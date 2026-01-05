@@ -162,10 +162,17 @@ export default function App() {
       {/* Sidebar Navigation */}
       <nav className={`fixed left-0 top-0 h-screen w-72 flex flex-col p-6 z-50 border-r transition-colors ${theme === 'dark' ? 'bg-slate-900 border-slate-800' : 'bg-white border-slate-200'}`}>
         <div className="flex items-center gap-3 pb-8 border-b border-slate-800 mb-6">
-          <div className="w-10 h-10 bg-accent-cyan rounded-lg flex items-center justify-center text-slate-900 font-bold text-xl">LA</div>
-          <div>
-            <div className="font-bold text-lg leading-none">Music Group</div>
-            <div className="text-xs text-slate-500 uppercase tracking-widest mt-1">Dash Report v25</div>
+          <div className="flex items-center gap-2">
+            <img 
+              src="/logo-la-music-school.png" 
+              alt="LA Music School" 
+              className="h-10 w-auto logo-img"
+            />
+            <img 
+              src="/logo-la-music-kids.png" 
+              alt="LA Music Kids" 
+              className="h-10 w-auto logo-img"
+            />
           </div>
         </div>
         
@@ -205,15 +212,17 @@ export default function App() {
           <div className="absolute bottom-[-10%] left-[-10%] w-[50%] h-[80%] bg-accent-pink/10 blur-[120px] rounded-full" />
           
           <div className="relative z-10">
-            <div className="flex justify-center gap-8 mb-12">
-              <div className="flex flex-col items-center">
-                <div className="w-20 h-20 bg-slate-200 rounded-2xl mb-4" />
-                <span className="text-xs uppercase tracking-widest text-slate-500">School</span>
-              </div>
-              <div className="flex flex-col items-center">
-                <div className="w-20 h-20 bg-slate-200 rounded-2xl mb-4" />
-                <span className="text-xs uppercase tracking-widest text-slate-500">Kids</span>
-              </div>
+            <div className="flex justify-center items-center gap-8 mb-8">
+              <img 
+                src="/logo-la-music-school.png" 
+                alt="LA Music School" 
+                className="h-16 md:h-20 w-auto logo-img"
+              />
+              <img 
+                src="/logo-la-music-kids.png" 
+                alt="LA Music Kids" 
+                className="h-16 md:h-20 w-auto logo-img"
+              />
             </div>
             
             <h1 className="text-8xl lg:text-9xl font-grotesk font-black mb-4">
