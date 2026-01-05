@@ -4,11 +4,12 @@ import {
   Home, BarChart3, TrendingUp, Building2, GitCompare, Calendar, 
   Target, MessageCircleQuestion, AlertTriangle, Rocket, Lightbulb, 
   Heart, Moon, Sun, ChevronUp, ChevronDown, ArrowRight,
-  Users, UserPlus, UserMinus, Percent, Receipt, Clock, ShieldCheck
+  Users, UserPlus, UserMinus, Percent, Receipt, Clock, ShieldCheck,
+  CheckCircle2, XCircle
 } from 'lucide-react';
-import { ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LineChart, Line, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
+import { ResponsiveContainer, PieChart, Pie, Cell, Sector, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LineChart, Line, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 import { Theme, MetricType, UnitData, Meta2026 } from './types';
-import { UNITS, HISTORY_DATA, THEME_COLORS, MONTHS } from './constants';
+import { UNITS, HISTORY_DATA, DISTRIBUTION_DATA, THEME_COLORS, MONTHS } from './constants';
 
 // --- Helper Components ---
 
@@ -49,6 +50,87 @@ const Card = ({ children, className = "", title, icon: Icon, trend, trendValue }
   </div>
 );
 
+const NegativeMetricCard = ({ children, className = "", title, icon: Icon, trend, trendValue }: { children?: React.ReactNode, className?: string, title?: string, icon?: any, trend?: 'up' | 'down', trendValue?: string }) => (
+  <div className={`bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-2xl p-6 transition-all hover:-translate-y-1 hover:border-accent-cyan/30 shadow-lg ${className}`}>
+    {(title || Icon) && (
+      <div className="flex items-center justify-between mb-4">
+        {Icon && (
+          <div className="w-12 h-12 flex items-center justify-center bg-slate-700/50 rounded-xl text-accent-cyan">
+            <Icon size={24} />
+          </div>
+        )}
+        {trend && (
+          <div className={`flex items-center gap-1 text-sm font-bold ${trend === 'up' ? 'text-accent-pink' : 'text-accent-green'}`}>
+            {trend === 'up' ? <TrendingUp size={16} /> : <TrendingUp size={16} className="rotate-180" />}
+            {trendValue}
+          </div>
+        )}
+      </div>
+    )}
+    {children}
+  </div>
+);
+
+const MetaIndicator = ({ 
+  current, 
+  meta, 
+  isNegativeMetric = false,
+  format = 'number',
+  showProgress = false
+}: { 
+  current: number, 
+  meta: number, 
+  isNegativeMetric?: boolean,
+  format?: 'number' | 'percentage' | 'currency' | 'months',
+  showProgress?: boolean
+}) => {
+  const gap = isNegativeMetric ? meta - current : current - meta;
+  const percentAchieved = isNegativeMetric 
+    ? Math.min((meta / current) * 100, 100)
+    : (current / meta) * 100;
+  
+  const isAchieved = isNegativeMetric ? current <= meta : current >= meta;
+  const isClose = !isAchieved && percentAchieved >= 85;
+  
+  const formatValue = (value: number) => {
+    switch(format) {
+      case 'percentage': return `${value.toFixed(1)}%`;
+      case 'currency': return `R$ ${value.toFixed(0)}`;
+      case 'months': return `${value}m`;
+      default: return value.toLocaleString('pt-BR');
+    }
+  };
+  
+  const statusColor = isAchieved ? 'text-accent-green' : isClose ? 'text-accent-yellow' : 'text-accent-pink';
+  const statusIcon = isAchieved ? <CheckCircle2 size={12} /> : <XCircle size={12} />;
+  
+  return (
+    <div className="mt-3 pt-3 border-t border-slate-700/50">
+      <div className="flex items-center justify-between text-xs">
+        <span className="text-slate-400">
+          Meta: <span className="text-slate-300 font-semibold">{formatValue(meta)}</span>
+        </span>
+        <div className={`flex items-center gap-1 font-bold ${statusColor}`}>
+          {statusIcon}
+          <span>
+            {isNegativeMetric ? (gap > 0 ? `+${formatValue(Math.abs(gap))}` : formatValue(Math.abs(gap))) : (gap >= 0 ? `+${formatValue(gap)}` : formatValue(gap))}
+          </span>
+          <span className="text-slate-500">|</span>
+          <span>{percentAchieved.toFixed(0)}%</span>
+        </div>
+      </div>
+      {showProgress && (
+        <div className="mt-2 h-1 bg-slate-800 rounded-full overflow-hidden">
+          <div 
+            className={`h-full transition-all duration-1000 ${isAchieved ? 'bg-accent-green' : isClose ? 'bg-accent-yellow' : 'bg-accent-pink'}`}
+            style={{ width: `${Math.min(percentAchieved, 100)}%` }}
+          />
+        </div>
+      )}
+    </div>
+  );
+};
+
 const SectionHeader = ({ badge, title, subtitle, icon: Icon }: { badge: string, title: string, subtitle: string, icon: any }) => (
   <div className="mb-10">
     <Badge><Icon size={14} /> {badge}</Badge>
@@ -59,20 +141,28 @@ const SectionHeader = ({ badge, title, subtitle, icon: Icon }: { badge: string, 
   </div>
 );
 
-const RankingCard = ({ pos, name, value, label, colorClass, gold }: { pos: number, name: string, value: string, label?: string, colorClass: string, gold?: boolean }) => (
-  <div className="flex items-center gap-4 p-4 bg-slate-800/50 border border-slate-700/50 rounded-xl mb-3">
-    <div className={`w-10 h-10 flex items-center justify-center font-grotesk font-bold rounded-full text-xl ${gold ? 'bg-gradient-to-br from-yellow-400 to-yellow-600 text-slate-900' : 'bg-slate-700 text-slate-300'}`}>
-      {pos}º
+const RankingCard = ({ pos, name, value, label, colorClass }: { pos: number, name: string, value: string, label?: string, colorClass: string }) => {
+  const medalStyles = {
+    1: 'bg-gradient-to-br from-[#FFD700] via-[#FFFACD] to-[#DAA520] text-yellow-950 shadow-lg shadow-yellow-500/40 border border-yellow-200/50',
+    2: 'bg-gradient-to-br from-[#C0C0C0] via-[#F8F8F8] to-[#808080] text-slate-800 shadow-lg shadow-slate-400/30 border border-slate-100/50',
+    3: 'bg-gradient-to-br from-[#CD7F32] via-[#E6B8A2] to-[#8B4513] text-white shadow-lg shadow-orange-900/30 border border-orange-300/50'
+  };
+  
+  return (
+    <div className="flex items-center gap-4 p-4 bg-slate-800/50 border border-slate-700/50 rounded-xl mb-3">
+      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-[11px] font-black ${medalStyles[pos as keyof typeof medalStyles]}`}>
+        {pos}
+      </div>
+      <div className="flex-1">
+        <div className="font-bold text-slate-200">{name}</div>
+        {label && <div className="text-xs text-slate-400">{label}</div>}
+      </div>
+      <div className={`text-2xl font-grotesk font-bold ${colorClass}`}>
+        {value}
+      </div>
     </div>
-    <div className="flex-1">
-      <div className="font-bold text-slate-200">{name}</div>
-      {label && <div className="text-xs text-slate-400">{label}</div>}
-    </div>
-    <div className={`text-2xl font-grotesk font-bold ${colorClass}`}>
-      {value}
-    </div>
-  </div>
-);
+  );
+};
 
 const CustomTooltip = ({ active, payload }: any) => {
   if (active && payload && payload.length) {
@@ -86,6 +176,55 @@ const CustomTooltip = ({ active, payload }: any) => {
   return null;
 };
 
+const DistributionTooltip = ({ active, payload, metric }: any) => {
+  if (active && payload && payload.length) {
+    const value = payload[0].value;
+    let formattedValue = '';
+    
+    switch(metric) {
+      case 'faturamento':
+        formattedValue = `R$ ${(value / 1000).toFixed(0)}k`;
+        break;
+      case 'alunos':
+        formattedValue = `${value} alunos`;
+        break;
+      case 'matriculas':
+        formattedValue = `${value} matrículas`;
+        break;
+      case 'evasoes':
+        formattedValue = `${value} evasões`;
+        break;
+      default:
+        formattedValue = `${value}`;
+    }
+    
+    return (
+      <div className="bg-slate-900 border-2 border-slate-600 rounded-xl px-4 py-3 shadow-2xl">
+        <p className="text-white font-bold text-base">{payload[0].name}</p>
+        <p className="text-accent-cyan font-semibold text-lg mt-1">{formattedValue}</p>
+      </div>
+    );
+  }
+  return null;
+};
+
+const renderActiveShape = (props: any) => {
+  const { cx, cy, innerRadius, outerRadius, startAngle, endAngle, fill } = props;
+  return (
+    <g>
+      <Sector
+        cx={cx}
+        cy={cy}
+        innerRadius={innerRadius}
+        outerRadius={outerRadius + 10}
+        startAngle={startAngle}
+        endAngle={endAngle}
+        fill={fill}
+      />
+    </g>
+  );
+};
+
 // --- Main App Component ---
 
 export default function App() {
@@ -93,6 +232,12 @@ export default function App() {
   const [activeSection, setActiveSection] = useState('cover');
   const [unitTab, setUnitTab] = useState('cg');
   const [evolutionMetric, setEvolutionMetric] = useState<MetricType>('alunos');
+  const [selectedUnit, setSelectedUnit] = useState('cg');
+  const [activeIndex, setActiveIndex] = useState<number | undefined>(undefined);
+  const [overviewYear, setOverviewYear] = useState<2023 | 2024 | 2025>(2025);
+  const [overviewUnit, setOverviewUnit] = useState<'consolidado' | 'cg' | 'recreio' | 'barra'>('consolidado');
+  const [distributionYear, setDistributionYear] = useState<'2023' | '2024' | '2025'>('2025');
+  const [distributionMetric, setDistributionMetric] = useState<'alunos' | 'matriculas' | 'evasoes' | 'faturamento'>('alunos');
   const [metas2026, setMetas2026] = useState<Record<string, Meta2026>>({
     cg: { alunos: 500, churn: '4%', renovacao: '90%', ticket: 'R$ 395', matriculas: 30, inadimplencia: '< 1,5%', faturamento: 'R$ 200.000' },
     recreio: { alunos: 400, churn: '4%', renovacao: '90%', ticket: 'R$ 455', matriculas: 25, inadimplencia: '< 1,5%', faturamento: 'R$ 180.000' },
@@ -146,6 +291,87 @@ export default function App() {
 
   // Fix: Explicitly cast to Meta2026[] and provide types to reduce to solve 'unknown' operator issues
   const totalAlunos2026 = (Object.values(metas2026) as Meta2026[]).reduce((acc: number, m: Meta2026) => acc + Number(m.alunos), 0);
+
+  // Dados históricos completos para Visão Geral
+  const historicalData = {
+    consolidado: {
+      2023: { alunos: 687, matriculas: 436, evasoes: 409, churn: 5.4, renovacao: null, ticket: 369, permanencia: null, inadimplencia: null },
+      2024: { alunos: 970, matriculas: 688, evasoes: 449, churn: 4.8, renovacao: null, ticket: 399, permanencia: null, inadimplencia: null },
+      2025: { alunos: 935, matriculas: 602, evasoes: 612, churn: 5.27, renovacao: 83.6, ticket: 414, permanencia: 16, inadimplencia: 0.81 }
+    },
+    cg: {
+      2023: { alunos: 321, matriculas: 194, evasoes: 208, churn: 5.1, renovacao: null, ticket: 312, permanencia: null, inadimplencia: null },
+      2024: { alunos: 463, matriculas: 323, evasoes: 213, churn: 4.6, renovacao: null, ticket: 345, permanencia: null, inadimplencia: null },
+      2025: { alunos: 417, matriculas: 271, evasoes: 288, churn: 5.89, renovacao: 76.58, ticket: 375, permanencia: 19, inadimplencia: 0.85 }
+    },
+    recreio: {
+      2023: { alunos: 219, matriculas: 118, evasoes: 127, churn: 4.5, renovacao: null, ticket: 388, permanencia: null, inadimplencia: null },
+      2024: { alunos: 295, matriculas: 187, evasoes: 117, churn: 3.9, renovacao: null, ticket: 418, permanencia: null, inadimplencia: null },
+      2025: { alunos: 297, matriculas: 189, evasoes: 189, churn: 5.01, renovacao: 87.04, ticket: 430, permanencia: 15, inadimplencia: 1.10 }
+    },
+    barra: {
+      2023: { alunos: 147, matriculas: 124, evasoes: 74, churn: 6.7, renovacao: null, ticket: 407, permanencia: null, inadimplencia: null },
+      2024: { alunos: 212, matriculas: 178, evasoes: 119, churn: 6.0, renovacao: null, ticket: 435, permanencia: null, inadimplencia: null },
+      2025: { alunos: 221, matriculas: 142, evasoes: 135, churn: 4.90, renovacao: 87.18, ticket: 440, permanencia: 14, inadimplencia: 0.48 }
+    }
+  };
+
+  // Metas 2025
+  const metas2025 = {
+    consolidado: {
+      alunos: 1180,
+      matriculas: 850,
+      evasoes: 400,
+      churn: 3.5,
+      renovacao: 90,
+      ticket: 400,
+      permanencia: 15,
+      inadimplencia: 2
+    },
+    cg: {
+      alunos: 550,
+      matriculas: 420,
+      evasoes: 180,
+      churn: 3.5,
+      renovacao: 90,
+      ticket: 370,
+      permanencia: 18,
+      inadimplencia: 2
+    },
+    recreio: {
+      alunos: 400,
+      matriculas: 250,
+      evasoes: 120,
+      churn: 3.5,
+      renovacao: 90,
+      ticket: 420,
+      permanencia: 14,
+      inadimplencia: 2
+    },
+    barra: {
+      alunos: 300,
+      matriculas: 180,
+      evasoes: 100,
+      churn: 3.5,
+      renovacao: 90,
+      ticket: 440,
+      permanencia: 13,
+      inadimplencia: 2
+    }
+  };
+
+  // Calcular trends baseado no ano anterior
+  const getTrend = (current: number | null, previous: number | null, isPercentage = false) => {
+    if (current === null || previous === null) return null;
+    const diff = current - previous;
+    const percentChange = (diff / previous) * 100;
+    return { value: isPercentage ? diff : percentChange, isPositive: diff > 0 };
+  };
+
+  // Obter dados do ano e unidade selecionados
+  const currentData = historicalData[overviewUnit][overviewYear];
+  const previousYear = overviewYear === 2023 ? null : (overviewYear - 1) as 2023 | 2024;
+  const previousData = previousYear ? historicalData[overviewUnit][previousYear] : null;
 
   const radarData = [
     { metric: 'Crescimento', cg: 30, recreio: 50, barra: 100 },
@@ -252,104 +478,394 @@ export default function App() {
         <section id="overview" className="min-h-screen py-24 px-12">
           <SectionHeader 
             badge="Visão Geral" 
-            title="O Ano de 2025 em Números" 
-            subtitle="Performance consolidada do Grupo LA Music"
+            title={`O Ano de ${overviewYear} em Números`}
+            subtitle={overviewUnit === 'consolidado' ? 'Performance consolidada do Grupo LA Music' : `Performance da unidade ${UNITS.find(u => u.id === overviewUnit)?.name}`}
             icon={BarChart3}
           />
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <Card title="Alunos Pagantes" icon={Users} trend="down" trendValue="-3,6%">
-              <div className="text-5xl font-grotesk font-bold mt-2">935</div>
-              <div className="text-sm text-slate-400 mt-1">Total em Dez/25</div>
-            </Card>
-            <Card title="Novas Matrículas" icon={UserPlus} trend="down" trendValue="-12,5%">
-              <div className="text-5xl font-grotesk font-bold mt-2">602</div>
-              <div className="text-sm text-slate-400 mt-1">Acumulado do Ano</div>
-            </Card>
-            <Card title="Evasões (Ex-Alunos)" icon={UserMinus} trend="up" trendValue="+36,3%">
-              <div className="text-5xl font-grotesk font-bold mt-2 text-accent-pink">612</div>
-              <div className="text-sm text-slate-400 mt-1">Acumulado do Ano</div>
-            </Card>
-            <Card title="Churn Rate Médio" icon={Percent} trend="up" trendValue="+0,47 p.p.">
-              <div className="text-5xl font-grotesk font-bold mt-2">5,27%</div>
-              <div className="text-sm text-slate-400 mt-1">Média Mensal</div>
-            </Card>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-            <Card title="Taxa de Renovação" icon={Rocket}>
-              <div className="text-4xl font-grotesk font-bold mt-2 text-accent-green">83,6%</div>
-              <div className="text-sm text-slate-400 mt-1">Média do Grupo</div>
-            </Card>
-            <Card title="Ticket Médio" icon={Receipt} trend="up" trendValue="+3,9%">
-              <div className="text-4xl font-grotesk font-bold mt-2">R$ 414</div>
-              <div className="text-sm text-slate-400 mt-1">Parcelas Ativas</div>
-            </Card>
-            <Card title="Tempo de Permanência" icon={Clock} trend="up" trendValue="+1,7 meses">
-              <div className="text-4xl font-grotesk font-bold mt-2">16</div>
-              <div className="text-sm text-slate-400 mt-1">Meses em Média</div>
-            </Card>
-            <Card title="Inadimplência Média" icon={ShieldCheck} trend="up" trendValue="Meta Batida!">
-              <div className="text-4xl font-grotesk font-bold mt-2 text-accent-green">0,81%</div>
-              <div className="text-sm text-slate-400 mt-1">Total vencido &gt; 30d</div>
-            </Card>
-          </div>
-
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8">
-            <div className="flex items-center justify-between mb-8">
-              <h3 className="text-2xl font-grotesk font-bold">Distribuição por Unidade</h3>
-              <div className="flex gap-6">
-                {UNITS.map(u => (
-                  <div key={u.id} className="flex items-center gap-2 text-sm text-slate-400">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: u.color }} />
-                    {u.name} ({u.alunosDez})
-                  </div>
+          {/* Filtros */}
+          <div className="flex flex-col md:flex-row gap-6 mb-8">
+            {/* Filtro de Ano */}
+            <div>
+              <label className="text-sm text-slate-400 mb-2 block">Ano</label>
+              <div className="flex gap-2">
+                {[2023, 2024, 2025].map(year => (
+                  <button
+                    key={year}
+                    onClick={() => setOverviewYear(year as 2023 | 2024 | 2025)}
+                    className={`px-4 py-2 rounded-lg border transition-all ${
+                      overviewYear === year
+                        ? 'bg-accent-cyan text-slate-900 border-accent-cyan font-bold'
+                        : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'
+                    }`}
+                  >
+                    {year}
+                  </button>
                 ))}
               </div>
             </div>
-            
-            <div className="flex flex-col lg:flex-row items-center gap-12">
-              <div className="w-full lg:w-1/3 h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={UNITS}
-                      cx="50%"
-                      cy="50%"
-                      innerRadius={80}
-                      outerRadius={120}
-                      paddingAngle={5}
-                      dataKey="alunosDez"
-                    >
-                      {UNITS.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
-                      ))}
-                    </Pie>
-                    <Tooltip content={<CustomTooltip />} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-              <div className="flex-1 w-full space-y-6">
-                {UNITS.map(u => {
-                  const percent = ((u.alunosDez / 935) * 100).toFixed(1);
-                  return (
-                    <div key={u.id}>
-                      <div className="flex justify-between text-sm font-bold mb-2">
-                        <span>{u.name}</span>
-                        <span style={{ color: u.color }}>{percent}%</span>
-                      </div>
-                      <div className="h-3 bg-slate-800 rounded-full overflow-hidden">
-                        <div 
-                          className="h-full transition-all duration-1000 ease-out"
-                          style={{ width: `${percent}%`, backgroundColor: u.color }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
+
+            {/* Filtro de Unidade */}
+            <div>
+              <label className="text-sm text-slate-400 mb-2 block">Unidade</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setOverviewUnit('consolidado')}
+                  className={`px-4 py-2 rounded-lg border transition-all ${
+                    overviewUnit === 'consolidado'
+                      ? 'bg-accent-cyan text-slate-900 border-accent-cyan font-bold'
+                      : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'
+                  }`}
+                >
+                  Consolidado
+                </button>
+                {UNITS.map(unit => (
+                  <button
+                    key={unit.id}
+                    onClick={() => setOverviewUnit(unit.id as 'cg' | 'recreio' | 'barra')}
+                    className={`px-4 py-2 rounded-lg border transition-all ${
+                      overviewUnit === unit.id
+                        ? 'bg-accent-cyan text-slate-900 border-accent-cyan font-bold'
+                        : 'bg-slate-800 text-slate-400 border-slate-700 hover:bg-slate-700'
+                    }`}
+                  >
+                    {unit.name}
+                  </button>
+                ))}
               </div>
             </div>
           </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            {(() => {
+              const alunosTrend = getTrend(currentData.alunos, previousData?.alunos);
+              const matriculasTrend = getTrend(currentData.matriculas, previousData?.matriculas);
+              const evasoesTrend = getTrend(currentData.evasoes, previousData?.evasoes);
+              const churnTrend = getTrend(currentData.churn, previousData?.churn, true);
+              
+              return (
+                <>
+                  <Card 
+                    title="Alunos Pagantes" 
+                    icon={Users} 
+                    trend={alunosTrend ? (alunosTrend.isPositive ? "up" : "down") : undefined}
+                    trendValue={alunosTrend ? `${alunosTrend.isPositive ? '+' : ''}${alunosTrend.value.toFixed(1)}%` : undefined}
+                  >
+                    <div className="text-5xl font-grotesk font-bold mt-2">{currentData.alunos}</div>
+                    <div className="text-sm text-slate-400 mt-1">Alunos Pagantes (Dez/{overviewYear.toString().slice(-2)})</div>
+                    {overviewYear === 2025 && (
+                      <MetaIndicator 
+                        current={currentData.alunos} 
+                        meta={metas2025[overviewUnit].alunos}
+                        format="number"
+                        showProgress={true}
+                      />
+                    )}
+                  </Card>
+                  <Card 
+                    title="Novas Matrículas" 
+                    icon={UserPlus}
+                    trend={matriculasTrend ? (matriculasTrend.isPositive ? "up" : "down") : undefined}
+                    trendValue={matriculasTrend ? `${matriculasTrend.isPositive ? '+' : ''}${matriculasTrend.value.toFixed(1)}%` : undefined}
+                  >
+                    <div className="text-5xl font-grotesk font-bold mt-2">{currentData.matriculas}</div>
+                    <div className="text-sm text-slate-400 mt-1">Novas Matrículas no Ano</div>
+                    {overviewYear === 2025 && (
+                      <MetaIndicator 
+                        current={currentData.matriculas} 
+                        meta={metas2025[overviewUnit].matriculas}
+                        format="number"
+                        showProgress={true}
+                      />
+                    )}
+                  </Card>
+                  <NegativeMetricCard 
+                    title="Evasões (Ex-Alunos)" 
+                    icon={UserMinus}
+                    trend={evasoesTrend ? (evasoesTrend.isPositive ? "up" : "down") : undefined}
+                    trendValue={evasoesTrend ? `${evasoesTrend.isPositive ? '+' : ''}${evasoesTrend.value.toFixed(1)}%` : undefined}
+                  >
+                    <div className="text-5xl font-grotesk font-bold mt-2 text-accent-pink">{currentData.evasoes}</div>
+                    <div className="text-sm text-slate-400 mt-1">Evasões no Ano</div>
+                    {overviewYear === 2025 && (
+                      <MetaIndicator 
+                        current={currentData.evasoes} 
+                        meta={metas2025[overviewUnit].evasoes}
+                        isNegativeMetric={true}
+                        format="number"
+                        showProgress={true}
+                      />
+                    )}
+                  </NegativeMetricCard>
+                  <NegativeMetricCard 
+                    title="Churn Rate Médio" 
+                    icon={Percent}
+                    trend={churnTrend ? (churnTrend.isPositive ? "up" : "down") : undefined}
+                    trendValue={churnTrend ? `${churnTrend.isPositive ? '+' : ''}${churnTrend.value.toFixed(2)} p.p.` : undefined}
+                  >
+                    <div className="text-5xl font-grotesk font-bold mt-2 text-accent-pink">{currentData.churn}%</div>
+                    <div className="text-sm text-slate-400 mt-1">Churn Rate Médio</div>
+                    {overviewYear === 2025 && (
+                      <MetaIndicator 
+                        current={currentData.churn} 
+                        meta={metas2025[overviewUnit].churn}
+                        isNegativeMetric={true}
+                        format="percentage"
+                        showProgress={true}
+                      />
+                    )}
+                  </NegativeMetricCard>
+                </>
+              );
+            })()}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
+            {(() => {
+              const renovacaoTrend = getTrend(currentData.renovacao, previousData?.renovacao, true);
+              const ticketTrend = getTrend(currentData.ticket, previousData?.ticket);
+              const permanenciaTrend = getTrend(currentData.permanencia, previousData?.permanencia);
+              
+              return (
+                <>
+                  <Card title="Taxa de Renovação" icon={Rocket} trend={renovacaoTrend ? (renovacaoTrend.isPositive ? "up" : "down") : undefined} trendValue={renovacaoTrend ? `${renovacaoTrend.isPositive ? '+' : ''}${renovacaoTrend.value.toFixed(2)} p.p.` : undefined}>
+                    {currentData.renovacao !== null ? (
+                      <div className="text-4xl font-grotesk font-bold mt-2 text-accent-green">{currentData.renovacao}%</div>
+                    ) : (
+                      <div className="text-4xl font-grotesk font-bold mt-2 text-slate-600">-</div>
+                    )}
+                    <div className="text-sm text-slate-400 mt-1">Taxa de Renovação Média</div>
+                    {overviewYear === 2025 && currentData.renovacao !== null && (
+                      <MetaIndicator 
+                        current={currentData.renovacao} 
+                        meta={metas2025[overviewUnit].renovacao}
+                        format="percentage"
+                        showProgress={true}
+                      />
+                    )}
+                  </Card>
+                  <Card 
+                    title="Ticket Médio" 
+                    icon={Receipt}
+                    trend={ticketTrend ? (ticketTrend.isPositive ? "up" : "down") : undefined}
+                    trendValue={ticketTrend ? `${ticketTrend.isPositive ? '+' : ''}${ticketTrend.value.toFixed(1)}%` : undefined}
+                  >
+                    <div className="text-4xl font-grotesk font-bold mt-2">R$ {currentData.ticket}</div>
+                    <div className="text-sm text-slate-400 mt-1">Ticket Médio Parcelas</div>
+                    {overviewYear === 2025 && (
+                      <MetaIndicator 
+                        current={currentData.ticket} 
+                        meta={metas2025[overviewUnit].ticket}
+                        format="currency"
+                        showProgress={true}
+                      />
+                    )}
+                  </Card>
+                  <Card 
+                    title="Tempo de Permanência" 
+                    icon={Clock}
+                    trend={permanenciaTrend ? (permanenciaTrend.isPositive ? "up" : "down") : undefined}
+                    trendValue={permanenciaTrend ? `${permanenciaTrend.isPositive ? '+' : ''}${permanenciaTrend.value.toFixed(1)} meses` : undefined}
+                  >
+                    {currentData.permanencia !== null ? (
+                      <div className="text-4xl font-grotesk font-bold mt-2">{currentData.permanencia}</div>
+                    ) : (
+                      <div className="text-4xl font-grotesk font-bold mt-2 text-slate-600">-</div>
+                    )}
+                    <div className="text-sm text-slate-400 mt-1">Tempo de Permanência (meses)</div>
+                    {overviewYear === 2025 && currentData.permanencia !== null && (
+                      <MetaIndicator 
+                        current={currentData.permanencia} 
+                        meta={metas2025[overviewUnit].permanencia}
+                        format="months"
+                        showProgress={true}
+                      />
+                    )}
+                  </Card>
+                  <Card 
+                    title="Inadimplência Média" 
+                    icon={ShieldCheck}
+                    trend={currentData.inadimplencia !== null && currentData.inadimplencia < 1.5 ? "up" : undefined}
+                    trendValue={currentData.inadimplencia !== null && currentData.inadimplencia < 1.5 ? "Meta Batida!" : undefined}
+                  >
+                    {currentData.inadimplencia !== null ? (
+                      <div className="text-4xl font-grotesk font-bold mt-2 text-accent-green">{currentData.inadimplencia}%</div>
+                    ) : (
+                      <div className="text-4xl font-grotesk font-bold mt-2 text-slate-600">-</div>
+                    )}
+                    <div className="text-sm text-slate-400 mt-1">Inadimplência Média</div>
+                    {overviewYear === 2025 && currentData.inadimplencia !== null && (
+                      <MetaIndicator 
+                        current={currentData.inadimplencia} 
+                        meta={metas2025[overviewUnit].inadimplencia}
+                        isNegativeMetric={true}
+                        format="percentage"
+                        showProgress={true}
+                      />
+                    )}
+                  </Card>
+                </>
+              );
+            })()}
+          </div>
+
+          {overviewUnit === 'consolidado' && (
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-2xl font-grotesk font-bold">Distribuição por Unidade</h3>
+                <div className="flex gap-6">
+                  {UNITS.map(u => (
+                    <div key={u.id} className="flex items-center gap-2 text-sm text-slate-400">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: u.color }} />
+                      {u.name}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Filtros */}
+              <div className="flex flex-wrap gap-3 mb-8">
+                <div className="flex gap-2">
+                  {(['2023', '2024', '2025'] as const).map(year => (
+                    <button
+                      key={year}
+                      onClick={() => setDistributionYear(year)}
+                      className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                        distributionYear === year 
+                          ? 'bg-accent-cyan text-slate-900' 
+                          : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                      }`}
+                    >
+                      {year}
+                    </button>
+                  ))}
+                </div>
+                <div className="w-px bg-slate-700" />
+                <div className="flex gap-2">
+                  {(['alunos', 'matriculas', 'evasoes', 'faturamento'] as const).map(metric => (
+                    <button
+                      key={metric}
+                      onClick={() => setDistributionMetric(metric)}
+                      className={`px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                        distributionMetric === metric 
+                          ? 'bg-accent-cyan text-slate-900' 
+                          : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                      }`}
+                    >
+                      {metric === 'alunos' ? 'Alunos' : metric === 'matriculas' ? 'Matrículas' : metric === 'evasoes' ? 'Evasões' : 'Faturamento'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              
+              <div className="flex flex-col lg:flex-row items-center gap-12">
+                {/* Donut Chart */}
+                <div className="w-full lg:w-1/3 flex flex-col items-center">
+                  <div className="w-full h-[300px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={[
+                            { name: 'Campo Grande', value: DISTRIBUTION_DATA[distributionYear][distributionMetric].cg, color: THEME_COLORS.cyan },
+                            { name: 'Recreio', value: DISTRIBUTION_DATA[distributionYear][distributionMetric].recreio, color: THEME_COLORS.purple },
+                            { name: 'Barra', value: DISTRIBUTION_DATA[distributionYear][distributionMetric].barra, color: THEME_COLORS.green },
+                          ]}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={80}
+                          outerRadius={120}
+                          paddingAngle={0}
+                          dataKey="value"
+                          activeIndex={activeIndex}
+                          activeShape={renderActiveShape}
+                          onMouseEnter={(_, index) => setActiveIndex(index)}
+                          onMouseLeave={() => setActiveIndex(undefined)}
+                        >
+                          {[THEME_COLORS.cyan, THEME_COLORS.purple, THEME_COLORS.green].map((color, index) => (
+                            <Cell key={`cell-${index}`} fill={color} stroke="none" />
+                          ))}
+                        </Pie>
+                        <Tooltip content={<DistributionTooltip metric={distributionMetric} />} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="text-center mt-4">
+                    <div className="text-3xl font-bold">
+                      {distributionMetric === 'faturamento' 
+                        ? `R$ ${(DISTRIBUTION_DATA[distributionYear][distributionMetric].total / 1000).toFixed(0)}k`
+                        : DISTRIBUTION_DATA[distributionYear][distributionMetric].total.toLocaleString('pt-BR')
+                      }
+                    </div>
+                    <div className="text-sm text-slate-400">Total {distributionYear}</div>
+                  </div>
+                </div>
+
+                {/* Barras com tendências */}
+                <div className="flex-1 w-full space-y-6">
+                  {(() => {
+                    const currentData = DISTRIBUTION_DATA[distributionYear][distributionMetric];
+                    const prevYear = String(Number(distributionYear) - 1) as '2023' | '2024' | '2025';
+                    const prevData = DISTRIBUTION_DATA[prevYear]?.[distributionMetric];
+                    const total = currentData.total;
+                    
+                    const units = [
+                      { id: 'cg', name: 'Campo Grande', value: currentData.cg, color: THEME_COLORS.cyan },
+                      { id: 'recreio', name: 'Recreio', value: currentData.recreio, color: THEME_COLORS.purple },
+                      { id: 'barra', name: 'Barra', value: currentData.barra, color: THEME_COLORS.green },
+                    ];
+
+                    return units.map(unit => {
+                      const percent = ((unit.value / total) * 100);
+                      const prevPercent = prevData ? ((prevData[unit.id as 'cg' | 'recreio' | 'barra'] / prevData.total) * 100) : null;
+                      const variation = prevPercent !== null ? (percent - prevPercent) : null;
+                      
+                      // Lógica de tendência: para evasões, invertida
+                      const isGoodTrend = distributionMetric === 'evasoes' 
+                        ? (variation !== null && variation < 0)
+                        : (variation !== null && variation > 0);
+                      const isBadTrend = distributionMetric === 'evasoes'
+                        ? (variation !== null && variation > 0)
+                        : (variation !== null && variation < 0);
+
+                      return (
+                        <div key={unit.id} className="group">
+                          <div className="flex justify-between items-center text-sm font-bold mb-3">
+                            <span className="text-white">{unit.name}</span>
+                            <div className="flex items-center gap-3">
+                              <span className="text-slate-400">
+                                {distributionMetric === 'faturamento' 
+                                  ? `R$ ${(unit.value / 1000).toFixed(0)}k`
+                                  : unit.value.toLocaleString('pt-BR')
+                                }
+                              </span>
+                              {variation !== null && (
+                                <div className={`flex items-center gap-1 text-xs font-bold px-2 py-1 rounded-md ${
+                                  isGoodTrend ? 'bg-accent-green/20 text-accent-green' :
+                                  isBadTrend ? 'bg-accent-pink/20 text-accent-pink' :
+                                  'bg-slate-700 text-slate-400'
+                                }`}>
+                                  {isGoodTrend ? <TrendingUp size={12} /> : isBadTrend ? <TrendingUp size={12} className="rotate-180" /> : <ArrowRight size={12} />}
+                                  {variation > 0 ? '+' : ''}{variation.toFixed(1)} p.p.
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="h-10 bg-slate-800 rounded-lg overflow-hidden relative group-hover:bg-slate-750 transition-colors">
+                            <div 
+                              className="h-full transition-all duration-1000 ease-out rounded-lg flex items-center justify-end pr-4"
+                              style={{ width: `${percent}%`, backgroundColor: unit.color }}
+                            >
+                              <span className="text-white font-bold text-sm">{percent.toFixed(1)}%</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+            </div>
+          )}
         </section>
 
         {/* Evolution Section */}
@@ -464,7 +980,7 @@ export default function App() {
           <SectionHeader 
             badge="Análise Individual" 
             title="Performance por Unidade" 
-            subtitle="Raio-X detalhado de cada ponto de venda"
+            subtitle="Raio-X detalhado de cada Unidade"
             icon={Building2}
           />
 
@@ -473,7 +989,7 @@ export default function App() {
               <button
                 key={u.id}
                 onClick={() => setUnitTab(u.id)}
-                className={`px-8 py-3 rounded-xl text-sm font-bold transition-all ${unitTab === u.id ? 'bg-accent-cyan text-slate-900 shadow-lg' : 'text-slate-500 hover:text-slate-200'}`}
+                className={`px-8 py-3 rounded-xl text-sm font-bold transition-all ${unitTab === u.id ? (u.id === 'cg' ? 'bg-accent-cyan text-slate-900' : u.id === 'recreio' ? 'bg-accent-purple text-slate-900' : 'bg-accent-green text-slate-900') : 'text-slate-500 hover:text-slate-200'}`}
               >
                 {u.name}
               </button>
@@ -485,23 +1001,23 @@ export default function App() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                 <div className={`p-6 rounded-3xl border flex flex-col justify-between`} style={{ backgroundColor: u.bgColor, borderColor: `${u.color}33` }}>
                   <div className="flex justify-between items-start">
-                    <span className="text-xs uppercase font-black text-slate-400 tracking-widest">Alunos Dez</span>
-                    <Badge variant={u.id === 'barra' ? 'success' : 'danger'}>{u.id === 'barra' ? '+1.8%' : u.id === 'recreio' ? '-4.5%' : '-16.3%'}</Badge>
+                    <span className="text-xs uppercase font-black text-slate-400 tracking-widest">Alunos Pagantes (Dez)</span>
+                    <Badge variant={u.id === 'barra' ? 'success' : 'danger'}>{u.id === 'barra' ? '+1,8%' : u.id === 'recreio' ? '-4,5%' : '-16,3%'}</Badge>
                   </div>
                   <div className="text-5xl font-grotesk font-bold mt-4" style={{ color: u.color }}>{u.alunosDez}</div>
-                  <div className="text-xs text-slate-400 mt-2">Saldo: {u.id === 'cg' ? '-81' : u.id === 'recreio' ? '-14' : '+4'} alunos</div>
+                  <div className="text-xs text-slate-400 mt-2">{u.id === 'cg' ? 'Jan: 498 → Dez: 417 (-81)' : u.id === 'recreio' ? 'Jan: 311 → Dez: 297 (-14)' : 'Jan: 217 → Dez: 221 (+4)'}</div>
                 </div>
-                <Card title="Matrículas">
+                <Card title="Novas Matrículas">
                   <div className="text-4xl font-grotesk font-bold">{u.matriculasAno}</div>
-                  <div className="text-xs text-slate-400 mt-2">Média: {(u.matriculasAno / 12).toFixed(1)} /mês</div>
+                  <div className="text-xs text-slate-400 mt-2">Média: {(u.matriculasAno / 12).toFixed(2)}/mês</div>
                 </Card>
                 <Card title="Evasões">
                   <div className="text-4xl font-grotesk font-bold text-accent-pink">{u.evasoesAno}</div>
-                  <div className="text-xs text-slate-400 mt-2">{(u.evasoesAno / 12).toFixed(1)} saídas por mês</div>
+                  <div className="text-xs text-slate-400 mt-2">{u.id === 'cg' ? '+35% vs 2024' : u.id === 'recreio' ? '+61,5% vs 2024' : '+13,4% vs 2024'}</div>
                 </Card>
                 <Card title="Churn Médio">
                   <div className="text-4xl font-grotesk font-bold">{u.churnMedio}%</div>
-                  <div className="text-xs text-slate-400 mt-2">Meta: 3.5%</div>
+                  <div className="text-xs text-slate-400 mt-2">Meta: 3,5%</div>
                 </Card>
               </div>
 
@@ -526,12 +1042,33 @@ export default function App() {
                       <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
                       <XAxis dataKey="month" stroke="#94a3b8" />
                       <YAxis stroke="#94a3b8" />
-                      <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px' }} />
+                      <Tooltip cursor={{fill: '#1e293b'}} contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px' }} />
                       <Legend />
-                      <Bar dataKey="matriculas" fill={THEME_COLORS.green} name="Entradas" />
-                      <Bar dataKey="evasoes" fill={THEME_COLORS.pink} name="Saídas" />
+                      <Bar dataKey="matriculas" fill={THEME_COLORS.green} name="Entradas" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="evasoes" fill={THEME_COLORS.pink} name="Saídas" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                <div className="bg-slate-800/50 border-l-4 border-accent-green rounded-2xl p-6">
+                  <h4 className="text-sm font-bold text-accent-green mb-3">Melhor Mês para Matrículas</h4>
+                  <p className="text-slate-300">
+                    {u.id === 'cg' ? 'Janeiro (42) e Maio (37)' : u.id === 'recreio' ? 'Agosto (40) - RECORDE!' : 'Fevereiro (18) e Agosto (17)'}
+                  </p>
+                </div>
+                <div className="bg-gradient-to-br from-purple-900/30 to-pink-900/30 border-l-4 border-accent-pink rounded-2xl p-6">
+                  <h4 className="text-sm font-bold text-accent-pink mb-3">Meses Críticos de Evasão</h4>
+                  <p className="text-slate-300">
+                    {u.id === 'cg' ? 'Fevereiro (49) e Maio (47)' : u.id === 'recreio' ? 'Abril (24), Setembro (24) e Dezembro (24)' : 'Maio (19) e Junho (17)'}
+                  </p>
+                </div>
+                <div className="bg-slate-800/50 border-l-4 border-accent-cyan rounded-2xl p-6">
+                  <h4 className="text-sm font-bold text-accent-cyan mb-3">LTV</h4>
+                  <p className="text-slate-300">
+                    {u.id === 'cg' ? '19 meses (+1 vs 2024)' : u.id === 'recreio' ? '15 meses (+0,5 vs 2024)' : '14 meses (+0,8 vs 2024)'}
+                  </p>
                 </div>
               </div>
 
@@ -556,52 +1093,121 @@ export default function App() {
         <section id="comparison" className="min-h-screen py-24 px-12 bg-slate-900/50">
           <SectionHeader 
             badge="Comparativo" 
-            title="Quem Lidera o Grupo?" 
-            subtitle="Ranking de performance cruzada entre unidades"
+            title="Ranking entre Unidades" 
+            subtitle="Quem performou melhor em cada KPI"
             icon={GitCompare}
           />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
             <div>
-              <h4 className="text-slate-500 uppercase tracking-widest font-black text-xs mb-6">Crescimento de Base</h4>
-              <RankingCard pos={1} name="Barra" value="+1,8%" colorClass="text-accent-green" gold />
-              <RankingCard pos={2} name="Recreio" value="-4,5%" colorClass="text-accent-pink" />
+              <h4 className="text-slate-400 font-semibold text-base mb-6">Crescimento da Base</h4>
+              <RankingCard pos={1} name="Barra" value="+1,8%" label="Única que cresceu" colorClass="text-accent-green" />
+              <RankingCard pos={2} name="Recreio" value="-4,5%" colorClass="text-accent-purple" />
               <RankingCard pos={3} name="Campo Grande" value="-16,3%" colorClass="text-accent-pink" />
             </div>
             <div>
-              <h4 className="text-slate-500 uppercase tracking-widest font-black text-xs mb-6">Controle de Churn</h4>
-              <RankingCard pos={1} name="Barra" value="4,90%" colorClass="text-accent-green" gold />
-              <RankingCard pos={2} name="Recreio" value="5,01%" colorClass="text-slate-200" />
-              <RankingCard pos={3} name="Campo Grande" value="5,21%" colorClass="text-accent-pink" />
+              <h4 className="text-slate-400 font-semibold text-base mb-6">Menor Churn</h4>
+              <RankingCard pos={1} name="Barra" value="4,90%" colorClass="text-accent-green" />
+              <RankingCard pos={2} name="Recreio" value="5,01%" colorClass="text-accent-purple" />
+              <RankingCard pos={3} name="Campo Grande" value="5,21%" colorClass="text-accent-cyan" />
             </div>
             <div>
-              <h4 className="text-slate-500 uppercase tracking-widest font-black text-xs mb-6">Taxa de Renovação</h4>
-              <RankingCard pos={1} name="Barra" value="87,2%" colorClass="text-accent-green" gold />
-              <RankingCard pos={2} name="Recreio" value="87,0%" colorClass="text-slate-200" />
-              <RankingCard pos={3} name="Campo Grande" value="76,6%" colorClass="text-accent-pink" />
+              <h4 className="text-slate-400 font-semibold text-base mb-6">Taxa de Renovação</h4>
+              <RankingCard pos={1} name="Barra" value="87,18%" colorClass="text-accent-green" />
+              <RankingCard pos={2} name="Recreio" value="87,04%" colorClass="text-accent-purple" />
+              <RankingCard pos={3} name="Campo Grande" value="76,58%" colorClass="text-accent-pink" />
             </div>
             <div>
-              <h4 className="text-slate-500 uppercase tracking-widest font-black text-xs mb-6">Inadimplência</h4>
-              <RankingCard pos={1} name="Barra" value="0,48%" colorClass="text-accent-green" gold />
-              <RankingCard pos={2} name="Campo Grande" value="0,85%" colorClass="text-slate-200" />
-              <RankingCard pos={3} name="Recreio" value="1,10%" colorClass="text-slate-200" />
+              <h4 className="text-slate-400 font-semibold text-base mb-6">Menor Inadimplência</h4>
+              <RankingCard pos={1} name="Barra" value="0,48%" colorClass="text-accent-green" />
+              <RankingCard pos={2} name="Campo Grande" value="0,85%" colorClass="text-accent-cyan" />
+              <RankingCard pos={3} name="Recreio" value="1,10%" colorClass="text-accent-purple" />
             </div>
           </div>
 
-          <div className="bg-slate-800/30 border border-slate-700/50 rounded-3xl p-12 h-[600px]">
+          <div className="bg-slate-800/30 border border-slate-700/50 rounded-3xl p-12 min-h-[600px]">
             <h3 className="text-3xl font-grotesk font-bold mb-10 text-center">Visão 360º de Performance</h3>
-            <ResponsiveContainer width="100%" height="80%">
-              <RadarChart data={radarData}>
-                <PolarGrid stroke="#334155" />
-                <PolarAngleAxis dataKey="metric" tick={{ fill: '#94a3b8', fontSize: 14 }} />
-                <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
-                <Radar name="Campo Grande" dataKey="cg" stroke={THEME_COLORS.cyan} fill={THEME_COLORS.cyan} fillOpacity={0.3} />
-                <Radar name="Recreio" dataKey="recreio" stroke={THEME_COLORS.pink} fill={THEME_COLORS.pink} fillOpacity={0.3} />
-                <Radar name="Barra" dataKey="barra" stroke={THEME_COLORS.green} fill={THEME_COLORS.green} fillOpacity={0.3} />
-                <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px' }} />
-                <Legend />
-              </RadarChart>
-            </ResponsiveContainer>
+            
+            <div className="flex flex-col lg:flex-row gap-12 items-center">
+              <div className="w-full lg:w-[60%] h-[400px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadarChart data={radarData}>
+                    <PolarGrid stroke="#334155" />
+                    <PolarAngleAxis dataKey="metric" tick={{ fill: '#94a3b8', fontSize: 14 }} />
+                    <PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} />
+                    <Radar name="Campo Grande" dataKey="cg" stroke={THEME_COLORS.cyan} fill={THEME_COLORS.cyan} fillOpacity={0.3} />
+                    <Radar name="Recreio" dataKey="recreio" stroke={THEME_COLORS.purple} fill={THEME_COLORS.purple} fillOpacity={0.3} />
+                    <Radar name="Barra" dataKey="barra" stroke={THEME_COLORS.green} fill={THEME_COLORS.green} fillOpacity={0.3} />
+                    <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px' }} />
+                    <Legend />
+                  </RadarChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="w-full lg:w-[40%] space-y-6">
+                <div className="bg-slate-900/50 border border-slate-700/50 rounded-2xl overflow-hidden">
+                  <table className="w-full text-left text-sm">
+                    <thead>
+                      <tr className="bg-slate-800/80 border-b border-slate-700">
+                        <th className="px-4 py-3 font-bold text-slate-400">Métrica</th>
+                        <th className="px-4 py-3 font-bold text-accent-green">Barra</th>
+                        <th className="px-4 py-3 font-bold text-accent-cyan">CG</th>
+                        <th className="px-4 py-3 font-bold text-accent-purple">Rec.</th>
+                        <th className="px-4 py-3 font-bold text-white">Melhor</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800">
+                      <tr>
+                        <td className="px-4 py-3 text-slate-400">Crescimento</td>
+                        <td className="px-4 py-3 text-white">+1,8%</td>
+                        <td className="px-4 py-3 text-white">-16,3%</td>
+                        <td className="px-4 py-3 text-white">-4,5%</td>
+                        <td className="px-4 py-3 font-bold text-accent-green">Barra</td>
+                      </tr>
+                      <tr>
+                        <td className="px-4 py-3 text-slate-400">Churn</td>
+                        <td className="px-4 py-3 text-white">4,90%</td>
+                        <td className="px-4 py-3 text-white">5,21%</td>
+                        <td className="px-4 py-3 text-white">5,01%</td>
+                        <td className="px-4 py-3 font-bold text-accent-green">Barra</td>
+                      </tr>
+                      <tr>
+                        <td className="px-4 py-3 text-slate-400">Renovação</td>
+                        <td className="px-4 py-3 text-white">87,18%</td>
+                        <td className="px-4 py-3 text-white">76,58%</td>
+                        <td className="px-4 py-3 text-white">87,04%</td>
+                        <td className="px-4 py-3 font-bold text-accent-green">Barra</td>
+                      </tr>
+                      <tr>
+                        <td className="px-4 py-3 text-slate-400">Inadimplência</td>
+                        <td className="px-4 py-3 text-white">0,48%</td>
+                        <td className="px-4 py-3 text-white">0,85%</td>
+                        <td className="px-4 py-3 text-white">1,10%</td>
+                        <td className="px-4 py-3 font-bold text-accent-green">Barra</td>
+                      </tr>
+                      <tr>
+                        <td className="px-4 py-3 text-slate-400">Ticket Médio</td>
+                        <td className="px-4 py-3 text-white">R$ 440</td>
+                        <td className="px-4 py-3 text-white">R$ 371</td>
+                        <td className="px-4 py-3 text-white">R$ 430</td>
+                        <td className="px-4 py-3 font-bold text-accent-green">Barra</td>
+                      </tr>
+                      <tr>
+                        <td className="px-4 py-3 text-slate-400">LTV</td>
+                        <td className="px-4 py-3 text-white">14 m.</td>
+                        <td className="px-4 py-3 text-white">19 m.</td>
+                        <td className="px-4 py-3 text-white">15 m.</td>
+                        <td className="px-4 py-3 font-bold text-accent-cyan">CG</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-xs text-slate-500 italic px-2">
+                  * Os scores de 0-100 representam a performance relativa entre as unidades. 
+                  Score 100 = melhor desempenho naquela métrica.
+                </p>
+              </div>
+            </div>
           </div>
         </section>
 
@@ -609,39 +1215,58 @@ export default function App() {
         <section id="seasonality" className="min-h-screen py-24 px-12">
           <SectionHeader 
             badge="Sazonalidade" 
-            title="Padrões de Risco e Oportunidade" 
-            subtitle="Identificando quando agir para maximizar resultados"
+            title="Padrões Identificados" 
+            subtitle="Meses críticos e oportunidades"
             icon={Calendar}
           />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
-            <div className="p-8 bg-accent-pink/5 border border-accent-pink/20 rounded-3xl">
-              <h4 className="flex items-center gap-2 text-2xl font-grotesk font-bold text-accent-pink mb-4">
-                <AlertTriangle /> Meses de ALTO RISCO
+            {/* Card Alto Risco */}
+            <div 
+              className="p-8 rounded-xl border-l-4 border-accent-pink"
+              style={{
+                background: 'linear-gradient(135deg, rgba(255, 51, 102, 0.1) 0%, transparent 100%)',
+                borderRadius: '12px'
+              }}
+            >
+              <h4 className="text-xl font-grotesk font-bold text-accent-pink mb-6">
+                Meses de ALTO RISCO (Evasão)
               </h4>
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-2 gap-8">
                 <div>
-                  <div className="text-4xl font-black font-grotesk text-accent-pink">FEVEREIRO</div>
-                  <div className="text-sm text-slate-400 mt-1">Pós-férias + Reajuste. <br/>81 evasões em 2025.</div>
+                  <div className="text-4xl font-black font-grotesk text-accent-pink mb-2">FEVEREIRO</div>
+                  <div className="text-sm text-slate-400 mb-1">Pós-férias + Reajuste anual</div>
+                  <div className="text-sm text-slate-400">2025: 81 evasões no grupo</div>
                 </div>
                 <div>
-                  <div className="text-4xl font-black font-grotesk text-accent-pink">MAIO</div>
-                  <div className="text-sm text-slate-400 mt-1">Fim do ciclo semestral. <br/>73 evasões em 2025.</div>
+                  <div className="text-4xl font-black font-grotesk text-accent-pink mb-2">MAIO</div>
+                  <div className="text-sm text-slate-400 mb-1">Fim do 1º semestre</div>
+                  <div className="text-sm text-slate-400">2025: 73 evasões no grupo</div>
                 </div>
               </div>
             </div>
-            <div className="p-8 bg-accent-green/5 border border-accent-green/20 rounded-3xl">
-              <h4 className="flex items-center gap-2 text-2xl font-grotesk font-bold text-accent-green mb-4">
-                <Rocket /> Meses de OURO
+
+            {/* Card Meses de Ouro */}
+            <div 
+              className="p-8 rounded-xl border-l-4 border-accent-green"
+              style={{
+                background: 'linear-gradient(135deg, rgba(0, 204, 102, 0.1) 0%, transparent 100%)',
+                borderRadius: '12px'
+              }}
+            >
+              <h4 className="text-xl font-grotesk font-bold text-accent-green mb-6">
+                Meses de OURO (Captação)
               </h4>
-              <div className="grid grid-cols-2 gap-6">
+              <div className="grid grid-cols-2 gap-8">
                 <div>
-                  <div className="text-4xl font-black font-grotesk text-accent-green">JANEIRO</div>
-                  <div className="text-sm text-slate-400 mt-1">Metas de ano novo. <br/>Recorde histórico de captação.</div>
+                  <div className="text-4xl font-black font-grotesk text-accent-green mb-2">JANEIRO</div>
+                  <div className="text-sm text-slate-400 mb-1">Ano novo + Resoluções</div>
+                  <div className="text-sm text-slate-400">Média: 88 matrículas/ano</div>
                 </div>
                 <div>
-                  <div className="text-4xl font-black font-grotesk text-accent-green">AGOSTO</div>
-                  <div className="text-sm text-slate-400 mt-1">Volta às aulas (2º sem). <br/>86 matrículas em 2025.</div>
+                  <div className="text-4xl font-black font-grotesk text-accent-green mb-2">AGOSTO</div>
+                  <div className="text-sm text-slate-400 mb-1">Volta do 2º semestre</div>
+                  <div className="text-sm text-slate-400">2025: 86 matrículas (recorde!)</div>
                 </div>
               </div>
             </div>
@@ -682,6 +1307,392 @@ export default function App() {
               <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-accent-yellow/30" /> Médio (15-25)</div>
               <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-accent-pink/40" /> Alto (26-40)</div>
               <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-accent-pink/80" /> Crítico (&gt;40)</div>
+            </div>
+          </div>
+        </section>
+
+        {/* Goals 2025 - Metas vs Realizado */}
+        <section id="goals2025" className="min-h-screen py-24 px-12 bg-slate-900/50">
+          <SectionHeader 
+            badge="Metas 2025" 
+            title="Metas vs Realizado" 
+            subtitle="Avaliação do cumprimento das metas estabelecidas"
+            icon={Target}
+          />
+
+          {/* Tabs para unidades */}
+          <div className="flex gap-2 mb-8">
+            {UNITS.map(u => (
+              <button
+                key={u.id}
+                onClick={() => setSelectedUnit(u.id)}
+                className={`px-6 py-3 rounded-full font-bold transition-all ${
+                  selectedUnit === u.id
+                    ? u.id === 'cg' ? 'bg-accent-cyan text-slate-900'
+                    : u.id === 'recreio' ? 'bg-accent-purple text-white'
+                    : 'bg-accent-green text-slate-900'
+                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                }`}
+              >
+                {u.name}
+              </button>
+            ))}
+          </div>
+
+          {/* Tabela de Metas vs Realizado */}
+          {(() => {
+            const goalsData: Record<string, { metrica: string; meta: string; realizado: string; gap: string; status: 'atingida' | 'proximo' | 'nao_atingida'; nota?: string }[]> = {
+              cg: [
+                { metrica: 'Alunos (Dez)', meta: '550', realizado: '417', gap: '-133', status: 'nao_atingida' },
+                { metrica: 'Churn Médio', meta: '3,5%', realizado: '5,21%', gap: '+1,71 p.p.', status: 'nao_atingida' },
+                { metrica: 'Taxa de Renovação', meta: '90%', realizado: '76,58%', gap: '-13,42 p.p.', status: 'nao_atingida' },
+                { metrica: 'Ticket Médio', meta: 'R$ 370', realizado: 'R$ 371,52', gap: '+R$ 1,52', status: 'atingida' },
+                { metrica: 'Matrículas/mês', meta: '35', realizado: '22,6', gap: '-12,4', status: 'nao_atingida' },
+                { metrica: 'Inadimplência', meta: '<2%', realizado: '0,85%', gap: 'OK', status: 'atingida' },
+                { metrica: 'Faturamento/mês', meta: 'R$ 200.000', realizado: '~R$ 151.000', gap: '-24,6%', status: 'nao_atingida' },
+              ],
+              recreio: [
+                { metrica: 'Alunos (Dez)', meta: '400', realizado: '297', gap: '-103', status: 'nao_atingida' },
+                { metrica: 'Churn Médio', meta: '3,5%', realizado: '5,01%', gap: '+1,51 p.p.', status: 'nao_atingida' },
+                { metrica: 'Taxa de Renovação', meta: '90%', realizado: '87,04%', gap: '-2,96 p.p.', status: 'proximo' },
+                { metrica: 'Ticket Médio', meta: 'R$ 430', realizado: 'R$ 429,57', gap: '-R$ 0,43', status: 'atingida' },
+                { metrica: 'Matrículas/mês', meta: '25', realizado: '15,75', gap: '-9,25', status: 'nao_atingida' },
+                { metrica: 'Inadimplência', meta: '<2%', realizado: '1,10%', gap: 'OK', status: 'atingida' },
+                { metrica: 'Faturamento/mês', meta: 'R$ 170.000', realizado: '~R$ 121.000', gap: '-28,5%', status: 'nao_atingida' },
+              ],
+              barra: [
+                { metrica: 'Alunos (Dez)', meta: '300', realizado: '221', gap: '-79', status: 'nao_atingida' },
+                { metrica: 'Churn Médio', meta: '3,5%', realizado: '4,90%', gap: '+1,4 p.p.', status: 'proximo', nota: 'Melhor do grupo' },
+                { metrica: 'Taxa de Renovação', meta: '90%', realizado: '87,18%', gap: '-2,82 p.p.', status: 'proximo' },
+                { metrica: 'Ticket Médio', meta: 'R$ 450', realizado: 'R$ 440,24', gap: '-R$ 9,76', status: 'proximo' },
+                { metrica: 'Matrículas/mês', meta: '20', realizado: '11,83', gap: '-8,17', status: 'nao_atingida' },
+                { metrica: 'Inadimplência', meta: '<2%', realizado: '0,48%', gap: 'OK', status: 'atingida', nota: 'Melhor!' },
+                { metrica: 'Faturamento/mês', meta: 'R$ 130.000', realizado: '~R$ 86.500', gap: '-33,5%', status: 'nao_atingida' },
+              ],
+            };
+
+            const currentData = goalsData[selectedUnit] || goalsData.cg;
+            const atingidas = currentData.filter(d => d.status === 'atingida').length;
+            const proximos = currentData.filter(d => d.status === 'proximo').length;
+            const naoAtingidas = currentData.filter(d => d.status === 'nao_atingida').length;
+
+            const getStatusBadge = (status: string, nota?: string) => {
+              if (status === 'atingida') {
+                return (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-accent-green/20 text-accent-green text-sm font-medium">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Atingida{nota ? ` (${nota})` : ''}
+                  </span>
+                );
+              }
+              if (status === 'proximo') {
+                return (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-accent-yellow/20 text-accent-yellow text-sm font-medium">
+                    <AlertTriangle className="w-3.5 h-3.5" /> {nota || 'Próximo'}
+                  </span>
+                );
+              }
+              return (
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-accent-pink/20 text-accent-pink text-sm font-medium">
+                  <XCircle className="w-3.5 h-3.5" /> Não atingida
+                </span>
+              );
+            };
+
+            const currentUnit = UNITS.find(u => u.id === selectedUnit);
+            const unitColor = currentUnit?.color || THEME_COLORS.cyan;
+
+            return (
+              <>
+                <div className="bg-slate-800 rounded-3xl overflow-hidden border border-slate-700 mb-8">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-slate-700" style={{ backgroundColor: `${unitColor}15` }}>
+                        <th className="text-left p-4 font-bold text-slate-300">Métrica</th>
+                        <th className="text-center p-4 font-bold text-slate-300">Meta</th>
+                        <th className="text-center p-4 font-bold text-slate-300">Realizado</th>
+                        <th className="text-center p-4 font-bold text-slate-300">Gap</th>
+                        <th className="text-center p-4 font-bold text-slate-300">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {currentData.map((row, idx) => (
+                        <tr key={idx} className="border-b border-slate-700/50 hover:bg-slate-700/30 transition-colors">
+                          <td className="p-4 font-medium text-white">{row.metrica}</td>
+                          <td className="p-4 text-center text-white">{row.meta}</td>
+                          <td className="p-4 text-center font-bold text-white">{row.realizado}</td>
+                          <td className="p-4 text-center font-bold text-white">
+                            {row.gap}
+                          </td>
+                          <td className="p-4 text-center">{getStatusBadge(row.status, row.nota)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Cards de Resumo */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  {/* Card Metas Atingidas */}
+                  <div 
+                    className="p-8 rounded-xl border-l-4 border-accent-green"
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(0, 204, 102, 0.1) 0%, transparent 100%)',
+                      borderRadius: '12px'
+                    }}
+                  >
+                    <h4 className="text-xl font-grotesk font-bold text-accent-green mb-4 flex items-center gap-2">
+                      <CheckCircle2 className="w-6 h-6" /> Metas Atingidas
+                    </h4>
+                    <div className="text-6xl font-black font-grotesk text-accent-green">{atingidas}</div>
+                  </div>
+
+                  {/* Card Próximo da Meta */}
+                  {proximos > 0 && (
+                    <div 
+                      className="p-8 rounded-xl border-l-4 border-accent-yellow"
+                      style={{
+                        background: 'linear-gradient(135deg, rgba(255, 193, 7, 0.1) 0%, transparent 100%)',
+                        borderRadius: '12px'
+                      }}
+                    >
+                      <h4 className="text-xl font-grotesk font-bold text-accent-yellow mb-4 flex items-center gap-2">
+                        <AlertTriangle className="w-6 h-6" /> Próximo da Meta
+                      </h4>
+                      <div className="text-6xl font-black font-grotesk text-accent-yellow">{proximos}</div>
+                    </div>
+                  )}
+
+                  {/* Card Metas Não Atingidas */}
+                  <div 
+                    className="p-8 rounded-xl border-l-4 border-accent-pink"
+                    style={{
+                      background: 'linear-gradient(135deg, rgba(255, 51, 102, 0.1) 0%, transparent 100%)',
+                      borderRadius: '12px'
+                    }}
+                  >
+                    <h4 className="text-xl font-grotesk font-bold text-accent-pink mb-4 flex items-center gap-2">
+                      <XCircle className="w-6 h-6" /> Metas Não Atingidas
+                    </h4>
+                    <div className="text-6xl font-black font-grotesk text-accent-pink">{naoAtingidas}</div>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
+        </section>
+
+        {/* Reflections Section */}
+        <section id="reflections" className="min-h-screen py-24 px-12">
+          <SectionHeader 
+            badge="Reflexões" 
+            title="Perguntas Estratégicas" 
+            subtitle="Questões para discutirmos em equipe"
+            icon={MessageCircleQuestion}
+          />
+
+          <div className="max-w-4xl mx-auto space-y-6">
+            {/* Card 1 - Fevereiro CG */}
+            <div 
+              className="border-2 border-accent-pink rounded-3xl p-10 text-center"
+              style={{
+                background: 'linear-gradient(135deg, rgba(255, 51, 102, 0.2) 0%, rgba(139, 92, 246, 0.1) 100%)'
+              }}
+            >
+              <div 
+                className="w-12 h-12 rounded-full mx-auto mb-6"
+                style={{ background: '#ff3366' }}
+              />
+              <h3 className="text-3xl font-semibold text-white mb-4 leading-tight">
+                O que aconteceu em Fevereiro de 2025 em Campo Grande?
+              </h3>
+              <p className="text-lg text-slate-400">
+                49 evasões vs 27 em 2024 — aumento de 81%. O que mudou?
+              </p>
+            </div>
+
+            {/* Card 2 - Agosto Recreio */}
+            <div 
+              className="border-2 border-accent-green rounded-3xl p-10 text-center"
+              style={{
+                background: 'linear-gradient(135deg, rgba(0, 204, 102, 0.2) 0%, rgba(0, 212, 255, 0.1) 100%)'
+              }}
+            >
+              <div 
+                className="w-12 h-12 rounded-full mx-auto mb-6"
+                style={{ background: '#00cc66' }}
+              />
+              <h3 className="text-3xl font-semibold text-white mb-4 leading-tight">
+                O que o Recreio fez em Agosto/25?
+              </h3>
+              <p className="text-lg text-slate-400">
+                40 matrículas — recorde da unidade! Podemos replicar?
+              </p>
+            </div>
+
+            {/* Card 3 - Barra Churn */}
+            <div 
+              className="border-2 border-accent-purple rounded-3xl p-10 text-center"
+              style={{
+                background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(0, 212, 255, 0.1) 100%)'
+              }}
+            >
+              <div 
+                className="w-12 h-12 rounded-full mx-auto mb-6"
+                style={{ background: '#8b5cf6' }}
+              />
+              <h3 className="text-3xl font-semibold text-white mb-4 leading-tight">
+                Por que a Barra conseguiu reduzir o churn?
+              </h3>
+              <p className="text-lg text-slate-400">
+                Única unidade que reduziu (de 6,0% para 4,90%). O que eles fazem diferente?
+              </p>
+            </div>
+
+            {/* Card 4 - Colaboradores */}
+            <div 
+              className="border-2 rounded-3xl p-10 text-center"
+              style={{
+                borderColor: '#ffaa00',
+                background: 'linear-gradient(135deg, rgba(255, 170, 0, 0.2) 0%, rgba(255, 51, 102, 0.1) 100%)'
+              }}
+            >
+              <div 
+                className="w-12 h-12 rounded-full mx-auto mb-6"
+                style={{ background: '#ffaa00' }}
+              />
+              <h3 className="text-3xl font-semibold text-white mb-4 leading-tight">
+                As trocas de colaboradores estratégicos coincidem com os picos de evasão?
+              </h3>
+              <p className="text-lg text-slate-400">
+                Precisamos mapear essas correlações para 2026.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {/* Alerts and Insights Section */}
+        <section id="alerts" className="min-h-screen py-24 px-12 bg-slate-900/50">
+          <SectionHeader 
+            badge="Alertas e Insights" 
+            title="Pontos Críticos de Atenção" 
+            subtitle="O que a gestão precisa saber"
+            icon={AlertTriangle}
+          />
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
+            {/* Coluna Esquerda - Alertas Críticos */}
+            <div>
+              <h3 className="text-2xl font-bold text-accent-pink mb-6">Alertas Críticos</h3>
+              
+              {/* Card 1 */}
+              <div 
+                className="border-l-4 border-accent-pink rounded-xl p-5 mb-4"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(255, 51, 102, 0.15) 0%, transparent 100%)'
+                }}
+              >
+                <h4 className="text-lg font-semibold text-white mb-2">Explosão de Evasões em 2025</h4>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  612 evasões vs 449 em 2024 (+36,3%). Mesmo com 602 matrículas, saldo foi negativo.
+                </p>
+              </div>
+
+              {/* Card 2 */}
+              <div 
+                className="border-l-4 border-accent-pink rounded-xl p-5 mb-4"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(255, 51, 102, 0.15) 0%, transparent 100%)'
+                }}
+              >
+                <h4 className="text-lg font-semibold text-white mb-2">Fevereiro é o Mês Mais Perigoso</h4>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  81 evasões no grupo só em Fevereiro/25. Hipótese: reajuste mal comunicado + reavaliação pós-férias.
+                </p>
+              </div>
+
+              {/* Card 3 */}
+              <div 
+                className="border-l-4 border-accent-pink rounded-xl p-5 mb-4"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(255, 51, 102, 0.15) 0%, transparent 100%)'
+                }}
+              >
+                <h4 className="text-lg font-semibold text-white mb-2">Campo Grande Perdeu o Ritmo</h4>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  Em 2024 cresceu 66% em matrículas. Em 2025 caiu 16%. O que mudou?
+                </p>
+              </div>
+
+              {/* Card 4 - Amarelo */}
+              <div 
+                className="border-l-4 rounded-xl p-5 mb-4"
+                style={{
+                  borderLeftColor: '#ffaa00',
+                  background: 'linear-gradient(135deg, rgba(255, 170, 0, 0.15) 0%, transparent 100%)'
+                }}
+              >
+                <h4 className="text-lg font-semibold text-white mb-2">Metas 2025 Estavam Muito Agressivas</h4>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  Crescimentos de 18% a 41% necessários não eram realistas dado o histórico.
+                </p>
+              </div>
+            </div>
+
+            {/* Coluna Direita - Insights Positivos */}
+            <div>
+              <h3 className="text-2xl font-bold text-accent-green mb-6">Insights Positivos</h3>
+              
+              {/* Card 1 - Cyan */}
+              <div 
+                className="border-l-4 border-accent-cyan rounded-xl p-5 mb-4"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(0, 212, 255, 0.15) 0%, transparent 100%)'
+                }}
+              >
+                <h4 className="text-lg font-semibold text-white mb-2">Inadimplência Sob Controle</h4>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  Todas as unidades abaixo de 2%. Indica boa qualidade de crédito e cobrança eficiente.
+                </p>
+              </div>
+
+              {/* Card 2 - Cyan */}
+              <div 
+                className="border-l-4 border-accent-cyan rounded-xl p-5 mb-4"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(0, 212, 255, 0.15) 0%, transparent 100%)'
+                }}
+              >
+                <h4 className="text-lg font-semibold text-white mb-2">Ticket Médio Crescendo</h4>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  Grupo cresceu 3,9% no ticket. CG e Recreio bateram as metas. Continuar política de reajuste.
+                </p>
+              </div>
+
+              {/* Card 3 - Cyan */}
+              <div 
+                className="border-l-4 border-accent-cyan rounded-xl p-5 mb-4"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(0, 212, 255, 0.15) 0%, transparent 100%)'
+                }}
+              >
+                <h4 className="text-lg font-semibold text-white mb-2">LTV Aumentando</h4>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  Quem fica, está ficando mais tempo. Todas as unidades aumentaram o tempo de permanência.
+                </p>
+              </div>
+
+              {/* Card 4 - Verde */}
+              <div 
+                className="border-l-4 border-accent-green rounded-xl p-5 mb-4"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(0, 204, 102, 0.15) 0%, transparent 100%)'
+                }}
+              >
+                <h4 className="text-lg font-semibold text-white mb-2">Barra é o Modelo a Seguir</h4>
+                <p className="text-sm text-slate-400 leading-relaxed">
+                  Única que cresceu, menor churn, menor inadimplência. Entender e replicar!
+                </p>
+              </div>
             </div>
           </div>
         </section>
@@ -853,22 +1864,37 @@ export default function App() {
         <section id="closing" className="min-h-screen flex flex-col items-center justify-center px-12 text-center relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-b from-transparent via-accent-cyan/5 to-slate-950" />
           
-          <div className="relative z-10 max-w-4xl">
-            <h1 className="text-7xl lg:text-8xl font-grotesk font-black mb-12">
+          <div className="relative z-10 max-w-5xl">
+            {/* Logos no topo */}
+            <div className="flex items-center justify-center gap-8 mb-16">
+              <img src="/logo-la-music-school.png" alt="LA Music School" className="h-16 object-contain" />
+              <img src="/logo-la-music-kids.png" alt="LA Music Kids" className="h-16 object-contain" />
+            </div>
+
+            <h1 className="text-6xl lg:text-7xl font-grotesk font-black mb-12">
               MUITO OBRIGADO, <span className="text-accent-cyan">TIME!</span>
             </h1>
             
-            <div className="space-y-8 text-2xl text-slate-400 font-light mb-16">
-              <p>2025 foi um ano de reajuste, aprendizado e resiliência.</p>
-              <p>Seguimos juntos, mais preparados e prontos para fazer de 2026 o nosso <span className="text-white font-bold">melhor ano histórico</span>.</p>
+            <div className="space-y-6 text-xl text-slate-300 font-light mb-12 max-w-4xl mx-auto">
+              <p>2025 foi desafiador. Enfrentamos obstáculos, ajustamos rotas, reinventamos estratégias... e aprendemos muito com nossos erros e acertos.</p>
+              <p>Isso só foi possível porque temos um time que <span className="text-accent-cyan font-semibold">veste a camisa</span>, acredita no que faz e entrega com alma.</p>
+            </div>
+
+            <div className="text-2xl font-semibold text-white mb-12 max-w-3xl mx-auto leading-relaxed">
+              Seguimos juntos, mais preparados, mais fortes — e prontos pra fazer de 2026 o nosso melhor ano!
             </div>
             
-            <div className="inline-flex flex-col items-center">
-              <div className="px-12 py-6 bg-gradient-to-r from-accent-cyan/20 to-accent-pink/20 border-2 border-white/10 rounded-3xl backdrop-blur-md mb-8">
-                <span className="text-4xl font-grotesk font-black uppercase tracking-tighter">Vamos com tudo para 2026!</span>
+            <div className="inline-flex flex-col items-center gap-8">
+              <div className="relative">
+                <div className="absolute -inset-2 bg-accent-cyan rounded-full blur-xl opacity-60 animate-pulse" />
+                <div className="relative px-16 py-5 bg-slate-900 border-4 border-accent-cyan rounded-full shadow-[0_0_40px_rgba(0,212,255,0.6)]">
+                  <span className="text-3xl font-grotesk font-black uppercase tracking-tight text-accent-cyan">
+                    Vamos com tudo para 2026!
+                  </span>
+                </div>
               </div>
               <div className="text-accent-cyan font-black text-2xl uppercase tracking-widest">
-                L.A. Pra quem sabe o que quer!
+                LA PRA QUEM SABE O QUE QUER!
               </div>
             </div>
           </div>

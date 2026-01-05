@@ -59,8 +59,8 @@ export const UNITS: UnitData[] = [
     permanenciaMeses: 16,
     inadimplencia: 1.10,
     faturamentoMes: 121000,
-    color: THEME_COLORS.pink,
-    bgColor: 'rgba(255, 51, 102, 0.1)',
+    color: THEME_COLORS.purple,
+    bgColor: 'rgba(139, 92, 246, 0.1)',
     evolution: [
       { month: 'Jan', alunos: 311, matriculas: 30, evasoes: 13 },
       { month: 'Fev', alunos: 305, matriculas: 17, evasoes: 23 },
@@ -133,4 +133,25 @@ export const HISTORY_DATA = {
     { year: '2024', cg: 345, recreio: 418, barra: 435 },
     { year: '2025', cg: 371, recreio: 430, barra: 440 },
   ],
+};
+
+export const DISTRIBUTION_DATA = {
+  '2023': {
+    alunos: { cg: 321, recreio: 219, barra: 147, total: 687 },
+    matriculas: { cg: 194, recreio: 118, barra: 124, total: 436 },
+    evasoes: { cg: 208, recreio: 127, barra: 74, total: 409 },
+    faturamento: { cg: 100152, recreio: 84972, barra: 59829, total: 253000 },
+  },
+  '2024': {
+    alunos: { cg: 463, recreio: 295, barra: 212, total: 970 },
+    matriculas: { cg: 323, recreio: 187, barra: 178, total: 688 },
+    evasoes: { cg: 213, recreio: 117, barra: 119, total: 449 },
+    faturamento: { cg: 159735, recreio: 123310, barra: 92220, total: 387000 },
+  },
+  '2025': {
+    alunos: { cg: 417, recreio: 297, barra: 221, total: 935 },
+    matriculas: { cg: 271, recreio: 189, barra: 142, total: 602 },
+    evasoes: { cg: 288, recreio: 189, barra: 135, total: 612 },
+    faturamento: { cg: 156375, recreio: 127641, barra: 97293, total: 389000 },
+  },
 };
