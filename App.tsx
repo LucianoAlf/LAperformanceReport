@@ -13,6 +13,56 @@ import { UNITS, HISTORY_DATA, DISTRIBUTION_DATA, THEME_COLORS, MONTHS } from './
 
 // --- Helper Components ---
 
+// Tooltip customizado premium
+const CustomTooltipHeatmap = ({ content, children }: { content: string, children: React.ReactNode }) => {
+  const [isVisible, setIsVisible] = useState(false);
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+  const tooltipRef = useRef<HTMLDivElement>(null);
+
+  const handleMouseEnter = (e: React.MouseEvent) => {
+    setIsVisible(true);
+    updatePosition(e);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    updatePosition(e);
+  };
+
+  const handleMouseLeave = () => {
+    setIsVisible(false);
+  };
+
+  const updatePosition = (e: React.MouseEvent) => {
+    setPosition({ x: e.clientX, y: e.clientY });
+  };
+
+  return (
+    <>
+      <div
+        onMouseEnter={handleMouseEnter}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+      >
+        {children}
+      </div>
+      {isVisible && (
+        <div
+          ref={tooltipRef}
+          className="fixed z-50 pointer-events-none animate-in fade-in zoom-in-95 duration-200"
+          style={{
+            left: `${position.x + 12}px`,
+            top: `${position.y + 12}px`,
+          }}
+        >
+          <div className="bg-slate-900 border-2 border-accent-cyan/50 rounded-xl px-4 py-3 shadow-2xl backdrop-blur-sm">
+            <p className="text-white font-bold text-sm whitespace-nowrap">{content}</p>
+          </div>
+        </div>
+      )}
+    </>
+  );
+};
+
 // Fix: Make children optional to resolve 'Property children is missing' errors
 const Badge = ({ children, variant = 'info' }: { children?: React.ReactNode, variant?: string }) => {
   const styles: Record<string, string> = {
@@ -238,6 +288,9 @@ export default function App() {
   const [overviewUnit, setOverviewUnit] = useState<'consolidado' | 'cg' | 'recreio' | 'barra'>('consolidado');
   const [distributionYear, setDistributionYear] = useState<'2023' | '2024' | '2025'>('2025');
   const [distributionMetric, setDistributionMetric] = useState<'alunos' | 'matriculas' | 'evasoes' | 'faturamento'>('alunos');
+  const [evolutionUnit, setEvolutionUnit] = useState<'consolidado' | 'cg' | 'recreio' | 'barra'>('consolidado');
+  const [seasonalityMetric, setSeasonalityMetric] = useState<'evasoes' | 'matriculas'>('evasoes');
+  const [seasonalityYear, setSeasonalityYear] = useState<'2023' | '2024' | '2025' | 'todos'>('2025');
   const [metas2026, setMetas2026] = useState<Record<string, Meta2026>>({
     cg: { alunos: 500, churn: '4%', renovacao: '90%', ticket: 'R$ 395', matriculas: 30, inadimplencia: '< 1,5%', faturamento: 'R$ 200.000' },
     recreio: { alunos: 400, churn: '4%', renovacao: '90%', ticket: 'R$ 455', matriculas: 25, inadimplencia: '< 1,5%', faturamento: 'R$ 180.000' },
@@ -316,6 +369,58 @@ export default function App() {
     }
   };
 
+  // Insights dinâmicos por métrica e unidade
+  const evolutionInsights: Record<string, Record<string, { color: string, title: string, text: string }>> = {
+    consolidado: {
+      alunos: {
+        color: 'pink',
+        title: 'Ponto de Atenção Crítico',
+        text: '2025 quebrou a tendência de crescimento. Após expandir 41% em 2024, a retração de 3,6% sinaliza esgotamento do modelo ou falha na retenção (+36% de evasões).'
+      },
+      matriculas: {
+        color: 'pink',
+        title: 'Captação em Queda',
+        text: 'Após recorde de 688 matrículas em 2024, caímos 12,5% em 2025. Apenas Recreio manteve crescimento (+1,1%). Ações de marketing precisam ser revisadas.'
+      },
+      evasoes: {
+        color: 'pink',
+        title: '⚠️ Alerta Vermelho',
+        text: '612 evasões em 2025 é o maior número da história. Aumento de 36,3% vs 2024. Fevereiro foi o pior mês (81 evasões). Prioridade máxima para 2026.'
+      },
+      churn: {
+        color: 'pink',
+        title: 'Churn Voltou a Subir',
+        text: 'Após reduzir de 5,4% para 4,8% em 2024, o churn subiu para 5,27% em 2025. Apenas Barra conseguiu reduzir (-1,1pp). Modelo da Barra deve ser replicado.'
+      },
+      ticket: {
+        color: 'green',
+        title: '✅ Ponto Positivo',
+        text: 'Ticket médio cresceu consistentemente: R$369 → R$399 → R$414 (+12% em 2 anos). Política de reajuste está funcionando. Manter.'
+      }
+    },
+    cg: {
+      alunos: {
+        color: 'pink',
+        title: 'Maior Queda do Grupo',
+        text: 'Campo Grande perdeu 46 alunos em 2025 após crescer 142 em 2024. Fevereiro/25 teve 49 evasões (recorde negativo). Investigar causas urgentemente.'
+      }
+    },
+    recreio: {
+      alunos: {
+        color: 'yellow',
+        title: 'Estabilidade às Custas de Evasão',
+        text: 'Recreio manteve base estável (+0,7%), mas com aumento brutal de evasões (+61,5%). Agosto/25 teve recorde de 40 matrículas. Replicar ações de agosto.'
+      }
+    },
+    barra: {
+      alunos: {
+        color: 'green',
+        title: '🏆 Caso de Sucesso',
+        text: 'Única unidade que cresceu em 2025 (+4,2%) e reduziu o churn (-1,1pp). Menor inadimplência do grupo (0,48%). Modelo a ser estudado e replicado.'
+      }
+    }
+  };
+
   // Metas 2025
   const metas2025 = {
     consolidado: {
@@ -357,6 +462,44 @@ export default function App() {
       ticket: 440,
       permanencia: 13,
       inadimplencia: 2
+    }
+  };
+
+  // Dados históricos de sazonalidade (evasões e matrículas mensais)
+  const seasonalityData = {
+    evasoes: {
+      2023: {
+        cg: [17, 23, 21, 25, 14, 15, 15, 20, 19, 14, 9, 16],
+        recreio: [5, 12, 16, 12, 8, 17, 7, 5, 5, 15, 14, 11],
+        barra: [7, 4, 6, 6, 14, 7, 3, 4, 6, 7, 4, 6]
+      },
+      2024: {
+        cg: [35, 27, 20, 25, 22, 9, 21, 11, 12, 12, 8, 11],
+        recreio: [13, 15, 9, 13, 9, 10, 10, 8, 6, 13, 6, 5],
+        barra: [12, 23, 13, 12, 13, 4, 6, 9, 12, 8, 3, 4]
+      },
+      2025: {
+        cg: [12, 49, 9, 26, 47, 5, 37, 11, 29, 40, 14, 9],
+        recreio: [13, 23, 8, 24, 7, 11, 21, 9, 24, 14, 11, 24],
+        barra: [11, 9, 10, 13, 19, 17, 10, 6, 10, 9, 5, 16]
+      }
+    },
+    matriculas: {
+      2023: {
+        cg: [22, 19, 18, 16, 12, 13, 15, 25, 15, 18, 13, 8],
+        recreio: [10, 13, 17, 7, 11, 16, 7, 12, 12, 6, 4, 3],
+        barra: [7, 5, 17, 11, 15, 11, 9, 16, 7, 6, 13, 7]
+      },
+      2024: {
+        cg: [50, 17, 19, 29, 24, 24, 16, 33, 20, 35, 40, 16],
+        recreio: [21, 21, 15, 10, 8, 11, 12, 25, 18, 24, 16, 6],
+        barra: [25, 27, 13, 10, 7, 8, 9, 20, 4, 16, 23, 16]
+      },
+      2025: {
+        cg: [42, 29, 20, 21, 37, 12, 17, 29, 23, 11, 24, 6],
+        recreio: [30, 17, 18, 17, 10, 10, 9, 40, 15, 6, 13, 4],
+        barra: [16, 18, 13, 6, 12, 12, 13, 17, 13, 10, 9, 3]
+      }
     }
   };
 
@@ -877,102 +1020,241 @@ export default function App() {
             icon={TrendingUp}
           />
 
-          <div className="flex flex-wrap gap-2 mb-8">
-            {(['alunos', 'matriculas', 'evasoes', 'churn', 'ticket'] as MetricType[]).map(m => (
-              <button
-                key={m}
-                onClick={() => setEvolutionMetric(m)}
-                className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${evolutionMetric === m ? 'bg-accent-cyan text-slate-900' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
-              >
-                {m.charAt(0).toUpperCase() + m.slice(1)}
-              </button>
-            ))}
+          {/* Filtros */}
+          <div className="flex flex-col gap-4 mb-8">
+            <div>
+              <label className="text-sm text-slate-400 mb-2 block">Métrica</label>
+              <div className="flex flex-wrap gap-2">
+                {(['alunos', 'matriculas', 'evasoes', 'churn', 'ticket'] as MetricType[]).map(m => (
+                  <button
+                    key={m}
+                    onClick={() => setEvolutionMetric(m)}
+                    className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${evolutionMetric === m ? 'bg-accent-cyan text-slate-900' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                  >
+                    {m.charAt(0).toUpperCase() + m.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+            
+            <div>
+              <label className="text-sm text-slate-400 mb-2 block">Unidade</label>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={() => setEvolutionUnit('consolidado')}
+                  className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${evolutionUnit === 'consolidado' ? 'bg-accent-cyan text-slate-900' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                >
+                  Consolidado
+                </button>
+                {UNITS.map(unit => (
+                  <button
+                    key={unit.id}
+                    onClick={() => setEvolutionUnit(unit.id as 'cg' | 'recreio' | 'barra')}
+                    className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${evolutionUnit === unit.id ? 'bg-accent-cyan text-slate-900' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                  >
+                    {unit.name}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="bg-slate-800/50 border border-slate-700/50 rounded-3xl p-8 h-[500px]">
-              <h3 className="text-xl font-grotesk font-bold mb-6">Comparativo Anual por Unidade</h3>
-              <ResponsiveContainer width="100%" height="90%">
-                <BarChart data={[
+          {/* Conteúdo dinâmico */}
+          {(() => {
+            const unitData = historicalData[evolutionUnit];
+            const unitMetas = metas2025[evolutionUnit];
+            
+            // Preparar dados para todas as métricas
+            const metricsData = [
+              { 
+                name: 'Alunos (Dez)', 
+                key: 'alunos',
+                v2023: unitData[2023].alunos, 
+                v2024: unitData[2024].alunos, 
+                v2025: unitData[2025].alunos,
+                meta: unitMetas.alunos,
+                isNegative: false,
+                format: (v: number) => v.toLocaleString('pt-BR')
+              },
+              { 
+                name: 'Matrículas', 
+                key: 'matriculas',
+                v2023: unitData[2023].matriculas, 
+                v2024: unitData[2024].matriculas, 
+                v2025: unitData[2025].matriculas,
+                meta: unitMetas.matriculas,
+                isNegative: false,
+                format: (v: number) => v.toLocaleString('pt-BR')
+              },
+              { 
+                name: 'Evasões', 
+                key: 'evasoes',
+                v2023: unitData[2023].evasoes, 
+                v2024: unitData[2024].evasoes, 
+                v2025: unitData[2025].evasoes,
+                meta: unitMetas.evasoes,
+                isNegative: true,
+                format: (v: number) => v.toLocaleString('pt-BR')
+              },
+              { 
+                name: 'Churn Médio', 
+                key: 'churn',
+                v2023: unitData[2023].churn, 
+                v2024: unitData[2024].churn, 
+                v2025: unitData[2025].churn,
+                meta: unitMetas.churn,
+                isNegative: true,
+                format: (v: number) => `${v.toFixed(2)}%`
+              },
+              { 
+                name: 'Ticket Médio', 
+                key: 'ticket',
+                v2023: unitData[2023].ticket, 
+                v2024: unitData[2024].ticket, 
+                v2025: unitData[2025].ticket,
+                meta: unitMetas.ticket,
+                isNegative: false,
+                format: (v: number) => `R$ ${v}`
+              },
+              { 
+                name: 'Renovação', 
+                key: 'renovacao',
+                v2023: unitData[2023].renovacao, 
+                v2024: unitData[2024].renovacao, 
+                v2025: unitData[2025].renovacao,
+                meta: unitMetas.renovacao,
+                isNegative: false,
+                format: (v: number | null) => v !== null ? `${v.toFixed(1)}%` : '--'
+              },
+              { 
+                name: 'Permanência', 
+                key: 'permanencia',
+                v2023: unitData[2023].permanencia, 
+                v2024: unitData[2024].permanencia, 
+                v2025: unitData[2025].permanencia,
+                meta: unitMetas.permanencia,
+                isNegative: false,
+                format: (v: number | null) => v !== null ? `${v}m` : '--'
+              },
+              { 
+                name: 'Inadimplência', 
+                key: 'inadimplencia',
+                v2023: unitData[2023].inadimplencia, 
+                v2024: unitData[2024].inadimplencia, 
+                v2025: unitData[2025].inadimplencia,
+                meta: unitMetas.inadimplencia,
+                isNegative: true,
+                format: (v: number | null) => v !== null ? `${v.toFixed(2)}%` : '--'
+              }
+            ];
+
+            // Calcular variações
+            const calcVar = (current: number | null, previous: number | null) => {
+              if (current === null || previous === null) return null;
+              return ((current - previous) / previous) * 100;
+            };
+
+            // Obter insight dinâmico
+            const insight = evolutionInsights[evolutionUnit]?.[evolutionMetric] || evolutionInsights.consolidado[evolutionMetric];
+            const insightBgColor = insight.color === 'green' ? 'bg-accent-green/10 border-accent-green' : insight.color === 'yellow' ? 'bg-accent-yellow/10 border-accent-yellow' : 'bg-accent-pink/10 border-accent-pink';
+            const insightTextColor = insight.color === 'green' ? 'text-accent-green' : insight.color === 'yellow' ? 'text-accent-yellow' : 'text-accent-pink';
+
+            // Dados para gráfico
+            const chartData = evolutionUnit === 'consolidado' 
+              ? [
                   { name: 'C. Grande', '2023': HISTORY_DATA[evolutionMetric][0].cg, '2024': HISTORY_DATA[evolutionMetric][1].cg, '2025': HISTORY_DATA[evolutionMetric][2].cg },
                   { name: 'Recreio', '2023': HISTORY_DATA[evolutionMetric][0].recreio, '2024': HISTORY_DATA[evolutionMetric][1].recreio, '2025': HISTORY_DATA[evolutionMetric][2].recreio },
                   { name: 'Barra', '2023': HISTORY_DATA[evolutionMetric][0].barra, '2024': HISTORY_DATA[evolutionMetric][1].barra, '2025': HISTORY_DATA[evolutionMetric][2].barra },
-                ]}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
-                  <XAxis dataKey="name" stroke="#94a3b8" />
-                  <YAxis stroke="#94a3b8" />
-                  <Tooltip cursor={{fill: '#1e293b'}} contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px' }} />
-                  <Legend />
-                  <Bar dataKey="2023" fill="#64748b" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="2024" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="2025" fill="#00d4ff" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
+                ]
+              : [
+                  { name: UNITS.find(u => u.id === evolutionUnit)?.name || '', '2023': HISTORY_DATA[evolutionMetric][0][evolutionUnit], '2024': HISTORY_DATA[evolutionMetric][1][evolutionUnit], '2025': HISTORY_DATA[evolutionMetric][2][evolutionUnit] }
+                ];
 
-            <div className="space-y-6">
-              <div className="overflow-hidden border border-slate-800 rounded-3xl">
-                <table className="w-full text-left">
-                  <thead className="bg-slate-800/80">
-                    <tr>
-                      <th className="px-6 py-4 text-xs uppercase tracking-widest text-accent-cyan font-black">Métrica</th>
-                      <th className="px-6 py-4 text-xs font-bold text-slate-400">2023</th>
-                      <th className="px-6 py-4 text-xs font-bold text-slate-400">2024</th>
-                      <th className="px-6 py-4 text-xs font-bold text-slate-400">2025</th>
-                      <th className="px-6 py-4 text-xs font-bold text-slate-400">Var 25/24</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800">
-                    <tr>
-                      <td className="px-6 py-4 font-bold">Alunos (Dez)</td>
-                      <td className="px-6 py-4 text-slate-400">687</td>
-                      <td className="px-6 py-4 text-slate-400">970</td>
-                      <td className="px-6 py-4 text-slate-200">935</td>
-                      <td className="px-6 py-4 text-accent-pink font-bold">-3,6%</td>
-                    </tr>
-                    <tr>
-                      <td className="px-6 py-4 font-bold">Matrículas</td>
-                      <td className="px-6 py-4 text-slate-400">436</td>
-                      <td className="px-6 py-4 text-slate-400">688</td>
-                      <td className="px-6 py-4 text-slate-200">602</td>
-                      <td className="px-6 py-4 text-accent-pink font-bold">-12,5%</td>
-                    </tr>
-                    <tr>
-                      <td className="px-6 py-4 font-bold">Evasões</td>
-                      <td className="px-6 py-4 text-slate-400">409</td>
-                      <td className="px-6 py-4 text-slate-400">449</td>
-                      <td className="px-6 py-4 text-slate-200">612</td>
-                      <td className="px-6 py-4 text-accent-pink font-bold">+36,3%</td>
-                    </tr>
-                    <tr>
-                      <td className="px-6 py-4 font-bold">Churn Médio</td>
-                      <td className="px-6 py-4 text-slate-400">5,4%</td>
-                      <td className="px-6 py-4 text-slate-400">4,8%</td>
-                      <td className="px-6 py-4 text-slate-200">5,27%</td>
-                      <td className="px-6 py-4 text-accent-pink font-bold">+0,47pp</td>
-                    </tr>
-                    <tr>
-                      <td className="px-6 py-4 font-bold">Ticket Médio</td>
-                      <td className="px-6 py-4 text-slate-400">R$ 369</td>
-                      <td className="px-6 py-4 text-slate-400">R$ 399</td>
-                      <td className="px-6 py-4 text-slate-200">R$ 414</td>
-                      <td className="px-6 py-4 text-accent-green font-bold">+3,9%</td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+            return (
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Gráfico */}
+                <div className="bg-slate-800/50 border border-slate-700/50 rounded-3xl p-8 h-[500px]">
+                  <h3 className="text-xl font-grotesk font-bold mb-6">
+                    {evolutionUnit === 'consolidado' ? 'Comparativo por Unidade' : `Evolução ${UNITS.find(u => u.id === evolutionUnit)?.name}`}
+                  </h3>
+                  <ResponsiveContainer width="100%" height="90%">
+                    <BarChart data={chartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                      <XAxis dataKey="name" stroke="#94a3b8" />
+                      <YAxis stroke="#94a3b8" />
+                      <Tooltip cursor={{fill: '#1e293b'}} contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px' }} />
+                      <Legend />
+                      <Bar dataKey="2023" fill="#64748b" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="2024" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="2025" fill="#00d4ff" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
 
-              <div className="bg-accent-pink/10 border-l-4 border-accent-pink p-6 rounded-2xl flex gap-4">
-                <AlertTriangle className="text-accent-pink shrink-0" />
-                <div>
-                  <h4 className="font-bold text-accent-pink">Ponto de Atenção Crítico</h4>
-                  <p className="text-sm text-slate-400 mt-1">
-                    2025 quebrou a tendência de crescimento. Após expandir 41% em 2024, a retração de 3,6% sinaliza um esgotamento do modelo atual ou falha grave na retenção (+36% de evasões).
-                  </p>
+                {/* Tabela + Insight */}
+                <div className="space-y-6">
+                  <div className="overflow-x-auto border border-slate-800 rounded-3xl">
+                    <table className="w-full text-left text-sm">
+                      <thead className="bg-slate-800/80">
+                        <tr>
+                          <th className="px-4 py-3 text-xs uppercase tracking-widest text-accent-cyan font-black">Métrica</th>
+                          <th className="px-4 py-3 text-xs font-bold text-slate-400">2023</th>
+                          <th className="px-4 py-3 text-xs font-bold text-slate-400">2024</th>
+                          <th className="px-4 py-3 text-xs font-bold text-slate-400">Var</th>
+                          <th className="px-4 py-3 text-xs font-bold text-slate-400">2025</th>
+                          <th className="px-4 py-3 text-xs font-bold text-slate-400">Var</th>
+                          <th className="px-4 py-3 text-xs font-bold text-slate-400">Meta</th>
+                          <th className="px-4 py-3 text-xs font-bold text-slate-400">%</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-800">
+                        {metricsData.map(metric => {
+                          const var2423 = calcVar(metric.v2024, metric.v2023);
+                          const var2524 = calcVar(metric.v2025, metric.v2024);
+                          const metaPercent = metric.v2025 !== null && metric.meta ? (metric.isNegative ? Math.min((metric.meta / metric.v2025) * 100, 100) : (metric.v2025 / metric.meta) * 100) : null;
+                          const metaAchieved = metric.v2025 !== null && metric.meta ? (metric.isNegative ? metric.v2025 <= metric.meta : metric.v2025 >= metric.meta) : false;
+                          
+                          const getVarColor = (varVal: number | null, isNeg: boolean) => {
+                            if (varVal === null) return 'text-slate-600';
+                            if (isNeg) return varVal > 0 ? 'text-accent-pink' : 'text-accent-green';
+                            return varVal > 0 ? 'text-accent-green' : 'text-accent-pink';
+                          };
+
+                          return (
+                            <tr key={metric.key}>
+                              <td className="px-4 py-3 font-bold text-xs">{metric.name}</td>
+                              <td className="px-4 py-3 text-slate-400 text-xs">{metric.format(metric.v2023)}</td>
+                              <td className="px-4 py-3 text-slate-400 text-xs">{metric.format(metric.v2024)}</td>
+                              <td className={`px-4 py-3 font-bold text-xs ${getVarColor(var2423, metric.isNegative)}`}>
+                                {var2423 !== null ? `${var2423 > 0 ? '+' : ''}${var2423.toFixed(1)}%` : '--'}
+                              </td>
+                              <td className="px-4 py-3 text-slate-200 text-xs">{metric.format(metric.v2025)}</td>
+                              <td className={`px-4 py-3 font-bold text-xs ${getVarColor(var2524, metric.isNegative)}`}>
+                                {var2524 !== null ? `${var2524 > 0 ? '+' : ''}${var2524.toFixed(1)}%` : '--'}
+                              </td>
+                              <td className="px-4 py-3 text-slate-400 text-xs">{metric.format(metric.meta)}</td>
+                              <td className={`px-4 py-3 font-bold text-xs ${metaAchieved ? 'text-accent-green' : 'text-accent-pink'}`}>
+                                {metaPercent !== null ? `${metaPercent.toFixed(0)}%` : '--'}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Insight Dinâmico */}
+                  <div className={`${insightBgColor} border-l-4 p-6 rounded-2xl flex gap-4`}>
+                    <AlertTriangle className={`${insightTextColor} shrink-0`} size={20} />
+                    <div>
+                      <h4 className={`font-bold ${insightTextColor}`}>{insight.title}</h4>
+                      <p className="text-sm text-slate-400 mt-1">{insight.text}</p>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
+            );
+          })()}
         </section>
 
         {/* Unit Analysis Section */}
@@ -996,32 +1278,70 @@ export default function App() {
             ))}
           </div>
 
-          {UNITS.filter(u => u.id === unitTab).map(u => (
-            <div key={u.id} className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-                <div className={`p-6 rounded-3xl border flex flex-col justify-between`} style={{ backgroundColor: u.bgColor, borderColor: `${u.color}33` }}>
-                  <div className="flex justify-between items-start">
-                    <span className="text-xs uppercase font-black text-slate-400 tracking-widest">Alunos Pagantes (Dez)</span>
-                    <Badge variant={u.id === 'barra' ? 'success' : 'danger'}>{u.id === 'barra' ? '+1,8%' : u.id === 'recreio' ? '-4,5%' : '-16,3%'}</Badge>
+          {UNITS.filter(u => u.id === unitTab).map(u => {
+            // Dados dinâmicos por unidade
+            const reajuste = u.id === 'cg' ? { medio: 12.85, pico: '18% (Mai)', min: '9,9% (Dez)' } : u.id === 'recreio' ? { medio: 10.12, pico: '12,15% (Mai)', min: '8,67% (Mar)' } : { medio: 11.47, pico: '21% (Mai)', min: '8,5% (Jan)' };
+            const faturamentoDez = u.id === 'cg' ? 156375 : u.id === 'recreio' ? 127710 : 97240;
+            const faturamentoAnual = u.id === 'cg' ? 1870000 : u.id === 'recreio' ? 1530000 : 1170000;
+            const matriculasBadge = u.id === 'recreio' ? '+1,1%' : u.id === 'barra' ? '-20,2%' : null;
+            const churnBadge = u.id === 'barra' ? '-1,1pp' : null;
+            
+            return (
+              <div key={u.id} className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                  {/* Card 1 - Alunos */}
+                  <div className={`p-6 rounded-3xl border flex flex-col justify-between`} style={{ backgroundColor: u.bgColor, borderColor: `${u.color}33` }}>
+                    <div className="flex justify-between items-start">
+                      <span className="text-xs uppercase font-black text-slate-400 tracking-widest">Alunos Pagantes (Dez)</span>
+                      <Badge variant={u.id === 'barra' ? 'success' : 'danger'}>{u.id === 'barra' ? '+4,2%' : u.id === 'recreio' ? '-4,5%' : '-16,3%'}</Badge>
+                    </div>
+                    <div className="text-5xl font-grotesk font-bold mt-4" style={{ color: u.id === 'barra' ? THEME_COLORS.green : u.color }}>{u.alunosDez}</div>
+                    <div className="text-xs text-slate-400 mt-2">{u.id === 'cg' ? 'Jan: 498 → Dez: 417 (-81)' : u.id === 'recreio' ? 'Jan: 311 → Dez: 297 (-14)' : 'Jan: 217 → Dez: 221 (+4)'}</div>
                   </div>
-                  <div className="text-5xl font-grotesk font-bold mt-4" style={{ color: u.color }}>{u.alunosDez}</div>
-                  <div className="text-xs text-slate-400 mt-2">{u.id === 'cg' ? 'Jan: 498 → Dez: 417 (-81)' : u.id === 'recreio' ? 'Jan: 311 → Dez: 297 (-14)' : 'Jan: 217 → Dez: 221 (+4)'}</div>
+                  
+                  {/* Card 2 - Matrículas */}
+                  <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-2xl p-6 transition-all hover:-translate-y-1 hover:border-accent-cyan/30 shadow-lg">
+                    <div className="flex justify-between items-start mb-4">
+                      <span className="text-xs uppercase font-black text-slate-400 tracking-widest">Novas Matrículas</span>
+                      {matriculasBadge && <Badge variant={u.id === 'recreio' ? 'success' : 'danger'}>{matriculasBadge}</Badge>}
+                    </div>
+                    <div className="text-4xl font-grotesk font-bold">{u.matriculasAno}</div>
+                    <div className="text-xs text-slate-400 mt-2">Média: {(u.matriculasAno / 12).toFixed(1)}/mês</div>
+                  </div>
+                  
+                  {/* Card 3 - Evasões */}
+                  <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-2xl p-6 transition-all hover:-translate-y-1 hover:border-accent-cyan/30 shadow-lg">
+                    <div className="text-xs uppercase font-black text-slate-400 tracking-widest mb-4">Evasões</div>
+                    <div className="text-4xl font-grotesk font-bold text-accent-pink">{u.evasoesAno}</div>
+                    <div className="text-xs text-slate-400 mt-2">{u.id === 'cg' ? '+35% vs 2024' : u.id === 'recreio' ? '+61,5% vs 2024' : '+13,4% vs 2024'}</div>
+                  </div>
+                  
+                  {/* Card 4 - Churn */}
+                  <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-2xl p-6 transition-all hover:-translate-y-1 hover:border-accent-cyan/30 shadow-lg">
+                    <div className="flex justify-between items-start mb-4">
+                      <span className="text-xs uppercase font-black text-slate-400 tracking-widest">Churn Médio</span>
+                      {churnBadge && <Badge variant="success">{churnBadge}</Badge>}
+                    </div>
+                    <div className={`text-4xl font-grotesk font-bold ${u.id === 'barra' ? 'text-accent-green' : 'text-accent-pink'}`}>{u.churnMedio}%</div>
+                    <div className="text-xs text-slate-400 mt-2">{u.id === 'barra' ? 'Meta: 3,5% | Melhor do grupo!' : 'Meta: 3,5%'}</div>
+                  </div>
+                  
+                  {/* Card 5 - Reajuste */}
+                  <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-2xl p-6 transition-all hover:-translate-y-1 hover:border-accent-cyan/30 shadow-lg">
+                    <div className="text-xs uppercase font-black text-slate-400 tracking-widest mb-4">Reajuste Médio</div>
+                    <div className="text-4xl font-grotesk font-bold">{reajuste.medio}%</div>
+                    <div className="text-xs text-slate-400 mt-2">Pico: {reajuste.pico} | Mín: {reajuste.min}</div>
+                  </div>
+                  
+                  {/* Card 6 - Faturamento */}
+                  <div className="bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700/50 rounded-2xl p-6 transition-all hover:-translate-y-1 hover:border-accent-cyan/30 shadow-lg">
+                    <div className="text-xs uppercase font-black text-slate-400 tracking-widest mb-4">Faturamento (Dez)</div>
+                    <div className="text-4xl font-grotesk font-bold">~R$ {Math.round(faturamentoDez / 1000)}k</div>
+                    <div className="text-xs text-slate-400 mt-2">Anual: ~R$ {(faturamentoAnual / 1000000).toFixed(2)}M</div>
+                  </div>
                 </div>
-                <Card title="Novas Matrículas">
-                  <div className="text-4xl font-grotesk font-bold">{u.matriculasAno}</div>
-                  <div className="text-xs text-slate-400 mt-2">Média: {(u.matriculasAno / 12).toFixed(2)}/mês</div>
-                </Card>
-                <Card title="Evasões">
-                  <div className="text-4xl font-grotesk font-bold text-accent-pink">{u.evasoesAno}</div>
-                  <div className="text-xs text-slate-400 mt-2">{u.id === 'cg' ? '+35% vs 2024' : u.id === 'recreio' ? '+61,5% vs 2024' : '+13,4% vs 2024'}</div>
-                </Card>
-                <Card title="Churn Médio">
-                  <div className="text-4xl font-grotesk font-bold">{u.churnMedio}%</div>
-                  <div className="text-xs text-slate-400 mt-2">Meta: 3,5%</div>
-                </Card>
-              </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
                 <div className="bg-slate-800/50 border border-slate-700/50 rounded-3xl p-8 h-[400px]">
                   <h3 className="text-xl font-grotesk font-bold mb-6">Evolução Mensal de Alunos</h3>
                   <ResponsiveContainer width="100%" height="90%">
@@ -1072,21 +1392,22 @@ export default function App() {
                 </div>
               </div>
 
-              {u.id === 'barra' && (
-                <div className="bg-accent-green/10 border-2 border-accent-green p-8 rounded-3xl flex items-center gap-8">
-                  <div className="w-16 h-16 bg-accent-green rounded-2xl flex items-center justify-center text-slate-900 shrink-0">
-                    <Rocket size={32} />
+                {u.id === 'barra' && (
+                  <div className="bg-accent-green/10 border-2 border-accent-green p-8 rounded-3xl flex items-center gap-8">
+                    <div className="w-16 h-16 bg-accent-green rounded-2xl flex items-center justify-center text-slate-900 shrink-0">
+                      <Rocket size={32} />
+                    </div>
+                    <div>
+                      <h3 className="text-2xl font-grotesk font-bold text-accent-green">Destaque: Benchmarking Interno</h3>
+                      <p className="text-lg text-slate-400 mt-2">
+                        A Barra é a única unidade que cresceu em base de alunos (+4), possui o menor churn (4,9%), a menor inadimplência (0,48%) e o maior ticket. O "jeito Barra" precisa ser mapeado e replicado.
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="text-2xl font-grotesk font-bold text-accent-green">Destaque: Benchmarking Interno</h3>
-                    <p className="text-lg text-slate-400 mt-2">
-                      A Barra é a única unidade que cresceu em base de alunos (+4), possui o menor churn (4,9%), a menor inadimplência (0,48%) e o maior ticket. O "jeito Barra" precisa ser mapeado e replicado.
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
+                )}
+              </div>
+            );
+          })}
         </section>
 
         {/* Comparison Section */}
@@ -1220,6 +1541,43 @@ export default function App() {
             icon={Calendar}
           />
 
+          {/* Filtros */}
+          <div className="flex flex-col md:flex-row gap-6 mb-8">
+            <div>
+              <label className="text-sm text-slate-400 mb-2 block">Métrica</label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setSeasonalityMetric('evasoes')}
+                  className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${seasonalityMetric === 'evasoes' ? 'bg-accent-pink text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                >
+                  Evasões
+                </button>
+                <button
+                  onClick={() => setSeasonalityMetric('matriculas')}
+                  className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${seasonalityMetric === 'matriculas' ? 'bg-accent-green text-white' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                >
+                  Matrículas
+                </button>
+              </div>
+            </div>
+            
+            <div>
+              <label className="text-sm text-slate-400 mb-2 block">Ano</label>
+              <div className="flex gap-2">
+                {['2023', '2024', '2025'].map(year => (
+                  <button
+                    key={year}
+                    onClick={() => setSeasonalityYear(year as '2023' | '2024' | '2025' | 'todos')}
+                    className={`px-6 py-2 rounded-xl text-sm font-bold transition-all ${seasonalityYear === year ? 'bg-accent-cyan text-slate-900' : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                  >
+                    {year}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Cards de Alto Risco e Meses de Ouro */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
             {/* Card Alto Risco */}
             <div 
@@ -1272,43 +1630,239 @@ export default function App() {
             </div>
           </div>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8">
-            <h3 className="text-xl font-bold mb-8">Heatmap de Evasões 2025 (Grupo)</h3>
-            <div className="grid grid-cols-[160px_repeat(12,1fr)] gap-2">
-              <div />
-              {MONTHS.map(m => <div key={m} className="text-center text-xs font-bold text-slate-500 py-2">{m}</div>)}
-              
-              {UNITS.map(u => (
-                <React.Fragment key={u.id}>
-                  <div className="flex items-center text-sm font-bold text-slate-300">{u.name}</div>
-                  {u.evolution.map((e, idx) => {
-                    const ev = e.evasoes;
-                    let color = 'bg-slate-800/30';
-                    if (ev >= 40) color = 'bg-accent-pink/80 text-white';
-                    else if (ev >= 26) color = 'bg-accent-pink/40 text-accent-pink';
-                    else if (ev >= 15) color = 'bg-accent-yellow/30 text-accent-yellow';
-                    else color = 'bg-accent-green/20 text-accent-green';
+          {/* Heatmap Dinâmico */}
+          {(() => {
+            const metric = seasonalityMetric;
+            const year = seasonalityYear;
+            const isMatriculas = metric === 'matriculas';
+            
+            // Obter dados do ano selecionado
+            const getData = (yr: string) => {
+              if (yr === 'todos') return null; // Tratamento especial para "todos"
+              return seasonalityData[metric][yr as '2023' | '2024' | '2025'];
+            };
+            
+            const yearData = getData(year);
+            
+            // Calcular totais mensais
+            const calculateTotals = (data: any) => {
+              if (!data) return [];
+              const totals = [];
+              for (let i = 0; i < 12; i++) {
+                totals.push(data.cg[i] + data.recreio[i] + data.barra[i]);
+              }
+              return totals;
+            };
+            
+            const totals = yearData ? calculateTotals(yearData) : [];
+            
+            // Função de cor para evasões (individual)
+            const getColorEvasoes = (val: number) => {
+              if (val > 30) return 'bg-accent-pink/80 text-white';
+              if (val >= 21) return 'bg-accent-pink/40 text-accent-pink';
+              if (val >= 10) return 'bg-accent-yellow/30 text-accent-yellow';
+              return 'bg-accent-green/20 text-accent-green';
+            };
+            
+            // Função de cor para evasões TOTAL (escala 3x - soma de 3 unidades)
+            const getColorEvasoesTotal = (val: number) => {
+              if (val > 90) return 'bg-accent-pink/80 text-white';
+              if (val >= 61) return 'bg-accent-pink/40 text-accent-pink';
+              if (val >= 30) return 'bg-accent-yellow/30 text-accent-yellow';
+              return 'bg-accent-green/20 text-accent-green';
+            };
+            
+            // Função de cor para matrículas (individual - verde = melhor)
+            const getColorMatriculas = (val: number) => {
+              if (val >= 35) return 'bg-accent-green/80 text-white';
+              if (val >= 20) return 'bg-accent-green/40 text-accent-green';
+              if (val >= 10) return 'bg-accent-yellow/30 text-accent-yellow';
+              return 'bg-accent-pink/20 text-accent-pink';
+            };
+            
+            // Função de cor para matrículas TOTAL (escala 3x)
+            const getColorMatriculasTotal = (val: number) => {
+              if (val >= 105) return 'bg-accent-green/80 text-white';
+              if (val >= 60) return 'bg-accent-green/40 text-accent-green';
+              if (val >= 30) return 'bg-accent-yellow/30 text-accent-yellow';
+              return 'bg-accent-pink/20 text-accent-pink';
+            };
+            
+            const getColor = isMatriculas ? getColorMatriculas : getColorEvasoes;
+            const getColorTotal = isMatriculas ? getColorMatriculasTotal : getColorEvasoesTotal;
+            
+            return (
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 mb-8">
+                <h3 className="text-xl font-bold mb-8">
+                  Heatmap de {isMatriculas ? 'Matrículas' : 'Evasões'} {year === 'todos' ? '(Comparativo)' : year} (Grupo)
+                </h3>
+                
+                {yearData && (
+                  <>
+                    <div className="grid grid-cols-[160px_repeat(12,1fr)] gap-2">
+                      <div />
+                      {MONTHS.map(m => <div key={m} className="text-center text-xs font-bold text-slate-500 py-2">{m}</div>)}
+                      
+                      {/* Campo Grande */}
+                      <div className="flex items-center text-sm font-bold text-slate-300">Campo Grande</div>
+                      {yearData.cg.map((val: number, idx: number) => (
+                        <CustomTooltipHeatmap content={`${MONTHS[idx]}: ${val} ${isMatriculas ? 'matrículas' : 'evasões'}`}>
+                          <div key={idx} className={`aspect-square flex items-center justify-center rounded-lg text-xs font-black transition-transform hover:scale-110 cursor-default ${getColor(val)}`}>
+                            {val}
+                          </div>
+                        </CustomTooltipHeatmap>
+                      ))}
+                      
+                      {/* Recreio */}
+                      <div className="flex items-center text-sm font-bold text-slate-300">Recreio</div>
+                      {yearData.recreio.map((val: number, idx: number) => (
+                        <CustomTooltipHeatmap content={`${MONTHS[idx]}: ${val} ${isMatriculas ? 'matrículas' : 'evasões'}`}>
+                          <div key={idx} className={`aspect-square flex items-center justify-center rounded-lg text-xs font-black transition-transform hover:scale-110 cursor-default ${getColor(val)}`}>
+                            {val}
+                          </div>
+                        </CustomTooltipHeatmap>
+                      ))}
+                      
+                      {/* Barra */}
+                      <div className="flex items-center text-sm font-bold text-slate-300">Barra</div>
+                      {yearData.barra.map((val: number, idx: number) => (
+                        <CustomTooltipHeatmap content={`${MONTHS[idx]}: ${val} ${isMatriculas ? 'matrículas' : 'evasões'}`}>
+                          <div key={idx} className={`aspect-square flex items-center justify-center rounded-lg text-xs font-black transition-transform hover:scale-110 cursor-default ${getColor(val)}`}>
+                            {val}
+                          </div>
+                        </CustomTooltipHeatmap>
+                      ))}
+                      
+                      {/* Linha TOTAL */}
+                      <div className="flex items-center text-sm font-black text-accent-cyan">TOTAL</div>
+                      {totals.map((val: number, idx: number) => (
+                        <CustomTooltipHeatmap content={`${MONTHS[idx]}: ${val} ${isMatriculas ? 'matrículas' : 'evasões'} (total)`}>
+                          <div key={idx} className={`aspect-square flex items-center justify-center rounded-lg text-xs font-black transition-transform hover:scale-110 cursor-default border-2 border-accent-cyan/50 ${getColorTotal(val)}`}>
+                            {val}
+                          </div>
+                        </CustomTooltipHeatmap>
+                      ))}
+                    </div>
                     
-                    return (
-                      <div 
-                        key={idx} 
-                        className={`aspect-square flex items-center justify-center rounded-lg text-xs font-black transition-transform hover:scale-110 cursor-default ${color}`}
-                        title={`${e.month}: ${ev} evasões`}
-                      >
-                        {ev}
+                    {/* Legenda */}
+                    <div className="mt-12 space-y-3">
+                      <div className="flex gap-6 justify-center text-xs font-bold text-slate-500 uppercase tracking-widest">
+                        {isMatriculas ? (
+                          <>
+                            <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-accent-pink/20" /> Baixo (&lt;10)</div>
+                            <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-accent-yellow/30" /> Médio (10-19)</div>
+                            <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-accent-green/40" /> Bom (20-34)</div>
+                            <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-accent-green/80" /> Excelente (≥35)</div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-accent-green/20" /> Baixo (&lt;10)</div>
+                            <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-accent-yellow/30" /> Médio (10-20)</div>
+                            <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-accent-pink/40" /> Alto (21-30)</div>
+                            <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-accent-pink/80" /> Crítico (&gt;30)</div>
+                          </>
+                        )}
                       </div>
-                    );
-                  })}
-                </React.Fragment>
-              ))}
+                      <div className="text-center text-xs text-slate-600 italic">
+                        {isMatriculas 
+                          ? 'Linha TOTAL usa escala 3x: Baixo (<30) | Médio (30-59) | Bom (60-104) | Excelente (≥105)'
+                          : 'Linha TOTAL usa escala 3x: Baixo (<30) | Médio (30-60) | Alto (61-90) | Crítico (>90)'
+                        }
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Gráfico de Sazonalidade: Evasões vs Matrículas */}
+          {seasonalityYear === '2025' && (
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-8 mb-8">
+              <h3 className="text-xl font-bold mb-8">Padrão Sazonal: Evasões vs Matrículas (2025)</h3>
+              <ResponsiveContainer width="100%" height={400}>
+                <LineChart data={MONTHS.map((month, idx) => ({
+                  month,
+                  evasoes: seasonalityData.evasoes['2025'].cg[idx] + seasonalityData.evasoes['2025'].recreio[idx] + seasonalityData.evasoes['2025'].barra[idx],
+                  matriculas: seasonalityData.matriculas['2025'].cg[idx] + seasonalityData.matriculas['2025'].recreio[idx] + seasonalityData.matriculas['2025'].barra[idx]
+                }))}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                  <XAxis dataKey="month" stroke="#94a3b8" />
+                  <YAxis stroke="#94a3b8" />
+                  <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '8px' }} />
+                  <Legend />
+                  <Line type="monotone" dataKey="evasoes" stroke={THEME_COLORS.pink} strokeWidth={3} name="Evasões" dot={{ r: 5, fill: THEME_COLORS.pink }} />
+                  <Line type="monotone" dataKey="matriculas" stroke={THEME_COLORS.green} strokeWidth={3} name="Matrículas" dot={{ r: 5, fill: THEME_COLORS.green }} />
+                </LineChart>
+              </ResponsiveContainer>
             </div>
-            <div className="flex gap-6 justify-center mt-12 text-xs font-bold text-slate-500 uppercase tracking-widest">
-              <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-accent-green/20" /> Baixo (&lt;15)</div>
-              <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-accent-yellow/30" /> Médio (15-25)</div>
-              <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-accent-pink/40" /> Alto (26-40)</div>
-              <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-accent-pink/80" /> Crítico (&gt;40)</div>
+          )}
+
+          {/* Cards de Insights */}
+          {seasonalityYear === '2025' && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              {/* Card Correlação */}
+              <div className="bg-accent-yellow/10 border-2 border-accent-yellow rounded-2xl p-6">
+                <h4 className="text-lg font-bold text-accent-yellow mb-3">⚠️ Reajuste = Pico de Evasão</h4>
+                <p className="text-sm text-slate-400">
+                  Fevereiro concentra reajuste anual e 81 evasões (13% do total). Hipótese: comunicação do reajuste mal feita. Ação: revisar estratégia de comunicação para 2026.
+                </p>
+              </div>
+
+              {/* Card Meses Críticos */}
+              <div className="bg-accent-pink/10 border-2 border-accent-pink rounded-2xl p-6">
+                <h4 className="text-lg font-bold text-accent-pink mb-3">Meses Críticos (Evasões &gt; Matrículas)</h4>
+                <ul className="text-xs text-slate-400 space-y-1">
+                  <li>• Fevereiro: -17 (64 mat vs 81 eva)</li>
+                  <li>• Abril: -19 (44 mat vs 63 eva)</li>
+                  <li>• Maio: -14 (59 mat vs 73 eva)</li>
+                  <li>• Julho: -29 (39 mat vs 68 eva)</li>
+                  <li>• Setembro: -12 (51 mat vs 63 eva)</li>
+                  <li>• Outubro: -36 (27 mat vs 63 eva)</li>
+                  <li>• Dezembro: -36 (13 mat vs 49 eva)</li>
+                </ul>
+              </div>
+
+              {/* Card Meses de Ouro */}
+              <div className="bg-accent-green/10 border-2 border-accent-green rounded-2xl p-6">
+                <h4 className="text-lg font-bold text-accent-green mb-3">Meses de Ouro (Matrículas &gt; Evasões)</h4>
+                <ul className="text-xs text-slate-400 space-y-1">
+                  <li>• Janeiro: +52 (88 mat vs 36 eva) ⭐</li>
+                  <li>• Março: +24 (51 mat vs 27 eva)</li>
+                  <li>• Junho: +1 (34 mat vs 33 eva)</li>
+                  <li>• Agosto: +60 (86 mat vs 26 eva) ⭐⭐</li>
+                  <li>• Novembro: +16 (46 mat vs 30 eva)</li>
+                </ul>
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Insight de Padrão Recorrente (quando "Todos" anos selecionado) */}
+          {seasonalityYear === 'todos' && seasonalityMetric === 'evasoes' && (
+            <div className="bg-accent-pink/10 border-2 border-accent-pink rounded-2xl p-8 mb-8">
+              <div className="flex items-center gap-4 mb-4">
+                <AlertTriangle className="text-accent-pink" size={32} />
+                <h3 className="text-2xl font-grotesk font-bold text-accent-pink">Padrão Identificado: Fevereiro é crítico em TODOS os anos</h3>
+              </div>
+              <div className="grid grid-cols-3 gap-6 mb-4">
+                <div>
+                  <div className="text-3xl font-black text-accent-pink">2023</div>
+                  <div className="text-sm text-slate-400">39 evasões</div>
+                </div>
+                <div>
+                  <div className="text-3xl font-black text-accent-pink">2024</div>
+                  <div className="text-sm text-slate-400">65 evasões (+67%)</div>
+                </div>
+                <div>
+                  <div className="text-3xl font-black text-accent-pink">2025</div>
+                  <div className="text-sm text-slate-400">81 evasões (+25%)</div>
+                </div>
+              </div>
+              <p className="text-lg text-slate-300 font-bold">
+                Tendência de piora (+24% a.a.). Ação urgente necessária!
+              </p>
+            </div>
+          )}
         </section>
 
         {/* Goals 2025 - Metas vs Realizado */}
@@ -1490,81 +2044,234 @@ export default function App() {
             icon={MessageCircleQuestion}
           />
 
-          <div className="max-w-4xl mx-auto space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {/* Card 1 - Fevereiro CG */}
             <div 
-              className="border-2 border-accent-pink rounded-3xl p-10 text-center"
+              className="border-2 border-accent-pink rounded-3xl p-8 text-center"
               style={{
                 background: 'linear-gradient(135deg, rgba(255, 51, 102, 0.2) 0%, rgba(139, 92, 246, 0.1) 100%)'
               }}
             >
               <div 
-                className="w-12 h-12 rounded-full mx-auto mb-6"
+                className="w-12 h-12 rounded-full mx-auto mb-4"
                 style={{ background: '#ff3366' }}
               />
-              <h3 className="text-3xl font-semibold text-white mb-4 leading-tight">
+              <h3 className="text-2xl font-semibold text-white mb-3 leading-tight">
                 O que aconteceu em Fevereiro de 2025 em Campo Grande?
               </h3>
-              <p className="text-lg text-slate-400">
+              <p className="text-sm text-slate-400">
                 49 evasões vs 27 em 2024 — aumento de 81%. O que mudou?
               </p>
             </div>
 
             {/* Card 2 - Agosto Recreio */}
             <div 
-              className="border-2 border-accent-green rounded-3xl p-10 text-center"
+              className="border-2 border-accent-green rounded-3xl p-8 text-center"
               style={{
                 background: 'linear-gradient(135deg, rgba(0, 204, 102, 0.2) 0%, rgba(0, 212, 255, 0.1) 100%)'
               }}
             >
               <div 
-                className="w-12 h-12 rounded-full mx-auto mb-6"
+                className="w-12 h-12 rounded-full mx-auto mb-4"
                 style={{ background: '#00cc66' }}
               />
-              <h3 className="text-3xl font-semibold text-white mb-4 leading-tight">
+              <h3 className="text-2xl font-semibold text-white mb-3 leading-tight">
                 O que o Recreio fez em Agosto/25?
               </h3>
-              <p className="text-lg text-slate-400">
+              <p className="text-sm text-slate-400">
                 40 matrículas — recorde da unidade! Podemos replicar?
               </p>
             </div>
 
             {/* Card 3 - Barra Churn */}
             <div 
-              className="border-2 border-accent-purple rounded-3xl p-10 text-center"
+              className="border-2 border-accent-purple rounded-3xl p-8 text-center"
               style={{
                 background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(0, 212, 255, 0.1) 100%)'
               }}
             >
               <div 
-                className="w-12 h-12 rounded-full mx-auto mb-6"
+                className="w-12 h-12 rounded-full mx-auto mb-4"
                 style={{ background: '#8b5cf6' }}
               />
-              <h3 className="text-3xl font-semibold text-white mb-4 leading-tight">
+              <h3 className="text-2xl font-semibold text-white mb-3 leading-tight">
                 Por que a Barra conseguiu reduzir o churn?
               </h3>
-              <p className="text-lg text-slate-400">
+              <p className="text-sm text-slate-400">
                 Única unidade que reduziu (de 6,0% para 4,90%). O que eles fazem diferente?
               </p>
             </div>
 
             {/* Card 4 - Colaboradores */}
             <div 
-              className="border-2 rounded-3xl p-10 text-center"
+              className="border-2 rounded-3xl p-8 text-center"
               style={{
                 borderColor: '#ffaa00',
                 background: 'linear-gradient(135deg, rgba(255, 170, 0, 0.2) 0%, rgba(255, 51, 102, 0.1) 100%)'
               }}
             >
               <div 
-                className="w-12 h-12 rounded-full mx-auto mb-6"
+                className="w-12 h-12 rounded-full mx-auto mb-4"
                 style={{ background: '#ffaa00' }}
               />
-              <h3 className="text-3xl font-semibold text-white mb-4 leading-tight">
-                As trocas de colaboradores estratégicos coincidem com os picos de evasão?
+              <h3 className="text-2xl font-semibold text-white mb-3 leading-tight">
+                As trocas de colaboradores coincidem com picos de evasão?
               </h3>
-              <p className="text-lg text-slate-400">
+              <p className="text-sm text-slate-400">
                 Precisamos mapear essas correlações para 2026.
+              </p>
+            </div>
+
+            {/* Card 5 - Dezembro Matrículas */}
+            <div 
+              className="border-2 border-accent-pink rounded-3xl p-8 text-center"
+              style={{
+                background: 'linear-gradient(135deg, rgba(255, 51, 102, 0.2) 0%, rgba(139, 92, 246, 0.1) 100%)'
+              }}
+            >
+              <div 
+                className="w-12 h-12 rounded-full mx-auto mb-4"
+                style={{ background: '#ff3366' }}
+              />
+              <h3 className="text-2xl font-semibold text-white mb-3 leading-tight">
+                Por que Dezembro tem tão poucas matrículas?
+              </h3>
+              <p className="text-sm text-slate-400">
+                Apenas 13 matrículas no grupo em Dez/25. Férias? Falta de ação comercial?
+              </p>
+            </div>
+
+            {/* Card 6 - Barra Cresceu */}
+            <div 
+              className="border-2 border-accent-green rounded-3xl p-8 text-center"
+              style={{
+                background: 'linear-gradient(135deg, rgba(0, 204, 102, 0.2) 0%, rgba(0, 212, 255, 0.1) 100%)'
+              }}
+            >
+              <div 
+                className="w-12 h-12 rounded-full mx-auto mb-4"
+                style={{ background: '#00cc66' }}
+              />
+              <h3 className="text-2xl font-semibold text-white mb-3 leading-tight">
+                Como a Barra cresceu mesmo com menos matrículas?
+              </h3>
+              <p className="text-sm text-slate-400">
+                +4,2% de alunos com -20% de matrículas. Segredo: menor evasão. Replicar!
+              </p>
+            </div>
+
+            {/* Card 7 - Reajuste Fevereiro */}
+            <div 
+              className="border-2 border-accent-cyan rounded-3xl p-8 text-center"
+              style={{
+                background: 'linear-gradient(135deg, rgba(0, 212, 255, 0.2) 0%, rgba(0, 204, 102, 0.1) 100%)'
+              }}
+            >
+              <div 
+                className="w-12 h-12 rounded-full mx-auto mb-4"
+                style={{ background: THEME_COLORS.cyan }}
+              />
+              <h3 className="text-2xl font-semibold text-white mb-3 leading-tight">
+                O reajuste de Fevereiro está sendo bem comunicado?
+              </h3>
+              <p className="text-sm text-slate-400">
+                81 evasões em Fev/25 (13% do total anual). Coincide com reajuste. Rever abordagem?
+              </p>
+            </div>
+
+            {/* Card 8 - Campo Grande Caiu */}
+            <div 
+              className="border-2 border-accent-pink rounded-3xl p-8 text-center"
+              style={{
+                background: 'linear-gradient(135deg, rgba(255, 51, 102, 0.2) 0%, rgba(139, 92, 246, 0.1) 100%)'
+              }}
+            >
+              <div 
+                className="w-12 h-12 rounded-full mx-auto mb-4"
+                style={{ background: '#ff3366' }}
+              />
+              <h3 className="text-2xl font-semibold text-white mb-3 leading-tight">
+                Por que Campo Grande caiu 16% após crescer 66%?
+              </h3>
+              <p className="text-sm text-slate-400">
+                De 463 para 417 alunos. Maior queda do grupo. O que mudou na operação?
+              </p>
+            </div>
+
+            {/* Card 9 - Concorrentes */}
+            <div 
+              className="border-2 rounded-3xl p-8 text-center"
+              style={{
+                borderColor: '#ffaa00',
+                background: 'linear-gradient(135deg, rgba(255, 170, 0, 0.2) 0%, rgba(255, 51, 102, 0.1) 100%)'
+              }}
+            >
+              <div 
+                className="w-12 h-12 rounded-full mx-auto mb-4"
+                style={{ background: '#ffaa00' }}
+              />
+              <h3 className="text-2xl font-semibold text-white mb-3 leading-tight">
+                Estamos perdendo alunos para concorrentes?
+              </h3>
+              <p className="text-sm text-slate-400">
+                612 evasões em 2025. Sabemos para onde eles estão indo?
+              </p>
+            </div>
+
+            {/* Card 10 - Janeiro e Agosto */}
+            <div 
+              className="border-2 border-accent-green rounded-3xl p-8 text-center"
+              style={{
+                background: 'linear-gradient(135deg, rgba(0, 204, 102, 0.2) 0%, rgba(0, 212, 255, 0.1) 100%)'
+              }}
+            >
+              <div 
+                className="w-12 h-12 rounded-full mx-auto mb-4"
+                style={{ background: '#00cc66' }}
+              />
+              <h3 className="text-2xl font-semibold text-white mb-3 leading-tight">
+                O que Janeiro e Agosto têm em comum?
+              </h3>
+              <p className="text-sm text-slate-400">
+                Nossos 2 melhores meses de captação. Ano novo + volta às aulas. Intensificar campanhas?
+              </p>
+            </div>
+
+            {/* Card 11 - Retenção vs Captação */}
+            <div 
+              className="border-2 border-accent-purple rounded-3xl p-8 text-center"
+              style={{
+                background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(0, 212, 255, 0.1) 100%)'
+              }}
+            >
+              <div 
+                className="w-12 h-12 rounded-full mx-auto mb-4"
+                style={{ background: '#8b5cf6' }}
+              />
+              <h3 className="text-2xl font-semibold text-white mb-3 leading-tight">
+                Vale investir mais em retenção ou captação?
+              </h3>
+              <p className="text-sm text-slate-400">
+                Custo de evasão: ~R$1,5M/ano. Quanto custa reter vs captar um aluno novo?
+              </p>
+            </div>
+
+            {/* Card 12 - Metas Realistas */}
+            <div 
+              className="border-2 border-accent-cyan rounded-3xl p-8 text-center"
+              style={{
+                background: 'linear-gradient(135deg, rgba(0, 212, 255, 0.2) 0%, rgba(0, 204, 102, 0.1) 100%)'
+              }}
+            >
+              <div 
+                className="w-12 h-12 rounded-full mx-auto mb-4"
+                style={{ background: THEME_COLORS.cyan }}
+              />
+              <h3 className="text-2xl font-semibold text-white mb-3 leading-tight">
+                As metas de 2025 eram realistas?
+              </h3>
+              <p className="text-sm text-slate-400">
+                Nenhuma unidade bateu meta de alunos. Crescimentos de 18-41% eram factíveis?
               </p>
             </div>
           </div>
