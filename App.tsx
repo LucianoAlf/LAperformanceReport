@@ -2583,9 +2583,6 @@ export default function App() {
           {/* KPIs de Acompanhamento */}
           <LearningsKPIs />
 
-          {/* Responsáveis e Próximos Passos */}
-          <LearningsResponsaveis />
-
         </section>
 
         {/* Closing Section */}
@@ -2629,28 +2626,6 @@ export default function App() {
         </section>
 
       </main>
-
-      {/* Floating Navigation Controls */}
-      <div className="fixed bottom-10 right-10 flex flex-col gap-3 z-[60]">
-        <button 
-          onClick={() => {
-            const idx = sections.findIndex(s => s.id === activeSection);
-            if (idx > 0) scrollToSection(sections[idx - 1].id);
-          }}
-          className="w-14 h-14 bg-slate-800/80 backdrop-blur border border-slate-700 text-slate-300 rounded-2xl flex items-center justify-center hover:bg-accent-cyan hover:text-slate-900 transition-all shadow-xl"
-        >
-          <ChevronUp size={24} />
-        </button>
-        <button 
-          onClick={() => {
-            const idx = sections.findIndex(s => s.id === activeSection);
-            if (idx < sections.length - 1) scrollToSection(sections[idx + 1].id);
-          }}
-          className="w-14 h-14 bg-slate-800/80 backdrop-blur border border-slate-700 text-slate-300 rounded-2xl flex items-center justify-center hover:bg-accent-cyan hover:text-slate-900 transition-all shadow-xl"
-        >
-          <ChevronDown size={24} />
-        </button>
-      </div>
     </div>
   );
 }
