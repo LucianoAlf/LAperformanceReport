@@ -5,8 +5,13 @@ import {
   Target, MessageCircleQuestion, AlertTriangle, Rocket, Lightbulb, 
   Heart, Moon, Sun, ChevronUp, ChevronDown, ArrowRight,
   Users, UserPlus, UserMinus, Percent, Receipt, Clock, ShieldCheck,
-  CheckCircle2, XCircle
+  CheckCircle2, XCircle, AlertCircle, Trophy, TrendingDown, DollarSign,
+  ArrowDown, Sparkles, Scale
 } from 'lucide-react';
+import Metas2026 from './src/components/Metas2026.tsx';
+import LearningsTimeline from './src/components/LearningsTimeline.tsx';
+import LearningsKPIs from './src/components/LearningsKPIs.tsx';
+import LearningsResponsaveis from './src/components/LearningsResponsaveis.tsx';
 import { ResponsiveContainer, PieChart, Pie, Cell, Sector, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LineChart, Line, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 import { Theme, MetricType, UnitData, Meta2026 } from './types';
 import { UNITS, HISTORY_DATA, DISTRIBUTION_DATA, THEME_COLORS, MONTHS } from './constants';
@@ -2053,9 +2058,11 @@ export default function App() {
               }}
             >
               <div 
-                className="w-12 h-12 rounded-full mx-auto mb-4"
+                className="w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center"
                 style={{ background: '#ff3366' }}
-              />
+              >
+                <AlertCircle className="text-white" size={24} />
+              </div>
               <h3 className="text-2xl font-semibold text-white mb-3 leading-tight">
                 O que aconteceu em Fevereiro de 2025 em Campo Grande?
               </h3>
@@ -2072,9 +2079,11 @@ export default function App() {
               }}
             >
               <div 
-                className="w-12 h-12 rounded-full mx-auto mb-4"
+                className="w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center"
                 style={{ background: '#00cc66' }}
-              />
+              >
+                <Trophy className="text-white" size={24} />
+              </div>
               <h3 className="text-2xl font-semibold text-white mb-3 leading-tight">
                 O que o Recreio fez em Agosto/25?
               </h3>
@@ -2091,9 +2100,11 @@ export default function App() {
               }}
             >
               <div 
-                className="w-12 h-12 rounded-full mx-auto mb-4"
+                className="w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center"
                 style={{ background: '#8b5cf6' }}
-              />
+              >
+                <TrendingDown className="text-white" size={24} />
+              </div>
               <h3 className="text-2xl font-semibold text-white mb-3 leading-tight">
                 Por que a Barra conseguiu reduzir o churn?
               </h3>
@@ -2111,9 +2122,11 @@ export default function App() {
               }}
             >
               <div 
-                className="w-12 h-12 rounded-full mx-auto mb-4"
+                className="w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center"
                 style={{ background: '#ffaa00' }}
-              />
+              >
+                <Users className="text-white" size={24} />
+              </div>
               <h3 className="text-2xl font-semibold text-white mb-3 leading-tight">
                 As trocas de colaboradores coincidem com picos de evasão?
               </h3>
@@ -2130,9 +2143,11 @@ export default function App() {
               }}
             >
               <div 
-                className="w-12 h-12 rounded-full mx-auto mb-4"
+                className="w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center"
                 style={{ background: '#ff3366' }}
-              />
+              >
+                <Calendar className="text-white" size={24} />
+              </div>
               <h3 className="text-2xl font-semibold text-white mb-3 leading-tight">
                 Por que Dezembro tem tão poucas matrículas?
               </h3>
@@ -2149,9 +2164,11 @@ export default function App() {
               }}
             >
               <div 
-                className="w-12 h-12 rounded-full mx-auto mb-4"
+                className="w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center"
                 style={{ background: '#00cc66' }}
-              />
+              >
+                <TrendingUp className="text-white" size={24} />
+              </div>
               <h3 className="text-2xl font-semibold text-white mb-3 leading-tight">
                 Como a Barra cresceu mesmo com menos matrículas?
               </h3>
@@ -2168,9 +2185,11 @@ export default function App() {
               }}
             >
               <div 
-                className="w-12 h-12 rounded-full mx-auto mb-4"
+                className="w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center"
                 style={{ background: THEME_COLORS.cyan }}
-              />
+              >
+                <DollarSign className="text-white" size={24} />
+              </div>
               <h3 className="text-2xl font-semibold text-white mb-3 leading-tight">
                 O reajuste de Fevereiro está sendo bem comunicado?
               </h3>
@@ -2187,9 +2206,11 @@ export default function App() {
               }}
             >
               <div 
-                className="w-12 h-12 rounded-full mx-auto mb-4"
+                className="w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center"
                 style={{ background: '#ff3366' }}
-              />
+              >
+                <ArrowDown className="text-white" size={24} />
+              </div>
               <h3 className="text-2xl font-semibold text-white mb-3 leading-tight">
                 Por que Campo Grande caiu 16% após crescer 66%?
               </h3>
@@ -2207,9 +2228,11 @@ export default function App() {
               }}
             >
               <div 
-                className="w-12 h-12 rounded-full mx-auto mb-4"
+                className="w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center"
                 style={{ background: '#ffaa00' }}
-              />
+              >
+                <Target className="text-white" size={24} />
+              </div>
               <h3 className="text-2xl font-semibold text-white mb-3 leading-tight">
                 Estamos perdendo alunos para concorrentes?
               </h3>
@@ -2226,9 +2249,11 @@ export default function App() {
               }}
             >
               <div 
-                className="w-12 h-12 rounded-full mx-auto mb-4"
+                className="w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center"
                 style={{ background: '#00cc66' }}
-              />
+              >
+                <Sparkles className="text-white" size={24} />
+              </div>
               <h3 className="text-2xl font-semibold text-white mb-3 leading-tight">
                 O que Janeiro e Agosto têm em comum?
               </h3>
@@ -2245,9 +2270,11 @@ export default function App() {
               }}
             >
               <div 
-                className="w-12 h-12 rounded-full mx-auto mb-4"
+                className="w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center"
                 style={{ background: '#8b5cf6' }}
-              />
+              >
+                <Scale className="text-white" size={24} />
+              </div>
               <h3 className="text-2xl font-semibold text-white mb-3 leading-tight">
                 Vale investir mais em retenção ou captação?
               </h3>
@@ -2264,9 +2291,11 @@ export default function App() {
               }}
             >
               <div 
-                className="w-12 h-12 rounded-full mx-auto mb-4"
+                className="w-12 h-12 rounded-full mx-auto mb-4 flex items-center justify-center"
                 style={{ background: THEME_COLORS.cyan }}
-              />
+              >
+                <Target className="text-white" size={24} />
+              </div>
               <h3 className="text-2xl font-semibold text-white mb-3 leading-tight">
                 As metas de 2025 eram realistas?
               </h3>
@@ -2404,167 +2433,159 @@ export default function App() {
           </div>
         </section>
 
-        {/* Goals 2026 Section */}
-        <section id="goals2026" className="min-h-screen py-24 px-12 bg-slate-900/50">
-          <SectionHeader 
-            badge="Metas 2026" 
-            title="Estratégia de Retomada" 
-            subtitle="Clique nos valores para simular e planejar o próximo ciclo"
-            icon={Rocket}
-          />
-
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
-            {UNITS.map(u => {
-              const metas = metas2026[u.id];
-              const varAlunos = (((Number(metas.alunos) / u.alunosDez) - 1) * 100).toFixed(1);
-              return (
-                <div key={u.id} className="bg-slate-800 border-t-4 p-8 rounded-3xl" style={{ borderTopColor: u.color }}>
-                  <h3 className="text-2xl font-grotesk font-bold mb-8 flex items-center gap-3">
-                    <Building2 style={{ color: u.color }} /> {u.name}
-                  </h3>
-                  
-                  <div className="space-y-4">
-                    <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-700">
-                      <div className="flex items-center gap-2 text-xs font-bold text-slate-500 uppercase mb-2">
-                        <Users size={14} style={{ color: u.color }} /> Alunos Dezembro
-                      </div>
-                      <input 
-                        type="number" 
-                        value={metas.alunos} 
-                        onChange={(e) => updateMeta(u.id, 'alunos', e.target.value)}
-                        className="w-full bg-transparent text-3xl font-grotesk font-bold focus:outline-none focus:text-accent-cyan"
-                      />
-                      <div className="flex justify-between text-[10px] mt-2 font-bold uppercase tracking-tighter">
-                        <span className="text-slate-500">2025: {u.alunosDez}</span>
-                        <span className="text-accent-green">Var: +{varAlunos}%</span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-700">
-                        <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Churn Alvo</div>
-                        <input value={metas.churn} onChange={(e) => updateMeta(u.id, 'churn', e.target.value)} className="w-full bg-transparent font-bold focus:outline-none" />
-                      </div>
-                      <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-700">
-                        <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Renovação</div>
-                        <input value={metas.renovacao} onChange={(e) => updateMeta(u.id, 'renovacao', e.target.value)} className="w-full bg-transparent font-bold focus:outline-none" />
-                      </div>
-                    </div>
-
-                    <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-700">
-                      <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Matrículas/Mês</div>
-                      <input type="number" value={metas.matriculas} onChange={(e) => updateMeta(u.id, 'matriculas', e.target.value)} className="w-full bg-transparent font-bold text-xl focus:outline-none" />
-                    </div>
-
-                    <div className="bg-slate-900/50 p-4 rounded-2xl border border-slate-700">
-                      <div className="text-[10px] font-bold text-slate-500 uppercase mb-1">Ticket Médio Alvo</div>
-                      <input value={metas.ticket} onChange={(e) => updateMeta(u.id, 'ticket', e.target.value)} className="w-full bg-transparent font-bold focus:outline-none" />
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <Card className="border-t-8 border-accent-purple" title="Consolidado LA Music 2026">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-12 py-6 text-center">
-              <div>
-                <div className="text-6xl font-grotesk font-black text-accent-cyan mb-2">{totalAlunos2026}</div>
-                <div className="text-sm font-bold text-slate-500 uppercase tracking-widest">Total Alunos</div>
-                <div className="text-accent-green font-bold text-sm mt-1">+26,2% vs 2025</div>
-              </div>
-              <div>
-                <div className="text-6xl font-grotesk font-black text-accent-pink mb-2">4%</div>
-                <div className="text-sm font-bold text-slate-500 uppercase tracking-widest">Churn Médio</div>
-                <div className="text-accent-green font-bold text-sm mt-1">-1,27pp vs 2025</div>
-              </div>
-              <div>
-                <div className="text-6xl font-grotesk font-black text-accent-green mb-2">900</div>
-                <div className="text-sm font-bold text-slate-500 uppercase tracking-widest">Matrículas/Ano</div>
-                <div className="text-accent-green font-bold text-sm mt-1">+49,5% vs 2025</div>
-              </div>
-              <div>
-                <div className="text-6xl font-grotesk font-black text-accent-yellow mb-2">~R$ 510k</div>
-                <div className="text-sm font-bold text-slate-500 uppercase tracking-widest">Faturamento</div>
-                <div className="text-accent-green font-bold text-sm mt-1">+42,5% vs 2025</div>
-              </div>
-            </div>
-          </Card>
+        {/* Goals 2026 Section - Integrado com Supabase */}
+        <section id="goals2026" className="min-h-screen bg-slate-900/50">
+          <Metas2026 />
         </section>
 
-        {/* Learnings Section */}
-        <section id="learnings" className="min-h-screen py-24 px-12">
-          <SectionHeader 
-            badge="Aprendizados" 
-            title="Lições de 2025 & Plano de Ação" 
-            subtitle="O que fica para o futuro do grupo"
-            icon={Lightbulb}
-          />
+        {/* Learnings Section - Expandida */}
+        <section id="learnings" className="py-16 px-8 bg-slate-900/50">
+          
+          {/* Header */}
+          <div className="mb-10">
+            <span className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-orange-500/20 text-orange-400 text-sm mb-4">
+              <Lightbulb className="w-4 h-4" />
+              Aprendizados
+            </span>
+            <h2 className="text-4xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-emerald-400 mb-2">
+              Lições de 2025 & Plano de Ação
+            </h2>
+            <p className="text-gray-400">O que fica para o futuro do grupo</p>
+          </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="bg-slate-800/40 p-8 rounded-3xl border border-slate-700/50">
-              <div className="w-14 h-14 bg-accent-green/20 text-accent-green rounded-2xl flex items-center justify-center mb-6">
-                <ShieldCheck size={28} />
-              </div>
-              <h3 className="text-2xl font-bold mb-6">O que Funcionou</h3>
-              <ul className="space-y-4">
-                {[
-                  "Controle rigoroso de inadimplência (<2%)",
-                  "Política de reajuste manteve ticket crescendo",
-                  "LTV aumentou em todas as unidades",
-                  "Barra como modelo de escala e retenção",
-                  "Agosto como mês recorde de captação"
-                ].map((item, i) => (
-                  <li key={i} className="flex gap-3 text-slate-400">
-                    <ArrowRight className="text-accent-green shrink-0 mt-1" size={16} />
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
+          {/* Cards de Resumo */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-10">
+            <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-5">
+              <div className="text-red-400 text-sm mb-1">Evasões Evitáveis</div>
+              <div className="text-3xl font-bold text-red-400">~200</div>
+              <div className="text-gray-500 text-xs mt-1">33% do total (Fev + reajuste)</div>
             </div>
 
-            <div className="bg-slate-800/40 p-8 rounded-3xl border border-slate-700/50">
-              <div className="w-14 h-14 bg-accent-yellow/20 text-accent-yellow rounded-2xl flex items-center justify-center mb-6">
-                <AlertTriangle size={28} />
-              </div>
-              <h3 className="text-2xl font-bold mb-6">O que Melhorar</h3>
-              <ul className="space-y-4">
-                {[
-                  "Comunicação do reajuste anual",
-                  "Acompanhamento semanal de KPIs",
-                  "Definição de metas realistas (SMART)",
-                  "Autonomia de gerentes regionais",
-                  "Gestão centralizada de CRM"
-                ].map((item, i) => (
-                  <li key={i} className="flex gap-3 text-slate-400">
-                    <ArrowRight className="text-accent-yellow shrink-0 mt-1" size={16} />
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-5">
+              <div className="text-amber-400 text-sm mb-1">Receita Perdida</div>
+              <div className="text-3xl font-bold text-amber-400">~R$2.5M</div>
+              <div className="text-gray-500 text-xs mt-1">612 evasões × R$414 × 10m</div>
             </div>
 
-            <div className="bg-slate-800/40 p-8 rounded-3xl border border-slate-700/50">
-              <div className="w-14 h-14 bg-accent-cyan/20 text-accent-cyan rounded-2xl flex items-center justify-center mb-6">
-                <Rocket size={28} />
-              </div>
-              <h3 className="text-2xl font-bold mb-6">Plano 2026</h3>
-              <ul className="space-y-4">
-                {[
-                  "Protocolo de retenção 30d antes dos picos",
-                  "Dashboard de tempo real (LA DashFinance)",
-                  "Reunião quinzenal de KPIs por unidade",
-                  "Concentrar 60% do budget marketing em Jan/Ago",
-                  "Programa de indicação estruturado"
-                ].map((item, i) => (
-                  <li key={i} className="flex gap-3 text-slate-400">
-                    <ArrowRight className="text-accent-cyan shrink-0 mt-1" size={16} />
-                    <span>{item}</span>
-                  </li>
-                ))}
-              </ul>
+            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-5">
+              <div className="text-emerald-400 text-sm mb-1">Caso de Sucesso</div>
+              <div className="text-3xl font-bold text-emerald-400">Barra</div>
+              <div className="text-gray-500 text-xs mt-1">Única que cresceu +4,2%</div>
+            </div>
+
+            <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-5">
+              <div className="text-cyan-400 text-sm mb-1">Potencial 2026</div>
+              <div className="text-3xl font-bold text-cyan-400">1.180</div>
+              <div className="text-gray-500 text-xs mt-1">alunos se corrigirmos a rota</div>
             </div>
           </div>
+
+          {/* Três Colunas Expandidas */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
+            
+            {/* Coluna 1: O que Funcionou */}
+            <div className="bg-slate-800/50 rounded-xl p-6 border border-emerald-500/30">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                  <CheckCircle2 className="text-emerald-400" size={24} />
+                </div>
+                <h3 className="text-xl font-semibold text-white">O que Funcionou</h3>
+              </div>
+              
+              <div className="space-y-4">
+                {[
+                  { title: "Controle rigoroso de inadimplência", metric: "Todas unidades < 2% (meta atingida)" },
+                  { title: "Política de reajuste manteve ticket crescendo", metric: "+3,9% no ano (R$399 → R$414)" },
+                  { title: "LTV aumentou em todas as unidades", metric: "Permanência média: 16 meses (+2)" },
+                  { title: "Barra como modelo de escala e retenção", metric: "Menor churn (4,9%) + crescimento" },
+                  { title: "Agosto como mês recorde de captação", metric: "86 matrículas (+60 saldo líquido)" },
+                  { title: "Janeiro forte para captação", metric: "88 matrículas (+52 saldo líquido)" },
+                  { title: "Renovação da Barra próxima da meta", metric: "87% de taxa de renovação" }
+                ].map((item, i) => (
+                  <div key={i} className="flex gap-3">
+                    <ArrowRight className="text-emerald-400 mt-1 shrink-0" size={16} />
+                    <div>
+                      <div className="text-white font-medium">{item.title}</div>
+                      <div className="text-emerald-400 text-sm">{item.metric}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Coluna 2: O que Melhorar */}
+            <div className="bg-slate-800/50 rounded-xl p-6 border border-amber-500/30">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center">
+                  <AlertTriangle className="text-amber-400" size={24} />
+                </div>
+                <h3 className="text-xl font-semibold text-white">O que Melhorar</h3>
+              </div>
+              
+              <div className="space-y-4">
+                {[
+                  { title: "Comunicação do reajuste anual", metric: "81 evasões em Fev (13% do ano)" },
+                  { title: "Acompanhamento semanal de KPIs", metric: "Detectar problemas antes de escalar" },
+                  { title: "Definição de metas realistas (SMART)", metric: "Crescimentos de 18-41% não eram factíveis" },
+                  { title: "Autonomia de gerentes regionais", metric: "Decisões mais rápidas na ponta" },
+                  { title: "Gestão centralizada de CRM", metric: "Histórico de contatos e follow-ups" },
+                  { title: "Protocolo de retenção preventivo", metric: "Agir ANTES do aluno pedir cancelamento" },
+                  { title: "Campo Grande precisa de atenção", metric: "Maior queda: -16% (-46 alunos)" },
+                  { title: "Dezembro morto para captação", metric: "Apenas 13 matrículas no mês" }
+                ].map((item, i) => (
+                  <div key={i} className="flex gap-3">
+                    <ArrowRight className="text-amber-400 mt-1 shrink-0" size={16} />
+                    <div>
+                      <div className="text-white font-medium">{item.title}</div>
+                      <div className="text-amber-400 text-sm">{item.metric}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Coluna 3: Plano 2026 */}
+            <div className="bg-slate-800/50 rounded-xl p-6 border border-cyan-500/30">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-12 h-12 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+                  <Rocket className="text-cyan-400" size={24} />
+                </div>
+                <h3 className="text-xl font-semibold text-white">Plano 2026</h3>
+              </div>
+              
+              <div className="space-y-4">
+                {[
+                  { title: "Protocolo de retenção 30d antes dos picos", metric: "Ligar para alunos em risco em Jan e Abr" },
+                  { title: "Dashboard de tempo real (LA DashFinance)", metric: "Alertas automáticos de KPIs críticos" },
+                  { title: "Reunião quinzenal de KPIs por unidade", metric: "Gestores + Diretoria analisando dados" },
+                  { title: "Concentrar 60% do budget marketing em Jan/Ago", metric: "Meses com melhor saldo histórico" },
+                  { title: "Programa de indicação estruturado", metric: "Meta: 20% das matrículas via indicação" },
+                  { title: "Comunicação de reajuste em Dezembro", metric: "Antecipar conversa, não surpreender em Fev" },
+                  { title: "Benchmark mensal entre unidades", metric: "Compartilhar boas práticas da Barra" },
+                  { title: "Plano de recuperação Campo Grande", metric: "Foco especial na maior unidade" }
+                ].map((item, i) => (
+                  <div key={i} className="flex gap-3">
+                    <ArrowRight className="text-cyan-400 mt-1 shrink-0" size={16} />
+                    <div>
+                      <div className="text-white font-medium">{item.title}</div>
+                      <div className="text-cyan-400 text-sm">{item.metric}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+          </div>
+
+          {/* Timeline 2026 */}
+          <LearningsTimeline />
+
+          {/* KPIs de Acompanhamento */}
+          <LearningsKPIs />
+
+          {/* Responsáveis e Próximos Passos */}
+          <LearningsResponsaveis />
+
         </section>
 
         {/* Closing Section */}
