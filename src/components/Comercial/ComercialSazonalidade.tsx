@@ -40,9 +40,6 @@ export function ComercialSazonalidade() {
     };
   });
 
-  // Debug: Log para verificar os dados (remover depois)
-  console.log('dadosCG raw:', dadosCG);
-  console.log('Dados por mês:', dadosPorMes.map(d => ({ mes: d.mes, mat: d.total_mat })));
 
   // Dados para o gráfico de linha
   const chartData = dadosPorMes.map(d => ({
@@ -71,9 +68,6 @@ export function ComercialSazonalidade() {
   const melhoresMeses = mesesOrdenados.slice(0, 3);
   const pioresMeses = [...dadosPorMes].sort((a, b) => a.total_mat - b.total_mat).slice(0, 3);
 
-  // Debug
-  console.log('Melhores:', melhoresMeses.map(m => ({ mes: m.mes, mat: m.total_mat })));
-  console.log('Piores:', pioresMeses.map(m => ({ mes: m.mes, mat: m.total_mat })));
 
   return (
     <div className="p-8 min-h-screen">

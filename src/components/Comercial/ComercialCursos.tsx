@@ -1,10 +1,12 @@
 import { useCursosData } from '../../hooks/useCursosData';
+import { useComercialData } from '../../hooks/useComercialData';
 import { Music, Mic } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { ChartTooltip } from './ChartTooltip';
 
 export function ComercialCursos() {
   const { cursos, loading } = useCursosData(2025, 'Consolidado');
+  const { kpis } = useComercialData(2025, 'Consolidado');
 
   if (loading) {
     return (
@@ -19,12 +21,21 @@ export function ComercialCursos() {
   
   const cores = ['#10b981', '#06b6d4', '#8b5cf6', '#f59e0b', '#ef4444', '#ec4899', '#14b8a6', '#6366f1', '#84cc16', '#f97316'];
 
-  // Separar cursos Kids vs Adultos
-  const cursosKids = ['Musicalização', 'Musicalização Bebê', 'Musicalização Bebês', 'Musicalização Infantil', 'Musicalização Preparatória'];
-  const totalKids = cursos
-    .filter(c => cursosKids.some(k => c.curso.includes(k) || c.curso.includes('Bebê') || c.curso.includes('Preparatória') || c.curso.includes('Infantil')))
-    .reduce((sum, c) => sum + c.total, 0);
-  const totalAdultos = total - totalKids;
+  // Usar dados corretos da tabela dados_comerciais
+  const totalKids = kpis?.matriculasLAMK || 0;
+  const totalAdultos = kpis?.matriculasEMLA || 0;
+  const totalGeral = totalKids + totalAdultos;
+
+  // Nomes de cursos Kids para filtrar top cursos
+  const cursosKidsNomes = ['Musicalização', 'Musicalização Bebê', 'Musicalização Bebês', 'Musicalização Infantil', 'Musicalização Preparatória'];
+  
+  const topCursosKids = cursos
+    .filter(c => cursosKidsNomes.some(k => c.curso.includes(k)))
+    .slice(0, 3);
+
+  const topCursosAdultos = cursos
+    .filter(c => !cursosKidsNomes.some(k => c.curso.includes(k)))
+    .slice(0, 3);
 
   const pieData = top10.map((c) => ({
     name: c.curso,
@@ -59,10 +70,10 @@ export function ComercialCursos() {
             </div>
           </div>
           <div className="text-4xl font-bold text-white mb-2">{totalAdultos}</div>
-          <div className="text-sm text-gray-400">matrículas ({((totalAdultos / total) * 100).toFixed(0)}%)</div>
+          <div className="text-sm text-gray-400">matrículas ({totalGeral > 0 ? ((totalAdultos / totalGeral) * 100).toFixed(0) : 0}%)</div>
           <div className="mt-4 space-y-2">
             <div className="text-sm text-gray-300">Top Cursos:</div>
-            {cursos.filter(c => !cursosKids.some(k => c.curso.includes(k))).slice(0, 3).map((c, idx) => (
+            {topCursosAdultos.map((c, idx) => (
               <div key={c.curso} className="flex justify-between text-sm">
                 <span className="text-gray-400">{idx + 1}. {c.curso}</span>
                 <span className="text-blue-400">{c.total}</span>
@@ -82,10 +93,10 @@ export function ComercialCursos() {
             </div>
           </div>
           <div className="text-4xl font-bold text-white mb-2">{totalKids}</div>
-          <div className="text-sm text-gray-400">matrículas ({((totalKids / total) * 100).toFixed(0)}%)</div>
+          <div className="text-sm text-gray-400">matrículas ({totalGeral > 0 ? ((totalKids / totalGeral) * 100).toFixed(0) : 0}%)</div>
           <div className="mt-4 space-y-2">
             <div className="text-sm text-gray-300">Top Cursos:</div>
-            {cursos.filter(c => cursosKids.some(k => c.curso.includes(k))).slice(0, 3).map((c, idx) => (
+            {topCursosKids.map((c, idx) => (
               <div key={c.curso} className="flex justify-between text-sm">
                 <span className="text-gray-400">{idx + 1}. {c.curso}</span>
                 <span className="text-pink-400">{c.total}</span>
