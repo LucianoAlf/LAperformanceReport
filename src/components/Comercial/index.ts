@@ -1,0 +1,14 @@
+export { ComercialDashboard } from './ComercialDashboard';
+export { ComercialInicio } from './ComercialInicio';
+export { ComercialVisaoGeral } from './ComercialVisaoGeral';
+export { ComercialFunil } from './ComercialFunil';
+export { ComercialRanking } from './ComercialRanking';
+export { ComercialSazonalidade } from './ComercialSazonalidade';
+export { ComercialFinanceiro } from './ComercialFinanceiro';
+export { ComercialAlertas } from './ComercialAlertas';
+export { ComercialMetas } from './ComercialMetas';
+export { ComercialProfessores } from './ComercialProfessores';
+export { ComercialCursos } from './ComercialCursos';
+export { ComercialOrigem } from './ComercialOrigem';
+export { SidebarComercial } from './SidebarComercial';
+export { PageSwitcher } from './PageSwitcher';

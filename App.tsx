@@ -12,6 +12,7 @@ import Metas2026 from './src/components/Metas2026.tsx';
 import LearningsTimeline from './src/components/LearningsTimeline.tsx';
 import LearningsKPIs from './src/components/LearningsKPIs.tsx';
 import LearningsResponsaveis from './src/components/LearningsResponsaveis.tsx';
+import { ComercialDashboard } from './src/components/Comercial';
 import { ResponsiveContainer, PieChart, Pie, Cell, Sector, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LineChart, Line, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 import { Theme, MetricType, UnitData, Meta2026 } from './types';
 import { UNITS, HISTORY_DATA, DISTRIBUTION_DATA, THEME_COLORS, MONTHS } from './constants';
@@ -283,6 +284,7 @@ const renderActiveShape = (props: any) => {
 // --- Main App Component ---
 
 export default function App() {
+  const [currentPage, setCurrentPage] = useState<'gestao' | 'comercial'>('gestao');
   const [theme, setTheme] = useState<Theme>('dark');
   const [activeSection, setActiveSection] = useState('cover');
   const [unitTab, setUnitTab] = useState('cg');
@@ -530,6 +532,11 @@ export default function App() {
     { metric: 'LTV', cg: 100, recreio: 70, barra: 60 },
   ];
 
+  // Se estiver na página comercial, renderiza o dashboard comercial
+  if (currentPage === 'comercial') {
+    return <ComercialDashboard onPageChange={setCurrentPage} />;
+  }
+
   return (
     <div className={`flex min-h-screen ${theme === 'dark' ? 'bg-slate-950 text-slate-50' : 'bg-slate-50 text-slate-900'}`}>
       
@@ -566,14 +573,23 @@ export default function App() {
           })}
         </div>
 
-        <div className="pt-6 border-t border-slate-800 mt-6">
-          <button 
-            onClick={toggleTheme}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-slate-800 text-slate-400 hover:text-slate-100 transition-colors"
-          >
-            {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
-            <span>{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
-          </button>
+        <div className="pt-6 border-t border-slate-800 mt-6 space-y-3">
+          {/* Navegação entre Gestão e Comercial */}
+          <div className="bg-slate-800/50 rounded-xl p-1 flex gap-1">
+            <button
+              className="flex-1 flex items-center justify-center gap-2 py-3 px-3 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/25"
+            >
+              <BarChart3 size={16} />
+              <span className="text-sm font-medium">Gestão</span>
+            </button>
+            <button
+              onClick={() => setCurrentPage('comercial')}
+              className="flex-1 flex items-center justify-center gap-2 py-3 px-3 rounded-lg text-gray-400 hover:text-white hover:bg-slate-700/50 transition-all"
+            >
+              <TrendingUp size={16} />
+              <span className="text-sm font-medium">Comercial</span>
+            </button>
+          </div>
         </div>
       </nav>
 
