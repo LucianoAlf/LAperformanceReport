@@ -1,10 +1,13 @@
+import { useState } from 'react';
 import { useOrigemData } from '../../hooks/useOrigemData';
+import { UnidadeComercial } from '../../types/comercial';
 import { Smartphone, TrendingUp, AlertTriangle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts';
 import { ChartTooltip } from './ChartTooltip';
 
 export function ComercialOrigem() {
-  const { origem, loading } = useOrigemData(2025, 'Consolidado');
+  const [unidade, setUnidade] = useState<UnidadeComercial>('Consolidado');
+  const { origem, loading } = useOrigemData(2025, unidade);
 
   if (loading) {
     return (
@@ -34,7 +37,30 @@ export function ComercialOrigem() {
         </h1>
         <p className="text-gray-400">
           Análise de canais de aquisição e taxa de conversão
+          {unidade !== 'Consolidado' && (
+            <span className="text-emerald-400"> - {unidade}</span>
+          )}
         </p>
+      </div>
+
+      {/* Filtros */}
+      <div className="flex flex-wrap gap-4 mb-8">
+        <div className="flex gap-2">
+          <span className="text-gray-400 self-center text-sm">Unidade:</span>
+          {(['Consolidado', 'Campo Grande', 'Recreio', 'Barra'] as UnidadeComercial[]).map((u) => (
+            <button
+              key={u}
+              onClick={() => setUnidade(u)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                unidade === u
+                  ? 'bg-emerald-500 text-white'
+                  : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
+              }`}
+            >
+              {u === 'Campo Grande' ? 'C. Grande' : u}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Cards de Insight */}
@@ -47,7 +73,10 @@ export function ComercialOrigem() {
             </div>
             <div>
               <div className="text-blue-400 font-medium">Maior Volume</div>
-              <div className="text-sm text-gray-400">Canal que mais gera leads</div>
+              <div className="text-sm text-gray-400">
+                  Canal que mais gera leads
+                  {unidade !== 'Consolidado' && <span className="text-blue-300"> • {unidade}</span>}
+                </div>
             </div>
           </div>
           <div className="text-3xl font-bold text-white mb-1">{origem[0]?.canal}</div>
@@ -67,7 +96,10 @@ export function ComercialOrigem() {
             </div>
             <div>
               <div className="text-emerald-400 font-medium">Segundo Maior</div>
-              <div className="text-sm text-gray-400">Canal com potencial</div>
+              <div className="text-sm text-gray-400">
+                  Canal com potencial
+                  {unidade !== 'Consolidado' && <span className="text-emerald-300"> • {unidade}</span>}
+                </div>
             </div>
           </div>
           <div className="text-3xl font-bold text-white mb-1">{origem[1]?.canal}</div>
@@ -183,14 +215,16 @@ export function ComercialOrigem() {
           <div>
             <div className="text-amber-400 font-medium mb-1">Concentração de Canais</div>
             <p className="text-gray-300 text-sm">
-              <strong>Instagram</strong> gera {origem.find(o => o.canal === 'Instagram')?.percentual.toFixed(0) || 0}% dos leads - 
-              alta dependência de um único canal.
+              <strong>{origem[0]?.canal}</strong> gera {totalLeads > 0 ? ((origem[0]?.leads / totalLeads) * 100).toFixed(0) : 0}% dos leads
+              {unidade !== 'Consolidado' && ` em ${unidade}`} - alta dependência de um único canal.
               <br />
-              <strong>Indicação</strong> representa apenas {origem.find(o => o.canal === 'Indicação')?.percentual.toFixed(1) || 0}% mas 
-              historicamente tem maior taxa de conversão.
+              <strong>{origem[1]?.canal}</strong> é o segundo maior canal com {origem[1]?.percentual.toFixed(1)}% dos leads.
               <br />
               <span className="text-gray-400">
-                Ação: Diversificar canais de aquisição e criar programa de indicação estruturado.
+                {unidade === 'Consolidado' 
+                  ? 'Ação: Diversificar canais de aquisição e criar programa de indicação estruturado.'
+                  : `Ação: Analisar estratégias específicas de ${unidade} para otimizar conversão.`
+                }
               </span>
             </p>
           </div>

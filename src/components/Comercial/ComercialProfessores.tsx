@@ -1,10 +1,13 @@
+import { useState } from 'react';
 import { useProfessoresData } from '../../hooks/useProfessoresData';
+import { UnidadeComercial } from '../../types/comercial';
 import { Trophy, Award, Medal } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { ChartTooltip } from './ChartTooltip';
 
 export function ComercialProfessores() {
-  const { professores, loading } = useProfessoresData(2025, 'Consolidado');
+  const [unidade, setUnidade] = useState<UnidadeComercial>('Consolidado');
+  const { professores, loading } = useProfessoresData(2025, unidade);
 
   if (loading) {
     return (
@@ -35,8 +38,31 @@ export function ComercialProfessores() {
           Ranking de <span className="text-accent-cyan">Professores</span>
         </h1>
         <p className="text-gray-400">
-          Professores que mais deram aulas experimentais em 2025
+          Professores que mais matricularam em 2025
+          {unidade !== 'Consolidado' && (
+            <span className="text-emerald-400"> - {unidade}</span>
+          )}
         </p>
+      </div>
+
+      {/* Filtros */}
+      <div className="flex flex-wrap gap-4 mb-8">
+        <div className="flex gap-2">
+          <span className="text-gray-400 self-center text-sm">Unidade:</span>
+          {(['Consolidado', 'Campo Grande', 'Recreio', 'Barra'] as UnidadeComercial[]).map((u) => (
+            <button
+              key={u}
+              onClick={() => setUnidade(u)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                unidade === u
+                  ? 'bg-emerald-500 text-white'
+                  : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
+              }`}
+            >
+              {u === 'Campo Grande' ? 'C. Grande' : u}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Cards de Destaque */}
@@ -64,14 +90,20 @@ export function ComercialProfessores() {
             <div className="text-4xl font-bold text-accent-cyan mb-2">{prof.total}</div>
             <div className="text-sm text-gray-400">aulas experimentais</div>
             <div className="mt-3 flex flex-wrap gap-2">
-              {Object.entries(prof.unidades).map(([unid, qty]) => (
-                <span 
-                  key={unid}
-                  className="text-xs bg-slate-700/50 px-2 py-1 rounded text-gray-300"
-                >
-                  {unid === 'Campo Grande' ? 'CG' : unid}: {qty}
+              {unidade === 'Consolidado' ? (
+                Object.entries(prof.unidades).map(([unid, qty]) => (
+                  <span 
+                    key={unid}
+                    className="text-xs bg-slate-700/50 px-2 py-1 rounded text-gray-300"
+                  >
+                    {unid === 'Campo Grande' ? 'CG' : unid}: {qty}
+                  </span>
+                ))
+              ) : (
+                <span className="text-xs bg-slate-700/50 px-2 py-1 rounded text-gray-300">
+                  {unidade === 'Campo Grande' ? 'CG' : unidade}: {prof.total}
                 </span>
-              ))}
+              )}
             </div>
           </div>
         ))}
@@ -118,9 +150,13 @@ export function ComercialProfessores() {
                 <th className="text-left text-gray-400 text-sm font-medium py-3 px-4">#</th>
                 <th className="text-left text-gray-400 text-sm font-medium py-3 px-4">Professor</th>
                 <th className="text-right text-gray-400 text-sm font-medium py-3 px-4">Total</th>
-                <th className="text-right text-gray-400 text-sm font-medium py-3 px-4">C. Grande</th>
-                <th className="text-right text-gray-400 text-sm font-medium py-3 px-4">Recreio</th>
-                <th className="text-right text-gray-400 text-sm font-medium py-3 px-4">Barra</th>
+                {unidade === 'Consolidado' && (
+                  <>
+                    <th className="text-right text-gray-400 text-sm font-medium py-3 px-4">C. Grande</th>
+                    <th className="text-right text-gray-400 text-sm font-medium py-3 px-4">Recreio</th>
+                    <th className="text-right text-gray-400 text-sm font-medium py-3 px-4">Barra</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -132,10 +168,14 @@ export function ComercialProfessores() {
                     </div>
                   </td>
                   <td className="py-3 px-4 text-white font-medium">{prof.professor}</td>
-                  <td className="text-right py-3 px-4 text-accent-cyan font-bold">{prof.total}</td>
-                  <td className="text-right py-3 px-4 text-cyan-400">{prof.unidades['Campo Grande'] || '-'}</td>
-                  <td className="text-right py-3 px-4 text-purple-400">{prof.unidades['Recreio'] || '-'}</td>
-                  <td className="text-right py-3 px-4 text-emerald-400">{prof.unidades['Barra'] || '-'}</td>
+                  <td className="text-right py-3 px-4 text-emerald-400 font-bold">{prof.total}</td>
+                  {unidade === 'Consolidado' && (
+                    <>
+                      <td className="text-right py-3 px-4 text-cyan-400">{prof.unidades['Campo Grande'] || '-'}</td>
+                      <td className="text-right py-3 px-4 text-purple-400">{prof.unidades['Recreio'] || '-'}</td>
+                      <td className="text-right py-3 px-4 text-emerald-400">{prof.unidades['Barra'] || '-'}</td>
+                    </>
+                  )}
                 </tr>
               ))}
             </tbody>
