@@ -48,20 +48,40 @@ export function ComercialSazonalidade() {
     Matrículas: d.total_mat,
   }));
 
-  // Função para cor do heatmap
-  const getHeatmapColor = (valor: number, tipo: 'leads' | 'mat') => {
-    if (tipo === 'leads') {
-      if (valor >= 400) return 'bg-emerald-500';
-      if (valor >= 250) return 'bg-emerald-600/70';
-      if (valor >= 150) return 'bg-yellow-600/70';
-      return 'bg-red-600/70';
-    } else {
-      if (valor >= 30) return 'bg-emerald-500';
-      if (valor >= 20) return 'bg-emerald-600/70';
-      if (valor >= 10) return 'bg-yellow-600/70';
-      return 'bg-red-600/70';
-    }
+  // Função para cor do heatmap - Matrículas (verde = melhor)
+  const getColorMatriculas = (valor: number) => {
+    if (valor >= 30) return 'bg-accent-green/80 text-white';
+    if (valor >= 20) return 'bg-accent-green/40 text-accent-green';
+    if (valor >= 10) return 'bg-yellow-500/30 text-yellow-400';
+    return 'bg-pink-500/20 text-pink-400';
   };
+
+  // Função para cor do heatmap - Matrículas TOTAL (escala 3x)
+  const getColorMatriculasTotal = (valor: number) => {
+    if (valor >= 90) return 'bg-accent-green/80 text-white';
+    if (valor >= 60) return 'bg-accent-green/40 text-accent-green';
+    if (valor >= 30) return 'bg-yellow-500/30 text-yellow-400';
+    return 'bg-pink-500/20 text-pink-400';
+  };
+
+  // Função para cor do heatmap - Leads (verde = melhor)
+  const getColorLeads = (valor: number) => {
+    if (valor >= 400) return 'bg-accent-green/80 text-white';
+    if (valor >= 250) return 'bg-accent-green/40 text-accent-green';
+    if (valor >= 150) return 'bg-yellow-500/30 text-yellow-400';
+    return 'bg-pink-500/20 text-pink-400';
+  };
+
+  // Função para cor do heatmap - Leads TOTAL (escala 3x)
+  const getColorLeadsTotal = (valor: number) => {
+    if (valor >= 1200) return 'bg-accent-green/80 text-white';
+    if (valor >= 750) return 'bg-accent-green/40 text-accent-green';
+    if (valor >= 450) return 'bg-yellow-500/30 text-yellow-400';
+    return 'bg-pink-500/20 text-pink-400';
+  };
+
+  const getHeatmapColor = metrica === 'matriculas' ? getColorMatriculas : getColorLeads;
+  const getHeatmapColorTotal = metrica === 'matriculas' ? getColorMatriculasTotal : getColorLeadsTotal;
 
   // Encontrar melhores e piores meses - ordenar por matrículas
   const mesesOrdenados = [...dadosPorMes].sort((a, b) => b.total_mat - a.total_mat);
@@ -202,81 +222,97 @@ export function ComercialSazonalidade() {
           </div>
         </div>
         
-        {/* Heatmap Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr>
-                <th className="p-2 text-left"></th>
-                {MESES.map(mes => (
-                  <th key={mes} className="p-2 text-center text-gray-400 text-sm font-medium">
-                    {mes}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {/* Campo Grande */}
-              <tr>
-                <td className="p-2 text-cyan-400 text-sm font-medium whitespace-nowrap">C. Grande</td>
-                {dadosPorMes.map((d, idx) => (
-                  <td key={idx} className="p-1">
-                    <div className={`${getHeatmapColor(metrica === 'leads' ? d.cg_leads : d.cg_mat, metrica === 'leads' ? 'leads' : 'mat')} rounded-lg p-3 text-center text-white font-semibold text-sm`}>
-                      {metrica === 'leads' ? d.cg_leads : d.cg_mat}
-                    </div>
-                  </td>
-                ))}
-              </tr>
-              {/* Recreio */}
-              <tr>
-                <td className="p-2 text-purple-400 text-sm font-medium whitespace-nowrap">Recreio</td>
-                {dadosPorMes.map((d, idx) => (
-                  <td key={idx} className="p-1">
-                    <div className={`${getHeatmapColor(metrica === 'leads' ? d.rec_leads : d.rec_mat, metrica === 'leads' ? 'leads' : 'mat')} rounded-lg p-3 text-center text-white font-semibold text-sm`}>
-                      {metrica === 'leads' ? d.rec_leads : d.rec_mat}
-                    </div>
-                  </td>
-                ))}
-              </tr>
-              {/* Barra */}
-              <tr>
-                <td className="p-2 text-emerald-400 text-sm font-medium whitespace-nowrap">Barra</td>
-                {dadosPorMes.map((d, idx) => (
-                  <td key={idx} className="p-1">
-                    <div className={`${getHeatmapColor(metrica === 'leads' ? d.barra_leads : d.barra_mat, metrica === 'leads' ? 'leads' : 'mat')} rounded-lg p-3 text-center text-white font-semibold text-sm`}>
-                      {metrica === 'leads' ? d.barra_leads : d.barra_mat}
-                    </div>
-                  </td>
-                ))}
-              </tr>
-              {/* Total */}
-              <tr className="border-t border-slate-700">
-                <td className="p-2 pt-4 text-yellow-400 text-sm font-bold whitespace-nowrap">TOTAL</td>
-                {dadosPorMes.map((d, idx) => (
-                  <td key={idx} className="p-1 pt-4">
-                    <div className="bg-slate-700 rounded-lg p-3 text-center text-white font-bold text-sm">
-                      {metrica === 'leads' ? d.total_leads : d.total_mat}
-                    </div>
-                  </td>
-                ))}
-              </tr>
-            </tbody>
-          </table>
-        </div>
-
-        {/* Legenda */}
-        <div className="flex items-center justify-center gap-6 mt-6">
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded bg-emerald-500"></div>
-            <span className="text-gray-400 text-sm">Alto</span>
+        {/* Heatmap Grid - Estilo Gestão */}
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+          <div className="grid grid-cols-[120px_repeat(12,1fr)] gap-2">
+            {/* Header - Meses */}
+            <div />
+            {MESES.map(mes => (
+              <div key={mes} className="text-center text-xs font-bold text-slate-500 py-2">{mes}</div>
+            ))}
+            
+            {/* Campo Grande */}
+            <div className="flex items-center text-sm font-bold text-slate-300">Campo Grande</div>
+            {dadosPorMes.map((d, idx) => {
+              const valor = metrica === 'leads' ? d.cg_leads : d.cg_mat;
+              return (
+                <div 
+                  key={idx} 
+                  className={`aspect-square flex items-center justify-center rounded-lg text-xs font-black transition-transform hover:scale-110 cursor-default ${getHeatmapColor(valor)}`}
+                >
+                  {valor}
+                </div>
+              );
+            })}
+            
+            {/* Recreio */}
+            <div className="flex items-center text-sm font-bold text-slate-300">Recreio</div>
+            {dadosPorMes.map((d, idx) => {
+              const valor = metrica === 'leads' ? d.rec_leads : d.rec_mat;
+              return (
+                <div 
+                  key={idx} 
+                  className={`aspect-square flex items-center justify-center rounded-lg text-xs font-black transition-transform hover:scale-110 cursor-default ${getHeatmapColor(valor)}`}
+                >
+                  {valor}
+                </div>
+              );
+            })}
+            
+            {/* Barra */}
+            <div className="flex items-center text-sm font-bold text-slate-300">Barra</div>
+            {dadosPorMes.map((d, idx) => {
+              const valor = metrica === 'leads' ? d.barra_leads : d.barra_mat;
+              return (
+                <div 
+                  key={idx} 
+                  className={`aspect-square flex items-center justify-center rounded-lg text-xs font-black transition-transform hover:scale-110 cursor-default ${getHeatmapColor(valor)}`}
+                >
+                  {valor}
+                </div>
+              );
+            })}
+            
+            {/* Linha TOTAL */}
+            <div className="flex items-center text-sm font-black text-accent-cyan">TOTAL</div>
+            {dadosPorMes.map((d, idx) => {
+              const valor = metrica === 'leads' ? d.total_leads : d.total_mat;
+              return (
+                <div 
+                  key={idx} 
+                  className={`aspect-square flex items-center justify-center rounded-lg text-xs font-black transition-transform hover:scale-110 cursor-default border-2 border-accent-cyan/50 ${getHeatmapColorTotal(valor)}`}
+                >
+                  {valor}
+                </div>
+              );
+            })}
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded bg-yellow-600/70"></div>
-            <span className="text-gray-400 text-sm">Médio</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded bg-red-600/70"></div>
-            <span className="text-gray-400 text-sm">Baixo</span>
+          
+          {/* Legenda */}
+          <div className="mt-8 space-y-3">
+            <div className="flex gap-6 justify-center text-xs font-bold text-slate-500 uppercase tracking-widest">
+              {metrica === 'matriculas' ? (
+                <>
+                  <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-pink-500/20" /> Baixo (&lt;10)</div>
+                  <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-yellow-500/30" /> Médio (10-19)</div>
+                  <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-accent-green/40" /> Alto (20-29)</div>
+                  <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-accent-green/80" /> Excelente (≥30)</div>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-pink-500/20" /> Baixo (&lt;150)</div>
+                  <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-yellow-500/30" /> Médio (150-249)</div>
+                  <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-accent-green/40" /> Alto (250-399)</div>
+                  <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-accent-green/80" /> Excelente (≥400)</div>
+                </>
+              )}
+            </div>
+            <div className="text-center text-xs text-slate-600 italic">
+              {metrica === 'matriculas' 
+                ? 'Linha TOTAL usa escala 3x: Baixo (<30) | Médio (30-59) | Alto (60-89) | Excelente (≥90)'
+                : 'Linha TOTAL usa escala 3x: Baixo (<450) | Médio (450-749) | Alto (750-1199) | Excelente (≥1200)'
+              }
+            </div>
           </div>
         </div>
       </div>
