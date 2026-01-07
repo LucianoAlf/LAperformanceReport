@@ -139,3 +139,42 @@ export const ICONES_MOTIVOS: Record<string, string> = {
   'Viagem': 'Plane',
   'Concorrência': 'Building',
 };
+
+// =============================================
+// TIPOS DE PERFORMANCE DE PROFESSORES
+// =============================================
+
+export interface ProfessorPerformance {
+  id: number;
+  professor: string;
+  unidade: string;
+  ano: number;
+  experimentais: number;
+  matriculas: number;
+  taxa_conversao: number;
+  evasoes: number;
+  contratos_vencer: number;
+  renovacoes: number;
+  taxa_renovacao: number;
+  score_saude?: number;
+  nivel_risco?: 'crítico' | 'alto' | 'médio' | 'normal';
+}
+
+export interface KPIsRenovacao {
+  totalContratos: number;
+  totalRenovados: number;
+  totalNaoRenovados: number;
+  taxaRenovacao: number;
+}
+
+export interface TotaisPerformance {
+  experimentais: number;
+  matriculas: number;
+  evasoes: number;
+  contratos_vencer: number;
+  renovacoes: number;
+  taxa_conversao: number;
+  taxa_renovacao: number;
+  nao_renovados: number;
+  totalProfessores: number;
+}

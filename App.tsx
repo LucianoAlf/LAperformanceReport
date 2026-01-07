@@ -597,20 +597,27 @@ export default function App() {
         </div>
 
         <div className="pt-6 border-t border-slate-800 mt-6 space-y-3">
-          {/* Navegação entre Gestão e Comercial */}
-          <div className="bg-slate-800/50 rounded-xl p-1 flex gap-1">
+          {/* Navegação entre Gestão, Comercial e Retenção */}
+          <div className="bg-slate-800/50 rounded-xl p-1 flex flex-col gap-1">
             <button
-              className="flex-1 flex items-center justify-center gap-2 py-3 px-3 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/25"
+              className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/25"
             >
               <BarChart3 size={16} />
               <span className="text-sm font-medium">Gestão</span>
             </button>
             <button
               onClick={() => handlePageChange('comercial')}
-              className="flex-1 flex items-center justify-center gap-2 py-3 px-3 rounded-lg text-gray-400 hover:text-white hover:bg-slate-700/50 transition-all"
+              className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-gray-400 hover:text-white hover:bg-slate-700/50 transition-all"
             >
               <TrendingUp size={16} />
               <span className="text-sm font-medium">Comercial</span>
+            </button>
+            <button
+              onClick={() => handlePageChange('retencao')}
+              className="flex items-center justify-center gap-2 py-2.5 px-3 rounded-lg text-gray-400 hover:text-white hover:bg-slate-700/50 transition-all"
+            >
+              <TrendingDown size={16} />
+              <span className="text-sm font-medium">Retenção</span>
             </button>
           </div>
         </div>

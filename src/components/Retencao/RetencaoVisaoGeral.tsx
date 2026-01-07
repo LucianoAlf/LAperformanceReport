@@ -1,5 +1,6 @@
-import { Users, DollarSign, TrendingDown, AlertTriangle, Target, UserMinus, RefreshCcw } from 'lucide-react';
+import { Users, DollarSign, TrendingDown, AlertTriangle, Target, UserMinus, RefreshCcw, FileText, CheckCircle, Percent, XCircle } from 'lucide-react';
 import { useEvasoesData } from '../../hooks/useEvasoesData';
+import { useProfessoresPerformance } from '../../hooks/useProfessoresPerformance';
 import { UnidadeRetencao } from '../../types/retencao';
 
 interface RetencaoVisaoGeralProps {
@@ -11,6 +12,7 @@ interface RetencaoVisaoGeralProps {
 
 export function RetencaoVisaoGeral({ ano, unidade, onAnoChange, onUnidadeChange }: RetencaoVisaoGeralProps) {
   const { kpis, dadosPorUnidade, loading } = useEvasoesData(ano, unidade);
+  const { totais: totaisPerformance, loading: loadingPerformance } = useProfessoresPerformance(ano, unidade === 'Consolidado' ? undefined : unidade);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -74,9 +76,44 @@ export function RetencaoVisaoGeral({ ano, unidade, onAnoChange, onUnidadeChange 
       amber: { bg: 'bg-amber-500/10', border: 'border-amber-500/30', text: 'text-amber-400', icon: 'text-amber-400' },
       pink: { bg: 'bg-pink-500/10', border: 'border-pink-500/30', text: 'text-pink-400', icon: 'text-pink-400' },
       purple: { bg: 'bg-purple-500/10', border: 'border-purple-500/30', text: 'text-purple-400', icon: 'text-purple-400' },
+      blue: { bg: 'bg-blue-500/10', border: 'border-blue-500/30', text: 'text-blue-400', icon: 'text-blue-400' },
+      green: { bg: 'bg-green-500/10', border: 'border-green-500/30', text: 'text-green-400', icon: 'text-green-400' },
+      emerald: { bg: 'bg-emerald-500/10', border: 'border-emerald-500/30', text: 'text-emerald-400', icon: 'text-emerald-400' },
     };
     return colors[color] || colors.rose;
   };
+
+  // KPIs de Renovação
+  const renovacaoCards = totaisPerformance ? [
+    {
+      title: 'Contratos Vencidos',
+      value: totaisPerformance.contratos_vencer.toLocaleString('pt-BR'),
+      icon: FileText,
+      color: 'blue',
+      description: 'Total de contratos que venceram',
+    },
+    {
+      title: 'Renovados',
+      value: totaisPerformance.renovacoes.toLocaleString('pt-BR'),
+      icon: CheckCircle,
+      color: 'green',
+      description: 'Contratos que renovaram',
+    },
+    {
+      title: 'Taxa de Renovação',
+      value: `${totaisPerformance.taxa_renovacao.toFixed(1)}%`,
+      icon: Percent,
+      color: 'emerald',
+      description: 'Percentual de renovação',
+    },
+    {
+      title: 'Não Renovaram',
+      value: totaisPerformance.nao_renovados.toLocaleString('pt-BR'),
+      icon: XCircle,
+      color: 'rose',
+      description: 'Contratos perdidos',
+    },
+  ] : [];
 
   return (
     <div className="min-h-screen p-8 bg-slate-950">
@@ -112,14 +149,14 @@ export function RetencaoVisaoGeral({ ano, unidade, onAnoChange, onUnidadeChange 
       </div>
 
       {/* Loading */}
-      {loading && (
+      {(loading || loadingPerformance) && (
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-rose-500"></div>
         </div>
       )}
 
       {/* KPI Cards */}
-      {!loading && (
+      {!loading && !loadingPerformance && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
             {kpiCards.map((kpi, index) => {
@@ -145,6 +182,40 @@ export function RetencaoVisaoGeral({ ano, unidade, onAnoChange, onUnidadeChange 
               );
             })}
           </div>
+
+          {/* KPIs de Renovação */}
+          {renovacaoCards.length > 0 && (
+            <div className="mb-8">
+              <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+                <RefreshCcw className="w-5 h-5 text-emerald-400" />
+                Indicadores de Renovação
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {renovacaoCards.map((kpi, index) => {
+                  const colors = getColorClasses(kpi.color);
+                  const Icon = kpi.icon;
+                  
+                  return (
+                    <div
+                      key={index}
+                      className={`${colors.bg} ${colors.border} border rounded-2xl p-5 hover:scale-[1.02] transition-transform`}
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div className={`w-10 h-10 rounded-xl ${colors.bg} flex items-center justify-center`}>
+                          <Icon className={`w-5 h-5 ${colors.icon}`} />
+                        </div>
+                      </div>
+                      <div className={`text-2xl font-bold ${colors.text} mb-1`}>
+                        {kpi.value}
+                      </div>
+                      <div className="text-white font-medium text-sm mb-1">{kpi.title}</div>
+                      <div className="text-gray-400 text-xs">{kpi.description}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Insights */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">

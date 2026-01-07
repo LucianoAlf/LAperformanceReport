@@ -1,16 +1,15 @@
-import { GitCompare, TrendingDown, DollarSign, Users } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
+import { GitCompare, TrendingDown, DollarSign, Users, UserPlus, RefreshCcw, Percent, Target } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Cell } from 'recharts';
 import { useEvasoesData } from '../../hooks/useEvasoesData';
+import { useProfessoresPerformance } from '../../hooks/useProfessoresPerformance';
 
 interface RetencaoComparativoProps {
   ano: number;
 }
 
 export function RetencaoComparativo({ ano }: RetencaoComparativoProps) {
-  const { dadosPorUnidade: dadosCG } = useEvasoesData(ano, 'Campo Grande');
-  const { dadosPorUnidade: dadosRecreioBruto } = useEvasoesData(ano, 'Recreio');
-  const { dadosPorUnidade: dadosBarraBruto } = useEvasoesData(ano, 'Barra');
   const { dadosPorUnidade, loading } = useEvasoesData(ano, 'Consolidado');
+  const { porUnidade: performancePorUnidade, totais, loading: loadingPerformance } = useProfessoresPerformance(ano);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {
@@ -61,18 +60,19 @@ export function RetencaoComparativo({ ano }: RetencaoComparativoProps) {
       </div>
 
       {/* Loading */}
-      {loading && (
+      {(loading || loadingPerformance) && (
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-rose-500"></div>
         </div>
       )}
 
-      {!loading && (
+      {!loading && !loadingPerformance && (
         <>
-          {/* Cards de Unidades */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          {/* Cards de Unidades com Performance Completa */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
             {dadosPorUnidade.map((unidadeData) => {
               const percentual = totalEvasoes > 0 ? ((unidadeData.totalEvasoes / totalEvasoes) * 100).toFixed(1) : 0;
+              const perf = performancePorUnidade[unidadeData.unidade];
               
               return (
                 <div
@@ -84,42 +84,54 @@ export function RetencaoComparativo({ ano }: RetencaoComparativoProps) {
                       className="w-4 h-4 rounded-full"
                       style={{ backgroundColor: unidadeData.cor }}
                     />
-                    <h3 className="text-lg font-semibold text-white">{unidadeData.unidade}</h3>
+                    <h3 className="text-xl font-bold text-white">{unidadeData.unidade}</h3>
                   </div>
                   
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Users className="w-4 h-4 text-gray-400" />
-                        <span className="text-gray-400 text-sm">Evasões</span>
-                      </div>
-                      <div className="text-right">
-                        <span className="text-2xl font-bold text-white">{unidadeData.totalEvasoes}</span>
-                        <span className="text-gray-400 text-sm ml-2">({percentual}%)</span>
-                      </div>
+                  {/* Métricas em Grid */}
+                  <div className="grid grid-cols-3 gap-3 mb-4">
+                    <div className="bg-slate-900/50 rounded-xl p-3 text-center">
+                      <div className="text-lg font-bold text-cyan-400">{perf?.experimentais || 0}</div>
+                      <div className="text-xs text-gray-400">Exp</div>
                     </div>
-                    
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <DollarSign className="w-4 h-4 text-gray-400" />
-                        <span className="text-gray-400 text-sm">MRR Perdido</span>
-                      </div>
-                      <span className="text-xl font-semibold text-rose-400">
-                        {formatCurrency(unidadeData.mrrPerdido)}
-                      </span>
+                    <div className="bg-slate-900/50 rounded-xl p-3 text-center">
+                      <div className="text-lg font-bold text-teal-400">{perf?.matriculas || 0}</div>
+                      <div className="text-xs text-gray-400">Mat</div>
                     </div>
-                    
-                    {/* Barra de progresso */}
-                    <div className="w-full bg-slate-700 rounded-full h-2">
-                      <div
-                        className="h-2 rounded-full transition-all"
-                        style={{
-                          width: `${percentual}%`,
-                          backgroundColor: unidadeData.cor,
-                        }}
-                      />
+                    <div className="bg-slate-900/50 rounded-xl p-3 text-center">
+                      <div className="text-lg font-bold text-purple-400">{perf?.taxa_conversao?.toFixed(1) || 0}%</div>
+                      <div className="text-xs text-gray-400">Conv</div>
+                    </div>
+                    <div className="bg-slate-900/50 rounded-xl p-3 text-center">
+                      <div className="text-lg font-bold text-rose-400">{unidadeData.totalEvasoes}</div>
+                      <div className="text-xs text-gray-400">Eva</div>
+                    </div>
+                    <div className="bg-slate-900/50 rounded-xl p-3 text-center">
+                      <div className="text-lg font-bold text-green-400">{perf?.renovacoes || 0}</div>
+                      <div className="text-xs text-gray-400">Ren</div>
+                    </div>
+                    <div className="bg-slate-900/50 rounded-xl p-3 text-center">
+                      <div className="text-lg font-bold text-emerald-400">{perf?.taxa_renovacao?.toFixed(1) || 0}%</div>
+                      <div className="text-xs text-gray-400">Ren%</div>
                     </div>
                   </div>
+                  
+                  {/* Info adicional */}
+                  <div className="flex items-center justify-between text-sm border-t border-slate-700/50 pt-3">
+                    <span className="text-gray-400">{perf?.totalProfessores || 0} professores</span>
+                    <span className="text-rose-400 font-medium">{formatCurrency(unidadeData.mrrPerdido)}</span>
+                  </div>
+                  
+                  {/* Barra de progresso */}
+                  <div className="w-full bg-slate-700 rounded-full h-1.5 mt-3">
+                    <div
+                      className="h-1.5 rounded-full transition-all"
+                      style={{
+                        width: `${percentual}%`,
+                        backgroundColor: unidadeData.cor,
+                      }}
+                    />
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1 text-right">{percentual}% das evasões</div>
                 </div>
               );
             })}
