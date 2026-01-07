@@ -11,7 +11,8 @@ import {
   User, 
   ArrowRightLeft, 
   Plane, 
-  Building 
+  Building,
+  PieChartIcon
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { useEvasoesData } from '../../hooks/useEvasoesData';
@@ -68,8 +69,15 @@ export function RetencaoMotivos({ ano, unidade }: RetencaoMotivosProps) {
     <div className="min-h-screen p-8 bg-slate-950">
       {/* Header */}
       <div className="mb-8">
-        <h2 className="text-3xl font-bold text-white mb-2">Motivos de Evasão</h2>
-        <p className="text-gray-400">Análise detalhada das causas de cancelamento</p>
+        <span className="inline-flex items-center gap-1.5 bg-rose-500/20 text-rose-400 text-sm font-medium px-3 py-1 rounded-full mb-4">
+          <PieChartIcon className="w-4 h-4" /> Motivos
+        </span>
+        <h1 className="text-4xl lg:text-5xl font-grotesk font-bold text-white mb-2">
+          Motivos de <span className="text-rose-400">Evasão</span>
+        </h1>
+        <p className="text-gray-400">
+          Análise detalhada das causas de cancelamento {unidade !== 'Consolidado' && <span className="text-rose-400">- {unidade}</span>}
+        </p>
       </div>
 
       {/* Loading */}
@@ -85,7 +93,7 @@ export function RetencaoMotivos({ ano, unidade }: RetencaoMotivosProps) {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
             {/* Gráfico de Pizza */}
             <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
-              <h3 className="text-lg font-semibold text-white mb-6">Distribuição por Motivo</h3>
+              <h3 className="text-lg font-grotesk font-semibold text-white mb-6">Distribuição por Motivo</h3>
               <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -109,6 +117,7 @@ export function RetencaoMotivos({ ano, unidade }: RetencaoMotivosProps) {
                         borderRadius: '12px',
                       }}
                       labelStyle={{ color: '#fff' }}
+                      itemStyle={{ color: '#fff' }}
                       cursor={{ fill: '#1e293b' }}
                     />
                   </PieChart>
@@ -150,6 +159,7 @@ export function RetencaoMotivos({ ano, unidade }: RetencaoMotivosProps) {
                         borderRadius: '12px',
                       }}
                       labelStyle={{ color: '#fff' }}
+                      itemStyle={{ color: '#fff' }}
                       cursor={{ fill: '#1e293b' }}
                     />
                     <Bar 

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Target, CheckCircle, Clock, AlertTriangle, Users, DollarSign, TrendingDown, Calendar } from 'lucide-react';
+import { Target, CheckCircle, Clock, AlertTriangle, Users, DollarSign, TrendingDown, Calendar, Rocket } from 'lucide-react';
 import { useEvasoesData } from '../../hooks/useEvasoesData';
 import { UnidadeRetencao } from '../../types/retencao';
 
@@ -154,8 +154,15 @@ export function RetencaoAcoes({ ano, unidade }: RetencaoAcoesProps) {
     <div className="min-h-screen p-8 bg-slate-950">
       {/* Header */}
       <div className="mb-8">
-        <h2 className="text-3xl font-bold text-white mb-2">Ações Recomendadas 2026</h2>
-        <p className="text-gray-400">Plano de ação para reduzir evasões baseado na análise de {ano}</p>
+        <span className="inline-flex items-center gap-1.5 bg-rose-500/20 text-rose-400 text-sm font-medium px-3 py-1 rounded-full mb-4">
+          <Rocket className="w-4 h-4" /> Plano de Ação
+        </span>
+        <h1 className="text-4xl lg:text-5xl font-grotesk font-bold text-white mb-2">
+          Ações <span className="text-rose-400">Recomendadas</span> 2026
+        </h1>
+        <p className="text-gray-400">
+          Plano de ação para reduzir evasões baseado na análise de {ano} {unidade !== 'Consolidado' && <span className="text-rose-400">- {unidade}</span>}
+        </p>
       </div>
 
       {/* Loading */}
@@ -168,11 +175,13 @@ export function RetencaoAcoes({ ano, unidade }: RetencaoAcoesProps) {
       {!loading && (
         <>
           {/* Resumo de Metas */}
-          <div className="bg-gradient-to-r from-rose-500/20 to-red-500/20 border border-rose-500/30 rounded-2xl p-6 mb-8">
+          <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 mb-8 hover:border-slate-600/50 transition-all">
             <div className="flex items-center gap-3 mb-4">
-              <Target className="w-8 h-8 text-rose-400" />
+              <div className="p-3 bg-rose-500/20 rounded-xl">
+                <Target className="w-8 h-8 text-rose-400" />
+              </div>
               <div>
-                <h3 className="text-xl font-bold text-white">Meta de Retenção 2026</h3>
+                <h3 className="text-xl font-grotesk font-bold text-white">Meta de Retenção 2026</h3>
                 <p className="text-gray-400">Reduzir evasões em 20% comparado a 2025</p>
               </div>
             </div>

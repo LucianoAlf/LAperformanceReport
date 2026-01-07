@@ -1,4 +1,4 @@
-import { GitCompare, TrendingDown, DollarSign, Users, UserPlus, RefreshCcw, Percent, Target } from 'lucide-react';
+import { GitCompare, TrendingDown, DollarSign, Users, UserPlus, RefreshCcw, Percent, Target, Building2 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Cell } from 'recharts';
 import { useEvasoesData } from '../../hooks/useEvasoesData';
 import { useProfessoresPerformance } from '../../hooks/useProfessoresPerformance';
@@ -55,8 +55,15 @@ export function RetencaoComparativo({ ano }: RetencaoComparativoProps) {
     <div className="min-h-screen p-8 bg-slate-950">
       {/* Header */}
       <div className="mb-8">
-        <h2 className="text-3xl font-bold text-white mb-2">Comparativo entre Unidades</h2>
-        <p className="text-gray-400">Análise comparativa de evasões por unidade em {ano}</p>
+        <span className="inline-flex items-center gap-1.5 bg-rose-500/20 text-rose-400 text-sm font-medium px-3 py-1 rounded-full mb-4">
+          <Building2 className="w-4 h-4" /> Comparativo
+        </span>
+        <h1 className="text-4xl lg:text-5xl font-grotesk font-bold text-white mb-2">
+          Comparativo entre <span className="text-rose-400">Unidades</span>
+        </h1>
+        <p className="text-gray-400">
+          Análise comparativa de evasões por unidade em {ano}
+        </p>
       </div>
 
       {/* Loading */}
@@ -84,7 +91,7 @@ export function RetencaoComparativo({ ano }: RetencaoComparativoProps) {
                       className="w-4 h-4 rounded-full"
                       style={{ backgroundColor: unidadeData.cor }}
                     />
-                    <h3 className="text-xl font-bold text-white">{unidadeData.unidade}</h3>
+                    <h3 className="text-xl font-grotesk font-bold text-white">{unidadeData.unidade}</h3>
                   </div>
                   
                   {/* Métricas em Grid */}
@@ -155,6 +162,7 @@ export function RetencaoComparativo({ ano }: RetencaoComparativoProps) {
                         borderRadius: '12px',
                       }}
                       labelStyle={{ color: '#fff' }}
+                      itemStyle={{ color: '#fff' }}
                       cursor={{ fill: '#1e293b' }}
                     />
                     <Bar dataKey="evasoes" name="Evasões" radius={[4, 4, 0, 0]}>
@@ -182,6 +190,8 @@ export function RetencaoComparativo({ ano }: RetencaoComparativoProps) {
                         border: '1px solid #334155',
                         borderRadius: '12px',
                       }}
+                      labelStyle={{ color: '#fff' }}
+                      itemStyle={{ color: '#fff' }}
                       cursor={{ fill: '#1e293b' }}
                     />
                     <Radar name="Campo Grande" dataKey="Campo Grande" stroke="#06b6d4" fill="#06b6d4" fillOpacity={0.3} />

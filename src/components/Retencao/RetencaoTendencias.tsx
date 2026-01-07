@@ -1,4 +1,4 @@
-import { TrendingDown, TrendingUp } from 'lucide-react';
+import { TrendingDown, TrendingUp, LineChartIcon } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { useEvasoesData } from '../../hooks/useEvasoesData';
 import { UnidadeRetencao } from '../../types/retencao';
@@ -42,8 +42,15 @@ export function RetencaoTendencias({ ano, unidade }: RetencaoTendenciasProps) {
     <div className="min-h-screen p-8 bg-slate-950">
       {/* Header */}
       <div className="mb-8">
-        <h2 className="text-3xl font-bold text-white mb-2">Tendências de Evasão</h2>
-        <p className="text-gray-400">Evolução mensal das evasões em {ano}</p>
+        <span className="inline-flex items-center gap-1.5 bg-rose-500/20 text-rose-400 text-sm font-medium px-3 py-1 rounded-full mb-4">
+          <LineChartIcon className="w-4 h-4" /> Tendências
+        </span>
+        <h1 className="text-4xl lg:text-5xl font-grotesk font-bold text-white mb-2">
+          Tendências de <span className="text-rose-400">Evasão</span>
+        </h1>
+        <p className="text-gray-400">
+          Evolução mensal das evasões {unidade !== 'Consolidado' && <span className="text-rose-400">- {unidade}</span>} em {ano}
+        </p>
       </div>
 
       {/* Loading */}
@@ -65,9 +72,9 @@ export function RetencaoTendencias({ ano, unidade }: RetencaoTendenciasProps) {
                 ) : (
                   <TrendingDown className="w-6 h-6 text-green-400" />
                 )}
-                <h3 className="text-lg font-semibold text-white">Tendência Geral</h3>
+                <h3 className="text-lg font-grotesk font-semibold text-white">Tendência Geral</h3>
               </div>
-              <div className={`text-2xl font-bold mb-2 ${
+              <div className={`text-2xl font-grotesk font-bold mb-2 ${
                 tendencia.tipo === 'alta' ? 'text-red-400' : 'text-green-400'
               }`}>
                 {tendencia.tipo === 'alta' ? '+' : '-'}{tendencia.valor}%
@@ -85,9 +92,9 @@ export function RetencaoTendencias({ ano, unidade }: RetencaoTendenciasProps) {
                 <div className="w-6 h-6 rounded-full bg-rose-500/20 flex items-center justify-center">
                   <span className="text-rose-400 text-xs font-bold">!</span>
                 </div>
-                <h3 className="text-lg font-semibold text-white">Mês Crítico</h3>
+                <h3 className="text-lg font-grotesk font-semibold text-white">Mês Crítico</h3>
               </div>
-              <div className="text-2xl font-bold text-rose-400 mb-2">
+              <div className="text-2xl font-grotesk font-bold text-rose-400 mb-2">
                 {picoMes?.mesAbrev || 'N/A'}
               </div>
               <p className="text-gray-400 text-sm">
@@ -141,6 +148,7 @@ export function RetencaoTendencias({ ano, unidade }: RetencaoTendenciasProps) {
                       borderRadius: '12px',
                     }}
                     labelStyle={{ color: '#fff' }}
+                    itemStyle={{ color: '#fff' }}
                     cursor={{ fill: '#1e293b' }}
                   />
                   <Area
@@ -181,6 +189,7 @@ export function RetencaoTendencias({ ano, unidade }: RetencaoTendenciasProps) {
                       borderRadius: '12px',
                     }}
                     labelStyle={{ color: '#fff' }}
+                    itemStyle={{ color: '#fff' }}
                     formatter={(value: number) => [formatCurrency(value), 'MRR Perdido']}
                     cursor={{ fill: '#1e293b' }}
                   />

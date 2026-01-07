@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Users, AlertTriangle, TrendingDown, ArrowUpDown, Filter } from 'lucide-react';
+import { Users, AlertTriangle, TrendingDown, ArrowUpDown, Filter, GraduationCap } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ScatterChart, Scatter, ZAxis } from 'recharts';
 import { useProfessoresPerformance } from '../../hooks/useProfessoresPerformance';
 import { UnidadeRetencao } from '../../types/retencao';
@@ -79,8 +79,15 @@ export function RetencaoProfessores({ ano, unidade }: RetencaoProfessoresProps) 
     <div className="min-h-screen p-8 bg-slate-950">
       {/* Header */}
       <div className="mb-8">
-        <h2 className="text-3xl font-bold text-white mb-2">Evasões por Professor</h2>
-        <p className="text-gray-400">Ranking de professores com maior número de evasões</p>
+        <span className="inline-flex items-center gap-1.5 bg-rose-500/20 text-rose-400 text-sm font-medium px-3 py-1 rounded-full mb-4">
+          <GraduationCap className="w-4 h-4" /> Performance Professores
+        </span>
+        <h1 className="text-4xl lg:text-5xl font-grotesk font-bold text-white mb-2">
+          Evasões por <span className="text-rose-400">Professor</span>
+        </h1>
+        <p className="text-gray-400">
+          Ranking de professores com maior número de evasões {unidade !== 'Consolidado' && <span className="text-rose-400">- {unidade}</span>}
+        </p>
       </div>
 
       {/* Loading */}
@@ -94,41 +101,49 @@ export function RetencaoProfessores({ ano, unidade }: RetencaoProfessoresProps) 
         <>
           {/* Resumo por Risco */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-            <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-4">
+            <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4 hover:border-slate-600/50 transition-all">
               <div className="flex items-center gap-2 mb-2">
-                <AlertTriangle className="w-5 h-5 text-red-400" />
-                <span className="text-gray-400 text-sm">Críticos</span>
+                <div className="p-2 bg-red-500/20 rounded-lg">
+                  <AlertTriangle className="w-5 h-5 text-red-400" />
+                </div>
               </div>
-              <div className="text-2xl font-bold text-red-400">
+              <div className="text-3xl font-grotesk font-bold text-white">
                 {porRisco.critico}
               </div>
+              <span className="text-gray-400 text-sm">Críticos</span>
             </div>
-            <div className="bg-orange-500/10 border border-orange-500/30 rounded-2xl p-4">
+            <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4 hover:border-slate-600/50 transition-all">
               <div className="flex items-center gap-2 mb-2">
-                <TrendingDown className="w-5 h-5 text-orange-400" />
-                <span className="text-gray-400 text-sm">Alto Risco</span>
+                <div className="p-2 bg-orange-500/20 rounded-lg">
+                  <TrendingDown className="w-5 h-5 text-orange-400" />
+                </div>
               </div>
-              <div className="text-2xl font-bold text-orange-400">
+              <div className="text-3xl font-grotesk font-bold text-white">
                 {porRisco.alto}
               </div>
+              <span className="text-gray-400 text-sm">Alto Risco</span>
             </div>
-            <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-2xl p-4">
+            <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4 hover:border-slate-600/50 transition-all">
               <div className="flex items-center gap-2 mb-2">
-                <Users className="w-5 h-5 text-yellow-400" />
-                <span className="text-gray-400 text-sm">Médio Risco</span>
+                <div className="p-2 bg-yellow-500/20 rounded-lg">
+                  <Users className="w-5 h-5 text-yellow-400" />
+                </div>
               </div>
-              <div className="text-2xl font-bold text-yellow-400">
+              <div className="text-3xl font-grotesk font-bold text-white">
                 {porRisco.medio}
               </div>
+              <span className="text-gray-400 text-sm">Médio Risco</span>
             </div>
-            <div className="bg-green-500/10 border border-green-500/30 rounded-2xl p-4">
+            <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4 hover:border-slate-600/50 transition-all">
               <div className="flex items-center gap-2 mb-2">
-                <Users className="w-5 h-5 text-green-400" />
-                <span className="text-gray-400 text-sm">Normal</span>
+                <div className="p-2 bg-green-500/20 rounded-lg">
+                  <Users className="w-5 h-5 text-green-400" />
+                </div>
               </div>
-              <div className="text-2xl font-bold text-green-400">
+              <div className="text-3xl font-grotesk font-bold text-white">
                 {porRisco.normal}
               </div>
+              <span className="text-gray-400 text-sm">Normal</span>
             </div>
           </div>
 
@@ -174,7 +189,7 @@ export function RetencaoProfessores({ ano, unidade }: RetencaoProfessoresProps) 
 
           {/* Gráfico */}
           <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 mb-8">
-            <h3 className="text-lg font-semibold text-white mb-6">Top 10 Professores com Mais Evasões</h3>
+            <h3 className="text-lg font-grotesk font-semibold text-white mb-6">Top 10 Professores com Mais Evasões</h3>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={dadosGrafico} layout="vertical">
@@ -194,6 +209,7 @@ export function RetencaoProfessores({ ano, unidade }: RetencaoProfessoresProps) 
                       borderRadius: '12px',
                     }}
                     labelStyle={{ color: '#fff' }}
+                    itemStyle={{ color: '#fff' }}
                     cursor={{ fill: '#1e293b' }}
                   />
                   <Bar dataKey="evasoes" radius={[0, 4, 4, 0]} name="Evasões">
@@ -209,7 +225,7 @@ export function RetencaoProfessores({ ano, unidade }: RetencaoProfessoresProps) 
           {/* Tabela Completa de Professores */}
           <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl overflow-hidden">
             <div className="p-4 border-b border-slate-700/50">
-              <h3 className="text-lg font-semibold text-white">Ranking Completo de Professores</h3>
+              <h3 className="text-lg font-grotesk font-semibold text-white">Ranking Completo de Professores</h3>
               <p className="text-gray-400 text-sm">{professoresProcessados.length} professores encontrados</p>
             </div>
             <div className="overflow-x-auto">
@@ -261,7 +277,7 @@ export function RetencaoProfessores({ ano, unidade }: RetencaoProfessoresProps) 
 
           {/* Gráfico Scatter: Conversão vs Evasão */}
           <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 mt-8">
-            <h3 className="text-lg font-semibold text-white mb-2">Conversão vs Evasão</h3>
+            <h3 className="text-lg font-grotesk font-semibold text-white mb-2">Conversão vs Evasão</h3>
             <p className="text-gray-400 text-sm mb-6">Relação entre taxa de conversão e número de evasões por professor</p>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
@@ -291,6 +307,7 @@ export function RetencaoProfessores({ ano, unidade }: RetencaoProfessoresProps) 
                       borderRadius: '12px',
                     }}
                     labelStyle={{ color: '#fff' }}
+                    itemStyle={{ color: '#fff' }}
                     formatter={(value: number, name: string) => [
                       name === 'conversao' ? `${value.toFixed(1)}%` : value,
                       name === 'conversao' ? 'Conversão' : name === 'evasoes' ? 'Evasões' : name

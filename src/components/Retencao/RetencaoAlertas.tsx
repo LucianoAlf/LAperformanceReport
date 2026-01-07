@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, AlertCircle, Info, CheckCircle, TrendingUp, Users, DollarSign, Calendar } from 'lucide-react';
+import { AlertTriangle, AlertCircle, Info, CheckCircle, TrendingUp, Users, DollarSign, Calendar, Bell } from 'lucide-react';
 import { useEvasoesData } from '../../hooks/useEvasoesData';
 import { UnidadeRetencao } from '../../types/retencao';
 
@@ -143,8 +143,15 @@ export function RetencaoAlertas({ ano, unidade }: RetencaoAlertasProps) {
     <div className="min-h-screen p-8 bg-slate-950">
       {/* Header */}
       <div className="mb-8">
-        <h2 className="text-3xl font-bold text-white mb-2">Alertas e Insights</h2>
-        <p className="text-gray-400">Pontos de atenção identificados na análise de evasão</p>
+        <span className="inline-flex items-center gap-1.5 bg-rose-500/20 text-rose-400 text-sm font-medium px-3 py-1 rounded-full mb-4">
+          <Bell className="w-4 h-4" /> Alertas
+        </span>
+        <h1 className="text-4xl lg:text-5xl font-grotesk font-bold text-white mb-2">
+          Alertas e <span className="text-rose-400">Insights</span>
+        </h1>
+        <p className="text-gray-400">
+          Pontos de atenção identificados na análise de evasão {unidade !== 'Consolidado' && <span className="text-rose-400">- {unidade}</span>}
+        </p>
       </div>
 
       {/* Loading */}
@@ -170,12 +177,14 @@ export function RetencaoAlertas({ ano, unidade }: RetencaoAlertasProps) {
               };
               
               return (
-                <div key={tipo} className={`${styles.bg} ${styles.border} border rounded-2xl p-4`}>
+                <div key={tipo} className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4 hover:border-slate-600/50 transition-all">
                   <div className="flex items-center gap-2 mb-2">
-                    <Icon className={`w-5 h-5 ${styles.text}`} />
-                    <span className="text-gray-400 text-sm">{labels[tipo]}</span>
+                    <div className={`p-2 ${styles.bg} rounded-lg`}>
+                      <Icon className={`w-5 h-5 ${styles.text}`} />
+                    </div>
                   </div>
-                  <div className={`text-2xl font-bold ${styles.text}`}>{count}</div>
+                  <div className="text-3xl font-grotesk font-bold text-white">{count}</div>
+                  <span className="text-gray-400 text-sm">{labels[tipo]}</span>
                 </div>
               );
             })}

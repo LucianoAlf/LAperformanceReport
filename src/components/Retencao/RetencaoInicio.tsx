@@ -29,7 +29,7 @@ export function RetencaoInicio({ onStart }: RetencaoInicioProps) {
       </div>
 
       {/* Título */}
-      <h1 className="text-5xl md:text-7xl font-bold text-center mb-4 relative z-10">
+      <h1 className="text-5xl md:text-7xl font-grotesk font-bold text-center mb-4 relative z-10">
         <span className="text-white">RETENÇÃO</span>{' '}
         <span className="text-transparent bg-clip-text bg-gradient-to-r from-rose-400 to-red-400">
           2025

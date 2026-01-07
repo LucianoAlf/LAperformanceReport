@@ -1,4 +1,4 @@
-import { Users, DollarSign, TrendingDown, AlertTriangle, Target, UserMinus, RefreshCcw, FileText, CheckCircle, Percent, XCircle } from 'lucide-react';
+import { Users, DollarSign, TrendingDown, AlertTriangle, Target, UserMinus, RefreshCcw, FileText, CheckCircle, Percent, XCircle, BarChart3 } from 'lucide-react';
 import { useEvasoesData } from '../../hooks/useEvasoesData';
 import { useProfessoresPerformance } from '../../hooks/useProfessoresPerformance';
 import { UnidadeRetencao } from '../../types/retencao';
@@ -118,33 +118,52 @@ export function RetencaoVisaoGeral({ ano, unidade, onAnoChange, onUnidadeChange 
   return (
     <div className="min-h-screen p-8 bg-slate-950">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
-        <div>
-          <h2 className="text-3xl font-bold text-white mb-2">Visão Geral</h2>
-          <p className="text-gray-400">Panorama completo das evasões em {ano}</p>
+      <div className="mb-8">
+        <span className="inline-flex items-center gap-1.5 bg-rose-500/20 text-rose-400 text-sm font-medium px-3 py-1 rounded-full mb-4">
+          <BarChart3 className="w-4 h-4" /> Visão Geral
+        </span>
+        <h1 className="text-4xl lg:text-5xl font-grotesk font-bold text-white mb-2">
+          Análise de <span className="text-rose-400">Retenção</span>
+        </h1>
+        <p className="text-gray-400">
+          Panorama completo das evasões {unidade === 'Consolidado' ? 'do Grupo LA Music' : `da unidade ${unidade}`} em {ano}
+        </p>
+      </div>
+
+      {/* Filtros */}
+      <div className="flex flex-wrap gap-4 mb-8">
+        <div className="flex gap-2 items-center">
+          <span className="text-gray-400 text-sm">Ano:</span>
+          {[2025, 2024].map((y) => (
+            <button
+              key={y}
+              onClick={() => onAnoChange(y)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                ano === y
+                  ? 'bg-rose-500 text-white'
+                  : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
+              }`}
+            >
+              {y}
+            </button>
+          ))}
         </div>
 
-        {/* Filtros */}
-        <div className="flex gap-3">
-          <select
-            value={ano}
-            onChange={(e) => onAnoChange(Number(e.target.value))}
-            className="bg-slate-800 border border-slate-700 text-white rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-rose-500"
-          >
-            <option value={2025}>2025</option>
-            <option value={2024}>2024</option>
-          </select>
-
-          <select
-            value={unidade}
-            onChange={(e) => onUnidadeChange(e.target.value as UnidadeRetencao)}
-            className="bg-slate-800 border border-slate-700 text-white rounded-xl px-4 py-2 focus:outline-none focus:ring-2 focus:ring-rose-500"
-          >
-            <option value="Consolidado">Consolidado</option>
-            <option value="Campo Grande">Campo Grande</option>
-            <option value="Recreio">Recreio</option>
-            <option value="Barra">Barra</option>
-          </select>
+        <div className="flex gap-2 items-center">
+          <span className="text-gray-400 text-sm">Unidade:</span>
+          {(['Consolidado', 'Campo Grande', 'Recreio', 'Barra'] as UnidadeRetencao[]).map((u) => (
+            <button
+              key={u}
+              onClick={() => onUnidadeChange(u)}
+              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                unidade === u
+                  ? 'bg-rose-500 text-white'
+                  : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
+              }`}
+            >
+              {u === 'Campo Grande' ? 'C. Grande' : u}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -166,18 +185,17 @@ export function RetencaoVisaoGeral({ ano, unidade, onAnoChange, onUnidadeChange 
               return (
                 <div
                   key={index}
-                  className={`${colors.bg} ${colors.border} border rounded-2xl p-6 hover:scale-[1.02] transition-transform`}
+                  className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 hover:border-slate-600/50 transition-all"
                 >
                   <div className="flex items-start justify-between mb-4">
-                    <div className={`w-12 h-12 rounded-xl ${colors.bg} flex items-center justify-center`}>
+                    <div className={`p-3 ${colors.bg} rounded-xl`}>
                       <Icon className={`w-6 h-6 ${colors.icon}`} />
                     </div>
                   </div>
-                  <div className={`text-3xl font-bold ${colors.text} mb-1`}>
+                  <div className="text-4xl font-grotesk font-bold text-white mb-1">
                     {kpi.value}
                   </div>
-                  <div className="text-white font-medium mb-1">{kpi.title}</div>
-                  <div className="text-gray-400 text-sm">{kpi.description}</div>
+                  <div className="text-sm text-gray-400">{kpi.title}</div>
                 </div>
               );
             })}
@@ -186,7 +204,7 @@ export function RetencaoVisaoGeral({ ano, unidade, onAnoChange, onUnidadeChange 
           {/* KPIs de Renovação */}
           {renovacaoCards.length > 0 && (
             <div className="mb-8">
-              <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+              <h3 className="text-lg font-grotesk font-semibold text-white mb-4 flex items-center gap-2">
                 <RefreshCcw className="w-5 h-5 text-emerald-400" />
                 Indicadores de Renovação
               </h3>
@@ -198,18 +216,17 @@ export function RetencaoVisaoGeral({ ano, unidade, onAnoChange, onUnidadeChange 
                   return (
                     <div
                       key={index}
-                      className={`${colors.bg} ${colors.border} border rounded-2xl p-5 hover:scale-[1.02] transition-transform`}
+                      className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-5 hover:border-slate-600/50 transition-all"
                     >
                       <div className="flex items-start justify-between mb-3">
-                        <div className={`w-10 h-10 rounded-xl ${colors.bg} flex items-center justify-center`}>
+                        <div className={`p-2.5 ${colors.bg} rounded-xl`}>
                           <Icon className={`w-5 h-5 ${colors.icon}`} />
                         </div>
                       </div>
-                      <div className={`text-2xl font-bold ${colors.text} mb-1`}>
+                      <div className="text-2xl font-grotesk font-bold text-white mb-1">
                         {kpi.value}
                       </div>
-                      <div className="text-white font-medium text-sm mb-1">{kpi.title}</div>
-                      <div className="text-gray-400 text-xs">{kpi.description}</div>
+                      <div className="text-sm text-gray-400">{kpi.title}</div>
                     </div>
                   );
                 })}
@@ -225,7 +242,7 @@ export function RetencaoVisaoGeral({ ano, unidade, onAnoChange, onUnidadeChange 
                 <AlertTriangle className="w-6 h-6 text-orange-400" />
                 <h3 className="text-lg font-semibold text-white">Motivo Principal</h3>
               </div>
-              <div className="text-2xl font-bold text-orange-400 mb-2">
+              <div className="text-2xl font-grotesk font-bold text-orange-400 mb-2">
                 {kpis?.motivoPrincipal || 'N/A'}
               </div>
               <p className="text-gray-400 text-sm">
@@ -239,7 +256,7 @@ export function RetencaoVisaoGeral({ ano, unidade, onAnoChange, onUnidadeChange 
                 <Users className="w-6 h-6 text-rose-400" />
                 <h3 className="text-lg font-semibold text-white">Professor com Mais Evasões</h3>
               </div>
-              <div className="text-2xl font-bold text-rose-400 mb-2">
+              <div className="text-2xl font-grotesk font-bold text-rose-400 mb-2">
                 {kpis?.professorCritico || 'N/A'}
               </div>
               <p className="text-gray-400 text-sm">
@@ -251,7 +268,7 @@ export function RetencaoVisaoGeral({ ano, unidade, onAnoChange, onUnidadeChange 
           {/* Distribuição por Unidade */}
           {unidade === 'Consolidado' && dadosPorUnidade.length > 0 && (
             <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
-              <h3 className="text-lg font-semibold text-white mb-6">Distribuição por Unidade</h3>
+              <h3 className="text-lg font-grotesk font-semibold text-white mb-6">Distribuição por Unidade</h3>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 {dadosPorUnidade.map((unidadeData) => (
                   <div
