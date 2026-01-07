@@ -232,6 +232,7 @@ export function ComercialRanking() {
                 tick={{ fill: '#64748b', fontSize: 10 }}
               />
               <Tooltip 
+                cursor={{fill: '#1e293b'}}
                 content={<ChartTooltip suffix="%" />}
               />
               <Radar

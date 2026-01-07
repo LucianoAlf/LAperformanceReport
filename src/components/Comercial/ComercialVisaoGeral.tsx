@@ -224,6 +224,7 @@ export function ComercialVisaoGeral({ ano, unidade, onAnoChange, onUnidadeChange
                     ))}
                   </Pie>
                   <Tooltip 
+                    cursor={{fill: '#1e293b'}}
                     content={<ChartTooltip suffix=" matrículas" />}
                   />
                 </PieChart>

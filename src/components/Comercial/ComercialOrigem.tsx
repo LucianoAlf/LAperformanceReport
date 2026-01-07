@@ -135,6 +135,7 @@ export function ComercialOrigem() {
                   ))}
                 </Pie>
                 <Tooltip 
+                  cursor={{fill: '#1e293b'}}
                   content={<ChartTooltip suffix=" leads" />}
                 />
                 <Legend />
@@ -159,6 +160,7 @@ export function ComercialOrigem() {
                   tick={{ fontSize: 11 }}
                 />
                 <Tooltip 
+                  cursor={{fill: '#1e293b'}}
                   content={<ChartTooltip suffix=" Leads" />}
                 />
                 <Bar dataKey="leads" radius={[0, 4, 4, 0]}>

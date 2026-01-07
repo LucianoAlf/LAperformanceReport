@@ -169,6 +169,7 @@ export function ComercialSazonalidade() {
               <XAxis dataKey="mes" stroke="#94a3b8" />
               <YAxis stroke="#94a3b8" />
               <Tooltip 
+                cursor={{fill: '#1e293b'}}
                 content={<ChartTooltip />}
               />
               <Legend />

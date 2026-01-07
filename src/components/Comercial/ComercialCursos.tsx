@@ -160,6 +160,7 @@ export function ComercialCursos() {
                   ))}
                 </Pie>
                 <Tooltip 
+                  cursor={{fill: '#1e293b'}}
                   content={<ChartTooltip suffix=" matrículas" />}
                 />
                 <Legend />
@@ -184,6 +185,7 @@ export function ComercialCursos() {
                   tick={{ fontSize: 11 }}
                 />
                 <Tooltip 
+                  cursor={{fill: '#1e293b'}}
                   content={<ChartTooltip />}
                 />
                 <Bar dataKey="total" radius={[0, 4, 4, 0]}>

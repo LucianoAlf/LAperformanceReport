@@ -148,6 +148,7 @@ export function ComercialFinanceiro({ ano, unidade, onAnoChange, onUnidadeChange
                 <XAxis dataKey="mes" stroke="#94a3b8" />
                 <YAxis stroke="#94a3b8" domain={[300, 500]} />
                 <Tooltip 
+                  cursor={{fill: '#1e293b'}}
                   content={<ChartTooltip valueFormatter={(value: number) => `R$ ${value.toFixed(0)}`} />}
                 />
                 <Legend />
@@ -171,6 +172,7 @@ export function ComercialFinanceiro({ ano, unidade, onAnoChange, onUnidadeChange
                 <XAxis dataKey="unidade" stroke="#94a3b8" />
                 <YAxis stroke="#94a3b8" />
                 <Tooltip 
+                  cursor={{fill: '#1e293b'}}
                   content={<ChartTooltip valueFormatter={(value: number) => `R$ ${value.toLocaleString('pt-BR')}`} />}
                 />
                 <Bar dataKey="faturamento" fill="#00d4ff" radius={[4, 4, 0, 0]} />

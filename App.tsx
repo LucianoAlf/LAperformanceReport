@@ -349,6 +349,16 @@ export default function App() {
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  // Função para trocar de página e resetar a seção ativa
+  const handlePageChange = (page: 'gestao' | 'comercial') => {
+    setCurrentPage(page);
+    if (page === 'gestao') {
+      setActiveSection('cover'); // Reseta para a página inicial
+      // Scroll para o topo
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
   const updateMeta = (unit: string, field: keyof Meta2026, value: string | number) => {
     setMetas2026(prev => ({
       ...prev,
@@ -541,7 +551,7 @@ export default function App() {
 
   // Se estiver na página comercial, renderiza o dashboard comercial
   if (currentPage === 'comercial') {
-    return <ComercialDashboard onPageChange={setCurrentPage} />;
+    return <ComercialDashboard onPageChange={handlePageChange} />;
   }
 
   return (
@@ -590,7 +600,7 @@ export default function App() {
               <span className="text-sm font-medium">Gestão</span>
             </button>
             <button
-              onClick={() => setCurrentPage('comercial')}
+              onClick={() => handlePageChange('comercial')}
               className="flex-1 flex items-center justify-center gap-2 py-3 px-3 rounded-lg text-gray-400 hover:text-white hover:bg-slate-700/50 transition-all"
             >
               <TrendingUp size={16} />

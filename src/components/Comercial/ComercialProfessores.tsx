@@ -65,19 +65,26 @@ export function ComercialProfessores() {
         </div>
       </div>
 
-      {/* Cards de Destaque */}
+      {/* Cards de Destaque - Estilo Pódio */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         {professores.slice(0, 3).map((prof, idx) => (
           <div 
             key={prof.professor}
-            className={`bg-gradient-to-br ${
-              idx === 0 ? 'from-yellow-500/20 to-amber-500/20 border-yellow-500/30' :
-              idx === 1 ? 'from-gray-500/20 to-slate-500/20 border-gray-500/30' :
-              'from-amber-600/20 to-orange-600/20 border-amber-600/30'
-            } border rounded-2xl p-6`}
+            className="relative bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 overflow-hidden"
           >
-            <div className="flex items-center justify-between mb-4">
-              {getMedalIcon(idx)}
+            {/* Ícone de posição com gradiente - Estilo Gestão */}
+            <div className={`absolute top-4 left-4 w-12 h-12 rounded-xl flex items-center justify-center text-xl font-black ${
+              idx === 0 
+                ? 'bg-gradient-to-br from-[#FFD700] via-[#FFFACD] to-[#DAA520] text-yellow-950 shadow-lg shadow-yellow-500/40 border border-yellow-200/50' 
+                : idx === 1 
+                ? 'bg-gradient-to-br from-[#C0C0C0] via-[#F8F8F8] to-[#808080] text-slate-800 shadow-lg shadow-slate-400/30 border border-slate-100/50' 
+                : 'bg-gradient-to-br from-[#CD7F32] via-[#E6B8A2] to-[#8B4513] text-white shadow-lg shadow-orange-900/30 border border-orange-300/50'
+            }`}>
+              {idx + 1}
+            </div>
+            
+            {/* Posição no canto direito */}
+            <div className="absolute top-4 right-4">
               <span className={`text-sm font-medium ${
                 idx === 0 ? 'text-yellow-400' :
                 idx === 1 ? 'text-gray-300' :
@@ -86,25 +93,50 @@ export function ComercialProfessores() {
                 #{idx + 1}
               </span>
             </div>
-            <div className="text-2xl font-grotesk font-bold text-white mb-1">{prof.professor}</div>
-            <div className="text-4xl font-grotesk font-bold text-emerald-400 mb-2">{prof.total}</div>
-            <div className="text-sm text-gray-400">aulas experimentais</div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {unidade === 'Consolidado' ? (
-                Object.entries(prof.unidades).map(([unid, qty]) => (
-                  <span 
-                    key={unid}
-                    className="text-xs bg-slate-700/50 px-2 py-1 rounded text-gray-300"
-                  >
-                    {unid === 'Campo Grande' ? 'CG' : unid}: {qty}
+
+            {/* Conteúdo */}
+            <div className="mt-14">
+              <div className="text-2xl font-grotesk font-bold text-white mb-1">{prof.professor}</div>
+              <div className={`text-4xl font-grotesk font-bold mb-2 ${
+                idx === 0 ? 'text-yellow-400' :
+                idx === 1 ? 'text-gray-300' :
+                'text-amber-500'
+              }`}>{prof.total}</div>
+              <div className="text-sm text-gray-400">aulas experimentais</div>
+              <div className="mt-3 flex flex-wrap gap-2">
+                {unidade === 'Consolidado' ? (
+                  Object.entries(prof.unidades).map(([unid, qty]) => (
+                    <span 
+                      key={unid}
+                      className={`text-xs px-2 py-1 rounded ${
+                        idx === 0 ? 'bg-yellow-500/20 text-yellow-300' :
+                        idx === 1 ? 'bg-gray-500/20 text-gray-300' :
+                        'bg-amber-500/20 text-amber-300'
+                      }`}
+                    >
+                      {unid === 'Campo Grande' ? 'CG' : unid}: {qty}
+                    </span>
+                  ))
+                ) : (
+                  <span className={`text-xs px-2 py-1 rounded ${
+                    idx === 0 ? 'bg-yellow-500/20 text-yellow-300' :
+                    idx === 1 ? 'bg-gray-500/20 text-gray-300' :
+                    'bg-amber-500/20 text-amber-300'
+                  }`}>
+                    {unidade === 'Campo Grande' ? 'CG' : unidade}: {prof.total}
                   </span>
-                ))
-              ) : (
-                <span className="text-xs bg-slate-700/50 px-2 py-1 rounded text-gray-300">
-                  {unidade === 'Campo Grande' ? 'CG' : unidade}: {prof.total}
-                </span>
-              )}
+                )}
+              </div>
             </div>
+
+            {/* Borda inferior colorida */}
+            <div className={`absolute bottom-0 left-0 right-0 h-1 ${
+              idx === 0 
+                ? 'bg-gradient-to-r from-yellow-400 via-amber-400 to-yellow-500' 
+                : idx === 1 
+                ? 'bg-gradient-to-r from-gray-300 via-gray-400 to-gray-300' 
+                : 'bg-gradient-to-r from-amber-500 via-orange-500 to-amber-500'
+            }`} />
           </div>
         ))}
       </div>
@@ -127,6 +159,7 @@ export function ComercialProfessores() {
                 tick={{ fontSize: 12 }}
               />
               <Tooltip 
+                cursor={{fill: '#1e293b'}}
                 content={<ChartTooltip />}
               />
               <Bar dataKey="total" radius={[0, 4, 4, 0]}>
