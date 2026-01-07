@@ -47,7 +47,7 @@ export function ComercialFunil({ ano, unidade, onAnoChange, onUnidadeChange }: P
         <span className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-400 text-sm font-medium px-3 py-1 rounded-full mb-4">
           <Target className="w-4 h-4" /> Funil de Conversão
         </span>
-        <h1 className="text-4xl font-bold text-white mb-2">
+        <h1 className="text-4xl lg:text-5xl font-grotesk font-bold text-white mb-2">
           Jornada do <span className="text-emerald-400">Lead à Matrícula</span>
         </h1>
         <p className="text-gray-400">
@@ -103,7 +103,7 @@ export function ComercialFunil({ ano, unidade, onAnoChange, onUnidadeChange }: P
             <div 
               className="bg-gradient-to-r from-blue-500 to-blue-600 rounded-t-xl py-6 px-8 text-center"
             >
-              <div className="text-3xl font-bold text-white">
+              <div className="text-3xl font-grotesk font-bold text-white">
                 {kpis.totalLeads.toLocaleString('pt-BR')}
               </div>
               <div className="text-blue-100 text-sm">LEADS GERADOS</div>
@@ -125,7 +125,7 @@ export function ComercialFunil({ ano, unidade, onAnoChange, onUnidadeChange }: P
             <div 
               className="bg-gradient-to-r from-cyan-500 to-cyan-600 py-6 px-8 text-center"
             >
-              <div className="text-3xl font-bold text-white">
+              <div className="text-3xl font-grotesk font-bold text-white">
                 {kpis.aulasExperimentais.toLocaleString('pt-BR')}
               </div>
               <div className="text-cyan-100 text-sm">AULAS EXPERIMENTAIS</div>
@@ -147,7 +147,7 @@ export function ComercialFunil({ ano, unidade, onAnoChange, onUnidadeChange }: P
             <div 
               className="bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-b-xl py-6 px-8 text-center"
             >
-              <div className="text-3xl font-bold text-white">
+              <div className="text-3xl font-grotesk font-bold text-white">
                 {kpis.novasMatriculas.toLocaleString('pt-BR')}
               </div>
               <div className="text-emerald-100 text-sm">NOVAS MATRÍCULAS</div>

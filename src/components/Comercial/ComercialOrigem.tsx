@@ -32,7 +32,7 @@ export function ComercialOrigem() {
         <span className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-400 text-sm font-medium px-3 py-1 rounded-full mb-4">
           <Smartphone className="w-4 h-4" /> Origem dos Leads
         </span>
-        <h1 className="text-4xl font-bold text-white mb-2">
+        <h1 className="text-4xl lg:text-5xl font-grotesk font-bold text-white mb-2">
           De Onde Vêm os <span className="text-emerald-400">Leads</span>
         </h1>
         <p className="text-gray-400">
@@ -79,8 +79,8 @@ export function ComercialOrigem() {
                 </div>
             </div>
           </div>
-          <div className="text-3xl font-bold text-white mb-1">{origem[0]?.canal}</div>
-          <div className="text-2xl font-bold text-blue-400">
+          <div className="text-3xl font-grotesk font-bold text-white mb-1">{origem[0]?.canal}</div>
+          <div className="text-2xl font-grotesk font-bold text-blue-400">
             {origem[0]?.leads.toLocaleString('pt-BR')} leads
           </div>
           <div className="text-sm text-gray-400 mt-2">
@@ -102,8 +102,8 @@ export function ComercialOrigem() {
                 </div>
             </div>
           </div>
-          <div className="text-3xl font-bold text-white mb-1">{origem[1]?.canal}</div>
-          <div className="text-2xl font-bold text-emerald-400">
+          <div className="text-3xl font-grotesk font-bold text-white mb-1">{origem[1]?.canal}</div>
+          <div className="text-2xl font-grotesk font-bold text-emerald-400">
             {origem[1]?.leads.toLocaleString('pt-BR')} leads
           </div>
           <div className="text-sm text-gray-400 mt-2">

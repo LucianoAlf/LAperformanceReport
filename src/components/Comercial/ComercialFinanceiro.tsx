@@ -55,7 +55,7 @@ export function ComercialFinanceiro({ ano, unidade, onAnoChange, onUnidadeChange
         <span className="inline-block bg-emerald-500/20 text-emerald-500 text-sm font-medium px-3 py-1 rounded-full mb-4">
           💰 Financeiro
         </span>
-        <h1 className="text-4xl font-bold text-white mb-2">
+        <h1 className="text-4xl lg:text-5xl font-grotesk font-bold text-white mb-2">
           Ticket Médio e <span className="text-emerald-500">Passaporte</span>
         </h1>
         <p className="text-gray-400">
@@ -91,7 +91,7 @@ export function ComercialFinanceiro({ ano, unidade, onAnoChange, onUnidadeChange
               <DollarSign className="w-6 h-6 text-yellow-400" />
             </div>
           </div>
-          <div className="text-3xl font-bold text-white mb-1">
+          <div className="text-3xl font-grotesk font-bold text-white mb-1">
             R$ {kpis.ticketMedioParcelas.toFixed(0)}
           </div>
           <div className="text-sm text-gray-400">Ticket Médio Parcelas</div>
@@ -103,7 +103,7 @@ export function ComercialFinanceiro({ ano, unidade, onAnoChange, onUnidadeChange
               <CreditCard className="w-6 h-6 text-purple-400" />
             </div>
           </div>
-          <div className="text-3xl font-bold text-white mb-1">
+          <div className="text-3xl font-grotesk font-bold text-white mb-1">
             R$ {kpis.ticketMedioPassaporte.toFixed(0)}
           </div>
           <div className="text-sm text-gray-400">Ticket Médio Passaporte</div>
@@ -115,7 +115,7 @@ export function ComercialFinanceiro({ ano, unidade, onAnoChange, onUnidadeChange
               <Wallet className="w-6 h-6 text-emerald-500" />
             </div>
           </div>
-          <div className="text-3xl font-bold text-white mb-1">
+          <div className="text-3xl font-grotesk font-bold text-white mb-1">
             R$ {(kpis.faturamentoPassaporte / 1000).toFixed(0)}k
           </div>
           <div className="text-sm text-gray-400">Faturamento Passaporte</div>
@@ -127,7 +127,7 @@ export function ComercialFinanceiro({ ano, unidade, onAnoChange, onUnidadeChange
               <TrendingUp className="w-6 h-6 text-emerald-400" />
             </div>
           </div>
-          <div className="text-3xl font-bold text-white mb-1">
+          <div className="text-3xl font-grotesk font-bold text-white mb-1">
             ~{kpis.ticketMedioPassaporte > 0 ? Math.round(kpis.faturamentoPassaporte / kpis.ticketMedioPassaporte) : 0}
           </div>
           <div className="text-sm text-gray-400">Passaportes Vendidos</div>

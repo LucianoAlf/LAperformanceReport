@@ -107,7 +107,7 @@ export function ComercialMetas() {
         <span className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-400 text-sm font-medium px-3 py-1 rounded-full mb-4">
           <Target className="w-4 h-4" /> Metas 2026
         </span>
-        <h1 className="text-4xl font-bold text-white mb-2">
+        <h1 className="text-4xl lg:text-5xl font-grotesk font-bold text-white mb-2">
           Objetivos <span className="text-emerald-400">Comerciais</span>
         </h1>
         <p className="text-gray-400">
@@ -124,27 +124,27 @@ export function ComercialMetas() {
         
         <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
           <div className="text-center">
-            <div className="text-3xl font-bold text-white">{metaGrupo.meta_leads.toLocaleString('pt-BR')}</div>
+            <div className="text-3xl font-grotesk font-bold text-white">{metaGrupo.meta_leads.toLocaleString('pt-BR')}</div>
             <div className="text-sm text-gray-400">Leads</div>
             <div className="text-xs text-emerald-400 mt-1">{calcVariacao(kpisGrupo.totalLeads, metaGrupo.meta_leads)}</div>
           </div>
           <div className="text-center">
-            <div className="text-3xl font-bold text-white">{metaGrupo.meta_experimentais.toLocaleString('pt-BR')}</div>
+            <div className="text-3xl font-grotesk font-bold text-white">{metaGrupo.meta_experimentais.toLocaleString('pt-BR')}</div>
             <div className="text-sm text-gray-400">Experimentais</div>
             <div className="text-xs text-emerald-400 mt-1">{calcVariacao(kpisGrupo.aulasExperimentais, metaGrupo.meta_experimentais)}</div>
           </div>
           <div className="text-center">
-            <div className="text-3xl font-bold text-white">{metaGrupo.meta_matriculas}</div>
+            <div className="text-3xl font-grotesk font-bold text-white">{metaGrupo.meta_matriculas}</div>
             <div className="text-sm text-gray-400">Matrículas</div>
             <div className="text-xs text-emerald-400 mt-1">{calcVariacao(kpisGrupo.novasMatriculas, metaGrupo.meta_matriculas)}</div>
           </div>
           <div className="text-center">
-            <div className="text-3xl font-bold text-white">{metaGrupo.meta_taxa_conversao}%</div>
+            <div className="text-3xl font-grotesk font-bold text-white">{metaGrupo.meta_taxa_conversao}%</div>
             <div className="text-sm text-gray-400">Taxa Conversão</div>
             <div className="text-xs text-emerald-400 mt-1">+{(metaGrupo.meta_taxa_conversao - kpisGrupo.taxaConversaoTotal).toFixed(1)}pp</div>
           </div>
           <div className="text-center">
-            <div className="text-3xl font-bold text-white">R$ {metaGrupo.meta_ticket_medio}</div>
+            <div className="text-3xl font-grotesk font-bold text-white">R$ {metaGrupo.meta_ticket_medio}</div>
             <div className="text-sm text-gray-400">Ticket Médio</div>
             <div className="text-xs text-emerald-400 mt-1">{calcVariacao(kpisGrupo.ticketMedioParcelas, metaGrupo.meta_ticket_medio)}</div>
           </div>

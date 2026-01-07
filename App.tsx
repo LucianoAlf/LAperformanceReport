@@ -321,10 +321,16 @@ export default function App() {
 
   useEffect(() => {
     const observer = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) setActiveSection(entry.target.id);
-      });
-    }, { threshold: 0.5 });
+      // Encontrar a seção mais visível
+      const visibleEntries = entries.filter(entry => entry.isIntersecting);
+      if (visibleEntries.length > 0) {
+        // Ordenar por intersectionRatio para pegar a mais visível
+        const mostVisible = visibleEntries.reduce((prev, current) => 
+          current.intersectionRatio > prev.intersectionRatio ? current : prev
+        );
+        setActiveSection(mostVisible.target.id);
+      }
+    }, { threshold: [0.1, 0.25, 0.5, 0.75], rootMargin: '-10% 0px -10% 0px' });
     sections.forEach(s => {
       const el = document.getElementById(s.id);
       if (el) observer.observe(el);
@@ -339,6 +345,7 @@ export default function App() {
   };
 
   const scrollToSection = (id: string) => {
+    setActiveSection(id); // Atualiza imediatamente ao clicar
     document.getElementById(id)?.scrollIntoView({ behavior: 'smooth' });
   };
 

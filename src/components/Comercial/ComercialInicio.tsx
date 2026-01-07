@@ -1,10 +1,12 @@
 import { TrendingUp, Users, Target, ArrowRight, BarChart3 } from 'lucide-react';
+import { useComercialData } from '../../hooks/useComercialData';
 
 interface ComercialInicioProps {
   onStart: () => void;
 }
 
 export function ComercialInicio({ onStart }: ComercialInicioProps) {
+  const { kpis, loading } = useComercialData(2025, 'Consolidado');
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 relative overflow-hidden">
       {/* Background decorativo */}
@@ -29,14 +31,14 @@ export function ComercialInicio({ onStart }: ComercialInicioProps) {
         </div>
 
         {/* Título */}
-        <h1 className="text-5xl md:text-7xl font-bold text-center mb-4">
+        <h1 className="text-5xl md:text-7xl font-grotesk font-bold text-center mb-4">
           <span className="text-white">INDICADORES DE</span>{' '}
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-400">
             MATRÍCULAS
           </span>
         </h1>
 
-        <div className="text-6xl md:text-8xl font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 mb-6">
+        <div className="text-6xl md:text-8xl font-grotesk font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 mb-6">
           2025
         </div>
 
@@ -48,19 +50,25 @@ export function ComercialInicio({ onStart }: ComercialInicioProps) {
         <div className="flex flex-wrap justify-center gap-6 mb-12">
           <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-6 text-center min-w-[180px] hover:border-emerald-500/30 transition-all">
             <TrendingUp className="w-8 h-8 text-emerald-400 mx-auto mb-3" />
-            <div className="text-3xl font-bold text-white">7.123</div>
+            <div className="text-4xl font-grotesk font-bold text-white">
+              {loading ? '...' : kpis?.totalLeads.toLocaleString('pt-BR') || '0'}
+            </div>
             <div className="text-sm text-gray-400">Leads Gerados</div>
           </div>
 
           <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-6 text-center min-w-[180px] hover:border-cyan-500/30 transition-all">
             <Users className="w-8 h-8 text-cyan-400 mx-auto mb-3" />
-            <div className="text-3xl font-bold text-white">847</div>
+            <div className="text-4xl font-grotesk font-bold text-white">
+              {loading ? '...' : kpis?.aulasExperimentais.toLocaleString('pt-BR') || '0'}
+            </div>
             <div className="text-sm text-gray-400">Aulas Experimentais</div>
           </div>
 
           <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-6 text-center min-w-[180px] hover:border-green-500/30 transition-all">
             <Target className="w-8 h-8 text-green-400 mx-auto mb-3" />
-            <div className="text-3xl font-bold text-white">571</div>
+            <div className="text-4xl font-grotesk font-bold text-white">
+              {loading ? '...' : kpis?.novasMatriculas.toLocaleString('pt-BR') || '0'}
+            </div>
             <div className="text-sm text-gray-400">Novas Matrículas</div>
           </div>
         </div>
@@ -86,7 +94,9 @@ export function ComercialInicio({ onStart }: ComercialInicioProps) {
 
         {/* Taxa de conversão */}
         <div className="mt-8 text-center">
-          <div className="text-4xl font-bold text-emerald-400">8,0%</div>
+          <div className="text-4xl font-grotesk font-bold text-emerald-400">
+            {loading ? '...' : `${kpis?.taxaConversaoTotal.toFixed(1) || '0'}%`}
+          </div>
           <div className="text-sm text-gray-500">Taxa de Conversão Total</div>
         </div>
       </div>

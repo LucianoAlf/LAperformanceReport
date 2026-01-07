@@ -61,7 +61,7 @@ export function ComercialVisaoGeral({ ano, unidade, onAnoChange, onUnidadeChange
         <span className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-400 text-sm font-medium px-3 py-1 rounded-full mb-4">
           <BarChart3 className="w-4 h-4" /> Visão Geral
         </span>
-        <h1 className="text-4xl font-bold text-white mb-2">
+        <h1 className="text-4xl lg:text-5xl font-grotesk font-bold text-white mb-2">
           O Ano de {ano} em <span className="text-emerald-400">Números</span>
         </h1>
         <p className="text-gray-400">
@@ -332,7 +332,7 @@ function KPICard({ icon: Icon, iconColor, iconBg, value, label, meta, metaLabel,
           </div>
         )}
       </div>
-      <div className="text-3xl font-bold text-white mb-1">{value}</div>
+      <div className="text-4xl font-grotesk font-bold text-white mb-1">{value}</div>
       <div className="text-sm text-gray-400">{label}</div>
       {meta && metaLabel && (
         <div className="mt-2 text-xs text-gray-500">

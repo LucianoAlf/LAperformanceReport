@@ -95,7 +95,7 @@ export function ComercialSazonalidade() {
         <span className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-400 text-sm font-medium px-3 py-1 rounded-full mb-4">
           <Calendar className="w-4 h-4" /> Sazonalidade
         </span>
-        <h1 className="text-4xl font-bold text-white mb-2">
+        <h1 className="text-4xl lg:text-5xl font-grotesk font-bold text-white mb-2">
           Padrões <span className="text-emerald-400">Identificados</span>
         </h1>
         <p className="text-gray-400">
@@ -117,7 +117,7 @@ export function ComercialSazonalidade() {
           <div className="grid grid-cols-3 gap-4">
             {melhoresMeses.map((m, idx) => (
               <div key={m.mes} className="text-center">
-                <div className="text-2xl font-bold text-white">{m.mes.toUpperCase()}</div>
+                <div className="text-3xl font-grotesk font-bold text-white">{m.mes.toUpperCase()}</div>
                 <div className="text-emerald-400 font-semibold">{m.total_mat} mat.</div>
                 {idx === 0 && <div className="text-yellow-400 text-xs mt-1">⭐ Melhor</div>}
               </div>
@@ -142,7 +142,7 @@ export function ComercialSazonalidade() {
           <div className="grid grid-cols-3 gap-4">
             {pioresMeses.map((m, idx) => (
               <div key={m.mes} className="text-center">
-                <div className="text-2xl font-bold text-white">{m.mes.toUpperCase()}</div>
+                <div className="text-3xl font-grotesk font-bold text-white">{m.mes.toUpperCase()}</div>
                 <div className="text-red-400 font-semibold">{m.total_mat} mat.</div>
                 {idx === 0 && <div className="text-red-400 text-xs mt-1 flex items-center justify-center gap-1"><AlertTriangle className="w-3 h-3" /> Pior</div>}
               </div>

@@ -52,7 +52,7 @@ export function ComercialCursos() {
         <span className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-400 text-sm font-medium px-3 py-1 rounded-full mb-4">
           <Guitar className="w-4 h-4" /> Cursos Matriculados
         </span>
-        <h1 className="text-4xl font-bold text-white mb-2">
+        <h1 className="text-4xl lg:text-5xl font-grotesk font-bold text-white mb-2">
           Cursos Mais <span className="text-emerald-400">Procurados</span>
         </h1>
         <p className="text-gray-400">
@@ -98,7 +98,7 @@ export function ComercialCursos() {
                 </div>
             </div>
           </div>
-          <div className="text-4xl font-bold text-white mb-2">{totalAdultos}</div>
+          <div className="text-3xl font-grotesk font-bold text-white mb-2">{totalAdultos}</div>
           <div className="text-sm text-gray-400">matrículas ({totalGeral > 0 ? ((totalAdultos / totalGeral) * 100).toFixed(0) : 0}%)</div>
           <div className="mt-4 space-y-2">
             <div className="text-sm text-gray-300">Top Cursos:</div>
@@ -124,7 +124,7 @@ export function ComercialCursos() {
                 </div>
             </div>
           </div>
-          <div className="text-4xl font-bold text-white mb-2">{totalKids}</div>
+          <div className="text-3xl font-grotesk font-bold text-white mb-2">{totalKids}</div>
           <div className="text-sm text-gray-400">matrículas ({totalGeral > 0 ? ((totalKids / totalGeral) * 100).toFixed(0) : 0}%)</div>
           <div className="mt-4 space-y-2">
             <div className="text-sm text-gray-300">Top Cursos:</div>

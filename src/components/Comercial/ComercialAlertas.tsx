@@ -140,11 +140,11 @@ export function ComercialAlertas() {
             <div className="text-sm text-gray-400 mb-2">Recomendação de alocação:</div>
             <div className="grid grid-cols-2 gap-4">
               <div className="text-center">
-                <div className="text-2xl font-bold text-emerald-500">60%</div>
+                <div className="text-2xl font-grotesk font-bold text-emerald-500">60%</div>
                 <div className="text-xs text-gray-500">do budget em Jan/Ago</div>
               </div>
               <div className="text-center">
-                <div className="text-2xl font-bold text-red-400">0%</div>
+                <div className="text-2xl font-grotesk font-bold text-red-400">0%</div>
                 <div className="text-xs text-gray-500">captação em Dezembro</div>
               </div>
             </div>
@@ -161,7 +161,7 @@ export function ComercialAlertas() {
         <span className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-400 text-sm font-medium px-3 py-1 rounded-full mb-4">
           <AlertTriangle className="w-4 h-4" /> Alertas e Insights
         </span>
-        <h1 className="text-4xl font-bold text-white mb-2">
+        <h1 className="text-4xl lg:text-5xl font-grotesk font-bold text-white mb-2">
           Pontos de <span className="text-emerald-400">Atenção</span>
         </h1>
         <p className="text-gray-400">

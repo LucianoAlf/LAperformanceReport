@@ -109,7 +109,7 @@ export function ComercialRanking() {
         <span className="inline-block bg-emerald-500/20 text-emerald-500 text-sm font-medium px-3 py-1 rounded-full mb-4">
           🏆 Ranking
         </span>
-        <h1 className="text-4xl font-bold text-white mb-2">
+        <h1 className="text-4xl lg:text-5xl font-grotesk font-bold text-white mb-2">
           Ranking entre <span className="text-emerald-500">Unidades</span>
         </h1>
         <p className="text-gray-400">

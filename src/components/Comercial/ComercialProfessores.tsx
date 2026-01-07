@@ -34,7 +34,7 @@ export function ComercialProfessores() {
         <span className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-400 text-sm font-medium px-3 py-1 rounded-full mb-4">
           <GraduationCap className="w-4 h-4" /> Performance Professores
         </span>
-        <h1 className="text-4xl font-bold text-white mb-2">
+        <h1 className="text-4xl lg:text-5xl font-grotesk font-bold text-white mb-2">
           Ranking de <span className="text-emerald-400">Professores</span>
         </h1>
         <p className="text-gray-400">
@@ -86,8 +86,8 @@ export function ComercialProfessores() {
                 #{idx + 1}
               </span>
             </div>
-            <div className="text-2xl font-bold text-white mb-1">{prof.professor}</div>
-            <div className="text-4xl font-bold text-emerald-400 mb-2">{prof.total}</div>
+            <div className="text-2xl font-grotesk font-bold text-white mb-1">{prof.professor}</div>
+            <div className="text-4xl font-grotesk font-bold text-emerald-400 mb-2">{prof.total}</div>
             <div className="text-sm text-gray-400">aulas experimentais</div>
             <div className="mt-3 flex flex-wrap gap-2">
               {unidade === 'Consolidado' ? (
