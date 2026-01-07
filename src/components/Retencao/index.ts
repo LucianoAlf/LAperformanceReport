@@ -1,0 +1,11 @@
+export { RetencaoDashboard } from './RetencaoDashboard';
+export { SidebarRetencao } from './SidebarRetencao';
+export { RetencaoInicio } from './RetencaoInicio';
+export { RetencaoVisaoGeral } from './RetencaoVisaoGeral';
+export { RetencaoTendencias } from './RetencaoTendencias';
+export { RetencaoMotivos } from './RetencaoMotivos';
+export { RetencaoProfessores } from './RetencaoProfessores';
+export { RetencaoSazonalidade } from './RetencaoSazonalidade';
+export { RetencaoComparativo } from './RetencaoComparativo';
+export { RetencaoAlertas } from './RetencaoAlertas';
+export { RetencaoAcoes } from './RetencaoAcoes';

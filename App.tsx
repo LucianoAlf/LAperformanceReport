@@ -13,6 +13,7 @@ import LearningsTimeline from './src/components/LearningsTimeline.tsx';
 import LearningsKPIs from './src/components/LearningsKPIs.tsx';
 import LearningsResponsaveis from './src/components/LearningsResponsaveis.tsx';
 import { ComercialDashboard } from './src/components/Comercial';
+import { RetencaoDashboard } from './src/components/Retencao';
 import { ResponsiveContainer, PieChart, Pie, Cell, Sector, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, LineChart, Line, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 import { Theme, MetricType, UnitData, Meta2026 } from './types';
 import { UNITS, HISTORY_DATA, DISTRIBUTION_DATA, THEME_COLORS, MONTHS } from './constants';
@@ -284,7 +285,7 @@ const renderActiveShape = (props: any) => {
 // --- Main App Component ---
 
 export default function App() {
-  const [currentPage, setCurrentPage] = useState<'gestao' | 'comercial'>('gestao');
+  const [currentPage, setCurrentPage] = useState<'gestao' | 'comercial' | 'retencao'>('gestao');
   const [theme, setTheme] = useState<Theme>('dark');
   const [activeSection, setActiveSection] = useState('cover');
   const [unitTab, setUnitTab] = useState('cg');
@@ -350,7 +351,7 @@ export default function App() {
   };
 
   // Função para trocar de página e resetar a seção ativa
-  const handlePageChange = (page: 'gestao' | 'comercial') => {
+  const handlePageChange = (page: 'gestao' | 'comercial' | 'retencao') => {
     setCurrentPage(page);
     if (page === 'gestao') {
       setActiveSection('cover'); // Reseta para a página inicial
@@ -552,6 +553,11 @@ export default function App() {
   // Se estiver na página comercial, renderiza o dashboard comercial
   if (currentPage === 'comercial') {
     return <ComercialDashboard onPageChange={handlePageChange} />;
+  }
+
+  // Se estiver na página retenção, renderiza o dashboard de retenção
+  if (currentPage === 'retencao') {
+    return <RetencaoDashboard onPageChange={handlePageChange} />;
   }
 
   return (
