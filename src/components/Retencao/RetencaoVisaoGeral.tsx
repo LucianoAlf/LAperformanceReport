@@ -134,7 +134,7 @@ export function RetencaoVisaoGeral({ ano, unidade, onAnoChange, onUnidadeChange 
       <div className="flex flex-wrap gap-4 mb-8">
         <div className="flex gap-2 items-center">
           <span className="text-gray-400 text-sm">Ano:</span>
-          {[2025, 2024].map((y) => (
+          {[2024, 2025].map((y) => (
             <button
               key={y}
               onClick={() => onAnoChange(y)}
