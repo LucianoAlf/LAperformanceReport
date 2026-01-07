@@ -59,8 +59,8 @@ export function SidebarComercial({ activeSection, onSectionChange, onPageChange 
           />
         </div>
         <div className="mt-3">
-          <span className="text-xs text-emerald-400 font-medium bg-emerald-500/10 px-2 py-1 rounded-full">
-            📊 Indicadores de Matrículas
+          <span className="text-xs text-emerald-400 font-medium bg-emerald-500/10 px-2 py-1 rounded-full inline-flex items-center gap-1">
+            <BarChart3 className="w-3 h-3" /> Indicadores de Matrículas
           </span>
         </div>
       </div>

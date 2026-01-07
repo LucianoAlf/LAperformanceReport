@@ -1,4 +1,4 @@
-import { TrendingUp, Users, Target, ArrowRight } from 'lucide-react';
+import { TrendingUp, Users, Target, ArrowRight, BarChart3 } from 'lucide-react';
 
 interface ComercialInicioProps {
   onStart: () => void;
@@ -67,8 +67,8 @@ export function ComercialInicio({ onStart }: ComercialInicioProps) {
 
         {/* Badge */}
         <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-full px-6 py-2 mb-8">
-          <span className="text-emerald-400 font-medium">
-            📊 Análise de Performance Comercial
+          <span className="text-emerald-400 font-medium inline-flex items-center gap-1.5">
+            <BarChart3 className="w-4 h-4" /> Análise de Performance Comercial
           </span>
         </div>
 

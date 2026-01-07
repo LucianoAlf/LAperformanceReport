@@ -7,7 +7,8 @@ import {
   DollarSign, 
   Baby,
   ArrowUpRight,
-  ArrowDownRight
+  ArrowDownRight,
+  BarChart3
 } from 'lucide-react';
 import { useComercialData } from '../../hooks/useComercialData';
 import { UnidadeComercial, CORES_UNIDADES } from '../../types/comercial';
@@ -57,8 +58,8 @@ export function ComercialVisaoGeral({ ano, unidade, onAnoChange, onUnidadeChange
     <div className="p-8 min-h-screen">
       {/* Header */}
       <div className="mb-8">
-        <span className="inline-block bg-emerald-500/20 text-emerald-400 text-sm font-medium px-3 py-1 rounded-full mb-4">
-          📊 Visão Geral
+        <span className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-400 text-sm font-medium px-3 py-1 rounded-full mb-4">
+          <BarChart3 className="w-4 h-4" /> Visão Geral
         </span>
         <h1 className="text-4xl font-bold text-white mb-2">
           O Ano de {ano} em <span className="text-emerald-400">Números</span>

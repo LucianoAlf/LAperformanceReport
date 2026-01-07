@@ -40,7 +40,7 @@ export function ComercialMetas() {
   if (loading || !kpisCG || !kpisRec || !kpisBarra || !kpisGrupo) {
     return (
       <div className="flex items-center justify-center h-full min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent-cyan"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
       </div>
     );
   }
@@ -104,11 +104,11 @@ export function ComercialMetas() {
     <div className="p-8 min-h-screen">
       {/* Header */}
       <div className="mb-8">
-        <span className="inline-block bg-accent-cyan/20 text-accent-cyan text-sm font-medium px-3 py-1 rounded-full mb-4">
-          🎯 Metas 2026
+        <span className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-400 text-sm font-medium px-3 py-1 rounded-full mb-4">
+          <Target className="w-4 h-4" /> Metas 2026
         </span>
         <h1 className="text-4xl font-bold text-white mb-2">
-          Objetivos <span className="text-accent-cyan">Comerciais</span>
+          Objetivos <span className="text-emerald-400">Comerciais</span>
         </h1>
         <p className="text-gray-400">
           Metas e plano de ação para o próximo ano
@@ -116,8 +116,8 @@ export function ComercialMetas() {
       </div>
 
       {/* Metas do Grupo */}
-      <div className="bg-gradient-to-r from-accent-cyan/20 to-blue-500/20 border border-accent-cyan/30 rounded-2xl p-6 mb-8">
-        <h3 className="text-xl font-semibold text-accent-cyan mb-6 flex items-center gap-2">
+      <div className="bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 rounded-2xl p-6 mb-8">
+        <h3 className="text-xl font-semibold text-emerald-400 mb-6 flex items-center gap-2">
           <Flag className="w-5 h-5" />
           Metas do Grupo 2026
         </h3>
@@ -126,27 +126,27 @@ export function ComercialMetas() {
           <div className="text-center">
             <div className="text-3xl font-bold text-white">{metaGrupo.meta_leads.toLocaleString('pt-BR')}</div>
             <div className="text-sm text-gray-400">Leads</div>
-            <div className="text-xs text-accent-cyan mt-1">{calcVariacao(kpisGrupo.totalLeads, metaGrupo.meta_leads)}</div>
+            <div className="text-xs text-emerald-400 mt-1">{calcVariacao(kpisGrupo.totalLeads, metaGrupo.meta_leads)}</div>
           </div>
           <div className="text-center">
             <div className="text-3xl font-bold text-white">{metaGrupo.meta_experimentais.toLocaleString('pt-BR')}</div>
             <div className="text-sm text-gray-400">Experimentais</div>
-            <div className="text-xs text-accent-cyan mt-1">{calcVariacao(kpisGrupo.aulasExperimentais, metaGrupo.meta_experimentais)}</div>
+            <div className="text-xs text-emerald-400 mt-1">{calcVariacao(kpisGrupo.aulasExperimentais, metaGrupo.meta_experimentais)}</div>
           </div>
           <div className="text-center">
             <div className="text-3xl font-bold text-white">{metaGrupo.meta_matriculas}</div>
             <div className="text-sm text-gray-400">Matrículas</div>
-            <div className="text-xs text-accent-cyan mt-1">{calcVariacao(kpisGrupo.novasMatriculas, metaGrupo.meta_matriculas)}</div>
+            <div className="text-xs text-emerald-400 mt-1">{calcVariacao(kpisGrupo.novasMatriculas, metaGrupo.meta_matriculas)}</div>
           </div>
           <div className="text-center">
             <div className="text-3xl font-bold text-white">{metaGrupo.meta_taxa_conversao}%</div>
             <div className="text-sm text-gray-400">Taxa Conversão</div>
-            <div className="text-xs text-accent-cyan mt-1">+{(metaGrupo.meta_taxa_conversao - kpisGrupo.taxaConversaoTotal).toFixed(1)}pp</div>
+            <div className="text-xs text-emerald-400 mt-1">+{(metaGrupo.meta_taxa_conversao - kpisGrupo.taxaConversaoTotal).toFixed(1)}pp</div>
           </div>
           <div className="text-center">
             <div className="text-3xl font-bold text-white">R$ {metaGrupo.meta_ticket_medio}</div>
             <div className="text-sm text-gray-400">Ticket Médio</div>
-            <div className="text-xs text-accent-cyan mt-1">{calcVariacao(kpisGrupo.ticketMedioParcelas, metaGrupo.meta_ticket_medio)}</div>
+            <div className="text-xs text-emerald-400 mt-1">{calcVariacao(kpisGrupo.ticketMedioParcelas, metaGrupo.meta_ticket_medio)}</div>
           </div>
         </div>
       </div>
@@ -176,7 +176,7 @@ export function ComercialMetas() {
                   <td className="text-right text-white py-4 px-4">{u.real}</td>
                   <td className="text-right text-white py-4 px-4 font-semibold">{u.meta}</td>
                   <td className="text-right py-4 px-4">
-                    <span className="text-accent-cyan font-semibold">
+                    <span className="text-emerald-400 font-semibold">
                       +{(((u.meta - u.real) / u.real) * 100).toFixed(0)}%
                     </span>
                   </td>
@@ -187,7 +187,7 @@ export function ComercialMetas() {
                 <td className="text-right text-white py-4 px-4 font-bold">{kpisGrupo.novasMatriculas}</td>
                 <td className="text-right text-white py-4 px-4 font-bold">{metaGrupo.meta_matriculas}</td>
                 <td className="text-right py-4 px-4">
-                  <span className="text-accent-cyan font-bold">
+                  <span className="text-emerald-400 font-bold">
                     +{(((metaGrupo.meta_matriculas) - kpisGrupo.novasMatriculas) / kpisGrupo.novasMatriculas * 100).toFixed(0)}%
                   </span>
                 </td>
@@ -200,7 +200,7 @@ export function ComercialMetas() {
       {/* Plano de Ação */}
       <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
         <h3 className="text-lg font-semibold text-white mb-6 flex items-center gap-2">
-          <Target className="w-5 h-5 text-accent-cyan" />
+          <Target className="w-5 h-5 text-emerald-400" />
           Plano de Ação Comercial 2026
         </h3>
         
@@ -211,14 +211,14 @@ export function ComercialMetas() {
               className="bg-slate-700/30 rounded-xl p-4 hover:bg-slate-700/50 transition-all"
             >
               <div className="flex items-start gap-4">
-                <div className="w-8 h-8 rounded-full bg-accent-cyan/20 flex items-center justify-center text-accent-cyan font-bold">
+                <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold">
                   {acao.numero}
                 </div>
                 <div className="flex-1">
                   <h4 className="text-white font-semibold mb-1">{acao.titulo}</h4>
                   <p className="text-gray-400 text-sm mb-2">{acao.descricao}</p>
                   <div className="flex flex-wrap gap-4 text-xs">
-                    <span className="bg-accent-cyan/20 text-accent-cyan px-2 py-1 rounded">
+                    <span className="bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded">
                       Meta: {acao.meta}
                     </span>
                     <span className="bg-blue-500/20 text-blue-400 px-2 py-1 rounded">

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useComercialData } from '../../hooks/useComercialData';
-import { TrendingUp, TrendingDown, AlertTriangle } from 'lucide-react';
+import { TrendingUp, TrendingDown, AlertTriangle, Calendar } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { ChartTooltip } from './ChartTooltip';
 
@@ -16,7 +16,7 @@ export function ComercialSazonalidade() {
   if (!dadosCG || !dadosRec || !dadosBarra) {
     return (
       <div className="flex items-center justify-center h-full min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent-cyan"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
       </div>
     );
   }
@@ -39,7 +39,6 @@ export function ComercialSazonalidade() {
       total_mat: (cgMes?.matriculas || 0) + (recMes?.matriculas || 0) + (barraMes?.matriculas || 0),
     };
   });
-
 
   // Dados para o gráfico de linha
   const chartData = dadosPorMes.map(d => ({
@@ -93,11 +92,11 @@ export function ComercialSazonalidade() {
     <div className="p-8 min-h-screen">
       {/* Header */}
       <div className="mb-8">
-        <span className="inline-block bg-accent-cyan/20 text-accent-cyan text-sm font-medium px-3 py-1 rounded-full mb-4">
-          📅 Sazonalidade
+        <span className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-400 text-sm font-medium px-3 py-1 rounded-full mb-4">
+          <Calendar className="w-4 h-4" /> Sazonalidade
         </span>
         <h1 className="text-4xl font-bold text-white mb-2">
-          Padrões <span className="text-accent-cyan">Identificados</span>
+          Padrões <span className="text-emerald-400">Identificados</span>
         </h1>
         <p className="text-gray-400">
           Meses críticos e oportunidades de captação
@@ -107,19 +106,19 @@ export function ComercialSazonalidade() {
       {/* Cards de Meses */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         {/* Meses de Ouro */}
-        <div className="bg-accent-cyan/10 border border-accent-cyan/30 rounded-2xl p-6">
+        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 bg-accent-cyan/20 rounded-lg">
-              <TrendingUp className="w-5 h-5 text-accent-cyan" />
+            <div className="p-2 bg-emerald-500/20 rounded-lg">
+              <TrendingUp className="w-5 h-5 text-emerald-400" />
             </div>
-            <h3 className="text-lg font-semibold text-accent-cyan">Meses de Ouro (Captação)</h3>
+            <h3 className="text-lg font-semibold text-emerald-400">Meses de Ouro (Captação)</h3>
           </div>
           
           <div className="grid grid-cols-3 gap-4">
             {melhoresMeses.map((m, idx) => (
               <div key={m.mes} className="text-center">
                 <div className="text-2xl font-bold text-white">{m.mes.toUpperCase()}</div>
-                <div className="text-accent-cyan font-semibold">{m.total_mat} mat.</div>
+                <div className="text-emerald-400 font-semibold">{m.total_mat} mat.</div>
                 {idx === 0 && <div className="text-yellow-400 text-xs mt-1">⭐ Melhor</div>}
               </div>
             ))}
@@ -145,7 +144,7 @@ export function ComercialSazonalidade() {
               <div key={m.mes} className="text-center">
                 <div className="text-2xl font-bold text-white">{m.mes.toUpperCase()}</div>
                 <div className="text-red-400 font-semibold">{m.total_mat} mat.</div>
-                {idx === 0 && <div className="text-red-400 text-xs mt-1">⚠️ Pior</div>}
+                {idx === 0 && <div className="text-red-400 text-xs mt-1 flex items-center justify-center gap-1"><AlertTriangle className="w-3 h-3" /> Pior</div>}
               </div>
             ))}
           </div>
@@ -203,7 +202,7 @@ export function ComercialSazonalidade() {
               onClick={() => setMetrica('leads')}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 metrica === 'leads'
-                  ? 'bg-accent-cyan text-slate-900'
+                  ? 'bg-emerald-500 text-slate-900'
                   : 'bg-slate-700 text-gray-400 hover:bg-slate-600'
               }`}
             >
@@ -213,7 +212,7 @@ export function ComercialSazonalidade() {
               onClick={() => setMetrica('matriculas')}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 metrica === 'matriculas'
-                  ? 'bg-accent-cyan text-slate-900'
+                  ? 'bg-emerald-500 text-slate-900'
                   : 'bg-slate-700 text-gray-400 hover:bg-slate-600'
               }`}
             >
@@ -274,13 +273,13 @@ export function ComercialSazonalidade() {
             })}
             
             {/* Linha TOTAL */}
-            <div className="flex items-center text-sm font-black text-accent-cyan">TOTAL</div>
+            <div className="flex items-center text-sm font-black text-emerald-400">TOTAL</div>
             {dadosPorMes.map((d, idx) => {
               const valor = metrica === 'leads' ? d.total_leads : d.total_mat;
               return (
                 <div 
                   key={idx} 
-                  className={`aspect-square flex items-center justify-center rounded-lg text-xs font-black transition-transform hover:scale-110 cursor-default border-2 border-accent-cyan/50 ${getHeatmapColorTotal(valor)}`}
+                  className={`aspect-square flex items-center justify-center rounded-lg text-xs font-black transition-transform hover:scale-110 cursor-default border-2 border-emerald-500/50 ${getHeatmapColorTotal(valor)}`}
                 >
                   {valor}
                 </div>

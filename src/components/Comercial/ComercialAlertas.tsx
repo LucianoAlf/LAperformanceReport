@@ -10,7 +10,7 @@ export function ComercialAlertas() {
   if (!kpisGrupo || !kpisCG || !kpisRec || !kpisBarra) {
     return (
       <div className="flex items-center justify-center h-full min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent-cyan"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
       </div>
     );
   }
@@ -31,17 +31,17 @@ export function ComercialAlertas() {
         <>
           <p className="text-gray-300 mb-3">
             Campo Grande converte apenas <strong className="text-red-400">6,4%</strong> dos leads
-            enquanto Recreio converte <strong className="text-accent-cyan">11,9%</strong> (quase o dobro).
+            enquanto Recreio converte <strong className="text-emerald-500">11,9%</strong> (quase o dobro).
           </p>
           <div className="bg-slate-800/50 rounded-lg p-3">
             <div className="text-sm text-gray-400 mb-2">Se CG tivesse a mesma taxa do Recreio:</div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <div className="text-xl font-bold text-accent-cyan">+{matriculasAdicionaisCG}</div>
+                <div className="text-xl font-bold text-emerald-500">+{matriculasAdicionaisCG}</div>
                 <div className="text-xs text-gray-500">matrículas adicionais</div>
               </div>
               <div>
-                <div className="text-xl font-bold text-accent-cyan">+R$ {Math.round(faturamentoAdicional / 1000)}k</div>
+                <div className="text-xl font-bold text-emerald-500">+R$ {Math.round(faturamentoAdicional / 1000)}k</div>
                 <div className="text-xs text-gray-500">faturamento anual</div>
               </div>
             </div>
@@ -52,25 +52,25 @@ export function ComercialAlertas() {
     {
       tipo: 'oportunidade',
       icone: Lightbulb,
-      corIcone: 'text-accent-cyan',
-      corBg: 'bg-accent-cyan/10',
-      corBorda: 'border-accent-cyan/30',
+      corIcone: 'text-emerald-500',
+      corBg: 'bg-emerald-500/10',
+      corBorda: 'border-emerald-500/30',
       titulo: 'Oportunidade: Programa de Indicação',
       conteudo: (
         <>
           <p className="text-gray-300 mb-3">
-            Indicação tem <strong className="text-accent-cyan">25,1%</strong> de conversão (vs 5,7% Instagram)
+            Indicação tem <strong className="text-emerald-500">25,1%</strong> de conversão (vs 5,7% Instagram)
             mas representa apenas <strong className="text-amber-400">5,5%</strong> dos leads.
           </p>
           <div className="bg-slate-800/50 rounded-lg p-3">
             <div className="text-sm text-gray-400 mb-2">Se aumentar indicações para 20% dos leads:</div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <div className="text-xl font-bold text-accent-cyan">+120</div>
+                <div className="text-xl font-bold text-emerald-500">+120</div>
                 <div className="text-xs text-gray-500">matrículas/ano</div>
               </div>
               <div>
-                <div className="text-xl font-bold text-accent-cyan">R$ 50k</div>
+                <div className="text-xl font-bold text-emerald-500">R$ 50k</div>
                 <div className="text-xs text-gray-500">faturamento extra</div>
               </div>
             </div>
@@ -89,7 +89,7 @@ export function ComercialAlertas() {
         <>
           <p className="text-gray-300 mb-3">
             <strong className="text-pink-400">49%</strong> das matrículas são para LA Music Kids (até 11 anos).
-            Barra lidera com <strong className="text-accent-cyan">59%</strong> de matrículas Kids.
+            Barra lidera com <strong className="text-emerald-500">59%</strong> de matrículas Kids.
           </p>
           <div className="bg-slate-800/50 rounded-lg p-3">
             <div className="text-sm text-gray-400 mb-2">Distribuição por unidade:</div>
@@ -140,7 +140,7 @@ export function ComercialAlertas() {
             <div className="text-sm text-gray-400 mb-2">Recomendação de alocação:</div>
             <div className="grid grid-cols-2 gap-4">
               <div className="text-center">
-                <div className="text-2xl font-bold text-accent-cyan">60%</div>
+                <div className="text-2xl font-bold text-emerald-500">60%</div>
                 <div className="text-xs text-gray-500">do budget em Jan/Ago</div>
               </div>
               <div className="text-center">
@@ -158,11 +158,11 @@ export function ComercialAlertas() {
     <div className="p-8 min-h-screen">
       {/* Header */}
       <div className="mb-8">
-        <span className="inline-block bg-accent-cyan/20 text-accent-cyan text-sm font-medium px-3 py-1 rounded-full mb-4">
-          ⚠️ Alertas e Insights
+        <span className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-400 text-sm font-medium px-3 py-1 rounded-full mb-4">
+          <AlertTriangle className="w-4 h-4" /> Alertas e Insights
         </span>
         <h1 className="text-4xl font-bold text-white mb-2">
-          Pontos de <span className="text-accent-cyan">Atenção</span>
+          Pontos de <span className="text-emerald-400">Atenção</span>
         </h1>
         <p className="text-gray-400">
           Insights inteligentes para tomada de decisão

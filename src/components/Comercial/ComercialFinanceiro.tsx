@@ -22,23 +22,22 @@ export function ComercialFinanceiro({ ano, unidade, onAnoChange, onUnidadeChange
   if (loading || !kpis || !kpisCG || !kpisRec || !kpisBarra) {
     return (
       <div className="flex items-center justify-center h-full min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent-cyan"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
       </div>
     );
   }
 
   // Dados para gráfico de evolução do ticket
-  const ticketData = MESES.map((mes, idx) => {
-    const mesNum = idx + 1;
-    const cgMes = dadosCG?.find(d => d.mes === mesNum);
-    const recMes = dadosRec?.find(d => d.mes === mesNum);
-    const barraMes = dadosBarra?.find(d => d.mes === mesNum);
+  const ticketData = MESES.map((mes) => {
+    const cgMes = dadosCG?.find(d => d.mesAbrev === mes);
+    const recMes = dadosRec?.find(d => d.mesAbrev === mes);
+    const barraMes = dadosBarra?.find(d => d.mesAbrev === mes);
 
     return {
       mes,
-      'Campo Grande': cgMes?.ticketMedioParcelas || null,
-      'Recreio': recMes?.ticketMedioParcelas || null,
-      'Barra': barraMes?.ticketMedioParcelas || null,
+      'Campo Grande': cgMes?.ticketParcelas || null,
+      'Recreio': recMes?.ticketParcelas || null,
+      'Barra': barraMes?.ticketParcelas || null,
     };
   });
 
@@ -53,11 +52,11 @@ export function ComercialFinanceiro({ ano, unidade, onAnoChange, onUnidadeChange
     <div className="p-8 min-h-screen">
       {/* Header */}
       <div className="mb-8">
-        <span className="inline-block bg-accent-cyan/20 text-accent-cyan text-sm font-medium px-3 py-1 rounded-full mb-4">
+        <span className="inline-block bg-emerald-500/20 text-emerald-500 text-sm font-medium px-3 py-1 rounded-full mb-4">
           💰 Financeiro
         </span>
         <h1 className="text-4xl font-bold text-white mb-2">
-          Ticket Médio e <span className="text-accent-cyan">Passaporte</span>
+          Ticket Médio e <span className="text-emerald-500">Passaporte</span>
         </h1>
         <p className="text-gray-400">
           Análise financeira das novas matrículas
@@ -74,7 +73,7 @@ export function ComercialFinanceiro({ ano, unidade, onAnoChange, onUnidadeChange
               onClick={() => onUnidadeChange(u)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 unidade === u
-                  ? 'bg-accent-cyan text-slate-900'
+                  ? 'bg-emerald-500 text-slate-900'
                   : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
               }`}
             >
@@ -112,8 +111,8 @@ export function ComercialFinanceiro({ ano, unidade, onAnoChange, onUnidadeChange
 
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
           <div className="flex items-start justify-between mb-4">
-            <div className="p-3 bg-accent-cyan/20 rounded-xl">
-              <Wallet className="w-6 h-6 text-accent-cyan" />
+            <div className="p-3 bg-emerald-500/20 rounded-xl">
+              <Wallet className="w-6 h-6 text-emerald-500" />
             </div>
           </div>
           <div className="text-3xl font-bold text-white mb-1">

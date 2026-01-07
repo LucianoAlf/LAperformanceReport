@@ -12,7 +12,7 @@ export function ComercialOrigem() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent-cyan"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
       </div>
     );
   }
@@ -29,11 +29,11 @@ export function ComercialOrigem() {
     <div className="p-8 min-h-screen">
       {/* Header */}
       <div className="mb-8">
-        <span className="inline-block bg-accent-cyan/20 text-accent-cyan text-sm font-medium px-3 py-1 rounded-full mb-4">
-          📱 Origem dos Leads
+        <span className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-400 text-sm font-medium px-3 py-1 rounded-full mb-4">
+          <Smartphone className="w-4 h-4" /> Origem dos Leads
         </span>
         <h1 className="text-4xl font-bold text-white mb-2">
-          De Onde Vêm os <span className="text-accent-cyan">Leads</span>
+          De Onde Vêm os <span className="text-emerald-400">Leads</span>
         </h1>
         <p className="text-gray-400">
           Análise de canais de aquisição e taxa de conversão

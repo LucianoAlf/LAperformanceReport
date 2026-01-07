@@ -1,6 +1,6 @@
 import { useComercialData } from '../../hooks/useComercialData';
 import { UnidadeComercial } from '../../types/comercial';
-import { TrendingDown, Lightbulb, AlertTriangle } from 'lucide-react';
+import { TrendingDown, Lightbulb, AlertTriangle, Target } from 'lucide-react';
 
 interface Props {
   ano: number;
@@ -18,7 +18,7 @@ export function ComercialFunil({ ano, unidade, onAnoChange, onUnidadeChange }: P
   if (loading || !kpis || !kpisCG || !kpisRec || !kpisBarra) {
     return (
       <div className="flex items-center justify-center h-full min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent-cyan"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
       </div>
     );
   }
@@ -44,11 +44,11 @@ export function ComercialFunil({ ano, unidade, onAnoChange, onUnidadeChange }: P
     <div className="p-8 min-h-screen">
       {/* Header */}
       <div className="mb-8">
-        <span className="inline-block bg-accent-cyan/20 text-accent-cyan text-sm font-medium px-3 py-1 rounded-full mb-4">
-          🎯 Funil de Conversão
+        <span className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-400 text-sm font-medium px-3 py-1 rounded-full mb-4">
+          <Target className="w-4 h-4" /> Funil de Conversão
         </span>
         <h1 className="text-4xl font-bold text-white mb-2">
-          Jornada do <span className="text-accent-cyan">Lead à Matrícula</span>
+          Jornada do <span className="text-emerald-400">Lead à Matrícula</span>
         </h1>
         <p className="text-gray-400">
           Análise completa das taxas de conversão em cada etapa
@@ -65,7 +65,7 @@ export function ComercialFunil({ ano, unidade, onAnoChange, onUnidadeChange }: P
               onClick={() => onAnoChange(y)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 ano === y
-                  ? 'bg-accent-cyan text-slate-900'
+                  ? 'bg-emerald-500 text-slate-900'
                   : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
               }`}
             >
@@ -81,7 +81,7 @@ export function ComercialFunil({ ano, unidade, onAnoChange, onUnidadeChange }: P
               onClick={() => onUnidadeChange(u)}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 unidade === u
-                  ? 'bg-accent-cyan text-slate-900'
+                  ? 'bg-emerald-500 text-slate-900'
                   : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
               }`}
             >
@@ -114,7 +114,7 @@ export function ComercialFunil({ ano, unidade, onAnoChange, onUnidadeChange }: P
           <div className="flex items-center gap-4 py-2">
             <div className="text-gray-500">↓</div>
             <div className="bg-slate-700/50 px-4 py-1 rounded-full">
-              <span className="text-accent-cyan font-semibold">{kpis.taxaLeadExp.toFixed(1)}%</span>
+              <span className="text-emerald-400 font-semibold">{kpis.taxaLeadExp.toFixed(1)}%</span>
               <span className="text-gray-400 text-sm ml-2">converteram</span>
             </div>
             <div className="text-gray-500">↓</div>
@@ -159,7 +159,7 @@ export function ComercialFunil({ ano, unidade, onAnoChange, onUnidadeChange }: P
         <div className="mt-8 text-center">
           <div className="inline-block bg-slate-700/50 rounded-xl px-8 py-4">
             <div className="text-sm text-gray-400 mb-1">Taxa de Conversão Total</div>
-            <div className="text-4xl font-bold text-accent-cyan">
+            <div className="text-4xl font-bold text-emerald-400">
               {kpis.taxaConversaoTotal.toFixed(1)}%
             </div>
             <div className="text-sm text-gray-500 mt-1">Lead → Matrícula</div>
@@ -210,12 +210,12 @@ export function ComercialFunil({ ano, unidade, onAnoChange, onUnidadeChange }: P
         </div>
 
         {/* Oportunidade */}
-        <div className="bg-accent-cyan/10 border border-accent-cyan/30 rounded-2xl p-6">
+        <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 bg-accent-cyan/20 rounded-lg">
-              <Lightbulb className="w-5 h-5 text-accent-cyan" />
+            <div className="p-2 bg-emerald-500/20 rounded-lg">
+              <Lightbulb className="w-5 h-5 text-emerald-400" />
             </div>
-            <h3 className="text-lg font-semibold text-accent-cyan">Oportunidade</h3>
+            <h3 className="text-lg font-semibold text-emerald-400">Oportunidade</h3>
           </div>
           
           <div className="space-y-4">
@@ -224,19 +224,19 @@ export function ComercialFunil({ ano, unidade, onAnoChange, onUnidadeChange }: P
             </p>
             <div className="grid grid-cols-3 gap-4 text-center">
               <div className="bg-slate-800/50 rounded-lg p-3">
-                <div className="text-xl font-bold text-accent-cyan">
+                <div className="text-xl font-bold text-emerald-400">
                   +{Math.round(kpis.totalLeads * 0.15 - kpis.aulasExperimentais)}
                 </div>
                 <div className="text-xs text-gray-500">experimentais</div>
               </div>
               <div className="bg-slate-800/50 rounded-lg p-3">
-                <div className="text-xl font-bold text-accent-cyan">
+                <div className="text-xl font-bold text-emerald-400">
                   +{Math.round((kpis.totalLeads * 0.15 - kpis.aulasExperimentais) * (kpis.taxaExpMat / 100))}
                 </div>
                 <div className="text-xs text-gray-500">matrículas</div>
               </div>
               <div className="bg-slate-800/50 rounded-lg p-3">
-                <div className="text-xl font-bold text-accent-cyan">
+                <div className="text-xl font-bold text-emerald-400">
                   +R$ {Math.round((kpis.totalLeads * 0.15 - kpis.aulasExperimentais) * (kpis.taxaExpMat / 100) * kpis.ticketMedioParcelas / 1000)}k
                 </div>
                 <div className="text-xs text-gray-500">faturamento/ano</div>
@@ -289,7 +289,7 @@ export function ComercialFunil({ ano, unidade, onAnoChange, onUnidadeChange }: P
                     </span>
                   </td>
                   <td className="text-right py-4 px-4">
-                    <span className={`font-bold ${u.kpis.taxaConversaoTotal === melhorConversao ? 'text-accent-cyan' : 'text-white'}`}>
+                    <span className={`font-bold ${u.kpis.taxaConversaoTotal === melhorConversao ? 'text-emerald-400' : 'text-white'}`}>
                       {u.kpis.taxaConversaoTotal.toFixed(1)}%
                       {u.kpis.taxaConversaoTotal === melhorConversao && ' 🏆'}
                     </span>

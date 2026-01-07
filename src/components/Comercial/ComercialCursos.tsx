@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useCursosData } from '../../hooks/useCursosData';
 import { useComercialData } from '../../hooks/useComercialData';
 import { UnidadeComercial } from '../../types/comercial';
-import { Music, Mic } from 'lucide-react';
+import { Music, Mic, Guitar } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { ChartTooltip } from './ChartTooltip';
 
@@ -14,7 +14,7 @@ export function ComercialCursos() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent-cyan"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
       </div>
     );
   }
@@ -49,11 +49,11 @@ export function ComercialCursos() {
     <div className="p-8 min-h-screen">
       {/* Header */}
       <div className="mb-8">
-        <span className="inline-block bg-accent-cyan/20 text-accent-cyan text-sm font-medium px-3 py-1 rounded-full mb-4">
-          🎸 Cursos Matriculados
+        <span className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-400 text-sm font-medium px-3 py-1 rounded-full mb-4">
+          <Guitar className="w-4 h-4" /> Cursos Matriculados
         </span>
         <h1 className="text-4xl font-bold text-white mb-2">
-          Cursos Mais <span className="text-accent-cyan">Procurados</span>
+          Cursos Mais <span className="text-emerald-400">Procurados</span>
         </h1>
         <p className="text-gray-400">
           Distribuição de matrículas por instrumento/curso em 2025

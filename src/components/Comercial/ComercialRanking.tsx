@@ -11,7 +11,7 @@ export function ComercialRanking() {
   if (!kpisCG || !kpisRec || !kpisBarra) {
     return (
       <div className="flex items-center justify-center h-full min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent-cyan"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
       </div>
     );
   }
@@ -106,11 +106,11 @@ export function ComercialRanking() {
     <div className="p-8 min-h-screen">
       {/* Header */}
       <div className="mb-8">
-        <span className="inline-block bg-accent-cyan/20 text-accent-cyan text-sm font-medium px-3 py-1 rounded-full mb-4">
+        <span className="inline-block bg-emerald-500/20 text-emerald-500 text-sm font-medium px-3 py-1 rounded-full mb-4">
           🏆 Ranking
         </span>
         <h1 className="text-4xl font-bold text-white mb-2">
-          Ranking entre <span className="text-accent-cyan">Unidades</span>
+          Ranking entre <span className="text-emerald-500">Unidades</span>
         </h1>
         <p className="text-gray-400">
           Quem performou melhor em cada KPI comercial
@@ -122,7 +122,7 @@ export function ComercialRanking() {
         {/* Taxa de Conversão */}
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-4">
-            <Target className="w-5 h-5 text-accent-cyan" />
+            <Target className="w-5 h-5 text-emerald-500" />
             <h3 className="text-lg font-semibold text-white">Taxa de Conversão</h3>
           </div>
           <div className="space-y-3">
@@ -134,7 +134,7 @@ export function ComercialRanking() {
                 <div className="flex-1">
                   <span className="text-white">{item.nome}</span>
                 </div>
-                <span className={`font-bold ${idx === 0 ? 'text-accent-cyan' : 'text-gray-400'}`}>
+                <span className={`font-bold ${idx === 0 ? 'text-emerald-500' : 'text-gray-400'}`}>
                   {item.valor.toFixed(1)}%
                 </span>
               </div>
@@ -281,7 +281,7 @@ export function ComercialRanking() {
                 <td className="text-center text-white py-2 px-3">{kpisCG.taxaConversaoTotal.toFixed(1)}%</td>
                 <td className="text-center text-white py-2 px-3">{kpisRec.taxaConversaoTotal.toFixed(1)}%</td>
                 <td className="text-center py-2 px-3">
-                  <span className="bg-accent-cyan/20 text-accent-cyan px-2 py-1 rounded text-xs">{melhorConversaoNome}</span>
+                  <span className="bg-emerald-500/20 text-emerald-500 px-2 py-1 rounded text-xs">{melhorConversaoNome}</span>
                 </td>
               </tr>
               <tr className="border-b border-slate-700/50">
@@ -290,7 +290,7 @@ export function ComercialRanking() {
                 <td className="text-center text-white py-2 px-3">{kpisCG.taxaLeadExp.toFixed(1)}%</td>
                 <td className="text-center text-white py-2 px-3">{kpisRec.taxaLeadExp.toFixed(1)}%</td>
                 <td className="text-center py-2 px-3">
-                  <span className="bg-accent-cyan/20 text-accent-cyan px-2 py-1 rounded text-xs">{melhorLeadExp}</span>
+                  <span className="bg-emerald-500/20 text-emerald-500 px-2 py-1 rounded text-xs">{melhorLeadExp}</span>
                 </td>
               </tr>
               <tr className="border-b border-slate-700/50">
@@ -299,7 +299,7 @@ export function ComercialRanking() {
                 <td className="text-center text-white py-2 px-3">{kpisCG.taxaExpMat.toFixed(1)}%</td>
                 <td className="text-center text-white py-2 px-3">{kpisRec.taxaExpMat.toFixed(1)}%</td>
                 <td className="text-center py-2 px-3">
-                  <span className="bg-accent-cyan/20 text-accent-cyan px-2 py-1 rounded text-xs">{melhorExpMat}</span>
+                  <span className="bg-emerald-500/20 text-emerald-500 px-2 py-1 rounded text-xs">{melhorExpMat}</span>
                 </td>
               </tr>
               <tr className="border-b border-slate-700/50">
@@ -308,7 +308,7 @@ export function ComercialRanking() {
                 <td className="text-center text-white py-2 px-3">R$ {kpisCG.ticketMedioParcelas.toFixed(0)}</td>
                 <td className="text-center text-white py-2 px-3">R$ {kpisRec.ticketMedioParcelas.toFixed(0)}</td>
                 <td className="text-center py-2 px-3">
-                  <span className="bg-accent-cyan/20 text-accent-cyan px-2 py-1 rounded text-xs">{melhorTicket}</span>
+                  <span className="bg-emerald-500/20 text-emerald-500 px-2 py-1 rounded text-xs">{melhorTicket}</span>
                 </td>
               </tr>
             </tbody>

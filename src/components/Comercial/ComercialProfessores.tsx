@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useProfessoresData } from '../../hooks/useProfessoresData';
 import { UnidadeComercial } from '../../types/comercial';
-import { Trophy, Award, Medal } from 'lucide-react';
+import { Trophy, Award, Medal, GraduationCap } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { ChartTooltip } from './ChartTooltip';
 
@@ -12,7 +12,7 @@ export function ComercialProfessores() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-accent-cyan"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
       </div>
     );
   }
@@ -31,11 +31,11 @@ export function ComercialProfessores() {
     <div className="p-8 min-h-screen">
       {/* Header */}
       <div className="mb-8">
-        <span className="inline-block bg-accent-cyan/20 text-accent-cyan text-sm font-medium px-3 py-1 rounded-full mb-4">
-          👨‍🏫 Performance Professores
+        <span className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-400 text-sm font-medium px-3 py-1 rounded-full mb-4">
+          <GraduationCap className="w-4 h-4" /> Performance Professores
         </span>
         <h1 className="text-4xl font-bold text-white mb-2">
-          Ranking de <span className="text-accent-cyan">Professores</span>
+          Ranking de <span className="text-emerald-400">Professores</span>
         </h1>
         <p className="text-gray-400">
           Professores que mais matricularam em 2025
@@ -87,7 +87,7 @@ export function ComercialProfessores() {
               </span>
             </div>
             <div className="text-2xl font-bold text-white mb-1">{prof.professor}</div>
-            <div className="text-4xl font-bold text-accent-cyan mb-2">{prof.total}</div>
+            <div className="text-4xl font-bold text-emerald-400 mb-2">{prof.total}</div>
             <div className="text-sm text-gray-400">aulas experimentais</div>
             <div className="mt-3 flex flex-wrap gap-2">
               {unidade === 'Consolidado' ? (
