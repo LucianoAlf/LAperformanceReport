@@ -43,7 +43,7 @@ interface SidebarComercialProps {
 
 export function SidebarComercial({ activeSection, onSectionChange, onPageChange }: SidebarComercialProps) {
   return (
-    <aside className="w-64 min-h-screen bg-slate-900/95 backdrop-blur-sm border-r border-slate-800 flex flex-col">
+    <aside className="fixed left-0 top-0 w-64 h-screen bg-slate-900/95 backdrop-blur-sm border-r border-slate-800 flex flex-col z-50">
       {/* Logo */}
       <div className="p-6 border-b border-slate-800">
         <div className="flex items-center gap-2">

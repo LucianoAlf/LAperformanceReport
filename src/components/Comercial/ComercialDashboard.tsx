@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { SecaoComercial, UnidadeComercial } from '../../types/comercial';
 import SidebarComercial from './SidebarComercial';
 import ComercialInicio from './ComercialInicio';
@@ -17,89 +17,121 @@ interface ComercialDashboardProps {
   onPageChange: (page: 'gestao' | 'comercial') => void;
 }
 
+// Lista de seções para o IntersectionObserver
+const sections: SecaoComercial[] = [
+  'inicio',
+  'visao-geral',
+  'funil',
+  'professores',
+  'cursos',
+  'origem',
+  'ranking',
+  'sazonalidade',
+  'financeiro',
+  'alertas',
+  'metas'
+];
+
 export function ComercialDashboard({ onPageChange }: ComercialDashboardProps) {
   const [activeSection, setActiveSection] = useState<SecaoComercial>('inicio');
   const [ano, setAno] = useState(2025);
   const [unidade, setUnidade] = useState<UnidadeComercial>('Consolidado');
 
-  const renderSection = () => {
-    switch (activeSection) {
-      case 'inicio':
-        return <ComercialInicio onStart={() => setActiveSection('visao-geral')} />;
-      
-      case 'visao-geral':
-        return (
-          <ComercialVisaoGeral 
-            ano={ano} 
-            unidade={unidade} 
-            onAnoChange={setAno} 
-            onUnidadeChange={setUnidade} 
-          />
+  // IntersectionObserver para detectar seção ativa durante scroll
+  useEffect(() => {
+    const observer = new IntersectionObserver((entries) => {
+      const visibleEntries = entries.filter(entry => entry.isIntersecting);
+      if (visibleEntries.length > 0) {
+        const mostVisible = visibleEntries.reduce((prev, current) => 
+          current.intersectionRatio > prev.intersectionRatio ? current : prev
         );
-      
-      case 'funil':
-        return <ComercialFunil ano={ano} unidade={unidade} onAnoChange={setAno} onUnidadeChange={setUnidade} />;
-      
-      case 'professores':
-        return <ComercialProfessores />;
-      
-      case 'cursos':
-        return <ComercialCursos />;
-      
-      case 'origem':
-        return <ComercialOrigem />;
-      
-      case 'ranking':
-        return <ComercialRanking />;
-      
-      case 'sazonalidade':
-        return <ComercialSazonalidade />;
-      
-      case 'financeiro':
-        return <ComercialFinanceiro ano={ano} unidade={unidade} onAnoChange={setAno} onUnidadeChange={setUnidade} />;
-      
-      case 'alertas':
-        return <ComercialAlertas />;
-      
-      case 'metas':
-        return <ComercialMetas />;
-      
-      default:
-        return <PlaceholderSection title="Em Construção" description="Esta seção será implementada em breve." />;
-    }
+        setActiveSection(mostVisible.target.id as SecaoComercial);
+      }
+    }, { threshold: [0.1, 0.25, 0.5, 0.75], rootMargin: '-10% 0px -10% 0px' });
+
+    sections.forEach(sectionId => {
+      const el = document.getElementById(sectionId);
+      if (el) observer.observe(el);
+    });
+
+    return () => observer.disconnect();
+  }, []);
+
+  // Função para scroll suave ao clicar na sidebar
+  const scrollToSection = (sectionId: SecaoComercial) => {
+    setActiveSection(sectionId);
+    document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth' });
   };
 
   return (
     <div className="flex min-h-screen bg-slate-950">
       <SidebarComercial 
         activeSection={activeSection} 
-        onSectionChange={setActiveSection}
+        onSectionChange={scrollToSection}
         onPageChange={onPageChange}
       />
       
-      <main className="flex-1 overflow-y-auto">
-        {renderSection()}
-      </main>
-    </div>
-  );
-}
+      <main className="flex-1 ml-64 overflow-y-auto">
+        {/* Seção Início */}
+        <section id="inicio">
+          <ComercialInicio onStart={() => scrollToSection('visao-geral')} />
+        </section>
 
-// Componente placeholder para seções não implementadas
-function PlaceholderSection({ title, description }: { title: string; description: string }) {
-  return (
-    <div className="flex items-center justify-center h-full min-h-screen">
-      <div className="text-center max-w-md">
-        <div className="w-20 h-20 bg-emerald-500/20 rounded-2xl flex items-center justify-center mx-auto mb-6">
-          <span className="text-4xl">🚧</span>
-        </div>
-        <h2 className="text-2xl font-bold text-white mb-2">{title}</h2>
-        <p className="text-gray-400 mb-6">{description}</p>
-        <div className="bg-slate-800/50 border border-slate-700/50 rounded-xl p-4">
-          <span className="text-emerald-400 text-sm">
-            Esta seção será implementada na próxima etapa
-          </span>
-        </div>
-      </div>
+        {/* Seção Visão Geral */}
+        <section id="visao-geral">
+          <ComercialVisaoGeral 
+            ano={ano} 
+            unidade={unidade} 
+            onAnoChange={setAno} 
+            onUnidadeChange={setUnidade} 
+          />
+        </section>
+
+        {/* Seção Funil */}
+        <section id="funil">
+          <ComercialFunil ano={ano} unidade={unidade} onAnoChange={setAno} onUnidadeChange={setUnidade} />
+        </section>
+
+        {/* Seção Professores */}
+        <section id="professores">
+          <ComercialProfessores />
+        </section>
+
+        {/* Seção Cursos */}
+        <section id="cursos">
+          <ComercialCursos />
+        </section>
+
+        {/* Seção Origem */}
+        <section id="origem">
+          <ComercialOrigem />
+        </section>
+
+        {/* Seção Ranking */}
+        <section id="ranking">
+          <ComercialRanking />
+        </section>
+
+        {/* Seção Sazonalidade */}
+        <section id="sazonalidade">
+          <ComercialSazonalidade />
+        </section>
+
+        {/* Seção Financeiro */}
+        <section id="financeiro">
+          <ComercialFinanceiro ano={ano} unidade={unidade} onAnoChange={setAno} onUnidadeChange={setUnidade} />
+        </section>
+
+        {/* Seção Alertas */}
+        <section id="alertas">
+          <ComercialAlertas />
+        </section>
+
+        {/* Seção Metas */}
+        <section id="metas">
+          <ComercialMetas />
+        </section>
+      </main>
     </div>
   );
 }
