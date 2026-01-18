@@ -9,8 +9,8 @@ interface PrivateRouteProps {
 export function PrivateRoute({ requireAdmin = false }: PrivateRouteProps) {
   const { user, usuario, loading, isAdmin } = useAuth();
 
-  // Mostra loading enquanto verifica autenticação
-  if (loading) {
+  // Mostra loading apenas se ainda está carregando E não tem user
+  if (loading && !user) {
     return (
       <div className="min-h-screen bg-slate-900 flex items-center justify-center">
         <div className="text-center">
@@ -26,22 +26,17 @@ export function PrivateRoute({ requireAdmin = false }: PrivateRouteProps) {
     return <Navigate to="/login" replace />;
   }
 
-  // Se não tem registro na tabela usuarios, redireciona para login
-  if (!usuario) {
-    return <Navigate to="/login" replace />;
-  }
-
-  // Se usuário está inativo, redireciona para login
-  if (!usuario.ativo) {
-    return <Navigate to="/login" replace />;
-  }
-
-  // Se rota requer admin e usuário não é admin
-  if (requireAdmin && !isAdmin) {
+  // Se rota requer admin e usuário não é admin (só verifica se usuario já carregou)
+  if (requireAdmin && usuario && !isAdmin) {
     return <Navigate to="/app" replace />;
   }
 
-  // Usuário autenticado, renderiza a rota
+  // Se usuário está inativo (só verifica se usuario já carregou)
+  if (usuario && !usuario.ativo) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // Usuário autenticado, renderiza a rota (mesmo se usuario ainda não carregou)
   return <Outlet />;
 }
 

@@ -1,18 +1,20 @@
-import { useState, useEffect } from 'react';
-import { BarChart3, TrendingUp, TrendingDown, Users } from 'lucide-react';
+import { useState } from 'react';
+import { useOutletContext } from 'react-router-dom';
+import { BarChart3, TrendingUp, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { UnidadeFilter, type UnidadeId } from '@/components/ui/UnidadeFilter';
-import { TabDashboard } from './TabDashboard';
-import { TabComercial } from './TabComercial';
-import { TabRetencao } from './TabRetencao';
-import { TabProfessores } from './TabProfessores';
+import { TabGestao } from './TabGestao';
+import { TabComercialNew } from './TabComercialNew';
+import { TabProfessoresNew } from './TabProfessoresNew';
 
-type TabId = 'dashboard' | 'comercial' | 'retencao' | 'professores';
+type TabId = 'gestao' | 'comercial' | 'professores';
+
+interface OutletContextType {
+  filtroAtivo: string | null;
+}
 
 const tabs = [
-  { id: 'dashboard' as const, label: 'Dashboard', shortLabel: 'Dash', icon: BarChart3 },
+  { id: 'gestao' as const, label: 'Gestão', shortLabel: 'Gestão', icon: BarChart3 },
   { id: 'comercial' as const, label: 'Comercial', shortLabel: 'Comercial', icon: TrendingUp },
-  { id: 'retencao' as const, label: 'Retenção', shortLabel: 'Retenção', icon: TrendingDown },
   { id: 'professores' as const, label: 'Professores', shortLabel: 'Profs', icon: Users },
 ];
 
@@ -21,13 +23,16 @@ interface GestaoMensalPageProps {
 }
 
 export function GestaoMensalPage({ mesReferencia }: GestaoMensalPageProps) {
-  const [activeTab, setActiveTab] = useState<TabId>('dashboard');
-  const [unidadeFiltro, setUnidadeFiltro] = useState<UnidadeId>('todos');
+  const [activeTab, setActiveTab] = useState<TabId>('gestao');
+  
+  // Pegar o filtro de unidade do contexto do Outlet (vem do header)
+  const { filtroAtivo } = useOutletContext<OutletContextType>() || { filtroAtivo: null };
+  
+  // Se filtroAtivo é null = consolidado, senão é o ID da unidade
+  const unidadeFiltro = filtroAtivo || 'todos';
 
-  // Reset filtro quando muda de aba (como no Super Folha)
   const handleTabChange = (tabId: TabId) => {
     setActiveTab(tabId);
-    setUnidadeFiltro('todos');
   };
 
   // Mês atual como padrão
@@ -92,22 +97,16 @@ export function GestaoMensalPage({ mesReferencia }: GestaoMensalPageProps) {
         </div>
       </div>
 
-      {/* Filtro de Unidade */}
-      <UnidadeFilter value={unidadeFiltro} onChange={setUnidadeFiltro} />
-
       {/* Conteúdo da Aba Ativa */}
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
-        {activeTab === 'dashboard' && (
-          <TabDashboard ano={ano} mes={mes} unidade={unidadeFiltro} />
+        {activeTab === 'gestao' && (
+          <TabGestao ano={ano} mes={mes} unidade={unidadeFiltro} />
         )}
         {activeTab === 'comercial' && (
-          <TabComercial ano={ano} mes={mes} unidade={unidadeFiltro} />
-        )}
-        {activeTab === 'retencao' && (
-          <TabRetencao ano={ano} mes={mes} unidade={unidadeFiltro} />
+          <TabComercialNew ano={ano} mes={mes} unidade={unidadeFiltro} />
         )}
         {activeTab === 'professores' && (
-          <TabProfessores ano={ano} mes={mes} unidade={unidadeFiltro} />
+          <TabProfessoresNew ano={ano} mes={mes} unidade={unidadeFiltro} />
         )}
       </div>
     </div>

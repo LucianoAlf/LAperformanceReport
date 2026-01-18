@@ -7,12 +7,11 @@ import { BarChartHorizontal } from '@/components/ui/BarChartHorizontal';
 import { RankingTable } from '@/components/ui/RankingTable';
 import { formatCurrency } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
-import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 
 interface TabComercialProps {
   ano: number;
   mes: number;
-  unidade: UnidadeId;
+  unidade: string;
 }
 
 interface LeadDiario {

@@ -22,27 +22,28 @@ export function LoginPage() {
     setLoading(true);
     
     try {
-      console.log('🔐 Iniciando processo de login...');
+      // Timeout de 10s para o login completo
+      const loginPromise = (async () => {
+        await signOut();
+        const { error } = await signIn(email, password);
+        return { error };
+      })();
       
-      // Limpar qualquer sessão anterior antes de fazer login
-      console.log('🧹 Limpando sessão anterior...');
-      await signOut();
-      
-      console.log('🔑 Fazendo login com:', email);
-      const { error } = await signIn(email, password);
+      const timeoutPromise = new Promise<{ error: Error }>((resolve) => 
+        setTimeout(() => resolve({ error: new Error('Timeout no login') }), 10000)
+      );
+
+      const { error } = await Promise.race([loginPromise, timeoutPromise]);
       
       if (error) {
-        console.error('❌ Erro no login:', error);
-        toast.error('Email ou senha incorretos');
+        toast.error(error.message === 'Timeout no login' ? 'Login demorou demais, tente novamente' : 'Email ou senha incorretos');
         return;
       }
 
-      console.log('✅ Login bem-sucedido!');
       toast.success('Login realizado com sucesso!');
-      console.log('🚀 Navegando para /app');
       navigate('/app');
     } catch (err) {
-      console.error('❌ Erro no login:', err);
+      console.error('Erro no login:', err);
       toast.error('Erro ao fazer login');
     } finally {
       setLoading(false);

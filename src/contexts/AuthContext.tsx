@@ -33,38 +33,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Buscar dados do usuário na tabela usuarios
-  const fetchUsuario = async (userId: string): Promise<Usuario | null> => {
-    console.log('🔍 fetchUsuario iniciado para userId:', userId);
+  // Buscar dados do usuário na tabela usuarios - com timeout
+  const fetchUsuario = async (userId: string, userEmail?: string): Promise<Usuario | null> => {
     try {
-      console.log('📡 Consultando tabela usuarios...');
-      const { data, error } = await supabase
+      // Query com timeout usando Promise.race
+      const queryPromise = supabase
         .from('usuarios')
         .select('*')
         .eq('auth_user_id', userId)
         .single();
+      
+      const timeoutPromise = new Promise<never>((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout')), 5000)
+      );
 
-      console.log('📡 Resposta da consulta:', { hasData: !!data, errorCode: error?.code, errorMessage: error?.message });
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
 
       if (error && error.code !== 'PGRST116') {
-        console.error('❌ Erro ao buscar usuário:', error);
+        console.error('Erro ao buscar usuário:', error);
         return null;
       }
 
       // Se não encontrou o usuário, criar automaticamente para admins conhecidos
-      if (!data) {
-        console.warn('⚠️ Usuário não encontrado na tabela usuarios. Tentando criar...');
-        
-        // Buscar email do usuário no Auth
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user?.email) return null;
-
-        const email = user.email.toLowerCase();
+      if (!data && userEmail) {
+        const email = userEmail.toLowerCase();
         const isKnownAdmin = email === 'lucianoalf.la@gmail.com' || email === 'rh@lamusicschool.com.br';
 
         if (isKnownAdmin) {
-          console.log('✨ Admin conhecido detectado, criando registro...');
-          // Criar registro automaticamente
           const { data: newUser, error: insertError } = await supabase
             .from('usuarios')
             .insert({
@@ -79,11 +74,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .single();
 
           if (insertError) {
-            console.error('❌ Erro ao criar usuário automaticamente:', insertError);
+            console.error('Erro ao criar usuário:', insertError);
             return null;
           }
 
-          console.log('✅ Usuário admin criado automaticamente:', newUser);
           return {
             id: newUser.id,
             email: newUser.email,
@@ -94,11 +88,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             ativo: newUser.ativo,
           };
         }
-
         return null;
       }
 
-      // Buscar nome da unidade separadamente se não for admin
+      if (!data) return null;
+
+      // Buscar nome da unidade apenas se necessário
       let unidadeNome = null;
       if (data.unidade_id) {
         const { data: unidadeData } = await supabase
@@ -106,7 +101,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .select('nome')
           .eq('id', data.unidade_id)
           .single();
-        
         unidadeNome = unidadeData?.nome || null;
       }
 
@@ -120,7 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         ativo: data.ativo,
       };
     } catch (err) {
-      console.error('Erro inesperado no fetchUsuario:', err);
+      console.error('Erro no fetchUsuario:', err);
       return null;
     }
   };
@@ -128,74 +122,54 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
     
-    // Timeout de segurança: se após 10 segundos ainda estiver carregando, força o fim
+    // Timeout de segurança reduzido para 5 segundos
     const safetyTimeout = setTimeout(() => {
       if (mounted && loading) {
-        console.warn('⚠️ Timeout de autenticação atingido. Forçando fim do carregamento.');
+        console.warn('Timeout de autenticação - forçando fim do loading');
         setLoading(false);
       }
-    }, 10000);
+    }, 5000);
 
-    // Verificar sessão atual
     const initAuth = async () => {
-      console.log('🔄 Iniciando autenticação...');
       try {
         const { data: { session }, error } = await supabase.auth.getSession();
-        console.log('📦 Sessão obtida:', { hasSession: !!session, error: error?.message });
         
-        if (error) {
-          console.error('❌ Erro ao obter sessão:', error);
-          if (mounted) {
-            console.log('✅ Finalizando loading (erro na sessão)');
-            setLoading(false);
-          }
-          return;
-        }
-
-        if (!mounted) {
-          console.log('⚠️ Componente desmontado, abortando');
+        if (error || !mounted) {
+          if (mounted) setLoading(false);
           return;
         }
 
         setSession(session);
         setUser(session?.user ?? null);
-        console.log('👤 Usuário definido:', session?.user?.email);
         
         if (session?.user) {
-          console.log('🔍 Buscando dados do usuário na tabela usuarios...');
-          const usuarioData = await fetchUsuario(session.user.id);
-          console.log('📊 Dados do usuário:', usuarioData ? `${usuarioData.nome} (${usuarioData.perfil})` : 'null');
+          const usuarioData = await fetchUsuario(session.user.id, session.user.email);
           if (mounted) setUsuario(usuarioData);
         }
       } catch (error) {
-        console.error('❌ Erro ao carregar sessão:', error);
+        console.error('Erro ao carregar sessão:', error);
       } finally {
-        if (mounted) {
-          console.log('✅ Finalizando loading (initAuth completo)');
-          setLoading(false);
-        }
+        if (mounted) setLoading(false);
       }
     };
 
     initAuth();
 
-    // Escutar mudanças de autenticação
+    // Listener de mudanças de auth - NÃO bloqueia o fluxo
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      async (event, session) => {
         if (!mounted) return;
         
-        try {
-          setSession(session);
-          setUser(session?.user ?? null);
-          
-          if (session?.user) {
-            const usuarioData = await fetchUsuario(session.user.id);
-            if (mounted) setUsuario(usuarioData);
-          } else {
-            if (mounted) setUsuario(null);
-          }
-        } catch (error) {
-          console.error('Erro ao processar mudança de autenticação:', error);
+        setSession(session);
+        setUser(session?.user ?? null);
+        
+        if (session?.user) {
+          // Busca em background, não bloqueia
+          fetchUsuario(session.user.id, session.user.email).then(data => {
+            if (mounted) setUsuario(data);
+          });
+        } else {
+          setUsuario(null);
         }
       }
     );

@@ -5,12 +5,11 @@ import { RankingTable } from '@/components/ui/RankingTable';
 import { BarChartHorizontal } from '@/components/ui/BarChartHorizontal';
 import { formatCurrency } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
-import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 
 interface TabProfessoresProps {
   ano: number;
   mes: number;
-  unidade: UnidadeId;
+  unidade: string;
 }
 
 interface ProfessorKPI {
