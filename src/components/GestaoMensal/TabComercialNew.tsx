@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Phone, Calendar, UserPlus, Percent, DollarSign, TrendingUp, Archive, XCircle, Music, Clock, Users, Target } from 'lucide-react';
+import { Phone, Calendar, UserPlus, Percent, DollarSign, TrendingUp, Archive, XCircle, Music, Clock, Users, Target, Baby, GraduationCap, AlertTriangle, Info } from 'lucide-react';
 import { KPICard } from '@/components/ui/KPICard';
 import { FunnelChart } from '@/components/ui/FunnelChart';
 import { DistributionChart } from '@/components/ui/DistributionChart';
 import { RankingTable } from '@/components/ui/RankingTable';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, getMesNomeCurto } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 
@@ -15,13 +15,12 @@ interface TabComercialProps {
   unidade: string;
 }
 
-type SubTabId = 'leads' | 'experimentais' | 'matriculas' | 'faturamento';
+type SubTabId = 'leads' | 'experimentais' | 'matriculas';
 
 const subTabs = [
   { id: 'leads' as const, label: 'Leads', icon: Phone },
   { id: 'experimentais' as const, label: 'Experimentais', icon: Calendar },
   { id: 'matriculas' as const, label: 'Matrículas', icon: UserPlus },
-  { id: 'faturamento' as const, label: 'Faturamento', icon: DollarSign },
 ];
 
 interface DadosComercial {
@@ -48,6 +47,7 @@ interface DadosComercial {
   matriculas_por_canal: { name: string; value: number }[];
   matriculas_por_professor: { id: number; nome: string; valor: number; subvalor?: string }[];
   matriculas_por_horario: { name: string; value: number }[];
+  matriculas_por_faixa_etaria: { name: string; value: number }[];
   ticket_medio_passaporte: number;
   ticket_medio_parcela: number;
   motivos_nao_matricula: { name: string; value: number }[];
@@ -63,6 +63,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
   const [activeSubTab, setActiveSubTab] = useState<SubTabId>('leads');
   const [loading, setLoading] = useState(true);
   const [dados, setDados] = useState<DadosComercial | null>(null);
+  const [mesFechado, setMesFechado] = useState(false);
 
   // Usar mesFim se fornecido, senão usar mes (para filtro mensal)
   const mesInicio = mes;
@@ -85,7 +86,8 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             canais_origem(nome),
             cursos(nome),
             professores:professor_experimental_id(nome),
-            motivos_arquivamento(nome)
+            motivos_arquivamento(nome),
+            motivos_nao_matricula(nome)
           `)
           .gte('data', startDate)
           .lte('data', endDate);
@@ -97,6 +99,25 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
         const { data: leadsData, error: leadsError } = await leadsQuery;
 
         if (leadsError) throw leadsError;
+
+        // Buscar dados mensais para ticket de passaporte (dados históricos)
+        let dadosMensaisQuery = supabase
+          .from('dados_mensais')
+          .select('ticket_medio_passaporte, faturamento_passaporte, unidade_id')
+          .eq('ano', ano)
+          .gte('mes', mesInicio)
+          .lte('mes', mesFinal);
+
+        if (unidade !== 'todos') {
+          dadosMensaisQuery = dadosMensaisQuery.eq('unidade_id', unidade);
+        }
+
+        const { data: dadosMensaisData } = await dadosMensaisQuery;
+
+        // Verificar se o mês está fechado (tem dados em dados_mensais)
+        const temDadosMes = dadosMensaisData && dadosMensaisData.length > 0 && 
+          dadosMensaisData.some(d => d.ticket_medio_passaporte !== null && d.ticket_medio_passaporte > 0);
+        setMesFechado(temDadosMes);
 
         // Buscar matrículas do mês
         let matriculasQuery = supabase
@@ -192,6 +213,10 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           horarioMap.set(hora, (horarioMap.get(hora) || 0) + 1);
         });
 
+        // Matrículas por Faixa Etária (LA Kids vs LA 12+)
+        const matriculasLaKids = matriculas.filter(m => m.idade_atual !== null && m.idade_atual <= 11).length;
+        const matriculasLaAdultos = matriculas.filter(m => m.idade_atual !== null && m.idade_atual >= 12).length;
+
         // Motivos de Não Matrícula (experimentais que não converteram)
         const motivosNaoMatMap = new Map<string, number>();
         leads.filter(l => l.tipo === 'experimental_nao_matriculou' || (l.tipo === 'experimental_realizada' && l.motivo_nao_matricula_id)).forEach(l => {
@@ -199,11 +224,22 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           motivosNaoMatMap.set(motivo, (motivosNaoMatMap.get(motivo) || 0) + (l.quantidade || 1));
         });
 
-        // Faturamento
-        const faturamentoPassaportes = matriculas.reduce((acc, m) => acc + (Number(m.valor_passaporte) || 0), 0);
+        // Faturamento - usar dados_mensais para passaporte (dados históricos) ou calcular de matrículas
+        const dadosMensais = dadosMensaisData || [];
+        const faturamentoPassaportesHistorico = dadosMensais.reduce((acc, dm) => acc + (Number(dm.faturamento_passaporte) || 0), 0);
+        const ticketMedioPassaporteHistorico = dadosMensais.length > 0 
+          ? dadosMensais.reduce((acc, dm) => acc + (Number(dm.ticket_medio_passaporte) || 0), 0) / dadosMensais.length 
+          : 0;
+        
+        // Calcular de matrículas como fallback
+        const faturamentoPassaportesMatriculas = matriculas.reduce((acc, m) => acc + (Number(m.valor_passaporte) || 0), 0);
         const faturamentoParcelas = matriculas.reduce((acc, m) => acc + (Number(m.valor_parcela) || 0), 0);
-        const ticketMedioPassaporte = matriculas.length > 0 ? faturamentoPassaportes / matriculas.length : 0;
+        const ticketMedioPassaporteMatriculas = matriculas.length > 0 ? faturamentoPassaportesMatriculas / matriculas.length : 0;
         const ticketMedioParcela = matriculas.length > 0 ? faturamentoParcelas / matriculas.length : 0;
+        
+        // Usar dados históricos se disponíveis, senão calcular de matrículas
+        const faturamentoPassaportes = faturamentoPassaportesHistorico > 0 ? faturamentoPassaportesHistorico : faturamentoPassaportesMatriculas;
+        const ticketMedioPassaporte = ticketMedioPassaporteHistorico > 0 ? ticketMedioPassaporteHistorico : ticketMedioPassaporteMatriculas;
 
         setDados({
           // Leads
@@ -238,6 +274,10 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             valor: data.count,
           })).sort((a, b) => b.valor - a.valor),
           matriculas_por_horario: Array.from(horarioMap.entries()).map(([name, value]) => ({ name, value })),
+          matriculas_por_faixa_etaria: [
+            { name: 'LA Music Kids (até 11)', value: matriculasLaKids },
+            { name: 'LA Music School (12+)', value: matriculasLaAdultos },
+          ],
           ticket_medio_passaporte: ticketMedioPassaporte,
           ticket_medio_parcela: ticketMedioParcela,
           motivos_nao_matricula: Array.from(motivosNaoMatMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
@@ -275,6 +315,15 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
     );
   }
 
+  // Componente de estado vazio informativo
+  const EstadoVazio = ({ titulo, mensagem }: { titulo: string; mensagem: string }) => (
+    <div className="bg-slate-800/30 border border-slate-700/50 rounded-xl p-8 text-center">
+      <Info className="w-12 h-12 text-slate-500 mx-auto mb-3" />
+      <h4 className="text-slate-300 font-medium mb-2">{titulo}</h4>
+      <p className="text-slate-400 text-sm">{mensagem}</p>
+    </div>
+  );
+
   return (
     <div className="space-y-6">
       {/* Sub-abas */}
@@ -299,6 +348,15 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
       {/* Sub-aba: Leads */}
       {activeSubTab === 'leads' && (
         <div className="space-y-6">
+          {/* Aviso se o mês não está fechado */}
+          {!mesFechado && (
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-center gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
+              <p className="text-amber-200 text-sm">
+                <strong>Mês não fechado:</strong> Os dados de {getMesNomeCurto(mes)}/{ano} ainda não foram populados. Novas Matrículas, Evasões e Saldo Líquido mostram dados do mês atual em andamento.
+              </p>
+            </div>
+          )}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             <KPICard
               icon={Phone}
@@ -328,18 +386,39 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <DistributionChart
-              data={dados.leads_por_canal}
-              title="Leads por Canal"
-            />
-            <DistributionChart
-              data={dados.leads_por_curso}
-              title="Leads por Curso de Interesse"
-            />
-            <DistributionChart
-              data={dados.motivos_arquivamento}
-              title="Motivos de Arquivamento"
-            />
+            {dados.leads_por_canal.length > 0 ? (
+              <DistributionChart
+                data={dados.leads_por_canal}
+                title="Leads por Canal"
+              />
+            ) : (
+              <EstadoVazio
+                titulo="Sem dados para exibir"
+                mensagem="Nenhum lead registrado no período selecionado."
+              />
+            )}
+            {dados.leads_por_curso.length > 0 ? (
+              <DistributionChart
+                data={dados.leads_por_curso}
+                title="Leads por Curso de Interesse"
+              />
+            ) : (
+              <EstadoVazio
+                titulo="Sem dados para exibir"
+                mensagem="Nenhum lead com curso de interesse registrado."
+              />
+            )}
+            {dados.motivos_arquivamento.length > 0 ? (
+              <DistributionChart
+                data={dados.motivos_arquivamento}
+                title="Motivos de Arquivamento"
+              />
+            ) : (
+              <EstadoVazio
+                titulo="Sem dados para exibir"
+                mensagem="Nenhum lead arquivado no período."
+              />
+            )}
           </div>
         </div>
       )}
@@ -347,6 +426,15 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
       {/* Sub-aba: Experimentais */}
       {activeSubTab === 'experimentais' && (
         <div className="space-y-6">
+          {/* Aviso se o mês não está fechado */}
+          {!mesFechado && (
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-center gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
+              <p className="text-amber-200 text-sm">
+                <strong>Mês não fechado:</strong> Os dados de {getMesNomeCurto(mes)}/{ano} ainda não foram populados. Novas Matrículas, Evasões e Saldo Líquido mostram dados do mês atual em andamento.
+              </p>
+            </div>
+          )}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <KPICard
               icon={Calendar}
@@ -389,11 +477,18 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
               ]}
               title="Funil de Conversão"
             />
-            <RankingTable
-              data={dados.experimentais_por_professor}
-              title="Experimentais por Professor"
-              valorLabel="Aulas"
-            />
+            {dados.experimentais_por_professor.length > 0 ? (
+              <RankingTable
+                data={dados.experimentais_por_professor}
+                title="Experimentais por Professor"
+                valorLabel="Aulas"
+              />
+            ) : (
+              <EstadoVazio
+                titulo="Sem dados para exibir"
+                mensagem="Nenhuma aula experimental com professor vinculado no período."
+              />
+            )}
           </div>
         </div>
       )}
@@ -401,7 +496,17 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
       {/* Sub-aba: Matrículas */}
       {activeSubTab === 'matriculas' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {/* Aviso se o mês não está fechado */}
+          {!mesFechado && (
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-center gap-3">
+              <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
+              <p className="text-amber-200 text-sm">
+                <strong>Mês não fechado:</strong> Os dados de {getMesNomeCurto(mes)}/{ano} ainda não foram populados. Novas Matrículas, Evasões e Saldo Líquido mostram dados do mês atual em andamento.
+              </p>
+            </div>
+          )}
+          {/* Linha 1: Quantidade e Receitas */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <KPICard
               icon={UserPlus}
               label="Novas Matrículas"
@@ -410,116 +515,108 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             />
             <KPICard
               icon={DollarSign}
-              label="Ticket Passaporte"
-              value={formatCurrency(dados.ticket_medio_passaporte)}
+              label="Receita Passaportes"
+              value={formatCurrency(dados.faturamento_passaportes)}
+              subvalue={`${dados.novas_matriculas} vendidos`}
               variant="cyan"
             />
             <KPICard
-              icon={DollarSign}
-              label="Ticket Parcela"
-              value={formatCurrency(dados.ticket_medio_parcela)}
-              variant="violet"
+              icon={TrendingUp}
+              label="MRR Novos"
+              value={formatCurrency(dados.faturamento_parcelas)}
+              subvalue="Receita recorrente"
+              variant="amber"
             />
             <KPICard
               icon={Clock}
               label="Por Horário"
               value={dados.matriculas_por_horario.length > 0 ? dados.matriculas_por_horario[0].name : '-'}
               subvalue={dados.matriculas_por_horario.length > 0 ? `${dados.matriculas_por_horario[0].value} matrículas` : ''}
-              variant="amber"
+              variant="violet"
             />
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <DistributionChart
-              data={dados.matriculas_por_curso}
-              title="Matrículas por Curso"
-            />
-            <DistributionChart
-              data={dados.matriculas_por_canal}
-              title="Matrículas por Canal"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <DistributionChart
-              data={dados.motivos_nao_matricula}
-              title="Motivos de Não Matrícula (Experimentais)"
-            />
-            <RankingTable
-              data={dados.matriculas_por_professor}
-              title="Ranking Matriculadores"
-              valorLabel="Matrículas"
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Sub-aba: Faturamento */}
-      {activeSubTab === 'faturamento' && (
-        <div className="space-y-6">
+          {/* Linha 2: Tickets e Faixa Etária */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <KPICard
               icon={DollarSign}
-              label="Passaportes"
-              value={formatCurrency(dados.faturamento_passaportes)}
-              subvalue={`${dados.novas_matriculas} vendidos`}
+              label="Ticket Passaporte"
+              value={formatCurrency(dados.ticket_medio_passaporte)}
+              subvalue="Média por matrícula"
               variant="cyan"
             />
             <KPICard
               icon={DollarSign}
-              label="Parcelas (1ª)"
-              value={formatCurrency(dados.faturamento_parcelas)}
-              subvalue="Primeira mensalidade"
+              label="Ticket Parcela"
+              value={formatCurrency(dados.ticket_medio_parcela)}
+              subvalue="Média por matrícula"
               variant="emerald"
             />
             <KPICard
-              icon={DollarSign}
-              label="Total Novos"
-              value={formatCurrency(dados.faturamento_total)}
-              subvalue="Passaportes + Parcelas"
-              variant="violet"
+              icon={Baby}
+              label="LA Music Kids"
+              value={(dados.matriculas_por_faixa_etaria || []).find(f => f.name.includes('Kids'))?.value || 0}
+              subvalue={`${dados.novas_matriculas > 0 ? (((dados.matriculas_por_faixa_etaria || []).find(f => f.name.includes('Kids'))?.value || 0) / dados.novas_matriculas * 100).toFixed(0) : 0}% das matrículas`}
+              variant="rose"
             />
             <KPICard
-              icon={TrendingUp}
-              label="MRR Novos"
-              value={formatCurrency(dados.faturamento_parcelas)}
-              subvalue="Receita recorrente mensal"
-              variant="amber"
+              icon={GraduationCap}
+              label="LA Music School"
+              value={(dados.matriculas_por_faixa_etaria || []).find(f => f.name.includes('School'))?.value || 0}
+              subvalue={`${dados.novas_matriculas > 0 ? (((dados.matriculas_por_faixa_etaria || []).find(f => f.name.includes('School'))?.value || 0) / dados.novas_matriculas * 100).toFixed(0) : 0}% das matrículas`}
+              variant="violet"
             />
           </div>
 
-          <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
-            <h3 className="text-lg font-bold text-white mb-4">Resumo Financeiro - Novos Alunos</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">Passaportes vendidos:</span>
-                  <span className="text-white font-medium">{dados.novas_matriculas}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">Ticket médio passaporte:</span>
-                  <span className="text-white font-medium">{formatCurrency(dados.ticket_medio_passaporte)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">Ticket médio parcela:</span>
-                  <span className="text-white font-medium">{formatCurrency(dados.ticket_medio_parcela)}</span>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">Receita passaportes:</span>
-                  <span className="text-cyan-400 font-medium">{formatCurrency(dados.faturamento_passaportes)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">Receita parcelas:</span>
-                  <span className="text-emerald-400 font-medium">{formatCurrency(dados.faturamento_parcelas)}</span>
-                </div>
-                <div className="flex justify-between text-sm border-t border-slate-700 pt-2 mt-2">
-                  <span className="text-white font-bold">Total:</span>
-                  <span className="text-violet-400 font-bold">{formatCurrency(dados.faturamento_total)}</span>
-                </div>
-              </div>
-            </div>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {dados.matriculas_por_curso.length > 0 ? (
+              <DistributionChart
+                data={dados.matriculas_por_curso}
+                title="Matrículas por Curso"
+              />
+            ) : (
+              <EstadoVazio
+                titulo="Sem matrículas no período"
+                mensagem={`Nenhuma matrícula registrada em ${getMesNomeCurto(mes)}/${ano}. Isso pode indicar período de baixa ou dados ainda não lançados.`}
+              />
+            )}
+            {dados.matriculas_por_canal.length > 0 ? (
+              <DistributionChart
+                data={dados.matriculas_por_canal}
+                title="Matrículas por Canal"
+              />
+            ) : (
+              <EstadoVazio
+                titulo="Sem dados para exibir"
+                mensagem="Nenhuma matrícula com canal de origem registrado."
+              />
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {(dados.motivos_nao_matricula || []).length > 0 ? (
+              <DistributionChart
+                data={dados.motivos_nao_matricula || []}
+                title="Motivos de Não Matrícula (Experimentais)"
+              />
+            ) : (
+              <EstadoVazio
+                titulo="Sem dados para exibir"
+                mensagem="Nenhum motivo de não matrícula registrado no período."
+              />
+            )}
+            {(dados.matriculas_por_professor || []).length > 0 ? (
+              <RankingTable
+                data={dados.matriculas_por_professor || []}
+                title="Ranking de Professores Matriculadores"
+                valorLabel="Matrículas"
+              />
+            ) : (
+              <EstadoVazio
+                titulo="Sem ranking de professores matriculadores"
+                mensagem={`Nenhuma matrícula com professor vinculado em ${getMesNomeCurto(mes)}/${ano}.`}
+              />
+            )}
           </div>
         </div>
       )}

@@ -14,10 +14,10 @@ interface TabProfessoresProps {
   unidade: string;
 }
 
-type SubTabId = 'carteira' | 'conversao' | 'retencao' | 'qualidade';
+type SubTabId = 'visao_geral' | 'conversao' | 'retencao' | 'qualidade';
 
 const subTabs = [
-  { id: 'carteira' as const, label: 'Carteira', icon: Users },
+  { id: 'visao_geral' as const, label: 'Visão Geral', icon: Users },
   { id: 'conversao' as const, label: 'Conversão', icon: Target },
   { id: 'retencao' as const, label: 'Retenção', icon: UserCheck },
   { id: 'qualidade' as const, label: 'Qualidade', icon: Star },
@@ -83,7 +83,7 @@ interface DadosProfessores {
 }
 
 export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresProps) {
-  const [activeSubTab, setActiveSubTab] = useState<SubTabId>('carteira');
+  const [activeSubTab, setActiveSubTab] = useState<SubTabId>('visao_geral');
   const [loading, setLoading] = useState(true);
   const [dados, setDados] = useState<DadosProfessores | null>(null);
 
@@ -95,9 +95,17 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
     async function fetchDados() {
       setLoading(true);
       try {
-        // Buscar dados da view otimizada com todos os 23 KPIs (suporta range de meses)
+        // Determinar qual view usar: mensal (atual) ou histórica
+        const currentDate = new Date();
+        const currentYear = currentDate.getFullYear();
+        const currentMonth = currentDate.getMonth() + 1;
+        const isCurrentPeriod = ano === currentYear && mesInicio <= currentMonth && mesFinal >= currentMonth;
+        
+        // Usar view mensal para período atual, histórica para passado
+        const viewName = isCurrentPeriod ? 'vw_kpis_professor_mensal' : 'vw_kpis_professor_historico';
+        
         let query = supabase
-          .from('vw_kpis_professor_mensal')
+          .from(viewName)
           .select('*')
           .eq('ano', ano)
           .gte('mes', mesInicio)
@@ -108,45 +116,204 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
           query = query.eq('unidade_id', unidade);
         }
 
-        const { data: professoresData, error: professoresError } = await query;
+        // Buscar totais de experimentais/matrículas por unidade (dados do CSV - só para histórico)
+        let totaisQuery = supabase
+          .from('experimentais_mensal_unidade')
+          .select('*')
+          .eq('ano', ano)
+          .gte('mes', mesInicio)
+          .lte('mes', mesFinal);
 
-        if (professoresError) throw professoresError;
+        if (unidade !== 'todos') {
+          totaisQuery = totaisQuery.eq('unidade_id', unidade);
+        }
 
-        const professores = professoresData || [];
+        // Buscar dados de performance anual (conversão e retenção)
+        let performanceQuery = supabase
+          .from('professores_performance')
+          .select('*')
+          .eq('ano', ano);
+
+        // Buscar dados de qualidade (presença, ticket, carteira atual)
+        const qualidadeQuery = supabase
+          .from('vw_kpis_professor_completo')
+          .select('*');
+
+        // Buscar dados de evasões por professor
+        const evasoesQuery = supabase
+          .from('vw_evasoes_professores')
+          .select('*');
+
+        const [professoresResult, totaisResult, performanceResult, qualidadeResult, evasoesResult] = await Promise.all([
+          query, 
+          totaisQuery, 
+          performanceQuery,
+          qualidadeQuery,
+          evasoesQuery
+        ]);
+
+        if (professoresResult.error) throw professoresResult.error;
+        if (totaisResult.error) throw totaisResult.error;
+
+        const professores = professoresResult.data || [];
+        const totaisUnidade = totaisResult.data || [];
+        const performanceData = performanceResult.data || [];
+        const qualidadeData = qualidadeResult.data || [];
+        const evasoesData = evasoesResult.data || [];
         
-        // Mapear para o formato esperado com todos os KPIs
-        const professoresKPIs: ProfessorKPI[] = professores.map(p => ({
-          id: p.professor_id,
-          nome: p.professor_nome,
-          unidade_nome: '',
-          // Carteira
-          carteira_alunos: p.carteira_alunos || 0,
-          media_alunos_turma: Number(p.media_alunos_turma) || 0,
-          ticket_medio: Number(p.ticket_medio) || 0,
-          // Conversão
-          experimentais: p.experimentais || 0,
-          matriculas: p.matriculas || 0,
-          taxa_conversao: Number(p.taxa_conversao) || 0,
-          // Retenção
-          renovacoes: p.renovacoes || 0,
-          nao_renovacoes: p.nao_renovacoes || 0,
-          taxa_renovacao: Number(p.taxa_renovacao) || 0,
-          evasoes: p.evasoes || 0,
-          taxa_cancelamento: Number(p.taxa_cancelamento) || 0,
-          mrr_perdido: Number(p.mrr_perdido) || 0,
-          // Qualidade
-          nps: Number(p.nps_medio) || 0,
-          media_presenca: Number(p.media_presenca) || 0,
-          taxa_faltas: Number(p.taxa_faltas) || 0,
-        }));
+        // Calcular totais corretos do CSV
+        const experimentaisTotalCSV = totaisUnidade.reduce((acc, t) => acc + (t.total_experimentais || 0), 0);
+        const matriculasTotalCSV = totaisUnidade.reduce((acc, t) => acc + (t.total_matriculas || 0), 0);
+
+        // Mapear dados de qualidade por nome de professor
+        const qualidadeMap = new Map<string, typeof qualidadeData[0]>();
+        qualidadeData.forEach(q => {
+          qualidadeMap.set(q.professor_nome, q);
+        });
+
+        // Mapear dados de evasões por professor/unidade
+        const evasoesMap = new Map<string, typeof evasoesData[0]>();
+        evasoesData.forEach(e => {
+          const key = `${e.professor}-${e.unidade}`;
+          evasoesMap.set(key, e);
+        });
+
+        // Consolidar dados de performance por professor (somando unidades)
+        const performanceMap = new Map<string, {
+          experimentais: number;
+          matriculas: number;
+          taxa_conversao: number;
+          evasoes: number;
+          renovacoes: number;
+          contratos_vencer: number;
+          taxa_renovacao: number;
+        }>();
+
+        performanceData.forEach(p => {
+          const nome = p.professor;
+          const existing = performanceMap.get(nome);
+          
+          if (existing) {
+            existing.experimentais += p.experimentais || 0;
+            existing.matriculas += p.matriculas || 0;
+            existing.evasoes += p.evasoes || 0;
+            existing.renovacoes += p.renovacoes || 0;
+            existing.contratos_vencer += p.contratos_vencer || 0;
+            // Recalcular taxas após somar
+            existing.taxa_conversao = existing.experimentais > 0 
+              ? (existing.matriculas / existing.experimentais) * 100 : 0;
+            existing.taxa_renovacao = existing.contratos_vencer > 0 
+              ? (existing.renovacoes / existing.contratos_vencer) * 100 : 0;
+          } else {
+            performanceMap.set(nome, {
+              experimentais: p.experimentais || 0,
+              matriculas: p.matriculas || 0,
+              taxa_conversao: Number(p.taxa_conversao) || 0,
+              evasoes: p.evasoes || 0,
+              renovacoes: p.renovacoes || 0,
+              contratos_vencer: p.contratos_vencer || 0,
+              taxa_renovacao: Number(p.taxa_renovacao) || 0,
+            });
+          }
+        });
+        
+        // Consolidar dados por professor único (evita duplicação quando professor atua em múltiplas unidades)
+        const professoresMap = new Map<number, ProfessorKPI>();
+        
+        professores.forEach(p => {
+          const id = p.professor_id;
+          const nome = p.professor_nome;
+          const existing = professoresMap.get(id);
+          
+          // Buscar dados de performance (só para dados históricos/anuais)
+          const perf = performanceMap.get(nome.toUpperCase()) || performanceMap.get(nome);
+          const qual = qualidadeMap.get(nome);
+          
+          if (existing) {
+            // Somar valores acumuláveis
+            existing.carteira_alunos += p.carteira_alunos || 0;
+            existing.matriculas += p.matriculas || 0;
+            existing.experimentais += p.experimentais || 0;
+            existing.renovacoes += p.renovacoes || 0;
+            existing.nao_renovacoes += p.nao_renovacoes || 0;
+            existing.evasoes += p.evasoes || 0;
+            existing.mrr_perdido += Number(p.mrr_perdido) || 0;
+          } else {
+            professoresMap.set(id, {
+              id: p.professor_id,
+              nome: nome,
+              unidade_nome: '',
+              // Carteira - usar dados da view diretamente
+              carteira_alunos: p.carteira_alunos ?? qual?.carteira_alunos ?? 0,
+              media_alunos_turma: p.media_alunos_turma ? Number(p.media_alunos_turma) : (qual?.media_alunos_turma ? Number(qual.media_alunos_turma) : 0),
+              ticket_medio: p.ticket_medio ? Number(p.ticket_medio) : (qual?.ticket_medio ? Number(qual.ticket_medio) : 0),
+              // Conversão - usar dados da view, fallback para performance anual
+              experimentais: p.experimentais ?? perf?.experimentais ?? 0,
+              matriculas: p.matriculas ?? perf?.matriculas ?? 0,
+              taxa_conversao: p.taxa_conversao ? Number(p.taxa_conversao) : (perf?.taxa_conversao ?? 0),
+              // Retenção - usar dados da view, fallback para performance anual
+              renovacoes: p.renovacoes ?? perf?.renovacoes ?? 0,
+              nao_renovacoes: p.nao_renovacoes ?? ((perf?.contratos_vencer ?? 0) - (perf?.renovacoes ?? 0)),
+              taxa_renovacao: p.taxa_renovacao ? Number(p.taxa_renovacao) : (perf?.taxa_renovacao ?? 0),
+              evasoes: p.evasoes ?? perf?.evasoes ?? 0,
+              taxa_cancelamento: p.taxa_cancelamento ? Number(p.taxa_cancelamento) : 0,
+              mrr_perdido: p.mrr_perdido ? Number(p.mrr_perdido) : 0,
+              // Qualidade - usar dados da view
+              nps: p.nps_medio ? Number(p.nps_medio) : (qual?.nps_medio ? Number(qual.nps_medio) : 0),
+              media_presenca: p.media_presenca ? Number(p.media_presenca) : (qual?.media_presenca ? Number(qual.media_presenca) : 0),
+              taxa_faltas: p.taxa_faltas ? Number(p.taxa_faltas) : (qual?.taxa_faltas ? Number(qual.taxa_faltas) : 0),
+            });
+          }
+        });
+
+        // Adicionar professores que estão em performance mas não em professores (histórico)
+        performanceData.forEach(p => {
+          const nomeUpper = p.professor;
+          const existingByName = Array.from(professoresMap.values()).find(
+            prof => prof.nome.toUpperCase() === nomeUpper
+          );
+          
+          if (!existingByName) {
+            const qual = qualidadeData.find(q => q.professor_nome.toUpperCase() === nomeUpper);
+            const perf = performanceMap.get(nomeUpper);
+            
+            if (perf) {
+              const newId = Math.max(...Array.from(professoresMap.keys()), 0) + 1000 + professoresMap.size;
+              professoresMap.set(newId, {
+                id: newId,
+                nome: nomeUpper,
+                unidade_nome: p.unidade || '',
+                carteira_alunos: qual?.carteira_alunos || 0,
+                media_alunos_turma: qual?.media_alunos_turma ? Number(qual.media_alunos_turma) : 0,
+                ticket_medio: qual?.ticket_medio ? Number(qual.ticket_medio) : 0,
+                experimentais: perf.experimentais,
+                matriculas: perf.matriculas,
+                taxa_conversao: perf.taxa_conversao,
+                renovacoes: perf.renovacoes,
+                nao_renovacoes: perf.contratos_vencer - perf.renovacoes,
+                taxa_renovacao: perf.taxa_renovacao,
+                evasoes: perf.evasoes,
+                taxa_cancelamento: 0,
+                mrr_perdido: 0,
+                nps: qual?.nps_medio ? Number(qual.nps_medio) : 0,
+                media_presenca: qual?.media_presenca ? Number(qual.media_presenca) : 0,
+                taxa_faltas: qual?.taxa_faltas ? Number(qual.taxa_faltas) : 0,
+              });
+            }
+          }
+        });
+        
+        // Converter Map para array
+        const professoresKPIs: ProfessorKPI[] = Array.from(professoresMap.values());
 
         // Calcular totais e médias
         const totalProfessores = professoresKPIs.filter(p => p.carteira_alunos > 0).length;
         const alunosTotal = professoresKPIs.reduce((acc, p) => acc + p.carteira_alunos, 0);
         const carteiraMedia = totalProfessores > 0 ? alunosTotal / totalProfessores : 0;
         
-        const experimentaisTotal = professoresKPIs.reduce((acc, p) => acc + p.experimentais, 0);
-        const matriculasTotal = professoresKPIs.reduce((acc, p) => acc + p.matriculas, 0);
+        // Usar totais do CSV (dados corretos)
+        const experimentaisTotal = experimentaisTotalCSV;
+        const matriculasTotal = matriculasTotalCSV;
         const taxaConversaoGeral = experimentaisTotal > 0 ? (matriculasTotal / experimentaisTotal) * 100 : 0;
         
         const renovacoesTotal = professoresKPIs.reduce((acc, p) => acc + p.renovacoes, 0);
@@ -284,8 +451,8 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
         ))}
       </div>
 
-      {/* Sub-aba: Carteira */}
-      {activeSubTab === 'carteira' && (
+      {/* Sub-aba: Visão Geral */}
+      {activeSubTab === 'visao_geral' && (
         <div className="space-y-6">
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <KPICard
@@ -302,7 +469,7 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
             />
             <KPICard
               icon={Target}
-              label="Carteira Média"
+              label="Média de Alunos"
               value={dados.carteira_media.toFixed(1)}
               subvalue="alunos por professor"
               variant="emerald"
@@ -323,27 +490,30 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <BarChartHorizontal
+            <RankingTable
               data={dados.professores
                 .sort((a, b) => b.carteira_alunos - a.carteira_alunos)
                 .slice(0, 10)
                 .map(p => ({
-                  name: p.nome,
-                  value: p.carteira_alunos,
-                  color: '#8b5cf6'
+                  id: p.id,
+                  nome: p.nome,
+                  valor: p.carteira_alunos
                 }))}
-              title="Top 10 - Maior Carteira"
+              title="Top 10 - Mais Alunos"
+              valorLabel="Alunos"
             />
-            <BarChartHorizontal
+            <RankingTable
               data={dados.professores
                 .sort((a, b) => b.ticket_medio - a.ticket_medio)
                 .slice(0, 10)
                 .map(p => ({
-                  name: p.nome,
-                  value: p.ticket_medio,
-                  color: '#f59e0b'
+                  id: p.id,
+                  nome: p.nome,
+                  valor: p.ticket_medio
                 }))}
               title="Top 10 - Maior Ticket Médio"
+              valorLabel="Ticket"
+              valorFormatter={(value) => formatCurrency(Number(value))}
             />
           </div>
         </div>
