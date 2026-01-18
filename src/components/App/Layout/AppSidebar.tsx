@@ -2,25 +2,25 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   PlusCircle, 
-  FileText, 
   Target,
   Settings,
   LogOut,
-  Presentation,
+  FolderArchive,
   BarChart3,
   TrendingUp,
   TrendingDown,
   Users,
   Shield,
   Table2,
-  Camera
+  Camera,
+  GraduationCap
 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 
 const menuItems = [
   { path: '/app', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { path: '/app/gestao-mensal', label: 'Gestão Mensal', icon: BarChart3 },
   { path: '/app/entrada', label: 'Entrada de Dados', icon: PlusCircle },
-  { path: '/app/relatorios', label: 'Relatórios', icon: FileText },
   { path: '/app/metas', label: 'Metas', icon: Target },
   { path: '/app/config', label: 'Configurações', icon: Settings },
 ];
@@ -28,13 +28,8 @@ const menuItems = [
 const planilhas = [
   { path: '/app/comercial', label: 'Comercial (Hunters)', icon: TrendingUp },
   { path: '/app/retencao', label: 'Retenção (Farmers)', icon: TrendingDown },
+  { path: '/app/professores', label: 'Professores', icon: GraduationCap },
   { path: '/app/snapshot', label: 'Snapshot Diário', icon: Camera },
-];
-
-const apresentacoes = [
-  { path: '/apresentacao/gestao', label: 'Gestão 2025', icon: BarChart3 },
-  { path: '/apresentacao/comercial', label: 'Comercial 2025', icon: TrendingUp },
-  { path: '/apresentacao/retencao', label: 'Retenção 2025', icon: TrendingDown },
 ];
 
 export function AppSidebar() {
@@ -146,29 +141,23 @@ export function AppSidebar() {
         {/* Separador */}
         <div className="my-4 border-t border-slate-800" />
 
-        {/* Apresentações */}
+        {/* Histórico */}
         <div className="text-xs text-slate-500 uppercase tracking-wider mb-2 px-3 flex items-center gap-2">
-          <Presentation className="w-3 h-3" /> Apresentações
+          <FolderArchive className="w-3 h-3" /> Histórico
         </div>
-        {apresentacoes.map((item) => {
-          const Icon = item.icon;
-          return (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              className={({ isActive }) =>
-                `w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all text-sm ${
-                  isActive
-                    ? 'bg-slate-800 text-white'
-                    : 'text-gray-500 hover:text-gray-300 hover:bg-slate-800/30'
-                }`
-              }
-            >
-              <Icon className="w-4 h-4" />
-              <span className="font-medium">{item.label}</span>
-            </NavLink>
-          );
-        })}
+        <NavLink
+          to="/app/apresentacoes-2025"
+          className={({ isActive }) =>
+            `w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all text-sm ${
+              isActive
+                ? 'bg-slate-800 text-white'
+                : 'text-gray-500 hover:text-gray-300 hover:bg-slate-800/30'
+            }`
+          }
+        >
+          <BarChart3 className="w-4 h-4" />
+          <span className="font-medium">Apresentações 2025</span>
+        </NavLink>
       </nav>
 
       {/* Footer */}

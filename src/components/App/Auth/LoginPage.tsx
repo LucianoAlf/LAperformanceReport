@@ -6,7 +6,7 @@ import { LogIn, Mail, Lock, Music } from 'lucide-react';
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const { signIn } = useAuth();
+  const { signIn, signOut } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -22,24 +22,29 @@ export function LoginPage() {
     setLoading(true);
     
     try {
+      console.log('🔐 Iniciando processo de login...');
+      
+      // Limpar qualquer sessão anterior antes de fazer login
+      console.log('🧹 Limpando sessão anterior...');
+      await signOut();
+      
+      console.log('🔑 Fazendo login com:', email);
       const { error } = await signIn(email, password);
       
       if (error) {
+        console.error('❌ Erro no login:', error);
         toast.error('Email ou senha incorretos');
-        setLoading(false);
         return;
       }
 
+      console.log('✅ Login bem-sucedido!');
       toast.success('Login realizado com sucesso!');
-      
-      // Aguardar um pouco para o AuthContext carregar os dados do usuário
-      setTimeout(() => {
-        navigate('/app');
-        setLoading(false);
-      }, 500);
+      console.log('🚀 Navegando para /app');
+      navigate('/app');
     } catch (err) {
-      console.error('Erro no login:', err);
+      console.error('❌ Erro no login:', err);
       toast.error('Erro ao fazer login');
+    } finally {
       setLoading(false);
     }
   };

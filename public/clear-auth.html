@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Limpar Cache de Autenticação</title>
+    <style>
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+        .container {
+            text-align: center;
+            padding: 2rem;
+            background: rgba(255,255,255,0.05);
+            border-radius: 1rem;
+            backdrop-filter: blur(10px);
+        }
+        button {
+            background: #8b5cf6;
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 0.5rem;
+            font-size: 1rem;
+            cursor: pointer;
+            margin-top: 1rem;
+        }
+        button:hover {
+            background: #7c3aed;
+        }
+        .success {
+            color: #10b981;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔧 Limpar Cache de Autenticação</h1>
+        <p>Clique no botão abaixo para limpar completamente o cache de autenticação do Supabase.</p>
+        <button onclick="clearAuth()">Limpar Cache e Fazer Logout</button>
+        <div id="result"></div>
+    </div>
+
+    <script type="module">
+        import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+        const supabaseUrl = 'https://ouqwbbermlzqqvtqwlul.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im91cXdiYmVybWx6cXF2dHF3bHVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzY5NjI3NzMsImV4cCI6MjA1MjUzODc3M30.hXDaVvDEFoOSVPFXVSdHPcKbvVKQhfLQjHPqSWPFLLI';
+        
+        const supabase = createClient(supabaseUrl, supabaseKey);
+
+        window.clearAuth = async function() {
+            const result = document.getElementById('result');
+            result.innerHTML = '<p>Limpando cache...</p>';
+            
+            try {
+                // 1. Fazer logout do Supabase
+                await supabase.auth.signOut();
+                
+                // 2. Limpar localStorage
+                localStorage.clear();
+                
+                // 3. Limpar sessionStorage
+                sessionStorage.clear();
+                
+                // 4. Limpar cookies do Supabase
+                document.cookie.split(";").forEach(function(c) { 
+                    document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
+                });
+                
+                result.innerHTML = '<p class="success">✅ Cache limpo com sucesso!</p><p>Redirecionando para login...</p>';
+                
+                // Redirecionar para a página de login
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 2000);
+            } catch (error) {
+                result.innerHTML = '<p style="color: #ef4444;">❌ Erro: ' + error.message + '</p>';
+            }
+        };
+    </script>
+</body>
+</html>

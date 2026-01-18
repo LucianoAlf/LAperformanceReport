@@ -35,20 +35,66 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Buscar dados do usuário na tabela usuarios
   const fetchUsuario = async (userId: string): Promise<Usuario | null> => {
+    console.log('🔍 fetchUsuario iniciado para userId:', userId);
     try {
+      console.log('📡 Consultando tabela usuarios...');
       const { data, error } = await supabase
         .from('usuarios')
         .select('*')
         .eq('auth_user_id', userId)
         .single();
 
-      if (error) {
-        console.error('Erro ao buscar usuário:', error);
+      console.log('📡 Resposta da consulta:', { hasData: !!data, errorCode: error?.code, errorMessage: error?.message });
+
+      if (error && error.code !== 'PGRST116') {
+        console.error('❌ Erro ao buscar usuário:', error);
         return null;
       }
 
+      // Se não encontrou o usuário, criar automaticamente para admins conhecidos
       if (!data) {
-        console.warn('Usuário não encontrado na tabela usuarios');
+        console.warn('⚠️ Usuário não encontrado na tabela usuarios. Tentando criar...');
+        
+        // Buscar email do usuário no Auth
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user?.email) return null;
+
+        const email = user.email.toLowerCase();
+        const isKnownAdmin = email === 'lucianoalf.la@gmail.com' || email === 'rh@lamusicschool.com.br';
+
+        if (isKnownAdmin) {
+          console.log('✨ Admin conhecido detectado, criando registro...');
+          // Criar registro automaticamente
+          const { data: newUser, error: insertError } = await supabase
+            .from('usuarios')
+            .insert({
+              nome: email === 'lucianoalf.la@gmail.com' ? 'Luciano Alf' : 'Ana Paula',
+              email: email,
+              perfil: 'admin',
+              unidade_id: null,
+              auth_user_id: userId,
+              ativo: true
+            })
+            .select()
+            .single();
+
+          if (insertError) {
+            console.error('❌ Erro ao criar usuário automaticamente:', insertError);
+            return null;
+          }
+
+          console.log('✅ Usuário admin criado automaticamente:', newUser);
+          return {
+            id: newUser.id,
+            email: newUser.email,
+            nome: newUser.nome,
+            perfil: newUser.perfil as 'admin' | 'unidade',
+            unidade_id: newUser.unidade_id,
+            unidade_nome: null,
+            ativo: newUser.ativo,
+          };
+        }
+
         return null;
       }
 
@@ -92,28 +138,42 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // Verificar sessão atual
     const initAuth = async () => {
+      console.log('🔄 Iniciando autenticação...');
       try {
         const { data: { session }, error } = await supabase.auth.getSession();
+        console.log('📦 Sessão obtida:', { hasSession: !!session, error: error?.message });
         
         if (error) {
-          console.error('Erro ao obter sessão:', error);
-          if (mounted) setLoading(false);
+          console.error('❌ Erro ao obter sessão:', error);
+          if (mounted) {
+            console.log('✅ Finalizando loading (erro na sessão)');
+            setLoading(false);
+          }
           return;
         }
 
-        if (!mounted) return;
+        if (!mounted) {
+          console.log('⚠️ Componente desmontado, abortando');
+          return;
+        }
 
         setSession(session);
         setUser(session?.user ?? null);
+        console.log('👤 Usuário definido:', session?.user?.email);
         
         if (session?.user) {
+          console.log('🔍 Buscando dados do usuário na tabela usuarios...');
           const usuarioData = await fetchUsuario(session.user.id);
+          console.log('📊 Dados do usuário:', usuarioData ? `${usuarioData.nome} (${usuarioData.perfil})` : 'null');
           if (mounted) setUsuario(usuarioData);
         }
       } catch (error) {
-        console.error('Erro ao carregar sessão:', error);
+        console.error('❌ Erro ao carregar sessão:', error);
       } finally {
-        if (mounted) setLoading(false);
+        if (mounted) {
+          console.log('✅ Finalizando loading (initAuth completo)');
+          setLoading(false);
+        }
       }
     };
 

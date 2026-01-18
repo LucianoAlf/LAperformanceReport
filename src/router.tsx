@@ -20,9 +20,22 @@ import { GerenciarUsuarios } from './components/App/Admin';
 // Planilhas Inline
 import { PlanilhaComercial } from './components/App/Comercial';
 import { PlanilhaRetencao } from './components/App/Retencao';
+import { PlanilhaProfessores } from './components/App/Professores';
 import { SnapshotDiario } from './components/App/Snapshot';
 
-// Apresentações (componentes existentes - INTOCADOS)
+// Metas
+import { MetasPage } from './components/App/Metas';
+
+// Configurações
+import { ConfigPage } from './components/App/Config';
+
+// Gestão Mensal (Cockpit com abas)
+import { GestaoMensalPage } from './components/GestaoMensal';
+
+// Histórico - Apresentações 2025
+import { Apresentacoes2025Page } from './components/App/Historico';
+
+// Apresentações (componentes existentes - mantidos para rotas legadas)
 import App from '../App';
 import { ComercialDashboard } from './components/Comercial';
 import { RetencaoDashboard } from './components/Retencao';
@@ -118,12 +131,16 @@ export const router = createBrowserRouter([
             element: <RelatorioDiario />,
           },
           {
+            path: 'gestao-mensal',
+            element: <GestaoMensalPage />,
+          },
+          {
             path: 'metas',
-            element: <PlaceholderPage title="Gestão de Metas" />,
+            element: <MetasPage />,
           },
           {
             path: 'config',
-            element: <PlaceholderPage title="Configurações" />,
+            element: <ConfigPage />,
           },
           // Planilhas Inline
           {
@@ -137,6 +154,14 @@ export const router = createBrowserRouter([
           {
             path: 'snapshot',
             element: <SnapshotDiario />,
+          },
+          {
+            path: 'professores',
+            element: <PlanilhaProfessores />,
+          },
+          {
+            path: 'apresentacoes-2025',
+            element: <Apresentacoes2025Page />,
           },
           // Rotas Admin - apenas para admin
           {
