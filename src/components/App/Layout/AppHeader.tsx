@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Bell, Search, Calendar, MapPin, Building2 } from 'lucide-react';
+import { Calendar, MapPin, Building2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -13,9 +13,10 @@ interface Unidade {
 interface AppHeaderProps {
   unidadeSelecionada: string | null;
   onUnidadeChange: (unidadeId: string | null) => void;
+  periodoLabel?: string; // Label do período selecionado (ex: "Jan/2026", "Q1 2026")
 }
 
-export function AppHeader({ unidadeSelecionada, onUnidadeChange }: AppHeaderProps) {
+export function AppHeader({ unidadeSelecionada, onUnidadeChange, periodoLabel }: AppHeaderProps) {
   const { usuario, isAdmin } = useAuth();
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const hoje = new Date();
@@ -85,21 +86,13 @@ export function AppHeader({ unidadeSelecionada, onUnidadeChange }: AppHeaderProp
             </div>
           )}
 
-          {/* Busca */}
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-            <input
-              type="text"
-              placeholder="Buscar aluno..."
-              className="bg-slate-800/50 border border-slate-700 rounded-xl pl-10 pr-4 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 w-64"
-            />
-          </div>
-
-          {/* Notificações */}
-          <button className="relative p-2 text-gray-400 hover:text-white transition-colors">
-            <Bell className="w-5 h-5" />
-            <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full" />
-          </button>
+          {/* Label do Período Selecionado */}
+          {periodoLabel && (
+            <div className="flex items-center gap-2 bg-violet-600/20 border border-violet-500/30 rounded-xl px-3 py-2">
+              <Calendar className="w-4 h-4 text-violet-400" />
+              <span className="text-sm font-medium text-violet-300">{periodoLabel}</span>
+            </div>
+          )}
         </div>
       </div>
     </header>

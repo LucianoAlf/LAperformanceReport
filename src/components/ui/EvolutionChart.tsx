@@ -59,7 +59,7 @@ export function EvolutionChart({
       {title && <h3 className="text-lg font-bold text-white mb-4">{title}</h3>}
       <div className="h-64">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={data} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+          <LineChart data={data} margin={{ top: 5, right: 20, left: 10, bottom: 5 }} style={{ backgroundColor: 'transparent' }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
             <XAxis 
               dataKey="name" 
@@ -71,7 +71,10 @@ export function EvolutionChart({
               tick={{ fill: '#94a3b8', fontSize: 12 }}
               tickFormatter={yAxisFormatter}
             />
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip 
+              content={<CustomTooltip />}
+              cursor={{ stroke: '#475569', strokeWidth: 1, strokeDasharray: '5 5' }}
+            />
             <Legend 
               formatter={(value) => <span className="text-slate-300 text-xs">{value}</span>}
             />

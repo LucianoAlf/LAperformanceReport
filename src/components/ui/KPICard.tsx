@@ -1,6 +1,11 @@
 import { LucideIcon, TrendingUp, TrendingDown, Minus, Info } from 'lucide-react';
 import { cn, formatCurrency } from '@/lib/utils';
 
+interface ComparativoProps {
+  valor: number;
+  label: string; // Ex: "Dez/25" ou "Jan/25"
+}
+
 interface KPICardProps {
   title?: string;
   label?: string;
@@ -18,6 +23,10 @@ interface KPICardProps {
   size?: 'sm' | 'md' | 'lg';
   onClick?: () => void;
   className?: string;
+  // Novos comparativos
+  comparativoMesAnterior?: ComparativoProps;
+  comparativoAnoAnterior?: ComparativoProps;
+  inverterCor?: boolean; // Para métricas onde menor é melhor (evasões, churn, etc.)
 }
 
 const colorMap: Record<string, string> = {
@@ -70,7 +79,10 @@ export function KPICard({
   color,
   size = 'md',
   onClick,
-  className 
+  className,
+  comparativoMesAnterior,
+  comparativoAnoAnterior,
+  inverterCor = false,
 }: KPICardProps) {
   const displayLabel = title || label || '';
   const effectiveVariant = color || variant;
@@ -180,9 +192,80 @@ export function KPICard({
       </div>
 
       {/* Subvalue */}
-      {subvalue && (
+      {subvalue && !comparativoMesAnterior && !comparativoAnoAnterior && (
         <div className="text-[9px] md:text-xs text-slate-500 mt-1 truncate">
           {subvalue}
+        </div>
+      )}
+
+      {/* Comparativos Mês Anterior e Ano Anterior */}
+      {(comparativoMesAnterior || comparativoAnoAnterior) && typeof value === 'number' && (
+        <div className="mt-2 pt-2 border-t border-slate-700/50">
+          <div className="grid grid-cols-2 gap-2 text-[10px]">
+            {/* vs Mês Anterior */}
+            {comparativoMesAnterior && (
+              <div className="text-center">
+                <div className="text-slate-500 mb-0.5">vs Mês Anterior</div>
+                {(() => {
+                  const diff = value - comparativoMesAnterior.valor;
+                  const pct = comparativoMesAnterior.valor !== 0 
+                    ? ((diff / comparativoMesAnterior.valor) * 100) 
+                    : 0;
+                  const isPositive = diff > 0;
+                  const corPositiva = inverterCor ? 'text-rose-400' : 'text-emerald-400';
+                  const corNegativa = inverterCor ? 'text-emerald-400' : 'text-rose-400';
+                  const cor = diff === 0 ? 'text-slate-400' : (isPositive ? corPositiva : corNegativa);
+                  return (
+                    <>
+                      <div className={cn("font-semibold flex items-center justify-center gap-0.5", cor)}>
+                        {isPositive ? <TrendingUp size={10} /> : diff < 0 ? <TrendingDown size={10} /> : <Minus size={10} />}
+                        {isPositive ? '+' : ''}{pct.toFixed(1)}%
+                      </div>
+                      <div className="text-slate-600">({comparativoMesAnterior.label})</div>
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+            {/* vs Ano Anterior */}
+            {comparativoAnoAnterior && (
+              <div className="text-center">
+                <div className="text-slate-500 mb-0.5">vs Ano Anterior</div>
+                {(() => {
+                  const diff = value - comparativoAnoAnterior.valor;
+                  const pct = comparativoAnoAnterior.valor !== 0 
+                    ? ((diff / comparativoAnoAnterior.valor) * 100) 
+                    : 0;
+                  const isPositive = diff > 0;
+                  const corPositiva = inverterCor ? 'text-rose-400' : 'text-emerald-400';
+                  const corNegativa = inverterCor ? 'text-emerald-400' : 'text-rose-400';
+                  const cor = diff === 0 ? 'text-slate-400' : (isPositive ? corPositiva : corNegativa);
+                  return (
+                    <>
+                      <div className={cn("font-semibold flex items-center justify-center gap-0.5", cor)}>
+                        {isPositive ? <TrendingUp size={10} /> : diff < 0 ? <TrendingDown size={10} /> : <Minus size={10} />}
+                        {isPositive ? '+' : ''}{pct.toFixed(1)}%
+                      </div>
+                      <div className="text-slate-600">({comparativoAnoAnterior.label})</div>
+                    </>
+                  );
+                })()}
+              </div>
+            )}
+            {/* Se só tem um comparativo, mostrar N/A no outro */}
+            {comparativoMesAnterior && !comparativoAnoAnterior && (
+              <div className="text-center">
+                <div className="text-slate-500 mb-0.5">vs Ano Anterior</div>
+                <div className="text-slate-600 font-medium">N/A</div>
+              </div>
+            )}
+            {!comparativoMesAnterior && comparativoAnoAnterior && (
+              <div className="text-center">
+                <div className="text-slate-500 mb-0.5">vs Mês Anterior</div>
+                <div className="text-slate-600 font-medium">N/A</div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

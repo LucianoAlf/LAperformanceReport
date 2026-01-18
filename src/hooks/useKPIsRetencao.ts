@@ -161,17 +161,12 @@ export function useKPIsRetencao(
       const startDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`;
       const endDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-31`;
 
-      // Buscar evasões
+      // Buscar evasões - query simplificada
       let evasoesQuery = supabase
         .from('evasoes_v2')
-        .select(`
-          *,
-          motivos_saida(nome),
-          tipos_saida(nome),
-          professores(nome)
-        `)
-        .gte('data_saida', startDate)
-        .lte('data_saida', endDate);
+        .select('*')
+        .gte('data_evasao', startDate)
+        .lte('data_evasao', endDate);
 
       if (unidadeId !== 'todos') {
         evasoesQuery = evasoesQuery.eq('unidade_id', unidadeId);
@@ -208,10 +203,11 @@ export function useKPIsRetencao(
       const renovacoes = renovacoesData || [];
 
       const totalEvasoes = evasoes.length;
-      const evasoesInterrompidas = evasoes.filter((e: any) => e.tipos_saida?.nome?.toLowerCase().includes('interrompido')).length;
-      const avisosPrevios = evasoes.filter((e: any) => e.tipos_saida?.nome?.toLowerCase().includes('aviso')).length;
-      const transferencias = evasoes.filter((e: any) => e.tipos_saida?.nome?.toLowerCase().includes('transfer')).length;
-      const mrrPerdido = evasoes.reduce((acc, e) => acc + (e.valor_parcela || 0), 0);
+      // Simplificado - sem joins, usar tipo_saida_id diretamente
+      const evasoesInterrompidas = evasoes.filter((e: any) => e.tipo_saida_id === 1).length;
+      const avisosPrevios = evasoes.filter((e: any) => e.tipo_saida_id === 2).length;
+      const transferencias = evasoes.filter((e: any) => e.tipo_saida_id === 3).length;
+      const mrrPerdido = evasoes.reduce((acc: number, e: any) => acc + (e.valor_parcela || 0), 0);
 
       const renovacoesRealizadas = renovacoes.filter(r => r.status === 'realizada').length;
       const naoRenovacoes = renovacoes.filter(r => r.status === 'nao_renovada').length;
@@ -240,18 +236,18 @@ export function useKPIsRetencao(
         evasoes_por_professor: {},
       };
 
-      // Agrupar evasões por motivo
+      // Agrupar evasões por motivo (usando ID por enquanto)
       const motivosMap = new Map<string, number>();
       evasoes.forEach((e: any) => {
-        const motivo = e.motivos_saida?.nome || 'Outros';
+        const motivo = `Motivo ${e.motivo_saida_id || 'N/A'}`;
         motivosMap.set(motivo, (motivosMap.get(motivo) || 0) + 1);
       });
       consolidado.evasoes_por_motivo = Object.fromEntries(motivosMap);
 
-      // Agrupar evasões por professor
+      // Agrupar evasões por professor (usando ID por enquanto)
       const profsMap = new Map<string, number>();
       evasoes.forEach((e: any) => {
-        const prof = e.professores?.nome || 'Sem Professor';
+        const prof = `Professor ${e.professor_id || 'N/A'}`;
         profsMap.set(prof, (profsMap.get(prof) || 0) + 1);
       });
       consolidado.evasoes_por_professor = Object.fromEntries(profsMap);

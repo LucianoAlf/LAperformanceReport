@@ -153,8 +153,8 @@ export function useMetas(
       let evasoesQuery = supabase
         .from('evasoes_v2')
         .select('*', { count: 'exact', head: true })
-        .gte('data_saida', startDate)
-        .lte('data_saida', endDate);
+        .gte('data_evasao', startDate)
+        .lte('data_evasao', endDate);
 
       if (unidadeId !== 'todos') {
         evasoesQuery = evasoesQuery.eq('unidade_id', unidadeId);

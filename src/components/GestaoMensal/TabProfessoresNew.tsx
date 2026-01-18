@@ -10,6 +10,7 @@ import { cn } from '@/lib/utils';
 interface TabProfessoresProps {
   ano: number;
   mes: number;
+  mesFim?: number; // Para filtros de período (trimestre, semestre, anual)
   unidade: string;
 }
 
@@ -81,21 +82,26 @@ interface DadosProfessores {
   professores: ProfessorKPI[];
 }
 
-export function TabProfessoresNew({ ano, mes, unidade }: TabProfessoresProps) {
+export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresProps) {
   const [activeSubTab, setActiveSubTab] = useState<SubTabId>('carteira');
   const [loading, setLoading] = useState(true);
   const [dados, setDados] = useState<DadosProfessores | null>(null);
+
+  // Usar mesFim se fornecido, senão usar mes (para filtro mensal)
+  const mesInicio = mes;
+  const mesFinal = mesFim || mes;
 
   useEffect(() => {
     async function fetchDados() {
       setLoading(true);
       try {
-        // Buscar dados da view otimizada com todos os 23 KPIs
+        // Buscar dados da view otimizada com todos os 23 KPIs (suporta range de meses)
         let query = supabase
           .from('vw_kpis_professor_mensal')
           .select('*')
           .eq('ano', ano)
-          .eq('mes', mes);
+          .gte('mes', mesInicio)
+          .lte('mes', mesFinal);
 
         // Filtrar por unidade se não for consolidado
         if (unidade !== 'todos') {
@@ -239,7 +245,7 @@ export function TabProfessoresNew({ ano, mes, unidade }: TabProfessoresProps) {
     }
 
     fetchDados();
-  }, [ano, mes, unidade]);
+  }, [ano, mesInicio, mesFinal, unidade]);
 
   if (loading) {
     return (

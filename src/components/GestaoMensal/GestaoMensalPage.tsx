@@ -5,11 +5,13 @@ import { cn } from '@/lib/utils';
 import { TabGestao } from './TabGestao';
 import { TabComercialNew } from './TabComercialNew';
 import { TabProfessoresNew } from './TabProfessoresNew';
+import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
 
 type TabId = 'gestao' | 'comercial' | 'professores';
 
 interface OutletContextType {
   filtroAtivo: string | null;
+  competencia: ReturnType<typeof import('@/hooks/useCompetenciaFiltro').useCompetenciaFiltro>;
 }
 
 const tabs = [
@@ -25,47 +27,75 @@ interface GestaoMensalPageProps {
 export function GestaoMensalPage({ mesReferencia }: GestaoMensalPageProps) {
   const [activeTab, setActiveTab] = useState<TabId>('gestao');
   
-  // Pegar o filtro de unidade do contexto do Outlet (vem do header)
-  const { filtroAtivo } = useOutletContext<OutletContextType>() || { filtroAtivo: null };
+  // Pegar filtros do contexto do Outlet (vem do AppLayout)
+  const context = useOutletContext<OutletContextType>();
+  const filtroAtivo = context?.filtroAtivo ?? null;
+  const competencia = context?.competencia;
   
   // Se filtroAtivo é null = consolidado, senão é o ID da unidade
   const unidadeFiltro = filtroAtivo || 'todos';
+
+  // Extrair valores do hook de competência
+  const competenciaFiltro = competencia?.filtro;
+  const competenciaRange = competencia?.range;
+  const anosDisponiveis = competencia?.anosDisponiveis || [];
+  const setTipo = competencia?.setTipo;
+  const setAno = competencia?.setAno;
+  const setMes = competencia?.setMes;
+  const setTrimestre = competencia?.setTrimestre;
+  const setSemestre = competencia?.setSemestre;
 
   const handleTabChange = (tabId: TabId) => {
     setActiveTab(tabId);
   };
 
-  // Mês atual como padrão
-  const [ano, mes] = (mesReferencia || `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`).split('-').map(Number);
-
   return (
     <div className="space-y-6">
-      {/* Sistema de Abas */}
+      {/* Sistema de Abas com Filtro de Competência */}
       <div className="animate-in fade-in slide-in-from-top-4 duration-500">
         {/* Desktop Tabs */}
         <div className="hidden lg:block border-b border-slate-800/60 bg-slate-900/20 backdrop-blur-sm rounded-t-xl">
-          <div className="flex items-center gap-1 overflow-x-auto pb-px scrollbar-hide px-0">
-            {tabs.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => handleTabChange(tab.id)}
-                className={cn(
-                  "relative flex items-center gap-2.5 px-6 py-4 text-sm font-bold transition-all whitespace-nowrap group",
-                  activeTab === tab.id
-                    ? "text-violet-400"
-                    : "text-slate-500 hover:text-slate-200"
-                )}
-              >
-                <tab.icon size={16} className={cn(
-                  "transition-colors",
-                  activeTab === tab.id ? "text-violet-400" : "text-slate-600 group-hover:text-slate-400"
-                )} />
-                {tab.label}
-                {activeTab === tab.id && (
-                  <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-violet-500 shadow-[0_0_12px_rgba(139,92,246,0.5)]" />
-                )}
-              </button>
-            ))}
+          <div className="flex items-center justify-between gap-4 px-4 py-2">
+            {/* Abas à esquerda */}
+            <div className="flex items-center gap-1 overflow-x-auto pb-px scrollbar-hide">
+              {tabs.map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => handleTabChange(tab.id)}
+                  className={cn(
+                    "relative flex items-center gap-2.5 px-6 py-3 text-sm font-bold transition-all whitespace-nowrap group",
+                    activeTab === tab.id
+                      ? "text-violet-400"
+                      : "text-slate-500 hover:text-slate-200"
+                  )}
+                >
+                  <tab.icon size={16} className={cn(
+                    "transition-colors",
+                    activeTab === tab.id ? "text-violet-400" : "text-slate-600 group-hover:text-slate-400"
+                  )} />
+                  {tab.label}
+                  {activeTab === tab.id && (
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-violet-500 shadow-[0_0_12px_rgba(139,92,246,0.5)]" />
+                  )}
+                </button>
+              ))}
+            </div>
+
+            {/* Filtro de Competência à direita */}
+            {competenciaFiltro && competenciaRange && setTipo && setAno && setMes && setTrimestre && setSemestre && (
+              <div className="flex-shrink-0">
+                <CompetenciaFilter
+                  filtro={competenciaFiltro}
+                  range={competenciaRange}
+                  anosDisponiveis={anosDisponiveis}
+                  onTipoChange={setTipo}
+                  onAnoChange={setAno}
+                  onMesChange={setMes}
+                  onTrimestreChange={setTrimestre}
+                  onSemestreChange={setSemestre}
+                />
+              </div>
+            )}
           </div>
         </div>
 
@@ -100,13 +130,28 @@ export function GestaoMensalPage({ mesReferencia }: GestaoMensalPageProps) {
       {/* Conteúdo da Aba Ativa */}
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
         {activeTab === 'gestao' && (
-          <TabGestao ano={ano} mes={mes} unidade={unidadeFiltro} />
+          <TabGestao 
+            ano={competenciaRange?.ano || new Date().getFullYear()} 
+            mes={competenciaRange?.mesInicio || new Date().getMonth() + 1} 
+            mesFim={competenciaRange?.mesFim}
+            unidade={unidadeFiltro} 
+          />
         )}
         {activeTab === 'comercial' && (
-          <TabComercialNew ano={ano} mes={mes} unidade={unidadeFiltro} />
+          <TabComercialNew 
+            ano={competenciaRange?.ano || new Date().getFullYear()} 
+            mes={competenciaRange?.mesInicio || new Date().getMonth() + 1} 
+            mesFim={competenciaRange?.mesFim}
+            unidade={unidadeFiltro} 
+          />
         )}
         {activeTab === 'professores' && (
-          <TabProfessoresNew ano={ano} mes={mes} unidade={unidadeFiltro} />
+          <TabProfessoresNew 
+            ano={competenciaRange?.ano || new Date().getFullYear()} 
+            mes={competenciaRange?.mesInicio || new Date().getMonth() + 1} 
+            mesFim={competenciaRange?.mesFim}
+            unidade={unidadeFiltro} 
+          />
         )}
       </div>
     </div>

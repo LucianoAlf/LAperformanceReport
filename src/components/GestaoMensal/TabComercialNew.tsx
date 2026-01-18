@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 interface TabComercialProps {
   ano: number;
   mes: number;
+  mesFim?: number; // Para filtros de período (trimestre, semestre, anual)
   unidade: string;
 }
 
@@ -58,17 +59,23 @@ interface DadosComercial {
   projecao_mensal: number;
 }
 
-export function TabComercialNew({ ano, mes, unidade }: TabComercialProps) {
+export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps) {
   const [activeSubTab, setActiveSubTab] = useState<SubTabId>('leads');
   const [loading, setLoading] = useState(true);
   const [dados, setDados] = useState<DadosComercial | null>(null);
+
+  // Usar mesFim se fornecido, senão usar mes (para filtro mensal)
+  const mesInicio = mes;
+  const mesFinal = mesFim || mes;
 
   useEffect(() => {
     async function fetchDados() {
       setLoading(true);
       try {
-        const startDate = `${ano}-${String(mes).padStart(2, '0')}-01`;
-        const endDate = `${ano}-${String(mes).padStart(2, '0')}-31`;
+        // Calcular datas de início e fim do período
+        const startDate = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
+        const ultimoDia = new Date(ano, mesFinal, 0).getDate();
+        const endDate = `${ano}-${String(mesFinal).padStart(2, '0')}-${ultimoDia}`;
 
         // Buscar leads_diarios
         let leadsQuery = supabase
@@ -250,7 +257,7 @@ export function TabComercialNew({ ano, mes, unidade }: TabComercialProps) {
     }
 
     fetchDados();
-  }, [ano, mes, unidade]);
+  }, [ano, mesInicio, mesFinal, unidade]);
 
   if (loading) {
     return (

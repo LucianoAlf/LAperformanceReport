@@ -87,9 +87,9 @@ export function DistributionChart({
   return (
     <div className={cn("bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4", className)}>
       {title && <h3 className="text-lg font-bold text-white mb-4">{title}</h3>}
-      <div className="h-64">
-        <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
+      <div className="h-64 min-h-[200px] min-w-[200px]">
+        <ResponsiveContainer width="100%" height="100%" minWidth={100} minHeight={100}>
+          <PieChart style={{ backgroundColor: 'transparent' }}>
             <Pie
               data={dataWithColors}
               cx="50%"
@@ -107,7 +107,7 @@ export function DistributionChart({
                 <Cell key={`cell-${index}`} fill={entry.color} />
               ))}
             </Pie>
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<CustomTooltip />} cursor={false} />
             {showLegend && (
               <Legend
                 verticalAlign="bottom"

@@ -68,25 +68,12 @@ export function TabRetencao({ ano, mes, unidade }: TabRetencaoProps) {
         const startDate = `${ano}-${String(mes).padStart(2, '0')}-01`;
         const endDate = `${ano}-${String(mes).padStart(2, '0')}-31`;
 
-        // Buscar evasões do mês
+        // Buscar evasões do mês - query simplificada
         let evasoesQuery = supabase
           .from('evasoes_v2')
-          .select(`
-            id,
-            data_saida,
-            aluno_id,
-            alunos(nome),
-            motivo_saida_id,
-            motivos_saida(nome),
-            tipo_saida_id,
-            tipos_saida(nome),
-            valor_parcela,
-            professor_id,
-            professores(nome),
-            unidade_id
-          `)
-          .gte('data_saida', startDate)
-          .lte('data_saida', endDate);
+          .select('id, data_evasao, aluno_id, motivo_saida_id, tipo_saida_id, valor_parcela, professor_id, unidade_id')
+          .gte('data_evasao', startDate)
+          .lte('data_evasao', endDate);
 
         // Buscar renovações do mês
         let renovacoesQuery = supabase
@@ -112,16 +99,16 @@ export function TabRetencao({ ano, mes, unidade }: TabRetencaoProps) {
         // Processar evasões
         const evasoesData = (evasoesRes.data || []).map((e: any) => ({
           id: e.id,
-          data_saida: e.data_saida,
+          data_saida: e.data_evasao,
           aluno_id: e.aluno_id,
-          aluno_nome: e.alunos?.nome || 'N/A',
+          aluno_nome: `Aluno ${e.aluno_id || 'N/A'}`,
           motivo_saida_id: e.motivo_saida_id,
-          motivo_nome: e.motivos_saida?.nome || 'N/A',
+          motivo_nome: `Motivo ${e.motivo_saida_id || 'N/A'}`,
           tipo_saida_id: e.tipo_saida_id,
-          tipo_nome: e.tipos_saida?.nome || 'N/A',
+          tipo_nome: e.tipo_saida_id === 1 ? 'Interrompido' : e.tipo_saida_id === 2 ? 'Não Renovou' : e.tipo_saida_id === 3 ? 'Aviso Prévio' : 'Outro',
           valor_parcela: e.valor_parcela || 0,
           professor_id: e.professor_id,
-          professor_nome: e.professores?.nome || 'N/A',
+          professor_nome: `Professor ${e.professor_id || 'N/A'}`,
           unidade_id: e.unidade_id,
         }));
 
