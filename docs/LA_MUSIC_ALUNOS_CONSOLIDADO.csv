@@ -1,0 +1,912 @@
+nome,data_nascimento,data_matricula,curso,professor,valor_parcela,tipo_matricula,status,unidade,dia_semana,horario,percentual_presenca
+Adriana Christine da Silva,01/08/2012,17/06/2025,Guitarra,MATHEUS STERQUE,447.0,Regular,ativo,Campo Grande,Sábado,09:00,75
+Adriana Mesquita dos Santos Vilas Boas,16/02/1972,02/10/2025,Teclado,RENAM AMORIM,520.0,Regular,ativo,Campo Grande,Quinta,17:00,50
+Adriana Vitor Pim,19/01/1972,15/03/2025,Teclado,KAIO FELIPE,417.0,Regular,ativo,Campo Grande,Quarta,18:00,84
+Ágatha Da Silva De Souza,24/07/2007,18/01/2023,Piano,RAMON PINA,447.0,Regular,ativo,Campo Grande,Segunda,17:00,57
+Águedha Silva Furtado,02/03/2012,06/09/2025,Guitarra,WILLER ARRUDA,447.0,Regular,ativo,Campo Grande,Sábado,10:00,64
+Ailla Goulart Caldeira,23/08/2006,19/08/2024,Bateria,GABRIEL BARBOSA,447.0,Regular,ativo,Campo Grande,Terça,17:00,27
+Alexandre Ayres Filho,31/08/2013,30/01/2021,Teclado,RENAM AMORIM,447.0,Regular,ativo,Campo Grande,Quinta,14:00,77
+Alexandre Ribeiro de Oliveira,26/08/1997,25/01/2025,Bateria,VICENTE PINHEIRO,367.0,Regular,ativo,Campo Grande,Sábado,14:00,72
+Alexandre Wallace Bispo Oliveira,12/05/2000,30/11/2024,Guitarra,MATHEUS STERQUE,387.0,Regular,ativo,Campo Grande,Sábado,11:00,75
+Alice Cardoso de Farias,09/05/2014,25/08/2022,Canto,MATHEUS FELIPE,447.0,Regular,ativo,Campo Grande,Terça,19:00,86
+Alice Castro Figueiredo,29/04/2017,30/06/2023,Teclado,KAIO FELIPE,447.0,Regular,ativo,Campo Grande,Terça,16:00,74
+Alice dos Anjos Nogueira,01/06/2017,31/01/2025,Guitarra,GABRIEL LEÃO,417.0,Regular,ativo,Campo Grande,Segunda,19:00,100
+Alice Rodrigues de Santana,29/09/2020,30/01/2025,Musicalização Preparatória,PEDRO SÉRGIO,447.0,Regular,ativo,Campo Grande,Quarta,17:00,50
+Alice Sales da Cunha Mattos,12/02/2013,22/03/2019,Bateria,JORDAN BARBOSA,447.0,Regular,ativo,Campo Grande,Quarta,16:00,71
+Alice Serra de Souza Rangel Soares,13/09/2018,11/02/2025,Teclado,KAIO FELIPE,387.0,Regular,ativo,Campo Grande,Terça,16:00,79
+Alice Viana de Carvalho,24/02/2010,03/06/2024,Piano,LÉO CASTRO,447.0,Regular,ativo,Campo Grande,Segunda,17:00,68
+Alicia Castro Santiago Gonzaga,11/05/2015,05/08/2025,Teclado,PEDRO SÉRGIO,447.0,Regular,ativo,Campo Grande,Quinta,19:00,88
+Ana Beatriz Da Conceição Pereira,28/11/2007,07/08/2023,Canto,ALEXANDRE DE SÁ,147.0,Regular,ativo,Campo Grande,Terça,16:00,68
+Ana Clara Lima Santos Pinto,25/11/2015,28/05/2025,Canto,GABRIEL LEÃO,447.0,Regular,ativo,Campo Grande,Segunda,17:00,47
+Ana Mel Henrique da Silva,26/10/2014,28/01/2023,Teclado,KAIO FELIPE,447.0,Regular,ativo,Campo Grande,Sábado,12:00,89
+Ana Victoria Padiglione Rosa,25/01/2011,22/02/2025,Teclado,KAIO FELIPE,417.0,Regular,ativo,Campo Grande,Quarta,16:00,67
+Anderson Cherem de Mello,19/07/1979,24/01/2023,Canto,MARCOS SATURNINO,447.0,Regular,ativo,Campo Grande,Quinta,19:00,56
+André Luiz Rodrigues Marques,30/05/1987,19/11/2025,Bateria,JORDAN BARBOSA,447.0,Regular,ativo,Campo Grande,Segunda,17:00,
+André Vitor Soares da Silva,31/05/2009,06/02/2025,Violino,JOEL DE SALLES,417.0,Regular,ativo,Campo Grande,Quinta,16:00,97
+Andressa Dávila de Canha Pontes,11/06/1997,20/09/2025,Canto,ALEXANDRE DE SÁ,447.0,Regular,ativo,Campo Grande,Sábado,10:00,89
+Andressa Gabriele Lourenço Vasconcelos de Souza,07/03/1991,09/05/2025,Canto,GABRIEL LEÃO,447.0,Regular,ativo,Campo Grande,Sábado,10:00,88
+Anna Clara Ferreira Brito,11/10/2018,24/07/2023,Musicalização Preparatória,MATHEUS FELIPE,447.0,Regular,ativo,Campo Grande,Quinta,18:00,78
+Anna Klara de Abreu Coutinho,04/11/2013,03/07/2025,Canto,LOHANA LEOPOLDO,447.0,Regular,ativo,Campo Grande,Segunda,19:00,53
+Anne Krissya Cordeiro da Silva Noé,03/01/1995,27/01/2023,Piano,RENAM AMORIM,0.19,Regular,ativo,Campo Grande,Terça,20:00,63
+Anthony de Andrade Vasques,27/01/2021,30/07/2025,Musicalização Preparatória,LETICIA PALMEIRA,447.0,Regular,ativo,Campo Grande,Sexta,16:00,78
+Antonia Scudio Guidi da Rocha,01/10/2014,06/04/2022,Guitarra,RENAM AMORIM,447.0,Regular,ativo,Campo Grande,Quarta,14:00,77
+Antonia Simone Lima Alves,14/12/1986,17/06/2025,Canto,GABRIEL LEÃO,447.0,Regular,ativo,Campo Grande,Segunda,18:00,95
+Antônio Carlos Romero Andrade,06/05/2019,29/08/2025,Bateria,PETERSON BIANCAMANO,447.0,Regular,ativo,Campo Grande,Sexta,15:00,77
+Antônio José da Silva Delgado,20/10/2008,31/07/2025,Teclado,WILLIAN RIBEIRO,447.0,Regular,ativo,Campo Grande,Segunda,17:00,88
+Antonio Thales da Silva Maria,22/02/2012,17/09/2025,Bateria,PETERSON BIANCAMANO,520.0,Regular,ativo,Campo Grande,Quarta,20:00,100
+Antônio Villa Barros,14/11/2014,14/11/2024,Canto,MATHEUS SANTOS,447.0,Regular,ativo,Campo Grande,Quarta,17:00,87
+Arthur Da Hora Marinho,09/10/2015,11/10/2025,Bateria,CAIO TENÓRIO,447.0,Regular,ativo,Campo Grande,Terça,19:00,67
+Arthur De Jesus Lindo Braga,21/03/2015,18/10/2025,Musicalização Preparatória,CAIO TENÓRIO,447.0,Regular,ativo,Campo Grande,Sábado,09:00,100
+Arthur Ennes Sarto Amorim,17/10/2019,26/06/2025,Musicalização Preparatória,WILLIAN RIBEIRO,447.0,Regular,ativo,Campo Grande,Quarta,17:00,89
+Arthur Felipe de Mattos,08/02/2017,30/06/2021,Bateria,GABRIEL BARBOSA,447.0,Regular,ativo,Campo Grande,Terça,14:00,88
+Arthur Gabriel de Lima Cardoso,13/03/2015,24/04/2025,Teclado,KAIO FELIPE,367.0,Regular,ativo,Campo Grande,Quarta,14:00,100
+Arthur Lee Cardozo Dias,14/07/2023,13/12/2024,Musicalização Preparatória,CAIO TENÓRIO,387.0,Regular,ativo,Campo Grande,Terça,14:00,67
+Arthur Rocha de Almeida,16/12/2015,24/01/2024,Bateria,GABRIEL BARBOSA,387.0,Regular,ativo,Campo Grande,Terça,19:00,61
+Arthur Serpa Arcoverde,20/06/2018,20/03/2025,Bateria,VICENTE PINHEIRO,447.0,Regular,ativo,Campo Grande,Sábado,11:00,91
+Arthur Souza Del Bosco,05/01/2021,09/03/2024,Bateria,GABRIEL BARBOSA,447.0,Regular,ativo,Campo Grande,Sábado,12:00,42
+Ayres Nishio Da Silva Junior,04/09/1992,20/02/2025,Guitarra,RODRIGO PINHEIRO,447.0,Regular,ativo,Campo Grande,Segunda,20:00,94
+Barbara Ribeiro Alves,17/10/2001,25/04/2023,Guitarra,RODRIGO PINHEIRO,520.0,Regular,ativo,Campo Grande,Terça,20:00,60
+Beatriz Arruda de Azevedo,24/03/2015,16/10/2024,Teclado,RAMON PINA,387.0,Regular,ativo,Campo Grande,Segunda,18:00,53
+Beatriz Azevedo Teixeira Frossard,04/05/1992,22/01/2025,Canto,DAIANA PACÍFICO,170.0,Regular,ativo,Campo Grande,Quinta,19:00,63
+Beatriz Cardoso Schmitz,22/07/2012,05/06/2024,Canto,MATHEUS SANTOS,447.0,Regular,ativo,Campo Grande,Quarta,18:00,52
+Beatriz Souza,06/04/1991,04/11/2025,Bateria,JORDAN BARBOSA,447.0,Regular,ativo,Campo Grande,Segunda,20:00,67
+Benício Benjamim de Jesus Filgueiras,22/01/2015,10/05/2022,Bateria,GABRIEL BARBOSA,447.0,Regular,ativo,Campo Grande,Quinta,17:00,66
+Benício de Souza Amaral Costa,16/09/2019,07/03/2024,Bateria,GABRIEL BARBOSA,447.0,Regular,ativo,Campo Grande,Sábado,08:00,79
+Benjamim Soares Vieira,14/12/2015,02/08/2025,Teclado,KAIO FELIPE,447.0,Regular,ativo,Campo Grande,Sábado,09:00,100
+Benjamin da Silva Barbosa,06/02/2019,28/05/2025,Piano,KAIO FELIPE,447.0,Regular,ativo,Campo Grande,Sexta,18:00,78
+Bento Cabral do Nascimento,04/03/2015,04/02/2023,Bateria,CAIO TENÓRIO,447.0,Regular,ativo,Campo Grande,Quarta,14:00,86
+Bernardo Ferreira Bittencourt,21/07/2020,21/03/2024,Bateria,GABRIEL BARBOSA,447.0,Regular,ativo,Campo Grande,Segunda,15:00,86
+Bernardo Xavier Veras Mascarenhas de Castro,01/03/2013,27/04/2024,Bateria,VICENTE PINHEIRO,447.0,Regular,ativo,Campo Grande,Sábado,09:00,57
+Bruna Amaral de Carvalho,03/06/2006,30/03/2023,Guitarra,JEYSON GAIA,150.0,Regular,ativo,Campo Grande,Segunda,17:00,79
+Camila Oliveira da Rocha,24/12/2007,31/07/2023,Contrabaixo,MARCOS SATURNINO,447.0,Regular,ativo,Campo Grande,Segunda,20:00,51
+Carlos Eduardo Garcia do Nascimento,16/12/2003,24/01/2023,Canto,MARCOS SATURNINO,0.2,Regular,ativo,Campo Grande,Quinta,19:00,56
+Carlos Mamede Tiburcio,25/10/2019,24/11/2023,Bateria,CAIO TENÓRIO,387.0,Regular,ativo,Campo Grande,Quinta,17:00,81
+Catarina Marx Feitosa,19/12/2011,25/01/2025,Violino,JOEL DE SALLES,387.0,Regular,ativo,Campo Grande,Sábado,11:00,47
+Catia dos Santos Machado,27/12/1962,01/08/2025,Canto,MATHEUS SANTOS,447.0,Regular,ativo,Campo Grande,Quarta,17:00,100
+Cecília Cavalcante de Aguiar,19/04/2019,19/09/2025,Canto,MATHEUS FELIPE,447.0,Regular,ativo,Campo Grande,Terça,14:00,80
+Clara da Costa Corval,02/05/2012,15/12/2023,Guitarra,RODRIGO PINHEIRO,447.0,Regular,ativo,Campo Grande,Terça,17:00,96
+Clara Pereira Domingos,28/03/2013,29/10/2021,Canto,ALEXANDRE DE SÁ,447.0,Regular,ativo,Campo Grande,Domingo,08:00,71
+Clarisse Maria Vignerom Lira,31/08/2018,11/07/2025,Musicalização Preparatória,CAIO TENÓRIO,447.0,Regular,ativo,Campo Grande,Quinta,18:00,56
+Claudia Alves da Fonseca,27/04/1971,17/05/2025,Bateria,JORDAN BARBOSA,447.0,Regular,ativo,Campo Grande,Segunda,15:00,68
+Claudio do Nascimento,23/02/1971,01/08/2025,Guitarra,ISRAEL ROCHA,447.0,Regular,ativo,Campo Grande,Quinta,13:00,94
+Claudio Roberto da Silva Lopes Cabral,27/02/1970,12/08/2025,Violino,JOEL DE SALLES,447.0,Regular,ativo,Campo Grande,Quinta,19:00,100
+Conrado de Jesus dos Santos Silva,03/12/2019,23/05/2025,Musicalização Preparatória,WILLIAN RIBEIRO,447.0,Regular,ativo,Campo Grande,Segunda,16:00,96
+Cristiano Vianna,10/03/2011,31/01/2025,Piano,LÉO CASTRO,447.0,Regular,ativo,Campo Grande,Segunda,19:00,82
+Crystian Henrique de Souza Lima Rinaldi,14/09/2011,07/06/2025,Teclado,RENAM AMORIM,447.0,Regular,ativo,Campo Grande,Quinta,14:00,76
+Daniel Da Hora Marinho,31/01/2018,11/10/2025,Guitarra,WILLIAN RIBEIRO,447.0,Regular,ativo,Campo Grande,Segunda,18:00,100
+Daniel Oliveira dos Santos,19/10/2010,20/02/2025,Violão,ISRAEL ROCHA,447.0,Regular,ativo,Campo Grande,Quarta,15:00,94
+Daniel Teixeira de Mello,10/04/1990,30/01/2025,Guitarra,ISRAEL ROCHA,447.0,Regular,ativo,Campo Grande,Quinta,19:00,94
+Daniel Valeriano Motta,12/04/2014,18/07/2025,Piano,LÉO CASTRO,447.0,Regular,ativo,Campo Grande,Segunda,16:00,80
+Daniel Victor Coutinho de Andrade Santos,05/06/2012,02/12/2024,Bateria,GABRIEL BARBOSA,447.0,Regular,ativo,Campo Grande,Terça,16:00,80
+Daniel Victor de Oliveira Malafaia,04/12/2011,12/03/2025,Bateria,JORDAN BARBOSA,447.0,Regular,ativo,Campo Grande,Quarta,18:00,90
+Daniela Beiriz Moura,13/10/2014,06/12/2022,Bateria,CAIO TENÓRIO,387.0,Regular,ativo,Campo Grande,Quinta,20:00,86
+Danilo Melo Pavão,30/03/2016,17/01/2022,Bateria,GABRIEL BARBOSA,447.0,Regular,ativo,Campo Grande,Quinta,18:00,79
+Davi Borges da Silva Nascimento,26/05/2012,03/05/2018,Guitarra,ANTONIO MARCOS,447.0,Regular,ativo,Campo Grande,Sábado,08:00,72
+Davi Branco Rodrigues,01/08/2017,18/01/2024,Bateria,CAIO TENÓRIO,447.0,Regular,ativo,Campo Grande,Terça,20:00,65
+Davi de Matos Lopes Carvalho,24/08/2011,13/09/2024,Teclado,KAIO FELIPE,447.0,Regular,ativo,Campo Grande,Sexta,14:00,94
+Davi Gabriel de Souza Apolinário,05/12/2016,25/02/2025,Bateria,PETERSON BIANCAMANO,447.0,Regular,ativo,Campo Grande,Quinta,18:00,65
+Davi Guilherme De Souza Chaves Ribeiro,18/02/2013,06/03/2021,Bateria,GABRIEL BARBOSA,387.0,Regular,ativo,Campo Grande,Terça,20:00,65
+Davi Lucas de Souza Araújo de Andrade,10/09/2015,12/11/2025,Musicalização Preparatória,WILLIAN RIBEIRO,447.0,Regular,ativo,Campo Grande,Segunda,19:00,
+Davi Lucas Gabry Losik,28/02/2020,14/10/2023,Bateria,GABRIEL BARBOSA,447.0,Regular,ativo,Campo Grande,Terça,18:00,84
+Davi Lucca de Carvalho Gomes,21/08/2018,12/11/2024,Bateria,VICENTE PINHEIRO,387.0,Regular,ativo,Campo Grande,Sábado,10:00,81
+Davi Paulo Vieira,09/03/2022,18/01/2025,Musicalização Preparatória,CAIO TENÓRIO,447.0,Regular,ativo,Campo Grande,Quarta,19:00,92
+Davi Rosendo Chaves Vieira,19/08/2019,31/10/2024,Musicalização Preparatória,PEDRO SÉRGIO,387.0,Regular,ativo,Campo Grande,Quarta,19:00,85
+Davi Tomaz Silva,29/03/2008,02/02/2023,Bateria,GABRIEL BARBOSA,387.0,Regular,ativo,Campo Grande,Segunda,19:00,80
+David Lucca Neves do Carmo,21/01/2015,12/04/2023,Teclado,KAIO FELIPE,447.0,Regular,ativo,Campo Grande,Sexta,17:00,80
+Edio Gino da Silva Junior,22/11/1981,11/10/2024,Bateria,VICENTE PINHEIRO,387.0,Regular,ativo,Campo Grande,Sábado,14:00,36
+Eduardo da Silva Barreto,12/07/2000,24/01/2023,Canto,DAIANA PACÍFICO,447.0,Regular,ativo,Campo Grande,Quinta,19:00,66
+Eduardo França Tristão Batista,29/08/2005,27/01/2023,Contrabaixo,MARCOS SATURNINO,447.0,Regular,ativo,Campo Grande,Quinta,18:00,62
+Eduardo Knupp Gomes,25/10/2005,26/02/2024,Guitarra,ISRAEL ROCHA,447.0,Regular,ativo,Campo Grande,Terça,16:00,99
+Elisa Juliace Rodrigues,07/02/2018,31/08/2024,Canto,ALEXANDRE DE SÁ,447.0,Regular,ativo,Campo Grande,Quinta,18:00,71
+Elisa Knupp Gomes,19/08/2012,08/02/2025,Canto,GABRIEL LEÃO,447.0,Regular,ativo,Campo Grande,Quarta,16:00,95
+Emanuel Davi Costa Marcelino,08/03/2018,22/03/2025,Guitarra,VALDO DELFINO,447.0,Regular,ativo,Campo Grande,Sábado,10:00,100
+Emanuela de Paula da Silva,11/10/2011,30/03/2024,Canto,DAIANA PACÍFICO,447.0,Regular,ativo,Campo Grande,Quinta,18:00,78
+Emanuele Lemos de Oliveira,12/09/2014,06/08/2024,Teclado,RENAM AMORIM,447.0,Regular,ativo,Campo Grande,Sexta,13:00,84
+Emilly Souza de Oliveira,02/01/2015,30/01/2025,Canto,GABRIEL LEÃO,387.0,Regular,ativo,Campo Grande,Sábado,09:00,89
+Emmanuel de Oliveira Carrari,09/09/2010,12/08/2025,Guitarra,ISRAEL ROCHA,447.0,Regular,ativo,Campo Grande,Terça,14:00,73
+Enzo Lopes Mauro,13/05/2011,15/08/2024,Bateria,PETERSON BIANCAMANO,447.0,Regular,ativo,Campo Grande,Quinta,15:00,70
+Erica Batista de Castro,16/10/1976,30/06/2023,Canto,DAIANA PACÍFICO,447.0,Regular,ativo,Campo Grande,Terça,16:00,68
+Erika Brito de Sousa,20/02/1994,01/11/2025,Canto,GABRIEL LEÃO,447.0,Regular,ativo,Campo Grande,Sábado,10:00,100
+Ester de Souza Rosa,09/09/1994,30/08/2025,Canto,RODRIGO PINHEIRO,447.0,Regular,ativo,Campo Grande,Quinta,18:00,55
+Ester Santos do Amaral,08/12/2003,29/09/2025,Canto,LOHANA LEOPOLDO,447.0,Regular,ativo,Campo Grande,Segunda,20:00,100
+Ester Soares Gomes Christianes,25/09/2011,06/06/2023,Guitarra,RODRIGO PINHEIRO,447.0,Regular,ativo,Campo Grande,Terça,19:00,62
+Evandro Andrade da Silva,23/09/1986,25/01/2023,Contrabaixo,MARCOS SATURNINO,520.0,Regular,ativo,Campo Grande,Terça,15:00,71
+Fabiana Mendonça Puime Paiva,18/04/2005,24/11/2025,Bateria,JORDAN BARBOSA,447.0,Regular,ativo,Campo Grande,Segunda,15:00,
+Fábio Moreira de Carvalho,02/04/1972,17/09/2025,Flauta Transversal,MIQUEIAS DE OLIVEIRA,447.0,Regular,ativo,Campo Grande,Quarta,15:00,44
+Fabrício Ravi Ramos Medeiros,17/11/2009,25/06/2025,Violão,ISRAEL ROCHA,447.0,Regular,ativo,Campo Grande,Quarta,14:00,63
+Felipe  Marques Gevezier,11/03/2005,29/09/2025,Bateria,JORDAN BARBOSA,520.0,Regular,ativo,Campo Grande,Segunda,15:00,56
+Felipe Robalinho de Melo,27/02/2012,19/11/2025,Canto,MATHEUS SANTOS,447.0,Regular,ativo,Campo Grande,Quarta,15:00,56
+Flávio Esteves Ferreira,27/09/1980,26/02/2025,Canto,DAIANA PACÍFICO,447.0,Regular,ativo,Campo Grande,Quinta,17:00,58
+Francis Araújo Linhares Lira de Melo,14/03/2019,30/11/2024,Musicalização Preparatória,LETICIA PALMEIRA,387.0,Regular,ativo,Campo Grande,Sexta,17:00,71
+Francisco Carlos de Oliveira Sales,08/06/2009,25/11/2024,Bateria,PETERSON BIANCAMANO,387.0,Regular,ativo,Campo Grande,Quinta,17:00,70
+Francisco José Sgarbi Moreira Alves,15/03/2016,06/04/2023,Bateria,GABRIEL BARBOSA,520.0,Regular,ativo,Campo Grande,Quinta,19:00,82
+Gabriel Abreu da Cruz Carvalho,01/05/2010,30/04/2025,Canto,GABRIEL LEÃO,520.0,Regular,ativo,Campo Grande,Sábado,10:00,79
+Gabriel dos Santos Santana Cavalcanti,20/08/2014,28/11/2025,Violino,JOEL DE SALLES,447.0,Regular,ativo,Campo Grande,Quinta,20:00,
+Gabriel Gomes Chaves,14/05/2013,30/03/2019,Teclado,RENAM AMORIM,447.0,Regular,ativo,Campo Grande,Sexta,14:00,78
+Gabriel Jeronimo Barbosa,31/10/2018,30/08/2025,Musicalização Preparatória,CAIO TENÓRIO,447.0,Regular,ativo,Campo Grande,Quinta,19:00,92
+Gabriel Lucas Silva Sales,06/08/2021,30/10/2023,Musicalização Preparatória,CAIO TENÓRIO,367.0,Regular,ativo,Campo Grande,Sábado,14:00,62
+Gabriel Mello Leal Rabelo de Oliveira,23/02/2012,05/04/2024,Canto,MATHEUS FELIPE,447.0,Regular,ativo,Campo Grande,Quinta,15:00,68
+Gabriel Negreiros Carvalho,02/08/2012,07/11/2025,Teclado,RODRIGO PINHEIRO,447.0,Regular,ativo,Campo Grande,Quinta,18:00,
+Gabriel Pereira Morais,31/08/2010,24/10/2024,Bateria,GABRIEL BARBOSA,387.0,Regular,ativo,Campo Grande,Terça,20:00,85
+Gabriel Walace lima de Souza,20/06/2013,18/09/2025,Bateria,GABRIEL BARBOSA,443.0,Regular,ativo,Campo Grande,Sábado,10:00,100
+Gabriela da Silva Vieira,01/05/1987,02/05/2025,Canto,LETICIA PALMEIRA,447.0,Regular,ativo,Campo Grande,Sexta,15:00,26
+Gabriela Nascimento Brum,09/04/2011,13/04/2022,Bateria,JORDAN BARBOSA,447.0,Regular,ativo,Campo Grande,Quarta,19:00,55
+Gael de Oliveira Ferreira,15/09/2017,26/08/2023,Bateria,GABRIEL BARBOSA,447.0,Regular,ativo,Campo Grande,Terça,14:00,83
+Gael Zine Nascimento Paes Leme,02/09/2020,01/03/2024,Musicalização Preparatória,ALEXANDRE DE SÁ,447.0,Regular,ativo,Campo Grande,Sábado,09:00,89
+Georgie Jefferson de Mello Basílio da Silva,16/07/1997,13/02/2025,Bateria,PETERSON BIANCAMANO,520.0,Regular,ativo,Campo Grande,Sexta,10:00,78
+Geovanna Farias Rodrigues Alves,04/01/2006,02/02/2023,Guitarra,MATHEUS STERQUE,447.0,Regular,ativo,Campo Grande,Sábado,10:00,73
+Giovana da Cruz Stancato,07/05/2013,29/04/2023,Canto,MATHEUS FELIPE,447.0,Regular,ativo,Campo Grande,Terça,16:00,88
+Giovana de Oliveira Salgueiro,17/02/2009,14/11/2024,Ukulele,ISRAEL ROCHA,387.0,Regular,ativo,Campo Grande,Terça,19:00,82
+Giovanna Branco rodrigues,12/12/2014,18/01/2024,Teclado,PEDRO SÉRGIO,447.0,Regular,ativo,Campo Grande,Terça,20:00,92
+Giovanna Neves Coelho Guerra da Silva,14/12/2017,02/10/2025,Teclado,PEDRO SÉRGIO,447.0,Regular,ativo,Campo Grande,Quinta,14:00,100
+Giulia de Souza Pereira,11/03/2022,06/12/2024,Musicalização Preparatória,PEDRO SÉRGIO,387.0,Regular,ativo,Campo Grande,Sábado,14:00,55
+Gohan Lucca Santos da Silva,14/08/2019,29/01/2024,Bateria,GABRIEL BARBOSA,387.0,Regular,ativo,Campo Grande,Terça,18:00,69
+Guilherme  Lauria  Muniz,03/10/2007,27/02/2023,Guitarra,MATHEUS STERQUE,447.0,Regular,ativo,Campo Grande,Sábado,14:00,60
+Guilherme Castro Figueiredo,29/04/2017,30/06/2023,Teclado,PEDRO SÉRGIO,447.0,Regular,ativo,Campo Grande,Terça,16:00,66
+Guilherme de Oliveira Malafaia,25/03/2015,12/03/2025,Teclado,WILLIAN RIBEIRO,447.0,Regular,ativo,Campo Grande,Quarta,18:00,77
+Guilherme Dias da Silva,07/04/2011,14/09/2024,Bateria,VICENTE PINHEIRO,367.0,Regular,ativo,Campo Grande,Sábado,09:00,69
+Guilherme Gama Clavelario Nunes,16/09/2011,29/02/2024,Piano,RAMON PINA,387.0,Regular,ativo,Campo Grande,Segunda,14:00,79
+Guilherme Martins Santos,22/11/2010,21/03/2025,Violino,JOEL DE SALLES,447.0,Regular,ativo,Campo Grande,Terça,15:00,94
+Guilherme Mendes Guidi Da Rocha,11/11/2020,21/08/2025,Musicalização Preparatória,PEDRO SÉRGIO,447.0,Regular,ativo,Campo Grande,Quinta,15:00,93
+Gustavo Chagas Lima,10/06/2020,23/01/2025,Musicalização Preparatória,WILLIAN RIBEIRO,447.0,Regular,ativo,Campo Grande,Quarta,19:00,66
+Gustavo Concurd Santos,09/07/2020,31/01/2025,Musicalização Preparatória,PEDRO SÉRGIO,447.0,Regular,ativo,Campo Grande,Sábado,10:00,0
+Gustavo de Almeida Correa Peres,17/08/2006,05/01/2024,Guitarra,MATHEUS STERQUE,387.0,Regular,ativo,Campo Grande,Sábado,10:00,82
+Gustavo Wood Lisboa,15/06/2016,31/07/2023,Bateria,GABRIEL BARBOSA,447.0,Regular,ativo,Campo Grande,Terça,18:00,46
+Heitor Alves da Rocha,18/12/2018,14/05/2025,Musicalização Preparatória,WILLIAN RIBEIRO,447.0,Regular,ativo,Campo Grande,Quarta,17:00,88
+Heitor Cariuz Gino,14/08/2013,16/12/2023,Bateria,JORDAN BARBOSA,387.0,Regular,ativo,Campo Grande,Segunda,16:00,56
+Heitor de Freitas Delou,16/08/2017,14/11/2024,Musicalização Preparatória,PEDRO SÉRGIO,387.0,Regular,ativo,Campo Grande,Terça,15:00,85
+Heitor de Freitas Soares Amaral,12/01/2018,21/02/2024,Musicalização Preparatória,CAIO TENÓRIO,447.0,Regular,ativo,Campo Grande,Segunda,16:00,84
+Heitor Dias Berriel Abreu,05/06/2019,08/01/2026,Bateria,CAIO TENÓRIO,447.0,Regular,ativo,Campo Grande,Terça,15:00,
+Heitor Fernandes Teixeira de Farias,19/02/2009,02/04/2024,Violino,JOEL DE SALLES,447.0,Regular,ativo,Campo Grande,Quinta,15:00,87
+Heitor Gomes Rocha,01/11/2014,14/04/2025,Teclado,KAIO FELIPE,447.0,Regular,ativo,Campo Grande,Sexta,15:00,61
+Heitor Pereira Ramos,04/10/2021,26/10/2024,Musicalização Preparatória,PEDRO SÉRGIO,387.0,Regular,ativo,Campo Grande,Terça,17:00,74
+Heitor Silva Braga,13/05/2019,16/06/2025,Bateria,GABRIEL LEÃO,447.0,Regular,ativo,Campo Grande,Quarta,20:00,95
+Heitor Thadeu Caciano,26/03/2019,28/01/2023,Teclado,WILLER ARRUDA,387.0,Regular,ativo,Campo Grande,Sábado,11:00,82
+Heloisa Nogueira Delgado Constantino da Silva,15/09/2016,25/09/2025,Teclado,PEDRO SÉRGIO,447.0,Regular,ativo,Campo Grande,Quinta,19:00,67
+Henrique Tomaz Silva,29/03/2008,02/02/2023,Contrabaixo,CAIO TENÓRIO,387.0,Regular,ativo,Campo Grande,Segunda,19:00,87
+Hugo Leonardo Ramos Guimarães,16/07/1988,02/09/2025,Bateria,PETERSON BIANCAMANO,447.0,Regular,ativo,Campo Grande,Quarta,19:00,90
+Hugo Sena da Cruz,05/12/2009,02/09/2025,Teclado,RENAM AMORIM,447.0,Regular,ativo,Campo Grande,Sexta,16:00,77
+Íris Brito de Souza,20/10/2012,31/01/2025,Contrabaixo,MARCOS SATURNINO,447.0,Regular,ativo,Campo Grande,Terça,17:00,81
+Isaac Gomes Francisco Ribeiro,14/01/2020,05/11/2025,Bateria,VICENTE PINHEIRO,447.0,Regular,ativo,Campo Grande,Sábado,13:00,
+Isabela de Fatima Rocha Gomes,11/11/2012,13/09/2023,Teclado,RAMON PINA,520.0,Regular,ativo,Campo Grande,Segunda,18:00,73
+Isabela Paixão Figueiredo,14/05/2015,24/06/2024,Canto,LOHANA LEOPOLDO,447.0,Regular,ativo,Campo Grande,Quarta,19:00,90
+Isabela Serra de Souza Rangel Soares,16/11/2015,28/05/2022,Bateria,GABRIEL BARBOSA,447.0,Regular,ativo,Campo Grande,Terça,16:00,76
+Isabella Christina Pereira dos Santos,25/06/1994,26/02/2025,Violão,RODRIGO PINHEIRO,447.0,Regular,ativo,Campo Grande,Segunda,18:00,35
+Isabella Cruz Rustichelli,10/08/2006,11/10/2025,Violino,JOEL DE SALLES,447.0,Regular,ativo,Campo Grande,Sábado,10:00,61
+Isabella da Silva Batista,14/01/2013,30/11/2022,Canto,LOHANA LEOPOLDO,387.0,Regular,ativo,Campo Grande,Quarta,16:00,85
+Isabella Pereira Freitas de Almeida,09/06/2010,20/08/2024,Canto,ALEXANDRE DE SÁ,447.0,Regular,ativo,Campo Grande,Terça,15:00,59
+Isabelle da Costa Lima,01/04/1998,24/01/2023,Canto,MARCOS SATURNINO,447.0,Regular,ativo,Campo Grande,Quinta,19:00,59
+Isaque dos Santos Lico,15/06/2019,11/01/2024,Bateria,CAIO TENÓRIO,387.0,Regular,ativo,Campo Grande,Terça,20:00,92
+Israel Gonçalves Monteiro,22/03/1990,22/11/2024,Guitarra,MATHEUS STERQUE,387.0,Regular,ativo,Campo Grande,Sexta,14:00,71
+Jasmim Fortunato Monteiro Bernardo,24/07/2015,23/10/2024,Canto,LOHANA LEOPOLDO,447.0,Regular,ativo,Campo Grande,Quarta,19:00,77
+Jean Lucas de Santana Dias Brum Ribeiro,21/03/2014,18/10/2025,Teclado,ELLIABH HENRIQUE,447.0,Regular,ativo,Campo Grande,Sábado,14:00,80
+Jean Marcel Silva da Costa Jacques,26/07/1994,13/08/2025,Canto,MATHEUS SANTOS,447.0,Regular,ativo,Campo Grande,Quarta,14:00,100
+Jefte Wesley Vilar Custódio,27/07/1997,31/01/2025,Canto,JULIANA BALTAZAR,387.0,Regular,ativo,Campo Grande,Quinta,19:00,24
+Joanna Carolina Teixeira Sampaio dos Santos Souto,08/02/2018,21/08/2025,Canto,MATHEUS FELIPE,447.0,Regular,ativo,Campo Grande,Terça,17:00,57
+João Bernardes de Castro,26/08/2023,27/11/2024,Musicalização Preparatória,CAIO TENÓRIO,447.0,Regular,ativo,Campo Grande,Quarta,16:00,70
+João Gabriel Oliveira Narciso,25/01/2018,27/05/2021,Guitarra,WILLIAN RIBEIRO,447.0,Regular,ativo,Campo Grande,Segunda,18:00,78
+João Lucas Henrique da Silva,17/08/2020,08/12/2022,Bateria,GABRIEL BARBOSA,447.0,Regular,ativo,Campo Grande,Sábado,12:00,85
+João Machado Martins,08/07/2020,31/07/2025,Musicalização Preparatória,WILLIAN RIBEIRO,447.0,Regular,ativo,Campo Grande,Quarta,17:00,100
+João Miguel da Cunha Alves Ferreira,07/03/2012,27/11/2020,Violino,JOEL DE SALLES,387.0,Regular,ativo,Campo Grande,Quinta,17:00,75
+João Paulo Costa do Carmo,21/12/1991,06/08/2025,Canto,VALDO DELFINO,447.0,Regular,ativo,Campo Grande,Sexta,20:00,100
+João Pedro Machado rosa,16/10/2019,13/05/2025,Canto,GABRIEL LEÃO,375.0,Regular,ativo,Campo Grande,Segunda,19:00,84
+Joao Pedro Moreira de Oliva,22/12/2008,11/09/2025,Guitarra,WILLER ARRUDA,447.0,Regular,ativo,Campo Grande,Sábado,13:00,100
+João Victor Costa Barboza,27/11/2004,09/09/2023,Canto,MATHEUS FELIPE,367.0,Regular,ativo,Campo Grande,Quinta,17:00,89
+João Vitor Da Silva De Oliveira,23/04/2016,15/01/2025,Bateria,CAIO TENÓRIO,447.0,Regular,ativo,Campo Grande,Quarta,17:00,87
+Joaquim do Espirito Santo Teixeira,04/07/1940,16/08/2025,Canto,DAIANA PACÍFICO,447.0,Regular,ativo,Campo Grande,Terça,17:00,62
+Jonatas Viana Carvalho,15/09/2004,29/09/2025,Canto,LOHANA LEOPOLDO,447.0,Regular,ativo,Campo Grande,Segunda,20:00,100
+Jonathan Carlos Souza Junior,30/11/1998,09/07/2025,Contrabaixo,MARCOS SATURNINO,447.0,Regular,ativo,Campo Grande,Terça,18:00,83
+Jonathan de Lima Santos,11/04/2003,10/08/2023,Canto,JULIANA BALTAZAR,170.0,Regular,ativo,Campo Grande,Quinta,19:00,62
+Jorge Leon Sant' Anna Siqueira Simas da Silva,25/12/2024,12/08/2025,Musicalização para Bebês,PEDRO SÉRGIO,447.0,Regular,ativo,Campo Grande,Terça,18:00,93
+José Carlos Nazário,21/10/1974,28/02/2025,Piano,KAIO FELIPE,447.0,Regular,ativo,Campo Grande,Quarta,18:00,90
+José Demétrio de Oliveira Accioly Cordeiro,23/07/2007,27/09/2024,Guitarra,MATHEUS STERQUE,447.0,Regular,ativo,Campo Grande,Sábado,14:00,76
+Julia Cabral do Nascimento,08/09/2017,04/02/2023,Bateria,JORDAN BARBOSA,447.0,Regular,ativo,Campo Grande,Quarta,14:00,68
+Julia da Costa de Oliveira,04/08/2011,06/11/2021,Bateria,RENAM AMORIM,447.0,Regular,ativo,Campo Grande,Segunda,14:00,74
+Júlia Lençone Plaza,19/03/2012,16/05/2025,Canto,GABRIEL LEÃO,520.0,Regular,ativo,Campo Grande,Sábado,11:00,83
+Julia Pessoa Valadares Luz Pereira,11/02/2015,13/02/2025,Teclado,RAMON PINA,447.0,Regular,ativo,Campo Grande,Segunda,19:00,83
+Julia Silva de Freitas,19/11/2012,16/09/2022,Canto,MATHEUS FELIPE,447.0,Regular,ativo,Campo Grande,Quinta,16:00,77
+Julia Xavier da Silva Souza Campelo,12/09/2011,18/05/2018,Bateria,JORDAN BARBOSA,447.0,Regular,ativo,Campo Grande,Quarta,16:00,59
+Juliana Carrati Fagundes,18/02/1997,25/01/2025,Violino,JOEL DE SALLES,387.0,Regular,ativo,Campo Grande,Sábado,14:00,81
+Juliana Fonseca Fortes,05/11/2009,10/09/2025,Guitarra,VALDO DELFINO,447.0,Regular,ativo,Campo Grande,Sábado,12:00,70
+Júlio César da Silva Vidal,14/10/2010,01/04/2025,Bateria,GABRIEL BARBOSA,520.0,Regular,ativo,Campo Grande,Segunda,20:00,72
+Jullya Victoria Gomes da Silva,23/08/2007,30/08/2025,Canto,GABRIEL LEÃO,447.0,Regular,ativo,Campo Grande,Sábado,12:00,92
+Kamilly Azevedo da Silva,12/07/2010,14/11/2024,Canto,GABRIEL LEÃO,447.0,Regular,ativo,Campo Grande,Segunda,19:00,77
+Karina Alexandra da Silva Fontes,17/09/2009,17/01/2025,Teclado,RENAM AMORIM,447.0,Regular,ativo,Campo Grande,Terça,15:00,87
+Kayque Vinicius Da Costa Mallet de Oliveira,11/09/2000,08/01/2026,Bateria,JORDAN BARBOSA,520.0,Regular,ativo,Campo Grande,Segunda,19:00,
+Klaus Magno Viana Silva,19/03/2021,29/10/2024,Musicalização Preparatória,WILLIAN RIBEIRO,447.0,Regular,ativo,Campo Grande,Quarta,19:00,95
+Lara Carvalho Torres,18/05/2020,10/10/2025,Musicalização Preparatória,CAIO TENÓRIO,447.0,Regular,ativo,Campo Grande,Quarta,18:00,50
+Larissa Mendes Paiva,01/03/2003,12/11/2025,Canto,MATHEUS SANTOS,447.0,Regular,ativo,Campo Grande,Quarta,16:00,
+Laura Andrade da Silveira,08/01/2013,06/02/2024,Teclado,RAMON PINA,387.0,Regular,ativo,Campo Grande,Segunda,18:00,84
+Laura Bustamante França,22/05/2017,28/04/2022,Teclado,ALEXANDRE DE SÁ,447.0,Regular,ativo,Campo Grande,Quinta,15:00,95
+Laura Costa Figueira,11/07/2023,30/01/2025,Musicalização para Bebês,LETICIA PALMEIRA,447.0,Regular,ativo,Campo Grande,Sexta,18:00,76
+Laura Leal Mesquita,18/07/2012,25/03/2025,Bateria,PETERSON BIANCAMANO,447.0,Regular,ativo,Campo Grande,Quarta,17:00,65
+Laura Peres de Souza,15/10/2015,24/01/2025,Piano,RENAM AMORIM,447.0,Regular,ativo,Campo Grande,Quinta,16:00,69
+Laura Riggo Targueta Barboza,12/11/2016,18/02/2025,Canto,GABRIEL LEÃO,286.0,Regular,ativo,Campo Grande,Quarta,17:00,89
+Laura Turques Tavares,20/09/2023,21/06/2025,Musicalização para Bebês,PEDRO SÉRGIO,170.0,Regular,ativo,Campo Grande,Sábado,08:00,36
+Lavínia Lyrio Ferreira,03/04/2012,30/04/2025,Guitarra,ISRAEL ROCHA,447.0,Regular,ativo,Campo Grande,Quinta,14:00,92
+Lavynea dos Anjos Silva Guimarães,06/06/2006,26/08/2025,Guitarra,RODRIGO PINHEIRO,520.0,Regular,ativo,Campo Grande,Quinta,19:00,85
+Leandro Vasconcelos dos Santos,17/12/1981,29/08/2025,Teclado,ELLIABH HENRIQUE,447.0,Regular,ativo,Campo Grande,Sábado,08:00,77
+Leona Patrícia da Cruz Martins,02/06/2018,29/09/2025,Violino,JOEL DE SALLES,447.0,Regular,ativo,Campo Grande,Sábado,13:00,100
+Letícia Neves Coelho Guerra da Silva,09/10/2013,18/09/2025,Violino,JOEL DE SALLES,447.0,Regular,ativo,Campo Grande,Quinta,14:00,89
+Letícia Passos de Souza,04/03/2011,29/11/2025,Violão,RODRIGO PINHEIRO,447.0,Regular,ativo,Campo Grande,Quinta,17:00,
+Levi de Freitas Simões,17/07/2024,11/09/2025,Musicalização para Bebês,CAIO TENÓRIO,447.0,Regular,ativo,Campo Grande,Quinta,15:00,45
+Levi Jorge Leite Oliveira,22/11/2021,08/07/2025,Musicalização Preparatória,CAIO TENÓRIO,447.0,Regular,ativo,Campo Grande,Sábado,10:00,81
+Lidiane Maria Barbosa Lima Dias,02/02/1975,01/08/2025,Bateria,PETERSON BIANCAMANO,447.0,Regular,ativo,Campo Grande,Sexta,14:00,78
+Lilian de Souza,02/12/1992,29/01/2025,Canto,DAIANA PACÍFICO,447.0,Regular,ativo,Campo Grande,Quinta,20:00,62
+Lohana Leopoldo de Araujo,11/03/1998,24/05/2024,Teclado,LÉO CASTRO,170.0,Regular,ativo,Campo Grande,Segunda,18:00,56
+Lorena Barreto Campos Dias,11/09/2014,29/09/2025,Violão,VALDO DELFINO,447.0,Regular,ativo,Campo Grande,Sexta,15:00,89
+Lorena Dos Santos Villas,16/10/2019,14/11/2024,Canto,MATHEUS SANTOS,387.0,Regular,ativo,Campo Grande,Quarta,19:00,37
+Lorenzo Felipe Nicolau da Silva,06/02/2018,23/10/2025,Bateria,CAIO TENÓRIO,447.0,Regular,ativo,Campo Grande,Terça,17:00,80
+Lorenzo Rodrigues Trovisco,03/08/2023,30/09/2025,Musicalização Preparatória,PEDRO SÉRGIO,447.0,Regular,ativo,Campo Grande,Quinta,18:00,71
+Lorrane da Silva Azevedo,31/03/1999,21/03/2025,Canto,DAIANA PACÍFICO,447.0,Regular,ativo,Campo Grande,Terça,16:00,18
+Luan Gomes de Faria,05/10/2016,22/04/2023,Bateria,GABRIEL BARBOSA,447.0,Regular,ativo,Campo Grande,Sábado,08:00,74
+Luana Ferreira de Souza,15/07/2013,29/04/2025,Violão,ANTONIO MARCOS,447.0,Regular,ativo,Campo Grande,Sábado,09:00,92
+Lucas Azevedo de Barros,30/04/2015,24/08/2024,Bateria,VICENTE PINHEIRO,447.0,Regular,ativo,Campo Grande,Sábado,11:00,79
+Lucas Barreira dos Santos,03/08/2012,01/06/2019,Bateria,JORDAN BARBOSA,387.0,Regular,ativo,Campo Grande,Quarta,19:00,65
+Lucas dos Santos Basilio,15/04/2017,27/02/2025,Bateria,PETERSON BIANCAMANO,447.0,Regular,ativo,Campo Grande,Quarta,16:00,88
+Lucas Marinho da Silva,24/10/2011,16/01/2025,Guitarra,RODRIGO PINHEIRO,447.0,Regular,ativo,Campo Grande,Segunda,16:00,82
+Lucas Reis Marques,09/05/2018,25/10/2023,Bateria,GABRIEL BARBOSA,367.0,Regular,ativo,Campo Grande,Quinta,19:00,89
+Lucas Souza dos Santos,13/12/1995,13/08/2025,Bateria,PETERSON BIANCAMANO,447.0,Regular,ativo,Campo Grande,Sexta,17:00,77
+Lucca da Silva  Batista,12/08/2014,30/11/2022,Bateria,PETERSON BIANCAMANO,387.0,Regular,ativo,Campo Grande,Quarta,16:00,76
+Lucca Gabriel de Almeida Bispo,30/01/2013,29/11/2025,Teclado,RENAM AMORIM,447.0,Regular,ativo,Campo Grande,Sexta,18:00,
+Luci Machado Viegas,23/07/1957,12/11/2025,Violão,RODRIGO PINHEIRO,447.0,Regular,ativo,Campo Grande,Segunda,14:00,
+Luciano Carvalho Christianes,05/04/1976,18/12/2024,Guitarra,RODRIGO PINHEIRO,447.0,Regular,ativo,Campo Grande,Segunda,20:00,86
+Luciano Peres de Souza,24/02/1977,05/01/2024,Bateria,PETERSON BIANCAMANO,447.0,Regular,ativo,Campo Grande,Quarta,19:00,86
+Luciene de Almeida Correa de  Souza,25/07/1975,05/07/2025,Canto,MATHEUS SANTOS,447.0,Regular,ativo,Campo Grande,Quarta,19:00,94
+Luis Lyan da Silveira Ribeiro Miranda,10/04/2011,06/12/2024,Guitarra,MATHEUS STERQUE,387.0,Regular,ativo,Campo Grande,Sexta,15:00,71
+Luís Rafael Sousa dos Santos,24/08/1986,14/04/2025,Violão,VALDO DELFINO,447.0,Regular,ativo,Campo Grande,Quarta,19:00,100
+Luisa Celano Laurentino Silva,03/06/2008,20/08/2024,Contrabaixo,CAIO TENÓRIO,447.0,Regular,ativo,Campo Grande,Terça,16:00,71
+Luisa Xavier Cesar,07/11/2015,03/05/2024,Canto,ALEXANDRE DE SÁ,447.0,Regular,ativo,Campo Grande,Quinta,18:00,83
+Luiz Eduardo Passos Cunha,22/05/1992,05/10/2024,Guitarra,MATHEUS STERQUE,447.0,Regular,ativo,Campo Grande,Sábado,11:00,76
+Luiz Eduardo Philippsen,04/07/1998,02/02/2021,Musicalização Preparatória,PEDRO SÉRGIO,520.0,Regular,ativo,Campo Grande,Segunda,16:00,73
+Luiza Mazeliah do Nascimento,31/10/2006,26/01/2023,Canto,LETICIA PALMEIRA,387.0,Regular,ativo,Campo Grande,Sexta,15:00,69
+Luiza Pereira dos Santos,16/01/2020,13/05/2025,Musicalização Preparatória,PEDRO SÉRGIO,334.0,Regular,ativo,Campo Grande,Quarta,19:00,84
+Luiza Pimentel Oliveira Barbosa,18/05/2017,04/07/2025,Canto,MATHEUS FELIPE,447.0,Regular,ativo,Campo Grande,Terça,14:00,89
+Maicon Viana Mário,19/09/1991,29/03/2025,Piano,KAIO FELIPE,447.0,Regular,ativo,Campo Grande,Sábado,11:00,80
+Manuela Ariston Romao,24/11/2016,17/03/2025,Musicalização Preparatória,PEDRO SÉRGIO,447.0,Regular,ativo,Campo Grande,Terça,19:00,88
+Manuela Lima Dias,31/01/2012,01/08/2025,Guitarra,VALDO DELFINO,447.0,Regular,ativo,Campo Grande,Sexta,14:00,83
+Manuela Lourenço Ribeiro,23/01/2019,22/05/2025,Teclado,LÉO CASTRO,447.0,Regular,ativo,Campo Grande,Segunda,20:00,0
+Manuela Piveta Schulz,14/05/2009,30/11/2024,Canto,MATHEUS FELIPE,387.0,Regular,ativo,Campo Grande,Quinta,17:00,61
+Manuela Ribeiro de Carvalho,14/08/2010,24/04/2025,Canto,GABRIEL LEÃO,447.0,Regular,ativo,Campo Grande,Sábado,11:00,96
+Marcela Medeiros Martins Monteiro,13/07/1981,24/10/2024,Teclado,RENAM AMORIM,387.0,Regular,ativo,Campo Grande,Sexta,16:00,0
+Marcela Oliveira da Trindade,08/12/2014,26/10/2024,Teclado,KAIO FELIPE,460.0,Regular,ativo,Campo Grande,Terça,17:00,90
+Marcele Alcoforado Santil dos Reis,20/03/1979,10/01/2025,Teclado,RENAM AMORIM,387.0,Regular,ativo,Campo Grande,Terça,14:00,44
+Marcelino Jorge Batista,02/02/1958,17/01/2025,Canto,GABRIEL LEÃO,447.0,Regular,ativo,Campo Grande,Segunda,18:00,76
+Marcello Fernandes Junior,14/02/2003,25/01/2023,Bateria,RENAM AMORIM,447.0,Regular,ativo,Campo Grande,Quinta,18:00,68
+Marcelo da Silva Galvão,15/05/2004,30/10/2024,Guitarra,ISRAEL ROCHA,387.0,Regular,ativo,Campo Grande,Quinta,20:00,64
+Marcio Renato Santos da Silva,28/06/1981,29/11/2025,Guitarra,JEYSON GAIA,447.0,Regular,ativo,Campo Grande,Segunda,20:00,63
+Marcio Vital de Sousa,11/04/1983,31/05/2024,Contrabaixo,RAMON PINA,447.0,Regular,ativo,Campo Grande,Segunda,20:00,42
+Marco Aurelio Pacheco Duarte,08/05/2008,01/03/2023,Guitarra,ANTONIO MARCOS,447.0,Regular,ativo,Campo Grande,Sexta,15:00,68
+Maria Alice Ferreira Suzano,27/04/2019,01/11/2025,Musicalização Preparatória,LETICIA PALMEIRA,447.0,Regular,ativo,Campo Grande,Sexta,16:00,75
+Maria Antônia Santos,11/11/2022,30/10/2024,Musicalização Preparatória,PEDRO SÉRGIO,387.0,Regular,ativo,Campo Grande,Sábado,10:00,36
+Maria Aurora Ferreira Costa Jordão da Silva dos Anjos,21/02/2022,12/06/2024,Musicalização Preparatória,CAIO TENÓRIO,447.0,Regular,ativo,Campo Grande,Quarta,16:00,71
+Maria Eduarda Costa da Fonseca,22/01/2009,11/04/2025,Bateria,GABRIEL BARBOSA,447.0,Regular,ativo,Campo Grande,Terça,17:00,54
+Maria Eduarda Novo Novaes,03/06/2005,31/01/2025,Produção Musical,RENAM AMORIM,447.0,Regular,ativo,Campo Grande,Terça,16:00,84
+Maria Eduarda Souto de Lima,16/03/2012,21/02/2025,Guitarra,VALDO DELFINO,447.0,Regular,ativo,Campo Grande,Sexta,18:00,81
+Maria Eduarda Tonassi do Vale,10/01/2019,27/05/2025,Bateria,GABRIEL BARBOSA,447.0,Regular,ativo,Campo Grande,Terça,15:00,83
+Maria Fernanda Frambach da Costa,22/03/2011,07/12/2024,Canto,LETICIA PALMEIRA,447.0,Regular,ativo,Campo Grande,Sexta,19:00,63
+Maria Fernanda Francisco Barros,10/02/2015,04/09/2024,Violão,WILLIAN RIBEIRO,447.0,Regular,ativo,Campo Grande,Quarta,14:00,89
+Maria Flor de Carvalho Fernandes,26/11/2007,28/06/2023,Bateria,GABRIEL BARBOSA,447.0,Regular,ativo,Campo Grande,Quinta,16:00,63
+Maria Flor Gomes Fazio,29/01/2018,22/09/2018,Teclado,PEDRO SÉRGIO,447.0,Regular,ativo,Campo Grande,Quinta,17:00,74
+Maria Flor Silva Da Conceiçao,12/07/2015,03/01/2024,Bateria,GABRIEL BARBOSA,447.0,Regular,ativo,Campo Grande,Sábado,09:00,79
+Maria Laura Kalile da Silva,25/08/2009,08/01/2026,Canto,GABRIEL LEÃO,447.0,Regular,ativo,Campo Grande,Quarta,15:00,
+Maria Luísa de Souza Ignacio,13/03/2017,19/11/2025,Teclado,PEDRO SÉRGIO,447.0,Regular,ativo,Campo Grande,Quinta,19:00,
+Maria Luisa Silva da Conceição,09/03/2020,03/01/2024,Musicalização Preparatória,ALEXANDRE DE SÁ,447.0,Regular,ativo,Campo Grande,Sábado,09:00,88
+Maria Luiza dos Santos Figueiredo,16/05/2016,31/01/2025,Teclado,KAIO FELIPE,520.0,Regular,ativo,Campo Grande,Sexta,17:00,14
+Maria Luiza Gomes Nascimento,16/07/2010,27/05/2024,Piano,KAIO FELIPE,447.0,Regular,ativo,Campo Grande,Sexta,13:00,87
+Maria Luiza Hilária Durão,23/02/2011,16/08/2023,Bateria,PETERSON BIANCAMANO,520.0,Regular,ativo,Campo Grande,Quarta,15:00,75
+Maria Luiza Nogueira Leal,01/05/2013,19/02/2019,Canto,ALEXANDRE DE SÁ,170.0,Regular,ativo,Campo Grande,Sábado,08:00,74
+Maria Miranda Pereira,06/03/2015,18/10/2022,Teclado,RENAM AMORIM,447.0,Regular,ativo,Campo Grande,Terça,18:00,96
+Maria Rita Porfirio da Conceição,19/03/2014,03/01/2024,Teclado,KAIO FELIPE,447.0,Regular,ativo,Campo Grande,Sábado,09:00,66
+Mariana Guedes da Penha,28/02/1990,04/11/2025,Canto,GABRIEL LEÃO,447.0,Regular,ativo,Campo Grande,Segunda,20:00,67
+Marina de Albuquerque Bulhões Silva,16/05/2011,12/04/2024,Canto,MATHEUS FELIPE,447.0,Regular,ativo,Campo Grande,Quinta,16:00,68
+Mario Dias dos Santos,10/04/1963,30/11/2024,Teclado,KAIO FELIPE,447.0,Regular,ativo,Campo Grande,Terça,15:00,69
+Maristela Abreu Gonçalves,28/05/1966,20/10/2025,Canto,GABRIEL LEÃO,447.0,Regular,ativo,Campo Grande,Segunda,14:00,100
+Mateus Santiago Tonassi do Vale,16/10/2016,27/05/2025,Guitarra,ISRAEL ROCHA,447.0,Regular,ativo,Campo Grande,Terça,15:00,88
+Matheus de Albuquerque de Sousa,20/10/2016,27/11/2024,Bateria,GABRIEL BARBOSA,387.0,Regular,ativo,Campo Grande,Quinta,18:00,73
+Matheus Dias Tupper,12/01/2015,12/11/2024,Violão,WILLIAN RIBEIRO,460.0,Regular,ativo,Campo Grande,Quarta,19:00,45
+Matheus Felipe Correia Ferreira dos Santos,20/06/2001,17/04/2025,Canto,LOHANA LEOPOLDO,354.0,Regular,ativo,Campo Grande,Segunda,18:00,62
+Matheus Keyne Pereira Souza,10/01/2014,14/05/2024,Canto,GABRIEL LEÃO,447.0,Regular,ativo,Campo Grande,Segunda,19:00,89
+Matheus Roatti Amaral,17/11/1997,18/01/2025,Guitarra,MATHEUS STERQUE,387.0,Regular,ativo,Campo Grande,Sábado,09:00,57
+Mel Bastos Oliveira,02/05/2014,07/08/2025,Canto,LOHANA LEOPOLDO,447.0,Regular,ativo,Campo Grande,Segunda,19:00,84
+Meline Guinâncio Printes,07/07/1989,02/09/2025,Canto,MATHEUS SANTOS,447.0,Regular,ativo,Campo Grande,Quarta,19:00,73
+Melissa Gorni Dutra,08/06/2017,30/04/2025,Teclado,PEDRO SÉRGIO,520.0,Regular,ativo,Campo Grande,Quinta,16:00,96
+Michele Oliveira Ramalho,13/11/1981,31/07/2025,Violino,JOEL DE SALLES,447.0,Regular,ativo,Campo Grande,Quinta,18:00,94
+Miguel Abreu Melo,13/04/2024,24/03/2025,Musicalização para Bebês,PEDRO SÉRGIO,447.0,Regular,ativo,Campo Grande,Terça,18:00,82
+Miguel Alves da Rocha,18/12/2018,14/05/2025,Musicalização Preparatória,PEDRO SÉRGIO,447.0,Regular,ativo,Campo Grande,Quarta,17:00,92
+Miguel Bittencourt Costa,14/01/2014,12/05/2018,Bateria,RENAM AMORIM,447.0,Regular,ativo,Campo Grande,Quarta,18:00,79
+Miguel Bustamante França,25/02/2019,28/04/2022,Bateria,GABRIEL BARBOSA,447.0,Regular,ativo,Campo Grande,Quinta,15:00,94
+Miguel Gomes Biancamano,06/02/2011,12/09/2024,Contrabaixo,MIQUEIAS DE OLIVEIRA,0.19,Regular,ativo,Campo Grande,Quinta,16:00,52
+Miguel Gonçalves da Silva,26/04/2018,29/07/2024,Violão,PEDRO SÉRGIO,447.0,Regular,ativo,Campo Grande,Quarta,18:00,87
+Miguel Lucas Moraes Silveira,18/02/2018,17/05/2025,Teclado,KAIO FELIPE,375.0,Regular,ativo,Campo Grande,Terça,13:00,100
+Miguel Santos Borges,02/01/2009,31/07/2024,Saxofone,MIQUEIAS DE OLIVEIRA,447.0,Regular,ativo,Campo Grande,Quarta,16:00,44
+Miguel Silva Roca,02/03/2011,28/06/2021,Bateria,GABRIEL BARBOSA,447.0,Regular,ativo,Campo Grande,Segunda,17:00,86
+Miguel Teixeira Sampaio dos Santos Souto,15/04/2014,21/08/2025,Bateria,CAIO TENÓRIO,447.0,Regular,ativo,Campo Grande,Terça,17:00,71
+Millene Chris Pimentel de Matos,17/02/1995,06/08/2025,Bateria,PETERSON BIANCAMANO,447.0,Regular,ativo,Campo Grande,Sexta,20:00,82
+Murilo  Martellote de Assis,30/12/2017,15/05/2021,Teclado,KAIO FELIPE,447.0,Regular,ativo,Campo Grande,Sábado,08:00,76
+Murilo Oliveira da Hora Dantas,06/01/2023,22/10/2025,Musicalização Preparatória,CAIO TENÓRIO,447.0,Regular,ativo,Campo Grande,Quinta,16:00,60
+Natalia Jorge Vieira,04/12/2018,17/05/2025,Piano,WILLER ARRUDA,447.0,Regular,ativo,Campo Grande,Sábado,09:00,83
+Nathan William Dos Santos Onório,27/02/2008,29/07/2024,Canto,GABRIEL LEÃO,447.0,Regular,ativo,Campo Grande,Segunda,13:00,84
+Neemias Francisco dos Santos,01/06/1963,13/02/2025,Violino,JOEL DE SALLES,377.0,Regular,ativo,Campo Grande,Terça,14:00,97
+Nico Manuci Bastos Sena,27/06/2020,25/10/2024,Musicalização Preparatória,LETICIA PALMEIRA,447.0,Regular,ativo,Campo Grande,Sexta,17:00,75
+Nicolas Faria dos Santos,05/07/2018,02/02/2023,Bateria,GABRIEL BARBOSA,387.0,Regular,ativo,Campo Grande,Quinta,15:00,53
+Nicolas Silva do Bonfim,05/07/2013,28/08/2025,Bateria,CAIO TENÓRIO,447.0,Regular,ativo,Campo Grande,Quinta,14:00,67
+Nikolas Carolina Damasceno,23/10/2019,30/09/2024,Bateria,VICENTE PINHEIRO,447.0,Regular,ativo,Campo Grande,Sábado,13:00,88
+Nilson Ribeiro do Couto,05/05/1944,07/11/2025,Canto,DAIANA PACÍFICO,447.0,Regular,ativo,Campo Grande,Terça,17:00,64
+Olavo Pereira Wood,14/07/2020,28/09/2024,Bateria,VICENTE PINHEIRO,387.0,Regular,ativo,Campo Grande,Sábado,10:00,82
+Olivia Rocha Venturi,28/10/2018,14/10/2025,Ukulele,WILLIAN RIBEIRO,520.0,Regular,ativo,Campo Grande,Quarta,20:00,56
+Olivia Ventura Martins,19/12/2012,29/11/2024,Canto,GABRIEL LEÃO,387.0,Regular,ativo,Campo Grande,Sábado,11:00,81
+Orion Dias de Oliveira,14/02/2014,10/05/2021,Teclado,PEDRO SÉRGIO,447.0,Regular,ativo,Campo Grande,Terça,16:00,82
+Pablo Henrique Costa de Oliveira,13/10/2015,24/05/2025,Bateria,GABRIEL BARBOSA,447.0,Regular,ativo,Campo Grande,Sábado,11:00,87
+Paloma Barreto Campos Dias,23/05/2014,14/11/2025,Bateria,PETERSON BIANCAMANO,447.0,Regular,ativo,Campo Grande,Sexta,15:00,67
+Patric Silva de Oliveira,06/04/1997,18/11/2025,Guitarra,RODRIGO PINHEIRO,447.0,Regular,ativo,Campo Grande,Quinta,20:00,
+Paulo Gabriel chelinho de Andrade,18/10/2023,27/11/2025,Musicalização Preparatória,PEDRO SÉRGIO,447.0,Regular,ativo,Campo Grande,Sábado,11:00,
+Paulo Modesto Ferreira,15/09/2008,20/02/2025,Bateria,PETERSON BIANCAMANO,447.0,Regular,ativo,Campo Grande,Quinta,14:00,46
+Pedro Alexandre Lopes Santiago Girardi,28/03/2019,30/01/2025,Bateria,GABRIEL BARBOSA,447.0,Regular,ativo,Campo Grande,Quinta,17:00,38
+Pedro Alves Pereira,10/12/2012,16/01/2024,Canto,RENAM AMORIM,447.0,Regular,ativo,Campo Grande,Segunda,14:00,82
+Pedro Augusto Meiser Gabrielli,26/11/1959,17/02/2025,Canto,ALEXANDRE DE SÁ,447.0,Regular,ativo,Campo Grande,Sábado,10:00,45
+Pedro de Oliveira Vargas,15/09/2011,25/05/2022,Bateria,JORDAN BARBOSA,447.0,Regular,ativo,Campo Grande,Quarta,19:00,80
+Pedro Faria de Oliveira,12/11/2022,29/05/2025,Musicalização Preparatória,PEDRO SÉRGIO,447.0,Regular,ativo,Campo Grande,Quinta,20:00,59
+Pedro Gabriel da França Rocha Pinto,08/03/2014,26/07/2018,Canto,RENAM AMORIM,447.0,Regular,ativo,Campo Grande,Terça,18:00,86
+Pedro Gusmão Morgado,22/02/2012,15/05/2018,Bateria,JORDAN BARBOSA,447.0,Regular,ativo,Campo Grande,Quarta,16:00,79
+Pedro Henrique Argeu Costa da Silva,08/09/2011,05/06/2024,Teclado,RENAM AMORIM,447.0,Regular,ativo,Campo Grande,Terça,15:00,61
+Pedro Martellote de Assis,30/12/2017,15/05/2021,Teclado,KAIO FELIPE,447.0,Regular,ativo,Campo Grande,Sábado,08:00,75
+Pedro Siqueira Guimarães,23/03/2015,19/10/2019,Bateria,GABRIEL BARBOSA,387.0,Regular,ativo,Campo Grande,Sábado,10:00,61
+Pérola Reis da Cunha Silva Santos,15/08/2011,22/03/2025,Violino,JOEL DE SALLES,447.0,Regular,ativo,Campo Grande,Sábado,09:00,90
+Pietro Bahia de Oliveira,11/01/2012,08/02/2025,Bateria,PETERSON BIANCAMANO,447.0,Regular,ativo,Campo Grande,Sexta,19:00,49
+Priscila Amaro da Silva,11/09/1989,25/01/2023,Contrabaixo,MARCOS SATURNINO,447.0,Regular,ativo,Campo Grande,Terça,16:00,54
+Raffael Pietro Coutinho Agostinho,24/11/2015,28/05/2025,Bateria,CAIO TENÓRIO,447.0,Regular,ativo,Campo Grande,Terça,19:00,80
+Raul Fonseca Silva,18/01/2013,17/05/2025,Guitarra,WILLIAN RIBEIRO,447.0,Regular,ativo,Campo Grande,Segunda,15:00,100
+Raul Luis Castro Costa Pereira,16/06/2020,06/12/2022,Musicalização Preparatória,MATHEUS FELIPE,447.0,Regular,ativo,Campo Grande,Terça,18:00,72
+Raul Rodrigues Aguiar,18/06/2018,19/05/2025,Musicalização Preparatória,ALEXANDRE DE SÁ,447.0,Regular,ativo,Campo Grande,Sábado,14:00,61
+Rebeca dos Santos Gregório Pinto,20/08/2016,06/03/2021,Bateria,GABRIEL BARBOSA,447.0,Regular,ativo,Campo Grande,Quinta,18:00,91
+Rebeca Valério da Silva de Paulo,12/08/1996,13/11/2024,Piano,RENAM AMORIM,387.0,Regular,ativo,Campo Grande,Terça,19:00,52
+Renan de Souza Corrêa,23/09/1998,24/06/2025,Bateria,PETERSON BIANCAMANO,447.0,Regular,ativo,Campo Grande,Sexta,17:00,86
+Renato Vitorino Pandolpho,25/09/1965,09/05/2025,Teclado,RENAM AMORIM,447.0,Regular,ativo,Campo Grande,Terça,18:00,69
+Rhajan Rodrigues Amorim,20/12/1987,18/07/2025,Cavaquinho,JEYSON GAIA,447.0,Regular,ativo,Campo Grande,Segunda,15:00,82
+Ricardo Nunes Hacar,14/11/2015,14/06/2022,Bateria,JORDAN BARBOSA,520.0,Regular,ativo,Campo Grande,Quarta,17:00,65
+Rodrigo Wanderley da Silva,27/09/1999,27/01/2023,Canto,ALEXANDRE DE SÁ,448.0,Regular,ativo,Campo Grande,Quinta,19:00,61
+Ronald Oliveira Rodrigues Fernandes,21/06/1983,19/05/2025,Violão,VALDO DELFINO,447.0,Regular,ativo,Campo Grande,Sábado,14:00,61
+Ruan Luis de Oliveira Martellote,16/06/2004,28/11/2025,Guitarra,RODRIGO PINHEIRO,447.0,Regular,ativo,Campo Grande,Segunda,20:00,
+Ryan Oliveira Narciso,25/01/2018,27/05/2021,Musicalização Preparatória,CAIO TENÓRIO,447.0,Regular,ativo,Campo Grande,Segunda,18:00,78
+Samuel do Nascimento Alcantara Botelho,02/08/2010,06/08/2024,Guitarra,WILLER ARRUDA,447.0,Regular,ativo,Campo Grande,Sábado,14:00,63
+Sandro Ribeiro da Silva,01/09/1987,22/05/2025,Violão,WILLIAN RIBEIRO,447.0,Regular,ativo,Campo Grande,Segunda,20:00,5
+Sara Racca Alves de Freitas Damasceno,20/09/2017,22/08/2024,Teclado,ALEXANDRE DE SÁ,447.0,Regular,ativo,Campo Grande,Quinta,16:00,69
+Sarah Mendes Gomes,22/07/2020,09/09/2025,Bateria,CAIO TENÓRIO,447.0,Regular,ativo,Campo Grande,Terça,18:00,82
+Senair José da Silva Pinto,14/06/1952,16/08/2025,Violão,RODRIGO PINHEIRO,447.0,Regular,ativo,Campo Grande,Terça,15:00,100
+Sirley Jorge Martins Dantas,29/04/1967,20/09/2025,Violão,ALEXANDRE DE SÁ,447.0,Regular,ativo,Campo Grande,Terça,18:00,78
+Sofia Alves Vedoi,17/07/2019,18/03/2024,Musicalização Preparatória,PEDRO SÉRGIO,447.0,Regular,ativo,Campo Grande,Quarta,19:00,66
+Sofia Borges Aquino da Silva,28/07/2010,28/04/2025,Canto,GABRIEL LEÃO,520.0,Regular,ativo,Campo Grande,Sábado,11:00,96
+Sofia Cardoso de Lima,10/06/2015,06/12/2024,Canto,MATHEUS FELIPE,447.0,Regular,ativo,Campo Grande,Terça,15:00,100
+Sofia Ellen Soares da Silva,30/10/2013,06/02/2025,Teclado,ALEXANDRE DE SÁ,417.0,Regular,ativo,Campo Grande,Quinta,16:00,97
+Sofia Vitor Pim,24/08/2008,15/03/2025,Violão,VALDO DELFINO,417.0,Regular,ativo,Campo Grande,Quarta,18:00,97
+Sophia Maciel Magalhaes,15/06/2015,14/11/2024,Bateria,PETERSON BIANCAMANO,387.0,Regular,ativo,Campo Grande,Sexta,18:00,71
+Sophia Mallet Molnar Silveira Torres,04/09/2020,22/07/2022,Musicalização Preparatória,PEDRO SÉRGIO,447.0,Regular,ativo,Campo Grande,Sábado,13:00,84
+Sophia Reis Martins Garcia de Lima,09/09/2011,21/06/2025,Guitarra,VALDO DELFINO,447.0,Regular,ativo,Campo Grande,Sábado,13:00,31
+Soraia da Silveira Duarte,17/01/2003,07/01/2026,Guitarra,VALDO DELFINO,447.0,Regular,ativo,Campo Grande,Sexta,18:00,
+Talyta Modesto Ferreira,15/09/2008,20/02/2025,Canto,MATHEUS FELIPE,447.0,Regular,ativo,Campo Grande,Quinta,15:00,91
+Tarcilio Araújo Brito,16/11/1983,02/08/2024,Guitarra,ISRAEL ROCHA,447.0,Regular,ativo,Campo Grande,Quinta,18:00,84
+Téo Brito de Souza,05/12/2016,31/10/2024,Bateria,CAIO TENÓRIO,387.0,Regular,ativo,Campo Grande,Quarta,17:00,89
+Thais Galdino Cavalcante,23/04/1991,28/01/2023,Canto,ALEXANDRE DE SÁ,387.0,Regular,ativo,Campo Grande,Quinta,19:00,68
+Théo D'Avila Gonçalves,03/06/2014,27/08/2022,Teclado,KAIO FELIPE,520.0,Regular,ativo,Campo Grande,Sábado,12:00,86
+Théo de Souza Alves,03/05/2022,30/10/2024,Musicalização Preparatória,PEDRO SÉRGIO,387.0,Regular,ativo,Campo Grande,Segunda,18:00,76
+Theo de Souza Pereira,11/11/2017,30/11/2024,Bateria,VICENTE PINHEIRO,387.0,Regular,ativo,Campo Grande,Sábado,14:00,39
+Theo dos Santos Figueiredo,25/01/2018,31/01/2025,Teclado,KAIO FELIPE,520.0,Regular,ativo,Campo Grande,Sexta,17:00,14
+Thiago Sandes,08/12/1990,18/11/2023,Canto,MATHEUS STERQUE,447.0,Regular,ativo,Campo Grande,Sábado,11:00,73
+Thuanny de Souza Chaves Ribeiro,21/01/2000,20/05/2025,Canto,GABRIEL LEÃO,447.0,Regular,ativo,Campo Grande,Quarta,16:00,58
+Tito  de Oliveira Ferreira,23/02/2015,26/08/2023,Teclado,PEDRO SÉRGIO,447.0,Regular,ativo,Campo Grande,Terça,14:00,83
+Valdemir De Vargas Junior,09/08/1990,19/09/2025,Produção Musical,RENAM AMORIM,447.0,Regular,ativo,Campo Grande,Sexta,17:00,55
+Valentim Lima de Oliveira,27/02/2020,24/04/2025,Teclado,PEDRO SÉRGIO,447.0,Regular,ativo,Campo Grande,Quarta,16:00,64
+Valentina Garcia da Silva,24/05/2011,31/01/2025,Teclado,RENAM AMORIM,387.0,Regular,ativo,Campo Grande,Sexta,18:00,78
+Valentina Rodrigues dos Santos,15/02/2018,09/04/2025,Teclado,WILLIAN RIBEIRO,447.0,Regular,ativo,Campo Grande,Quarta,16:00,93
+Valentina Santiago Santos Poubel de Araújo,11/06/2014,02/08/2024,Canto,LOHANA LEOPOLDO,447.0,Regular,ativo,Campo Grande,Segunda,19:00,75
+Veronica Nascimento da Silva,03/02/1962,01/08/2025,Canto,MATHEUS SANTOS,447.0,Regular,ativo,Campo Grande,Quarta,17:00,88
+Vicente Dias Botelho,09/04/2014,27/01/2023,Flauta Transversal,RENAM AMORIM,447.0,Regular,ativo,Campo Grande,Quinta,13:00,78
+Victor Caputo Cerillo Andrade,10/01/2005,24/06/2025,Produção Musical,RENAM AMORIM,447.0,Regular,ativo,Campo Grande,Terça,16:00,95
+Vinícius Cantarino Vieira,05/08/2021,29/11/2024,Musicalização Preparatória,PEDRO SÉRGIO,387.0,Regular,ativo,Campo Grande,Segunda,17:00,53
+Vinícius de Andrade Teixeira,29/12/2012,08/02/2023,Teclado,KAIO FELIPE,447.0,Regular,ativo,Campo Grande,Quarta,16:00,74
+Vinícius de Souza de Oliveira,24/09/2007,23/10/2024,Bateria,JORDAN BARBOSA,387.0,Regular,ativo,Campo Grande,Quarta,18:00,89
+Vinícius Lopa Mendes Rezende de Macedo,22/11/2011,14/05/2018,Contrabaixo,MARCOS SATURNINO,447.0,Regular,ativo,Campo Grande,Quinta,16:00,77
+Violeta de Freitas Germano Leal,01/09/2018,03/08/2022,Teclado,PEDRO SÉRGIO,447.0,Regular,ativo,Campo Grande,Quarta,20:00,78
+Vitoria Vivia dos Santos Costa,27/11/1999,04/09/2023,Bateria,JORDAN BARBOSA,170.0,Regular,ativo,Campo Grande,Terça,13:00,88
+Wagner Amaral Mesquita Pereira,18/10/1985,21/03/2025,Piano,RENAM AMORIM,447.0,Regular,ativo,Campo Grande,Quinta,20:00,64
+Wagner Siqueira de Almeida,05/10/2005,29/11/2025,Canto,ALEXANDRE DE SÁ,447.0,Regular,ativo,Campo Grande,Sábado,10:00,
+Willer Arruda Machado,28/07/2001,03/11/2025,Bateria,JORDAN BARBOSA,0.14,Regular,ativo,Campo Grande,Segunda,15:00,36
+Wylla Cristina Carvalho de Almeida,13/10/1988,04/07/2025,Canto,ALEXANDRE DE SÁ,447.0,Regular,ativo,Campo Grande,Quinta,19:00,94
+Yan Andrade Barreto,05/07/2001,28/11/2025,Bateria,PETERSON BIANCAMANO,447.0,Regular,ativo,Campo Grande,Quinta,20:00,
+Yasmin P. Ignez Moraes,19/05/2010,24/10/2025,Canto,LETICIA PALMEIRA,447.0,Regular,ativo,Campo Grande,Sexta,19:00,60
+Yuri Gabriel dos Santos Rodrigues,18/09/2016,03/07/2021,Bateria,GABRIEL BARBOSA,447.0,Regular,ativo,Campo Grande,Sábado,09:00,90
+Yuri Maia Gonçalves Dias,14/10/2008,19/03/2024,Violão,ISRAEL ROCHA,447.0,Regular,ativo,Campo Grande,Quarta,16:00,72
+Agatha de Sá Dellatorre,05/04/2018,17/02/2024,Teclado,RENAM AMORIM,460.0,Regular,ativo,Recreio,Quarta,15:00,87
+Agatha Sampaio Mendes dos Santos,01/08/2009,31/03/2025,Canto,LETICIA PALMEIRA,415.0,Regular,ativo,Recreio,Segunda,16:00,90
+Alex Mendes Silva de Souza,28/03/2007,15/05/2023,Contrabaixo,RAMON PINA,460.0,Regular,ativo,Recreio,Quarta,19:00,88
+Alice dos Santos Seabra,03/02/2016,27/03/2025,Canto,VINICIUS PINHEIRO,460.0,Regular,ativo,Recreio,Quinta,20:00,64
+Alice Marzullo Monteiro Mendes,23/07/2012,12/12/2024,Canto,LARISSA BHEATTRIZ,465.0,Regular,ativo,Recreio,Sexta,19:00,76
+Alice Mattos Jordão,16/01/2021,23/11/2024,Musicalização Preparatória,LETICIA PALMEIRA,465.0,Regular,ativo,Recreio,Sábado,08:00,75
+Alisson Silva Leite,04/05/1996,04/07/2025,Bateria,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Quinta,14:00,86
+Amanda Aiko Gomes Togashi,14/04/2009,16/09/2025,Bateria,WILLER ARRUDA,460.0,Regular,ativo,Recreio,Quinta,13:00,100
+Amanda Ozório de Barros,07/12/2011,04/08/2025,Canto,MATHEUS FELIPE,460.0,Regular,ativo,Recreio,Segunda,15:00,100
+Anna Luisa Cruz Gondim,03/06/2011,13/11/2025,Teclado,LARISSA BHEATTRIZ,460.0,Regular,ativo,Recreio,Quinta,15:00,75
+Arthur Bezerra Siqueira,28/09/2015,31/10/2025,Teclado,CAIO TENÓRIO,460.0,Regular,ativo,Recreio,Sexta,14:00,100
+Arthur Carvalho Lima,06/01/2013,18/06/2022,Guitarra,RAFAEL AKEEM,469.26,Regular,ativo,Recreio,Quarta,19:00,71
+Arthur Darzi Ferreira,06/05/2020,22/05/2025,Bateria,WILLIAN DE ANDRADE,415.0,Regular,ativo,Recreio,Quinta,11:00,81
+Arthur de Carvalho Rodrigues Frota Almeida,04/01/2016,18/08/2025,Musicalização Preparatória,MATHEUS FELIPE,460.0,Regular,ativo,Recreio,Segunda,18:00,80
+Arthur Galvão Barbosa,04/12/2006,11/06/2024,Bateria,VICENTE PINHEIRO,460.0,Regular,ativo,Recreio,Segunda,19:00,66
+Arthur Rodriguez Machado,29/08/2019,03/06/2024,Musicalização Preparatória,JOEL DE SALLES,460.0,Regular,ativo,Recreio,Sexta,17:00,73
+Arthur Vale de Oliveira,10/04/2014,21/10/2023,Canto,LOHANA LEOPOLDO,460.0,Regular,ativo,Recreio,Sábado,11:00,55
+Arthur Vargas Caldas,11/07/2018,18/04/2024,Bateria,RAMON PINA,460.0,Regular,ativo,Recreio,Quarta,14:00,84
+Arthur Vieira Dantas Pollig,10/06/2015,12/11/2021,Guitarra,LUCAS GUIMARÃES,605.0,Regular,ativo,Recreio,Terça,19:00,71
+Artur Carollo Barbuto,28/06/2011,08/12/2025,Guitarra,ISRAEL ROCHA,460.0,Regular,ativo,Recreio,Segunda,19:00,100
+Aurora Drummond e Bragança,15/03/2024,08/08/2025,Musicalização para Bebês,LETICIA PALMEIRA,370.0,Regular,ativo,Recreio,Quinta,17:00,88
+Bárbara Victoria Moreno Ruiz,26/01/2006,20/02/2024,Bateria,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Quarta,14:00,82
+Beatriz dos Santos Monteiro,15/01/2011,05/09/2025,Guitarra,ISRAEL ROCHA,460.0,Regular,ativo,Recreio,Segunda,16:00,72
+Beatriz Rabelo Cheker,23/08/2017,19/08/2021,Bateria,RAFAEL AKEEM,496.1,Regular,ativo,Recreio,Quarta,18:00,73
+Beatriz Souto Machado,05/04/2012,23/06/2018,Teclado,RAMON PINA,460.0,Regular,ativo,Recreio,Sábado,09:00,82
+Benício Cardoso Moreira,07/07/2018,30/08/2025,Guitarra,ISRAEL ROCHA,460.0,Regular,ativo,Recreio,Sábado,09:00,46
+Benjamin de Jesus Pimentel,03/07/2019,05/12/2025,Bateria,VICENTE PINHEIRO,460.0,Regular,ativo,Recreio,Quarta,19:00,
+Benjamin Felipe Roca Ribeiro,14/06/2018,30/06/2025,Bateria,RAFAEL AKEEM,385.0,Regular,ativo,Recreio,Sábado,12:00,78
+Benjamin Lehrer Braz,23/11/2021,25/09/2025,Musicalização Preparatória,LARISSA BHEATTRIZ,460.0,Regular,ativo,Recreio,Quinta,10:00,90
+Bento Vieira Sindeaux,27/02/2022,05/04/2025,Musicalização Preparatória,LETICIA PALMEIRA,460.0,Regular,ativo,Recreio,Sábado,11:00,61
+Bernardo da Silva Menezes,09/03/2019,31/07/2024,Bateria,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Quarta,10:00,75
+Bernardo Guerra da Costa,08/03/2010,23/08/2025,Teclado,WILLER ARRUDA,460.0,Regular,ativo,Recreio,Sexta,15:00,100
+Bernardo Lioi Santos,30/05/2020,18/01/2025,Musicalização Preparatória,LETICIA PALMEIRA,460.0,Regular,ativo,Recreio,Quarta,09:00,93
+Bernardo Martinelli,06/09/2023,25/02/2025,Musicalização para Bebês,LETICIA PALMEIRA,460.0,Regular,ativo,Recreio,Quinta,17:00,75
+Bernardo Neumann da Cunha,13/07/2018,17/01/2025,Musicalização Preparatória,LARISSA BHEATTRIZ,465.0,Regular,ativo,Recreio,Sexta,11:00,64
+Bernardo Pereira Magalhães,01/03/2016,14/08/2025,Teclado,LARISSA BHEATTRIZ,460.0,Regular,ativo,Recreio,Sexta,09:00,88
+Betina Gerstel,28/12/2012,30/09/2025,Canto,LETICIA PALMEIRA,460.0,Regular,ativo,Recreio,Quinta,18:00,90
+Bianca Petrolongo Pinto Abreu,28/11/1983,09/07/2021,Canto,RAMON PINA,465.0,Regular,ativo,Recreio,Quarta,20:00,82
+Breno Ferreira Florião,03/01/2009,25/10/2024,Bateria,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Sexta,14:00,50
+Bruna Silva De Sá Vale,03/12/2011,24/01/2020,Teclado,ALEXANDRE DE SÁ,460.0,Regular,ativo,Recreio,Segunda,16:00,91
+Caetano Leao Barradas,16/07/2016,16/06/2021,Bateria,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Segunda,18:00,56
+Caio Gabriel da Silva Neto,07/02/2022,26/04/2023,Musicalização Preparatória,LETICIA PALMEIRA,460.0,Regular,ativo,Recreio,Sábado,11:00,46
+Caio Lioi Santos,24/04/2023,18/01/2025,Musicalização para Bebês,LETICIA PALMEIRA,460.0,Regular,ativo,Recreio,Quarta,10:00,88
+Caio Villela Meireles,10/08/2014,16/09/2025,Bateria,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Terça,18:00,54
+Caio Vinicius Vieira de Castro,01/10/2003,29/06/2024,Canto,MATHEUS SANTOS,460.0,Regular,ativo,Recreio,Quinta,16:00,95
+Calebe de Moura Oliveira Ramos,11/02/2014,11/11/2020,Bateria,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Quarta,19:00,67
+Catarina Bahia Teodoro,08/03/2021,11/08/2025,Musicalização Preparatória,LETICIA PALMEIRA,460.0,Regular,ativo,Recreio,Sábado,08:00,76
+Catarina Petrolongo Pinto Abreu,22/01/2019,27/05/2021,Bateria,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Sexta,09:00,75
+Clara Beatriz F de Carvalho,27/01/2014,09/08/2024,Teclado,JOEL DE SALLES,460.0,Regular,ativo,Recreio,Sexta,16:00,81
+Clara de Sá Silva Santos,30/03/2014,28/07/2023,Teclado,RENAM AMORIM,460.0,Regular,ativo,Recreio,Quarta,18:00,89
+Clara Marina Jorge da Silva,30/06/2010,11/09/2024,Canto,MATHEUS SANTOS,415.0,Regular,ativo,Recreio,Quinta,16:00,72
+Clara Martins Moura Marendaz,04/10/2014,18/09/2023,Teclado,RENAM AMORIM,461.72,Regular,ativo,Recreio,Quarta,19:00,60
+Daniel Bezerra Siqueira,01/12/2017,31/10/2025,Bateria,WILLIAN DE ANDRADE,460.0,Regular,ativo,Recreio,Sexta,14:00,100
+Daniel Cardoso Poggio Contardo,26/11/2012,10/12/2024,Guitarra,LUCAS GUIMARÃES,460.0,Regular,ativo,Recreio,Terça,14:00,82
+Daniel Castor Kuhlmann Silva,05/04/2011,30/10/2020,Bateria,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Segunda,15:00,87
+Daniel Coelho Faria,22/03/1978,27/03/2025,Violão,LUCAS GUIMARÃES,460.0,Regular,ativo,Recreio,Segunda,18:00,69
+Daniel Duque Vianna,25/07/2013,28/06/2024,Ukulele,ISRAEL ROCHA,385.0,Regular,ativo,Recreio,Segunda,20:00,86
+Daniel Mendes Saramago,10/10/2016,20/02/2025,Teclado,KAIO FELIPE,415.0,Regular,ativo,Recreio,Segunda,14:00,89
+Daniel Rodriguez Machado,29/09/2017,07/02/2025,Bateria,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Sexta,17:00,70
+Daniel sterblitch,02/04/2014,19/03/2024,Bateria,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Segunda,17:00,83
+Daniel Teixeira Campos,31/05/2020,24/06/2024,Bateria,RAFAEL AKEEM,401.25,Regular,ativo,Recreio,Quinta,19:00,84
+Danielle Medeiros Da Silva Machado,10/04/1982,27/04/2024,Teclado,RAMON PINA,650.0,Regular,ativo,Recreio,Sábado,08:00,62
+Davi do nascimento alexandre da gama mello,06/01/2021,16/03/2024,Musicalização Preparatória,LETICIA PALMEIRA,460.0,Regular,ativo,Recreio,Sábado,09:00,93
+Davi dos Santos amaral,28/10/2009,31/05/2024,Violino,JOEL DE SALLES,415.0,Regular,ativo,Recreio,Segunda,17:00,60
+Davi dos Santos Veras,03/04/2009,28/07/2025,Bateria,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Terça,14:00,90
+Davi Farias dos Santos,25/09/2015,27/11/2025,Violino,VINICIUS PINHEIRO,460.0,Regular,ativo,Recreio,Quinta,19:00,100
+Davi Jorge da Silva,13/01/2016,05/06/2024,Guitarra,VALDO DELFINO,460.0,Regular,ativo,Recreio,Quinta,16:00,81
+Davi Lucas de Castro Lourenço,25/03/2015,06/08/2025,Teclado,RENAM AMORIM,465.0,Regular,ativo,Recreio,Quarta,19:00,54
+Davi Piragine Silva,11/10/2013,29/11/2021,Canto,LOHANA LEOPOLDO,461.72,Regular,ativo,Recreio,Quinta,19:00,73
+David Kayat A. Mansour,21/10/2012,28/11/2025,Guitarra,WILLIAN DE ANDRADE,395.0,Regular,ativo,Recreio,Sexta,16:00,85
+Débora Rodriguez Barbosa,11/12/1983,06/03/2024,Teclado,ALEXANDRE DE SÁ,460.0,Regular,ativo,Recreio,Quarta,11:00,81
+Diogo Ribeiro Galhardo,27/09/1982,25/10/2021,Bateria,RAMON PINA,459.77,Regular,ativo,Recreio,Segunda,16:00,93
+Dom Szsentes Boyd,10/01/2022,30/01/2025,Musicalização Preparatória,LETICIA PALMEIRA,460.0,Regular,ativo,Recreio,Segunda,11:00,82
+Dylan Januzi,06/09/2019,31/01/2025,Violão,LUCAS GUIMARÃES,460.0,Regular,ativo,Recreio,Sexta,10:00,69
+Elena Picanço Santos,20/09/2013,13/09/2024,Canto,MATHEUS SANTOS,460.0,Regular,ativo,Recreio,Terça,20:00,96
+Elena Ribeiro Lopes Zoletti,09/02/2014,07/03/2024,Teclado,RENAM AMORIM,460.0,Regular,ativo,Recreio,Quarta,18:00,87
+Elis Tineli Gomes Cotta,04/04/2012,23/09/2024,Bateria,RENAM AMORIM,415.0,Regular,ativo,Recreio,Segunda,20:00,86
+Enrico Florenzano,27/02/2021,12/08/2024,Bateria,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Quarta,17:00,89
+Enzo Amigo Alvarez,15/09/2014,31/03/2022,Guitarra,LUCAS GUIMARÃES,460.0,Regular,ativo,Recreio,Sábado,14:00,64
+Enzo de Castro Freitas,14/04/1975,08/08/2023,Guitarra,RAMON PINA,460.0,Regular,ativo,Recreio,Terça,13:00,73
+Enzo Dorileo Ewald,17/10/2018,28/11/2025,Bateria,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Quarta,15:00,100
+Enzo Langer Peres,28/04/2015,13/05/2022,Bateria,CAIO TENÓRIO,483.0,Regular,ativo,Recreio,Sexta,18:00,57
+Enzo Teixeira Menezes de Lima,30/10/2017,09/08/2025,Bateria,RAFAEL AKEEM,415.0,Regular,ativo,Recreio,Sábado,12:00,70
+Erik Edson Chalegre Erdmann,02/09/2011,10/03/2025,Bateria,RAMON PINA,460.0,Regular,ativo,Recreio,Quarta,15:00,89
+Estevão Lehrer Braz,12/04/2020,25/09/2025,Musicalização Preparatória,LARISSA BHEATTRIZ,375.0,Regular,ativo,Recreio,Quinta,10:00,90
+Fabiana Moriel Castela de Souza,15/05/2013,15/09/2025,Guitarra,WILLER ARRUDA,460.0,Regular,ativo,Recreio,Terça,15:00,67
+Fabio Pilar Moreira,04/06/2009,17/06/2022,Bateria,RAMON PINA,488.75,Regular,ativo,Recreio,Quarta,18:00,88
+Felipe de Moura Vieira,22/11/2019,29/02/2024,Musicalização Preparatória,WILLIAN RIBEIRO,460.0,Regular,ativo,Recreio,Terça,16:00,84
+Felipe Melo Castor,07/11/2015,20/08/2025,Teclado,ISAQUE MENDES,460.0,Regular,ativo,Recreio,Terça,18:00,94
+Fernanda Lehrer Turbae Amaral Braz,06/05/1990,26/09/2025,Teclado,JOEL DE SALLES,460.0,Regular,ativo,Recreio,Sexta,15:00,29
+Fernanda Maria da Silva,02/05/1999,11/11/2025,Canto,MATHEUS SANTOS,460.0,Regular,ativo,Recreio,Terça,15:00,100
+Fernanda Moriel Castela de Souza,07/02/2007,15/09/2025,Canto,MATHEUS SANTOS,460.0,Regular,ativo,Recreio,Terça,16:00,75
+Flavio Ricardo Leal Vieira,11/07/1976,16/06/2025,Guitarra,ISRAEL ROCHA,460.0,Regular,ativo,Recreio,Segunda,17:00,90
+Francesco de Souza Novello,03/06/2019,30/06/2024,Bateria,WILLIAN DE ANDRADE,460.0,Regular,ativo,Recreio,Sexta,10:00,85
+Francisco Cardoso Aride,18/07/2018,05/04/2025,Guitarra,ISRAEL ROCHA,460.0,Regular,ativo,Recreio,Segunda,10:00,77
+Gabriel De Paula,17/07/2017,17/05/2025,Teclado,MATHEUS LANA,460.0,Regular,ativo,Recreio,Sábado,12:00,52
+Gabriel Medeiros Gonçalves Bittencourt,12/05/2018,19/01/2022,Bateria,WILLIAN DE ANDRADE,460.0,Regular,ativo,Recreio,Sexta,09:00,86
+Gabriel Miele Nunes,27/10/2010,30/09/2024,Canto,ALEXANDRE DE SÁ,460.0,Regular,ativo,Recreio,Quarta,18:00,83
+Gabriel Vidal França de Carvalho,26/01/2022,31/07/2024,Musicalização Preparatória,LETICIA PALMEIRA,460.0,Regular,ativo,Recreio,Sábado,11:00,75
+Gabriel Wandeck Campos Brito,09/03/2007,02/08/2024,Bateria,VICENTE PINHEIRO,460.0,Regular,ativo,Recreio,Terça,19:00,64
+Gabriela da Silva Machado,02/08/2012,19/09/2023,Teclado,LOHANA LEOPOLDO,460.0,Regular,ativo,Recreio,Terça,14:00,77
+Gabriela Garcia de Carvalho,12/09/2014,26/09/2025,Teclado,CAIO TENÓRIO,395.0,Regular,ativo,Recreio,Sexta,17:00,55
+Gael Rodrigues Martins,10/06/2019,05/07/2022,Bateria,RAFAEL AKEEM,463.25,Regular,ativo,Recreio,Terça,16:00,85
+Geovana vitória jorge da silva,14/12/2012,11/09/2024,Cavaquinho,WILLIAN DE ANDRADE,415.0,Regular,ativo,Recreio,Quinta,16:00,58
+Giovanna Alves da Silva Mendonça,15/10/2009,09/10/2020,Canto,RAMON PINA,460.0,Regular,ativo,Recreio,Quarta,20:00,58
+Giovanna Azevedo Chipitelli,12/11/2018,25/07/2024,Canto,LOHANA LEOPOLDO,460.0,Regular,ativo,Recreio,Terça,18:00,86
+Giovanna Dabés Moreira de Carvalho Al Alam da Fonseca,28/12/2013,24/03/2025,Canto,LETICIA PALMEIRA,415.0,Regular,ativo,Recreio,Segunda,18:00,88
+Giovanna Gonçalves Frias Ribeiro,29/12/2009,31/03/2023,Canto,RAMON PINA,460.0,Regular,ativo,Recreio,Quarta,19:00,58
+Giovanna Marsico da Silva,21/04/2013,08/11/2025,Guitarra,LUCAS GUIMARÃES,460.0,Regular,ativo,Recreio,Sábado,15:00,100
+Giovanna Sant Anna de Lima Nicolela,22/05/2017,25/07/2024,Canto,LETICIA PALMEIRA,460.0,Regular,ativo,Recreio,Quarta,14:00,72
+Grace Couto de Andrade,20/01/1977,30/06/2022,Contrabaixo,RAMON PINA,467.5,Regular,ativo,Recreio,Terça,11:00,84
+Guilherme de Farias Varjão,08/01/2013,12/03/2025,Guitarra,LUCAS GUIMARÃES,460.0,Regular,ativo,Recreio,Terça,14:00,89
+Guilherme Duque Vianna,29/08/2018,28/06/2024,Bateria,RAFAEL AKEEM,385.0,Regular,ativo,Recreio,Segunda,20:00,82
+Guilherme Ferreira Muniz dos Santos,27/05/2019,26/08/2021,Bateria,RAFAEL AKEEM,476.0,Regular,ativo,Recreio,Quinta,13:00,87
+Heitor Cañas Garofo,12/04/2018,19/11/2022,Bateria,WILLER ARRUDA,460.0,Regular,ativo,Recreio,Quinta,15:00,90
+Heitor de Souza Lima da Silva,21/12/2007,29/08/2024,Canto,MATHEUS SANTOS,415.0,Regular,ativo,Recreio,Terça,18:00,54
+Heitor Gael Serra Araújo,05/09/2011,14/08/2025,Guitarra,VALDO DELFINO,460.0,Regular,ativo,Recreio,Quinta,15:00,100
+Helena cardoso Roxo,18/04/2017,31/01/2025,Teclado,WILLIAN DE ANDRADE,460.0,Regular,ativo,Recreio,Sexta,11:00,97
+Helena de Souza Lima da Silva,05/03/2014,29/08/2024,Canto,MATHEUS SANTOS,415.0,Regular,ativo,Recreio,Terça,20:00,71
+Helena Neis Zavallo,14/08/2012,22/01/2025,Teclado,RAMON PINA,465.0,Regular,ativo,Recreio,Sexta,17:00,49
+Heloísa de Andrade Leôncio,31/03/2014,17/04/2025,Canto,LETICIA PALMEIRA,460.0,Regular,ativo,Recreio,Segunda,10:00,72
+Henrique Dang Silva,20/07/2017,15/03/2024,Bateria,VICENTE PINHEIRO,460.0,Regular,ativo,Recreio,Terça,18:00,89
+Henrique de Andrade Leôncio,23/02/2019,17/04/2025,Bateria,ISRAEL ROCHA,460.0,Regular,ativo,Recreio,Segunda,11:00,76
+Henrique Pereira Caldas Pinto de Souza,10/05/2015,18/08/2021,Bateria,LUCAS GUIMARÃES,491.59,Regular,ativo,Recreio,Terça,10:00,81
+Hugo Marsico da Silva,25/07/2015,08/11/2025,Guitarra,LUCAS GUIMARÃES,460.0,Regular,ativo,Recreio,Sábado,15:00,100
+Hugo Penedo Amorim,03/08/2015,30/01/2025,Teclado,RAMON PINA,460.0,Regular,ativo,Recreio,Terça,10:00,73
+Inaê Antunes Coelho de Sá,17/07/2014,24/01/2022,Canto,RAMON PINA,460.0,Regular,ativo,Recreio,Segunda,10:00,75
+Isabel Ohana Nunes de Carvalho,21/12/2014,31/10/2024,Canto,LARISSA BHEATTRIZ,460.0,Regular,ativo,Recreio,Quinta,18:00,87
+Isabela Ferreira Moura,23/07/2014,09/12/2023,Canto,LUCAS GUIMARÃES,460.0,Regular,ativo,Recreio,Sábado,11:00,55
+Isabella Boscardini Moreira,03/10/2020,21/08/2021,Musicalização Preparatória,LETICIA PALMEIRA,518.65,Regular,ativo,Recreio,Sábado,08:00,81
+Isabella de Souza Durço,09/02/2016,30/04/2025,Canto,LETICIA PALMEIRA,460.0,Regular,ativo,Recreio,Quarta,15:00,62
+Ísis Mayumi Fujiwara Lima,02/03/2017,15/03/2023,Teclado,RAMON PINA,460.0,Regular,ativo,Recreio,Terça,19:00,76
+Jan Sidarta stehmann de Aguiar (Ian),12/05/2004,31/01/2025,Bateria,WILLER ARRUDA,460.0,Regular,ativo,Recreio,Terça,17:00,88
+Joachim Krull Carrez,11/10/2019,09/07/2022,Teclado,ISAQUE MENDES,460.0,Regular,ativo,Recreio,Terça,13:00,92
+João Dal Bello Migani,03/01/2015,30/10/2020,Bateria,RAFAEL AKEEM,508.2,Regular,ativo,Recreio,Quinta,17:00,67
+João Francisco Quintella de Macedo Mayer,27/05/2017,11/08/2023,Bateria,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Quarta,16:00,80
+João Guilherme Couto Vargas Luiz,28/08/2017,17/04/2025,Teclado,LARISSA BHEATTRIZ,460.0,Regular,ativo,Recreio,Quinta,11:00,79
+Joao Miguel de Araújo Jardim Tupinamba Borges,23/10/2013,27/07/2022,Teclado,KAIO FELIPE,476.0,Regular,ativo,Recreio,Segunda,16:00,72
+João Pedro Brizzi de Almeida,10/05/2021,29/04/2025,Musicalização Preparatória,LETICIA PALMEIRA,460.0,Regular,ativo,Recreio,Quarta,11:00,75
+João Pedro Cerveira Soares,11/11/2009,20/05/2021,Teclado,RAMON PINA,460.0,Regular,ativo,Recreio,Quarta,17:00,83
+João Pedro Fontenelle,25/04/2019,31/07/2024,Bateria,ISRAEL ROCHA,460.0,Regular,ativo,Recreio,Sábado,12:00,92
+João Piragine Silva,02/07/2011,29/11/2021,Guitarra,VALDO DELFINO,461.72,Regular,ativo,Recreio,Quinta,19:00,79
+João Ribeiro Miranda do valle Magalhães,03/09/2019,26/02/2025,Bateria,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Quarta,10:00,65
+Josué Salazar Nogueira Galheiro Poças,23/09/2013,01/03/2019,Teclado,RAMON PINA,470.4,Regular,ativo,Recreio,Terça,15:00,88
+Júlia Adum de Paiva Herbst,30/10/2018,28/11/2025,Canto,LARISSA BHEATTRIZ,460.0,Regular,ativo,Recreio,Quarta,19:00,50
+Julia Alves Arantes,06/05/2010,15/09/2025,Canto,LETICIA PALMEIRA,460.0,Regular,ativo,Recreio,Segunda,14:00,73
+Julia Christina Mury Messias,11/12/2014,29/02/2024,Teclado,RAMON PINA,460.0,Regular,ativo,Recreio,Sexta,19:00,84
+Júlia Heil da Fonseca,03/02/2014,28/08/2024,Canto,LOHANA LEOPOLDO,460.0,Regular,ativo,Recreio,Quinta,16:00,69
+Júlia Lopes de Medeiros,20/01/2018,06/01/2026,Teclado,LARISSA BHEATTRIZ,460.0,Regular,ativo,Recreio,Sexta,18:00,63
+Júlia Paraguassu Eizerik Machado,31/07/2011,28/11/2025,Guitarra,LUCAS GUIMARÃES,460.0,Regular,ativo,Recreio,Quarta,15:00,67
+Júlia Queiroz de Carvalho,13/04/2016,06/02/2025,Canto,ALEXANDRE DE SÁ,460.0,Regular,ativo,Recreio,Segunda,18:00,75
+Júlia Salarini Gama,03/03/2016,03/08/2024,Canto,ALEXANDRE DE SÁ,460.0,Regular,ativo,Recreio,Quarta,14:00,78
+Kaique da silva Batista,18/07/2017,30/09/2025,Teclado,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Segunda,19:00,67
+Killian Paschuini Brito,11/03/2018,02/03/2023,Bateria,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Quarta,18:00,78
+Lara Dias de Souza,29/12/2013,08/07/2025,Teclado,KAIO FELIPE,460.0,Regular,ativo,Recreio,Segunda,17:00,84
+Lara Pereira Faria,27/01/2018,16/01/2025,Teclado,KAIO FELIPE,465.0,Regular,ativo,Recreio,Segunda,18:00,90
+Larissa Bezerra Silva de Oliveira,14/02/2020,27/07/2024,Musicalização Preparatória,LOHANA LEOPOLDO,460.0,Regular,ativo,Recreio,Terça,20:00,76
+Laura Almada Teixeira Neto,26/12/2011,02/09/2024,Guitarra,RAMON PINA,460.0,Regular,ativo,Recreio,Quarta,17:00,71
+Laura Damasceno Estevez,12/05/2015,28/02/2025,Teclado,LARISSA BHEATTRIZ,460.0,Regular,ativo,Recreio,Sexta,16:00,94
+Laura Picanço Santos,26/08/2008,23/01/2025,Canto,RENAM AMORIM,460.0,Regular,ativo,Recreio,Terça,19:00,87
+Lavinia Barreto Miranda,06/04/2009,18/11/2022,Bateria,RAFAEL AKEEM,474.32,Regular,ativo,Recreio,Quinta,20:00,72
+Letícia Ferreira Vasconcelos,17/03/2018,08/02/2025,Teclado,LARISSA BHEATTRIZ,460.0,Regular,ativo,Recreio,Sexta,14:00,70
+Levi Freire da Silva Sousa,09/05/2016,19/07/2022,Bateria,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Sexta,13:00,81
+Liah Lemos Schettino,22/07/2008,28/04/2025,Violino,VINICIUS PINHEIRO,460.0,Regular,ativo,Recreio,Quinta,17:00,66
+Lígia de Freitas Gonçalves,08/11/1953,31/01/2024,Bateria,RAFAEL AKEEM,431.2,Regular,ativo,Recreio,Quarta,12:00,95
+Lis Alencar Rodrigues De Azevedo,26/03/2014,24/11/2020,Bateria,RAMON PINA,460.0,Regular,ativo,Recreio,Sexta,16:00,71
+Lohan Marques Boente,29/02/2020,16/11/2021,Musicalização Preparatória,LETICIA PALMEIRA,460.0,Regular,ativo,Recreio,Quarta,18:00,70
+Lorenzo Donni Borges,26/05/2014,18/01/2025,Teclado,ISAQUE MENDES,460.0,Regular,ativo,Recreio,Terça,14:00,90
+Luca Pessurno Rodrigues Torres,16/04/2011,31/07/2024,Canto,ISRAEL ROCHA,385.0,Regular,ativo,Recreio,Sábado,14:00,74
+Lucas Bezerra Siqueira,18/01/2010,31/10/2025,Violão,LUCAS GUIMARÃES,460.0,Regular,ativo,Recreio,Sexta,14:00,100
+Lucas Cseko e Silva,27/01/2014,25/02/2021,Bateria,LUCAS GUIMARÃES,460.0,Regular,ativo,Recreio,Terça,19:00,74
+Lucas Freire da Silva Sousa,03/09/2019,30/08/2025,Teclado,WILLIAN DE ANDRADE,460.0,Regular,ativo,Recreio,Sexta,13:00,92
+Lucas Medeiros de Albuquerque,09/02/2018,30/05/2025,Teclado,WILLER ARRUDA,460.0,Regular,ativo,Recreio,Quinta,18:00,59
+Luis Miguel da Silva Neto,15/10/2012,24/03/2023,Bateria,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Quinta,16:00,49
+Luísa da Silva Fraga,17/05/2013,01/08/2025,Teclado,KAIO FELIPE,420.0,Regular,ativo,Recreio,Segunda,15:00,89
+Luisa medeiros de Albuquerque,22/10/2016,30/05/2025,Canto,LOHANA LEOPOLDO,460.0,Regular,ativo,Recreio,Quinta,18:00,58
+Luísa Serpa Ribeiro Fleischhauer,29/03/2007,30/01/2025,Violão,LUCAS GUIMARÃES,460.0,Regular,ativo,Recreio,Quarta,11:00,55
+Luiz Felipe de Castro Teixeira,12/08/2010,16/09/2024,Canto,ALEXANDRE DE SÁ,415.0,Regular,ativo,Recreio,Segunda,15:00,96
+Luiza Faria Frazão de Souza,03/03/2017,23/09/2020,Teclado,RAMON PINA,460.0,Regular,ativo,Recreio,Quinta,16:00,91
+Luiza Quintas de Oliveira Ramos Morais,13/06/2023,21/03/2025,Musicalização para Bebês,LARISSA BHEATTRIZ,460.0,Regular,ativo,Recreio,Sexta,10:00,71
+Maitê Gomes Pereira,20/10/2017,11/12/2025,Teclado,WILLER ARRUDA,460.0,Regular,ativo,Recreio,Terça,19:00,
+Malu Picerno Franco Molinaro Amaral,16/02/2019,09/08/2025,Canto,LOHANA LEOPOLDO,460.0,Regular,ativo,Recreio,Terça,18:00,78
+Manuela Araujo Rodrigues,10/01/2012,15/03/2025,Canto,LETICIA PALMEIRA,460.0,Regular,ativo,Recreio,Segunda,15:00,74
+Manuela Chermont de Miranda Petersen,03/09/2012,25/02/2021,Violão,RAMON PINA,460.0,Regular,ativo,Recreio,Sexta,19:00,64
+Manuela correia Lopes de Oliveira,02/02/2013,31/03/2025,Guitarra,LUCAS GUIMARÃES,460.0,Regular,ativo,Recreio,Terça,18:00,82
+Manuela de Moura Vieira,25/07/2017,29/02/2024,Bateria,WILLER ARRUDA,460.0,Regular,ativo,Recreio,Terça,16:00,83
+Manuela Souza Soares,31/03/2010,22/05/2025,Guitarra,LUCAS GUIMARÃES,460.0,Regular,ativo,Recreio,Sexta,16:00,83
+Manuella Weber Riedel,27/04/2013,30/08/2025,Guitarra,LUCAS GUIMARÃES,395.0,Regular,ativo,Recreio,Sexta,18:00,93
+Marcela de Araújo Guimarães Dutra,17/11/2011,30/09/2025,Canto,LETICIA PALMEIRA,460.0,Regular,ativo,Recreio,Quinta,20:00,60
+Marcelo Costa de Souza lira,20/07/1979,29/11/2025,Violão,LUCAS GUIMARÃES,460.0,Regular,ativo,Recreio,Sexta,19:00,100
+Marco Antônio Barreto Sundin,13/12/1984,28/08/2024,Teclado,KAIO FELIPE,460.0,Regular,ativo,Recreio,Segunda,20:00,57
+Marcos Monteiro Leal Simões,03/07/2015,19/07/2025,Musicalização Preparatória,MATHEUS LANA,415.0,Regular,ativo,Recreio,Sábado,11:00,73
+Maria Clara Cunha dos Santos,01/10/2012,02/02/2022,Teclado,VINICIUS PINHEIRO,460.0,Regular,ativo,Recreio,Quinta,10:00,61
+María Clara Monteiro de Carvalho,13/01/2016,27/01/2023,Canto,LARISSA BHEATTRIZ,460.0,Regular,ativo,Recreio,Quarta,16:00,76
+Maria Clara Monteiro Delgado de Oliveira,01/02/2018,24/02/2022,Canto,ALEXANDRE DE SÁ,460.0,Regular,ativo,Recreio,Segunda,13:00,95
+Maria Clara Wandeck Lima,03/10/2019,27/05/2025,Teclado,VINICIUS PINHEIRO,460.0,Regular,ativo,Recreio,Quinta,18:00,96
+Maria Edith Madeira Coimbra,03/05/2022,31/10/2023,Musicalização Preparatória,LETICIA PALMEIRA,498.96,Regular,ativo,Recreio,Segunda,11:00,77
+Maria Eduarda Cardoso Moreira,05/07/2016,30/08/2025,Canto,LOHANA LEOPOLDO,460.0,Regular,ativo,Recreio,Sábado,09:00,54
+Maria Eduarda Oliveira Costa,02/07/2007,11/12/2021,Bateria,RAMON PINA,460.0,Regular,ativo,Recreio,Sábado,14:00,86
+Maria Eduarda Santiago de Aguiar,18/12/2013,12/12/2025,Guitarra,WILLIAN DE ANDRADE,410.0,Regular,ativo,Recreio,Sexta,18:00,
+Maria Esther Hadassa,25/11/2019,14/11/2024,Teclado,LARISSA BHEATTRIZ,460.0,Regular,ativo,Recreio,Quinta,19:00,84
+Maria Flor Arrigoni Carneiro,24/08/2011,28/11/2024,Contrabaixo,RENAM AMORIM,460.0,Regular,ativo,Recreio,Quarta,17:00,87
+Maria Helena Brizzi de Almeida,17/05/2018,29/04/2025,Teclado,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Quarta,11:00,72
+Maria Júlia Lagdem Fernandes,14/07/2018,01/08/2022,Canto,LETICIA PALMEIRA,478.55,Regular,ativo,Recreio,Quinta,19:00,90
+Maria Júlia nascimento Nóbrega,07/04/2017,24/04/2024,Canto,MATHEUS FELIPE,460.0,Regular,ativo,Recreio,Segunda,19:00,61
+Maria Luiza Ferreira Moura,10/05/2016,14/05/2024,Bateria,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Sábado,11:00,56
+Maria Luiza Figueiredo Cantalice,08/11/2016,30/07/2025,Canto,LOHANA LEOPOLDO,460.0,Regular,ativo,Recreio,Quinta,18:00,84
+Maria Petzold Antonioli Coutinho,24/10/2016,30/07/2025,Teclado,LARISSA BHEATTRIZ,460.0,Regular,ativo,Recreio,Quarta,20:00,67
+Maria Rita Damasceno Estevez,13/02/2020,28/02/2025,Bateria,WILLER ARRUDA,460.0,Regular,ativo,Recreio,Sexta,16:00,94
+Maria Sousa P. dos Santos,06/06/1999,05/08/2025,Contrabaixo,WILLER ARRUDA,460.0,Regular,ativo,Recreio,Terça,11:00,78
+Mariana Albuquerque Oliveira,08/05/2010,15/10/2024,Violino,JOEL DE SALLES,460.0,Regular,ativo,Recreio,Sexta,18:00,78
+Marília Andressa Sandeo,06/09/1997,27/10/2025,Canto,ALEXANDRE DE SÁ,460.0,Regular,ativo,Recreio,Segunda,19:00,100
+Matheus Carvalho Freitas,10/06/1991,08/08/2025,Guitarra,LUCAS GUIMARÃES,460.0,Regular,ativo,Recreio,Sexta,13:00,62
+Matheus da Mota Gomes,04/10/2017,09/08/2025,Teclado,JOEL DE SALLES,460.0,Regular,ativo,Recreio,Sexta,10:00,71
+Mathias Barreto Caetano,02/09/2016,02/10/2025,Teclado,LOHANA LEOPOLDO,460.0,Regular,ativo,Recreio,Sábado,10:00,75
+Maysa Telles Reis Gonçalves,18/01/2013,16/02/2023,Canto,RAFAEL AKEEM,415.0,Regular,ativo,Recreio,Terça,15:00,70
+Miguel Antunes Tostes,15/06/2011,15/02/2023,Bateria,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Sábado,10:00,81
+Miguel Bolais de Salles,29/01/2016,31/05/2024,Bateria,RAMON PINA,460.0,Regular,ativo,Recreio,Terça,10:00,89
+Miguel Couto de Andrade,27/11/2011,30/06/2022,Teclado,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Sexta,15:00,78
+Miguel da Silva Fraga,30/12/2018,16/09/2025,Bateria,WILLER ARRUDA,460.0,Regular,ativo,Recreio,Sexta,14:00,83
+Miguel Holanda Cavalcanti Martins,23/02/2013,04/08/2025,Bateria,VICENTE PINHEIRO,460.0,Regular,ativo,Recreio,Segunda,15:00,76
+Miguel Jorge da Silva,20/12/2007,05/06/2024,Bateria,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Quinta,18:00,64
+Miguel Masson Rocha Mendes,10/04/2015,13/08/2024,Teclado,WILLIAN RIBEIRO,467.5,Regular,ativo,Recreio,Terça,15:00,95
+Miguel Menezes Merçon dos Santos,20/05/2010,02/06/2025,Guitarra,ISRAEL ROCHA,460.0,Regular,ativo,Recreio,Sábado,10:00,71
+Milena Melo Lima Correa,09/11/2016,16/08/2022,Teclado,ALEXANDRE DE SÁ,464.4,Regular,ativo,Recreio,Quarta,15:00,81
+Natan Lança Moreira,23/04/2018,26/08/2025,Bateria,WILLIAN RIBEIRO,460.0,Regular,ativo,Recreio,Terça,11:00,100
+Natan Sá Justino,05/10/2013,24/01/2025,Teclado,JOEL DE SALLES,465.0,Regular,ativo,Recreio,Sexta,14:00,89
+Natan Vitor Santos,13/03/1990,13/08/2025,Bateria,VICENTE PINHEIRO,460.0,Regular,ativo,Recreio,Quarta,20:00,30
+Nathan Leggett de Moura,13/05/2014,30/01/2020,Bateria,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Quinta,17:00,76
+Nicolas Couto de Andrade,27/11/2011,30/06/2022,Bateria,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Sexta,15:00,78
+Nicolas de Farias Varjão,10/10/2014,12/03/2025,Teclado,WILLIAN RIBEIRO,460.0,Regular,ativo,Recreio,Terça,14:00,92
+Nicole Takeda Takenawa,16/04/2010,11/06/2025,Guitarra,VALDO DELFINO,460.0,Regular,ativo,Recreio,Quinta,17:00,35
+Noah Carpenter Degan,08/04/2019,28/10/2023,Ukulele,RAMON PINA,460.0,Regular,ativo,Recreio,Sábado,10:00,88
+Noah Teixeira Menezes de Lima,26/07/2019,09/08/2025,Guitarra,LUCAS GUIMARÃES,415.0,Regular,ativo,Recreio,Sábado,11:00,71
+Olivia Freire Rodrigues Oliveira,20/02/2016,08/08/2023,Bateria,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Quinta,15:00,89
+Otto Dorileo Ewald,28/06/2016,28/11/2025,Bateria,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Quarta,15:00,100
+Otto Santiago Mendes,23/07/2020,09/01/2024,Musicalização Preparatória,LETICIA PALMEIRA,460.0,Regular,ativo,Recreio,Sábado,08:00,92
+Pedro Cesquim Medeiros de Castro e Azevedo,29/04/2015,07/04/2025,Teclado,KAIO FELIPE,415.0,Regular,ativo,Recreio,Segunda,19:00,80
+Pedro da Mota Gomes,03/06/2015,09/08/2025,Teclado,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Sexta,10:00,76
+Pedro da Silva Machado,09/09/2015,15/08/2023,Ukulele,RAMON PINA,460.0,Regular,ativo,Recreio,Terça,14:00,79
+Pedro de Castro Bressane Albuquerque do Carmo,24/05/2016,31/05/2022,Bateria,WILLIAN DE ANDRADE,460.0,Regular,ativo,Recreio,Quinta,09:00,64
+Pedro Faria Frazão de Souza,02/03/2014,23/09/2020,Teclado,JOEL DE SALLES,460.0,Regular,ativo,Recreio,Segunda,18:00,88
+Pedro Gabriel de Melo Alexandre,31/01/2003,28/03/2024,Canto,MATHEUS SANTOS,460.0,Regular,ativo,Recreio,Quinta,17:00,88
+Pedro Henrique Almeida Capitanio,02/07/2011,30/04/2025,Bateria,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Sexta,15:00,90
+Pedro Quintas de Oliveira Ramos Morais,20/09/2018,25/06/2020,Bateria,WILLIAN DE ANDRADE,415.0,Regular,ativo,Recreio,Sexta,10:00,85
+Philippe de Goulart Rodrigues,18/03/2009,28/07/2025,Guitarra,WILLER ARRUDA,415.0,Regular,ativo,Recreio,Terça,20:00,58
+Pietra Sucena Novaes Calvo Bueno,16/06/2019,28/07/2022,Canto,LARISSA BHEATTRIZ,460.0,Regular,ativo,Recreio,Sexta,17:00,76
+Rafael Marques G dos Santos,20/11/2012,16/09/2024,Bateria,VICENTE PINHEIRO,460.0,Regular,ativo,Recreio,Segunda,16:00,92
+Rafael Souto Machado,16/09/2014,25/08/2018,Bateria,MATHEUS LANA,460.0,Regular,ativo,Recreio,Sábado,09:00,85
+Rafael Villeth de Holanda,27/11/2015,11/01/2025,Bateria,RAFAEL AKEEM,465.0,Regular,ativo,Recreio,Sexta,18:00,79
+Ramires Moraes do Nascimento,22/11/2014,06/05/2025,Musicalização Preparatória,LARISSA BHEATTRIZ,460.0,Regular,ativo,Recreio,Quarta,18:00,93
+Ricardo Alfonso Moreno Ruiz,11/12/2012,20/02/2024,Teclado,RENAM AMORIM,460.0,Regular,ativo,Recreio,Quarta,14:00,79
+Roberta Rodrigues Lins Rodolfo,05/10/2005,09/06/2025,Canto,LARISSA BHEATTRIZ,460.0,Regular,ativo,Recreio,Quarta,15:00,92
+Roberto Toledo El Alam,02/07/1979,30/09/2025,Violão,VALDO DELFINO,460.0,Regular,ativo,Recreio,Quinta,18:00,80
+Rodrigo Pereira Brum,13/07/1979,21/10/2025,Violão,LUCAS GUIMARÃES,460.0,Regular,ativo,Recreio,Quarta,18:00,45
+Rúbia Pimentel Duarte,01/06/2019,23/10/2024,Teclado,JOEL DE SALLES,460.0,Regular,ativo,Recreio,Sexta,10:00,82
+Samuel Nunes Victorino,30/01/2019,11/08/2025,Teclado,MATHEUS LANA,460.0,Regular,ativo,Recreio,Sábado,08:00,77
+Samuel Silveira Noronha,06/04/2020,12/08/2025,Bateria,WILLIAN DE ANDRADE,460.0,Regular,ativo,Recreio,Quinta,10:00,88
+Saulo Medeiros Aride,21/09/1985,05/04/2025,Guitarra,LUCAS GUIMARÃES,460.0,Regular,ativo,Recreio,Sábado,09:00,90
+Sérgio Mauro da Silva Maia,12/04/1977,14/11/2025,Violão,VALDO DELFINO,460.0,Regular,ativo,Recreio,Quinta,20:00,100
+Silvia Ohana Marques Coelho de Carvalho,26/05/1984,20/02/2025,Canto,MATHEUS SANTOS,415.0,Regular,ativo,Recreio,Terça,13:00,93
+Sofia de Avellar Muchuli e Silva,17/05/2015,23/01/2025,Teclado,WILLER ARRUDA,465.0,Regular,ativo,Recreio,Sexta,19:00,87
+Sofia Gonçalves Copello Moraes,20/04/2013,08/09/2022,Canto,LOHANA LEOPOLDO,508.2,Regular,ativo,Recreio,Quinta,19:00,57
+Sofia Lima de Castro,06/04/2009,11/04/2024,Canto,ISRAEL ROCHA,460.0,Regular,ativo,Recreio,Terça,16:00,74
+Sophia Correa Motta,22/05/2013,23/10/2024,Canto,ALEXANDRE DE SÁ,460.0,Regular,ativo,Recreio,Segunda,17:00,78
+Sophie Medeiros Rodrigues,20/09/2018,13/05/2021,Canto,LOHANA LEOPOLDO,650.0,Regular,ativo,Recreio,Sábado,08:00,74
+Sophie Szsentes Boyd,30/08/2018,27/01/2023,Canto,ALEXANDRE DE SÁ,460.0,Regular,ativo,Recreio,Quarta,16:00,88
+Tammy Missae dos Reis Nagashima Lira,07/07/1981,29/11/2025,Violão,LUCAS GUIMARÃES,460.0,Regular,ativo,Recreio,Sexta,19:00,100
+Théo Arruda de Oliveira,12/11/2018,18/07/2025,Guitarra,LUCAS GUIMARÃES,420.0,Regular,ativo,Recreio,Sábado,11:00,89
+Theo Campello Bastos,21/10/2015,04/08/2025,Teclado,KAIO FELIPE,395.0,Regular,ativo,Recreio,Segunda,19:00,89
+Theo de Souza Galdino,03/09/2015,16/01/2025,Bateria,WILLIAN DE ANDRADE,465.0,Regular,ativo,Recreio,Quinta,09:00,82
+Theo Modesti da Cunha Belém,12/07/2019,08/08/2025,Bateria,VICENTE PINHEIRO,460.0,Regular,ativo,Recreio,Segunda,17:00,93
+Thomás Giorelli de Carvalho,20/08/2014,20/02/2025,Teclado,WILLER ARRUDA,650.0,Regular,ativo,Recreio,Quinta,20:00,36
+Thomas Medeiros Rodrigues,26/03/2020,13/05/2021,Musicalização Preparatória,RAFAEL AKEEM,650.0,Regular,ativo,Recreio,Sábado,08:00,75
+Valentim da Silva Bond,25/01/2020,25/08/2025,Bateria,MATHEUS LANA,460.0,Regular,ativo,Recreio,Sábado,10:00,71
+Valentina Cortes Santanna,30/05/2014,29/01/2022,Canto,RAMON PINA,460.0,Regular,ativo,Recreio,Segunda,18:00,76
+Valentina Mendes Rodrigues Aleixo,29/05/2015,16/04/2024,Canto,MATHEUS FELIPE,460.0,Regular,ativo,Recreio,Segunda,10:00,76
+Vaner Paranhos,30/05/1982,27/08/2025,Canto,LETICIA PALMEIRA,460.0,Regular,ativo,Recreio,Segunda,19:00,73
+Vicente Boêta Alves,12/11/2020,14/12/2024,Musicalização Preparatória,LETICIA PALMEIRA,465.0,Regular,ativo,Recreio,Sábado,09:00,78
+Vicente Pereira Costard,19/04/2020,28/11/2022,Musicalização Preparatória,LETICIA PALMEIRA,460.63,Regular,ativo,Recreio,Quarta,16:00,91
+Victor Alexandre Mendes Soares,17/07/2013,11/11/2020,Teclado,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Quarta,19:00,74
+Victor Henrique de Sá Santos,15/07/1996,06/05/2025,Canto,MATHEUS SANTOS,650.0,Regular,ativo,Recreio,Quinta,14:00,76
+Vinícius Palmieri Schmid,28/01/2012,02/06/2025,Bateria,RAFAEL AKEEM,460.0,Regular,ativo,Recreio,Terça,15:00,86
+Vitor Palmieri Schmid,27/08/2016,02/06/2025,Violão,LUCAS GUIMARÃES,460.0,Regular,ativo,Recreio,Terça,15:00,92
+Vitória da Silva Nobre,30/03/2017,20/02/2025,Canto,LETICIA PALMEIRA,650.0,Regular,ativo,Recreio,Quinta,15:00,72
+Yuri Amador Maia,19/01/2017,21/03/2025,Teclado,JOEL DE SALLES,460.0,Regular,ativo,Recreio,Sexta,11:00,97
+Yuri Barros Jardim,22/06/2015,29/11/2024,Bateria,VICENTE PINHEIRO,465.0,Regular,ativo,Recreio,Segunda,18:00,90
+Yuri de Souza Ribeiro,26/11/2009,10/06/2021,Teclado,RAMON PINA,488.75,Regular,ativo,Recreio,Quarta,17:00,69
+Agatha Carias da Silva Pereira,18/11/2014,19/08/2024,Teclado,ISAQUE MENDES,477.0,Regular,ativo,Barra,Sexta,14:00,72
+Alana Vasconcelos de Araujo,21/11/2016,23/11/2024,Canto,DAIANA PACÍFICO,420.0,Regular,ativo,Barra,Sábado,11:00,61
+Alberto José dos Santos,20/07/1951,08/08/2025,Teclado,FELIPE GEVEZIER,467.0,Regular,ativo,Barra,Terça,10:00,100
+Alexandre Ferreira,19/06/1973,18/07/2025,Violão,LÉO CASTRO,365.0,Regular,ativo,Barra,Quinta,09:00,42
+Alexandre Herd Giglio,10/09/2010,11/10/2024,Bateria,PETERSON BIANCAMANO,375.0,Regular,ativo,Barra,Sábado,09:00,72
+Alice Cordeiro Mafra,12/08/2018,30/09/2025,Teclado,JOEL DE SALLES,477.0,Regular,ativo,Barra,Quarta,16:00,70
+Alicia Reina,23/10/2015,13/06/2025,Teclado,FELIPE GEVEZIER,385.0,Regular,ativo,Barra,Quinta,17:00,77
+Aline Borges Becker Oliveira,23/03/1982,30/09/2025,Canto,LÉO CASTRO,365.0,Regular,ativo,Barra,Quinta,14:00,67
+Ana Paula dos Santos Souza,06/12/1980,04/12/2024,Teclado,LARISSA BHEATTRIZ,365.0,Regular,ativo,Barra,Terça,19:00,31
+Ana Paula Oliveira Cazarotti,04/12/1980,07/05/2025,Canto,DAIANA PACÍFICO,370.0,Regular,ativo,Barra,Quarta,15:00,75
+Ana Vitória de Lima,14/12/2005,19/01/2023,Canto,LOHANA LEOPOLDO,480.0,Regular,ativo,Barra,Sexta,18:00,70
+Anna Luisa Peres Alves,21/05/2012,16/05/2025,Violão,PEDRO SÉRGIO,447.0,Regular,ativo,Barra,Sexta,16:00,82
+Antonella Lara Grei Cardozo De Morais,07/08/2020,17/06/2025,Teclado,LARISSA BHEATTRIZ,447.0,Regular,ativo,Barra,Terça,16:00,91
+Antônio Henrique Segall de Noronha,10/05/2016,30/10/2024,Guitarra,ISAQUE MENDES,437.0,Regular,ativo,Barra,Segunda,19:00,88
+Arthur Brito de Souza,19/02/2009,05/06/2024,Violão,MATHEUS LANA,437.0,Regular,ativo,Barra,Quarta,15:00,53
+Arthur Engelke Ludogero,19/06/2020,14/12/2022,Musicalização Preparatória,MATHEUS LANA,437.0,Regular,ativo,Barra,Quarta,16:00,73
+Arthur Giovanni Monte Caporali,03/12/2014,17/09/2025,Bateria,GUILHERME OVÍDIO,350.0,Regular,ativo,Barra,Quinta,19:00,70
+Arthur Moreno Godinho,13/07/2020,17/01/2022,Bateria,WILLIAN DE ANDRADE,365.0,Regular,ativo,Barra,Sábado,13:00,61
+Arthur Pedro Palmerini Lomba,20/12/2014,03/02/2025,Teclado,WILLER ARRUDA,447.0,Regular,ativo,Barra,Quarta,17:00,82
+Arthur Titus Rego Von Bertrand,16/12/2017,24/06/2022,Bateria,PETERSON BIANCAMANO,387.0,Regular,ativo,Barra,Sábado,11:00,77
+Beatriz Correa Paula dos Reis Barata,05/11/2015,23/08/2024,Piano,DAIANA PACÍFICO,497.0,Regular,ativo,Barra,Sexta,11:00,56
+Beatriz Dolavale Assed,20/02/2023,31/10/2025,Musicalização para Bebês,GABRIEL ANTONY,350.0,Regular,ativo,Barra,Quinta,17:00,100
+Bella Moreno Godinho,13/01/2024,26/11/2025,Musicalização para Bebês,FELIPE GEVEZIER,365.0,Regular,ativo,Barra,Sábado,13:00,0
+Benício Carvalho,04/03/2017,01/02/2024,Bateria,WILLIAN DE ANDRADE,365.0,Regular,ativo,Barra,Terça,10:00,92
+Benício Rosa Rodrigues,08/11/2018,05/02/2024,Musicalização Preparatória,MATHEUS LANA,437.0,Regular,ativo,Barra,Terça,16:00,71
+Benjamin Medeiros Paganini Agostinho,03/09/2022,07/03/2024,Musicalização Preparatória,WILLIAN DE ANDRADE,487.0,Regular,ativo,Barra,Sábado,09:00,92
+Bento Cordeiro Sobrinho,22/06/2020,08/12/2023,Teclado,MATHEUS LANA,425.0,Regular,ativo,Barra,Terça,14:00,89
+Bento Lapa Cazarim,29/01/2015,20/09/2025,Violão,FELIPE GEVEZIER,365.0,Regular,ativo,Barra,Sexta,17:00,92
+Bento Rebuli Paulo Gomes,26/04/2019,28/07/2025,Bateria,MATHEUS LANA,447.0,Regular,ativo,Barra,Quinta,10:00,58
+Bernardo Becker Oliveira,07/01/2016,26/02/2024,Bateria,GABRIEL ANTONY,400.0,Regular,ativo,Barra,Terça,11:00,69
+Bernardo Berriel,09/05/2021,09/11/2023,Musicalização Preparatória,GABRIEL ANTONY,482.0,Regular,ativo,Barra,Segunda,16:00,95
+Bernardo de Medeiros Lacorte Soares,19/10/2015,31/01/2025,Teclado,FELIPE GEVEZIER,467.0,Regular,ativo,Barra,Terça,11:00,93
+Bernardo Leal de Meirelles Bolzani,12/07/2022,28/11/2025,Musicalização Preparatória,PEDRO SÉRGIO,350.0,Regular,ativo,Barra,Sexta,15:00,
+Bernardo Reis de Carvalho,29/11/2009,18/03/2023,Guitarra,JEYSON GAIA,428.0,Regular,ativo,Barra,Sábado,10:00,62
+Billy Paulo Vangu Junior,03/04/2016,27/11/2021,Teclado,WILLIAN DE ANDRADE,391.0,Regular,ativo,Barra,Sábado,13:00,79
+Caê Leal Santos,25/11/2020,04/08/2025,Guitarra,FELIPE GEVEZIER,412.0,Regular,ativo,Barra,Sábado,10:00,65
+Caique Feijó de Lima Vieira,29/01/2020,04/08/2025,Musicalização Preparatória,GABRIEL ANTONY,467.0,Regular,ativo,Barra,Segunda,13:00,76
+Camila Santos Renha de Oliveira,19/06/2013,20/03/2023,Canto,DAIANA PACÍFICO,350.0,Regular,ativo,Barra,Sábado,09:00,79
+Carlos Jorge Aud,18/05/1974,30/11/2024,Violão,WILLIAN DE ANDRADE,365.0,Regular,ativo,Barra,Segunda,19:00,54
+Carlos Vitor Pinheiro da Silva,28/02/1966,31/07/2025,Violão,MATHEUS LANA,365.0,Regular,ativo,Barra,Quinta,19:00,67
+Cecília suhett de Oliveira,15/01/2017,26/02/2024,Teclado,MARIANA CARNEIRO,482.0,Regular,ativo,Barra,Sábado,10:00,73
+Clara Agostinho Roizman,17/07/2009,30/08/2025,Canto,DAIANA PACÍFICO,487.0,Regular,ativo,Barra,Quarta,16:00,57
+Clara de Souza Dantas Lapa,14/04/1983,19/09/2025,Piano,ISAQUE MENDES,365.0,Regular,ativo,Barra,Sexta,13:00,83
+Clara Paes Leme Ghanem,03/03/2012,10/12/2025,Guitarra,MATHEUS LANA,497.0,Regular,ativo,Barra,Quarta,19:00,
+Clarice Braga Soares de Mello,05/11/2014,11/11/2025,Canto,GABRIEL LEÃO,350.0,Regular,ativo,Barra,Quinta,19:00,38
+Clarice Rangel Tourinho,20/07/2019,12/09/2024,Teclado,MATHEUS LANA,497.0,Regular,ativo,Barra,Quinta,18:00,82
+Clarissa Menezes de Carvalho,29/09/2017,15/06/2024,Teclado,ISAQUE MENDES,365.0,Regular,ativo,Barra,Sexta,18:00,98
+Daniel Freire de Souza,21/09/2014,23/09/2023,Bateria,PETERSON BIANCAMANO,590.0,Regular,ativo,Barra,Sábado,12:00,70
+Daniel Lemanski Bordallo,10/12/2016,27/11/2024,Bateria,GABRIEL ANTONY,385.0,Regular,ativo,Barra,Quinta,11:00,97
+Daniel Pires de Lima,26/06/2019,28/02/2025,Violão,ISAQUE MENDES,395.0,Regular,ativo,Barra,Sábado,09:00,76
+Daniel Sampaio Senna Lattari,22/08/2020,08/07/2024,Musicalização Preparatória,GABRIEL ANTONY,460.0,Regular,ativo,Barra,Sexta,15:00,75
+Dante Custódio de Almeida Marques,31/07/2012,08/01/2026,Guitarra,PEDRO SÉRGIO,497.0,Regular,ativo,Barra,Sexta,10:00,
+Davi Barreto Lima,03/11/2019,12/01/2024,Bateria,WILLIAN DE ANDRADE,370.0,Regular,ativo,Barra,Segunda,10:00,86
+Davi Lima Quintarelli,07/04/2017,27/03/2024,Bateria,GABRIEL ANTONY,487.0,Regular,ativo,Barra,Sábado,14:00,73
+Eduardo Chagas Mendonça,27/05/2022,26/08/2025,Musicalização Preparatória,GABRIEL ANTONY,450.0,Regular,ativo,Barra,Segunda,10:00,100
+Enzo Ferrari,27/08/2014,26/04/2025,Bateria,PETERSON BIANCAMANO,457.0,Regular,ativo,Barra,Sábado,13:00,79
+Enzo Gabriel Pacheco de Almeida,04/04/2015,30/04/2025,Piano,LARISSA BHEATTRIZ,417.0,Regular,ativo,Barra,Segunda,18:00,85
+Esther Araújo Marques França,24/02/2017,24/04/2024,Canto,LOHANA LEOPOLDO,460.0,Regular,ativo,Barra,Sexta,19:00,61
+Eva do Espírito Santo Esteves,13/06/2015,27/11/2023,Teclado,MATHEUS LANA,447.0,Regular,ativo,Barra,Sexta,09:00,71
+Felipe Alves Fontinele,14/04/1993,11/07/2025,Bateria,LÉO CASTRO,233.0,Regular,ativo,Barra,Terça,14:00,92
+Filippe Carnetti Fernandes,18/11/2019,19/06/2023,Musicalização Preparatória,GABRIEL ANTONY,450.0,Regular,ativo,Barra,Sábado,09:00,77
+Flávia do Espírito Santo da Silva Telles,01/05/1990,23/10/2024,Canto,LOHANA LEOPOLDO,402.0,Regular,ativo,Barra,Sexta,18:00,62
+Flor Gianni Botelho Egas Cocco Cordovil de Macedo,20/06/2020,30/10/2024,Musicalização Preparatória,MARIANA CARNEIRO,375.0,Regular,ativo,Barra,Sábado,12:00,84
+Francisco Thomé Godoi,13/10/2020,26/10/2024,Musicalização Preparatória,GABRIEL ANTONY,437.0,Regular,ativo,Barra,Quinta,10:00,97
+Gabriel Maia Tavares Darmont,11/05/2011,11/03/2023,Bateria,WILLIAN DE ANDRADE,429.0,Regular,ativo,Barra,Segunda,14:00,78
+Gabriela da Costa,13/07/2016,11/08/2025,Teclado,FELIPE GEVEZIER,467.0,Regular,ativo,Barra,Quinta,18:00,100
+Gabriela Dornas,27/05/2011,21/06/2025,Teclado,ISAQUE MENDES,447.0,Regular,ativo,Barra,Sexta,16:00,77
+Gabriela Ferreira Noritomi,01/10/2014,22/03/2025,Canto,DAIANA PACÍFICO,467.0,Regular,ativo,Barra,Sábado,09:00,54
+Gael Silveira Gonzalez Martinez,07/12/2018,27/05/2022,Bateria,PETERSON BIANCAMANO,445.0,Regular,ativo,Barra,Sábado,10:00,81
+GIOVANI BREDA SILVA,25/10/2015,22/11/2025,Bateria,FELIPE GEVEZIER,457.0,Regular,ativo,Barra,Sábado,15:00,50
+Glauce Passos de Souza Maues,10/04/1970,18/07/2025,Canto,GABRIEL LEÃO,365.0,Regular,ativo,Barra,Quinta,09:00,53
+Guilherme Dolavale Assed,27/05/2020,09/10/2024,Bateria,GUILHERME OVÍDIO,350.0,Regular,ativo,Barra,Quinta,17:00,82
+Heitor Lucas Nogueira dos Santos Soares,03/02/2022,23/11/2024,Musicalização para Bebês,GABRIEL ANTONY,470.0,Regular,ativo,Barra,Sábado,11:00,87
+Helena Abreu Paixão,27/12/2017,02/05/2025,Canto,LARISSA BHEATTRIZ,447.0,Regular,ativo,Barra,Segunda,16:00,52
+Helena Menezes de Carvalho,21/09/2019,15/06/2024,Musicalização Preparatória,GABRIEL ANTONY,365.0,Regular,ativo,Barra,Sexta,18:00,93
+Hellena Pitrez Florentino,09/12/2019,03/08/2024,Teclado,MATHEUS LANA,497.0,Regular,ativo,Barra,Sexta,17:00,67
+Isabela Leal de Meirelles Bolzani,12/07/2022,28/11/2025,Musicalização Preparatória,PEDRO SÉRGIO,350.0,Regular,ativo,Barra,Sexta,15:00,
+Isabella Florenzano,23/06/2007,30/08/2025,Canto,DAIANA PACÍFICO,385.0,Regular,ativo,Barra,Sábado,14:00,50
+Isabella Lopes Correa,21/02/2021,01/07/2025,Musicalização Preparatória,MATHEUS LANA,375.0,Regular,ativo,Barra,Quinta,15:00,35
+Isadora Florenzano Carvalho,29/11/2015,05/02/2025,Canto,DAIANA PACÍFICO,440.0,Regular,ativo,Barra,Quarta,18:00,55
+Isis Petrucio Abrantes,07/03/2017,29/03/2025,Canto,LÉO CASTRO,447.0,Regular,ativo,Barra,Quarta,10:00,60
+Islan Morais,07/08/1973,04/12/2024,Guitarra,LÉO CASTRO,365.0,Regular,ativo,Barra,Quarta,14:00,29
+Ivan Moacyr Weiss Junior,03/08/1984,31/08/2024,Violão,JEYSON GAIA,395.0,Regular,ativo,Barra,Quarta,19:00,60
+Jefferson Cândido de Souza,03/12/1988,18/07/2025,Piano,LÉO CASTRO,380.0,Regular,ativo,Barra,Terça,19:00,45
+Jeremias Ou Yuan Ma,10/08/2016,21/08/2025,Teclado,FELIPE GEVEZIER,385.0,Regular,ativo,Barra,Sexta,15:00,88
+João Gabriel Candido,08/11/2010,17/04/2024,Guitarra,MATHEUS LANA,487.0,Regular,ativo,Barra,Terça,15:00,82
+João Pedro Proença Magalhães,01/11/2015,14/02/2025,Canto,LOHANA LEOPOLDO,497.0,Regular,ativo,Barra,Sexta,19:00,72
+João Vitor Pinheiro Martins,04/07/2005,31/10/2025,Teclado,ISAQUE MENDES,497.0,Regular,ativo,Barra,Segunda,16:00,100
+João Vitor Souza da Costa,25/05/2016,27/01/2025,Piano,WILLIAN DE ANDRADE,420.0,Regular,ativo,Barra,Terça,11:00,93
+Joaquim Candido Querido Ferraz Soares,25/04/2015,30/05/2025,Canto,LÉO CASTRO,447.0,Regular,ativo,Barra,Terça,18:00,73
+Joaquim Toshio de Barros Lima Hara,23/08/2021,06/01/2024,Musicalização para Bebês,GABRIEL ANTONY,365.0,Regular,ativo,Barra,Sábado,11:00,64
+Joseph Díaz Jabor,16/08/2021,31/08/2025,Musicalização Preparatória,FELIPE GEVEZIER,467.0,Regular,ativo,Barra,Segunda,18:00,83
+Juan do Nascimento Cruz Rebello,06/10/2004,12/06/2023,Teclado,ISAQUE MENDES,400.0,Regular,ativo,Barra,Sábado,10:00,93
+Julia dos Santos Nadaes,28/08/2015,18/09/2025,Canto,GABRIEL LEÃO,365.0,Regular,ativo,Barra,Quinta,19:00,73
+Júlia Segal de Noronha,23/11/2014,07/06/2025,Teclado,ISAQUE MENDES,380.0,Regular,ativo,Barra,Segunda,10:00,62
+Júlia Silva Vilardo,22/01/2014,30/06/2023,Canto,DAIANA PACÍFICO,375.0,Regular,ativo,Barra,Sábado,09:00,77
+Juliana de Oliveira almeida,04/03/2013,02/02/2023,Canto,MATHEUS LANA,407.0,Regular,ativo,Barra,Quinta,14:00,56
+Juliana Mei Jin Ma,05/01/2015,21/08/2025,Teclado,FELIPE GEVEZIER,385.0,Regular,ativo,Barra,Sexta,15:00,88
+Juliana Monteiro Pereira,04/01/2014,29/11/2024,Bateria,MATHEUS LANA,402.0,Regular,ativo,Barra,Terça,17:00,63
+Katia  Regina Goulart Trindade,25/12/1957,15/01/2025,Canto,DAIANA PACÍFICO,447.0,Regular,ativo,Barra,Sábado,10:00,78
+Lana Lopes Pinheiro,06/05/1988,14/08/2025,Canto,GABRIEL LEÃO,375.0,Regular,ativo,Barra,Quinta,16:00,65
+Levi Barbosa Rodrigues,25/01/2018,20/09/2025,Bateria,FELIPE GEVEZIER,365.0,Regular,ativo,Barra,Sexta,16:00,83
+Liv Ribeiro Oliveira,28/08/2021,19/12/2025,Musicalização Preparatória,LÉO CASTRO,437.0,Regular,ativo,Barra,Quinta,10:00,
+Lívia Becker Oliveira,18/04/2014,18/03/2025,Piano,LÉO CASTRO,365.0,Regular,ativo,Barra,Terça,11:00,76
+Liz de Azevedo Pacheco,09/01/2018,28/02/2024,Canto,DAIANA PACÍFICO,395.0,Regular,ativo,Barra,Quarta,17:00,70
+Loisi Carla Monteiro Pereira,18/11/1981,13/12/2024,Bateria,WILLIAN DE ANDRADE,365.0,Regular,ativo,Barra,Terça,17:00,85
+Lorenzo Tavares Bernardino de Lima,20/10/2017,15/09/2025,Musicalização Preparatória,FELIPE GEVEZIER,350.0,Regular,ativo,Barra,Terça,16:00,71
+Luan Colucci Dias,23/01/2017,21/03/2024,Bateria,GABRIEL ANTONY,460.0,Regular,ativo,Barra,Sábado,14:00,80
+Lucas Antunes,05/03/2016,10/01/2024,Bateria,FELIPE GEVEZIER,447.0,Regular,ativo,Barra,Sábado,11:00,90
+Lucas Bianchi,01/04/2020,08/02/2024,Musicalização Preparatória,GABRIEL ANTONY,482.0,Regular,ativo,Barra,Terça,19:00,82
+Lucas Brivio do Nascimento,30/07/2020,16/08/2024,Bateria,WILLIAN DE ANDRADE,395.0,Regular,ativo,Barra,Sábado,10:00,80
+Lucas Cardoso Neiva,21/09/2011,19/10/2021,Violão,MATHEUS LANA,425.0,Regular,ativo,Barra,Quarta,18:00,64
+Lucas Cordeiro Sobrinho,31/08/2011,08/12/2023,Piano,ISAQUE MENDES,425.0,Regular,ativo,Barra,Segunda,15:00,81
+Lucas de Barros Rodolpho dos Santos,26/02/2011,27/11/2024,Piano,WILLIAN DE ANDRADE,450.0,Regular,ativo,Barra,Terça,15:00,86
+Lucas Marques Scaldaferri,01/05/2015,04/02/2025,Guitarra,MATHEUS LANA,365.0,Regular,ativo,Barra,Sexta,10:00,65
+Lucas Matos de Azevedo Fontes,29/03/2021,31/07/2024,Musicalização Preparatória,GABRIEL ANTONY,399.0,Regular,ativo,Barra,Quinta,15:00,85
+Lucas Reis Pinna de Andrade,06/08/2021,12/12/2024,Musicalização Preparatória,GABRIEL ANTONY,370.0,Regular,ativo,Barra,Quinta,15:00,79
+Ludmilla Lage Gonçalves,06/12/1979,28/01/2025,Bateria,GABRIEL ANTONY,380.0,Regular,ativo,Barra,Quinta,13:00,44
+Luis Carlos Gomes,15/06/1969,11/05/2023,Violão,JEYSON GAIA,402.0,Regular,ativo,Barra,Sábado,11:00,50
+Luísa Schlinz Paz,06/07/2018,26/08/2025,Bateria,MATHEUS LANA,497.0,Regular,ativo,Barra,Quinta,10:00,47
+Lyanna de Faro Alves,05/03/2020,23/01/2025,Teclado,GABRIEL ANTONY,468.0,Regular,ativo,Barra,Terça,10:00,86
+Manu Ramos Medeiros,02/02/2017,22/08/2023,Teclado,WILLER ARRUDA,497.0,Regular,ativo,Barra,Quarta,18:00,80
+Marcela Gianni Botelho Egas,19/02/1978,30/10/2024,Violão,JEYSON GAIA,375.0,Regular,ativo,Barra,Sábado,12:00,73
+Marcelo Oliveira Brum Cardoso,07/08/2015,06/09/2024,Teclado,GABRIEL ANTONY,437.0,Regular,ativo,Barra,Quarta,18:00,58
+Marcelo Ximenes Apoliano,25/07/1972,24/01/2022,Bateria,WILLER ARRUDA,377.0,Regular,ativo,Barra,Quarta,14:00,81
+Maria Clara Brivio do Nascimento,03/02/2018,16/08/2024,Bateria,GABRIEL ANTONY,395.0,Regular,ativo,Barra,Sábado,10:00,80
+Maria Clara Miranda Rodrigues,24/02/2009,31/03/2025,Canto,ISAQUE MENDES,253.0,Regular,ativo,Barra,Segunda,14:00,86
+Maria Eduarda Candido,17/06/2015,17/11/2022,Bateria,GABRIEL LEÃO,497.0,Regular,ativo,Barra,Quinta,17:00,56
+Maria Eduarda Porciuncula Koeche de Magalhães,10/10/2010,31/07/2025,Violão,LÉO CASTRO,467.0,Regular,ativo,Barra,Quarta,17:00,78
+Maria Fernanda Lima Soares de Moura,22/12/2015,28/11/2025,Teclado,WILLIAN DE ANDRADE,447.0,Regular,ativo,Barra,Terça,14:00,100
+Maria Fernanda Sellos Correa Peres,06/04/2012,26/02/2024,Canto,LOHANA LEOPOLDO,482.0,Regular,ativo,Barra,Sexta,17:00,86
+Maria Flor Silveira,13/12/2015,08/04/2024,Violão,ISAQUE MENDES,437.0,Regular,ativo,Barra,Sexta,19:00,73
+Mariana Herd Giglio,19/05/2015,11/10/2024,Canto,DAIANA PACÍFICO,350.0,Regular,ativo,Barra,Sábado,09:00,77
+Marina Holanda Cardoso,30/10/2023,11/12/2024,Musicalização para Bebês,GABRIEL ANTONY,420.0,Regular,ativo,Barra,Sábado,15:00,41
+Marina Vasconcellos Tourinho Garcia,04/07/2018,03/02/2023,Teclado,GABRIEL ANTONY,395.0,Regular,ativo,Barra,Sábado,12:00,75
+Martina Gomes Ferreira,03/07/2011,17/02/2025,Teclado,LÉO CASTRO,467.0,Regular,ativo,Barra,Quarta,15:00,76
+Mateus Bernardes Galvão,26/04/2023,29/11/2024,Musicalização para Bebês,PEDRO SÉRGIO,420.0,Regular,ativo,Barra,Sexta,17:00,79
+Mateus Kosinov Paulino,20/05/2015,31/10/2024,Canto,DAIANA PACÍFICO,465.0,Regular,ativo,Barra,Sábado,13:00,62
+Matheus Moura,25/05/2016,31/10/2025,Bateria,FELIPE GEVEZIER,460.0,Regular,ativo,Barra,Sexta,10:00,100
+Mauricio Cabral Liberato de Matos Junior,02/04/2012,08/05/2024,Bateria,GABRIEL ANTONY,460.0,Regular,ativo,Barra,Terça,17:00,56
+Maya Kelly Ximenes Apoliano,28/05/2015,07/12/2021,Canto,MATHEUS LANA,377.0,Regular,ativo,Barra,Quarta,14:00,83
+Mel Gianni Botelho Egas Cocco Cordovil de Macedo,17/09/2018,30/10/2024,Teclado,GABRIEL ANTONY,375.0,Regular,ativo,Barra,Sábado,12:00,77
+Melissa Milesi Barth,06/04/2016,31/01/2025,Canto,LÉO CASTRO,600.0,Regular,ativo,Barra,Terça,17:00,76
+Miguel Brivio do Nascimento,17/12/2015,16/08/2024,Teclado,MARIANA CARNEIRO,395.0,Regular,ativo,Barra,Sábado,10:00,76
+Miguel Cardozo,24/09/2015,21/11/2025,Bateria,GUILHERME OVÍDIO,450.0,Regular,ativo,Barra,Quinta,18:00,67
+Miguel Hayashi Dupret,27/11/2019,14/10/2025,Musicalização Preparatória,GABRIEL ANTONY,497.0,Regular,ativo,Barra,Segunda,11:00,71
+Miguel Reis Pinna Mateus Leite,26/08/2019,27/05/2024,Musicalização Preparatória,MARIANA CARNEIRO,415.0,Regular,ativo,Barra,Sábado,11:00,92
+Miguel Souza da Costa,07/11/2019,27/01/2025,Teclado,LARISSA BHEATTRIZ,420.0,Regular,ativo,Barra,Terça,11:00,93
+Miguel Sperandio Kevorkian,22/04/2021,01/08/2024,Musicalização Preparatória,GABRIEL ANTONY,437.0,Regular,ativo,Barra,Sexta,19:00,90
+Mirella Cordeiro Sobrinho,05/11/2015,08/12/2023,Bateria,GABRIEL ANTONY,425.0,Regular,ativo,Barra,Terça,14:00,86
+Natan Pereira Calvo Demidoff,13/07/2015,22/05/2023,Bateria,PETERSON BIANCAMANO,457.0,Regular,ativo,Barra,Sábado,15:00,74
+Nicolas Mendes de Morais,18/05/2016,26/11/2024,Teclado,LARISSA BHEATTRIZ,470.0,Regular,ativo,Barra,Terça,18:00,63
+Nicolle Mendes de Morais,10/11/2010,08/01/2026,Guitarra,WILLIAN DE ANDRADE,385.0,Regular,ativo,Barra,Segunda,17:00,
+Nina Aragão Velloso,07/08/2009,09/05/2025,Contrabaixo,FELIPE GEVEZIER,447.0,Regular,ativo,Barra,Sábado,09:00,85
+Noah do Nascimento Barros Peres,11/06/2015,04/06/2025,Bateria,WILLER ARRUDA,350.0,Regular,ativo,Barra,Quarta,16:00,88
+Patrick Menezes Cruz,28/12/1998,05/10/2024,Cavaquinho,JEYSON GAIA,437.0,Regular,ativo,Barra,Sábado,11:00,72
+Paula Kelly Ximenes Apoliano,31/07/1979,11/06/2025,Canto,DAIANA PACÍFICO,377.0,Regular,ativo,Barra,Quarta,14:00,39
+Paula Tavares da Silva Samão,24/12/1994,28/11/2025,Bateria,WILLIAN DE ANDRADE,430.0,Regular,ativo,Barra,Sábado,12:00,100
+Paulo César Benzi Filho,28/02/1976,30/10/2025,Piano,LÉO CASTRO,437.0,Regular,ativo,Barra,Quinta,15:00,60
+Paulo Roberto Lopes Filho,12/02/1970,18/05/2023,Bateria,FELIPE GEVEZIER,518.0,Regular,ativo,Barra,Quinta,19:00,52
+Pedro Bastos da Costa,27/01/2005,17/10/2025,Canto,LOHANA LEOPOLDO,497.0,Regular,ativo,Barra,Sexta,16:00,100
+Pedro Cindra Feijó,28/06/2020,11/06/2025,Musicalização Preparatória,GABRIEL ANTONY,447.0,Regular,ativo,Barra,Terça,15:00,96
+Pedro de Figueiredo Vieira,31/05/2008,30/04/2025,Guitarra,LÉO CASTRO,447.0,Regular,ativo,Barra,Quinta,17:00,86
+Pedro do Nascimento Cruz Rebello,25/10/2017,12/06/2023,Bateria,GABRIEL ANTONY,400.0,Regular,ativo,Barra,Terça,18:00,95
+Pedro Henrique Madeira Maturano,21/10/2001,13/12/2024,Bateria,WILLIAN DE ANDRADE,350.0,Regular,ativo,Barra,Segunda,16:00,87
+Pedro Henrique Moreno Godinho,14/01/2016,17/01/2022,Bateria,PETERSON BIANCAMANO,365.0,Regular,ativo,Barra,Sábado,13:00,63
+Pedro José Dos santos Nadaes,12/03/2018,18/09/2025,Bateria,GABRIEL ANTONY,365.0,Regular,ativo,Barra,Quarta,19:00,82
+Pedro Marinho,11/10/2014,01/10/2025,Bateria,ISAQUE MENDES,497.0,Regular,ativo,Barra,Segunda,18:00,88
+Pedro Oliveira Cazarotti,20/08/2018,07/05/2025,Bateria,GABRIEL ANTONY,370.0,Regular,ativo,Barra,Quarta,15:00,96
+Pedro Vasconcellos Tourinho Garcia,17/03/2015,03/02/2023,Bateria,PETERSON BIANCAMANO,395.0,Regular,ativo,Barra,Sábado,12:00,76
+Pérola Madeira Maturano,18/01/2013,12/12/2024,Canto,MATHEUS LANA,350.0,Regular,ativo,Barra,Sexta,14:00,61
+Pietro Matola Abreu,26/02/2011,04/08/2025,Contrabaixo,GABRIEL ANTONY,401.5,Regular,ativo,Barra,Quinta,19:00,57
+Rafael Dias de Lima,10/10/1976,28/02/2025,Violão,JEYSON GAIA,395.0,Regular,ativo,Barra,Sábado,09:00,65
+Rafael Kelly Ximenes Apoliano,28/05/2015,07/12/2021,Bateria,GABRIEL ANTONY,377.0,Regular,ativo,Barra,Quarta,14:00,91
+Rafael Moura Fernandes,20/06/2000,15/07/2022,Guitarra,MATHEUS LANA,500.0,Regular,ativo,Barra,Terça,18:00,69
+Rafael Placido,30/04/1986,01/02/2022,Violão,JEYSON GAIA,490.0,Regular,ativo,Barra,Quarta,18:00,69
+Raissa Arcoverde Borborema Mendes Dytz,08/02/1994,26/06/2025,Piano,LARISSA BHEATTRIZ,497.0,Regular,ativo,Barra,Segunda,14:00,71
+Raquel de Cássia Silva de Carvalho,11/07/1994,10/04/2024,Bateria,WILLER ARRUDA,487.0,Regular,ativo,Barra,Quarta,19:00,90
+Rodrigo de Souza Lima Hara,11/09/1983,03/12/2024,Violão,WILLIAN DE ANDRADE,365.0,Regular,ativo,Barra,Terça,16:00,60
+Rogério Nascimento de Carvalho,07/11/1972,18/03/2023,Guitarra,JEYSON GAIA,428.0,Regular,ativo,Barra,Sábado,10:00,66
+Samara Severo Souza,08/07/2007,30/11/2024,Bateria,PETERSON BIANCAMANO,399.0,Regular,ativo,Barra,Sábado,14:00,79
+Sandra Maria Gomes Carvalho,08/02/1961,16/10/2025,Piano,LÉO CASTRO,437.0,Regular,ativo,Barra,Quarta,11:00,38
+Sara Gomes dos Santos,26/04/1999,05/02/2025,Canto,DAIANA PACÍFICO,340.0,Regular,ativo,Barra,Sábado,10:00,59
+Saulo Reina da Rocha,12/04/2017,13/06/2025,Bateria,MATHEUS LANA,385.0,Regular,ativo,Barra,Quinta,17:00,59
+Sergio Paulo Fogaça de Carvalho,04/08/1987,13/12/2024,Violão,WILLIAN DE ANDRADE,365.0,Regular,ativo,Barra,Segunda,19:00,90
+Sophia Galhanone,04/12/2019,10/01/2024,Musicalização Preparatória,FELIPE GEVEZIER,530.0,Regular,ativo,Barra,Sexta,19:00,71
+Stefano Luigi de Almeida Agostini,30/10/2010,06/03/2024,Bateria,MATHEUS LANA,420.0,Regular,ativo,Barra,Sexta,16:00,56
+Stella Sá de Farias gomes,22/01/2016,11/05/2023,Canto,DAIANA PACÍFICO,402.0,Regular,ativo,Barra,Sábado,12:00,60
+Tâmara Perez Lemanski Bordallo,15/09/1982,30/10/2025,Canto,GABRIEL LEÃO,385.0,Regular,ativo,Barra,Quinta,11:00,100
+Thainá Moreira,31/07/1992,11/11/2025,Canto,GABRIEL LEÃO,460.0,Regular,ativo,Barra,Terça,09:00,100
+Thalita Araujo Costa,21/09/2015,30/11/2024,Canto,DAIANA PACÍFICO,437.0,Regular,ativo,Barra,Sábado,11:00,63
+Theo do Nascimento Barros Peres,14/02/2018,04/06/2025,Bateria,LÉO CASTRO,350.0,Regular,ativo,Barra,Quarta,16:00,72
+Théo Dos Santos Machado Weiss,10/12/2013,28/07/2023,Bateria,GABRIEL ANTONY,395.0,Regular,ativo,Barra,Quinta,18:00,53
+Theo Marinho Cobas,08/12/2022,31/01/2025,Musicalização Preparatória,GABRIEL ANTONY,457.0,Regular,ativo,Barra,Segunda,09:00,73
+Thoth dos Anjos de Oliveira,21/06/2023,05/02/2024,Musicalização para Bebês,GABRIEL ANTONY,426.0,Regular,ativo,Barra,Quinta,16:00,89
+Tito Lapa Cazarim,11/06/2017,20/09/2025,Teclado,ISAQUE MENDES,365.0,Regular,ativo,Barra,Sexta,17:00,92
+Valentina Natividade de Sá Macedo,15/02/2016,04/03/2024,Canto,ISAQUE MENDES,350.0,Regular,ativo,Barra,Sábado,11:00,69
+Vicente Graça Vianna,19/12/2016,23/08/2025,Canto,LOHANA LEOPOLDO,460.0,Regular,ativo,Barra,Sexta,19:00,50
+Victor de Azevedo Pacheco,07/07/2014,28/02/2024,Bateria,GABRIEL ANTONY,395.0,Regular,ativo,Barra,Quarta,17:00,73
+Vinicius Cunha Oliveira,17/08/1987,03/12/2024,Bateria,GABRIEL ANTONY,365.0,Regular,ativo,Barra,Sexta,16:00,65
+Vitor Hugo Carvalho de Castro,16/02/2017,18/03/2023,Bateria,PETERSON BIANCAMANO,492.0,Regular,ativo,Barra,Sábado,11:00,75
+Vitoria da Luz,21/11/2000,04/12/2023,Canto,DAIANA PACÍFICO,437.0,Regular,ativo,Barra,Quarta,19:00,61
+Vivian Dangelo,30/01/1985,31/07/2025,Teclado,MARIANA CARNEIRO,365.0,Regular,ativo,Barra,Sábado,13:00,59
+Wanessa Monte Caporali,11/03/1985,17/09/2025,Piano,LÉO CASTRO,350.0,Regular,ativo,Barra,Quinta,19:00,44
+William Gaspar da Silva Oliveira,02/09/1993,08/12/2025,Bateria,WILLIAN DE ANDRADE,437.0,Regular,ativo,Barra,Segunda,18:00,100

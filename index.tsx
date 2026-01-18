@@ -1,7 +1,11 @@
 
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App';
+import { RouterProvider } from 'react-router-dom';
+import { router } from './src/router';
+import { Toaster } from 'sonner';
+import { AuthProvider } from './src/contexts/AuthContext';
+import { ErrorBoundary } from './src/components/App/Auth/ErrorBoundary';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -11,6 +15,11 @@ if (!rootElement) {
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
-    <App />
+    <ErrorBoundary>
+      <AuthProvider>
+        <RouterProvider router={router} />
+        <Toaster position="top-right" richColors />
+      </AuthProvider>
+    </ErrorBoundary>
   </React.StrictMode>
 );

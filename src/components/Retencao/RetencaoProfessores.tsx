@@ -58,12 +58,33 @@ export function RetencaoProfessores({ ano, unidade }: RetencaoProfessoresProps) 
     }
   };
 
-  // Dados para gráfico de barras
-  const dadosGrafico = professoresProcessados.slice(0, 10).map(p => ({
-    nome: p.professor.split(' ').slice(0, 2).join(' '),
-    evasoes: p.evasoes,
-    risco: p.nivel_risco || 'normal',
-  }));
+  // Labels para cada tipo de ordenação
+  const getMetricaLabel = (tipo: OrdenacaoTipo) => {
+    switch (tipo) {
+      case 'evasoes': return 'Evasões';
+      case 'taxa_renovacao': return 'Renovação %';
+      case 'taxa_conversao': return 'Conversão %';
+      case 'score_saude': return 'Score';
+      default: return 'Evasões';
+    }
+  };
+
+  // Dados para gráfico de barras - baseado na métrica selecionada
+  const dadosGrafico = professoresProcessados.slice(0, 10).map(p => {
+    let valor: number;
+    switch (ordenarPor) {
+      case 'evasoes': valor = p.evasoes; break;
+      case 'taxa_renovacao': valor = p.taxa_renovacao; break;
+      case 'taxa_conversao': valor = p.taxa_conversao; break;
+      case 'score_saude': valor = p.score_saude || 0; break;
+      default: valor = p.evasoes;
+    }
+    return {
+      nome: p.professor.split(' ').slice(0, 2).join(' '),
+      valor,
+      risco: p.nivel_risco || 'normal',
+    };
+  });
 
   // Dados para scatter plot (Conversão vs Evasão)
   const dadosScatter = professores.map(p => ({
@@ -189,7 +210,9 @@ export function RetencaoProfessores({ ano, unidade }: RetencaoProfessoresProps) 
 
           {/* Gráfico */}
           <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 mb-8">
-            <h3 className="text-lg font-grotesk font-semibold text-white mb-6">Top 10 Professores com Mais Evasões</h3>
+            <h3 className="text-lg font-grotesk font-semibold text-white mb-6">
+              Top 10 Professores - {getMetricaLabel(ordenarPor)}
+            </h3>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={dadosGrafico} layout="vertical">
@@ -211,8 +234,14 @@ export function RetencaoProfessores({ ano, unidade }: RetencaoProfessoresProps) 
                     labelStyle={{ color: '#fff' }}
                     itemStyle={{ color: '#fff' }}
                     cursor={{ fill: '#1e293b' }}
+                    formatter={(value: number) => [
+                      ordenarPor === 'taxa_renovacao' || ordenarPor === 'taxa_conversao' 
+                        ? `${value.toFixed(1)}%` 
+                        : value,
+                      getMetricaLabel(ordenarPor)
+                    ]}
                   />
-                  <Bar dataKey="evasoes" radius={[0, 4, 4, 0]} name="Evasões">
+                  <Bar dataKey="valor" radius={[0, 4, 4, 0]} name={getMetricaLabel(ordenarPor)}>
                     {dadosGrafico.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={getCoresRisco(entry.risco).bar} />
                     ))}

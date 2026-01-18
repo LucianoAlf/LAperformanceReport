@@ -1,0 +1,1 @@
+export { GerenciarUsuarios } from './GerenciarUsuarios';

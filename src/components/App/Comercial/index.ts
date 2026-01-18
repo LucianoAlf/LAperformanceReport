@@ -1,0 +1,1 @@
+export { PlanilhaComercial } from './PlanilhaComercial';
