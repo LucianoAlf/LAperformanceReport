@@ -19,7 +19,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 
 const menuItems = [
   { path: '/app', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { path: '/app/gestao-mensal', label: 'Gestão Mensal', icon: BarChart3 },
+  { path: '/app/gestao-mensal', label: 'Analytics', icon: BarChart3 },
   { path: '/app/entrada', label: 'Entrada de Dados', icon: PlusCircle },
   { path: '/app/metas', label: 'Metas', icon: Target },
   { path: '/app/config', label: 'Configurações', icon: Settings },

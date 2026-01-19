@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Users, Trophy, TrendingUp, TrendingDown, Percent, Star, DollarSign, UserCheck, UserMinus, Target, Award, Clock } from 'lucide-react';
+import { Users, Trophy, TrendingUp, TrendingDown, Percent, Star, DollarSign, UserCheck, UserMinus, Target, Award, Clock, BarChart3 } from 'lucide-react';
 import { KPICard } from '@/components/ui/KPICard';
 import { RankingTable } from '@/components/ui/RankingTable';
+import { RankingTableCollapsible } from '@/components/ui/RankingTableCollapsible';
 import { BarChartHorizontal } from '@/components/ui/BarChartHorizontal';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, getMesNomeCurto } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 
@@ -63,6 +64,7 @@ interface DadosProfessores {
   matriculas_total: number;
   taxa_conversao_geral: number;
   ranking_matriculadores: { id: number; nome: string; valor: number; subvalor?: string }[];
+  ranking_conversao: { id: number; nome: string; valor: number; subvalor?: string }[];
   
   // Retenção
   renovacoes_total: number;
@@ -82,10 +84,26 @@ interface DadosProfessores {
   professores: ProfessorKPI[];
 }
 
+// Interface para dados comparativos de professores
+interface DadosComparativoProfessores {
+  total_professores: number;
+  alunos_total: number;
+  carteira_media: number;
+  experimentais_total: number;
+  matriculas_total: number;
+  taxa_conversao_geral: number;
+  ticket_medio_geral: number;
+  label: string;
+}
+
 export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresProps) {
   const [activeSubTab, setActiveSubTab] = useState<SubTabId>('visao_geral');
   const [loading, setLoading] = useState(true);
   const [dados, setDados] = useState<DadosProfessores | null>(null);
+  
+  // Estados para comparativos históricos
+  const [dadosMesAnterior, setDadosMesAnterior] = useState<DadosComparativoProfessores | null>(null);
+  const [dadosAnoAnterior, setDadosAnoAnterior] = useState<DadosComparativoProfessores | null>(null);
 
   // Usar mesFim se fornecido, senão usar mes (para filtro mensal)
   const mesInicio = mes;
@@ -103,6 +121,106 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
         
         // Usar view mensal para período atual, histórica para passado
         const viewName = isCurrentPeriod ? 'vw_kpis_professor_mensal' : 'vw_kpis_professor_historico';
+
+        // ========== BUSCAR DADOS COMPARATIVOS (Mês Anterior e Ano Anterior) ==========
+        // Usar tabela dados_mensais que tem dados históricos completos de alunos, matrículas, ticket, etc.
+        // Usar tabela dados_comerciais para experimentais
+        const mesAnterior = mes === 1 ? 12 : mes - 1;
+        const anoMesAnterior = mes === 1 ? ano - 1 : ano;
+
+        // Buscar dados do mês anterior de dados_mensais (alunos, ticket, matrículas)
+        let mesAnteriorDadosQuery = supabase
+          .from('dados_mensais')
+          .select('*')
+          .eq('ano', anoMesAnterior)
+          .eq('mes', mesAnterior);
+
+        if (unidade !== 'todos') {
+          mesAnteriorDadosQuery = mesAnteriorDadosQuery.eq('unidade_id', unidade);
+        }
+
+        // Buscar dados do mês anterior de dados_comerciais (experimentais)
+        const competenciaMesAnt = `${anoMesAnterior}-${String(mesAnterior).padStart(2, '0')}-01`;
+        let mesAnteriorComercialQuery = supabase
+          .from('dados_comerciais')
+          .select('*')
+          .eq('competencia', competenciaMesAnt);
+
+        // Buscar dados do mesmo mês do ano anterior de dados_mensais
+        let anoAnteriorDadosQuery = supabase
+          .from('dados_mensais')
+          .select('*')
+          .eq('ano', ano - 1)
+          .eq('mes', mes);
+
+        if (unidade !== 'todos') {
+          anoAnteriorDadosQuery = anoAnteriorDadosQuery.eq('unidade_id', unidade);
+        }
+
+        // Buscar dados do ano anterior de dados_comerciais (experimentais)
+        const competenciaAnoAnt = `${ano - 1}-${String(mes).padStart(2, '0')}-01`;
+        let anoAnteriorComercialQuery = supabase
+          .from('dados_comerciais')
+          .select('*')
+          .eq('competencia', competenciaAnoAnt);
+
+        // Executar queries comparativas em paralelo
+        const [mesAntDadosResult, mesAntComercialResult, anoAntDadosResult, anoAntComercialResult] = await Promise.all([
+          mesAnteriorDadosQuery,
+          mesAnteriorComercialQuery,
+          anoAnteriorDadosQuery,
+          anoAnteriorComercialQuery
+        ]);
+
+        // Processar dados do mês anterior
+        const dadosMesAnt = mesAntDadosResult.data || [];
+        const comercialMesAnt = mesAntComercialResult.data || [];
+        if (dadosMesAnt.length > 0) {
+          const alunosTotal = dadosMesAnt.reduce((acc, d) => acc + (d.alunos_pagantes || 0), 0);
+          const matTotal = dadosMesAnt.reduce((acc, d) => acc + (d.novas_matriculas || 0), 0);
+          const ticketMedio = dadosMesAnt.length > 0 
+            ? dadosMesAnt.reduce((acc, d) => acc + (Number(d.ticket_medio) || 0), 0) / dadosMesAnt.length 
+            : 0;
+          const expTotal = comercialMesAnt.reduce((acc, c) => acc + (c.aulas_experimentais || 0), 0);
+
+          setDadosMesAnterior({
+            total_professores: 0, // Não temos histórico mensal de professores
+            alunos_total: alunosTotal,
+            carteira_media: 0,
+            experimentais_total: expTotal,
+            matriculas_total: matTotal,
+            taxa_conversao_geral: expTotal > 0 ? (matTotal / expTotal) * 100 : 0,
+            ticket_medio_geral: ticketMedio,
+            label: `${getMesNomeCurto(mesAnterior)}/${String(anoMesAnterior).slice(2)}`,
+          });
+        } else {
+          setDadosMesAnterior(null);
+        }
+
+        // Processar dados do ano anterior
+        const dadosAnoAnt = anoAntDadosResult.data || [];
+        const comercialAnoAnt = anoAntComercialResult.data || [];
+        if (dadosAnoAnt.length > 0) {
+          const alunosTotal = dadosAnoAnt.reduce((acc, d) => acc + (d.alunos_pagantes || 0), 0);
+          const matTotal = dadosAnoAnt.reduce((acc, d) => acc + (d.novas_matriculas || 0), 0);
+          const ticketMedio = dadosAnoAnt.length > 0 
+            ? dadosAnoAnt.reduce((acc, d) => acc + (Number(d.ticket_medio) || 0), 0) / dadosAnoAnt.length 
+            : 0;
+          const expTotal = comercialAnoAnt.reduce((acc, c) => acc + (c.aulas_experimentais || 0), 0);
+
+          setDadosAnoAnterior({
+            total_professores: 0, // Não temos histórico mensal de professores
+            alunos_total: alunosTotal,
+            carteira_media: 0,
+            experimentais_total: expTotal,
+            matriculas_total: matTotal,
+            taxa_conversao_geral: expTotal > 0 ? (matTotal / expTotal) * 100 : 0,
+            ticket_medio_geral: ticketMedio,
+            label: `${getMesNomeCurto(mes)}/${String(ano - 1).slice(2)}`,
+          });
+        } else {
+          setDadosAnoAnterior(null);
+        }
         
         let query = supabase
           .from(viewName)
@@ -348,10 +466,19 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
             subvalor: `${p.taxa_conversao.toFixed(0)}% conversão (${p.experimentais} exp)`
           }));
 
+        const rankingConversao = professoresKPIs
+          .filter(p => p.experimentais > 0 && p.matriculas > 0)
+          .sort((a, b) => b.taxa_conversao - a.taxa_conversao)
+          .map(p => ({
+            id: p.id,
+            nome: p.nome,
+            valor: p.taxa_conversao,
+            subvalor: `${p.matriculas} matrículas de ${p.experimentais} exp`
+          }));
+
         const rankingRenovadores = professoresKPIs
           .filter(p => p.renovacoes > 0 || p.nao_renovacoes > 0)
           .sort((a, b) => b.taxa_renovacao - a.taxa_renovacao)
-          .slice(0, 10)
           .map(p => ({
             id: p.id,
             nome: p.nome,
@@ -362,7 +489,6 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
         const rankingChurn = professoresKPIs
           .filter(p => p.carteira_alunos > 0)
           .sort((a, b) => a.taxa_cancelamento - b.taxa_cancelamento) // Menor é melhor
-          .slice(0, 10)
           .map(p => ({
             id: p.id,
             nome: p.nome,
@@ -373,7 +499,6 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
         const rankingNPS = professoresKPIs
           .filter(p => p.nps > 0)
           .sort((a, b) => b.nps - a.nps)
-          .slice(0, 10)
           .map(p => ({
             id: p.id,
             nome: p.nome,
@@ -390,6 +515,7 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
           matriculas_total: matriculasTotal,
           taxa_conversao_geral: taxaConversaoGeral,
           ranking_matriculadores: rankingMatriculadores,
+          ranking_conversao: rankingConversao,
           renovacoes_total: renovacoesTotal,
           nao_renovacoes_total: naoRenovacoesTotal,
           taxa_renovacao_geral: taxaRenovacaoGeral,
@@ -466,6 +592,8 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
               label="Total Alunos"
               value={dados.alunos_total}
               variant="cyan"
+              comparativoMesAnterior={dadosMesAnterior && dadosMesAnterior.alunos_total > 0 ? { valor: dadosMesAnterior.alunos_total, label: dadosMesAnterior.label } : undefined}
+              comparativoAnoAnterior={dadosAnoAnterior && dadosAnoAnterior.alunos_total > 0 ? { valor: dadosAnoAnterior.alunos_total, label: dadosAnoAnterior.label } : undefined}
             />
             <KPICard
               icon={Target}
@@ -484,35 +612,38 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
             <KPICard
               icon={DollarSign}
               label="Ticket Médio"
-              value={formatCurrency(dados.ticket_medio_geral)}
+              value={dados.ticket_medio_geral}
+              format="currency"
               variant="amber"
+              comparativoMesAnterior={dadosMesAnterior && dadosMesAnterior.ticket_medio_geral > 0 ? { valor: dadosMesAnterior.ticket_medio_geral, label: dadosMesAnterior.label } : undefined}
+              comparativoAnoAnterior={dadosAnoAnterior && dadosAnoAnterior.ticket_medio_geral > 0 ? { valor: dadosAnoAnterior.ticket_medio_geral, label: dadosAnoAnterior.label } : undefined}
             />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <RankingTable
+            <RankingTableCollapsible
               data={dados.professores
                 .sort((a, b) => b.carteira_alunos - a.carteira_alunos)
-                .slice(0, 10)
                 .map(p => ({
                   id: p.id,
                   nome: p.nome,
                   valor: p.carteira_alunos
                 }))}
-              title="Top 10 - Mais Alunos"
+              title="Ranking - Mais Alunos"
               valorLabel="Alunos"
+              topCount={3}
             />
-            <RankingTable
+            <RankingTableCollapsible
               data={dados.professores
                 .sort((a, b) => b.ticket_medio - a.ticket_medio)
-                .slice(0, 10)
                 .map(p => ({
                   id: p.id,
                   nome: p.nome,
                   valor: p.ticket_medio
                 }))}
-              title="Top 10 - Maior Ticket Médio"
+              title="Ranking - Maior Ticket Médio"
               valorLabel="Ticket"
+              topCount={3}
               valorFormatter={(value) => formatCurrency(Number(value))}
             />
           </div>
@@ -528,12 +659,16 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
               label="Experimentais"
               value={dados.experimentais_total}
               variant="cyan"
+              comparativoMesAnterior={dadosMesAnterior ? { valor: dadosMesAnterior.experimentais_total, label: dadosMesAnterior.label } : undefined}
+              comparativoAnoAnterior={dadosAnoAnterior ? { valor: dadosAnoAnterior.experimentais_total, label: dadosAnoAnterior.label } : undefined}
             />
             <KPICard
               icon={UserCheck}
               label="Matrículas"
               value={dados.matriculas_total}
               variant="emerald"
+              comparativoMesAnterior={dadosMesAnterior ? { valor: dadosMesAnterior.matriculas_total, label: dadosMesAnterior.label } : undefined}
+              comparativoAnoAnterior={dadosAnoAnterior ? { valor: dadosAnoAnterior.matriculas_total, label: dadosAnoAnterior.label } : undefined}
             />
             <KPICard
               icon={Percent}
@@ -550,40 +685,42 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
             />
           </div>
 
-          <RankingTable
-            data={dados.ranking_matriculadores}
-            title="🏆 Ranking Matriculadores"
-            valorLabel="Matrículas"
-          />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <RankingTableCollapsible
+              data={dados.ranking_matriculadores}
+              title="Ranking Professores Matriculadores"
+              valorLabel="Matrículas"
+              topCount={3}
+              variant="emerald"
+            />
+            <RankingTableCollapsible
+              data={dados.ranking_conversao}
+              title="Ranking Melhor Taxa de Conversão"
+              valorLabel="Taxa"
+              topCount={3}
+              variant="violet"
+              valorFormatter={(value) => `${Number(value).toFixed(1)}%`}
+            />
+          </div>
         </div>
       )}
 
       {/* Sub-aba: Retenção */}
       {activeSubTab === 'retencao' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <KPICard
               icon={UserCheck}
               label="Renovações"
               value={dados.renovacoes_total}
+              subvalue={`${dados.taxa_renovacao_geral.toFixed(1)}% taxa de renovação`}
               variant="emerald"
             />
             <KPICard
               icon={UserMinus}
               label="Não Renovações"
               value={dados.nao_renovacoes_total}
-              variant="amber"
-            />
-            <KPICard
-              icon={Percent}
-              label="Taxa Renovação"
-              value={`${dados.taxa_renovacao_geral.toFixed(1)}%`}
-              variant="emerald"
-            />
-            <KPICard
-              icon={Percent}
-              label="Taxa Não Renovação"
-              value={`${(100 - dados.taxa_renovacao_geral).toFixed(1)}%`}
+              subvalue={`${(100 - dados.taxa_renovacao_geral).toFixed(1)}% taxa de não renovação`}
               variant="amber"
             />
             <KPICard
@@ -601,15 +738,19 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <RankingTable
+            <RankingTableCollapsible
               data={dados.ranking_renovadores}
-              title="🏆 Ranking Renovadores"
+              title="Ranking Renovadores"
               valorLabel="Renovações"
+              topCount={3}
+              variant="emerald"
             />
-            <RankingTable
+            <RankingTableCollapsible
               data={dados.ranking_churn}
-              title="🛡️ Menor Churn (Melhor Retenção)"
+              title="Menor Churn (Melhor Retenção)"
               valorLabel="Evasões"
+              topCount={3}
+              variant="cyan"
             />
           </div>
         </div>
@@ -618,7 +759,7 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
       {/* Sub-aba: Qualidade */}
       {activeSubTab === 'qualidade' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <KPICard
               icon={Star}
               label="NPS Médio"
@@ -630,41 +771,58 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
               icon={Clock}
               label="Presença Média"
               value={`${dados.presenca_media.toFixed(1)}%`}
+              subvalue={`${(100 - dados.presenca_media).toFixed(1)}% taxa de faltas`}
               variant="emerald"
-            />
-            <KPICard
-              icon={TrendingDown}
-              label="Taxa Faltas"
-              value={`${(100 - dados.presenca_media).toFixed(1)}%`}
-              variant="rose"
             />
             <KPICard
               icon={Users}
               label="Média Alunos/Turma"
               value={dados.media_alunos_turma_geral.toFixed(1)}
-              subvalue="média geral"
+              subvalue="Pilar financeiro da escola"
               variant="cyan"
-            />
-            <KPICard
-              icon={DollarSign}
-              label="Ticket Médio"
-              value={formatCurrency(dados.ticket_medio_geral)}
-              variant="violet"
             />
           </div>
 
-          {dados.ranking_nps.length > 0 ? (
-            <RankingTable
-              data={dados.ranking_nps}
-              title="⭐ Ranking NPS"
-              valorLabel="Nota"
-            />
-          ) : (
-            <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 text-center">
-              <p className="text-slate-400">Dados de NPS não disponíveis</p>
-              <p className="text-sm text-slate-500 mt-2">Configure pesquisas de NPS para visualizar este ranking</p>
-            </div>
-          )}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {dados.ranking_nps.length > 0 ? (
+              <RankingTableCollapsible
+                data={dados.ranking_nps}
+                title="Ranking NPS"
+                valorLabel="Nota"
+                topCount={3}
+                variant="gold"
+              />
+            ) : (
+              <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 text-center">
+                <p className="text-slate-400">Dados de NPS não disponíveis</p>
+                <p className="text-sm text-slate-500 mt-2">Configure pesquisas de NPS para visualizar este ranking</p>
+              </div>
+            )}
+
+            {dados.professores.some(p => p.media_alunos_turma > 0) ? (
+              <RankingTableCollapsible
+                data={dados.professores
+                  .filter(p => p.media_alunos_turma > 0)
+                  .sort((a, b) => b.media_alunos_turma - a.media_alunos_turma)
+                  .map(p => ({
+                    id: p.id,
+                    nome: p.nome,
+                    valor: p.media_alunos_turma,
+                    subvalor: `${p.carteira_alunos} alunos`
+                  }))}
+                title="Ranking Média Alunos por Turma"
+                valorLabel="Média"
+                topCount={3}
+                variant="cyan"
+                valorFormatter={(value) => Number(value).toFixed(1)}
+              />
+            ) : (
+              <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 text-center">
+                <p className="text-slate-400">Dados de média de alunos por turma não disponíveis</p>
+                <p className="text-sm text-slate-500 mt-2">Aguardando integração com Emusys</p>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

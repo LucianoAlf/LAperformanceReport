@@ -40,11 +40,13 @@ interface DadosComercial {
   taxa_showup: number;
   taxa_conversao_exp_mat: number;
   experimentais_por_professor: { id: number; nome: string; valor: number; subvalor?: string }[];
+  experimentais_por_canal: { name: string; value: number }[];
   
   // Matrículas
   novas_matriculas: number;
   matriculas_por_curso: { name: string; value: number }[];
   matriculas_por_canal: { name: string; value: number }[];
+  matriculas_por_canal_origem: { name: string; value: number }[];
   matriculas_por_professor: { id: number; nome: string; valor: number; subvalor?: string }[];
   matriculas_por_horario: { name: string; value: number }[];
   matriculas_por_faixa_etaria: { name: string; value: number }[];
@@ -59,11 +61,25 @@ interface DadosComercial {
   projecao_mensal: number;
 }
 
+// Interface para dados comparativos
+interface DadosComparativo {
+  total_leads: number;
+  experimentais_realizadas: number;
+  novas_matriculas: number;
+  ticket_medio_parcela: number;
+  ticket_medio_passaporte: number;
+  label: string;
+}
+
 export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps) {
   const [activeSubTab, setActiveSubTab] = useState<SubTabId>('leads');
   const [loading, setLoading] = useState(true);
   const [dados, setDados] = useState<DadosComercial | null>(null);
   const [mesFechado, setMesFechado] = useState(false);
+  
+  // Estados para comparativos históricos
+  const [dadosMesAnterior, setDadosMesAnterior] = useState<DadosComparativo | null>(null);
+  const [dadosAnoAnterior, setDadosAnoAnterior] = useState<DadosComparativo | null>(null);
 
   // Usar mesFim se fornecido, senão usar mes (para filtro mensal)
   const mesInicio = mes;
@@ -78,6 +94,294 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
         const ultimoDia = new Date(ano, mesFinal, 0).getDate();
         const endDate = `${ano}-${String(mesFinal).padStart(2, '0')}-${ultimoDia}`;
 
+        // Detectar se é período histórico (antes do mês atual)
+        const currentDate = new Date();
+        const currentYear = currentDate.getFullYear();
+        const currentMonth = currentDate.getMonth() + 1;
+        const isHistorico = ano < currentYear || (ano === currentYear && mesFinal < currentMonth);
+
+        // ========== BUSCAR DADOS COMPARATIVOS (Mês Anterior e Ano Anterior) ==========
+        const mesAnterior = mes === 1 ? 12 : mes - 1;
+        const anoMesAnterior = mes === 1 ? ano - 1 : ano;
+        
+        // Mapeamento de unidades para nomes
+        const unidadeNomesMap: Record<string, string> = {
+          '2ec861f6-023f-4d7b-9927-3960ad8c2a92': 'Campo Grande',
+          '95553e96-971b-4590-a6eb-0201d013c14d': 'Recreio',
+          '368d47f5-2d88-4475-bc14-ba084a9a348e': 'Barra'
+        };
+
+        // Buscar dados do mês anterior de dados_comerciais
+        let mesAnteriorQuery = supabase
+          .from('dados_comerciais')
+          .select('*')
+          .eq('competencia', `${anoMesAnterior}-${String(mesAnterior).padStart(2, '0')}-01`);
+
+        if (unidade !== 'todos') {
+          mesAnteriorQuery = mesAnteriorQuery.eq('unidade', unidadeNomesMap[unidade] || unidade);
+        }
+
+        // Buscar dados do mesmo mês do ano anterior
+        let anoAnteriorQuery = supabase
+          .from('dados_comerciais')
+          .select('*')
+          .eq('competencia', `${ano - 1}-${String(mes).padStart(2, '0')}-01`);
+
+        if (unidade !== 'todos') {
+          anoAnteriorQuery = anoAnteriorQuery.eq('unidade', unidadeNomesMap[unidade] || unidade);
+        }
+
+        // Também buscar de dados_mensais para matrículas (tem dados de 2024)
+        let mesAnteriorMensalQuery = supabase
+          .from('dados_mensais')
+          .select('novas_matriculas, ticket_medio')
+          .eq('ano', anoMesAnterior)
+          .eq('mes', mesAnterior);
+
+        if (unidade !== 'todos') {
+          mesAnteriorMensalQuery = mesAnteriorMensalQuery.eq('unidade_id', unidade);
+        }
+
+        let anoAnteriorMensalQuery = supabase
+          .from('dados_mensais')
+          .select('novas_matriculas, ticket_medio')
+          .eq('ano', ano - 1)
+          .eq('mes', mes);
+
+        if (unidade !== 'todos') {
+          anoAnteriorMensalQuery = anoAnteriorMensalQuery.eq('unidade_id', unidade);
+        }
+
+        const [mesAnteriorResult, anoAnteriorResult, mesAnteriorMensalResult, anoAnteriorMensalResult] = await Promise.all([
+          mesAnteriorQuery,
+          anoAnteriorQuery,
+          mesAnteriorMensalQuery,
+          anoAnteriorMensalQuery
+        ]);
+
+        // Consolidar dados do mês anterior
+        const dadosMesAnt = mesAnteriorResult.data || [];
+        const dadosMesAntMensal = mesAnteriorMensalResult.data || [];
+        if (dadosMesAnt.length > 0 || dadosMesAntMensal.length > 0) {
+          const totalLeadsMesAnt = dadosMesAnt.reduce((acc, d) => acc + (d.total_leads || 0), 0);
+          const expMesAnt = dadosMesAnt.reduce((acc, d) => acc + (d.aulas_experimentais || 0), 0);
+          const matMesAnt = dadosMesAnt.length > 0 
+            ? dadosMesAnt.reduce((acc, d) => acc + (d.novas_matriculas_total || 0), 0)
+            : dadosMesAntMensal.reduce((acc, d) => acc + (d.novas_matriculas || 0), 0);
+          const ticketParcelaMesAnt = dadosMesAnt.length > 0 && dadosMesAnt.some(d => d.ticket_medio_parcelas)
+            ? dadosMesAnt.reduce((acc, d) => acc + (Number(d.ticket_medio_parcelas) || 0), 0) / dadosMesAnt.filter(d => d.ticket_medio_parcelas).length
+            : dadosMesAntMensal.length > 0 
+              ? dadosMesAntMensal.reduce((acc, d) => acc + (Number(d.ticket_medio) || 0), 0) / dadosMesAntMensal.length
+              : 0;
+          const ticketPassMesAnt = dadosMesAnt.length > 0 && dadosMesAnt.some(d => d.ticket_medio_passaporte)
+            ? dadosMesAnt.reduce((acc, d) => acc + (Number(d.ticket_medio_passaporte) || 0), 0) / dadosMesAnt.filter(d => d.ticket_medio_passaporte).length
+            : 0;
+
+          setDadosMesAnterior({
+            total_leads: totalLeadsMesAnt,
+            experimentais_realizadas: expMesAnt,
+            novas_matriculas: matMesAnt,
+            ticket_medio_parcela: ticketParcelaMesAnt,
+            ticket_medio_passaporte: ticketPassMesAnt,
+            label: `${getMesNomeCurto(mesAnterior)}/${String(anoMesAnterior).slice(2)}`,
+          });
+        } else {
+          setDadosMesAnterior(null);
+        }
+
+        // Consolidar dados do ano anterior
+        const dadosAnoAnt = anoAnteriorResult.data || [];
+        const dadosAnoAntMensal = anoAnteriorMensalResult.data || [];
+        if (dadosAnoAnt.length > 0 || dadosAnoAntMensal.length > 0) {
+          const totalLeadsAnoAnt = dadosAnoAnt.reduce((acc, d) => acc + (d.total_leads || 0), 0);
+          const expAnoAnt = dadosAnoAnt.reduce((acc, d) => acc + (d.aulas_experimentais || 0), 0);
+          const matAnoAnt = dadosAnoAnt.length > 0 
+            ? dadosAnoAnt.reduce((acc, d) => acc + (d.novas_matriculas_total || 0), 0)
+            : dadosAnoAntMensal.reduce((acc, d) => acc + (d.novas_matriculas || 0), 0);
+          const ticketParcelaAnoAnt = dadosAnoAnt.length > 0 && dadosAnoAnt.some(d => d.ticket_medio_parcelas)
+            ? dadosAnoAnt.reduce((acc, d) => acc + (Number(d.ticket_medio_parcelas) || 0), 0) / dadosAnoAnt.filter(d => d.ticket_medio_parcelas).length
+            : dadosAnoAntMensal.length > 0 
+              ? dadosAnoAntMensal.reduce((acc, d) => acc + (Number(d.ticket_medio) || 0), 0) / dadosAnoAntMensal.length
+              : 0;
+          const ticketPassAnoAnt = dadosAnoAnt.length > 0 && dadosAnoAnt.some(d => d.ticket_medio_passaporte)
+            ? dadosAnoAnt.reduce((acc, d) => acc + (Number(d.ticket_medio_passaporte) || 0), 0) / dadosAnoAnt.filter(d => d.ticket_medio_passaporte).length
+            : 0;
+
+          setDadosAnoAnterior({
+            total_leads: totalLeadsAnoAnt,
+            experimentais_realizadas: expAnoAnt,
+            novas_matriculas: matAnoAnt,
+            ticket_medio_parcela: ticketParcelaAnoAnt,
+            ticket_medio_passaporte: ticketPassAnoAnt,
+            label: `${getMesNomeCurto(mes)}/${String(ano - 1).slice(2)}`,
+          });
+        } else {
+          setDadosAnoAnterior(null);
+        }
+
+        // Se for período histórico, buscar dados da view histórica
+        if (isHistorico) {
+          // Buscar dados históricos consolidados
+          let historicoQuery = supabase
+            .from('vw_kpis_comercial_historico')
+            .select('*')
+            .eq('ano', ano)
+            .gte('mes', mesInicio)
+            .lte('mes', mesFinal);
+
+          if (unidade !== 'todos') {
+            historicoQuery = historicoQuery.eq('unidade_id', unidade);
+          }
+
+          // Buscar origem dos leads históricos
+          let origemQuery = supabase
+            .from('origem_leads')
+            .select('*')
+            .gte('competencia', startDate)
+            .lte('competencia', endDate);
+
+          if (unidade !== 'todos') {
+            // origem_leads usa nome da unidade, não UUID
+            const unidadeNomes: Record<string, string> = {
+              '2ec861f6-023f-4d7b-9927-3960ad8c2a92': 'Campo Grande',
+              '95553e96-971b-4590-a6eb-0201d013c14d': 'Recreio',
+              '368d47f5-2d88-4475-bc14-ba084a9a348e': 'Barra'
+            };
+            origemQuery = origemQuery.eq('unidade', unidadeNomes[unidade] || unidade);
+          }
+
+          // Buscar experimentais por professor históricos
+          let expProfQuery = supabase
+            .from('experimentais_professor_mensal')
+            .select('*, professores(nome)')
+            .eq('ano', ano)
+            .gte('mes', mesInicio)
+            .lte('mes', mesFinal);
+
+          if (unidade !== 'todos') {
+            expProfQuery = expProfQuery.eq('unidade_id', unidade);
+          }
+
+          // Buscar cursos matriculados históricos
+          let cursosMatQuery = supabase
+            .from('cursos_matriculados')
+            .select('*')
+            .gte('competencia', startDate)
+            .lte('competencia', endDate);
+
+          if (unidade !== 'todos') {
+            const unidadeNomes: Record<string, string> = {
+              '2ec861f6-023f-4d7b-9927-3960ad8c2a92': 'Campo Grande',
+              '95553e96-971b-4590-a6eb-0201d013c14d': 'Recreio',
+              '368d47f5-2d88-4475-bc14-ba084a9a348e': 'Barra'
+            };
+            cursosMatQuery = cursosMatQuery.eq('unidade', unidadeNomes[unidade] || unidade);
+          }
+
+          const [historicoResult, origemResult, expProfResult, cursosMatResult] = await Promise.all([
+            historicoQuery,
+            origemQuery,
+            expProfQuery,
+            cursosMatQuery
+          ]);
+
+          const historico = historicoResult.data || [];
+          const origemLeads = origemResult.data || [];
+          const expProf = expProfResult.data || [];
+          const cursosMat = cursosMatResult.data || [];
+
+          // Consolidar dados históricos
+          const totalLeads = historico.reduce((acc, h) => acc + (h.total_leads || 0), 0);
+          const expRealizadas = historico.reduce((acc, h) => acc + (h.experimentais_realizadas || 0), 0);
+          const novasMatriculas = historico.reduce((acc, h) => acc + (h.novas_matriculas_total || 0), 0);
+          const matriculasLamk = historico.reduce((acc, h) => acc + (h.novas_matriculas_lamk || 0), 0);
+          const matriculasEmla = historico.reduce((acc, h) => acc + (h.novas_matriculas_emla || 0), 0);
+          const ticketMedioParcela = historico.length > 0 
+            ? historico.reduce((acc, h) => acc + (Number(h.ticket_medio_parcelas) || 0), 0) / historico.filter(h => h.ticket_medio_parcelas).length || 0
+            : 0;
+          const ticketMedioPassaporte = historico.length > 0 
+            ? historico.reduce((acc, h) => acc + (Number(h.ticket_medio_passaporte) || 0), 0) / historico.filter(h => h.ticket_medio_passaporte).length || 0
+            : 0;
+          const faturamentoPassaportes = historico.reduce((acc, h) => acc + (Number(h.faturamento_passaporte) || 0), 0);
+
+          // Processar origem dos leads
+          const leadsCanaisMap = new Map<string, number>();
+          const expCanaisMap = new Map<string, number>();
+          const matCanaisMap = new Map<string, number>();
+          origemLeads.forEach(o => {
+            if (o.tipo === 'leads') leadsCanaisMap.set(o.canal, (leadsCanaisMap.get(o.canal) || 0) + (o.quantidade || 0));
+            if (o.tipo === 'experimentais') expCanaisMap.set(o.canal, (expCanaisMap.get(o.canal) || 0) + (o.quantidade || 0));
+            if (o.tipo === 'matriculas') matCanaisMap.set(o.canal, (matCanaisMap.get(o.canal) || 0) + (o.quantidade || 0));
+          });
+
+          // Processar experimentais por professor
+          const expProfMap = new Map<string, { id: number; total: number }>();
+          expProf.forEach(e => {
+            const nome = (e.professores as any)?.nome || 'Desconhecido';
+            const current = expProfMap.get(nome) || { id: e.professor_id || 0, total: 0 };
+            current.total += e.experimentais || 0;
+            expProfMap.set(nome, current);
+          });
+
+          // Processar cursos matriculados
+          const cursosMatMap = new Map<string, number>();
+          cursosMat.forEach(c => {
+            cursosMatMap.set(c.curso, (cursosMatMap.get(c.curso) || 0) + (c.quantidade || 0));
+          });
+
+          setMesFechado(true); // Dados históricos são sempre "fechados"
+
+          setDados({
+            // Leads
+            total_leads: totalLeads,
+            leads_arquivados: 0, // Não disponível no histórico
+            leads_ativos: totalLeads,
+            taxa_conversao_lead_exp: totalLeads > 0 ? (expRealizadas / totalLeads) * 100 : 0,
+            leads_por_canal: Array.from(leadsCanaisMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+            leads_por_curso: [], // Não disponível no histórico
+            motivos_arquivamento: [], // Não disponível no histórico
+            
+            // Experimentais
+            experimentais_marcadas: expRealizadas, // Só temos realizadas no histórico
+            experimentais_realizadas: expRealizadas,
+            faltaram: 0, // Não disponível no histórico
+            taxa_showup: 100, // Não disponível no histórico
+            taxa_conversao_exp_mat: expRealizadas > 0 ? (novasMatriculas / expRealizadas) * 100 : 0,
+            experimentais_por_professor: Array.from(expProfMap.entries()).map(([nome, data]) => ({
+              id: data.id,
+              nome,
+              valor: data.total,
+              subvalor: ''
+            })).sort((a, b) => b.valor - a.valor),
+            experimentais_por_canal: Array.from(expCanaisMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+            
+            // Matrículas
+            novas_matriculas: novasMatriculas,
+            matriculas_por_curso: Array.from(cursosMatMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+            matriculas_por_canal: Array.from(matCanaisMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+            matriculas_por_canal_origem: Array.from(matCanaisMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+            matriculas_por_professor: [], // Não disponível no histórico
+            matriculas_por_horario: [], // Não disponível no histórico
+            matriculas_por_faixa_etaria: [
+              { name: 'LA Music Kids (até 11)', value: matriculasLamk },
+              { name: 'LA Music School (12+)', value: matriculasEmla },
+            ],
+            ticket_medio_passaporte: ticketMedioPassaporte,
+            ticket_medio_parcela: ticketMedioParcela,
+            motivos_nao_matricula: [], // Não disponível no histórico
+            
+            // Faturamento
+            faturamento_passaportes: faturamentoPassaportes,
+            faturamento_parcelas: novasMatriculas * ticketMedioParcela,
+            faturamento_total: faturamentoPassaportes + (novasMatriculas * ticketMedioParcela),
+            projecao_mensal: (novasMatriculas * ticketMedioParcela) * 12,
+          });
+
+          setLoading(false);
+          return; // Sair da função, dados históricos já processados
+        }
+
+        // ========== CÓDIGO ORIGINAL PARA PERÍODO ATUAL ==========
         // Buscar leads_diarios
         let leadsQuery = supabase
           .from('leads_diarios')
@@ -182,6 +486,13 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           expProfMap.set(prof, current);
         });
 
+        // Experimentais por Canal (origem das pessoas que fizeram experimentais)
+        const expCanalMap = new Map<string, number>();
+        leads.filter(l => l.tipo === 'experimental_realizada').forEach(l => {
+          const canal = (l.canais_origem as any)?.nome || 'Outros';
+          expCanalMap.set(canal, (expCanalMap.get(canal) || 0) + (l.quantidade || 1));
+        });
+
         // Matrículas por Curso
         const cursoMatMap = new Map<string, number>();
         matriculas.forEach(m => {
@@ -263,11 +574,13 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             valor: data.total,
             subvalor: `${data.convertidas} matrículas (${data.total > 0 ? ((data.convertidas / data.total) * 100).toFixed(0) : 0}%)`
           })).sort((a, b) => b.valor - a.valor),
+          experimentais_por_canal: Array.from(expCanalMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
           
           // Matrículas
           novas_matriculas: novasMatriculas || matriculas.length,
           matriculas_por_curso: Array.from(cursoMatMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
           matriculas_por_canal: Array.from(canalMatMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+          matriculas_por_canal_origem: Array.from(canalMatMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
           matriculas_por_professor: Array.from(profMatMap.entries()).map(([nome, data]) => ({
             id: data.id,
             nome,
@@ -363,6 +676,8 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
               label="Total Leads"
               value={dados.total_leads}
               variant="cyan"
+              comparativoMesAnterior={dadosMesAnterior ? { valor: dadosMesAnterior.total_leads, label: dadosMesAnterior.label } : undefined}
+              comparativoAnoAnterior={dadosAnoAnterior ? { valor: dadosAnoAnterior.total_leads, label: dadosAnoAnterior.label } : undefined}
             />
             <KPICard
               icon={Archive}
@@ -447,6 +762,8 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
               label="Aulas Realizadas"
               value={dados.experimentais_realizadas}
               variant="emerald"
+              comparativoMesAnterior={dadosMesAnterior ? { valor: dadosMesAnterior.experimentais_realizadas, label: dadosMesAnterior.label } : undefined}
+              comparativoAnoAnterior={dadosAnoAnterior ? { valor: dadosAnoAnterior.experimentais_realizadas, label: dadosAnoAnterior.label } : undefined}
             />
             <KPICard
               icon={XCircle}
@@ -477,6 +794,20 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
               ]}
               title="Funil de Conversão"
             />
+            {dados.experimentais_por_canal.length > 0 ? (
+              <DistributionChart
+                data={dados.experimentais_por_canal}
+                title="Experimentais por Canal"
+              />
+            ) : (
+              <EstadoVazio
+                titulo="Sem dados para exibir"
+                mensagem="Nenhuma experimental com canal de origem registrado."
+              />
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {dados.experimentais_por_professor.length > 0 ? (
               <RankingTable
                 data={dados.experimentais_por_professor}
@@ -512,6 +843,8 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
               label="Novas Matrículas"
               value={dados.novas_matriculas}
               variant="emerald"
+              comparativoMesAnterior={dadosMesAnterior ? { valor: dadosMesAnterior.novas_matriculas, label: dadosMesAnterior.label } : undefined}
+              comparativoAnoAnterior={dadosAnoAnterior ? { valor: dadosAnoAnterior.novas_matriculas, label: dadosAnoAnterior.label } : undefined}
             />
             <KPICard
               icon={DollarSign}
@@ -541,16 +874,22 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             <KPICard
               icon={DollarSign}
               label="Ticket Passaporte"
-              value={formatCurrency(dados.ticket_medio_passaporte)}
+              value={dados.ticket_medio_passaporte}
+              format="currency"
               subvalue="Média por matrícula"
               variant="cyan"
+              comparativoMesAnterior={dadosMesAnterior && dadosMesAnterior.ticket_medio_passaporte > 0 ? { valor: dadosMesAnterior.ticket_medio_passaporte, label: dadosMesAnterior.label } : undefined}
+              comparativoAnoAnterior={dadosAnoAnterior && dadosAnoAnterior.ticket_medio_passaporte > 0 ? { valor: dadosAnoAnterior.ticket_medio_passaporte, label: dadosAnoAnterior.label } : undefined}
             />
             <KPICard
               icon={DollarSign}
               label="Ticket Parcela"
-              value={formatCurrency(dados.ticket_medio_parcela)}
+              value={dados.ticket_medio_parcela}
+              format="currency"
               subvalue="Média por matrícula"
               variant="emerald"
+              comparativoMesAnterior={dadosMesAnterior && dadosMesAnterior.ticket_medio_parcela > 0 ? { valor: dadosMesAnterior.ticket_medio_parcela, label: dadosMesAnterior.label } : undefined}
+              comparativoAnoAnterior={dadosAnoAnterior && dadosAnoAnterior.ticket_medio_parcela > 0 ? { valor: dadosAnoAnterior.ticket_medio_parcela, label: dadosAnoAnterior.label } : undefined}
             />
             <KPICard
               icon={Baby}
@@ -580,10 +919,10 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
                 mensagem={`Nenhuma matrícula registrada em ${getMesNomeCurto(mes)}/${ano}. Isso pode indicar período de baixa ou dados ainda não lançados.`}
               />
             )}
-            {dados.matriculas_por_canal.length > 0 ? (
+            {dados.matriculas_por_canal_origem.length > 0 ? (
               <DistributionChart
-                data={dados.matriculas_por_canal}
-                title="Matrículas por Canal"
+                data={dados.matriculas_por_canal_origem}
+                title="Matrículas por Canal de Origem"
               />
             ) : (
               <EstadoVazio

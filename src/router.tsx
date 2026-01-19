@@ -29,7 +29,7 @@ import { MetasPage } from './components/App/Metas';
 // Configurações
 import { ConfigPage } from './components/App/Config';
 
-// Gestão Mensal (Cockpit com abas)
+// Analytics (Cockpit com abas: Gestão, Comercial, Professores)
 import { GestaoMensalPage } from './components/GestaoMensal';
 
 // Histórico - Apresentações 2025
