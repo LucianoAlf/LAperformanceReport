@@ -11,3 +11,4 @@ export * from './EvolutionChart';
 export * from './BarChartHorizontal';
 export * from './RankingTable';
 export * from './FunnelChart';
+export * from './MetaInput';

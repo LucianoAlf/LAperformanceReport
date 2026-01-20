@@ -27,6 +27,10 @@ interface KPICardProps {
   comparativoMesAnterior?: ComparativoProps;
   comparativoAnoAnterior?: ComparativoProps;
   inverterCor?: boolean; // Para métricas onde menor é melhor (evasões, churn, etc.)
+  // Meta inversa (onde menor é melhor - churn, inadimplência)
+  metaInversa?: boolean;
+  // Mostrar barra de progresso (default: true se target definido)
+  showProgress?: boolean;
 }
 
 const colorMap: Record<string, string> = {
@@ -83,6 +87,8 @@ export function KPICard({
   comparativoMesAnterior,
   comparativoAnoAnterior,
   inverterCor = false,
+  metaInversa = false,
+  showProgress = true,
 }: KPICardProps) {
   const displayLabel = title || label || '';
   const effectiveVariant = color || variant;
@@ -110,14 +116,57 @@ export function KPICard({
     }
   };
 
-  // Calcular progresso da meta
-  const metaPercent = target && typeof value === 'number' ? (value / target) * 100 : null;
+  // Calcular progresso da meta (suporta metas inversas)
+  const calcularProgressoMeta = () => {
+    if (!target || typeof value !== 'number') return null;
+    
+    if (metaInversa) {
+      // Meta inversa: valor atual deve ser MENOR que o target (ex: Churn 2% meta máxima 3%)
+      // Se valor <= target: atingiu (100%+)
+      // Se valor > target: não atingiu (proporcional inverso)
+      if (value <= target) {
+        // Quanto menor, melhor. Se valor = 0, é 100% de sucesso
+        // Se valor = target, é exatamente no limite (100%)
+        return 100;
+      } else {
+        // Ultrapassou a meta máxima - calcula quanto passou
+        // Ex: meta 3%, valor 4.5% = 150% do limite (ruim)
+        return Math.max(0, 100 - ((value - target) / target) * 100);
+      }
+    } else {
+      // Meta normal: valor atual deve ser MAIOR ou igual ao target
+      return (value / target) * 100;
+    }
+  };
+  
+  const metaPercent = calcularProgressoMeta();
+  
   const getMetaColor = () => {
-    if (!metaPercent) return 'bg-slate-600';
-    if (metaPercent >= 100) return 'bg-emerald-500';
-    if (metaPercent >= 80) return 'bg-cyan-500';
-    if (metaPercent >= 50) return 'bg-amber-500';
-    return 'bg-rose-500';
+    if (metaPercent === null) return 'bg-slate-600';
+    
+    if (metaInversa) {
+      // Para metas inversas: verde se está abaixo/igual, vermelho se ultrapassou
+      if (metaPercent >= 100) return 'bg-emerald-500';
+      if (metaPercent >= 70) return 'bg-amber-500';
+      return 'bg-rose-500';
+    } else {
+      // Meta normal
+      if (metaPercent >= 100) return 'bg-emerald-500';
+      if (metaPercent >= 80) return 'bg-cyan-500';
+      if (metaPercent >= 50) return 'bg-amber-500';
+      return 'bg-rose-500';
+    }
+  };
+  
+  // Largura da barra (para metas inversas, mostra quanto "consumiu" do limite)
+  const getBarWidth = () => {
+    if (metaPercent === null) return 0;
+    if (metaInversa) {
+      // Mostra quanto do limite foi usado (valor/target * 100)
+      const usado = typeof value === 'number' ? (value / target!) * 100 : 0;
+      return Math.min(usado, 100);
+    }
+    return Math.min(metaPercent, 100);
   };
 
   // Tamanhos
@@ -269,18 +318,36 @@ export function KPICard({
         </div>
       )}
 
-      {/* Barra de meta (apenas size lg) */}
-      {target && metaPercent !== null && size === 'lg' && (
-        <div className="mt-3">
-          <div className="flex justify-between text-[10px] text-slate-500 mb-1">
-            <span>Meta: {formatValue(target, format)}</span>
-            <span>{metaPercent.toFixed(0)}%</span>
+      {/* Barra de progresso da meta */}
+      {target && metaPercent !== null && showProgress && (
+        <div className={cn("mt-2", size === 'lg' && "mt-3")}>
+          {/* Container da barra com label */}
+          <div className="flex items-center gap-2">
+            {/* Barra de progresso */}
+            <div className="flex-1 h-2 bg-slate-700/60 rounded-full overflow-hidden">
+              <div 
+                className={cn("h-full rounded-full transition-all duration-500", getMetaColor())}
+                style={{ width: `${getBarWidth()}%` }}
+              />
+            </div>
+            {/* Percentual */}
+            <span className={cn(
+              "font-semibold tabular-nums",
+              size === 'sm' ? 'text-[9px]' : 'text-[10px]',
+              metaPercent >= 100 ? 'text-emerald-400' : 
+              metaPercent >= 80 ? 'text-cyan-400' : 
+              metaPercent >= 50 ? 'text-amber-400' : 'text-rose-400'
+            )}>
+              {metaPercent.toFixed(0)}%
+            </span>
           </div>
-          <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
-            <div 
-              className={cn("h-full rounded-full transition-all duration-500", getMetaColor())}
-              style={{ width: `${Math.min(metaPercent, 100)}%` }}
-            />
+          {/* Label da meta */}
+          <div className={cn(
+            "text-slate-500 mt-1",
+            size === 'sm' ? 'text-[8px]' : 'text-[10px]'
+          )}>
+            {metaInversa ? 'Meta máx: ' : 'Meta: '}
+            {formatValue(target, format)}
           </div>
         </div>
       )}

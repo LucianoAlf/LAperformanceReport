@@ -8,6 +8,7 @@ import { AlertBanner } from '@/components/ui/AlertBanner';
 import { formatCurrency, getMesNomeCurto } from '@/lib/utils';
 import { useKPIsGestao } from '@/hooks/useKPIsGestao';
 import { useMetas } from '@/hooks/useMetas';
+import { useMetasKPI } from '@/hooks/useMetasKPI';
 import { supabase } from '@/lib/supabase';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 
@@ -40,6 +41,11 @@ export function TabDashboard({ ano, mes, unidade }: TabDashboardProps) {
   const [loading, setLoading] = useState(true);
   const [dados, setDados] = useState<DadosUnidade[]>([]);
   const [evolucao, setEvolucao] = useState<DadosMensais[]>([]);
+  
+  // Buscar metas do período
+  const unidadeIdParaMetas = unidade === 'todos' ? null : unidade;
+  const { metas } = useMetasKPI(unidadeIdParaMetas, ano, mes);
+  
   const [totais, setTotais] = useState({
     alunosAtivos: 0,
     alunosPagantes: 0,
@@ -167,24 +173,35 @@ export function TabDashboard({ ano, mes, unidade }: TabDashboardProps) {
           icon={Users}
           label="Alunos Pagantes"
           value={totais.alunosPagantes}
+          target={metas.alunos_pagantes}
+          format="number"
           variant="emerald"
         />
         <KPICard
           icon={DollarSign}
           label="Ticket Médio"
-          value={formatCurrency(totais.ticketMedio)}
+          value={totais.ticketMedio}
+          target={metas.ticket_medio}
+          format="currency"
           variant="violet"
         />
         <KPICard
           icon={Percent}
           label="Churn Rate"
-          value={`${totais.churnRate.toFixed(1)}%`}
+          value={totais.churnRate}
+          target={metas.churn_rate}
+          format="percent"
+          metaInversa={true}
+          inverterCor={true}
           variant="rose"
         />
         <KPICard
           icon={Clock}
           label="Permanência"
-          value={`${totais.tempoPermanencia.toFixed(1)} meses`}
+          value={totais.tempoPermanencia}
+          target={metas.tempo_permanencia}
+          format="number"
+          subvalue="meses"
           variant="amber"
         />
       </div>
@@ -215,7 +232,11 @@ export function TabDashboard({ ano, mes, unidade }: TabDashboardProps) {
         <KPICard
           icon={AlertTriangle}
           label="Inadimplência"
-          value={`${totais.inadimplencia.toFixed(1)}%`}
+          value={totais.inadimplencia}
+          target={metas.inadimplencia}
+          format="percent"
+          metaInversa={true}
+          inverterCor={true}
           variant="amber"
         />
         <KPICard

@@ -18,7 +18,7 @@ export function AppLayout() {
           periodoLabel={competencia.range.label}
         />
         <main className="p-6">
-          <Outlet context={{ filtroAtivo, competencia }} />
+          <Outlet context={{ filtroAtivo, unidadeSelecionada, competencia }} />
         </main>
       </div>
     </div>

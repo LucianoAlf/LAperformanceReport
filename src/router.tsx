@@ -24,7 +24,7 @@ import { PlanilhaProfessores } from './components/App/Professores';
 import { SnapshotDiario } from './components/App/Snapshot';
 
 // Metas
-import { MetasPage } from './components/App/Metas';
+import { MetasPageNew } from './components/App/Metas';
 
 // Configurações
 import { ConfigPage } from './components/App/Config';
@@ -136,7 +136,7 @@ export const router = createBrowserRouter([
           },
           {
             path: 'metas',
-            element: <MetasPage />,
+            element: <MetasPageNew />,
           },
           {
             path: 'config',

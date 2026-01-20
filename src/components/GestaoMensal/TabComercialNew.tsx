@@ -7,6 +7,7 @@ import { RankingTable } from '@/components/ui/RankingTable';
 import { formatCurrency, getMesNomeCurto } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
+import { useMetasKPI } from '@/hooks/useMetasKPI';
 
 interface TabComercialProps {
   ano: number;
@@ -75,6 +76,10 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
   const [activeSubTab, setActiveSubTab] = useState<SubTabId>('leads');
   const [loading, setLoading] = useState(true);
   const [dados, setDados] = useState<DadosComercial | null>(null);
+  
+  // Buscar metas do período
+  const unidadeIdParaMetas = unidade === 'todos' ? null : unidade;
+  const { metas } = useMetasKPI(unidadeIdParaMetas, ano, mes);
   const [mesFechado, setMesFechado] = useState(false);
   
   // Estados para comparativos históricos
@@ -675,6 +680,8 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
               icon={Phone}
               label="Total Leads"
               value={dados.total_leads}
+              target={metas.leads}
+              format="number"
               variant="cyan"
               comparativoMesAnterior={dadosMesAnterior ? { valor: dadosMesAnterior.total_leads, label: dadosMesAnterior.label } : undefined}
               comparativoAnoAnterior={dadosAnoAnterior ? { valor: dadosAnoAnterior.total_leads, label: dadosAnoAnterior.label } : undefined}
@@ -695,7 +702,9 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             <KPICard
               icon={Percent}
               label="Conversão Lead → Exp"
-              value={`${dados.taxa_conversao_lead_exp.toFixed(1)}%`}
+              value={dados.taxa_conversao_lead_exp}
+              target={metas.taxa_lead_exp}
+              format="percent"
               variant="violet"
             />
           </div>
@@ -761,6 +770,8 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
               icon={Calendar}
               label="Aulas Realizadas"
               value={dados.experimentais_realizadas}
+              target={metas.experimentais}
+              format="number"
               variant="emerald"
               comparativoMesAnterior={dadosMesAnterior ? { valor: dadosMesAnterior.experimentais_realizadas, label: dadosMesAnterior.label } : undefined}
               comparativoAnoAnterior={dadosAnoAnterior ? { valor: dadosAnoAnterior.experimentais_realizadas, label: dadosAnoAnterior.label } : undefined}
@@ -774,13 +785,16 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             <KPICard
               icon={Percent}
               label="Taxa Show-up"
-              value={`${dados.taxa_showup.toFixed(1)}%`}
+              value={dados.taxa_showup}
+              format="percent"
               variant="violet"
             />
             <KPICard
               icon={Target}
               label="Conversão Exp → Mat"
-              value={`${dados.taxa_conversao_exp_mat.toFixed(1)}%`}
+              value={dados.taxa_conversao_exp_mat}
+              target={metas.taxa_exp_mat}
+              format="percent"
               variant="emerald"
             />
           </div>
@@ -842,6 +856,8 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
               icon={UserPlus}
               label="Novas Matrículas"
               value={dados.novas_matriculas}
+              target={metas.matriculas}
+              format="number"
               variant="emerald"
               comparativoMesAnterior={dadosMesAnterior ? { valor: dadosMesAnterior.novas_matriculas, label: dadosMesAnterior.label } : undefined}
               comparativoAnoAnterior={dadosAnoAnterior ? { valor: dadosAnoAnterior.novas_matriculas, label: dadosAnoAnterior.label } : undefined}
