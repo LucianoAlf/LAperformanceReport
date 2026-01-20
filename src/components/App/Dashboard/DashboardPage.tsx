@@ -26,6 +26,8 @@ import { EvolutionChart } from '@/components/ui/EvolutionChart';
 import { FunnelChart } from '@/components/ui/FunnelChart';
 import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
 import { TipoCompetencia, CompetenciaFiltro, CompetenciaRange } from '@/hooks/useCompetenciaFiltro';
+import { useMetasKPI } from '@/hooks/useMetasKPI';
+import { KPICard } from '@/components/ui/KPICard';
 
 interface OutletContextType {
   filtroAtivo: string | null;
@@ -106,6 +108,10 @@ export function DashboardPage() {
   const mes = competencia?.filtro?.mes || new Date().getMonth() + 1;
   const mesFim = competencia?.range?.mesFim || mes;
   const unidade = filtroAtivo || 'todos';
+  
+  // Buscar metas do período
+  const unidadeIdParaMetas = unidade === 'todos' ? null : unidade;
+  const { metas } = useMetasKPI(unidadeIdParaMetas, ano, mes);
   
   // Funções de controle do filtro de competência
   const anosDisponiveis = competencia?.anosDisponiveis || [2023, 2024, 2025, 2026];
@@ -425,33 +431,36 @@ export function DashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <KPICard
             icon={Users}
-            iconColor="text-cyan-400"
-            iconBg="bg-cyan-500/20"
-            value={dadosGestao?.alunos_ativos?.toLocaleString('pt-BR') || totais.alunosAtivos.toLocaleString('pt-BR')}
             label="Alunos Ativos"
+            value={dadosGestao?.alunos_ativos || totais.alunosAtivos}
+            target={metas.alunos_pagantes}
+            format="number"
+            variant="cyan"
           />
           <KPICard
             icon={UserPlus}
-            iconColor="text-emerald-400"
-            iconBg="bg-emerald-500/20"
-            value={dadosGestao?.matriculas_mes?.toString() || '--'}
             label="Matrículas (Mês)"
-            sublabel={!dadosGestao ? 'Aguardando dados' : undefined}
+            value={dadosGestao?.matriculas_mes ?? '--'}
+            target={metas.matriculas}
+            format="number"
+            subvalue={!dadosGestao ? 'Aguardando dados' : undefined}
+            variant="emerald"
           />
           <KPICard
             icon={UserMinus}
-            iconColor="text-rose-400"
-            iconBg="bg-rose-500/20"
-            value={dadosGestao?.evasoes_mes?.toString() || '--'}
             label="Evasões (Mês)"
-            sublabel={!dadosGestao ? 'Aguardando dados' : undefined}
+            value={dadosGestao?.evasoes_mes ?? '--'}
+            subvalue={!dadosGestao ? 'Aguardando dados' : undefined}
+            variant="rose"
+            inverterCor={true}
           />
           <KPICard
             icon={DollarSign}
-            iconColor="text-yellow-400"
-            iconBg="bg-yellow-500/20"
-            value={dadosGestao ? formatCurrency(dadosGestao.ticket_medio) : `R$ ${ticketMedioGeral.toFixed(0)}`}
             label="Ticket Médio Parcelas"
+            value={dadosGestao?.ticket_medio ?? ticketMedioGeral}
+            target={metas.ticket_medio}
+            format="currency"
+            variant="amber"
           />
         </div>
       </div>
@@ -465,35 +474,37 @@ export function DashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <KPICard
             icon={Phone}
-            iconColor="text-blue-400"
-            iconBg="bg-blue-500/20"
-            value={dadosComercial?.leads_mes?.toLocaleString('pt-BR') || '--'}
             label="Leads (Mês)"
-            sublabel={!dadosComercial ? 'Aguardando dados' : undefined}
+            value={dadosComercial?.leads_mes ?? '--'}
+            target={metas.leads}
+            format="number"
+            subvalue={!dadosComercial ? 'Aguardando dados' : undefined}
+            variant="cyan"
           />
           <KPICard
             icon={Calendar}
-            iconColor="text-violet-400"
-            iconBg="bg-violet-500/20"
-            value={dadosComercial?.experimentais_realizadas?.toString() || '--'}
             label="Experimentais Realizadas"
-            sublabel={!dadosComercial ? 'Aguardando dados' : undefined}
+            value={dadosComercial?.experimentais_realizadas ?? '--'}
+            target={metas.experimentais}
+            format="number"
+            subvalue={!dadosComercial ? 'Aguardando dados' : undefined}
+            variant="violet"
           />
           <KPICard
             icon={Percent}
-            iconColor="text-emerald-400"
-            iconBg="bg-emerald-500/20"
-            value={dadosComercial ? `${dadosComercial.taxa_conversao.toFixed(1)}%` : '--'}
             label="Taxa Conversão"
-            sublabel={!dadosComercial ? 'Aguardando dados' : undefined}
+            value={dadosComercial?.taxa_conversao ?? '--'}
+            format="percent"
+            subvalue={!dadosComercial ? 'Aguardando dados' : undefined}
+            variant="emerald"
           />
           <KPICard
             icon={Ticket}
-            iconColor="text-amber-400"
-            iconBg="bg-amber-500/20"
-            value={dadosComercial ? formatCurrency(dadosComercial.ticket_passaporte) : '--'}
             label="Ticket Médio Passaporte"
-            sublabel={!dadosComercial ? 'Aguardando dados' : undefined}
+            value={dadosComercial?.ticket_passaporte ?? '--'}
+            format="currency"
+            subvalue={!dadosComercial ? 'Aguardando dados' : undefined}
+            variant="amber"
           />
         </div>
       </div>
@@ -507,35 +518,36 @@ export function DashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <KPICard
             icon={Users}
-            iconColor="text-cyan-400"
-            iconBg="bg-cyan-500/20"
-            value={dadosProfessores?.total_professores?.toString() || '--'}
             label="Total Professores"
-            sublabel={dadosProfessores ? 'ativos' : 'Aguardando dados'}
+            value={dadosProfessores?.total_professores ?? '--'}
+            format="number"
+            subvalue={dadosProfessores ? 'ativos' : 'Aguardando dados'}
+            variant="cyan"
           />
           <KPICard
             icon={GraduationCap}
-            iconColor="text-violet-400"
-            iconBg="bg-violet-500/20"
-            value={dadosProfessores ? dadosProfessores.media_alunos_professor.toFixed(1) : '--'}
             label="Média Alunos/Professor"
-            sublabel={!dadosProfessores ? 'Aguardando dados' : undefined}
+            value={dadosProfessores?.media_alunos_professor ?? '--'}
+            format="number"
+            subvalue={!dadosProfessores ? 'Aguardando dados' : undefined}
+            variant="violet"
           />
           <KPICard
             icon={RefreshCw}
-            iconColor="text-emerald-400"
-            iconBg="bg-emerald-500/20"
-            value={dadosProfessores ? `${dadosProfessores.taxa_renovacao.toFixed(1)}%` : '--'}
             label="Taxa Renovação"
-            sublabel={!dadosProfessores ? 'Aguardando dados' : undefined}
+            value={dadosProfessores?.taxa_renovacao ?? '--'}
+            target={metas.taxa_renovacao}
+            format="percent"
+            subvalue={!dadosProfessores ? 'Aguardando dados' : undefined}
+            variant="emerald"
           />
           <KPICard
             icon={Target}
-            iconColor="text-rose-400"
-            iconBg="bg-rose-500/20"
-            value={dadosProfessores ? dadosProfessores.media_alunos_turma.toFixed(1) : '--'}
             label="Média Alunos/Turma"
-            sublabel={dadosProfessores?.media_alunos_turma ? 'Pilar financeiro' : 'Aguardando Emusys'}
+            value={dadosProfessores?.media_alunos_turma ?? '--'}
+            format="number"
+            subvalue={dadosProfessores?.media_alunos_turma ? 'Pilar financeiro' : 'Aguardando Emusys'}
+            variant="rose"
           />
         </div>
       </div>
@@ -731,47 +743,6 @@ export function DashboardPage() {
   );
 }
 
-// Componente KPI Card
-function KPICard({ 
-  icon: Icon, 
-  iconColor, 
-  iconBg, 
-  value, 
-  label, 
-  sublabel,
-  trend, 
-  trendValue 
-}: {
-  icon: any;
-  iconColor: string;
-  iconBg: string;
-  value: string;
-  label: string;
-  sublabel?: string;
-  trend?: 'up' | 'down';
-  trendValue?: string;
-}) {
-  return (
-    <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-5 hover:border-cyan-500/30 transition-all">
-      <div className="flex items-center justify-between mb-3">
-        <div className={`w-10 h-10 rounded-xl ${iconBg} flex items-center justify-center`}>
-          <Icon className={`w-5 h-5 ${iconColor}`} />
-        </div>
-        {trend && trendValue && (
-          <div className={`flex items-center gap-1 text-xs font-medium ${
-            trend === 'up' ? 'text-emerald-400' : 'text-rose-400'
-          }`}>
-            {trend === 'up' ? <ArrowUpRight className="w-3 h-3" /> : <ArrowDownRight className="w-3 h-3" />}
-            {trendValue}
-          </div>
-        )}
-      </div>
-      <div className="text-2xl font-bold text-white">{value}</div>
-      <div className="text-sm text-gray-400">{label}</div>
-      {sublabel && <div className="text-xs text-gray-500 mt-1">{sublabel}</div>}
-    </div>
-  );
-}
 
 // Componente Action Button
 function ActionButton({ 

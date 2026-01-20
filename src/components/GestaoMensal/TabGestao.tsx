@@ -9,6 +9,7 @@ import { AreaChart } from '@/components/ui/AreaChart';
 import { formatCurrency, getMesNomeCurto } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
+import { useMetasKPI } from '@/hooks/useMetasKPI';
 
 interface TabGestaoProps {
   ano: number;
@@ -80,6 +81,10 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
   const [activeSubTab, setActiveSubTab] = useState<SubTabId>('alunos');
   const [loading, setLoading] = useState(true);
   const [dados, setDados] = useState<DadosGestao | null>(null);
+  
+  // Buscar metas do período
+  const unidadeIdParaMetas = unidade === 'todos' ? null : unidade;
+  const { metas } = useMetasKPI(unidadeIdParaMetas, ano, mes);
   const [dadosAnterior, setDadosAnterior] = useState<Partial<DadosGestao> | null>(null);
   const [evolucao, setEvolucao] = useState<any[]>([]);
   const [distribuicao, setDistribuicao] = useState<any[]>([]);
@@ -886,6 +891,8 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               icon={DollarSign}
               label="Alunos Pagantes"
               value={dados.total_alunos_pagantes}
+              target={metas.alunos_pagantes}
+              format="number"
               variant="emerald"
               comparativoMesAnterior={dadosMesAnterior ? { valor: dadosMesAnterior.alunos_pagantes, label: dadosMesAnterior.label } : undefined}
               comparativoAnoAnterior={dadosAnoAnterior ? { valor: dadosAnoAnterior.alunos_pagantes, label: dadosAnoAnterior.label } : undefined}
@@ -1061,6 +1068,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               icon={CreditCard}
               label="Ticket Médio"
               value={mesFechado ? dados.ticket_medio : '—'}
+              target={metas.ticket_medio}
               format={mesFechado ? "currency" : "number"}
               variant="violet"
               comparativoMesAnterior={mesFechado && dadosMesAnterior ? { valor: dadosMesAnterior.ticket_medio, label: dadosMesAnterior.label } : undefined}
@@ -1105,7 +1113,9 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               icon={AlertTriangle}
               label="Inadimplência %"
               value={mesFechado ? dados.inadimplencia_pct : '—'}
+              target={metas.inadimplencia}
               format={mesFechado ? "percent" : "number"}
+              metaInversa={true}
               variant="amber"
               inverterCor={true}
               comparativoMesAnterior={mesFechado && dadosMesAnterior ? { valor: dadosMesAnterior.inadimplencia, label: dadosMesAnterior.label } : undefined}
@@ -1292,7 +1302,9 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               icon={Percent}
               label="Churn Rate"
               value={mesFechado ? dados.churn_rate : '—'}
+              target={metas.churn_rate}
               format={mesFechado ? "percent" : "number"}
+              metaInversa={true}
               variant="rose"
               inverterCor={true}
               comparativoMesAnterior={mesFechado && dadosMesAnterior ? { valor: dadosMesAnterior.churn_rate, label: dadosMesAnterior.label } : undefined}
@@ -1318,6 +1330,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               icon={RefreshCw}
               label="Taxa Renovação"
               value={mesFechado ? dados.renovacoes_pct : '—'}
+              target={metas.taxa_renovacao}
               format={mesFechado ? "percent" : "number"}
               variant="emerald"
               comparativoMesAnterior={mesFechado && dadosMesAnterior ? { valor: dadosMesAnterior.taxa_renovacao, label: dadosMesAnterior.label } : undefined}

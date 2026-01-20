@@ -1,4 +1,4 @@
-import { LucideIcon, TrendingUp, TrendingDown, Minus, Info } from 'lucide-react';
+import { LucideIcon, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { cn, formatCurrency } from '@/lib/utils';
 
 interface ComparativoProps {
@@ -6,7 +6,7 @@ interface ComparativoProps {
   label: string; // Ex: "Dez/25" ou "Jan/25"
 }
 
-interface KPICardProps {
+export interface KPICardProps {
   title?: string;
   label?: string;
   icon?: LucideIcon;
@@ -44,6 +44,32 @@ const colorMap: Record<string, string> = {
   yellow: 'from-amber-500 to-amber-600',
   rose: 'from-rose-500 to-rose-600',
   red: 'from-rose-500 to-rose-600',
+};
+
+const iconBgMap: Record<string, string> = {
+  default: 'bg-slate-500/20',
+  cyan: 'bg-cyan-500/20',
+  emerald: 'bg-emerald-500/20',
+  green: 'bg-emerald-500/20',
+  violet: 'bg-violet-500/20',
+  purple: 'bg-violet-500/20',
+  amber: 'bg-amber-500/20',
+  yellow: 'bg-amber-500/20',
+  rose: 'bg-rose-500/20',
+  red: 'bg-rose-500/20',
+};
+
+const iconColorMap: Record<string, string> = {
+  default: 'text-slate-400',
+  cyan: 'text-cyan-400',
+  emerald: 'text-emerald-400',
+  green: 'text-emerald-400',
+  violet: 'text-violet-400',
+  purple: 'text-violet-400',
+  amber: 'text-amber-400',
+  yellow: 'text-amber-400',
+  rose: 'text-rose-400',
+  red: 'text-rose-400',
 };
 
 function formatValue(value: number | string, format?: 'number' | 'currency' | 'percent'): string {
@@ -177,16 +203,32 @@ export function KPICard({
   };
 
   const valueSizeClasses = {
-    sm: 'text-lg',
-    md: 'text-xl md:text-2xl',
-    lg: 'text-2xl md:text-3xl',
+    sm: 'text-2xl',
+    md: 'text-3xl md:text-4xl',
+    lg: 'text-4xl md:text-5xl',
   };
 
   const iconSizeClasses = {
-    sm: 16,
-    md: 18,
-    lg: 22,
+    sm: 14,
+    md: 16,
+    lg: 18,
   };
+
+  // Calcular comparativos
+  const calcComparativo = (comparativo: ComparativoProps | undefined) => {
+    if (!comparativo || typeof value !== 'number') return null;
+    const diff = value - comparativo.valor;
+    const pct = comparativo.valor !== 0 ? ((diff / comparativo.valor) * 100) : 0;
+    const isPositive = diff > 0;
+    const corPositiva = inverterCor ? 'text-rose-400' : 'text-emerald-400';
+    const corNegativa = inverterCor ? 'text-emerald-400' : 'text-rose-400';
+    const cor = diff === 0 ? 'text-slate-400' : (isPositive ? corPositiva : corNegativa);
+    return { diff, pct, isPositive, cor };
+  };
+
+  const compMes = calcComparativo(comparativoMesAnterior);
+  const compAno = calcComparativo(comparativoAnoAnterior);
+  const hasComparativos = compMes || compAno;
 
   return (
     <div 
@@ -199,141 +241,52 @@ export function KPICard({
       )}
       onClick={onClick}
     >
-      {/* Header com ícone e info */}
-      <div className="flex items-start justify-between mb-2 md:mb-3">
+      {/* Header: Título + Ícone (alinhados) */}
+      <div className="flex items-start justify-between mb-2">
+        <div>
+          <div className={cn(
+            "font-medium text-slate-400 mb-1",
+            size === 'sm' ? 'text-[10px]' : 'text-xs'
+          )}>
+            {displayLabel}
+          </div>
+          {/* Valor + Meta na mesma linha */}
+          <div className="flex items-baseline gap-2">
+            <span className={cn(
+              "font-bold text-white leading-none",
+              valueSizeClasses[size]
+            )}>
+              {typeof value === 'number' ? formatValue(value, format) : value}
+            </span>
+            {target && (
+              <span className="text-lg text-slate-500">
+                / {formatValue(target, format)}
+              </span>
+            )}
+          </div>
+        </div>
         {Icon && (
           <div className={cn(
-            "p-2 md:p-2.5 rounded-xl bg-gradient-to-br text-white shadow-lg shadow-black/20",
-            colorMap[effectiveVariant]
+            "p-2 rounded-xl",
+            iconBgMap[effectiveVariant]
           )}>
-            <Icon size={iconSizeClasses[size]} />
-          </div>
-        )}
-        
-        {/* Tendência */}
-        {trend && trendValue && size !== 'sm' && (
-          <div className={cn(
-            "flex items-center gap-1 text-[10px] md:text-xs font-medium",
-            getTrendColor()
-          )}>
-            {trend === 'up' && <TrendingUp size={12} />}
-            {trend === 'down' && <TrendingDown size={12} />}
-            {trend === 'neutral' && <Minus size={12} />}
-            <span>{trendValue}</span>
+            <Icon size={iconSizeClasses[size]} className={iconColorMap[effectiveVariant]} />
           </div>
         )}
       </div>
 
-      {/* Valor principal */}
-      <div className={cn(
-        "font-bold text-white mb-0.5 md:mb-1 truncate leading-tight",
-        valueSizeClasses[size]
-      )}>
-        {typeof value === 'number' ? formatValue(value, format) : value}
-      </div>
-
-      {/* Label */}
-      <div className={cn(
-        "text-slate-400 truncate font-medium",
-        size === 'sm' ? 'text-[10px] uppercase tracking-wider' : 'text-xs md:text-sm'
-      )}>
-        {displayLabel}
-      </div>
-
-      {/* Subvalue */}
-      {subvalue && !comparativoMesAnterior && !comparativoAnoAnterior && (
-        <div className="text-[9px] md:text-xs text-slate-500 mt-1 truncate">
-          {subvalue}
-        </div>
-      )}
-
-      {/* Comparativos Mês Anterior e Ano Anterior */}
-      {(comparativoMesAnterior || comparativoAnoAnterior) && typeof value === 'number' && (
-        <div className="mt-2 pt-2 border-t border-slate-700/50">
-          <div className="grid grid-cols-2 gap-2 text-[10px]">
-            {/* vs Mês Anterior */}
-            {comparativoMesAnterior && (
-              <div className="text-center">
-                <div className="text-slate-500 mb-0.5">vs Mês Anterior</div>
-                {(() => {
-                  const diff = value - comparativoMesAnterior.valor;
-                  const pct = comparativoMesAnterior.valor !== 0 
-                    ? ((diff / comparativoMesAnterior.valor) * 100) 
-                    : 0;
-                  const isPositive = diff > 0;
-                  const corPositiva = inverterCor ? 'text-rose-400' : 'text-emerald-400';
-                  const corNegativa = inverterCor ? 'text-emerald-400' : 'text-rose-400';
-                  const cor = diff === 0 ? 'text-slate-400' : (isPositive ? corPositiva : corNegativa);
-                  return (
-                    <>
-                      <div className={cn("font-semibold flex items-center justify-center gap-0.5", cor)}>
-                        {isPositive ? <TrendingUp size={10} /> : diff < 0 ? <TrendingDown size={10} /> : <Minus size={10} />}
-                        {isPositive ? '+' : ''}{pct.toFixed(1)}%
-                      </div>
-                      <div className="text-slate-600">({comparativoMesAnterior.label})</div>
-                    </>
-                  );
-                })()}
-              </div>
-            )}
-            {/* vs Ano Anterior */}
-            {comparativoAnoAnterior && (
-              <div className="text-center">
-                <div className="text-slate-500 mb-0.5">vs Ano Anterior</div>
-                {(() => {
-                  const diff = value - comparativoAnoAnterior.valor;
-                  const pct = comparativoAnoAnterior.valor !== 0 
-                    ? ((diff / comparativoAnoAnterior.valor) * 100) 
-                    : 0;
-                  const isPositive = diff > 0;
-                  const corPositiva = inverterCor ? 'text-rose-400' : 'text-emerald-400';
-                  const corNegativa = inverterCor ? 'text-emerald-400' : 'text-rose-400';
-                  const cor = diff === 0 ? 'text-slate-400' : (isPositive ? corPositiva : corNegativa);
-                  return (
-                    <>
-                      <div className={cn("font-semibold flex items-center justify-center gap-0.5", cor)}>
-                        {isPositive ? <TrendingUp size={10} /> : diff < 0 ? <TrendingDown size={10} /> : <Minus size={10} />}
-                        {isPositive ? '+' : ''}{pct.toFixed(1)}%
-                      </div>
-                      <div className="text-slate-600">({comparativoAnoAnterior.label})</div>
-                    </>
-                  );
-                })()}
-              </div>
-            )}
-            {/* Se só tem um comparativo, mostrar N/A no outro */}
-            {comparativoMesAnterior && !comparativoAnoAnterior && (
-              <div className="text-center">
-                <div className="text-slate-500 mb-0.5">vs Ano Anterior</div>
-                <div className="text-slate-600 font-medium">N/A</div>
-              </div>
-            )}
-            {!comparativoMesAnterior && comparativoAnoAnterior && (
-              <div className="text-center">
-                <div className="text-slate-500 mb-0.5">vs Mês Anterior</div>
-                <div className="text-slate-600 font-medium">N/A</div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Barra de progresso da meta */}
+      {/* Barra de progresso com percentual */}
       {target && metaPercent !== null && showProgress && (
-        <div className={cn("mt-2", size === 'lg' && "mt-3")}>
-          {/* Container da barra com label */}
-          <div className="flex items-center gap-2">
-            {/* Barra de progresso */}
-            <div className="flex-1 h-2 bg-slate-700/60 rounded-full overflow-hidden">
+        <div className="mb-3">
+          <div className="flex items-center gap-2 mb-1">
+            <div className="flex-1 h-3 bg-slate-700/60 rounded-full overflow-hidden">
               <div 
                 className={cn("h-full rounded-full transition-all duration-500", getMetaColor())}
                 style={{ width: `${getBarWidth()}%` }}
               />
             </div>
-            {/* Percentual */}
             <span className={cn(
-              "font-semibold tabular-nums",
-              size === 'sm' ? 'text-[9px]' : 'text-[10px]',
+              "text-sm font-bold tabular-nums min-w-[3rem] text-right",
               metaPercent >= 100 ? 'text-emerald-400' : 
               metaPercent >= 80 ? 'text-cyan-400' : 
               metaPercent >= 50 ? 'text-amber-400' : 'text-rose-400'
@@ -341,14 +294,37 @@ export function KPICard({
               {metaPercent.toFixed(0)}%
             </span>
           </div>
-          {/* Label da meta */}
-          <div className={cn(
-            "text-slate-500 mt-1",
-            size === 'sm' ? 'text-[8px]' : 'text-[10px]'
-          )}>
-            {metaInversa ? 'Meta máx: ' : 'Meta: '}
-            {formatValue(target, format)}
-          </div>
+        </div>
+      )}
+
+      {/* Subvalue (quando não tem meta) */}
+      {subvalue && !target && (
+        <div className="text-xs text-slate-500 mb-2">
+          {subvalue}
+        </div>
+      )}
+
+      {/* Comparativos no rodapé */}
+      {hasComparativos && typeof value === 'number' && (
+        <div className="flex gap-4 pt-2 border-t border-slate-700/50">
+          {compMes && comparativoMesAnterior && (
+            <div className="flex items-center gap-1">
+              <span className={cn("font-semibold text-xs flex items-center gap-0.5", compMes.cor)}>
+                {compMes.isPositive ? <TrendingUp size={10} /> : compMes.pct < 0 ? <TrendingDown size={10} /> : <Minus size={10} />}
+                {compMes.isPositive ? '+' : ''}{compMes.pct.toFixed(1)}%
+              </span>
+              <span className="text-[10px] text-slate-500">{comparativoMesAnterior.label}</span>
+            </div>
+          )}
+          {compAno && comparativoAnoAnterior && (
+            <div className="flex items-center gap-1">
+              <span className={cn("font-semibold text-xs flex items-center gap-0.5", compAno.cor)}>
+                {compAno.isPositive ? <TrendingUp size={10} /> : compAno.pct < 0 ? <TrendingDown size={10} /> : <Minus size={10} />}
+                {compAno.isPositive ? '+' : ''}{compAno.pct.toFixed(1)}%
+              </span>
+              <span className="text-[10px] text-slate-500">{comparativoAnoAnterior.label}</span>
+            </div>
+          )}
         </div>
       )}
     </div>

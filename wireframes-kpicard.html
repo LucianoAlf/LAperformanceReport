@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframes KPICard - Alternativas</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background: #0f172a; }
+    .card { background: linear-gradient(to bottom right, #1e293b, #0f172a); }
+  </style>
+</head>
+<body class="p-8 min-h-screen">
+  <h1 class="text-3xl font-bold text-white mb-2">Wireframes KPICard</h1>
+  <p class="text-slate-400 mb-8">Escolha a melhor disposição para os cards de KPI com barra de progresso</p>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+    <!-- ATUAL -->
+    <div class="space-y-4">
+      <h2 class="text-xl font-semibold text-cyan-400">📌 Layout Atual</h2>
+      <div class="card border border-slate-700 rounded-2xl p-5 w-72">
+        <div class="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center mb-3">
+          <span class="text-emerald-400 text-lg">$</span>
+        </div>
+        <div class="text-3xl font-bold text-white">414</div>
+        <div class="text-sm text-slate-400 mb-3">Alunos Pagantes</div>
+        
+        <div class="flex gap-4 text-xs mb-3">
+          <div class="text-center">
+            <div class="text-slate-500">vs Mês Anterior</div>
+            <div class="text-rose-400">↘ -0.7% <span class="text-slate-500">(Dez/25)</span></div>
+          </div>
+          <div class="text-center">
+            <div class="text-slate-500">vs Ano Anterior</div>
+            <div class="text-rose-400">↘ -16.9% <span class="text-slate-500">(Jan/25)</span></div>
+          </div>
+        </div>
+        
+        <div class="space-y-1">
+          <div class="flex items-center gap-2">
+            <div class="flex-1 h-2 bg-slate-700 rounded-full overflow-hidden">
+              <div class="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full" style="width: 77%"></div>
+            </div>
+            <span class="text-xs text-amber-400 font-semibold">77%</span>
+          </div>
+          <div class="text-xs text-slate-500">Meta: 535</div>
+        </div>
+      </div>
+      <p class="text-slate-500 text-sm max-w-xs">Ícone no topo, número grande, label embaixo, comparativos, depois barra de meta.</p>
+    </div>
+
+    <!-- OPÇÃO A: Título no Topo -->
+    <div class="space-y-4">
+      <h2 class="text-xl font-semibold text-violet-400">🅰️ Opção A: Título no Topo</h2>
+      <div class="card border border-slate-700 rounded-2xl p-5 w-72">
+        <div class="flex items-center gap-3 mb-4">
+          <div class="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+            <span class="text-emerald-400 text-lg">$</span>
+          </div>
+          <div class="text-sm font-medium text-slate-300">Alunos Pagantes</div>
+        </div>
+        
+        <div class="text-4xl font-bold text-white mb-1">414</div>
+        
+        <div class="flex gap-4 text-xs mb-4">
+          <div>
+            <span class="text-rose-400">↘ -0.7%</span>
+            <span class="text-slate-500 ml-1">vs mês</span>
+          </div>
+          <div>
+            <span class="text-rose-400">↘ -16.9%</span>
+            <span class="text-slate-500 ml-1">vs ano</span>
+          </div>
+        </div>
+        
+        <div class="space-y-1">
+          <div class="flex items-center gap-2">
+            <div class="flex-1 h-2 bg-slate-700 rounded-full overflow-hidden">
+              <div class="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full" style="width: 77%"></div>
+            </div>
+            <span class="text-xs text-amber-400 font-semibold">77%</span>
+          </div>
+          <div class="text-xs text-slate-500">Meta: 535</div>
+        </div>
+      </div>
+      <p class="text-slate-500 text-sm max-w-xs">Ícone + título na mesma linha no topo. Número maior e mais destacado. Comparativos compactos.</p>
+    </div>
+
+    <!-- OPÇÃO B: Compacto com Meta Integrada -->
+    <div class="space-y-4">
+      <h2 class="text-xl font-semibold text-emerald-400">🅱️ Opção B: Meta Integrada</h2>
+      <div class="card border border-slate-700 rounded-2xl p-5 w-72">
+        <div class="flex items-start justify-between mb-2">
+          <div>
+            <div class="text-sm font-medium text-slate-400 mb-1">Alunos Pagantes</div>
+            <div class="flex items-baseline gap-2">
+              <span class="text-4xl font-bold text-white">414</span>
+              <span class="text-lg text-slate-500">/ 535</span>
+            </div>
+          </div>
+          <div class="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+            <span class="text-emerald-400 text-lg">$</span>
+          </div>
+        </div>
+        
+        <div class="mb-3">
+          <div class="flex items-center gap-2 mb-1">
+            <div class="flex-1 h-3 bg-slate-700 rounded-full overflow-hidden">
+              <div class="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full" style="width: 77%"></div>
+            </div>
+            <span class="text-sm text-amber-400 font-bold">77%</span>
+          </div>
+        </div>
+        
+        <div class="flex gap-4 text-xs border-t border-slate-700/50 pt-3">
+          <div>
+            <span class="text-rose-400">↘ -0.7%</span>
+            <span class="text-slate-500 ml-1">mês</span>
+          </div>
+          <div>
+            <span class="text-rose-400">↘ -16.9%</span>
+            <span class="text-slate-500 ml-1">ano</span>
+          </div>
+        </div>
+      </div>
+      <p class="text-slate-500 text-sm max-w-xs">Título no topo, número + meta na mesma linha (414/535). Barra maior. Comparativos no rodapé.</p>
+    </div>
+
+    <!-- OPÇÃO C: Minimalista com Barra Lateral -->
+    <div class="space-y-4">
+      <h2 class="text-xl font-semibold text-rose-400">🅲 Opção C: Barra Lateral</h2>
+      <div class="card border border-slate-700 rounded-2xl p-5 w-72">
+        <div class="flex gap-4">
+          <!-- Barra vertical de progresso -->
+          <div class="w-2 bg-slate-700 rounded-full overflow-hidden flex flex-col-reverse">
+            <div class="bg-gradient-to-t from-amber-500 to-amber-400 rounded-full" style="height: 77%"></div>
+          </div>
+          
+          <div class="flex-1">
+            <div class="flex items-center gap-2 mb-1">
+              <div class="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                <span class="text-emerald-400 text-sm">$</span>
+              </div>
+              <span class="text-sm font-medium text-slate-400">Alunos Pagantes</span>
+            </div>
+            
+            <div class="flex items-baseline gap-2 mb-2">
+              <span class="text-3xl font-bold text-white">414</span>
+              <span class="text-amber-400 font-semibold">77%</span>
+            </div>
+            
+            <div class="text-xs text-slate-500 mb-3">Meta: 535</div>
+            
+            <div class="flex gap-3 text-xs">
+              <span class="text-rose-400">↘ -0.7% mês</span>
+              <span class="text-rose-400">↘ -16.9% ano</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="text-slate-500 text-sm max-w-xs">Barra de progresso vertical na lateral esquerda. Layout mais compacto e diferenciado.</p>
+    </div>
+
+    <!-- OPÇÃO D: Card Grande com Destaque -->
+    <div class="space-y-4">
+      <h2 class="text-xl font-semibold text-amber-400">🅳 Opção D: Destaque Central</h2>
+      <div class="card border border-slate-700 rounded-2xl p-5 w-72">
+        <div class="flex items-center justify-between mb-4">
+          <div class="text-sm font-semibold text-slate-300 uppercase tracking-wide">Alunos Pagantes</div>
+          <div class="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+            <span class="text-emerald-400 text-sm">$</span>
+          </div>
+        </div>
+        
+        <div class="text-center mb-4">
+          <div class="text-5xl font-black text-white mb-1">414</div>
+          <div class="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-amber-500/20 text-amber-400 text-sm font-semibold">
+            77% da meta
+          </div>
+        </div>
+        
+        <div class="mb-4">
+          <div class="h-2 bg-slate-700 rounded-full overflow-hidden">
+            <div class="h-full bg-gradient-to-r from-amber-500 to-amber-400 rounded-full" style="width: 77%"></div>
+          </div>
+          <div class="flex justify-between text-xs text-slate-500 mt-1">
+            <span>0</span>
+            <span>Meta: 535</span>
+          </div>
+        </div>
+        
+        <div class="flex justify-center gap-6 text-xs border-t border-slate-700/50 pt-3">
+          <div class="text-center">
+            <div class="text-rose-400 font-semibold">-0.7%</div>
+            <div class="text-slate-500">vs mês</div>
+          </div>
+          <div class="text-center">
+            <div class="text-rose-400 font-semibold">-16.9%</div>
+            <div class="text-slate-500">vs ano</div>
+          </div>
+        </div>
+      </div>
+      <p class="text-slate-500 text-sm max-w-xs">Título no topo, número centralizado e grande, badge de porcentagem, barra com escala, comparativos no rodapé.</p>
+    </div>
+
+  </div>
+
+  <div class="mt-12 p-6 bg-slate-800/50 rounded-2xl border border-slate-700">
+    <h2 class="text-xl font-semibold text-white mb-4">📊 Comparativo Rápido</h2>
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-slate-400 border-b border-slate-700">
+          <th class="pb-2">Layout</th>
+          <th class="pb-2">Prós</th>
+          <th class="pb-2">Contras</th>
+          <th class="pb-2">Melhor para</th>
+        </tr>
+      </thead>
+      <tbody class="text-slate-300">
+        <tr class="border-b border-slate-700/50">
+          <td class="py-3 font-medium text-cyan-400">Atual</td>
+          <td class="py-3">Familiar, ícone destacado</td>
+          <td class="py-3">Título pequeno, hierarquia confusa</td>
+          <td class="py-3">Manter consistência</td>
+        </tr>
+        <tr class="border-b border-slate-700/50">
+          <td class="py-3 font-medium text-violet-400">A: Título no Topo</td>
+          <td class="py-3">Hierarquia clara, fácil leitura</td>
+          <td class="py-3">Ícone menor destaque</td>
+          <td class="py-3">Dashboards informativos</td>
+        </tr>
+        <tr class="border-b border-slate-700/50">
+          <td class="py-3 font-medium text-emerald-400">B: Meta Integrada</td>
+          <td class="py-3">Meta visível de imediato (414/535)</td>
+          <td class="py-3">Pode parecer "cheio"</td>
+          <td class="py-3">Foco em atingimento de metas</td>
+        </tr>
+        <tr class="border-b border-slate-700/50">
+          <td class="py-3 font-medium text-rose-400">C: Barra Lateral</td>
+          <td class="py-3">Diferenciado, compacto</td>
+          <td class="py-3">Menos familiar, barra pequena</td>
+          <td class="py-3">Layouts inovadores</td>
+        </tr>
+        <tr>
+          <td class="py-3 font-medium text-amber-400">D: Destaque Central</td>
+          <td class="py-3">Número super destacado, badge de %</td>
+          <td class="py-3">Ocupa mais espaço vertical</td>
+          <td class="py-3">KPIs principais, apresentações</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="mt-8 text-center text-slate-500">
+    <p>Abra este arquivo no navegador para visualizar os wireframes</p>
+    <p class="text-xs mt-2">Arquivo: wireframes-kpicard.html</p>
+  </div>
+
+</body>
+</html>

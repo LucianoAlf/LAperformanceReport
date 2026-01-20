@@ -8,6 +8,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { MetaInput, FormatoMeta } from '@/components/ui/MetaInput';
+import { SimuladorPage } from './Simulador/SimuladorPage';
 
 // Interface do contexto do layout
 interface OutletContextType {
@@ -117,7 +118,7 @@ const PERIODOS: Record<FiltroPeriodo, PeriodoConfig> = {
   },
 };
 
-type AbaAtiva = 'gestao' | 'comercial' | 'professores';
+type AbaAtiva = 'gestao' | 'comercial' | 'professores' | 'simulador';
 
 export function MetasPageNew() {
   // Pegar filtros do contexto do Outlet (vem do AppLayout)
@@ -146,7 +147,7 @@ export function MetasPageNew() {
     try {
       const [metasRes, unidadesRes] = await Promise.all([
         supabase
-          .from('metas')
+          .from('metas_kpi')
           .select('*')
           .eq('ano', anoSelecionado)
           .order('mes'),
@@ -224,18 +225,18 @@ export function MetasPageNew() {
       if (valor === null || valor === 0) {
         // Remove meta se valor for nulo/zero
         if (existing?.id) {
-          await supabase.from('metas').delete().eq('id', existing.id);
+          await supabase.from('metas_kpi').delete().eq('id', existing.id);
         }
       } else if (existing?.id) {
         // Atualiza meta existente
         await supabase
-          .from('metas')
+          .from('metas_kpi')
           .update({ valor })
           .eq('id', existing.id);
       } else {
         // Insere nova meta
         await supabase
-          .from('metas')
+          .from('metas_kpi')
           .insert({
             ano: anoSelecionado,
             mes,
@@ -406,6 +407,7 @@ export function MetasPageNew() {
           { id: 'gestao' as const, label: 'Gestão', icon: BarChart3 },
           { id: 'comercial' as const, label: 'Comercial', icon: TrendingUp },
           { id: 'professores' as const, label: 'Professores', icon: Users },
+          { id: 'simulador' as const, label: 'Simulador', icon: Target },
         ].map(aba => (
           <button
             key={aba.id}
@@ -423,7 +425,13 @@ export function MetasPageNew() {
         ))}
       </div>
 
-      {/* Tabela de Metas */}
+      {/* Simulador - renderiza quando aba simulador está ativa */}
+      {abaAtiva === 'simulador' && (
+        <SimuladorPage />
+      )}
+
+      {/* Tabela de Metas - renderiza quando NÃO é simulador */}
+      {abaAtiva !== 'simulador' && (
       <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -575,8 +583,10 @@ export function MetasPageNew() {
           </table>
         </div>
       </div>
+      )}
 
-      {/* Legenda */}
+      {/* Legenda - só mostra quando não é simulador */}
+      {abaAtiva !== 'simulador' && (
       <div className="flex flex-wrap items-center gap-6 text-xs text-slate-500">
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 bg-amber-500/20 border border-amber-500/50 rounded" />
@@ -594,6 +604,7 @@ export function MetasPageNew() {
           💡 Alterações são salvas automaticamente após 1.5 segundos
         </div>
       </div>
+      )}
     </div>
   );
 }

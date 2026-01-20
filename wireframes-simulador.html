@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe - Simulador de Metas</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body { background: #0f172a; }
+    .card { background: linear-gradient(to bottom right, #1e293b, #0f172a); }
+    .input-sim { 
+      background: #1e293b; 
+      border: 2px solid #334155;
+      transition: all 0.2s;
+    }
+    .input-sim:focus {
+      border-color: #06b6d4;
+      outline: none;
+    }
+  </style>
+</head>
+<body class="p-6 min-h-screen text-white">
+  
+  <!-- Header -->
+  <div class="max-w-6xl mx-auto mb-6">
+    <h1 class="text-2xl font-bold mb-2">METAS 2026</h1>
+    
+    <!-- Tabs -->
+    <div class="flex gap-1 bg-slate-800/50 p-1 rounded-xl w-fit">
+      <button class="px-4 py-2 rounded-lg text-sm text-slate-400 hover:bg-slate-700/50">Gestão</button>
+      <button class="px-4 py-2 rounded-lg text-sm text-slate-400 hover:bg-slate-700/50">Comercial</button>
+      <button class="px-4 py-2 rounded-lg text-sm text-slate-400 hover:bg-slate-700/50">Financeiro</button>
+      <button class="px-4 py-2 rounded-lg text-sm bg-cyan-500/20 text-cyan-400 font-medium">🎯 Simulador</button>
+    </div>
+  </div>
+
+  <div class="max-w-6xl mx-auto space-y-6">
+    
+    <!-- Row 1: Situação Atual + Meta Objetivo -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      
+      <!-- Situação Atual -->
+      <div class="card border border-slate-700 rounded-2xl p-5">
+        <div class="flex items-center gap-2 mb-4">
+          <div class="w-8 h-8 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+            <i data-lucide="bar-chart-3" class="w-4 h-4 text-cyan-400"></i>
+          </div>
+          <div>
+            <h2 class="font-semibold text-white">SITUAÇÃO ATUAL</h2>
+            <p class="text-xs text-slate-500">Campo Grande • Janeiro/2026</p>
+          </div>
+        </div>
+        
+        <div class="grid grid-cols-2 gap-4">
+          <div class="bg-slate-800/50 rounded-xl p-3">
+            <div class="text-xs text-slate-500 mb-1">Alunos Pagantes</div>
+            <div class="text-2xl font-bold text-white">480</div>
+          </div>
+          <div class="bg-slate-800/50 rounded-xl p-3">
+            <div class="text-xs text-slate-500 mb-1">Ticket Médio</div>
+            <div class="text-2xl font-bold text-white">R$ 285</div>
+          </div>
+          <div class="bg-slate-800/50 rounded-xl p-3">
+            <div class="text-xs text-slate-500 mb-1">Churn Rate</div>
+            <div class="text-2xl font-bold text-amber-400">4.2%</div>
+          </div>
+          <div class="bg-slate-800/50 rounded-xl p-3">
+            <div class="text-xs text-slate-500 mb-1">Taxa Renovação</div>
+            <div class="text-2xl font-bold text-emerald-400">82%</div>
+          </div>
+        </div>
+        
+        <div class="mt-4 pt-4 border-t border-slate-700/50">
+          <div class="flex justify-between items-center">
+            <span class="text-sm text-slate-400">MRR Atual</span>
+            <span class="text-lg font-bold text-white">R$ 136.800</span>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Meta Objetivo -->
+      <div class="card border border-cyan-500/30 rounded-2xl p-5 bg-gradient-to-br from-cyan-500/5 to-transparent">
+        <div class="flex items-center gap-2 mb-4">
+          <div class="w-8 h-8 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+            <i data-lucide="target" class="w-4 h-4 text-cyan-400"></i>
+          </div>
+          <div>
+            <h2 class="font-semibold text-white">META OBJETIVO</h2>
+            <p class="text-xs text-slate-500">Dezembro/2026</p>
+          </div>
+        </div>
+        
+        <div class="mb-4">
+          <label class="text-sm text-slate-400 mb-2 block">Quantos alunos você quer ter?</label>
+          <input type="number" value="535" class="input-sim w-full text-4xl font-black text-center text-cyan-400 rounded-xl p-4" />
+        </div>
+        
+        <div class="grid grid-cols-2 gap-4">
+          <div class="bg-slate-800/50 rounded-xl p-3 text-center">
+            <div class="text-xs text-slate-500 mb-1">Crescimento</div>
+            <div class="text-xl font-bold text-emerald-400">+55</div>
+            <div class="text-xs text-slate-500">alunos</div>
+          </div>
+          <div class="bg-slate-800/50 rounded-xl p-3 text-center">
+            <div class="text-xs text-slate-500 mb-1">Percentual</div>
+            <div class="text-xl font-bold text-emerald-400">+11.5%</div>
+            <div class="text-xs text-slate-500">em 11 meses</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Row 2: Cálculo Automático -->
+    <div class="card border border-slate-700 rounded-2xl p-5">
+      <div class="flex items-center gap-2 mb-4">
+        <div class="w-8 h-8 rounded-lg bg-violet-500/20 flex items-center justify-center">
+          <i data-lucide="calculator" class="w-4 h-4 text-violet-400"></i>
+        </div>
+        <h2 class="font-semibold text-white">CÁLCULO AUTOMÁTICO</h2>
+      </div>
+      
+      <!-- Flow de cálculo -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+        <div class="bg-rose-500/10 border border-rose-500/30 rounded-xl p-4 text-center">
+          <div class="text-xs text-rose-400 mb-1">📉 Evasões Projetadas</div>
+          <div class="text-2xl font-bold text-rose-400">~20/mês</div>
+          <div class="text-xs text-slate-500">240 no ano</div>
+        </div>
+        <div class="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 text-center relative">
+          <div class="absolute -left-3 top-1/2 -translate-y-1/2 text-slate-600">→</div>
+          <div class="text-xs text-emerald-400 mb-1">📈 Matrículas Necessárias</div>
+          <div class="text-2xl font-bold text-emerald-400">25/mês</div>
+          <div class="text-xs text-slate-500">295 no ano</div>
+        </div>
+        <div class="bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-4 text-center relative">
+          <div class="absolute -left-3 top-1/2 -translate-y-1/2 text-slate-600">→</div>
+          <div class="text-xs text-cyan-400 mb-1">📞 Leads Necessários</div>
+          <div class="text-2xl font-bold text-cyan-400">85/mês</div>
+          <div class="text-xs text-slate-500">1.020 no ano</div>
+        </div>
+        <div class="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 text-center relative">
+          <div class="absolute -left-3 top-1/2 -translate-y-1/2 text-slate-600">→</div>
+          <div class="text-xs text-amber-400 mb-1">💰 MRR Projetado</div>
+          <div class="text-2xl font-bold text-amber-400">R$ 152k</div>
+          <div class="text-xs text-slate-500">+11.5%</div>
+        </div>
+      </div>
+      
+      <!-- Fórmula -->
+      <div class="bg-slate-800/50 rounded-xl p-3 text-center">
+        <code class="text-sm text-slate-300">
+          480 <span class="text-slate-500">alunos</span> + 
+          <span class="text-emerald-400">295</span> <span class="text-slate-500">matrículas</span> - 
+          <span class="text-rose-400">240</span> <span class="text-slate-500">evasões</span> = 
+          <span class="text-cyan-400 font-bold">535</span> <span class="text-slate-500">alunos</span> ✓
+        </code>
+      </div>
+    </div>
+    
+    <!-- Row 3: Alertas de Viabilidade -->
+    <div class="card border border-slate-700 rounded-2xl p-5">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-2">
+          <div class="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center">
+            <i data-lucide="alert-triangle" class="w-4 h-4 text-amber-400"></i>
+          </div>
+          <h2 class="font-semibold text-white">ALERTAS DE VIABILIDADE</h2>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-sm text-slate-400">Score:</span>
+          <span class="px-3 py-1 rounded-full bg-amber-500/20 text-amber-400 font-bold">72%</span>
+        </div>
+      </div>
+      
+      <div class="space-y-3">
+        <!-- Alerta Sucesso -->
+        <div class="flex items-start gap-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4">
+          <div class="w-6 h-6 rounded-full bg-emerald-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <i data-lucide="check" class="w-3 h-3 text-emerald-400"></i>
+          </div>
+          <div>
+            <div class="font-medium text-emerald-400">Taxa de renovação compatível</div>
+            <div class="text-sm text-slate-400">Sua taxa atual de 82% atende ao mínimo necessário de 80%</div>
+          </div>
+        </div>
+        
+        <!-- Alerta Aviso 1 -->
+        <div class="flex items-start gap-3 bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
+          <div class="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <i data-lucide="alert-triangle" class="w-3 h-3 text-amber-400"></i>
+          </div>
+          <div>
+            <div class="font-medium text-amber-400">Matrículas necessárias acima do histórico</div>
+            <div class="text-sm text-slate-400 mb-2">
+              Precisa: <span class="text-white font-medium">25/mês</span> • 
+              Histórico: <span class="text-white font-medium">18/mês</span> 
+              <span class="text-rose-400">(+39%)</span>
+            </div>
+            <div class="flex items-center gap-2 text-xs">
+              <span class="text-cyan-400">💡</span>
+              <span class="text-cyan-300">Reduzir churn para 3.5% OU aumentar leads em 30%</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Alerta Aviso 2 -->
+        <div class="flex items-start gap-3 bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
+          <div class="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+            <i data-lucide="alert-triangle" class="w-3 h-3 text-amber-400"></i>
+          </div>
+          <div>
+            <div class="font-medium text-amber-400">Leads necessários exigem aumento de investimento</div>
+            <div class="text-sm text-slate-400 mb-2">
+              Precisa: <span class="text-white font-medium">85/mês</span> • 
+              Histórico: <span class="text-white font-medium">65/mês</span> 
+              <span class="text-rose-400">(+31%)</span>
+            </div>
+            <div class="flex items-center gap-2 text-xs">
+              <span class="text-cyan-400">💡</span>
+              <span class="text-cyan-300">Aumentar budget de marketing em ~R$ 2.000/mês</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Row 4: Metas Calculadas -->
+    <div class="card border border-emerald-500/30 rounded-2xl p-5 bg-gradient-to-br from-emerald-500/5 to-transparent">
+      <div class="flex items-center gap-2 mb-4">
+        <div class="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+          <i data-lucide="check-circle" class="w-4 h-4 text-emerald-400"></i>
+        </div>
+        <h2 class="font-semibold text-white">METAS CALCULADAS</h2>
+        <span class="text-xs text-slate-500">(prontas para aplicar)</span>
+      </div>
+      
+      <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+        <div class="bg-slate-800/50 rounded-xl p-4 text-center">
+          <div class="text-xs text-slate-500 mb-1">Leads/mês</div>
+          <div class="text-2xl font-bold text-cyan-400">85</div>
+        </div>
+        <div class="bg-slate-800/50 rounded-xl p-4 text-center">
+          <div class="text-xs text-slate-500 mb-1">Experimentais/mês</div>
+          <div class="text-2xl font-bold text-violet-400">50</div>
+        </div>
+        <div class="bg-slate-800/50 rounded-xl p-4 text-center">
+          <div class="text-xs text-slate-500 mb-1">Matrículas/mês</div>
+          <div class="text-2xl font-bold text-emerald-400">25</div>
+        </div>
+        <div class="bg-slate-800/50 rounded-xl p-4 text-center">
+          <div class="text-xs text-slate-500 mb-1">Churn máximo</div>
+          <div class="text-2xl font-bold text-amber-400">4.2%</div>
+        </div>
+        <div class="bg-slate-800/50 rounded-xl p-4 text-center">
+          <div class="text-xs text-slate-500 mb-1">Alunos Pagantes</div>
+          <div class="text-2xl font-bold text-white">535</div>
+        </div>
+      </div>
+      
+      <!-- Botões de ação -->
+      <div class="flex flex-wrap gap-3">
+        <button class="flex items-center gap-2 px-6 py-3 bg-emerald-500 hover:bg-emerald-600 text-white font-semibold rounded-xl transition-colors">
+          <i data-lucide="save" class="w-4 h-4"></i>
+          Aplicar Metas
+        </button>
+        <button class="flex items-center gap-2 px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-xl transition-colors">
+          <i data-lucide="refresh-cw" class="w-4 h-4"></i>
+          Recalcular
+        </button>
+        <button class="flex items-center gap-2 px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white font-medium rounded-xl transition-colors">
+          <i data-lucide="line-chart" class="w-4 h-4"></i>
+          Ver Projeção Mensal
+        </button>
+      </div>
+    </div>
+    
+    <!-- Row 5: Parâmetros Ajustáveis (colapsável) -->
+    <details class="card border border-slate-700 rounded-2xl">
+      <summary class="p-5 cursor-pointer flex items-center gap-2">
+        <div class="w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center">
+          <i data-lucide="settings" class="w-4 h-4 text-slate-400"></i>
+        </div>
+        <h2 class="font-semibold text-white">PARÂMETROS AJUSTÁVEIS</h2>
+        <span class="text-xs text-slate-500 ml-2">(clique para expandir)</span>
+      </summary>
+      <div class="px-5 pb-5 pt-2 border-t border-slate-700/50">
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div>
+            <label class="text-xs text-slate-500 mb-1 block">Churn Projetado (%)</label>
+            <input type="number" value="4.2" step="0.1" class="input-sim w-full text-lg font-bold text-center rounded-lg p-2" />
+          </div>
+          <div>
+            <label class="text-xs text-slate-500 mb-1 block">Conversão Lead→Exp (%)</label>
+            <input type="number" value="60" class="input-sim w-full text-lg font-bold text-center rounded-lg p-2" />
+          </div>
+          <div>
+            <label class="text-xs text-slate-500 mb-1 block">Conversão Exp→Mat (%)</label>
+            <input type="number" value="50" class="input-sim w-full text-lg font-bold text-center rounded-lg p-2" />
+          </div>
+          <div>
+            <label class="text-xs text-slate-500 mb-1 block">Ticket Médio (R$)</label>
+            <input type="number" value="285" class="input-sim w-full text-lg font-bold text-center rounded-lg p-2" />
+          </div>
+        </div>
+      </div>
+    </details>
+    
+  </div>
+  
+  <!-- Footer info -->
+  <div class="max-w-6xl mx-auto mt-8 text-center text-slate-500 text-sm">
+    <p>Wireframe do Simulador de Metas • LA Music School 2026</p>
+  </div>
+
+  <script>
+    lucide.createIcons();
+  </script>
+</body>
+</html>

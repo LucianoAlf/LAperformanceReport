@@ -64,7 +64,7 @@ export function useMetasKPI(
     try {
       // Buscar metas do mês específico
       let query = supabase
-        .from('metas')
+        .from('metas_kpi')
         .select('tipo, valor, unidade_id')
         .eq('ano', ano)
         .eq('mes', mes);

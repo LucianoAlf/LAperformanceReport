@@ -50,6 +50,16 @@
       .dark .logo-img {
         filter: brightness(0) invert(1);
       }
+      /* Remover setas do input number */
+      input[type="number"]::-webkit-inner-spin-button,
+      input[type="number"]::-webkit-outer-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+      }
+      input[type="number"] {
+        -moz-appearance: textfield;
+        appearance: textfield;
+      }
     </style>
 <script type="importmap">
 {
@@ -62,7 +72,7 @@
   }
 }
 </script>
-<link rel="stylesheet" href="/index.css">
+<link rel="stylesheet" href="/src/index.css">
 </head>
 <body class="bg-slate-900 text-slate-50 transition-colors duration-300">
     <div id="root"></div>

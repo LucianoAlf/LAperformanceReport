@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Wireframe - Simulador de Metas v2 (Múltiplos Objetivos)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .tab-active { background: linear-gradient(135deg, #0891b2, #06b6d4); }
+        .objective-active { border-color: #06b6d4; background: rgba(6, 182, 212, 0.1); }
+        .objective-inactive { border-color: #334155; background: transparent; }
+        .objective-inactive:hover { border-color: #475569; background: rgba(71, 85, 105, 0.2); }
+    </style>
+</head>
+<body class="bg-slate-900 text-white min-h-screen p-8">
+    
+    <div class="max-w-6xl mx-auto space-y-6">
+        
+        <!-- Header -->
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-2xl font-bold flex items-center gap-2">
+                    🎯 Simulador de Metas
+                </h1>
+                <p class="text-slate-400 text-sm mt-1">Defina sua meta e veja o que precisa acontecer para atingi-la</p>
+            </div>
+            <div class="text-sm text-slate-500">
+                Campo Grande • Janeiro/2026
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- SELETOR DE OBJETIVO - NOVO! -->
+        <!-- ============================================== -->
+        <div class="bg-slate-800/50 border border-slate-700 rounded-2xl p-5">
+            <div class="flex items-center gap-2 mb-4">
+                <span class="text-sm text-slate-400">Qual é o seu objetivo principal?</span>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4">
+                <!-- Objetivo 1: Alunos Pagantes (ATIVO) -->
+                <button class="objective-active border-2 rounded-xl p-4 text-left transition-all">
+                    <div class="flex items-center gap-3">
+                        <div class="w-12 h-12 rounded-xl bg-cyan-500/20 flex items-center justify-center">
+                            <span class="text-2xl">👥</span>
+                        </div>
+                        <div>
+                            <div class="font-semibold text-white">Alunos Pagantes</div>
+                            <div class="text-xs text-slate-400">Crescer a base de alunos</div>
+                        </div>
+                    </div>
+                    <div class="mt-3 text-xs text-cyan-400">
+                        ✓ Selecionado
+                    </div>
+                </button>
+                
+                <!-- Objetivo 2: MRR / Faturamento -->
+                <button class="objective-inactive border-2 rounded-xl p-4 text-left transition-all">
+                    <div class="flex items-center gap-3">
+                        <div class="w-12 h-12 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                            <span class="text-2xl">💰</span>
+                        </div>
+                        <div>
+                            <div class="font-semibold text-white">MRR / Faturamento</div>
+                            <div class="text-xs text-slate-400">Crescer a receita recorrente</div>
+                        </div>
+                    </div>
+                    <div class="mt-3 text-xs text-slate-500">
+                        Clique para selecionar
+                    </div>
+                </button>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- VERSÃO A: OBJETIVO = ALUNOS PAGANTES -->
+        <!-- ============================================== -->
+        <div class="border-2 border-cyan-500/30 rounded-2xl p-1">
+            <div class="bg-cyan-500/10 text-cyan-400 text-xs font-medium px-3 py-1 rounded-t-xl">
+                MODO: ALUNOS PAGANTES
+            </div>
+            
+            <div class="p-4 space-y-6">
+                <!-- Row 1: Situação Atual + Meta Objetivo -->
+                <div class="grid grid-cols-2 gap-6">
+                    
+                    <!-- Situação Atual -->
+                    <div class="bg-slate-800/50 border border-slate-700 rounded-2xl p-5">
+                        <div class="flex items-center gap-2 mb-4">
+                            <div class="w-8 h-8 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                                📊
+                            </div>
+                            <div>
+                                <h2 class="font-semibold text-white">SITUAÇÃO ATUAL</h2>
+                                <p class="text-xs text-amber-400">Campo Grande • Jan/2026</p>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-slate-700/30 rounded-xl p-4 mb-3">
+                            <div class="text-xs text-slate-500 mb-1">Alunos Pagantes</div>
+                            <div class="text-3xl font-bold text-white">414</div>
+                            <div class="text-xs text-slate-500 mt-1">Puxado do banco</div>
+                        </div>
+                        
+                        <div class="bg-slate-700/30 rounded-xl p-4">
+                            <div class="flex justify-between items-center">
+                                <div>
+                                    <div class="text-xs text-slate-500 mb-1">MRR Atual</div>
+                                    <div class="text-xl font-bold text-emerald-400">R$ 177.788</div>
+                                </div>
+                                <div class="text-right text-xs text-slate-500">
+                                    R$ 429 × 414
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Meta Objetivo: ALUNOS -->
+                    <div class="bg-slate-800/50 border border-cyan-500/50 rounded-2xl p-5">
+                        <div class="flex items-center gap-2 mb-4">
+                            <div class="w-8 h-8 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                                🎯
+                            </div>
+                            <div>
+                                <h2 class="font-semibold text-white">META OBJETIVO</h2>
+                                <p class="text-xs text-slate-400">Quantos alunos você quer ter?</p>
+                            </div>
+                        </div>
+                        
+                        <div class="flex gap-3 mb-4">
+                            <div class="flex-1">
+                                <div class="text-xs text-slate-500 mb-2">Alunos Pagantes em:</div>
+                                <input type="number" value="500" class="w-full bg-slate-700 border border-cyan-500/50 rounded-xl p-3 text-3xl font-bold text-center text-cyan-400 focus:outline-none">
+                            </div>
+                            <div class="w-32">
+                                <div class="text-xs text-slate-500 mb-2">&nbsp;</div>
+                                <select class="w-full bg-slate-700 border border-slate-600 rounded-xl p-3 text-white">
+                                    <option>Dezembro</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="bg-slate-700/30 rounded-xl p-3 text-center">
+                                <div class="text-xs text-slate-500">Crescimento</div>
+                                <div class="text-lg font-bold text-cyan-400">+86 alunos</div>
+                            </div>
+                            <div class="bg-slate-700/30 rounded-xl p-3 text-center">
+                                <div class="text-xs text-slate-500">Percentual</div>
+                                <div class="text-lg font-bold text-cyan-400">+20.8%</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Parâmetros -->
+                <div class="bg-slate-800/50 border border-slate-700 rounded-2xl p-5">
+                    <div class="flex items-center gap-2 mb-4">
+                        <div class="w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center">⚙️</div>
+                        <div>
+                            <h2 class="font-semibold text-white">PARÂMETROS</h2>
+                            <p class="text-xs text-slate-500">Ajuste os valores para simular cenários</p>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-5 gap-4">
+                        <div>
+                            <label class="text-xs text-slate-500 mb-1 block">Churn Projetado</label>
+                            <div class="relative">
+                                <input type="number" value="4" class="w-full bg-slate-700 border border-slate-600 rounded-lg p-2 text-lg font-bold text-center text-white">
+                                <span class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500">%</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-xs text-slate-500 mb-1 block">Ticket Médio</label>
+                            <div class="relative">
+                                <span class="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 text-sm">R$</span>
+                                <input type="number" value="429" class="w-full bg-slate-700 border border-slate-600 rounded-lg p-2 pl-8 text-lg font-bold text-center text-white">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-xs text-slate-500 mb-1 block">Lead → Exp</label>
+                            <div class="relative">
+                                <input type="number" value="60" class="w-full bg-slate-700 border border-slate-600 rounded-lg p-2 text-lg font-bold text-center text-white">
+                                <span class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500">%</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-xs text-slate-500 mb-1 block">Exp → Mat</label>
+                            <div class="relative">
+                                <input type="number" value="50" class="w-full bg-slate-700 border border-slate-600 rounded-lg p-2 text-lg font-bold text-center text-white">
+                                <span class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500">%</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-xs text-slate-500 mb-1 block">Conversão Total</label>
+                            <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-2 text-center">
+                                <span class="text-lg font-bold text-cyan-400">30%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cálculo Automático -->
+                <div class="bg-slate-800/50 border border-slate-700 rounded-2xl p-5">
+                    <div class="flex items-center gap-2 mb-4">
+                        <div class="w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center">🧮</div>
+                        <h2 class="font-semibold text-white">CÁLCULO AUTOMÁTICO</h2>
+                    </div>
+                    
+                    <div class="grid grid-cols-4 gap-4">
+                        <div class="bg-rose-500/10 border border-rose-500/30 rounded-xl p-4">
+                            <div class="text-xs text-rose-400 mb-1">Evasões Projetadas</div>
+                            <div class="text-2xl font-bold text-rose-400">~17/mês</div>
+                            <div class="text-xs text-slate-500">204 no ano</div>
+                        </div>
+                        <div class="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
+                            <div class="text-xs text-amber-400 mb-1">Matrículas Necessárias</div>
+                            <div class="text-2xl font-bold text-amber-400">25/mês</div>
+                            <div class="text-xs text-slate-500">290 no ano</div>
+                        </div>
+                        <div class="bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-4">
+                            <div class="text-xs text-cyan-400 mb-1">Leads Necessários</div>
+                            <div class="text-2xl font-bold text-cyan-400">83/mês</div>
+                            <div class="text-xs text-slate-500">967 no ano</div>
+                        </div>
+                        <div class="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4">
+                            <div class="text-xs text-emerald-400 mb-1">MRR Projetado</div>
+                            <div class="text-2xl font-bold text-emerald-400">R$ 214.500</div>
+                            <div class="text-xs text-slate-500">+20.8%</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- SEPARADOR -->
+        <!-- ============================================== -->
+        <div class="flex items-center gap-4 py-8">
+            <div class="flex-1 h-px bg-slate-700"></div>
+            <div class="text-slate-500 text-sm font-medium">OU SE SELECIONAR MRR...</div>
+            <div class="flex-1 h-px bg-slate-700"></div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- VERSÃO B: OBJETIVO = MRR / FATURAMENTO -->
+        <!-- ============================================== -->
+        <div class="border-2 border-emerald-500/30 rounded-2xl p-1">
+            <div class="bg-emerald-500/10 text-emerald-400 text-xs font-medium px-3 py-1 rounded-t-xl">
+                MODO: MRR / FATURAMENTO
+            </div>
+            
+            <div class="p-4 space-y-6">
+                <!-- Row 1: Situação Atual + Meta Objetivo -->
+                <div class="grid grid-cols-2 gap-6">
+                    
+                    <!-- Situação Atual (muda para foco em MRR) -->
+                    <div class="bg-slate-800/50 border border-slate-700 rounded-2xl p-5">
+                        <div class="flex items-center gap-2 mb-4">
+                            <div class="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                                📊
+                            </div>
+                            <div>
+                                <h2 class="font-semibold text-white">SITUAÇÃO ATUAL</h2>
+                                <p class="text-xs text-amber-400">Campo Grande • Jan/2026</p>
+                            </div>
+                        </div>
+                        
+                        <!-- MRR em destaque agora -->
+                        <div class="bg-slate-700/30 rounded-xl p-4 mb-3">
+                            <div class="text-xs text-slate-500 mb-1">MRR Atual</div>
+                            <div class="text-3xl font-bold text-emerald-400">R$ 177.788</div>
+                            <div class="text-xs text-slate-500 mt-1">Puxado do banco</div>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="bg-slate-700/30 rounded-xl p-3">
+                                <div class="text-xs text-slate-500 mb-1">Alunos Pagantes</div>
+                                <div class="text-lg font-bold text-white">414</div>
+                            </div>
+                            <div class="bg-slate-700/30 rounded-xl p-3">
+                                <div class="text-xs text-slate-500 mb-1">Ticket Médio</div>
+                                <div class="text-lg font-bold text-white">R$ 429</div>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-3 bg-slate-700/30 rounded-xl p-3">
+                            <div class="text-xs text-slate-500 mb-1">Faturamento Anual Atual</div>
+                            <div class="text-lg font-bold text-white">R$ 2.133.456</div>
+                            <div class="text-xs text-slate-500">MRR × 12</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Meta Objetivo: MRR -->
+                    <div class="bg-slate-800/50 border border-emerald-500/50 rounded-2xl p-5">
+                        <div class="flex items-center gap-2 mb-4">
+                            <div class="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">
+                                🎯
+                            </div>
+                            <div>
+                                <h2 class="font-semibold text-white">META OBJETIVO</h2>
+                                <p class="text-xs text-slate-400">Quanto você quer faturar?</p>
+                            </div>
+                        </div>
+                        
+                        <!-- Toggle: MRR Mensal ou Faturamento Anual -->
+                        <div class="flex gap-2 mb-4">
+                            <button class="flex-1 bg-emerald-500/20 border border-emerald-500/50 text-emerald-400 rounded-lg py-2 text-sm font-medium">
+                                MRR Mensal
+                            </button>
+                            <button class="flex-1 bg-slate-700/50 border border-slate-600 text-slate-400 rounded-lg py-2 text-sm font-medium">
+                                Faturamento Anual
+                            </button>
+                        </div>
+                        
+                        <div class="flex gap-3 mb-4">
+                            <div class="flex-1">
+                                <div class="text-xs text-slate-500 mb-2">MRR em:</div>
+                                <div class="relative">
+                                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-emerald-400 font-bold">R$</span>
+                                    <input type="number" value="250000" class="w-full bg-slate-700 border border-emerald-500/50 rounded-xl p-3 pl-12 text-2xl font-bold text-center text-emerald-400 focus:outline-none">
+                                </div>
+                            </div>
+                            <div class="w-32">
+                                <div class="text-xs text-slate-500 mb-2">&nbsp;</div>
+                                <select class="w-full bg-slate-700 border border-slate-600 rounded-xl p-3 text-white">
+                                    <option>Dezembro</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="bg-slate-700/30 rounded-xl p-3 text-center">
+                                <div class="text-xs text-slate-500">Crescimento</div>
+                                <div class="text-lg font-bold text-emerald-400">+R$ 72.212</div>
+                            </div>
+                            <div class="bg-slate-700/30 rounded-xl p-3 text-center">
+                                <div class="text-xs text-slate-500">Percentual</div>
+                                <div class="text-lg font-bold text-emerald-400">+40.6%</div>
+                            </div>
+                        </div>
+                        
+                        <!-- Faturamento Anual calculado -->
+                        <div class="mt-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3">
+                            <div class="flex justify-between items-center">
+                                <div class="text-xs text-emerald-400">Faturamento Anual Projetado</div>
+                                <div class="text-lg font-bold text-emerald-400">R$ 3.000.000</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Parâmetros (mesmo, mas Ticket ganha destaque) -->
+                <div class="bg-slate-800/50 border border-slate-700 rounded-2xl p-5">
+                    <div class="flex items-center gap-2 mb-4">
+                        <div class="w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center">⚙️</div>
+                        <div>
+                            <h2 class="font-semibold text-white">PARÂMETROS</h2>
+                            <p class="text-xs text-slate-500">Ajuste os valores para simular cenários</p>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-5 gap-4">
+                        <!-- Ticket em destaque para objetivo MRR -->
+                        <div class="border border-emerald-500/50 rounded-lg p-1">
+                            <label class="text-xs text-emerald-400 mb-1 block px-1">Ticket Médio ⭐</label>
+                            <div class="relative">
+                                <span class="absolute left-2 top-1/2 -translate-y-1/2 text-slate-500 text-sm">R$</span>
+                                <input type="number" value="429" class="w-full bg-slate-700 border border-emerald-500/30 rounded-lg p-2 pl-8 text-lg font-bold text-center text-emerald-400">
+                            </div>
+                            <div class="text-[10px] text-slate-500 text-center mt-1">Impacta diretamente o MRR</div>
+                        </div>
+                        <div>
+                            <label class="text-xs text-slate-500 mb-1 block">Churn Projetado</label>
+                            <div class="relative">
+                                <input type="number" value="4" class="w-full bg-slate-700 border border-slate-600 rounded-lg p-2 text-lg font-bold text-center text-white">
+                                <span class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500">%</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-xs text-slate-500 mb-1 block">Lead → Exp</label>
+                            <div class="relative">
+                                <input type="number" value="60" class="w-full bg-slate-700 border border-slate-600 rounded-lg p-2 text-lg font-bold text-center text-white">
+                                <span class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500">%</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-xs text-slate-500 mb-1 block">Exp → Mat</label>
+                            <div class="relative">
+                                <input type="number" value="50" class="w-full bg-slate-700 border border-slate-600 rounded-lg p-2 text-lg font-bold text-center text-white">
+                                <span class="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500">%</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="text-xs text-slate-500 mb-1 block">Conversão Total</label>
+                            <div class="bg-slate-700/50 border border-slate-600 rounded-lg p-2 text-center">
+                                <span class="text-lg font-bold text-cyan-400">30%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cálculo Automático (inverte: alunos vira resultado) -->
+                <div class="bg-slate-800/50 border border-slate-700 rounded-2xl p-5">
+                    <div class="flex items-center gap-2 mb-4">
+                        <div class="w-8 h-8 rounded-lg bg-slate-700 flex items-center justify-center">🧮</div>
+                        <h2 class="font-semibold text-white">CÁLCULO AUTOMÁTICO</h2>
+                    </div>
+                    
+                    <div class="grid grid-cols-4 gap-4">
+                        <!-- Alunos agora é RESULTADO, não input -->
+                        <div class="bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-4">
+                            <div class="text-xs text-cyan-400 mb-1">Alunos Necessários</div>
+                            <div class="text-2xl font-bold text-cyan-400">583</div>
+                            <div class="text-xs text-slate-500">+169 alunos (+40.8%)</div>
+                        </div>
+                        <div class="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
+                            <div class="text-xs text-amber-400 mb-1">Matrículas Necessárias</div>
+                            <div class="text-2xl font-bold text-amber-400">31/mês</div>
+                            <div class="text-xs text-slate-500">373 no ano</div>
+                        </div>
+                        <div class="bg-purple-500/10 border border-purple-500/30 rounded-xl p-4">
+                            <div class="text-xs text-purple-400 mb-1">Leads Necessários</div>
+                            <div class="text-2xl font-bold text-purple-400">104/mês</div>
+                            <div class="text-xs text-slate-500">1.243 no ano</div>
+                        </div>
+                        <div class="bg-rose-500/10 border border-rose-500/30 rounded-xl p-4">
+                            <div class="text-xs text-rose-400 mb-1">Evasões Projetadas</div>
+                            <div class="text-2xl font-bold text-rose-400">~17/mês</div>
+                            <div class="text-xs text-slate-500">204 no ano</div>
+                        </div>
+                    </div>
+                    
+                    <!-- Alternativa: Aumentar Ticket -->
+                    <div class="mt-4 bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="text-amber-400">💡</span>
+                            <span class="text-sm font-medium text-amber-400">Alternativa: Aumentar Ticket Médio</span>
+                        </div>
+                        <p class="text-xs text-slate-400">
+                            Se aumentar o ticket de R$ 429 para <strong class="text-white">R$ 500</strong>, 
+                            você precisaria de apenas <strong class="text-white">500 alunos</strong> (vs 583) para atingir o mesmo MRR.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- METAS CALCULADAS (comum aos dois) -->
+        <!-- ============================================== -->
+        <div class="bg-slate-800/50 border border-slate-700 rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-4">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-lg bg-emerald-500/20 flex items-center justify-center">✅</div>
+                    <div>
+                        <h2 class="font-semibold text-white">METAS CALCULADAS</h2>
+                        <p class="text-xs text-slate-400">(prontas para aplicar)</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-7 gap-3 mb-4">
+                <div class="bg-slate-700/30 rounded-xl p-3 text-center">
+                    <div class="text-xs text-slate-500">Leads/mês</div>
+                    <div class="text-lg font-bold text-white">83</div>
+                </div>
+                <div class="bg-slate-700/30 rounded-xl p-3 text-center">
+                    <div class="text-xs text-slate-500">Exp/mês</div>
+                    <div class="text-lg font-bold text-white">50</div>
+                </div>
+                <div class="bg-slate-700/30 rounded-xl p-3 text-center">
+                    <div class="text-xs text-slate-500">Mat/mês</div>
+                    <div class="text-lg font-bold text-white">25</div>
+                </div>
+                <div class="bg-slate-700/30 rounded-xl p-3 text-center">
+                    <div class="text-xs text-slate-500">Churn máx</div>
+                    <div class="text-lg font-bold text-white">4%</div>
+                </div>
+                <div class="bg-slate-700/30 rounded-xl p-3 text-center">
+                    <div class="text-xs text-slate-500">Alunos</div>
+                    <div class="text-lg font-bold text-cyan-400">500</div>
+                </div>
+                <div class="bg-slate-700/30 rounded-xl p-3 text-center">
+                    <div class="text-xs text-slate-500">MRR</div>
+                    <div class="text-lg font-bold text-emerald-400">R$ 214.5k</div>
+                </div>
+                <div class="bg-slate-700/30 rounded-xl p-3 text-center">
+                    <div class="text-xs text-slate-500">LTV</div>
+                    <div class="text-lg font-bold text-purple-400">R$ 10.7k</div>
+                </div>
+            </div>
+            
+            <div class="flex gap-3">
+                <button class="flex-1 bg-gradient-to-r from-cyan-500 to-emerald-500 text-white font-semibold py-3 rounded-xl hover:opacity-90 transition-opacity">
+                    ✅ Aplicar Metas
+                </button>
+                <button class="px-6 bg-slate-700 text-slate-300 font-medium py-3 rounded-xl hover:bg-slate-600 transition-colors">
+                    💾 Salvar Cenário
+                </button>
+            </div>
+        </div>
+
+        <!-- ============================================== -->
+        <!-- RESUMO DA ARQUITETURA -->
+        <!-- ============================================== -->
+        <div class="bg-slate-800/30 border border-slate-700/50 rounded-2xl p-6 mt-8">
+            <h3 class="text-lg font-bold text-white mb-4">📐 Resumo da Arquitetura</h3>
+            
+            <div class="grid grid-cols-2 gap-6">
+                <div>
+                    <h4 class="text-cyan-400 font-semibold mb-2">Objetivo: Alunos Pagantes</h4>
+                    <ul class="text-sm text-slate-400 space-y-1">
+                        <li>• <strong>Input:</strong> Quantidade de alunos desejada</li>
+                        <li>• <strong>Parâmetros:</strong> Churn, Ticket, Conversões</li>
+                        <li>• <strong>Cálculo:</strong> Matrículas, Leads, Evasões</li>
+                        <li>• <strong>Resultado:</strong> MRR projetado (consequência)</li>
+                    </ul>
+                </div>
+                <div>
+                    <h4 class="text-emerald-400 font-semibold mb-2">Objetivo: MRR / Faturamento</h4>
+                    <ul class="text-sm text-slate-400 space-y-1">
+                        <li>• <strong>Input:</strong> MRR ou Faturamento Anual desejado</li>
+                        <li>• <strong>Parâmetros:</strong> Ticket (destaque), Churn, Conversões</li>
+                        <li>• <strong>Cálculo:</strong> Alunos necessários → Matrículas → Leads</li>
+                        <li>• <strong>Resultado:</strong> Alunos projetados (consequência)</li>
+                    </ul>
+                </div>
+            </div>
+            
+            <div class="mt-4 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+                <h4 class="text-amber-400 font-semibold mb-2">💡 Diferença Principal</h4>
+                <p class="text-sm text-slate-400">
+                    No modo <strong class="text-cyan-400">Alunos</strong>, você define quantos alunos quer e o sistema calcula o MRR resultante.<br>
+                    No modo <strong class="text-emerald-400">MRR</strong>, você define quanto quer faturar e o sistema calcula quantos alunos você precisa.<br><br>
+                    <strong class="text-white">É a mesma matemática, só inverte a perspectiva!</strong>
+                </p>
+            </div>
+        </div>
+
+    </div>
+    
+</body>
+</html>

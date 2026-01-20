@@ -6,6 +6,7 @@ import { router } from './src/router';
 import { Toaster } from 'sonner';
 import { AuthProvider } from './src/contexts/AuthContext';
 import { ErrorBoundary } from './src/components/App/Auth/ErrorBoundary';
+import './src/index.css';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
