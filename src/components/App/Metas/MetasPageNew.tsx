@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { MetaInput, FormatoMeta } from '@/components/ui/MetaInput';
 import { SimuladorPage } from './Simulador/SimuladorPage';
+import { SimuladorTurmaPage } from './SimuladorTurma';
 
 // Interface do contexto do layout
 interface OutletContextType {
@@ -118,7 +119,7 @@ const PERIODOS: Record<FiltroPeriodo, PeriodoConfig> = {
   },
 };
 
-type AbaAtiva = 'gestao' | 'comercial' | 'professores' | 'simulador';
+type AbaAtiva = 'gestao' | 'comercial' | 'professores' | 'simulador' | 'simulador-turma';
 
 export function MetasPageNew() {
   // Pegar filtros do contexto do Outlet (vem do AppLayout)
@@ -410,7 +411,8 @@ export function MetasPageNew() {
           { id: 'gestao' as const, label: 'Gestão', icon: BarChart3 },
           { id: 'comercial' as const, label: 'Comercial', icon: TrendingUp },
           { id: 'professores' as const, label: 'Professores', icon: Users },
-          { id: 'simulador' as const, label: 'Simulador', icon: Target },
+          { id: 'simulador' as const, label: 'Simulador Metas', icon: Target },
+          { id: 'simulador-turma' as const, label: 'Simulador Turma', icon: TrendingUp },
         ].map(aba => (
           <button
             key={aba.id}
@@ -428,13 +430,18 @@ export function MetasPageNew() {
         ))}
       </div>
 
-      {/* Simulador - renderiza quando aba simulador está ativa */}
+      {/* Simulador de Metas - renderiza quando aba simulador está ativa */}
       {abaAtiva === 'simulador' && (
         <SimuladorPage />
       )}
 
+      {/* Simulador de Turma - renderiza quando aba simulador-turma está ativa */}
+      {abaAtiva === 'simulador-turma' && (
+        <SimuladorTurmaPage />
+      )}
+
       {/* Tabela de Metas - renderiza quando NÃO é simulador */}
-      {abaAtiva !== 'simulador' && (
+      {abaAtiva !== 'simulador' && abaAtiva !== 'simulador-turma' && (
       <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
@@ -589,7 +596,7 @@ export function MetasPageNew() {
       )}
 
       {/* Legenda - só mostra quando não é simulador */}
-      {abaAtiva !== 'simulador' && (
+      {abaAtiva !== 'simulador' && abaAtiva !== 'simulador-turma' && (
       <div className="flex flex-wrap items-center gap-6 text-xs text-slate-500">
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 bg-amber-500/20 border border-amber-500/50 rounded" />

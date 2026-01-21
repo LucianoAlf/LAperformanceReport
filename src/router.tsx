@@ -17,11 +17,10 @@ import { LoginPage, PrivateRoute } from './components/App/Auth';
 // Admin
 import { GerenciarUsuarios } from './components/App/Admin';
 
-// Planilhas Inline
-import { PlanilhaComercial } from './components/App/Comercial';
+// Operacional
+import { ComercialPage } from './components/App/Comercial';
 import { PlanilhaRetencao } from './components/App/Retencao';
 import { PlanilhaProfessores } from './components/App/Professores';
-import { SnapshotDiario } from './components/App/Snapshot';
 
 // Metas
 import { MetasPageNew } from './components/App/Metas';
@@ -142,18 +141,18 @@ export const router = createBrowserRouter([
             path: 'config',
             element: <ConfigPage />,
           },
-          // Planilhas Inline
+          // Operacional
           {
             path: 'comercial',
-            element: <PlanilhaComercial />,
+            element: <ComercialPage />,
           },
           {
-            path: 'retencao',
+            path: 'administrativo',
             element: <PlanilhaRetencao />,
           },
           {
-            path: 'snapshot',
-            element: <SnapshotDiario />,
+            path: 'alunos',
+            element: <PlaceholderPage title="Lista de Alunos" />,
           },
           {
             path: 'professores',

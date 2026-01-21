@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe V3 - Simulador de Lucratividade por Turma</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            background: '#0a0a0f',
+            card: '#12121a',
+            border: '#1e1e2e',
+            muted: '#71717a',
+            dark: { 900: '#0a0f1a', 800: '#111827', 700: '#1a2332', 600: '#243044' },
+            cyan: { 400: '#22d3ee', 500: '#06b6d4', 600: '#0891b2' },
+            emerald: { 400: '#34d399', 500: '#10b981' },
+            amber: { 400: '#fbbf24', 500: '#f59e0b' },
+            rose: { 400: '#fb7185', 500: '#f43f5e' },
+            purple: { 400: '#c084fc', 500: '#a855f7' }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Inter', sans-serif; background: linear-gradient(135deg, #0a0f1a 0%, #111827 100%); }
+    .card { background: rgba(26, 35, 50, 0.8); border: 1px solid rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); }
+    .card-cyan { border-left: 3px solid #22d3ee; }
+    .card-emerald { border-left: 3px solid #34d399; }
+    .card-amber { border-left: 3px solid #fbbf24; }
+    .input-field { background: rgba(17, 24, 39, 0.8); border: 1px solid rgba(255, 255, 255, 0.1); }
+    .input-field:focus { border-color: #22d3ee; outline: none; }
+    .btn-primary { background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%); }
+    .btn-secondary { background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); }
+    .progress-bar { background: rgba(255, 255, 255, 0.1); }
+    .scenario-card { transition: all 0.3s ease; }
+    .scenario-card:hover { transform: translateY(-2px); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3); }
+    .scenario-card.selected { border: 2px solid #22d3ee; }
+    .slider-cyan::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%; background: #06b6d4; cursor: pointer; }
+    .slider-cyan::-webkit-slider-runnable-track { height: 8px; background: linear-gradient(to right, #06b6d4 0%, #06b6d4 var(--value), #1e1e2e var(--value), #1e1e2e 100%); border-radius: 4px; }
+    .tab-active { background: rgba(34, 211, 238, 0.2); border-bottom: 2px solid #22d3ee; }
+    .guarantee-card { background: linear-gradient(135deg, rgba(34, 211, 238, 0.1) 0%, rgba(16, 185, 129, 0.1) 100%); border: 1px solid rgba(34, 211, 238, 0.3); }
+    .collapsible-content { max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; }
+    .collapsible-content.open { max-height: 500px; }
+    .card-glow { box-shadow: 0 0 20px rgba(6, 182, 212, 0.1); }
+  </style>
+</head>
+<body class="min-h-screen text-white p-6">
+  <div class="max-w-7xl mx-auto space-y-6">
+
+  <!-- HEADER (V2) -->
+  <div class="flex justify-between items-center mb-8">
+    <div>
+      <h1 class="text-2xl font-semibold">Bom dia, Luciano! 👋</h1>
+      <p class="text-gray-400 text-sm">📅 terça-feira, 21 de janeiro de 2026</p>
+    </div>
+    <div class="flex items-center gap-4">
+      <div class="flex items-center gap-2 bg-dark-700 px-4 py-2 rounded-lg">📍 <span>Barra</span> <span class="text-gray-500">▼</span></div>
+      <div class="bg-cyan-500/20 text-cyan-400 px-4 py-2 rounded-lg border border-cyan-500/30">📅 Jan/2026</div>
+    </div>
+  </div>
+
+  <!-- Page Title & Tabs (V2) -->
+  <div class="mb-6">
+    <div class="flex items-center gap-2 mb-2"><span class="text-2xl">🎯</span><h2 class="text-xl font-semibold">Gestão de Metas</h2></div>
+    <p class="text-gray-400">Defina metas mensais para acompanhar o progresso dos KPIs</p>
+  </div>
+  <div class="flex items-center gap-4 mb-6">
+    <div class="flex bg-dark-700 rounded-lg p-1">
+      <button class="px-4 py-2 rounded-md bg-cyan-500 text-white text-sm font-medium">Mês</button>
+      <button class="px-4 py-2 rounded-md text-gray-400 text-sm">Trim</button>
+      <button class="px-4 py-2 rounded-md text-gray-400 text-sm">Sem</button>
+      <button class="px-4 py-2 rounded-md text-gray-400 text-sm">Ano</button>
+    </div>
+    <div class="flex items-center gap-2 bg-dark-700 px-4 py-2 rounded-lg"><span>2026</span><span class="text-gray-500">▼</span></div>
+    <div class="ml-auto flex items-center gap-2 text-cyan-400 bg-cyan-500/10 px-4 py-2 rounded-lg border border-cyan-500/30">📊 Editando: <strong>Barra</strong></div>
+  </div>
+  <div class="flex gap-2 mb-8">
+    <button class="flex items-center gap-2 px-4 py-3 rounded-lg text-gray-400 hover:bg-dark-700">📊 Gestão</button>
+    <button class="flex items-center gap-2 px-4 py-3 rounded-lg text-gray-400 hover:bg-dark-700">📈 Comercial</button>
+    <button class="flex items-center gap-2 px-4 py-3 rounded-lg text-gray-400 hover:bg-dark-700">👥 Professores</button>
+    <button class="flex items-center gap-2 px-4 py-3 rounded-lg bg-dark-700 text-white tab-active">🎯 Simulador</button>
+  </div>
+
+  <!-- SEÇÃO 1: SELEÇÃO DE OBJETIVO (V2) -->
+  <div class="card rounded-xl p-6 mb-6">
+    <p class="text-gray-400 mb-4">Qual é o seu objetivo principal?</p>
+    <div class="grid grid-cols-3 gap-4">
+      <div class="card rounded-xl p-4 cursor-pointer hover:border-gray-500"><div class="flex items-center gap-3"><div class="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400">👥</div><div><h4 class="font-medium">Alunos Pagantes</h4><p class="text-gray-500 text-sm">Crescer a base de alunos</p></div></div></div>
+      <div class="card rounded-xl p-4 cursor-pointer hover:border-gray-500"><div class="flex items-center gap-3"><div class="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400">💰</div><div><h4 class="font-medium">MRR / Faturamento</h4><p class="text-gray-500 text-sm">Crescer a receita recorrente</p></div></div></div>
+      <div class="card rounded-xl p-4 cursor-pointer border-2 border-emerald-500 bg-emerald-500/5"><div class="flex items-center gap-3"><div class="w-10 h-10 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400">📊</div><div><h4 class="font-medium">Lucratividade por Turma</h4><p class="text-gray-500 text-sm">Otimizar margem de lucro</p></div></div><span class="text-emerald-400 text-sm mt-2">✓ Selecionado</span></div>
+    </div>
+  </div>
+  <div class="inline-block bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full text-sm font-medium mb-6">MODO: LUCRATIVIDADE POR TURMA</div>
+
+  <!-- SEÇÃO 2: CENÁRIOS DE ESCALONAMENTO (V2) -->
+  <div class="card rounded-xl p-6 mb-6">
+    <div class="flex items-center gap-2 mb-2"><span>⚡</span><h3 class="font-semibold">Cenários de Escalonamento</h3></div>
+    <p class="text-gray-400 text-sm mb-6">Escolha como pagar os professores por aluno na turma</p>
+    <div class="grid grid-cols-3 gap-4 mb-6">
+      <div class="scenario-card card rounded-xl p-5 cursor-pointer hover:border-purple-500/50"><div class="flex items-center gap-2 mb-3"><span class="text-purple-400">🚀</span><h4 class="text-purple-400 font-semibold">Agressivo</h4></div><p class="text-gray-400 text-sm mb-4">Incremento alto para atrair professores</p><div class="space-y-2 mb-4"><div class="flex justify-between"><span class="text-gray-500">Base (1 aluno)</span><span class="font-medium">R$ 35</span></div><div class="flex justify-between"><span class="text-gray-500">Incremento</span><span class="font-medium text-purple-400">+R$ 10</span></div></div><div class="pt-4 border-t border-gray-700"><div class="flex justify-between mb-2"><span class="text-gray-500">Margem em 2.0:</span><span class="font-bold text-purple-400">78,52%</span></div><div class="text-center py-2 bg-purple-500/10 rounded-lg"><span class="text-purple-400 text-sm">~21% Folha</span></div></div></div>
+      <div class="scenario-card card rounded-xl p-5 cursor-pointer selected border-2 border-emerald-500 bg-emerald-500/5"><div class="flex items-center gap-2 mb-3"><span class="text-emerald-400">✨</span><h4 class="text-emerald-400 font-semibold">Equilibrado</h4></div><p class="text-gray-400 text-sm mb-4">Melhor custo-benefício para a escola</p><div class="space-y-2 mb-4"><div class="flex justify-between"><span class="text-gray-500">Base (1 aluno)</span><span class="font-medium">R$ 30</span></div><div class="flex justify-between"><span class="text-gray-500">Incremento</span><span class="font-medium text-emerald-400">+R$ 5</span></div></div><div class="pt-4 border-t border-gray-700"><div class="flex justify-between mb-2"><span class="text-gray-500">Margem em 2.0:</span><span class="font-bold text-emerald-400">83,29%</span></div><div class="text-center py-2 bg-emerald-500/20 rounded-lg"><span class="text-emerald-400 text-sm">~17% Folha</span></div></div><div class="mt-4 text-center"><span class="text-emerald-400 text-sm">✓ Selecionado</span></div></div>
+      <div class="scenario-card card rounded-xl p-5 cursor-pointer hover:border-amber-500/50"><div class="flex items-center gap-2 mb-3"><span class="text-amber-400">⚖️</span><h4 class="text-amber-400 font-semibold">Moderado</h4></div><p class="text-gray-400 text-sm mb-4">Meio termo entre escola e professor</p><div class="space-y-2 mb-4"><div class="flex justify-between"><span class="text-gray-500">Base (1 aluno)</span><span class="font-medium">R$ 30</span></div><div class="flex justify-between"><span class="text-gray-500">Incremento</span><span class="font-medium text-amber-400">+R$ 7</span></div></div><div class="pt-4 border-t border-gray-700"><div class="flex justify-between mb-2"><span class="text-gray-500">Margem em 2.0:</span><span class="font-bold text-amber-400">82,34%</span></div><div class="text-center py-2 bg-amber-500/10 rounded-lg"><span class="text-amber-400 text-sm">~18% Folha</span></div></div></div>
+    </div>
+    <div class="flex items-center gap-4 p-4 bg-dark-800 rounded-xl"><span class="text-gray-400">⚙️ Personalizado:</span><div class="flex items-center gap-2"><span class="text-gray-500">Base R$</span><input type="number" value="30" class="input-field w-20 px-3 py-2 rounded-lg text-center"></div><div class="flex items-center gap-2"><span class="text-gray-500">Incremento +R$</span><input type="number" value="5" class="input-field w-20 px-3 py-2 rounded-lg text-center"></div><button class="btn-secondary px-4 py-2 rounded-lg text-sm">Aplicar</button></div>
+  </div>
+
+  <!-- SEÇÃO 3: SIMULAR META DE MÉDIA (V1 - MODELO PREFERIDO) -->
+  <section class="card rounded-2xl p-6 mb-6">
+    <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+      <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+      </svg>
+      Simular Meta de Média
+    </h2>
+
+    <!-- Slider de Meta -->
+    <div class="mb-8">
+      <div class="flex items-center justify-between mb-3">
+        <label class="text-sm text-muted">Meta de Média de Alunos/Turma</label>
+        <span class="text-2xl font-bold text-cyan-400">2.0</span>
+      </div>
+      <input type="range" min="1.0" max="3.0" step="0.1" value="2.0" 
+             class="w-full h-2 bg-border rounded-lg appearance-none cursor-pointer slider-cyan"
+             style="--value: 50%">
+      <div class="flex justify-between text-xs text-muted mt-2">
+        <span>1.0 (individual)</span>
+        <span>1.5</span>
+        <span>2.0 (duplas)</span>
+        <span>2.5</span>
+        <span>3.0 (trios)</span>
+      </div>
+    </div>
+
+    <!-- Comparativo Antes/Depois -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <!-- ANTES -->
+      <div class="bg-background border border-rose-500/30 rounded-2xl p-5">
+        <div class="flex items-center gap-2 mb-4">
+          <div class="w-3 h-3 rounded-full bg-rose-500"></div>
+          <h3 class="font-semibold text-rose-400">Situação Atual</h3>
+          <span class="text-xs text-muted ml-auto">Média 1.25</span>
+        </div>
+        <div class="space-y-3">
+          <div class="flex justify-between">
+            <span class="text-muted text-sm">Custo/Aluno</span>
+            <span class="font-semibold">R$ 103,33</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-muted text-sm">Folha Total</span>
+            <span class="font-semibold">R$ 22.217</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-muted text-sm">% Folha</span>
+            <span class="font-semibold text-rose-400">24,66%</span>
+          </div>
+          <div class="flex justify-between border-t border-border pt-3">
+            <span class="text-muted text-sm">Margem Bruta</span>
+            <span class="font-bold text-lg">75,34%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- DEPOIS -->
+      <div class="bg-background border border-emerald-500/30 rounded-2xl p-5">
+        <div class="flex items-center gap-2 mb-4">
+          <div class="w-3 h-3 rounded-full bg-emerald-500"></div>
+          <h3 class="font-semibold text-emerald-400">Meta Projetada</h3>
+          <span class="text-xs text-muted ml-auto">Média 2.0</span>
+        </div>
+        <div class="space-y-3">
+          <div class="flex justify-between">
+            <span class="text-muted text-sm">Custo/Aluno</span>
+            <span class="font-semibold">R$ 70,00</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-muted text-sm">Folha Total</span>
+            <span class="font-semibold">R$ 15.050</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-muted text-sm">% Folha</span>
+            <span class="font-semibold text-emerald-400">16,71%</span>
+          </div>
+          <div class="flex justify-between border-t border-border pt-3">
+            <span class="text-muted text-sm">Margem Bruta</span>
+            <span class="font-bold text-lg text-emerald-400">83,29%</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cards de Ganho -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+      <div class="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 text-center">
+        <p class="text-sm text-emerald-400 mb-1">Ganho de Margem</p>
+        <p class="text-3xl font-bold text-emerald-400">+7,95%</p>
+      </div>
+      <div class="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 text-center">
+        <p class="text-sm text-emerald-400 mb-1">Economia Mensal</p>
+        <p class="text-3xl font-bold text-emerald-400">R$ 7.167</p>
+      </div>
+      <div class="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 text-center">
+        <p class="text-sm text-emerald-400 mb-1">Economia Anual</p>
+        <p class="text-3xl font-bold text-emerald-400">R$ 86.004</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- SEÇÃO 4: TABELA DE BONIFICAÇÕES SUGERIDAS (V1 - MODELO PREFERIDO) -->
+  <section class="card rounded-2xl p-6 mb-6">
+    <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+      <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/>
+      </svg>
+      Tabela de Bonificações Sugeridas
+      <span class="text-xs text-muted ml-2">(baseado em professor com 20 alunos)</span>
+    </h2>
+
+    <div class="overflow-x-auto">
+      <table class="w-full">
+        <thead>
+          <tr class="border-b border-border">
+            <th class="text-left py-3 px-4 text-muted text-sm font-medium">Meta Atingida</th>
+            <th class="text-right py-3 px-4 text-muted text-sm font-medium">Economia/Prof</th>
+            <th class="text-right py-3 px-4 text-muted text-sm font-medium">Bônus Sugerido</th>
+            <th class="text-right py-3 px-4 text-muted text-sm font-medium">Lucro Escola</th>
+            <th class="text-center py-3 px-4 text-muted text-sm font-medium">% Repasse</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="border-b border-border/50 hover:bg-background/50">
+            <td class="py-3 px-4">
+              <span class="inline-flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                Média 1.5
+              </span>
+            </td>
+            <td class="text-right py-3 px-4 text-muted">R$ 334/mês</td>
+            <td class="text-right py-3 px-4 font-semibold text-amber-400">R$ 150</td>
+            <td class="text-right py-3 px-4 text-emerald-400">R$ 184</td>
+            <td class="text-center py-3 px-4 text-muted">45%</td>
+          </tr>
+          <tr class="border-b border-border/50 hover:bg-background/50">
+            <td class="py-3 px-4">
+              <span class="inline-flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                Média 1.8
+              </span>
+            </td>
+            <td class="text-right py-3 px-4 text-muted">R$ 534/mês</td>
+            <td class="text-right py-3 px-4 font-semibold text-amber-400">R$ 250</td>
+            <td class="text-right py-3 px-4 text-emerald-400">R$ 284</td>
+            <td class="text-center py-3 px-4 text-muted">47%</td>
+          </tr>
+          <tr class="border-b border-border/50 hover:bg-background/50 bg-cyan-500/5">
+            <td class="py-3 px-4">
+              <span class="inline-flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+                <strong>Média 2.0</strong>
+              </span>
+            </td>
+            <td class="text-right py-3 px-4 text-muted">R$ 666/mês</td>
+            <td class="text-right py-3 px-4 font-bold text-cyan-400">R$ 300</td>
+            <td class="text-right py-3 px-4 text-emerald-400 font-semibold">R$ 366</td>
+            <td class="text-center py-3 px-4 text-muted">45%</td>
+          </tr>
+          <tr class="border-b border-border/50 hover:bg-background/50">
+            <td class="py-3 px-4">
+              <span class="inline-flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                Média 2.5
+              </span>
+            </td>
+            <td class="text-right py-3 px-4 text-muted">R$ 858/mês</td>
+            <td class="text-right py-3 px-4 font-semibold text-emerald-400">R$ 400</td>
+            <td class="text-right py-3 px-4 text-emerald-400">R$ 458</td>
+            <td class="text-center py-3 px-4 text-muted">47%</td>
+          </tr>
+          <tr class="hover:bg-background/50">
+            <td class="py-3 px-4">
+              <span class="inline-flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                Média 3.0
+              </span>
+            </td>
+            <td class="text-right py-3 px-4 text-muted">R$ 955/mês</td>
+            <td class="text-right py-3 px-4 font-semibold text-emerald-400">R$ 450</td>
+            <td class="text-right py-3 px-4 text-emerald-400">R$ 505</td>
+            <td class="text-center py-3 px-4 text-muted">47%</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="text-xs text-muted mt-4 flex items-center gap-2">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+      Os valores de bônus são sugestões baseadas em ~45% da economia gerada. Ajuste conforme política da escola.
+    </p>
+  </section>
+
+  <!-- SEÇÃO 5: MODELO DE GARANTIA (V2) -->
+  <div class="card card-cyan rounded-xl p-6 mb-6">
+    <div class="flex items-center gap-2 mb-2"><span>🛡️</span><h3 class="font-semibold">MODELO DE GARANTIA PARA PROFESSORES</h3></div>
+    <p class="text-gray-400 text-sm mb-6">Simule o impacto de garantir a renda do professor durante a transição</p>
+    <div class="grid grid-cols-2 gap-6">
+      <div class="space-y-4">
+        <div class="p-4 bg-dark-800 rounded-xl"><p class="text-gray-500 text-sm mb-2">Professor exemplo:</p><div class="grid grid-cols-2 gap-4"><div><p class="text-gray-500 text-xs">Alunos</p><input type="number" value="20" class="input-field w-full px-3 py-2 rounded-lg text-xl font-bold text-center"></div><div><p class="text-gray-500 text-xs">Média Atual</p><input type="number" value="1.0" step="0.1" class="input-field w-full px-3 py-2 rounded-lg text-xl font-bold text-center"></div></div></div>
+        <div class="guarantee-card rounded-xl p-4"><p class="text-cyan-400 font-medium mb-3">📋 Cenário de Transição</p><div class="space-y-2 text-sm"><div class="flex justify-between"><span class="text-gray-400">Ganho atual (20h × R$120):</span><span class="font-medium">R$ 2.400/mês</span></div><div class="flex justify-between"><span class="text-gray-400">Ganho meta 2.0 (10 turmas × R$140):</span><span class="font-medium">R$ 1.400/mês</span></div><div class="flex justify-between pt-2 border-t border-cyan-500/30"><span class="text-gray-400">Diferença (garantia):</span><span class="font-medium text-rose-400">-R$ 1.000/mês</span></div></div></div>
+      </div>
+      <div class="space-y-4">
+        <div class="p-4 bg-dark-800 rounded-xl"><div class="flex items-center gap-2 mb-3"><span class="text-amber-400">⚠️</span><span class="text-amber-400 font-medium">Cenário Pessimista</span></div><div class="space-y-2 text-sm"><div class="flex justify-between"><span class="text-gray-400">Garantia 6 meses:</span><span>R$ 6.000</span></div><div class="flex justify-between text-amber-400"><span>Resultado:</span><span>Empate</span></div></div></div>
+        <div class="p-4 bg-emerald-500/10 rounded-xl border border-emerald-500/30"><div class="flex items-center gap-2 mb-3"><span class="text-emerald-400">✅</span><span class="text-emerald-400 font-medium">Cenário Otimista</span></div><div class="space-y-2 text-sm"><div class="flex justify-between"><span class="text-gray-400">Garantia paga:</span><span>R$ 1.000</span></div><div class="flex justify-between"><span class="text-gray-400">Receita nova:</span><span class="text-emerald-400">+R$ 33.450</span></div><div class="flex justify-between text-emerald-400 font-bold"><span>Lucro 6 meses:</span><span>R$ 32.450 🚀</span></div></div></div>
+      </div>
+    </div>
+    <div class="mt-6 p-4 bg-cyan-500/10 rounded-xl border border-cyan-500/30"><p class="text-cyan-400 text-sm">💡 <strong>Risco ZERO no pior cenário</strong> — escola apenas empata. Coordenação filtra junções viáveis.</p></div>
+  </div>
+
+  <!-- SEÇÃO 6: ALERTAS DE VIABILIDADE (V2) -->
+  <div class="card rounded-xl p-6 mb-6">
+    <div class="flex items-center justify-between mb-6"><div class="flex items-center gap-2"><span>⚠️</span><h3 class="font-semibold">ALERTAS DE VIABILIDADE</h3></div><div class="flex items-center gap-2 bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-full">Score: <span class="font-bold">85%</span></div></div>
+    <div class="space-y-4">
+      <div class="p-4 bg-emerald-500/10 rounded-xl border-l-4 border-emerald-500"><div class="flex items-center gap-2 mb-1"><span class="text-emerald-400">✅</span><span class="text-emerald-400 font-medium">Meta de margem alcançável</span></div><p class="text-gray-400 text-sm">A meta de 83,29% é realista com o cenário selecionado.</p></div>
+      <div class="p-4 bg-amber-500/10 rounded-xl border-l-4 border-amber-500"><div class="flex items-center gap-2 mb-1"><span class="text-amber-400">⚠️</span><span class="text-amber-400 font-medium">Requer gestão ativa da coordenação</span></div><p class="text-gray-400 text-sm">A transição de 1.25 → 2.0 exige acompanhamento.</p></div>
+      <div class="p-4 bg-emerald-500/10 rounded-xl border-l-4 border-emerald-500"><div class="flex items-center gap-2 mb-1"><span class="text-emerald-400">✅</span><span class="text-emerald-400 font-medium">ROI positivo em 3-6 meses</span></div><p class="text-gray-400 text-sm">Economia supera custos de garantia rapidamente.</p></div>
+    </div>
+  </div>
+
+  <!-- SEÇÃO 7: METAS CALCULADAS (V2) -->
+  <div class="card rounded-xl p-6 mb-8">
+    <div class="flex items-center gap-2 mb-6"><span>✅</span><h3 class="font-semibold">METAS CALCULADAS</h3></div>
+    <div class="grid grid-cols-7 gap-3">
+      <div class="text-center p-4 bg-dark-800 rounded-xl"><p class="text-gray-500 text-xs mb-2">Média Atual</p><p class="text-xl font-bold text-white">1.25</p></div>
+      <div class="text-center p-4 bg-dark-800 rounded-xl"><p class="text-gray-500 text-xs mb-2">Meta Média</p><p class="text-xl font-bold text-emerald-400">2.0</p></div>
+      <div class="text-center p-4 bg-dark-800 rounded-xl"><p class="text-gray-500 text-xs mb-2">% Folha Atual</p><p class="text-xl font-bold text-rose-400">24,66%</p></div>
+      <div class="text-center p-4 bg-dark-800 rounded-xl"><p class="text-gray-500 text-xs mb-2">% Folha Meta</p><p class="text-xl font-bold text-emerald-400">16,71%</p></div>
+      <div class="text-center p-4 bg-dark-800 rounded-xl"><p class="text-gray-500 text-xs mb-2">Margem Atual</p><p class="text-xl font-bold text-white">75,34%</p></div>
+      <div class="text-center p-4 bg-dark-800 rounded-xl"><p class="text-gray-500 text-xs mb-2">Margem Meta</p><p class="text-xl font-bold text-emerald-400">83,29%</p></div>
+      <div class="text-center p-4 bg-emerald-500/20 rounded-xl border border-emerald-500/30"><p class="text-gray-500 text-xs mb-2">Economia/Ano</p><p class="text-xl font-bold text-emerald-400">R$ 86k</p></div>
+    </div>
+    <div class="flex gap-4 mt-6"><button class="btn-primary px-6 py-3 rounded-xl font-medium">🎯 Aplicar Metas</button><button class="btn-secondary px-6 py-3 rounded-xl font-medium">💾 Salvar Cenário</button></div>
+  </div>
+
+  <!-- SEÇÃO 8: RANKING DE PROFESSORES POR MÉDIA (V1 - MODELO PREFERIDO) -->
+  <section class="card rounded-2xl p-6 mb-6">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-semibold flex items-center gap-2">
+        <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+        </svg>
+        Ranking de Professores por Média
+      </h2>
+      <div class="flex items-center gap-3">
+        <span class="text-xs text-muted">Ordenar por:</span>
+        <select class="bg-background border border-border rounded-lg px-3 py-1.5 text-sm text-white focus:border-cyan-500 focus:outline-none">
+          <option>Média (menor → maior)</option>
+          <option>Média (maior → menor)</option>
+          <option>Carteira de Alunos</option>
+          <option>Nome A-Z</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Legenda -->
+    <div class="flex items-center gap-6 mb-4 text-xs">
+      <span class="flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+        Crítico (&lt;1.3)
+      </span>
+      <span class="flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+        Atenção (1.3-1.7)
+      </span>
+      <span class="flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-cyan-500"></span>
+        Bom (1.7-2.0)
+      </span>
+      <span class="flex items-center gap-1.5">
+        <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+        Excelente (&gt;2.0)
+      </span>
+    </div>
+
+    <!-- Lista de Professores -->
+    <div class="space-y-2">
+      
+      <!-- Professor 1 - Crítico (Expandido) -->
+      <div class="border border-rose-500/30 rounded-xl overflow-hidden">
+        <button onclick="toggleCollapse(this)" class="w-full flex items-center justify-between p-4 hover:bg-background/50 transition-colors">
+          <div class="flex items-center gap-4">
+            <span class="w-8 h-8 rounded-full bg-rose-500/20 flex items-center justify-center text-rose-400 font-bold text-sm">1</span>
+            <div class="text-left">
+              <p class="font-semibold">Antonio Marcos</p>
+              <p class="text-xs text-muted">20 alunos • MRR R$ 8.380</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-6">
+            <div class="text-right">
+              <p class="text-2xl font-bold text-rose-400">1.05</p>
+              <p class="text-xs text-muted">alunos/turma</p>
+            </div>
+            <svg class="w-5 h-5 text-muted transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </div>
+        </button>
+        
+        <!-- Conteúdo Expandido -->
+        <div class="collapsible-content open border-t border-rose-500/20 bg-background/30 p-4">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div>
+              <p class="text-xs text-muted mb-1">Situação Atual</p>
+              <p class="text-sm">% Folha: <span class="text-rose-400 font-semibold">28,64%</span></p>
+              <p class="text-sm">Margem: <span class="font-semibold">71,36%</span></p>
+            </div>
+            <div>
+              <p class="text-xs text-muted mb-1">Se atingir meta 2.0</p>
+              <p class="text-sm">% Folha: <span class="text-emerald-400 font-semibold">16,71%</span></p>
+              <p class="text-sm">Economia: <span class="text-emerald-400 font-semibold">R$ 999/mês</span></p>
+            </div>
+            <div>
+              <p class="text-xs text-muted mb-1">Definir Meta Individual</p>
+              <div class="flex items-center gap-2">
+                <input type="number" value="1.8" step="0.1" min="1.0" max="3.0" class="w-20 bg-card border border-border rounded-lg px-3 py-1.5 text-white text-center focus:border-cyan-500 focus:outline-none">
+                <button class="px-3 py-1.5 bg-cyan-500 hover:bg-cyan-600 rounded-lg text-sm font-medium transition-colors">
+                  Salvar
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 text-xs text-amber-400">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+            Atenção: Este professor tem quase todas as aulas individuais. Priorize ações de junção de turmas.
+          </div>
+        </div>
+      </div>
+
+      <!-- Professor 2 - Crítico -->
+      <div class="border border-rose-500/30 rounded-xl overflow-hidden">
+        <button onclick="toggleCollapse(this)" class="w-full flex items-center justify-between p-4 hover:bg-background/50 transition-colors">
+          <div class="flex items-center gap-4">
+            <span class="w-8 h-8 rounded-full bg-rose-500/20 flex items-center justify-center text-rose-400 font-bold text-sm">2</span>
+            <div class="text-left">
+              <p class="font-semibold">Caio Tenório</p>
+              <p class="text-xs text-muted">29 alunos • MRR R$ 12.523</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-6">
+            <div class="text-right">
+              <p class="text-2xl font-bold text-rose-400">1.12</p>
+              <p class="text-xs text-muted">alunos/turma</p>
+            </div>
+            <svg class="w-5 h-5 text-muted transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </div>
+        </button>
+        <div class="collapsible-content border-t border-rose-500/20 bg-background/30 p-4">
+          <p class="text-sm text-muted">Detalhes do professor...</p>
+        </div>
+      </div>
+
+      <!-- Professor 3 - Atenção -->
+      <div class="border border-amber-500/30 rounded-xl overflow-hidden">
+        <button onclick="toggleCollapse(this)" class="w-full flex items-center justify-between p-4 hover:bg-background/50 transition-colors">
+          <div class="flex items-center gap-4">
+            <span class="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 font-bold text-sm">3</span>
+            <div class="text-left">
+              <p class="font-semibold">Gabriel Barbosa</p>
+              <p class="text-xs text-muted">36 alunos • MRR R$ 15.674</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-6">
+            <div class="text-right">
+              <p class="text-2xl font-bold text-amber-400">1.45</p>
+              <p class="text-xs text-muted">alunos/turma</p>
+            </div>
+            <svg class="w-5 h-5 text-muted transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </div>
+        </button>
+        <div class="collapsible-content border-t border-amber-500/20 bg-background/30 p-4">
+          <p class="text-sm text-muted">Detalhes do professor...</p>
+        </div>
+      </div>
+
+      <!-- Professor 4 - Bom -->
+      <div class="border border-cyan-500/30 rounded-xl overflow-hidden">
+        <button onclick="toggleCollapse(this)" class="w-full flex items-center justify-between p-4 hover:bg-background/50 transition-colors">
+          <div class="flex items-center gap-4">
+            <span class="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400 font-bold text-sm">4</span>
+            <div class="text-left">
+              <p class="font-semibold">Rafael Akeem</p>
+              <p class="text-xs text-muted">47 alunos • MRR R$ 21.614</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-6">
+            <div class="text-right">
+              <p class="text-2xl font-bold text-cyan-400">1.85</p>
+              <p class="text-xs text-muted">alunos/turma</p>
+            </div>
+            <svg class="w-5 h-5 text-muted transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </div>
+        </button>
+        <div class="collapsible-content border-t border-cyan-500/20 bg-background/30 p-4">
+          <p class="text-sm text-muted">Detalhes do professor...</p>
+        </div>
+      </div>
+
+      <!-- Professor 5 - Excelente -->
+      <div class="border border-emerald-500/30 rounded-xl overflow-hidden">
+        <button onclick="toggleCollapse(this)" class="w-full flex items-center justify-between p-4 hover:bg-background/50 transition-colors">
+          <div class="flex items-center gap-4">
+            <span class="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold text-sm">5</span>
+            <div class="text-left">
+              <p class="font-semibold">Leticia Palmeira</p>
+              <p class="text-xs text-muted">30 alunos • MRR R$ 13.936</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-6">
+            <div class="text-right">
+              <p class="text-2xl font-bold text-emerald-400">2.35</p>
+              <p class="text-xs text-muted">alunos/turma</p>
+            </div>
+            <svg class="w-5 h-5 text-muted transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+            </svg>
+          </div>
+        </button>
+        <div class="collapsible-content border-t border-emerald-500/20 bg-background/30 p-4">
+          <p class="text-sm text-muted">Detalhes do professor...</p>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Botão Ver Mais -->
+    <button class="w-full mt-4 py-3 border border-border rounded-xl text-muted hover:text-white hover:border-cyan-500 transition-colors flex items-center justify-center gap-2">
+      <span>Ver todos os 42 professores</span>
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+      </svg>
+    </button>
+  </section>
+
+  <!-- SEÇÃO 8: PLANO DE AÇÃO INTELIGENTE (V2) -->
+  <div class="card rounded-xl p-6 mb-6">
+    <div class="flex items-center justify-between mb-6"><div class="flex items-center gap-2"><span>🧠</span><h3 class="font-semibold">Plano de Ação Inteligente</h3><span class="text-purple-400">✨</span></div><div class="flex gap-2"><button class="btn-primary px-4 py-2 rounded-lg text-sm">💾 Salvar</button><button class="btn-secondary px-4 py-2 rounded-lg text-sm">✨ Novo Plano</button></div></div>
+    <div class="p-4 bg-purple-500/10 rounded-xl border-l-4 border-purple-500 mb-6"><div class="flex items-center gap-2 mb-2"><span>💡</span><span class="font-medium">Diagnóstico</span></div><p class="text-gray-300 text-sm">A unidade Barra opera com média de 1.25 alunos/turma, consumindo 24,66% do faturamento em folha. Atingir média 2.0 reduziria a folha para 16,71%, liberando R$ 7.167/mês (~R$ 86k/ano) para reinvestimento.</p></div>
+    <div class="mb-6"><div class="flex items-center gap-2 mb-4"><span class="text-cyan-400">⏱️</span><span class="font-medium">Curto Prazo (2 semanas)</span></div><div class="card rounded-xl p-4 mb-3"><div class="flex items-center justify-between mb-2"><div class="flex items-center gap-2"><span class="text-cyan-400">🎯</span><span class="font-medium">Mapeamento de Oportunidades de Junção</span></div><div class="flex gap-2"><span class="text-xs px-2 py-1 bg-emerald-500/20 text-emerald-400 rounded">Baixo</span><span class="text-xs px-2 py-1 bg-cyan-500/20 text-cyan-400 rounded">Coordenação</span></div></div><p class="text-gray-400 text-sm mb-2">Identificar alunos em horários consecutivos com perfis compatíveis</p><div class="p-2 bg-emerald-500/10 rounded-lg"><span class="text-emerald-400 text-sm">🎯 Meta: 20+ oportunidades em 7 dias</span></div></div></div>
+    <div class="mb-6"><div class="flex items-center gap-2 mb-4"><span class="text-amber-400">📅</span><span class="font-medium">Médio Prazo (1 mês)</span></div><div class="card rounded-xl p-4"><div class="flex items-center justify-between mb-2"><div class="flex items-center gap-2"><span class="text-amber-400">🎯</span><span class="font-medium">Execução das Primeiras Junções com Garantia</span></div><div class="flex gap-2"><span class="text-xs px-2 py-1 bg-amber-500/20 text-amber-400 rounded">Médio</span></div></div><p class="text-gray-400 text-sm mb-2">Iniciar com 5 professores piloto em horários de alta demanda</p><div class="p-2 bg-emerald-500/10 rounded-lg"><span class="text-emerald-400 text-sm">🎯 Meta: 10 turmas formadas, média subir para 1.5</span></div></div></div>
+    <div><div class="flex items-center gap-2 mb-4"><span class="text-emerald-400">🎯</span><span class="font-medium">Longo Prazo (trimestre)</span></div><div class="card rounded-xl p-4"><div class="flex items-center justify-between mb-2"><div class="flex items-center gap-2"><span class="text-emerald-400">🎯</span><span class="font-medium">Escala Total e Bonificações</span></div><div class="flex gap-2"><span class="text-xs px-2 py-1 bg-rose-500/20 text-rose-400 rounded">Alto</span></div></div><p class="text-gray-400 text-sm mb-2">Expandir para toda equipe e implementar sistema de bônus</p><div class="p-2 bg-emerald-500/10 rounded-lg"><span class="text-emerald-400 text-sm">🎯 Meta: Média 2.0, Margem 83%, Economia R$ 7.167/mês</span></div></div></div>
+  </div>
+
+  <div class="h-20"></div>
+
+  </div>
+
+  <script>
+    function toggleCollapse(button) {
+      const content = button.nextElementSibling;
+      const arrow = button.querySelector('svg:last-child');
+      
+      if (content.classList.contains('open')) {
+        content.classList.remove('open');
+        arrow.style.transform = 'rotate(0deg)';
+      } else {
+        content.classList.add('open');
+        arrow.style.transform = 'rotate(180deg)';
+      }
+    }
+  </script>
+</body>
+</html>

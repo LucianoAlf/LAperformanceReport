@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LA Music - Sistema de Input - Wireframe</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .tab-active { border-bottom: 2px solid #06b6d4; color: #06b6d4; }
+    .card-hover:hover { border-color: #06b6d4; }
+  </style>
+</head>
+<body class="bg-slate-900 text-white min-h-screen">
+  
+  <!-- Header -->
+  <header class="bg-slate-800 border-b border-slate-700 px-6 py-4">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-4">
+        <h1 class="text-xl font-bold">LA Music</h1>
+        <select class="bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-sm">
+          <option>Campo Grande</option>
+          <option>Barra</option>
+          <option>Recreio</option>
+        </select>
+      </div>
+      <div class="text-sm text-slate-400">Hoje: <span class="text-white font-medium">21/01/2026</span></div>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <nav class="bg-slate-800/50 border-b border-slate-700 px-6">
+    <div class="flex gap-6">
+      <button onclick="showTab('comercial')" id="tab-comercial" class="py-3 px-2 text-sm font-medium tab-active">📊 Comercial</button>
+      <button onclick="showTab('administrativo')" id="tab-administrativo" class="py-3 px-2 text-sm font-medium text-slate-400 hover:text-white">📋 Administrativo</button>
+      <button onclick="showTab('alunos')" id="tab-alunos" class="py-3 px-2 text-sm font-medium text-slate-400 hover:text-white">👥 Alunos</button>
+    </div>
+  </nav>
+
+  <main class="p-6">
+    
+    <!-- TAB: COMERCIAL -->
+    <div id="content-comercial">
+      
+      <!-- Quick Input Section -->
+      <section class="mb-8">
+        <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+          ⚡ Quick Input - Registro Rápido
+          <span class="text-xs bg-cyan-500/20 text-cyan-400 px-2 py-0.5 rounded">Mínimo de cliques</span>
+        </h2>
+        
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <!-- Card: Leads -->
+          <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 card-hover transition-all cursor-pointer" onclick="openModal('leads')">
+            <div class="flex items-center gap-3 mb-3">
+              <div class="w-10 h-10 bg-blue-500/20 rounded-lg flex items-center justify-center">📱</div>
+              <div><h3 class="font-semibold">Leads</h3><p class="text-xs text-slate-400">Novos contatos</p></div>
+            </div>
+            <div class="text-3xl font-bold text-blue-400">+12</div>
+            <p class="text-xs text-slate-400 mt-1">hoje</p>
+          </div>
+
+          <!-- Card: Experimentais -->
+          <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 card-hover transition-all cursor-pointer" onclick="openModal('experimental')">
+            <div class="flex items-center gap-3 mb-3">
+              <div class="w-10 h-10 bg-violet-500/20 rounded-lg flex items-center justify-center">🎸</div>
+              <div><h3 class="font-semibold">Experimentais</h3><p class="text-xs text-slate-400">Agendadas/Realizadas</p></div>
+            </div>
+            <div class="text-3xl font-bold text-violet-400">3</div>
+            <p class="text-xs text-slate-400 mt-1">hoje</p>
+          </div>
+
+          <!-- Card: Visitas -->
+          <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 card-hover transition-all cursor-pointer" onclick="openModal('visita')">
+            <div class="flex items-center gap-3 mb-3">
+              <div class="w-10 h-10 bg-amber-500/20 rounded-lg flex items-center justify-center">🏫</div>
+              <div><h3 class="font-semibold">Visitas</h3><p class="text-xs text-slate-400">À escola</p></div>
+            </div>
+            <div class="text-3xl font-bold text-amber-400">1</div>
+            <p class="text-xs text-slate-400 mt-1">hoje</p>
+          </div>
+
+          <!-- Card: Matrículas -->
+          <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 card-hover transition-all cursor-pointer" onclick="openModal('matricula')">
+            <div class="flex items-center gap-3 mb-3">
+              <div class="w-10 h-10 bg-emerald-500/20 rounded-lg flex items-center justify-center">✅</div>
+              <div><h3 class="font-semibold">Matrículas</h3><p class="text-xs text-slate-400">Conversões</p></div>
+            </div>
+            <div class="text-3xl font-bold text-emerald-400">2</div>
+            <p class="text-xs text-slate-400 mt-1">hoje</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Resumo do Mês -->
+      <section class="mb-8">
+        <h2 class="text-lg font-semibold mb-4">📈 Resumo do Mês - Janeiro/2026</h2>
+        <div class="bg-slate-800 border border-slate-700 rounded-xl p-6">
+          <div class="grid grid-cols-2 md:grid-cols-5 gap-6">
+            <div><p class="text-sm text-slate-400">Total Leads</p><p class="text-2xl font-bold">461</p></div>
+            <div><p class="text-sm text-slate-400">Experimentais</p><p class="text-2xl font-bold">16</p></div>
+            <div><p class="text-sm text-slate-400">Matrículas</p><p class="text-2xl font-bold text-emerald-400">11</p></div>
+            <div><p class="text-sm text-slate-400">Taxa Conversão</p><p class="text-2xl font-bold text-cyan-400">2.4%</p></div>
+            <div><p class="text-sm text-slate-400">Exp → Mat</p><p class="text-2xl font-bold text-violet-400">68.7%</p></div>
+          </div>
+          <div class="mt-6 pt-6 border-t border-slate-700">
+            <p class="text-sm text-slate-400 mb-3">Leads por Canal</p>
+            <div class="flex flex-wrap gap-3">
+              <span class="bg-pink-500/20 text-pink-400 px-3 py-1 rounded-full text-sm">Instagram: 300</span>
+              <span class="bg-blue-500/20 text-blue-400 px-3 py-1 rounded-full text-sm">Google: 100</span>
+              <span class="bg-green-500/20 text-green-400 px-3 py-1 rounded-full text-sm">Indicação: 30</span>
+              <span class="bg-amber-500/20 text-amber-400 px-3 py-1 rounded-full text-sm">Placa: 11</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- TAB: ADMINISTRATIVO -->
+    <div id="content-administrativo" class="hidden">
+      <section class="mb-8">
+        <h2 class="text-lg font-semibold mb-4">⚡ Quick Input - Ações Rápidas</h2>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 card-hover cursor-pointer" onclick="openModal('renovacao')">
+            <div class="flex items-center gap-3 mb-3">
+              <div class="w-10 h-10 bg-emerald-500/20 rounded-lg flex items-center justify-center">🔄</div>
+              <div><h3 class="font-semibold">Renovação</h3><p class="text-xs text-slate-400">Contrato renovado</p></div>
+            </div>
+            <div class="text-3xl font-bold text-emerald-400">15</div>
+          </div>
+          <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 card-hover cursor-pointer" onclick="openModal('nao-renovacao')">
+            <div class="flex items-center gap-3 mb-3">
+              <div class="w-10 h-10 bg-amber-500/20 rounded-lg flex items-center justify-center">⚠️</div>
+              <div><h3 class="font-semibold">Não Renovação</h3><p class="text-xs text-slate-400">Não quis renovar</p></div>
+            </div>
+            <div class="text-3xl font-bold text-amber-400">0</div>
+          </div>
+          <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 card-hover cursor-pointer" onclick="openModal('aviso')">
+            <div class="flex items-center gap-3 mb-3">
+              <div class="w-10 h-10 bg-orange-500/20 rounded-lg flex items-center justify-center">📢</div>
+              <div><h3 class="font-semibold">Aviso Prévio</h3><p class="text-xs text-slate-400">Vai sair próximo mês</p></div>
+            </div>
+            <div class="text-3xl font-bold text-orange-400">8</div>
+          </div>
+          <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 card-hover cursor-pointer" onclick="openModal('evasao')">
+            <div class="flex items-center gap-3 mb-3">
+              <div class="w-10 h-10 bg-rose-500/20 rounded-lg flex items-center justify-center">🚪</div>
+              <div><h3 class="font-semibold">Evasão</h3><p class="text-xs text-slate-400">Saiu da escola</p></div>
+            </div>
+            <div class="text-3xl font-bold text-rose-400">8</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Resumo ADM -->
+      <section class="mb-8">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="bg-slate-800 border border-slate-700 rounded-xl p-6">
+            <h3 class="font-semibold mb-4 text-cyan-400">👥 Alunos</h3>
+            <div class="grid grid-cols-2 gap-4 text-sm">
+              <div><p class="text-slate-400">Ativos</p><p class="text-xl font-bold">461</p></div>
+              <div><p class="text-slate-400">Pagantes</p><p class="text-xl font-bold">431</p></div>
+              <div><p class="text-slate-400">Não Pagantes</p><p class="text-xl font-bold text-amber-400">30</p></div>
+              <div><p class="text-slate-400">Novos no Mês</p><p class="text-xl font-bold text-emerald-400">21</p></div>
+            </div>
+          </div>
+          <div class="bg-slate-800 border border-slate-700 rounded-xl p-6">
+            <h3 class="font-semibold mb-4 text-emerald-400">🔄 Renovações</h3>
+            <div class="grid grid-cols-2 gap-4 text-sm">
+              <div><p class="text-slate-400">Previstas</p><p class="text-xl font-bold">25</p></div>
+              <div><p class="text-slate-400">Realizadas</p><p class="text-xl font-bold text-emerald-400">15</p></div>
+              <div><p class="text-slate-400">Pendentes</p><p class="text-xl font-bold text-amber-400">10</p></div>
+              <div><p class="text-slate-400">Não Renovações</p><p class="text-xl font-bold text-rose-400">0</p></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Lista Avisos Prévios -->
+      <section>
+        <h2 class="text-lg font-semibold mb-4">📢 Avisos Prévios - Saem em Fevereiro</h2>
+        <div class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-700/50">
+              <tr>
+                <th class="text-left px-4 py-3">Aluno</th>
+                <th class="text-left px-4 py-3">Professor</th>
+                <th class="text-left px-4 py-3">Parcela</th>
+                <th class="text-left px-4 py-3">Motivo</th>
+                <th class="text-left px-4 py-3">Ações</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-700">
+              <tr class="hover:bg-slate-700/30">
+                <td class="px-4 py-3">Laura da Costa Figueira</td>
+                <td class="px-4 py-3">Leticia Palmeira</td>
+                <td class="px-4 py-3">R$ 387,00</td>
+                <td class="px-4 py-3 text-slate-400">Dificuldade financeira</td>
+                <td class="px-4 py-3"><button class="text-rose-400 text-xs">Confirmar Saída</button></td>
+              </tr>
+              <tr class="hover:bg-slate-700/30">
+                <td class="px-4 py-3">Andressa Gabriele Lourenço</td>
+                <td class="px-4 py-3">Gabriel Leão</td>
+                <td class="px-4 py-3">R$ 380,00</td>
+                <td class="px-4 py-3 text-slate-400">Cirurgia</td>
+                <td class="px-4 py-3"><button class="text-rose-400 text-xs">Confirmar Saída</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+
+    <!-- TAB: ALUNOS -->
+    <div id="content-alunos" class="hidden">
+      <section class="mb-6">
+        <div class="flex flex-wrap items-center gap-4">
+          <input type="text" placeholder="🔍 Buscar aluno..." class="flex-1 min-w-[200px] bg-slate-800 border border-slate-700 rounded-lg px-4 py-2 text-sm">
+          <select class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm">
+            <option>Todos os Cursos</option>
+            <option>Violão</option>
+            <option>Piano</option>
+          </select>
+          <select class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm">
+            <option>Todos os Professores</option>
+            <option>Rafael Akeem</option>
+          </select>
+        </div>
+      </section>
+
+      <section>
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-semibold">👥 Lista de Alunos (904)</h2>
+          <button class="bg-cyan-500 text-white px-3 py-1.5 rounded-lg text-sm">+ Novo Aluno</button>
+        </div>
+        <div class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
+          <table class="w-full text-sm">
+            <thead class="bg-slate-700/50">
+              <tr>
+                <th class="text-left px-4 py-3">Nome</th>
+                <th class="text-left px-4 py-3">Curso</th>
+                <th class="text-left px-4 py-3">Professor</th>
+                <th class="text-left px-4 py-3">Parcela</th>
+                <th class="text-left px-4 py-3">Status</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-700">
+              <tr class="hover:bg-slate-700/30">
+                <td class="px-4 py-3">Adriana Christine da Silva</td>
+                <td class="px-4 py-3"><select class="bg-slate-700 rounded px-2 py-1 text-xs"><option>Guitarra</option></select></td>
+                <td class="px-4 py-3"><select class="bg-slate-700 rounded px-2 py-1 text-xs"><option>Gabriel Barbosa</option></select></td>
+                <td class="px-4 py-3"><input value="R$ 447" class="bg-slate-700 rounded px-2 py-1 text-xs w-20"></td>
+                <td class="px-4 py-3"><span class="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded text-xs">Ativo</span></td>
+              </tr>
+              <tr class="hover:bg-slate-700/30">
+                <td class="px-4 py-3">Alexandre Ayres Filho</td>
+                <td class="px-4 py-3"><select class="bg-slate-700 rounded px-2 py-1 text-xs"><option>Teclado</option></select></td>
+                <td class="px-4 py-3"><select class="bg-slate-700 rounded px-2 py-1 text-xs"><option>Renam Amorim</option></select></td>
+                <td class="px-4 py-3"><input value="R$ 447" class="bg-slate-700 rounded px-2 py-1 text-xs w-20"></td>
+                <td class="px-4 py-3"><span class="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded text-xs">Ativo</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- MODAIS -->
+  <div id="modal-overlay" class="fixed inset-0 bg-black/60 hidden z-40" onclick="closeModal()"></div>
+  
+  <!-- Modal Leads -->
+  <div id="modal-leads" class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md hidden z-50">
+    <div class="flex justify-between mb-6">
+      <h3 class="text-lg font-semibold">📱 Registrar Leads</h3>
+      <button onclick="closeModal()" class="text-slate-400">✕</button>
+    </div>
+    <form class="space-y-4">
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm text-slate-400 mb-1">Canal *</label>
+          <select class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+            <option>Instagram</option><option>Google</option><option>Indicação</option><option>Placa</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm text-slate-400 mb-1">Quantidade *</label>
+          <input type="number" value="1" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+        </div>
+      </div>
+      <div>
+        <label class="block text-sm text-slate-400 mb-1">Curso de Interesse</label>
+        <select class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+          <option>Não informado</option><option>Violão</option><option>Piano</option><option>Bateria</option>
+        </select>
+      </div>
+      <div class="pt-4 flex gap-3">
+        <button type="button" onclick="closeModal()" class="flex-1 bg-slate-700 py-2 rounded-lg">Cancelar</button>
+        <button type="submit" class="flex-1 bg-cyan-500 py-2 rounded-lg font-medium">Salvar</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Modal Experimental -->
+  <div id="modal-experimental" class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md hidden z-50">
+    <div class="flex justify-between mb-6">
+      <h3 class="text-lg font-semibold">🎸 Aula Experimental</h3>
+      <button onclick="closeModal()" class="text-slate-400">✕</button>
+    </div>
+    <form class="space-y-4">
+      <div>
+        <label class="block text-sm text-slate-400 mb-2">Status *</label>
+        <div class="grid grid-cols-3 gap-2">
+          <label class="text-center bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 cursor-pointer hover:border-cyan-500"><input type="radio" name="exp" class="hidden"><span class="text-sm">📅 Agendada</span></label>
+          <label class="text-center bg-cyan-500/20 border border-cyan-500 rounded-lg px-3 py-2 cursor-pointer"><input type="radio" name="exp" class="hidden" checked><span class="text-sm">✅ Realizada</span></label>
+          <label class="text-center bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 cursor-pointer hover:border-cyan-500"><input type="radio" name="exp" class="hidden"><span class="text-sm">❌ Faltou</span></label>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm text-slate-400 mb-1">Canal *</label>
+          <select class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+            <option>Instagram</option><option>Google</option><option>Indicação</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm text-slate-400 mb-1">Curso *</label>
+          <select class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+            <option>Violão</option><option>Piano</option><option>Bateria</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="block text-sm text-slate-400 mb-1">Professor *</label>
+        <select class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+          <option>Rafael Akeem</option><option>Leticia Palmeira</option><option>Gabriel Antony</option>
+        </select>
+      </div>
+      <div class="pt-4 flex gap-3">
+        <button type="button" onclick="closeModal()" class="flex-1 bg-slate-700 py-2 rounded-lg">Cancelar</button>
+        <button type="submit" class="flex-1 bg-violet-500 py-2 rounded-lg font-medium">Salvar</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Modal Matrícula -->
+  <div id="modal-matricula" class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-lg hidden z-50">
+    <div class="flex justify-between mb-6">
+      <h3 class="text-lg font-semibold">✅ Nova Matrícula</h3>
+      <button onclick="closeModal()" class="text-slate-400">✕</button>
+    </div>
+    <form class="space-y-4">
+      <div>
+        <label class="block text-sm text-slate-400 mb-1">Nome do Aluno *</label>
+        <input type="text" placeholder="Nome completo" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm text-slate-400 mb-1">Tipo *</label>
+          <select class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+            <option>EMLA (Adulto)</option><option>LAMK (Kids)</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm text-slate-400 mb-1">Curso *</label>
+          <select class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+            <option>Violão</option><option>Piano</option><option>Bateria</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm text-slate-400 mb-1">Canal *</label>
+          <select class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+            <option>Instagram</option><option>Google</option><option>Indicação</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm text-slate-400 mb-1">Teve Experimental?</label>
+          <select class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+            <option>Sim</option><option>Não</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm text-slate-400 mb-1">Prof. Experimental</label>
+          <select class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+            <option>N/A</option><option>Rafael Akeem</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm text-slate-400 mb-1">Prof. Fixo *</label>
+          <select class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+            <option>Rafael Akeem</option><option>Leticia Palmeira</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm text-slate-400 mb-1">Passaporte (R$)</label>
+          <input type="text" placeholder="0,00" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+        </div>
+        <div>
+          <label class="block text-sm text-slate-400 mb-1">Parcela (R$) *</label>
+          <input type="text" placeholder="0,00" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+        </div>
+      </div>
+      <div class="pt-4 flex gap-3">
+        <button type="button" onclick="closeModal()" class="flex-1 bg-slate-700 py-2 rounded-lg">Cancelar</button>
+        <button type="submit" class="flex-1 bg-emerald-500 py-2 rounded-lg font-medium">Salvar</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Modal Renovação -->
+  <div id="modal-renovacao" class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md hidden z-50">
+    <div class="flex justify-between mb-6">
+      <h3 class="text-lg font-semibold">🔄 Registrar Renovação</h3>
+      <button onclick="closeModal()" class="text-slate-400">✕</button>
+    </div>
+    <form class="space-y-4">
+      <div>
+        <label class="block text-sm text-slate-400 mb-1">Aluno *</label>
+        <input type="text" placeholder="🔍 Buscar aluno..." class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-sm text-slate-400 mb-1">Parcela Anterior</label>
+          <input value="R$ 387,00" readonly class="w-full bg-slate-600 border border-slate-600 rounded-lg px-3 py-2 text-sm text-slate-400">
+        </div>
+        <div>
+          <label class="block text-sm text-slate-400 mb-1">Nova Parcela *</label>
+          <input type="text" placeholder="R$ 0,00" class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+        </div>
+      </div>
+      <div class="bg-slate-700/50 rounded-lg p-3 text-center">
+        <p class="text-sm text-slate-400">Reajuste</p>
+        <p class="text-xl font-bold text-emerald-400">+8,22%</p>
+      </div>
+      <div>
+        <label class="block text-sm text-slate-400 mb-1">Agente</label>
+        <select class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+          <option>Duda</option><option>Arthur</option>
+        </select>
+      </div>
+      <div class="pt-4 flex gap-3">
+        <button type="button" onclick="closeModal()" class="flex-1 bg-slate-700 py-2 rounded-lg">Cancelar</button>
+        <button type="submit" class="flex-1 bg-emerald-500 py-2 rounded-lg font-medium">Confirmar</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Modal Aviso Prévio -->
+  <div id="modal-aviso" class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md hidden z-50">
+    <div class="flex justify-between mb-6">
+      <h3 class="text-lg font-semibold">📢 Aviso Prévio</h3>
+      <button onclick="closeModal()" class="text-slate-400">✕</button>
+    </div>
+    <form class="space-y-4">
+      <div>
+        <label class="block text-sm text-slate-400 mb-1">Aluno *</label>
+        <input type="text" placeholder="🔍 Buscar aluno..." class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+      </div>
+      <div class="bg-slate-700/50 rounded-lg p-3">
+        <div class="grid grid-cols-2 gap-2 text-sm">
+          <div><p class="text-slate-400">Professor</p><p class="font-medium">Leticia Palmeira</p></div>
+          <div><p class="text-slate-400">Parcela</p><p class="font-medium">R$ 387,00</p></div>
+        </div>
+      </div>
+      <div>
+        <label class="block text-sm text-slate-400 mb-1">Mês de Saída *</label>
+        <select class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+          <option>Fevereiro/2026</option><option>Março/2026</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm text-slate-400 mb-1">Motivo *</label>
+        <select class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+          <option>Dificuldade financeira</option><option>Falta de tempo</option><option>Mudança</option><option>Não se adaptou</option>
+        </select>
+      </div>
+      <div class="pt-4 flex gap-3">
+        <button type="button" onclick="closeModal()" class="flex-1 bg-slate-700 py-2 rounded-lg">Cancelar</button>
+        <button type="submit" class="flex-1 bg-orange-500 py-2 rounded-lg font-medium">Registrar</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Modal Evasão -->
+  <div id="modal-evasao" class="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-800 border border-slate-700 rounded-2xl p-6 w-full max-w-md hidden z-50">
+    <div class="flex justify-between mb-6">
+      <h3 class="text-lg font-semibold">🚪 Registrar Evasão</h3>
+      <button onclick="closeModal()" class="text-slate-400">✕</button>
+    </div>
+    <form class="space-y-4">
+      <div>
+        <label class="block text-sm text-slate-400 mb-1">Aluno *</label>
+        <input type="text" placeholder="🔍 Buscar aluno..." class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+      </div>
+      <div>
+        <label class="block text-sm text-slate-400 mb-2">Tipo de Saída *</label>
+        <div class="grid grid-cols-2 gap-2">
+          <label class="text-center bg-rose-500/20 border border-rose-500 rounded-lg px-3 py-2 cursor-pointer"><input type="radio" name="saida" class="hidden" checked><span class="text-sm">Interrompido</span></label>
+          <label class="text-center bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 cursor-pointer hover:border-rose-500"><input type="radio" name="saida" class="hidden"><span class="text-sm">Não Renovou</span></label>
+        </div>
+      </div>
+      <div>
+        <label class="block text-sm text-slate-400 mb-1">Motivo *</label>
+        <select class="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+          <option>Dificuldade financeira</option><option>Falta de tempo</option><option>Mudança</option>
+        </select>
+      </div>
+      <div class="pt-4 flex gap-3">
+        <button type="button" onclick="closeModal()" class="flex-1 bg-slate-700 py-2 rounded-lg">Cancelar</button>
+        <button type="submit" class="flex-1 bg-rose-500 py-2 rounded-lg font-medium">Confirmar Saída</button>
+      </div>
+    </form>
+  </div>
+
+  <script>
+    function showTab(tab) {
+      document.querySelectorAll('[id^="content-"]').forEach(el => el.classList.add('hidden'));
+      document.querySelectorAll('[id^="tab-"]').forEach(el => {
+        el.classList.remove('tab-active');
+        el.classList.add('text-slate-400');
+      });
+      document.getElementById('content-' + tab).classList.remove('hidden');
+      document.getElementById('tab-' + tab).classList.add('tab-active');
+      document.getElementById('tab-' + tab).classList.remove('text-slate-400');
+    }
+    
+    function openModal(type) {
+      document.getElementById('modal-overlay').classList.remove('hidden');
+      document.getElementById('modal-' + type).classList.remove('hidden');
+    }
+    
+    function closeModal() {
+      document.getElementById('modal-overlay').classList.add('hidden');
+      document.querySelectorAll('[id^="modal-"]:not(#modal-overlay)').forEach(el => el.classList.add('hidden'));
+    }
+  </script>
+</body>
+</html>

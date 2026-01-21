@@ -1,0 +1,695 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe - Simulador de Média de Alunos em Turma</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            background: '#0a0a0f',
+            card: '#12121a',
+            border: '#1e1e2e',
+            muted: '#71717a',
+            cyan: {
+              400: '#22d3ee',
+              500: '#06b6d4',
+              600: '#0891b2',
+            },
+            emerald: {
+              400: '#34d399',
+              500: '#10b981',
+            },
+            amber: {
+              400: '#fbbf24',
+              500: '#f59e0b',
+            },
+            rose: {
+              400: '#fb7185',
+              500: '#f43f5e',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .gradient-text {
+      background: linear-gradient(135deg, #22d3ee 0%, #06b6d4 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .card-glow {
+      box-shadow: 0 0 20px rgba(6, 182, 212, 0.1);
+    }
+    .slider-cyan::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background: #06b6d4;
+      cursor: pointer;
+    }
+    .slider-cyan::-webkit-slider-runnable-track {
+      height: 8px;
+      background: linear-gradient(to right, #06b6d4 0%, #06b6d4 var(--value), #1e1e2e var(--value), #1e1e2e 100%);
+      border-radius: 4px;
+    }
+    .collapsible-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease-out;
+    }
+    .collapsible-content.open {
+      max-height: 500px;
+    }
+  </style>
+</head>
+<body class="bg-background text-white min-h-screen p-6">
+  
+  <!-- Container Principal -->
+  <div class="max-w-7xl mx-auto space-y-6">
+    
+    <!-- ============================================ -->
+    <!-- HEADER -->
+    <!-- ============================================ -->
+    <header class="flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-bold">
+          <span class="gradient-text">Simulador de Média de Alunos em Turma</span>
+        </h1>
+        <p class="text-muted text-sm mt-1">
+          Simule cenários de escalonamento e calcule ganhos de margem
+        </p>
+      </div>
+      
+      <!-- Seletor de Unidade -->
+      <div class="flex items-center gap-3">
+        <label class="text-sm text-muted">Unidade:</label>
+        <select class="bg-card border border-border rounded-lg px-4 py-2 text-white focus:border-cyan-500 focus:outline-none">
+          <option>Todas as Unidades</option>
+          <option selected>Barra da Tijuca</option>
+          <option>Recreio</option>
+          <option>Freguesia</option>
+        </select>
+      </div>
+    </header>
+
+    <!-- ============================================ -->
+    <!-- SEÇÃO 1: SITUAÇÃO ATUAL DA UNIDADE -->
+    <!-- ============================================ -->
+    <section>
+      <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+        <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+        </svg>
+        Situação Atual da Unidade
+      </h2>
+      
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <!-- Card: Total de Alunos -->
+        <div class="bg-card border border-border rounded-2xl p-4 card-glow">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-muted text-sm">Total de Alunos</span>
+            <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+          </div>
+          <p class="text-2xl font-bold text-white">215</p>
+          <p class="text-xs text-muted mt-1">alunos pagantes</p>
+        </div>
+
+        <!-- Card: Ticket Médio -->
+        <div class="bg-card border border-border rounded-2xl p-4 card-glow">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-muted text-sm">Ticket Médio</span>
+            <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+          </div>
+          <p class="text-2xl font-bold text-white">R$ 419</p>
+          <p class="text-xs text-muted mt-1">por aluno</p>
+        </div>
+
+        <!-- Card: MRR -->
+        <div class="bg-card border border-border rounded-2xl p-4 card-glow">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-muted text-sm">MRR</span>
+            <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+            </svg>
+          </div>
+          <p class="text-2xl font-bold text-white">R$ 90.085</p>
+          <p class="text-xs text-muted mt-1">faturamento mensal</p>
+        </div>
+
+        <!-- Card: Média Atual -->
+        <div class="bg-card border border-border rounded-2xl p-4 card-glow border-amber-500/30">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-muted text-sm">Média Atual</span>
+            <svg class="w-4 h-4 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"/>
+            </svg>
+          </div>
+          <p class="text-2xl font-bold text-amber-400">1.25</p>
+          <p class="text-xs text-muted mt-1">alunos/turma</p>
+        </div>
+
+        <!-- Card: % Folha Atual -->
+        <div class="bg-card border border-border rounded-2xl p-4 card-glow border-rose-500/30">
+          <div class="flex items-center justify-between mb-2">
+            <span class="text-muted text-sm">% Folha Atual</span>
+            <svg class="w-4 h-4 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 14l6-6m-5.5.5h.01m4.99 5h.01M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16l3.5-2 3.5 2 3.5-2 3.5 2z"/>
+            </svg>
+          </div>
+          <p class="text-2xl font-bold text-rose-400">24,66%</p>
+          <p class="text-xs text-muted mt-1">do faturamento</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================ -->
+    <!-- SEÇÃO 2: CONFIGURAÇÃO DE ESCALONAMENTO -->
+    <!-- ============================================ -->
+    <section class="bg-card border border-border rounded-2xl p-6">
+      <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+        <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+        </svg>
+        Configuração de Escalonamento
+      </h2>
+      
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Valor Base Hora-Aula -->
+        <div>
+          <label class="block text-sm text-muted mb-2">Valor Base Hora-Aula</label>
+          <div class="relative">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-muted">R$</span>
+            <input type="number" value="30" class="w-full bg-background border border-border rounded-lg pl-10 pr-4 py-3 text-white focus:border-cyan-500 focus:outline-none text-lg font-semibold">
+          </div>
+          <p class="text-xs text-muted mt-1">Valor pago por 1 aluno na turma</p>
+        </div>
+
+        <!-- Incremento por Aluno -->
+        <div>
+          <label class="block text-sm text-muted mb-2">Incremento por Aluno Adicional</label>
+          <div class="relative">
+            <span class="absolute left-3 top-1/2 -translate-y-1/2 text-muted">+R$</span>
+            <input type="number" value="5" class="w-full bg-background border border-border rounded-lg pl-12 pr-4 py-3 text-white focus:border-cyan-500 focus:outline-none text-lg font-semibold">
+          </div>
+          <p class="text-xs text-muted mt-1">Acréscimo por cada aluno extra</p>
+        </div>
+
+        <!-- Templates Rápidos -->
+        <div>
+          <label class="block text-sm text-muted mb-2">Templates de Cenário</label>
+          <div class="flex gap-2">
+            <button class="flex-1 bg-background border border-border rounded-lg px-3 py-3 text-sm hover:border-cyan-500 transition-colors">
+              <span class="block font-semibold">Cenário 1</span>
+              <span class="text-xs text-muted">R$35 +R$10</span>
+            </button>
+            <button class="flex-1 bg-cyan-500/20 border border-cyan-500 rounded-lg px-3 py-3 text-sm">
+              <span class="block font-semibold text-cyan-400">Cenário 2</span>
+              <span class="text-xs text-cyan-400/70">R$30 +R$5</span>
+            </button>
+            <button class="flex-1 bg-background border border-border rounded-lg px-3 py-3 text-sm hover:border-cyan-500 transition-colors">
+              <span class="block font-semibold">Cenário 3</span>
+              <span class="text-xs text-muted">R$30 +R$7</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================ -->
+    <!-- SEÇÃO 3: SIMULADOR DE META -->
+    <!-- ============================================ -->
+    <section class="bg-card border border-border rounded-2xl p-6">
+      <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+        <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+        </svg>
+        Simular Meta de Média
+      </h2>
+
+      <!-- Slider de Meta -->
+      <div class="mb-8">
+        <div class="flex items-center justify-between mb-3">
+          <label class="text-sm text-muted">Meta de Média de Alunos/Turma</label>
+          <span class="text-2xl font-bold text-cyan-400">2.0</span>
+        </div>
+        <input type="range" min="1.0" max="3.0" step="0.1" value="2.0" 
+               class="w-full h-2 bg-border rounded-lg appearance-none cursor-pointer slider-cyan"
+               style="--value: 50%">
+        <div class="flex justify-between text-xs text-muted mt-2">
+          <span>1.0 (individual)</span>
+          <span>1.5</span>
+          <span>2.0 (duplas)</span>
+          <span>2.5</span>
+          <span>3.0 (trios)</span>
+        </div>
+      </div>
+
+      <!-- Comparativo Antes/Depois -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- ANTES -->
+        <div class="bg-background border border-rose-500/30 rounded-2xl p-5">
+          <div class="flex items-center gap-2 mb-4">
+            <div class="w-3 h-3 rounded-full bg-rose-500"></div>
+            <h3 class="font-semibold text-rose-400">Situação Atual</h3>
+            <span class="text-xs text-muted ml-auto">Média 1.25</span>
+          </div>
+          
+          <div class="space-y-3">
+            <div class="flex justify-between">
+              <span class="text-muted text-sm">Custo/Aluno</span>
+              <span class="font-semibold">R$ 103,33</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-muted text-sm">Folha Total</span>
+              <span class="font-semibold">R$ 22.217</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-muted text-sm">% Folha</span>
+              <span class="font-semibold text-rose-400">24,66%</span>
+            </div>
+            <div class="flex justify-between border-t border-border pt-3">
+              <span class="text-muted text-sm">Margem Bruta</span>
+              <span class="font-bold text-lg">75,34%</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- DEPOIS -->
+        <div class="bg-background border border-emerald-500/30 rounded-2xl p-5">
+          <div class="flex items-center gap-2 mb-4">
+            <div class="w-3 h-3 rounded-full bg-emerald-500"></div>
+            <h3 class="font-semibold text-emerald-400">Meta Projetada</h3>
+            <span class="text-xs text-muted ml-auto">Média 2.0</span>
+          </div>
+          
+          <div class="space-y-3">
+            <div class="flex justify-between">
+              <span class="text-muted text-sm">Custo/Aluno</span>
+              <span class="font-semibold">R$ 70,00</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-muted text-sm">Folha Total</span>
+              <span class="font-semibold">R$ 15.050</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-muted text-sm">% Folha</span>
+              <span class="font-semibold text-emerald-400">16,71%</span>
+            </div>
+            <div class="flex justify-between border-t border-border pt-3">
+              <span class="text-muted text-sm">Margem Bruta</span>
+              <span class="font-bold text-lg text-emerald-400">83,29%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cards de Ganho -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+        <div class="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 text-center">
+          <p class="text-sm text-emerald-400 mb-1">Ganho de Margem</p>
+          <p class="text-3xl font-bold text-emerald-400">+7,95%</p>
+        </div>
+        <div class="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 text-center">
+          <p class="text-sm text-emerald-400 mb-1">Economia Mensal</p>
+          <p class="text-3xl font-bold text-emerald-400">R$ 7.167</p>
+        </div>
+        <div class="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 text-center">
+          <p class="text-sm text-emerald-400 mb-1">Economia Anual</p>
+          <p class="text-3xl font-bold text-emerald-400">R$ 86.004</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============================================ -->
+    <!-- SEÇÃO 4: TABELA DE BONIFICAÇÕES -->
+    <!-- ============================================ -->
+    <section class="bg-card border border-border rounded-2xl p-6">
+      <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+        <svg class="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7"/>
+        </svg>
+        Tabela de Bonificações Sugeridas
+        <span class="text-xs text-muted ml-2">(baseado em professor com 20 alunos)</span>
+      </h2>
+
+      <div class="overflow-x-auto">
+        <table class="w-full">
+          <thead>
+            <tr class="border-b border-border">
+              <th class="text-left py-3 px-4 text-muted text-sm font-medium">Meta Atingida</th>
+              <th class="text-right py-3 px-4 text-muted text-sm font-medium">Economia/Prof</th>
+              <th class="text-right py-3 px-4 text-muted text-sm font-medium">Bônus Sugerido</th>
+              <th class="text-right py-3 px-4 text-muted text-sm font-medium">Lucro Escola</th>
+              <th class="text-center py-3 px-4 text-muted text-sm font-medium">% Repasse</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="border-b border-border/50 hover:bg-background/50">
+              <td class="py-3 px-4">
+                <span class="inline-flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                  Média 1.5
+                </span>
+              </td>
+              <td class="text-right py-3 px-4 text-muted">R$ 334/mês</td>
+              <td class="text-right py-3 px-4 font-semibold text-amber-400">R$ 150</td>
+              <td class="text-right py-3 px-4 text-emerald-400">R$ 184</td>
+              <td class="text-center py-3 px-4 text-muted">45%</td>
+            </tr>
+            <tr class="border-b border-border/50 hover:bg-background/50">
+              <td class="py-3 px-4">
+                <span class="inline-flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+                  Média 1.8
+                </span>
+              </td>
+              <td class="text-right py-3 px-4 text-muted">R$ 534/mês</td>
+              <td class="text-right py-3 px-4 font-semibold text-amber-400">R$ 250</td>
+              <td class="text-right py-3 px-4 text-emerald-400">R$ 284</td>
+              <td class="text-center py-3 px-4 text-muted">47%</td>
+            </tr>
+            <tr class="border-b border-border/50 hover:bg-background/50 bg-cyan-500/5">
+              <td class="py-3 px-4">
+                <span class="inline-flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+                  <strong>Média 2.0</strong>
+                </span>
+              </td>
+              <td class="text-right py-3 px-4 text-muted">R$ 666/mês</td>
+              <td class="text-right py-3 px-4 font-bold text-cyan-400">R$ 300</td>
+              <td class="text-right py-3 px-4 text-emerald-400 font-semibold">R$ 366</td>
+              <td class="text-center py-3 px-4 text-muted">45%</td>
+            </tr>
+            <tr class="border-b border-border/50 hover:bg-background/50">
+              <td class="py-3 px-4">
+                <span class="inline-flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                  Média 2.5
+                </span>
+              </td>
+              <td class="text-right py-3 px-4 text-muted">R$ 858/mês</td>
+              <td class="text-right py-3 px-4 font-semibold text-emerald-400">R$ 400</td>
+              <td class="text-right py-3 px-4 text-emerald-400">R$ 458</td>
+              <td class="text-center py-3 px-4 text-muted">47%</td>
+            </tr>
+            <tr class="hover:bg-background/50">
+              <td class="py-3 px-4">
+                <span class="inline-flex items-center gap-2">
+                  <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                  Média 3.0
+                </span>
+              </td>
+              <td class="text-right py-3 px-4 text-muted">R$ 955/mês</td>
+              <td class="text-right py-3 px-4 font-semibold text-emerald-400">R$ 450</td>
+              <td class="text-right py-3 px-4 text-emerald-400">R$ 505</td>
+              <td class="text-center py-3 px-4 text-muted">47%</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <p class="text-xs text-muted mt-4 flex items-center gap-2">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        Os valores de bônus são sugestões baseadas em ~45% da economia gerada. Ajuste conforme política da escola.
+      </p>
+    </section>
+
+    <!-- ============================================ -->
+    <!-- SEÇÃO 5: RANKING DE PROFESSORES (COLAPSÁVEL) -->
+    <!-- ============================================ -->
+    <section class="bg-card border border-border rounded-2xl p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-lg font-semibold flex items-center gap-2">
+          <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+          Ranking de Professores por Média
+        </h2>
+        <div class="flex items-center gap-3">
+          <span class="text-xs text-muted">Ordenar por:</span>
+          <select class="bg-background border border-border rounded-lg px-3 py-1.5 text-sm text-white focus:border-cyan-500 focus:outline-none">
+            <option>Média (menor → maior)</option>
+            <option>Média (maior → menor)</option>
+            <option>Carteira de Alunos</option>
+            <option>Nome A-Z</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Legenda -->
+      <div class="flex items-center gap-6 mb-4 text-xs">
+        <span class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-rose-500"></span>
+          Crítico (&lt;1.3)
+        </span>
+        <span class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-amber-500"></span>
+          Atenção (1.3-1.7)
+        </span>
+        <span class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-cyan-500"></span>
+          Bom (1.7-2.0)
+        </span>
+        <span class="flex items-center gap-1.5">
+          <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+          Excelente (&gt;2.0)
+        </span>
+      </div>
+
+      <!-- Lista de Professores -->
+      <div class="space-y-2">
+        
+        <!-- Professor 1 - Crítico (Expandido) -->
+        <div class="border border-rose-500/30 rounded-xl overflow-hidden">
+          <button onclick="toggleCollapse(this)" class="w-full flex items-center justify-between p-4 hover:bg-background/50 transition-colors">
+            <div class="flex items-center gap-4">
+              <span class="w-8 h-8 rounded-full bg-rose-500/20 flex items-center justify-center text-rose-400 font-bold text-sm">1</span>
+              <div class="text-left">
+                <p class="font-semibold">Antonio Marcos</p>
+                <p class="text-xs text-muted">20 alunos • MRR R$ 8.380</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-6">
+              <div class="text-right">
+                <p class="text-2xl font-bold text-rose-400">1.05</p>
+                <p class="text-xs text-muted">alunos/turma</p>
+              </div>
+              <svg class="w-5 h-5 text-muted transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+              </svg>
+            </div>
+          </button>
+          
+          <!-- Conteúdo Expandido -->
+          <div class="collapsible-content open border-t border-rose-500/20 bg-background/30 p-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+              <div>
+                <p class="text-xs text-muted mb-1">Situação Atual</p>
+                <p class="text-sm">% Folha: <span class="text-rose-400 font-semibold">28,64%</span></p>
+                <p class="text-sm">Margem: <span class="font-semibold">71,36%</span></p>
+              </div>
+              <div>
+                <p class="text-xs text-muted mb-1">Se atingir meta 2.0</p>
+                <p class="text-sm">% Folha: <span class="text-emerald-400 font-semibold">16,71%</span></p>
+                <p class="text-sm">Economia: <span class="text-emerald-400 font-semibold">R$ 999/mês</span></p>
+              </div>
+              <div>
+                <p class="text-xs text-muted mb-1">Definir Meta Individual</p>
+                <div class="flex items-center gap-2">
+                  <input type="number" value="1.8" step="0.1" min="1.0" max="3.0" class="w-20 bg-card border border-border rounded-lg px-3 py-1.5 text-white text-center focus:border-cyan-500 focus:outline-none">
+                  <button class="px-3 py-1.5 bg-cyan-500 hover:bg-cyan-600 rounded-lg text-sm font-medium transition-colors">
+                    Salvar
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 text-xs text-amber-400">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+              </svg>
+              Atenção: Este professor tem quase todas as aulas individuais. Priorize ações de junção de turmas.
+            </div>
+          </div>
+        </div>
+
+        <!-- Professor 2 - Crítico -->
+        <div class="border border-rose-500/30 rounded-xl overflow-hidden">
+          <button onclick="toggleCollapse(this)" class="w-full flex items-center justify-between p-4 hover:bg-background/50 transition-colors">
+            <div class="flex items-center gap-4">
+              <span class="w-8 h-8 rounded-full bg-rose-500/20 flex items-center justify-center text-rose-400 font-bold text-sm">2</span>
+              <div class="text-left">
+                <p class="font-semibold">Caio Tenório</p>
+                <p class="text-xs text-muted">29 alunos • MRR R$ 12.523</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-6">
+              <div class="text-right">
+                <p class="text-2xl font-bold text-rose-400">1.12</p>
+                <p class="text-xs text-muted">alunos/turma</p>
+              </div>
+              <svg class="w-5 h-5 text-muted transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+              </svg>
+            </div>
+          </button>
+          <div class="collapsible-content border-t border-rose-500/20 bg-background/30 p-4">
+            <!-- Conteúdo expandido similar -->
+            <p class="text-sm text-muted">Detalhes do professor...</p>
+          </div>
+        </div>
+
+        <!-- Professor 3 - Atenção -->
+        <div class="border border-amber-500/30 rounded-xl overflow-hidden">
+          <button onclick="toggleCollapse(this)" class="w-full flex items-center justify-between p-4 hover:bg-background/50 transition-colors">
+            <div class="flex items-center gap-4">
+              <span class="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 font-bold text-sm">3</span>
+              <div class="text-left">
+                <p class="font-semibold">Gabriel Barbosa</p>
+                <p class="text-xs text-muted">36 alunos • MRR R$ 15.674</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-6">
+              <div class="text-right">
+                <p class="text-2xl font-bold text-amber-400">1.45</p>
+                <p class="text-xs text-muted">alunos/turma</p>
+              </div>
+              <svg class="w-5 h-5 text-muted transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+              </svg>
+            </div>
+          </button>
+          <div class="collapsible-content border-t border-amber-500/20 bg-background/30 p-4">
+            <p class="text-sm text-muted">Detalhes do professor...</p>
+          </div>
+        </div>
+
+        <!-- Professor 4 - Bom -->
+        <div class="border border-cyan-500/30 rounded-xl overflow-hidden">
+          <button onclick="toggleCollapse(this)" class="w-full flex items-center justify-between p-4 hover:bg-background/50 transition-colors">
+            <div class="flex items-center gap-4">
+              <span class="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center text-cyan-400 font-bold text-sm">4</span>
+              <div class="text-left">
+                <p class="font-semibold">Rafael Akeem</p>
+                <p class="text-xs text-muted">47 alunos • MRR R$ 21.614</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-6">
+              <div class="text-right">
+                <p class="text-2xl font-bold text-cyan-400">1.85</p>
+                <p class="text-xs text-muted">alunos/turma</p>
+              </div>
+              <svg class="w-5 h-5 text-muted transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+              </svg>
+            </div>
+          </button>
+          <div class="collapsible-content border-t border-cyan-500/20 bg-background/30 p-4">
+            <p class="text-sm text-muted">Detalhes do professor...</p>
+          </div>
+        </div>
+
+        <!-- Professor 5 - Excelente -->
+        <div class="border border-emerald-500/30 rounded-xl overflow-hidden">
+          <button onclick="toggleCollapse(this)" class="w-full flex items-center justify-between p-4 hover:bg-background/50 transition-colors">
+            <div class="flex items-center gap-4">
+              <span class="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-400 font-bold text-sm">5</span>
+              <div class="text-left">
+                <p class="font-semibold">Leticia Palmeira</p>
+                <p class="text-xs text-muted">30 alunos • MRR R$ 13.936</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-6">
+              <div class="text-right">
+                <p class="text-2xl font-bold text-emerald-400">2.35</p>
+                <p class="text-xs text-muted">alunos/turma</p>
+              </div>
+              <svg class="w-5 h-5 text-muted transform transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+              </svg>
+            </div>
+          </button>
+          <div class="collapsible-content border-t border-emerald-500/20 bg-background/30 p-4">
+            <p class="text-sm text-muted">Detalhes do professor...</p>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Botão Ver Mais -->
+      <button class="w-full mt-4 py-3 border border-border rounded-xl text-muted hover:text-white hover:border-cyan-500 transition-colors flex items-center justify-center gap-2">
+        <span>Ver todos os 42 professores</span>
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+      </button>
+    </section>
+
+    <!-- ============================================ -->
+    <!-- SEÇÃO 6: REGRA DE OURO (INFO) -->
+    <!-- ============================================ -->
+    <section class="bg-gradient-to-r from-cyan-500/10 to-emerald-500/10 border border-cyan-500/30 rounded-2xl p-6">
+      <div class="flex items-start gap-4">
+        <div class="w-12 h-12 rounded-full bg-cyan-500/20 flex items-center justify-center flex-shrink-0">
+          <svg class="w-6 h-6 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+          </svg>
+        </div>
+        <div>
+          <h3 class="font-semibold text-lg mb-2">Regra de Ouro</h3>
+          <p class="text-muted mb-3">
+            Cada <strong class="text-white">+0.1</strong> de aumento na média de alunos/turma representa aproximadamente 
+            <strong class="text-cyan-400">1-2% de ganho na margem bruta</strong>.
+          </p>
+          <div class="flex flex-wrap gap-4 text-sm">
+            <span class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+              1.0 → 1.1: ~2% de ganho
+            </span>
+            <span class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+              1.9 → 2.0: ~0,6% de ganho
+            </span>
+            <span class="flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+              2.9 → 3.0: ~0,3% de ganho
+            </span>
+          </div>
+          <p class="text-xs text-muted mt-3">
+            O ganho é <strong>acumulativo</strong> mas <strong>decrescente</strong> — os maiores ganhos estão na transição de aulas individuais para duplas.
+          </p>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- JavaScript para Collapse -->
+  <script>
+    function toggleCollapse(button) {
+      const content = button.nextElementSibling;
+      const arrow = button.querySelector('svg:last-child');
+      
+      content.classList.toggle('open');
+      arrow.classList.toggle('rotate-180');
+    }
+  </script>
+
+</body>
+</html>
