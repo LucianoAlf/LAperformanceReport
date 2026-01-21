@@ -17,6 +17,7 @@ import { CalculoAutomatico } from './CalculoAutomatico';
 import { AlertasViabilidade } from './AlertasViabilidade';
 import { MetasCalculadas } from './MetasCalculadas';
 import { CenariosLista } from './CenariosLista';
+import { InsightsIA } from './InsightsIA';
 
 // Interface do contexto do layout
 interface OutletContextType {
@@ -42,7 +43,7 @@ export function SimuladorPage() {
   const [alunosEditado, setAlunosEditado] = useState(false);
   
   // Buscar dados históricos
-  const { dadosAtuais, dadosHistoricos, loading: loadingDados } = useDadosHistoricos(
+  const { dadosAtuais, dadosHistoricos, unidadeNome, loading: loadingDados } = useDadosHistoricos(
     unidadeId,
     ano,
     mes
@@ -298,7 +299,28 @@ export function SimuladorPage() {
         />
       )}
 
-      {/* Row 6: Cenários Salvos */}
+      {/* Row 6: Insights IA - Plano de Ação Inteligente */}
+      {resultado && (
+        <InsightsIA
+          inputs={inputs}
+          resultado={resultado}
+          alertas={resultado.alertas.map(a => ({
+            tipo: a.tipo === 'erro' ? 'danger' : a.tipo === 'aviso' ? 'warning' : 'success',
+            mensagem: a.mensagem
+          }))}
+          historico={dadosHistoricos ? [{
+            mes: `${mes}/${ano}`,
+            leads: dadosHistoricos.mediaLeads || 0,
+            experimentais: dadosHistoricos.mediaExperimentais || 0,
+            matriculas: dadosHistoricos.mediaMatriculas || 0,
+            cancelamentos: dadosHistoricos.mediaEvasoes || 0,
+          }] : undefined}
+          unidadeId={unidadeId || ''}
+          unidadeNome={unidadeNome || 'Unidade'}
+        />
+      )}
+
+      {/* Row 7: Cenários Salvos */}
       {cenarios.length > 0 && (
         <CenariosLista
           cenarios={cenarios}

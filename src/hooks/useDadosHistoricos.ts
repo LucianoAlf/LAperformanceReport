@@ -7,6 +7,7 @@ import { DadosAtuais, DadosHistoricos } from '@/lib/simulador/tipos';
 interface UseDadosHistoricosResult {
   dadosAtuais: DadosAtuais | null;
   dadosHistoricos: DadosHistoricos | null;
+  unidadeNome: string | null;
   loading: boolean;
   error: string | null;
 }
@@ -18,6 +19,7 @@ export function useDadosHistoricos(
 ): UseDadosHistoricosResult {
   const [dadosAtuais, setDadosAtuais] = useState<DadosAtuais | null>(null);
   const [dadosHistoricos, setDadosHistoricos] = useState<DadosHistoricos | null>(null);
+  const [unidadeNome, setUnidadeNome] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -81,6 +83,7 @@ export function useDadosHistoricos(
           .single();
 
         const nomeUnidade = unidadeData?.nome || '';
+        setUnidadeNome(nomeUnidade);
 
         // Buscar dados anuais consolidados (churn, inadimplência, etc.)
         const { data: dadosAnuais, error: errorAnual } = await supabase
@@ -174,7 +177,7 @@ export function useDadosHistoricos(
     fetchDados();
   }, [unidadeId, ano, mes]);
 
-  return { dadosAtuais, dadosHistoricos, loading, error };
+  return { dadosAtuais, dadosHistoricos, unidadeNome, loading, error };
 }
 
 export default useDadosHistoricos;
