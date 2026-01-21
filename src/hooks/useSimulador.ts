@@ -267,15 +267,19 @@ export function useSimulador(
     setError(null);
 
     try {
-      // Metas a serem aplicadas (sem inadimplência)
+      // Metas a serem aplicadas (incluindo taxas de conversão e alunos atual editado)
       const metasParaAplicar = [
         { tipo: 'alunos_pagantes', valor: inputs.alunosObjetivo },
+        { tipo: 'alunos_atual', valor: inputs.alunosAtual }, // Alunos atual editado
         { tipo: 'churn_rate', valor: inputs.churnProjetado },
         { tipo: 'ticket_medio', valor: inputs.ticketMedio },
         { tipo: 'leads', valor: resultado.leadsMensais },
         { tipo: 'experimentais', valor: resultado.experimentaisMensais },
         { tipo: 'matriculas', valor: resultado.matriculasMensais },
         { tipo: 'mrr', valor: resultado.mrrProjetado },
+        // Taxas de conversão (parâmetros do simulador)
+        { tipo: 'taxa_lead_exp', valor: inputs.taxaLeadExp },
+        { tipo: 'taxa_exp_mat', valor: inputs.taxaExpMat },
       ];
 
       // Aplicar para todos os meses restantes do ano

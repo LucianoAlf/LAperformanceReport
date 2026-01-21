@@ -94,6 +94,8 @@ export function calcularSimulacao(
       churnProjetado,
       crescimentoPercentual,
       mesesRestantes,
+      taxaLeadExp,
+      taxaExpMat,
     },
     historico
   );
@@ -151,6 +153,8 @@ function gerarAlertas(
     churnProjetado: number;
     crescimentoPercentual: number;
     mesesRestantes: number;
+    taxaLeadExp: number;
+    taxaExpMat: number;
   },
   historico?: DadosHistoricos
 ): Alerta[] {
@@ -164,6 +168,8 @@ function gerarAlertas(
     churnProjetado,
     crescimentoPercentual,
     mesesRestantes,
+    taxaLeadExp,
+    taxaExpMat,
   } = resultados;
 
   // Se não tem histórico, não pode comparar
@@ -321,19 +327,31 @@ function gerarAlertas(
     });
   }
 
-  // 5. Alerta de Taxa de Conversão
-  const taxaConversaoTotal = historico.taxaConversaoTotal;
-  if (taxaConversaoTotal < 15) {
+  // 5. Alerta de Taxa de Conversão (usar taxa dos inputs, não do histórico)
+  const taxaConversaoAtual = (taxaLeadExp / 100) * (taxaExpMat / 100) * 100;
+  const taxaConversaoHistorica = historico.taxaConversaoTotal;
+  
+  if (taxaConversaoAtual < 15) {
     alertas.push({
       id: `alerta-${alertaId++}`,
       tipo: 'aviso',
       categoria: 'conversao',
       icone: 'percent',
       titulo: 'Taxa de conversão pode melhorar',
-      mensagem: `Conversão total de ${taxaConversaoTotal.toFixed(1)}% está abaixo do ideal (> 20%).`,
+      mensagem: `Conversão total de ${taxaConversaoAtual.toFixed(1)}% está abaixo do ideal (> 20%).`,
       sugestao: 'Treine a equipe comercial para aumentar a conversão.',
-      valorAtual: taxaConversaoTotal,
+      valorAtual: taxaConversaoAtual,
       valorNecessario: 20,
+    });
+  } else {
+    alertas.push({
+      id: `alerta-${alertaId++}`,
+      tipo: 'sucesso',
+      categoria: 'conversao',
+      icone: 'check-circle',
+      titulo: 'Taxa de conversão adequada',
+      mensagem: `Conversão total de ${taxaConversaoAtual.toFixed(1)}% está em um bom nível.`,
+      valorAtual: taxaConversaoAtual,
     });
   }
 

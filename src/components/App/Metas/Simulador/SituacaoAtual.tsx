@@ -133,9 +133,13 @@ export function SituacaoAtual({
             <div className="text-xs text-slate-500 mb-1">Alunos Pagantes</div>
             {editando ? (
               <input
-                type="number"
-                value={tempAlunos}
-                onChange={(e) => setTempAlunos(parseInt(e.target.value) || 0)}
+                type="text"
+                inputMode="numeric"
+                value={tempAlunos === 0 ? '' : tempAlunos}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, '');
+                  setTempAlunos(val === '' ? 0 : parseInt(val));
+                }}
                 className="w-full bg-slate-600/50 border border-slate-500 rounded-lg px-3 py-2 text-3xl font-bold text-white focus:outline-none focus:border-cyan-500"
                 autoFocus
               />

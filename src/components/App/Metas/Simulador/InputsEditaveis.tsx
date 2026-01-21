@@ -148,9 +148,11 @@ export function InputsEditaveis({ inputs, historico, tipoObjetivo, onChange }: I
               {((inputs.taxaLeadExp / 100) * (inputs.taxaExpMat / 100) * 100).toFixed(1)}%
             </span>
           </div>
-          <div className="text-[10px] text-slate-500 mt-1 text-center">
-            Lead → Matrícula
-          </div>
+          {historico && (
+            <div className="text-[10px] text-slate-500 mt-1 text-center">
+              Histórico: {historico.taxaConversaoTotal?.toFixed(1) || '?'}%
+            </div>
+          )}
         </div>
 
         {/* Inadimplência - apenas no modo MRR */}

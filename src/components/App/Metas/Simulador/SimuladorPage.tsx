@@ -1,15 +1,17 @@
 // Simulador de Metas - Página Principal
 // Suporta dois objetivos: Alunos Pagantes e MRR/Faturamento
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Target } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 import { useDadosHistoricos } from '@/hooks/useDadosHistoricos';
 import { useSimulador } from '@/hooks/useSimulador';
 import { TipoObjetivo } from '@/lib/simulador/tipos';
 import { SeletorObjetivo } from './SeletorObjetivo';
 import { SituacaoAtual } from './SituacaoAtual';
 import { MetaObjetivo } from './MetaObjetivo';
+import { TemplatesCenario } from './TemplatesCenario';
 import { InputsEditaveis } from './InputsEditaveis';
 import { CalculoAutomatico } from './CalculoAutomatico';
 import { AlertasViabilidade } from './AlertasViabilidade';
@@ -32,6 +34,12 @@ export function SimuladorPage() {
   const unidadeId = unidadeSelecionada;
   const ano = competencia?.ano || new Date().getFullYear();
   const mes = competencia?.mes || new Date().getMonth() + 1;
+  
+  // Estado para metas aplicadas
+  const [metasAplicadas, setMetasAplicadas] = useState<Record<string, number> | null>(null);
+  const [loadingMetas, setLoadingMetas] = useState(true);
+  const [templateAplicado, setTemplateAplicado] = useState(false);
+  const [alunosEditado, setAlunosEditado] = useState(false);
   
   // Buscar dados históricos
   const { dadosAtuais, dadosHistoricos, loading: loadingDados } = useDadosHistoricos(
@@ -66,41 +74,87 @@ export function SimuladorPage() {
     dadosAtuais?.churnRate || 4
   );
 
-  // Carregar cenários ao montar
+  // Carregar cenários e metas aplicadas ao montar
   useEffect(() => {
     if (unidadeId) {
       carregarCenarios();
+      carregarMetasAplicadas();
     }
   }, [unidadeId, carregarCenarios]);
 
-  // Atualizar inputs quando dados atuais carregarem
+  // Função para carregar metas aplicadas da tabela metas_kpi
+  async function carregarMetasAplicadas() {
+    if (!unidadeId) return;
+    
+    setLoadingMetas(true);
+    try {
+      const { data, error } = await supabase
+        .from('metas_kpi')
+        .select('tipo, valor')
+        .eq('unidade_id', unidadeId)
+        .eq('ano', ano)
+        .eq('mes', 12); // Pegar metas do mês objetivo (dezembro)
+      
+      if (error) throw error;
+      
+      if (data && data.length > 0) {
+        const metas: Record<string, number> = {};
+        data.forEach(m => {
+          metas[m.tipo] = typeof m.valor === 'string' ? parseFloat(m.valor) : m.valor;
+        });
+        setMetasAplicadas(metas);
+      } else {
+        setMetasAplicadas(null);
+      }
+    } catch (err) {
+      console.error('Erro ao carregar metas aplicadas:', err);
+      setMetasAplicadas(null);
+    } finally {
+      setLoadingMetas(false);
+    }
+  }
+
+  // Atualizar inputs quando dados atuais carregarem OU quando metas aplicadas carregarem
+  // NÃO sobrescrever se um template foi aplicado ou alunos foi editado manualmente
   useEffect(() => {
-    if (dadosAtuais && !cenarioAtivo) {
+    if (dadosAtuais && !cenarioAtivo && !loadingMetas && !templateAplicado && !alunosEditado) {
       const mrrAtual = dadosAtuais.alunosPagantes * dadosAtuais.ticketMedio;
-      setInputs({
-        alunosAtual: dadosAtuais.alunosPagantes,
-        alunosObjetivo: Math.round(dadosAtuais.alunosPagantes * 1.1),
-        ticketMedio: dadosAtuais.ticketMedio,
-        churnProjetado: dadosAtuais.churnRate || 4,
-        // Inicializar MRR objetivo com +10% do atual
-        mrrObjetivo: Math.round(mrrAtual * 1.1),
-        // Inicializar inadimplência
-        inadimplenciaPct: dadosAtuais.inadimplencia || 3,
-      });
+      
+      // Função para arredondar para 1 casa decimal
+      const round1 = (v: number | undefined | null) => v ? Math.round(v * 10) / 10 : null;
+      
+      // Se existem metas aplicadas, usar elas como objetivo
+      if (metasAplicadas) {
+        setInputs({
+          // Usar alunos_atual salvo se existir, senão usar do banco
+          alunosAtual: Math.round(metasAplicadas.alunos_atual || dadosAtuais.alunosPagantes),
+          alunosObjetivo: Math.round(metasAplicadas.alunos_pagantes || dadosAtuais.alunosPagantes * 1.1),
+          ticketMedio: round1(metasAplicadas.ticket_medio) || dadosAtuais.ticketMedio,
+          churnProjetado: round1(metasAplicadas.churn_rate) || dadosAtuais.churnRate || 4,
+          mrrObjetivo: Math.round(metasAplicadas.mrr || mrrAtual * 1.1),
+          inadimplenciaPct: dadosAtuais.inadimplencia || 3,
+          // Taxas de conversão das metas aplicadas (arredondadas)
+          taxaLeadExp: round1(metasAplicadas.taxa_lead_exp) || round1(dadosHistoricos?.taxaConversaoLeadExp) || 20,
+          taxaExpMat: round1(metasAplicadas.taxa_exp_mat) || round1(dadosHistoricos?.taxaConversaoExpMat) || 60,
+        });
+      } else {
+        // Sem metas aplicadas, usar valores padrão (+10%)
+        setInputs({
+          alunosAtual: dadosAtuais.alunosPagantes,
+          alunosObjetivo: Math.round(dadosAtuais.alunosPagantes * 1.1),
+          ticketMedio: dadosAtuais.ticketMedio,
+          churnProjetado: dadosAtuais.churnRate || 4,
+          mrrObjetivo: Math.round(mrrAtual * 1.1),
+          inadimplenciaPct: dadosAtuais.inadimplencia || 3,
+          // Taxas do histórico (arredondadas)
+          taxaLeadExp: round1(dadosHistoricos?.taxaConversaoLeadExp) || 20,
+          taxaExpMat: round1(dadosHistoricos?.taxaConversaoExpMat) || 60,
+        });
+      }
     }
-  }, [dadosAtuais, cenarioAtivo, setInputs]);
+  }, [dadosAtuais, dadosHistoricos, cenarioAtivo, metasAplicadas, loadingMetas, templateAplicado, alunosEditado, setInputs]);
 
-  // Atualizar taxas quando histórico carregar
-  useEffect(() => {
-    if (dadosHistoricos && !cenarioAtivo) {
-      setInputs({
-        taxaLeadExp: Math.round(dadosHistoricos.taxaConversaoLeadExp * 10) / 10 || 60,
-        taxaExpMat: Math.round(dadosHistoricos.taxaConversaoExpMat * 10) / 10 || 50,
-      });
-    }
-  }, [dadosHistoricos, cenarioAtivo, setInputs]);
-
-  if (loadingDados) {
+  if (loadingDados || loadingMetas) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500" />
@@ -170,7 +224,10 @@ export function SimuladorPage() {
           tipoObjetivo={inputs.tipoObjetivo}
           alunosAtual={inputs.alunosAtual}
           ticketMedio={inputs.ticketMedio}
-          onChangeAlunosAtual={(valor) => setInput('alunosAtual', valor)}
+          onChangeAlunosAtual={(valor) => {
+            setAlunosEditado(true);
+            setInput('alunosAtual', valor);
+          }}
         />
         <MetaObjetivo
           tipoObjetivo={inputs.tipoObjetivo}
@@ -184,6 +241,28 @@ export function SimuladorPage() {
           onChange={(campo, valor) => setInput(campo as keyof typeof inputs, valor as never)}
         />
       </div>
+
+      {/* Templates de Cenário */}
+      <TemplatesCenario
+        unidadeId={unidadeId}
+        alunosAtual={inputs.alunosAtual}
+        ticketAtual={inputs.ticketMedio}
+        churnAtual={inputs.churnProjetado}
+        historicoLeadExp={dadosHistoricos?.taxaConversaoLeadExp || 20}
+        historicoExpMat={dadosHistoricos?.taxaConversaoExpMat || 60}
+        onAplicarTemplate={(valores) => {
+          console.log('Template aplicado:', valores);
+          setTemplateAplicado(true);
+          setInputs({
+            alunosObjetivo: valores.alunosObjetivo,
+            ticketMedio: valores.ticketMedio,
+            churnProjetado: valores.churnProjetado,
+            taxaLeadExp: valores.taxaLeadExp,
+            taxaExpMat: valores.taxaExpMat,
+            mrrObjetivo: valores.mrrObjetivo,
+          });
+        }}
+      />
 
       {/* Row 2: Inputs Editáveis */}
       <InputsEditaveis

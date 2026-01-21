@@ -123,9 +123,8 @@ type AbaAtiva = 'gestao' | 'comercial' | 'professores' | 'simulador';
 export function MetasPageNew() {
   // Pegar filtros do contexto do Outlet (vem do AppLayout)
   const context = useOutletContext<OutletContextType>();
-  const filtroAtivo = context?.filtroAtivo ?? null;
-  // filtroAtivo é o UUID da unidade quando selecionada, ou null quando consolidado
-  const unidadeId = filtroAtivo;
+  // Usar unidadeSelecionada diretamente (mesmo que o Simulador usa)
+  const unidadeId = context?.unidadeSelecionada ?? context?.filtroAtivo ?? null;
   
   const [loading, setLoading] = useState(true);
   const [metas, setMetas] = useState<Meta[]>([]);
@@ -140,7 +139,7 @@ export function MetasPageNew() {
 
   useEffect(() => {
     fetchDados();
-  }, [anoSelecionado]);
+  }, [anoSelecionado, abaAtiva]);
 
   async function fetchDados() {
     setLoading(true);
@@ -168,7 +167,11 @@ export function MetasPageNew() {
     const meta = metas.find(m => 
       m.unidade_id === unidadeIdParam && m.mes === mes && m.tipo === tipo
     );
-    return meta?.valor ?? null;
+    
+    if (!meta?.valor) return null;
+    // Converter para número (Supabase retorna numeric como string)
+    const valor = typeof meta.valor === 'string' ? parseFloat(meta.valor) : meta.valor;
+    return isNaN(valor) ? null : valor;
   }, [metas]);
 
   // Calcula soma consolidada (para modo consolidado)
