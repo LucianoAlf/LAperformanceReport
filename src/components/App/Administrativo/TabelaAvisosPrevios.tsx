@@ -1,5 +1,6 @@
 import { Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/contexts/AuthContext';
 import type { MovimentacaoAdmin } from './AdministrativoPage';
 
 interface TabelaAvisosPreviosProps {
@@ -9,6 +10,9 @@ interface TabelaAvisosPreviosProps {
 }
 
 export function TabelaAvisosPrevios({ data, onEdit, onDelete }: TabelaAvisosPreviosProps) {
+  const { usuario } = useAuth();
+  const isAdmin = usuario?.perfil === 'admin' && usuario?.unidade_id === null;
+  
   // Calcular perda potencial
   const perdaPotencial = data.reduce((acc, item) => acc + (item.valor_parcela_novo || item.valor_parcela_anterior || 0), 0);
 
@@ -20,6 +24,7 @@ export function TabelaAvisosPrevios({ data, onEdit, onDelete }: TabelaAvisosPrev
             <th className="py-3 px-4 text-left">#</th>
             <th className="py-3 px-4 text-left">Data Aviso</th>
             <th className="py-3 px-4 text-left">Aluno</th>
+            <th className="py-3 px-4 text-left">Escola</th>
             <th className="py-3 px-4 text-right">Parcela</th>
             <th className="py-3 px-4 text-left">Professor</th>
             <th className="py-3 px-4 text-left">Mês Saída</th>
@@ -30,7 +35,7 @@ export function TabelaAvisosPrevios({ data, onEdit, onDelete }: TabelaAvisosPrev
         <tbody>
           {data.length === 0 ? (
             <tr>
-              <td colSpan={8} className="py-8 text-center text-slate-500">
+              <td colSpan={9} className="py-8 text-center text-slate-500">
                 Nenhum aviso prévio registrado neste período 🎉
               </td>
             </tr>
@@ -42,6 +47,22 @@ export function TabelaAvisosPrevios({ data, onEdit, onDelete }: TabelaAvisosPrev
                   {new Date(item.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
                 </td>
                 <td className="py-3 px-4 text-white font-medium">{item.aluno_nome}</td>
+                <td className="py-3 px-4">
+                  <div className="flex items-center gap-1.5">
+                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                      item.unidade_id === 'emla' 
+                        ? 'bg-violet-500/20 text-violet-400' 
+                        : 'bg-cyan-500/20 text-cyan-400'
+                    }`}>
+                      {item.unidade_id === 'emla' ? 'EMLA' : 'LAMK'}
+                    </span>
+                    {isAdmin && item.unidades?.codigo && (
+                      <span className="px-2 py-1 rounded text-xs font-medium bg-slate-600/30 text-slate-300">
+                        {item.unidades.codigo}
+                      </span>
+                    )}
+                  </div>
+                </td>
                 <td className="py-3 px-4 text-right text-orange-400 font-medium">
                   R$ {(item.valor_parcela_novo || item.valor_parcela_anterior || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </td>

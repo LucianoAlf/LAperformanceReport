@@ -6,8 +6,15 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
+import { AutocompleteAluno, type Aluno } from '@/components/ui/AutocompleteAluno';
 import { AlertTriangle } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 import type { MovimentacaoAdmin } from './AdministrativoPage';
+
+interface MotivoSaida {
+  id: number;
+  nome: string;
+}
 
 interface ModalAvisoPrevioProps {
   open: boolean;
@@ -16,18 +23,35 @@ interface ModalAvisoPrevioProps {
   editingItem: MovimentacaoAdmin | null;
   professores: { id: number; nome: string }[];
   competencia: string;
+  unidadeId?: string | null;
 }
 
-export function ModalAvisoPrevio({ open, onOpenChange, onSave, editingItem, professores, competencia }: ModalAvisoPrevioProps) {
+export function ModalAvisoPrevio({ open, onOpenChange, onSave, editingItem, professores, competencia, unidadeId }: ModalAvisoPrevioProps) {
   const [loading, setLoading] = useState(false);
+  const [motivosSaida, setMotivosSaida] = useState<MotivoSaida[]>([]);
   const [formData, setFormData] = useState({
     data: new Date(),
     mes_saida: '',
     aluno_nome: '',
     valor_parcela: '',
     professor_id: '',
-    motivo: '',
+    motivo_saida_id: '',
+    observacoes: '',
   });
+
+  // Carregar motivos de saída
+  useEffect(() => {
+    async function loadMotivos() {
+      const { data } = await supabase
+        .from('motivos_saida')
+        .select('id, nome')
+        .eq('ativo', true)
+        .order('ordem')
+        .order('nome');
+      setMotivosSaida(data || []);
+    }
+    loadMotivos();
+  }, []);
 
   // Gerar opções de mês de saída (próximos 6 meses)
   const mesesSaida = Array.from({ length: 6 }, (_, i) => {
@@ -47,11 +71,11 @@ export function ModalAvisoPrevio({ open, onOpenChange, onSave, editingItem, prof
           aluno_nome: editingItem.aluno_nome,
           valor_parcela: editingItem.valor_parcela_novo?.toString() || editingItem.valor_parcela_anterior?.toString() || '',
           professor_id: editingItem.professor_id?.toString() || '',
-          motivo: editingItem.motivo || '',
+          motivo_saida_id: (editingItem as any).motivo_saida_id?.toString() || '',
+          observacoes: editingItem.motivo || '',
         });
       } else {
         const [ano, mes] = competencia.split('-');
-        // Mês de saída padrão = próximo mês
         const proximoMes = new Date(parseInt(ano), parseInt(mes), 1);
         setFormData({
           data: new Date(parseInt(ano), parseInt(mes) - 1, new Date().getDate()),
@@ -59,7 +83,8 @@ export function ModalAvisoPrevio({ open, onOpenChange, onSave, editingItem, prof
           aluno_nome: '',
           valor_parcela: '',
           professor_id: '',
-          motivo: '',
+          motivo_saida_id: '',
+          observacoes: '',
         });
       }
     }
@@ -67,8 +92,10 @@ export function ModalAvisoPrevio({ open, onOpenChange, onSave, editingItem, prof
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!formData.aluno_nome.trim() || !formData.motivo.trim()) return;
+    if (!formData.aluno_nome.trim() || !formData.motivo_saida_id) return;
 
+    const motivoSelecionado = motivosSaida.find(m => m.id.toString() === formData.motivo_saida_id);
+    
     setLoading(true);
     const success = await onSave({
       tipo: 'aviso_previo',
@@ -77,8 +104,10 @@ export function ModalAvisoPrevio({ open, onOpenChange, onSave, editingItem, prof
       valor_parcela_novo: parseFloat(formData.valor_parcela) || null,
       professor_id: formData.professor_id ? parseInt(formData.professor_id) : null,
       mes_saida: formData.mes_saida || null,
-      motivo: formData.motivo.trim(),
-    });
+      motivo: motivoSelecionado?.nome || '',
+      motivo_saida_id: parseInt(formData.motivo_saida_id),
+      observacoes: formData.observacoes.trim() || null,
+    } as any);
     setLoading(false);
 
     if (success) {
@@ -129,12 +158,17 @@ export function ModalAvisoPrevio({ open, onOpenChange, onSave, editingItem, prof
 
           <div>
             <Label className="text-slate-300">Nome do Aluno *</Label>
-            <Input
+            <AutocompleteAluno
               value={formData.aluno_nome}
-              onChange={(e) => setFormData({ ...formData, aluno_nome: e.target.value })}
-              placeholder="Nome completo"
-              className="bg-slate-800 border-slate-700"
-              required
+              onChange={(nome: string, aluno?: Aluno) => {
+                setFormData({ 
+                  ...formData, 
+                  aluno_nome: nome,
+                  valor_parcela: aluno?.valor_parcela?.toString() || formData.valor_parcela,
+                });
+              }}
+              unidadeId={unidadeId}
+              placeholder="Digite o nome do aluno..."
             />
           </div>
 
@@ -173,18 +207,36 @@ export function ModalAvisoPrevio({ open, onOpenChange, onSave, editingItem, prof
 
           <div>
             <Label className="text-slate-300">Motivo *</Label>
+            <Select
+              value={formData.motivo_saida_id}
+              onValueChange={(value) => setFormData({ ...formData, motivo_saida_id: value })}
+            >
+              <SelectTrigger className="bg-slate-800 border-slate-700">
+                <SelectValue placeholder="Selecione o motivo..." />
+              </SelectTrigger>
+              <SelectContent>
+                {motivosSaida.map((motivo) => (
+                  <SelectItem key={motivo.id} value={motivo.id.toString()}>
+                    {motivo.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label className="text-slate-300">Observações (opcional)</Label>
             <Textarea
-              value={formData.motivo}
-              onChange={(e) => setFormData({ ...formData, motivo: e.target.value })}
-              placeholder="Descreva o motivo da saída..."
-              className="bg-slate-800 border-slate-700 min-h-[100px]"
-              required
+              value={formData.observacoes}
+              onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
+              placeholder="Detalhes adicionais..."
+              className="bg-slate-800 border-slate-700 min-h-[80px]"
             />
           </div>
 
           <Button
             type="submit"
-            disabled={loading || !formData.aluno_nome.trim() || !formData.motivo.trim()}
+            disabled={loading || !formData.aluno_nome.trim() || !formData.motivo_saida_id}
             className="w-full bg-gradient-to-r from-orange-500 to-amber-500"
           >
             {loading ? 'Salvando...' : editingItem ? 'Salvar Alterações' : 'Registrar Aviso Prévio'}

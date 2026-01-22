@@ -16,6 +16,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
+import { useAuth } from '../../../contexts/AuthContext';
 
 // Schema de validação
 const matriculaSchema = z.object({
@@ -30,6 +31,9 @@ const matriculaSchema = z.object({
   professor_id: z.coerce.number().optional(),
   data_matricula: z.string().min(1, 'Data obrigatória'),
   data_inicio_aulas: z.string().optional(),
+  valor_passaporte: z.coerce.number().optional(),
+  forma_pagamento_passaporte: z.string().optional(),
+  parcelas_passaporte: z.coerce.number().optional(),
   valor_mensalidade: z.coerce.number().min(1, 'Valor obrigatório'),
   dia_vencimento: z.coerce.number().min(1).max(31),
   forma_pagamento: z.string().optional(),
@@ -71,6 +75,11 @@ export function FormMatricula() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const leadIdParam = searchParams.get('lead');
+  const { usuario } = useAuth();
+  
+  // Lógica híbrida: usuário de unidade específica ou admin
+  const isAdmin = usuario?.perfil === 'admin' && usuario?.unidade_id === null;
+  const unidadeUsuario = usuario?.unidade_id || null;
 
   const [loading, setLoading] = useState(false);
   const [searchingLead, setSearchingLead] = useState(false);
@@ -94,10 +103,12 @@ export function FormMatricula() {
       dia_vencimento: 10,
       duracao_contrato: 12,
       valor_mensalidade: 450,
+      unidade_id: !isAdmin ? unidadeUsuario || undefined : undefined,
     },
   });
 
   const cursoSelecionado = watch('curso_id');
+  const formaPagamentoPassaporte = watch('forma_pagamento_passaporte');
 
   // Carregar dados de referência
   useEffect(() => {
@@ -177,7 +188,7 @@ export function FormMatricula() {
   const onSubmit = async (data: MatriculaFormData) => {
     setLoading(true);
     try {
-      // 1. Criar registro do aluno
+      // 1. Criar registro do aluno (usando campos corretos da tabela)
       const { data: aluno, error: alunoError } = await supabase
         .from('alunos')
         .insert({
@@ -185,19 +196,15 @@ export function FormMatricula() {
           email: data.email || null,
           telefone: data.telefone || null,
           data_nascimento: data.data_nascimento || null,
-          responsavel: data.responsavel || null,
           unidade_id: data.unidade_id,
           curso_id: data.curso_id,
-          professor_id: data.professor_id || null,
+          professor_atual_id: data.professor_id || null,
           data_matricula: data.data_matricula,
-          data_inicio: data.data_inicio_aulas || data.data_matricula,
-          valor_mensalidade: data.valor_mensalidade,
-          dia_vencimento: data.dia_vencimento,
-          forma_pagamento: data.forma_pagamento || null,
-          duracao_contrato_meses: data.duracao_contrato,
+          data_inicio_contrato: data.data_inicio_aulas || data.data_matricula,
+          valor_parcela: data.valor_mensalidade,
+          valor_passaporte: data.valor_passaporte || null,
           status: 'ativo',
-          observacoes: data.observacoes || null,
-          lead_id: data.lead_id || null,
+          tipo_matricula_id: 1,
         })
         .select()
         .single();
@@ -363,6 +370,45 @@ export function FormMatricula() {
               )}
             </div>
 
+            {/* Campo Unidade - visível apenas para admin */}
+            {isAdmin && (
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Unidade *</label>
+                <select
+                  {...register('unidade_id')}
+                  className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500/50"
+                >
+                  <option value="">Selecione a unidade...</option>
+                  {unidades.map((u) => (
+                    <option key={u.id} value={u.id}>{u.nome}</option>
+                  ))}
+                </select>
+                {errors.unidade_id && (
+                  <p className="text-red-400 text-xs mt-1">{errors.unidade_id.message}</p>
+                )}
+              </div>
+            )}
+
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Escola *</label>
+              <select
+                className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500/50"
+              >
+                <option value="emla">EMLA (Adulto)</option>
+                <option value="lamk">LAMK (Kids)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm text-gray-400 mb-1">Tipo Aluno</label>
+              <select
+                className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500/50"
+              >
+                <option value="pagante">Pagante</option>
+                <option value="cortesia">Cortesia</option>
+              </select>
+            </div>
+
             <div>
               <label className="block text-sm text-gray-400 mb-1">Email</label>
               <input
@@ -388,7 +434,7 @@ export function FormMatricula() {
               <input
                 {...register('data_nascimento')}
                 type="date"
-                className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500/50"
+                className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500/50 [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-70 [&::-webkit-calendar-picker-indicator]:hover:opacity-100"
               />
             </div>
 
@@ -412,22 +458,6 @@ export function FormMatricula() {
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm text-gray-400 mb-1">Unidade *</label>
-              <select
-                {...register('unidade_id')}
-                className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500/50"
-              >
-                <option value="">Selecione...</option>
-                {unidades.map((u) => (
-                  <option key={u.id} value={u.id}>{u.nome}</option>
-                ))}
-              </select>
-              {errors.unidade_id && (
-                <p className="text-red-400 text-xs mt-1">{errors.unidade_id.message}</p>
-              )}
-            </div>
-
             <div>
               <label className="block text-sm text-gray-400 mb-1">Curso *</label>
               <select
@@ -479,6 +509,65 @@ export function FormMatricula() {
             Dados Financeiros
           </h2>
 
+          {/* Passaporte */}
+          <div className="mb-6 p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl">
+            <h3 className="text-sm font-semibold text-amber-400 mb-3">🎫 Passaporte</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Valor Passaporte</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500">R$</span>
+                  <input
+                    {...register('valor_passaporte')}
+                    type="number"
+                    step="0.01"
+                    placeholder="0,00"
+                    className="w-full bg-slate-900/50 border border-slate-700 rounded-xl pl-10 pr-4 py-3 text-white focus:outline-none focus:border-cyan-500/50"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Forma Pagamento</label>
+                <select
+                  {...register('forma_pagamento_passaporte')}
+                  className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500/50"
+                >
+                  <option value="">Selecione...</option>
+                  <option value="pix">PIX</option>
+                  <option value="dinheiro">Dinheiro</option>
+                  <option value="cartao_debito">Cartão de Débito</option>
+                  <option value="cartao_credito">Cartão de Crédito</option>
+                  <option value="cheque">Cheque</option>
+                  <option value="link">Link de Pagamento</option>
+                </select>
+              </div>
+              {formaPagamentoPassaporte === 'cartao_credito' && (
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Parcelas</label>
+                  <select
+                    {...register('parcelas_passaporte')}
+                    className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500/50"
+                  >
+                    <option value="1">1x (à vista)</option>
+                    <option value="2">2x</option>
+                    <option value="3">3x</option>
+                    <option value="4">4x</option>
+                    <option value="5">5x</option>
+                    <option value="6">6x</option>
+                    <option value="7">7x</option>
+                    <option value="8">8x</option>
+                    <option value="9">9x</option>
+                    <option value="10">10x</option>
+                    <option value="11">11x</option>
+                    <option value="12">12x</option>
+                  </select>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Mensalidade */}
+          <h3 className="text-sm font-semibold text-emerald-400 mb-3">💳 Parcela Mensal</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm text-gray-400 mb-1">Valor Mensalidade *</label>
@@ -515,11 +604,12 @@ export function FormMatricula() {
                 className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500/50"
               >
                 <option value="">Selecione...</option>
+                <option value="credito_recorrente">Crédito Recorrente</option>
                 <option value="boleto">Boleto</option>
-                <option value="cartao_credito">Cartão de Crédito</option>
-                <option value="cartao_debito">Cartão de Débito</option>
                 <option value="pix">PIX</option>
                 <option value="dinheiro">Dinheiro</option>
+                <option value="cheque">Cheque</option>
+                <option value="link">Link de Pagamento</option>
               </select>
             </div>
           </div>

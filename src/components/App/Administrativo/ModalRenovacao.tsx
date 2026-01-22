@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DatePicker } from '@/components/ui/date-picker';
+import { AutocompleteAluno, type Aluno } from '@/components/ui/AutocompleteAluno';
 import { CheckCircle2 } from 'lucide-react';
 import type { MovimentacaoAdmin } from './AdministrativoPage';
 
@@ -15,9 +16,10 @@ interface ModalRenovacaoProps {
   editingItem: MovimentacaoAdmin | null;
   formasPagamento: { id: number; nome: string; sigla: string }[];
   competencia: string;
+  unidadeId?: string | null;
 }
 
-export function ModalRenovacao({ open, onOpenChange, onSave, editingItem, formasPagamento, competencia }: ModalRenovacaoProps) {
+export function ModalRenovacao({ open, onOpenChange, onSave, editingItem, formasPagamento, competencia, unidadeId }: ModalRenovacaoProps) {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     data: new Date(),
@@ -103,12 +105,17 @@ export function ModalRenovacao({ open, onOpenChange, onSave, editingItem, formas
 
           <div>
             <Label className="text-slate-300">Nome do Aluno *</Label>
-            <Input
+            <AutocompleteAluno
               value={formData.aluno_nome}
-              onChange={(e) => setFormData({ ...formData, aluno_nome: e.target.value })}
-              placeholder="Nome completo"
-              className="bg-slate-800 border-slate-700"
-              required
+              onChange={(nome: string, aluno?: Aluno) => {
+                setFormData({ 
+                  ...formData, 
+                  aluno_nome: nome,
+                  valor_parcela_anterior: aluno?.valor_parcela?.toString() || formData.valor_parcela_anterior,
+                });
+              }}
+              unidadeId={unidadeId}
+              placeholder="Digite o nome do aluno..."
             />
           </div>
 
@@ -168,7 +175,7 @@ export function ModalRenovacao({ open, onOpenChange, onSave, editingItem, formas
               </Select>
             </div>
             <div>
-              <Label className="text-slate-300">Agente Comercial</Label>
+              <Label className="text-slate-300">Agente Administrativo</Label>
               <Input
                 value={formData.agente_comercial}
                 onChange={(e) => setFormData({ ...formData, agente_comercial: e.target.value })}

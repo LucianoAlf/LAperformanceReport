@@ -27,6 +27,7 @@ interface LeadDiario {
   forma_pagamento_id: number | null;
   tipo_matricula: string | null;
   aluno_novo_retorno: string | null;
+  unidades?: { codigo: string };
 }
 
 interface Option {
@@ -55,6 +56,7 @@ const ALUNO_TIPO = [
 
 export function PlanilhaComercial() {
   const { usuario } = useAuth();
+  const isAdmin = usuario?.perfil === 'admin' && usuario?.unidade_id === null;
   const [rows, setRows] = useState<(LeadDiario & { isNew?: boolean; isDirty?: boolean; expanded?: boolean })[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -97,7 +99,7 @@ export function PlanilhaComercial() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let query = (supabase as any)
         .from('leads_diarios')
-        .select('*')
+        .select('*, unidades(codigo)')
         .order('data', { ascending: false })
         .order('id', { ascending: false });
 
@@ -472,6 +474,25 @@ export function PlanilhaComercial() {
                                 max={100}
                                 className="border rounded mt-1"
                               />
+                            </div>
+                            <div>
+                              <label className="text-xs text-muted-foreground">Escola</label>
+                              <div className="flex items-center gap-1.5 mt-1 px-3 py-2 border rounded bg-muted/30">
+                                {row.tipo_matricula && (
+                                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                    row.tipo_matricula === 'EMLA' 
+                                      ? 'bg-violet-500/20 text-violet-400' 
+                                      : 'bg-cyan-500/20 text-cyan-400'
+                                  }`}>
+                                    {row.tipo_matricula}
+                                  </span>
+                                )}
+                                {isAdmin && row.unidades?.codigo && (
+                                  <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-600/30 text-slate-300">
+                                    {row.unidades.codigo}
+                                  </span>
+                                )}
+                              </div>
                             </div>
                             <div>
                               <label className="text-xs text-muted-foreground">Prof. Experimental</label>

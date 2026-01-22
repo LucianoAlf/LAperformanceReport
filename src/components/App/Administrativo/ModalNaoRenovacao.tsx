@@ -6,8 +6,16 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
+import { AutocompleteAluno } from '@/components/ui/AutocompleteAluno';
 import { XCircle } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 import type { MovimentacaoAdmin } from './AdministrativoPage';
+
+interface MotivoSaida {
+  id: number;
+  nome: string;
+  categoria: string;
+}
 
 interface ModalNaoRenovacaoProps {
   open: boolean;
@@ -16,17 +24,36 @@ interface ModalNaoRenovacaoProps {
   editingItem: MovimentacaoAdmin | null;
   professores: { id: number; nome: string }[];
   competencia: string;
+  unidadeId?: string | null;
 }
 
-export function ModalNaoRenovacao({ open, onOpenChange, onSave, editingItem, professores, competencia }: ModalNaoRenovacaoProps) {
+export function ModalNaoRenovacao({ open, onOpenChange, onSave, editingItem, professores, competencia, unidadeId }: ModalNaoRenovacaoProps) {
   const [loading, setLoading] = useState(false);
+  const [motivosSaida, setMotivosSaida] = useState<MotivoSaida[]>([]);
   const [formData, setFormData] = useState({
     data: new Date(),
     aluno_nome: '',
     professor_id: '',
-    motivo: '',
+    motivo_saida_id: '',
+    observacoes: '',
     agente_comercial: '',
+    tempo_permanencia_meses: '',
+    valor_parcela: '',
   });
+
+  // Carregar motivos de saída
+  useEffect(() => {
+    async function loadMotivos() {
+      const { data } = await supabase
+        .from('motivos_saida')
+        .select('id, nome, categoria')
+        .eq('ativo', true)
+        .order('ordem')
+        .order('nome');
+      setMotivosSaida(data || []);
+    }
+    loadMotivos();
+  }, []);
 
   useEffect(() => {
     if (open) {
@@ -35,8 +62,11 @@ export function ModalNaoRenovacao({ open, onOpenChange, onSave, editingItem, pro
           data: new Date(editingItem.data),
           aluno_nome: editingItem.aluno_nome,
           professor_id: editingItem.professor_id?.toString() || '',
-          motivo: editingItem.motivo || '',
+          motivo_saida_id: (editingItem as any).motivo_saida_id?.toString() || '',
+          observacoes: editingItem.motivo || '',
           agente_comercial: editingItem.agente_comercial || '',
+          tempo_permanencia_meses: editingItem.tempo_permanencia_meses?.toString() || '',
+          valor_parcela: editingItem.valor_parcela_evasao?.toString() || '',
         });
       } else {
         const [ano, mes] = competencia.split('-');
@@ -44,8 +74,11 @@ export function ModalNaoRenovacao({ open, onOpenChange, onSave, editingItem, pro
           data: new Date(parseInt(ano), parseInt(mes) - 1, new Date().getDate()),
           aluno_nome: '',
           professor_id: '',
-          motivo: '',
+          motivo_saida_id: '',
+          observacoes: '',
           agente_comercial: '',
+          tempo_permanencia_meses: '',
+          valor_parcela: '',
         });
       }
     }
@@ -53,17 +86,23 @@ export function ModalNaoRenovacao({ open, onOpenChange, onSave, editingItem, pro
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!formData.aluno_nome.trim() || !formData.motivo.trim()) return;
+    if (!formData.aluno_nome.trim() || !formData.motivo_saida_id) return;
 
+    const motivoSelecionado = motivosSaida.find(m => m.id.toString() === formData.motivo_saida_id);
+    
     setLoading(true);
     const success = await onSave({
       tipo: 'nao_renovacao',
       data: formData.data.toISOString().split('T')[0],
       aluno_nome: formData.aluno_nome.trim(),
       professor_id: formData.professor_id ? parseInt(formData.professor_id) : null,
-      motivo: formData.motivo.trim(),
+      motivo: motivoSelecionado?.nome || '',
+      motivo_saida_id: parseInt(formData.motivo_saida_id),
+      observacoes: formData.observacoes.trim() || null,
       agente_comercial: formData.agente_comercial.trim() || null,
-    });
+      tempo_permanencia_meses: formData.tempo_permanencia_meses ? parseInt(formData.tempo_permanencia_meses) : null,
+      valor_parcela_evasao: formData.valor_parcela ? parseFloat(formData.valor_parcela) : null,
+    } as any);
     setLoading(false);
 
     if (success) {
@@ -94,12 +133,11 @@ export function ModalNaoRenovacao({ open, onOpenChange, onSave, editingItem, pro
 
           <div>
             <Label className="text-slate-300">Nome do Aluno *</Label>
-            <Input
+            <AutocompleteAluno
               value={formData.aluno_nome}
-              onChange={(e) => setFormData({ ...formData, aluno_nome: e.target.value })}
-              placeholder="Nome completo"
-              className="bg-slate-800 border-slate-700"
-              required
+              onChange={(nome) => setFormData({ ...formData, aluno_nome: nome })}
+              unidadeId={unidadeId}
+              placeholder="Digite o nome do aluno..."
             />
           </div>
 
@@ -122,19 +160,67 @@ export function ModalNaoRenovacao({ open, onOpenChange, onSave, editingItem, pro
             </Select>
           </div>
 
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-slate-300">Tempo na Escola (meses) *</Label>
+              <Input
+                type="number"
+                min="1"
+                value={formData.tempo_permanencia_meses}
+                onChange={(e) => setFormData({ ...formData, tempo_permanencia_meses: e.target.value })}
+                placeholder="Ex: 18"
+                className="bg-slate-800 border-slate-700"
+                required
+              />
+              <p className="text-xs text-slate-500 mt-1">Usado para calcular LTV</p>
+            </div>
+            <div>
+              <Label className="text-slate-300">Valor da Parcela (R$) *</Label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                value={formData.valor_parcela}
+                onChange={(e) => setFormData({ ...formData, valor_parcela: e.target.value })}
+                placeholder="Ex: 450.00"
+                className="bg-slate-800 border-slate-700"
+                required
+              />
+              <p className="text-xs text-slate-500 mt-1">Usado para calcular MRR Perdido</p>
+            </div>
+          </div>
+
           <div>
             <Label className="text-slate-300">Motivo *</Label>
+            <Select
+              value={formData.motivo_saida_id}
+              onValueChange={(value) => setFormData({ ...formData, motivo_saida_id: value })}
+            >
+              <SelectTrigger className="bg-slate-800 border-slate-700">
+                <SelectValue placeholder="Selecione o motivo..." />
+              </SelectTrigger>
+              <SelectContent>
+                {motivosSaida.map((motivo) => (
+                  <SelectItem key={motivo.id} value={motivo.id.toString()}>
+                    {motivo.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label className="text-slate-300">Observações (opcional)</Label>
             <Textarea
-              value={formData.motivo}
-              onChange={(e) => setFormData({ ...formData, motivo: e.target.value })}
-              placeholder="Descreva o motivo da não renovação..."
-              className="bg-slate-800 border-slate-700 min-h-[100px]"
-              required
+              value={formData.observacoes}
+              onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
+              placeholder="Detalhes adicionais..."
+              className="bg-slate-800 border-slate-700 min-h-[80px]"
             />
           </div>
 
           <div>
-            <Label className="text-slate-300">Agente Comercial</Label>
+            <Label className="text-slate-300">Agente Administrativo</Label>
             <Input
               value={formData.agente_comercial}
               onChange={(e) => setFormData({ ...formData, agente_comercial: e.target.value })}
@@ -145,7 +231,7 @@ export function ModalNaoRenovacao({ open, onOpenChange, onSave, editingItem, pro
 
           <Button
             type="submit"
-            disabled={loading || !formData.aluno_nome.trim() || !formData.motivo.trim()}
+            disabled={loading || !formData.aluno_nome.trim() || !formData.motivo_saida_id || !formData.tempo_permanencia_meses || !formData.valor_parcela}
             className="w-full bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-900"
           >
             {loading ? 'Salvando...' : editingItem ? 'Salvar Alterações' : 'Registrar Não Renovação'}

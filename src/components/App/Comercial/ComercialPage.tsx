@@ -71,6 +71,7 @@ interface LeadDiario {
   tipo_matricula: string | null;
   tipo_aluno: string | null;
   aluno_novo_retorno: string | null;
+  unidades?: { codigo: string };
 }
 
 interface Option {
@@ -175,6 +176,7 @@ export function ComercialPage() {
   const [cursos, setCursos] = useState<Option[]>([]);
   const [professores, setProfessores] = useState<Option[]>([]);
   const [formasPagamento, setFormasPagamento] = useState<Option[]>([]);
+  const [unidades, setUnidades] = useState<Option[]>([]);
   
   // Resumo do mês
   const [resumo, setResumo] = useState<ResumoMes>({
@@ -245,24 +247,29 @@ export function ComercialPage() {
     valor_parcela: null as number | null,
     forma_pagamento_id: null as number | null,
     forma_pagamento_passaporte_id: null as number | null,
+    forma_pagamento_passaporte: '' as string,
+    parcelas_passaporte: 1 as number,
     dia_vencimento: 5 as number | null,
+    unidade_id: null as string | null,
   });
 
   // Carregar dados mestres
   useEffect(() => {
     const loadMasterData = async () => {
       try {
-        const [canaisRes, cursosRes, professoresRes, formasRes] = await Promise.all([
+        const [canaisRes, cursosRes, professoresRes, formasRes, unidadesRes] = await Promise.all([
           supabase.from('canais_origem').select('id, nome').eq('ativo', true).order('nome'),
           supabase.from('cursos').select('id, nome').eq('ativo', true).order('nome'),
           supabase.from('professores').select('id, nome').eq('ativo', true).order('nome'),
           supabase.from('formas_pagamento').select('id, nome').eq('ativo', true).order('nome'),
+          supabase.from('unidades').select('id, nome').eq('ativo', true).order('nome'),
         ]);
 
         if (canaisRes.data) setCanais(canaisRes.data.map((c: any) => ({ value: c.id, label: c.nome })));
         if (cursosRes.data) setCursos(cursosRes.data.map((c: any) => ({ value: c.id, label: c.nome })));
         if (professoresRes.data) setProfessores(professoresRes.data.map((p: any) => ({ value: p.id, label: p.nome })));
         if (formasRes.data) setFormasPagamento(formasRes.data.map((f: any) => ({ value: f.id, label: f.nome })));
+        if (unidadesRes.data) setUnidades(unidadesRes.data.map((u: any) => ({ value: u.id, label: u.nome })));
       } catch (error) {
         console.error('Erro ao carregar dados mestres:', error);
       }
@@ -282,10 +289,10 @@ export function ComercialPage() {
       // Usar range de datas do filtro de competência
       const { startDate, endDate } = competencia.range;
 
-      // Query base - buscar também cursos
+      // Query base - buscar também cursos e unidades
       let query = supabase
         .from('leads_diarios')
-        .select('*, canais_origem(nome), cursos(nome)')
+        .select('*, canais_origem(nome), cursos(nome), unidades(codigo)')
         .gte('data', startDate)
         .lte('data', endDate)
         .order('data', { ascending: false });
@@ -674,9 +681,14 @@ export function ComercialPage() {
 
   // Salvar registro
   const handleSave = async () => {
-    // Usar a unidade calculada no topo do componente
-    if (!unidadeParaSalvar) {
-      toast.error('Selecione uma unidade no filtro acima');
+    // Para admin: usar unidade do modal se preenchida, senão do filtro
+    // Para usuário normal: usar sua unidade
+    const unidadeFinal = isAdmin 
+      ? (formData.unidade_id || unidadeParaSalvar)
+      : unidadeParaSalvar;
+      
+    if (!unidadeFinal) {
+      toast.error('Selecione uma unidade');
       return;
     }
 
@@ -691,7 +703,7 @@ export function ComercialPage() {
       }
 
       const registro: Partial<LeadDiario> = {
-        unidade_id: unidadeParaSalvar,
+        unidade_id: unidadeFinal,
         data: dataLancamento,
         tipo: tipo || 'lead',
         canal_origem_id: formData.canal_origem_id,
@@ -721,9 +733,39 @@ export function ComercialPage() {
         registro.professor_experimental_id = formData.professor_id;
       }
 
-      const { error } = await supabase.from('leads_diarios').insert(registro);
+      const { data: leadData, error } = await supabase.from('leads_diarios').insert(registro).select().single();
 
       if (error) throw error;
+
+      // Se for matrícula, criar também o registro na tabela alunos
+      // Campos baseados na estrutura real da tabela alunos no Supabase
+      if (modalOpen === 'matricula' && formData.aluno_nome) {
+        const novoAluno: Record<string, any> = {
+          nome: formData.aluno_nome.trim(),
+          unidade_id: unidadeFinal,
+          data_matricula: formData.data.toISOString().split('T')[0],
+          valor_mensalidade: formData.valor_parcela || 0,
+          status: 'ativo',
+        };
+
+        // Campos opcionais que existem na tabela
+        if (formData.curso_id) novoAluno.curso_id = formData.curso_id.toString();
+        if (formData.professor_fixo_id) novoAluno.professor_id = formData.professor_fixo_id.toString();
+        if (formData.teve_experimental) {
+          novoAluno.fez_experimental = true;
+          novoAluno.converteu_experimental = true;
+        }
+
+        console.log('Inserindo aluno:', novoAluno);
+        const { data: alunoData, error: alunoError } = await supabase.from('alunos').insert(novoAluno).select().single();
+        
+        if (alunoError) {
+          console.error('Erro ao criar aluno:', alunoError);
+          toast.error(`Erro ao criar aluno: ${alunoError.message}`);
+        } else {
+          console.log('Aluno criado com sucesso:', alunoData);
+        }
+      }
 
       toast.success('Registro salvo com sucesso!');
       setModalOpen(null);
@@ -1554,12 +1596,19 @@ export function ComercialPage() {
                           </SelectContent>
                         </Select>
                       ) : (
-                        <span className={cn(
-                          "px-2 py-0.5 rounded text-xs font-medium",
-                          mat.tipo_matricula === 'LAMK' ? 'bg-pink-500/20 text-pink-400' : 'bg-blue-500/20 text-blue-400'
-                        )}>
-                          {mat.tipo_matricula || '-'}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={cn(
+                            "px-2 py-0.5 rounded text-xs font-medium",
+                            mat.tipo_matricula === 'LAMK' ? 'bg-pink-500/20 text-pink-400' : 'bg-blue-500/20 text-blue-400'
+                          )}>
+                            {mat.tipo_matricula || '-'}
+                          </span>
+                          {isAdmin && mat.unidades?.codigo && (
+                            <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-600/30 text-slate-300">
+                              {mat.unidades.codigo}
+                            </span>
+                          )}
+                        </div>
                       )}
                     </td>
                     <td className="py-3 px-2 text-right">
@@ -2029,6 +2078,25 @@ export function ComercialPage() {
                 placeholder="Nome completo"
               />
             </div>
+            {/* Campo Unidade - visível apenas para admin */}
+            {isAdmin && (
+              <div>
+                <Label className="mb-2 block">Unidade *</Label>
+                <Select
+                  value={formData.unidade_id || ''}
+                  onValueChange={(value) => setFormData({ ...formData, unidade_id: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a unidade..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {unidades.map((u) => (
+                      <SelectItem key={u.value} value={u.value.toString()}>{u.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <Label className="mb-2 block">Idade</Label>
@@ -2105,15 +2173,24 @@ export function ComercialPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex items-center gap-3">
-              <input
-                type="checkbox"
-                id="teveExp"
-                checked={formData.teve_experimental}
-                onChange={(e) => setFormData({ ...formData, teve_experimental: e.target.checked })}
-                className="w-5 h-5 rounded bg-slate-800 border-slate-700 text-emerald-500 focus:ring-emerald-500"
-              />
-              <label htmlFor="teveExp" className="text-slate-300">Teve aula experimental?</label>
+            <div className="flex items-center gap-2">
+              <label htmlFor="teveExp" className="flex items-center gap-2 cursor-pointer group">
+                <div className="relative">
+                  <input
+                    type="checkbox"
+                    id="teveExp"
+                    checked={formData.teve_experimental}
+                    onChange={(e) => setFormData({ ...formData, teve_experimental: e.target.checked })}
+                    className="peer sr-only"
+                  />
+                  <div className="w-5 h-5 rounded border-2 border-slate-600 bg-slate-800 peer-checked:bg-emerald-500 peer-checked:border-emerald-500 transition-all group-hover:border-slate-500 peer-checked:group-hover:bg-emerald-400 flex items-center justify-center">
+                    <svg className={`w-3 h-3 text-white transition-opacity ${formData.teve_experimental ? 'opacity-100' : 'opacity-0'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </div>
+                </div>
+                <span className="text-slate-300 group-hover:text-white transition-colors">Teve aula experimental?</span>
+              </label>
             </div>
             {formData.teve_experimental && (
               <div>
@@ -2150,9 +2227,9 @@ export function ComercialPage() {
               </Select>
             </div>
             {/* Passaporte */}
-            <div className="p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-xl space-y-3">
-              <h4 className="text-sm font-semibold text-emerald-400">💳 Passaporte</h4>
-              <div className="grid grid-cols-2 gap-3">
+            <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-3">
+              <h4 className="text-sm font-semibold text-amber-400">🎫 Passaporte</h4>
+              <div className={`grid gap-3 ${formData.forma_pagamento_passaporte === 'cartao_credito' ? 'grid-cols-3' : 'grid-cols-2'}`}>
                 <div>
                   <Label className="mb-1 block text-xs">Valor (R$)</Label>
                   <Input
@@ -2167,19 +2244,40 @@ export function ComercialPage() {
                 <div>
                   <Label className="mb-1 block text-xs">Forma Pagamento</Label>
                   <Select
-                    value={formData.forma_pagamento_passaporte_id?.toString() || ''}
-                    onValueChange={(value) => setFormData({ ...formData, forma_pagamento_passaporte_id: parseInt(value) || null })}
+                    value={formData.forma_pagamento_passaporte}
+                    onValueChange={(value) => setFormData({ ...formData, forma_pagamento_passaporte: value, parcelas_passaporte: value === 'cartao_credito' ? 1 : 1 })}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {formasPagamento.map((f) => (
-                        <SelectItem key={f.value} value={f.value.toString()}>{f.label}</SelectItem>
-                      ))}
+                      <SelectItem value="pix">PIX</SelectItem>
+                      <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                      <SelectItem value="cartao_debito">Cartão de Débito</SelectItem>
+                      <SelectItem value="cartao_credito">Cartão de Crédito</SelectItem>
+                      <SelectItem value="cheque">Cheque</SelectItem>
+                      <SelectItem value="link">Link de Pagamento</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+                {formData.forma_pagamento_passaporte === 'cartao_credito' && (
+                  <div>
+                    <Label className="mb-1 block text-xs">Parcelas</Label>
+                    <Select
+                      value={formData.parcelas_passaporte?.toString() || '1'}
+                      onValueChange={(value) => setFormData({ ...formData, parcelas_passaporte: parseInt(value) })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="1x" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="1">1x (à vista)</SelectItem>
+                        <SelectItem value="2">2x</SelectItem>
+                        <SelectItem value="3">3x</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
             </div>
 

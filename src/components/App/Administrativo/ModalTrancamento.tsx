@@ -6,8 +6,15 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { DatePicker } from '@/components/ui/date-picker';
+import { AutocompleteAluno } from '@/components/ui/AutocompleteAluno';
 import { PauseCircle } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 import type { MovimentacaoAdmin } from './AdministrativoPage';
+
+interface MotivoTrancamento {
+  id: number;
+  nome: string;
+}
 
 interface ModalTrancamentoProps {
   open: boolean;
@@ -16,17 +23,33 @@ interface ModalTrancamentoProps {
   editingItem: MovimentacaoAdmin | null;
   professores: { id: number; nome: string }[];
   competencia: string;
+  unidadeId?: string | null;
 }
 
-export function ModalTrancamento({ open, onOpenChange, onSave, editingItem, professores, competencia }: ModalTrancamentoProps) {
+export function ModalTrancamento({ open, onOpenChange, onSave, editingItem, professores, competencia, unidadeId }: ModalTrancamentoProps) {
   const [loading, setLoading] = useState(false);
+  const [motivosTrancamento, setMotivosTrancamento] = useState<MotivoTrancamento[]>([]);
   const [formData, setFormData] = useState({
     data: new Date(),
     aluno_nome: '',
     professor_id: '',
-    motivo: '',
+    motivo_trancamento_id: '',
+    observacoes: '',
     previsao_retorno: null as Date | null,
   });
+
+  // Carregar motivos de trancamento
+  useEffect(() => {
+    async function loadMotivos() {
+      const { data } = await supabase
+        .from('motivos_trancamento')
+        .select('id, nome')
+        .eq('ativo', true)
+        .order('nome');
+      setMotivosTrancamento(data || []);
+    }
+    loadMotivos();
+  }, []);
 
   useEffect(() => {
     if (open) {
@@ -35,7 +58,8 @@ export function ModalTrancamento({ open, onOpenChange, onSave, editingItem, prof
           data: new Date(editingItem.data),
           aluno_nome: editingItem.aluno_nome,
           professor_id: editingItem.professor_id?.toString() || '',
-          motivo: editingItem.motivo || '',
+          motivo_trancamento_id: (editingItem as any).motivo_trancamento_id?.toString() || '',
+          observacoes: editingItem.motivo || '',
           previsao_retorno: editingItem.previsao_retorno ? new Date(editingItem.previsao_retorno) : null,
         });
       } else {
@@ -44,7 +68,8 @@ export function ModalTrancamento({ open, onOpenChange, onSave, editingItem, prof
           data: new Date(parseInt(ano), parseInt(mes) - 1, new Date().getDate()),
           aluno_nome: '',
           professor_id: '',
-          motivo: '',
+          motivo_trancamento_id: '',
+          observacoes: '',
           previsao_retorno: null,
         });
       }
@@ -53,17 +78,21 @@ export function ModalTrancamento({ open, onOpenChange, onSave, editingItem, prof
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!formData.aluno_nome.trim() || !formData.motivo.trim()) return;
+    if (!formData.aluno_nome.trim() || !formData.motivo_trancamento_id) return;
 
+    const motivoSelecionado = motivosTrancamento.find(m => m.id.toString() === formData.motivo_trancamento_id);
+    
     setLoading(true);
     const success = await onSave({
       tipo: 'trancamento',
       data: formData.data.toISOString().split('T')[0],
       aluno_nome: formData.aluno_nome.trim(),
       professor_id: formData.professor_id ? parseInt(formData.professor_id) : null,
-      motivo: formData.motivo.trim(),
+      motivo: motivoSelecionado?.nome || '',
+      motivo_trancamento_id: parseInt(formData.motivo_trancamento_id),
+      observacoes: formData.observacoes.trim() || null,
       previsao_retorno: formData.previsao_retorno ? formData.previsao_retorno.toISOString().split('T')[0] : null,
-    });
+    } as any);
     setLoading(false);
 
     if (success) {
@@ -107,12 +136,11 @@ export function ModalTrancamento({ open, onOpenChange, onSave, editingItem, prof
 
           <div>
             <Label className="text-slate-300">Nome do Aluno *</Label>
-            <Input
+            <AutocompleteAluno
               value={formData.aluno_nome}
-              onChange={(e) => setFormData({ ...formData, aluno_nome: e.target.value })}
-              placeholder="Digite o nome completo do aluno"
-              className="bg-slate-800 border-slate-700"
-              required
+              onChange={(nome) => setFormData({ ...formData, aluno_nome: nome })}
+              unidadeId={unidadeId}
+              placeholder="Digite o nome do aluno..."
             />
           </div>
 
@@ -134,12 +162,30 @@ export function ModalTrancamento({ open, onOpenChange, onSave, editingItem, prof
 
           <div>
             <Label className="text-slate-300">Motivo do Trancamento *</Label>
+            <Select
+              value={formData.motivo_trancamento_id}
+              onValueChange={(value) => setFormData({ ...formData, motivo_trancamento_id: value })}
+            >
+              <SelectTrigger className="bg-slate-800 border-slate-700">
+                <SelectValue placeholder="Selecione o motivo..." />
+              </SelectTrigger>
+              <SelectContent>
+                {motivosTrancamento.map((motivo) => (
+                  <SelectItem key={motivo.id} value={motivo.id.toString()}>
+                    {motivo.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label className="text-slate-300">Observações (opcional)</Label>
             <Textarea
-              value={formData.motivo}
-              onChange={(e) => setFormData({ ...formData, motivo: e.target.value })}
-              placeholder="Descreva o motivo do trancamento (ex: viagem, problemas financeiros, questões pessoais...)"
-              className="bg-slate-800 border-slate-700 min-h-[100px]"
-              required
+              value={formData.observacoes}
+              onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
+              placeholder="Detalhes adicionais..."
+              className="bg-slate-800 border-slate-700 min-h-[80px]"
             />
           </div>
 
@@ -152,7 +198,7 @@ export function ModalTrancamento({ open, onOpenChange, onSave, editingItem, prof
 
           <Button
             type="submit"
-            disabled={loading || !formData.aluno_nome.trim() || !formData.motivo.trim()}
+            disabled={loading || !formData.aluno_nome.trim() || !formData.motivo_trancamento_id}
             className="w-full bg-gradient-to-r from-amber-500 to-orange-500"
           >
             {loading ? 'Salvando...' : editingItem ? 'Salvar Alterações' : 'Registrar Trancamento'}

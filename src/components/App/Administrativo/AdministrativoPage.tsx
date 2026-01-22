@@ -5,7 +5,7 @@ import { useOutletContext } from 'react-router-dom';
 import { 
   Users, DollarSign, BookOpen, GraduationCap, UserPlus,
   FileText, Calendar, Plus, Pause, RefreshCw, XCircle, AlertTriangle, LogOut,
-  Zap, BarChart3, CheckCircle, DoorOpen, PauseCircle
+  Zap, BarChart3, CheckCircle, DoorOpen, PauseCircle, Search
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { KPICard } from '@/components/ui/KPICard';
@@ -32,6 +32,7 @@ import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 // Tipos
 export interface MovimentacaoAdmin {
   id?: number;
+  unidade_id?: string | null;
   tipo: 'renovacao' | 'nao_renovacao' | 'aviso_previo' | 'evasao' | 'trancamento';
   data: string;
   aluno_nome: string;
@@ -49,6 +50,7 @@ export interface MovimentacaoAdmin {
   valor_parcela_evasao?: number | null;
   previsao_retorno?: string | null;
   created_at?: string;
+  unidades?: { codigo: string };
 }
 
 export interface ResumoMes {
@@ -76,12 +78,12 @@ export interface ResumoMes {
   ltv_meses: number;
 }
 
-type TabId = 'renovacoes' | 'avisos' | 'evasoes' | 'trancamentos';
+type TabId = 'renovacoes' | 'avisos' | 'cancelamentos' | 'trancamentos';
 
 const tabs: { id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: 'renovacoes', label: 'Renovações', icon: CheckCircle },
   { id: 'avisos', label: 'Avisos Prévios', icon: AlertTriangle },
-  { id: 'evasoes', label: 'Evasões', icon: DoorOpen },
+  { id: 'cancelamentos', label: 'Cancelamentos', icon: DoorOpen },
   { id: 'trancamentos', label: 'Trancamentos', icon: PauseCircle },
 ];
 
@@ -133,7 +135,7 @@ export function AdministrativoPage() {
       // Carregar movimentações do mês
       let query = supabase
         .from('movimentacoes_admin')
-        .select('*')
+        .select('*, unidades(codigo)')
         .gte('data', startDate)
         .lte('data', endDate)
         .order('data', { ascending: false });
@@ -327,7 +329,7 @@ export function AdministrativoPage() {
             <FileText className="w-7 h-7 text-violet-400" />
             Administrativo
           </h1>
-          <p className="text-slate-400 mt-1">Gestão de Renovações, Avisos e Evasões</p>
+          <p className="text-slate-400 mt-1">Gestão de Renovações, Avisos e Cancelamentos</p>
         </div>
         <div className="flex items-center gap-4">
           <CompetenciaFilter
@@ -417,7 +419,7 @@ export function AdministrativoPage() {
             </div>
             <div>
               <h2 className="text-lg font-bold text-white">Lançamento Rápido</h2>
-              <p className="text-sm text-violet-400">Registre renovações, avisos e evasões</p>
+              <p className="text-sm text-violet-400">Registre renovações, avisos e cancelamentos</p>
             </div>
           </div>
         </div>
@@ -457,12 +459,288 @@ export function AdministrativoPage() {
           />
           <QuickInputCard
             icon={LogOut}
-            title="Evasão"
+            title="Cancelamento"
             count={resumo?.evasoes_total || 0}
             variant="rose"
             onClick={() => { setEditingItem(null); setModalEvasao(true); }}
           />
         </div>
+        </div>
+      </section>
+
+      {/* Resumo Administrativo do Mês */}
+      <section className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 border border-amber-500/20 rounded-2xl overflow-hidden">
+        <div className="bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-b border-amber-500/20 px-6 py-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center">
+              <BarChart3 className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-white">Resumo Administrativo</h2>
+              <p className="text-sm text-amber-400 capitalize">{competenciaOptions.find(o => o.value === competencia)?.label}</p>
+            </div>
+          </div>
+        </div>
+        <div className="p-6 space-y-6">
+          
+          {/* INDICADORES */}
+          <div>
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-cyan-500"></span>
+              Indicadores
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Taxa de Renovação */}
+              <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+                <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Taxa de Renovação</p>
+                <p className="text-3xl font-bold text-emerald-400">
+                  {(() => {
+                    const totalVencimentos = renovacoes.length + naoRenovacoes.length;
+                    if (totalVencimentos === 0) return '0.0';
+                    return ((renovacoes.length / totalVencimentos) * 100).toFixed(1);
+                  })()}%
+                </p>
+                <p className="text-xs text-slate-500 mt-1">
+                  {renovacoes.length} de {renovacoes.length + naoRenovacoes.length} vencimentos
+                </p>
+              </div>
+              
+              {/* Churn Rate */}
+              <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+                <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Churn Rate</p>
+                <p className="text-3xl font-bold text-rose-400">
+                  {resumo?.alunos_ativos ? ((naoRenovacoes.length + evasoes.length) / resumo.alunos_ativos * 100).toFixed(1) : '0.0'}%
+                </p>
+                <p className="text-xs text-slate-500 mt-1">
+                  {naoRenovacoes.length + evasoes.length} evasões / {resumo?.alunos_ativos || 0} base
+                </p>
+              </div>
+              
+              {/* Tempo Médio de Permanência */}
+              <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
+                <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Tempo Médio Permanência</p>
+                <p className="text-3xl font-bold text-cyan-400">
+                  {(() => {
+                    const todos = [...naoRenovacoes, ...evasoes].filter(m => m.tempo_permanencia_meses);
+                    if (todos.length === 0) return '-';
+                    const media = todos.reduce((acc, m) => acc + (m.tempo_permanencia_meses || 0), 0) / todos.length;
+                    return media.toFixed(1);
+                  })()}
+                  <span className="text-lg font-normal text-slate-400"> meses</span>
+                </p>
+                <p className="text-xs text-slate-500 mt-1">média das evasões do período</p>
+              </div>
+            </div>
+          </div>
+
+          {/* PRINCIPAIS MOTIVOS DE SAÍDA */}
+          <div>
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
+              Principais Motivos de Saída (Não Renovação + Cancelamento)
+            </h3>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {/* Lista de Motivos */}
+              <div className="bg-slate-800/30 rounded-xl p-4 border border-slate-700/30">
+                {(() => {
+                  const todosMotivos = [...naoRenovacoes, ...evasoes];
+                  
+                  if (todosMotivos.length === 0) {
+                    return (
+                      <div className="flex flex-col items-center justify-center py-8 text-center">
+                        <div className="w-12 h-12 rounded-full bg-slate-700/50 flex items-center justify-center mb-3">
+                          <Search className="w-6 h-6 text-slate-500" />
+                        </div>
+                        <p className="text-slate-400 text-sm font-medium">Nenhuma evasão registrada</p>
+                        <p className="text-slate-500 text-xs mt-1">Os motivos aparecerão aqui quando houver não renovações ou cancelamentos</p>
+                      </div>
+                    );
+                  }
+                  
+                  const porMotivo = todosMotivos.reduce((acc, m) => {
+                    const motivo = m.motivo || 'Não informado';
+                    acc[motivo] = (acc[motivo] || 0) + 1;
+                    return acc;
+                  }, {} as Record<string, number>);
+                  
+                  const sorted = Object.entries(porMotivo).sort((a, b) => b[1] - a[1]);
+                  const total = todosMotivos.length;
+                  
+                  return (
+                    <div className="space-y-3">
+                      {sorted.slice(0, 7).map(([motivo, count], index) => {
+                        const percent = (count / total) * 100;
+                        const colors = [
+                          'from-rose-500 to-pink-500',
+                          'from-amber-500 to-orange-500',
+                          'from-violet-500 to-purple-500',
+                          'from-cyan-500 to-blue-500',
+                          'from-emerald-500 to-teal-500',
+                          'from-indigo-500 to-blue-500',
+                          'from-slate-500 to-slate-600',
+                        ];
+                        return (
+                          <div key={motivo}>
+                            <div className="flex justify-between text-sm mb-1">
+                              <span className="text-slate-300 truncate pr-2">{motivo}</span>
+                              <span className="text-slate-400 whitespace-nowrap">{count} ({percent.toFixed(0)}%)</span>
+                            </div>
+                            <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+                              <div 
+                                className={`h-full bg-gradient-to-r ${colors[index % colors.length]} rounded-full transition-all`}
+                                style={{ width: `${percent}%` }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+              
+              {/* Distribuição por Categoria */}
+              <div className="bg-slate-800/30 rounded-xl p-4 border border-slate-700/30">
+                <h4 className="text-sm font-medium text-white mb-4">Distribuição por Categoria</h4>
+                {(() => {
+                  const todosMotivos = [...naoRenovacoes, ...evasoes];
+                  const total = todosMotivos.length;
+                  
+                  if (total === 0) {
+                    return (
+                      <div className="space-y-3">
+                        {[
+                          { icon: '💰', label: 'Financeiro', color: 'text-rose-400' },
+                          { icon: '⏰', label: 'Tempo', color: 'text-amber-400' },
+                          { icon: '👤', label: 'Pessoal', color: 'text-violet-400' },
+                          { icon: '😞', label: 'Insatisfação', color: 'text-orange-400' },
+                          { icon: '📋', label: 'Outro', color: 'text-slate-400' },
+                        ].map((cat) => (
+                          <div key={cat.label} className="flex items-center justify-between opacity-40">
+                            <div className="flex items-center gap-2">
+                              <span>{cat.icon}</span>
+                              <span className={`text-sm ${cat.color}`}>{cat.label}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="w-24 h-2 bg-slate-700 rounded-full overflow-hidden">
+                                <div className="h-full bg-slate-600 rounded-full" style={{ width: '0%' }} />
+                              </div>
+                              <span className="text-sm text-slate-500 w-12 text-right">0%</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  }
+                  
+                  // Categorizar motivos
+                  const categorias: Record<string, { count: number; color: string; icon: string }> = {
+                    'Financeiro': { count: 0, color: 'text-rose-400', icon: '💰' },
+                    'Tempo': { count: 0, color: 'text-amber-400', icon: '⏰' },
+                    'Pessoal': { count: 0, color: 'text-violet-400', icon: '👤' },
+                    'Insatisfação': { count: 0, color: 'text-orange-400', icon: '😞' },
+                    'Outro': { count: 0, color: 'text-slate-400', icon: '📋' },
+                  };
+                  
+                  todosMotivos.forEach(m => {
+                    const motivo = (m.motivo || '').toLowerCase();
+                    if (motivo.includes('financ') || motivo.includes('inadimpl') || motivo.includes('acessível')) {
+                      categorias['Financeiro'].count++;
+                    } else if (motivo.includes('tempo') || motivo.includes('horário')) {
+                      categorias['Tempo'].count++;
+                    } else if (motivo.includes('mudança') || motivo.includes('saúde') || motivo.includes('familiar') || motivo.includes('pessoal')) {
+                      categorias['Pessoal'].count++;
+                    } else if (motivo.includes('insatisf') || motivo.includes('desânimo') || motivo.includes('desistência')) {
+                      categorias['Insatisfação'].count++;
+                    } else {
+                      categorias['Outro'].count++;
+                    }
+                  });
+                  
+                  const sortedCategorias = Object.entries(categorias)
+                    .sort((a, b) => b[1].count - a[1].count);
+                  
+                  return (
+                    <div className="space-y-3">
+                      {sortedCategorias.map(([categoria, data]) => {
+                        const percent = total > 0 ? (data.count / total) * 100 : 0;
+                        return (
+                          <div key={categoria} className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span>{data.icon}</span>
+                              <span className={`text-sm ${data.color}`}>{categoria}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="w-24 h-2 bg-slate-700 rounded-full overflow-hidden">
+                                <div 
+                                  className={`h-full ${data.color.replace('text-', 'bg-')} rounded-full`}
+                                  style={{ width: `${percent}%` }}
+                                />
+                              </div>
+                              <span className="text-sm text-slate-400 w-12 text-right">{percent.toFixed(0)}%</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          </div>
+
+          {/* IMPACTO FINANCEIRO */}
+          <div>
+            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+              Impacto Financeiro
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* MRR Perdido */}
+              <div className="bg-rose-500/10 border border-rose-500/30 rounded-xl p-4">
+                <p className="text-xs text-rose-400 uppercase tracking-wider mb-1">MRR Perdido (Evasões)</p>
+                <p className="text-3xl font-bold text-rose-400">
+                  R$ {(() => {
+                    const total = [...naoRenovacoes, ...evasoes].reduce((acc, m) => acc + (m.valor_parcela_evasao || 0), 0);
+                    return total.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+                  })()}
+                </p>
+                <p className="text-xs text-rose-300/70 mt-1">
+                  {naoRenovacoes.length + evasoes.length} × R$ {(() => {
+                    const todos = [...naoRenovacoes, ...evasoes].filter(m => m.valor_parcela_evasao);
+                    if (todos.length === 0) return '0,00';
+                    const media = todos.reduce((acc, m) => acc + (m.valor_parcela_evasao || 0), 0) / todos.length;
+                    return media.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+                  })()} ticket médio
+                </p>
+              </div>
+              
+              {/* LTV Médio */}
+              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4">
+                <p className="text-xs text-emerald-400 uppercase tracking-wider mb-1">LTV Médio (Evasões)</p>
+                <p className="text-3xl font-bold text-emerald-400">
+                  R$ {(() => {
+                    const todos = [...naoRenovacoes, ...evasoes].filter(m => m.tempo_permanencia_meses && m.valor_parcela_evasao);
+                    if (todos.length === 0) return '0,00';
+                    const tempoMedio = todos.reduce((acc, m) => acc + (m.tempo_permanencia_meses || 0), 0) / todos.length;
+                    const ticketMedio = todos.reduce((acc, m) => acc + (m.valor_parcela_evasao || 0), 0) / todos.length;
+                    const ltv = tempoMedio * ticketMedio;
+                    return ltv.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+                  })()}
+                </p>
+                <p className="text-xs text-emerald-300/70 mt-1">
+                  {(() => {
+                    const todos = [...naoRenovacoes, ...evasoes].filter(m => m.tempo_permanencia_meses && m.valor_parcela_evasao);
+                    if (todos.length === 0) return '- meses × R$ -';
+                    const tempoMedio = todos.reduce((acc, m) => acc + (m.tempo_permanencia_meses || 0), 0) / todos.length;
+                    const ticketMedio = todos.reduce((acc, m) => acc + (m.valor_parcela_evasao || 0), 0) / todos.length;
+                    return `${tempoMedio.toFixed(1)}m × R$ ${ticketMedio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+                  })()}
+                </p>
+              </div>
+            </div>
+          </div>
+          
         </div>
       </section>
 
@@ -475,7 +753,7 @@ export function AdministrativoPage() {
             </div>
             <div>
               <h2 className="text-lg font-bold text-white">Detalhamento do Mês</h2>
-              <p className="text-sm text-emerald-400">{renovacoes.length + avisosPrevios.length + evasoes.length} movimentações</p>
+              <p className="text-sm text-emerald-400">{renovacoes.length + avisosPrevios.length + evasoes.length + naoRenovacoes.length + trancamentos.length} movimentações</p>
             </div>
           </div>
         </div>
@@ -486,7 +764,7 @@ export function AdministrativoPage() {
           {tabs.map(tab => {
             const count = tab.id === 'renovacoes' ? renovacoes.length 
               : tab.id === 'avisos' ? avisosPrevios.length 
-              : tab.id === 'evasoes' ? evasoes.length
+              : tab.id === 'cancelamentos' ? evasoes.length
               : trancamentos.length;
             const Icon = tab.icon;
             return (
@@ -523,7 +801,7 @@ export function AdministrativoPage() {
               onDelete={handleDeleteMovimentacao}
             />
           )}
-          {activeTab === 'evasoes' && (
+          {activeTab === 'cancelamentos' && (
             <TabelaEvasoes 
               data={evasoes} 
               onEdit={handleEdit}
@@ -549,6 +827,7 @@ export function AdministrativoPage() {
         editingItem={editingItem}
         formasPagamento={formasPagamento}
         competencia={competencia}
+        unidadeId={unidade === 'todos' ? null : unidade}
       />
       <ModalNaoRenovacao
         open={modalNaoRenovacao}
@@ -557,6 +836,7 @@ export function AdministrativoPage() {
         editingItem={editingItem}
         professores={professores}
         competencia={competencia}
+        unidadeId={unidade === 'todos' ? null : unidade}
       />
       <ModalAvisoPrevio
         open={modalAvisoPrevio}
@@ -565,6 +845,7 @@ export function AdministrativoPage() {
         editingItem={editingItem}
         professores={professores}
         competencia={competencia}
+        unidadeId={unidade === 'todos' ? null : unidade}
       />
       <ModalEvasao
         open={modalEvasao}
@@ -573,6 +854,7 @@ export function AdministrativoPage() {
         editingItem={editingItem}
         professores={professores}
         competencia={competencia}
+        unidadeId={unidade === 'todos' ? null : unidade}
       />
       <ModalTrancamento
         open={modalTrancamento}
@@ -581,6 +863,7 @@ export function AdministrativoPage() {
         editingItem={editingItem}
         professores={professores}
         competencia={competencia}
+        unidadeId={unidade === 'todos' ? null : unidade}
       />
       <ModalRelatorio
         open={modalRelatorio}
