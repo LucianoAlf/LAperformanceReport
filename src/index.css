@@ -26,6 +26,159 @@
   background: rgb(71 85 105);
 }
 
+/* Estilos customizados para react-day-picker v9 - Dark Mode Premium */
+.rdp-custom {
+  /* Cores principais */
+  --rdp-accent-color: #10b981;
+  --rdp-accent-background-color: #10b981;
+  
+  /* IMPORTANTE: Remove o anel de seleção */
+  --rdp-selected-border: 0px solid transparent;
+  --rdp-outline: 2px solid transparent;
+  --rdp-outline-selected: 2px solid transparent;
+  
+  /* Tamanho dos dias */
+  --rdp-day-height: 36px;
+  --rdp-day-width: 36px;
+  
+  /* Fundo do dia selecionado */
+  --rdp-selected-color: #10b981;
+  
+  background: rgb(15 23 42) !important;
+  border: 1px solid rgb(51 65 85) !important;
+  border-radius: 12px !important;
+  padding: 16px !important;
+  color: white !important;
+}
+
+/* FORÇA a remoção do anel/borda do selected */
+.rdp-custom .rdp-selected .rdp-day_button {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  background: #10b981 !important;
+  color: white !important;
+  border-radius: 8px !important;
+}
+
+.rdp-custom .rdp-selected .rdp-day_button::before,
+.rdp-custom .rdp-selected .rdp-day_button::after {
+  display: none !important;
+}
+
+/* Caption (mês/ano) */
+.rdp-custom .rdp-month_caption {
+  font-weight: 600 !important;
+  font-size: 14px !important;
+  color: white !important;
+  padding: 8px 0 !important;
+}
+
+/* Dias da semana */
+.rdp-custom .rdp-weekday {
+  color: rgb(100 116 139) !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+}
+
+/* Todos os dias */
+.rdp-custom .rdp-day {
+  color: rgb(203 213 225) !important;
+}
+
+.rdp-custom .rdp-day button {
+  border-radius: 8px !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.rdp-custom .rdp-day:hover button {
+  background: rgb(51 65 85) !important;
+  color: white !important;
+}
+
+/* Dia de hoje */
+.rdp-custom .rdp-today button {
+  background: rgb(30 41 59) !important;
+  color: #10b981 !important;
+  font-weight: 600 !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* Dia selecionado - REMOVE TODAS AS BORDAS */
+.rdp-custom .rdp-selected button,
+.rdp-custom .rdp-day.rdp-selected button,
+.rdp-custom button[aria-selected="true"],
+.rdp-custom .rdp-day_button[aria-selected="true"] {
+  background: #10b981 !important;
+  color: white !important;
+  font-weight: 600 !important;
+  border: none !important;
+  outline: none !important;
+  box-shadow: none !important;
+  border-radius: 8px !important;
+}
+
+.rdp-custom .rdp-selected button:hover,
+.rdp-custom button[aria-selected="true"]:hover {
+  background: #059669 !important;
+}
+
+/* Remove QUALQUER outline/ring/border do focus */
+.rdp-custom button:focus,
+.rdp-custom button:focus-visible,
+.rdp-custom .rdp-day button:focus,
+.rdp-custom .rdp-day button:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+  border: none !important;
+}
+
+/* Dias fora do mês */
+.rdp-custom .rdp-outside {
+  color: rgb(51 65 85) !important;
+  opacity: 0.4 !important;
+}
+
+/* Dias desabilitados */
+.rdp-custom .rdp-disabled {
+  color: rgb(51 65 85) !important;
+  opacity: 0.2 !important;
+}
+
+/* Botões de navegação */
+.rdp-custom .rdp-button_previous,
+.rdp-custom .rdp-button_next {
+  background: rgb(30 41 59) !important;
+  border: 1px solid rgb(51 65 85) !important;
+  border-radius: 6px !important;
+  color: white !important;
+  width: 28px !important;
+  height: 28px !important;
+}
+
+.rdp-custom .rdp-button_previous:hover,
+.rdp-custom .rdp-button_next:hover {
+  background: rgb(51 65 85) !important;
+  border-color: #10b981 !important;
+}
+
+.rdp-custom .rdp-nav {
+  gap: 4px !important;
+}
+
+/* Remove o anel verde feio do selected */
+.rdp-custom .rdp-selected::before,
+.rdp-custom .rdp-selected::after,
+.rdp-custom .rdp-day.rdp-selected::before,
+.rdp-custom .rdp-day.rdp-selected::after {
+  display: none !important;
+  content: none !important;
+}
+
 /* Scrollbar para toda a aplicação em dark mode */
 * {
   scrollbar-width: thin;

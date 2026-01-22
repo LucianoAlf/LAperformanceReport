@@ -1,0 +1,543 @@
+import { useState } from 'react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { Copy, Check, RotateCcw, FileText, Calendar, RefreshCw, AlertTriangle, LogOut } from 'lucide-react';
+import { cn } from '@/lib/utils';
+import { DatePicker } from '@/components/ui/date-picker';
+import type { MovimentacaoAdmin, ResumoMes } from './AdministrativoPage';
+
+interface ModalRelatorioProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  resumo: ResumoMes | null;
+  renovacoes: MovimentacaoAdmin[];
+  naoRenovacoes: MovimentacaoAdmin[];
+  avisosPrevios: MovimentacaoAdmin[];
+  evasoes: MovimentacaoAdmin[];
+  competencia: string;
+  unidade: string;
+}
+
+type TipoRelatorio = 'diario' | 'mensal' | 'renovacoes' | 'avisos' | 'evasoes';
+
+const tiposRelatorio: { id: TipoRelatorio; label: string; icon: React.ReactNode; desc: string }[] = [
+  { id: 'diario', label: 'Relatório Diário', icon: <Calendar className="w-5 h-5" />, desc: 'Resumo do dia: alunos, renovações, avisos, evasões' },
+  { id: 'mensal', label: 'Relatório Mensal', icon: <FileText className="w-5 h-5" />, desc: 'Análise completa: métricas, LTV, churn, ticket médio' },
+  { id: 'renovacoes', label: 'Relatório de Renovações', icon: <RefreshCw className="w-5 h-5" />, desc: 'Lista detalhada de renovações com reajustes' },
+  { id: 'avisos', label: 'Relatório de Avisos Prévios', icon: <AlertTriangle className="w-5 h-5" />, desc: 'Lista de alunos que vão sair com motivos' },
+  { id: 'evasoes', label: 'Relatório de Evasões', icon: <LogOut className="w-5 h-5" />, desc: 'Lista detalhada de evasões com motivos' },
+];
+
+export function ModalRelatorio({ 
+  open, 
+  onOpenChange, 
+  resumo, 
+  renovacoes, 
+  naoRenovacoes,
+  avisosPrevios, 
+  evasoes, 
+  competencia,
+  unidade 
+}: ModalRelatorioProps) {
+  const [tipoSelecionado, setTipoSelecionado] = useState<TipoRelatorio | null>(null);
+  const [textoRelatorio, setTextoRelatorio] = useState('');
+  const [copiado, setCopiado] = useState(false);
+  
+  // Estado para período do relatório
+  const [relatorioPeriodo, setRelatorioPeriodo] = useState<'hoje' | 'ontem' | 'semana' | 'mes' | 'personalizado'>('hoje');
+  const [relatorioDataInicio, setRelatorioDataInicio] = useState<Date>(new Date());
+  const [relatorioDataFim, setRelatorioDataFim] = useState<Date>(new Date());
+
+  const [ano, mes] = competencia.split('-').map(Number);
+  const mesNome = new Date(ano, mes - 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  const hoje = new Date().toLocaleDateString('pt-BR');
+
+  function gerarRelatorioDiario(): string {
+    const dia = new Date().getDate().toString().padStart(2, '0');
+    const mesNome = new Date().toLocaleString('pt-BR', { month: 'long' });
+    const ano = new Date().getFullYear();
+    const unidadeNome = unidade === 'todos' ? 'CONSOLIDADO' : unidade.toUpperCase();
+
+    let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `📋 *RELATÓRIO DIÁRIO ADMINISTRATIVO*\n`;
+    texto += `🏢 *${unidadeNome}*\n`;
+    texto += `📆 ${dia}/${mesNome}/${ano}\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+    texto += `👥 *ALUNOS*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `• Ativos: *${resumo?.alunos_ativos || 0}*\n`;
+    texto += `• Pagantes: *${resumo?.alunos_pagantes || 0}*\n`;
+    texto += `• Não Pagantes: *${resumo?.alunos_nao_pagantes || 0}*\n`;
+    texto += `• Bolsistas: *${(resumo?.bolsistas_integrais || 0) + (resumo?.bolsistas_parciais || 0)}*\n`;
+    texto += `• Trancados: *${resumo?.alunos_trancados || 0}*\n`;
+    texto += `• Novos no mês: *${resumo?.alunos_novos || 0}*\n\n`;
+
+    texto += `🔄 *RENOVAÇÕES*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `• Realizadas: *${resumo?.renovacoes_realizadas || 0}*\n`;
+    texto += `• Pendentes: *${resumo?.renovacoes_pendentes || 0}*\n`;
+    texto += `• Não Renovações: *${naoRenovacoes.length}*\n\n`;
+
+    texto += `⚠️ *AVISOS PRÉVIOS (${avisosPrevios.length})*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    if (avisosPrevios.length === 0) {
+      texto += `Nenhum aviso prévio registrado hoje 🎉\n\n`;
+    } else {
+      avisosPrevios.forEach((a, i) => {
+        texto += `${i + 1}. *${a.aluno_nome}*\n`;
+        texto += `   💰 R$ ${(a.valor_parcela_novo || 0).toFixed(2)} | 🎸 ${a.professor_nome || 'N/A'}\n`;
+        texto += `   📝 ${a.motivo || 'Sem motivo'}\n\n`;
+      });
+    }
+
+    texto += `🚪 *EVASÕES (${evasoes.length})*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `• Interrompido: *${evasoes.filter(e => e.tipo_evasao === 'interrompido').length}*\n`;
+    texto += `• Não Renovou: *${evasoes.filter(e => e.tipo_evasao === 'nao_renovou').length}*\n\n`;
+
+    texto += `━━━━━━━━━━━━━━━━━━━━━━`;
+    return texto;
+  }
+
+  function gerarRelatorioMensal(): string {
+    const mesNomeUpper = new Date(ano, mes - 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
+    const unidadeNome = unidade === 'todos' ? 'CONSOLIDADO' : unidade.toUpperCase();
+    
+    const reajusteMedio = renovacoes.length > 0
+      ? renovacoes.reduce((acc, r) => {
+          if (r.valor_parcela_anterior && r.valor_parcela_novo) {
+            return acc + ((r.valor_parcela_novo - r.valor_parcela_anterior) / r.valor_parcela_anterior) * 100;
+          }
+          return acc;
+        }, 0) / renovacoes.length
+      : 0;
+
+    let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `📊 *RELATÓRIO MENSAL ADMINISTRATIVO*\n`;
+    texto += `🏢 *${unidadeNome}*\n`;
+    texto += `📅 *${mesNomeUpper}/${ano}*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+    texto += `📈 *RESUMO GERAL DO MÊS*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `👥 Alunos Ativos: *${resumo?.alunos_ativos || 0}*\n`;
+    texto += `💵 Pagantes: *${resumo?.alunos_pagantes || 0}*\n`;
+    texto += `🎓 Bolsistas: *${(resumo?.bolsistas_integrais || 0) + (resumo?.bolsistas_parciais || 0)}*\n`;
+    texto += `⏸️ Trancados: *${resumo?.alunos_trancados || 0}*\n`;
+    texto += `✨ Novos: *${resumo?.alunos_novos || 0}*\n\n`;
+
+    texto += `💰 *INDICADORES FINANCEIROS*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `Ticket Médio: *R$ ${(resumo?.ticket_medio || 0).toFixed(2)}*\n`;
+    texto += `Faturamento: *R$ ${(resumo?.faturamento || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n`;
+    texto += `LTV: *${resumo?.ltv_meses || 0} meses*\n`;
+    texto += `Churn Rate: *${(resumo?.churn_rate || 0).toFixed(1)}%*\n\n`;
+
+    texto += `🔄 *RENOVAÇÕES (${renovacoes.length})*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    if (renovacoes.length === 0) {
+      texto += `Nenhuma renovação registrada\n\n`;
+    } else {
+      renovacoes.forEach((r, i) => {
+        const reajuste = r.valor_parcela_anterior && r.valor_parcela_novo
+          ? ((r.valor_parcela_novo - r.valor_parcela_anterior) / r.valor_parcela_anterior) * 100
+          : 0;
+        texto += `${i + 1}. *${r.aluno_nome}*\n`;
+        texto += `   💰 R$ ${(r.valor_parcela_anterior || 0).toFixed(0)} → R$ ${(r.valor_parcela_novo || 0).toFixed(0)} (*+${reajuste.toFixed(0)}%*)\n`;
+        texto += `   💳 ${r.forma_pagamento_nome || 'N/A'} | 👤 ${r.agente_comercial || 'N/A'}\n\n`;
+      });
+      texto += `📊 Reajuste médio: *+${reajusteMedio.toFixed(1)}%*\n\n`;
+    }
+
+    texto += `❌ *NÃO RENOVAÇÕES (${naoRenovacoes.length})*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    if (naoRenovacoes.length === 0) {
+      texto += `Nenhuma não renovação registrada 🎉\n\n`;
+    } else {
+      naoRenovacoes.forEach((n, i) => {
+        texto += `${i + 1}. *${n.aluno_nome}*\n`;
+        texto += `   🎸 ${n.professor_nome || 'N/A'} | 👤 ${n.agente_comercial || 'N/A'}\n`;
+        texto += `   📝 ${n.motivo || 'Sem motivo'}\n\n`;
+      });
+    }
+
+    texto += `⚠️ *AVISOS PRÉVIOS (${avisosPrevios.length})*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    if (avisosPrevios.length === 0) {
+      texto += `Nenhum aviso prévio registrado 🎉\n\n`;
+    } else {
+      avisosPrevios.forEach((a, i) => {
+        texto += `${i + 1}. *${a.aluno_nome}*\n`;
+        texto += `   📆 Sai em: ${a.mes_saida ? new Date(a.mes_saida).toLocaleDateString('pt-BR', { month: 'long' }) : 'N/A'}\n`;
+        texto += `   🎸 ${a.professor_nome || 'N/A'}\n`;
+        texto += `   📝 ${a.motivo || 'Sem motivo'}\n\n`;
+      });
+    }
+
+    texto += `🚪 *EVASÕES (${evasoes.length})*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    if (evasoes.length === 0) {
+      texto += `Nenhuma evasão registrada 🎉\n\n`;
+    } else {
+      const interrompidos = evasoes.filter(e => e.tipo_evasao === 'interrompido').length;
+      const naoRenovou = evasoes.filter(e => e.tipo_evasao === 'nao_renovou').length;
+      texto += `• Interrompido: *${interrompidos}*\n`;
+      texto += `• Não Renovou: *${naoRenovou}*\n\n`;
+      
+      evasoes.forEach((e, i) => {
+        const tipoLabel = e.tipo_evasao === 'interrompido' ? '⏸️ Interrompido' : '❌ Não Renovou';
+        texto += `${i + 1}. *${e.aluno_nome}*\n`;
+        texto += `   ${tipoLabel} | 🎸 ${e.professor_nome || 'N/A'}\n`;
+        texto += `   📝 ${e.motivo || 'Sem motivo'}\n\n`;
+      });
+    }
+
+    const dataHora = new Date();
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `📅 Gerado em: ${dataHora.toLocaleDateString('pt-BR')} às ${dataHora.getHours()}:${dataHora.getMinutes().toString().padStart(2, '0')}\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━`;
+
+    return texto;
+  }
+
+  function gerarRelatorioRenovacoes(): string {
+    const mesNomeUpper = new Date(ano, mes - 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
+    
+    const reajusteMedio = renovacoes.length > 0
+      ? renovacoes.reduce((acc, r) => {
+          if (r.valor_parcela_anterior && r.valor_parcela_novo) {
+            return acc + ((r.valor_parcela_novo - r.valor_parcela_anterior) / r.valor_parcela_anterior) * 100;
+          }
+          return acc;
+        }, 0) / renovacoes.length
+      : 0;
+
+    let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `✅ *RELATÓRIO DE RENOVAÇÕES*\n`;
+    texto += `📅 *${mesNomeUpper}/${ano}*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+    texto += `📊 *RESUMO*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `Total: *${renovacoes.length} renovações*\n`;
+    texto += `Reajuste médio: *+${reajusteMedio.toFixed(1)}%*\n\n`;
+
+    if (renovacoes.length === 0) {
+      texto += `Nenhuma renovação registrada neste período.\n\n`;
+    } else {
+      texto += `📋 *LISTA DE RENOVAÇÕES*\n`;
+      texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+      renovacoes.forEach((r, i) => {
+        const reajuste = r.valor_parcela_anterior && r.valor_parcela_novo
+          ? ((r.valor_parcela_novo - r.valor_parcela_anterior) / r.valor_parcela_anterior) * 100
+          : 0;
+        const dataFormatada = new Date(r.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+        texto += `${i + 1}. *${r.aluno_nome}*\n`;
+        texto += `   📅 ${dataFormatada}\n`;
+        texto += `   💰 R$ ${(r.valor_parcela_anterior || 0).toFixed(2)} → R$ ${(r.valor_parcela_novo || 0).toFixed(2)} (*+${reajuste.toFixed(0)}%*)\n`;
+        texto += `   💳 ${r.forma_pagamento_nome || 'N/A'} | 👤 ${r.agente_comercial || 'N/A'}\n\n`;
+      });
+    }
+
+    texto += `━━━━━━━━━━━━━━━━━━━━━━`;
+    return texto;
+  }
+
+  function gerarRelatorioAvisos(): string {
+    const mesNomeUpper = new Date(ano, mes - 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
+    const perdaPotencial = avisosPrevios.reduce((acc, a) => acc + (a.valor_parcela_novo || 0), 0);
+
+    let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `⚠️ *RELATÓRIO DE AVISOS PRÉVIOS*\n`;
+    texto += `📅 *${mesNomeUpper}/${ano}*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+    texto += `📊 *RESUMO*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `Total: *${avisosPrevios.length} avisos prévios*\n`;
+    texto += `Perda potencial: *R$ ${perdaPotencial.toFixed(2)}/mês*\n\n`;
+
+    if (avisosPrevios.length === 0) {
+      texto += `Nenhum aviso prévio registrado neste período. 🎉\n\n`;
+    } else {
+      texto += `📋 *LISTA DE AVISOS*\n`;
+      texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+      avisosPrevios.forEach((a, i) => {
+        const dataAviso = new Date(a.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+        const mesSaida = a.mes_saida ? new Date(a.mes_saida).toLocaleDateString('pt-BR', { month: 'long' }) : 'N/A';
+        texto += `${i + 1}. *${a.aluno_nome}*\n`;
+        texto += `   📅 Aviso: ${dataAviso} | 📆 Sai em: ${mesSaida}\n`;
+        texto += `   💰 R$ ${(a.valor_parcela_novo || 0).toFixed(2)} | 🎸 ${a.professor_nome || 'N/A'}\n`;
+        texto += `   📝 ${a.motivo || 'Sem motivo informado'}\n\n`;
+      });
+    }
+
+    texto += `━━━━━━━━━━━━━━━━━━━━━━`;
+    return texto;
+  }
+
+  function gerarRelatorioEvasoes(): string {
+    const mesNomeUpper = new Date(ano, mes - 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
+    
+    const porTipo = evasoes.reduce((acc, e) => {
+      const tipo = e.tipo_evasao || 'outros';
+      acc[tipo] = (acc[tipo] || 0) + 1;
+      return acc;
+    }, {} as Record<string, number>);
+
+    const mrrPerdido = evasoes.reduce((acc, e) => acc + (e.valor_parcela_evasao || 0), 0);
+
+    let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `🚪 *RELATÓRIO DE EVASÕES*\n`;
+    texto += `📅 *${mesNomeUpper}/${ano}*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+    texto += `📊 *RESUMO*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `Total: *${evasoes.length} evasões*\n`;
+    if (mrrPerdido > 0) {
+      texto += `MRR Perdido: *R$ ${mrrPerdido.toFixed(2)}/mês*\n`;
+    }
+    texto += `\n`;
+
+    if (Object.keys(porTipo).length > 0) {
+      texto += `📈 *POR TIPO*\n`;
+      texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+      Object.entries(porTipo).forEach(([tipo, count]) => {
+        const label = tipo === 'interrompido' ? '⏸️ Interrompido' : 
+          tipo === 'nao_renovou' ? '❌ Não Renovou' : 
+          tipo === 'interrompido_2_curso' ? '⏸️ Interrompido 2º Curso' :
+          tipo === 'interrompido_bolsista' ? '⏸️ Interrompido Bolsista' :
+          tipo === 'interrompido_banda' ? '⏸️ Interrompido Banda' : tipo;
+        texto += `• ${label}: *${count}*\n`;
+      });
+      texto += `\n`;
+    }
+
+    if (evasoes.length === 0) {
+      texto += `Nenhuma evasão registrada neste período. 🎉\n\n`;
+    } else {
+      texto += `📋 *LISTA DE EVASÕES*\n`;
+      texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+      evasoes.forEach((e, i) => {
+        const tipoLabel = e.tipo_evasao === 'interrompido' ? '⏸️ Interrompido' : 
+          e.tipo_evasao === 'nao_renovou' ? '❌ Não Renovou' : 
+          e.tipo_evasao === 'interrompido_2_curso' ? '⏸️ 2º Curso' :
+          e.tipo_evasao === 'interrompido_bolsista' ? '⏸️ Bolsista' :
+          e.tipo_evasao === 'interrompido_banda' ? '⏸️ Banda' : e.tipo_evasao || 'N/A';
+        const dataFormatada = new Date(e.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+        texto += `${i + 1}. *${e.aluno_nome}*\n`;
+        texto += `   📅 ${dataFormatada} | ${tipoLabel}\n`;
+        if (e.valor_parcela_evasao) {
+          texto += `   💰 R$ ${e.valor_parcela_evasao.toFixed(2)}`;
+          if (e.tempo_permanencia_meses) {
+            texto += ` | ⏱️ ${e.tempo_permanencia_meses} meses`;
+          }
+          texto += `\n`;
+        }
+        texto += `   🎸 ${e.professor_nome || 'N/A'}\n`;
+        texto += `   📝 ${e.motivo || 'Sem motivo informado'}\n\n`;
+      });
+    }
+
+    texto += `━━━━━━━━━━━━━━━━━━━━━━`;
+    return texto;
+  }
+
+  function selecionarTipo(tipo: TipoRelatorio) {
+    setTipoSelecionado(tipo);
+    let texto = '';
+    switch (tipo) {
+      case 'diario':
+        texto = gerarRelatorioDiario();
+        break;
+      case 'mensal':
+        texto = gerarRelatorioMensal();
+        break;
+      case 'renovacoes':
+        texto = gerarRelatorioRenovacoes();
+        break;
+      case 'avisos':
+        texto = gerarRelatorioAvisos();
+        break;
+      case 'evasoes':
+        texto = gerarRelatorioEvasoes();
+        break;
+    }
+    setTextoRelatorio(texto);
+  }
+
+  function copiarRelatorio() {
+    navigator.clipboard.writeText(textoRelatorio);
+    setCopiado(true);
+    setTimeout(() => setCopiado(false), 2000);
+  }
+
+  function voltar() {
+    setTipoSelecionado(null);
+    setTextoRelatorio('');
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="bg-slate-900 border-slate-700 max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-white">
+            <FileText className="w-5 h-5 text-cyan-400" />
+            {tipoSelecionado ? tiposRelatorio.find(t => t.id === tipoSelecionado)?.label : 'Gerar Relatório'}
+          </DialogTitle>
+        </DialogHeader>
+
+        {!tipoSelecionado ? (
+          <div className="space-y-4">
+            {/* Seleção de Período */}
+            <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+              <Label className="text-slate-300 text-sm font-medium mb-3 block">Período do Relatório</Label>
+              
+              {/* Botões de atalho */}
+              <div className="flex flex-wrap gap-2 mb-3">
+                {[
+                  { id: 'hoje', label: 'Hoje' },
+                  { id: 'ontem', label: 'Ontem' },
+                  { id: 'semana', label: 'Esta Semana' },
+                  { id: 'mes', label: 'Este Mês' },
+                  { id: 'personalizado', label: 'Personalizado' },
+                ].map((p) => (
+                  <button
+                    key={p.id}
+                    onClick={() => {
+                      setRelatorioPeriodo(p.id as typeof relatorioPeriodo);
+                      const hojeDate = new Date();
+                      if (p.id === 'hoje') {
+                        setRelatorioDataInicio(hojeDate);
+                        setRelatorioDataFim(hojeDate);
+                      } else if (p.id === 'ontem') {
+                        const ontem = new Date(hojeDate);
+                        ontem.setDate(ontem.getDate() - 1);
+                        setRelatorioDataInicio(ontem);
+                        setRelatorioDataFim(ontem);
+                      } else if (p.id === 'semana') {
+                        const inicioSemana = new Date(hojeDate);
+                        inicioSemana.setDate(hojeDate.getDate() - hojeDate.getDay());
+                        setRelatorioDataInicio(inicioSemana);
+                        setRelatorioDataFim(hojeDate);
+                      } else if (p.id === 'mes') {
+                        const inicioMes = new Date(hojeDate.getFullYear(), hojeDate.getMonth(), 1);
+                        setRelatorioDataInicio(inicioMes);
+                        setRelatorioDataFim(hojeDate);
+                      }
+                    }}
+                    className={cn(
+                      'px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
+                      relatorioPeriodo === p.id
+                        ? 'bg-violet-600 text-white'
+                        : 'bg-slate-700/50 text-slate-400 hover:text-white hover:bg-slate-600/50'
+                    )}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+              
+              {/* Seletor de datas personalizado */}
+              {relatorioPeriodo === 'personalizado' && (
+                <div className="grid grid-cols-2 gap-3 mt-3">
+                  <div>
+                    <Label className="text-slate-400 text-xs mb-1 block">Data Início</Label>
+                    <DatePicker
+                      date={relatorioDataInicio}
+                      onDateChange={(date) => date && setRelatorioDataInicio(date)}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-slate-400 text-xs mb-1 block">Data Fim</Label>
+                    <DatePicker
+                      date={relatorioDataFim}
+                      onDateChange={(date) => date && setRelatorioDataFim(date)}
+                    />
+                  </div>
+                </div>
+              )}
+              
+              {/* Exibir período selecionado */}
+              <p className="text-xs text-cyan-400 mt-2 flex items-center gap-1">
+                <Calendar className="w-3 h-3" />
+                {relatorioDataInicio.toLocaleDateString('pt-BR')} 
+                {relatorioDataInicio.toDateString() !== relatorioDataFim.toDateString() && (
+                  <> até {relatorioDataFim.toLocaleDateString('pt-BR')}</>
+                )}
+              </p>
+            </div>
+
+            <p className="text-slate-400 text-sm">Escolha o tipo de relatório:</p>
+            {tiposRelatorio.map((tipo) => (
+              <button
+                key={tipo.id}
+                onClick={() => selecionarTipo(tipo.id)}
+                className="w-full flex items-center gap-4 p-4 bg-slate-800/50 hover:bg-slate-800 border border-slate-700 hover:border-slate-600 rounded-xl transition-all text-left"
+              >
+                <div className="w-10 h-10 bg-slate-700/50 rounded-lg flex items-center justify-center text-cyan-400">
+                  {tipo.icon}
+                </div>
+                <div className="flex-1">
+                  <h3 className="font-medium text-white">{tipo.label}</h3>
+                  <p className="text-xs text-slate-400">{tipo.desc}</p>
+                </div>
+                <span className="text-slate-500">→</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="flex-1 flex flex-col min-h-0">
+            <div className="flex items-center justify-between mb-3">
+              <Button variant="ghost" size="sm" onClick={voltar} className="text-slate-400 hover:text-white">
+                ← Voltar
+              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => selecionarTipo(tipoSelecionado)}
+                  className="text-slate-400 hover:text-white"
+                >
+                  <RotateCcw className="w-4 h-4 mr-1" />
+                  Resetar
+                </Button>
+                <Button
+                  onClick={copiarRelatorio}
+                  className={cn(
+                    'transition-all',
+                    copiado ? 'bg-emerald-500' : 'bg-cyan-500 hover:bg-cyan-600'
+                  )}
+                >
+                  {copiado ? (
+                    <>
+                      <Check className="w-4 h-4 mr-2" />
+                      Copiado!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4 mr-2" />
+                      Copiar
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+            <p className="text-xs text-slate-500 mb-2">
+              💡 Você pode editar o texto antes de copiar
+            </p>
+            <Textarea
+              value={textoRelatorio}
+              onChange={(e) => setTextoRelatorio(e.target.value)}
+              className="flex-1 bg-slate-800 border-slate-700 font-mono text-sm min-h-[300px] resize-none"
+            />
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}

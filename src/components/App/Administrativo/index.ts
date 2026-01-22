@@ -1,0 +1,10 @@
+export { AdministrativoPage } from './AdministrativoPage';
+export { QuickInputCard } from './QuickInputCard';
+export { TabelaRenovacoes } from './TabelaRenovacoes';
+export { TabelaAvisosPrevios } from './TabelaAvisosPrevios';
+export { TabelaEvasoes } from './TabelaEvasoes';
+export { ModalRenovacao } from './ModalRenovacao';
+export { ModalNaoRenovacao } from './ModalNaoRenovacao';
+export { ModalAvisoPrevio } from './ModalAvisoPrevio';
+export { ModalEvasao } from './ModalEvasao';
+export { ModalRelatorio } from './ModalRelatorio';

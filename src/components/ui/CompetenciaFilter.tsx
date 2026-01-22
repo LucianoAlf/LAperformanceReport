@@ -1,6 +1,6 @@
-import { Calendar, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { TipoCompetencia, CompetenciaFiltro, CompetenciaRange } from '@/hooks/useCompetenciaFiltro';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface CompetenciaFilterProps {
   filtro: CompetenciaFiltro;
@@ -80,75 +80,79 @@ export function CompetenciaFilter({
       </div>
 
       {/* Seletores de Período */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         {/* Seletor de Ano */}
-        <div className="relative">
-          <select
-            value={filtro.ano}
-            onChange={(e) => onAnoChange(Number(e.target.value))}
-            className="appearance-none bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-2 pr-9 text-sm text-white cursor-pointer focus:outline-none focus:border-violet-500"
-          >
+        <Select
+          value={filtro.ano.toString()}
+          onValueChange={(value) => onAnoChange(Number(value))}
+        >
+          <SelectTrigger className="w-[90px] bg-slate-800/50 border-slate-700 text-white">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
             {anosDisponiveis.map((ano) => (
-              <option key={ano} value={ano} className="bg-slate-900">
+              <SelectItem key={ano} value={ano.toString()}>
                 {ano}
-              </option>
+              </SelectItem>
             ))}
-          </select>
-          <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-        </div>
+          </SelectContent>
+        </Select>
 
         {/* Seletor de Mês (apenas para tipo mensal) */}
         {filtro.tipo === 'mensal' && (
-          <div className="relative">
-            <select
-              value={filtro.mes}
-              onChange={(e) => onMesChange(Number(e.target.value))}
-              className="appearance-none bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-2 pr-9 text-sm text-white cursor-pointer focus:outline-none focus:border-violet-500"
-            >
+          <Select
+            value={filtro.mes.toString()}
+            onValueChange={(value) => onMesChange(Number(value))}
+          >
+            <SelectTrigger className="w-[80px] bg-slate-800/50 border-slate-700 text-white">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
               {MESES.map((mes) => (
-                <option key={mes.value} value={mes.value} className="bg-slate-900">
+                <SelectItem key={mes.value} value={mes.value.toString()}>
                   {mes.short}
-                </option>
+                </SelectItem>
               ))}
-            </select>
-            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-          </div>
+            </SelectContent>
+          </Select>
         )}
 
         {/* Seletor de Trimestre */}
         {filtro.tipo === 'trimestral' && (
-          <div className="relative">
-            <select
-              value={filtro.trimestre}
-              onChange={(e) => onTrimestreChange(Number(e.target.value) as 1 | 2 | 3 | 4)}
-              className="appearance-none bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-2 pr-9 text-sm text-white cursor-pointer focus:outline-none focus:border-violet-500"
-            >
+          <Select
+            value={filtro.trimestre.toString()}
+            onValueChange={(value) => onTrimestreChange(Number(value) as 1 | 2 | 3 | 4)}
+          >
+            <SelectTrigger className="w-[80px] bg-slate-800/50 border-slate-700 text-white">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
               {TRIMESTRES.map((t) => (
-                <option key={t.value} value={t.value} className="bg-slate-900">
+                <SelectItem key={t.value} value={t.value.toString()}>
                   {t.short}
-                </option>
+                </SelectItem>
               ))}
-            </select>
-            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-          </div>
+            </SelectContent>
+          </Select>
         )}
 
         {/* Seletor de Semestre */}
         {filtro.tipo === 'semestral' && (
-          <div className="relative">
-            <select
-              value={filtro.semestre}
-              onChange={(e) => onSemestreChange(Number(e.target.value) as 1 | 2)}
-              className="appearance-none bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-2 pr-9 text-sm text-white cursor-pointer focus:outline-none focus:border-violet-500"
-            >
+          <Select
+            value={filtro.semestre.toString()}
+            onValueChange={(value) => onSemestreChange(Number(value) as 1 | 2)}
+          >
+            <SelectTrigger className="w-[100px] bg-slate-800/50 border-slate-700 text-white">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
               {SEMESTRES.map((s) => (
-                <option key={s.value} value={s.value} className="bg-slate-900">
+                <SelectItem key={s.value} value={s.value.toString()}>
                   {s.short}
-                </option>
+                </SelectItem>
               ))}
-            </select>
-            <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
-          </div>
+            </SelectContent>
+          </Select>
         )}
       </div>
     </div>

@@ -21,6 +21,7 @@ import { GerenciarUsuarios } from './components/App/Admin';
 import { ComercialPage } from './components/App/Comercial';
 import { PlanilhaRetencao } from './components/App/Retencao';
 import { PlanilhaProfessores } from './components/App/Professores';
+import { AdministrativoPage } from './components/App/Administrativo';
 
 // Metas
 import { MetasPageNew } from './components/App/Metas';
@@ -148,6 +149,10 @@ export const router = createBrowserRouter([
           },
           {
             path: 'administrativo',
+            element: <AdministrativoPage />,
+          },
+          {
+            path: 'retencao',
             element: <PlanilhaRetencao />,
           },
           {

@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe - Página Administrativa</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body { background: linear-gradient(135deg, #0f172a 0%, #1e1b4b 100%); min-height: 100vh; }
+    .card { background: rgba(30, 41, 59, 0.5); border: 1px solid rgba(51, 65, 85, 0.5); }
+  </style>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+    });
+  </script>
+</head>
+<body class="text-white p-6">
+  <div class="max-w-7xl mx-auto space-y-8">
+    
+    <div class="text-center mb-8">
+      <h1 class="text-3xl font-bold text-violet-400 mb-2 flex items-center justify-center gap-2"><i data-lucide="clipboard-list" class="w-8 h-8"></i> PLANO - PÁGINA ADMINISTRATIVA</h1>
+      <p class="text-slate-400">Wireframe baseado na auditoria da página Analytics</p>
+    </div>
+
+    <!-- AUDITORIA -->
+    <section class="card rounded-2xl p-6">
+      <h2 class="text-xl font-bold text-violet-400 mb-4">1. AUDITORIA - KPIs Existentes (Analytics/Gestão)</h2>
+      <div class="grid grid-cols-3 gap-4 text-sm">
+        <div class="bg-slate-800/50 rounded-xl p-4 border border-cyan-500/30">
+          <h3 class="text-cyan-400 font-bold mb-2">ALUNOS</h3>
+          <ul class="text-slate-300 space-y-1 text-xs">
+            <li>• Total Alunos Ativos</li>
+            <li>• Alunos Pagantes</li>
+            <li>• LA Kids / LA School</li>
+            <li>• Banda</li>
+            <li>• Novas Matrículas / Evasões</li>
+            <li>• Bolsistas (Integrais/Parciais)</li>
+          </ul>
+        </div>
+        <div class="bg-slate-800/50 rounded-xl p-4 border border-emerald-500/30">
+          <h3 class="text-emerald-400 font-bold mb-2">FINANCEIRO</h3>
+          <ul class="text-slate-300 space-y-1 text-xs">
+            <li>• Ticket Médio</li>
+            <li>• MRR / ARR</li>
+            <li>• LTV Médio</li>
+            <li>• Faturamento Previsto/Realizado</li>
+            <li>• Inadimplência %</li>
+            <li>• Reajuste Médio %</li>
+          </ul>
+        </div>
+        <div class="bg-slate-800/50 rounded-xl p-4 border border-rose-500/30">
+          <h3 class="text-rose-400 font-bold mb-2">RETENÇÃO</h3>
+          <ul class="text-slate-300 space-y-1 text-xs">
+            <li>• Cancelamentos / Não Renovações</li>
+            <li>• Total Evasões / Churn Rate</li>
+            <li>• MRR Perdido</li>
+            <li>• Renovações / Taxa Renovação</li>
+            <li>• Aviso Prévio</li>
+            <li>• Tempo Permanência</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- BANCO DE DADOS -->
+    <section class="card rounded-2xl p-6">
+      <h2 class="text-xl font-bold text-cyan-400 mb-4">2. ESTRUTURA DO BANCO</h2>
+      <div class="grid grid-cols-2 gap-4">
+        <div class="bg-slate-900/50 rounded-xl p-4 font-mono text-xs">
+          <h3 class="text-cyan-400 font-bold mb-2">movimentacoes_admin</h3>
+          <pre class="text-slate-300">id, unidade_id, data, tipo
+aluno_nome, aluno_id, professor_id, curso_id
+valor_parcela_anterior, valor_parcela_novo
+forma_pagamento_id, mes_saida, tipo_evasao
+motivo, observacoes, agente_comercial</pre>
+        </div>
+        <div class="bg-slate-900/50 rounded-xl p-4 font-mono text-xs">
+          <h3 class="text-emerald-400 font-bold mb-2">resumo_admin_mensal</h3>
+          <pre class="text-slate-300">id, unidade_id, mes
+alunos_ativos, alunos_pagantes, bolsistas
+matriculas_ativas, matriculas_banda
+renovacoes_previstas, renovacoes_realizadas
+ticket_medio, faturamento, churn_rate</pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- WIREFRAME PÁGINA -->
+    <section class="card rounded-2xl p-6">
+      <h2 class="text-xl font-bold text-emerald-400 mb-4">3. WIREFRAME DA PÁGINA</h2>
+      
+      <div class="bg-slate-900 rounded-xl p-4 border border-slate-700">
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-4 pb-4 border-b border-slate-700">
+          <div class="flex items-center gap-2">
+            <i data-lucide="clipboard-list" class="w-6 h-6 text-violet-400"></i>
+            <div>
+              <h1 class="text-lg font-bold">Administrativo</h1>
+              <p class="text-xs text-slate-400">Renovações, Avisos e Evasões</p>
+            </div>
+          </div>
+          <div class="flex gap-2">
+            <select class="bg-slate-800 border border-slate-700 rounded px-2 py-1 text-xs">
+              <option>Janeiro 2026</option>
+            </select>
+            <button class="bg-cyan-500 px-3 py-1 rounded text-xs flex items-center gap-1"><i data-lucide="bar-chart-3" class="w-3 h-3"></i> Relatório</button>
+          </div>
+        </div>
+
+        <!-- KPIs Resumo -->
+        <div class="mb-4">
+          <h3 class="text-sm font-bold text-slate-300 mb-2 flex items-center gap-1"><i data-lucide="trending-up" class="w-4 h-4"></i> Resumo do Mês</h3>
+          <div class="grid grid-cols-6 gap-2">
+            <div class="bg-cyan-500/10 border border-cyan-500/30 rounded-lg p-2 text-center">
+              <p class="text-lg font-bold">462</p>
+              <p class="text-[10px] text-slate-400">Ativos</p>
+            </div>
+            <div class="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-2 text-center">
+              <p class="text-lg font-bold">432</p>
+              <p class="text-[10px] text-slate-400">Pagantes</p>
+            </div>
+            <div class="bg-violet-500/10 border border-violet-500/30 rounded-lg p-2 text-center">
+              <p class="text-lg font-bold">532</p>
+              <p class="text-[10px] text-slate-400">Matrículas</p>
+            </div>
+            <div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-2 text-center">
+              <p class="text-lg font-bold">29</p>
+              <p class="text-[10px] text-slate-400">Bolsistas</p>
+            </div>
+            <div class="bg-slate-500/10 border border-slate-500/30 rounded-lg p-2 text-center">
+              <p class="text-lg font-bold">1</p>
+              <p class="text-[10px] text-slate-400">Trancados</p>
+            </div>
+            <div class="bg-green-500/10 border border-green-500/30 rounded-lg p-2 text-center">
+              <p class="text-lg font-bold">22</p>
+              <p class="text-[10px] text-slate-400">Novos</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Input -->
+        <div class="mb-4">
+          <h3 class="text-sm font-bold text-slate-300 mb-2 flex items-center gap-1"><i data-lucide="zap" class="w-4 h-4"></i> Lançamento Rápido</h3>
+          <div class="grid grid-cols-4 gap-2">
+            <div class="bg-emerald-500/10 border border-emerald-500/30 rounded-lg p-3 cursor-pointer hover:border-emerald-500">
+              <div class="flex justify-between items-start mb-1">
+                <i data-lucide="check-circle" class="w-5 h-5 text-emerald-400"></i>
+                <span class="text-lg font-bold text-emerald-400">15</span>
+              </div>
+              <p class="text-xs font-bold">Renovação</p>
+              <p class="text-[10px] text-slate-400">Pendentes: 10</p>
+            </div>
+            <div class="bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 cursor-pointer hover:border-amber-500">
+              <div class="flex justify-between items-start mb-1">
+                <i data-lucide="x-circle" class="w-5 h-5 text-amber-400"></i>
+                <span class="text-lg font-bold text-amber-400">2</span>
+              </div>
+              <p class="text-xs font-bold">Não Renovação</p>
+              <p class="text-[10px] text-slate-400">25% das renov.</p>
+            </div>
+            <div class="bg-orange-500/10 border border-orange-500/30 rounded-lg p-3 cursor-pointer hover:border-orange-500">
+              <div class="flex justify-between items-start mb-1">
+                <i data-lucide="alert-triangle" class="w-5 h-5 text-orange-400"></i>
+                <span class="text-lg font-bold text-orange-400">8</span>
+              </div>
+              <p class="text-xs font-bold">Aviso Prévio</p>
+              <p class="text-[10px] text-slate-400">Saem em Fev</p>
+            </div>
+            <div class="bg-rose-500/10 border border-rose-500/30 rounded-lg p-3 cursor-pointer hover:border-rose-500">
+              <div class="flex justify-between items-start mb-1">
+                <i data-lucide="door-open" class="w-5 h-5 text-rose-400"></i>
+                <span class="text-lg font-bold text-rose-400">20</span>
+              </div>
+              <p class="text-xs font-bold">Evasão</p>
+              <p class="text-[10px] text-slate-400">Churn: 4.3%</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tabs Detalhamento -->
+        <div>
+          <h3 class="text-sm font-bold text-slate-300 mb-2 flex items-center gap-1"><i data-lucide="bar-chart-3" class="w-4 h-4"></i> Detalhamento</h3>
+          <div class="flex gap-1 mb-2">
+            <button class="bg-violet-500 px-3 py-1 rounded text-xs flex items-center gap-1"><i data-lucide="check-circle" class="w-3 h-3"></i> Renovações (15)</button>
+            <button class="bg-slate-700 px-3 py-1 rounded text-xs text-slate-400 flex items-center gap-1"><i data-lucide="alert-triangle" class="w-3 h-3"></i> Avisos (8)</button>
+            <button class="bg-slate-700 px-3 py-1 rounded text-xs text-slate-400 flex items-center gap-1"><i data-lucide="door-open" class="w-3 h-3"></i> Evasões (20)</button>
+          </div>
+          <div class="bg-slate-800/50 rounded-lg overflow-hidden text-xs">
+            <table class="w-full">
+              <thead class="bg-slate-800">
+                <tr class="text-slate-400">
+                  <th class="py-2 px-2 text-left">#</th>
+                  <th class="py-2 px-2 text-left">Data</th>
+                  <th class="py-2 px-2 text-left">Aluno</th>
+                  <th class="py-2 px-2 text-right">Anterior</th>
+                  <th class="py-2 px-2 text-right">Novo</th>
+                  <th class="py-2 px-2 text-center">%</th>
+                  <th class="py-2 px-2 text-left">Forma</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr class="border-t border-slate-700">
+                  <td class="py-2 px-2 text-slate-500">1</td>
+                  <td class="py-2 px-2">05/01</td>
+                  <td class="py-2 px-2 font-medium">Camila Renha</td>
+                  <td class="py-2 px-2 text-right text-slate-400">R$ 200</td>
+                  <td class="py-2 px-2 text-right text-emerald-400">R$ 350</td>
+                  <td class="py-2 px-2 text-center text-emerald-400">+75%</td>
+                  <td class="py-2 px-2">C.R</td>
+                </tr>
+                <tr class="border-t border-slate-700">
+                  <td class="py-2 px-2 text-slate-500">2</td>
+                  <td class="py-2 px-2">08/01</td>
+                  <td class="py-2 px-2 font-medium">Arthur Brito</td>
+                  <td class="py-2 px-2 text-right text-slate-400">R$ 365</td>
+                  <td class="py-2 px-2 text-right text-emerald-400">R$ 437</td>
+                  <td class="py-2 px-2 text-center text-emerald-400">+19%</td>
+                  <td class="py-2 px-2">C.R</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- MODAIS -->
+    <section class="card rounded-2xl p-6">
+      <h2 class="text-xl font-bold text-rose-400 mb-4">4. MODAIS DE LANÇAMENTO</h2>
+      <div class="grid grid-cols-2 gap-4">
+        
+        <!-- Modal Renovação -->
+        <div class="bg-slate-900 rounded-xl border border-slate-700 overflow-hidden">
+          <div class="bg-emerald-500/20 px-3 py-2 border-b border-slate-700">
+            <h3 class="font-bold text-sm flex items-center gap-1"><i data-lucide="check-circle" class="w-4 h-4"></i> Registrar Renovação</h3>
+          </div>
+          <div class="p-3 space-y-2 text-xs">
+            <div class="grid grid-cols-2 gap-2">
+              <div><label class="text-slate-400">Data</label><input type="date" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 mt-1"></div>
+              <div><label class="text-slate-400">Agente</label><input class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 mt-1"></div>
+            </div>
+            <div><label class="text-slate-400">Nome do Aluno *</label><input class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 mt-1"></div>
+            <div class="grid grid-cols-2 gap-2">
+              <div><label class="text-slate-400">Parcela Anterior</label><input type="number" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 mt-1"></div>
+              <div><label class="text-slate-400">Parcela Nova</label><input type="number" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 mt-1"></div>
+            </div>
+            <div><label class="text-slate-400">Forma Pagamento</label><select class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 mt-1"><option>Selecione...</option></select></div>
+            <button class="w-full bg-emerald-500 py-2 rounded font-medium">Registrar</button>
+          </div>
+        </div>
+
+        <!-- Modal Aviso Prévio -->
+        <div class="bg-slate-900 rounded-xl border border-slate-700 overflow-hidden">
+          <div class="bg-orange-500/20 px-3 py-2 border-b border-slate-700">
+            <h3 class="font-bold text-sm flex items-center gap-1"><i data-lucide="alert-triangle" class="w-4 h-4"></i> Registrar Aviso Prévio</h3>
+          </div>
+          <div class="p-3 space-y-2 text-xs">
+            <div class="grid grid-cols-2 gap-2">
+              <div><label class="text-slate-400">Data Aviso</label><input type="date" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 mt-1"></div>
+              <div><label class="text-slate-400">Mês Saída</label><select class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 mt-1"><option>Fevereiro</option></select></div>
+            </div>
+            <div><label class="text-slate-400">Nome do Aluno *</label><input class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 mt-1"></div>
+            <div class="grid grid-cols-2 gap-2">
+              <div><label class="text-slate-400">Parcela</label><input type="number" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 mt-1"></div>
+              <div><label class="text-slate-400">Professor</label><select class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 mt-1"><option>Selecione...</option></select></div>
+            </div>
+            <div><label class="text-slate-400">Motivo *</label><textarea rows="2" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 mt-1 resize-none"></textarea></div>
+            <button class="w-full bg-orange-500 py-2 rounded font-medium">Registrar</button>
+          </div>
+        </div>
+
+        <!-- Modal Não Renovação -->
+        <div class="bg-slate-900 rounded-xl border border-slate-700 overflow-hidden">
+          <div class="bg-amber-500/20 px-3 py-2 border-b border-slate-700">
+            <h3 class="font-bold text-sm flex items-center gap-1"><i data-lucide="x-circle" class="w-4 h-4"></i> Registrar Não Renovação</h3>
+          </div>
+          <div class="p-3 space-y-2 text-xs">
+            <div><label class="text-slate-400">Data</label><input type="date" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 mt-1"></div>
+            <div><label class="text-slate-400">Nome do Aluno *</label><input class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 mt-1"></div>
+            <div><label class="text-slate-400">Professor</label><select class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 mt-1"><option>Selecione...</option></select></div>
+            <div><label class="text-slate-400">Motivo *</label><textarea rows="2" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 mt-1 resize-none"></textarea></div>
+            <div><label class="text-slate-400">Agente</label><input class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 mt-1"></div>
+            <button class="w-full bg-amber-500 py-2 rounded font-medium text-slate-900">Registrar</button>
+          </div>
+        </div>
+
+        <!-- Modal Evasão -->
+        <div class="bg-slate-900 rounded-xl border border-slate-700 overflow-hidden">
+          <div class="bg-rose-500/20 px-3 py-2 border-b border-slate-700">
+            <h3 class="font-bold text-sm flex items-center gap-1"><i data-lucide="door-open" class="w-4 h-4"></i> Registrar Evasão</h3>
+          </div>
+          <div class="p-3 space-y-2 text-xs">
+            <div class="grid grid-cols-2 gap-2">
+              <div><label class="text-slate-400">Data</label><input type="date" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 mt-1"></div>
+              <div><label class="text-slate-400">Tipo</label><select class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 mt-1"><option>Interrompido</option><option>Não Renovou</option></select></div>
+            </div>
+            <div><label class="text-slate-400">Nome do Aluno *</label><input class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 mt-1"></div>
+            <div><label class="text-slate-400">Professor</label><select class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 mt-1"><option>Selecione...</option></select></div>
+            <div><label class="text-slate-400">Motivo *</label><textarea rows="2" class="w-full bg-slate-800 border border-slate-700 rounded px-2 py-1 mt-1 resize-none"></textarea></div>
+            <button class="w-full bg-rose-500 py-2 rounded font-medium">Registrar</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RELATÓRIOS -->
+    <section class="card rounded-2xl p-6">
+      <h2 class="text-xl font-bold text-cyan-400 mb-4">5. TIPOS DE RELATÓRIO</h2>
+      <div class="grid grid-cols-5 gap-3">
+        <div class="bg-slate-800/50 rounded-lg p-3 border border-blue-500/30 text-center">
+          <i data-lucide="calendar" class="w-8 h-8"></i>
+          <p class="text-xs font-bold mt-1">Diário</p>
+          <p class="text-[10px] text-slate-400">Resumo do dia</p>
+        </div>
+        <div class="bg-slate-800/50 rounded-lg p-3 border border-violet-500/30 text-center">
+          <i data-lucide="bar-chart-3" class="w-8 h-8"></i>
+          <p class="text-xs font-bold mt-1">Mensal</p>
+          <p class="text-[10px] text-slate-400">Completo</p>
+        </div>
+        <div class="bg-slate-800/50 rounded-lg p-3 border border-emerald-500/30 text-center">
+          <i data-lucide="check-circle" class="w-8 h-8"></i>
+          <p class="text-xs font-bold mt-1">Renovações</p>
+          <p class="text-[10px] text-slate-400">Lista detalhada</p>
+        </div>
+        <div class="bg-slate-800/50 rounded-lg p-3 border border-orange-500/30 text-center">
+          <i data-lucide="alert-triangle" class="w-8 h-8"></i>
+          <p class="text-xs font-bold mt-1">Avisos</p>
+          <p class="text-[10px] text-slate-400">Prévios</p>
+        </div>
+        <div class="bg-slate-800/50 rounded-lg p-3 border border-rose-500/30 text-center">
+          <i data-lucide="door-open" class="w-8 h-8"></i>
+          <p class="text-xs font-bold mt-1">Evasões</p>
+          <p class="text-[10px] text-slate-400">Com motivos</p>
+        </div>
+      </div>
+    </section>
+
+  </div>
+</body>
+</html>

@@ -129,10 +129,10 @@ export function useCompetenciaFiltro() {
     setFiltro(prev => ({ ...prev, semestre }));
   };
 
-  // Anos disponíveis (2023 até ano atual)
+  // Anos disponíveis (2026 até ano atual) - dados operacionais a partir de 2026
   const anosDisponiveis = useMemo(() => {
     const anos: number[] = [];
-    for (let a = anoAtual; a >= 2023; a--) {
+    for (let a = anoAtual; a >= 2026; a--) {
       anos.push(a);
     }
     return anos;
