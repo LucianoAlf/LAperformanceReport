@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,6 +24,7 @@ export function ModalRenovacao({ open, onOpenChange, onSave, editingItem, formas
   const [formData, setFormData] = useState({
     data: new Date(),
     aluno_nome: '',
+    aluno_id: null as number | null,
     valor_parcela_anterior: '',
     valor_parcela_novo: '',
     forma_pagamento_id: '',
@@ -47,6 +48,7 @@ export function ModalRenovacao({ open, onOpenChange, onSave, editingItem, formas
         setFormData({
           data: new Date(parseInt(ano), parseInt(mes) - 1, new Date().getDate()),
           aluno_nome: '',
+          aluno_id: null,
           valor_parcela_anterior: '',
           valor_parcela_novo: '',
           forma_pagamento_id: '',
@@ -70,6 +72,7 @@ export function ModalRenovacao({ open, onOpenChange, onSave, editingItem, formas
       tipo: 'renovacao',
       data: formData.data.toISOString().split('T')[0],
       aluno_nome: formData.aluno_nome.trim(),
+      aluno_id: formData.aluno_id,
       valor_parcela_anterior: parseFloat(formData.valor_parcela_anterior) || null,
       valor_parcela_novo: parseFloat(formData.valor_parcela_novo) || null,
       forma_pagamento_id: formData.forma_pagamento_id ? parseInt(formData.forma_pagamento_id) : null,
@@ -111,6 +114,7 @@ export function ModalRenovacao({ open, onOpenChange, onSave, editingItem, formas
                 setFormData({ 
                   ...formData, 
                   aluno_nome: nome,
+                  aluno_id: aluno?.id || null,
                   valor_parcela_anterior: aluno?.valor_parcela?.toString() || formData.valor_parcela_anterior,
                 });
               }}

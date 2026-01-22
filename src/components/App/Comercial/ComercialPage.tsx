@@ -32,6 +32,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DatePicker } from '@/components/ui/date-picker';
+import { DatePickerNascimento } from '@/components/ui/date-picker-nascimento';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
@@ -237,7 +238,7 @@ export function ComercialPage() {
     status_experimental: 'experimental_agendada',
     professor_id: null as number | null,
     aluno_nome: '',
-    aluno_idade: null as number | null,
+    aluno_data_nascimento: null as Date | null,
     tipo_matricula: 'EMLA',
     tipo_aluno: 'pagante',
     teve_experimental: false,
@@ -692,6 +693,18 @@ export function ComercialPage() {
       return;
     }
 
+    // Validação de campos obrigatórios para matrícula
+    if (modalOpen === 'matricula') {
+      if (!formData.aluno_data_nascimento) {
+        toast.error('Informe a data de nascimento do aluno');
+        return;
+      }
+      if (!formData.forma_pagamento_id) {
+        toast.error('Selecione a forma de pagamento da parcela mensal');
+        return;
+      }
+    }
+
     setSaving(true);
     try {
       // Usar a data selecionada no formulário (permite lançamento retroativo)
@@ -715,7 +728,10 @@ export function ComercialPage() {
       // Campos extras para matrícula
       if (modalOpen === 'matricula') {
         registro.aluno_nome = formData.aluno_nome;
-        registro.aluno_idade = formData.aluno_idade;
+        // Calcular idade a partir da data de nascimento
+        registro.aluno_idade = formData.aluno_data_nascimento 
+          ? Math.floor((new Date().getTime() - formData.aluno_data_nascimento.getTime()) / (365.25 * 24 * 60 * 60 * 1000))
+          : null;
         registro.tipo_matricula = formData.tipo_matricula;
         registro.tipo_aluno = formData.tipo_aluno;
         registro.professor_experimental_id = formData.teve_experimental ? formData.professor_experimental_id : null;
@@ -738,23 +754,22 @@ export function ComercialPage() {
       if (error) throw error;
 
       // Se for matrícula, criar também o registro na tabela alunos
-      // Campos baseados na estrutura real da tabela alunos no Supabase
+      // A trigger calcular_campos_aluno() calcula automaticamente: idade_atual e classificacao (EMLA/LAMK)
       if (modalOpen === 'matricula' && formData.aluno_nome) {
         const novoAluno: Record<string, any> = {
           nome: formData.aluno_nome.trim(),
           unidade_id: unidadeFinal,
-          data_matricula: formData.data.toISOString().split('T')[0],
-          valor_mensalidade: formData.valor_parcela || 0,
+          data_nascimento: formData.aluno_data_nascimento?.toISOString().split('T')[0] || null,
+          // idade_atual e classificacao são calculados automaticamente pela trigger baseado em data_nascimento
           status: 'ativo',
+          tipo_aluno: formData.tipo_aluno || 'pagante',
+          valor_parcela: formData.valor_parcela || 0,
+          data_matricula: formData.data.toISOString().split('T')[0],
+          curso_id: formData.curso_id || null,
+          professor_atual_id: formData.professor_fixo_id || null,
+          canal_origem_id: formData.canal_origem_id || null,
+          professor_experimental_id: formData.teve_experimental ? formData.professor_experimental_id : null,
         };
-
-        // Campos opcionais que existem na tabela
-        if (formData.curso_id) novoAluno.curso_id = formData.curso_id.toString();
-        if (formData.professor_fixo_id) novoAluno.professor_id = formData.professor_fixo_id.toString();
-        if (formData.teve_experimental) {
-          novoAluno.fez_experimental = true;
-          novoAluno.converteu_experimental = true;
-        }
 
         console.log('Inserindo aluno:', novoAluno);
         const { data: alunoData, error: alunoError } = await supabase.from('alunos').insert(novoAluno).select().single();
@@ -764,6 +779,7 @@ export function ComercialPage() {
           toast.error(`Erro ao criar aluno: ${alunoError.message}`);
         } else {
           console.log('Aluno criado com sucesso:', alunoData);
+          toast.success('Aluno cadastrado com sucesso!');
         }
       }
 
@@ -2097,32 +2113,23 @@ export function ComercialPage() {
                 </Select>
               </div>
             )}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label className="mb-2 block">Idade</Label>
-                <Input
-                  type="number"
-                  min="3"
-                  max="99"
-                  value={formData.aluno_idade || ''}
-                  onChange={(e) => setFormData({ ...formData, aluno_idade: parseInt(e.target.value) || null })}
+                <Label className="mb-2 block">Data de Nascimento *</Label>
+                <DatePickerNascimento
+                  date={formData.aluno_data_nascimento || undefined}
+                  onDateChange={(date) => setFormData({ ...formData, aluno_data_nascimento: date || null })}
+                  placeholder="Selecione..."
                 />
-              </div>
-              <div>
-                <Label className="mb-2 block">Escola</Label>
-                <Select
-                  value={formData.tipo_matricula}
-                  onValueChange={(value) => setFormData({ ...formData, tipo_matricula: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {TIPOS_MATRICULA.map((t) => (
-                      <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                {formData.aluno_data_nascimento && (
+                  <p className="text-xs text-slate-400 mt-1">
+                    Idade: {Math.floor((new Date().getTime() - formData.aluno_data_nascimento.getTime()) / (365.25 * 24 * 60 * 60 * 1000))} anos
+                    {' → '}
+                    <span className={Math.floor((new Date().getTime() - formData.aluno_data_nascimento.getTime()) / (365.25 * 24 * 60 * 60 * 1000)) < 12 ? 'text-cyan-400' : 'text-violet-400'}>
+                      {Math.floor((new Date().getTime() - formData.aluno_data_nascimento.getTime()) / (365.25 * 24 * 60 * 60 * 1000)) < 12 ? 'LAMK' : 'EMLA'}
+                    </span>
+                  </p>
+                )}
               </div>
               <div>
                 <Label className="mb-2 block">Tipo Aluno</Label>
@@ -2297,10 +2304,11 @@ export function ComercialPage() {
                   />
                 </div>
                 <div>
-                  <Label className="mb-1 block text-xs">Forma Pagamento</Label>
+                  <Label className="mb-1 block text-xs">Forma Pagamento *</Label>
                   <Select
                     value={formData.forma_pagamento_id?.toString() || ''}
                     onValueChange={(value) => setFormData({ ...formData, forma_pagamento_id: parseInt(value) || null })}
+                    required
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione..." />
@@ -2331,7 +2339,7 @@ export function ComercialPage() {
             </div>
             <Button
               onClick={handleSave}
-              disabled={saving || !formData.aluno_nome}
+              disabled={saving || !formData.aluno_nome || !formData.aluno_data_nascimento || !formData.forma_pagamento_id}
               className="w-full bg-gradient-to-r from-emerald-500 to-teal-500"
             >
               {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,6 +33,7 @@ export function ModalNaoRenovacao({ open, onOpenChange, onSave, editingItem, pro
   const [formData, setFormData] = useState({
     data: new Date(),
     aluno_nome: '',
+    aluno_id: null as number | null,
     professor_id: '',
     motivo_saida_id: '',
     observacoes: '',
@@ -73,6 +74,7 @@ export function ModalNaoRenovacao({ open, onOpenChange, onSave, editingItem, pro
         setFormData({
           data: new Date(parseInt(ano), parseInt(mes) - 1, new Date().getDate()),
           aluno_nome: '',
+          aluno_id: null,
           professor_id: '',
           motivo_saida_id: '',
           observacoes: '',
@@ -95,6 +97,7 @@ export function ModalNaoRenovacao({ open, onOpenChange, onSave, editingItem, pro
       tipo: 'nao_renovacao',
       data: formData.data.toISOString().split('T')[0],
       aluno_nome: formData.aluno_nome.trim(),
+      aluno_id: formData.aluno_id,
       professor_id: formData.professor_id ? parseInt(formData.professor_id) : null,
       motivo: motivoSelecionado?.nome || '',
       motivo_saida_id: parseInt(formData.motivo_saida_id),
@@ -135,7 +138,14 @@ export function ModalNaoRenovacao({ open, onOpenChange, onSave, editingItem, pro
             <Label className="text-slate-300">Nome do Aluno *</Label>
             <AutocompleteAluno
               value={formData.aluno_nome}
-              onChange={(nome) => setFormData({ ...formData, aluno_nome: nome })}
+              onChange={(nome, aluno) => {
+                setFormData({ 
+                  ...formData, 
+                  aluno_nome: nome,
+                  aluno_id: aluno?.id || null,
+                  professor_id: aluno?.professor_atual_id?.toString() || formData.professor_id
+                });
+              }}
               unidadeId={unidadeId}
               placeholder="Digite o nome do aluno..."
             />

@@ -49,8 +49,10 @@ export interface MovimentacaoAdmin {
   tempo_permanencia_meses?: number | null;
   valor_parcela_evasao?: number | null;
   previsao_retorno?: string | null;
+  observacoes?: string | null;
   created_at?: string;
   unidades?: { codigo: string };
+  alunos?: { classificacao: string };
 }
 
 export interface ResumoMes {
@@ -147,6 +149,25 @@ export function AdministrativoPage() {
       const { data: movData, error: movError } = await query;
       if (movError) throw movError;
 
+      // Buscar classificação dos alunos separadamente
+      const alunosIds = movData?.filter(m => m.aluno_id).map(m => m.aluno_id) || [];
+      let alunosMap = new Map();
+      
+      if (alunosIds.length > 0) {
+        const { data: alunosData } = await supabase
+          .from('alunos')
+          .select('id, classificacao')
+          .in('id', alunosIds);
+        
+        alunosMap = new Map(alunosData?.map(a => [a.id, a]) || []);
+      }
+
+      // Enriquecer movimentações com classificação dos alunos
+      const movDataComAlunos = movData?.map(m => ({
+        ...m,
+        alunos: m.aluno_id ? alunosMap.get(m.aluno_id) : null
+      })) || [];
+
       // Carregar professores
       const { data: profData } = await supabase
         .from('professores')
@@ -178,31 +199,28 @@ export function AdministrativoPage() {
         alunos_ativos: (acc.alunos_ativos || 0) + (k.total_alunos_ativos || 0),
         alunos_pagantes: (acc.alunos_pagantes || 0) + (k.total_alunos_pagantes || 0),
         alunos_nao_pagantes: (acc.alunos_nao_pagantes || 0) + ((k.total_alunos_ativos || 0) - (k.total_alunos_pagantes || 0)),
-        alunos_trancados: (acc.alunos_trancados || 0) + (k.total_trancados || 0),
         bolsistas_integrais: (acc.bolsistas_integrais || 0) + (k.total_bolsistas_integrais || 0),
         bolsistas_parciais: (acc.bolsistas_parciais || 0) + (k.total_bolsistas_parciais || 0),
-        alunos_novos: (acc.alunos_novos || 0) + (k.novas_matriculas || 0),
-        matriculas_ativas: (acc.matriculas_ativas || 0) + (k.total_matriculas || 0),
         matriculas_banda: (acc.matriculas_banda || 0) + (k.total_banda || 0),
-        matriculas_2_curso: 0, // Calcular separadamente se necessário
+        matriculas_2_curso: 0,
         ticket_medio: k.ticket_medio || acc.ticket_medio || 0,
-        faturamento: (acc.faturamento || 0) + (k.faturamento_estimado || 0),
+        faturamento: (acc.faturamento || 0) + (Number(k.faturamento_previsto) || 0),
         churn_rate: k.churn_rate || acc.churn_rate || 0,
-        ltv_meses: k.tempo_permanencia || acc.ltv_meses || 0,
+        ltv_meses: Number(k.tempo_permanencia_medio) || acc.ltv_meses || 0,
       }), {} as any) || {};
 
       // Contar movimentações por tipo
-      const renovacoes = movData?.filter(m => m.tipo === 'renovacao') || [];
-      const naoRenovacoes = movData?.filter(m => m.tipo === 'nao_renovacao') || [];
-      const avisosPrevios = movData?.filter(m => m.tipo === 'aviso_previo') || [];
-      const evasoes = movData?.filter(m => m.tipo === 'evasao') || [];
-      const trancamentos = movData?.filter(m => m.tipo === 'trancamento') || [];
+      const renovacoes = movDataComAlunos?.filter(m => m.tipo === 'renovacao') || [];
+      const naoRenovacoes = movDataComAlunos?.filter(m => m.tipo === 'nao_renovacao') || [];
+      const avisosPrevios = movDataComAlunos?.filter(m => m.tipo === 'aviso_previo') || [];
+      const evasoes = movDataComAlunos?.filter(m => m.tipo === 'evasao') || [];
+      const trancamentos = movDataComAlunos?.filter(m => m.tipo === 'trancamento') || [];
 
       // Enriquecer movimentações com nomes
       const profMap = new Map(profData?.map(p => [p.id, p.nome]) || []);
       const fpMap = new Map(fpData?.map(f => [f.id, { nome: f.nome, sigla: f.sigla }]) || []);
 
-      const movimentacoesEnriquecidas = (movData || []).map(m => ({
+      const movimentacoesEnriquecidas = (movDataComAlunos || []).map(m => ({
         ...m,
         professor_nome: m.professor_id ? profMap.get(m.professor_id) : undefined,
         forma_pagamento_nome: m.forma_pagamento_id ? fpMap.get(m.forma_pagamento_id)?.sigla : undefined,
@@ -212,9 +230,26 @@ export function AdministrativoPage() {
       setProfessores(profData || []);
       setFormasPagamento(fpData || []);
 
+      // Buscar novos alunos do mês
+      let novosAlunosQuery = supabase
+        .from('alunos')
+        .select('id', { count: 'exact', head: true })
+        .gte('data_matricula', startDate)
+        .lte('data_matricula', endDate);
+
+      if (unidade !== 'todos') {
+        novosAlunosQuery = novosAlunosQuery.eq('unidade_id', unidade);
+      }
+
+      const { count: novosAlunosCount } = await novosAlunosQuery;
+
       // Montar resumo
       setResumo({
         ...kpis,
+        // Calcular campos que vêm das movimentações e queries adicionais
+        alunos_trancados: trancamentos.length,
+        alunos_novos: novosAlunosCount || 0,
+        matriculas_ativas: kpis.alunos_ativos || 0,
         renovacoes_previstas: 25, // TODO: Calcular baseado em alunos que completam aniversário
         renovacoes_realizadas: renovacoes.length,
         renovacoes_pendentes: 25 - renovacoes.length,
@@ -813,6 +848,21 @@ export function AdministrativoPage() {
               data={trancamentos} 
               onEdit={handleEdit}
               onDelete={handleDeleteMovimentacao}
+              professores={professores}
+              onSaveInline={async (id, data) => {
+                try {
+                  const { error } = await supabase
+                    .from('movimentacoes_admin')
+                    .update(data)
+                    .eq('id', id);
+                  if (error) throw error;
+                  await loadData();
+                  return true;
+                } catch (error) {
+                  console.error('Erro ao salvar:', error);
+                  return false;
+                }
+              }}
             />
           )}
         </div>

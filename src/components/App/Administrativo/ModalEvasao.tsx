@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -40,6 +40,7 @@ export function ModalEvasao({ open, onOpenChange, onSave, editingItem, professor
     data: new Date(),
     tipo_evasao: 'interrompido',
     aluno_nome: '',
+    aluno_id: null as number | null,
     professor_id: '',
     motivo_saida_id: '',
     observacoes: '',
@@ -80,6 +81,7 @@ export function ModalEvasao({ open, onOpenChange, onSave, editingItem, professor
           data: new Date(parseInt(ano), parseInt(mes) - 1, new Date().getDate()),
           tipo_evasao: 'interrompido',
           aluno_nome: '',
+          aluno_id: null,
           professor_id: '',
           motivo_saida_id: '',
           observacoes: '',
@@ -101,6 +103,7 @@ export function ModalEvasao({ open, onOpenChange, onSave, editingItem, professor
       tipo: 'evasao',
       data: formData.data.toISOString().split('T')[0],
       aluno_nome: formData.aluno_nome.trim(),
+      aluno_id: formData.aluno_id,
       tipo_evasao: formData.tipo_evasao,
       professor_id: formData.professor_id ? parseInt(formData.professor_id) : null,
       motivo: motivoSelecionado?.nome || '',
@@ -165,7 +168,9 @@ export function ModalEvasao({ open, onOpenChange, onSave, editingItem, professor
                 setFormData({ 
                   ...formData, 
                   aluno_nome: nome,
+                  aluno_id: aluno?.id || null,
                   valor_parcela_evasao: aluno?.valor_parcela?.toString() || formData.valor_parcela_evasao,
+                  professor_id: aluno?.professor_atual_id?.toString() || formData.professor_id
                 });
               }}
               unidadeId={unidadeId}

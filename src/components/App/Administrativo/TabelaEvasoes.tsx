@@ -1,4 +1,5 @@
-import { Pencil, Trash2 } from 'lucide-react';
+import { Pencil, Trash2, Info } from 'lucide-react';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import type { MovimentacaoAdmin } from './AdministrativoPage';
@@ -91,8 +92,17 @@ export function TabelaEvasoes({ data, onEdit, onDelete }: TabelaEvasoesProps) {
                     )}
                   </td>
                   <td className="py-3 px-4 text-slate-300">{item.professor_nome || '-'}</td>
-                  <td className="py-3 px-4 text-slate-400 text-sm max-w-xs truncate" title={item.motivo || ''}>
-                    {item.motivo || '-'}
+                  <td className="py-3 px-4">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-400 text-sm max-w-xs truncate">
+                        {item.motivo || '-'}
+                      </span>
+                      {item.observacoes && (
+                        <Tooltip content={item.observacoes} side="top">
+                          <Info className="w-4 h-4 text-blue-400 cursor-help flex-shrink-0" />
+                        </Tooltip>
+                      )}
+                    </div>
                   </td>
                   <td className="py-3 px-4 text-center">
                     <div className="flex items-center justify-center gap-1">
