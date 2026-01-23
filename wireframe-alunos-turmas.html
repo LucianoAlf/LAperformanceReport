@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe - Gestão de Turmas | LA Music School</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'sans-serif'] }
+        }
+      }
+    }
+  </script>
+  <style>
+    @keyframes pulse-red { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .pulse-alert { animation: pulse-red 1s ease-in-out infinite; }
+  </style>
+</head>
+<body class="bg-slate-900 text-white font-sans min-h-screen">
+  
+  <!-- Header -->
+  <header class="bg-slate-800 border-b border-slate-700 px-6 py-4">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-4">
+        <div class="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold">Gestão de Alunos</h1>
+          <p class="text-sm text-slate-400">Controle completo de alunos, turmas e horários</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <select class="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+          <option>Barra</option>
+          <option>Campo Grande</option>
+          <option>Recreio</option>
+        </select>
+        <div class="bg-purple-600 px-4 py-2 rounded-lg text-sm font-medium">Jan/2026</div>
+      </div>
+    </div>
+  </header>
+
+  <main class="p-6 space-y-6">
+    
+    <!-- SEÇÃO 1: KPI CARDS (mesmo da página anterior) -->
+    <section class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+      <div class="bg-slate-800 border border-slate-700 rounded-xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-slate-400 text-xs font-medium uppercase">Alunos Ativos</span>
+        </div>
+        <p class="text-3xl font-bold text-white">204</p>
+      </div>
+      <div class="bg-slate-800 border border-slate-700 rounded-xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-slate-400 text-xs font-medium uppercase">Pagantes</span>
+        </div>
+        <p class="text-3xl font-bold text-white">198</p>
+      </div>
+      <div class="bg-slate-800 border border-slate-700 rounded-xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-slate-400 text-xs font-medium uppercase">Média/Turma</span>
+        </div>
+        <p class="text-3xl font-bold text-white">1.8</p>
+      </div>
+      <div class="bg-slate-800 border border-slate-700 rounded-xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-slate-400 text-xs font-medium uppercase">Ticket Médio</span>
+        </div>
+        <p class="text-3xl font-bold text-white">R$ 419</p>
+      </div>
+      <div class="bg-slate-800 border border-slate-700 rounded-xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-slate-400 text-xs font-medium uppercase">LTV Médio</span>
+        </div>
+        <p class="text-3xl font-bold text-white">15</p>
+      </div>
+      <div class="bg-slate-800 border border-slate-700 rounded-xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-slate-400 text-xs font-medium uppercase">Turmas</span>
+        </div>
+        <p class="text-3xl font-bold text-white">113</p>
+      </div>
+      <div class="bg-red-900/30 border border-red-500/50 rounded-xl p-4 pulse-alert">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-red-400 text-xs font-medium uppercase">⚠️ Sozinhos</span>
+        </div>
+        <p class="text-3xl font-bold text-red-400">42</p>
+      </div>
+    </section>
+
+    <!-- SEÇÃO 2: TABS - ABA TURMAS ATIVA -->
+    <section class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
+      <div class="flex border-b border-slate-700">
+        <button class="px-6 py-3 text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-700/50 transition">
+          👥 Lista de Alunos
+        </button>
+        <button class="px-6 py-3 text-sm font-medium bg-purple-600 text-white border-b-2 border-purple-400">
+          📅 Gestão de Turmas
+        </button>
+        <button class="px-6 py-3 text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-700/50 transition">
+          📊 Distribuição
+        </button>
+        <button class="px-6 py-3 text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-700/50 transition">
+          📤 Importar Alunos
+        </button>
+      </div>
+
+      <!-- FILTROS DE TURMAS -->
+      <div class="p-4 bg-slate-800/50 border-b border-slate-700">
+        <div class="flex flex-wrap gap-3">
+          <select class="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm min-w-[150px]">
+            <option value="">Professor</option>
+            <option>Matheus Lana</option>
+            <option>Fábio Amorim</option>
+            <option>Ramon Pina</option>
+          </select>
+          <select class="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm min-w-[120px]">
+            <option value="">Dia</option>
+            <option>Segunda</option>
+            <option>Terça</option>
+            <option>Quarta</option>
+            <option>Quinta</option>
+            <option>Sexta</option>
+            <option>Sábado</option>
+          </select>
+          <select class="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm min-w-[120px]">
+            <option value="">Sala</option>
+            <option>Sala 1</option>
+            <option>Sala 2</option>
+            <option>Sala 3</option>
+            <option>Sala 4</option>
+          </select>
+          <select class="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm min-w-[150px]">
+            <option value="">Ocupação</option>
+            <option>🔴 1 aluno (sozinho)</option>
+            <option>🟡 2 alunos</option>
+            <option>🟢 3+ alunos</option>
+            <option>⚫ Vazia</option>
+          </select>
+          <button class="bg-slate-600 hover:bg-slate-500 px-4 py-2 rounded-lg text-sm transition">
+            🔄 Limpar
+          </button>
+          <div class="flex-1"></div>
+          <button class="bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Nova Turma
+          </button>
+        </div>
+      </div>
+
+      <!-- GRID DE TURMAS POR DIA -->
+      <div class="p-4">
+        <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+          
+          <!-- CARD: Segunda-feira -->
+          <div class="bg-slate-700/30 rounded-xl border border-slate-600 overflow-hidden">
+            <div class="bg-blue-600/20 border-b border-blue-500/30 px-4 py-3">
+              <div class="flex items-center justify-between">
+                <h3 class="font-semibold text-blue-400">📅 Segunda-feira</h3>
+                <span class="text-xs bg-blue-500/20 text-blue-300 px-2 py-1 rounded">18 turmas</span>
+              </div>
+            </div>
+            <div class="p-3 space-y-2 max-h-80 overflow-y-auto">
+              
+              <!-- Turma com 3 alunos (OK) -->
+              <div class="bg-slate-800 rounded-lg p-3 border border-slate-600 hover:border-emerald-500/50 transition cursor-pointer">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-sm font-medium text-white">15:00 - Sala 1</span>
+                  <span class="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded text-xs">3/4 alunos</span>
+                </div>
+                <div class="flex items-center gap-2 text-xs text-slate-400">
+                  <span>🎸 Guitarra</span>
+                  <span>•</span>
+                  <span>Matheus Lana</span>
+                </div>
+                <div class="mt-2 flex flex-wrap gap-1">
+                  <span class="bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded text-xs">João Silva</span>
+                  <span class="bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded text-xs">Pedro Costa</span>
+                  <span class="bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded text-xs">Luciano Alf</span>
+                </div>
+              </div>
+
+              <!-- Turma com 1 aluno (ALERTA) -->
+              <div class="bg-red-900/20 rounded-lg p-3 border border-red-500/50 hover:border-red-400 transition cursor-pointer">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-sm font-medium text-white">16:00 - Sala 2</span>
+                  <span class="bg-red-500/30 text-red-400 px-2 py-0.5 rounded text-xs pulse-alert">⚠️ 1/4 aluno</span>
+                </div>
+                <div class="flex items-center gap-2 text-xs text-slate-400">
+                  <span>🎹 Piano</span>
+                  <span>•</span>
+                  <span>Fábio Amorim</span>
+                </div>
+                <div class="mt-2 flex flex-wrap gap-1">
+                  <span class="bg-red-500/20 text-red-300 px-2 py-0.5 rounded text-xs">Maria Oliveira</span>
+                </div>
+                <p class="text-xs text-red-400 mt-2">💡 Sugestão: Juntar com turma de 17:00</p>
+              </div>
+
+              <!-- Turma com 2 alunos -->
+              <div class="bg-slate-800 rounded-lg p-3 border border-slate-600 hover:border-yellow-500/50 transition cursor-pointer">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-sm font-medium text-white">17:00 - Sala 2</span>
+                  <span class="bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded text-xs">2/4 alunos</span>
+                </div>
+                <div class="flex items-center gap-2 text-xs text-slate-400">
+                  <span>🎹 Piano</span>
+                  <span>•</span>
+                  <span>Fábio Amorim</span>
+                </div>
+                <div class="mt-2 flex flex-wrap gap-1">
+                  <span class="bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded text-xs">Ana Beatriz</span>
+                  <span class="bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded text-xs">Carlos Mendes</span>
+                </div>
+              </div>
+
+              <!-- Turma cheia -->
+              <div class="bg-slate-800 rounded-lg p-3 border border-slate-600 hover:border-emerald-500/50 transition cursor-pointer">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-sm font-medium text-white">18:00 - Sala 3</span>
+                  <span class="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded text-xs">4/4 ✓</span>
+                </div>
+                <div class="flex items-center gap-2 text-xs text-slate-400">
+                  <span>🥁 Bateria</span>
+                  <span>•</span>
+                  <span>Ramon Pina</span>
+                </div>
+                <div class="mt-2 flex flex-wrap gap-1">
+                  <span class="bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded text-xs">+4 alunos</span>
+                </div>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- CARD: Terça-feira -->
+          <div class="bg-slate-700/30 rounded-xl border border-slate-600 overflow-hidden">
+            <div class="bg-green-600/20 border-b border-green-500/30 px-4 py-3">
+              <div class="flex items-center justify-between">
+                <h3 class="font-semibold text-green-400">📅 Terça-feira</h3>
+                <span class="text-xs bg-green-500/20 text-green-300 px-2 py-1 rounded">15 turmas</span>
+              </div>
+            </div>
+            <div class="p-3 space-y-2 max-h-80 overflow-y-auto">
+              <div class="bg-slate-800 rounded-lg p-3 border border-slate-600">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-sm font-medium text-white">14:00 - Sala 1</span>
+                  <span class="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded text-xs">3/4 alunos</span>
+                </div>
+                <div class="flex items-center gap-2 text-xs text-slate-400">
+                  <span>🎸 Violão</span>
+                  <span>•</span>
+                  <span>Matheus Lana</span>
+                </div>
+              </div>
+              <div class="bg-red-900/20 rounded-lg p-3 border border-red-500/50">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-sm font-medium text-white">15:00 - Sala 2</span>
+                  <span class="bg-red-500/30 text-red-400 px-2 py-0.5 rounded text-xs pulse-alert">⚠️ 1/4 aluno</span>
+                </div>
+                <div class="flex items-center gap-2 text-xs text-slate-400">
+                  <span>🎤 Canto</span>
+                  <span>•</span>
+                  <span>Letícia Palmeira</span>
+                </div>
+              </div>
+              <div class="bg-slate-800 rounded-lg p-3 border border-slate-600">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-sm font-medium text-white">16:00 - Sala 1</span>
+                  <span class="bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded text-xs">2/4 alunos</span>
+                </div>
+                <div class="flex items-center gap-2 text-xs text-slate-400">
+                  <span>🎸 Guitarra</span>
+                  <span>•</span>
+                  <span>Matheus Lana</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- CARD: Quarta-feira -->
+          <div class="bg-slate-700/30 rounded-xl border border-slate-600 overflow-hidden">
+            <div class="bg-yellow-600/20 border-b border-yellow-500/30 px-4 py-3">
+              <div class="flex items-center justify-between">
+                <h3 class="font-semibold text-yellow-400">📅 Quarta-feira</h3>
+                <span class="text-xs bg-yellow-500/20 text-yellow-300 px-2 py-1 rounded">20 turmas</span>
+              </div>
+            </div>
+            <div class="p-3 space-y-2 max-h-80 overflow-y-auto">
+              <div class="bg-slate-800 rounded-lg p-3 border border-slate-600">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-sm font-medium text-white">15:00 - Sala 1</span>
+                  <span class="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded text-xs">4/4 ✓</span>
+                </div>
+                <div class="flex items-center gap-2 text-xs text-slate-400">
+                  <span>🎹 Teclado</span>
+                  <span>•</span>
+                  <span>Kaio Felipe</span>
+                </div>
+              </div>
+              <div class="bg-slate-800 rounded-lg p-3 border border-slate-600">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-sm font-medium text-white">16:00 - Sala 3</span>
+                  <span class="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded text-xs">3/4 alunos</span>
+                </div>
+                <div class="flex items-center gap-2 text-xs text-slate-400">
+                  <span>🥁 Bateria</span>
+                  <span>•</span>
+                  <span>Ramon Pina</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- CARD: Quinta-feira -->
+          <div class="bg-slate-700/30 rounded-xl border border-slate-600 overflow-hidden">
+            <div class="bg-purple-600/20 border-b border-purple-500/30 px-4 py-3">
+              <div class="flex items-center justify-between">
+                <h3 class="font-semibold text-purple-400">📅 Quinta-feira</h3>
+                <span class="text-xs bg-purple-500/20 text-purple-300 px-2 py-1 rounded">17 turmas</span>
+              </div>
+            </div>
+            <div class="p-3 space-y-2 max-h-80 overflow-y-auto">
+              <div class="bg-red-900/20 rounded-lg p-3 border border-red-500/50">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-sm font-medium text-white">17:00 - Sala 1</span>
+                  <span class="bg-red-500/30 text-red-400 px-2 py-0.5 rounded text-xs pulse-alert">⚠️ 1/4 aluno</span>
+                </div>
+                <div class="flex items-center gap-2 text-xs text-slate-400">
+                  <span>🎹 Piano</span>
+                  <span>•</span>
+                  <span>Renam Amorim</span>
+                </div>
+              </div>
+              <div class="bg-slate-800 rounded-lg p-3 border border-slate-600">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-sm font-medium text-white">18:00 - Sala 2</span>
+                  <span class="bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded text-xs">2/4 alunos</span>
+                </div>
+                <div class="flex items-center gap-2 text-xs text-slate-400">
+                  <span>🎸 Guitarra</span>
+                  <span>•</span>
+                  <span>Matheus Sterque</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- CARD: Sexta-feira -->
+          <div class="bg-slate-700/30 rounded-xl border border-slate-600 overflow-hidden">
+            <div class="bg-pink-600/20 border-b border-pink-500/30 px-4 py-3">
+              <div class="flex items-center justify-between">
+                <h3 class="font-semibold text-pink-400">📅 Sexta-feira</h3>
+                <span class="text-xs bg-pink-500/20 text-pink-300 px-2 py-1 rounded">12 turmas</span>
+              </div>
+            </div>
+            <div class="p-3 space-y-2 max-h-80 overflow-y-auto">
+              <div class="bg-slate-800 rounded-lg p-3 border border-slate-600">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-sm font-medium text-white">14:00 - Sala 1</span>
+                  <span class="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded text-xs">3/4 alunos</span>
+                </div>
+                <div class="flex items-center gap-2 text-xs text-slate-400">
+                  <span>🎸 Violão</span>
+                  <span>•</span>
+                  <span>Gabriel Leão</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- CARD: Sábado -->
+          <div class="bg-slate-700/30 rounded-xl border border-slate-600 overflow-hidden">
+            <div class="bg-cyan-600/20 border-b border-cyan-500/30 px-4 py-3">
+              <div class="flex items-center justify-between">
+                <h3 class="font-semibold text-cyan-400">📅 Sábado</h3>
+                <span class="text-xs bg-cyan-500/20 text-cyan-300 px-2 py-1 rounded">31 turmas</span>
+              </div>
+            </div>
+            <div class="p-3 space-y-2 max-h-80 overflow-y-auto">
+              <div class="bg-slate-800 rounded-lg p-3 border border-slate-600">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-sm font-medium text-white">08:00 - Sala 1</span>
+                  <span class="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded text-xs">4/4 ✓</span>
+                </div>
+                <div class="flex items-center gap-2 text-xs text-slate-400">
+                  <span>🎤 Canto</span>
+                  <span>•</span>
+                  <span>Letícia Palmeira</span>
+                </div>
+              </div>
+              <div class="bg-slate-800 rounded-lg p-3 border border-slate-600">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-sm font-medium text-white">09:00 - Sala 2</span>
+                  <span class="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded text-xs">4/4 ✓</span>
+                </div>
+                <div class="flex items-center gap-2 text-xs text-slate-400">
+                  <span>🎹 Piano</span>
+                  <span>•</span>
+                  <span>Daiana Pacífico</span>
+                </div>
+              </div>
+              <div class="bg-red-900/20 rounded-lg p-3 border border-red-500/50">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-sm font-medium text-white">10:00 - Sala 3</span>
+                  <span class="bg-red-500/30 text-red-400 px-2 py-0.5 rounded text-xs pulse-alert">⚠️ 1/4 aluno</span>
+                </div>
+                <div class="flex items-center gap-2 text-xs text-slate-400">
+                  <span>🥁 Bateria</span>
+                  <span>•</span>
+                  <span>Jordan Barbosa</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- RESUMO DE SALAS -->
+      <div class="p-4 border-t border-slate-700">
+        <h3 class="text-sm font-semibold text-slate-400 uppercase mb-3">Capacidade por Sala</h3>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div class="bg-slate-700/50 rounded-lg p-3">
+            <div class="flex items-center justify-between mb-2">
+              <span class="font-medium">Sala 1</span>
+              <span class="text-xs text-slate-400">Guitarra/Violão</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <div class="flex-1 bg-slate-600 rounded-full h-2">
+                <div class="bg-emerald-500 h-2 rounded-full" style="width: 75%"></div>
+              </div>
+              <span class="text-sm text-emerald-400">4 max</span>
+            </div>
+          </div>
+          <div class="bg-slate-700/50 rounded-lg p-3">
+            <div class="flex items-center justify-between mb-2">
+              <span class="font-medium">Sala 2</span>
+              <span class="text-xs text-slate-400">Piano/Teclado</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <div class="flex-1 bg-slate-600 rounded-full h-2">
+                <div class="bg-blue-500 h-2 rounded-full" style="width: 50%"></div>
+              </div>
+              <span class="text-sm text-blue-400">3 max</span>
+            </div>
+          </div>
+          <div class="bg-slate-700/50 rounded-lg p-3">
+            <div class="flex items-center justify-between mb-2">
+              <span class="font-medium">Sala 3</span>
+              <span class="text-xs text-slate-400">Bateria</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <div class="flex-1 bg-slate-600 rounded-full h-2">
+                <div class="bg-yellow-500 h-2 rounded-full" style="width: 25%"></div>
+              </div>
+              <span class="text-sm text-yellow-400">2 max</span>
+            </div>
+          </div>
+          <div class="bg-slate-700/50 rounded-lg p-3">
+            <div class="flex items-center justify-between mb-2">
+              <span class="font-medium">Sala 4</span>
+              <span class="text-xs text-slate-400">Canto</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <div class="flex-1 bg-slate-600 rounded-full h-2">
+                <div class="bg-purple-500 h-2 rounded-full" style="width: 100%"></div>
+              </div>
+              <span class="text-sm text-purple-400">4 max</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- MODAL: Detalhes da Turma -->
+    <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+      <div class="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-lg mx-4 shadow-2xl">
+        <div class="p-6 border-b border-slate-700">
+          <div class="flex items-center justify-between">
+            <div>
+              <h2 class="text-xl font-bold">Turma: Segunda 15:00</h2>
+              <p class="text-sm text-slate-400">Sala 1 • Guitarra • Matheus Lana</p>
+            </div>
+            <button class="text-slate-400 hover:text-white">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <div class="p-6">
+          <div class="flex items-center justify-between mb-4">
+            <span class="text-sm text-slate-400">Capacidade:</span>
+            <span class="bg-emerald-500/20 text-emerald-400 px-3 py-1 rounded-lg">3/4 alunos</span>
+          </div>
+          <h3 class="text-sm font-semibold text-slate-400 uppercase mb-3">Alunos na Turma</h3>
+          <div class="space-y-2">
+            <div class="flex items-center justify-between bg-slate-700/50 rounded-lg p-3">
+              <div class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center text-sm font-bold">J</div>
+                <div>
+                  <p class="font-medium">João Silva Santos</p>
+                  <p class="text-xs text-slate-400">24 meses na escola</p>
+                </div>
+              </div>
+              <span class="bg-purple-500/20 text-purple-400 px-2 py-1 rounded text-xs">EMLA</span>
+            </div>
+            <div class="flex items-center justify-between bg-slate-700/50 rounded-lg p-3">
+              <div class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center text-sm font-bold">P</div>
+                <div>
+                  <p class="font-medium">Pedro Costa</p>
+                  <p class="text-xs text-slate-400">12 meses na escola</p>
+                </div>
+              </div>
+              <span class="bg-purple-500/20 text-purple-400 px-2 py-1 rounded text-xs">EMLA</span>
+            </div>
+            <div class="flex items-center justify-between bg-slate-700/50 rounded-lg p-3">
+              <div class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-sm font-bold">L</div>
+                <div>
+                  <p class="font-medium">Luciano Alf</p>
+                  <p class="text-xs text-slate-400">1 mês na escola</p>
+                </div>
+              </div>
+              <span class="bg-purple-500/20 text-purple-400 px-2 py-1 rounded text-xs">EMLA</span>
+            </div>
+          </div>
+          <button class="w-full mt-4 bg-purple-600 hover:bg-purple-500 py-2 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Adicionar Aluno à Turma
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+</body>
+</html>

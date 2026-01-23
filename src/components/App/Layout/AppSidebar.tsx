@@ -16,7 +16,8 @@ import {
   Layers,
   Wrench,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Building2
 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { Tooltip } from '../../ui/Tooltip';
@@ -33,6 +34,7 @@ const operacional = [
   { path: '/app/administrativo', label: 'Administrativo', icon: ClipboardList },
   { path: '/app/alunos', label: 'Alunos', icon: Users },
   { path: '/app/professores', label: 'Professores', icon: GraduationCap },
+  { path: '/app/salas', label: 'Salas', icon: Building2 },
 ];
 
 export function AppSidebar() {
@@ -155,7 +157,7 @@ export function AppSidebar() {
                 }
                 style={isCollapsed ? { background: 'none', border: 'none', boxShadow: 'none', outline: 'none' } : {}}
               >
-                <Icon className={`w-4 h-4 ${isCollapsed ? (item.path === window.location.pathname ? 'text-emerald-400' : 'text-gray-400 hover:text-white') : ''}`} />
+                <Icon className={`w-5 h-5 ${isCollapsed ? (item.path === window.location.pathname ? 'text-emerald-400' : 'text-gray-400 hover:text-white') : ''}`} />
                 {!isCollapsed && <span className="text-sm font-medium">{item.label}</span>}
               </NavLink>
             </Tooltip>

@@ -4,6 +4,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '../../../lib/supabase';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface Unidade {
   id: string;
@@ -61,22 +62,24 @@ export function AppHeader({ unidadeSelecionada, onUnidadeChange, periodoLabel }:
         <div className="flex items-center gap-4">
           {/* Seletor de Unidade - APENAS PARA ADMIN */}
           {isAdmin ? (
-            <div className="flex items-center gap-2 bg-slate-800/50 rounded-xl px-3 py-2">
+            <div className="flex items-center gap-2">
               <MapPin className="w-4 h-4 text-gray-500" />
-              <select
+              <Select
                 value={unidadeSelecionada || 'consolidado'}
-                onChange={(e) => onUnidadeChange(e.target.value === 'consolidado' ? null : e.target.value)}
-                className="bg-transparent text-sm text-white border-none outline-none cursor-pointer"
+                onValueChange={(value) => onUnidadeChange(value === 'consolidado' ? null : value)}
               >
-                <option value="consolidado" className="bg-slate-900">
-                  Consolidado
-                </option>
-                {unidades.map((u) => (
-                  <option key={u.id} value={u.id} className="bg-slate-900">
-                    {u.nome}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="w-[180px] bg-slate-800/50 border-slate-700">
+                  <SelectValue placeholder="Selecione..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="consolidado">Consolidado</SelectItem>
+                  {unidades.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           ) : (
             /* Usuário de unidade - mostra unidade fixa */

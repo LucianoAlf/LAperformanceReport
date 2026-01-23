@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Modal Editar Sala - Wireframe</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body {
+      background: rgba(15, 23, 42, 0.95);
+      color: #e2e8f0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+  </style>
+</head>
+<body class="p-8 flex items-center justify-center min-h-screen">
+  
+  <!-- Modal Container -->
+  <div class="w-full max-w-3xl bg-slate-800 rounded-2xl shadow-2xl overflow-hidden">
+    
+    <!-- Modal Header -->
+    <div class="bg-gradient-to-r from-purple-600 to-pink-600 p-6">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-4">
+          <div class="w-14 h-14 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center">
+            <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
+            </svg>
+          </div>
+          <div>
+            <h2 class="text-2xl font-bold text-white">Editar Sala</h2>
+            <p class="text-purple-100 text-sm">Configure a infraestrutura para a agenda MusiClass.</p>
+          </div>
+        </div>
+        <button class="text-white hover:bg-white/10 p-2 rounded-lg transition">
+          <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Modal Body -->
+    <div class="p-6 space-y-6 max-h-[70vh] overflow-y-auto">
+      
+      <!-- Seção: Informações Gerais -->
+      <div>
+        <div class="flex items-center gap-2 mb-4">
+          <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+          </svg>
+          <h3 class="text-sm font-semibold text-purple-400 uppercase tracking-wide">Informações Gerais</h3>
+        </div>
+
+        <!-- Nome da Sala -->
+        <div class="mb-4">
+          <label class="block text-sm font-medium text-slate-300 mb-2">
+            Nome Identificador da Sala *
+          </label>
+          <input 
+            type="text" 
+            value="Sala 1 - Piano"
+            class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 transition"
+          >
+        </div>
+
+        <!-- Unidade e Tipo -->
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">
+              Unidade MusiClass *
+            </label>
+            <select class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-purple-500 transition">
+              <option>EMLA Campo Grande</option>
+              <option>LAMK Recreio</option>
+              <option>LAMK Barra</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">
+              Tipo de Sala *
+            </label>
+            <select class="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-purple-500 transition">
+              <option>Piano / Teclado</option>
+              <option>Bateria / Percussão</option>
+              <option>Cordas (Violão, Guitarra, Baixo)</option>
+              <option>Sopro (Flauta, Saxofone)</option>
+              <option>Canto / Vocal</option>
+              <option>Teoria Musical</option>
+              <option>Multiuso / Coringa</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Seção: Capacidade e Operacional -->
+      <div>
+        <div class="flex items-center gap-2 mb-4">
+          <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path>
+          </svg>
+          <h3 class="text-sm font-semibold text-purple-400 uppercase tracking-wide">Capacidade e Operacional</h3>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">
+              Capacidade Máxima (Alunos) *
+            </label>
+            <div class="relative">
+              <div class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                </svg>
+              </div>
+              <input 
+                type="number" 
+                value="3"
+                min="1"
+                max="20"
+                class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-12 pr-4 py-3 text-white focus:outline-none focus:border-purple-500 transition"
+              >
+            </div>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-300 mb-2">
+              Buffer Operacional (Minutos) *
+            </label>
+            <div class="relative">
+              <div class="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+              </div>
+              <input 
+                type="number" 
+                value="10"
+                min="0"
+                max="60"
+                step="5"
+                class="w-full bg-slate-900 border border-slate-700 rounded-xl pl-12 pr-4 py-3 text-white focus:outline-none focus:border-purple-500 transition"
+              >
+            </div>
+            <p class="text-xs text-slate-500 mt-1">*Tempo mínimo de intervalo entre aulas nesta sala</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Seção: Recursos e Inventário -->
+      <div>
+        <div class="flex items-center gap-2 mb-4">
+          <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+          </svg>
+          <h3 class="text-sm font-semibold text-purple-400 uppercase tracking-wide">Recursos e Inventário</h3>
+        </div>
+
+        <!-- Input para adicionar recursos -->
+        <div class="mb-3">
+          <div class="flex gap-2">
+            <input 
+              type="text" 
+              placeholder="Ex: Piano de Cauda, Ar Condicionado, Amplificador..."
+              class="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:border-purple-500 transition"
+            >
+            <button class="bg-purple-600 hover:bg-purple-500 px-6 py-3 rounded-xl text-sm font-medium transition flex items-center gap-2 whitespace-nowrap">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+              </svg>
+              Adicionar
+            </button>
+          </div>
+        </div>
+
+        <!-- Lista de recursos adicionados -->
+        <div class="flex flex-wrap gap-2">
+          <span class="bg-slate-700 text-slate-200 px-3 py-2 rounded-lg text-sm flex items-center gap-2">
+            Piano de Cauda
+            <button class="text-red-400 hover:text-red-300 transition">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+            </button>
+          </span>
+          <span class="bg-slate-700 text-slate-200 px-3 py-2 rounded-lg text-sm flex items-center gap-2">
+            Ar Condicionado
+            <button class="text-red-400 hover:text-red-300 transition">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+            </button>
+          </span>
+          <span class="bg-slate-700 text-slate-200 px-3 py-2 rounded-lg text-sm flex items-center gap-2">
+            Amplificador
+            <button class="text-red-400 hover:text-red-300 transition">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+            </button>
+          </span>
+          <span class="bg-slate-700 text-slate-200 px-3 py-2 rounded-lg text-sm flex items-center gap-2">
+            Estante de Partitura
+            <button class="text-red-400 hover:text-red-300 transition">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+            </button>
+          </span>
+        </div>
+      </div>
+
+      <!-- Seção: Configurações Especiais -->
+      <div>
+        <div class="flex items-center gap-2 mb-4">
+          <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+          </svg>
+          <h3 class="text-sm font-semibold text-purple-400 uppercase tracking-wide">Configurações Especiais</h3>
+        </div>
+
+        <!-- Checkbox Sala Coringa -->
+        <label class="flex items-start gap-3 p-4 bg-slate-900 border border-slate-700 rounded-xl cursor-pointer hover:border-emerald-500/50 transition">
+          <input 
+            type="checkbox" 
+            class="mt-1 w-5 h-5 rounded border-slate-600 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-slate-900"
+          >
+          <div>
+            <div class="font-medium text-white mb-1">✨ Sala Coringa</div>
+            <p class="text-sm text-slate-400">Esta sala pode ser usada para múltiplos tipos de aula (Piano, Canto, Teoria, etc.)</p>
+          </div>
+        </label>
+      </div>
+
+      <!-- Seção: Horários de Funcionamento (Opcional - pode ser adicionado depois) -->
+      <div class="bg-slate-900/50 border border-slate-700 rounded-xl p-4">
+        <div class="flex items-center gap-2 mb-2">
+          <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+          <h4 class="text-sm font-medium text-blue-400">Horários de Funcionamento</h4>
+        </div>
+        <p class="text-xs text-slate-400">
+          Os horários disponíveis para esta sala serão baseados nos horários gerais da unidade. Você pode configurar restrições específicas posteriormente.
+        </p>
+      </div>
+
+    </div>
+
+    <!-- Modal Footer -->
+    <div class="bg-slate-900 border-t border-slate-700 p-6 flex items-center justify-between">
+      <button class="px-6 py-3 rounded-xl text-sm font-medium text-slate-300 hover:bg-slate-800 transition">
+        Cancelar
+      </button>
+      <button class="bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 px-8 py-3 rounded-xl text-sm font-medium transition flex items-center gap-2">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+        </svg>
+        Salvar Alterações
+      </button>
+    </div>
+
+  </div>
+
+</body>
+</html>

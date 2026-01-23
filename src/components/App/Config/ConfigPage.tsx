@@ -1,13 +1,20 @@
 import { useState, useEffect } from 'react';
-import { Settings, Save, Plus, Trash2, RefreshCw, Building2, Users, Tag, Megaphone } from 'lucide-react';
+import { Settings, Save, Plus, Trash2, RefreshCw, Building2, Users, Tag, Megaphone, Clock } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+
+interface HorarioFuncionamento {
+  segunda_sexta: { inicio: string; fim: string };
+  sabado: { inicio: string; fim: string };
+  domingo: { fechado: boolean; inicio?: string; fim?: string };
+}
 
 interface Unidade {
   id: string;
   nome: string;
   endereco: string | null;
   telefone: string | null;
+  horario_funcionamento: HorarioFuncionamento | null;
 }
 
 interface CanalOrigem {
@@ -89,6 +96,7 @@ export function ConfigPage() {
             nome: unidade.nome,
             endereco: unidade.endereco,
             telefone: unidade.telefone,
+            horario_funcionamento: unidade.horario_funcionamento,
           }).eq('id', id);
         }
       }
@@ -100,6 +108,36 @@ export function ConfigPage() {
     } finally {
       setSaving(false);
     }
+  }
+
+  // Handler para horário de funcionamento
+  function handleHorarioChange(
+    unidadeId: string, 
+    periodo: 'segunda_sexta' | 'sabado' | 'domingo', 
+    campo: 'inicio' | 'fim' | 'fechado', 
+    valor: string | boolean
+  ) {
+    setUnidades(prev => prev.map(u => {
+      if (u.id !== unidadeId) return u;
+      
+      const horarioAtual = u.horario_funcionamento || {
+        segunda_sexta: { inicio: '08:00', fim: '21:00' },
+        sabado: { inicio: '08:00', fim: '16:00' },
+        domingo: { fechado: true }
+      };
+
+      return {
+        ...u,
+        horario_funcionamento: {
+          ...horarioAtual,
+          [periodo]: {
+            ...horarioAtual[periodo],
+            [campo]: valor
+          }
+        }
+      };
+    }));
+    setEditedUnidades(prev => new Set(prev).add(unidadeId));
   }
 
   // Handlers para Canais
@@ -255,41 +293,123 @@ export function ConfigPage() {
                   className="flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm"
                 >
                   <Save size={16} />
-                  Salvar
+                  Salvar Alterações
                 </button>
               )}
             </div>
-            <div className="space-y-3">
-              {unidades.map(u => (
-                <div key={u.id} className={`grid grid-cols-4 gap-4 p-3 rounded-lg ${
-                  editedUnidades.has(u.id) ? 'bg-amber-500/10 border border-amber-500/30' : 'bg-slate-900/50'
-                }`}>
-                  <input
-                    type="text"
-                    value={u.nome}
-                    onChange={(e) => handleUnidadeChange(u.id, 'nome', e.target.value)}
-                    placeholder="Nome"
-                    className="bg-transparent border border-slate-700 rounded px-3 py-2 text-white text-sm"
-                  />
-                  <input
-                    type="text"
-                    value={u.endereco || ''}
-                    onChange={(e) => handleUnidadeChange(u.id, 'endereco', e.target.value)}
-                    placeholder="Endereço"
-                    className="bg-transparent border border-slate-700 rounded px-3 py-2 text-slate-300 text-sm"
-                  />
-                  <input
-                    type="text"
-                    value={u.telefone || ''}
-                    onChange={(e) => handleUnidadeChange(u.id, 'telefone', e.target.value)}
-                    placeholder="Telefone"
-                    className="bg-transparent border border-slate-700 rounded px-3 py-2 text-slate-300 text-sm"
-                  />
-                  <div className="flex items-center justify-center">
-                    <span className="text-xs text-slate-500 uppercase">{u.id}</span>
+            <div className="space-y-6">
+              {unidades.map(u => {
+                const horario = u.horario_funcionamento || {
+                  segunda_sexta: { inicio: '08:00', fim: '21:00' },
+                  sabado: { inicio: '08:00', fim: '16:00' },
+                  domingo: { fechado: true }
+                };
+                
+                return (
+                  <div key={u.id} className={`p-4 rounded-xl ${
+                    editedUnidades.has(u.id) ? 'bg-amber-500/10 border border-amber-500/30' : 'bg-slate-900/50 border border-slate-700/50'
+                  }`}>
+                    {/* Dados básicos da unidade */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                      <div>
+                        <label className="text-xs text-slate-400 uppercase mb-1 block">Nome</label>
+                        <input
+                          type="text"
+                          value={u.nome}
+                          onChange={(e) => handleUnidadeChange(u.id, 'nome', e.target.value)}
+                          placeholder="Nome"
+                          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-slate-400 uppercase mb-1 block">Endereço</label>
+                        <input
+                          type="text"
+                          value={u.endereco || ''}
+                          onChange={(e) => handleUnidadeChange(u.id, 'endereco', e.target.value)}
+                          placeholder="Endereço"
+                          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-300 text-sm"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs text-slate-400 uppercase mb-1 block">Telefone</label>
+                        <input
+                          type="text"
+                          value={u.telefone || ''}
+                          onChange={(e) => handleUnidadeChange(u.id, 'telefone', e.target.value)}
+                          placeholder="Telefone"
+                          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-300 text-sm"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Horário de Funcionamento */}
+                    <div className="border-t border-slate-700/50 pt-4">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Clock size={16} className="text-violet-400" />
+                        <span className="text-sm font-medium text-white">Horário de Funcionamento</span>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        {/* Segunda a Sexta */}
+                        <div className="bg-slate-800/50 rounded-lg p-3">
+                          <span className="text-xs text-slate-400 uppercase block mb-2">Segunda a Sexta</span>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="time"
+                              value={horario.segunda_sexta?.inicio || '08:00'}
+                              onChange={(e) => handleHorarioChange(u.id, 'segunda_sexta', 'inicio', e.target.value)}
+                              className="flex-1 bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white text-sm"
+                            />
+                            <span className="text-slate-500">às</span>
+                            <input
+                              type="time"
+                              value={horario.segunda_sexta?.fim || '21:00'}
+                              onChange={(e) => handleHorarioChange(u.id, 'segunda_sexta', 'fim', e.target.value)}
+                              className="flex-1 bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white text-sm"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Sábado */}
+                        <div className="bg-slate-800/50 rounded-lg p-3">
+                          <span className="text-xs text-slate-400 uppercase block mb-2">Sábado</span>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="time"
+                              value={horario.sabado?.inicio || '08:00'}
+                              onChange={(e) => handleHorarioChange(u.id, 'sabado', 'inicio', e.target.value)}
+                              className="flex-1 bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white text-sm"
+                            />
+                            <span className="text-slate-500">às</span>
+                            <input
+                              type="time"
+                              value={horario.sabado?.fim || '16:00'}
+                              onChange={(e) => handleHorarioChange(u.id, 'sabado', 'fim', e.target.value)}
+                              className="flex-1 bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white text-sm"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Domingo */}
+                        <div className="bg-slate-800/50 rounded-lg p-3">
+                          <span className="text-xs text-slate-400 uppercase block mb-2">Domingo</span>
+                          <div className="flex items-center gap-2">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={horario.domingo?.fechado !== false}
+                                onChange={(e) => handleHorarioChange(u.id, 'domingo', 'fechado', e.target.checked)}
+                                className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-violet-500 focus:ring-violet-500"
+                              />
+                              <span className="text-sm text-slate-300">Fechado</span>
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

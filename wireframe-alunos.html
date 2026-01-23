@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe - Página de Alunos | LA Music School</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'sans-serif'] }
+        }
+      }
+    }
+  </script>
+  <style>
+    @keyframes pulse-red { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .pulse-alert { animation: pulse-red 1s ease-in-out infinite; }
+  </style>
+</head>
+<body class="bg-slate-900 text-white font-sans min-h-screen">
+  
+  <!-- Header -->
+  <header class="bg-slate-800 border-b border-slate-700 px-6 py-4">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-4">
+        <div class="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold">Gestão de Alunos</h1>
+          <p class="text-sm text-slate-400">Controle completo de alunos, turmas e horários</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <select class="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm">
+          <option>Barra</option>
+          <option>Campo Grande</option>
+          <option>Recreio</option>
+        </select>
+        <div class="bg-purple-600 px-4 py-2 rounded-lg text-sm font-medium">Jan/2026</div>
+      </div>
+    </div>
+  </header>
+
+  <main class="p-6 space-y-6">
+    
+    <!-- SEÇÃO 1: KPI CARDS -->
+    <section class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+      <!-- Alunos Ativos -->
+      <div class="bg-slate-800 border border-slate-700 rounded-xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-slate-400 text-xs font-medium uppercase">Alunos Ativos</span>
+          <div class="w-8 h-8 bg-emerald-500/20 rounded-lg flex items-center justify-center">
+            <svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+            </svg>
+          </div>
+        </div>
+        <p class="text-3xl font-bold text-white">204</p>
+        <p class="text-xs text-slate-500 mt-1">na unidade</p>
+      </div>
+
+      <!-- Pagantes -->
+      <div class="bg-slate-800 border border-slate-700 rounded-xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-slate-400 text-xs font-medium uppercase">Pagantes</span>
+          <div class="w-8 h-8 bg-yellow-500/20 rounded-lg flex items-center justify-center">
+            <svg class="w-4 h-4 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+          </div>
+        </div>
+        <p class="text-3xl font-bold text-white">198</p>
+        <p class="text-xs text-slate-500 mt-1">6 bolsistas</p>
+      </div>
+
+      <!-- Média Alunos/Turma -->
+      <div class="bg-slate-800 border border-slate-700 rounded-xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-slate-400 text-xs font-medium uppercase">Média/Turma</span>
+          <div class="w-8 h-8 bg-blue-500/20 rounded-lg flex items-center justify-center">
+            <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+            </svg>
+          </div>
+        </div>
+        <p class="text-3xl font-bold text-white">1.8</p>
+        <p class="text-xs text-slate-500 mt-1">alunos/turma</p>
+      </div>
+
+      <!-- Ticket Médio -->
+      <div class="bg-slate-800 border border-slate-700 rounded-xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-slate-400 text-xs font-medium uppercase">Ticket Médio</span>
+          <div class="w-8 h-8 bg-green-500/20 rounded-lg flex items-center justify-center">
+            <svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+          </div>
+        </div>
+        <p class="text-3xl font-bold text-white">R$ 419</p>
+        <p class="text-xs text-slate-500 mt-1">mensal</p>
+      </div>
+
+      <!-- LTV Médio -->
+      <div class="bg-slate-800 border border-slate-700 rounded-xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-slate-400 text-xs font-medium uppercase">LTV Médio</span>
+          <div class="w-8 h-8 bg-purple-500/20 rounded-lg flex items-center justify-center">
+            <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+          </div>
+        </div>
+        <p class="text-3xl font-bold text-white">15</p>
+        <p class="text-xs text-slate-500 mt-1">meses</p>
+      </div>
+
+      <!-- Turmas -->
+      <div class="bg-slate-800 border border-slate-700 rounded-xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-slate-400 text-xs font-medium uppercase">Turmas</span>
+          <div class="w-8 h-8 bg-cyan-500/20 rounded-lg flex items-center justify-center">
+            <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/>
+            </svg>
+          </div>
+        </div>
+        <p class="text-3xl font-bold text-white">113</p>
+        <p class="text-xs text-slate-500 mt-1">ativas</p>
+      </div>
+
+      <!-- ALERTA: Alunos Sozinhos -->
+      <div class="bg-red-900/30 border border-red-500/50 rounded-xl p-4 pulse-alert">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-red-400 text-xs font-medium uppercase">⚠️ Sozinhos</span>
+          <div class="w-8 h-8 bg-red-500/20 rounded-lg flex items-center justify-center">
+            <svg class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+          </div>
+        </div>
+        <p class="text-3xl font-bold text-red-400">42</p>
+        <p class="text-xs text-red-300 mt-1">turmas com 1 aluno</p>
+      </div>
+    </section>
+
+    <!-- SEÇÃO 2: TABS DE NAVEGAÇÃO -->
+    <section class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
+      <div class="flex border-b border-slate-700">
+        <button class="px-6 py-3 text-sm font-medium bg-purple-600 text-white border-b-2 border-purple-400">
+          👥 Lista de Alunos
+        </button>
+        <button class="px-6 py-3 text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-700/50 transition">
+          📅 Gestão de Turmas
+        </button>
+        <button class="px-6 py-3 text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-700/50 transition">
+          📊 Distribuição
+        </button>
+        <button class="px-6 py-3 text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-700/50 transition">
+          📤 Importar Alunos
+        </button>
+      </div>
+
+      <!-- FILTROS -->
+      <div class="p-4 bg-slate-800/50 border-b border-slate-700">
+        <div class="flex flex-wrap gap-3">
+          <!-- Busca por nome -->
+          <div class="flex-1 min-w-[200px]">
+            <input type="text" placeholder="🔍 Buscar por nome do aluno..." 
+                   class="w-full bg-slate-700 border border-slate-600 rounded-lg px-4 py-2 text-sm placeholder-slate-400 focus:outline-none focus:border-purple-500">
+          </div>
+          
+          <!-- Filtro Professor -->
+          <select class="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm min-w-[150px]">
+            <option value="">Professor</option>
+            <option>Matheus Lana</option>
+            <option>Fábio Amorim</option>
+            <option>Ramon Pina</option>
+          </select>
+
+          <!-- Filtro Curso -->
+          <select class="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm min-w-[120px]">
+            <option value="">Curso</option>
+            <option>Guitarra</option>
+            <option>Piano</option>
+            <option>Bateria</option>
+            <option>Violão</option>
+            <option>Canto</option>
+          </select>
+
+          <!-- Filtro Dia -->
+          <select class="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm min-w-[120px]">
+            <option value="">Dia</option>
+            <option>Segunda</option>
+            <option>Terça</option>
+            <option>Quarta</option>
+            <option>Quinta</option>
+            <option>Sexta</option>
+            <option>Sábado</option>
+          </select>
+
+          <!-- Filtro Horário -->
+          <select class="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm min-w-[120px]">
+            <option value="">Horário</option>
+            <option>08:00</option>
+            <option>09:00</option>
+            <option>10:00</option>
+            <option>14:00</option>
+            <option>15:00</option>
+            <option>16:00</option>
+            <option>17:00</option>
+            <option>18:00</option>
+            <option>19:00</option>
+            <option>20:00</option>
+          </select>
+
+          <!-- Filtro Status -->
+          <select class="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm min-w-[120px]">
+            <option value="">Status</option>
+            <option>Ativo</option>
+            <option>Trancado</option>
+            <option>Inativo</option>
+          </select>
+
+          <!-- Filtro Tipo -->
+          <select class="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm min-w-[120px]">
+            <option value="">Tipo</option>
+            <option>Regular</option>
+            <option>Bolsista Integral</option>
+            <option>Bolsista Parcial</option>
+            <option>Banda</option>
+          </select>
+
+          <!-- Filtro Escola -->
+          <select class="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm min-w-[100px]">
+            <option value="">Escola</option>
+            <option>EMLA</option>
+            <option>LAMK</option>
+          </select>
+
+          <!-- Filtro Turma -->
+          <select class="bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-sm min-w-[100px]">
+            <option value="">Turma</option>
+            <option>1 aluno (sozinho)</option>
+            <option>2 alunos</option>
+            <option>3+ alunos</option>
+          </select>
+
+          <!-- Limpar filtros -->
+          <button class="bg-slate-600 hover:bg-slate-500 px-4 py-2 rounded-lg text-sm transition">
+            🔄 Limpar
+          </button>
+
+          <!-- Novo Aluno -->
+          <button class="bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+            Novo Aluno
+          </button>
+        </div>
+      </div>
+
+      <!-- TABELA DE ALUNOS -->
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-700/50">
+            <tr class="text-left text-slate-400 text-xs uppercase">
+              <th class="px-4 py-3 font-medium">#</th>
+              <th class="px-4 py-3 font-medium">Nome</th>
+              <th class="px-4 py-3 font-medium">Escola</th>
+              <th class="px-4 py-3 font-medium">Professor</th>
+              <th class="px-4 py-3 font-medium">Curso</th>
+              <th class="px-4 py-3 font-medium">Dia</th>
+              <th class="px-4 py-3 font-medium">Horário</th>
+              <th class="px-4 py-3 font-medium">Sala</th>
+              <th class="px-4 py-3 font-medium">Turma</th>
+              <th class="px-4 py-3 font-medium">Parcela</th>
+              <th class="px-4 py-3 font-medium">Tempo</th>
+              <th class="px-4 py-3 font-medium">Status</th>
+              <th class="px-4 py-3 font-medium text-right">Ações</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-700/50">
+            <!-- Aluno 1 - Normal -->
+            <tr class="hover:bg-slate-700/30 transition">
+              <td class="px-4 py-3 text-slate-500">1</td>
+              <td class="px-4 py-3">
+                <div class="flex items-center gap-2">
+                  <span class="font-medium text-white">João Silva Santos</span>
+                  <span class="text-xs bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded">Veterano</span>
+                </div>
+              </td>
+              <td class="px-4 py-3">
+                <span class="bg-purple-500/20 text-purple-400 px-2 py-1 rounded text-xs font-medium">EMLA</span>
+              </td>
+              <td class="px-4 py-3 text-slate-300">Matheus Lana</td>
+              <td class="px-4 py-3 text-slate-300">Guitarra</td>
+              <td class="px-4 py-3 text-slate-300">Segunda</td>
+              <td class="px-4 py-3 text-slate-300">15:00</td>
+              <td class="px-4 py-3 text-slate-300">Sala 1</td>
+              <td class="px-4 py-3">
+                <span class="bg-blue-500/20 text-blue-400 px-2 py-1 rounded text-xs">3 alunos</span>
+              </td>
+              <td class="px-4 py-3 text-slate-300">R$ 450</td>
+              <td class="px-4 py-3 text-slate-300">24 meses</td>
+              <td class="px-4 py-3">
+                <span class="bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded text-xs">Ativo</span>
+              </td>
+              <td class="px-4 py-3 text-right">
+                <div class="flex items-center justify-end gap-1">
+                  <button class="p-1.5 hover:bg-slate-600 rounded transition" title="Ver histórico">
+                    <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                  </button>
+                  <button class="p-1.5 hover:bg-slate-600 rounded transition" title="Editar">
+                    <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                    </svg>
+                  </button>
+                  <button class="p-1.5 hover:bg-slate-600 rounded transition" title="Excluir">
+                    <svg class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                  </button>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Aluno 2 - ALERTA: Sozinho na turma -->
+            <tr class="hover:bg-slate-700/30 transition bg-red-900/10">
+              <td class="px-4 py-3 text-slate-500">2</td>
+              <td class="px-4 py-3">
+                <div class="flex items-center gap-2">
+                  <span class="font-medium text-white">Maria Oliveira</span>
+                </div>
+              </td>
+              <td class="px-4 py-3">
+                <span class="bg-orange-500/20 text-orange-400 px-2 py-1 rounded text-xs font-medium">LAMK</span>
+              </td>
+              <td class="px-4 py-3 text-slate-300">Fábio Amorim</td>
+              <td class="px-4 py-3 text-slate-300">Piano</td>
+              <td class="px-4 py-3 text-slate-300">Terça</td>
+              <td class="px-4 py-3 text-slate-300">16:00</td>
+              <td class="px-4 py-3 text-slate-300">Sala 2</td>
+              <td class="px-4 py-3">
+                <span class="bg-red-500/30 text-red-400 px-2 py-1 rounded text-xs font-medium pulse-alert">⚠️ 1 aluno</span>
+              </td>
+              <td class="px-4 py-3 text-slate-300">R$ 380</td>
+              <td class="px-4 py-3 text-slate-300">3 meses</td>
+              <td class="px-4 py-3">
+                <span class="bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded text-xs">Ativo</span>
+              </td>
+              <td class="px-4 py-3 text-right">
+                <div class="flex items-center justify-end gap-1">
+                  <button class="p-1.5 hover:bg-slate-600 rounded transition" title="Ver histórico">
+                    <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                  </button>
+                  <button class="p-1.5 hover:bg-slate-600 rounded transition" title="Editar">
+                    <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                    </svg>
+                  </button>
+                  <button class="p-1.5 hover:bg-slate-600 rounded transition" title="Excluir">
+                    <svg class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                  </button>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Aluno 3 - Bolsista -->
+            <tr class="hover:bg-slate-700/30 transition">
+              <td class="px-4 py-3 text-slate-500">3</td>
+              <td class="px-4 py-3">
+                <div class="flex items-center gap-2">
+                  <span class="font-medium text-white">Pedro Costa</span>
+                  <span class="text-xs bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded">Bolsista</span>
+                </div>
+              </td>
+              <td class="px-4 py-3">
+                <span class="bg-purple-500/20 text-purple-400 px-2 py-1 rounded text-xs font-medium">EMLA</span>
+              </td>
+              <td class="px-4 py-3 text-slate-300">Ramon Pina</td>
+              <td class="px-4 py-3 text-slate-300">Bateria</td>
+              <td class="px-4 py-3 text-slate-300">Quarta</td>
+              <td class="px-4 py-3 text-slate-300">17:00</td>
+              <td class="px-4 py-3 text-slate-300">Sala 3</td>
+              <td class="px-4 py-3">
+                <span class="bg-blue-500/20 text-blue-400 px-2 py-1 rounded text-xs">2 alunos</span>
+              </td>
+              <td class="px-4 py-3 text-slate-300">R$ 0</td>
+              <td class="px-4 py-3 text-slate-300">12 meses</td>
+              <td class="px-4 py-3">
+                <span class="bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded text-xs">Ativo</span>
+              </td>
+              <td class="px-4 py-3 text-right">
+                <div class="flex items-center justify-end gap-1">
+                  <button class="p-1.5 hover:bg-slate-600 rounded transition" title="Ver histórico">
+                    <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                  </button>
+                  <button class="p-1.5 hover:bg-slate-600 rounded transition" title="Editar">
+                    <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                    </svg>
+                  </button>
+                  <button class="p-1.5 hover:bg-slate-600 rounded transition" title="Excluir">
+                    <svg class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                  </button>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Aluno 4 - Trancado -->
+            <tr class="hover:bg-slate-700/30 transition opacity-60">
+              <td class="px-4 py-3 text-slate-500">4</td>
+              <td class="px-4 py-3">
+                <div class="flex items-center gap-2">
+                  <span class="font-medium text-white">Ana Beatriz</span>
+                </div>
+              </td>
+              <td class="px-4 py-3">
+                <span class="bg-orange-500/20 text-orange-400 px-2 py-1 rounded text-xs font-medium">LAMK</span>
+              </td>
+              <td class="px-4 py-3 text-slate-300">Matheus Lana</td>
+              <td class="px-4 py-3 text-slate-300">Violão</td>
+              <td class="px-4 py-3 text-slate-300">Quinta</td>
+              <td class="px-4 py-3 text-slate-300">18:00</td>
+              <td class="px-4 py-3 text-slate-300">Sala 1</td>
+              <td class="px-4 py-3">
+                <span class="bg-slate-500/20 text-slate-400 px-2 py-1 rounded text-xs">-</span>
+              </td>
+              <td class="px-4 py-3 text-slate-300">R$ 420</td>
+              <td class="px-4 py-3 text-slate-300">8 meses</td>
+              <td class="px-4 py-3">
+                <span class="bg-yellow-500/20 text-yellow-400 px-2 py-1 rounded text-xs">Trancado</span>
+              </td>
+              <td class="px-4 py-3 text-right">
+                <div class="flex items-center justify-end gap-1">
+                  <button class="p-1.5 hover:bg-slate-600 rounded transition" title="Ver histórico">
+                    <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                    </svg>
+                  </button>
+                  <button class="p-1.5 hover:bg-slate-600 rounded transition" title="Editar">
+                    <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                    </svg>
+                  </button>
+                  <button class="p-1.5 hover:bg-slate-600 rounded transition" title="Excluir">
+                    <svg class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                    </svg>
+                  </button>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Aluno 5 - Em edição inline -->
+            <tr class="bg-purple-900/20 border-l-4 border-purple-500">
+              <td class="px-4 py-3 text-slate-500">5</td>
+              <td class="px-4 py-3">
+                <input type="text" value="Luciano Alf" class="bg-slate-700 border border-purple-500 rounded px-2 py-1 text-sm w-full">
+              </td>
+              <td class="px-4 py-3">
+                <span class="bg-purple-500/20 text-purple-400 px-2 py-1 rounded text-xs font-medium">EMLA</span>
+              </td>
+              <td class="px-4 py-3">
+                <select class="bg-slate-700 border border-purple-500 rounded px-2 py-1 text-sm">
+                  <option>Matheus Lana</option>
+                  <option>Fábio Amorim</option>
+                  <option>Ramon Pina</option>
+                </select>
+              </td>
+              <td class="px-4 py-3">
+                <select class="bg-slate-700 border border-purple-500 rounded px-2 py-1 text-sm">
+                  <option>Guitarra</option>
+                  <option>Piano</option>
+                  <option>Bateria</option>
+                </select>
+              </td>
+              <td class="px-4 py-3">
+                <select class="bg-slate-700 border border-purple-500 rounded px-2 py-1 text-sm">
+                  <option>Segunda</option>
+                  <option>Terça</option>
+                  <option>Quarta</option>
+                </select>
+              </td>
+              <td class="px-4 py-3">
+                <select class="bg-slate-700 border border-purple-500 rounded px-2 py-1 text-sm">
+                  <option>15:00</option>
+                  <option>16:00</option>
+                  <option>17:00</option>
+                </select>
+              </td>
+              <td class="px-4 py-3">
+                <select class="bg-slate-700 border border-purple-500 rounded px-2 py-1 text-sm">
+                  <option>Sala 1</option>
+                  <option>Sala 2</option>
+                  <option>Sala 3</option>
+                </select>
+              </td>
+              <td class="px-4 py-3">
+                <span class="bg-blue-500/20 text-blue-400 px-2 py-1 rounded text-xs">3 alunos</span>
+              </td>
+              <td class="px-4 py-3">
+                <input type="text" value="450" class="bg-slate-700 border border-purple-500 rounded px-2 py-1 text-sm w-20">
+              </td>
+              <td class="px-4 py-3 text-slate-300">1 mês</td>
+              <td class="px-4 py-3">
+                <select class="bg-slate-700 border border-purple-500 rounded px-2 py-1 text-sm">
+                  <option>Ativo</option>
+                  <option>Trancado</option>
+                  <option>Inativo</option>
+                </select>
+              </td>
+              <td class="px-4 py-3 text-right">
+                <div class="flex items-center justify-end gap-1">
+                  <button class="p-1.5 bg-emerald-600 hover:bg-emerald-500 rounded transition" title="Salvar">
+                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                    </svg>
+                  </button>
+                  <button class="p-1.5 bg-slate-600 hover:bg-slate-500 rounded transition" title="Cancelar">
+                    <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                  </button>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Paginação -->
+      <div class="p-4 border-t border-slate-700 flex items-center justify-between">
+        <p class="text-sm text-slate-400">Mostrando 1-50 de 204 alunos</p>
+        <div class="flex items-center gap-2">
+          <button class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm transition">Anterior</button>
+          <button class="px-3 py-1.5 bg-purple-600 rounded text-sm">1</button>
+          <button class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm transition">2</button>
+          <button class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm transition">3</button>
+          <button class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm transition">4</button>
+          <button class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm transition">5</button>
+          <button class="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 rounded text-sm transition">Próximo</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- MODAL DE ALERTA (exemplo) -->
+    <div class="fixed bottom-6 right-6 bg-yellow-900/90 border border-yellow-500/50 rounded-xl p-4 max-w-sm shadow-2xl">
+      <div class="flex items-start gap-3">
+        <div class="w-10 h-10 bg-yellow-500/20 rounded-lg flex items-center justify-center flex-shrink-0">
+          <svg class="w-5 h-5 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+          </svg>
+        </div>
+        <div>
+          <h4 class="font-semibold text-yellow-400">⚠️ Alerta de Turma</h4>
+          <p class="text-sm text-yellow-200 mt-1">
+            Já existe <strong>1 aluno</strong> nesta turma:<br>
+            <span class="text-white">João Silva</span> (Guitarra, Seg 15h)
+          </p>
+          <p class="text-xs text-yellow-300 mt-2">Deseja cadastrar mesmo assim?</p>
+          <div class="flex gap-2 mt-3">
+            <button class="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-500 rounded text-sm font-medium transition">Sim, cadastrar</button>
+            <button class="px-3 py-1.5 bg-slate-600 hover:bg-slate-500 rounded text-sm transition">Cancelar</button>
+          </div>
+        </div>
+        <button class="text-slate-400 hover:text-white transition">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+  </main>
+
+</body>
+</html>

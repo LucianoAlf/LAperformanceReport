@@ -288,6 +288,27 @@ export function AdministrativoPage() {
         if (error) throw error;
       }
 
+      // Atualizar status do aluno quando for trancamento
+      if (data.aluno_nome && data.tipo === 'trancamento') {
+        // Buscar o aluno pelo nome para obter o ID
+        const { data: alunoData } = await supabase
+          .from('alunos')
+          .select('id')
+          .eq('nome', data.aluno_nome)
+          .single();
+        
+        if (alunoData) {
+          const { error: alunoError } = await supabase
+            .from('alunos')
+            .update({ status: 'trancado' })
+            .eq('id', alunoData.id);
+          
+          if (alunoError) {
+            console.error('Erro ao atualizar status do aluno:', alunoError);
+          }
+        }
+      }
+
       await loadData();
       setEditingItem(null);
       return true;
