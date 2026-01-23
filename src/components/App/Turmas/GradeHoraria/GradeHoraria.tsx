@@ -403,7 +403,7 @@ export function GradeHoraria({
                 <SelectValue placeholder="Unidade" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="todos">Todas</SelectItem>
+                <SelectItem value="todos">Todas unid.</SelectItem>
                 {unidades.map(u => (
                   <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>
                 ))}
@@ -420,7 +420,7 @@ export function GradeHoraria({
               <SelectValue placeholder="Sala" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="todos">Todas as salas</SelectItem>
+              <SelectItem value="todos">Todas salas</SelectItem>
               {salasFiltradas.map(s => (
                 <SelectItem key={s.id} value={s.id.toString()}>{s.nome}</SelectItem>
               ))}
@@ -437,7 +437,7 @@ export function GradeHoraria({
               <SelectValue placeholder="Professor" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="todos">Todos</SelectItem>
+              <SelectItem value="todos">Todos prof.</SelectItem>
               {professores.map(p => (
                 <SelectItem key={p.id} value={p.id.toString()}>{p.nome}</SelectItem>
               ))}
@@ -453,7 +453,7 @@ export function GradeHoraria({
               <SelectValue placeholder="Dia" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="todos">Todos os dias</SelectItem>
+              <SelectItem value="todos">Todos dias</SelectItem>
               {diasSemana.map(d => (
                 <SelectItem key={d} value={d}>{d}</SelectItem>
               ))}

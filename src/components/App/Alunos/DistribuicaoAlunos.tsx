@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, BarChart3, Music, Calendar, Clock } from 'lucide-react';
 import type { Aluno, Turma } from './AlunosPage';
 
 interface DistribuicaoAlunosProps {
@@ -85,7 +85,10 @@ export function DistribuicaoAlunos({ alunos, turmas, professores, cursos }: Dist
       {/* Distribuição por Professor */}
       <section>
         <div className="mb-4">
-          <h3 className="text-lg font-semibold text-white">📊 Distribuição por Professor</h3>
+          <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+            <BarChart3 className="w-5 h-5 text-purple-400" />
+            Distribuição por Professor
+          </h3>
           <p className="text-sm text-slate-400 mt-1">
             Carga de trabalho de cada professor (turmas e alunos totais).
             Use para <span className="text-purple-400 font-medium">equilibrar a distribuição</span> e identificar sobrecarga ou ociosidade.
@@ -118,7 +121,10 @@ export function DistribuicaoAlunos({ alunos, turmas, professores, cursos }: Dist
       {/* Distribuição por Curso */}
       <section>
         <div className="mb-4">
-          <h3 className="text-lg font-semibold text-white">🎵 Distribuição por Curso</h3>
+          <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+            <Music className="w-5 h-5 text-cyan-400" />
+            Distribuição por Curso
+          </h3>
           <p className="text-sm text-slate-400 mt-1">
             Popularidade de cada curso (total de alunos e turmas).
             Use para <span className="text-cyan-400 font-medium">planejar investimentos</span> em instrumentos, materiais e contratação de especialistas.
@@ -146,7 +152,10 @@ export function DistribuicaoAlunos({ alunos, turmas, professores, cursos }: Dist
       {/* Distribuição por Dia */}
       <section>
         <div className="mb-4">
-          <h3 className="text-lg font-semibold text-white">📅 Distribuição por Dia da Semana</h3>
+          <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+            <Calendar className="w-5 h-5 text-emerald-400" />
+            Distribuição por Dia da Semana
+          </h3>
           <p className="text-sm text-slate-400 mt-1">
             Total de alunos por dia somando <span className="text-emerald-400 font-medium">todos os horários</span>.
             Use para identificar dias com maior demanda e equilibrar a grade semanal.
@@ -179,7 +188,10 @@ export function DistribuicaoAlunos({ alunos, turmas, professores, cursos }: Dist
       <section>
         <div className="flex items-start justify-between mb-4">
           <div>
-            <h3 className="text-lg font-semibold text-white">🕐 Distribuição por Horário</h3>
+            <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+              <Clock className="w-5 h-5 text-purple-400" />
+              Distribuição por Horário
+            </h3>
             <p className="text-sm text-slate-400 mt-1">
               Total de alunos por horário somando <span className="text-purple-400 font-medium">todos os dias da semana</span>.
               Use para identificar horários de pico e planejar infraestrutura (salas, professores).

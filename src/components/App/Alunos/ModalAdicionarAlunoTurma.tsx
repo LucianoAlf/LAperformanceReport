@@ -174,22 +174,23 @@ export function ModalAdicionarAlunoTurma({
     if (turmaAtualDoAluno) {
       conflitosDetectados.push({
         tipo: 'horario',
-        mensagem: `${aluno.nome} já tem aula ${turmaAtualDoAluno.dia_semana} às ${turmaAtualDoAluno.horario_inicio} com ${turmaAtualDoAluno.professor_nome}`,
+        mensagem: `${aluno.nome} já tem aula ${turmaAtualDoAluno.dia_semana} às ${turmaAtualDoAluno.horario_inicio} com ${turmaAtualDoAluno.professor_nome}\nO aluno será movido para esta turma e removido da turma anterior.`,
         severidade: 'aviso'
       });
     }
 
-    // Verificar se o aluno já faz o mesmo curso com outro professor
-    const mesmoCursoOutroProfessor = turmasExistentes.find(t =>
+    // Verificar se o aluno já faz o mesmo curso (mesmo com o mesmo professor ou outro)
+    const mesmoCurso = turmasExistentes.find(t =>
       t.ids_alunos?.includes(aluno.id) &&
       t.curso_id === turma.curso_id &&
-      t.professor_id !== turma.professor_id
+      !(t.dia_semana === turma.dia_semana && t.horario_inicio === turma.horario_inicio)
     );
 
-    if (mesmoCursoOutroProfessor) {
+    if (mesmoCurso) {
+      const mesmoProfessor = mesmoCurso.professor_id === turma.professor_id;
       conflitosDetectados.push({
         tipo: 'mesmo_curso',
-        mensagem: `${aluno.nome} já faz ${turma.curso_nome || 'este curso'} com ${mesmoCursoOutroProfessor.professor_nome}`,
+        mensagem: `${aluno.nome} já faz ${turma.curso_nome || 'este curso'} ${mesmoCurso.dia_semana} às ${mesmoCurso.horario_inicio} com ${mesmoCurso.professor_nome}\n⚠️ O aluno será REMOVIDO da turma anterior e MOVIDO para esta turma.`,
         severidade: 'aviso'
       });
     }
@@ -221,19 +222,28 @@ export function ModalAdicionarAlunoTurma({
     setSalvando(true);
 
     try {
-      // Se o aluno tem conflito de horário, remover da turma anterior primeiro
-      const turmaAnterior = turmasExistentes.find(t =>
+      // Verificar se o aluno já está em alguma turma do mesmo curso
+      const turmaAnteriorMesmoCurso = turmasExistentes.find(t =>
+        t.ids_alunos?.includes(alunoSelecionado.id) &&
+        t.curso_id === turma.curso_id &&
+        !(t.dia_semana === turma.dia_semana && t.horario_inicio === turma.horario_inicio)
+      );
+
+      // Verificar se o aluno tem conflito de horário exato
+      const turmaAnteriorMesmoHorario = turmasExistentes.find(t =>
         t.ids_alunos?.includes(alunoSelecionado.id) &&
         t.dia_semana === turma.dia_semana &&
         t.horario_inicio === turma.horario_inicio
       );
 
-      if (turmaAnterior && turmaAnterior.turma_explicita_id) {
-        // Remover da turma anterior (turma explícita)
+      // Remover da turma anterior (mesmo curso OU mesmo horário)
+      const turmaParaRemover = turmaAnteriorMesmoCurso || turmaAnteriorMesmoHorario;
+      
+      if (turmaParaRemover && turmaParaRemover.turma_explicita_id) {
         await supabase
           .from('turmas_alunos')
           .delete()
-          .eq('turma_id', turmaAnterior.turma_explicita_id)
+          .eq('turma_id', turmaParaRemover.turma_explicita_id)
           .eq('aluno_id', alunoSelecionado.id);
       }
 
@@ -271,8 +281,8 @@ export function ModalAdicionarAlunoTurma({
           .insert({
             turma_id: turma.turma_explicita_id,
             aluno_id: alunoSelecionado.id,
-            acao: turmaAnterior ? 'mover' : 'adicionar',
-            turma_origem_id: turmaAnterior?.turma_explicita_id || null,
+            acao: turmaParaRemover ? 'mover' : 'adicionar',
+            turma_origem_id: turmaParaRemover?.turma_explicita_id || null,
             turma_destino_id: turma.turma_explicita_id,
             metadata: {
               conflitos: conflitos.map(c => c.mensagem),

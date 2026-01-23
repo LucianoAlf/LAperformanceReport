@@ -5,6 +5,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { TurmaGrade } from './types';
 import { gerarCorPorId } from '@/lib/horarios';
 import { cn } from '@/lib/utils';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 interface CelulaTurmaProps {
   turma: TurmaGrade;
@@ -52,21 +53,24 @@ export function CelulaTurma({ turma, onClick, draggable = false }: CelulaTurmaPr
   };
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...(draggable ? { ...attributes, ...listeners } : {})}
-      className={cn(
-        'w-full p-1.5 rounded-lg border text-left transition-all relative group',
-        corOcupacao,
-        'hover:scale-[1.02] hover:shadow-lg',
-        'focus:outline-none focus:ring-2 focus:ring-violet-500/50',
-        isDragging && 'opacity-50 scale-95 z-50',
-        draggable && 'cursor-grab active:cursor-grabbing touch-none'
-      )}
-      onClick={handleClick}
-      title={`${turma.professor_nome} - ${turma.sala_nome} (${turma.horario_inicio} - ${turma.horario_fim})`}
+    <Tooltip 
+      content={`${turma.professor_nome} - ${turma.sala_nome} (${turma.horario_inicio} - ${turma.horario_fim})`}
+      side="top"
     >
+      <div
+        ref={setNodeRef}
+        style={style}
+        {...(draggable ? { ...attributes, ...listeners } : {})}
+        className={cn(
+          'w-full p-1.5 rounded-lg border text-left transition-all relative group',
+          corOcupacao,
+          'hover:scale-[1.02] hover:shadow-lg',
+          'focus:outline-none focus:ring-2 focus:ring-violet-500/50',
+          isDragging && 'opacity-50 scale-95 z-50',
+          draggable && 'cursor-grab active:cursor-grabbing touch-none'
+        )}
+        onClick={handleClick}
+      >
       {/* Indicador de arraste ativo */}
       {draggable && (
         <div className="absolute -left-0.5 top-1/2 -translate-y-1/2 opacity-40 group-hover:opacity-100 transition-opacity">
@@ -106,7 +110,8 @@ export function CelulaTurma({ turma, onClick, draggable = false }: CelulaTurmaPr
           </div>
         )}
       </div>
-    </div>
+      </div>
+    </Tooltip>
   );
 }
 
