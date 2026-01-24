@@ -33,18 +33,18 @@ const WEIGHT_CONFIG: Record<HealthWeightKey, {
 }> = {
   curso: { 
     icon: Music, 
-    label: 'Adimplência', 
+    label: 'Curso', 
     description: 'Ajuste por tipo de instrumento (bateria tem limite menor que canto)',
     color: 'text-yellow-400'
   },
-  mediaTurma: { icon: Users, label: 'Frequência', color: 'text-purple-400' },
-  retencao: { icon: RefreshCw, label: 'Engajamento', color: 'text-cyan-400' },
-  conversao: { icon: Target, label: 'Tempo na escola', color: 'text-pink-400' },
+  mediaTurma: { icon: Users, label: 'Média/Turma', color: 'text-purple-400' },
+  retencao: { icon: RefreshCw, label: 'Retenção', color: 'text-cyan-400' },
+  conversao: { icon: Target, label: 'Conversão', color: 'text-pink-400' },
   nps: { icon: Star, label: 'NPS', color: 'text-amber-400' },
   presenca: { icon: Calendar, label: 'Presença', color: 'text-green-400' },
   evasoes: { 
     icon: DoorOpen, 
-    label: 'Evasões/Churn', 
+    label: 'Evasões', 
     description: 'Inverso: menos = melhor',
     color: 'text-red-400'
   },

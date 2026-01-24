@@ -21,8 +21,13 @@ export function useUnidadeFiltro(): UseUnidadeFiltroReturn {
   const [unidadeSelecionada, setUnidadeSelecionada] = useState<string | null>(null);
 
   // Quando usuário de unidade loga, força o filtro para sua unidade
+  // Quando admin loga, garante que começa com Consolidado (null)
   useEffect(() => {
-    if (!isAdmin && unidadeId) {
+    if (isAdmin) {
+      // Admin sempre começa com Consolidado
+      setUnidadeSelecionada(null);
+    } else if (unidadeId) {
+      // Usuário de unidade: força filtro para sua unidade
       setUnidadeSelecionada(unidadeId);
     }
   }, [isAdmin, unidadeId]);

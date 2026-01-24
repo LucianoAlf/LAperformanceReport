@@ -1,6 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical, Play } from 'lucide-react';
+import { CelulaEditavel } from '@/components/ui/CelulaEditavel';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
 import { useAuth } from '@/contexts/AuthContext';
@@ -60,9 +61,6 @@ export function TabelaAlunos({
   const { usuario } = useAuth();
   const isAdmin = usuario?.perfil === 'admin' && usuario?.unidade_id === null;
   
-  const [editingId, setEditingId] = useState<number | null>(null);
-  const [editingData, setEditingData] = useState<Partial<Aluno>>({});
-  const [saving, setSaving] = useState(false);
   const [paginaAtual, setPaginaAtual] = useState(1);
   const [alunoParaExcluir, setAlunoParaExcluir] = useState<Aluno | null>(null);
   const [modalDestrancamento, setModalDestrancamento] = useState(false);
@@ -108,62 +106,50 @@ export function TabelaAlunos({
     return contagem;
   }, [todosAlunos, alunos]);
 
-  function iniciarEdicao(aluno: Aluno) {
-    setEditingId(aluno.id);
-    setEditingData({
-      nome: aluno.nome,
-      professor_atual_id: aluno.professor_atual_id,
-      curso_id: aluno.curso_id,
-      dia_aula: aluno.dia_aula,
-      horario_aula: aluno.horario_aula,
-      valor_parcela: aluno.valor_parcela,
-      status: aluno.status
-    });
-  }
-
-  function cancelarEdicao() {
-    setEditingId(null);
-    setEditingData({});
-  }
-
-  async function salvarEdicao() {
-    if (!editingId) return;
-    
-    setSaving(true);
-    
-    // Verificar se a turma já tem alunos
-    const alunoAtualizado = {
-      ...alunos.find(a => a.id === editingId)!,
-      ...editingData
+  // Função para salvar campo individual do aluno
+  const salvarCampo = useCallback(async (alunoId: number, campo: string, valor: string | number | null) => {
+    const updateData: Record<string, any> = {
+      updated_at: new Date().toISOString()
     };
-    
-    const podeProsseguir = await verificarTurmaAoSalvar(alunoAtualizado);
-    if (!podeProsseguir) {
-      setSaving(false);
-      return;
+
+    // Mapear campo para coluna do banco
+    switch (campo) {
+      case 'nome':
+        updateData.nome = valor;
+        break;
+      case 'professor_atual_id':
+        updateData.professor_atual_id = valor ? Number(valor) : null;
+        break;
+      case 'curso_id':
+        updateData.curso_id = valor ? Number(valor) : null;
+        break;
+      case 'dia_aula':
+        updateData.dia_aula = valor || null;
+        break;
+      case 'horario_aula':
+        updateData.horario_aula = valor ? `${valor}:00` : null;
+        break;
+      case 'valor_parcela':
+        updateData.valor_parcela = valor ? Number(valor) : null;
+        break;
+      case 'status':
+        updateData.status = valor || 'ativo';
+        break;
     }
 
     const { error } = await supabase
       .from('alunos')
-      .update({
-        nome: editingData.nome,
-        professor_atual_id: editingData.professor_atual_id,
-        curso_id: editingData.curso_id,
-        dia_aula: editingData.dia_aula,
-        horario_aula: editingData.horario_aula ? `${editingData.horario_aula}:00` : null,
-        valor_parcela: editingData.valor_parcela,
-        status: editingData.status,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', editingId);
+      .update(updateData)
+      .eq('id', alunoId);
 
-    if (!error) {
-      setEditingId(null);
-      setEditingData({});
-      onRecarregar();
+    if (error) {
+      console.error('Erro ao salvar:', error);
+      throw error;
     }
-    setSaving(false);
-  }
+
+    // Recarregar dados após salvar
+    onRecarregar();
+  }, [onRecarregar]);
 
   async function confirmarExclusao() {
     if (!alunoParaExcluir) return;
@@ -542,41 +528,35 @@ export function TabelaAlunos({
           </thead>
           <tbody className="divide-y divide-slate-700/50">
             {alunosPaginados.map((aluno, index) => {
-              const isEditing = editingId === aluno.id;
               const isSozinho = aluno.total_alunos_turma === 1;
               
               return (
                 <tr
                   key={aluno.id}
                   className={`
-                    transition
-                    ${isEditing ? 'bg-purple-900/20 border-l-4 border-purple-500' : ''}
-                    ${isSozinho && !isEditing ? 'bg-red-900/10' : ''}
-                    ${!isEditing ? 'hover:bg-slate-700/30' : ''}
+                    transition hover:bg-slate-700/30
+                    ${isSozinho ? 'bg-red-900/10' : ''}
                   `}
                 >
                   <td className="px-4 py-3 text-slate-500">
                     {(paginaAtual - 1) * itensPorPagina + index + 1}
                   </td>
                   
-                  {/* Nome */}
-                  <td className="px-4 py-3">
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={editingData.nome || ''}
-                        onChange={(e) => setEditingData({ ...editingData, nome: e.target.value })}
-                        className="bg-slate-700 border border-purple-500 rounded px-2 py-1 text-sm w-full"
+                  {/* Nome - Edição inline */}
+                  <td className="px-4 py-2">
+                    <div className="flex items-center gap-2">
+                      <CelulaEditavel
+                        value={aluno.nome}
+                        onChange={async (valor) => salvarCampo(aluno.id, 'nome', valor)}
+                        tipo="texto"
+                        placeholder="-"
+                        className="min-w-[150px]"
                       />
-                    ) : (
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium text-white">{aluno.nome}</span>
-                        {getBadgesAluno(aluno)}
-                      </div>
-                    )}
+                      {getBadgesAluno(aluno)}
+                    </div>
                   </td>
 
-                  {/* Escola */}
+                  {/* Escola - Não editável */}
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1.5">
                       {getBadgeEscola(aluno.classificacao)}
@@ -588,79 +568,57 @@ export function TabelaAlunos({
                     </div>
                   </td>
 
-                  {/* Professor */}
-                  <td className="px-4 py-3">
-                    {isEditing ? (
-                      <select
-                        value={editingData.professor_atual_id || ''}
-                        onChange={(e) => setEditingData({ ...editingData, professor_atual_id: parseInt(e.target.value) || null })}
-                        className="bg-slate-700 border border-purple-500 rounded px-2 py-1 text-sm"
-                      >
-                        <option value="">Selecione</option>
-                        {professores.map(p => (
-                          <option key={p.id} value={p.id}>{p.nome}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className="text-slate-300">{aluno.professor_nome || '-'}</span>
-                    )}
+                  {/* Professor - Edição inline */}
+                  <td className="px-4 py-2">
+                    <CelulaEditavel
+                      value={aluno.professor_atual_id}
+                      onChange={async (valor) => salvarCampo(aluno.id, 'professor_atual_id', valor)}
+                      tipo="select"
+                      opcoes={professores.map(p => ({ value: p.id, label: p.nome }))}
+                      placeholder="-"
+                      formatarExibicao={() => aluno.professor_nome || '-'}
+                      className="min-w-[120px]"
+                    />
                   </td>
 
-                  {/* Curso */}
-                  <td className="px-4 py-3">
-                    {isEditing ? (
-                      <select
-                        value={editingData.curso_id || ''}
-                        onChange={(e) => setEditingData({ ...editingData, curso_id: parseInt(e.target.value) || null })}
-                        className="bg-slate-700 border border-purple-500 rounded px-2 py-1 text-sm"
-                      >
-                        <option value="">Selecione</option>
-                        {cursos.map(c => (
-                          <option key={c.id} value={c.id}>{c.nome}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className="text-slate-300">{aluno.curso_nome || '-'}</span>
-                    )}
+                  {/* Curso - Edição inline */}
+                  <td className="px-4 py-2">
+                    <CelulaEditavel
+                      value={aluno.curso_id}
+                      onChange={async (valor) => salvarCampo(aluno.id, 'curso_id', valor)}
+                      tipo="select"
+                      opcoes={cursos.map(c => ({ value: c.id, label: c.nome }))}
+                      placeholder="-"
+                      formatarExibicao={() => aluno.curso_nome || '-'}
+                      className="min-w-[100px]"
+                    />
                   </td>
 
-                  {/* Dia */}
-                  <td className="px-4 py-3">
-                    {isEditing ? (
-                      <select
-                        value={editingData.dia_aula || ''}
-                        onChange={(e) => setEditingData({ ...editingData, dia_aula: e.target.value })}
-                        className="bg-slate-700 border border-purple-500 rounded px-2 py-1 text-sm"
-                      >
-                        <option value="">Selecione</option>
-                        {DIAS_SEMANA.map(d => (
-                          <option key={d} value={d}>{d}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className="text-slate-300">{aluno.dia_aula || '-'}</span>
-                    )}
+                  {/* Dia - Edição inline */}
+                  <td className="px-4 py-2">
+                    <CelulaEditavel
+                      value={aluno.dia_aula}
+                      onChange={async (valor) => salvarCampo(aluno.id, 'dia_aula', valor)}
+                      tipo="select"
+                      opcoes={DIAS_SEMANA.map(d => ({ value: d, label: d }))}
+                      placeholder="-"
+                      className="min-w-[90px]"
+                    />
                   </td>
 
-                  {/* Horário */}
-                  <td className="px-4 py-3">
-                    {isEditing ? (
-                      <select
-                        value={editingData.horario_aula?.substring(0, 5) || ''}
-                        onChange={(e) => setEditingData({ ...editingData, horario_aula: e.target.value })}
-                        className="bg-slate-700 border border-purple-500 rounded px-2 py-1 text-sm"
-                      >
-                        <option value="">Selecione</option>
-                        {HORARIOS_LISTA.map(h => (
-                          <option key={h} value={h}>{h}</option>
-                        ))}
-                      </select>
-                    ) : (
-                      <span className="text-slate-300">{aluno.horario_aula?.substring(0, 5) || '-'}</span>
-                    )}
+                  {/* Horário - Edição inline */}
+                  <td className="px-4 py-2">
+                    <CelulaEditavel
+                      value={aluno.horario_aula?.substring(0, 5) || null}
+                      onChange={async (valor) => salvarCampo(aluno.id, 'horario_aula', valor)}
+                      tipo="select"
+                      opcoes={HORARIOS_LISTA.map(h => ({ value: h, label: h }))}
+                      placeholder="-"
+                      className="min-w-[70px]"
+                    />
                   </td>
 
-                  {/* Turma */}
+                  {/* Turma - Não editável */}
                   <td className="px-4 py-3">
                     {aluno.dia_aula && aluno.horario_aula
                       ? getBadgeTurma(aluno.total_alunos_turma || 1, aluno)
@@ -668,107 +626,82 @@ export function TabelaAlunos({
                     }
                   </td>
 
-                  {/* Parcela */}
-                  <td className="px-4 py-3">
-                    {isEditing ? (
-                      <input
-                        type="number"
-                        value={editingData.valor_parcela || ''}
-                        onChange={(e) => setEditingData({ ...editingData, valor_parcela: parseFloat(e.target.value) || null })}
-                        className="bg-slate-700 border border-purple-500 rounded px-2 py-1 text-sm w-20"
-                      />
-                    ) : (
-                      <span className="text-slate-300">
-                        {aluno.valor_parcela ? `R$ ${aluno.valor_parcela}` : '-'}
-                      </span>
-                    )}
+                  {/* Parcela - Edição inline */}
+                  <td className="px-4 py-2">
+                    <CelulaEditavel
+                      value={aluno.valor_parcela}
+                      onChange={async (valor) => salvarCampo(aluno.id, 'valor_parcela', valor)}
+                      tipo="moeda"
+                      placeholder="-"
+                      className="min-w-[80px]"
+                    />
                   </td>
 
-                  {/* Tempo */}
+                  {/* Tempo - Não editável */}
                   <td className="px-4 py-3 text-slate-300">
                     {formatarTempoPermanencia(aluno.tempo_permanencia_meses)}
                   </td>
 
-                  {/* Status */}
-                  <td className="px-2 py-3">
-                    {isEditing ? (
-                      <select
-                        value={editingData.status || ''}
-                        onChange={(e) => setEditingData({ ...editingData, status: e.target.value })}
-                        className="bg-slate-700 border border-purple-500 rounded px-2 py-1 text-sm"
-                      >
-                        <option value="ativo">Ativo</option>
-                        <option value="trancado">Trancado</option>
-                        <option value="inativo">Inativo</option>
-                      </select>
-                    ) : (
-                      getBadgeStatus(aluno.status)
-                    )}
+                  {/* Status - Edição inline */}
+                  <td className="px-2 py-2">
+                    <CelulaEditavel
+                      value={aluno.status}
+                      onChange={async (valor) => salvarCampo(aluno.id, 'status', valor)}
+                      tipo="select"
+                      opcoes={[
+                        { value: 'ativo', label: 'Ativo' },
+                        { value: 'aviso_previo', label: 'Aviso Prévio' },
+                        { value: 'trancado', label: 'Trancado' },
+                        { value: 'inativo', label: 'Inativo' },
+                      ]}
+                      placeholder="-"
+                      formatarExibicao={() => {
+                        switch (aluno.status) {
+                          case 'ativo': return 'Ativo';
+                          case 'aviso_previo': return 'Aviso Prévio';
+                          case 'trancado': return 'Trancado';
+                          case 'inativo': return 'Inativo';
+                          default: return aluno.status;
+                        }
+                      }}
+                      className="min-w-[80px]"
+                    />
                   </td>
 
                   {/* Ações */}
                   <td className="px-2 py-3 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      {isEditing ? (
-                        <>
-                          <button
-                            onClick={salvarEdicao}
-                            disabled={saving}
-                            className="p-1.5 bg-emerald-600 hover:bg-emerald-500 rounded transition"
-                            title="Salvar"
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button className="p-1.5 hover:bg-slate-600 rounded transition">
+                          <MoreVertical className="w-4 h-4 text-slate-400" />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        <DropdownMenuItem className="cursor-pointer">
+                          <History className="w-4 h-4 mr-2 text-slate-400" />
+                          Ver histórico
+                        </DropdownMenuItem>
+                        {aluno.status === 'trancado' && (
+                          <DropdownMenuItem 
+                            onClick={() => {
+                              setAlunoParaDestrancar(aluno);
+                              setModalDestrancamento(true);
+                            }}
+                            className="cursor-pointer text-emerald-400 focus:text-emerald-400"
                           >
-                            <Check className="w-4 h-4 text-white" />
-                          </button>
-                          <button
-                            onClick={cancelarEdicao}
-                            className="p-1.5 bg-slate-600 hover:bg-slate-500 rounded transition"
-                            title="Cancelar"
-                          >
-                            <X className="w-4 h-4 text-white" />
-                          </button>
-                        </>
-                      ) : (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button className="p-1.5 hover:bg-slate-600 rounded transition">
-                              <MoreVertical className="w-4 h-4 text-slate-400" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="w-48">
-                            <DropdownMenuItem className="cursor-pointer">
-                              <History className="w-4 h-4 mr-2 text-slate-400" />
-                              Ver histórico
-                            </DropdownMenuItem>
-                            {aluno.status === 'trancado' && (
-                              <DropdownMenuItem 
-                                onClick={() => {
-                                  setAlunoParaDestrancar(aluno);
-                                  setModalDestrancamento(true);
-                                }}
-                                className="cursor-pointer text-emerald-400 focus:text-emerald-400"
-                              >
-                                <Play className="w-4 h-4 mr-2" />
-                                Destrancar aluno
-                              </DropdownMenuItem>
-                            )}
-                            <DropdownMenuItem 
-                              onClick={() => iniciarEdicao(aluno)}
-                              className="cursor-pointer"
-                            >
-                              <Edit2 className="w-4 h-4 mr-2 text-blue-400" />
-                              Editar aluno
-                            </DropdownMenuItem>
-                            <DropdownMenuItem 
-                              onClick={() => setAlunoParaExcluir(aluno)}
-                              className="cursor-pointer text-red-400 focus:text-red-400"
-                            >
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              Excluir
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
-                    </div>
+                            <Play className="w-4 h-4 mr-2" />
+                            Destrancar aluno
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem 
+                          onClick={() => setAlunoParaExcluir(aluno)}
+                          className="cursor-pointer text-red-400 focus:text-red-400"
+                        >
+                          <Trash2 className="w-4 h-4 mr-2" />
+                          Excluir
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </td>
                 </tr>
               );

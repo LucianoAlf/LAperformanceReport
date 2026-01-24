@@ -18,22 +18,30 @@ interface AppHeaderProps {
 }
 
 export function AppHeader({ unidadeSelecionada, onUnidadeChange, periodoLabel }: AppHeaderProps) {
-  const { usuario, isAdmin } = useAuth();
+  const { usuario, isAdmin, loading } = useAuth();
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const hoje = new Date();
 
+  // Debug: verificar estado do admin
   useEffect(() => {
-    if (isAdmin) {
+    console.log('[AppHeader] loading:', loading, 'isAdmin:', isAdmin, 'usuario:', usuario?.perfil, 'unidades carregadas:', unidades.length);
+  }, [loading, isAdmin, usuario, unidades]);
+
+  // Carregar unidades quando usuario for admin
+  useEffect(() => {
+    if (!loading && isAdmin) {
       carregarUnidades();
     }
-  }, [isAdmin]);
+  }, [loading, isAdmin]);
 
   const carregarUnidades = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('unidades')
       .select('id, nome')
       .eq('ativo', true)
       .order('nome');
+    
+    console.log('[AppHeader] Unidades carregadas:', data, 'erro:', error);
     if (data) setUnidades(data);
   };
 

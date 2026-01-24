@@ -144,17 +144,50 @@ export function DashboardPage() {
         }
 
         // ===== DADOS DE GESTÃO =====
-        // USAR MESMA FONTE da aba Gestão (TabGestao.tsx): vw_kpis_gestao_mensal
-        // Esta view tem dados em TEMPO REAL, não depende de fechamento mensal
-        let gestaoQuery = supabase
-          .from('vw_kpis_gestao_mensal')
-          .select('*');
-        
-        if (unidade !== 'todos') {
-          gestaoQuery = gestaoQuery.eq('unidade_id', unidade);
-        }
+        // Verificar se é período atual ou histórico
+        const currentDate = new Date();
+        const currentYear = currentDate.getFullYear();
+        const currentMonth = currentDate.getMonth() + 1;
+        const isPeriodoAtual = ano === currentYear && mes === currentMonth;
+        const isHistorico = !isPeriodoAtual;
 
-        const { data: gestaoData } = await gestaoQuery;
+        let gestaoData: any[] = [];
+
+        if (isPeriodoAtual) {
+          // PERÍODO ATUAL: usar view em tempo real
+          let gestaoQuery = supabase
+            .from('vw_kpis_gestao_mensal')
+            .select('*');
+          
+          if (unidade !== 'todos') {
+            gestaoQuery = gestaoQuery.eq('unidade_id', unidade);
+          }
+
+          const { data } = await gestaoQuery;
+          gestaoData = data || [];
+        } else {
+          // PERÍODO HISTÓRICO: usar dados_mensais
+          let historicoQuery = supabase
+            .from('dados_mensais')
+            .select('*')
+            .eq('ano', ano)
+            .eq('mes', mes);
+
+          if (unidade !== 'todos') {
+            historicoQuery = historicoQuery.eq('unidade_id', unidade);
+          }
+
+          const { data } = await historicoQuery;
+          if (data && data.length > 0) {
+            gestaoData = data.map((d: any) => ({
+              total_alunos_ativos: d.alunos_pagantes || 0,
+              total_alunos_pagantes: d.alunos_pagantes || 0,
+              novas_matriculas: d.novas_matriculas || 0,
+              evasoes: d.evasoes || 0,
+              ticket_medio: Number(d.ticket_medio) || 0,
+            }));
+          }
+        }
         
         if (gestaoData && gestaoData.length > 0) {
           // Consolidar dados de todas as unidades
@@ -173,17 +206,14 @@ export function DashboardPage() {
             evasoes_mes: consolidado.evasoes,
             ticket_medio: consolidado.count > 0 ? consolidado.ticket_medio_sum / consolidado.count : 0
           });
+        } else {
+          setDadosGestao(null);
         }
 
         // ===== DADOS COMERCIAIS =====
         // USAR MESMA FONTE da aba Comercial (TabComercialNew.tsx): vw_kpis_comercial_historico
         // Esta view tem dados consolidados por mês/ano
         // Para mês atual, pode não ter dados ainda - usar dados_comerciais como fallback
-        
-        const currentDate = new Date();
-        const currentYear = currentDate.getFullYear();
-        const currentMonth = currentDate.getMonth() + 1;
-        const isHistorico = ano < currentYear || (ano === currentYear && mes < currentMonth);
 
         let comercialData: any[] = [];
         

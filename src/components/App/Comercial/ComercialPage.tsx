@@ -48,6 +48,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
 import { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
+import { CelulaEditavelInline } from '@/components/ui/CelulaEditavelInline';
 
 // Tipos
 interface LeadDiario {
@@ -462,6 +463,25 @@ export function ComercialPage() {
       setSaving(false);
     }
   };
+
+  // Função para salvar campo individual (edição inline por célula)
+  const salvarCampoMatricula = useCallback(async (matriculaId: number, campo: string, valor: string | number | null) => {
+    try {
+      const updateData: Record<string, any> = {};
+      updateData[campo] = valor;
+
+      const { error } = await supabase
+        .from('leads_diarios')
+        .update(updateData)
+        .eq('id', matriculaId);
+
+      if (error) throw error;
+      loadData();
+    } catch (error) {
+      console.error('Erro ao atualizar:', error);
+      toast.error('Erro ao atualizar');
+    }
+  }, [loadData]);
 
   const confirmDelete = async () => {
     if (!deleteId) return;
@@ -1434,236 +1454,165 @@ export function ComercialPage() {
                 {matriculasMes.map((mat, index) => (
                   <tr 
                     key={mat.id} 
-                    className={cn(
-                      "border-b border-slate-700/50 hover:bg-slate-700/20 transition-colors",
-                      editingId === mat.id && "bg-emerald-500/10"
-                    )}
+                    className="border-b border-slate-700/50 hover:bg-slate-700/20 transition-colors"
                   >
                     <td className="py-3 px-2 text-slate-500 font-medium border-r border-slate-700/30">{index + 1}</td>
+                    
+                    {/* Data - Edição inline */}
                     <td className="py-3 px-2 border-r border-slate-700/30">
-                      {editingId === mat.id ? (
-                        <DatePicker
-                          date={editingData.data ? new Date(editingData.data + 'T00:00:00') : undefined}
-                          onDateChange={(date) => setEditingData({ 
-                            ...editingData, 
-                            data: date ? format(date, 'yyyy-MM-dd') : '' 
-                          })}
-                          placeholder="Selecione"
-                        />
-                      ) : (
-                        <span className="text-slate-300">
-                          {new Date(mat.data + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
-                        </span>
-                      )}
+                      <CelulaEditavelInline
+                        value={mat.data}
+                        onChange={async (valor) => mat.id && salvarCampoMatricula(mat.id, 'data', valor)}
+                        tipo="data"
+                        textClassName="text-slate-300"
+                      />
                     </td>
+                    
+                    {/* Aluno - Edição inline */}
                     <td className="py-3 px-2 border-r border-slate-700/30">
-                      {editingId === mat.id ? (
-                        <Input
-                          type="text"
-                          value={editingData.aluno_nome || ''}
-                          onChange={(e) => setEditingData({ ...editingData, aluno_nome: e.target.value })}
-                          className="w-full h-8 text-sm"
-                        />
-                      ) : (
-                        <span className="text-white font-medium">{mat.aluno_nome || '-'}</span>
-                      )}
+                      <CelulaEditavelInline
+                        value={mat.aluno_nome}
+                        onChange={async (valor) => mat.id && salvarCampoMatricula(mat.id, 'aluno_nome', valor)}
+                        tipo="texto"
+                        textClassName="text-white font-medium"
+                        placeholder="-"
+                      />
                     </td>
+                    
+                    {/* Idade - Edição inline */}
                     <td className="py-3 px-2 border-r border-slate-700/30">
-                      {editingId === mat.id ? (
-                        <Input
-                          type="number"
-                          min="3"
-                          max="99"
-                          value={editingData.aluno_idade || ''}
-                          onChange={(e) => setEditingData({ ...editingData, aluno_idade: parseInt(e.target.value) || null })}
-                          className="w-16 h-8 text-sm"
-                        />
-                      ) : (
-                        <span className="text-slate-300">{mat.aluno_idade || '-'}</span>
-                      )}
+                      <CelulaEditavelInline
+                        value={mat.aluno_idade}
+                        onChange={async (valor) => mat.id && salvarCampoMatricula(mat.id, 'aluno_idade', valor ? Number(valor) : null)}
+                        tipo="numero"
+                        textClassName="text-slate-300"
+                        placeholder="-"
+                      />
                     </td>
+                    
+                    {/* Curso - Edição inline */}
                     <td className="py-3 px-2 border-r border-slate-700/30">
-                      {editingId === mat.id ? (
-                        <Select
-                          value={editingData.curso_id?.toString() || ''}
-                          onValueChange={(value) => setEditingData({ ...editingData, curso_id: parseInt(value) || null })}
-                        >
-                          <SelectTrigger className="w-full h-8 text-xs">
-                            <SelectValue placeholder="-" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {cursos.map((c) => (
-                              <SelectItem key={c.value} value={c.value.toString()}>{c.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <span className="text-purple-400">{mat.curso_nome || '-'}</span>
-                      )}
+                      <CelulaEditavelInline
+                        value={mat.curso_id}
+                        onChange={async (valor) => mat.id && salvarCampoMatricula(mat.id, 'curso_id', valor ? Number(valor) : null)}
+                        tipo="select"
+                        opcoes={cursos.map(c => ({ value: c.value, label: c.label }))}
+                        placeholder="-"
+                        formatarExibicao={() => mat.curso_nome || '-'}
+                        textClassName="text-purple-400"
+                      />
                     </td>
+                    
+                    {/* Canal - Edição inline */}
                     <td className="py-3 px-2 border-r border-slate-700/30">
-                      {editingId === mat.id ? (
-                        <Select
-                          value={editingData.canal_origem_id?.toString() || ''}
-                          onValueChange={(value) => setEditingData({ ...editingData, canal_origem_id: parseInt(value) || null })}
-                        >
-                          <SelectTrigger className="w-full h-8 text-xs">
-                            <SelectValue placeholder="-" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {canais.map((c) => (
-                              <SelectItem key={c.value} value={c.value.toString()}>{c.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <span className="text-blue-400">{mat.canal_nome || '-'}</span>
-                      )}
+                      <CelulaEditavelInline
+                        value={mat.canal_origem_id}
+                        onChange={async (valor) => mat.id && salvarCampoMatricula(mat.id, 'canal_origem_id', valor ? Number(valor) : null)}
+                        tipo="select"
+                        opcoes={canais.map(c => ({ value: c.value, label: c.label }))}
+                        placeholder="-"
+                        formatarExibicao={() => mat.canal_nome || '-'}
+                        textClassName="text-blue-400"
+                      />
                     </td>
+                    
+                    {/* Prof. Exp. - Edição inline */}
                     <td className="py-3 px-2 border-r border-slate-700/30">
-                      {editingId === mat.id ? (
-                        <Select
-                          value={editingData.professor_experimental_id?.toString() || ''}
-                          onValueChange={(value) => setEditingData({ ...editingData, professor_experimental_id: parseInt(value) || null })}
-                        >
-                          <SelectTrigger className="w-full h-8 text-xs">
-                            <SelectValue placeholder="-" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {professores.map((p) => (
-                              <SelectItem key={p.value} value={p.value.toString()}>{p.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <span className="text-slate-300">{mat.professor_exp_nome || '-'}</span>
-                      )}
+                      <CelulaEditavelInline
+                        value={mat.professor_experimental_id}
+                        onChange={async (valor) => mat.id && salvarCampoMatricula(mat.id, 'professor_experimental_id', valor ? Number(valor) : null)}
+                        tipo="select"
+                        opcoes={professores.map(p => ({ value: p.value, label: p.label }))}
+                        placeholder="-"
+                        formatarExibicao={() => mat.professor_exp_nome || '-'}
+                        textClassName="text-slate-300"
+                      />
                     </td>
+                    
+                    {/* Prof. Fixo - Edição inline */}
                     <td className="py-3 px-2 border-r border-slate-700/30">
-                      {editingId === mat.id ? (
-                        <Select
-                          value={editingData.professor_fixo_id?.toString() || ''}
-                          onValueChange={(value) => setEditingData({ ...editingData, professor_fixo_id: parseInt(value) || null })}
-                        >
-                          <SelectTrigger className="w-full h-8 text-xs">
-                            <SelectValue placeholder="-" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {professores.map((p) => (
-                              <SelectItem key={p.value} value={p.value.toString()}>{p.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <span className="text-slate-300">{mat.professor_fixo_nome || '-'}</span>
-                      )}
+                      <CelulaEditavelInline
+                        value={mat.professor_fixo_id}
+                        onChange={async (valor) => mat.id && salvarCampoMatricula(mat.id, 'professor_fixo_id', valor ? Number(valor) : null)}
+                        tipo="select"
+                        opcoes={professores.map(p => ({ value: p.value, label: p.label }))}
+                        placeholder="-"
+                        formatarExibicao={() => mat.professor_fixo_nome || '-'}
+                        textClassName="text-slate-300"
+                      />
                     </td>
+                    
+                    {/* Passaporte - Edição inline */}
                     <td className="py-3 px-2 border-r border-slate-700/30">
-                      {editingId === mat.id ? (
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={editingData.valor_passaporte || ''}
-                          onChange={(e) => setEditingData({ ...editingData, valor_passaporte: parseFloat(e.target.value) || null })}
-                          className="w-24 h-8 text-sm"
-                        />
-                      ) : (
-                        <span className="text-emerald-400 font-medium whitespace-nowrap">
-                          R$ {(mat.valor_passaporte || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          {mat.forma_pagamento_passaporte_nome && (
-                            <span className="text-slate-500 text-xs ml-1">{mat.forma_pagamento_passaporte_nome}</span>
-                          )}
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-2 border-r border-slate-700/30">
-                      {editingId === mat.id ? (
-                        <Input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          value={editingData.valor_parcela || ''}
-                          onChange={(e) => setEditingData({ ...editingData, valor_parcela: parseFloat(e.target.value) || null })}
-                          className="w-24 h-8 text-sm"
-                        />
-                      ) : (
-                        <span className="text-cyan-400 font-medium whitespace-nowrap">
-                          R$ {(mat.valor_parcela || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                          {mat.forma_pagamento_nome && (
-                            <span className="text-slate-500 text-xs ml-1">{mat.forma_pagamento_nome}</span>
-                          )}
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-2 border-r border-slate-700/30">
-                      {editingId === mat.id ? (
-                        <Select
-                          value={editingData.tipo_matricula || ''}
-                          onValueChange={(value) => setEditingData({ ...editingData, tipo_matricula: value })}
-                        >
-                          <SelectTrigger className="w-full h-8 text-xs">
-                            <SelectValue placeholder="-" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {TIPOS_MATRICULA.map((t) => (
-                              <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <div className="flex items-center gap-1.5">
-                          <span className={cn(
-                            "px-2 py-0.5 rounded text-xs font-medium",
-                            mat.tipo_matricula === 'LAMK' ? 'bg-pink-500/20 text-pink-400' : 'bg-blue-500/20 text-blue-400'
-                          )}>
-                            {mat.tipo_matricula || '-'}
+                      <CelulaEditavelInline
+                        value={mat.valor_passaporte}
+                        onChange={async (valor) => mat.id && salvarCampoMatricula(mat.id, 'valor_passaporte', valor ? Number(valor) : null)}
+                        tipo="moeda"
+                        placeholder="-"
+                        formatarExibicao={() => (
+                          <span className="text-emerald-400 font-medium whitespace-nowrap">
+                            R$ {(mat.valor_passaporte || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            {mat.forma_pagamento_passaporte_nome && (
+                              <span className="text-slate-500 text-xs ml-1">{mat.forma_pagamento_passaporte_nome}</span>
+                            )}
                           </span>
-                          {isAdmin && mat.unidades?.codigo && (
-                            <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-600/30 text-slate-300">
-                              {mat.unidades.codigo}
+                        )}
+                      />
+                    </td>
+                    
+                    {/* Parcela - Edição inline */}
+                    <td className="py-3 px-2 border-r border-slate-700/30">
+                      <CelulaEditavelInline
+                        value={mat.valor_parcela}
+                        onChange={async (valor) => mat.id && salvarCampoMatricula(mat.id, 'valor_parcela', valor ? Number(valor) : null)}
+                        tipo="moeda"
+                        placeholder="-"
+                        formatarExibicao={() => (
+                          <span className="text-cyan-400 font-medium whitespace-nowrap">
+                            R$ {(mat.valor_parcela || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            {mat.forma_pagamento_nome && (
+                              <span className="text-slate-500 text-xs ml-1">{mat.forma_pagamento_nome}</span>
+                            )}
+                          </span>
+                        )}
+                      />
+                    </td>
+                    
+                    {/* Escola - Edição inline */}
+                    <td className="py-3 px-2 border-r border-slate-700/30">
+                      <div className="flex items-center gap-1.5">
+                        <CelulaEditavelInline
+                          value={mat.tipo_matricula}
+                          onChange={async (valor) => mat.id && salvarCampoMatricula(mat.id, 'tipo_matricula', valor)}
+                          tipo="select"
+                          opcoes={TIPOS_MATRICULA.map(t => ({ value: t.value, label: t.label }))}
+                          placeholder="-"
+                          formatarExibicao={() => (
+                            <span className={cn(
+                              "px-2 py-0.5 rounded text-xs font-medium",
+                              mat.tipo_matricula === 'LAMK' ? 'bg-pink-500/20 text-pink-400' : 'bg-blue-500/20 text-blue-400'
+                            )}>
+                              {mat.tipo_matricula || '-'}
                             </span>
                           )}
-                        </div>
-                      )}
+                        />
+                        {isAdmin && mat.unidades?.codigo && (
+                          <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-600/30 text-slate-300">
+                            {mat.unidades.codigo}
+                          </span>
+                        )}
+                      </div>
                     </td>
+                    
+                    {/* Ações - Apenas excluir */}
                     <td className="py-3 px-2 text-right">
-                      {editingId === mat.id ? (
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={saveEditing}
-                            disabled={saving}
-                            className="p-1.5 text-emerald-400 hover:bg-emerald-500/20 rounded transition-colors"
-                            title="Salvar"
-                          >
-                            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                          </button>
-                          <button
-                            onClick={cancelEditing}
-                            className="p-1.5 text-slate-400 hover:bg-slate-700 rounded transition-colors"
-                            title="Cancelar"
-                          >
-                            <X className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-end gap-1">
-                          <button
-                            onClick={() => startEditing(mat)}
-                            className="p-1.5 text-slate-400 hover:text-cyan-400 hover:bg-slate-700 rounded transition-colors"
-                            title="Editar"
-                          >
-                            <Pencil className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => mat.id && setDeleteId(mat.id)}
-                            className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded transition-colors"
-                            title="Excluir"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      )}
+                      <button
+                        onClick={() => mat.id && setDeleteId(mat.id)}
+                        className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded transition-colors"
+                        title="Excluir"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </td>
                   </tr>
                 ))}

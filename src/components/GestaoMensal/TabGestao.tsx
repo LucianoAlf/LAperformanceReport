@@ -120,31 +120,96 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
     async function fetchDados() {
       setLoading(true);
       try {
-        // Buscar dados da view de gestão
-        let query = supabase
-          .from('vw_kpis_gestao_mensal')
-          .select('*');
+        // Verificar se é período atual ou histórico
+        const hoje = new Date();
+        const anoAtual = hoje.getFullYear();
+        const mesAtual = hoje.getMonth() + 1;
+        const isPeriodoAtual = ano === anoAtual && mes === mesAtual;
 
-        if (unidade !== 'todos') {
-          query = query.eq('unidade_id', unidade);
+        let gestaoData: any[] = [];
+        let retencaoData: any[] = [];
+
+        if (isPeriodoAtual) {
+          // PERÍODO ATUAL: usar views em tempo real
+          let query = supabase
+            .from('vw_kpis_gestao_mensal')
+            .select('*');
+
+          if (unidade !== 'todos') {
+            query = query.eq('unidade_id', unidade);
+          }
+
+          const { data, error: gestaoError } = await query;
+          if (gestaoError) throw gestaoError;
+          gestaoData = data || [];
+
+          // Buscar dados de retenção
+          let retencaoQuery = supabase
+            .from('vw_kpis_retencao_mensal')
+            .select('*');
+
+          if (unidade !== 'todos') {
+            retencaoQuery = retencaoQuery.eq('unidade_id', unidade);
+          }
+
+          const { data: retData, error: retencaoError } = await retencaoQuery;
+          if (retencaoError) throw retencaoError;
+          retencaoData = retData || [];
+        } else {
+          // PERÍODO HISTÓRICO: usar dados_mensais
+          let historicoQuery = supabase
+            .from('dados_mensais')
+            .select('*, unidades(nome)')
+            .eq('ano', ano)
+            .gte('mes', mesInicio)
+            .lte('mes', mesFinal);
+
+          if (unidade !== 'todos') {
+            historicoQuery = historicoQuery.eq('unidade_id', unidade);
+          }
+
+          const { data: historicoData, error: historicoError } = await historicoQuery;
+          if (historicoError) throw historicoError;
+
+          // Transformar dados históricos para o formato esperado
+          if (historicoData && historicoData.length > 0) {
+            gestaoData = historicoData.map((d: any) => ({
+              unidade_id: d.unidade_id,
+              unidade_nome: d.unidades?.nome || 'N/A',
+              ano: d.ano,
+              mes: d.mes,
+              total_alunos_ativos: d.alunos_pagantes || 0,
+              total_alunos_pagantes: d.alunos_pagantes || 0,
+              total_bolsistas_integrais: 0,
+              total_bolsistas_parciais: 0,
+              total_banda: 0,
+              ticket_medio: Number(d.ticket_medio) || 0,
+              mrr: Number(d.faturamento_estimado) || 0,
+              arr: (Number(d.faturamento_estimado) || 0) * 12,
+              tempo_permanencia_medio: Number(d.tempo_permanencia) || 0,
+              ltv_medio: 0,
+              inadimplencia_pct: Number(d.inadimplencia) || 0,
+              faturamento_previsto: Number(d.faturamento_estimado) || 0,
+              faturamento_realizado: (Number(d.faturamento_estimado) || 0) * (1 - (Number(d.inadimplencia) || 0) / 100),
+              churn_rate: Number(d.churn_rate) || 0,
+              total_evasoes: d.evasoes || 0,
+              novas_matriculas: d.novas_matriculas || 0,
+            }));
+
+            // Dados de retenção do histórico
+            retencaoData = historicoData.map((d: any) => ({
+              unidade_id: d.unidade_id,
+              total_evasoes: d.evasoes || 0,
+              evasoes_interrompidas: 0,
+              avisos_previos: 0,
+              mrr_perdido: 0,
+              renovacoes_realizadas: 0,
+              nao_renovacoes: 0,
+              renovacoes_pendentes: 0,
+              taxa_renovacao: Number(d.taxa_renovacao) || 0,
+            }));
+          }
         }
-
-        const { data: gestaoData, error: gestaoError } = await query;
-
-        if (gestaoError) throw gestaoError;
-
-        // Buscar dados de retenção
-        let retencaoQuery = supabase
-          .from('vw_kpis_retencao_mensal')
-          .select('*');
-
-        if (unidade !== 'todos') {
-          retencaoQuery = retencaoQuery.eq('unidade_id', unidade);
-        }
-
-        const { data: retencaoData, error: retencaoError } = await retencaoQuery;
-
-        if (retencaoError) throw retencaoError;
 
         // Buscar dados do mês anterior para comparativo (FORA do bloco condicional)
         const mesAnterior = mes === 1 ? 12 : mes - 1;
@@ -263,12 +328,14 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             faturamento_realizado: acc.faturamento_realizado + (Number(item.faturamento_realizado) || 0),
             churn_rate: acc.churn_rate + (Number(item.churn_rate) || 0),
             total_evasoes: acc.total_evasoes + (item.total_evasoes || 0),
+            novas_matriculas: acc.novas_matriculas + (item.novas_matriculas || 0),
             count: acc.count + 1,
           }), {
             total_alunos_ativos: 0, total_alunos_pagantes: 0, total_bolsistas_integrais: 0,
             total_bolsistas_parciais: 0, total_banda: 0, ticket_medio: 0, mrr: 0, arr: 0,
             tempo_permanencia_medio: 0, ltv_medio: 0, inadimplencia_pct: 0,
-            faturamento_previsto: 0, faturamento_realizado: 0, churn_rate: 0, total_evasoes: 0, count: 0
+            faturamento_previsto: 0, faturamento_realizado: 0, churn_rate: 0, total_evasoes: 0, 
+            novas_matriculas: 0, count: 0
           });
 
           const r = retencaoData?.reduce((acc, item) => ({
@@ -287,23 +354,33 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           }) || { total_evasoes: 0, evasoes_interrompidas: 0, avisos_previos: 0, mrr_perdido: 0,
             renovacoes_realizadas: 0, nao_renovacoes: 0, renovacoes_pendentes: 0, taxa_renovacao: 0, count: 1 };
 
-          // Buscar dados mensais para novas matrículas (suporta range de meses)
-          let dadosMensaisQuery = supabase
-            .from('dados_mensais')
-            .select('*')
-            .eq('ano', ano)
-            .gte('mes', mesInicio)
-            .lte('mes', mesFinal);
+          // Para período histórico, usar dados já consolidados em g
+          // Para período atual, buscar de dados_mensais
+          let novasMatriculas = g.novas_matriculas || 0;
+          let evasoes = g.total_evasoes || 0;
+          
+          if (isPeriodoAtual) {
+            // Buscar dados mensais para novas matrículas (suporta range de meses)
+            let dadosMensaisQuery = supabase
+              .from('dados_mensais')
+              .select('*')
+              .eq('ano', ano)
+              .gte('mes', mesInicio)
+              .lte('mes', mesFinal);
 
-          const { data: dadosMensais } = await dadosMensaisQuery;
+            const { data: dadosMensais } = await dadosMensaisQuery;
 
-          // Verificar se o mês está fechado (tem dados em dados_mensais)
-          const temDadosMes = dadosMensais && dadosMensais.length > 0 && 
-            dadosMensais.some(d => d.ticket_medio !== null && d.ticket_medio > 0);
-          setMesFechado(temDadosMes);
+            // Verificar se o mês está fechado (tem dados em dados_mensais)
+            const temDadosMes = dadosMensais && dadosMensais.length > 0 && 
+              dadosMensais.some(d => d.ticket_medio !== null && d.ticket_medio > 0);
+            setMesFechado(temDadosMes);
 
-          const novasMatriculas = dadosMensais?.reduce((acc, d) => acc + (d.novas_matriculas || 0), 0) || 0;
-          const evasoes = dadosMensais?.reduce((acc, d) => acc + (d.evasoes || 0), 0) || 0;
+            novasMatriculas = dadosMensais?.reduce((acc, d) => acc + (d.novas_matriculas || 0), 0) || 0;
+            evasoes = dadosMensais?.reduce((acc, d) => acc + (d.evasoes || 0), 0) || 0;
+          } else {
+            // Período histórico: já temos os dados, marcar como fechado
+            setMesFechado(true);
+          }
 
           // Buscar matrículas por curso e professor (suporta range de meses)
           const startDate = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
