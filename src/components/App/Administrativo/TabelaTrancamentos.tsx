@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Pencil, Trash2, Check, X, Info } from 'lucide-react';
+import { Pencil, Trash2, Check, X, Play, Info } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -20,11 +20,12 @@ interface TabelaTrancamentosProps {
   data: MovimentacaoAdmin[];
   onEdit: (item: MovimentacaoAdmin) => void;
   onDelete: (id: number) => void;
+  onDestrancar?: (item: MovimentacaoAdmin) => Promise<void>;
   professores: { id: number; nome: string }[];
   onSaveInline?: (id: number, data: Partial<MovimentacaoAdmin>) => Promise<boolean>;
 }
 
-export function TabelaTrancamentos({ data, onEdit, onDelete, professores, onSaveInline }: TabelaTrancamentosProps) {
+export function TabelaTrancamentos({ data, onEdit, onDelete, onDestrancar, professores, onSaveInline }: TabelaTrancamentosProps) {
   const { usuario } = useAuth();
   const isAdmin = usuario?.perfil === 'admin' && usuario?.unidade_id === null;
   
@@ -242,22 +243,38 @@ export function TabelaTrancamentos({ data, onEdit, onDelete, professores, onSave
                       </div>
                     ) : (
                       <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleStartEdit(item)}
-                          className="h-8 w-8 p-0 text-slate-400 hover:text-white"
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => item.id && onDelete(item.id)}
-                          className="h-8 w-8 p-0 text-slate-400 hover:text-rose-400"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
+                        {onDestrancar && (
+                          <Tooltip content="Destrancar aluno (voltar para ativo)" side="top">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => onDestrancar(item)}
+                              className="h-8 w-8 p-0 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/20"
+                            >
+                              <Play className="w-4 h-4" />
+                            </Button>
+                          </Tooltip>
+                        )}
+                        <Tooltip content="Editar trancamento" side="top">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleStartEdit(item)}
+                            className="h-8 w-8 p-0 text-slate-400 hover:text-white"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                        </Tooltip>
+                        <Tooltip content="Excluir trancamento" side="top">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => item.id && onDelete(item.id)}
+                            className="h-8 w-8 p-0 text-slate-400 hover:text-rose-400"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </Tooltip>
                       </div>
                     )}
                   </td>

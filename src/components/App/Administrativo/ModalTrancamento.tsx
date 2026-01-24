@@ -160,6 +160,7 @@ export function ModalTrancamento({ open, onOpenChange, onSave, editingItem, prof
               }}
               unidadeId={unidadeId}
               placeholder="Digite o nome do aluno..."
+              apenasAtivos={false}
             />
           </div>
 

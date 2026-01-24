@@ -7,7 +7,8 @@ import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import { 
   Users, GraduationCap, Building2, BookOpen, Award, TrendingUp,
   Plus, Search, RotateCcw, Edit2, Trash2, Eye, MoreHorizontal,
-  ChevronDown, Filter, Music, BarChart3, Table, LayoutGrid, MapPin, Clock
+  ChevronDown, Filter, Music, BarChart3, Table, LayoutGrid, MapPin, Clock,
+  Calendar, Target, Settings
 } from 'lucide-react';
 import { KPICard } from '@/components/ui/KPICard';
 import { Button } from '@/components/ui/button';
@@ -23,15 +24,29 @@ import { useToast } from '@/hooks/useToast';
 import { ModalProfessor } from './ModalProfessor';
 import { ModalDetalhesProfessor } from './ModalDetalhesProfessor';
 import { CardProfessor } from './CardProfessor';
+import { TabPerformanceProfessores } from './TabPerformanceProfessores';
+import { TabAgendaProfessores } from './TabAgendaProfessores';
+import { HealthScoreConfig } from './HealthScoreConfig';
 import type { 
   Professor, Unidade, Curso, KPIsProfessores, 
   FiltrosProfessores, ProfessorFormData
 } from './types';
 
+type AbaAtiva = 'cadastro' | 'performance' | 'agenda' | 'configuracoes';
+
 export function ProfessoresPage() {
   const context = useOutletContext<{ filtroAtivo: boolean; unidadeSelecionada: UnidadeId }>();
   const unidadeAtual = context?.unidadeSelecionada || 'todos';
   const toast = useToast();
+
+  // Estado da aba ativa (com persistência no localStorage)
+  const [abaAtiva, setAbaAtiva] = useState<AbaAtiva>(() => {
+    const saved = localStorage.getItem('professores_aba');
+    return (saved === 'cadastro' || saved === 'performance' || saved === 'agenda' || saved === 'configuracoes') ? saved : 'cadastro';
+  });
+
+  // Competência atual para as abas de Performance e Agenda
+  const competenciaAtual = format(new Date(), 'yyyy-MM');
 
   // Estados principais
   const [professores, setProfessores] = useState<Professor[]>([]);
@@ -44,7 +59,7 @@ export function ProfessoresPage() {
     nome: '',
     unidade_id: '',
     curso_id: '',
-    status: 'ativo',
+    status: 'todos',
     multiUnidade: 'todos'
   });
 
@@ -53,6 +68,11 @@ export function ProfessoresPage() {
     const saved = localStorage.getItem('professores_visualizacao');
     return (saved === 'cards' || saved === 'tabela') ? saved : 'tabela';
   });
+
+  // Salvar preferência de aba no localStorage
+  useEffect(() => {
+    localStorage.setItem('professores_aba', abaAtiva);
+  }, [abaAtiva]);
 
   // Estados de modais
   const [modalProfessor, setModalProfessor] = useState<{ open: boolean; modo: 'novo' | 'editar'; professor: Professor | null }>({
@@ -501,11 +521,162 @@ export function ProfessoresPage() {
             Gestão de Professores
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            Cadastro, turmas e performance dos professores
+            Cadastro, turmas e performance da equipe pedagógica
           </p>
         </div>
       </div>
 
+      {/* Abas */}
+      <div className="flex items-center gap-2 border-b border-slate-700 pb-1">
+        <button
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
+            abaAtiva === 'cadastro'
+              ? 'bg-slate-800 text-white border-b-2 border-purple-500'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+          }`}
+          onClick={() => setAbaAtiva('cadastro')}
+        >
+          <Users className="w-4 h-4" />
+          Cadastro
+        </button>
+        <button
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
+            abaAtiva === 'performance'
+              ? 'bg-slate-800 text-white border-b-2 border-purple-500'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+          }`}
+          onClick={() => setAbaAtiva('performance')}
+        >
+          <Target className="w-4 h-4" />
+          Performance
+        </button>
+        <button
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
+            abaAtiva === 'agenda'
+              ? 'bg-slate-800 text-white border-b-2 border-purple-500'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+          }`}
+          onClick={() => setAbaAtiva('agenda')}
+        >
+          <Calendar className="w-4 h-4" />
+          Agenda
+        </button>
+        <button
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
+            abaAtiva === 'configuracoes'
+              ? 'bg-slate-800 text-white border-b-2 border-purple-500'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+          }`}
+          onClick={() => setAbaAtiva('configuracoes')}
+        >
+          <Settings className="w-4 h-4" />
+          Configurações
+        </button>
+      </div>
+
+      {/* Conteúdo da aba Performance */}
+      {abaAtiva === 'performance' && (
+        <TabPerformanceProfessores unidadeAtual={unidadeAtual} competencia={competenciaAtual} />
+      )}
+
+      {/* Conteúdo da aba Agenda */}
+      {abaAtiva === 'agenda' && (
+        <TabAgendaProfessores unidadeAtual={unidadeAtual} competencia={competenciaAtual} />
+      )}
+
+      {/* Conteúdo da aba Configurações */}
+      {abaAtiva === 'configuracoes' && (
+        <div className="space-y-6">
+          <div className="flex items-center gap-3 mb-6">
+            <Settings className="w-6 h-6 text-cyan-400" />
+            <div>
+              <h2 className="text-xl font-bold text-white">Configurações de Performance</h2>
+              <p className="text-slate-400 text-sm">Configure os pesos e parâmetros do Health Score dos professores</p>
+            </div>
+          </div>
+          
+          <HealthScoreConfig 
+            onSave={(weights) => {
+              console.log('Pesos salvos:', weights);
+              toast.success('Configuração salva!', 'Os pesos do Health Score foram atualizados');
+            }}
+          />
+
+          {/* Referência de Metas */}
+          <div className="bg-slate-900/50 rounded-2xl border border-slate-700/50 p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <BarChart3 className="w-5 h-5 text-violet-400" />
+              <span className="text-sm font-bold text-white uppercase tracking-wide">Referência de Metas</span>
+            </div>
+            
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-6">
+              {/* Média/Turma */}
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-white">Média/Turma</p>
+                <div className="space-y-2 text-sm">
+                  <p className="flex items-center gap-2 text-slate-300"><span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span> &lt;1.3 Crítico</p>
+                  <p className="flex items-center gap-2 text-slate-300"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span> 1.3-1.5 Atenção</p>
+                  <p className="flex items-center gap-2 text-slate-300"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> &gt;1.5 Excelente</p>
+                </div>
+              </div>
+
+              {/* Retenção */}
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-white">Retenção</p>
+                <div className="space-y-2 text-sm">
+                  <p className="flex items-center gap-2 text-slate-300"><span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span> &lt;70% Crítico</p>
+                  <p className="flex items-center gap-2 text-slate-300"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span> 70-95% Regular</p>
+                  <p className="flex items-center gap-2 text-slate-300"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> &gt;95% Excelente</p>
+                </div>
+              </div>
+
+              {/* Conversão */}
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-white">Conversão</p>
+                <div className="space-y-2 text-sm">
+                  <p className="flex items-center gap-2 text-slate-300"><span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span> &lt;70% Ruim</p>
+                  <p className="flex items-center gap-2 text-slate-300"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span> 70-90% Bom</p>
+                  <p className="flex items-center gap-2 text-slate-300"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> &gt;90% Mestre</p>
+                </div>
+              </div>
+
+              {/* NPS */}
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-white">NPS</p>
+                <div className="space-y-2 text-sm">
+                  <p className="flex items-center gap-2 text-slate-300"><span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span> &lt;7 Ruim</p>
+                  <p className="flex items-center gap-2 text-slate-300"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span> 7-8.5 Regular</p>
+                  <p className="flex items-center gap-2 text-slate-300"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> &gt;8.5 Excelente</p>
+                </div>
+              </div>
+
+              {/* Presença */}
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-white">Presença</p>
+                <div className="space-y-2 text-sm">
+                  <p className="flex items-center gap-2 text-slate-300"><span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span> &lt;70% Crítico</p>
+                  <p className="flex items-center gap-2 text-slate-300"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span> 70-80% Atenção</p>
+                  <p className="flex items-center gap-2 text-slate-300"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> &gt;80% Ideal</p>
+                </div>
+              </div>
+
+              {/* Evasões */}
+              <div className="space-y-3">
+                <p className="text-sm font-semibold text-white">Evasões</p>
+                <div className="space-y-2 text-sm">
+                  <p className="flex items-center gap-2 text-slate-300"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> 0 Excelente</p>
+                  <p className="flex items-center gap-2 text-slate-300"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span> 1-2 Atenção</p>
+                  <p className="flex items-center gap-2 text-slate-300"><span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span> &gt;3 Crítico</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Conteúdo da aba Cadastro (conteúdo original) */}
+      {abaAtiva === 'cadastro' && (
+        <>
       {/* KPIs */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
         <KPICard
@@ -967,6 +1138,8 @@ export function ProfessoresPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+        </>
+      )}
 
       {/* Toast Container */}
       <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} />

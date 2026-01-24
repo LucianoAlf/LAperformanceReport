@@ -430,29 +430,27 @@ export function ModalAdicionarAlunoTurma({
                         onClick={() => setAlunoSelecionado(aluno)}
                         className={`p-3 rounded-lg border cursor-pointer transition ${getBgClass()}`}
                       >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-3">
-                            <div className={`
-                              w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold
-                              ${isSelected ? 'bg-purple-500' : temMesmoCurso ? 'bg-emerald-500' : 'bg-slate-600'}
-                            `}>
-                              {aluno.nome.charAt(0)}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium text-white truncate">{aluno.nome}</p>
-                              <p className="text-xs text-slate-400 truncate">
-                                {aluno.curso_nome || 'Sem curso'} • {aluno.professor_nome || 'Sem professor'}
-                              </p>
-                            </div>
+                        <div className="flex items-center gap-3">
+                          <div className={`
+                            w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center text-sm font-bold
+                            ${isSelected ? 'bg-purple-500' : temMesmoCurso ? 'bg-emerald-500' : 'bg-slate-600'}
+                          `}>
+                            {aluno.nome.charAt(0)}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-white truncate">{aluno.nome}</p>
+                            <p className="text-[11px] text-slate-400 truncate">
+                              {aluno.curso_nome || 'Sem curso'} • {aluno.professor_nome || 'Sem professor'}
+                            </p>
                           </div>
                           
                           {/* Badges de indicadores */}
-                          <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+                          <div className="flex items-center gap-1 flex-shrink-0">
                             {indicadores.slice(0, 2).map((ind, idx) => (
                               <span
                                 key={idx}
                                 className={`
-                                  px-1.5 py-0.5 rounded text-[10px] font-medium flex items-center gap-1
+                                  px-1.5 py-0.5 rounded text-[10px] font-medium whitespace-nowrap
                                   ${ind.cor === 'emerald' ? 'bg-emerald-500/20 text-emerald-300' : ''}
                                   ${ind.cor === 'cyan' ? 'bg-cyan-500/20 text-cyan-300' : ''}
                                   ${ind.cor === 'amber' ? 'bg-amber-500/20 text-amber-300' : ''}
@@ -460,16 +458,10 @@ export function ModalAdicionarAlunoTurma({
                                 `}
                                 title={ind.label}
                               >
-                                {ind.tipo === 'mesmo_curso' && <BookOpen className="w-3 h-3" />}
-                                {ind.tipo === 'horario_proximo' && <CalendarClock className="w-3 h-3" />}
-                                {ind.tipo === 'conflito_horario' && <AlertTriangle className="w-3 h-3" />}
-                                {ind.tipo === 'mesmo_curso_outro_prof' && <AlertTriangle className="w-3 h-3" />}
-                                <span className="hidden sm:inline">
-                                  {ind.tipo === 'mesmo_curso' && 'Mesmo curso'}
-                                  {ind.tipo === 'horario_proximo' && 'Horário próximo'}
-                                  {ind.tipo === 'conflito_horario' && 'Conflito'}
-                                  {ind.tipo === 'mesmo_curso_outro_prof' && 'Outro prof.'}
-                                </span>
+                                {ind.tipo === 'mesmo_curso' && 'Mesmo curso'}
+                                {ind.tipo === 'horario_proximo' && 'Horário próx.'}
+                                {ind.tipo === 'conflito_horario' && 'Conflito'}
+                                {ind.tipo === 'mesmo_curso_outro_prof' && 'Outro prof.'}
                               </span>
                             ))}
                           </div>

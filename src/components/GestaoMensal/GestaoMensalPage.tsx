@@ -54,29 +54,23 @@ export function GestaoMensalPage({ mesReferencia }: GestaoMensalPageProps) {
       {/* Sistema de Abas com Filtro de Competência */}
       <div className="animate-in fade-in slide-in-from-top-4 duration-500">
         {/* Desktop Tabs */}
-        <div className="hidden lg:block border-b border-slate-800/60 bg-slate-900/20 backdrop-blur-sm rounded-t-xl">
-          <div className="flex items-center justify-between gap-4 px-4 py-2">
+        <div className="hidden lg:block border-b border-slate-700">
+          <div className="flex items-center justify-between gap-4 px-4">
             {/* Abas à esquerda */}
-            <div className="flex items-center gap-1 overflow-x-auto pb-px scrollbar-hide">
+            <div className="flex items-center gap-2 pb-1 overflow-x-auto scrollbar-hide">
               {tabs.map(tab => (
                 <button
                   key={tab.id}
                   onClick={() => handleTabChange(tab.id)}
                   className={cn(
-                    "relative flex items-center gap-2.5 px-6 py-3 text-sm font-bold transition-all whitespace-nowrap group",
+                    "flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition whitespace-nowrap",
                     activeTab === tab.id
-                      ? "text-violet-400"
-                      : "text-slate-500 hover:text-slate-200"
+                      ? "bg-slate-800 text-white border-b-2 border-purple-500"
+                      : "text-slate-400 hover:text-white hover:bg-slate-800/50"
                   )}
                 >
-                  <tab.icon size={16} className={cn(
-                    "transition-colors",
-                    activeTab === tab.id ? "text-violet-400" : "text-slate-600 group-hover:text-slate-400"
-                  )} />
+                  <tab.icon className="w-4 h-4" />
                   {tab.label}
-                  {activeTab === tab.id && (
-                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-violet-500 shadow-[0_0_12px_rgba(139,92,246,0.5)]" />
-                  )}
                 </button>
               ))}
             </div>

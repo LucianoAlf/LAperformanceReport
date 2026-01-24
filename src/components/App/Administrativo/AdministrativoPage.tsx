@@ -26,6 +26,7 @@ import { ModalEvasao } from './ModalEvasao';
 import { ModalTrancamento } from './ModalTrancamento';
 import { ModalRelatorio } from './ModalRelatorio';
 import { TabelaTrancamentos } from './TabelaTrancamentos';
+import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
 
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 
@@ -114,6 +115,12 @@ export function AdministrativoPage() {
   const [modalTrancamento, setModalTrancamento] = useState(false);
   const [modalRelatorio, setModalRelatorio] = useState(false);
   const [editingItem, setEditingItem] = useState<MovimentacaoAdmin | null>(null);
+  const [modalConfirmacao, setModalConfirmacao] = useState(false);
+  const [itemParaDestrancar, setItemParaDestrancar] = useState<MovimentacaoAdmin | null>(null);
+  const [destrancando, setDestrancando] = useState(false);
+  const [modalConfirmacaoExcluir, setModalConfirmacaoExcluir] = useState(false);
+  const [itemParaExcluir, setItemParaExcluir] = useState<{ id: number; nome: string } | null>(null);
+  const [excluindo, setExcluindo] = useState(false);
 
   // Extrair ano e mês do filtro de competência
   const ano = competenciaFiltro.filtro.ano;
@@ -318,16 +325,83 @@ export function AdministrativoPage() {
     }
   }
 
-  async function handleDeleteMovimentacao(id: number) {
+  function handleDeleteMovimentacao(id: number) {
+    // Encontrar o item para mostrar o nome no modal
+    const item = movimentacoes.find(m => m.id === id);
+    setItemParaExcluir({ id, nome: item?.aluno_nome || 'este registro' });
+    setModalConfirmacaoExcluir(true);
+  }
+
+  async function handleConfirmarExclusao() {
+    if (!itemParaExcluir) return;
+
+    setExcluindo(true);
     try {
       const { error } = await supabase
         .from('movimentacoes_admin')
         .delete()
-        .eq('id', id);
+        .eq('id', itemParaExcluir.id);
       if (error) throw error;
+      
+      setModalConfirmacaoExcluir(false);
+      setItemParaExcluir(null);
       await loadData();
     } catch (error) {
       console.error('Erro ao excluir:', error);
+      alert('Erro ao excluir registro. Tente novamente.');
+    } finally {
+      setExcluindo(false);
+    }
+  }
+
+  async function handleConfirmarDestrancamento() {
+    if (!itemParaDestrancar) return;
+
+    setDestrancando(true);
+    try {
+      // Buscar o aluno pelo nome
+      const { data: alunoData, error: alunoError } = await supabase
+        .from('alunos')
+        .select('id')
+        .eq('nome', itemParaDestrancar.aluno_nome)
+        .single();
+
+      if (alunoError || !alunoData) {
+        alert('Aluno não encontrado no sistema.');
+        return;
+      }
+
+      // Atualizar status do aluno para ativo
+      const { error: updateError } = await supabase
+        .from('alunos')
+        .update({ status: 'ativo' })
+        .eq('id', alunoData.id);
+
+      if (updateError) throw updateError;
+
+      // Registrar o destrancamento como uma movimentação
+      const { error: movError } = await supabase
+        .from('movimentacoes_admin')
+        .insert({
+          tipo: 'destrancamento',
+          data: new Date().toISOString().split('T')[0],
+          aluno_nome: itemParaDestrancar.aluno_nome,
+          aluno_id: alunoData.id,
+          professor_id: itemParaDestrancar.professor_id,
+          unidade_id: itemParaDestrancar.unidade_id,
+          observacoes: `Destrancado antes da previsão de retorno (${itemParaDestrancar.previsao_retorno || 'não informada'})`
+        });
+
+      if (movError) console.warn('Erro ao registrar destrancamento:', movError);
+
+      setModalConfirmacao(false);
+      setItemParaDestrancar(null);
+      await loadData();
+    } catch (error) {
+      console.error('Erro ao destrancar:', error);
+      alert('Erro ao destrancar aluno. Tente novamente.');
+    } finally {
+      setDestrancando(false);
     }
   }
 
@@ -869,6 +943,10 @@ export function AdministrativoPage() {
               data={trancamentos} 
               onEdit={handleEdit}
               onDelete={handleDeleteMovimentacao}
+              onDestrancar={async (item) => {
+                setItemParaDestrancar(item);
+                setModalConfirmacao(true);
+              }}
               professores={professores}
               onSaveInline={async (id, data) => {
                 try {
@@ -946,6 +1024,38 @@ export function AdministrativoPage() {
         evasoes={evasoes}
         competencia={competencia}
         unidade={unidade}
+      />
+
+      {/* Modal de Confirmação de Destrancamento */}
+      <ModalConfirmacao
+        aberto={modalConfirmacao}
+        onClose={() => {
+          setModalConfirmacao(false);
+          setItemParaDestrancar(null);
+        }}
+        onConfirmar={handleConfirmarDestrancamento}
+        titulo="Confirmar Destrancamento"
+        mensagem={`Confirma o destrancamento de ${itemParaDestrancar?.aluno_nome}?\n\nO aluno voltará ao status ATIVO e poderá fazer aulas normalmente.`}
+        tipo="warning"
+        textoConfirmar="Destrancar"
+        textoCancelar="Cancelar"
+        carregando={destrancando}
+      />
+
+      {/* Modal de Confirmação de Exclusão */}
+      <ModalConfirmacao
+        aberto={modalConfirmacaoExcluir}
+        onClose={() => {
+          setModalConfirmacaoExcluir(false);
+          setItemParaExcluir(null);
+        }}
+        onConfirmar={handleConfirmarExclusao}
+        titulo="Confirmar Exclusão"
+        mensagem={`Tem certeza que deseja excluir o registro de trancamento de ${itemParaExcluir?.nome}?\n\nEsta ação não pode ser desfeita.`}
+        tipo="danger"
+        textoConfirmar="Excluir"
+        textoCancelar="Cancelar"
+        carregando={excluindo}
       />
     </div>
   );

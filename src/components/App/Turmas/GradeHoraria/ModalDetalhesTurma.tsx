@@ -96,7 +96,7 @@ export function ModalDetalhesTurma({ turma, aberto, onClose, onEditar, onSalaVin
         const { error } = await supabase
           .from('turmas_explicitas')
           .insert({
-            tipo: 'regular',
+            tipo: 'turma',
             nome: `${turma.curso_nome} - ${turma.professor_nome}`,
             professor_id: turma.professor_id,
             curso_id: turma.curso_id,

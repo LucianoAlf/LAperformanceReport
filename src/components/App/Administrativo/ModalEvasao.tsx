@@ -175,6 +175,7 @@ export function ModalEvasao({ open, onOpenChange, onSave, editingItem, professor
               }}
               unidadeId={unidadeId}
               placeholder="Digite o nome do aluno..."
+              apenasAtivos={false}
             />
           </div>
 

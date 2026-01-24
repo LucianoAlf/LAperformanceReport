@@ -1,7 +1,9 @@
 import { useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical } from 'lucide-react';
+import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical, Play } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
+import { useAuth } from '@/contexts/AuthContext';
 import { Tooltip } from '@/components/ui/Tooltip';
 import {
   DropdownMenu,
@@ -55,11 +57,17 @@ export function TabelaAlunos({
   onRecarregar,
   verificarTurmaAoSalvar
 }: TabelaAlunosProps) {
+  const { usuario } = useAuth();
+  const isAdmin = usuario?.perfil === 'admin' && usuario?.unidade_id === null;
+  
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingData, setEditingData] = useState<Partial<Aluno>>({});
   const [saving, setSaving] = useState(false);
   const [paginaAtual, setPaginaAtual] = useState(1);
   const [alunoParaExcluir, setAlunoParaExcluir] = useState<Aluno | null>(null);
+  const [modalDestrancamento, setModalDestrancamento] = useState(false);
+  const [alunoParaDestrancar, setAlunoParaDestrancar] = useState<Aluno | null>(null);
+  const [destrancando, setDestrancando] = useState(false);
   const itensPorPagina = 30;
 
   // Paginação
@@ -169,6 +177,29 @@ export function TabelaAlunos({
       onRecarregar();
     }
     setAlunoParaExcluir(null);
+  }
+
+  async function handleConfirmarDestrancamento() {
+    if (!alunoParaDestrancar) return;
+
+    setDestrancando(true);
+    try {
+      const { error } = await supabase
+        .from('alunos')
+        .update({ status: 'ativo' })
+        .eq('id', alunoParaDestrancar.id);
+
+      if (error) throw error;
+
+      setModalDestrancamento(false);
+      setAlunoParaDestrancar(null);
+      onRecarregar();
+    } catch (error) {
+      console.error('Erro ao destrancar:', error);
+      alert('Erro ao destrancar aluno. Tente novamente.');
+    } finally {
+      setDestrancando(false);
+    }
   }
 
   function getBadgeTurma(totalAlunos: number, aluno: Aluno) {
@@ -547,7 +578,14 @@ export function TabelaAlunos({
 
                   {/* Escola */}
                   <td className="px-4 py-3">
-                    {getBadgeEscola(aluno.classificacao)}
+                    <div className="flex items-center gap-1.5">
+                      {getBadgeEscola(aluno.classificacao)}
+                      {isAdmin && aluno.unidade_codigo && (
+                        <span className="bg-slate-600/30 text-slate-300 px-2 py-1 rounded text-xs font-medium">
+                          {aluno.unidade_codigo}
+                        </span>
+                      )}
+                    </div>
                   </td>
 
                   {/* Professor */}
@@ -701,6 +739,18 @@ export function TabelaAlunos({
                               <History className="w-4 h-4 mr-2 text-slate-400" />
                               Ver histórico
                             </DropdownMenuItem>
+                            {aluno.status === 'trancado' && (
+                              <DropdownMenuItem 
+                                onClick={() => {
+                                  setAlunoParaDestrancar(aluno);
+                                  setModalDestrancamento(true);
+                                }}
+                                className="cursor-pointer text-emerald-400 focus:text-emerald-400"
+                              >
+                                <Play className="w-4 h-4 mr-2" />
+                                Destrancar aluno
+                              </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem 
                               onClick={() => iniciarEdicao(aluno)}
                               className="cursor-pointer"
@@ -793,6 +843,22 @@ export function TabelaAlunos({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Modal de Confirmação de Destrancamento */}
+      <ModalConfirmacao
+        aberto={modalDestrancamento}
+        onClose={() => {
+          setModalDestrancamento(false);
+          setAlunoParaDestrancar(null);
+        }}
+        onConfirmar={handleConfirmarDestrancamento}
+        titulo="Confirmar Destrancamento"
+        mensagem={`Confirma o destrancamento de ${alunoParaDestrancar?.nome}?\n\nO aluno voltará ao status ATIVO e poderá fazer aulas normalmente.`}
+        tipo="warning"
+        textoConfirmar="Destrancar"
+        textoCancelar="Cancelar"
+        carregando={destrancando}
+      />
     </>
   );
 }

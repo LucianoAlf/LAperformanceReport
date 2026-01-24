@@ -392,18 +392,18 @@ export function ConfigPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 border-b border-slate-800">
+      <div className="flex items-center gap-2 border-b border-slate-700 pb-1">
         {tabs.map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px ${
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
               activeTab === tab.id
-                ? 'text-violet-400 border-violet-400'
-                : 'text-slate-500 border-transparent hover:text-slate-300'
+                ? 'bg-slate-800 text-white border-b-2 border-purple-500'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
             }`}
           >
-            <tab.icon size={16} />
+            <tab.icon className="w-4 h-4" />
             {tab.label}
           </button>
         ))}

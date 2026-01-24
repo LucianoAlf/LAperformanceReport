@@ -40,6 +40,7 @@ export interface Aluno {
   tipo_matricula_id: number | null;
   tipo_matricula_nome?: string;
   unidade_id: string;
+  unidade_codigo?: string;
   data_matricula: string | null;
   total_alunos_turma?: number;
   turma_id?: number;
@@ -190,7 +191,8 @@ export function AlunosPage() {
         status, tipo_matricula_id, unidade_id, data_matricula,
         professores:professor_atual_id(nome),
         cursos:curso_id(nome),
-        tipos_matricula:tipo_matricula_id(nome)
+        tipos_matricula:tipo_matricula_id(nome),
+        unidades:unidade_id(codigo)
       `)
       .order('nome');
     
@@ -222,6 +224,7 @@ export function AlunosPage() {
           professor_nome: a.professores?.nome || '',
           curso_nome: a.cursos?.nome || '',
           tipo_matricula_nome: a.tipos_matricula?.nome || '',
+          unidade_codigo: a.unidades?.codigo || '',
           total_alunos_turma: turmaInfo?.total_alunos || 1,
           turma_id: turmaInfo?.id,
           nomes_alunos_turma: turmaInfo?.nomes_alunos || []
@@ -709,53 +712,53 @@ export function AlunosPage() {
         {/* Tabs + Novo Aluno */}
         <div className="flex items-center justify-between border-b border-slate-700">
           {/* Tabs de navegação */}
-          <div className="flex">
+          <div className="flex items-center gap-2 pb-1">
             <button
               onClick={() => setTabAtiva('lista')}
-              className={`px-6 py-4 text-sm font-medium transition flex items-center gap-2 ${
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
                 tabAtiva === 'lista'
-                  ? 'bg-purple-600 text-white border-b-2 border-purple-400'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+                  ? 'bg-slate-800 text-white border-b-2 border-purple-500'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
               }`}
             >
               <Users className="w-4 h-4" /> Lista de Alunos
             </button>
             <button
               onClick={() => setTabAtiva('turmas')}
-              className={`px-6 py-4 text-sm font-medium transition flex items-center gap-2 ${
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
                 tabAtiva === 'turmas'
-                  ? 'bg-purple-600 text-white border-b-2 border-purple-400'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+                  ? 'bg-slate-800 text-white border-b-2 border-purple-500'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
               }`}
             >
               <Calendar className="w-4 h-4" /> Gestão de Turmas
             </button>
             <button
               onClick={() => setTabAtiva('grade')}
-              className={`px-6 py-4 text-sm font-medium transition flex items-center gap-2 ${
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
                 tabAtiva === 'grade'
-                  ? 'bg-purple-600 text-white border-b-2 border-purple-400'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+                  ? 'bg-slate-800 text-white border-b-2 border-purple-500'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
               }`}
             >
               <Clock className="w-4 h-4" /> Grade Horária
             </button>
             <button
               onClick={() => setTabAtiva('distribuicao')}
-              className={`px-6 py-4 text-sm font-medium transition flex items-center gap-2 ${
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
                 tabAtiva === 'distribuicao'
-                  ? 'bg-purple-600 text-white border-b-2 border-purple-400'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+                  ? 'bg-slate-800 text-white border-b-2 border-purple-500'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
               }`}
             >
               <BarChart3 className="w-4 h-4" /> Distribuição
             </button>
             <button
               onClick={() => setTabAtiva('importar')}
-              className={`px-6 py-4 text-sm font-medium transition flex items-center gap-2 ${
+              className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
                 tabAtiva === 'importar'
-                  ? 'bg-purple-600 text-white border-b-2 border-purple-400'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+                  ? 'bg-slate-800 text-white border-b-2 border-purple-500'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
               }`}
             >
               <Upload className="w-4 h-4" /> Importar Alunos
@@ -819,28 +822,6 @@ export function AlunosPage() {
         {tabAtiva === 'grade' && (
           <GradeHoraria 
             unidadeId={unidadeAtual === 'todos' ? undefined : unidadeAtual}
-            onEditarTurma={(turmaGrade) => {
-              // Converter TurmaGrade para Turma
-              const turma: Turma = {
-                id: turmaGrade.id,
-                unidade_id: turmaGrade.unidade_id,
-                unidade_nome: turmaGrade.unidade_nome,
-                professor_id: turmaGrade.professor_id,
-                professor_nome: turmaGrade.professor_nome,
-                curso_id: turmaGrade.curso_id,
-                curso_nome: turmaGrade.curso_nome,
-                dia_semana: turmaGrade.dia_semana,
-                horario_inicio: turmaGrade.horario_inicio,
-                sala_id: turmaGrade.sala_id,
-                sala_nome: turmaGrade.sala_nome,
-                capacidade_maxima: turmaGrade.capacidade_maxima || turmaGrade.sala_capacidade,
-                total_alunos: turmaGrade.num_alunos,
-                nomes_alunos: [],
-                ids_alunos: turmaGrade.alunos || [],
-              };
-              handleEditarTurma(turma);
-            }}
-            onExcluirTurma={handleExcluirTurma}
           />
         )}
 

@@ -25,8 +25,8 @@ export function CardProfessor({
       className="bg-slate-800/50 rounded-xl border border-slate-700/50 pt-5 px-5 pb-3 hover:border-violet-500/50 transition-all cursor-pointer group h-full flex flex-col"
       onClick={() => onVerDetalhes(professor)}
     >
-      {/* Header: Avatar + Nome + Status */}
-      <div className="flex items-start gap-3">
+      {/* Header: Avatar + Nome + Status + Ações */}
+      <div className="flex items-start gap-3 mb-4">
         <div className="w-12 h-12 rounded-full bg-slate-700 flex items-center justify-center overflow-hidden flex-shrink-0">
           {professor.foto_url ? (
             <img src={professor.foto_url} alt="" className="w-full h-full object-cover" />
@@ -50,13 +50,54 @@ export function CardProfessor({
             {professor.ativo ? 'Ativo' : 'Inativo'}
           </span>
         </div>
+        
+        {/* Ações no canto superior direito */}
+        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+          <Tooltip content="Ver detalhes" side="top">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0 text-slate-400 hover:text-white"
+              onClick={() => onVerDetalhes(professor)}
+            >
+              <Eye className="w-3.5 h-3.5" />
+            </Button>
+          </Tooltip>
+          <Tooltip content="Editar" side="top">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0 text-slate-400 hover:text-white"
+              onClick={() => onEditar(professor)}
+            >
+              <Edit2 className="w-3.5 h-3.5" />
+            </Button>
+          </Tooltip>
+          <Tooltip content={professor.ativo ? "Pausar" : "Ativar"} side="top">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0 text-slate-400 hover:text-amber-400"
+              onClick={() => onPausar(professor)}
+            >
+              {professor.ativo ? '⏸' : '▶'}
+            </Button>
+          </Tooltip>
+          <Tooltip content="Excluir" side="top">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 w-7 p-0 text-slate-400 hover:text-red-400"
+              onClick={() => onExcluir(professor)}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </Button>
+          </Tooltip>
+        </div>
       </div>
 
-      {/* Spacer flexível - empurra conteúdo para baixo */}
-      <div className="flex-1" />
-
-      {/* Unidades e Cursos na mesma linha */}
-      <div className="mb-3 grid grid-cols-2 gap-3">
+      {/* Unidades e Cursos em linhas separadas */}
+      <div className="mb-3 space-y-3">
         {/* Unidades */}
         <div>
           <div className="flex items-center gap-1.5 mb-1.5">
@@ -66,7 +107,7 @@ export function CardProfessor({
           <div className="flex flex-wrap gap-1">
             {professor.unidades && professor.unidades.length > 0 ? (
               <>
-                {professor.unidades.slice(0, 2).map((u) => (
+                {professor.unidades.slice(0, 3).map((u) => (
                   <span 
                     key={u.id}
                     className="px-2 py-0.5 rounded-full text-xs font-medium bg-violet-500/20 text-violet-300"
@@ -74,9 +115,9 @@ export function CardProfessor({
                     {u.unidade_codigo || u.unidade_nome}
                   </span>
                 ))}
-                {(professor.unidades?.length || 0) > 2 && (
+                {(professor.unidades?.length || 0) > 3 && (
                   <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-600 text-slate-300">
-                    +{(professor.unidades?.length || 0) - 2}
+                    +{(professor.unidades?.length || 0) - 3}
                   </span>
                 )}
               </>
@@ -95,7 +136,7 @@ export function CardProfessor({
           <div className="flex flex-wrap gap-1">
             {professor.cursos && professor.cursos.length > 0 ? (
               <>
-                {professor.cursos.slice(0, 2).map((c) => (
+                {professor.cursos.slice(0, 3).map((c) => (
                   <span 
                     key={c.id}
                     className="px-2 py-0.5 rounded-full text-xs font-medium bg-cyan-500/20 text-cyan-300"
@@ -103,9 +144,9 @@ export function CardProfessor({
                     {c.curso_nome}
                   </span>
                 ))}
-                {(professor.cursos?.length || 0) > 2 && (
+                {(professor.cursos?.length || 0) > 3 && (
                   <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-slate-600 text-slate-300">
-                    +{(professor.cursos?.length || 0) - 2}
+                    +{(professor.cursos?.length || 0) - 3}
                   </span>
                 )}
               </>
@@ -117,7 +158,7 @@ export function CardProfessor({
       </div>
 
       {/* Métricas */}
-      <div className="bg-slate-700/30 rounded-lg p-3 mb-3">
+      <div className="bg-slate-700/30 rounded-lg p-3">
         <div className="grid grid-cols-2 gap-3">
           {/* Turmas */}
           <div className="flex items-center gap-2">
@@ -167,53 +208,6 @@ export function CardProfessor({
         </div>
       </div>
 
-      {/* Ações */}
-      <div className="flex items-center justify-between gap-1 pt-2 border-t border-slate-700/30" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-1">
-          <Tooltip content="Ver detalhes" side="top">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0 text-slate-400 hover:text-white"
-              onClick={() => onVerDetalhes(professor)}
-            >
-              <Eye className="w-4 h-4" />
-            </Button>
-          </Tooltip>
-          <Tooltip content="Editar" side="top">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0 text-slate-400 hover:text-white"
-              onClick={() => onEditar(professor)}
-            >
-              <Edit2 className="w-4 h-4" />
-            </Button>
-          </Tooltip>
-        </div>
-        <div className="flex items-center gap-1">
-          <Tooltip content={professor.ativo ? "Pausar" : "Ativar"} side="top">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0 text-slate-400 hover:text-amber-400"
-              onClick={() => onPausar(professor)}
-            >
-              {professor.ativo ? '⏸' : '▶'}
-            </Button>
-          </Tooltip>
-          <Tooltip content="Excluir" side="top">
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-8 w-8 p-0 text-slate-400 hover:text-red-400"
-              onClick={() => onExcluir(professor)}
-            >
-              <Trash2 className="w-4 h-4" />
-            </Button>
-          </Tooltip>
-        </div>
-      </div>
     </div>
   );
 }

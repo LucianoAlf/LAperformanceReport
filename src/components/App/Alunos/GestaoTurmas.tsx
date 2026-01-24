@@ -1,6 +1,8 @@
-import { useState, useMemo } from 'react';
-import { RotateCcw, AlertTriangle, Plus, Calendar, Edit2, Trash2, Music } from 'lucide-react';
+import { useState, useMemo, useEffect } from 'react';
+import { RotateCcw, AlertTriangle, Plus, Calendar, Edit2, Trash2, Music, MapPin } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { supabase } from '@/lib/supabase';
 import type { Turma } from './AlunosPage';
 
 interface GestaoTurmasProps {
@@ -41,6 +43,11 @@ export function GestaoTurmas({ turmas, professores, salas, onRecarregar, onEdita
     ocupacao: ''
   });
   const [turmaDetalhe, setTurmaDetalhe] = useState<Turma | null>(null);
+  const [modoEdicaoSala, setModoEdicaoSala] = useState(false);
+  const [salasDisponiveis, setSalasDisponiveis] = useState<{id: number, nome: string, capacidade_maxima: number}[]>([]);
+  const [salaIdSelecionada, setSalaIdSelecionada] = useState<number | null>(null);
+  const [salvando, setSalvando] = useState(false);
+  const [carregandoSalas, setCarregandoSalas] = useState(false);
 
   // Agrupar turmas por dia
   const turmasPorDia = useMemo(() => {
@@ -70,6 +77,96 @@ export function GestaoTurmas({ turmas, professores, salas, onRecarregar, onEdita
     });
     return agrupado;
   }, [turmas, filtros]);
+
+  // Carregar salas quando entrar em modo de edição
+  useEffect(() => {
+    if (modoEdicaoSala && turmaDetalhe) {
+      carregarSalas();
+    }
+  }, [modoEdicaoSala, turmaDetalhe]);
+
+  async function carregarSalas() {
+    if (!turmaDetalhe?.unidade_id) return;
+    
+    setCarregandoSalas(true);
+    try {
+      const { data, error } = await supabase
+        .from('salas')
+        .select('id, nome, capacidade_maxima')
+        .eq('unidade_id', turmaDetalhe.unidade_id)
+        .eq('ativo', true)
+        .order('nome');
+
+      if (error) throw error;
+      setSalasDisponiveis(data || []);
+      setSalaIdSelecionada(turmaDetalhe.sala_id || null);
+    } catch (error) {
+      console.error('Erro ao carregar salas:', error);
+    } finally {
+      setCarregandoSalas(false);
+    }
+  }
+
+  async function handleVincularSala() {
+    if (!turmaDetalhe || !salaIdSelecionada) return;
+
+    setSalvando(true);
+    try {
+      const salaSelecionada = salasDisponiveis.find(s => s.id === salaIdSelecionada);
+      
+      // Verificar se já existe turma explícita
+      const { data: turmaExistente } = await supabase
+        .from('turmas_explicitas')
+        .select('id')
+        .eq('unidade_id', turmaDetalhe.unidade_id)
+        .eq('professor_id', turmaDetalhe.professor_id)
+        .eq('dia_semana', turmaDetalhe.dia_semana)
+        .eq('horario_inicio', turmaDetalhe.horario_inicio)
+        .single();
+
+      if (turmaExistente) {
+        // Atualizar turma existente
+        const { error } = await supabase
+          .from('turmas_explicitas')
+          .update({
+            sala_id: salaIdSelecionada,
+            capacidade_maxima: salaSelecionada?.capacidade_maxima || 4,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', turmaExistente.id);
+
+        if (error) throw error;
+      } else {
+        // Criar nova turma explícita
+        const { error } = await supabase
+          .from('turmas_explicitas')
+          .insert({
+            tipo: 'turma',
+            nome: `${turmaDetalhe.curso_nome} - ${turmaDetalhe.professor_nome}`,
+            professor_id: turmaDetalhe.professor_id,
+            curso_id: turmaDetalhe.curso_id,
+            dia_semana: turmaDetalhe.dia_semana,
+            horario_inicio: turmaDetalhe.horario_inicio,
+            sala_id: salaIdSelecionada,
+            unidade_id: turmaDetalhe.unidade_id,
+            capacidade_maxima: salaSelecionada?.capacidade_maxima || 4,
+            ativo: true
+          });
+
+        if (error) throw error;
+      }
+
+      // Fechar modal e recarregar dados
+      setModoEdicaoSala(false);
+      setTurmaDetalhe(null);
+      onRecarregar();
+    } catch (error) {
+      console.error('Erro ao vincular sala:', error);
+      alert('Erro ao vincular sala. Tente novamente.');
+    } finally {
+      setSalvando(false);
+    }
+  }
 
   function limparFiltros() {
     setFiltros({
@@ -416,6 +513,80 @@ export function GestaoTurmas({ turmas, professores, salas, onRecarregar, onEdita
               </div>
             </div>
             <div className="p-6">
+              {/* Seção de Sala */}
+              <div className="mb-6 p-4 bg-slate-700/30 rounded-lg border border-slate-600">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-semibold text-slate-300 uppercase flex items-center gap-2">
+                    <MapPin className="w-4 h-4" />
+                    Sala
+                  </span>
+                  {!modoEdicaoSala && (
+                    <button
+                      onClick={() => setModoEdicaoSala(true)}
+                      className="text-xs text-violet-400 hover:text-violet-300 transition"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                  )}
+                </div>
+                
+                {!modoEdicaoSala ? (
+                  <div className="text-slate-300">
+                    {turmaDetalhe.sala_nome || (
+                      <span className="text-slate-500 text-sm">
+                        Não vinculada <span className="text-xs">(clique para vincular)</span>
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {carregandoSalas ? (
+                      <div className="text-sm text-slate-400">Carregando salas...</div>
+                    ) : (
+                      <>
+                        <Select
+                          value={salaIdSelecionada?.toString() || ''}
+                          onValueChange={(v) => setSalaIdSelecionada(parseInt(v))}
+                        >
+                          <SelectTrigger className="bg-slate-800 border-slate-600">
+                            <SelectValue placeholder="Selecione uma sala" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {salasDisponiveis.map(sala => (
+                              <SelectItem key={sala.id} value={sala.id.toString()}>
+                                {sala.nome} (cap. {sala.capacidade_maxima})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <div className="flex gap-2">
+                          <Button
+                            onClick={() => {
+                              setModoEdicaoSala(false);
+                              setSalaIdSelecionada(turmaDetalhe.sala_id || null);
+                            }}
+                            variant="outline"
+                            size="sm"
+                            disabled={salvando}
+                            className="flex-1"
+                          >
+                            Cancelar
+                          </Button>
+                          <Button
+                            onClick={handleVincularSala}
+                            disabled={!salaIdSelecionada || salvando}
+                            size="sm"
+                            className="flex-1 bg-violet-600 hover:bg-violet-500"
+                          >
+                            {salvando ? 'Salvando...' : 'Vincular Sala'}
+                          </Button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <div className="flex items-center justify-between mb-4">
                 <span className="text-sm text-slate-400">Capacidade:</span>
                 {getBadgeOcupacao(turmaDetalhe.total_alunos, turmaDetalhe.capacidade_maxima || 4)}
