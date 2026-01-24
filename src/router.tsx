@@ -20,7 +20,7 @@ import { GerenciarUsuarios } from './components/App/Admin';
 // Operacional
 import { ComercialPage } from './components/App/Comercial';
 import { PlanilhaRetencao } from './components/App/Retencao';
-import { PlanilhaProfessores } from './components/App/Professores';
+import { ProfessoresPage } from './components/App/Professores';
 import { AdministrativoPage } from './components/App/Administrativo';
 import { AlunosPage } from './components/App/Alunos';
 import { SalasPage } from './components/App/Salas';
@@ -163,7 +163,7 @@ export const router = createBrowserRouter([
           },
           {
             path: 'professores',
-            element: <PlanilhaProfessores />,
+            element: <ProfessoresPage />,
           },
           {
             path: 'salas',

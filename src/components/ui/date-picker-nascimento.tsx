@@ -110,7 +110,7 @@ export function DatePickerNascimento({
           {date ? format(date, "dd/MM/yyyy", { locale: ptBR }) : <span className="text-slate-400">{placeholder}</span>}
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-auto p-3" align="start">
+      <PopoverContent className="w-auto p-3 z-[9999]" align="start">
         {/* Seletores de Ano e Mês */}
         <div className="flex gap-2 mb-3">
           <Select value={viewDate.getMonth().toString()} onValueChange={handleMonthChange}>
