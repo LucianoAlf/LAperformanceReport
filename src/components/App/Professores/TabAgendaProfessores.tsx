@@ -430,7 +430,8 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
         </div>
       </div>
 
-      {/* Lista de Ações */}
+      {/* Visualização Lista */}
+      {visualizacao === 'lista' && (
       <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 overflow-hidden">
         {/* Atrasados */}
         {acoesAgrupadas.atrasados.length > 0 && (
@@ -532,6 +533,137 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
           </div>
         )}
       </div>
+      )}
+
+      {/* Visualização Calendário */}
+      {visualizacao === 'calendario' && (
+        <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 p-6">
+          <div className="grid grid-cols-7 gap-2 mb-4">
+            {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((dia) => (
+              <div key={dia} className="text-center text-xs font-medium text-slate-400 py-2">
+                {dia}
+              </div>
+            ))}
+            {Array.from({ length: 35 }).map((_, i) => {
+              const dia = i - 2; // Ajuste para começar no dia correto
+              const isToday = dia === new Date().getDate();
+              const hasAcao = acoesFiltradas.some(a => 
+                new Date(a.data_agendada).getDate() === dia
+              );
+              
+              return (
+                <div
+                  key={i}
+                  className={`aspect-square rounded-lg border flex flex-col items-center justify-center text-sm transition ${
+                    dia < 1 || dia > 31
+                      ? 'border-transparent text-slate-700'
+                      : isToday
+                      ? 'border-blue-500 bg-blue-500/10 text-blue-400 font-semibold'
+                      : hasAcao
+                      ? 'border-slate-600 bg-slate-800 text-white hover:bg-slate-700 cursor-pointer'
+                      : 'border-slate-700 text-slate-500 hover:bg-slate-800/50'
+                  }`}
+                >
+                  {dia > 0 && dia <= 31 && (
+                    <>
+                      <span>{dia}</span>
+                      {hasAcao && (
+                        <div className="w-1 h-1 rounded-full bg-cyan-400 mt-1" />
+                      )}
+                    </>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {acoesFiltradas.length === 0 && (
+            <div className="text-center py-8 text-slate-500">
+              <CalendarDays className="w-12 h-12 mx-auto mb-3 opacity-50" />
+              <p className="text-sm">Nenhuma ação agendada neste período</p>
+              <p className="text-xs mt-1">Clique em "Nova Ação" para começar</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Visualização Kanban */}
+      {visualizacao === 'kanban' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Pendente */}
+          <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 p-4">
+            <div className="flex items-center gap-2 mb-4">
+              <Clock className="w-4 h-4 text-amber-400" />
+              <h3 className="font-medium text-white">Pendente</h3>
+              <span className="ml-auto text-xs text-slate-400">
+                {acoesFiltradas.filter(a => a.status === 'pendente').length}
+              </span>
+            </div>
+            <div className="space-y-2">
+              {acoesFiltradas.filter(a => a.status === 'pendente').length === 0 ? (
+                <div className="text-center py-8 text-slate-500 text-sm">
+                  Nenhuma ação pendente
+                </div>
+              ) : (
+                acoesFiltradas
+                  .filter(a => a.status === 'pendente')
+                  .map(acao => (
+                    <div key={acao.id} className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/30">
+                      <p className="text-sm font-medium text-white mb-1">{acao.titulo}</p>
+                      <p className="text-xs text-slate-400">{acao.professor_nome}</p>
+                      <div className="flex items-center gap-2 mt-2">
+                        <span className={`text-xs px-2 py-0.5 rounded ${getTipoBadgeColor(acao.tipo)}`}>
+                          {acao.tipo}
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          {format(new Date(acao.data_agendada), 'dd/MM')}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+              )}
+            </div>
+          </div>
+
+          {/* Em Andamento */}
+          <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 p-4">
+            <div className="flex items-center gap-2 mb-4">
+              <RefreshCw className="w-4 h-4 text-blue-400" />
+              <h3 className="font-medium text-white">Em Andamento</h3>
+              <span className="ml-auto text-xs text-slate-400">0</span>
+            </div>
+            <div className="text-center py-8 text-slate-500 text-sm">
+              Nenhuma ação em andamento
+            </div>
+          </div>
+
+          {/* Concluída */}
+          <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 p-4">
+            <div className="flex items-center gap-2 mb-4">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+              <h3 className="font-medium text-white">Concluída</h3>
+              <span className="ml-auto text-xs text-slate-400">
+                {acoesFiltradas.filter(a => a.status === 'concluida').length}
+              </span>
+            </div>
+            <div className="space-y-2">
+              {acoesFiltradas.filter(a => a.status === 'concluida').length === 0 ? (
+                <div className="text-center py-8 text-slate-500 text-sm">
+                  Nenhuma ação concluída
+                </div>
+              ) : (
+                acoesFiltradas
+                  .filter(a => a.status === 'concluida')
+                  .map(acao => (
+                    <div key={acao.id} className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/30 opacity-60">
+                      <p className="text-sm font-medium text-white mb-1 line-through">{acao.titulo}</p>
+                      <p className="text-xs text-slate-400">{acao.professor_nome}</p>
+                    </div>
+                  ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Metas e Ações em Andamento */}
       {metas.length > 0 && (
