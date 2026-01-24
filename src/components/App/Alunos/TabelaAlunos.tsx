@@ -1,8 +1,14 @@
 import { useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle } from 'lucide-react';
+import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip } from '@/components/ui/Tooltip';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -499,8 +505,8 @@ export function TabelaAlunos({
               <th className="px-4 py-3 font-medium">Turma</th>
               <th className="px-4 py-3 font-medium">Parcela</th>
               <th className="px-4 py-3 font-medium">Tempo</th>
-              <th className="px-4 py-3 font-medium">Status</th>
-              <th className="px-4 py-3 font-medium text-right">Ações</th>
+              <th className="px-2 py-3 font-medium">Status</th>
+              <th className="px-2 py-3 font-medium text-right">Ações</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-700/50">
@@ -646,7 +652,7 @@ export function TabelaAlunos({
                   </td>
 
                   {/* Status */}
-                  <td className="px-4 py-3">
+                  <td className="px-2 py-3">
                     {isEditing ? (
                       <select
                         value={editingData.status || ''}
@@ -663,7 +669,7 @@ export function TabelaAlunos({
                   </td>
 
                   {/* Ações */}
-                  <td className="px-4 py-3 text-right">
+                  <td className="px-2 py-3 text-right">
                     <div className="flex items-center justify-end gap-1">
                       {isEditing ? (
                         <>
@@ -684,31 +690,33 @@ export function TabelaAlunos({
                           </button>
                         </>
                       ) : (
-                        <>
-                          <Tooltip content="Ver histórico" side="top">
-                            <button
-                              className="p-1.5 hover:bg-slate-600 rounded transition"
-                            >
-                              <History className="w-4 h-4 text-slate-400" />
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <button className="p-1.5 hover:bg-slate-600 rounded transition">
+                              <MoreVertical className="w-4 h-4 text-slate-400" />
                             </button>
-                          </Tooltip>
-                          <Tooltip content="Editar aluno" side="top">
-                            <button
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-48">
+                            <DropdownMenuItem className="cursor-pointer">
+                              <History className="w-4 h-4 mr-2 text-slate-400" />
+                              Ver histórico
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
                               onClick={() => iniciarEdicao(aluno)}
-                              className="p-1.5 hover:bg-slate-600 rounded transition"
+                              className="cursor-pointer"
                             >
-                              <Edit2 className="w-4 h-4 text-blue-400" />
-                            </button>
-                          </Tooltip>
-                          <Tooltip content="Excluir aluno" side="top">
-                            <button
+                              <Edit2 className="w-4 h-4 mr-2 text-blue-400" />
+                              Editar aluno
+                            </DropdownMenuItem>
+                            <DropdownMenuItem 
                               onClick={() => setAlunoParaExcluir(aluno)}
-                              className="p-1.5 hover:bg-slate-600 rounded transition"
+                              className="cursor-pointer text-red-400 focus:text-red-400"
                             >
-                              <Trash2 className="w-4 h-4 text-red-400" />
-                            </button>
-                          </Tooltip>
-                        </>
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Excluir
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       )}
                     </div>
                   </td>

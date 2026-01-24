@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { DatePickerNascimento } from '@/components/ui/date-picker-nascimento';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ImageCropUpload } from '@/components/ui/ImageCropUpload';
+import { uploadImageToStorage } from '@/lib/uploadImage';
 import type { Professor, Unidade, Curso, ProfessorFormData } from './types';
 
 interface ModalProfessorProps {
@@ -93,7 +94,24 @@ export function ModalProfessor({
     
     setLoading(true);
     try {
-      await onSave(formData);
+      // Se há uma foto em base64, fazer upload primeiro
+      let fotoUrl = formData.foto_url;
+      
+      if (formData.foto_url && formData.foto_url.startsWith('data:image')) {
+        // É uma imagem base64, fazer upload (ou salvar base64 se storage não disponível)
+        fotoUrl = await uploadImageToStorage(
+          formData.foto_url,
+          'professores',
+          `professor_${Date.now()}.jpg`
+        );
+      }
+      
+      // Salvar com a URL da foto do storage
+      await onSave({
+        ...formData,
+        foto_url: fotoUrl
+      });
+      
       onClose();
     } catch (error) {
       console.error('Erro ao salvar professor:', error);

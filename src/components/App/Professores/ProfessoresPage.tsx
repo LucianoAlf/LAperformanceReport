@@ -7,7 +7,7 @@ import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import { 
   Users, GraduationCap, Building2, BookOpen, Award, TrendingUp,
   Plus, Search, RotateCcw, Edit2, Trash2, Eye, MoreHorizontal,
-  ChevronDown, Filter, Music, BarChart3
+  ChevronDown, Filter, Music, BarChart3, Table, LayoutGrid, MapPin, Clock
 } from 'lucide-react';
 import { KPICard } from '@/components/ui/KPICard';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,7 @@ import { ToastContainer } from '@/components/ui/toast';
 import { useToast } from '@/hooks/useToast';
 import { ModalProfessor } from './ModalProfessor';
 import { ModalDetalhesProfessor } from './ModalDetalhesProfessor';
+import { CardProfessor } from './CardProfessor';
 import type { 
   Professor, Unidade, Curso, KPIsProfessores, 
   FiltrosProfessores, ProfessorFormData
@@ -47,6 +48,12 @@ export function ProfessoresPage() {
     multiUnidade: 'todos'
   });
 
+  // Estado de visualização (com persistência no localStorage)
+  const [visualizacao, setVisualizacao] = useState<'tabela' | 'cards'>(() => {
+    const saved = localStorage.getItem('professores_visualizacao');
+    return (saved === 'cards' || saved === 'tabela') ? saved : 'tabela';
+  });
+
   // Estados de modais
   const [modalProfessor, setModalProfessor] = useState<{ open: boolean; modo: 'novo' | 'editar'; professor: Professor | null }>({
     open: false,
@@ -58,6 +65,11 @@ export function ProfessoresPage() {
     professor: null
   });
   const [professorParaExcluir, setProfessorParaExcluir] = useState<Professor | null>(null);
+
+  // Salvar preferência de visualização no localStorage
+  useEffect(() => {
+    localStorage.setItem('professores_visualizacao', visualizacao);
+  }, [visualizacao]);
 
   // Carregar dados iniciais
   useEffect(() => {
@@ -328,7 +340,6 @@ export function ProfessoresPage() {
     try {
       const professorData = {
         nome: data.nome.trim(),
-        nome_normalizado: data.nome.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''),
         data_admissao: data.data_admissao ? format(data.data_admissao, 'yyyy-MM-dd') : null,
         comissao_percentual: data.comissao_percentual,
         observacoes: data.observacoes || null,
@@ -635,8 +646,32 @@ export function ProfessoresPage() {
           Limpar
         </Button>
 
-        {/* Botão Novo Professor */}
-        <div className="flex-1 flex justify-end">
+        {/* Toggle de visualização e Botão Novo Professor */}
+        <div className="flex-1 flex justify-end items-center gap-2">
+          {/* Toggle Tabela/Cards */}
+          <div className="flex items-center gap-1 bg-slate-700/30 rounded-lg p-1">
+            <Tooltip content="Visualização em tabela" side="top">
+              <Button
+                variant="ghost"
+                size="sm"
+                className={`h-8 w-8 p-0 ${visualizacao === 'tabela' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                onClick={() => setVisualizacao('tabela')}
+              >
+                <Table className="w-4 h-4" />
+              </Button>
+            </Tooltip>
+            <Tooltip content="Visualização em cards" side="top">
+              <Button
+                variant="ghost"
+                size="sm"
+                className={`h-8 w-8 p-0 ${visualizacao === 'cards' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                onClick={() => setVisualizacao('cards')}
+              >
+                <LayoutGrid className="w-4 h-4" />
+              </Button>
+            </Tooltip>
+          </div>
+
           <Button 
             onClick={() => setModalProfessor({ open: true, modo: 'novo', professor: null })}
             className="bg-violet-600 hover:bg-violet-700"
@@ -647,10 +682,11 @@ export function ProfessoresPage() {
         </div>
       </div>
 
-      {/* Tabela de Professores */}
-      <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
+      {/* Visualização: Tabela ou Cards */}
+      {visualizacao === 'tabela' ? (
+        <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
             <thead>
               <tr className="border-b border-slate-700">
                 <th className="text-left p-4 text-xs font-medium text-slate-400 uppercase tracking-wider">Professor</th>
@@ -856,6 +892,38 @@ export function ProfessoresPage() {
           </span>
         </div>
       </div>
+      ) : (
+        <div>
+          {professoresFiltrados.length === 0 ? (
+            <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-12 text-center">
+              <p className="text-slate-400">Nenhum professor encontrado com os filtros aplicados</p>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {professoresFiltrados.map((professor) => (
+                  <CardProfessor
+                    key={professor.id}
+                    professor={professor}
+                    onVerDetalhes={(prof) => setModalDetalhes({ open: true, professor: prof })}
+                    onEditar={(prof) => setModalProfessor({ open: true, modo: 'editar', professor: prof })}
+                    onPausar={handleToggleStatus}
+                    onExcluir={setProfessorParaExcluir}
+                    formatarTempoCasa={formatarTempoCasa}
+                  />
+                ))}
+              </div>
+              
+              {/* Rodapé dos cards */}
+              <div className="mt-6 p-4 bg-slate-800/50 rounded-xl border border-slate-700/50 text-center text-sm text-slate-400">
+                <span>
+                  Mostrando {professoresFiltrados.length} de {professores.length} professores
+                </span>
+              </div>
+            </>
+          )}
+        </div>
+      )}
 
       {/* Modais */}
       <ModalProfessor

@@ -16,6 +16,9 @@ import {
   X,
   Loader2,
 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Switch } from '@/components/ui/switch';
+import { Label } from '@/components/ui/label';
 
 interface Usuario {
   id: string;
@@ -359,45 +362,44 @@ export function GerenciarUsuarios() {
 
               <div>
                 <label className="block text-sm text-gray-400 mb-1">Perfil *</label>
-                <select
-                  value={formPerfil}
-                  onChange={(e) => setFormPerfil(e.target.value as 'admin' | 'unidade')}
-                  className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500/50"
-                >
-                  <option value="unidade">Unidade (acesso restrito)</option>
-                  <option value="admin">Admin (acesso total)</option>
-                </select>
+                <Select value={formPerfil} onValueChange={(value) => setFormPerfil(value as 'admin' | 'unidade')}>
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Selecione o perfil" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unidade">Unidade (acesso restrito)</SelectItem>
+                    <SelectItem value="admin">Admin (acesso total)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               {formPerfil === 'unidade' && (
                 <div>
                   <label className="block text-sm text-gray-400 mb-1">Unidade *</label>
-                  <select
-                    value={formUnidadeId}
-                    onChange={(e) => setFormUnidadeId(e.target.value)}
-                    className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500/50"
-                  >
-                    <option value="">Selecione...</option>
-                    {unidades.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.nome}
-                      </option>
-                    ))}
-                  </select>
+                  <Select value={formUnidadeId} onValueChange={setFormUnidadeId}>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Selecione..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {unidades.map((u) => (
+                        <SelectItem key={u.id} value={u.id}>
+                          {u.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
 
               <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
+                <Switch
                   id="ativo"
                   checked={formAtivo}
-                  onChange={(e) => setFormAtivo(e.target.checked)}
-                  className="w-4 h-4 rounded border-slate-700 bg-slate-900 text-cyan-500 focus:ring-cyan-500"
+                  onCheckedChange={setFormAtivo}
                 />
-                <label htmlFor="ativo" className="text-gray-400">
+                <Label htmlFor="ativo" className="text-gray-400 cursor-pointer">
                   Usuário ativo
-                </label>
+                </Label>
               </div>
             </div>
 

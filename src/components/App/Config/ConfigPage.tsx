@@ -1,7 +1,13 @@
 import { useState, useEffect } from 'react';
-import { Settings, Save, Plus, Trash2, RefreshCw, Building2, Users, Tag, Megaphone, Clock } from 'lucide-react';
+import { Settings, Save, Plus, Trash2, RefreshCw, Building2, Users, Tag, Megaphone, Clock, Music } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { Checkbox } from '@/components/ui/checkbox';
+import { TimePicker24h } from '@/components/ui/time-picker-24h';
+import { 
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle 
+} from '@/components/ui/alert-dialog';
 
 interface HorarioFuncionamento {
   segunda_sexta: { inicio: string; fim: string };
@@ -34,19 +40,27 @@ interface TipoSaida {
   nome: string;
 }
 
-type TabId = 'unidades' | 'canais' | 'motivos' | 'tipos';
+interface Curso {
+  id: number;
+  nome: string;
+  ativo: boolean;
+}
+
+type TabId = 'unidades' | 'canais' | 'motivos' | 'tipos' | 'cursos';
 
 export function ConfigPage() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, unidadeId } = useAuth();
   const [activeTab, setActiveTab] = useState<TabId>('unidades');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   // Estados para cada entidade
   const [unidades, setUnidades] = useState<Unidade[]>([]);
+  const [unidadesFiltradas, setUnidadesFiltradas] = useState<Unidade[]>([]);
   const [canais, setCanais] = useState<CanalOrigem[]>([]);
   const [motivosSaida, setMotivosSaida] = useState<MotivoSaida[]>([]);
   const [tiposSaida, setTiposSaida] = useState<TipoSaida[]>([]);
+  const [cursos, setCursos] = useState<Curso[]>([]);
 
   // Estados de edição
   const [editedUnidades, setEditedUnidades] = useState<Set<string>>(new Set());
@@ -54,6 +68,13 @@ export function ConfigPage() {
   const [newCanal, setNewCanal] = useState('');
   const [newMotivo, setNewMotivo] = useState('');
   const [newTipo, setNewTipo] = useState('');
+  const [newCurso, setNewCurso] = useState('');
+  
+  // Estados para controle dos AlertDialogs de exclusão
+  const [canalParaExcluir, setCanalParaExcluir] = useState<number | null>(null);
+  const [motivoParaExcluir, setMotivoParaExcluir] = useState<number | null>(null);
+  const [tipoParaExcluir, setTipoParaExcluir] = useState<number | null>(null);
+  const [cursoParaExcluir, setCursoParaExcluir] = useState<number | null>(null);
 
   useEffect(() => {
     fetchDados();
@@ -62,17 +83,31 @@ export function ConfigPage() {
   async function fetchDados() {
     setLoading(true);
     try {
-      const [unidadesRes, canaisRes, motivosRes, tiposRes] = await Promise.all([
+      const [unidadesRes, canaisRes, motivosRes, tiposRes, cursosRes] = await Promise.all([
         supabase.from('unidades').select('*').order('nome'),
         supabase.from('canais_origem').select('*').order('nome'),
         supabase.from('motivos_saida').select('*').order('nome'),
         supabase.from('tipos_saida').select('*').order('nome'),
+        supabase.from('cursos').select('*').order('nome'),
       ]);
 
-      if (unidadesRes.data) setUnidades(unidadesRes.data);
+      if (unidadesRes.data) {
+        setUnidades(unidadesRes.data);
+        // Filtrar unidades baseado no perfil do usuário
+        if (isAdmin) {
+          // Admin vê todas as unidades
+          setUnidadesFiltradas(unidadesRes.data);
+        } else if (unidadeId) {
+          // Usuário comum vê apenas sua unidade
+          setUnidadesFiltradas(unidadesRes.data.filter(u => u.id === unidadeId));
+        } else {
+          setUnidadesFiltradas([]);
+        }
+      }
       if (canaisRes.data) setCanais(canaisRes.data);
       if (motivosRes.data) setMotivosSaida(motivosRes.data);
       if (tiposRes.data) setTiposSaida(tiposRes.data);
+      if (cursosRes.data) setCursos(cursosRes.data);
     } catch (err) {
       console.error('Erro ao carregar configurações:', err);
     } finally {
@@ -163,14 +198,29 @@ export function ConfigPage() {
     }
   }
 
-  async function deleteCanal(id: number) {
-    if (!confirm('Excluir este canal?')) return;
+  async function confirmarExclusaoCanal() {
+    if (!canalParaExcluir) return;
+    
     try {
-      await supabase.from('canais_origem').delete().eq('id', id);
-      setCanais(prev => prev.filter(c => c.id !== id));
+      const { error } = await supabase
+        .from('canais_origem')
+        .delete()
+        .eq('id', canalParaExcluir);
+      
+      if (error) {
+        console.error('Erro ao excluir canal:', error);
+        alert(`Erro ao excluir canal: ${error.message}\n\nPode haver dados vinculados a este canal.`);
+        setCanalParaExcluir(null);
+        return;
+      }
+      
+      // Sucesso: atualizar lista local
+      setCanais(prev => prev.filter(c => c.id !== canalParaExcluir));
+      setCanalParaExcluir(null);
     } catch (err) {
-      console.error('Erro ao excluir canal:', err);
-      alert('Erro ao excluir. Pode haver dados vinculados.');
+      console.error('Erro inesperado ao excluir canal:', err);
+      alert('Erro inesperado ao excluir. Tente novamente.');
+      setCanalParaExcluir(null);
     }
   }
 
@@ -188,14 +238,29 @@ export function ConfigPage() {
     }
   }
 
-  async function deleteMotivo(id: number) {
-    if (!confirm('Excluir este motivo?')) return;
+  async function confirmarExclusaoMotivo() {
+    if (!motivoParaExcluir) return;
+    
     try {
-      await supabase.from('motivos_saida').delete().eq('id', id);
-      setMotivosSaida(prev => prev.filter(m => m.id !== id));
+      const { error } = await supabase
+        .from('motivos_saida')
+        .delete()
+        .eq('id', motivoParaExcluir);
+      
+      if (error) {
+        console.error('Erro ao excluir motivo:', error);
+        alert(`Erro ao excluir motivo: ${error.message}\n\nPode haver dados vinculados a este motivo.`);
+        setMotivoParaExcluir(null);
+        return;
+      }
+      
+      // Sucesso: atualizar lista local
+      setMotivosSaida(prev => prev.filter(m => m.id !== motivoParaExcluir));
+      setMotivoParaExcluir(null);
     } catch (err) {
-      console.error('Erro ao excluir motivo:', err);
-      alert('Erro ao excluir. Pode haver dados vinculados.');
+      console.error('Erro inesperado ao excluir motivo:', err);
+      alert('Erro inesperado ao excluir. Tente novamente.');
+      setMotivoParaExcluir(null);
     }
   }
 
@@ -213,14 +278,78 @@ export function ConfigPage() {
     }
   }
 
-  async function deleteTipo(id: number) {
-    if (!confirm('Excluir este tipo?')) return;
+  async function confirmarExclusaoTipo() {
+    if (!tipoParaExcluir) return;
+    
     try {
-      await supabase.from('tipos_saida').delete().eq('id', id);
-      setTiposSaida(prev => prev.filter(t => t.id !== id));
+      const { error } = await supabase
+        .from('tipos_saida')
+        .delete()
+        .eq('id', tipoParaExcluir);
+      
+      if (error) {
+        console.error('Erro ao excluir tipo:', error);
+        alert(`Erro ao excluir tipo: ${error.message}\n\nPode haver dados vinculados a este tipo.`);
+        setTipoParaExcluir(null);
+        return;
+      }
+      
+      // Sucesso: atualizar lista local
+      setTiposSaida(prev => prev.filter(t => t.id !== tipoParaExcluir));
+      setTipoParaExcluir(null);
     } catch (err) {
-      console.error('Erro ao excluir tipo:', err);
-      alert('Erro ao excluir. Pode haver dados vinculados.');
+      console.error('Erro inesperado ao excluir tipo:', err);
+      alert('Erro inesperado ao excluir. Tente novamente.');
+      setTipoParaExcluir(null);
+    }
+  }
+
+  // Handlers para Cursos
+  async function addCurso() {
+    if (!newCurso.trim()) return;
+    try {
+      const { error } = await supabase.from('cursos').insert({ nome: newCurso, ativo: true });
+      if (error) throw error;
+      setNewCurso('');
+      await fetchDados();
+    } catch (err) {
+      console.error('Erro ao adicionar curso:', err);
+      alert('Erro ao adicionar curso.');
+    }
+  }
+
+  async function toggleCurso(id: number, ativo: boolean) {
+    try {
+      await supabase.from('cursos').update({ ativo: !ativo }).eq('id', id);
+      setCursos(prev => prev.map(c => c.id === id ? { ...c, ativo: !ativo } : c));
+    } catch (err) {
+      console.error('Erro ao atualizar curso:', err);
+    }
+  }
+
+  async function confirmarExclusaoCurso() {
+    if (!cursoParaExcluir) return;
+    
+    try {
+      const { error } = await supabase
+        .from('cursos')
+        .delete()
+        .eq('id', cursoParaExcluir);
+      
+      if (error) {
+        console.error('Erro ao excluir curso:', error);
+        alert(`Erro ao excluir curso: ${error.message}\n\nPode haver dados vinculados a este curso.`);
+        setCursoParaExcluir(null);
+        return;
+      }
+      
+      // Sucesso: atualizar lista local
+      setCursos(prev => prev.filter(c => c.id !== cursoParaExcluir));
+      setCursoParaExcluir(null);
+    } catch (err) {
+      console.error('Erro inesperado ao excluir curso:', err);
+      alert('Erro inesperado ao excluir. Tente novamente.');
+      setCursoParaExcluir(null);
     }
   }
 
@@ -229,6 +358,7 @@ export function ConfigPage() {
     { id: 'canais' as const, label: 'Canais de Origem', icon: Megaphone },
     { id: 'motivos' as const, label: 'Motivos de Saída', icon: Tag },
     { id: 'tipos' as const, label: 'Tipos de Saída', icon: Tag },
+    { id: 'cursos' as const, label: 'Cursos', icon: Music },
   ];
 
   if (loading) {
@@ -298,7 +428,12 @@ export function ConfigPage() {
               )}
             </div>
             <div className="space-y-6">
-              {unidades.map(u => {
+              {unidadesFiltradas.length === 0 ? (
+                <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 p-8 text-center">
+                  <p className="text-slate-400">Nenhuma unidade disponível para configuração</p>
+                </div>
+              ) : (
+                unidadesFiltradas.map(u => {
                 const horario = u.horario_funcionamento || {
                   segunda_sexta: { inicio: '08:00', fim: '21:00' },
                   sabado: { inicio: '08:00', fim: '16:00' },
@@ -354,18 +489,18 @@ export function ConfigPage() {
                         <div className="bg-slate-800/50 rounded-lg p-3">
                           <span className="text-xs text-slate-400 uppercase block mb-2">Segunda a Sexta</span>
                           <div className="flex items-center gap-2">
-                            <input
-                              type="time"
+                            <TimePicker24h
                               value={horario.segunda_sexta?.inicio || '08:00'}
-                              onChange={(e) => handleHorarioChange(u.id, 'segunda_sexta', 'inicio', e.target.value)}
-                              className="flex-1 bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white text-sm"
+                              onChange={(value) => handleHorarioChange(u.id, 'segunda_sexta', 'inicio', value)}
+                              placeholder="Início"
+                              className="flex-1"
                             />
                             <span className="text-slate-500">às</span>
-                            <input
-                              type="time"
+                            <TimePicker24h
                               value={horario.segunda_sexta?.fim || '21:00'}
-                              onChange={(e) => handleHorarioChange(u.id, 'segunda_sexta', 'fim', e.target.value)}
-                              className="flex-1 bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white text-sm"
+                              onChange={(value) => handleHorarioChange(u.id, 'segunda_sexta', 'fim', value)}
+                              placeholder="Fim"
+                              className="flex-1"
                             />
                           </div>
                         </div>
@@ -374,18 +509,18 @@ export function ConfigPage() {
                         <div className="bg-slate-800/50 rounded-lg p-3">
                           <span className="text-xs text-slate-400 uppercase block mb-2">Sábado</span>
                           <div className="flex items-center gap-2">
-                            <input
-                              type="time"
+                            <TimePicker24h
                               value={horario.sabado?.inicio || '08:00'}
-                              onChange={(e) => handleHorarioChange(u.id, 'sabado', 'inicio', e.target.value)}
-                              className="flex-1 bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white text-sm"
+                              onChange={(value) => handleHorarioChange(u.id, 'sabado', 'inicio', value)}
+                              placeholder="Início"
+                              className="flex-1"
                             />
                             <span className="text-slate-500">às</span>
-                            <input
-                              type="time"
+                            <TimePicker24h
                               value={horario.sabado?.fim || '16:00'}
-                              onChange={(e) => handleHorarioChange(u.id, 'sabado', 'fim', e.target.value)}
-                              className="flex-1 bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-white text-sm"
+                              onChange={(value) => handleHorarioChange(u.id, 'sabado', 'fim', value)}
+                              placeholder="Fim"
+                              className="flex-1"
                             />
                           </div>
                         </div>
@@ -395,11 +530,9 @@ export function ConfigPage() {
                           <span className="text-xs text-slate-400 uppercase block mb-2">Domingo</span>
                           <div className="flex items-center gap-2">
                             <label className="flex items-center gap-2 cursor-pointer">
-                              <input
-                                type="checkbox"
+                              <Checkbox
                                 checked={horario.domingo?.fechado !== false}
-                                onChange={(e) => handleHorarioChange(u.id, 'domingo', 'fechado', e.target.checked)}
-                                className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-violet-500 focus:ring-violet-500"
+                                onCheckedChange={(checked) => handleHorarioChange(u.id, 'domingo', 'fechado', checked as boolean)}
                               />
                               <span className="text-sm text-slate-300">Fechado</span>
                             </label>
@@ -409,7 +542,8 @@ export function ConfigPage() {
                     </div>
                   </div>
                 );
-              })}
+              })
+              )}
             </div>
           </div>
         )}
@@ -437,7 +571,7 @@ export function ConfigPage() {
             </div>
             <div className="space-y-2">
               {canais.map(c => (
-                <div key={c.id} className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg">
+                <div key={c.id} className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg border-b border-slate-700/30">
                   <span className={`text-sm ${c.ativo ? 'text-white' : 'text-slate-500 line-through'}`}>
                     {c.nome}
                   </span>
@@ -452,7 +586,7 @@ export function ConfigPage() {
                     </button>
                     {isAdmin && (
                       <button
-                        onClick={() => deleteCanal(c.id)}
+                        onClick={() => setCanalParaExcluir(c.id)}
                         className="p-1 text-slate-500 hover:text-rose-400"
                       >
                         <Trash2 size={16} />
@@ -488,11 +622,11 @@ export function ConfigPage() {
             </div>
             <div className="grid grid-cols-2 gap-2">
               {motivosSaida.map(m => (
-                <div key={m.id} className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg">
+                <div key={m.id} className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg border-b border-slate-700/30">
                   <span className="text-white text-sm">{m.nome}</span>
                   {isAdmin && (
                     <button
-                      onClick={() => deleteMotivo(m.id)}
+                      onClick={() => setMotivoParaExcluir(m.id)}
                       className="p-1 text-slate-500 hover:text-rose-400"
                     >
                       <Trash2 size={16} />
@@ -527,11 +661,11 @@ export function ConfigPage() {
             </div>
             <div className="grid grid-cols-2 gap-2">
               {tiposSaida.map(t => (
-                <div key={t.id} className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg">
+                <div key={t.id} className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg border-b border-slate-700/30">
                   <span className="text-white text-sm">{t.nome}</span>
                   {isAdmin && (
                     <button
-                      onClick={() => deleteTipo(t.id)}
+                      onClick={() => setTipoParaExcluir(t.id)}
                       className="p-1 text-slate-500 hover:text-rose-400"
                     >
                       <Trash2 size={16} />
@@ -542,7 +676,170 @@ export function ConfigPage() {
             </div>
           </div>
         )}
+
+        {/* Tab Cursos */}
+        {activeTab === 'cursos' && (
+          <div className="space-y-4">
+            <h3 className="text-lg font-bold text-white mb-4">Cursos</h3>
+            <div className="flex gap-2 mb-4">
+              <input
+                type="text"
+                value={newCurso}
+                onChange={(e) => setNewCurso(e.target.value)}
+                placeholder="Novo curso..."
+                className="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white text-sm"
+                onKeyDown={(e) => e.key === 'Enter' && addCurso()}
+              />
+              <button
+                onClick={addCurso}
+                className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm"
+              >
+                <Plus size={16} />
+                Adicionar
+              </button>
+            </div>
+            <div className="space-y-2">
+              {cursos.map(c => (
+                <div key={c.id} className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg border-b border-slate-700/30">
+                  <span className={`text-sm ${c.ativo ? 'text-white' : 'text-slate-500 line-through'}`}>
+                    {c.nome}
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => toggleCurso(c.id, c.ativo)}
+                      className={`px-3 py-1 rounded text-xs ${
+                        c.ativo ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700 text-slate-400'
+                      }`}
+                    >
+                      {c.ativo ? 'Ativo' : 'Inativo'}
+                    </button>
+                    {isAdmin && (
+                      <button
+                        onClick={() => setCursoParaExcluir(c.id)}
+                        className="p-1 text-slate-500 hover:text-rose-400"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* AlertDialog de Confirmação de Exclusão de Canal */}
+      <AlertDialog open={canalParaExcluir !== null} onOpenChange={(open) => !open && setCanalParaExcluir(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir este canal de origem? Esta ação não pode ser desfeita.
+              {canais.find(c => c.id === canalParaExcluir) && (
+                <span className="block mt-2 font-medium text-white">
+                  Canal: {canais.find(c => c.id === canalParaExcluir)?.nome}
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setCanalParaExcluir(null)}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmarExclusaoCanal}
+              className="bg-rose-600 hover:bg-rose-700"
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* AlertDialog de Confirmação de Exclusão de Motivo de Saída */}
+      <AlertDialog open={motivoParaExcluir !== null} onOpenChange={(open) => !open && setMotivoParaExcluir(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir este motivo de saída? Esta ação não pode ser desfeita.
+              {motivosSaida.find(m => m.id === motivoParaExcluir) && (
+                <span className="block mt-2 font-medium text-white">
+                  Motivo: {motivosSaida.find(m => m.id === motivoParaExcluir)?.nome}
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setMotivoParaExcluir(null)}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmarExclusaoMotivo}
+              className="bg-rose-600 hover:bg-rose-700"
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* AlertDialog de Confirmação de Exclusão de Tipo de Saída */}
+      <AlertDialog open={tipoParaExcluir !== null} onOpenChange={(open) => !open && setTipoParaExcluir(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir este tipo de saída? Esta ação não pode ser desfeita.
+              {tiposSaida.find(t => t.id === tipoParaExcluir) && (
+                <span className="block mt-2 font-medium text-white">
+                  Tipo: {tiposSaida.find(t => t.id === tipoParaExcluir)?.nome}
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setTipoParaExcluir(null)}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmarExclusaoTipo}
+              className="bg-rose-600 hover:bg-rose-700"
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* AlertDialog de Confirmação de Exclusão de Curso */}
+      <AlertDialog open={cursoParaExcluir !== null} onOpenChange={(open) => !open && setCursoParaExcluir(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir este curso? Esta ação não pode ser desfeita.
+              {cursos.find(c => c.id === cursoParaExcluir) && (
+                <span className="block mt-2 font-medium text-white">
+                  Curso: {cursos.find(c => c.id === cursoParaExcluir)?.nome}
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setCursoParaExcluir(null)}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmarExclusaoCurso}
+              className="bg-rose-600 hover:bg-rose-700"
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
