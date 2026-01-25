@@ -5,6 +5,68 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Mapeamento de UUIDs para nomes de unidades (UUIDs reais do banco)
+const UUID_NOME_MAP: Record<string, string> = {
+  "2ec861f6-023f-4d7b-9927-3960ad8c2a92": "Campo Grande",
+  "95553e96-971b-4590-a6eb-0201d013c14d": "Recreio",
+  "368d47f5-2d88-4475-bc14-ba084a9a348e": "Barra",
+};
+
+// Mapeamento de Farmers (duplas) por unidade
+const FARMERS_MAP: Record<string, { dupla: Array<{ nome: string; apelido: string }> }> = {
+  "2ec861f6-023f-4d7b-9927-3960ad8c2a92": { // Campo Grande
+    dupla: [
+      { nome: "Gabriela", apelido: "Gabi" },
+      { nome: "Jhonatan", apelido: "Jhon" }
+    ]
+  },
+  "95553e96-971b-4590-a6eb-0201d013c14d": { // Recreio
+    dupla: [
+      { nome: "Fernanda", apelido: "Fefê" },
+      { nome: "Daiana", apelido: "Dai" }
+    ]
+  },
+  "368d47f5-2d88-4475-bc14-ba084a9a348e": { // Barra
+    dupla: [
+      { nome: "Eduarda", apelido: "Duda" },
+      { nome: "Arthur", apelido: "Arthur" }
+    ]
+  },
+};
+
+// Programa Fideliza+ LA - Metas (iguais para todas as unidades)
+const FIDELIZA_PLUS_METAS = {
+  churn_premiado: 3, // Taxa de churn abaixo de 3%
+  inadimplencia_zero: 0, // 0% de inadimplência
+  max_renovacao: 100, // 100% das renovações previstas
+  reajuste_campeao: 8.5, // Média de reajustes > 8,5%
+};
+
+// Função para obter info das outras duplas de Farmers (concorrentes)
+function getOutrosFarmers(unidadeId: string): Array<{ nomes: string; apelidos: string; unidade: string }> {
+  const outros: Array<{ nomes: string; apelidos: string; unidade: string }> = [];
+  for (const [uuid, farmers] of Object.entries(FARMERS_MAP)) {
+    if (uuid !== unidadeId) {
+      const nomes = farmers.dupla.map(f => f.nome).join(" e ");
+      const apelidos = farmers.dupla.map(f => f.apelido).join(" e ");
+      outros.push({
+        nomes,
+        apelidos,
+        unidade: UUID_NOME_MAP[uuid] || "Outra unidade",
+      });
+    }
+  }
+  return outros;
+}
+
+// Função para formatar nomes da dupla
+function formatarDupla(dupla: Array<{ nome: string; apelido: string }>): { nomes: string; apelidos: string } {
+  return {
+    nomes: dupla.map(f => f.nome).join(" e "),
+    apelidos: dupla.map(f => f.apelido).join(" e "),
+  };
+}
+
 interface KPIGestao {
   unidade_id: string;
   unidade_nome: string;
@@ -47,14 +109,12 @@ interface RenovacoesProximas {
 
 interface Meta {
   unidade_id: string;
-  // Metas Comerciais
   meta_leads?: number;
   meta_experimentais?: number;
   meta_matriculas?: number;
   meta_taxa_conversao_experimental?: number;
   meta_taxa_conversao_lead?: number;
   meta_faturamento_passaportes?: number;
-  // Metas de Gestão/Retenção
   meta_alunos_pagantes?: number;
   meta_alunos_ativos?: number;
   meta_ticket_medio?: number;
@@ -106,7 +166,6 @@ interface InsightsRetencaoRequest {
 }
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
@@ -120,7 +179,6 @@ Deno.serve(async (req) => {
     const payload: InsightsRetencaoRequest = await req.json();
     const { dados, unidade_nome, is_consolidado } = payload;
 
-    // Consolidar KPIs se necessário
     const kpisGestao = dados.kpis_gestao || [];
     const kpisRetencao = dados.kpis_retencao || [];
     const renovacoesProximas = dados.renovacoes_proximas || [];
@@ -131,7 +189,6 @@ Deno.serve(async (req) => {
     const permanenciaPorFaixa = dados.permanencia_por_faixa || [];
     const alunosUrgentes = dados.alunos_renovacao_urgente || [];
 
-    // Calcular totais consolidados
     const totalPagantes = kpisGestao.reduce((acc, k) => acc + (k.total_alunos_pagantes || 0), 0);
     const ticketMedio = kpisGestao.length > 0 
       ? kpisGestao.reduce((acc, k) => acc + (k.ticket_medio || 0), 0) / kpisGestao.length 
@@ -146,7 +203,6 @@ Deno.serve(async (req) => {
       ? kpisGestao.reduce((acc, k) => acc + (k.tempo_permanencia_medio || 0), 0) / kpisGestao.length
       : 0;
 
-    // Renovações
     const totalRenovacoesPrevistas = kpisRetencao.reduce((acc, k) => acc + (k.renovacoes_previstas || 0), 0);
     const totalRenovacoesRealizadas = kpisRetencao.reduce((acc, k) => acc + (k.renovacoes_realizadas || 0), 0);
     const taxaRenovacao = totalRenovacoesPrevistas > 0 
@@ -154,13 +210,11 @@ Deno.serve(async (req) => {
       : 0;
     const totalEvasoes = kpisRetencao.reduce((acc, k) => acc + (k.total_evasoes || 0), 0);
 
-    // Renovações próximas
     const totalUrgente7Dias = renovacoesProximas.reduce((acc, r) => acc + (r.urgente_7_dias || 0), 0);
     const totalAtencao15Dias = renovacoesProximas.reduce((acc, r) => acc + (r.atencao_15_dias || 0), 0);
     const totalProximo30Dias = renovacoesProximas.reduce((acc, r) => acc + (r.proximo_30_dias || 0), 0);
     const totalVencidos = renovacoesProximas.reduce((acc, r) => acc + (r.vencidos || 0), 0);
 
-    // TODAS as Metas do Painel de Gestão
     const meta = metas.length > 0 ? metas[0] : null;
     const metaAlunosPagantes = meta?.meta_alunos_pagantes;
     const metaTicketMedio = meta?.meta_ticket_medio;
@@ -170,82 +224,143 @@ Deno.serve(async (req) => {
     const metaInadimplenciaMaxima = meta?.meta_inadimplencia_maxima;
     const metaFaturamento = meta?.meta_faturamento_parcelas;
 
-    // Dados do mês atual (para reajuste médio)
     const dadosMesAtual = dados.dados_mes_atual || [];
     const reajusteMedio = dadosMesAtual.length > 0 ? dadosMesAtual[0]?.reajuste_parcelas : null;
 
-    // Comparativos
     const churnMesAnterior = mesAnterior.length > 0 ? mesAnterior[0]?.churn_rate : null;
     const churnAnoPassado = mesmoMesAnoPassado.length > 0 ? mesmoMesAnoPassado[0]?.churn_rate : null;
     const ticketMesAnterior = mesAnterior.length > 0 ? mesAnterior[0]?.ticket_medio : null;
     const alunosMesAnterior = mesAnterior.length > 0 ? mesAnterior[0]?.alunos_pagantes : null;
 
-    const systemPrompt = `VOCÊ É A CONSULTORA DE GESTÃO DA LA MUSIC SCHOOL 🎵
+    // Identificar unidade e Farmers
+    const unidadeId = kpisGestao.length === 1 ? kpisGestao[0]?.unidade_id : null;
+    const nomeUnidadeFinal = unidade_nome || (kpisGestao.length === 1 ? kpisGestao[0]?.unidade_nome : undefined);
+    const farmers = unidadeId ? FARMERS_MAP[unidadeId] : null;
+    const duplaFormatada = farmers ? formatarDupla(farmers.dupla) : null;
+    const outrosFarmers = unidadeId ? getOutrosFarmers(unidadeId) : [];
 
-Você é uma especialista em gestão de escolas de música, com foco em ajudar o TIME DE FARMERS (equipe DM de secretaria/atendimento) a atingir TODAS as metas do painel de gestão.
+    // Calcular progresso no Fideliza+ LA
+    const progressoFidelizaPlus = {
+      churn_premiado: {
+        atual: churnRate,
+        meta: FIDELIZA_PLUS_METAS.churn_premiado,
+        conquistou: churnRate < FIDELIZA_PLUS_METAS.churn_premiado,
+      },
+      inadimplencia_zero: {
+        atual: inadimplencia,
+        meta: FIDELIZA_PLUS_METAS.inadimplencia_zero,
+        conquistou: inadimplencia === FIDELIZA_PLUS_METAS.inadimplencia_zero,
+      },
+      max_renovacao: {
+        atual: taxaRenovacao,
+        meta: FIDELIZA_PLUS_METAS.max_renovacao,
+        conquistou: taxaRenovacao >= FIDELIZA_PLUS_METAS.max_renovacao,
+      },
+      reajuste_campeao: {
+        atual: reajusteMedio,
+        meta: FIDELIZA_PLUS_METAS.reajuste_campeao,
+        conquistou: reajusteMedio !== null && reajusteMedio > FIDELIZA_PLUS_METAS.reajuste_campeao,
+      },
+    };
+
+    // Contar estrelas conquistadas
+    const estrelasConquistadas = [
+      progressoFidelizaPlus.churn_premiado.conquistou,
+      progressoFidelizaPlus.inadimplencia_zero.conquistou,
+      progressoFidelizaPlus.max_renovacao.conquistou,
+      progressoFidelizaPlus.reajuste_campeao.conquistou,
+    ].filter(Boolean).length;
+
+    // Montar contexto competitivo para provocações
+    let contextoCompetitivo = "";
+    if (!is_consolidado && outrosFarmers.length > 0) {
+      contextoCompetitivo = `
+## SEUS CONCORRENTES NO FIDELIZA+ LA:
+${outrosFarmers.map(f => `- ${f.apelidos} (${f.unidade})`).join("\n")}
+
+Use os nomes/apelidos deles para criar provocações saudáveis e competitivas!
+Exemplos de provocações:
+- "Será que a ${outrosFarmers[0]?.apelidos} vai deixar vocês passarem?"
+- "A dupla da ${outrosFarmers[1]?.unidade || outrosFarmers[0]?.unidade} tá voando, hein!"
+- "Quem vai levar o Fideliza+ LA esse mês?"
+- "Imagina a experiência que vocês vão curtir quando baterem todas as estrelas!"
+`;
+    }
+
+    // System Prompt personalizado
+    const systemPrompt = is_consolidado
+      ? `Você é uma consultora de gestão ENERGÉTICA e ESTRATÉGICA para escolas de música, analisando dados CONSOLIDADOS de todas as unidades.
+Seu papel é fornecer uma visão gerencial comparativa entre as unidades e seus times de Farmers.
 
 CONTEXTO DO NEGÓCIO:
-- LA Music School é uma escola de música com múltiplas unidades (Barra, Campo Grande, Recreio)
-- O TIME DE FARMERS são as responsáveis por renovações e retenção
-- Elas ganham comissão por renovação - são vendedoras do pós-venda
+- LA Music é um grupo de escolas de música com 3 unidades no Rio de Janeiro: Barra, Campo Grande e Recreio
+- O TIME DE FARMERS são os responsáveis por renovações, retenção e relacionamento com alunos
+- Eles ganham comissão por renovação e estrelas no programa Fideliza+ LA que geram experiências culinárias, culturais, passeios, cinema, troféus, 14º salário e VR por 6 meses!
 
-IMPORTANTE SOBRE PERSONALIZAÇÃO:
-- SEMPRE mencione "Farmers" ou "time de Farmers" ao se referir à equipe
-- Quando analisar UMA unidade específica, SEMPRE cite o nome da unidade (ex: "Farmers da Barra", "equipe da Campo Grande")
-- Quando for CONSOLIDADO, compare as 3 unidades e destaque diferenças entre elas
+FARMERS POR UNIDADE:
+- Campo Grande: Gabi e Jhon
+- Recreio: Fefê e Dai
+- Barra: Duda e Arthur
+
+IMPORTANTE:
+- Você está falando com o ADMINISTRADOR (visão geral)
+- Compare o desempenho entre as unidades e duplas de Farmers
+- Identifique qual dupla está performando melhor
+- Sugira ações para equilibrar os resultados
+- Mencione os nomes dos Farmers ao comparar
+
+Tom: Profissional, analítico, estratégico, mas celebrando conquistas!`
+      : `Você é uma coach de retenção ENERGÉTICA e PROVOCADORA para Farmers de uma escola de música!
+Você está falando diretamente com ${duplaFormatada?.nomes || "a equipe"} (pode chamar de ${duplaFormatada?.apelidos || "pessoal"}), Farmers da unidade ${nomeUnidadeFinal}.
+
+PERSONALIDADE:
+- Chame pelos NOMES diretamente: "${duplaFormatada?.apelidos || "Pessoal"}, e aí?!" (NUNCA "Farmers da ${nomeUnidadeFinal}")
+- Seja DESAFIADORA e COMPETITIVA - são vendedoras do pós-venda!
+- Use provocações saudáveis mencionando as outras duplas de Farmers
+- Fale sobre as EXPERIÊNCIAS e PRÊMIOS do Fideliza+ LA
+- Seja direta, energética, use emojis com moderação
+- Crie URGÊNCIA mas com bom humor
+
+${contextoCompetitivo}
+
+CONTEXTO DO NEGÓCIO:
+- LA Music é um grupo de escolas de música com 3 unidades no Rio de Janeiro
+- Farmers são responsáveis por renovações, retenção e relacionamento com alunos
+- Ganham comissão por renovação - são vendedoras do pós-venda!
 
 PAINEL DE METAS DE GESTÃO (o que você deve analisar):
 1. **Alunos Pagantes**: Meta de alunos no fim do período
 2. **Ticket Médio**: Valor médio por aluno
-3. **Churn Rate (%)**: Taxa de cancelamento (meta máxima)
+3. **Churn Rate (%)**: Taxa de cancelamento (meta máxima anual: 4%)
 4. **Taxa Renovação (%)**: Percentual de renovações realizadas
 5. **Tempo Permanência (meses)**: Média de meses que aluno fica
 6. **Inadimplência (%)**: Taxa de inadimplência (meta máxima)
 7. **Reajuste Médio (%)**: Percentual médio de reajuste nas renovações
 
-PROGRAMA FIDELIZA+ (bonificação extra):
-- Churn Premiado: Taxa de churn abaixo de 3,5% no mês
-- Inadimplência Zero: Unidade fechar o mês sem nenhuma inadimplência (0%)
-- Max Renovação: Realizar 100% das renovações previstas no mês
-- Reajuste Campeão: Média de reajustes superior a 8,5%
+## PROGRAMA FIDELIZA+ LA (4 ESTRELAS):
+Para ${duplaFormatada?.nomes || "a dupla"} ganhar as estrelas este mês:
+⭐ Churn Premiado: Taxa de churn abaixo de ${FIDELIZA_PLUS_METAS.churn_premiado}%
+⭐ Inadimplência Zero: Fechar o mês com 0% de inadimplência
+⭐ Max Renovação: Realizar 100% das renovações previstas
+⭐ Reajuste Campeão: Média de reajustes superior a ${FIDELIZA_PLUS_METAS.reajuste_campeao}%
+
+PRÊMIOS: Experiências culinárias, culturais, passeios, cinema, troféus! 
+GANHADOR DO ANO: 14º Salário + VR por 6 meses! 🏆
+Provoque: "Qual experiência vocês vão curtir esse mês?"
 
 SAZONALIDADE:
 - Meses difíceis para retenção: Janeiro, Fevereiro, Julho, Dezembro
 - Meses bons para matrícula: Janeiro, Fevereiro, Março, Agosto
 
-TOM DE COMUNICAÇÃO:
-- MOTIVACIONAL e ENERGÉTICO (são vendedoras!)
-- Celebre conquistas com entusiasmo usando emojis
-- Seja prática e direta nas ações
-- Quando houver problemas, seja construtiva e ofereça soluções
-- SEMPRE se refira à equipe como "Farmers" ou "time de Farmers"
+REGRAS DE OURO:
+1. SEMPRE chame pelos nomes/apelidos no início
+2. Mencione os concorrentes para criar competitividade
+3. Fale do Fideliza+ LA e das experiências/prêmios
+4. Seja provocadora mas respeitosa
+5. Crie senso de urgência com renovações pendentes
+6. Celebre conquistas mas sempre desafie para mais`;
 
-ANÁLISES QUE VOCÊ DEVE FAZER:
-1. Comparar CADA KPI com sua respectiva META
-2. Comparar com mês anterior (tendência)
-3. Comparar com mesmo período do ano passado (sazonalidade)
-4. Identificar alunos próximos de renovação
-5. Sugerir ações para atingir as metas que estão abaixo
-6. Celebrar metas que foram batidas
-
-${is_consolidado ? `MODO CONSOLIDADO (ADMIN):
-- Você está analisando TODAS as 3 unidades juntas
-- Compare performance entre Barra, Campo Grande e Recreio
-- Destaque qual unidade está melhor em cada KPI
-- Sugira troca de experiências entre as equipes de Farmers
-- Use frases como "Os Farmers da Barra estão...", "A equipe da Campo Grande..."` : `MODO UNIDADE ESPECÍFICA:
-- Você está analisando APENAS a unidade ${unidade_nome || '[nome da unidade]'}
-- Sempre mencione o nome da unidade nas suas análises
-- Use frases como "Farmers da ${unidade_nome || '[unidade]'}", "A equipe da ${unidade_nome || '[unidade]'}"
-- Personalize as ações para essa unidade específica`}
-
-IMPORTANTE:
-- Analise TODAS as metas do painel, não só o Fideliza+
-- Priorize AÇÕES PRÁTICAS que podem ser feitas HOJE
-- Destaque renovações urgentes (próximos 7 dias)
-- Sugira ligações/mensagens específicas para alunos em risco
-- SEMPRE mencione o nome da unidade ou "Farmers" nas suas mensagens
-
+    const jsonFormat = `
 Responda APENAS em JSON válido, sem markdown, no formato:
 {
   "saudacao_motivacional": "Mensagem de abertura energética e personalizada (2-3 frases)",
@@ -266,6 +381,22 @@ Responda APENAS em JSON válido, sem markdown, no formato:
       "acao_imediata": "string com ação específica"
     }
   ],
+  "painel_metas": {
+    "resumo_geral": "Análise geral do desempenho vs metas em 2-3 frases",
+    "metas_batidas": number,
+    "metas_total": number,
+    "kpis": [
+      {
+        "nome": "Alunos Pagantes" | "Ticket Médio" | "Churn Rate" | "Taxa Renovação" | "Tempo Permanência" | "Inadimplência" | "Reajuste Médio",
+        "atual": number,
+        "meta": number | null,
+        "status": "bateu" | "proximo" | "longe" | "sem_meta",
+        "variacao_mes_anterior": number | null,
+        "analise": "Análise curta e provocadora do KPI",
+        "acao_sugerida": "O que fazer para melhorar ou manter"
+      }
+    ]
+  },
   "analise_kpis": {
     "resumo": "Análise geral em 2-3 frases motivacionais",
     "comparativo_mes_anterior": {
@@ -277,10 +408,23 @@ Responda APENAS em JSON válido, sem markdown, no formato:
     }
   },
   "renovacoes_proximas": {
+    "total_vencidos": number,
     "total_7_dias": number,
     "total_15_dias": number,
     "total_30_dias": number,
-    "acao_sugerida": "string com ação específica"
+    "acao_sugerida": "string com ação específica",
+    "script_ligacao": "Sugestão de script para ligar para alunos com renovação próxima"
+  },
+  "evasoes_analise": {
+    "total_recente": number,
+    "principais_motivos": ["string"],
+    "perfil_risco": "Descrição do perfil de aluno com maior risco de evasão",
+    "acao_preventiva": "O que fazer para prevenir novas evasões"
+  },
+  "permanencia_analise": {
+    "faixa_critica": "Qual faixa de permanência tem mais risco",
+    "quantidade_risco": number,
+    "estrategia": "Estratégia para reter alunos nessa faixa"
   },
   "plano_acao_semanal": [
     {
@@ -288,7 +432,8 @@ Responda APENAS em JSON válido, sem markdown, no formato:
       "tipo": "ligacao" | "mensagem" | "reuniao" | "processo",
       "titulo": "string curto",
       "descricao": "string detalhada",
-      "impacto_esperado": "string"
+      "impacto_esperado": "string",
+      "meta_quantitativa": "Ex: 5 ligações, 10 mensagens"
     }
   ],
   "insights_fidelizacao": [
@@ -297,23 +442,43 @@ Responda APENAS em JSON válido, sem markdown, no formato:
       "acao_sugerida": "string com ação prática"
     }
   ],
+  "competitividade": {
+    "provocacao": "Provocação mencionando as outras duplas de Farmers",
+    "desafio": "Desafio direto para a dupla",
+    "ranking_estimado": "Onde a dupla está no ranking do Fideliza+"
+  },
+  "fideliza_plus": {
+    "estrelas_conquistadas": number,
+    "estrelas_possiveis": 4,
+    "detalhamento": [
+      {
+        "estrela": "Churn Premiado" | "Inadimplência Zero" | "Max Renovação" | "Reajuste Campeão",
+        "status": "conquistada" | "proxima" | "longe",
+        "atual": number,
+        "meta": number,
+        "falta": "O que falta para conquistar"
+      }
+    ],
+    "proxima_estrela": "Qual estrela está mais perto de conquistar",
+    "dica_experiencia": "Provocação sobre a experiência/prêmio"
+  },
   "dica_do_dia": "Uma dica prática e motivacional para aplicar hoje",
-  "mensagem_final": "Mensagem de encerramento motivacional e encorajadora (1-2 frases)"
+  "mensagem_final": "Mensagem de encerramento motivacional e encorajadora chamando pelos nomes (1-2 frases)"
 }`;
 
     // Preparar lista de alunos urgentes formatada
     const alunosUrgentesFormatados = alunosUrgentes.slice(0, 10).map((a: any) => 
-      `- ${a.aluno_nome} (${a.curso_nome || 'curso não informado'}): ${a.dias_ate_vencimento} dias, ${a.tempo_permanencia_meses || 0} meses de permanência`
+      `- ${a.aluno_nome} (${a.curso_nome || 'curso não informado'}): ${a.dias_ate_vencimento} dias, ${a.tempo_permanencia_meses || 0} meses de permanência` 
     ).join('\n');
 
     // Preparar evasões recentes formatadas
     const evasoesFormatadas = evasoesRecentes.slice(0, 5).map((e: any) =>
-      `- ${e.aluno_nome}: ${e.motivo || 'motivo não informado'}, ${e.tempo_permanencia || 0} meses`
+      `- ${e.aluno_nome}: ${e.motivo || 'motivo não informado'}, ${e.tempo_permanencia || 0} meses` 
     ).join('\n');
 
     // Preparar permanência por faixa
     const permanenciaFormatada = permanenciaPorFaixa.map((p: any) =>
-      `- ${p.faixa}: ${p.quantidade} alunos (${p.percentual}%)`
+      `- ${p.faixa}: ${p.quantidade} alunos (${p.percentual}%)` 
     ).join('\n');
 
     // Comparativo entre unidades (se consolidado)
@@ -323,11 +488,12 @@ Responda APENAS em JSON válido, sem markdown, no formato:
       comparativoUnidades = `
 📊 COMPARATIVO ENTRE UNIDADES:
 ${unidadesOrdenadas.map(u => 
-  `- ${u.unidade_nome}: ${u.total_alunos_pagantes} pagantes, Churn ${(u.churn_rate || 0).toFixed(1)}%, Ticket R$${(u.ticket_medio || 0).toFixed(0)}`
+  `- ${u.unidade_nome}: ${u.total_alunos_pagantes} pagantes, Churn ${(u.churn_rate || 0).toFixed(1)}%, Ticket R$${(u.ticket_medio || 0).toFixed(0)}` 
 ).join('\n')}`;
     }
 
-    const userPrompt = `Analise os dados de gestão ${unidade_nome ? `da unidade ${unidade_nome}` : 'CONSOLIDADO de todas as unidades'} em ${dados.periodo.mes_nome}/${dados.periodo.ano}:
+    const userPrompt = `# DADOS DE GESTÃO - ${nomeUnidadeFinal ? nomeUnidadeFinal.toUpperCase() : 'CONSOLIDADO'} - ${dados.periodo.mes_nome}/${dados.periodo.ano}
+${!is_consolidado && duplaFormatada ? `## FARMERS: ${duplaFormatada.nomes} (${duplaFormatada.apelidos})` : '## VISÃO CONSOLIDADA (ADMINISTRADOR)'}
 
 📊 PAINEL DE METAS DE GESTÃO - KPIs vs METAS:
 | KPI | Atual | Meta | Status |
@@ -338,9 +504,9 @@ ${unidadesOrdenadas.map(u =>
 | Taxa Renovação | ${taxaRenovacao.toFixed(0)}% | ${metaTaxaRenovacao ? `${metaTaxaRenovacao}%` : 'N/D'} | ${metaTaxaRenovacao ? (taxaRenovacao >= metaTaxaRenovacao ? '✅' : '❌') : '⚪'} |
 | Tempo Permanência | ${tempoPermanencia.toFixed(0)} meses | ${metaTempoPermanencia ? `${metaTempoPermanencia} meses` : 'N/D'} | ${metaTempoPermanencia ? (tempoPermanencia >= metaTempoPermanencia ? '✅' : '❌') : '⚪'} |
 | Inadimplência | ${inadimplencia.toFixed(1)}% | ${metaInadimplenciaMaxima ? `máx ${metaInadimplenciaMaxima}%` : 'N/D'} | ${metaInadimplenciaMaxima ? (inadimplencia <= metaInadimplenciaMaxima ? '✅' : '❌') : '⚪'} |
-| Reajuste Médio | ${reajusteMedio ? `${reajusteMedio.toFixed(1)}%` : 'N/D'} | >8,5% (Fideliza+) | ${reajusteMedio ? (reajusteMedio > 8.5 ? '✅' : '❌') : '⚪'} |
+| Reajuste Médio | ${reajusteMedio ? `${reajusteMedio.toFixed(1)}%` : 'N/D'} | >${FIDELIZA_PLUS_METAS.reajuste_campeao}% (Fideliza+) | ${reajusteMedio ? (reajusteMedio > FIDELIZA_PLUS_METAS.reajuste_campeao ? '✅' : '❌') : '⚪'} |
 
-� COMPARATIVO COM MÊS ANTERIOR:
+📈 COMPARATIVO COM MÊS ANTERIOR:
 - Alunos: ${alunosMesAnterior !== null ? `${alunosMesAnterior} → ${totalPagantes}` : 'N/D'}
 - Ticket: ${ticketMesAnterior !== null ? `R$${ticketMesAnterior.toFixed(0)} → R$${ticketMedio.toFixed(0)}` : 'N/D'}
 - Churn: ${churnMesAnterior !== null ? `${churnMesAnterior.toFixed(1)}% → ${churnRate.toFixed(1)}%` : 'N/D'}
@@ -362,17 +528,20 @@ ${permanenciaFormatada ? `⏱️ DISTRIBUIÇÃO POR PERMANÊNCIA:\n${permanencia
 
 ${comparativoUnidades}
 
-� PROGRAMA FIDELIZA+ (bonificação):
-- Churn Premiado (<3,5%): ${churnRate < 3.5 ? '✅ BATIDA!' : '❌'} (${churnRate.toFixed(1)}%)
-- Inadimplência Zero (0%): ${inadimplencia === 0 ? '✅ BATIDA!' : '❌'} (${inadimplencia.toFixed(1)}%)
-- Max Renovação (100%): ${taxaRenovacao >= 100 ? '✅ BATIDA!' : '❌'} (${taxaRenovacao.toFixed(0)}%)
-- Reajuste Campeão (>8,5%): ${reajusteMedio && reajusteMedio > 8.5 ? '✅ BATIDA!' : '❌'} (${reajusteMedio ? `${reajusteMedio.toFixed(1)}%` : 'N/D'})
+🏆 PROGRAMA FIDELIZA+ LA (${estrelasConquistadas}/4 estrelas):
+⭐ Churn Premiado (<${FIDELIZA_PLUS_METAS.churn_premiado}%): ${progressoFidelizaPlus.churn_premiado.conquistou ? '✅ CONQUISTOU!' : '❌'} (${churnRate.toFixed(1)}%)
+⭐ Inadimplência Zero (0%): ${progressoFidelizaPlus.inadimplencia_zero.conquistou ? '✅ CONQUISTOU!' : '❌'} (${inadimplencia.toFixed(1)}%)
+⭐ Max Renovação (100%): ${progressoFidelizaPlus.max_renovacao.conquistou ? '✅ CONQUISTOU!' : '❌'} (${taxaRenovacao.toFixed(0)}%)
+⭐ Reajuste Campeão (>${FIDELIZA_PLUS_METAS.reajuste_campeao}%): ${progressoFidelizaPlus.reajuste_campeao.conquistou ? '✅ CONQUISTOU!' : '❌'} (${reajusteMedio ? `${reajusteMedio.toFixed(1)}%` : 'N/D'})
 
-Gere uma análise completa de TODAS as metas do painel e um plano de ação prático!`;
+---
+
+Gere uma análise completa de TODAS as metas do painel e um plano de ação prático!
+${!is_consolidado && duplaFormatada ? `LEMBRE-SE: Chame ${duplaFormatada.apelidos} pelo nome e faça provocações com as outras duplas!` : ''}`;
 
     // Chamar Gemini API
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -380,7 +549,7 @@ Gere uma análise completa de TODAS as metas do painel e um plano de ação prá
           contents: [
             {
               role: 'user',
-              parts: [{ text: systemPrompt + '\n\n' + userPrompt }]
+              parts: [{ text: systemPrompt + '\n\n' + jsonFormat + '\n\n' + userPrompt }]
             }
           ],
           generationConfig: {
@@ -422,12 +591,14 @@ Gere uma análise completa de TODAS as metas do painel e um plano de ação prá
       
       // Retornar resposta de fallback
       insights = {
-        saudacao_motivacional: `Olá, equipe! 💪 Vamos analisar os números de ${dados.periodo.mes_nome} e traçar estratégias para fidelizar ainda mais nossos alunos!`,
-        saude_retencao: churnRate <= 4 ? 'excelente' : churnRate <= 6 ? 'saudavel' : churnRate <= 8 ? 'atencao' : 'critica',
-        conquistas: churnRate <= 4 ? [{
+        saudacao_motivacional: is_consolidado 
+          ? `Olá, Administrador! 💪 Vamos analisar os números de ${dados.periodo.mes_nome} e traçar estratégias para todas as unidades!` 
+          : `E aí, ${duplaFormatada?.apelidos || 'pessoal'}! 🔥 Bora ver como estão os números de ${dados.periodo.mes_nome}?`,
+        saude_retencao: churnRate < 3 ? 'excelente' : churnRate <= 4 ? 'saudavel' : churnRate <= 6 ? 'atencao' : 'critica',
+        conquistas: progressoFidelizaPlus.churn_premiado.conquistou ? [{
           tipo: 'meta_batida',
           titulo: 'Churn Premiado!',
-          descricao: `Churn de ${churnRate.toFixed(1)}% está dentro da meta Fideliza Mais!`,
+          descricao: `Churn de ${churnRate.toFixed(1)}% está abaixo de ${FIDELIZA_PLUS_METAS.churn_premiado}% - Estrela Fideliza+ conquistada!`,
           emoji: '🏆'
         }] : [],
         alertas_urgentes: totalUrgente7Dias > 0 ? [{
@@ -467,8 +638,22 @@ Gere uma análise completa de TODAS as metas do painel e um plano de ação prá
             acao_sugerida: 'Ofereça benefícios de fidelidade para alunos antigos'
           }
         ],
+        competitividade: is_consolidado ? null : {
+          provocacao: `Será que a ${outrosFarmers[0]?.apelidos || 'concorrência'} vai deixar vocês passarem?`,
+          desafio: 'Mostrem quem manda na retenção!'
+        },
+        fideliza_plus: {
+          estrelas_conquistadas: estrelasConquistadas,
+          estrelas_possiveis: 4,
+          proxima_estrela: !progressoFidelizaPlus.churn_premiado.conquistou ? 'Churn Premiado' : 
+                          !progressoFidelizaPlus.inadimplencia_zero.conquistou ? 'Inadimplência Zero' :
+                          !progressoFidelizaPlus.max_renovacao.conquistou ? 'Max Renovação' : 'Reajuste Campeão',
+          dica_experiencia: 'Qual experiência vocês vão curtir esse mês?'
+        },
         dica_do_dia: 'Ligue para um aluno que acabou de renovar e agradeça! Isso fortalece o relacionamento.',
-        mensagem_final: 'Vocês são incríveis! Cada renovação é uma vitória. Vamos juntas! 🚀'
+        mensagem_final: is_consolidado 
+          ? 'Acompanhe os números e apoie as equipes de Farmers!'
+          : `Vambora, ${duplaFormatada?.apelidos || 'pessoal'}! 🚀 O Fideliza+ LA espera vocês!` 
       };
     }
 

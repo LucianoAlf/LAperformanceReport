@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Brain, Sparkles, Loader2, Phone, MessageSquare, Users, Settings,
   TrendingUp, TrendingDown, AlertTriangle, CheckCircle, Target,
   Lightbulb, Calendar, ChevronDown, ChevronUp, Trophy, Zap,
-  Megaphone, BarChart3, UserCheck
+  Megaphone, BarChart3, UserCheck, Save, History, Trash2, Clock
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
@@ -130,11 +130,143 @@ interface PlanoAcaoComercialProps {
   mes: number;
 }
 
+// Interface para insights salvos
+interface InsightSalvo {
+  id: string;
+  tipo: string;
+  unidade_id: string | null;
+  ano: number;
+  mes: number;
+  dados: InsightsComercial;
+  titulo: string | null;
+  created_at: string;
+}
+
+// Chave para sessionStorage
+const getSessionKey = (unidadeId: string, ano: number, mes: number) => 
+  `insights_comercial_${unidadeId}_${ano}_${mes}`;
+
 export function PlanoAcaoComercial({ unidadeId, ano, mes }: PlanoAcaoComercialProps) {
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [insights, setInsights] = useState<InsightsComercial | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expandido, setExpandido] = useState(true);
+  const [showHistorico, setShowHistorico] = useState(false);
+  const [historico, setHistorico] = useState<InsightSalvo[]>([]);
+  const [loadingHistorico, setLoadingHistorico] = useState(false);
+  const [savedMessage, setSavedMessage] = useState<string | null>(null);
+
+  // Carregar insights da sessão ao montar ou quando mudar filtros
+  useEffect(() => {
+    const sessionKey = getSessionKey(unidadeId, ano, mes);
+    const saved = sessionStorage.getItem(sessionKey);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setInsights(parsed);
+      } catch (e) {
+        console.error('Erro ao carregar insights da sessão:', e);
+      }
+    } else {
+      setInsights(null);
+    }
+  }, [unidadeId, ano, mes]);
+
+  // Salvar insights na sessão quando mudar
+  useEffect(() => {
+    if (insights) {
+      const sessionKey = getSessionKey(unidadeId, ano, mes);
+      sessionStorage.setItem(sessionKey, JSON.stringify(insights));
+    }
+  }, [insights, unidadeId, ano, mes]);
+
+  // Buscar histórico de insights salvos
+  async function carregarHistorico() {
+    setLoadingHistorico(true);
+    try {
+      const unidadeUUID = getUnidadeUUID(unidadeId);
+      const { data, error } = await supabase
+        .from('insights_salvos')
+        .select('*')
+        .eq('tipo', 'comercial')
+        .eq('ano', ano)
+        .eq('mes', mes)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      if (error) throw error;
+      setHistorico(data || []);
+    } catch (err) {
+      console.error('Erro ao carregar histórico:', err);
+    } finally {
+      setLoadingHistorico(false);
+    }
+  }
+
+  // Salvar insights no banco de dados
+  async function salvarInsights() {
+    if (!insights) return;
+    
+    setSaving(true);
+    setSavedMessage(null);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('Usuário não autenticado');
+
+      const unidadeUUID = getUnidadeUUID(unidadeId);
+      const titulo = `Análise ${getUnidadeNome(unidadeId)} - ${mes.toString().padStart(2, '0')}/${ano}`;
+
+      const { error } = await supabase
+        .from('insights_salvos')
+        .insert({
+          user_id: user.id,
+          tipo: 'comercial',
+          unidade_id: unidadeUUID,
+          ano,
+          mes,
+          dados: insights,
+          titulo
+        });
+
+      if (error) throw error;
+      
+      setSavedMessage('Análise salva com sucesso!');
+      setTimeout(() => setSavedMessage(null), 3000);
+      
+      // Recarregar histórico se estiver aberto
+      if (showHistorico) {
+        carregarHistorico();
+      }
+    } catch (err) {
+      console.error('Erro ao salvar:', err);
+      setSavedMessage('Erro ao salvar análise');
+      setTimeout(() => setSavedMessage(null), 3000);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // Carregar insight do histórico
+  function carregarDoHistorico(item: InsightSalvo) {
+    setInsights(item.dados);
+    setShowHistorico(false);
+  }
+
+  // Deletar insight do histórico
+  async function deletarDoHistorico(id: string) {
+    try {
+      const { error } = await supabase
+        .from('insights_salvos')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      setHistorico(prev => prev.filter(h => h.id !== id));
+    } catch (err) {
+      console.error('Erro ao deletar:', err);
+    }
+  }
 
   async function gerarAnalise() {
     setLoading(true);
@@ -169,6 +301,9 @@ export function PlanoAcaoComercial({ unidadeId, ano, mes }: PlanoAcaoComercialPr
       // A Edge Function retorna diretamente os insights
       if (responseData && !responseData.error) {
         setInsights(responseData);
+        // Salvar na sessão automaticamente
+        const sessionKey = getSessionKey(unidadeId, ano, mes);
+        sessionStorage.setItem(sessionKey, JSON.stringify(responseData));
       } else {
         throw new Error(responseData?.error || 'Resposta inválida da IA');
       }
@@ -261,7 +396,42 @@ export function PlanoAcaoComercial({ unidadeId, ano, mes }: PlanoAcaoComercialPr
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {/* Botão Histórico */}
+          <Button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowHistorico(!showHistorico);
+              if (!showHistorico) carregarHistorico();
+            }}
+            variant="outline"
+            size="sm"
+            className="border-slate-600 text-slate-400 hover:bg-slate-700"
+          >
+            <History className="w-4 h-4" />
+          </Button>
+          
+          {/* Botão Salvar (só aparece se tiver insights) */}
+          {insights && (
+            <Button
+              onClick={(e) => {
+                e.stopPropagation();
+                salvarInsights();
+              }}
+              disabled={saving}
+              variant="outline"
+              size="sm"
+              className="border-emerald-600 text-emerald-400 hover:bg-emerald-500/10"
+            >
+              {saving ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
+            </Button>
+          )}
+          
+          {/* Botão Gerar (só aparece se não tiver insights) */}
           {!insights && (
             <Button
               onClick={(e) => {
@@ -291,6 +461,78 @@ export function PlanoAcaoComercial({ unidadeId, ano, mes }: PlanoAcaoComercialPr
           )}
         </div>
       </div>
+
+      {/* Mensagem de salvamento */}
+      {savedMessage && (
+        <div className={cn(
+          'mx-6 mb-2 p-2 rounded-lg text-sm text-center',
+          savedMessage.includes('sucesso') 
+            ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+            : 'bg-rose-500/10 text-rose-400 border border-rose-500/30'
+        )}>
+          {savedMessage}
+        </div>
+      )}
+
+      {/* Painel de Histórico */}
+      {showHistorico && (
+        <div className="mx-6 mb-4 p-4 bg-slate-800/50 rounded-xl border border-slate-700/50">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+              <History className="w-4 h-4 text-cyan-400" />
+              Análises Salvas
+            </h4>
+            <Button
+              onClick={() => setShowHistorico(false)}
+              variant="ghost"
+              size="sm"
+              className="text-slate-400 hover:text-white"
+            >
+              ✕
+            </Button>
+          </div>
+          
+          {loadingHistorico ? (
+            <div className="text-center py-4">
+              <Loader2 className="w-6 h-6 text-cyan-400 mx-auto animate-spin" />
+            </div>
+          ) : historico.length === 0 ? (
+            <p className="text-sm text-slate-500 text-center py-4">
+              Nenhuma análise salva para este período
+            </p>
+          ) : (
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {historico.map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between p-3 bg-slate-700/30 rounded-lg hover:bg-slate-700/50 transition-colors"
+                >
+                  <div 
+                    className="flex-1 cursor-pointer"
+                    onClick={() => carregarDoHistorico(item)}
+                  >
+                    <p className="text-sm text-white font-medium">
+                      {item.titulo || 'Análise sem título'}
+                    </p>
+                    <p className="text-xs text-slate-500 flex items-center gap-1">
+                      <Clock className="w-3 h-3" />
+                      {new Date(item.created_at).toLocaleString('pt-BR')}
+                    </p>
+                  </div>
+                  <Button
+                    onClick={() => deletarDoHistorico(item.id)}
+                    variant="ghost"
+                    size="sm"
+                    className="text-rose-400 hover:text-rose-300 hover:bg-rose-500/10"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Conteúdo */}
       {expandido && (
@@ -600,14 +842,32 @@ export function PlanoAcaoComercial({ unidadeId, ano, mes }: PlanoAcaoComercialPr
                 </div>
               )}
 
-              {/* Botão para nova análise */}
-              <div className="flex justify-center pt-4">
+              {/* Botões de ação */}
+              <div className="flex justify-center gap-3 pt-4">
+                <Button
+                  onClick={salvarInsights}
+                  disabled={saving}
+                  variant="outline"
+                  className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+                >
+                  {saving ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Save className="w-4 h-4 mr-2" />
+                  )}
+                  Salvar Análise
+                </Button>
                 <Button
                   onClick={gerarAnalise}
+                  disabled={loading}
                   variant="outline"
                   className="border-orange-500/30 text-orange-400 hover:bg-orange-500/10"
                 >
-                  <Sparkles className="w-4 h-4 mr-2" />
+                  {loading ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-4 h-4 mr-2" />
+                  )}
                   Gerar Nova Análise
                 </Button>
               </div>
