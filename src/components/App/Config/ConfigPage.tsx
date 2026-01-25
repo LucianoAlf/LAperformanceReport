@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Settings, Save, Plus, Trash2, RefreshCw, Building2, Users, Tag, Megaphone, Clock, Music } from 'lucide-react';
+import { Settings, Save, Plus, Trash2, RefreshCw, Building2, Users, Tag, Megaphone, Clock, Music, Edit2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { TimePicker24h } from '@/components/ui/time-picker-24h';
 import { 
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
@@ -44,6 +46,7 @@ interface Curso {
   id: number;
   nome: string;
   ativo: boolean;
+  capacidade_maxima: number | null;
 }
 
 type TabId = 'unidades' | 'canais' | 'motivos' | 'tipos' | 'cursos';
@@ -75,6 +78,11 @@ export function ConfigPage() {
   const [motivoParaExcluir, setMotivoParaExcluir] = useState<number | null>(null);
   const [tipoParaExcluir, setTipoParaExcluir] = useState<number | null>(null);
   const [cursoParaExcluir, setCursoParaExcluir] = useState<number | null>(null);
+  
+  // Estado para modal de edição de curso
+  const [cursoParaEditar, setCursoParaEditar] = useState<Curso | null>(null);
+  const [capacidadeEditando, setCapacidadeEditando] = useState<number | null>(null);
+  const [semLimite, setSemLimite] = useState(false);
 
   useEffect(() => {
     fetchDados();
@@ -324,6 +332,41 @@ export function ConfigPage() {
       setCursos(prev => prev.map(c => c.id === id ? { ...c, ativo: !ativo } : c));
     } catch (err) {
       console.error('Erro ao atualizar curso:', err);
+    }
+  }
+
+  function abrirModalEditarCurso(curso: Curso) {
+    setCursoParaEditar(curso);
+    setCapacidadeEditando(curso.capacidade_maxima);
+    setSemLimite(curso.capacidade_maxima === null);
+  }
+
+  async function salvarEdicaoCurso() {
+    if (!cursoParaEditar) return;
+    
+    try {
+      const { error } = await supabase
+        .from('cursos')
+        .update({ 
+          capacidade_maxima: semLimite ? null : capacidadeEditando 
+        })
+        .eq('id', cursoParaEditar.id);
+      
+      if (error) throw error;
+      
+      // Atualizar lista local
+      setCursos(prev => prev.map(c => 
+        c.id === cursoParaEditar.id 
+          ? { ...c, capacidade_maxima: semLimite ? null : capacidadeEditando }
+          : c
+      ));
+      
+      setCursoParaEditar(null);
+      setCapacidadeEditando(null);
+      setSemLimite(false);
+    } catch (err) {
+      console.error('Erro ao atualizar curso:', err);
+      alert('Erro ao atualizar curso.');
     }
   }
 
@@ -701,9 +744,16 @@ export function ConfigPage() {
             <div className="space-y-2">
               {cursos.map(c => (
                 <div key={c.id} className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg border-b border-slate-700/30">
-                  <span className={`text-sm ${c.ativo ? 'text-white' : 'text-slate-500 line-through'}`}>
-                    {c.nome}
-                  </span>
+                  <div className="flex-1">
+                    <span className={`text-sm ${c.ativo ? 'text-white' : 'text-slate-500 line-through'}`}>
+                      {c.nome}
+                    </span>
+                    {c.capacidade_maxima && (
+                      <span className="ml-2 text-xs text-slate-400">
+                        (máx. {c.capacidade_maxima} alunos)
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => toggleCurso(c.id, c.ativo)}
@@ -714,12 +764,21 @@ export function ConfigPage() {
                       {c.ativo ? 'Ativo' : 'Inativo'}
                     </button>
                     {isAdmin && (
-                      <button
-                        onClick={() => setCursoParaExcluir(c.id)}
-                        className="p-1 text-slate-500 hover:text-rose-400"
-                      >
-                        <Trash2 size={16} />
-                      </button>
+                      <>
+                        <button
+                          onClick={() => abrirModalEditarCurso(c)}
+                          className="p-1 text-slate-500 hover:text-violet-400"
+                          title="Editar capacidade"
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                        <button
+                          onClick={() => setCursoParaExcluir(c.id)}
+                          className="p-1 text-slate-500 hover:text-rose-400"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>
@@ -808,6 +867,77 @@ export function ConfigPage() {
               className="bg-rose-600 hover:bg-rose-700"
             >
               Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Modal de Edição de Curso */}
+      <AlertDialog open={cursoParaEditar !== null} onOpenChange={(open) => !open && setCursoParaEditar(null)}>
+        <AlertDialogContent className="bg-slate-800 border-slate-700">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white">Editar Curso</AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-400">
+              Configure a capacidade máxima de alunos por turma para este curso.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div>
+              <Label className="text-sm text-slate-300">Curso</Label>
+              <div className="mt-1 px-3 py-2 bg-slate-900/50 rounded-lg text-white text-sm">
+                {cursoParaEditar?.nome}
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Checkbox
+                  id="sem-limite"
+                  checked={semLimite}
+                  onCheckedChange={(checked) => {
+                    setSemLimite(checked as boolean);
+                    if (checked) setCapacidadeEditando(null);
+                  }}
+                />
+                <Label htmlFor="sem-limite" className="text-sm text-slate-300 cursor-pointer">
+                  Sem limite de capacidade
+                </Label>
+              </div>
+              
+              {!semLimite && (
+                <div>
+                  <Label htmlFor="capacidade" className="text-sm text-slate-300">
+                    Capacidade máxima de alunos
+                  </Label>
+                  <Input
+                    id="capacidade"
+                    type="number"
+                    min="1"
+                    max="20"
+                    value={capacidadeEditando || ''}
+                    onChange={(e) => setCapacidadeEditando(parseInt(e.target.value) || null)}
+                    className="mt-1 bg-slate-900 border-slate-700 text-white"
+                    placeholder="Ex: 5"
+                  />
+                  <p className="mt-1 text-xs text-slate-500">
+                    A capacidade efetiva da turma será o menor valor entre a capacidade da sala e do curso.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+          
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setCursoParaEditar(null)} className="bg-slate-700 hover:bg-slate-600">
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={salvarEdicaoCurso}
+              className="bg-violet-600 hover:bg-violet-700"
+              disabled={!semLimite && (!capacidadeEditando || capacidadeEditando < 1)}
+            >
+              Salvar
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

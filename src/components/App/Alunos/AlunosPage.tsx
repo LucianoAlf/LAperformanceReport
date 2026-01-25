@@ -27,6 +27,7 @@ export interface Aluno {
   id: number;
   nome: string;
   classificacao: string;
+  idade_atual?: number;
   professor_atual_id: number | null;
   professor_nome?: string;
   curso_id: number | null;
@@ -186,7 +187,7 @@ export function AlunosPage() {
     let query = supabase
       .from('alunos')
       .select(`
-        id, nome, classificacao, professor_atual_id, curso_id, 
+        id, nome, classificacao, idade_atual, professor_atual_id, curso_id, 
         dia_aula, horario_aula, valor_parcela, tempo_permanencia_meses,
         status, tipo_matricula_id, unidade_id, data_matricula,
         professores:professor_atual_id(nome),
@@ -319,12 +320,41 @@ export function AlunosPage() {
 
   async function carregarOpcoes() {
     // Carregar professores
-    const { data: profs } = await supabase
-      .from('professores')
-      .select('id, nome')
-      .eq('ativo', true)
-      .order('nome');
-    if (profs) setProfessores(profs);
+    // Como a tabela professores não tem unidade_id, precisamos filtrar pelos professores que têm alunos na unidade
+    let profs: {id: number, nome: string}[] = [];
+    
+    if (unidadeAtual && unidadeAtual !== 'todos') {
+      // Buscar professores que têm alunos ativos na unidade
+      const { data: professoresUnidade } = await supabase
+        .from('alunos')
+        .select('professor_atual_id, professores!professor_atual_id(id, nome)')
+        .eq('unidade_id', unidadeAtual)
+        .in('status', ['ativo', 'trancado'])
+        .not('professor_atual_id', 'is', null);
+      
+      if (professoresUnidade) {
+        // Extrair professores únicos
+        const professoresMap = new Map<number, {id: number, nome: string}>();
+        professoresUnidade.forEach(a => {
+          const prof = a.professores as any;
+          if (prof && prof.id && prof.nome) {
+            professoresMap.set(prof.id, { id: prof.id, nome: prof.nome });
+          }
+        });
+        profs = Array.from(professoresMap.values()).sort((a, b) => a.nome.localeCompare(b.nome));
+      }
+    } else {
+      // Consolidado: buscar todos os professores ativos
+      const { data: todosProfs } = await supabase
+        .from('professores')
+        .select('id, nome')
+        .eq('ativo', true)
+        .order('nome');
+      
+      if (todosProfs) profs = todosProfs;
+    }
+    
+    setProfessores(profs);
 
     // Carregar cursos
     const { data: cursosData } = await supabase

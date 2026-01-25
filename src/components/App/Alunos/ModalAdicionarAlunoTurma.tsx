@@ -44,6 +44,11 @@ export function ModalAdicionarAlunoTurma({
   const [salvando, setSalvando] = useState(false);
   const [sucesso, setSucesso] = useState(false);
   const [mostrarConfirmacao, setMostrarConfirmacao] = useState(false);
+  
+  // Filtros toggle
+  const [filtroMesmoCurso, setFiltroMesmoCurso] = useState(false);
+  const [filtroHorarioProximo, setFiltroHorarioProximo] = useState(false);
+  const [filtroIdadeProxima, setFiltroIdadeProxima] = useState(false);
 
   // Função para verificar se horário é próximo (1h de diferença)
   const isHorarioProximo = useCallback((horario1: string, horario2: string): boolean => {
@@ -117,6 +122,41 @@ export function ModalAdicionarAlunoTurma({
     return indicadores.sort((a, b) => a.prioridade - b.prioridade);
   }, [turma, turmasExistentes, isHorarioProximo]);
 
+  // Calcular idade média da turma para filtro de idade próxima
+  const idadeMediaTurma = useMemo(() => {
+    const alunosDaTurma = alunosDisponiveis.filter(a => turma.ids_alunos?.includes(a.id));
+    
+    console.log('🔍 Debug idade média:', {
+      totalAlunosTurma: alunosDaTurma.length,
+      idades: alunosDaTurma.map(a => ({ nome: a.nome, idade: a.idade_atual })),
+      turmaIds: turma.ids_alunos
+    });
+    
+    if (alunosDaTurma.length === 0) return null;
+    
+    // Filtrar apenas alunos com idade válida
+    const alunosComIdade = alunosDaTurma.filter(a => a.idade_atual && a.idade_atual > 0);
+    if (alunosComIdade.length === 0) return null;
+    
+    const somaIdades = alunosComIdade.reduce((sum, a) => sum + (a.idade_atual || 0), 0);
+    const media = Math.round(somaIdades / alunosComIdade.length);
+    
+    console.log('📊 Idade média calculada:', media);
+    
+    return media;
+  }, [alunosDisponiveis, turma.ids_alunos]);
+
+  // Função para verificar se aluno está na faixa etária próxima
+  const isIdadeProxima = useCallback((aluno: Aluno): boolean => {
+    if (!idadeMediaTurma || !aluno.idade_atual) return false;
+    
+    // Determinar faixa etária baseada na classificação do aluno
+    const faixaEtaria = aluno.classificacao === 'LAMK' ? 3 : 5; // ±3 anos para LAMK, ±5 para EMLA
+    
+    const diferencaIdade = Math.abs(aluno.idade_atual - idadeMediaTurma);
+    return diferencaIdade <= faixaEtaria;
+  }, [idadeMediaTurma]);
+
   // Filtrar e ordenar alunos (mesmo curso primeiro)
   const alunosFiltrados = useMemo(() => {
     const idsNaTurma = turma.ids_alunos || [];
@@ -129,8 +169,22 @@ export function ModalAdicionarAlunoTurma({
         // Filtrar por busca
         if (busca) {
           const termoBusca = busca.toLowerCase();
-          return aluno.nome.toLowerCase().includes(termoBusca);
+          if (!aluno.nome.toLowerCase().includes(termoBusca)) return false;
         }
+        
+        // Aplicar filtros toggle
+        const mesmoCurso = !!(aluno.curso_id && turma.curso_id && aluno.curso_id === turma.curso_id);
+        const horarioProximo = turmasExistentes.some(t => 
+          t.ids_alunos?.includes(aluno.id) &&
+          t.dia_semana === turma.dia_semana &&
+          isHorarioProximo(t.horario_inicio, turma.horario_inicio)
+        );
+        const idadeProxima = isIdadeProxima(aluno);
+        
+        if (filtroMesmoCurso && !mesmoCurso) return false;
+        if (filtroHorarioProximo && !horarioProximo) return false;
+        if (filtroIdadeProxima && !idadeProxima) return false;
+        
         return true;
       });
 
@@ -158,7 +212,7 @@ export function ModalAdicionarAlunoTurma({
       })
       .slice(0, 25) // Limitar a 25 resultados
       .map(item => item.aluno);
-  }, [alunosDisponiveis, turma.ids_alunos, turma.curso_id, turma.dia_semana, busca, calcularIndicadores, turmasExistentes, isHorarioProximo]);
+  }, [alunosDisponiveis, turma.ids_alunos, turma.curso_id, turma.dia_semana, busca, calcularIndicadores, turmasExistentes, isHorarioProximo, isIdadeProxima, filtroMesmoCurso, filtroHorarioProximo, filtroIdadeProxima]);
 
   // Detectar conflitos quando um aluno é selecionado
   const detectarConflitos = useCallback((aluno: Aluno): ConflitosAluno[] => {
@@ -374,7 +428,7 @@ export function ModalAdicionarAlunoTurma({
           ) : (
             <>
               {/* Busca */}
-              <div className="relative mb-4">
+              <div className="relative mb-3">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <Input
                   type="text"
@@ -385,20 +439,55 @@ export function ModalAdicionarAlunoTurma({
                 />
               </div>
 
-              {/* Legenda dos indicadores */}
-              <div className="mb-3 flex flex-wrap gap-2 text-xs">
-                <div className="flex items-center gap-1 text-emerald-400">
+              {/* Filtros toggle - botões compactos */}
+              <div className="mb-3 flex flex-wrap gap-2">
+                <button
+                  onClick={() => setFiltroMesmoCurso(!filtroMesmoCurso)}
+                  className={`
+                    px-2.5 py-1 rounded-full text-xs font-medium transition-all flex items-center gap-1.5
+                    ${filtroMesmoCurso 
+                      ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-500' 
+                      : 'bg-slate-700/50 text-slate-400 border border-slate-600 hover:border-emerald-500/50'
+                    }
+                  `}
+                >
                   <BookOpen className="w-3 h-3" />
-                  <span>Mesmo curso</span>
-                </div>
-                <div className="flex items-center gap-1 text-cyan-400">
+                  Mesmo curso
+                </button>
+                <button
+                  onClick={() => setFiltroHorarioProximo(!filtroHorarioProximo)}
+                  className={`
+                    px-2.5 py-1 rounded-full text-xs font-medium transition-all flex items-center gap-1.5
+                    ${filtroHorarioProximo 
+                      ? 'bg-cyan-500/30 text-cyan-300 border border-cyan-500' 
+                      : 'bg-slate-700/50 text-slate-400 border border-slate-600 hover:border-cyan-500/50'
+                    }
+                  `}
+                >
                   <CalendarClock className="w-3 h-3" />
-                  <span>Horário próximo</span>
-                </div>
-                <div className="flex items-center gap-1 text-amber-400">
-                  <AlertTriangle className="w-3 h-3" />
-                  <span>Conflito</span>
-                </div>
+                  Horário próximo
+                </button>
+                {idadeMediaTurma && (
+                  <button
+                    onClick={() => setFiltroIdadeProxima(!filtroIdadeProxima)}
+                    className={`
+                      px-2.5 py-1 rounded-full text-xs font-medium transition-all flex items-center gap-1.5
+                      ${filtroIdadeProxima 
+                        ? 'bg-violet-500/30 text-violet-300 border border-violet-500' 
+                        : 'bg-slate-700/50 text-slate-400 border border-slate-600 hover:border-violet-500/50'
+                      }
+                    `}
+                  >
+                    <Users className="w-3 h-3" />
+                    Idade próxima ({idadeMediaTurma}±{idadeMediaTurma < 12 ? 3 : 5})
+                  </button>
+                )}
+              </div>
+              
+              {/* Legenda de conflitos */}
+              <div className="mb-3 flex items-center gap-2 text-xs text-amber-400">
+                <AlertTriangle className="w-3 h-3" />
+                <span>Conflito</span>
               </div>
 
               {/* Lista de Alunos */}
@@ -414,11 +503,14 @@ export function ModalAdicionarAlunoTurma({
                     const temMesmoCurso = indicadores.some(i => i.tipo === 'mesmo_curso');
                     const temHorarioProximo = indicadores.some(i => i.tipo === 'horario_proximo');
                     const temConflito = indicadores.some(i => i.tipo === 'conflito_horario' || i.tipo === 'mesmo_curso_outro_prof');
+                    const temIdadeProxima = isIdadeProxima(aluno);
 
                     // Determinar cor de fundo baseada nos indicadores
                     const getBgClass = () => {
                       if (isSelected) return 'bg-purple-500/20 border-purple-500';
+                      if (temMesmoCurso && temIdadeProxima) return 'bg-violet-500/15 border-violet-500/40 hover:border-violet-500/60';
                       if (temMesmoCurso) return 'bg-emerald-500/10 border-emerald-500/30 hover:border-emerald-500/50';
+                      if (temIdadeProxima) return 'bg-violet-500/10 border-violet-500/30 hover:border-violet-500/50';
                       if (temHorarioProximo) return 'bg-cyan-500/10 border-cyan-500/30 hover:border-cyan-500/50';
                       if (temConflito) return 'bg-amber-500/10 border-amber-500/30 hover:border-amber-500/50';
                       return 'bg-slate-700/50 border-slate-600 hover:border-purple-500/50';
@@ -433,12 +525,23 @@ export function ModalAdicionarAlunoTurma({
                         <div className="flex items-center gap-3">
                           <div className={`
                             w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center text-sm font-bold
-                            ${isSelected ? 'bg-purple-500' : temMesmoCurso ? 'bg-emerald-500' : 'bg-slate-600'}
+                            ${isSelected ? 'bg-purple-500' : temMesmoCurso ? 'bg-emerald-500' : temIdadeProxima ? 'bg-violet-500' : 'bg-slate-600'}
                           `}>
                             {aluno.nome.charAt(0)}
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-white truncate">{aluno.nome}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium text-white truncate">{aluno.nome}</p>
+                              {/* Badge de idade */}
+                              {aluno.idade_atual && (
+                                <span className={`
+                                  px-1.5 py-0.5 rounded text-[10px] font-bold whitespace-nowrap
+                                  ${temIdadeProxima ? 'bg-violet-500/30 text-violet-300' : 'bg-slate-600/50 text-slate-400'}
+                                `}>
+                                  {aluno.idade_atual} anos
+                                </span>
+                              )}
+                            </div>
                             <p className="text-[11px] text-slate-400 truncate">
                               {aluno.curso_nome || 'Sem curso'} • {aluno.professor_nome || 'Sem professor'}
                             </p>

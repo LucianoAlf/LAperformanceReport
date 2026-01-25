@@ -27,6 +27,8 @@ import { ModalTrancamento } from './ModalTrancamento';
 import { ModalRelatorio } from './ModalRelatorio';
 import { TabelaTrancamentos } from './TabelaTrancamentos';
 import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
+import { AlertasRetencao } from './AlertasRetencao';
+import { PlanoAcaoRetencao } from './PlanoAcaoRetencao';
 
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 
@@ -481,6 +483,13 @@ export function AdministrativoPage() {
           </button>
         </div>
       </div>
+
+      {/* Alertas Inteligentes de Retenção */}
+      <AlertasRetencao 
+        unidadeId={unidade} 
+        ano={ano} 
+        mes={mes}
+      />
 
       {/* Resumo do Mês - KPIs */}
       <section className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 border border-cyan-500/20 rounded-2xl overflow-hidden">
@@ -1024,6 +1033,13 @@ export function AdministrativoPage() {
         evasoes={evasoes}
         competencia={competencia}
         unidade={unidade}
+      />
+
+      {/* Plano de Ação Inteligente - IA de Retenção */}
+      <PlanoAcaoRetencao
+        unidadeId={unidade}
+        ano={ano}
+        mes={mes}
       />
 
       {/* Modal de Confirmação de Destrancamento */}

@@ -86,6 +86,19 @@ export function ModalNovaTurma({
     return sala?.capacidade_maxima || null;
   }, [formData.sala_id, salas]);
 
+  // Capacidade do curso selecionado
+  const capacidadeCurso = useMemo(() => {
+    if (!formData.curso_id) return null;
+    const curso = cursos.find(c => c.id === formData.curso_id);
+    return (curso as any)?.capacidade_maxima || null;
+  }, [formData.curso_id, cursos]);
+
+  // Capacidade efetiva (menor entre sala e curso)
+  const capacidadeEfetiva = useMemo(() => {
+    const caps = [capacidadeSala, capacidadeCurso].filter(c => c !== null) as number[];
+    return caps.length > 0 ? Math.min(...caps) : null;
+  }, [capacidadeSala, capacidadeCurso]);
+
   // Converter turmas para o formato esperado pelas funções de conflito
   const turmasFormatadas = useMemo((): TurmaHorarios[] => {
     return turmasExistentes.map(t => ({
@@ -199,6 +212,12 @@ export function ModalNovaTurma({
     return conflitos.some(c => c.severidade === 'erro');
   }, [conflitos]);
 
+  // Verificar se excede capacidade efetiva
+  const excedeCapacidade = useMemo(() => {
+    if (!capacidadeEfetiva) return false;
+    return alunosSelecionados.length > capacidadeEfetiva;
+  }, [capacidadeEfetiva, alunosSelecionados.length]);
+
   // Filtrar alunos para busca (apenas ativos, pagantes ou bolsistas)
   const alunosFiltrados = useMemo(() => {
     if (!buscaAluno || buscaAluno.length < 2) return [];
@@ -256,6 +275,23 @@ export function ModalNovaTurma({
     }
     if (!formData.sala_id) {
       alert('Selecione uma sala');
+      return;
+    }
+
+    // Validar capacidade efetiva
+    if (excedeCapacidade) {
+      const cursoNome = cursos.find(c => c.id === formData.curso_id)?.nome || 'curso';
+      const salaNome = salas.find(s => s.id === formData.sala_id)?.nome || 'sala';
+      alert(
+        `Capacidade excedida!\n\n` +
+        `Alunos selecionados: ${alunosSelecionados.length}\n` +
+        `Capacidade efetiva: ${capacidadeEfetiva}\n\n` +
+        `Detalhes:\n` +
+        `- Sala ${salaNome}: ${capacidadeSala || 'sem limite'} alunos\n` +
+        `- Curso ${cursoNome}: ${capacidadeCurso || 'sem limite'} alunos\n\n` +
+        `A capacidade efetiva é o menor valor entre sala e curso.\n` +
+        `Remova ${alunosSelecionados.length - capacidadeEfetiva!} aluno(s) para continuar.`
+      );
       return;
     }
 
@@ -511,11 +547,32 @@ export function ModalNovaTurma({
                   </Select>
                 </div>
 
-                {formData.tipo === 'turma' && capacidadeSala && (
+                {formData.tipo === 'turma' && (capacidadeSala || capacidadeCurso) && (
                   <div>
                     <Label className="mb-2 block">Capacidade</Label>
-                    <div className="h-10 px-3 flex items-center bg-slate-700/50 rounded-lg text-slate-300">
-                      {capacidadeSala} alunos (definido pela sala)
+                    <div className="space-y-1">
+                      <div className="h-10 px-3 flex items-center justify-between bg-slate-700/50 rounded-lg">
+                        <span className="text-slate-300 text-sm">
+                          Capacidade efetiva: <span className="font-bold text-white">{capacidadeEfetiva || 'Sem limite'}</span>
+                          {capacidadeEfetiva && ` aluno${capacidadeEfetiva > 1 ? 's' : ''}`}
+                        </span>
+                        {alunosSelecionados.length > 0 && capacidadeEfetiva && (
+                          <span className={`text-xs font-medium ${
+                            excedeCapacidade ? 'text-rose-400' : 
+                            alunosSelecionados.length >= capacidadeEfetiva * 0.8 ? 'text-amber-400' : 
+                            'text-emerald-400'
+                          }`}>
+                            {alunosSelecionados.length}/{capacidadeEfetiva}
+                          </span>
+                        )}
+                      </div>
+                      {(capacidadeSala || capacidadeCurso) && (
+                        <p className="text-xs text-slate-500 px-1">
+                          {capacidadeSala && `Sala: ${capacidadeSala}`}
+                          {capacidadeSala && capacidadeCurso && ' • '}
+                          {capacidadeCurso && `Curso: ${capacidadeCurso}`}
+                        </p>
+                      )}
                     </div>
                   </div>
                 )}
