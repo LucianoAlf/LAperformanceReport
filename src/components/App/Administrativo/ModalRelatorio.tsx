@@ -1,12 +1,20 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Copy, Check, RotateCcw, FileText, Calendar, RefreshCw, AlertTriangle, LogOut } from 'lucide-react';
+import { Copy, Check, RotateCcw, FileText, Calendar, RefreshCw, AlertTriangle, LogOut, Sparkles, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DatePicker } from '@/components/ui/date-picker';
+import { supabase } from '@/lib/supabase';
 import type { MovimentacaoAdmin, ResumoMes } from './AdministrativoPage';
+
+// Mapeamento de UUIDs para nomes de unidade
+const UUID_NOME_MAP: Record<string, string> = {
+  '368d47f5-2d88-4475-bc14-ba084a9a348e': 'Barra',
+  '2ec861f6-023f-4d7b-9927-3960ad8c2a92': 'Campo Grande',
+  '95553e96-971b-4590-a6eb-0201d013c14d': 'Recreio',
+};
 
 interface ModalRelatorioProps {
   open: boolean;
@@ -20,9 +28,10 @@ interface ModalRelatorioProps {
   unidade: string;
 }
 
-type TipoRelatorio = 'diario' | 'mensal' | 'renovacoes' | 'avisos' | 'evasoes';
+type TipoRelatorio = 'gerencial_ia' | 'diario' | 'mensal' | 'renovacoes' | 'avisos' | 'evasoes';
 
-const tiposRelatorio: { id: TipoRelatorio; label: string; icon: React.ReactNode; desc: string }[] = [
+const tiposRelatorio: { id: TipoRelatorio; label: string; icon: React.ReactNode; desc: string; destaque?: boolean }[] = [
+  { id: 'gerencial_ia', label: 'Relatório Gerencial com IA ✨', icon: <Sparkles className="w-5 h-5" />, desc: 'Análise completa com insights, comparativos e plano de ação', destaque: true },
   { id: 'diario', label: 'Relatório Diário', icon: <Calendar className="w-5 h-5" />, desc: 'Resumo do dia: alunos, renovações, avisos, evasões' },
   { id: 'mensal', label: 'Relatório Mensal', icon: <FileText className="w-5 h-5" />, desc: 'Análise completa: métricas, LTV, churn, ticket médio' },
   { id: 'renovacoes', label: 'Relatório de Renovações', icon: <RefreshCw className="w-5 h-5" />, desc: 'Lista detalhada de renovações com reajustes' },
@@ -44,6 +53,8 @@ export function ModalRelatorio({
   const [tipoSelecionado, setTipoSelecionado] = useState<TipoRelatorio | null>(null);
   const [textoRelatorio, setTextoRelatorio] = useState('');
   const [copiado, setCopiado] = useState(false);
+  const [loadingIA, setLoadingIA] = useState(false);
+  const [erroIA, setErroIA] = useState<string | null>(null);
   
   // Estado para período do relatório
   const [relatorioPeriodo, setRelatorioPeriodo] = useState<'hoje' | 'ontem' | 'semana' | 'mes' | 'personalizado'>('hoje');
@@ -53,6 +64,78 @@ export function ModalRelatorio({
   const [ano, mes] = competencia.split('-').map(Number);
   const mesNome = new Date(ano, mes - 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
   const hoje = new Date().toLocaleDateString('pt-BR');
+
+  async function gerarRelatorioGerencialIA(): Promise<string> {
+    setLoadingIA(true);
+    setErroIA(null);
+    
+    try {
+      // Converter unidade para UUID se necessário
+      let unidadeUUID: string | null = null;
+      if (unidade && unidade !== 'todos') {
+        // Se já é UUID, usa direto; senão, tenta mapear
+        unidadeUUID = unidade.includes('-') ? unidade : null;
+      }
+
+      console.log('[ModalRelatorio] Gerando relatório gerencial IA');
+      console.log('[ModalRelatorio] unidade recebida:', unidade);
+      console.log('[ModalRelatorio] unidadeUUID:', unidadeUUID);
+      console.log('[ModalRelatorio] ano:', ano, 'mes:', mes);
+
+      // Buscar dados via função SQL
+      const { data: dadosRelatorio, error: errorDados } = await supabase
+        .rpc('get_dados_relatorio_gerencial', {
+          p_unidade_id: unidadeUUID,
+          p_ano: ano,
+          p_mes: mes
+        });
+
+      if (errorDados) {
+        console.error('Erro ao buscar dados:', errorDados);
+        throw new Error('Erro ao buscar dados para o relatório');
+      }
+
+      console.log('[ModalRelatorio] Dados retornados:', dadosRelatorio);
+
+      // Determinar nome da unidade
+      const nomeUnidade = unidadeUUID 
+        ? (UUID_NOME_MAP[unidadeUUID] || dadosRelatorio?.periodo?.unidade_nome || 'Unidade')
+        : 'Consolidado';
+      const isConsolidado = !unidadeUUID;
+
+      console.log('[ModalRelatorio] nomeUnidade:', nomeUnidade);
+      console.log('[ModalRelatorio] isConsolidado:', isConsolidado);
+
+      // Chamar Edge Function
+      const { data: responseData, error: errorEdge } = await supabase.functions.invoke(
+        'gemini-relatorio-gerencial',
+        {
+          body: {
+            dados: dadosRelatorio,
+            unidade_nome: nomeUnidade,
+            is_consolidado: isConsolidado
+          }
+        }
+      );
+
+      if (errorEdge) {
+        console.error('Erro na Edge Function:', errorEdge);
+        throw new Error('Erro ao gerar relatório com IA');
+      }
+
+      if (responseData?.success && responseData?.relatorio) {
+        return responseData.relatorio;
+      } else {
+        throw new Error(responseData?.error || 'Resposta inválida da IA');
+      }
+    } catch (error) {
+      const mensagem = error instanceof Error ? error.message : 'Erro desconhecido';
+      setErroIA(mensagem);
+      return `❌ Erro ao gerar relatório: ${mensagem}\n\nTente novamente em alguns instantes.`;
+    } finally {
+      setLoadingIA(false);
+    }
+  }
 
   function gerarRelatorioDiario(): string {
     const dia = new Date().getDate().toString().padStart(2, '0');
@@ -347,8 +430,17 @@ export function ModalRelatorio({
     return texto;
   }
 
-  function selecionarTipo(tipo: TipoRelatorio) {
+  async function selecionarTipo(tipo: TipoRelatorio) {
     setTipoSelecionado(tipo);
+    setErroIA(null);
+    
+    if (tipo === 'gerencial_ia') {
+      setTextoRelatorio('');
+      const texto = await gerarRelatorioGerencialIA();
+      setTextoRelatorio(texto);
+      return;
+    }
+    
     let texto = '';
     switch (tipo) {
       case 'diario':
@@ -477,16 +569,24 @@ export function ModalRelatorio({
               <button
                 key={tipo.id}
                 onClick={() => selecionarTipo(tipo.id)}
-                className="w-full flex items-center gap-4 p-4 bg-slate-800/50 hover:bg-slate-800 border border-slate-700 hover:border-slate-600 rounded-xl transition-all text-left"
+                className={cn(
+                  "w-full flex items-center gap-4 p-4 rounded-xl transition-all text-left",
+                  tipo.destaque 
+                    ? "bg-gradient-to-r from-violet-600/20 to-cyan-600/20 hover:from-violet-600/30 hover:to-cyan-600/30 border border-violet-500/50 hover:border-violet-400"
+                    : "bg-slate-800/50 hover:bg-slate-800 border border-slate-700 hover:border-slate-600"
+                )}
               >
-                <div className="w-10 h-10 bg-slate-700/50 rounded-lg flex items-center justify-center text-cyan-400">
+                <div className={cn(
+                  "w-10 h-10 rounded-lg flex items-center justify-center",
+                  tipo.destaque ? "bg-gradient-to-br from-violet-500 to-cyan-500 text-white" : "bg-slate-700/50 text-cyan-400"
+                )}>
                   {tipo.icon}
                 </div>
                 <div className="flex-1">
-                  <h3 className="font-medium text-white">{tipo.label}</h3>
+                  <h3 className={cn("font-medium", tipo.destaque ? "text-violet-300" : "text-white")}>{tipo.label}</h3>
                   <p className="text-xs text-slate-400">{tipo.desc}</p>
                 </div>
-                <span className="text-slate-500">→</span>
+                <span className={tipo.destaque ? "text-violet-400" : "text-slate-500"}>→</span>
               </button>
             ))}
           </div>
@@ -497,10 +597,23 @@ export function ModalRelatorio({
                 ← Voltar
               </Button>
               <div className="flex items-center gap-2">
+                {tipoSelecionado === 'gerencial_ia' && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => selecionarTipo('gerencial_ia')}
+                    disabled={loadingIA}
+                    className="text-violet-400 hover:text-violet-300"
+                  >
+                    <Sparkles className="w-4 h-4 mr-1" />
+                    Regenerar
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => selecionarTipo(tipoSelecionado)}
+                  disabled={loadingIA}
                   className="text-slate-400 hover:text-white"
                 >
                   <RotateCcw className="w-4 h-4 mr-1" />
@@ -508,6 +621,7 @@ export function ModalRelatorio({
                 </Button>
                 <Button
                   onClick={copiarRelatorio}
+                  disabled={loadingIA || !textoRelatorio}
                   className={cn(
                     'transition-all',
                     copiado ? 'bg-emerald-500' : 'bg-cyan-500 hover:bg-cyan-600'
@@ -527,14 +641,25 @@ export function ModalRelatorio({
                 </Button>
               </div>
             </div>
-            <p className="text-xs text-slate-500 mb-2">
-              💡 Você pode editar o texto antes de copiar
-            </p>
-            <Textarea
-              value={textoRelatorio}
-              onChange={(e) => setTextoRelatorio(e.target.value)}
-              className="flex-1 bg-slate-800 border-slate-700 font-mono text-sm min-h-[300px] resize-none"
-            />
+            
+            {loadingIA ? (
+              <div className="flex-1 flex flex-col items-center justify-center min-h-[300px] bg-slate-800/50 rounded-xl border border-slate-700">
+                <Loader2 className="w-10 h-10 text-violet-400 animate-spin mb-4" />
+                <p className="text-violet-300 font-medium">Gerando relatório com IA...</p>
+                <p className="text-slate-500 text-sm mt-1">Isso pode levar alguns segundos</p>
+              </div>
+            ) : (
+              <>
+                <p className="text-xs text-slate-500 mb-2">
+                  💡 Você pode editar o texto antes de copiar
+                </p>
+                <Textarea
+                  value={textoRelatorio}
+                  onChange={(e) => setTextoRelatorio(e.target.value)}
+                  className="flex-1 bg-slate-800 border-slate-700 font-mono text-sm min-h-[300px] resize-none"
+                />
+              </>
+            )}
           </div>
         )}
       </DialogContent>

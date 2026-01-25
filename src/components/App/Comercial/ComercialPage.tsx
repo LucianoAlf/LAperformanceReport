@@ -49,6 +49,8 @@ import {
 import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
 import { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
 import { CelulaEditavelInline } from '@/components/ui/CelulaEditavelInline';
+import { AlertasComercial } from './AlertasComercial';
+import { PlanoAcaoComercial } from './PlanoAcaoComercial';
 
 // Tipos
 interface LeadDiario {
@@ -1115,6 +1117,15 @@ export function ComercialPage() {
           </button>
         </div>
       </div>
+
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {/* ALERTAS COMERCIAL (IA) */}
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      <AlertasComercial 
+        unidadeId={isAdmin ? (context?.unidadeSelecionada || 'todos') : (unidadeId || 'todos')}
+        ano={competencia.filtro.ano}
+        mes={competencia.filtro.mes}
+      />
 
       {/* ═══════════════════════════════════════════════════════════════ */}
       {/* SEÇÃO 1: LANÇAMENTO DE HOJE */}
@@ -2526,6 +2537,15 @@ export function ComercialPage() {
           </div>
         </Modal>
       )}
+
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {/* PLANO DE AÇÃO INTELIGENTE (IA) */}
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      <PlanoAcaoComercial 
+        unidadeId={isAdmin ? (context?.unidadeSelecionada || 'todos') : (unidadeId || 'todos')}
+        ano={competencia.filtro.ano}
+        mes={competencia.filtro.mes}
+      />
 
       {/* AlertDialog de Confirmação de Exclusão */}
       <AlertDialog open={deleteId !== null} onOpenChange={(open) => !open && setDeleteId(null)}>
