@@ -16,6 +16,7 @@ import {
   MessageSquare
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
+import { useCursosUnidade } from '../../../hooks/useCursosUnidade';
 
 // Schema de validação
 const leadSchema = z.object({
@@ -61,7 +62,6 @@ export function FormLead() {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [unidades, setUnidades] = useState<Unidade[]>([]);
-  const [cursos, setCursos] = useState<Curso[]>([]);
   const [canais, setCanais] = useState<CanalOrigem[]>([]);
   const [professores, setProfessores] = useState<Professor[]>([]);
 
@@ -78,19 +78,21 @@ export function FormLead() {
   });
 
   const experimentalAgendada = watch('experimental_agendada');
+  const unidadeIdSelecionada = watch('unidade_id');
+  
+  // Buscar cursos da unidade selecionada
+  const { cursos } = useCursosUnidade(unidadeIdSelecionada);
 
   // Carregar dados de referência
   useEffect(() => {
     async function loadData() {
-      const [unidadesRes, cursosRes, canaisRes, professoresRes] = await Promise.all([
+      const [unidadesRes, canaisRes, professoresRes] = await Promise.all([
         supabase.from('unidades').select('id, nome').eq('ativo', true),
-        supabase.from('cursos').select('id, nome').eq('ativo', true),
         supabase.from('canais_origem').select('id, nome').eq('ativo', true),
         supabase.from('professores').select('id, nome').eq('ativo', true),
       ]);
 
       if (unidadesRes.data) setUnidades(unidadesRes.data);
-      if (cursosRes.data) setCursos(cursosRes.data);
       if (canaisRes.data) setCanais(canaisRes.data);
       if (professoresRes.data) setProfessores(professoresRes.data);
     }

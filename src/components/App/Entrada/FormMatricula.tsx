@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { useAuth } from '../../../contexts/AuthContext';
+import { useCursosUnidade } from '../../../hooks/useCursosUnidade';
 
 // Schema de validação
 const matriculaSchema = z.object({
@@ -87,7 +88,6 @@ export function FormMatricula() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [unidades, setUnidades] = useState<Unidade[]>([]);
-  const [cursos, setCursos] = useState<Curso[]>([]);
   const [professores, setProfessores] = useState<Professor[]>([]);
 
   const {
@@ -109,18 +109,20 @@ export function FormMatricula() {
 
   const cursoSelecionado = watch('curso_id');
   const formaPagamentoPassaporte = watch('forma_pagamento_passaporte');
+  const unidadeIdSelecionada = watch('unidade_id');
+  
+  // Buscar cursos da unidade selecionada
+  const { cursos } = useCursosUnidade(unidadeIdSelecionada);
 
   // Carregar dados de referência
   useEffect(() => {
     async function loadData() {
-      const [unidadesRes, cursosRes, professoresRes] = await Promise.all([
+      const [unidadesRes, professoresRes] = await Promise.all([
         supabase.from('unidades').select('id, nome').eq('ativo', true),
-        supabase.from('cursos').select('id, nome, valor_sugerido').eq('ativo', true),
         supabase.from('professores').select('id, nome').eq('ativo', true),
       ]);
 
       if (unidadesRes.data) setUnidades(unidadesRes.data);
-      if (cursosRes.data) setCursos(cursosRes.data);
       if (professoresRes.data) setProfessores(professoresRes.data);
     }
 

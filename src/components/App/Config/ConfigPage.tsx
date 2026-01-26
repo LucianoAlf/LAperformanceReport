@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Settings, Save, Plus, Trash2, RefreshCw, Building2, Users, Tag, Megaphone, Clock, Music, Edit2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
+import { useOutletContext } from 'react-router-dom';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -23,6 +24,8 @@ interface Unidade {
   endereco: string | null;
   telefone: string | null;
   horario_funcionamento: HorarioFuncionamento | null;
+  hunter_nome: string | null;
+  farmers_nomes: string[] | null;
 }
 
 interface CanalOrigem {
@@ -52,7 +55,11 @@ interface Curso {
 type TabId = 'unidades' | 'canais' | 'motivos' | 'tipos' | 'cursos';
 
 export function ConfigPage() {
-  const { isAdmin, unidadeId } = useAuth();
+  const { isAdmin } = useAuth();
+  const { filtroAtivo } = useOutletContext<{ filtroAtivo: string | null }>();
+  
+  console.log('🔍 [ConfigPage] Renderizou com filtroAtivo:', filtroAtivo);
+  
   const [activeTab, setActiveTab] = useState<TabId>('unidades');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -64,6 +71,7 @@ export function ConfigPage() {
   const [motivosSaida, setMotivosSaida] = useState<MotivoSaida[]>([]);
   const [tiposSaida, setTiposSaida] = useState<TipoSaida[]>([]);
   const [cursos, setCursos] = useState<Curso[]>([]);
+  const [cursosUnidade, setCursosUnidade] = useState<Record<number, boolean>>({});
 
   // Estados de edição
   const [editedUnidades, setEditedUnidades] = useState<Set<string>>(new Set());
@@ -88,6 +96,46 @@ export function ConfigPage() {
     fetchDados();
   }, []);
 
+  // Atualizar filtro quando o filtroAtivo mudar (seleção no header)
+  useEffect(() => {
+    console.log('[ConfigPage] Filtro mudou:', { filtroAtivo, totalUnidades: unidades.length });
+    if (filtroAtivo) {
+      // Filtrar por unidade específica
+      const filtradas = unidades.filter(u => u.id === filtroAtivo);
+      console.log('[ConfigPage] Filtrando por unidade:', filtroAtivo, 'Resultado:', filtradas.length);
+      setUnidadesFiltradas(filtradas);
+      // Carregar cursos da unidade
+      fetchCursosUnidade(filtroAtivo);
+    } else {
+      // Consolidado - mostrar todas
+      console.log('[ConfigPage] Modo consolidado - mostrando todas as unidades');
+      setUnidadesFiltradas(unidades);
+      setCursosUnidade({});
+    }
+  }, [filtroAtivo, unidades]);
+
+  // Carregar cursos de uma unidade específica
+  async function fetchCursosUnidade(unidadeId: string) {
+    try {
+      const { data, error } = await supabase
+        .from('unidades_cursos')
+        .select('curso_id, ativo')
+        .eq('unidade_id', unidadeId);
+      
+      if (error) throw error;
+      
+      // Converter para Record<curso_id, ativo>
+      const cursosMap: Record<number, boolean> = {};
+      data?.forEach(uc => {
+        cursosMap[uc.curso_id] = uc.ativo;
+      });
+      
+      setCursosUnidade(cursosMap);
+    } catch (err) {
+      console.error('Erro ao carregar cursos da unidade:', err);
+    }
+  }
+
   async function fetchDados() {
     setLoading(true);
     try {
@@ -101,15 +149,13 @@ export function ConfigPage() {
 
       if (unidadesRes.data) {
         setUnidades(unidadesRes.data);
-        // Filtrar unidades baseado no perfil do usuário
-        if (isAdmin) {
-          // Admin vê todas as unidades
-          setUnidadesFiltradas(unidadesRes.data);
-        } else if (unidadeId) {
-          // Usuário comum vê apenas sua unidade
-          setUnidadesFiltradas(unidadesRes.data.filter(u => u.id === unidadeId));
+        // Filtrar unidades baseado no filtro ativo do header
+        if (filtroAtivo) {
+          // Filtrado por unidade específica (seja admin ou usuário de unidade)
+          setUnidadesFiltradas(unidadesRes.data.filter(u => u.id === filtroAtivo));
         } else {
-          setUnidadesFiltradas([]);
+          // Consolidado (admin sem filtro) - mostra todas
+          setUnidadesFiltradas(unidadesRes.data);
         }
       }
       if (canaisRes.data) setCanais(canaisRes.data);
@@ -126,6 +172,7 @@ export function ConfigPage() {
   // Handlers para Unidades
   function handleUnidadeChange(id: string, field: keyof Unidade, value: string) {
     setUnidades(prev => prev.map(u => u.id === id ? { ...u, [field]: value } : u));
+    setUnidadesFiltradas(prev => prev.map(u => u.id === id ? { ...u, [field]: value } : u));
     setEditedUnidades(prev => new Set(prev).add(id));
   }
 
@@ -160,7 +207,7 @@ export function ConfigPage() {
     campo: 'inicio' | 'fim' | 'fechado', 
     valor: string | boolean
   ) {
-    setUnidades(prev => prev.map(u => {
+    const updateFn = (prev: Unidade[]) => prev.map(u => {
       if (u.id !== unidadeId) return u;
       
       const horarioAtual = u.horario_funcionamento || {
@@ -179,7 +226,10 @@ export function ConfigPage() {
           }
         }
       };
-    }));
+    });
+    
+    setUnidades(updateFn);
+    setUnidadesFiltradas(updateFn);
     setEditedUnidades(prev => new Set(prev).add(unidadeId));
   }
 
@@ -327,11 +377,60 @@ export function ConfigPage() {
   }
 
   async function toggleCurso(id: number, ativo: boolean) {
+    // Se há filtro ativo, atualiza o curso na unidade específica
+    if (filtroAtivo) {
+      await toggleCursoUnidade(id, ativo);
+    } else {
+      // Sem filtro, atualiza o curso globalmente
+      try {
+        await supabase.from('cursos').update({ ativo: !ativo }).eq('id', id);
+        setCursos(prev => prev.map(c => c.id === id ? { ...c, ativo: !ativo } : c));
+      } catch (err) {
+        console.error('Erro ao atualizar curso:', err);
+      }
+    }
+  }
+
+  async function toggleCursoUnidade(cursoId: number, ativoAtual: boolean) {
+    if (!filtroAtivo) return;
+    
     try {
-      await supabase.from('cursos').update({ ativo: !ativo }).eq('id', id);
-      setCursos(prev => prev.map(c => c.id === id ? { ...c, ativo: !ativo } : c));
+      const novoEstado = !ativoAtual;
+      
+      // Verificar se já existe o relacionamento
+      const { data: existente } = await supabase
+        .from('unidades_cursos')
+        .select('id')
+        .eq('unidade_id', filtroAtivo)
+        .eq('curso_id', cursoId)
+        .single();
+      
+      if (existente) {
+        // Atualizar existente
+        await supabase
+          .from('unidades_cursos')
+          .update({ ativo: novoEstado })
+          .eq('unidade_id', filtroAtivo)
+          .eq('curso_id', cursoId);
+      } else {
+        // Criar novo relacionamento
+        await supabase
+          .from('unidades_cursos')
+          .insert({
+            unidade_id: filtroAtivo,
+            curso_id: cursoId,
+            ativo: novoEstado
+          });
+      }
+      
+      // Atualizar estado local
+      setCursosUnidade(prev => ({
+        ...prev,
+        [cursoId]: novoEstado
+      }));
     } catch (err) {
-      console.error('Erro ao atualizar curso:', err);
+      console.error('Erro ao atualizar curso da unidade:', err);
+      alert('Erro ao atualizar curso. Tente novamente.');
     }
   }
 
@@ -518,6 +617,35 @@ export function ConfigPage() {
                           placeholder="Telefone"
                           className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-300 text-sm"
                         />
+                      </div>
+                    </div>
+
+                    {/* Equipe Comercial e Retenção */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 pb-4 border-b border-slate-700/50">
+                      <div>
+                        <label className="text-xs text-slate-400 uppercase mb-1 block">🎯 Hunter (Comercial)</label>
+                        <input
+                          type="text"
+                          value={u.hunter_nome || ''}
+                          onChange={(e) => handleUnidadeChange(u.id, 'hunter_nome', e.target.value)}
+                          placeholder="Nome do Hunter"
+                          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-300 text-sm"
+                        />
+                        <p className="text-xs text-slate-500 mt-1">Aparecerá nos relatórios comerciais</p>
+                      </div>
+                      <div>
+                        <label className="text-xs text-slate-400 uppercase mb-1 block">🌱 Farmers (Retenção)</label>
+                        <input
+                          type="text"
+                          value={u.farmers_nomes?.join(', ') || ''}
+                          onChange={(e) => {
+                            const farmers = e.target.value.split(',').map(n => n.trim()).filter(n => n);
+                            handleUnidadeChange(u.id, 'farmers_nomes', farmers);
+                          }}
+                          placeholder="Ex: Gabriela, Jhonatan"
+                          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-300 text-sm"
+                        />
+                        <p className="text-xs text-slate-500 mt-1">Separe os nomes por vírgula</p>
                       </div>
                     </div>
 
@@ -723,7 +851,16 @@ export function ConfigPage() {
         {/* Tab Cursos */}
         {activeTab === 'cursos' && (
           <div className="space-y-4">
-            <h3 className="text-lg font-bold text-white mb-4">Cursos</h3>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="text-lg font-bold text-white">Cursos</h3>
+                {filtroAtivo && (
+                  <p className="text-sm text-slate-400 mt-1">
+                    Gerenciando cursos da unidade selecionada
+                  </p>
+                )}
+              </div>
+            </div>
             <div className="flex gap-2 mb-4">
               <input
                 type="text"
@@ -742,27 +879,36 @@ export function ConfigPage() {
               </button>
             </div>
             <div className="space-y-2">
-              {cursos.map(c => (
-                <div key={c.id} className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg border-b border-slate-700/30">
-                  <div className="flex-1">
-                    <span className={`text-sm ${c.ativo ? 'text-white' : 'text-slate-500 line-through'}`}>
-                      {c.nome}
-                    </span>
-                    {c.capacidade_maxima && (
-                      <span className="ml-2 text-xs text-slate-400">
-                        (máx. {c.capacidade_maxima} alunos)
+              {cursos.map(c => {
+                // Se há filtro ativo, usar o status da unidade; senão, usar o status global
+                const ativoNaUnidade = filtroAtivo ? (cursosUnidade[c.id] ?? false) : c.ativo;
+                
+                return (
+                  <div key={c.id} className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg border-b border-slate-700/30">
+                    <div className="flex-1">
+                      <span className={`text-sm ${ativoNaUnidade ? 'text-white' : 'text-slate-500 line-through'}`}>
+                        {c.nome}
                       </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => toggleCurso(c.id, c.ativo)}
-                      className={`px-3 py-1 rounded text-xs ${
-                        c.ativo ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700 text-slate-400'
-                      }`}
-                    >
-                      {c.ativo ? 'Ativo' : 'Inativo'}
-                    </button>
+                      {c.capacidade_maxima && (
+                        <span className="ml-2 text-xs text-slate-400">
+                          (máx. {c.capacidade_maxima} alunos)
+                        </span>
+                      )}
+                      {filtroAtivo && !c.ativo && (
+                        <span className="ml-2 text-xs text-amber-400">
+                          (curso inativo globalmente)
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => toggleCurso(c.id, ativoNaUnidade)}
+                        className={`px-3 py-1 rounded text-xs ${
+                          ativoNaUnidade ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700 text-slate-400'
+                        }`}
+                      >
+                        {ativoNaUnidade ? 'Ativo' : 'Inativo'}
+                      </button>
                     {isAdmin && (
                       <>
                         <button
@@ -782,7 +928,8 @@ export function ConfigPage() {
                     )}
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

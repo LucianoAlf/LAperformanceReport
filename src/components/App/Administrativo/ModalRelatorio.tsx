@@ -137,58 +137,189 @@ export function ModalRelatorio({
     }
   }
 
-  function gerarRelatorioDiario(): string {
-    const dia = new Date().getDate().toString().padStart(2, '0');
-    const mesNome = new Date().toLocaleString('pt-BR', { month: 'long' });
-    const ano = new Date().getFullYear();
-    const unidadeNome = unidade === 'todos' ? 'CONSOLIDADO' : unidade.toUpperCase();
+  async function gerarRelatorioDiario(): Promise<string> {
+    const hoje = new Date();
+    const dia = hoje.getDate().toString().padStart(2, '0');
+    const mesNome = hoje.toLocaleString('pt-BR', { month: 'long' });
+    const ano = hoje.getFullYear();
+    
+    // Buscar nome da unidade e farmers
+    let unidadeNome = 'Unidade';
+    let farmersNomes = 'Equipe Administrativa';
+    
+    if (unidade && unidade !== 'todos') {
+      const { data: unidadeData } = await supabase
+        .from('unidades')
+        .select('nome, farmers_nomes')
+        .eq('id', unidade)
+        .single();
+      
+      if (unidadeData) {
+        unidadeNome = unidadeData.nome;
+        farmersNomes = unidadeData.farmers_nomes?.join(' e ') || 'Equipe Administrativa';
+      }
+    } else {
+      unidadeNome = 'CONSOLIDADO';
+      farmersNomes = 'Todas as Unidades';
+    }
+
+    // Filtrar renovações do dia
+    const renovacoesHoje = renovacoes.filter(r => {
+      const dataRenovacao = new Date(r.data);
+      return dataRenovacao.toDateString() === hoje.toDateString();
+    });
+
+    // Filtrar avisos prévios do dia
+    const avisosPreviosHoje = avisosPrevios.filter(a => {
+      const dataAviso = new Date(a.data);
+      return dataAviso.toDateString() === hoje.toDateString();
+    });
+
+    // Filtrar evasões do dia
+    const evasoesHoje = evasoes.filter(e => {
+      const dataEvasao = new Date(e.data);
+      return dataEvasao.toDateString() === hoje.toDateString();
+    });
+
+    // Calcular KPIs
+    const totalBolsistas = (resumo?.bolsistas_integrais || 0) + (resumo?.bolsistas_parciais || 0);
+    const taxaInadimplencia = resumo?.alunos_ativos 
+      ? ((resumo?.alunos_nao_pagantes || 0) / resumo.alunos_ativos * 100)
+      : 0;
+    const taxaRenovacao = resumo?.renovacoes_previstas
+      ? ((resumo?.renovacoes_realizadas || 0) / resumo.renovacoes_previstas * 100)
+      : 0;
 
     let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
     texto += `📋 *RELATÓRIO DIÁRIO ADMINISTRATIVO*\n`;
-    texto += `🏢 *${unidadeNome}*\n`;
+    texto += `🏢 *${unidadeNome.toUpperCase()}*\n`;
     texto += `📆 ${dia}/${mesNome}/${ano}\n`;
+    texto += `👥 ${farmersNomes}\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
     texto += `👥 *ALUNOS*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
     texto += `• Ativos: *${resumo?.alunos_ativos || 0}*\n`;
     texto += `• Pagantes: *${resumo?.alunos_pagantes || 0}*\n`;
-    texto += `• Não Pagantes: *${resumo?.alunos_nao_pagantes || 0}*\n`;
-    texto += `• Bolsistas: *${(resumo?.bolsistas_integrais || 0) + (resumo?.bolsistas_parciais || 0)}*\n`;
+    texto += `• Não Pagantes: *${resumo?.alunos_nao_pagantes || 0}* (${taxaInadimplencia.toFixed(1)}%)\n`;
+    texto += `• Bolsistas Integrais: *${resumo?.bolsistas_integrais || 0}*\n`;
+    texto += `• Bolsistas Parciais: *${resumo?.bolsistas_parciais || 0}*\n`;
     texto += `• Trancados: *${resumo?.alunos_trancados || 0}*\n`;
     texto += `• Novos no mês: *${resumo?.alunos_novos || 0}*\n\n`;
 
-    texto += `🔄 *RENOVAÇÕES*\n`;
+    texto += `📚 *MATRÍCULAS*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `• Matrículas Ativas: *${resumo?.matriculas_ativas || 0}*\n`;
+    texto += `• Matrículas em Banda: *${resumo?.matriculas_banda || 0}*\n`;
+    texto += `• Matrículas de 2º Curso: *${resumo?.matriculas_2_curso || 0}*\n\n`;
+
+    texto += `🔄 *RENOVAÇÕES DO MÊS*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `• Total previsto: *${resumo?.renovacoes_previstas || 0}*\n`;
     texto += `• Realizadas: *${resumo?.renovacoes_realizadas || 0}*\n`;
     texto += `• Pendentes: *${resumo?.renovacoes_pendentes || 0}*\n`;
-    texto += `• Não Renovações: *${naoRenovacoes.length}*\n\n`;
+    texto += `• Não Renovações: *${resumo?.nao_renovacoes || 0}*\n`;
+    texto += `• Taxa de Renovação: *${taxaRenovacao.toFixed(1)}%*\n\n`;
 
-    texto += `⚠️ *AVISOS PRÉVIOS (${avisosPrevios.length})*\n`;
-    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    if (avisosPrevios.length === 0) {
-      texto += `Nenhum aviso prévio registrado hoje 🎉\n\n`;
-    } else {
-      avisosPrevios.forEach((a, i) => {
-        texto += `${i + 1}. *${a.aluno_nome}*\n`;
-        texto += `   💰 R$ ${(a.valor_parcela_novo || 0).toFixed(2)} | 🎸 ${a.professor_nome || 'N/A'}\n`;
-        texto += `   📝 ${a.motivo || 'Sem motivo'}\n\n`;
+    // Renovações do dia
+    if (renovacoesHoje.length > 0) {
+      texto += `✅ *RENOVAÇÕES DO DIA (${renovacoesHoje.length})*\n`;
+      texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+      renovacoesHoje.forEach((r, i) => {
+        const reajuste = r.valor_parcela_anterior && r.valor_parcela_novo
+          ? ((r.valor_parcela_novo - r.valor_parcela_anterior) / r.valor_parcela_anterior) * 100
+          : 0;
+        texto += `${i + 1}) Nome: *${r.aluno_nome}*\n`;
+        texto += `   De: R$ ${(r.valor_parcela_anterior || 0).toFixed(2)} para R$ ${(r.valor_parcela_novo || 0).toFixed(2)} (*+${reajuste.toFixed(1)}%*)\n`;
+        texto += `   Agente: ${r.agente_comercial || 'N/A'}\n\n`;
       });
+    } else {
+      texto += `✅ *RENOVAÇÕES DO DIA: 0*\n\n`;
     }
 
-    texto += `🚪 *EVASÕES (${evasoes.length})*\n`;
+    // Avisos Prévios
+    texto += `⚠️ *AVISOS PRÉVIOS PARA SAIR EM ${new Date(ano, hoje.getMonth() + 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase()}*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    if (avisosPrevios.length === 0) {
+      texto += `Nenhum aviso prévio registrado 🎉\n\n`;
+    } else {
+      avisosPrevios.forEach((a, i) => {
+        texto += `${i + 1}) Nome: *${a.aluno_nome}*\n`;
+        texto += `   Motivo: ${a.motivo || 'Não informado'}\n`;
+        texto += `   Parcela: R$ ${(a.valor_parcela_novo || 0).toFixed(2)}\n`;
+        texto += `   Professor(a): ${a.professor_nome || 'N/A'}\n\n`;
+      });
+      texto += `● Total no mês: *${avisosPrevios.length}*\n\n`;
+    }
+
+    // Evasões
+    texto += `🚪 *EVASÕES (Saíram esse mês)*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `• Total de evasões: *${evasoes.length}*\n`;
     texto += `• Interrompido: *${evasoes.filter(e => e.tipo_evasao === 'interrompido').length}*\n`;
+    texto += `• Interrompido 2º Curso: *${evasoes.filter(e => e.tipo_evasao === 'interrompido_2_curso').length}*\n`;
+    texto += `• Interrompido Bolsista: *${evasoes.filter(e => e.tipo_evasao === 'interrompido_bolsista').length}*\n`;
+    texto += `• Interrompido Banda: *${evasoes.filter(e => e.tipo_evasao === 'interrompido_banda').length}*\n`;
     texto += `• Não Renovou: *${evasoes.filter(e => e.tipo_evasao === 'nao_renovou').length}*\n\n`;
 
+    if (evasoesHoje.length > 0) {
+      texto += `Evasões do dia: *${evasoesHoje.length}*\n\n`;
+      evasoesHoje.forEach((e, i) => {
+        texto += `${i + 1}) *${e.aluno_nome}*\n`;
+        texto += `   Tipo: ${e.tipo_evasao || 'N/A'}\n`;
+        texto += `   Motivo: ${e.motivo || 'Não informado'}\n\n`;
+      });
+    } else {
+      texto += `Evasões do dia: *0*\n\n`;
+    }
+
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `📅 Gerado em: ${dia}/${(hoje.getMonth() + 1).toString().padStart(2, '0')}/${ano} às ${hoje.getHours()}:${hoje.getMinutes().toString().padStart(2, '0')}\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━`;
+
     return texto;
   }
 
-  function gerarRelatorioMensal(): string {
+  async function gerarRelatorioMensal(): Promise<string> {
     const mesNomeUpper = new Date(ano, mes - 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
-    const unidadeNome = unidade === 'todos' ? 'CONSOLIDADO' : unidade.toUpperCase();
     
+    // Buscar nome da unidade e farmers do banco
+    let unidadeNome = 'CONSOLIDADO';
+    let farmersNomes = 'Todas as Unidades';
+    
+    if (unidade && unidade !== 'todos') {
+      const { data: unidadeData } = await supabase
+        .from('unidades')
+        .select('nome, farmers_nomes')
+        .eq('id', unidade)
+        .single();
+      
+      if (unidadeData) {
+        unidadeNome = unidadeData.nome;
+        farmersNomes = unidadeData.farmers_nomes?.join(' e ') || 'Equipe Administrativa';
+      }
+    }
+
+    // Buscar metas do banco
+    let metasQuery = supabase
+      .from('metas_kpi')
+      .select('tipo, valor')
+      .eq('ano', ano)
+      .eq('mes', mes);
+    
+    if (unidade && unidade !== 'todos') {
+      metasQuery = metasQuery.eq('unidade_id', unidade);
+    }
+    
+    const { data: metasData } = await metasQuery;
+    
+    // Mapear metas
+    const metas: Record<string, number> = {};
+    metasData?.forEach(m => {
+      metas[m.tipo] = Number(m.valor);
+    });
+    
+    // Calcular KPIs
     const reajusteMedio = renovacoes.length > 0
       ? renovacoes.reduce((acc, r) => {
           if (r.valor_parcela_anterior && r.valor_parcela_novo) {
@@ -198,84 +329,187 @@ export function ModalRelatorio({
         }, 0) / renovacoes.length
       : 0;
 
+    const totalBolsistas = (resumo?.bolsistas_integrais || 0) + (resumo?.bolsistas_parciais || 0);
+    const taxaInadimplencia = resumo?.alunos_ativos 
+      ? ((resumo?.alunos_nao_pagantes || 0) / resumo.alunos_ativos * 100)
+      : 0;
+    const taxaRenovacao = resumo?.renovacoes_previstas && resumo.renovacoes_previstas > 0
+      ? ((resumo?.renovacoes_realizadas || 0) / resumo.renovacoes_previstas * 100)
+      : 0;
+    const ticketMedio = resumo?.ticket_medio || 0;
+    const ltv = (resumo?.ltv_meses || 0) * ticketMedio;
+    const mrrAtual = (resumo?.alunos_pagantes || 0) * ticketMedio;
+    const mrrPerdido = evasoes.reduce((acc, e) => acc + (e.valor_parcela_novo || 0), 0);
+
+    // Função para gerar barra de progresso WhatsApp
+    const gerarBarra = (atual: number, meta: number, inverso: boolean = false): string => {
+      if (meta === 0) return '░░░░░░░░░░ 0%';
+      const percentual = Math.min((atual / meta) * 100, 100);
+      const blocos = Math.round(percentual / 10);
+      const barra = '▓'.repeat(blocos) + '░'.repeat(10 - blocos);
+      const status = inverso 
+        ? (atual <= meta ? '✅' : '❌')
+        : (atual >= meta ? '✅' : '⚠️');
+      return `${barra} ${percentual.toFixed(0)}% ${status}`;
+    };
+
     let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
     texto += `📊 *RELATÓRIO MENSAL ADMINISTRATIVO*\n`;
-    texto += `🏢 *${unidadeNome}*\n`;
+    texto += `🏢 *${unidadeNome.toUpperCase()}*\n`;
     texto += `📅 *${mesNomeUpper}/${ano}*\n`;
+    texto += `👥 Por ${farmersNomes}\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
-    texto += `📈 *RESUMO GERAL DO MÊS*\n`;
+    // SEÇÃO 1: ALUNOS
+    texto += `👥 *ALUNOS*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `👥 Alunos Ativos: *${resumo?.alunos_ativos || 0}*\n`;
-    texto += `💵 Pagantes: *${resumo?.alunos_pagantes || 0}*\n`;
-    texto += `🎓 Bolsistas: *${(resumo?.bolsistas_integrais || 0) + (resumo?.bolsistas_parciais || 0)}*\n`;
-    texto += `⏸️ Trancados: *${resumo?.alunos_trancados || 0}*\n`;
-    texto += `✨ Novos: *${resumo?.alunos_novos || 0}*\n\n`;
+    texto += `• Ativos: *${resumo?.alunos_ativos || 0}*\n`;
+    texto += `• Pagantes: *${resumo?.alunos_pagantes || 0}*\n`;
+    texto += `• Não Pagantes: *${resumo?.alunos_nao_pagantes || 0}*\n`;
+    texto += `• Bolsistas: *${totalBolsistas}*\n`;
+    texto += `• Trancados: *${resumo?.alunos_trancados || 0}*\n`;
+    texto += `• Novos no mês: *${resumo?.alunos_novos || 0}*\n\n`;
 
-    texto += `💰 *INDICADORES FINANCEIROS*\n`;
+    // SEÇÃO 2: MATRÍCULAS
+    texto += `📚 *MATRÍCULAS*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `Ticket Médio: *R$ ${(resumo?.ticket_medio || 0).toFixed(2)}*\n`;
-    texto += `Faturamento: *R$ ${(resumo?.faturamento || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n`;
-    texto += `LTV: *${resumo?.ltv_meses || 0} meses*\n`;
-    texto += `Churn Rate: *${(resumo?.churn_rate || 0).toFixed(1)}%*\n\n`;
+    texto += `• Matrículas Ativas: *${resumo?.matriculas_ativas || 0}*\n`;
+    texto += `• Matrículas em Banda: *${resumo?.matriculas_banda || 0}*\n`;
+    texto += `• Matrículas de 2º Curso: *${resumo?.matriculas_2_curso || 0}*\n\n`;
 
-    texto += `🔄 *RENOVAÇÕES (${renovacoes.length})*\n`;
+    // SEÇÃO 3: KPIs FINANCEIROS
+    texto += `💰 *KPIs FINANCEIROS*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    if (renovacoes.length === 0) {
-      texto += `Nenhuma renovação registrada\n\n`;
-    } else {
+    texto += `• Ticket Médio: *R$ ${ticketMedio.toFixed(2)}*\n`;
+    texto += `• Faturamento Previsto: *R$ ${mrrAtual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n`;
+    texto += `• MRR Atual: *R$ ${mrrAtual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n`;
+    texto += `• LTV (Tempo × Ticket): *R$ ${ltv.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n`;
+    texto += `• Tempo Permanência: *${(resumo?.ltv_meses || 0).toFixed(1)} meses*\n\n`;
+
+    // SEÇÃO 4: KPIs DE RETENÇÃO
+    texto += `📈 *KPIs DE RETENÇÃO*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `• Churn Rate: *${(resumo?.churn_rate || 0).toFixed(1)}%*\n`;
+    texto += `• Taxa de Renovação: *${taxaRenovacao.toFixed(1)}%*\n`;
+    texto += `• Reajuste Médio: *${reajusteMedio.toFixed(1)}%*\n`;
+    texto += `• Inadimplência: *${taxaInadimplencia.toFixed(1)}%*\n`;
+    texto += `• MRR Perdido: *R$ ${mrrPerdido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n`;
+    texto += `• Total Evasões: *${evasoes.length}*\n`;
+    texto += `• Não Renovações: *${naoRenovacoes.length}*\n\n`;
+
+    // SEÇÃO 5: BARRAS DE METAS (Fideliza+ LA)
+    texto += `🎯 *METAS FIDELIZA+ LA*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    
+    // Churn (meta: abaixo de 3% para estrela, máximo 4%)
+    const metaChurn = metas['churn_rate'] || 4;
+    texto += `⭐ *Churn Premiado* (meta: <3%)\n`;
+    texto += `   ${gerarBarra(100 - (resumo?.churn_rate || 0), 100 - 3, false)}\n`;
+    texto += `   Atual: *${(resumo?.churn_rate || 0).toFixed(1)}%* | Meta: *<3%*\n\n`;
+    
+    // Inadimplência (meta: 0%)
+    texto += `⭐ *Inadimplência Zero* (meta: 0%)\n`;
+    texto += `   ${gerarBarra(100 - taxaInadimplencia, 100, false)}\n`;
+    texto += `   Atual: *${taxaInadimplencia.toFixed(1)}%* | Meta: *0%*\n\n`;
+    
+    // Renovação (meta: 100%)
+    const metaRenovacao = metas['taxa_renovacao'] || 90;
+    texto += `⭐ *Max Renovação* (meta: 100%)\n`;
+    texto += `   ${gerarBarra(taxaRenovacao, 100, false)}\n`;
+    texto += `   Atual: *${taxaRenovacao.toFixed(1)}%* | Meta: *100%*\n\n`;
+    
+    // Reajuste (meta: >8.5%)
+    const metaReajuste = metas['reajuste_medio'] || 9;
+    texto += `⭐ *Reajuste Campeão* (meta: >8.5%)\n`;
+    texto += `   ${gerarBarra(reajusteMedio, 8.5, false)}\n`;
+    texto += `   Atual: *${reajusteMedio.toFixed(1)}%* | Meta: *>8.5%*\n\n`;
+
+    // SEÇÃO 6: RENOVAÇÕES
+    texto += `🔄 *RENOVAÇÕES DO MÊS*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `• Total previsto: *${resumo?.renovacoes_previstas || 0}*\n`;
+    texto += `• Realizadas: *${renovacoes.length}*\n`;
+    texto += `• Porcentagem: *${taxaRenovacao.toFixed(0)}%*\n\n`;
+    
+    if (renovacoes.length > 0) {
       renovacoes.forEach((r, i) => {
         const reajuste = r.valor_parcela_anterior && r.valor_parcela_novo
           ? ((r.valor_parcela_novo - r.valor_parcela_anterior) / r.valor_parcela_anterior) * 100
           : 0;
-        texto += `${i + 1}. *${r.aluno_nome}*\n`;
-        texto += `   💰 R$ ${(r.valor_parcela_anterior || 0).toFixed(0)} → R$ ${(r.valor_parcela_novo || 0).toFixed(0)} (*+${reajuste.toFixed(0)}%*)\n`;
-        texto += `   💳 ${r.forma_pagamento_nome || 'N/A'} | 👤 ${r.agente_comercial || 'N/A'}\n\n`;
+        texto += `${i + 1}) Nome: *${r.aluno_nome}*\n`;
+        texto += `   Parcela: R$ ${(r.valor_parcela_anterior || 0).toFixed(2)} para R$ ${(r.valor_parcela_novo || 0).toFixed(2)} (${reajuste.toFixed(2)}%)\n`;
+        texto += `   Forma de PG: ${r.forma_pagamento_nome || 'N/A'}\n`;
+        texto += `   Agente: ${r.agente_comercial || 'N/A'}\n\n`;
       });
-      texto += `📊 Reajuste médio: *+${reajusteMedio.toFixed(1)}%*\n\n`;
     }
 
-    texto += `❌ *NÃO RENOVAÇÕES (${naoRenovacoes.length})*\n`;
+    // SEÇÃO 7: NÃO RENOVAÇÕES
+    texto += `❌ *NÃO RENOVAÇÕES DO MÊS*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    if (naoRenovacoes.length === 0) {
-      texto += `Nenhuma não renovação registrada 🎉\n\n`;
+    texto += `• Total: *${naoRenovacoes.length}*\n`;
+    if (resumo?.renovacoes_previstas && resumo.renovacoes_previstas > 0) {
+      const pctNaoRenov = (naoRenovacoes.length / resumo.renovacoes_previstas) * 100;
+      texto += `• Porcentagem: *${pctNaoRenov.toFixed(0)}%*\n\n`;
     } else {
+      texto += `\n`;
+    }
+    
+    if (naoRenovacoes.length > 0) {
       naoRenovacoes.forEach((n, i) => {
-        texto += `${i + 1}. *${n.aluno_nome}*\n`;
-        texto += `   🎸 ${n.professor_nome || 'N/A'} | 👤 ${n.agente_comercial || 'N/A'}\n`;
-        texto += `   📝 ${n.motivo || 'Sem motivo'}\n\n`;
+        const reajuste = n.valor_parcela_anterior && n.valor_parcela_novo
+          ? ((n.valor_parcela_novo - n.valor_parcela_anterior) / n.valor_parcela_anterior) * 100
+          : 0;
+        const reajusteLabel = reajuste === 0 ? '(Retenção)' : `(${reajuste.toFixed(2)}%)`;
+        texto += `${i + 1}) Nome: *${n.aluno_nome}*\n`;
+        texto += `   Parcela: R$ ${(n.valor_parcela_anterior || 0).toFixed(2)} para R$ ${(n.valor_parcela_novo || 0).toFixed(2)} ${reajusteLabel}\n`;
+        texto += `   Professor: ${n.professor_nome || 'N/A'}\n`;
+        texto += `   Motivo: ${n.motivo || 'Não informado'}\n\n`;
       });
+    } else {
+      texto += `Nenhuma não renovação registrada 🎉\n\n`;
     }
 
-    texto += `⚠️ *AVISOS PRÉVIOS (${avisosPrevios.length})*\n`;
+    // SEÇÃO 8: AVISOS PRÉVIOS
+    const proximoMes = new Date(ano, mes).toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
+    texto += `⚠️ *AVISOS PRÉVIOS para sair em ${proximoMes}*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    if (avisosPrevios.length === 0) {
-      texto += `Nenhum aviso prévio registrado 🎉\n\n`;
-    } else {
+    texto += `• Total no mês: *${avisosPrevios.length}*\n\n`;
+    
+    if (avisosPrevios.length > 0) {
       avisosPrevios.forEach((a, i) => {
-        texto += `${i + 1}. *${a.aluno_nome}*\n`;
-        texto += `   📆 Sai em: ${a.mes_saida ? new Date(a.mes_saida).toLocaleDateString('pt-BR', { month: 'long' }) : 'N/A'}\n`;
-        texto += `   🎸 ${a.professor_nome || 'N/A'}\n`;
-        texto += `   📝 ${a.motivo || 'Sem motivo'}\n\n`;
+        texto += `${i + 1}) Nome: *${a.aluno_nome}*\n`;
+        texto += `   Motivo: ${a.motivo || 'Não informado'}\n`;
+        texto += `   Prof: ${a.professor_nome || 'N/A'}\n\n`;
       });
+    } else {
+      texto += `Nenhum aviso prévio registrado 🎉\n\n`;
     }
 
-    texto += `🚪 *EVASÕES (${evasoes.length})*\n`;
+    // SEÇÃO 9: EVASÕES
+    texto += `🚪 *EVASÕES (Saíram no mês)*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    if (evasoes.length === 0) {
-      texto += `Nenhuma evasão registrada 🎉\n\n`;
-    } else {
-      const interrompidos = evasoes.filter(e => e.tipo_evasao === 'interrompido').length;
-      const naoRenovou = evasoes.filter(e => e.tipo_evasao === 'nao_renovou').length;
-      texto += `• Interrompido: *${interrompidos}*\n`;
-      texto += `• Não Renovou: *${naoRenovou}*\n\n`;
-      
+    const interrompidos = evasoes.filter(e => e.tipo_evasao === 'interrompido').length;
+    const interrompidos2Curso = evasoes.filter(e => e.tipo_evasao === 'interrompido_2_curso').length;
+    const interrompidosBolsista = evasoes.filter(e => e.tipo_evasao === 'interrompido_bolsista').length;
+    const interrompidosBanda = evasoes.filter(e => e.tipo_evasao === 'interrompido_banda').length;
+    const naoRenovou = evasoes.filter(e => e.tipo_evasao === 'nao_renovou').length;
+    
+    texto += `• Total no mês: *${evasoes.length}*\n`;
+    texto += `• Não renovou: *${naoRenovou}*\n`;
+    texto += `• Interrompido: *${interrompidos}*\n`;
+    if (interrompidos2Curso > 0) texto += `• Interrompido 2º Curso: *${interrompidos2Curso}*\n`;
+    if (interrompidosBolsista > 0) texto += `• Interrompido Bolsista: *${interrompidosBolsista}*\n`;
+    if (interrompidosBanda > 0) texto += `• Interrompido Banda: *${interrompidosBanda}*\n`;
+    texto += `\n`;
+    
+    if (evasoes.length > 0) {
       evasoes.forEach((e, i) => {
-        const tipoLabel = e.tipo_evasao === 'interrompido' ? '⏸️ Interrompido' : '❌ Não Renovou';
-        texto += `${i + 1}. *${e.aluno_nome}*\n`;
-        texto += `   ${tipoLabel} | 🎸 ${e.professor_nome || 'N/A'}\n`;
-        texto += `   📝 ${e.motivo || 'Sem motivo'}\n\n`;
+        texto += `${i + 1}) Nome: *${e.aluno_nome}*\n`;
+        texto += `   Motivo: ${e.motivo || 'Não informado'}\n`;
+        texto += `   Prof: ${e.professor_nome || 'N/A'}\n\n`;
       });
+    } else {
+      texto += `Nenhuma evasão registrada 🎉\n\n`;
     }
 
     const dataHora = new Date();
@@ -430,12 +664,12 @@ export function ModalRelatorio({
     return texto;
   }
 
-  async function selecionarTipo(tipo: TipoRelatorio) {
+  async function handleSelecionarTipo(tipo: TipoRelatorio) {
     setTipoSelecionado(tipo);
-    setErroIA(null);
     
+    // Se for relatório gerencial IA, gera automaticamente
     if (tipo === 'gerencial_ia') {
-      setTextoRelatorio('');
+      setTextoRelatorio('Gerando relatório com IA... ⏳');
       const texto = await gerarRelatorioGerencialIA();
       setTextoRelatorio(texto);
       return;
@@ -444,10 +678,10 @@ export function ModalRelatorio({
     let texto = '';
     switch (tipo) {
       case 'diario':
-        texto = gerarRelatorioDiario();
+        texto = await gerarRelatorioDiario();
         break;
       case 'mensal':
-        texto = gerarRelatorioMensal();
+        texto = await gerarRelatorioMensal();
         break;
       case 'renovacoes':
         texto = gerarRelatorioRenovacoes();
@@ -489,13 +723,10 @@ export function ModalRelatorio({
             <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
               <Label className="text-slate-300 text-sm font-medium mb-3 block">Período do Relatório</Label>
               
-              {/* Botões de atalho */}
+              {/* Botões de atalho - Simplificado: Ontem e Personalizado */}
               <div className="flex flex-wrap gap-2 mb-3">
                 {[
-                  { id: 'hoje', label: 'Hoje' },
                   { id: 'ontem', label: 'Ontem' },
-                  { id: 'semana', label: 'Esta Semana' },
-                  { id: 'mes', label: 'Este Mês' },
                   { id: 'personalizado', label: 'Personalizado' },
                 ].map((p) => (
                   <button
@@ -503,23 +734,11 @@ export function ModalRelatorio({
                     onClick={() => {
                       setRelatorioPeriodo(p.id as typeof relatorioPeriodo);
                       const hojeDate = new Date();
-                      if (p.id === 'hoje') {
-                        setRelatorioDataInicio(hojeDate);
-                        setRelatorioDataFim(hojeDate);
-                      } else if (p.id === 'ontem') {
+                      if (p.id === 'ontem') {
                         const ontem = new Date(hojeDate);
                         ontem.setDate(ontem.getDate() - 1);
                         setRelatorioDataInicio(ontem);
                         setRelatorioDataFim(ontem);
-                      } else if (p.id === 'semana') {
-                        const inicioSemana = new Date(hojeDate);
-                        inicioSemana.setDate(hojeDate.getDate() - hojeDate.getDay());
-                        setRelatorioDataInicio(inicioSemana);
-                        setRelatorioDataFim(hojeDate);
-                      } else if (p.id === 'mes') {
-                        const inicioMes = new Date(hojeDate.getFullYear(), hojeDate.getMonth(), 1);
-                        setRelatorioDataInicio(inicioMes);
-                        setRelatorioDataFim(hojeDate);
                       }
                     }}
                     className={cn(
@@ -568,7 +787,7 @@ export function ModalRelatorio({
             {tiposRelatorio.map((tipo) => (
               <button
                 key={tipo.id}
-                onClick={() => selecionarTipo(tipo.id)}
+                onClick={() => handleSelecionarTipo(tipo.id)}
                 className={cn(
                   "w-full flex items-center gap-4 p-4 rounded-xl transition-all text-left",
                   tipo.destaque 
@@ -601,7 +820,7 @@ export function ModalRelatorio({
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => selecionarTipo('gerencial_ia')}
+                    onClick={() => handleSelecionarTipo('gerencial_ia')}
                     disabled={loadingIA}
                     className="text-violet-400 hover:text-violet-300"
                   >
@@ -612,7 +831,7 @@ export function ModalRelatorio({
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => selecionarTipo(tipoSelecionado)}
+                  onClick={() => handleSelecionarTipo(tipoSelecionado)}
                   disabled={loadingIA}
                   className="text-slate-400 hover:text-white"
                 >

@@ -156,6 +156,7 @@ const TIPOS_ALUNO = [
 export function ComercialPage() {
   const { usuario, isAdmin, unidadeId } = useAuth();
   const context = useOutletContext<{ filtroAtivo: string | null; unidadeSelecionada: string | null }>();
+  const filtroAtivo = context?.filtroAtivo;
   
   // Hook de filtro de competência (período)
   const competencia = useCompetenciaFiltro();
@@ -169,11 +170,11 @@ export function ComercialPage() {
   const [saving, setSaving] = useState(false);
   const [modalOpen, setModalOpen] = useState<'lead' | 'experimental' | 'visita' | 'matricula' | null>(null);
   const [relatorioOpen, setRelatorioOpen] = useState(false);
-  const [tipoRelatorio, setTipoRelatorio] = useState<'diario' | 'semanal' | 'mensal' | 'matriculas' | null>(null);
+  const [tipoRelatorio, setTipoRelatorio] = useState<'diario' | 'semanal' | 'mensal' | 'matriculas' | 'comparativo_mensal' | 'comparativo_anual' | null>(null);
   const [relatorioTexto, setRelatorioTexto] = useState('');
   
-  // Estado para período do relatório
-  const [relatorioPeriodo, setRelatorioPeriodo] = useState<'hoje' | 'ontem' | 'semana' | 'mes' | 'personalizado'>('hoje');
+  // Estado para período do relatório (simplificado)
+  const [relatorioPeriodo, setRelatorioPeriodo] = useState<'ontem' | 'personalizado'>('ontem');
   const [relatorioDataInicio, setRelatorioDataInicio] = useState<Date>(new Date());
   const [relatorioDataFim, setRelatorioDataFim] = useState<Date>(new Date());
   const [canais, setCanais] = useState<Option[]>([]);
@@ -197,6 +198,23 @@ export function ComercialPage() {
   
   // Registros do dia
   const [registrosHoje, setRegistrosHoje] = useState<LeadDiario[]>([]);
+  
+  // Gerar relatório automaticamente quando o tipo ou período muda
+  useEffect(() => {
+    if (tipoRelatorio === 'diario') {
+      gerarRelatorioDiario().then(texto => setRelatorioTexto(texto));
+    } else if (tipoRelatorio === 'semanal') {
+      gerarRelatorioSemanal().then(texto => setRelatorioTexto(texto));
+    } else if (tipoRelatorio === 'mensal') {
+      gerarRelatorioMensal().then(texto => setRelatorioTexto(texto));
+    } else if (tipoRelatorio === 'matriculas') {
+      gerarRelatorioMatriculas().then(texto => setRelatorioTexto(texto));
+    } else if (tipoRelatorio === 'comparativo_mensal') {
+      gerarRelatorioComparativoMensal().then(texto => setRelatorioTexto(texto));
+    } else if (tipoRelatorio === 'comparativo_anual') {
+      gerarRelatorioComparativoAnual().then(texto => setRelatorioTexto(texto));
+    }
+  }, [tipoRelatorio, relatorioPeriodo, relatorioDataInicio, relatorioDataFim]);
   
   // Matrículas do mês (para tabela)
   const [matriculasMes, setMatriculasMes] = useState<(LeadDiario & { 
@@ -818,167 +836,394 @@ export function ComercialPage() {
     }
   };
 
-  // Gerar relatório diário
-  const gerarRelatorioDiario = () => {
+  // Função auxiliar para calcular range de datas baseado no período
+  const calcularRangeDatas = () => {
     const hoje = new Date();
+    let dataInicio: Date;
+    let dataFim: Date;
+
+    switch (relatorioPeriodo) {
+      case 'ontem':
+        const ontem = new Date(hoje);
+        ontem.setDate(hoje.getDate() - 1);
+        dataInicio = ontem;
+        dataFim = ontem;
+        break;
+      case 'personalizado':
+        dataInicio = relatorioDataInicio;
+        dataFim = relatorioDataFim;
+        break;
+      default:
+        dataInicio = hoje;
+        dataFim = hoje;
+    }
+
+    return {
+      dataInicio: dataInicio.toISOString().split('T')[0],
+      dataFim: dataFim.toISOString().split('T')[0],
+      dataInicioObj: dataInicio,
+      dataFimObj: dataFim
+    };
+  };
+
+  // Gerar relatório diário
+  const gerarRelatorioDiario = async () => {
+    const { dataInicio, dataFim, dataInicioObj, dataFimObj } = calcularRangeDatas();
+    const hoje = dataFimObj;
     const dia = hoje.getDate().toString().padStart(2, '0');
     const mesNome = hoje.toLocaleString('pt-BR', { month: 'long' });
     const ano = hoje.getFullYear();
-    const unidadeNome = usuario?.unidade_nome || 'Unidade';
-    const nomeUsuario = usuario?.nome || 'Usuário';
+    
+    // Buscar informações da unidade incluindo o Hunter
+    const unidadeId = filtroAtivo || usuario?.unidade_id;
+    let unidadeNome = 'Unidade';
+    let hunterNome = usuario?.nome || 'Usuário';
+    
+    if (unidadeId) {
+      const { data: unidadeData } = await supabase
+        .from('unidades')
+        .select('nome, hunter_nome')
+        .eq('id', unidadeId)
+        .single();
+      
+      if (unidadeData) {
+        unidadeNome = unidadeData.nome;
+        hunterNome = unidadeData.hunter_nome || usuario?.nome || 'Usuário';
+      }
+    }
 
-    const leadsHoje = registrosHoje.filter(r => r.tipo === 'lead').reduce((acc, r) => acc + r.quantidade, 0);
-    const experimentaisHoje = registrosHoje.filter(r => r.tipo.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0);
-    const visitasHoje = registrosHoje.filter(r => r.tipo === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0);
-    const matriculasHoje = registrosHoje.filter(r => r.tipo === 'matricula').reduce((acc, r) => acc + r.quantidade, 0);
+    // Buscar dados do período selecionado
+    const { data: registrosPeriodo } = await supabase
+      .from('leads_diarios')
+      .select('tipo, quantidade')
+      .eq('unidade_id', unidadeId)
+      .gte('data', dataInicio)
+      .lte('data', dataFim);
+
+    const leadsPeriodo = registrosPeriodo?.filter(r => r.tipo === 'lead').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const experimentaisPeriodo = registrosPeriodo?.filter(r => r.tipo.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const matriculasPeriodo = registrosPeriodo?.filter(r => r.tipo === 'matricula').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+
+    // Buscar experimentais agendadas para o dia final do período
+    const { data: experimentaisDia } = await supabase
+      .from('leads_diarios')
+      .select('quantidade')
+      .eq('unidade_id', unidadeId)
+      .eq('data', dataFim)
+      .like('tipo', 'experimental%');
+    
+    const experimentaisAgendadasDia = experimentaisDia?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
+
+    // Buscar visitas do dia final do período
+    const { data: visitasDia } = await supabase
+      .from('leads_diarios')
+      .select('quantidade')
+      .eq('unidade_id', unidadeId)
+      .eq('data', dataFim)
+      .eq('tipo', 'visita_escola');
+    
+    const visitasDiaTotal = visitasDia?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
 
     let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
     texto += `📅 *RELATÓRIO DIÁRIO*\n`;
     texto += `🏢 *${unidadeNome.toUpperCase()}*\n`;
     texto += `📆 ${dia}/${mesNome}/${ano}\n`;
-    texto += `👤 ${nomeUsuario}\n`;
+    texto += `👤 ${hunterNome}\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-    texto += `🎯 Leads: *${leadsHoje}*\n`;
-    texto += `🎸 Experimentais: *${experimentaisHoje}*\n`;
-    texto += `🏫 Visitas: *${visitasHoje}*\n`;
-    texto += `✅ Matrículas: *${matriculasHoje}*\n\n`;
+    texto += `🎯 Leads no período: *${leadsPeriodo}*\n`;
+    texto += `🎸 Experimentais no período: *${experimentaisPeriodo}*\n`;
+    texto += `📆 Experimentais agendadas: *${experimentaisAgendadasDia}*\n`;
+    texto += `🏫 Visitas: *${visitasDiaTotal}*\n`;
+    texto += `✅ Matrículas no período: *${matriculasPeriodo}*\n\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━`;
 
     return texto;
   };
 
   // Gerar relatório semanal
-  const gerarRelatorioSemanal = () => {
+  const gerarRelatorioSemanal = async () => {
     const hoje = new Date();
     const seteDiasAtras = new Date(hoje);
     seteDiasAtras.setDate(hoje.getDate() - 7);
-    const unidadeNome = usuario?.unidade_nome || 'Unidade';
-    const nomeUsuario = usuario?.nome || 'Usuário';
+    
+    // Buscar informações da unidade incluindo o Hunter
+    const unidadeId = filtroAtivo || usuario?.unidade_id;
+    let unidadeNome = 'Unidade';
+    let hunterNome = usuario?.nome || 'Usuário';
+    
+    if (unidadeId) {
+      const { data: unidadeData } = await supabase
+        .from('unidades')
+        .select('nome, hunter_nome')
+        .eq('id', unidadeId)
+        .single();
+      
+      if (unidadeData) {
+        unidadeNome = unidadeData.nome;
+        hunterNome = unidadeData.hunter_nome || usuario?.nome || 'Usuário';
+      }
+    }
 
-    // Filtrar registros da última semana
-    const registrosSemana = registrosHoje; // Simplificado - você pode buscar os últimos 7 dias do banco
+    // Buscar dados dos últimos 7 dias
+    const { data: registrosSemana } = await supabase
+      .from('leads_diarios')
+      .select('tipo, quantidade, valor_passaporte, valor_parcela')
+      .eq('unidade_id', unidadeId)
+      .gte('data', seteDiasAtras.toISOString().split('T')[0])
+      .lte('data', hoje.toISOString().split('T')[0]);
+
+    const leadsSemana = registrosSemana?.filter(r => r.tipo === 'lead').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const experimentaisSemana = registrosSemana?.filter(r => r.tipo.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const visitasSemana = registrosSemana?.filter(r => r.tipo === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const matriculasSemana = registrosSemana?.filter(r => r.tipo === 'matricula').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+
+    // Calcular conversões
+    const conversaoLeadExp = leadsSemana > 0 ? (experimentaisSemana / leadsSemana) * 100 : 0;
+    const conversaoExpMat = experimentaisSemana > 0 ? (matriculasSemana / experimentaisSemana) * 100 : 0;
+    const conversaoLeadMat = leadsSemana > 0 ? (matriculasSemana / leadsSemana) * 100 : 0;
+
+    // Calcular tickets médios
+    const matriculas = registrosSemana?.filter(r => r.tipo === 'matricula') || [];
+    const totalPassaporte = matriculas.reduce((acc, r) => acc + (r.valor_passaporte || 0), 0);
+    const totalParcela = matriculas.reduce((acc, r) => acc + (r.valor_parcela || 0), 0);
+    const ticketMedioPassaporte = matriculasSemana > 0 ? totalPassaporte / matriculasSemana : 0;
+    const ticketMedioParcela = matriculasSemana > 0 ? totalParcela / matriculasSemana : 0;
     
     let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
     texto += `📆 *RELATÓRIO SEMANAL*\n`;
     texto += `🏢 *${unidadeNome.toUpperCase()}*\n`;
     texto += `📅 Últimos 7 dias\n`;
-    texto += `👤 ${nomeUsuario}\n`;
+    texto += `👤 ${hunterNome}\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
     
     texto += `📈 *TOTAIS DA SEMANA*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `🎯 Leads: *${resumo.leads}*\n`;
-    texto += `🎸 Experimentais: *${resumo.experimentais}*\n`;
-    texto += `🏫 Visitas: *${resumo.visitas}*\n`;
-    texto += `✅ Matrículas: *${resumo.matriculas}*\n\n`;
+    texto += `🎯 Leads na semana: *${leadsSemana}*\n`;
+    texto += `🎸 Experimentais na semana: *${experimentaisSemana}*\n`;
+    texto += `🏫 Visitas na semana: *${visitasSemana}*\n`;
+    texto += `✅ Matrículas na semana: *${matriculasSemana}*\n\n`;
 
     texto += `📊 *CONVERSÕES*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `Lead → Experimental: *${resumo.conversaoLeadExp.toFixed(1)}%*\n`;
-    texto += `Experimental → Matrícula: *${resumo.conversaoExpMat.toFixed(1)}%*\n\n`;
+    texto += `Lead → Experimental: *${conversaoLeadExp.toFixed(1)}%*\n`;
+    texto += `Experimental → Matrícula: *${conversaoExpMat.toFixed(1)}%*\n`;
+    texto += `Lead → Matrícula: *${conversaoLeadMat.toFixed(1)}%*\n\n`;
 
-    if (resumo.leadsPorCanal.length > 0) {
-      texto += `📱 *TOP 3 CANAIS*\n`;
-      texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-      resumo.leadsPorCanal.slice(0, 3).forEach((c, i) => {
-        texto += `${i + 1}. ${c.canal}: *${c.quantidade}*\n`;
-      });
-      texto += `\n`;
-    }
+    texto += `💰 *FINANCEIRO*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `Ticket Médio Passaporte: R$ ${ticketMedioPassaporte.toFixed(2)}\n`;
+    texto += `Ticket Médio Parcela: R$ ${ticketMedioParcela.toFixed(2)}\n\n`;
 
     texto += `━━━━━━━━━━━━━━━━━━━━━━`;
     return texto;
   };
 
   // Gerar relatório mensal completo
-  const gerarRelatorioMensal = () => {
+  const gerarRelatorioMensal = async () => {
     const hoje = new Date();
     const dia = hoje.getDate().toString().padStart(2, '0');
     const mesNome = hoje.toLocaleString('pt-BR', { month: 'long' });
     const mesNomeUpper = mesNome.toUpperCase();
     const ano = hoje.getFullYear();
-    const unidadeNome = usuario?.unidade_nome || 'Unidade';
-    const nomeUsuario = usuario?.nome || 'Usuário';
+    
+    // Buscar informações da unidade incluindo o Hunter
+    const unidadeId = filtroAtivo || usuario?.unidade_id;
+    let unidadeNome = 'Unidade';
+    let hunterNome = usuario?.nome || 'Usuário';
+    
+    if (unidadeId) {
+      const { data: unidadeData } = await supabase
+        .from('unidades')
+        .select('nome, hunter_nome')
+        .eq('id', unidadeId)
+        .single();
+      
+      if (unidadeData) {
+        unidadeNome = unidadeData.nome;
+        hunterNome = unidadeData.hunter_nome || usuario?.nome || 'Usuário';
+      }
+    }
+
+    // Buscar dados do mês completo
+    const primeiroDiaMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    const { data: registrosMes } = await supabase
+      .from('leads_diarios')
+      .select('tipo, quantidade, canal_id, curso_id, canais_origem(nome), cursos(nome)')
+      .eq('unidade_id', unidadeId)
+      .gte('data', primeiroDiaMes.toISOString().split('T')[0])
+      .lte('data', hoje.toISOString().split('T')[0]);
+
+    const leadsMes = registrosMes?.filter(r => r.tipo === 'lead').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const experimentaisMes = registrosMes?.filter(r => r.tipo.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const visitasMes = registrosMes?.filter(r => r.tipo === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const matriculasMes = registrosMes?.filter(r => r.tipo === 'matricula').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+
+    // Calcular conversões
+    const conversaoLeadExp = leadsMes > 0 ? (experimentaisMes / leadsMes) * 100 : 0;
+    const conversaoExpMat = experimentaisMes > 0 ? (matriculasMes / experimentaisMes) * 100 : 0;
+    const conversaoLeadMat = leadsMes > 0 ? (matriculasMes / leadsMes) * 100 : 0;
+
+    // Buscar matrículas detalhadas do mês
+    const { data: matriculasDetalhadas } = await supabase
+      .from('leads_diarios')
+      .select(`
+        data, 
+        aluno_nome, 
+        aluno_idade, 
+        tipo_matricula,
+        valor_passaporte, 
+        valor_parcela,
+        canais_origem(nome),
+        cursos(nome)
+      `)
+      .eq('unidade_id', unidadeId)
+      .eq('tipo', 'matricula')
+      .gte('data', primeiroDiaMes.toISOString().split('T')[0])
+      .lte('data', hoje.toISOString().split('T')[0])
+      .order('data', { ascending: true });
+
+    // Agrupar leads por canal
+    const leadsPorCanal: { [key: string]: number } = {};
+    registrosMes?.filter(r => r.tipo === 'lead').forEach(r => {
+      const canal = (r.canais_origem as any)?.nome || 'Não informado';
+      leadsPorCanal[canal] = (leadsPorCanal[canal] || 0) + r.quantidade;
+    });
+
+    // Agrupar leads por curso
+    const leadsPorCurso: { [key: string]: number } = {};
+    registrosMes?.filter(r => r.tipo === 'lead').forEach(r => {
+      const curso = (r.cursos as any)?.nome || 'Não informado';
+      leadsPorCurso[curso] = (leadsPorCurso[curso] || 0) + r.quantidade;
+    });
+
+    // Agrupar matrículas por canal
+    const matriculasPorCanal: { [key: string]: number } = {};
+    registrosMes?.filter(r => r.tipo === 'matricula').forEach(r => {
+      const canal = (r.canais_origem as any)?.nome || 'Não informado';
+      matriculasPorCanal[canal] = (matriculasPorCanal[canal] || 0) + r.quantidade;
+    });
+
+    // Agrupar matrículas por curso
+    const matriculasPorCurso: { [key: string]: number } = {};
+    registrosMes?.filter(r => r.tipo === 'matricula').forEach(r => {
+      const curso = (r.cursos as any)?.nome || 'Não informado';
+      matriculasPorCurso[curso] = (matriculasPorCurso[curso] || 0) + r.quantidade;
+    });
+
+    // Calcular totais financeiros
+    const totalPassaporte = matriculasDetalhadas?.reduce((acc, m) => acc + (m.valor_passaporte || 0), 0) || 0;
+    const totalParcela = matriculasDetalhadas?.reduce((acc, m) => acc + (m.valor_parcela || 0), 0) || 0;
+    const ticketMedioPass = matriculasMes > 0 ? totalPassaporte / matriculasMes : 0;
+    const ticketMedioPar = matriculasMes > 0 ? totalParcela / matriculasMes : 0;
+
+    // Contar matrículas por tipo
+    const lamkCount = matriculasDetalhadas?.filter(m => m.tipo_matricula === 'LAMK').length || 0;
+    const emlaCount = matriculasDetalhadas?.filter(m => m.tipo_matricula === 'EMLA').length || 0;
 
     // Cabeçalho
     let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
     texto += `📊 *RELATÓRIO MENSAL COMERCIAL*\n`;
     texto += `🏢 *${unidadeNome.toUpperCase()}*\n`;
     texto += `📅 *${mesNomeUpper}/${ano}*\n`;
-    texto += `👤 ${nomeUsuario}\n`;
+    texto += `👤 ${hunterNome}\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
     // Resumo Geral
     texto += `📈 *RESUMO GERAL DO MÊS*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `🎯 Leads: *${resumo.leads}*\n`;
-    texto += `🎸 Experimentais: *${resumo.experimentais}*\n`;
-    texto += `🏫 Visitas: *${resumo.visitas}*\n`;
-    texto += `✅ Matrículas: *${resumo.matriculas}*\n\n`;
+    texto += `🎯 Leads no mês: *${leadsMes}*\n`;
+    texto += `🎸 Experimentais no mês: *${experimentaisMes}*\n`;
+    texto += `🏫 Visitas no mês: *${visitasMes}*\n`;
+    texto += `✅ Matrículas no mês: *${matriculasMes}*\n\n`;
 
     // Conversões
     texto += `📊 *TAXAS DE CONVERSÃO*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `Lead → Experimental: *${resumo.conversaoLeadExp.toFixed(1)}%*\n`;
-    texto += `Experimental → Matrícula: *${resumo.conversaoExpMat.toFixed(1)}%*\n`;
-    texto += `Lead → Matrícula: *${resumo.conversaoLeadMat.toFixed(1)}%*\n\n`;
+    texto += `Lead → Experimental: *${conversaoLeadExp.toFixed(1)}%*\n`;
+    texto += `Experimental → Matrícula: *${conversaoExpMat.toFixed(1)}%*\n`;
+    texto += `Lead → Matrícula: *${conversaoLeadMat.toFixed(1)}%*\n\n`;
 
-    // Leads por Canal
-    if (resumo.leadsPorCanal.length > 0) {
-      texto += `📱 *LEADS POR CANAL*\n`;
-      texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-      resumo.leadsPorCanal.forEach(c => {
-        const percent = ((c.quantidade / resumo.leads) * 100).toFixed(0);
-        texto += `• ${c.canal}: *${c.quantidade}* (${percent}%)\n`;
-      });
-      texto += `\n`;
+    // Matrículas por tipo
+    texto += `👥 *MATRÍCULAS DO MÊS (${matriculasMes})*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `🎨 LAMK (Kids): *${lamkCount}*\n`;
+    texto += `🎸 EMLA (Adulto): *${emlaCount}*\n\n`;
+
+    // Valores financeiros
+    texto += `💰 *VALORES FINANCEIROS*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `Total Passaportes: *R$ ${totalPassaporte.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n`;
+    texto += `Total Parcelas: *R$ ${totalParcela.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n`;
+    texto += `Ticket Médio Pass.: *R$ ${ticketMedioPass.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n`;
+    texto += `Ticket Médio Parc.: *R$ ${ticketMedioPar.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n\n`;
+
+    // Leads por Canal - sempre mostrar
+    texto += `📲 *LEADS POR CANAIS*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    if (Object.keys(leadsPorCanal).length > 0) {
+      Object.entries(leadsPorCanal)
+        .sort(([, a], [, b]) => b - a)
+        .forEach(([canal, qtd]) => {
+          texto += `${canal}: ${qtd}\n`;
+        });
+    } else {
+      texto += `Nenhum lead registrado\n`;
     }
+    texto += `\n`;
 
-    // Leads por Curso
-    if (resumo.leadsPorCurso.length > 0) {
-      texto += `🎵 *LEADS POR CURSO*\n`;
-      texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-      resumo.leadsPorCurso.forEach(c => {
-        const percent = ((c.quantidade / resumo.leads) * 100).toFixed(0);
-        texto += `• ${c.curso}: *${c.quantidade}* (${percent}%)\n`;
-      });
-      texto += `\n`;
+    // Leads por Curso - sempre mostrar
+    texto += `🎸 *LEADS POR CURSO*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    if (Object.keys(leadsPorCurso).length > 0) {
+      Object.entries(leadsPorCurso)
+        .sort(([, a], [, b]) => b - a)
+        .forEach(([curso, qtd]) => {
+          texto += `${curso}: ${qtd}\n`;
+        });
+    } else {
+      texto += `Nenhum lead registrado\n`;
     }
+    texto += `\n`;
 
-    // Matrículas Detalhadas
-    if (matriculasMes.length > 0) {
-      texto += `👥 *MATRÍCULAS DO MÊS (${matriculasMes.length})*\n`;
-      texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-      
-      const lamk = matriculasMes.filter(m => m.tipo_matricula === 'LAMK');
-      const emla = matriculasMes.filter(m => m.tipo_matricula === 'EMLA');
-      
-      texto += `🎨 LAMK (Kids): *${lamk.length}*\n`;
-      texto += `🎸 EMLA (Adulto): *${emla.length}*\n\n`;
+    // Matrículas por Canal - sempre mostrar
+    texto += `🔥 *MATRÍCULAS POR CANAIS*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    if (Object.keys(matriculasPorCanal).length > 0) {
+      Object.entries(matriculasPorCanal)
+        .sort(([, a], [, b]) => b - a)
+        .forEach(([canal, qtd]) => {
+          texto += `${canal}: ${qtd}\n`;
+        });
+    } else {
+      texto += `Nenhuma matrícula registrada\n`;
+    }
+    texto += `\n`;
 
-      // Valores financeiros
-      const totalPassaporte = matriculasMes.reduce((acc, m) => acc + (m.valor_passaporte || 0), 0);
-      const totalParcela = matriculasMes.reduce((acc, m) => acc + (m.valor_parcela || 0), 0);
-      const ticketMedioPass = matriculasMes.length > 0 ? totalPassaporte / matriculasMes.length : 0;
-      const ticketMedioPar = matriculasMes.length > 0 ? totalParcela / matriculasMes.length : 0;
+    // Matrículas por Curso - sempre mostrar
+    texto += `🏆 *MATRÍCULAS POR CURSO*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    if (Object.keys(matriculasPorCurso).length > 0) {
+      Object.entries(matriculasPorCurso)
+        .sort(([, a], [, b]) => b - a)
+        .forEach(([curso, qtd]) => {
+          texto += `${curso}: ${qtd}\n`;
+        });
+    } else {
+      texto += `Nenhuma matrícula registrada\n`;
+    }
+    texto += `\n`;
 
-      texto += `💰 *VALORES FINANCEIROS*\n`;
-      texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-      texto += `Total Passaportes: *R$ ${totalPassaporte.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n`;
-      texto += `Total Parcelas: *R$ ${totalParcela.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n`;
-      texto += `Ticket Médio Pass.: *R$ ${ticketMedioPass.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n`;
-      texto += `Ticket Médio Parc.: *R$ ${ticketMedioPar.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n\n`;
-
-      // Lista de alunos matriculados
+    // Lista de matrículas
+    if (matriculasDetalhadas && matriculasDetalhadas.length > 0) {
       texto += `📋 *LISTA DE MATRÍCULAS*\n`;
       texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-      matriculasMes.forEach((mat, i) => {
+      matriculasDetalhadas.forEach((mat, i) => {
         const dataFormatada = new Date(mat.data + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
         texto += `${i + 1}. ${mat.aluno_nome}`;
         if (mat.aluno_idade) texto += ` (${mat.aluno_idade} anos)`;
         texto += `\n   📅 ${dataFormatada}`;
-        if (mat.curso_nome) texto += ` | 🎵 ${mat.curso_nome}`;
-        if (mat.canal_nome) texto += ` | 📱 ${mat.canal_nome}`;
+        if ((mat.cursos as any)?.nome) texto += ` | 🎵 ${(mat.cursos as any).nome}`;
+        if ((mat.canais_origem as any)?.nome) texto += ` | 📱 ${(mat.canais_origem as any).nome}`;
         texto += `\n   💵 Pass: R$ ${(mat.valor_passaporte || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
         texto += ` | Parc: R$ ${(mat.valor_parcela || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n\n`;
       });
@@ -993,53 +1238,364 @@ export function ComercialPage() {
   };
 
   // Gerar relatório de matrículas detalhado
-  const gerarRelatorioMatriculas = () => {
+  const gerarRelatorioMatriculas = async () => {
     const hoje = new Date();
-    const mesNome = hoje.toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
+    const dia = hoje.getDate().toString().padStart(2, '0');
+    const mesNome = hoje.toLocaleString('pt-BR', { month: 'long' });
+    const mesNomeUpper = mesNome.toUpperCase();
     const ano = hoje.getFullYear();
-    const unidadeNome = usuario?.unidade_nome || 'Unidade';
+    
+    // Buscar informações da unidade incluindo o Hunter
+    const unidadeId = filtroAtivo || usuario?.unidade_id;
+    let unidadeNome = 'Unidade';
+    let hunterNome = usuario?.nome || 'Usuário';
+    
+    if (unidadeId) {
+      const { data: unidadeData } = await supabase
+        .from('unidades')
+        .select('nome, hunter_nome')
+        .eq('id', unidadeId)
+        .single();
+      
+      if (unidadeData) {
+        unidadeNome = unidadeData.nome;
+        hunterNome = unidadeData.hunter_nome || usuario?.nome || 'Usuário';
+      }
+    }
 
-    let texto = `*RELATÓRIO L.A PASS / MÊS ${mesNome} ${ano}*\n\n`;
-    texto += `*Total de Passaportes: ${matriculasMes.length}*\n\n`;
+    // Calcular totais e estatísticas
+    const totalMatriculas = matriculasMes.length;
+    const lamkCount = matriculasMes.filter(m => m.tipo_matricula === 'LAMK').length;
+    const emlaCount = matriculasMes.filter(m => m.tipo_matricula === 'EMLA').length;
+    
+    const totalPassaporte = matriculasMes.reduce((acc, m) => acc + (m.valor_passaporte || 0), 0);
+    const totalParcela = matriculasMes.reduce((acc, m) => acc + (m.valor_parcela || 0), 0);
+    const ticketMedioPass = totalMatriculas > 0 ? totalPassaporte / totalMatriculas : 0;
+    const ticketMedioPar = totalMatriculas > 0 ? totalParcela / totalMatriculas : 0;
+
+    // Agrupar por canal
+    const matriculasPorCanal: { [key: string]: number } = {};
+    matriculasMes.forEach(m => {
+      const canal = m.canal_nome || 'Não informado';
+      matriculasPorCanal[canal] = (matriculasPorCanal[canal] || 0) + 1;
+    });
+
+    // Agrupar por curso
+    const matriculasPorCurso: { [key: string]: number } = {};
+    matriculasMes.forEach(m => {
+      const curso = m.curso_nome || 'Não informado';
+      matriculasPorCurso[curso] = (matriculasPorCurso[curso] || 0) + 1;
+    });
+
+    // Cabeçalho
+    let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `📋 *RELATÓRIO DE MATRÍCULAS*\n`;
+    texto += `🏢 *${unidadeNome.toUpperCase()}*\n`;
+    texto += `📅 *${mesNomeUpper}/${ano}*\n`;
+    texto += `👤 ${hunterNome}\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+    // Resumo Executivo
+    texto += `📊 *RESUMO EXECUTIVO*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `✅ Total de Matrículas: *${totalMatriculas}*\n`;
+    texto += `🎨 LAMK (Kids): *${lamkCount}*\n`;
+    texto += `🎸 EMLA (Adulto): *${emlaCount}*\n\n`;
+
+    // Valores Financeiros
+    texto += `💰 *VALORES FINANCEIROS*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `Total Passaportes: *R$ ${totalPassaporte.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n`;
+    texto += `Total Parcelas: *R$ ${totalParcela.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n`;
+    texto += `Ticket Médio Pass.: *R$ ${ticketMedioPass.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n`;
+    texto += `Ticket Médio Parc.: *R$ ${ticketMedioPar.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n\n`;
+
+    // Estatísticas
+    texto += `📊 *ESTATÍSTICAS*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    
+    // Por Canal
+    texto += `🔥 Por Canal:\n`;
+    if (Object.keys(matriculasPorCanal).length > 0) {
+      Object.entries(matriculasPorCanal)
+        .sort(([, a], [, b]) => b - a)
+        .forEach(([canal, qtd]) => {
+          texto += `• ${canal}: ${qtd}\n`;
+        });
+    } else {
+      texto += `• Nenhuma matrícula\n`;
+    }
+    texto += `\n`;
+
+    // Por Curso
+    texto += `🎸 Por Curso:\n`;
+    if (Object.keys(matriculasPorCurso).length > 0) {
+      Object.entries(matriculasPorCurso)
+        .sort(([, a], [, b]) => b - a)
+        .forEach(([curso, qtd]) => {
+          texto += `• ${curso}: ${qtd}\n`;
+        });
+    } else {
+      texto += `• Nenhuma matrícula\n`;
+    }
+    texto += `\n`;
+
+    // Lista Detalhada
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `📝 *LISTA DETALHADA*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
     matriculasMes.forEach((mat, i) => {
       const dataFormatada = new Date(mat.data + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
       
       texto += `MAT. ${(i + 1).toString().padStart(2, '0')}\n`;
-      texto += `Data: ${dataFormatada}\n`;
-      texto += `▪Aluno (a): ${mat.aluno_nome || 'Não informado'}\n`;
-      if (mat.aluno_idade) texto += `▪Idade: ${mat.aluno_idade}\n`;
-      texto += `▪Curso: ${mat.curso_nome || 'Não informado'}\n`;
-      texto += `▪Dia/horário: À definir\n`; // Campo não existe ainda no banco
-      texto += `▪Professor: ${mat.professor_fixo_nome || 'Não informado'}\n`;
-      texto += `▪Professor experimental: ${mat.professor_exp_nome || 'Não teve'}\n`;
-      texto += `▪Canal de Contato: ${mat.canal_nome || 'Não informado'}\n`;
-      texto += `▪Agente comercial: ${usuario?.nome || 'Não informado'}\n`;
-      texto += `▪Pass: R$ ${(mat.valor_passaporte || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}${mat.forma_pagamento_passaporte_nome ? ` ${mat.forma_pagamento_passaporte_nome}` : ''}\n`;
-      texto += `▪Parc: R$ ${(mat.valor_parcela || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}${mat.forma_pagamento_nome ? ` ${mat.forma_pagamento_nome}` : ''}\n\n`;
+      texto += `📅 Data: ${dataFormatada}\n`;
+      texto += `👤 Aluno: ${mat.aluno_nome || 'Não informado'}`;
+      if (mat.aluno_idade) texto += ` (${mat.aluno_idade} anos)`;
+      texto += `\n`;
+      texto += `🎵 Curso: ${mat.curso_nome || 'Não informado'}\n`;
+      texto += `👨‍🏫 Professor: ${mat.professor_fixo_nome || 'Não informado'}\n`;
+      texto += `🎸 Prof. Experimental: ${mat.professor_exp_nome || 'Não teve'}\n`;
+      texto += `📱 Canal: ${mat.canal_nome || 'Não informado'}\n`;
+      texto += `👤 Hunter: ${hunterNome}\n`;
+      texto += `💵 Pass: R$ ${(mat.valor_passaporte || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+      if (mat.forma_pagamento_passaporte_nome) texto += ` (${mat.forma_pagamento_passaporte_nome})`;
+      texto += `\n`;
+      texto += `💵 Parc: R$ ${(mat.valor_parcela || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+      if (mat.forma_pagamento_nome) texto += ` (${mat.forma_pagamento_nome})`;
+      texto += `\n\n`;
     });
+
+    // Rodapé
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `📅 Gerado em: ${dia}/${(hoje.getMonth() + 1).toString().padStart(2, '0')}/${ano} às ${hoje.getHours()}:${hoje.getMinutes().toString().padStart(2, '0')}\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━`;
 
     return texto;
   };
 
-  const copiarRelatorio = () => {
+  // Gerar relatório comparativo mensal (mês atual vs mês anterior)
+  const gerarRelatorioComparativoMensal = async () => {
+    const hoje = new Date();
+    const mesAtual = hoje.getMonth();
+    const anoAtual = hoje.getFullYear();
+    
+    // Mês anterior
+    const mesAnterior = mesAtual === 0 ? 11 : mesAtual - 1;
+    const anoAnterior = mesAtual === 0 ? anoAtual - 1 : anoAtual;
+    
+    const unidadeId = filtroAtivo || usuario?.unidade_id;
+    let unidadeNome = 'Unidade';
+    let hunterNome = usuario?.nome || 'Usuário';
+    
+    if (unidadeId) {
+      const { data: unidadeData } = await supabase
+        .from('unidades')
+        .select('nome, hunter_nome')
+        .eq('id', unidadeId)
+        .single();
+      
+      if (unidadeData) {
+        unidadeNome = unidadeData.nome;
+        hunterNome = unidadeData.hunter_nome || usuario?.nome || 'Usuário';
+      }
+    }
+
+    // Buscar dados do mês atual
+    const inicioMesAtual = new Date(anoAtual, mesAtual, 1);
+    const fimMesAtual = hoje;
+    
+    const { data: dadosMesAtual } = await supabase
+      .from('leads_diarios')
+      .select('tipo, quantidade')
+      .eq('unidade_id', unidadeId)
+      .gte('data', inicioMesAtual.toISOString().split('T')[0])
+      .lte('data', fimMesAtual.toISOString().split('T')[0]);
+
+    // Buscar dados do mês anterior
+    const inicioMesAnterior = new Date(anoAnterior, mesAnterior, 1);
+    const fimMesAnterior = new Date(anoAnterior, mesAnterior + 1, 0); // Último dia do mês
+    
+    const { data: dadosMesAnterior } = await supabase
+      .from('leads_diarios')
+      .select('tipo, quantidade')
+      .eq('unidade_id', unidadeId)
+      .gte('data', inicioMesAnterior.toISOString().split('T')[0])
+      .lte('data', fimMesAnterior.toISOString().split('T')[0]);
+
+    // Calcular totais mês atual
+    const leadsAtual = dadosMesAtual?.filter(r => r.tipo === 'lead').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const experimentaisAtual = dadosMesAtual?.filter(r => r.tipo.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const visitasAtual = dadosMesAtual?.filter(r => r.tipo === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const matriculasAtual = dadosMesAtual?.filter(r => r.tipo === 'matricula').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+
+    // Calcular totais mês anterior
+    const leadsAnterior = dadosMesAnterior?.filter(r => r.tipo === 'lead').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const experimentaisAnterior = dadosMesAnterior?.filter(r => r.tipo.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const visitasAnterior = dadosMesAnterior?.filter(r => r.tipo === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const matriculasAnterior = dadosMesAnterior?.filter(r => r.tipo === 'matricula').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+
+    // Calcular variações
+    const varLeads = leadsAnterior > 0 ? ((leadsAtual - leadsAnterior) / leadsAnterior * 100) : 0;
+    const varExp = experimentaisAnterior > 0 ? ((experimentaisAtual - experimentaisAnterior) / experimentaisAnterior * 100) : 0;
+    const varVisitas = visitasAnterior > 0 ? ((visitasAtual - visitasAnterior) / visitasAnterior * 100) : 0;
+    const varMat = matriculasAnterior > 0 ? ((matriculasAtual - matriculasAnterior) / matriculasAnterior * 100) : 0;
+
+    const mesAtualNome = new Date(anoAtual, mesAtual, 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
+    const mesAnteriorNome = new Date(anoAnterior, mesAnterior, 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
+
+    let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `📊 *RELATÓRIO COMPARATIVO MENSAL*\n`;
+    texto += `🏢 *${unidadeNome.toUpperCase()}*\n`;
+    texto += `👤 ${hunterNome}\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    
+    texto += `📅 *${mesAtualNome}/${anoAtual}* vs *${mesAnteriorNome}/${anoAnterior}*\n\n`;
+    
+    texto += `🎯 *LEADS*\n`;
+    texto += `${mesAtualNome}: *${leadsAtual}* | ${mesAnteriorNome}: *${leadsAnterior}*\n`;
+    texto += `Variação: *${varLeads > 0 ? '+' : ''}${varLeads.toFixed(1)}%* ${varLeads > 0 ? '📈' : varLeads < 0 ? '📉' : '➡️'}\n\n`;
+    
+    texto += `🎸 *EXPERIMENTAIS*\n`;
+    texto += `${mesAtualNome}: *${experimentaisAtual}* | ${mesAnteriorNome}: *${experimentaisAnterior}*\n`;
+    texto += `Variação: *${varExp > 0 ? '+' : ''}${varExp.toFixed(1)}%* ${varExp > 0 ? '📈' : varExp < 0 ? '📉' : '➡️'}\n\n`;
+    
+    texto += `🏫 *VISITAS*\n`;
+    texto += `${mesAtualNome}: *${visitasAtual}* | ${mesAnteriorNome}: *${visitasAnterior}*\n`;
+    texto += `Variação: *${varVisitas > 0 ? '+' : ''}${varVisitas.toFixed(1)}%* ${varVisitas > 0 ? '📈' : varVisitas < 0 ? '📉' : '➡️'}\n\n`;
+    
+    texto += `✅ *MATRÍCULAS*\n`;
+    texto += `${mesAtualNome}: *${matriculasAtual}* | ${mesAnteriorNome}: *${matriculasAnterior}*\n`;
+    texto += `Variação: *${varMat > 0 ? '+' : ''}${varMat.toFixed(1)}%* ${varMat > 0 ? '📈' : varMat < 0 ? '📉' : '➡️'}\n\n`;
+    
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `📅 Gerado em: ${hoje.getDate().toString().padStart(2, '0')}/${(hoje.getMonth() + 1).toString().padStart(2, '0')}/${hoje.getFullYear()}\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━`;
+
+    return texto;
+  };
+
+  // Gerar relatório comparativo anual (mesmo mês ano atual vs ano anterior)
+  const gerarRelatorioComparativoAnual = async () => {
+    const hoje = new Date();
+    const mesAtual = hoje.getMonth();
+    const anoAtual = hoje.getFullYear();
+    const anoAnterior = anoAtual - 1;
+    
+    const unidadeId = filtroAtivo || usuario?.unidade_id;
+    let unidadeNome = 'Unidade';
+    let hunterNome = usuario?.nome || 'Usuário';
+    
+    if (unidadeId) {
+      const { data: unidadeData } = await supabase
+        .from('unidades')
+        .select('nome, hunter_nome')
+        .eq('id', unidadeId)
+        .single();
+      
+      if (unidadeData) {
+        unidadeNome = unidadeData.nome;
+        hunterNome = unidadeData.hunter_nome || usuario?.nome || 'Usuário';
+      }
+    }
+
+    // Buscar dados do mês atual no ano atual
+    const inicioMesAtual = new Date(anoAtual, mesAtual, 1);
+    const fimMesAtual = hoje;
+    
+    const { data: dadosAnoAtual } = await supabase
+      .from('leads_diarios')
+      .select('tipo, quantidade')
+      .eq('unidade_id', unidadeId)
+      .gte('data', inicioMesAtual.toISOString().split('T')[0])
+      .lte('data', fimMesAtual.toISOString().split('T')[0]);
+
+    // Buscar dados do mesmo mês no ano anterior
+    const inicioMesAnterior = new Date(anoAnterior, mesAtual, 1);
+    const fimMesAnterior = new Date(anoAnterior, mesAtual + 1, 0);
+    
+    const { data: dadosAnoAnterior } = await supabase
+      .from('leads_diarios')
+      .select('tipo, quantidade')
+      .eq('unidade_id', unidadeId)
+      .gte('data', inicioMesAnterior.toISOString().split('T')[0])
+      .lte('data', fimMesAnterior.toISOString().split('T')[0]);
+
+    // Calcular totais ano atual
+    const leadsAtual = dadosAnoAtual?.filter(r => r.tipo === 'lead').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const experimentaisAtual = dadosAnoAtual?.filter(r => r.tipo.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const visitasAtual = dadosAnoAtual?.filter(r => r.tipo === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const matriculasAtual = dadosAnoAtual?.filter(r => r.tipo === 'matricula').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+
+    // Calcular totais ano anterior
+    const leadsAnterior = dadosAnoAnterior?.filter(r => r.tipo === 'lead').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const experimentaisAnterior = dadosAnoAnterior?.filter(r => r.tipo.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const visitasAnterior = dadosAnoAnterior?.filter(r => r.tipo === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const matriculasAnterior = dadosAnoAnterior?.filter(r => r.tipo === 'matricula').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+
+    // Calcular variações
+    const varLeads = leadsAnterior > 0 ? ((leadsAtual - leadsAnterior) / leadsAnterior * 100) : 0;
+    const varExp = experimentaisAnterior > 0 ? ((experimentaisAtual - experimentaisAnterior) / experimentaisAnterior * 100) : 0;
+    const varVisitas = visitasAnterior > 0 ? ((visitasAtual - visitasAnterior) / visitasAnterior * 100) : 0;
+    const varMat = matriculasAnterior > 0 ? ((matriculasAtual - matriculasAnterior) / matriculasAnterior * 100) : 0;
+
+    const mesNome = new Date(anoAtual, mesAtual, 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
+
+    let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `📊 *RELATÓRIO COMPARATIVO ANUAL*\n`;
+    texto += `🏢 *${unidadeNome.toUpperCase()}*\n`;
+    texto += `👤 ${hunterNome}\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+    
+    texto += `📅 *${mesNome}/${anoAtual}* vs *${mesNome}/${anoAnterior}*\n\n`;
+    
+    texto += `🎯 *LEADS*\n`;
+    texto += `${anoAtual}: *${leadsAtual}* | ${anoAnterior}: *${leadsAnterior}*\n`;
+    texto += `Variação: *${varLeads > 0 ? '+' : ''}${varLeads.toFixed(1)}%* ${varLeads > 0 ? '📈' : varLeads < 0 ? '📉' : '➡️'}\n\n`;
+    
+    texto += `🎸 *EXPERIMENTAIS*\n`;
+    texto += `${anoAtual}: *${experimentaisAtual}* | ${anoAnterior}: *${experimentaisAnterior}*\n`;
+    texto += `Variação: *${varExp > 0 ? '+' : ''}${varExp.toFixed(1)}%* ${varExp > 0 ? '📈' : varExp < 0 ? '📉' : '➡️'}\n\n`;
+    
+    texto += `🏫 *VISITAS*\n`;
+    texto += `${anoAtual}: *${visitasAtual}* | ${anoAnterior}: *${visitasAnterior}*\n`;
+    texto += `Variação: *${varVisitas > 0 ? '+' : ''}${varVisitas.toFixed(1)}%* ${varVisitas > 0 ? '📈' : varVisitas < 0 ? '📉' : '➡️'}\n\n`;
+    
+    texto += `✅ *MATRÍCULAS*\n`;
+    texto += `${anoAtual}: *${matriculasAtual}* | ${anoAnterior}: *${matriculasAnterior}*\n`;
+    texto += `Variação: *${varMat > 0 ? '+' : ''}${varMat.toFixed(1)}%* ${varMat > 0 ? '📈' : varMat < 0 ? '📉' : '➡️'}\n\n`;
+    
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `📅 Gerado em: ${hoje.getDate().toString().padStart(2, '0')}/${(hoje.getMonth() + 1).toString().padStart(2, '0')}/${hoje.getFullYear()}\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━`;
+
+    return texto;
+  };
+
+  const copiarRelatorio = async () => {
     let texto = '';
     
     switch (tipoRelatorio) {
       case 'diario':
-        texto = gerarRelatorioDiario();
+        texto = await gerarRelatorioDiario();
         break;
       case 'semanal':
-        texto = gerarRelatorioSemanal();
+        texto = await gerarRelatorioSemanal();
         break;
       case 'mensal':
-        texto = gerarRelatorioMensal();
+        texto = await gerarRelatorioMensal();
         break;
       case 'matriculas':
-        texto = gerarRelatorioMatriculas();
+        texto = await gerarRelatorioMatriculas();
+        break;
+      case 'comparativo_mensal':
+        texto = await gerarRelatorioComparativoMensal();
+        break;
+      case 'comparativo_anual':
+        texto = await gerarRelatorioComparativoAnual();
         break;
       default:
-        texto = gerarRelatorioMensal();
+        texto = await gerarRelatorioMensal();
     }
     
     navigator.clipboard.writeText(texto);
@@ -2320,10 +2876,7 @@ export function ComercialPage() {
               {/* Botões de atalho */}
               <div className="flex flex-wrap gap-2 mb-3">
                 {[
-                  { id: 'hoje', label: 'Hoje' },
                   { id: 'ontem', label: 'Ontem' },
-                  { id: 'semana', label: 'Esta Semana' },
-                  { id: 'mes', label: 'Este Mês' },
                   { id: 'personalizado', label: 'Personalizado' },
                 ].map((p) => (
                   <button
@@ -2331,23 +2884,11 @@ export function ComercialPage() {
                     onClick={() => {
                       setRelatorioPeriodo(p.id as typeof relatorioPeriodo);
                       const hoje = new Date();
-                      if (p.id === 'hoje') {
-                        setRelatorioDataInicio(hoje);
-                        setRelatorioDataFim(hoje);
-                      } else if (p.id === 'ontem') {
+                      if (p.id === 'ontem') {
                         const ontem = new Date(hoje);
                         ontem.setDate(ontem.getDate() - 1);
                         setRelatorioDataInicio(ontem);
                         setRelatorioDataFim(ontem);
-                      } else if (p.id === 'semana') {
-                        const inicioSemana = new Date(hoje);
-                        inicioSemana.setDate(hoje.getDate() - hoje.getDay());
-                        setRelatorioDataInicio(inicioSemana);
-                        setRelatorioDataFim(hoje);
-                      } else if (p.id === 'mes') {
-                        const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-                        setRelatorioDataInicio(inicioMes);
-                        setRelatorioDataFim(hoje);
                       }
                     }}
                     className={cn(
@@ -2453,6 +2994,42 @@ export function ComercialPage() {
               </div>
               <span className="text-slate-500">→</span>
             </button>
+
+            {/* Relatório Comparativo Mensal */}
+            <button
+              onClick={() => setTipoRelatorio('comparativo_mensal')}
+              className="w-full flex items-center gap-4 p-4 bg-gradient-to-r from-purple-900/20 to-pink-900/20 hover:from-purple-900/30 hover:to-pink-900/30 border border-purple-700/50 hover:border-purple-600 rounded-xl transition-all text-left"
+            >
+              <div className="w-10 h-10 bg-purple-700/50 rounded-lg flex items-center justify-center text-purple-400">
+                <TrendingUp className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <h4 className="font-medium text-white flex items-center gap-2">
+                  Comparativo Mensal
+                  <span className="text-xs bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded">NOVO</span>
+                </h4>
+                <p className="text-xs text-slate-400">Mês atual vs mês anterior com variações percentuais</p>
+              </div>
+              <span className="text-slate-500">→</span>
+            </button>
+
+            {/* Relatório Comparativo Anual */}
+            <button
+              onClick={() => setTipoRelatorio('comparativo_anual')}
+              className="w-full flex items-center gap-4 p-4 bg-gradient-to-r from-blue-900/20 to-cyan-900/20 hover:from-blue-900/30 hover:to-cyan-900/30 border border-blue-700/50 hover:border-blue-600 rounded-xl transition-all text-left"
+            >
+              <div className="w-10 h-10 bg-blue-700/50 rounded-lg flex items-center justify-center text-blue-400">
+                <TrendingUp className="w-5 h-5" />
+              </div>
+              <div className="flex-1">
+                <h4 className="font-medium text-white flex items-center gap-2">
+                  Comparativo Anual
+                  <span className="text-xs bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded">NOVO</span>
+                </h4>
+                <p className="text-xs text-slate-400">Mesmo mês ano atual vs ano anterior com variações</p>
+              </div>
+              <span className="text-slate-500">→</span>
+            </button>
           </div>
         </Modal>
       )}
@@ -2466,10 +3043,14 @@ export function ComercialPage() {
               {tipoRelatorio === 'semanal' && <CalendarDays className="w-5 h-5 text-cyan-400" />}
               {tipoRelatorio === 'mensal' && <BarChart3 className="w-5 h-5 text-cyan-400" />}
               {tipoRelatorio === 'matriculas' && <Users className="w-5 h-5 text-cyan-400" />}
+              {tipoRelatorio === 'comparativo_mensal' && <TrendingUp className="w-5 h-5 text-purple-400" />}
+              {tipoRelatorio === 'comparativo_anual' && <TrendingUp className="w-5 h-5 text-blue-400" />}
               {tipoRelatorio === 'diario' ? 'Relatório Diário' :
                tipoRelatorio === 'semanal' ? 'Relatório Semanal' :
                tipoRelatorio === 'mensal' ? 'Relatório Mensal' :
-               'Relatório de Matrículas'}
+               tipoRelatorio === 'matriculas' ? 'Relatório de Matrículas' :
+               tipoRelatorio === 'comparativo_mensal' ? 'Comparativo Mensal' :
+               'Comparativo Anual'}
             </span>
           } 
           onClose={() => { setRelatorioOpen(false); setTipoRelatorio(null); setRelatorioTexto(''); }}
@@ -2486,15 +3067,20 @@ export function ComercialPage() {
               <div className="flex items-center justify-between mb-2">
                 <Label className="text-slate-400 text-sm">Edite o relatório antes de copiar:</Label>
                 <button
-                  onClick={() => {
-                    let texto = '';
-                    switch (tipoRelatorio) {
-                      case 'diario': texto = gerarRelatorioDiario(); break;
-                      case 'semanal': texto = gerarRelatorioSemanal(); break;
-                      case 'mensal': texto = gerarRelatorioMensal(); break;
-                      case 'matriculas': texto = gerarRelatorioMatriculas(); break;
+                  onClick={async () => {
+                    if (tipoRelatorio === 'diario') {
+                      const texto = await gerarRelatorioDiario();
+                      setRelatorioTexto(texto);
+                    } else if (tipoRelatorio === 'semanal') {
+                      const texto = await gerarRelatorioSemanal();
+                      setRelatorioTexto(texto);
+                    } else if (tipoRelatorio === 'mensal') {
+                      const texto = await gerarRelatorioMensal();
+                      setRelatorioTexto(texto);
+                    } else if (tipoRelatorio === 'matriculas') {
+                      const texto = await gerarRelatorioMatriculas();
+                      setRelatorioTexto(texto);
                     }
-                    setRelatorioTexto(texto);
                   }}
                   className="flex items-center gap-1 px-3 py-1.5 text-xs text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/30 rounded-lg transition-colors"
                 >
@@ -2503,12 +3089,7 @@ export function ComercialPage() {
                 </button>
               </div>
               <textarea
-                value={relatorioTexto || (
-                  tipoRelatorio === 'diario' ? gerarRelatorioDiario() :
-                  tipoRelatorio === 'semanal' ? gerarRelatorioSemanal() :
-                  tipoRelatorio === 'mensal' ? gerarRelatorioMensal() :
-                  gerarRelatorioMatriculas()
-                )}
+                value={relatorioTexto}
                 onChange={(e) => setRelatorioTexto(e.target.value)}
                 className="w-full h-96 p-4 bg-slate-900 border border-slate-700 rounded-xl text-sm text-slate-300 font-mono resize-none focus:border-cyan-500 focus:outline-none scrollbar-thin scrollbar-thumb-slate-700 hover:scrollbar-thumb-slate-600"
                 placeholder="O relatório aparecerá aqui..."
@@ -2520,14 +3101,12 @@ export function ComercialPage() {
             
             <Button
               onClick={() => {
-                const textoFinal = relatorioTexto || (
-                  tipoRelatorio === 'diario' ? gerarRelatorioDiario() :
-                  tipoRelatorio === 'semanal' ? gerarRelatorioSemanal() :
-                  tipoRelatorio === 'mensal' ? gerarRelatorioMensal() :
-                  gerarRelatorioMatriculas()
-                );
-                navigator.clipboard.writeText(textoFinal);
-                toast.success('Relatório copiado!');
+                if (relatorioTexto) {
+                  navigator.clipboard.writeText(relatorioTexto);
+                  toast.success('Relatório copiado!');
+                } else {
+                  toast.error('Aguarde o relatório ser gerado');
+                }
               }}
               className="w-full bg-gradient-to-r from-cyan-500 to-blue-500"
             >

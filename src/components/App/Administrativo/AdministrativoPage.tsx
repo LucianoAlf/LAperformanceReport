@@ -203,6 +203,24 @@ export function AdministrativoPage() {
 
       const { data: kpisData } = await kpisQuery;
 
+      // Buscar matrículas ativas, banda e 2º curso do banco ANTES de consolidar KPIs
+      let matriculasQuery = supabase
+        .from('alunos')
+        .select('id, is_segundo_curso, curso_id, cursos(nome)')
+        .eq('status', 'ativo');
+
+      if (unidade !== 'todos') {
+        matriculasQuery = matriculasQuery.eq('unidade_id', unidade);
+      }
+
+      const { data: matriculasData } = await matriculasQuery;
+
+      const matriculasAtivas = matriculasData?.length || 0;
+      const matriculasBanda = matriculasData?.filter((m: any) => 
+        m.cursos?.nome?.toLowerCase().includes('banda')
+      ).length || 0;
+      const matriculas2Curso = matriculasData?.filter((m: any) => m.is_segundo_curso).length || 0;
+
       // Consolidar KPIs
       const kpis = kpisData?.reduce((acc, k) => ({
         alunos_ativos: (acc.alunos_ativos || 0) + (k.total_alunos_ativos || 0),
@@ -210,8 +228,8 @@ export function AdministrativoPage() {
         alunos_nao_pagantes: (acc.alunos_nao_pagantes || 0) + ((k.total_alunos_ativos || 0) - (k.total_alunos_pagantes || 0)),
         bolsistas_integrais: (acc.bolsistas_integrais || 0) + (k.total_bolsistas_integrais || 0),
         bolsistas_parciais: (acc.bolsistas_parciais || 0) + (k.total_bolsistas_parciais || 0),
-        matriculas_banda: (acc.matriculas_banda || 0) + (k.total_banda || 0),
-        matriculas_2_curso: 0,
+        matriculas_banda: matriculasBanda,
+        matriculas_2_curso: matriculas2Curso,
         ticket_medio: k.ticket_medio || acc.ticket_medio || 0,
         faturamento: (acc.faturamento || 0) + (Number(k.faturamento_previsto) || 0),
         churn_rate: k.churn_rate || acc.churn_rate || 0,
@@ -258,7 +276,7 @@ export function AdministrativoPage() {
         // Calcular campos que vêm das movimentações e queries adicionais
         alunos_trancados: trancamentos.length,
         alunos_novos: novosAlunosCount || 0,
-        matriculas_ativas: kpis.alunos_ativos || 0,
+        matriculas_ativas: matriculasAtivas,
         renovacoes_previstas: 25, // TODO: Calcular baseado em alunos que completam aniversário
         renovacoes_realizadas: renovacoes.length,
         renovacoes_pendentes: 25 - renovacoes.length,
