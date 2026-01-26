@@ -6,16 +6,19 @@ import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import {
   AlertTriangle, TrendingUp, TrendingDown, Users, Target, Award,
   ChevronRight, Search, Filter, Sparkles, Calendar, CheckCircle2,
-  XCircle, Clock, BarChart3, Loader2, Heart
+  XCircle, Clock, BarChart3, Loader2, Heart, FileText
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/useToast';
 import { ToastContainer } from '@/components/ui/toast';
+import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
+import { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
 import { ModalDetalhesProfessorPerformance } from './ModalDetalhesProfessorPerformance';
 import { ModalNovaMeta } from './ModalNovaMeta';
 import { ModalNovaAcao } from './ModalNovaAcao';
+import { ModalRelatorioCoordenacao } from './ModalRelatorioCoordenacao';
 import { PlanoAcaoEquipe } from './PlanoAcaoEquipe';
 import { calcularHealthScore } from '@/hooks/useHealthScore';
 import { HealthScoreCard } from './HealthScoreCard';
@@ -48,17 +51,21 @@ interface AlertaPerformance {
 
 interface Props {
   unidadeAtual: UnidadeId;
-  competencia: string;
 }
 
-export function TabPerformanceProfessores({ unidadeAtual, competencia }: Props) {
+export function TabPerformanceProfessores({ unidadeAtual }: Props) {
   const toast = useToast();
+  
+  // Hook de competência (Mês/Trim/Sem/Ano)
+  const competenciaFiltro = useCompetenciaFiltro();
+  const ano = competenciaFiltro.filtro.ano;
+  const mes = competenciaFiltro.filtro.mes;
+  const competencia = `${ano}-${String(mes).padStart(2, '0')}`;
   
   const [professores, setProfessores] = useState<ProfessorPerformance[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtroStatus, setFiltroStatus] = useState<string>('todos');
   const [filtroBusca, setFiltroBusca] = useState('');
-  const [filtroPeriodo, setFiltroPeriodo] = useState<'mensal' | 'trimestral' | 'semestral' | 'anual'>('mensal');
   
   const [modalDetalhes, setModalDetalhes] = useState<{ open: boolean; professor: ProfessorPerformance | null }>({
     open: false,
@@ -72,10 +79,11 @@ export function TabPerformanceProfessores({ unidadeAtual, competencia }: Props) 
     open: false,
     professorId: null
   });
+  const [modalRelatorio, setModalRelatorio] = useState(false);
 
   useEffect(() => {
     carregarDados();
-  }, [unidadeAtual, competencia]);
+  }, [unidadeAtual, ano, mes]);
 
   const carregarDados = async () => {
     setLoading(true);
@@ -93,20 +101,32 @@ export function TabPerformanceProfessores({ unidadeAtual, competencia }: Props) 
       const { data: professoresData, error: profError } = await query;
       if (profError) throw profError;
 
-      // Buscar KPIs reais da view vw_kpis_professor_mensal
-      const { data: kpisData } = await supabase
+      // Buscar KPIs reais da view vw_kpis_professor_mensal (filtrado por unidade se selecionada)
+      let kpisQuery = supabase
         .from('vw_kpis_professor_mensal')
         .select('*')
         .eq('ano', ano)
         .eq('mes', mes);
+      
+      if (unidadeAtual !== 'todos') {
+        kpisQuery = kpisQuery.eq('unidade_id', unidadeAtual);
+      }
+      
+      const { data: kpisData } = await kpisQuery;
 
-      // Buscar KPIs históricos para calcular tendências
-      const { data: kpisHistorico } = await supabase
+      // Buscar KPIs históricos para calcular tendências (filtrado por unidade se selecionada)
+      let historicoQuery = supabase
         .from('vw_kpis_professor_mensal')
-        .select('professor_id, ano, mes, media_alunos_turma')
+        .select('professor_id, ano, mes, media_alunos_turma, unidade_id')
         .gte('ano', ano - 1)
         .order('ano', { ascending: false })
         .order('mes', { ascending: false });
+      
+      if (unidadeAtual !== 'todos') {
+        historicoQuery = historicoQuery.eq('unidade_id', unidadeAtual);
+      }
+      
+      const { data: kpisHistorico } = await historicoQuery;
 
       // Buscar relacionamentos de unidades
       const { data: unidadesRelData } = await supabase
@@ -118,22 +138,40 @@ export function TabPerformanceProfessores({ unidadeAtual, competencia }: Props) 
         .from('professores_cursos')
         .select('professor_id, curso_id, cursos:curso_id (nome)');
 
-      // Buscar turmas da view vw_turmas_implicitas
-      const { data: turmasImplicitas } = await supabase
+      // Buscar turmas da view vw_turmas_implicitas (filtrado por unidade se selecionada)
+      let turmasQuery = supabase
         .from('vw_turmas_implicitas')
-        .select('professor_id, total_alunos');
+        .select('professor_id, total_alunos, unidade_id');
+      
+      if (unidadeAtual !== 'todos') {
+        turmasQuery = turmasQuery.eq('unidade_id', unidadeAtual);
+      }
+      
+      const { data: turmasImplicitas } = await turmasQuery;
 
-      // Buscar turmas explícitas
-      const { data: turmasExplicitas } = await supabase
+      // Buscar turmas explícitas (filtrado por unidade se selecionada)
+      let turmasExplicitasQuery = supabase
         .from('turmas_explicitas')
-        .select('professor_id, id')
+        .select('professor_id, id, unidade_id')
         .eq('ativo', true);
+      
+      if (unidadeAtual !== 'todos') {
+        turmasExplicitasQuery = turmasExplicitasQuery.eq('unidade_id', unidadeAtual);
+      }
+      
+      const { data: turmasExplicitas } = await turmasExplicitasQuery;
 
-      // Buscar alunos de turmas explícitas
-      const { data: alunosTurmasExplicitas } = await supabase
+      // Buscar alunos de turmas explícitas (filtrado por unidade via turmas_explicitas)
+      let alunosTurmasQuery = supabase
         .from('turmas_alunos')
-        .select('turma_id, aluno_id, turmas_explicitas!inner(professor_id)')
+        .select('turma_id, aluno_id, turmas_explicitas!inner(professor_id, unidade_id)')
         .eq('turmas_explicitas.ativo', true);
+      
+      if (unidadeAtual !== 'todos') {
+        alunosTurmasQuery = alunosTurmasQuery.eq('turmas_explicitas.unidade_id', unidadeAtual);
+      }
+      
+      const { data: alunosTurmasExplicitas } = await alunosTurmasQuery;
 
       // Criar mapa de KPIs por professor
       const kpisPorProfessor = new Map<number, any>();
@@ -444,26 +482,9 @@ export function TabPerformanceProfessores({ unidadeAtual, competencia }: Props) 
         </div>
       </div>
 
-      {/* Filtros e Período */}
+      {/* Filtros, Competência e Relatório - Tudo em uma linha */}
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-slate-400">Período:</span>
-          <div className="flex gap-1">
-            {(['mensal', 'trimestral', 'semestral', 'anual'] as const).map((periodo) => (
-              <button
-                key={periodo}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-                  filtroPeriodo === periodo
-                    ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
-                    : 'bg-slate-800/50 text-slate-400 border border-slate-700/50 hover:text-white'
-                }`}
-                onClick={() => setFiltroPeriodo(periodo)}
-              >
-                {periodo.charAt(0).toUpperCase() + periodo.slice(1)}
-              </button>
-            ))}
-          </div>
-        </div>
+        {/* Filtros à esquerda */}
         <div className="flex items-center gap-3">
           <Select value={filtroStatus} onValueChange={setFiltroStatus}>
             <SelectTrigger className="w-[150px]">
@@ -485,6 +506,27 @@ export function TabPerformanceProfessores({ unidadeAtual, competencia }: Props) 
               className="pl-9 w-48"
             />
           </div>
+        </div>
+
+        {/* Competência e Botão à direita */}
+        <div className="flex items-center gap-3">
+          <CompetenciaFilter
+            filtro={competenciaFiltro.filtro}
+            range={competenciaFiltro.range}
+            anosDisponiveis={competenciaFiltro.anosDisponiveis}
+            onTipoChange={competenciaFiltro.setTipo}
+            onAnoChange={competenciaFiltro.setAno}
+            onMesChange={competenciaFiltro.setMes}
+            onTrimestreChange={competenciaFiltro.setTrimestre}
+            onSemestreChange={competenciaFiltro.setSemestre}
+          />
+          <button
+            onClick={() => setModalRelatorio(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-cyan-500/20"
+          >
+            <FileText className="w-4 h-4" />
+            Gerar Relatório Coordenação
+          </button>
         </div>
       </div>
 
@@ -844,6 +886,19 @@ export function TabPerformanceProfessores({ unidadeAtual, competencia }: Props) 
           setModalAcao({ open: false, professorId: null });
           toast.success('Ação agendada!', 'A ação foi cadastrada com sucesso');
         }}
+      />
+
+      <ModalRelatorioCoordenacao
+        open={modalRelatorio}
+        onOpenChange={setModalRelatorio}
+        unidadeId={unidadeAtual !== 'todos' ? unidadeAtual : null}
+        unidadeNome={unidadeAtual !== 'todos' ? ({
+          '2ec861f6-023f-4d7b-9927-3960ad8c2a92': 'Campo Grande',
+          '95553e96-971b-4590-a6eb-0201d013c14d': 'Recreio',
+          '368d47f5-2d88-4475-bc14-ba084a9a348e': 'Barra'
+        }[unidadeAtual] || unidadeAtual) : 'Consolidado'}
+        ano={parseInt(competencia.split('-')[0])}
+        mes={parseInt(competencia.split('-')[1])}
       />
 
       <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} />

@@ -4,7 +4,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   X, Target, Calendar, CheckCircle2, Clock, AlertTriangle,
-  TrendingUp, TrendingDown, Sparkles, Loader2, Users, BarChart3, Brain, Heart
+  TrendingUp, TrendingDown, Sparkles, Loader2, Users, BarChart3, Brain, Heart, FileText, Copy, Check
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -83,6 +83,9 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
   const [insights, setInsights] = useState<InsightsIA | null>(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [relatorioTexto, setRelatorioTexto] = useState('');
+  const [loadingRelatorio, setLoadingRelatorio] = useState(false);
+  const [copiado, setCopiado] = useState(false);
 
   useEffect(() => {
     if (open && professor) {
@@ -238,10 +241,130 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
     }
   };
 
-  // Calcular Health Score do professor (ANTES do return condicional)
+  const gerarRelatorioIndividual = async () => {
+    if (!professor) return;
+    setLoadingRelatorio(true);
+    setRelatorioTexto('');
+
+    try {
+      // Usar Health Score já calculado do professor (para consistência com o modal)
+      const healthScoreAtual = professor.health_score !== undefined && professor.health_status
+        ? { score: professor.health_score, status: professor.health_status }
+        : calcularHealthScore({
+            mediaTurma: professor.media_alunos_turma,
+            retencao: professor.taxa_retencao,
+            conversao: professor.taxa_conversao,
+            nps: professor.nps,
+            presenca: professor.taxa_presenca,
+            evasoes: professor.evasoes_mes,
+            cursos: professor.especialidades
+          });
+
+      const { data: responseIA, error: errorIA } = await supabase.functions.invoke(
+        'gemini-relatorio-professor-individual',
+        {
+          body: {
+            professor: {
+              id: professor.id,
+              nome: professor.nome,
+              especialidades: professor.especialidades,
+              total_alunos: professor.total_alunos,
+              total_turmas: professor.total_turmas,
+              media_alunos_turma: professor.media_alunos_turma,
+              taxa_retencao: professor.taxa_retencao,
+              taxa_conversao: professor.taxa_conversao,
+              nps: professor.nps,
+              taxa_presenca: professor.taxa_presenca,
+              evasoes_mes: professor.evasoes_mes,
+              health_score: healthScoreAtual.score,
+              health_status: healthScoreAtual.status
+            },
+            metas: metas,
+            acoes: acoes,
+            evasoes_recentes: evasoes,
+            competencia: competencia,
+            unidade_nome: professor.unidades?.[0]?.nome
+          }
+        }
+      );
+
+      if (errorIA) throw errorIA;
+
+      if (responseIA?.success && responseIA?.relatorio) {
+        setRelatorioTexto(responseIA.relatorio);
+      } else {
+        throw new Error(responseIA?.error || 'Erro ao gerar relatório');
+      }
+    } catch (error) {
+      console.error('Erro ao gerar relatório:', error);
+      setRelatorioTexto('Erro ao gerar relatório. Tente novamente.');
+    } finally {
+      setLoadingRelatorio(false);
+    }
+  };
+
+  const copiarRelatorio = async () => {
+    if (!relatorioTexto) return;
+
+    try {
+      // Método 1: execCommand com textarea visível (mais compatível com IDEs)
+      const textarea = document.createElement('textarea');
+      textarea.value = relatorioTexto;
+      textarea.style.position = 'absolute';
+      textarea.style.left = '0';
+      textarea.style.top = '0';
+      textarea.style.opacity = '0';
+      textarea.style.pointerEvents = 'none';
+      textarea.setAttribute('readonly', '');
+      document.body.appendChild(textarea);
+      
+      // Forçar foco e seleção
+      textarea.focus();
+      textarea.select();
+      textarea.setSelectionRange(0, relatorioTexto.length);
+      
+      let success = false;
+      try {
+        success = document.execCommand('copy');
+      } catch (e) {
+        console.error('execCommand falhou:', e);
+      }
+      
+      document.body.removeChild(textarea);
+      
+      if (success) {
+        setCopiado(true);
+        setTimeout(() => setCopiado(false), 2000);
+        return;
+      }
+      
+      // Método 2: Clipboard API
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(relatorioTexto);
+        setCopiado(true);
+        setTimeout(() => setCopiado(false), 2000);
+        return;
+      }
+      
+    } catch (error) {
+      console.error('Erro ao copiar:', error);
+    }
+  };
+
+  // Usar Health Score já calculado na lista (para evitar divergências por arredondamento)
   const healthScore = useMemo(() => {
     if (!professor) return { score: 0, status: 'critico' as const, detalhes: [] };
     
+    // Se o professor já tem health_score calculado, usar esse valor
+    if (professor.health_score !== undefined && professor.health_status) {
+      return {
+        score: professor.health_score,
+        status: professor.health_status,
+        detalhes: []
+      };
+    }
+    
+    // Fallback: calcular se não tiver
     return calcularHealthScore({
       mediaTurma: professor.media_alunos_turma,
       retencao: professor.taxa_retencao,
@@ -417,6 +540,64 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
                 <p className="text-xs text-slate-400">NPS</p>
               </div>
             </div>
+          </div>
+
+          {/* Botão Relatório Individual - Logo após as métricas */}
+          <div className="mt-4">
+            <Button
+              onClick={gerarRelatorioIndividual}
+              disabled={loadingRelatorio}
+              className="w-full bg-teal-600 text-white hover:bg-teal-700 transition-colors"
+            >
+              {loadingRelatorio ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Gerando Relatório...
+                </>
+              ) : (
+                <>
+                  <FileText className="w-4 h-4 mr-2" />
+                  Gerar Relatório Individual
+                </>
+              )}
+            </Button>
+            <p className="text-xs text-slate-500 mt-1.5 text-center">
+              Relatório completo com análise de performance e sugestões
+            </p>
+
+            {/* Relatório Individual Gerado - Logo abaixo do botão */}
+            {relatorioTexto && (
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-medium text-slate-300 flex items-center gap-2">
+                    <FileText className="w-4 h-4 text-teal-400" />
+                    Relatório Individual
+                  </h4>
+                  <Button
+                    size="sm"
+                    onClick={copiarRelatorio}
+                    className={copiado ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-teal-600 hover:bg-teal-700'}
+                  >
+                    {copiado ? (
+                      <>
+                        <Check className="w-4 h-4 mr-1" />
+                        Copiado!
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4 mr-1" />
+                        Copiar
+                      </>
+                    )}
+                  </Button>
+                </div>
+                <textarea
+                  value={relatorioTexto}
+                  onChange={(e) => setRelatorioTexto(e.target.value)}
+                  className="w-full h-64 p-3 bg-slate-800 border border-slate-700 rounded-lg text-white text-xs font-mono resize-none focus:outline-none focus:ring-2 focus:ring-teal-500/50"
+                />
+              </div>
+            )}
           </div>
         </div>
 

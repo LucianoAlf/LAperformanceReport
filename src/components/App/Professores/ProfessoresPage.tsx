@@ -45,7 +45,7 @@ export function ProfessoresPage() {
     return (saved === 'cadastro' || saved === 'performance' || saved === 'agenda' || saved === 'configuracoes') ? saved : 'cadastro';
   });
 
-  // Competência atual para as abas de Performance e Agenda
+  // Competência atual para a aba de Agenda
   const competenciaAtual = format(new Date(), 'yyyy-MM');
 
   // Estados principais
@@ -576,7 +576,7 @@ export function ProfessoresPage() {
 
       {/* Conteúdo da aba Performance */}
       {abaAtiva === 'performance' && (
-        <TabPerformanceProfessores unidadeAtual={unidadeAtual} competencia={competenciaAtual} />
+        <TabPerformanceProfessores unidadeAtual={unidadeAtual} />
       )}
 
       {/* Conteúdo da aba Agenda */}

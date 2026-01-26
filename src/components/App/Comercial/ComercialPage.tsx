@@ -1598,8 +1598,37 @@ export function ComercialPage() {
         texto = await gerarRelatorioMensal();
     }
     
-    navigator.clipboard.writeText(texto);
-    toast.success('Relatório copiado!');
+    // Usar método mais compatível com webviews/IDEs
+    const textarea = document.createElement('textarea');
+    textarea.value = texto;
+    textarea.style.position = 'fixed';
+    textarea.style.top = '0';
+    textarea.style.left = '0';
+    textarea.style.width = '2em';
+    textarea.style.height = '2em';
+    textarea.style.padding = '0';
+    textarea.style.border = 'none';
+    textarea.style.outline = 'none';
+    textarea.style.boxShadow = 'none';
+    textarea.style.background = 'transparent';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    
+    try {
+      const successful = document.execCommand('copy');
+      if (successful) {
+        toast.success('Relatório copiado!');
+      } else {
+        console.error('execCommand retornou false');
+        toast.error('Erro ao copiar. Tente selecionar e copiar manualmente.');
+      }
+    } catch (err) {
+      console.error('Erro ao copiar:', err);
+      toast.error('Erro ao copiar. Tente selecionar e copiar manualmente.');
+    }
+    
+    document.body.removeChild(textarea);
   };
 
   // Obter contagem do dia para cada tipo
@@ -3102,8 +3131,37 @@ export function ComercialPage() {
             <Button
               onClick={() => {
                 if (relatorioTexto) {
-                  navigator.clipboard.writeText(relatorioTexto);
-                  toast.success('Relatório copiado!');
+                  // Usar método mais compatível com webviews/IDEs
+                  const textarea = document.createElement('textarea');
+                  textarea.value = relatorioTexto;
+                  textarea.style.position = 'fixed';
+                  textarea.style.top = '0';
+                  textarea.style.left = '0';
+                  textarea.style.width = '2em';
+                  textarea.style.height = '2em';
+                  textarea.style.padding = '0';
+                  textarea.style.border = 'none';
+                  textarea.style.outline = 'none';
+                  textarea.style.boxShadow = 'none';
+                  textarea.style.background = 'transparent';
+                  document.body.appendChild(textarea);
+                  textarea.focus();
+                  textarea.select();
+                  
+                  try {
+                    const successful = document.execCommand('copy');
+                    if (successful) {
+                      toast.success('Relatório copiado!');
+                    } else {
+                      console.error('execCommand retornou false');
+                      toast.error('Erro ao copiar. Tente selecionar e copiar manualmente.');
+                    }
+                  } catch (err) {
+                    console.error('Erro ao copiar:', err);
+                    toast.error('Erro ao copiar. Tente selecionar e copiar manualmente.');
+                  }
+                  
+                  document.body.removeChild(textarea);
                 } else {
                   toast.error('Aguarde o relatório ser gerado');
                 }

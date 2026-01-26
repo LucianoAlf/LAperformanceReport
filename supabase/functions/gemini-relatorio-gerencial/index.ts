@@ -1,3 +1,4 @@
+
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const corsHeaders = {
@@ -128,9 +129,9 @@ Deno.serve(async (req) => {
     const matriculas2Curso = dados.matriculas_2_curso || 0;
     const totalBolsistas = dados.total_bolsistas || 0;
 
-    // Metas
-    const metas = dados.metas || [];
-    const meta = metas.length > 0 ? metas[0] : null;
+    // Metas (da tabela metas_kpi)
+    const metasKpi = dados.metas_kpi || {};
+    const temMetas = Object.keys(metasKpi).length > 0;
 
     // Dados do mês anterior
     const mesAnterior = dados.mes_anterior || [];
@@ -156,11 +157,12 @@ Deno.serve(async (req) => {
 
     // Motivos de evasão
     const motivosEvasao = dados.motivos_evasao || [];
-
+    
     // Rankings de professores
     const topRetencao = dados.top_professores_retencao || [];
     const topMatriculadores = dados.top_professores_matriculadores || [];
     const topPresenca = dados.top_professores_presenca || [];
+    const topMediaTurma = dados.top_professores_media_turma || [];
 
     // Cursos mais procurados
     const cursosMaisProcurados = dados.cursos_mais_procurados || [];
@@ -224,19 +226,19 @@ Deno.serve(async (req) => {
     relatorioTemplate += `• Conversão Geral: *${taxaConversaoGeral.toFixed(1).replace('.', ',')}%*\n\n`;
 
     // Metas comerciais
-    if (meta) {
+    if (temMetas && (metasKpi.leads || metasKpi.experimentais || metasKpi.matriculas)) {
       relatorioTemplate += `🎯 *METAS COMERCIAIS*\n`;
-      if (meta.meta_leads) {
-        const pctLeads = Math.min((totalLeads / meta.meta_leads) * 100, 100);
-        relatorioTemplate += `${criarBarraProgresso(pctLeads)} ${pctLeads.toFixed(0)}% Leads (${totalLeads}/${meta.meta_leads})\n`;
+      if (metasKpi.leads) {
+        const pctLeads = Math.min((totalLeads / metasKpi.leads) * 100, 100);
+        relatorioTemplate += `${criarBarraProgresso(pctLeads)} ${pctLeads.toFixed(0)}% Leads (${totalLeads}/${metasKpi.leads})\n`;
       }
-      if (meta.meta_experimentais) {
-        const pctExp = Math.min((totalExperimentais / meta.meta_experimentais) * 100, 100);
-        relatorioTemplate += `${criarBarraProgresso(pctExp)} ${pctExp.toFixed(0)}% Experimentais (${totalExperimentais}/${meta.meta_experimentais})\n`;
+      if (metasKpi.experimentais) {
+        const pctExp = Math.min((totalExperimentais / metasKpi.experimentais) * 100, 100);
+        relatorioTemplate += `${criarBarraProgresso(pctExp)} ${pctExp.toFixed(0)}% Experimentais (${totalExperimentais}/${metasKpi.experimentais})\n`;
       }
-      if (meta.meta_matriculas) {
-        const pctMat = Math.min((novasMatriculas / meta.meta_matriculas) * 100, 100);
-        relatorioTemplate += `${criarBarraProgresso(pctMat)} ${pctMat.toFixed(0)}% Matrículas (${novasMatriculas}/${meta.meta_matriculas})\n`;
+      if (metasKpi.matriculas) {
+        const pctMat = Math.min((novasMatriculas / metasKpi.matriculas) * 100, 100);
+        relatorioTemplate += `${criarBarraProgresso(pctMat)} ${pctMat.toFixed(0)}% Matrículas (${novasMatriculas}/${metasKpi.matriculas})\n`;
       }
       relatorioTemplate += `\n`;
     }
@@ -286,6 +288,14 @@ Deno.serve(async (req) => {
       relatorioTemplate += `📊 *TOP 3 PRESENÇA MÉDIA*\n`;
       topPresenca.slice(0, 3).forEach((p: any, i: number) => {
         relatorioTemplate += `  ${i + 1}. ${p.professor} - ${p.presenca_media}%\n`;
+      });
+      relatorioTemplate += `\n`;
+    }
+
+    if (topMediaTurma.length > 0) {
+      relatorioTemplate += `👥 *TOP 3 MÉDIA DE ALUNOS POR TURMA*\n`;
+      topMediaTurma.slice(0, 3).forEach((p: any, i: number) => {
+        relatorioTemplate += `  ${i + 1}. ${p.professor} - ${p.media_alunos_turma} alunos/turma (${p.total_turmas} turmas)\n`;
       });
       relatorioTemplate += `\n`;
     }
@@ -378,23 +388,87 @@ Deno.serve(async (req) => {
     relatorioTemplate += `───────────────────────\n`;
     relatorioTemplate += `🎯 *METAS DO MÊS*\n`;
     relatorioTemplate += `───────────────────────\n`;
-    if (meta) {
-      if (meta.meta_alunos_pagantes) {
-        const pct = Math.min((totalPagantes / meta.meta_alunos_pagantes) * 100, 100);
-        relatorioTemplate += `${criarBarraProgresso(pct)} ${pct.toFixed(0)}% Alunos (${totalPagantes}/${meta.meta_alunos_pagantes})\n`;
+    if (temMetas) {
+      relatorioTemplate += `\n📊 *GESTÃO*\n`;
+      // Alunos Pagantes
+      if (metasKpi.alunos_pagantes) {
+        const pct = Math.min((totalPagantes / metasKpi.alunos_pagantes) * 100, 100);
+        const status = pct >= 100 ? '✅' : (pct >= 90 ? '⚠️' : '❌');
+        relatorioTemplate += `${criarBarraProgresso(pct)} ${pct.toFixed(0)}% Alunos (${totalPagantes}/${metasKpi.alunos_pagantes}) ${status}\n`;
       }
-      if (meta.meta_ticket_medio) {
-        const pct = Math.min((ticketMedio / meta.meta_ticket_medio) * 100, 100);
-        relatorioTemplate += `${criarBarraProgresso(pct)} ${pct.toFixed(0)}% Ticket (R$${ticketMedio.toFixed(0)}/R$${meta.meta_ticket_medio})\n`;
+      // Ticket Médio
+      if (metasKpi.ticket_medio) {
+        const pct = Math.min((ticketMedio / metasKpi.ticket_medio) * 100, 100);
+        const status = pct >= 100 ? '✅' : (pct >= 90 ? '⚠️' : '❌');
+        relatorioTemplate += `${criarBarraProgresso(pct)} ${pct.toFixed(0)}% Ticket (R$${ticketMedio.toFixed(0)}/R$${metasKpi.ticket_medio}) ${status}\n`;
       }
-      if (meta.meta_taxa_renovacao) {
-        const pct = Math.min((taxaRenovacao / meta.meta_taxa_renovacao) * 100, 100);
-        relatorioTemplate += `${criarBarraProgresso(pct)} ${pct.toFixed(0)}% Renovação (${taxaRenovacao.toFixed(0)}%/${meta.meta_taxa_renovacao}%)\n`;
+      // Churn Rate (inverso - quanto menor, melhor)
+      if (metasKpi.churn_rate) {
+        const pctChurn = churnRate <= metasKpi.churn_rate ? 100 : Math.max(0, 100 - ((churnRate - metasKpi.churn_rate) / metasKpi.churn_rate * 100));
+        const status = churnRate <= metasKpi.churn_rate ? '✅' : '❌';
+        relatorioTemplate += `${criarBarraProgresso(pctChurn)} ${pctChurn.toFixed(0)}% Churn (${churnRate.toFixed(1).replace('.', ',')}%/${metasKpi.churn_rate}%) ${status}\n`;
       }
-      if (meta.meta_churn_maximo) {
-        // Churn é inverso - quanto menor, melhor
-        const pctChurn = churnRate <= meta.meta_churn_maximo ? 100 : Math.max(0, 100 - ((churnRate - meta.meta_churn_maximo) / meta.meta_churn_maximo * 100));
-        relatorioTemplate += `${criarBarraProgresso(pctChurn)} ${pctChurn.toFixed(0)}% Churn (${churnRate.toFixed(1).replace('.', ',')}%/${meta.meta_churn_maximo}%)\n`;
+      // Taxa Renovação
+      if (metasKpi.taxa_renovacao) {
+        const pct = Math.min((taxaRenovacao / metasKpi.taxa_renovacao) * 100, 100);
+        const status = pct >= 100 ? '✅' : (pct >= 90 ? '⚠️' : '❌');
+        relatorioTemplate += `${criarBarraProgresso(pct)} ${pct.toFixed(0)}% Renovação (${taxaRenovacao.toFixed(0)}%/${metasKpi.taxa_renovacao}%) ${status}\n`;
+      }
+      // Tempo Permanência
+      if (metasKpi.tempo_permanencia) {
+        const pct = Math.min((tempoPermanencia / metasKpi.tempo_permanencia) * 100, 100);
+        const status = pct >= 100 ? '✅' : (pct >= 90 ? '⚠️' : '❌');
+        relatorioTemplate += `${criarBarraProgresso(pct)} ${pct.toFixed(0)}% Permanência (${tempoPermanencia.toFixed(1)}/${metasKpi.tempo_permanencia} meses) ${status}\n`;
+      }
+      // Inadimplência (inverso - quanto menor, melhor)
+      if (metasKpi.inadimplencia) {
+        const pctInad = inadimplencia <= metasKpi.inadimplencia ? 100 : Math.max(0, 100 - ((inadimplencia - metasKpi.inadimplencia) / metasKpi.inadimplencia * 100));
+        const status = inadimplencia <= metasKpi.inadimplencia ? '✅' : '❌';
+        relatorioTemplate += `${criarBarraProgresso(pctInad)} ${pctInad.toFixed(0)}% Inadimpl. (${inadimplencia.toFixed(1).replace('.', ',')}%/${metasKpi.inadimplencia}%) ${status}\n`;
+      }
+      // Reajuste Médio
+      if (metasKpi.reajuste_medio) {
+        const pct = Math.min((reajusteMedio / metasKpi.reajuste_medio) * 100, 100);
+        const status = pct >= 100 ? '✅' : (pct >= 90 ? '⚠️' : '❌');
+        relatorioTemplate += `${criarBarraProgresso(pct)} ${pct.toFixed(0)}% Reajuste (${reajusteMedio.toFixed(1).replace('.', ',')}%/${metasKpi.reajuste_medio}%) ${status}\n`;
+      }
+
+      relatorioTemplate += `\n📈 *COMERCIAL*\n`;
+      // Leads
+      if (metasKpi.leads) {
+        const pct = Math.min((totalLeads / metasKpi.leads) * 100, 100);
+        const status = pct >= 100 ? '✅' : (pct >= 70 ? '⚠️' : '❌');
+        relatorioTemplate += `${criarBarraProgresso(pct)} ${pct.toFixed(0)}% Leads (${totalLeads}/${metasKpi.leads}) ${status}\n`;
+      }
+      // Experimentais
+      if (metasKpi.experimentais) {
+        const pct = Math.min((totalExperimentais / metasKpi.experimentais) * 100, 100);
+        const status = pct >= 100 ? '✅' : (pct >= 70 ? '⚠️' : '❌');
+        relatorioTemplate += `${criarBarraProgresso(pct)} ${pct.toFixed(0)}% Experimentais (${totalExperimentais}/${metasKpi.experimentais}) ${status}\n`;
+      }
+      // Matrículas
+      if (metasKpi.matriculas) {
+        const pct = Math.min((novasMatriculas / metasKpi.matriculas) * 100, 100);
+        const status = pct >= 100 ? '✅' : (pct >= 70 ? '⚠️' : '❌');
+        relatorioTemplate += `${criarBarraProgresso(pct)} ${pct.toFixed(0)}% Matrículas (${novasMatriculas}/${metasKpi.matriculas}) ${status}\n`;
+      }
+      // Taxa Lead→Exp
+      if (metasKpi.taxa_lead_exp) {
+        const pct = Math.min((taxaLeadExp / metasKpi.taxa_lead_exp) * 100, 100);
+        const status = pct >= 100 ? '✅' : (pct >= 70 ? '⚠️' : '❌');
+        relatorioTemplate += `${criarBarraProgresso(pct)} ${pct.toFixed(0)}% Lead→Exp (${taxaLeadExp.toFixed(1).replace('.', ',')}%/${metasKpi.taxa_lead_exp}%) ${status}\n`;
+      }
+      // Taxa Exp→Mat
+      if (metasKpi.taxa_exp_mat) {
+        const pct = Math.min((taxaExpMat / metasKpi.taxa_exp_mat) * 100, 100);
+        const status = pct >= 100 ? '✅' : (pct >= 70 ? '⚠️' : '❌');
+        relatorioTemplate += `${criarBarraProgresso(pct)} ${pct.toFixed(0)}% Exp→Mat (${taxaExpMat.toFixed(1).replace('.', ',')}%/${metasKpi.taxa_exp_mat}%) ${status}\n`;
+      }
+      // Taxa Conversão Total
+      if (metasKpi.taxa_conversao) {
+        const pct = Math.min((taxaConversaoGeral / metasKpi.taxa_conversao) * 100, 100);
+        const status = pct >= 100 ? '✅' : (pct >= 70 ? '⚠️' : '❌');
+        relatorioTemplate += `${criarBarraProgresso(pct)} ${pct.toFixed(0)}% Conversão (${taxaConversaoGeral.toFixed(1).replace('.', ',')}%/${metasKpi.taxa_conversao}%) ${status}\n`;
       }
     } else {
       relatorioTemplate += `• Sem metas cadastradas\n`;
@@ -555,7 +629,7 @@ Responda EXATAMENTE neste formato JSON:
     };
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
