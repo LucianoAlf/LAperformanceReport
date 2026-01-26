@@ -99,6 +99,26 @@ interface RenovacoesProximas {
   script_ligacao?: string;
 }
 
+interface AnaliseTemporal {
+  dia_atual: number;
+  dias_no_mes: number;
+  percentual_decorrido: number;
+  dias_restantes: number;
+  ritmo_atual: string;
+  projecao_fim_mes: string;
+  urgencia: 'baixa' | 'media' | 'alta' | 'critica';
+  mensagem_motivacional: string;
+}
+
+interface Sazonalidade {
+  comparativo_ano_anterior: string;
+  tendencia: 'melhor' | 'igual' | 'pior';
+  variacao_alunos_pct: number | null;
+  variacao_ticket_pct: number | null;
+  variacao_churn_pp: number | null;
+  insight_sazonal: string;
+}
+
 interface FidelizaPlusDetalhe {
   estrela: string;
   status: 'conquistada' | 'proxima' | 'longe';
@@ -138,6 +158,8 @@ interface InsightsRetencao {
   renovacoes_proximas?: RenovacoesProximas | null;
   evasoes_analise?: EvasoesAnalise | null;
   permanencia_analise?: PermanenciaAnalise | null;
+  analise_temporal?: AnaliseTemporal | null;
+  sazonalidade?: Sazonalidade | null;
   // Campos existentes
   renovacoes_destaque?: string[];
   alunos_risco?: string[];
@@ -376,6 +398,8 @@ export function PlanoAcaoRetencao({ unidadeId, ano, mes }: PlanoAcaoRetencaoProp
           renovacoes_proximas: raw.renovacoes_proximas || null,
           evasoes_analise: raw.evasoes_analise || null,
           permanencia_analise: raw.permanencia_analise || null,
+          analise_temporal: raw.analise_temporal || null,
+          sazonalidade: raw.sazonalidade || null,
           // Campos existentes
           renovacoes_destaque: raw.renovacoes_destaque || [],
           alunos_risco: raw.alunos_risco || [],
@@ -646,6 +670,114 @@ export function PlanoAcaoRetencao({ unidadeId, ano, mes }: PlanoAcaoRetencaoProp
                 </div>
               </div>
 
+              {/* NOVO: Análise Temporal - Progresso do Mês */}
+              {insights.analise_temporal && (
+                <div className="space-y-3">
+                  <h4 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+                    <Calendar className="w-4 h-4 text-cyan-400" />
+                    Progresso do Mês
+                    <span className={cn(
+                      'ml-auto text-xs px-2 py-0.5 rounded-full',
+                      insights.analise_temporal.urgencia === 'critica' ? 'bg-rose-500/20 text-rose-400' :
+                      insights.analise_temporal.urgencia === 'alta' ? 'bg-amber-500/20 text-amber-400' :
+                      insights.analise_temporal.urgencia === 'media' ? 'bg-yellow-500/20 text-yellow-400' :
+                      'bg-emerald-500/20 text-emerald-400'
+                    )}>
+                      {insights.analise_temporal.urgencia === 'critica' ? '🚨 Crítico' :
+                       insights.analise_temporal.urgencia === 'alta' ? '⚠️ Alta' :
+                       insights.analise_temporal.urgencia === 'media' ? '🔶 Média' : '✅ Baixa'}
+                    </span>
+                  </h4>
+                  <div className="p-4 bg-gradient-to-r from-cyan-500/10 to-blue-500/10 rounded-xl border border-cyan-500/20">
+                    {/* Barra de progresso do mês */}
+                    <div className="mb-3">
+                      <div className="flex justify-between text-xs text-slate-400 mb-1">
+                        <span>Dia {insights.analise_temporal.dia_atual} de {insights.analise_temporal.dias_no_mes}</span>
+                        <span>{insights.analise_temporal.percentual_decorrido}% do mês</span>
+                      </div>
+                      <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all"
+                          style={{ width: `${insights.analise_temporal.percentual_decorrido}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1">
+                        {insights.analise_temporal.dias_restantes} dias restantes
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3 mb-3">
+                      <div className="p-2 bg-slate-800/50 rounded-lg">
+                        <p className="text-xs text-slate-400">Ritmo Atual</p>
+                        <p className="text-sm text-cyan-400 font-medium">{String(insights.analise_temporal.ritmo_atual || '')}</p>
+                      </div>
+                      <div className="p-2 bg-slate-800/50 rounded-lg">
+                        <p className="text-xs text-slate-400">Projeção</p>
+                        <p className="text-sm text-blue-400 font-medium">{String(insights.analise_temporal.projecao_fim_mes || '')}</p>
+                      </div>
+                    </div>
+                    <p className="text-sm text-white">{String(insights.analise_temporal.mensagem_motivacional || '')}</p>
+                  </div>
+                </div>
+              )}
+
+              {/* NOVO: Sazonalidade - Comparativo com Ano Anterior */}
+              {insights.sazonalidade && (
+                <div className="space-y-3">
+                  <h4 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
+                    <TrendingUp className="w-4 h-4 text-violet-400" />
+                    Sazonalidade
+                    <span className={cn(
+                      'ml-auto text-xs px-2 py-0.5 rounded-full',
+                      insights.sazonalidade.tendencia === 'melhor' ? 'bg-emerald-500/20 text-emerald-400' :
+                      insights.sazonalidade.tendencia === 'pior' ? 'bg-rose-500/20 text-rose-400' :
+                      'bg-slate-500/20 text-slate-400'
+                    )}>
+                      {insights.sazonalidade.tendencia === 'melhor' ? '📈 Melhor que 2025' :
+                       insights.sazonalidade.tendencia === 'pior' ? '📉 Pior que 2025' : '➡️ Similar a 2025'}
+                    </span>
+                  </h4>
+                  <div className="p-4 bg-gradient-to-r from-violet-500/10 to-purple-500/10 rounded-xl border border-violet-500/20">
+                    <p className="text-sm text-slate-300 mb-3">{String(insights.sazonalidade.comparativo_ano_anterior || '')}</p>
+                    <div className="grid grid-cols-3 gap-2 mb-3">
+                      {insights.sazonalidade.variacao_alunos_pct !== null && (
+                        <div className="p-2 bg-slate-800/50 rounded-lg text-center">
+                          <p className="text-xs text-slate-400">Alunos</p>
+                          <p className={cn(
+                            'text-sm font-bold',
+                            insights.sazonalidade.variacao_alunos_pct >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                          )}>
+                            {insights.sazonalidade.variacao_alunos_pct >= 0 ? '+' : ''}{insights.sazonalidade.variacao_alunos_pct.toFixed(1)}%
+                          </p>
+                        </div>
+                      )}
+                      {insights.sazonalidade.variacao_ticket_pct !== null && (
+                        <div className="p-2 bg-slate-800/50 rounded-lg text-center">
+                          <p className="text-xs text-slate-400">Ticket</p>
+                          <p className={cn(
+                            'text-sm font-bold',
+                            insights.sazonalidade.variacao_ticket_pct >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                          )}>
+                            {insights.sazonalidade.variacao_ticket_pct >= 0 ? '+' : ''}{insights.sazonalidade.variacao_ticket_pct.toFixed(1)}%
+                          </p>
+                        </div>
+                      )}
+                      {insights.sazonalidade.variacao_churn_pp !== null && (
+                        <div className="p-2 bg-slate-800/50 rounded-lg text-center">
+                          <p className="text-xs text-slate-400">Churn</p>
+                          <p className={cn(
+                            'text-sm font-bold',
+                            insights.sazonalidade.variacao_churn_pp <= 0 ? 'text-emerald-400' : 'text-rose-400'
+                          )}>
+                            {insights.sazonalidade.variacao_churn_pp > 0 ? '+' : ''}{insights.sazonalidade.variacao_churn_pp.toFixed(1)}pp
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-sm text-violet-400">💡 {String(insights.sazonalidade.insight_sazonal || '')}</p>
+                  </div>
+                </div>
+              )}
+
               {/* Desafio Farmer - igual ao Desafio Hunter do comercial */}
               {insights.desafio_farmer && (
                 <div className="space-y-2">
@@ -664,7 +796,7 @@ export function PlanoAcaoRetencao({ unidadeId, ano, mes }: PlanoAcaoRetencaoProp
                 </div>
               )}
 
-              {/* Fideliza+ LA - igual ao Matriculador+ do comercial */}
+              {/* Fideliza+ LA - com barras de progresso para cada estrela */}
               {insights.fideliza_plus && (
                 <div className="space-y-2">
                   <h4 className="text-sm font-semibold text-slate-300 flex items-center gap-2">
@@ -690,6 +822,49 @@ export function PlanoAcaoRetencao({ unidadeId, ano, mes }: PlanoAcaoRetencaoProp
                         {insights.fideliza_plus.estrelas_conquistadas}/{insights.fideliza_plus.estrelas_possiveis} estrelas
                       </span>
                     </div>
+                    
+                    {/* Detalhamento com barras de progresso */}
+                    {insights.fideliza_plus.detalhamento && insights.fideliza_plus.detalhamento.length > 0 && (
+                      <div className="space-y-2 mb-3">
+                        {insights.fideliza_plus.detalhamento.map((item, idx) => {
+                          const progresso = item.meta > 0 ? Math.min(100, (item.atual / item.meta) * 100) : 0;
+                          const isInverso = item.estrela.includes('Churn') || item.estrela.includes('Inadimplência');
+                          const progressoVisual = isInverso ? Math.max(0, 100 - (item.atual / item.meta) * 100) : progresso;
+                          
+                          return (
+                            <div key={idx} className="p-2 bg-slate-800/50 rounded-lg">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-xs text-slate-300 flex items-center gap-1">
+                                  {item.status === 'conquistada' ? '⭐' : item.status === 'proxima' ? '🔶' : '⚪'}
+                                  {item.estrela}
+                                </span>
+                                <span className={cn(
+                                  'text-xs font-medium',
+                                  item.status === 'conquistada' ? 'text-yellow-400' :
+                                  item.status === 'proxima' ? 'text-amber-400' : 'text-slate-500'
+                                )}>
+                                  {item.atual}{isInverso ? '%' : ''} / {item.meta}{isInverso ? '%' : ''}
+                                </span>
+                              </div>
+                              <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                                <div 
+                                  className={cn(
+                                    'h-full rounded-full transition-all',
+                                    item.status === 'conquistada' ? 'bg-yellow-400' :
+                                    item.status === 'proxima' ? 'bg-amber-400' : 'bg-slate-500'
+                                  )}
+                                  style={{ width: `${Math.min(100, progressoVisual)}%` }}
+                                />
+                              </div>
+                              {item.falta && item.status !== 'conquistada' && (
+                                <p className="text-xs text-slate-500 mt-1">{item.falta}</p>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    
                     <p className="text-sm text-slate-300 mb-2">
                       🎯 Próxima estrela: <span className="text-yellow-400 font-medium">{String(insights.fideliza_plus.proxima_estrela || '')}</span>
                     </p>

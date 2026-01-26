@@ -231,6 +231,29 @@ Deno.serve(async (req) => {
     const churnAnoPassado = mesmoMesAnoPassado.length > 0 ? mesmoMesAnoPassado[0]?.churn_rate : null;
     const ticketMesAnterior = mesAnterior.length > 0 ? mesAnterior[0]?.ticket_medio : null;
     const alunosMesAnterior = mesAnterior.length > 0 ? mesAnterior[0]?.alunos_pagantes : null;
+    
+    // Dados do ano passado para sazonalidade
+    const alunosAnoPassado = mesmoMesAnoPassado.length > 0 ? mesmoMesAnoPassado[0]?.alunos_pagantes : null;
+    const ticketAnoPassado = mesmoMesAnoPassado.length > 0 ? mesmoMesAnoPassado[0]?.ticket_medio : null;
+
+    // Análise dinâmica por dia do mês
+    const hoje = new Date();
+    const diaAtual = hoje.getDate();
+    const diasNoMes = new Date(dados.periodo.ano, dados.periodo.mes, 0).getDate();
+    const diasRestantes = diasNoMes - diaAtual;
+    const percentualMesDecorrido = Math.round((diaAtual / diasNoMes) * 100);
+    
+    // Projeções baseadas no ritmo atual
+    const faltamParaMetaAlunos = metaAlunosPagantes ? metaAlunosPagantes - totalPagantes : null;
+    const faltamParaMetaRenovacoes = totalRenovacoesPrevistas - totalRenovacoesRealizadas;
+    const ritmoRenovacoesDia = diaAtual > 0 ? totalRenovacoesRealizadas / diaAtual : 0;
+    const projecaoRenovacoesFimMes = Math.round(ritmoRenovacoesDia * diasNoMes);
+    const renovacoesPorDiaNecessarias = diasRestantes > 0 ? Math.ceil(faltamParaMetaRenovacoes / diasRestantes) : 0;
+    
+    // Variação vs ano passado (sazonalidade)
+    const variacaoAlunosAnoPassado = alunosAnoPassado ? ((totalPagantes - alunosAnoPassado) / alunosAnoPassado * 100) : null;
+    const variacaoTicketAnoPassado = ticketAnoPassado ? ((ticketMedio - ticketAnoPassado) / ticketAnoPassado * 100) : null;
+    const variacaoChurnAnoPassado = churnAnoPassado !== null ? (churnRate - churnAnoPassado) : null;
 
     // Identificar unidade e Farmers
     const unidadeId = kpisGestao.length === 1 ? kpisGestao[0]?.unidade_id : null;
@@ -397,6 +420,24 @@ Responda APENAS em JSON válido, sem markdown, no formato:
       }
     ]
   },
+  "analise_temporal": {
+    "dia_atual": number,
+    "dias_no_mes": number,
+    "percentual_decorrido": number,
+    "dias_restantes": number,
+    "ritmo_atual": "Descrição do ritmo atual de renovações",
+    "projecao_fim_mes": "Projeção de como vai fechar o mês no ritmo atual",
+    "urgencia": "baixa" | "media" | "alta" | "critica",
+    "mensagem_motivacional": "Mensagem baseada no momento do mês (início, meio, fim)"
+  },
+  "sazonalidade": {
+    "comparativo_ano_anterior": "Análise comparando com mesmo mês do ano passado",
+    "tendencia": "melhor" | "igual" | "pior",
+    "variacao_alunos_pct": number | null,
+    "variacao_ticket_pct": number | null,
+    "variacao_churn_pp": number | null,
+    "insight_sazonal": "Insight sobre o comportamento sazonal deste mês"
+  },
   "analise_kpis": {
     "resumo": "Análise geral em 2-3 frases motivacionais",
     "comparativo_mes_anterior": {
@@ -506,13 +547,24 @@ ${!is_consolidado && duplaFormatada ? `## FARMERS: ${duplaFormatada.nomes} (${du
 | Inadimplência | ${inadimplencia.toFixed(1)}% | ${metaInadimplenciaMaxima ? `máx ${metaInadimplenciaMaxima}%` : 'N/D'} | ${metaInadimplenciaMaxima ? (inadimplencia <= metaInadimplenciaMaxima ? '✅' : '❌') : '⚪'} |
 | Reajuste Médio | ${reajusteMedio ? `${reajusteMedio.toFixed(1)}%` : 'N/D'} | >${FIDELIZA_PLUS_METAS.reajuste_campeao}% (Fideliza+) | ${reajusteMedio ? (reajusteMedio > FIDELIZA_PLUS_METAS.reajuste_campeao ? '✅' : '❌') : '⚪'} |
 
-📈 COMPARATIVO COM MÊS ANTERIOR:
-- Alunos: ${alunosMesAnterior !== null ? `${alunosMesAnterior} → ${totalPagantes}` : 'N/D'}
-- Ticket: ${ticketMesAnterior !== null ? `R$${ticketMesAnterior.toFixed(0)} → R$${ticketMedio.toFixed(0)}` : 'N/D'}
-- Churn: ${churnMesAnterior !== null ? `${churnMesAnterior.toFixed(1)}% → ${churnRate.toFixed(1)}%` : 'N/D'}
+📅 ANÁLISE TEMPORAL - DIA ${diaAtual}/${diasNoMes} (${percentualMesDecorrido}% do mês):
+- Dias restantes: ${diasRestantes}
+- Renovações realizadas: ${totalRenovacoesRealizadas}/${totalRenovacoesPrevistas}
+- Faltam: ${faltamParaMetaRenovacoes} renovações
+- Ritmo atual: ${ritmoRenovacoesDia.toFixed(1)} renovações/dia
+- Projeção fim do mês: ${projecaoRenovacoesFimMes} renovações
+- Necessário para bater meta: ${renovacoesPorDiaNecessarias} renovações/dia
+${faltamParaMetaAlunos !== null ? `- Faltam ${faltamParaMetaAlunos} alunos para meta de ${metaAlunosPagantes}` : ''}
 
-📅 COMPARATIVO COM MESMO MÊS DO ANO PASSADO:
-- Churn: ${churnAnoPassado !== null ? `${churnAnoPassado.toFixed(1)}% → ${churnRate.toFixed(1)}%` : 'N/D'}
+📈 COMPARATIVO COM MÊS ANTERIOR:
+- Alunos: ${alunosMesAnterior !== null ? `${alunosMesAnterior} → ${totalPagantes} (${alunosMesAnterior < totalPagantes ? '+' : ''}${totalPagantes - alunosMesAnterior})` : 'N/D'}
+- Ticket: ${ticketMesAnterior !== null ? `R$${ticketMesAnterior.toFixed(0)} → R$${ticketMedio.toFixed(0)} (${ticketMesAnterior < ticketMedio ? '+' : ''}${(ticketMedio - ticketMesAnterior).toFixed(0)})` : 'N/D'}
+- Churn: ${churnMesAnterior !== null ? `${churnMesAnterior.toFixed(1)}% → ${churnRate.toFixed(1)}% (${churnMesAnterior > churnRate ? '✅ melhorou' : '⚠️ piorou'})` : 'N/D'}
+
+📅 SAZONALIDADE - COMPARATIVO COM ${dados.periodo.mes_nome?.toUpperCase() || 'MESMO MÊS'}/${dados.periodo.ano - 1}:
+- Alunos: ${alunosAnoPassado !== null ? `${alunosAnoPassado} → ${totalPagantes} (${variacaoAlunosAnoPassado !== null ? (variacaoAlunosAnoPassado >= 0 ? '+' : '') + variacaoAlunosAnoPassado.toFixed(1) + '%' : 'N/D'})` : 'N/D'}
+- Ticket: ${ticketAnoPassado !== null ? `R$${ticketAnoPassado.toFixed(0)} → R$${ticketMedio.toFixed(0)} (${variacaoTicketAnoPassado !== null ? (variacaoTicketAnoPassado >= 0 ? '+' : '') + variacaoTicketAnoPassado.toFixed(1) + '%' : 'N/D'})` : 'N/D'}
+- Churn: ${churnAnoPassado !== null ? `${churnAnoPassado.toFixed(1)}% → ${churnRate.toFixed(1)}% (${variacaoChurnAnoPassado !== null ? (variacaoChurnAnoPassado <= 0 ? '✅ melhorou ' : '⚠️ piorou ') + Math.abs(variacaoChurnAnoPassado).toFixed(1) + 'pp' : 'N/D'})` : 'N/D'}
 
 🔔 RENOVAÇÕES PRÓXIMAS:
 - Vencidos (URGENTE): ${totalVencidos}
