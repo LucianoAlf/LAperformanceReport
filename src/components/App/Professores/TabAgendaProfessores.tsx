@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/useToast';
 import { ToastContainer } from '@/components/ui/toast';
 import { ModalNovaAcao } from './ModalNovaAcao';
+import { ModalTreinamento } from './ModalTreinamento';
 
 interface Acao {
   id: string;
@@ -81,6 +82,10 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
     professorId: null
   });
   const [mostrarTodosTreinamentos, setMostrarTodosTreinamentos] = useState(false);
+  const [modalTreinamento, setModalTreinamento] = useState<{ open: boolean; slug: string }>({
+    open: false,
+    slug: ''
+  });
 
   useEffect(() => {
     carregarDados();
@@ -813,14 +818,26 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
               <p className="text-slate-400 text-xs mb-3 line-clamp-2">{treinamento.descricao}</p>
               <div className="flex items-center justify-between">
                 <span className="text-xs text-slate-500">⏱️ {treinamento.duracao_minutos} min</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="text-blue-400 text-xs"
-                  onClick={() => setModalAcao({ open: true, professorId: null })}
-                >
-                  Agendar
-                </Button>
+                <div className="flex items-center gap-2">
+                  {treinamento.nome === 'Conversão de Experimentais' && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-cyan-400 text-xs"
+                      onClick={() => setModalTreinamento({ open: true, slug: 'conversao-experimentais' })}
+                    >
+                      Ver Treinamento
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-blue-400 text-xs"
+                    onClick={() => setModalAcao({ open: true, professorId: null })}
+                  >
+                    Agendar
+                  </Button>
+                </div>
               </div>
             </div>
           ))}
@@ -837,6 +854,13 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
           toast.success('Ação agendada!');
           carregarDados();
         }}
+      />
+
+      {/* Modal Treinamento */}
+      <ModalTreinamento
+        isOpen={modalTreinamento.open}
+        onClose={() => setModalTreinamento({ open: false, slug: '' })}
+        treinamentoSlug={modalTreinamento.slug}
       />
 
       <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} />

@@ -13,7 +13,6 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/useToast';
 import { ToastContainer } from '@/components/ui/toast';
-import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
 import { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
 import { ModalDetalhesProfessorPerformance } from './ModalDetalhesProfessorPerformance';
 import { ModalNovaMeta } from './ModalNovaMeta';
@@ -89,7 +88,7 @@ export function TabPerformanceProfessores({ unidadeAtual }: Props) {
     setLoading(true);
     try {
       // Extrair ano e mês da competência (formato: YYYY-MM)
-      const [ano, mes] = competencia.split('-').map(Number);
+      const [anoFiltro, mesFiltro] = competencia.split('-').map(Number);
 
       // Buscar professores ativos
       let query = supabase
@@ -105,8 +104,8 @@ export function TabPerformanceProfessores({ unidadeAtual }: Props) {
       let kpisQuery = supabase
         .from('vw_kpis_professor_mensal')
         .select('*')
-        .eq('ano', ano)
-        .eq('mes', mes);
+        .eq('ano', anoFiltro)
+        .eq('mes', mesFiltro);
       
       if (unidadeAtual !== 'todos') {
         kpisQuery = kpisQuery.eq('unidade_id', unidadeAtual);
@@ -330,7 +329,7 @@ export function TabPerformanceProfessores({ unidadeAtual }: Props) {
     }
   };
 
-  // Filtrar professores
+  // Filtrar e ordenar professores
   const professoresFiltrados = useMemo(() => {
     let resultado = [...professores];
 
@@ -342,6 +341,9 @@ export function TabPerformanceProfessores({ unidadeAtual }: Props) {
       const termo = filtroBusca.toLowerCase();
       resultado = resultado.filter(p => p.nome.toLowerCase().includes(termo));
     }
+
+    // Ordenar por Health Score (maior para menor)
+    resultado.sort((a, b) => b.health_score - a.health_score);
 
     return resultado;
   }, [professores, filtroStatus, filtroBusca]);
@@ -482,54 +484,6 @@ export function TabPerformanceProfessores({ unidadeAtual }: Props) {
         </div>
       </div>
 
-      {/* Filtros, Competência e Relatório - Tudo em uma linha */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        {/* Filtros à esquerda */}
-        <div className="flex items-center gap-3">
-          <Select value={filtroStatus} onValueChange={setFiltroStatus}>
-            <SelectTrigger className="w-[150px]">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Todos os status</SelectItem>
-              <SelectItem value="critico">🔴 Crítico</SelectItem>
-              <SelectItem value="atencao">🟡 Atenção</SelectItem>
-              <SelectItem value="excelente">🟢 Excelente</SelectItem>
-            </SelectContent>
-          </Select>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <Input
-              placeholder="Buscar professor..."
-              value={filtroBusca}
-              onChange={(e) => setFiltroBusca(e.target.value)}
-              className="pl-9 w-48"
-            />
-          </div>
-        </div>
-
-        {/* Competência e Botão à direita */}
-        <div className="flex items-center gap-3">
-          <CompetenciaFilter
-            filtro={competenciaFiltro.filtro}
-            range={competenciaFiltro.range}
-            anosDisponiveis={competenciaFiltro.anosDisponiveis}
-            onTipoChange={competenciaFiltro.setTipo}
-            onAnoChange={competenciaFiltro.setAno}
-            onMesChange={competenciaFiltro.setMes}
-            onTrimestreChange={competenciaFiltro.setTrimestre}
-            onSemestreChange={competenciaFiltro.setSemestre}
-          />
-          <button
-            onClick={() => setModalRelatorio(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-cyan-500/20"
-          >
-            <FileText className="w-4 h-4" />
-            Gerar Relatório Coordenação
-          </button>
-        </div>
-      </div>
-
       {/* Ranking Rápido + Health Score com Gauge */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
         {/* Top Conversão */}
@@ -657,6 +611,67 @@ export function TabPerformanceProfessores({ unidadeAtual }: Props) {
           ) : (
             <p className="text-slate-500 text-sm">-</p>
           )}
+        </div>
+      </div>
+
+      {/* Filtros e Relatório */}
+      <div className="bg-slate-800/50 rounded-2xl p-4 border border-slate-700/50">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          {/* Filtros à esquerda */}
+          <div className="flex items-center gap-3">
+            <Select value={filtroStatus} onValueChange={setFiltroStatus}>
+              <SelectTrigger className="w-[150px]">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os status</SelectItem>
+                <SelectItem value="critico">🔴 Crítico</SelectItem>
+                <SelectItem value="atencao">🟡 Atenção</SelectItem>
+                <SelectItem value="excelente">🟢 Excelente</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Input
+                placeholder="Buscar professor..."
+                value={filtroBusca}
+                onChange={(e) => setFiltroBusca(e.target.value)}
+                className="pl-9 w-48"
+              />
+            </div>
+            
+            {/* Seletores de Ano e Mês */}
+            <Select value={String(ano)} onValueChange={(v) => competenciaFiltro.setAno(Number(v))}>
+              <SelectTrigger className="w-[100px]">
+                <SelectValue placeholder="Ano" />
+              </SelectTrigger>
+              <SelectContent>
+                {competenciaFiltro.anosDisponiveis.map(a => (
+                  <SelectItem key={a} value={String(a)}>{a}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            
+            <Select value={String(mes)} onValueChange={(v) => competenciaFiltro.setMes(Number(v))}>
+              <SelectTrigger className="w-[120px]">
+                <SelectValue placeholder="Mês" />
+              </SelectTrigger>
+              <SelectContent>
+                {competenciaFiltro.MESES_CURTO.map((m, i) => (
+                  <SelectItem key={i + 1} value={String(i + 1)}>{m}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Botão Relatório à direita */}
+          <button
+            onClick={() => setModalRelatorio(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-cyan-500/20"
+          >
+            <FileText className="w-4 h-4" />
+            Gerar Relatório Coordenação
+          </button>
         </div>
       </div>
 

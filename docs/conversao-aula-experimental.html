@@ -1,0 +1,1399 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conversão de Aulas Experimentais | LA Music</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Montserrat:wght@300;400;500;600;700;800&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary-dark: #0a1628;
+            --primary-blue: #1a2d4a;
+            --accent-orange: #f7941d;
+            --accent-orange-light: #ffb347;
+            --accent-cyan: #00d4ff;
+            --white: #ffffff;
+            --gray-light: #e8ecf1;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Montserrat', sans-serif;
+            background: var(--primary-dark);
+            color: var(--white);
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+        }
+
+        /* Progress Bar */
+        .progress-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: rgba(255,255,255,0.1);
+            z-index: 1000;
+        }
+
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-orange), var(--accent-cyan));
+            transition: width 0.5s ease;
+            box-shadow: 0 0 20px var(--accent-orange);
+        }
+
+        /* Navigation */
+        .nav-controls {
+            position: fixed;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 15px;
+            z-index: 1000;
+        }
+
+        .nav-btn {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            border: 2px solid var(--accent-orange);
+            background: rgba(247, 148, 29, 0.1);
+            color: var(--accent-orange);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s ease;
+            font-size: 18px;
+        }
+
+        .nav-btn:hover {
+            background: var(--accent-orange);
+            color: var(--primary-dark);
+            transform: scale(1.1);
+            box-shadow: 0 0 30px rgba(247, 148, 29, 0.5);
+        }
+
+        .slide-counter {
+            position: fixed;
+            bottom: 40px;
+            right: 40px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 24px;
+            color: rgba(255,255,255,0.3);
+            z-index: 1000;
+        }
+
+        .slide-counter span {
+            color: var(--accent-orange);
+        }
+
+        /* Slides Container */
+        .slides-wrapper {
+            width: 100%;
+            height: 100%;
+            position: relative;
+        }
+
+        .slide {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 60px 80px;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.6s ease, transform 0.6s ease;
+            transform: translateX(50px);
+            background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary-blue) 100%);
+        }
+
+        .slide.active {
+            opacity: 1;
+            visibility: visible;
+            transform: translateX(0);
+        }
+
+        .slide.exit {
+            transform: translateX(-50px);
+        }
+
+        /* Decorative Elements */
+        .slide::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            right: -20%;
+            width: 600px;
+            height: 600px;
+            background: radial-gradient(circle, rgba(247, 148, 29, 0.1) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        .slide::after {
+            content: '';
+            position: absolute;
+            bottom: -30%;
+            left: -10%;
+            width: 400px;
+            height: 400px;
+            background: radial-gradient(circle, rgba(0, 212, 255, 0.08) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        /* Logo */
+        .logo-container {
+            position: fixed;
+            top: 30px;
+            right: 40px;
+            z-index: 1000;
+            display: flex;
+            gap: 10px;
+        }
+
+        .logo {
+            width: 50px;
+            height: 50px;
+            background: linear-gradient(135deg, var(--accent-orange), #ff6b35);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 24px;
+            color: var(--white);
+            box-shadow: 0 4px 20px rgba(247, 148, 29, 0.3);
+        }
+
+        .logo.cyan {
+            background: linear-gradient(135deg, var(--accent-cyan), #00a8cc);
+        }
+
+        /* Typography */
+        h1 {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(48px, 8vw, 120px);
+            line-height: 0.95;
+            letter-spacing: 2px;
+            margin-bottom: 20px;
+        }
+
+        h2 {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: clamp(36px, 5vw, 72px);
+            line-height: 1;
+            letter-spacing: 1px;
+            margin-bottom: 30px;
+        }
+
+        h3 {
+            font-family: 'Poppins', sans-serif;
+            font-size: clamp(20px, 2.5vw, 32px);
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+
+        .subtitle {
+            font-family: 'Poppins', sans-serif;
+            font-size: clamp(16px, 2vw, 24px);
+            font-weight: 300;
+            color: rgba(255,255,255,0.7);
+            margin-bottom: 30px;
+        }
+
+        .highlight {
+            color: var(--accent-orange);
+        }
+
+        .highlight-cyan {
+            color: var(--accent-cyan);
+        }
+
+        /* Content Layouts */
+        .slide-content {
+            max-width: 1400px;
+            width: 100%;
+            position: relative;
+            z-index: 10;
+        }
+
+        .two-columns {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 60px;
+            align-items: center;
+        }
+
+        .three-columns {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 30px;
+        }
+
+        .five-columns {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 20px;
+        }
+
+        /* Cards */
+        .card {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 20px;
+            padding: 30px;
+            transition: all 0.4s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(90deg, var(--accent-orange), var(--accent-cyan));
+            transform: scaleX(0);
+            transition: transform 0.4s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            border-color: var(--accent-orange);
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+        }
+
+        .card:hover::before {
+            transform: scaleX(1);
+        }
+
+        .card-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+
+        .card-title {
+            font-family: 'Poppins', sans-serif;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 10px;
+        }
+
+        .card-text {
+            font-size: 14px;
+            color: rgba(255,255,255,0.7);
+            line-height: 1.6;
+        }
+
+        /* Step Cards */
+        .step-card {
+            background: var(--white);
+            border-radius: 20px;
+            padding: 25px 20px;
+            text-align: center;
+            color: var(--primary-dark);
+            position: relative;
+            transition: all 0.4s ease;
+        }
+
+        .step-card::before {
+            content: '';
+            position: absolute;
+            top: -3px;
+            left: -3px;
+            right: -3px;
+            bottom: -3px;
+            background: linear-gradient(135deg, var(--accent-orange), var(--accent-cyan));
+            border-radius: 23px;
+            z-index: -1;
+            opacity: 0;
+            transition: opacity 0.4s ease;
+        }
+
+        .step-card:hover::before {
+            opacity: 1;
+        }
+
+        .step-number {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 64px;
+            color: var(--accent-orange);
+            line-height: 1;
+        }
+
+        .step-title {
+            font-family: 'Poppins', sans-serif;
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 15px;
+            color: var(--primary-dark);
+        }
+
+        .step-desc {
+            font-size: 12px;
+            color: #666;
+            line-height: 1.5;
+        }
+
+        .step-icon {
+            font-size: 32px;
+            margin-bottom: 10px;
+        }
+
+        /* Lists */
+        .check-list {
+            list-style: none;
+        }
+
+        .check-list li {
+            display: flex;
+            align-items: flex-start;
+            gap: 15px;
+            margin-bottom: 20px;
+            font-size: 18px;
+        }
+
+        .check-list li::before {
+            content: '✓';
+            color: var(--success);
+            font-weight: bold;
+            font-size: 20px;
+            min-width: 25px;
+        }
+
+        .x-list li::before {
+            content: '✗';
+            color: var(--danger);
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 30px;
+            margin-top: 40px;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 30px;
+            background: rgba(247, 148, 29, 0.1);
+            border-radius: 20px;
+            border: 1px solid rgba(247, 148, 29, 0.3);
+        }
+
+        .stat-number {
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 56px;
+            color: var(--accent-orange);
+        }
+
+        .stat-label {
+            font-size: 14px;
+            color: rgba(255,255,255,0.7);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        /* Quote Box */
+        .quote-box {
+            background: linear-gradient(135deg, rgba(247, 148, 29, 0.2), rgba(0, 212, 255, 0.1));
+            border-left: 4px solid var(--accent-orange);
+            padding: 40px;
+            border-radius: 0 20px 20px 0;
+            font-size: 24px;
+            font-style: italic;
+            margin: 40px 0;
+        }
+
+        /* Script Box */
+        .script-box {
+            background: rgba(0, 212, 255, 0.1);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: 16px;
+            padding: 30px;
+            font-family: 'Poppins', sans-serif;
+            font-size: 16px;
+            line-height: 1.8;
+            position: relative;
+        }
+
+        .script-box::before {
+            content: '"';
+            position: absolute;
+            top: -20px;
+            left: 20px;
+            font-size: 80px;
+            color: var(--accent-cyan);
+            opacity: 0.3;
+            font-family: serif;
+        }
+
+        .script-label {
+            position: absolute;
+            top: -12px;
+            left: 30px;
+            background: var(--primary-dark);
+            padding: 0 15px;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--accent-cyan);
+        }
+
+        /* Timeline */
+        .timeline {
+            display: flex;
+            justify-content: space-between;
+            position: relative;
+            margin: 60px 0;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            top: 40px;
+            left: 10%;
+            right: 10%;
+            height: 4px;
+            background: linear-gradient(90deg, var(--accent-orange), var(--accent-cyan));
+            border-radius: 2px;
+        }
+
+        .timeline-item {
+            text-align: center;
+            position: relative;
+            z-index: 2;
+        }
+
+        .timeline-dot {
+            width: 80px;
+            height: 80px;
+            background: var(--primary-dark);
+            border: 4px solid var(--accent-orange);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+            font-family: 'Bebas Neue', sans-serif;
+            font-size: 32px;
+            color: var(--accent-orange);
+        }
+
+        .timeline-time {
+            font-size: 14px;
+            color: var(--accent-cyan);
+            margin-bottom: 5px;
+        }
+
+        .timeline-label {
+            font-size: 12px;
+            color: rgba(255,255,255,0.7);
+            max-width: 120px;
+        }
+
+        /* Checklist Visual */
+        .checklist-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+
+        .checklist-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 15px 20px;
+            background: rgba(255,255,255,0.03);
+            border-radius: 10px;
+            border: 1px solid rgba(255,255,255,0.1);
+            transition: all 0.3s ease;
+        }
+
+        .checklist-item:hover {
+            background: rgba(247, 148, 29, 0.1);
+            border-color: var(--accent-orange);
+        }
+
+        .checkbox {
+            width: 24px;
+            height: 24px;
+            border: 2px solid var(--accent-orange);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            color: var(--success);
+        }
+
+        /* Error Cards */
+        .error-card {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 16px;
+            padding: 20px;
+            display: flex;
+            align-items: flex-start;
+            gap: 15px;
+        }
+
+        .error-icon {
+            font-size: 24px;
+            color: var(--danger);
+        }
+
+        .error-text {
+            font-size: 14px;
+            color: rgba(255,255,255,0.9);
+        }
+
+        .error-fix {
+            font-size: 12px;
+            color: var(--success);
+            margin-top: 8px;
+        }
+
+        /* Animations */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-10px); }
+        }
+
+        .animate-in {
+            animation: fadeInUp 0.6s ease forwards;
+        }
+
+        .delay-1 { animation-delay: 0.1s; opacity: 0; }
+        .delay-2 { animation-delay: 0.2s; opacity: 0; }
+        .delay-3 { animation-delay: 0.3s; opacity: 0; }
+        .delay-4 { animation-delay: 0.4s; opacity: 0; }
+        .delay-5 { animation-delay: 0.5s; opacity: 0; }
+
+        .slide.active .animate-in {
+            animation: fadeInUp 0.6s ease forwards;
+        }
+
+        /* Cover Slide Special */
+        .cover-content {
+            text-align: center;
+        }
+
+        .cover-badge {
+            display: inline-block;
+            padding: 10px 30px;
+            background: rgba(247, 148, 29, 0.2);
+            border: 1px solid var(--accent-orange);
+            border-radius: 50px;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            margin-bottom: 40px;
+        }
+
+        .cover-title {
+            font-size: clamp(60px, 10vw, 140px);
+            background: linear-gradient(135deg, var(--white), var(--accent-orange));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .cover-subtitle {
+            font-size: clamp(20px, 3vw, 36px);
+            font-weight: 300;
+            margin-top: 20px;
+            color: rgba(255,255,255,0.6);
+        }
+
+        .cover-meta {
+            margin-top: 60px;
+            font-size: 14px;
+            color: rgba(255,255,255,0.4);
+        }
+
+        /* Target indicator */
+        .target-indicator {
+            position: relative;
+            width: 200px;
+            height: 200px;
+            margin: 0 auto;
+        }
+
+        .target-ring {
+            position: absolute;
+            border-radius: 50%;
+            border: 3px solid;
+            animation: pulse 2s ease infinite;
+        }
+
+        .target-ring.outer {
+            width: 200px;
+            height: 200px;
+            border-color: rgba(247, 148, 29, 0.2);
+            top: 0;
+            left: 0;
+        }
+
+        .target-ring.middle {
+            width: 140px;
+            height: 140px;
+            border-color: rgba(247, 148, 29, 0.4);
+            top: 30px;
+            left: 30px;
+            animation-delay: 0.3s;
+        }
+
+        .target-ring.inner {
+            width: 80px;
+            height: 80px;
+            border-color: var(--accent-orange);
+            top: 60px;
+            left: 60px;
+            animation-delay: 0.6s;
+        }
+
+        .target-center {
+            position: absolute;
+            width: 30px;
+            height: 30px;
+            background: var(--accent-orange);
+            border-radius: 50%;
+            top: 85px;
+            left: 85px;
+            box-shadow: 0 0 30px var(--accent-orange);
+        }
+
+        /* Keyboard hint */
+        .keyboard-hint {
+            position: fixed;
+            bottom: 40px;
+            left: 40px;
+            font-size: 12px;
+            color: rgba(255,255,255,0.3);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .key {
+            padding: 4px 10px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+            font-family: monospace;
+        }
+
+        /* Fullscreen button */
+        .fullscreen-btn {
+            position: fixed;
+            top: 30px;
+            left: 40px;
+            background: rgba(255,255,255,0.1);
+            border: none;
+            color: var(--white);
+            padding: 10px 15px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            z-index: 1000;
+            transition: all 0.3s ease;
+        }
+
+        .fullscreen-btn:hover {
+            background: var(--accent-orange);
+        }
+
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .five-columns {
+                grid-template-columns: repeat(3, 1fr);
+            }
+            .stats-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+
+        @media (max-width: 768px) {
+            .slide {
+                padding: 40px 30px;
+            }
+            .two-columns {
+                grid-template-columns: 1fr;
+                gap: 30px;
+            }
+            .five-columns, .three-columns {
+                grid-template-columns: 1fr;
+            }
+            .checklist-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Progress Bar -->
+    <div class="progress-container">
+        <div class="progress-bar" id="progressBar"></div>
+    </div>
+
+    <!-- Logo -->
+    <div class="logo-container">
+        <div class="logo">LA</div>
+        <div class="logo cyan">LK</div>
+    </div>
+
+    <!-- Fullscreen Button -->
+    <button class="fullscreen-btn" onclick="toggleFullscreen()">⛶ Fullscreen</button>
+
+    <!-- Slide Counter -->
+    <div class="slide-counter">
+        <span id="currentSlide">01</span> / <span id="totalSlides">12</span>
+    </div>
+
+    <!-- Keyboard Hint -->
+    <div class="keyboard-hint">
+        <span class="key">←</span> <span class="key">→</span> ou clique para navegar
+    </div>
+
+    <!-- Navigation -->
+    <div class="nav-controls">
+        <button class="nav-btn" onclick="prevSlide()">←</button>
+        <button class="nav-btn" onclick="nextSlide()">→</button>
+    </div>
+
+    <!-- Slides -->
+    <div class="slides-wrapper">
+        
+        <!-- SLIDE 1: CAPA -->
+        <div class="slide active" id="slide-1">
+            <div class="slide-content cover-content">
+                <div class="cover-badge animate-in delay-1">Programa de Capacitação 2026</div>
+                <h1 class="cover-title animate-in delay-2">CONVERSÃO DE<br>AULAS EXPERIMENTAIS</h1>
+                <p class="cover-subtitle animate-in delay-3">O professor que transforma experiências em matrículas</p>
+                <div class="cover-meta animate-in delay-4">
+                    LA Music School • Duração: 90 minutos • Treinamento Presencial
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 2: POR QUE IMPORTA -->
+        <div class="slide" id="slide-2">
+            <div class="slide-content">
+                <h2 class="animate-in">📊 Por que <span class="highlight">CONVERSÃO</span> importa?</h2>
+                <p class="subtitle animate-in delay-1">Números que você precisa saber</p>
+                
+                <div class="stats-grid">
+                    <div class="stat-item animate-in delay-2">
+                        <div class="stat-number">R$150</div>
+                        <div class="stat-label">Custo por experimental</div>
+                    </div>
+                    <div class="stat-item animate-in delay-3">
+                        <div class="stat-number">80%+</div>
+                        <div class="stat-label">Meta de conversão</div>
+                    </div>
+                    <div class="stat-item animate-in delay-4">
+                        <div class="stat-number">+$</div>
+                        <div class="stat-label">Mais comissões</div>
+                    </div>
+                    <div class="stat-item animate-in delay-5">
+                        <div class="stat-number">📈</div>
+                        <div class="stat-label">Health Score alto</div>
+                    </div>
+                </div>
+
+                <div class="quote-box animate-in delay-5">
+                    💡 "Conversão NÃO é vender. É mostrar <span class="highlight">VALOR</span>."
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 3: AS 5 ETAPAS -->
+        <div class="slide" id="slide-3">
+            <div class="slide-content">
+                <h2 class="animate-in">🎯 As <span class="highlight">5 ETAPAS</span> da Aula Experimental Perfeita</h2>
+                
+                <div class="five-columns" style="margin-top: 50px;">
+                    <div class="step-card animate-in delay-1">
+                        <div class="step-icon">🤝</div>
+                        <div class="step-number">01</div>
+                        <div class="step-title">Recepção do Aluno</div>
+                        <div class="step-desc">Acolher pelo nome, criar rapport inicial</div>
+                        <div style="margin-top: 10px; color: #f7941d; font-weight: 600;">3 min</div>
+                    </div>
+                    <div class="step-card animate-in delay-2">
+                        <div class="step-icon">🔥</div>
+                        <div class="step-number">02</div>
+                        <div class="step-title">Aquecimento</div>
+                        <div class="step-desc">Preparar e criar expectativa divertida</div>
+                        <div style="margin-top: 10px; color: #f7941d; font-weight: 600;">5 min</div>
+                    </div>
+                    <div class="step-card animate-in delay-3">
+                        <div class="step-icon">💫</div>
+                        <div class="step-number">03</div>
+                        <div class="step-title">Conexão com Aluno</div>
+                        <div class="step-desc">Diversão + vitória + vínculo emocional</div>
+                        <div style="margin-top: 10px; color: #f7941d; font-weight: 600;">15 min</div>
+                    </div>
+                    <div class="step-card animate-in delay-4">
+                        <div class="step-icon">✅</div>
+                        <div class="step-number">04</div>
+                        <div class="step-title">Encerramento</div>
+                        <div class="step-desc">Elogio + vídeo + entusiasmo</div>
+                        <div style="margin-top: 10px; color: #f7941d; font-weight: 600;">5 min</div>
+                    </div>
+                    <div class="step-card animate-in delay-5">
+                        <div class="step-icon">👥</div>
+                        <div class="step-number">05</div>
+                        <div class="step-title">Devolutiva</div>
+                        <div class="step-desc">Pitch natural para o responsável</div>
+                        <div style="margin-top: 10px; color: #f7941d; font-weight: 600;">7 min</div>
+                    </div>
+                </div>
+
+                <div style="text-align: center; margin-top: 40px; font-size: 20px; color: rgba(255,255,255,0.6);" class="animate-in delay-5">
+                    ⏱️ Tempo total: <span class="highlight">35 minutos</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 4: ETAPA 1 - RECEPÇÃO -->
+        <div class="slide" id="slide-4">
+            <div class="slide-content">
+                <div class="two-columns">
+                    <div>
+                        <div style="display: inline-block; padding: 8px 20px; background: var(--accent-orange); border-radius: 50px; font-size: 14px; margin-bottom: 20px;" class="animate-in">ETAPA 01</div>
+                        <h2 class="animate-in delay-1">🤝 Recepção do Aluno</h2>
+                        <p class="subtitle animate-in delay-2">Os primeiros 3 minutos definem tudo!</p>
+                        
+                        <ul class="check-list animate-in delay-3">
+                            <li>Receber o aluno E o responsável pelo <strong>PRIMEIRO NOME</strong></li>
+                            <li>Apresentar-se com <strong>ENTUSIASMO</strong></li>
+                            <li>Perguntar sobre <strong>EXPECTATIVAS</strong></li>
+                            <li>Explicar brevemente como será a aula</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <div class="script-box animate-in delay-4">
+                            <div class="script-label">Script Modelo</div>
+                            <p>"Olá, <strong>[Nome do Aluno]</strong>! Olá, <strong>[Nome do Responsável]</strong>!</p>
+                            <p style="margin-top: 15px;">Eu sou o Professor <strong>[Seu Nome]</strong> e estou muito animado para essa aula experimental!</p>
+                            <p style="margin-top: 15px;">Antes de começarmos, me conta: <span class="highlight-cyan">o que te fez querer aprender [instrumento]?</span>"</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 5: ETAPA 2 - AQUECIMENTO -->
+        <div class="slide" id="slide-5">
+            <div class="slide-content">
+                <div class="two-columns">
+                    <div>
+                        <div style="display: inline-block; padding: 8px 20px; background: var(--accent-orange); border-radius: 50px; font-size: 14px; margin-bottom: 20px;" class="animate-in">ETAPA 02</div>
+                        <h2 class="animate-in delay-1">🔥 Aquecimento</h2>
+                        <p class="subtitle animate-in delay-2">Preparar e criar expectativa (5 minutos)</p>
+                        
+                        <ul class="check-list animate-in delay-3">
+                            <li>Fazer exercícios leves de preparação</li>
+                            <li>Apresentar o instrumento de forma <strong>DIVERTIDA</strong></li>
+                            <li>Criar expectativa sobre o que vai aprender</li>
+                            <li>Deixar o aluno relaxado e confortável</li>
+                        </ul>
+
+                        <div class="quote-box animate-in delay-4" style="margin-top: 30px;">
+                            💡 DICA: Transforme o aquecimento em <span class="highlight">JOGO!</span>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 class="animate-in delay-3" style="margin-bottom: 25px;">Exemplos por Instrumento:</h3>
+                        <div class="card animate-in delay-4" style="margin-bottom: 15px;">
+                            <div style="display: flex; align-items: center; gap: 15px;">
+                                <span style="font-size: 36px;">🥁</span>
+                                <div>
+                                    <strong>Bateria</strong>
+                                    <p style="font-size: 14px; color: rgba(255,255,255,0.6);">Alongamento + palmas rítmicas</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card animate-in delay-4" style="margin-bottom: 15px;">
+                            <div style="display: flex; align-items: center; gap: 15px;">
+                                <span style="font-size: 36px;">🎸</span>
+                                <div>
+                                    <strong>Violão/Guitarra</strong>
+                                    <p style="font-size: 14px; color: rgba(255,255,255,0.6);">Postura + dedilhado no ar</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card animate-in delay-5" style="margin-bottom: 15px;">
+                            <div style="display: flex; align-items: center; gap: 15px;">
+                                <span style="font-size: 36px;">🎹</span>
+                                <div>
+                                    <strong>Teclado</strong>
+                                    <p style="font-size: 14px; color: rgba(255,255,255,0.6);">Posição das mãos + teclas brancas/pretas</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="card animate-in delay-5">
+                            <div style="display: flex; align-items: center; gap: 15px;">
+                                <span style="font-size: 36px;">🎤</span>
+                                <div>
+                                    <strong>Canto</strong>
+                                    <p style="font-size: 14px; color: rgba(255,255,255,0.6);">Respiração + aquecimento vocal leve</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 6: ETAPA 3 - CONEXÃO -->
+        <div class="slide" id="slide-6">
+            <div class="slide-content">
+                <div style="text-align: center; margin-bottom: 40px;">
+                    <div style="display: inline-block; padding: 8px 20px; background: var(--accent-orange); border-radius: 50px; font-size: 14px; margin-bottom: 20px;" class="animate-in">ETAPA 03</div>
+                    <h2 class="animate-in delay-1">💫 Conexão com o Aluno</h2>
+                    <p class="subtitle animate-in delay-2">Este é o <span class="highlight">CORAÇÃO</span> da aula! (15 minutos)</p>
+                </div>
+
+                <div class="three-columns">
+                    <div class="card animate-in delay-3">
+                        <div class="card-icon">🌟</div>
+                        <div class="card-title">Elogie Genuinamente</div>
+                        <div class="card-text">"Isso! Você pegou muito rápido!"<br><br>Celebre cada pequena vitória do aluno.</div>
+                    </div>
+                    <div class="card animate-in delay-4">
+                        <div class="card-icon">📛</div>
+                        <div class="card-title">Use o Nome do Aluno</div>
+                        <div class="card-text">"[Nome], agora vamos tentar algo mais legal..."<br><br>Personalização é a chave!</div>
+                    </div>
+                    <div class="card animate-in delay-5">
+                        <div class="card-icon">👨‍👩‍👧</div>
+                        <div class="card-title">Envolva o Responsável</div>
+                        <div class="card-text">"Viu só como [Nome] tem ritmo natural?"<br><br>Ele é o decisor!</div>
+                    </div>
+                </div>
+
+                <div class="quote-box animate-in delay-5" style="margin-top: 40px; text-align: center; font-size: 28px;">
+                    ⚠️ REGRA DE OURO: O aluno precisa sair<br>sabendo <span class="highlight">TOCAR ALGO</span>, mesmo que simples!
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 7: ETAPA 4 - ENCERRAMENTO -->
+        <div class="slide" id="slide-7">
+            <div class="slide-content">
+                <div class="two-columns">
+                    <div>
+                        <div style="display: inline-block; padding: 8px 20px; background: var(--accent-orange); border-radius: 50px; font-size: 14px; margin-bottom: 20px;" class="animate-in">ETAPA 04</div>
+                        <h2 class="animate-in delay-1">✅ Encerramento da Aula</h2>
+                        <p class="subtitle animate-in delay-2">Prepare o terreno para a matrícula (5 minutos)</p>
+                        
+                        <ul class="check-list animate-in delay-3">
+                            <li>Destacar os <strong>PONTOS FORTES</strong> do aluno</li>
+                            <li>Perguntar o que ele <strong>MAIS GOSTOU</strong></li>
+                            <li>Gravar um <strong>PEQUENO VÍDEO</strong> (se possível)</li>
+                            <li>Demonstrar <strong>ENTUSIASMO</strong> em ser professor dele</li>
+                        </ul>
+
+                        <div class="card animate-in delay-4" style="margin-top: 30px; background: rgba(0, 212, 255, 0.1); border-color: rgba(0, 212, 255, 0.3);">
+                            <div style="display: flex; align-items: center; gap: 15px;">
+                                <span style="font-size: 40px;">📱</span>
+                                <div>
+                                    <strong style="color: var(--accent-cyan);">Dica do Vídeo</strong>
+                                    <p style="font-size: 14px; color: rgba(255,255,255,0.7); margin-top: 5px;">Grave 15 segundos do aluno tocando algo simples. Isso vira PROVA de que ele consegue!</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="script-box animate-in delay-4">
+                            <div class="script-label">Script Modelo</div>
+                            <p>"<strong>[Nome]</strong>, essa aula foi incrível!</p>
+                            <p style="margin-top: 15px;">Você tem muito potencial e eu adoraria acompanhar sua evolução.</p>
+                            <p style="margin-top: 15px;">Me conta: <span class="highlight-cyan">o que você mais gostou de fazer hoje?</span></p>
+                            <p style="margin-top: 15px;"><em>[Ouvir resposta]</em></p>
+                            <p style="margin-top: 15px;">Isso é ótimo! Nas próximas aulas, vamos desenvolver ainda mais isso e você vai se <strong>surpreender</strong> com o quanto vai evoluir!"</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 8: ETAPA 5 - DEVOLUTIVA -->
+        <div class="slide" id="slide-8">
+            <div class="slide-content">
+                <div style="text-align: center; margin-bottom: 30px;">
+                    <div style="display: inline-block; padding: 8px 20px; background: var(--accent-orange); border-radius: 50px; font-size: 14px; margin-bottom: 20px;" class="animate-in">ETAPA 05</div>
+                    <h2 class="animate-in delay-1">👥 Devolutiva ao Responsável</h2>
+                    <p class="subtitle animate-in delay-2">Este é o momento da <span class="highlight">VENDA</span>! (7 minutos)</p>
+                </div>
+
+                <div class="stats-grid animate-in delay-3" style="grid-template-columns: repeat(4, 1fr); margin-bottom: 40px;">
+                    <div style="text-align: center; padding: 25px; background: rgba(16, 185, 129, 0.1); border-radius: 16px; border: 2px solid rgba(16, 185, 129, 0.3);">
+                        <div style="font-family: 'Bebas Neue', sans-serif; font-size: 48px; color: var(--success);">1️⃣</div>
+                        <div style="font-size: 14px; margin-top: 10px;">ELOGIO GENUÍNO</div>
+                        <div style="font-size: 12px; color: rgba(255,255,255,0.5); margin-top: 5px;">30 segundos</div>
+                    </div>
+                    <div style="text-align: center; padding: 25px; background: rgba(0, 212, 255, 0.1); border-radius: 16px; border: 2px solid rgba(0, 212, 255, 0.3);">
+                        <div style="font-family: 'Bebas Neue', sans-serif; font-size: 48px; color: var(--accent-cyan);">2️⃣</div>
+                        <div style="font-size: 14px; margin-top: 10px;">BENEFÍCIOS</div>
+                        <div style="font-size: 12px; color: rgba(255,255,255,0.5); margin-top: 5px;">1 minuto</div>
+                    </div>
+                    <div style="text-align: center; padding: 25px; background: rgba(247, 148, 29, 0.1); border-radius: 16px; border: 2px solid rgba(247, 148, 29, 0.3);">
+                        <div style="font-family: 'Bebas Neue', sans-serif; font-size: 48px; color: var(--accent-orange);">3️⃣</div>
+                        <div style="font-size: 14px; margin-top: 10px;">PROPOSTA DE VALOR</div>
+                        <div style="font-size: 12px; color: rgba(255,255,255,0.5); margin-top: 5px;">1 minuto</div>
+                    </div>
+                    <div style="text-align: center; padding: 25px; background: rgba(168, 85, 247, 0.1); border-radius: 16px; border: 2px solid rgba(168, 85, 247, 0.3);">
+                        <div style="font-family: 'Bebas Neue', sans-serif; font-size: 48px; color: #a855f7;">4️⃣</div>
+                        <div style="font-size: 14px; margin-top: 10px;">CHAMADA PARA AÇÃO</div>
+                        <div style="font-size: 12px; color: rgba(255,255,255,0.5); margin-top: 5px;">30 segundos</div>
+                    </div>
+                </div>
+
+                <div class="two-columns" style="gap: 40px;">
+                    <div class="script-box animate-in delay-4">
+                        <div class="script-label">Pitch Completo</div>
+                        <p>"<strong>[Nome do Responsável]</strong>, preciso compartilhar: <strong>[Nome do Aluno]</strong> foi fantástico! Mostrou ritmo natural e capacidade de aprender rápido.</p>
+                        <p style="margin-top: 15px;">Aqui na LA Music, além de [instrumento], ele vai desenvolver <span class="highlight-cyan">disciplina, foco, coordenação</span> e fazer novos amigos.</p>
+                        <p style="margin-top: 15px;">Eu adoraria acompanhar a jornada musical dele. Minha turma de [dia] às [hora] seria perfeita!</p>
+                        <p style="margin-top: 15px; font-size: 18px;"><strong>Posso já reservar essa vaga para [Nome]?</strong></p>
+                    </div>
+                    <div class="error-card animate-in delay-5">
+                        <div class="error-icon">⚠️</div>
+                        <div>
+                            <div class="error-text" style="font-size: 18px; font-weight: 600;">IMPORTANTE</div>
+                            <div class="error-text" style="margin-top: 10px;">NÃO fale de preço!</div>
+                            <div class="error-fix">Deixe isso para a recepção/comercial.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 9: O QUE NÃO FAZER -->
+        <div class="slide" id="slide-9">
+            <div class="slide-content">
+                <h2 class="animate-in">❌ Erros que <span style="color: var(--danger);">MATAM</span> a Conversão</h2>
+                <p class="subtitle animate-in delay-1">Evite esses erros a todo custo!</p>
+
+                <div class="three-columns" style="margin-top: 40px;">
+                    <div class="error-card animate-in delay-2" style="flex-direction: column; text-align: center;">
+                        <div class="error-icon" style="font-size: 40px; margin-bottom: 15px;">👤</div>
+                        <div class="error-text" style="font-weight: 600;">Ignorar o responsável</div>
+                        <div class="error-fix">→ Ele que decide e paga!</div>
+                    </div>
+                    <div class="error-card animate-in delay-2" style="flex-direction: column; text-align: center;">
+                        <div class="error-icon" style="font-size: 40px; margin-bottom: 15px;">📚</div>
+                        <div class="error-text" style="font-weight: 600;">Aula muito técnica</div>
+                        <div class="error-fix">→ Diversão primeiro!</div>
+                    </div>
+                    <div class="error-card animate-in delay-3" style="flex-direction: column; text-align: center;">
+                        <div class="error-icon" style="font-size: 40px; margin-bottom: 15px;">❓</div>
+                        <div class="error-text" style="font-weight: 600;">Não usar o nome</div>
+                        <div class="error-fix">→ Personalização é chave!</div>
+                    </div>
+                    <div class="error-card animate-in delay-3" style="flex-direction: column; text-align: center;">
+                        <div class="error-icon" style="font-size: 40px; margin-bottom: 15px;">😐</div>
+                        <div class="error-text" style="font-weight: 600;">Parecer desinteressado</div>
+                        <div class="error-fix">→ Entusiasmo contagia!</div>
+                    </div>
+                    <div class="error-card animate-in delay-4" style="flex-direction: column; text-align: center;">
+                        <div class="error-icon" style="font-size: 40px; margin-bottom: 15px;">🎵</div>
+                        <div class="error-text" style="font-weight: 600;">Não fazer o aluno tocar</div>
+                        <div class="error-fix">→ Ele precisa de uma vitória!</div>
+                    </div>
+                    <div class="error-card animate-in delay-4" style="flex-direction: column; text-align: center;">
+                        <div class="error-icon" style="font-size: 40px; margin-bottom: 15px;">💰</div>
+                        <div class="error-text" style="font-weight: 600;">Falar de preço</div>
+                        <div class="error-fix">→ Deixe pro comercial!</div>
+                    </div>
+                </div>
+
+                <div class="quote-box animate-in delay-5" style="margin-top: 40px; background: rgba(239, 68, 68, 0.1); border-color: var(--danger);">
+                    ❌ "Foi legal, tchau" = <span style="color: var(--danger);">MATRÍCULA PERDIDA</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 10: CHECKLIST -->
+        <div class="slide" id="slide-10">
+            <div class="slide-content">
+                <h2 class="animate-in">✅ Checklist do <span class="highlight">Professor Campeão</span></h2>
+                <p class="subtitle animate-in delay-1">Use antes de cada aula experimental!</p>
+
+                <div class="three-columns" style="margin-top: 40px; gap: 40px;">
+                    <div class="animate-in delay-2">
+                        <h3 style="margin-bottom: 20px; color: var(--accent-cyan);">📋 Antes da aula</h3>
+                        <div class="checklist-grid" style="grid-template-columns: 1fr;">
+                            <div class="checklist-item"><div class="checkbox">✓</div><span>Sei o nome do aluno e responsável</span></div>
+                            <div class="checklist-item"><div class="checkbox">✓</div><span>Sei qual instrumento e idade</span></div>
+                            <div class="checklist-item"><div class="checkbox">✓</div><span>Preparei o ambiente/instrumento</span></div>
+                        </div>
+                    </div>
+                    <div class="animate-in delay-3">
+                        <h3 style="margin-bottom: 20px; color: var(--accent-orange);">🎯 Durante a aula</h3>
+                        <div class="checklist-grid" style="grid-template-columns: 1fr;">
+                            <div class="checklist-item"><div class="checkbox">✓</div><span>Recebi pelo primeiro nome</span></div>
+                            <div class="checklist-item"><div class="checkbox">✓</div><span>Fiz aquecimento divertido</span></div>
+                            <div class="checklist-item"><div class="checkbox">✓</div><span>O aluno tocou ALGO</span></div>
+                            <div class="checklist-item"><div class="checkbox">✓</div><span>Elogiei genuinamente</span></div>
+                            <div class="checklist-item"><div class="checkbox">✓</div><span>Envolvi o responsável</span></div>
+                        </div>
+                    </div>
+                    <div class="animate-in delay-4">
+                        <h3 style="margin-bottom: 20px; color: var(--success);">🏆 No encerramento</h3>
+                        <div class="checklist-grid" style="grid-template-columns: 1fr;">
+                            <div class="checklist-item"><div class="checkbox">✓</div><span>Destaquei pontos fortes</span></div>
+                            <div class="checklist-item"><div class="checkbox">✓</div><span>Gravei vídeo (se possível)</span></div>
+                            <div class="checklist-item"><div class="checkbox">✓</div><span>Fiz o pitch para o responsável</span></div>
+                            <div class="checklist-item"><div class="checkbox">✓</div><span>NÃO falei de preço</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div style="text-align: center; margin-top: 50px;" class="animate-in delay-5">
+                    <div style="display: inline-block; padding: 20px 50px; background: linear-gradient(135deg, var(--accent-orange), #ff6b35); border-radius: 16px; font-size: 24px; font-weight: 700;">
+                        🎯 Meta: 10+ de 12 itens = Conversão garantida!
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 11: RESUMO -->
+        <div class="slide" id="slide-11">
+            <div class="slide-content">
+                <h2 class="animate-in" style="text-align: center;">🎯 Resumo: As <span class="highlight">5 ETAPAS</span></h2>
+                
+                <div class="timeline animate-in delay-2">
+                    <div class="timeline-item">
+                        <div class="timeline-dot">01</div>
+                        <div class="timeline-time">3 min</div>
+                        <div class="timeline-label">RECEPÇÃO<br><small>Acolher pelo nome</small></div>
+                    </div>
+                    <div class="timeline-item">
+                        <div class="timeline-dot">02</div>
+                        <div class="timeline-time">5 min</div>
+                        <div class="timeline-label">AQUECIMENTO<br><small>Preparar + expectativa</small></div>
+                    </div>
+                    <div class="timeline-item">
+                        <div class="timeline-dot">03</div>
+                        <div class="timeline-time">15 min</div>
+                        <div class="timeline-label">CONEXÃO<br><small>Diversão + vitória</small></div>
+                    </div>
+                    <div class="timeline-item">
+                        <div class="timeline-dot">04</div>
+                        <div class="timeline-time">5 min</div>
+                        <div class="timeline-label">ENCERRAMENTO<br><small>Elogio + vídeo</small></div>
+                    </div>
+                    <div class="timeline-item">
+                        <div class="timeline-dot">05</div>
+                        <div class="timeline-time">7 min</div>
+                        <div class="timeline-label">DEVOLUTIVA<br><small>Pitch ao responsável</small></div>
+                    </div>
+                </div>
+
+                <div class="quote-box animate-in delay-3" style="text-align: center; font-size: 28px; margin-top: 50px;">
+                    "Você não está vendendo aulas.<br>Você está oferecendo uma <span class="highlight">TRANSFORMAÇÃO</span><br>na vida do aluno através da música."
+                </div>
+
+                <div class="stats-grid animate-in delay-4" style="margin-top: 40px; grid-template-columns: repeat(3, 1fr);">
+                    <div class="stat-item">
+                        <div class="stat-number">📈</div>
+                        <div class="stat-label">Carteira cheia</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number">💚</div>
+                        <div class="stat-label">Health Score alto</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number">💰</div>
+                        <div class="stat-label">Mais comissões</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SLIDE 12: ENCERRAMENTO -->
+        <div class="slide" id="slide-12">
+            <div class="slide-content cover-content">
+                <div class="target-indicator animate-in delay-1">
+                    <div class="target-ring outer"></div>
+                    <div class="target-ring middle"></div>
+                    <div class="target-ring inner"></div>
+                    <div class="target-center"></div>
+                </div>
+                
+                <h1 class="cover-title animate-in delay-2" style="font-size: clamp(48px, 8vw, 100px); margin-top: 40px;">PARABÉNS!</h1>
+                <p class="subtitle animate-in delay-3" style="font-size: 24px;">Você completou o treinamento de<br><span class="highlight">CONVERSÃO DE AULAS EXPERIMENTAIS</span></p>
+
+                <div class="three-columns animate-in delay-4" style="max-width: 800px; margin: 40px auto; gap: 30px;">
+                    <div style="text-align: center; padding: 20px; background: rgba(255,255,255,0.05); border-radius: 16px;">
+                        <div style="font-size: 32px; margin-bottom: 10px;">📝</div>
+                        <div style="font-size: 14px;">Prova Escrita</div>
+                    </div>
+                    <div style="text-align: center; padding: 20px; background: rgba(255,255,255,0.05); border-radius: 16px;">
+                        <div style="font-size: 32px; margin-bottom: 10px;">🎭</div>
+                        <div style="font-size: 14px;">Roleplay Prático</div>
+                    </div>
+                    <div style="text-align: center; padding: 20px; background: rgba(255,255,255,0.05); border-radius: 16px;">
+                        <div style="font-size: 32px; margin-bottom: 10px;">🚀</div>
+                        <div style="font-size: 14px;">Aplicar na prática!</div>
+                    </div>
+                </div>
+
+                <div class="quote-box animate-in delay-5" style="max-width: 700px; margin: 0 auto; text-align: center;">
+                    "Cada experimental é uma oportunidade de<br><span class="highlight">mudar a vida de alguém</span> através da música.<br>Faça valer a pena!"
+                </div>
+
+                <div style="margin-top: 40px; font-family: 'Bebas Neue', sans-serif; font-size: 48px; color: var(--accent-orange);" class="animate-in delay-5">
+                    🎯 META: 80%+ DE CONVERSÃO
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        let currentSlide = 1;
+        const totalSlides = 12;
+
+        function updateSlide() {
+            // Remove active class from all slides
+            document.querySelectorAll('.slide').forEach((slide, index) => {
+                slide.classList.remove('active', 'exit');
+                if (index + 1 < currentSlide) {
+                    slide.classList.add('exit');
+                }
+            });
+
+            // Add active class to current slide
+            document.getElementById(`slide-${currentSlide}`).classList.add('active');
+
+            // Update counter
+            document.getElementById('currentSlide').textContent = currentSlide.toString().padStart(2, '0');
+            document.getElementById('totalSlides').textContent = totalSlides.toString().padStart(2, '0');
+
+            // Update progress bar
+            const progress = (currentSlide / totalSlides) * 100;
+            document.getElementById('progressBar').style.width = `${progress}%`;
+        }
+
+        function nextSlide() {
+            if (currentSlide < totalSlides) {
+                currentSlide++;
+                updateSlide();
+            }
+        }
+
+        function prevSlide() {
+            if (currentSlide > 1) {
+                currentSlide--;
+                updateSlide();
+            }
+        }
+
+        function goToSlide(n) {
+            if (n >= 1 && n <= totalSlides) {
+                currentSlide = n;
+                updateSlide();
+            }
+        }
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'Enter') {
+                nextSlide();
+            } else if (e.key === 'ArrowLeft') {
+                prevSlide();
+            } else if (e.key === 'f' || e.key === 'F') {
+                toggleFullscreen();
+            } else if (e.key >= '1' && e.key <= '9') {
+                goToSlide(parseInt(e.key));
+            } else if (e.key === '0') {
+                goToSlide(10);
+            }
+        });
+
+        // Click navigation
+        document.querySelector('.slides-wrapper').addEventListener('click', (e) => {
+            if (!e.target.closest('.nav-controls') && !e.target.closest('button')) {
+                const rect = document.querySelector('.slides-wrapper').getBoundingClientRect();
+                const clickX = e.clientX - rect.left;
+                if (clickX > rect.width / 2) {
+                    nextSlide();
+                } else {
+                    prevSlide();
+                }
+            }
+        });
+
+        // Touch navigation
+        let touchStartX = 0;
+        let touchEndX = 0;
+
+        document.addEventListener('touchstart', (e) => {
+            touchStartX = e.changedTouches[0].screenX;
+        });
+
+        document.addEventListener('touchend', (e) => {
+            touchEndX = e.changedTouches[0].screenX;
+            if (touchStartX - touchEndX > 50) {
+                nextSlide();
+            } else if (touchEndX - touchStartX > 50) {
+                prevSlide();
+            }
+        });
+
+        // Initialize
+        updateSlide();
+    </script>
+</body>
+</html>
