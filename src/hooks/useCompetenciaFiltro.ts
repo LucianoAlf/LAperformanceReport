@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
 
 export type TipoCompetencia = 'mensal' | 'trimestral' | 'semestral' | 'anual';
 
@@ -129,13 +130,48 @@ export function useCompetenciaFiltro() {
     setFiltro(prev => ({ ...prev, semestre }));
   };
 
-  // Anos disponíveis (2023 até ano atual) - incluindo histórico
-  const anosDisponiveis = useMemo(() => {
-    const anos: number[] = [];
-    for (let a = anoAtual; a >= 2023; a--) {
-      anos.push(a);
+  // Anos disponíveis - buscar dinamicamente do banco de dados + ano atual
+  const [anosDisponiveis, setAnosDisponiveis] = useState<number[]>([anoAtual]);
+
+  useEffect(() => {
+    async function buscarAnosDisponiveis() {
+      try {
+        // Buscar anos distintos da tabela dados_mensais
+        const { data, error } = await supabase
+          .from('dados_mensais')
+          .select('ano')
+          .order('ano', { ascending: false });
+
+        if (error) {
+          console.error('Erro ao buscar anos disponíveis:', error);
+          // Fallback para ano atual
+          setAnosDisponiveis([anoAtual]);
+          return;
+        }
+
+        if (data && data.length > 0) {
+          // Extrair anos únicos do banco
+          const anosUnicos = [...new Set(data.map(d => d.ano))];
+          
+          // SEMPRE incluir o ano atual, mesmo que não tenha dados históricos
+          if (!anosUnicos.includes(anoAtual)) {
+            anosUnicos.push(anoAtual);
+          }
+          
+          // Ordenar decrescente (mais recente primeiro)
+          anosUnicos.sort((a, b) => b - a);
+          setAnosDisponiveis(anosUnicos);
+        } else {
+          // Se não houver dados, usar ano atual
+          setAnosDisponiveis([anoAtual]);
+        }
+      } catch (err) {
+        console.error('Erro ao buscar anos disponíveis:', err);
+        setAnosDisponiveis([anoAtual]);
+      }
     }
-    return anos;
+
+    buscarAnosDisponiveis();
   }, [anoAtual]);
 
   return {

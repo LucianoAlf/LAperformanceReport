@@ -105,8 +105,11 @@ export function DashboardPage() {
   const filtroAtivo = context?.filtroAtivo ?? null;
   const competencia = context?.competencia;
   const ano = competencia?.filtro?.ano || new Date().getFullYear();
-  const mes = competencia?.filtro?.mes || new Date().getMonth() + 1;
-  const mesFim = competencia?.range?.mesFim || mes;
+  // IMPORTANTE: usar mesInicio e mesFim do RANGE, não do filtro
+  // O filtro.mes é o mês selecionado no dropdown, mas o range calcula o período correto
+  const mesInicio = competencia?.range?.mesInicio || competencia?.filtro?.mes || new Date().getMonth() + 1;
+  const mesFim = competencia?.range?.mesFim || mesInicio;
+  const mes = mesInicio; // Para compatibilidade com código existente
   const unidade = filtroAtivo || 'todos';
   
   // Buscar metas do período
@@ -145,10 +148,11 @@ export function DashboardPage() {
 
         // ===== DADOS DE GESTÃO =====
         // Verificar se é período atual ou histórico
+        // Período atual = ano atual E o range inclui o mês atual E é apenas 1 mês
         const currentDate = new Date();
         const currentYear = currentDate.getFullYear();
         const currentMonth = currentDate.getMonth() + 1;
-        const isPeriodoAtual = ano === currentYear && mes === currentMonth;
+        const isPeriodoAtual = ano === currentYear && mesInicio === currentMonth && mesFim === currentMonth;
         const isHistorico = !isPeriodoAtual;
 
         let gestaoData: any[] = [];
@@ -166,12 +170,13 @@ export function DashboardPage() {
           const { data } = await gestaoQuery;
           gestaoData = data || [];
         } else {
-          // PERÍODO HISTÓRICO: usar dados_mensais
+          // PERÍODO HISTÓRICO: usar dados_mensais com range de meses
           let historicoQuery = supabase
             .from('dados_mensais')
             .select('*')
             .eq('ano', ano)
-            .eq('mes', mes);
+            .gte('mes', mesInicio)
+            .lte('mes', mesFim);
 
           if (unidade !== 'todos') {
             historicoQuery = historicoQuery.eq('unidade_id', unidade);
@@ -185,25 +190,33 @@ export function DashboardPage() {
               novas_matriculas: d.novas_matriculas || 0,
               evasoes: d.evasoes || 0,
               ticket_medio: Number(d.ticket_medio) || 0,
+              ano: d.ano,
+              mes: d.mes,
             }));
           }
         }
         
         if (gestaoData && gestaoData.length > 0) {
-          // Consolidar dados de todas as unidades
+          // Consolidar dados - MÉDIA para alunos, SOMA para matrículas/evasões
           const consolidado = gestaoData.reduce((acc: any, d: any) => ({
-            total_alunos_ativos: acc.total_alunos_ativos + (d.total_alunos_ativos || 0),
-            total_alunos_pagantes: acc.total_alunos_pagantes + (d.total_alunos_pagantes || 0),
+            total_alunos_ativos_sum: acc.total_alunos_ativos_sum + (d.total_alunos_ativos || 0),
+            total_alunos_pagantes_sum: acc.total_alunos_pagantes_sum + (d.total_alunos_pagantes || 0),
             novas_matriculas: acc.novas_matriculas + (d.novas_matriculas || 0),
             evasoes: acc.evasoes + (d.evasoes || 0),
             ticket_medio_sum: acc.ticket_medio_sum + (Number(d.ticket_medio) || 0),
             count: acc.count + 1
-          }), { total_alunos_ativos: 0, total_alunos_pagantes: 0, novas_matriculas: 0, evasoes: 0, ticket_medio_sum: 0, count: 0 });
+          }), { total_alunos_ativos_sum: 0, total_alunos_pagantes_sum: 0, novas_matriculas: 0, evasoes: 0, ticket_medio_sum: 0, count: 0 });
+
+          // Calcular número de meses únicos para média correta
+          const mesesUnicos = new Set(gestaoData.map((d: any) => `${d.ano}-${d.mes}`)).size || 1;
 
           setDadosGestao({
-            alunos_ativos: consolidado.total_alunos_pagantes,
+            // Alunos: usar MÉDIA (snapshot mensal)
+            alunos_ativos: mesesUnicos > 0 ? Math.round(consolidado.total_alunos_pagantes_sum / mesesUnicos) : 0,
+            // Matrículas/Evasões: usar SOMA (eventos acumulam)
             matriculas_mes: consolidado.novas_matriculas,
             evasoes_mes: consolidado.evasoes,
+            // Ticket: usar MÉDIA
             ticket_medio: consolidado.count > 0 ? consolidado.ticket_medio_sum / consolidado.count : 0
           });
         } else {
@@ -218,12 +231,13 @@ export function DashboardPage() {
         let comercialData: any[] = [];
         
         if (isHistorico) {
-          // Período histórico: usar vw_kpis_comercial_historico
+          // Período histórico: usar vw_kpis_comercial_historico com range de meses
           let comercialQuery = supabase
             .from('vw_kpis_comercial_historico')
             .select('*')
             .eq('ano', ano)
-            .eq('mes', mes);
+            .gte('mes', mes)
+            .lte('mes', mesFim);
 
           if (unidade !== 'todos') {
             comercialQuery = comercialQuery.eq('unidade_id', unidade);
@@ -410,7 +424,7 @@ export function DashboardPage() {
     }
 
     fetchDados();
-  }, [ano, mes, mesFim, unidade]);
+  }, [ano, mesInicio, mesFim, unidade]);
 
   // Calcular totais consolidados
   const totais = dados.reduce(

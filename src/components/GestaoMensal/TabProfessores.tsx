@@ -201,16 +201,10 @@ export function TabProfessores({ ano, mes, unidade }: TabProfessoresProps) {
           variant="emerald"
         />
         <KPICard
-          icon={Percent}
-          label="Renovação Média"
+          icon={TrendingUp}
+          label="Taxa Renovação Média"
           value={`${totais.taxaRenovacaoMedia.toFixed(1)}%`}
-          variant="amber"
-        />
-        <KPICard
-          icon={Star}
-          label="NPS Geral"
-          value={totais.npsGeral > 0 ? totais.npsGeral.toFixed(1) : '—'}
-          variant="violet"
+          variant="emerald"
         />
         <KPICard
           icon={Users}

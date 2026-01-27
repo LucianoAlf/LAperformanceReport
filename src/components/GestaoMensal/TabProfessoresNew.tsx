@@ -117,7 +117,8 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
         const currentDate = new Date();
         const currentYear = currentDate.getFullYear();
         const currentMonth = currentDate.getMonth() + 1;
-        const isCurrentPeriod = ano === currentYear && mesInicio <= currentMonth && mesFinal >= currentMonth;
+        // Período atual = ano atual E é apenas o mês atual (não range)
+        const isCurrentPeriod = ano === currentYear && mesInicio === currentMonth && mesFinal === currentMonth;
         
         // Usar view mensal para período atual, histórica para passado
         const viewName = isCurrentPeriod ? 'vw_kpis_professor_mensal' : 'vw_kpis_professor_historico';
@@ -759,14 +760,7 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
       {/* Sub-aba: Qualidade */}
       {activeSubTab === 'qualidade' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <KPICard
-              icon={Star}
-              label="NPS Médio"
-              value={dados.nps_medio.toFixed(1)}
-              subvalue="Nota média dos professores"
-              variant="amber"
-            />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <KPICard
               icon={Clock}
               label="Presença Média"
@@ -784,20 +778,6 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {dados.ranking_nps.length > 0 ? (
-              <RankingTableCollapsible
-                data={dados.ranking_nps}
-                title="Ranking NPS"
-                valorLabel="Nota"
-                topCount={3}
-                variant="gold"
-              />
-            ) : (
-              <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 text-center">
-                <p className="text-slate-400">Dados de NPS não disponíveis</p>
-                <p className="text-sm text-slate-500 mt-2">Configure pesquisas de NPS para visualizar este ranking</p>
-              </div>
-            )}
 
             {dados.professores.some(p => p.media_alunos_turma > 0) ? (
               <RankingTableCollapsible

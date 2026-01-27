@@ -1036,20 +1036,19 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
               const acoesConcluidas = meta.acoes.filter(a => a.status === 'concluida');
               const acoesPendentes = meta.acoes.filter(a => a.status === 'pendente');
 
-              const getTipoMetaLabel = (tipo: string) => {
+              const formatarTipo = (tipo: string) => {
                 switch (tipo) {
                   case 'media_turma': return 'Média de turma';
                   case 'retencao': return 'Retenção';
                   case 'conversao': return 'Conversão';
-                  case 'nps': return 'NPS';
-                  case 'presenca': return 'Presença';
+                  case 'presenca': return 'Taxa de Presença';
                   default: return tipo;
                 }
               };
 
               const formatarValor = (valor: number | null, tipo: string) => {
                 if (valor === null) return '-';
-                if (tipo === 'media_turma' || tipo === 'nps') return valor.toFixed(1);
+                if (tipo === 'media_turma') return valor.toFixed(1);
                 return `${valor.toFixed(0)}%`;
               };
 
@@ -1063,7 +1062,7 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
                         <span className="text-white font-semibold">{meta.professor_nome}</span>
                       </div>
                       <p className="text-slate-300 text-sm">
-                        Meta: {getTipoMetaLabel(meta.tipo)} {formatarValor(meta.valor_atual, meta.tipo)} → {formatarValor(meta.valor_meta, meta.tipo)}
+                        Meta: {formatarTipo(meta.tipo)} {formatarValor(meta.valor_atual, meta.tipo)} → {formatarValor(meta.valor_meta, meta.tipo)}
                       </p>
                     </div>
                     {diasRestantes !== null && (

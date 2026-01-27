@@ -101,18 +101,65 @@ export function TabPerformanceProfessores({ unidadeAtual }: Props) {
       const { data: professoresData, error: profError } = await query;
       if (profError) throw profError;
 
-      // Buscar KPIs reais da view vw_kpis_professor_mensal (filtrado por unidade se selecionada)
-      let kpisQuery = supabase
-        .from('vw_kpis_professor_mensal')
-        .select('*')
-        .eq('ano', anoFiltro)
-        .eq('mes', mesFiltro);
-      
-      if (unidadeAtual !== 'todos') {
-        kpisQuery = kpisQuery.eq('unidade_id', unidadeAtual);
+      // Verificar se é período atual ou histórico
+      const hoje = new Date();
+      const anoAtual = hoje.getFullYear();
+      const mesAtual = hoje.getMonth() + 1;
+      const isPeriodoAtual = anoFiltro === anoAtual && mesFiltro === mesAtual;
+
+      let kpisData: any[] = [];
+
+      if (isPeriodoAtual) {
+        // PERÍODO ATUAL: usar view em tempo real
+        let kpisQuery = supabase
+          .from('vw_kpis_professor_mensal')
+          .select('*');
+        
+        if (unidadeAtual !== 'todos') {
+          kpisQuery = kpisQuery.eq('unidade_id', unidadeAtual);
+        }
+        
+        const { data } = await kpisQuery;
+        kpisData = data || [];
+      } else {
+        // PERÍODO HISTÓRICO: usar experimentais_professor_mensal + dados calculados
+        let historicoQuery = supabase
+          .from('experimentais_professor_mensal')
+          .select('*')
+          .eq('ano', anoFiltro)
+          .eq('mes', mesFiltro);
+
+        if (unidadeAtual !== 'todos') {
+          historicoQuery = historicoQuery.eq('unidade_id', unidadeAtual);
+        }
+
+        const { data: historicoData } = await historicoQuery;
+        
+        if (historicoData && historicoData.length > 0) {
+          // Transformar dados históricos para o formato esperado
+          kpisData = historicoData.map((d: any) => ({
+            professor_id: d.professor_id,
+            unidade_id: d.unidade_id,
+            ano: d.ano,
+            mes: d.mes,
+            experimentais: d.experimentais || 0,
+            matriculas: d.matriculas || 0,
+            taxa_conversao: d.experimentais > 0 ? ((d.matriculas || 0) / d.experimentais) * 100 : 0,
+            // Campos que não temos no histórico - usar valores padrão
+            carteira_alunos: 0,
+            ticket_medio: 0,
+            media_presenca: 0,
+            taxa_faltas: 0,
+            mrr_carteira: 0,
+            media_alunos_turma: 0,
+            renovacoes: 0,
+            nao_renovacoes: 0,
+            taxa_renovacao: 0,
+            evasoes: 0,
+            mrr_perdido: 0,
+          }));
+        }
       }
-      
-      const { data: kpisData } = await kpisQuery;
 
       // Buscar KPIs históricos para calcular tendências (filtrado por unidade se selecionada)
       let historicoQuery = supabase

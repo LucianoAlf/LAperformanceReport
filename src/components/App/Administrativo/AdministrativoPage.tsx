@@ -190,18 +190,54 @@ export function AdministrativoPage() {
         .select('id, nome, sigla')
         .order('nome');
 
-      // Carregar KPIs da view de gestão
-      let kpisQuery = supabase
-        .from('vw_kpis_gestao_mensal')
-        .select('*')
-        .eq('ano', ano)
-        .eq('mes', mes);
+      // Verificar se é período atual ou histórico
+      const hoje = new Date();
+      const anoAtual = hoje.getFullYear();
+      const mesAtual = hoje.getMonth() + 1;
+      const isPeriodoAtual = ano === anoAtual && mes === mesAtual;
 
-      if (unidade !== 'todos') {
-        kpisQuery = kpisQuery.eq('unidade_id', unidade);
+      let kpisData: any[] = [];
+
+      if (isPeriodoAtual) {
+        // PERÍODO ATUAL: usar view em tempo real
+        let kpisQuery = supabase
+          .from('vw_kpis_gestao_mensal')
+          .select('*');
+
+        if (unidade !== 'todos') {
+          kpisQuery = kpisQuery.eq('unidade_id', unidade);
+        }
+
+        const { data } = await kpisQuery;
+        kpisData = data || [];
+      } else {
+        // PERÍODO HISTÓRICO: usar dados_mensais
+        let historicoQuery = supabase
+          .from('dados_mensais')
+          .select('*')
+          .eq('ano', ano)
+          .eq('mes', mes);
+
+        if (unidade !== 'todos') {
+          historicoQuery = historicoQuery.eq('unidade_id', unidade);
+        }
+
+        const { data } = await historicoQuery;
+        if (data && data.length > 0) {
+          // Transformar dados históricos para o formato esperado
+          kpisData = data.map((d: any) => ({
+            unidade_id: d.unidade_id,
+            total_alunos_ativos: d.alunos_pagantes || 0,
+            total_alunos_pagantes: d.alunos_pagantes || 0,
+            total_bolsistas_integrais: 0,
+            total_bolsistas_parciais: 0,
+            ticket_medio: Number(d.ticket_medio) || 0,
+            faturamento_previsto: Number(d.faturamento_estimado) || 0,
+            churn_rate: Number(d.churn_rate) || 0,
+            tempo_permanencia_medio: Number(d.tempo_permanencia) || 0,
+          }));
+        }
       }
-
-      const { data: kpisData } = await kpisQuery;
 
       // Buscar matrículas ativas, banda e 2º curso do banco ANTES de consolidar KPIs
       let matriculasQuery = supabase

@@ -188,19 +188,13 @@ export function ModalDetalhesProfessor({
           )}
 
           {/* Métricas de Performance (se disponíveis) */}
-          {(professor.nps_medio !== null || professor.media_alunos_turma !== null) && (
+          {professor.media_alunos_turma !== null && (
             <div>
               <div className="flex items-center gap-2 text-slate-400 text-sm mb-2">
                 <TrendingUp className="w-4 h-4" />
                 Métricas de Performance
               </div>
               <div className="grid grid-cols-2 gap-4">
-                {professor.nps_medio !== null && (
-                  <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
-                    <div className="text-xs text-slate-400">NPS Médio</div>
-                    <div className="text-lg font-semibold text-white">{professor.nps_medio}</div>
-                  </div>
-                )}
                 {professor.media_alunos_turma !== null && (
                   <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700/50">
                     <div className="text-xs text-slate-400">Média Alunos/Turma</div>

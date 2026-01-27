@@ -197,15 +197,17 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             }));
 
             // Dados de retenção do histórico
+            // NOTA: tabelas evasoes_v2 e renovacoes estão vazias no banco
+            // Usamos os dados disponíveis em dados_mensais
             retencaoData = historicoData.map((d: any) => ({
               unidade_id: d.unidade_id,
               total_evasoes: d.evasoes || 0,
-              evasoes_interrompidas: 0,
-              avisos_previos: 0,
-              mrr_perdido: 0,
-              renovacoes_realizadas: 0,
-              nao_renovacoes: 0,
-              renovacoes_pendentes: 0,
+              evasoes_interrompidas: d.evasoes || 0, // Usar total de evasões como proxy
+              avisos_previos: 0, // Não disponível no histórico
+              mrr_perdido: 0, // Não disponível no histórico
+              renovacoes_realizadas: 0, // Não disponível no histórico
+              nao_renovacoes: 0, // Não disponível no histórico
+              renovacoes_pendentes: 0, // Não disponível no histórico
               taxa_renovacao: Number(d.taxa_renovacao) || 0,
             }));
           }
@@ -311,32 +313,41 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
         }
 
         // Consolidar dados
+        // IMPORTANTE: Para períodos múltiplos (Trim/Sem/Ano):
+        // - Alunos/Bolsistas/Banda: usar MÉDIA (snapshot, não acumula)
+        // - Matrículas/Evasões: usar SOMA (eventos acumulam)
+        // - Taxas/Percentuais: usar MÉDIA
+        // - Faturamento/MRR: usar SOMA (acumula no período)
         if (gestaoData && gestaoData.length > 0) {
           const g = gestaoData.reduce((acc, item) => ({
-            total_alunos_ativos: acc.total_alunos_ativos + (item.total_alunos_ativos || 0),
-            total_alunos_pagantes: acc.total_alunos_pagantes + (item.total_alunos_pagantes || 0),
-            total_bolsistas_integrais: acc.total_bolsistas_integrais + (item.total_bolsistas_integrais || 0),
-            total_bolsistas_parciais: acc.total_bolsistas_parciais + (item.total_bolsistas_parciais || 0),
-            total_banda: acc.total_banda + (item.total_banda || 0),
-            ticket_medio: acc.ticket_medio + (Number(item.ticket_medio) || 0),
-            mrr: acc.mrr + (Number(item.mrr) || 0),
-            arr: acc.arr + (Number(item.arr) || 0),
-            tempo_permanencia_medio: acc.tempo_permanencia_medio + (Number(item.tempo_permanencia_medio) || 0),
-            ltv_medio: acc.ltv_medio + (Number(item.ltv_medio) || 0),
-            inadimplencia_pct: acc.inadimplencia_pct + (Number(item.inadimplencia_pct) || 0),
+            // SOMA para acumular
+            total_alunos_ativos_sum: acc.total_alunos_ativos_sum + (item.total_alunos_ativos || 0),
+            total_alunos_pagantes_sum: acc.total_alunos_pagantes_sum + (item.total_alunos_pagantes || 0),
+            total_bolsistas_integrais_sum: acc.total_bolsistas_integrais_sum + (item.total_bolsistas_integrais || 0),
+            total_bolsistas_parciais_sum: acc.total_bolsistas_parciais_sum + (item.total_bolsistas_parciais || 0),
+            total_banda_sum: acc.total_banda_sum + (item.total_banda || 0),
+            ticket_medio_sum: acc.ticket_medio_sum + (Number(item.ticket_medio) || 0),
+            mrr_sum: acc.mrr_sum + (Number(item.mrr) || 0),
+            arr_sum: acc.arr_sum + (Number(item.arr) || 0),
+            tempo_permanencia_medio_sum: acc.tempo_permanencia_medio_sum + (Number(item.tempo_permanencia_medio) || 0),
+            ltv_medio_sum: acc.ltv_medio_sum + (Number(item.ltv_medio) || 0),
+            inadimplencia_pct_sum: acc.inadimplencia_pct_sum + (Number(item.inadimplencia_pct) || 0),
             faturamento_previsto: acc.faturamento_previsto + (Number(item.faturamento_previsto) || 0),
             faturamento_realizado: acc.faturamento_realizado + (Number(item.faturamento_realizado) || 0),
-            churn_rate: acc.churn_rate + (Number(item.churn_rate) || 0),
+            churn_rate_sum: acc.churn_rate_sum + (Number(item.churn_rate) || 0),
             total_evasoes: acc.total_evasoes + (item.total_evasoes || 0),
             novas_matriculas: acc.novas_matriculas + (item.novas_matriculas || 0),
             count: acc.count + 1,
           }), {
-            total_alunos_ativos: 0, total_alunos_pagantes: 0, total_bolsistas_integrais: 0,
-            total_bolsistas_parciais: 0, total_banda: 0, ticket_medio: 0, mrr: 0, arr: 0,
-            tempo_permanencia_medio: 0, ltv_medio: 0, inadimplencia_pct: 0,
-            faturamento_previsto: 0, faturamento_realizado: 0, churn_rate: 0, total_evasoes: 0, 
+            total_alunos_ativos_sum: 0, total_alunos_pagantes_sum: 0, total_bolsistas_integrais_sum: 0,
+            total_bolsistas_parciais_sum: 0, total_banda_sum: 0, ticket_medio_sum: 0, mrr_sum: 0, arr_sum: 0,
+            tempo_permanencia_medio_sum: 0, ltv_medio_sum: 0, inadimplencia_pct_sum: 0,
+            faturamento_previsto: 0, faturamento_realizado: 0, churn_rate_sum: 0, total_evasoes: 0, 
             novas_matriculas: 0, count: 0
           });
+          
+          // Calcular número de meses únicos no período (para média correta)
+          const mesesUnicos = new Set(gestaoData.map((d: any) => `${d.ano}-${d.mes}`)).size || 1;
 
           const r = retencaoData?.reduce((acc, item) => ({
             total_evasoes: acc.total_evasoes + (item.total_evasoes || 0),
@@ -459,13 +470,21 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             }
           });
 
+          // Calcular médias para campos de snapshot (alunos, taxas)
+          const mediaAlunos = mesesUnicos > 0 ? Math.round(g.total_alunos_ativos_sum / mesesUnicos) : 0;
+          const mediaPagantes = mesesUnicos > 0 ? Math.round(g.total_alunos_pagantes_sum / mesesUnicos) : 0;
+          const mediaBolsistasIntegrais = mesesUnicos > 0 ? Math.round(g.total_bolsistas_integrais_sum / mesesUnicos) : 0;
+          const mediaBolsistasParciais = mesesUnicos > 0 ? Math.round(g.total_bolsistas_parciais_sum / mesesUnicos) : 0;
+          const mediaBanda = mesesUnicos > 0 ? Math.round(g.total_banda_sum / mesesUnicos) : 0;
+
           setDados({
-            // Alunos
-            total_alunos_ativos: g.total_alunos_ativos,
-            total_alunos_pagantes: g.total_alunos_pagantes,
-            total_bolsistas_integrais: g.total_bolsistas_integrais,
-            total_bolsistas_parciais: g.total_bolsistas_parciais,
-            total_banda: g.total_banda,
+            // Alunos - usar MÉDIA do período (snapshot mensal, não acumula)
+            total_alunos_ativos: mediaAlunos,
+            total_alunos_pagantes: mediaPagantes,
+            total_bolsistas_integrais: mediaBolsistasIntegrais,
+            total_bolsistas_parciais: mediaBolsistasParciais,
+            total_banda: mediaBanda,
+            // Matrículas/Evasões - usar SOMA (eventos acumulam no período)
             novas_matriculas: novasMatriculas,
             evasoes: evasoes,
             saldo_liquido: novasMatriculas - evasoes,
@@ -476,30 +495,30 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               { name: 'LA Music School (12+)', value: totalLaAdultos },
             ],
             
-            // Financeiro
-            ticket_medio: g.count > 0 ? g.ticket_medio / g.count : 0,
-            mrr: g.mrr,
-            arr: g.arr,
-            faturamento_previsto: g.faturamento_previsto,
-            faturamento_realizado: g.faturamento_realizado,
+            // Financeiro - ticket/taxas = MÉDIA, faturamento = SOMA
+            ticket_medio: g.count > 0 ? g.ticket_medio_sum / g.count : 0,
+            mrr: mesesUnicos > 0 ? g.mrr_sum / mesesUnicos : 0, // MRR médio do período
+            arr: mesesUnicos > 0 ? (g.mrr_sum / mesesUnicos) * 12 : 0, // ARR baseado no MRR médio
+            faturamento_previsto: g.faturamento_previsto, // SOMA do período
+            faturamento_realizado: g.faturamento_realizado, // SOMA do período
             inadimplencia: g.faturamento_previsto - g.faturamento_realizado,
-            inadimplencia_pct: g.count > 0 ? g.inadimplencia_pct / g.count : 0,
-            ltv_medio: g.count > 0 ? g.ltv_medio / g.count : 0,
+            inadimplencia_pct: g.count > 0 ? g.inadimplencia_pct_sum / g.count : 0,
+            ltv_medio: g.count > 0 ? g.ltv_medio_sum / g.count : 0,
             ticket_medio_passaporte: 0, // TODO: buscar de outra fonte
             reajuste_pct: 0, // TODO: buscar de outra fonte
             
-            // Retenção
-            churn_rate: g.count > 0 ? g.churn_rate / g.count : 0,
+            // Retenção - taxas = MÉDIA
+            churn_rate: g.count > 0 ? g.churn_rate_sum / g.count : 0,
             renovacoes: r.renovacoes_realizadas,
             nao_renovacoes: r.nao_renovacoes,
             renovacoes_pct: r.count > 0 ? r.taxa_renovacao / r.count : 0,
             cancelamentos: r.evasoes_interrompidas,
-            cancelamento_pct: g.total_alunos_ativos > 0 ? (r.evasoes_interrompidas / g.total_alunos_ativos) * 100 : 0,
+            cancelamento_pct: mediaAlunos > 0 ? (r.evasoes_interrompidas / mediaAlunos) * 100 : 0,
             aviso_previo: r.avisos_previos,
             mrr_perdido: r.mrr_perdido,
             
-            // Indicadores
-            tempo_permanencia: g.count > 0 ? g.tempo_permanencia_medio / g.count : 0,
+            // Indicadores - usar MÉDIA
+            tempo_permanencia: g.count > 0 ? g.tempo_permanencia_medio_sum / g.count : 0,
             nps_evasoes: 0, // TODO: buscar de outra fonte
             renovacoes_pendentes: r.renovacoes_pendentes,
             total_evasoes: r.total_evasoes,
