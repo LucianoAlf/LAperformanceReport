@@ -171,6 +171,24 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           const { data: historicoData, error: historicoError } = await historicoQuery;
           if (historicoError) throw historicoError;
 
+          // Buscar dados de evasões detalhados da tabela evasoes
+          const startDate = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
+          const ultimoDia = new Date(ano, mesFinal, 0).getDate();
+          const endDate = `${ano}-${String(mesFinal).padStart(2, '0')}-${ultimoDia}`;
+
+          let evasoesQuery = supabase
+            .from('evasoes')
+            .select('tipo, parcela, competencia')
+            .gte('competencia', startDate)
+            .lte('competencia', endDate);
+
+          const { data: evasoesHistorico } = await evasoesQuery;
+
+          // Consolidar dados de evasões por tipo
+          const cancelamentos = evasoesHistorico?.filter(e => e.tipo === 'Interrompido').length || 0;
+          const naoRenovacoes = evasoesHistorico?.filter(e => e.tipo === 'Não Renovação').length || 0;
+          const mrrPerdidoTotal = evasoesHistorico?.reduce((acc, e) => acc + (Number(e.parcela) || 0), 0) || 0;
+
           // Transformar dados históricos para o formato esperado
           if (historicoData && historicoData.length > 0) {
             gestaoData = historicoData.map((d: any) => ({
@@ -194,22 +212,22 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               churn_rate: Number(d.churn_rate) || 0,
               total_evasoes: d.evasoes || 0,
               novas_matriculas: d.novas_matriculas || 0,
+              reajuste_pct: Number(d.reajuste_parcelas) || 0,
             }));
 
             // Dados de retenção do histórico
-            // NOTA: tabelas evasoes_v2 e renovacoes estão vazias no banco
-            // Usamos os dados disponíveis em dados_mensais
-            retencaoData = historicoData.map((d: any) => ({
-              unidade_id: d.unidade_id,
-              total_evasoes: d.evasoes || 0,
-              evasoes_interrompidas: d.evasoes || 0, // Usar total de evasões como proxy
+            // Usar dados da tabela evasoes que tem tipos detalhados
+            retencaoData = [{
+              unidade_id: unidade !== 'todos' ? unidade : null,
+              total_evasoes: (cancelamentos + naoRenovacoes) || 0,
+              evasoes_interrompidas: cancelamentos,
               avisos_previos: 0, // Não disponível no histórico
-              mrr_perdido: 0, // Não disponível no histórico
-              renovacoes_realizadas: 0, // Não disponível no histórico
-              nao_renovacoes: 0, // Não disponível no histórico
+              mrr_perdido: mrrPerdidoTotal,
+              renovacoes_realizadas: 0, // Não disponível - tabela renovacoes vazia
+              nao_renovacoes: naoRenovacoes,
               renovacoes_pendentes: 0, // Não disponível no histórico
-              taxa_renovacao: Number(d.taxa_renovacao) || 0,
-            }));
+              taxa_renovacao: historicoData.length > 0 ? historicoData.reduce((acc, d) => acc + (Number(d.taxa_renovacao) || 0), 0) / historicoData.length : 0,
+            }];
           }
         }
 
@@ -337,13 +355,14 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             churn_rate_sum: acc.churn_rate_sum + (Number(item.churn_rate) || 0),
             total_evasoes: acc.total_evasoes + (item.total_evasoes || 0),
             novas_matriculas: acc.novas_matriculas + (item.novas_matriculas || 0),
+            reajuste_pct_sum: acc.reajuste_pct_sum + (Number(item.reajuste_pct) || 0),
             count: acc.count + 1,
           }), {
             total_alunos_ativos_sum: 0, total_alunos_pagantes_sum: 0, total_bolsistas_integrais_sum: 0,
             total_bolsistas_parciais_sum: 0, total_banda_sum: 0, ticket_medio_sum: 0, mrr_sum: 0, arr_sum: 0,
             tempo_permanencia_medio_sum: 0, ltv_medio_sum: 0, inadimplencia_pct_sum: 0,
             faturamento_previsto: 0, faturamento_realizado: 0, churn_rate_sum: 0, total_evasoes: 0, 
-            novas_matriculas: 0, count: 0
+            novas_matriculas: 0, reajuste_pct_sum: 0, count: 0
           });
           
           // Calcular número de meses únicos no período (para média correta)
@@ -505,7 +524,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             inadimplencia_pct: g.count > 0 ? g.inadimplencia_pct_sum / g.count : 0,
             ltv_medio: g.count > 0 ? g.ltv_medio_sum / g.count : 0,
             ticket_medio_passaporte: 0, // TODO: buscar de outra fonte
-            reajuste_pct: 0, // TODO: buscar de outra fonte
+            reajuste_pct: g.count > 0 ? g.reajuste_pct_sum / g.count : 0,
             
             // Retenção - taxas = MÉDIA
             churn_rate: g.count > 0 ? g.churn_rate_sum / g.count : 0,
