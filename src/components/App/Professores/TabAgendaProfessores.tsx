@@ -1,12 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, isToday, isTomorrow, isPast, isSameWeek } from 'date-fns';
+import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, isToday, isTomorrow, isPast, isSameWeek, startOfMonth, endOfMonth, addMonths, subMonths, isSameMonth, getDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import {
   Calendar, ChevronLeft, ChevronRight, Plus, CheckCircle2, Clock,
   AlertTriangle, Users, BookOpen, Target, MessageSquare, Loader2,
-  LayoutList, CalendarDays, Columns, RefreshCw
+  LayoutList, CalendarDays, Columns, RefreshCw, Trash2, Edit2
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -27,6 +27,7 @@ interface Acao {
   local: string | null;
   status: string;
   meta_id: string | null;
+  responsavel: string | null;
 }
 
 interface Treinamento {
@@ -75,11 +76,20 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
   const [semanaAtual, setSemanaAtual] = useState(new Date());
   const [filtroTipo, setFiltroTipo] = useState('todos');
   const [filtroProfessor, setFiltroProfessor] = useState('todos');
+  const [filtroResponsavel, setFiltroResponsavel] = useState<'todos' | 'juliana' | 'quintela'>('todos');
   const [visualizacao, setVisualizacao] = useState<'lista' | 'calendario' | 'kanban'>('lista');
+  const [modoCalendario, setModoCalendario] = useState<'semana' | 'mes'>('semana');
 
-  const [modalAcao, setModalAcao] = useState<{ open: boolean; professorId: number | null }>({
+  const [modalAcao, setModalAcao] = useState<{ 
+    open: boolean; 
+    professorId: number | null; 
+    dataInicial?: Date; 
+    responsavelInicial?: string;
+    acaoParaEditar?: Acao | null;
+  }>({
     open: false,
-    professorId: null
+    professorId: null,
+    acaoParaEditar: null
   });
   const [mostrarTodosTreinamentos, setMostrarTodosTreinamentos] = useState(false);
   const [modalTreinamento, setModalTreinamento] = useState<{ open: boolean; slug: string }>({
@@ -233,6 +243,25 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
     }
   };
 
+  const handleExcluirAcao = async (acaoId: string) => {
+    if (!confirm('Tem certeza que deseja excluir esta ação?')) return;
+    
+    try {
+      const { error } = await supabase
+        .from('professor_acoes')
+        .delete()
+        .eq('id', acaoId);
+
+      if (error) throw error;
+
+      toast.success('Ação excluída!');
+      carregarDados();
+    } catch (error) {
+      console.error('Erro ao excluir ação:', error);
+      toast.error('Erro ao excluir ação');
+    }
+  };
+
   // Filtrar ações
   const acoesFiltradas = useMemo(() => {
     let resultado = [...acoes];
@@ -245,8 +274,40 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
       resultado = resultado.filter(a => a.professor_id === parseInt(filtroProfessor));
     }
 
+    if (filtroResponsavel !== 'todos') {
+      resultado = resultado.filter(a => a.responsavel === filtroResponsavel);
+    }
+
     return resultado;
-  }, [acoes, filtroTipo, filtroProfessor]);
+  }, [acoes, filtroTipo, filtroProfessor, filtroResponsavel]);
+
+  // Função para obter cor do responsável
+  const getResponsavelColor = (responsavel: string | null) => {
+    if (responsavel === 'juliana') return 'border-l-purple-500 bg-purple-500/10';
+    if (responsavel === 'quintela') return 'border-l-emerald-500 bg-emerald-500/10';
+    if (responsavel === 'ambos') return 'border-l-cyan-500 bg-gradient-to-r from-purple-500/10 to-emerald-500/10';
+    return 'border-l-slate-500 bg-slate-700/50';
+  };
+
+  // Função para abrir modal com data específica
+  const abrirModalNovaAcao = (data?: Date) => {
+    setModalAcao({ 
+      open: true, 
+      professorId: null, 
+      dataInicial: data,
+      responsavelInicial: filtroResponsavel !== 'todos' ? filtroResponsavel : undefined,
+      acaoParaEditar: null
+    });
+  };
+
+  // Função para abrir modal de edição
+  const abrirModalEditarAcao = (acao: Acao) => {
+    setModalAcao({
+      open: true,
+      professorId: acao.professor_id,
+      acaoParaEditar: acao
+    });
+  };
 
   // Agrupar ações por período
   const acoesAgrupadas = useMemo(() => {
@@ -375,6 +436,56 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
         </div>
       </div>
 
+      {/* Filtro de Coordenadores */}
+      <div className="bg-slate-800/50 rounded-2xl p-4 border border-slate-700/50">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-slate-400">Agenda de:</span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setFiltroResponsavel('juliana')}
+                className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition ${
+                  filtroResponsavel === 'juliana'
+                    ? 'bg-purple-500/20 text-purple-300 border-2 border-purple-500'
+                    : 'bg-slate-700/50 text-slate-400 border-2 border-transparent hover:border-purple-500/50'
+                }`}
+              >
+                <div className="w-3 h-3 rounded-full bg-purple-500" />
+                Juliana
+              </button>
+              <button
+                onClick={() => setFiltroResponsavel('quintela')}
+                className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition ${
+                  filtroResponsavel === 'quintela'
+                    ? 'bg-emerald-500/20 text-emerald-300 border-2 border-emerald-500'
+                    : 'bg-slate-700/50 text-slate-400 border-2 border-transparent hover:border-emerald-500/50'
+                }`}
+              >
+                <div className="w-3 h-3 rounded-full bg-emerald-500" />
+                Quintela
+              </button>
+              <button
+                onClick={() => setFiltroResponsavel('todos')}
+                className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition ${
+                  filtroResponsavel === 'todos'
+                    ? 'bg-blue-500/20 text-blue-300 border-2 border-blue-500'
+                    : 'bg-slate-700/50 text-slate-400 border-2 border-transparent hover:border-blue-500/50'
+                }`}
+              >
+                Ambos
+              </button>
+            </div>
+          </div>
+          <Button
+            onClick={() => abrirModalNovaAcao()}
+            className="bg-gradient-to-r from-blue-500 to-purple-500"
+          >
+            <Plus className="w-4 h-4 mr-1" />
+            Nova Ação
+          </Button>
+        </div>
+      </div>
+
       {/* Filtros e Visualização */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -425,13 +536,6 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
               ))}
             </SelectContent>
           </Select>
-          <Button
-            onClick={() => setModalAcao({ open: true, professorId: null })}
-            className="bg-gradient-to-r from-blue-500 to-purple-500"
-          >
-            <Plus className="w-4 h-4 mr-1" />
-            Nova Ação
-          </Button>
         </div>
       </div>
 
@@ -457,6 +561,7 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
                   getTipoBadgeColor={getTipoBadgeColor}
                   onConcluir={handleConcluirAcao}
                   onReagendar={handleReagendarAcao}
+                  onEditar={abrirModalEditarAcao}
                 />
               ))}
             </div>
@@ -484,6 +589,7 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
                   getTipoBadgeColor={getTipoBadgeColor}
                   onConcluir={handleConcluirAcao}
                   onReagendar={handleReagendarAcao}
+                  onEditar={abrirModalEditarAcao}
                 />
               ))}
             </div>
@@ -511,6 +617,7 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
                   getTipoBadgeColor={getTipoBadgeColor}
                   onConcluir={handleConcluirAcao}
                   onReagendar={handleReagendarAcao}
+                  onEditar={abrirModalEditarAcao}
                 />
               ))}
             </div>
@@ -532,6 +639,7 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
                   getTipoBadgeColor={getTipoBadgeColor}
                   onConcluir={handleConcluirAcao}
                   onReagendar={handleReagendarAcao}
+                  onEditar={abrirModalEditarAcao}
                 />
               ))}
             </div>
@@ -541,55 +649,274 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
       )}
 
       {/* Visualização Calendário */}
-      {visualizacao === 'calendario' && (
-        <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 p-6">
-          <div className="grid grid-cols-7 gap-2 mb-4">
-            {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((dia) => (
-              <div key={dia} className="text-center text-xs font-medium text-slate-400 py-2">
-                {dia}
+      {visualizacao === 'calendario' && (() => {
+        const inicioSemana = startOfWeek(semanaAtual, { weekStartsOn: 0 });
+        const diasSemana = Array.from({ length: 7 }).map((_, i) => {
+          const dia = new Date(inicioSemana);
+          dia.setDate(dia.getDate() + i);
+          return dia;
+        });
+
+        // Para visualização mensal
+        const inicioMes = startOfMonth(semanaAtual);
+        const fimMes = endOfMonth(semanaAtual);
+        const primeiroDiaSemana = getDay(inicioMes); // 0 = domingo
+        const totalDiasMes = fimMes.getDate();
+        const diasCalendarioMes = Array.from({ length: 42 }).map((_, i) => {
+          const diaNumero = i - primeiroDiaSemana + 1;
+          if (diaNumero < 1 || diaNumero > totalDiasMes) return null;
+          const dia = new Date(inicioMes);
+          dia.setDate(diaNumero);
+          return dia;
+        });
+
+        return (
+          <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 overflow-hidden">
+            {/* Header com navegação e toggle */}
+            <div className="p-4 border-b border-slate-700/50 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => modoCalendario === 'semana' 
+                    ? setSemanaAtual(subWeeks(semanaAtual, 1))
+                    : setSemanaAtual(subMonths(semanaAtual, 1))
+                  }
+                  className="p-1.5 hover:bg-slate-700 rounded-lg transition"
+                >
+                  <ChevronLeft className="w-5 h-5 text-slate-400" />
+                </button>
+                <h3 className="text-lg font-semibold text-white min-w-[200px] text-center">
+                  {modoCalendario === 'semana' 
+                    ? `${format(inicioSemana, "d 'de' MMM", { locale: ptBR })} - ${format(diasSemana[6], "d 'de' MMM", { locale: ptBR })}`
+                    : format(semanaAtual, "MMMM 'de' yyyy", { locale: ptBR })
+                  }
+                </h3>
+                <button
+                  onClick={() => modoCalendario === 'semana'
+                    ? setSemanaAtual(addWeeks(semanaAtual, 1))
+                    : setSemanaAtual(addMonths(semanaAtual, 1))
+                  }
+                  className="p-1.5 hover:bg-slate-700 rounded-lg transition"
+                >
+                  <ChevronRight className="w-5 h-5 text-slate-400" />
+                </button>
+                <button
+                  onClick={() => setSemanaAtual(new Date())}
+                  className="ml-2 px-3 py-1 text-xs bg-slate-700 hover:bg-slate-600 rounded-lg text-slate-300 transition"
+                >
+                  Hoje
+                </button>
               </div>
-            ))}
-            {Array.from({ length: 35 }).map((_, i) => {
-              const dia = i - 2; // Ajuste para começar no dia correto
-              const isToday = dia === new Date().getDate();
-              const hasAcao = acoesFiltradas.some(a => 
-                new Date(a.data_agendada).getDate() === dia
-              );
               
-              return (
-                <div
-                  key={i}
-                  className={`aspect-square rounded-lg border flex flex-col items-center justify-center text-sm transition ${
-                    dia < 1 || dia > 31
-                      ? 'border-transparent text-slate-700'
-                      : isToday
-                      ? 'border-blue-500 bg-blue-500/10 text-blue-400 font-semibold'
-                      : hasAcao
-                      ? 'border-slate-600 bg-slate-800 text-white hover:bg-slate-700 cursor-pointer'
-                      : 'border-slate-700 text-slate-500 hover:bg-slate-800/50'
+              {/* Toggle Semana/Mês */}
+              <div className="flex bg-slate-700/50 rounded-lg p-1">
+                <button
+                  onClick={() => setModoCalendario('semana')}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${
+                    modoCalendario === 'semana' 
+                      ? 'bg-blue-500 text-white' 
+                      : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  {dia > 0 && dia <= 31 && (
-                    <>
-                      <span>{dia}</span>
-                      {hasAcao && (
-                        <div className="w-1 h-1 rounded-full bg-cyan-400 mt-1" />
-                      )}
-                    </>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-          {acoesFiltradas.length === 0 && (
-            <div className="text-center py-8 text-slate-500">
-              <CalendarDays className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p className="text-sm">Nenhuma ação agendada neste período</p>
-              <p className="text-xs mt-1">Clique em "Nova Ação" para começar</p>
+                  Semana
+                </button>
+                <button
+                  onClick={() => setModoCalendario('mes')}
+                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition ${
+                    modoCalendario === 'mes' 
+                      ? 'bg-blue-500 text-white' 
+                      : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  Mês
+                </button>
+              </div>
             </div>
-          )}
-        </div>
-      )}
+
+            {/* Cabeçalho dos dias da semana */}
+            <div className="grid grid-cols-7 border-b border-slate-700/50">
+              {['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'].map((dia) => (
+                <div key={dia} className="p-2 text-center text-xs font-medium text-slate-400 uppercase">
+                  {dia}
+                </div>
+              ))}
+            </div>
+
+            {/* VISUALIZAÇÃO SEMANAL */}
+            {modoCalendario === 'semana' && (
+              <>
+                {/* Header com números dos dias */}
+                <div className="grid grid-cols-7 border-b border-slate-700/50">
+                  {diasSemana.map((dia, i) => {
+                    const isDiaHoje = isToday(dia);
+                    const acoesNoDia = acoesFiltradas.filter(a => 
+                      format(new Date(a.data_agendada), 'yyyy-MM-dd') === format(dia, 'yyyy-MM-dd')
+                    );
+                    
+                    return (
+                      <div 
+                        key={i} 
+                        className={`p-3 text-center border-r border-slate-700/50 last:border-r-0 ${
+                          isDiaHoje ? 'bg-blue-500/10' : ''
+                        }`}
+                      >
+                        <div className={`text-2xl font-bold ${
+                          isDiaHoje ? 'text-blue-400' : 'text-white'
+                        }`}>
+                          {format(dia, 'd')}
+                        </div>
+                        {acoesNoDia.length > 0 && (
+                          <div className="text-xs text-cyan-400 mt-1">
+                            {acoesNoDia.length} ação{acoesNoDia.length > 1 ? 'ões' : ''}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Corpo com ações por dia */}
+                <div className="grid grid-cols-7 min-h-[350px]">
+                  {diasSemana.map((dia, i) => {
+                    const isDiaHoje = isToday(dia);
+                    const acoesNoDia = acoesFiltradas
+                      .filter(a => format(new Date(a.data_agendada), 'yyyy-MM-dd') === format(dia, 'yyyy-MM-dd'))
+                      .sort((a, b) => new Date(a.data_agendada).getTime() - new Date(b.data_agendada).getTime());
+                    
+                    return (
+                      <div 
+                        key={i} 
+                        className={`p-2 border-r border-slate-700/50 last:border-r-0 ${
+                          isDiaHoje ? 'bg-blue-500/5' : ''
+                        }`}
+                      >
+                        {acoesNoDia.length === 0 ? (
+                          <div className="h-full flex items-center justify-center">
+                            <span className="text-xs text-slate-600">-</span>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            {acoesNoDia.map(acao => (
+                              <div 
+                                key={acao.id}
+                                onClick={() => abrirModalEditarAcao(acao)}
+                                className={`p-2 rounded-lg border cursor-pointer hover:scale-[1.02] transition-all border-l-4 ${
+                                  acao.responsavel === 'juliana'
+                                    ? 'border-l-purple-500 bg-purple-500/10 border-purple-500/30'
+                                    : acao.responsavel === 'quintela'
+                                    ? 'border-l-emerald-500 bg-emerald-500/10 border-emerald-500/30'
+                                    : acao.responsavel === 'ambos'
+                                    ? 'border-l-cyan-500 bg-gradient-to-r from-purple-500/10 to-emerald-500/10 border-cyan-500/30'
+                                    : 'border-l-slate-500 bg-slate-700/50 border-slate-600/50'
+                                } hover:shadow-lg`}
+                              >
+                                <div className="flex items-center gap-1 mb-1">
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${getTipoBadgeColor(acao.tipo)}`}>
+                                    {acao.tipo}
+                                  </span>
+                                </div>
+                                <p className="text-xs font-medium text-white truncate">{acao.titulo}</p>
+                                <p className="text-[10px] text-slate-400 truncate">
+                                  {acao.professor_nome || 'Professor'}
+                                </p>
+                                <div className="flex items-center gap-1 mt-1 text-[10px] text-slate-500">
+                                  <Clock className="w-3 h-3" />
+                                  {format(new Date(acao.data_agendada), 'HH:mm')}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+
+            {/* VISUALIZAÇÃO MENSAL */}
+            {modoCalendario === 'mes' && (
+              <div className="grid grid-cols-7">
+                {diasCalendarioMes.map((dia, i) => {
+                  if (!dia) {
+                    return (
+                      <div key={i} className="min-h-[100px] p-2 border-r border-b border-slate-700/30 last:border-r-0 bg-slate-900/30" />
+                    );
+                  }
+                  
+                  const isDiaHoje = isToday(dia);
+                  const acoesNoDia = acoesFiltradas
+                    .filter(a => format(new Date(a.data_agendada), 'yyyy-MM-dd') === format(dia, 'yyyy-MM-dd'))
+                    .sort((a, b) => new Date(a.data_agendada).getTime() - new Date(b.data_agendada).getTime());
+                  
+                  return (
+                    <div 
+                      key={i} 
+                      onClick={() => abrirModalNovaAcao(dia)}
+                      className={`min-h-[100px] p-2 border-r border-b border-slate-700/30 last:border-r-0 cursor-pointer transition ${
+                        isDiaHoje ? 'bg-blue-500/10' : 'hover:bg-slate-800/70'
+                      }`}
+                    >
+                      <div className={`text-sm font-medium mb-1 flex items-center justify-between ${
+                        isDiaHoje ? 'text-blue-400' : 'text-slate-400'
+                      }`}>
+                        <span>{format(dia, 'd')}</span>
+                        <Plus className="w-3 h-3 opacity-0 group-hover:opacity-100 text-slate-500" />
+                      </div>
+                      <div className="space-y-1" onClick={(e) => e.stopPropagation()}>
+                        {acoesNoDia.slice(0, 3).map(acao => (
+                          <div 
+                            key={acao.id}
+                            onClick={() => abrirModalEditarAcao(acao)}
+                            className={`px-1.5 py-0.5 rounded text-[10px] truncate cursor-pointer border-l-2 hover:opacity-80 transition ${
+                              acao.responsavel === 'juliana'
+                                ? 'border-l-purple-500 bg-purple-500/20 text-purple-200'
+                                : acao.responsavel === 'quintela'
+                                ? 'border-l-emerald-500 bg-emerald-500/20 text-emerald-200'
+                                : acao.responsavel === 'ambos'
+                                ? 'border-l-cyan-500 bg-gradient-to-r from-purple-500/20 to-emerald-500/20 text-cyan-200'
+                                : 'border-l-slate-500 bg-slate-700 text-slate-300'
+                            }`}
+                            title={`Clique para editar: ${acao.titulo} - ${format(new Date(acao.data_agendada), 'HH:mm')} (${acao.responsavel === 'ambos' ? 'Juliana e Quintela' : acao.responsavel || 'Sem responsável'})`}
+                          >
+                            {format(new Date(acao.data_agendada), 'HH:mm')} {acao.titulo}
+                          </div>
+                        ))}
+                        {acoesNoDia.length > 3 && (
+                          <div className="text-[10px] text-cyan-400 px-1">
+                            +{acoesNoDia.length - 3} mais
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Legenda */}
+            <div className="p-3 border-t border-slate-700/50 flex items-center gap-4 text-xs text-slate-400">
+              <div className="flex items-center gap-1">
+                <div className="w-3 h-3 rounded bg-purple-500/20 border-l-2 border-l-purple-500" />
+                <span>Juliana</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-3 h-3 rounded bg-emerald-500/20 border-l-2 border-l-emerald-500" />
+                <span>Quintela</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <div className="w-3 h-3 rounded bg-gradient-to-r from-purple-500/20 to-emerald-500/20 border-l-2 border-l-cyan-500" />
+                <span>Ambos</span>
+              </div>
+              <div className="border-l border-slate-600 h-4 mx-2" />
+              <span className="text-slate-500">Clique em um dia para adicionar ação</span>
+              <div className="flex-1" />
+              <span className="text-slate-500">
+                {acoesFiltradas.length} ação{acoesFiltradas.length !== 1 ? 'ões' : ''} no período
+              </span>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Visualização Kanban */}
       {visualizacao === 'kanban' && (
@@ -612,15 +939,33 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
                 acoesFiltradas
                   .filter(a => a.status === 'pendente')
                   .map(acao => (
-                    <div key={acao.id} className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/30">
-                      <p className="text-sm font-medium text-white mb-1">{acao.titulo}</p>
-                      <p className="text-xs text-slate-400">{acao.professor_nome}</p>
+                    <div key={acao.id} className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/30 hover:border-slate-600 transition group">
+                      <div className="flex items-start justify-between">
+                        <p className="text-sm font-medium text-white mb-1">{acao.titulo}</p>
+                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
+                          <button 
+                            onClick={() => handleConcluirAcao(acao.id)}
+                            className="p-1 hover:bg-emerald-500/20 rounded text-emerald-400"
+                            title="Concluir"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                          </button>
+                          <button 
+                            onClick={() => handleExcluirAcao(acao.id)}
+                            className="p-1 hover:bg-red-500/20 rounded text-red-400"
+                            title="Excluir"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                      <p className="text-xs text-slate-400">{acao.professor_nome || 'Geral'}</p>
                       <div className="flex items-center gap-2 mt-2">
                         <span className={`text-xs px-2 py-0.5 rounded ${getTipoBadgeColor(acao.tipo)}`}>
                           {acao.tipo}
                         </span>
                         <span className="text-xs text-slate-500">
-                          {format(new Date(acao.data_agendada), 'dd/MM')}
+                          {format(new Date(acao.data_agendada), 'dd/MM HH:mm')}
                         </span>
                       </div>
                     </div>
@@ -844,14 +1189,23 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
         </div>
       </div>
 
-      {/* Modal Nova Ação */}
+      {/* Modal Nova Ação / Editar Ação */}
       <ModalNovaAcao
         open={modalAcao.open}
-        onClose={() => setModalAcao({ open: false, professorId: null })}
+        onClose={() => setModalAcao({ open: false, professorId: null, acaoParaEditar: null })}
         professorId={modalAcao.professorId}
+        dataInicial={modalAcao.dataInicial}
+        responsavelInicial={modalAcao.responsavelInicial}
+        acaoParaEditar={modalAcao.acaoParaEditar}
+        professores={professores}
         onSave={() => {
-          setModalAcao({ open: false, professorId: null });
-          toast.success('Ação agendada!');
+          setModalAcao({ open: false, professorId: null, acaoParaEditar: null });
+          toast.success(modalAcao.acaoParaEditar ? 'Ação atualizada!' : 'Ação agendada!');
+          carregarDados();
+        }}
+        onDelete={() => {
+          setModalAcao({ open: false, professorId: null, acaoParaEditar: null });
+          toast.success('Ação excluída!');
           carregarDados();
         }}
       />
@@ -875,7 +1229,8 @@ function AcaoItem({
   getTipoColor,
   getTipoBadgeColor,
   onConcluir,
-  onReagendar
+  onReagendar,
+  onEditar
 }: {
   acao: Acao;
   isAtrasado?: boolean;
@@ -883,12 +1238,31 @@ function AcaoItem({
   getTipoBadgeColor: (tipo: string) => string;
   onConcluir: (id: string) => void;
   onReagendar: (id: string) => void;
+  onEditar?: (acao: Acao) => void;
 }) {
   const dataAcao = new Date(acao.data_agendada);
 
+  // Cor baseada no responsável
+  const getResponsavelBorderColor = () => {
+    if (isAtrasado) return 'border-l-red-500';
+    if (acao.responsavel === 'juliana') return 'border-l-purple-500';
+    if (acao.responsavel === 'quintela') return 'border-l-emerald-500';
+    if (acao.responsavel === 'ambos') return 'border-l-cyan-500';
+    return 'border-l-slate-500';
+  };
+
+  const getResponsavelBgColor = () => {
+    if (acao.responsavel === 'juliana') return 'bg-purple-500/5';
+    if (acao.responsavel === 'quintela') return 'bg-emerald-500/5';
+    if (acao.responsavel === 'ambos') return 'bg-gradient-to-r from-purple-500/5 to-emerald-500/5';
+    return '';
+  };
+
   return (
-    <div className="px-4 py-3 hover:bg-slate-800/30 cursor-pointer flex items-center gap-4">
-      <div className={`w-1 h-12 ${isAtrasado ? 'bg-red-500' : getTipoColor(acao.tipo)} rounded-full`} />
+    <div 
+      onClick={() => onEditar?.(acao)}
+      className={`px-4 py-3 hover:bg-slate-700/30 cursor-pointer flex items-center gap-4 border-l-4 ${getResponsavelBorderColor()} ${getResponsavelBgColor()} transition-all hover:shadow-md`}
+    >
       <div className="flex-1">
         <div className="flex items-center gap-2 mb-1">
           <span className={`px-2 py-0.5 rounded text-xs ${getTipoBadgeColor(acao.tipo)}`}>
@@ -896,15 +1270,24 @@ function AcaoItem({
           </span>
           <span className="text-white font-medium">{acao.titulo}</span>
           {isAtrasado && (
-            <span className="text-red-400 text-xs">
+            <span className="text-red-400 text-xs bg-red-500/20 px-2 py-0.5 rounded">
               {Math.floor((Date.now() - dataAcao.getTime()) / (1000 * 60 * 60 * 24))} dias atrasado
             </span>
           )}
         </div>
         <div className="flex items-center gap-4 text-xs text-slate-400">
           <span>🕐 {format(dataAcao, "HH:mm")} - {format(new Date(dataAcao.getTime() + acao.duracao_minutos * 60000), "HH:mm")}</span>
-          <span>👤 {acao.professor_nome}</span>
+          <span>👤 {acao.professor_nome || 'Professor'}</span>
           {acao.local && <span>📍 {acao.local}</span>}
+          {acao.responsavel && (
+            <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+              acao.responsavel === 'juliana' ? 'bg-purple-500/20 text-purple-300' :
+              acao.responsavel === 'quintela' ? 'bg-emerald-500/20 text-emerald-300' :
+              acao.responsavel === 'ambos' ? 'bg-cyan-500/20 text-cyan-300' : ''
+            }`}>
+              {acao.responsavel === 'ambos' ? 'Juliana e Quintela' : acao.responsavel.charAt(0).toUpperCase() + acao.responsavel.slice(1)}
+            </span>
+          )}
         </div>
       </div>
       <div className="flex items-center gap-2">

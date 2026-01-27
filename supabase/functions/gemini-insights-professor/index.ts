@@ -4,7 +4,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-const GEMINI_MODEL = "gemini-3.0-flash-preview";
+const GEMINI_MODEL = "gemini-2.5-flash-preview-05-20";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -41,12 +41,6 @@ O modelo de negócio incentiva turmas maiores para otimização de salas e recei
 - Janela: 30 dias após aula experimental
 - Nota: Responsabilidade compartilhada entre professor e comercial
 
-### NPS (Net Promoter Score)
-- Meta ideal: ≥8.5
-- Regular: 7.0-8.5
-- Ruim: <7.0
-- Avaliação: Semestral e na saída do aluno
-
 ### Taxa de Presença
 - Meta ideal: ≥80%
 - Atenção: 70-80%
@@ -59,23 +53,22 @@ O modelo de negócio incentiva turmas maiores para otimização de salas e recei
 - Crítico: ≥3 evasões
 - Análise: Considerar motivos e padrões
 
-### Health Score (Saúde do Professor)
+### Health Score V2 (Saúde do Professor)
 O Health Score é uma métrica composta que resume a saúde geral do professor em uma escala de 0-100.
 É calculado com base nos pesos configuráveis de cada KPI:
-- 🎸 Curso (10%): Ajuste pelo tipo de instrumento (bateria tem limite menor que canto)
+- 📈 Taxa de Crescimento (15%): Crescimento da carteira ajustado pelo fator de demanda
 - 👥 Média/Turma (20%): Principal indicador de eficiência
-- 🔄 Retenção (20%): Manter alunos é crucial
+- 🔄 Retenção (25%): Manter alunos é crucial
 - 🎯 Conversão (15%): Experimentais → Matrículas
-- ⭐ NPS (15%): Satisfação do aluno
-- 📅 Presença (10%): Engajamento nas aulas
+- 📅 Presença (15%): Engajamento nas aulas
 - 🚪 Evasões (10%): Inverso (menos = melhor)
 
 **Classificação:**
-- 🟢 Saudável: 80-100 pontos - Professor com ótimo desempenho
-- 🟡 Atenção: 60-79 pontos - Precisa de acompanhamento
-- 🔴 Crítico: 0-59 pontos - Requer intervenção urgente
+- 🟢 Saudável: ≥70 pontos - Professor com ótimo desempenho
+- 🟡 Atenção: 50-69 pontos - Precisa de acompanhamento
+- 🔴 Crítico: <50 pontos - Requer intervenção urgente
 
-**IMPORTANTE:** O Health Score considera o tipo de curso do professor. Um professor de bateria com média 1.5 alunos/turma tem score máximo, enquanto um de canto precisaria de 3+ para o mesmo score, pois bateria tem limite físico de alunos por sala.
+**IMPORTANTE:** O Fator de Demanda pondera o crescimento considerando a dificuldade de cada curso (cursos menores como bateria têm fator maior).
 
 ## DIRETRIZES OBRIGATÓRIAS
 
@@ -157,9 +150,10 @@ interface MetricasAtuais {
   media_alunos_turma: number;
   taxa_retencao: number;
   taxa_conversao: number;
-  nps: number | null;
+  nps?: number | null; // DEPRECATED - mantido para compatibilidade
   taxa_presenca: number;
   evasoes_mes: number;
+  fator_demanda_ponderado?: number; // V2: Fator de demanda ponderado
 }
 
 interface HistoricoItem {
@@ -238,13 +232,12 @@ interface ProfessorInsightsRequest {
 function calcularStatus(metricas: MetricasAtuais): string {
   // Crítico se qualquer métrica estiver crítica
   if (metricas.taxa_retencao < 70 || metricas.media_alunos_turma < 1.3 || 
-      (metricas.nps !== null && metricas.nps < 7) || metricas.evasoes_mes >= 3) {
+      metricas.evasoes_mes >= 3) {
     return 'critico';
   }
   // Atenção se qualquer métrica estiver em atenção
   if (metricas.taxa_retencao < 95 || metricas.media_alunos_turma < 1.5 ||
-      (metricas.nps !== null && metricas.nps < 8.5) || metricas.evasoes_mes >= 1 ||
-      metricas.taxa_presenca < 80) {
+      metricas.evasoes_mes >= 1 || metricas.taxa_presenca < 80) {
     return 'atencao';
   }
   return 'excelente';
@@ -279,7 +272,7 @@ ${healthScore.detalhes.map(d => `- ${d.kpi}: valor ${d.valor.toFixed(1)} → sco
 - Média de Alunos por Turma: ${dados.metricas_atuais.media_alunos_turma.toFixed(2)} ${dados.metricas_atuais.media_alunos_turma < 1.3 ? '🔴' : dados.metricas_atuais.media_alunos_turma < 1.5 ? '🟡' : '🟢'}
 - Taxa de Retenção: ${dados.metricas_atuais.taxa_retencao}% ${dados.metricas_atuais.taxa_retencao < 70 ? '🔴' : dados.metricas_atuais.taxa_retencao < 95 ? '🟡' : '🟢'}
 - Taxa de Conversão: ${dados.metricas_atuais.taxa_conversao}% ${dados.metricas_atuais.taxa_conversao < 70 ? '🔴' : dados.metricas_atuais.taxa_conversao < 90 ? '🟡' : '🟢'}
-- NPS: ${dados.metricas_atuais.nps !== null ? dados.metricas_atuais.nps.toFixed(1) : 'N/A'} ${dados.metricas_atuais.nps !== null ? (dados.metricas_atuais.nps < 7 ? '🔴' : dados.metricas_atuais.nps < 8.5 ? '🟡' : '🟢') : ''}
+- Fator de Demanda: ${(dados.metricas_atuais.fator_demanda_ponderado || 1.0).toFixed(1)} ${(dados.metricas_atuais.fator_demanda_ponderado || 1.0) <= 1.2 ? '🟢' : (dados.metricas_atuais.fator_demanda_ponderado || 1.0) <= 2.0 ? '🟡' : '🔴'}
 - Taxa de Presença: ${dados.metricas_atuais.taxa_presenca}% ${dados.metricas_atuais.taxa_presenca < 70 ? '🔴' : dados.metricas_atuais.taxa_presenca < 80 ? '🟡' : '🟢'}
 - Evasões no Mês: ${dados.metricas_atuais.evasoes_mes} ${dados.metricas_atuais.evasoes_mes >= 3 ? '🔴' : dados.metricas_atuais.evasoes_mes >= 1 ? '🟡' : '🟢'}
 `;
@@ -287,7 +280,7 @@ ${healthScore.detalhes.map(d => `- ${d.kpi}: valor ${d.valor.toFixed(1)} → sco
   if (dados.historico && dados.historico.length > 0) {
     prompt += `\n### HISTÓRICO (últimos meses)\n`;
     dados.historico.forEach(h => {
-      prompt += `- ${h.periodo}: Média ${h.media_alunos_turma.toFixed(2)}, Retenção ${h.taxa_retencao}%, Conversão ${h.taxa_conversao}%, NPS ${h.nps ?? 'N/A'}, Evasões ${h.evasoes}\n`;
+      prompt += `- ${h.periodo}: Média ${h.media_alunos_turma.toFixed(2)}, Retenção ${h.taxa_retencao}%, Conversão ${h.taxa_conversao}%, Evasões ${h.evasoes}\n`;
     });
   }
 

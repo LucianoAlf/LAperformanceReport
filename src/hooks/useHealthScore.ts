@@ -1,52 +1,79 @@
 import { useMemo } from 'react';
 import { DEFAULT_HEALTH_WEIGHTS, HealthWeightKey } from '@/components/App/Professores/HealthScoreConfig';
 
-// Limites de média de alunos por turma baseado no tipo de curso
-// Cursos individuais (bateria, violino) têm limite menor
-// Cursos coletivos (canto, musicalização) podem ter mais alunos
-export const CURSO_LIMITES_TURMA: Record<string, { min: number; max: number; ideal: number }> = {
-  // Instrumentos individuais (limite baixo)
-  'Bateria': { min: 1, max: 2, ideal: 1.5 },
-  'Violino': { min: 1, max: 2, ideal: 1.5 },
-  'Contrabaixo': { min: 1, max: 2, ideal: 1.5 },
-  'Saxofone': { min: 1, max: 2, ideal: 1.5 },
-  
-  // Instrumentos semi-coletivos (limite médio)
-  'Violão': { min: 1, max: 3, ideal: 2 },
-  'Guitarra': { min: 1, max: 3, ideal: 2 },
-  'Teclado': { min: 1, max: 3, ideal: 2 },
-  'Piano': { min: 1, max: 2, ideal: 1.5 },
-  'Ukulele': { min: 1, max: 4, ideal: 2.5 },
-  
-  // Cursos coletivos (limite alto)
-  'Canto': { min: 1, max: 5, ideal: 3 },
-  'Musicalização': { min: 2, max: 6, ideal: 4 },
-  'Musicalização Infantil': { min: 2, max: 6, ideal: 4 },
-  'Musicalização Preparatória': { min: 2, max: 5, ideal: 3.5 },
-  'Teoria Musical': { min: 2, max: 8, ideal: 5 },
-  
-  // Padrão para cursos não mapeados
-  'default': { min: 1, max: 3, ideal: 2 },
-};
+// ============================================================================
+// HEALTH SCORE V2 - Especificação Técnica
+// ============================================================================
+// Fatores e Pesos:
+// - Taxa de Crescimento: 15% (com fator de demanda ponderado)
+// - Média/Turma: 20%
+// - Retenção: 25%
+// - Conversão: 15%
+// - Presença: 15%
+// - Evasões: 10% (inverso)
+// 
+// Classificação:
+// - Saudável: ≥ 70
+// - Atenção: 50 - 69
+// - Crítico: < 50
+// ============================================================================
 
-// Metas de referência para cada KPI (baseado na imagem de referência)
+// Metas de referência para cada KPI
 export const METAS_REFERENCIA = {
-  mediaTurma: { min: 1.0, max: 2.0, critico: 1.3, atencao: 1.5 },
-  retencao: { min: 60, max: 100, critico: 70, atencao: 95 },
-  conversao: { min: 50, max: 100, critico: 70, atencao: 90 },
-  nps: { min: 5, max: 10, critico: 7, atencao: 8.5 },
-  presenca: { min: 60, max: 100, critico: 70, atencao: 80 },
-  evasoes: { min: 0, max: 5, critico: 3, atencao: 1 }, // Inverso: menos é melhor
+  taxaCrescimento: { min: -10, max: 20 }, // -10% → 0 pontos, +20% → 100 pontos
+  mediaTurma: { min: 0, max: 3.0, meta: 3.0 }, // Meta configurável
+  retencao: { min: 0, max: 100 }, // 0-100%
+  conversao: { min: 0, max: 100 }, // 0-100%
+  presenca: { min: 0, max: 100 }, // 0-100%
+  evasoes: { min: 0, max: 10 }, // Taxa de evasão em %
 };
 
+// Limites de classificação do Health Score
+export const LIMITES_HEALTH_SCORE = {
+  saudavel: 70, // ≥ 70
+  atencao: 50,  // 50 - 69
+  // < 50 = crítico
+};
+
+// Interface para os KPIs do professor (V2)
+interface ProfessorKPIsV2 {
+  // Taxa de Crescimento (15%)
+  taxaCrescimentoAjustada: number; // Já com fator de demanda aplicado
+  
+  // Média/Turma (20%)
+  mediaTurma: number;
+  
+  // Retenção (25%) - default 100% se não houver dados
+  retencao: number;
+  
+  // Conversão (15%)
+  conversao: number;
+  
+  // Presença (15%)
+  presenca: number;
+  
+  // Evasões (10%) - taxa de evasão em %
+  taxaEvasao: number;
+  
+  // Carteira de alunos (para cálculo de evasões)
+  carteiraAlunos: number;
+  evasoes: number;
+}
+
+// Interface para KPIs do professor (V2 com compatibilidade legada)
 interface ProfessorKPIs {
   mediaTurma: number;
   retencao: number;
   conversao: number;
-  nps: number | null;
   presenca: number;
   evasoes: number;
-  cursos: string[]; // Lista de cursos do professor
+  // Campos V2
+  taxaCrescimentoAjustada?: number;
+  taxaEvasao?: number;
+  carteiraAlunos?: number;
+  // Campos legados (opcionais, não usados no V2)
+  nps?: number | null;
+  cursos?: string[];
 }
 
 interface HealthScoreResult {
@@ -74,36 +101,40 @@ function normalizar(valor: number, min: number, max: number, inverso = false): n
 }
 
 /**
- * Calcula o fator de ajuste baseado nos cursos do professor
- * Professores de cursos individuais (bateria) não são penalizados por ter menos alunos por turma
+ * Calcula pontos da Taxa de Crescimento (V2)
+ * Fórmula: ((taxa_ajustada + 10) / 30) * 100, limitado entre 0 e 100
+ * -10% → 0 pontos | +20% → 100 pontos
  */
-function calcularFatorCurso(cursos: string[], mediaTurmaAtual: number): number {
-  if (!cursos.length) return 50; // Neutro se não tem cursos
-  
-  // Pegar o limite médio dos cursos do professor
-  let somaIdeal = 0;
-  let somaMax = 0;
-  
-  cursos.forEach(curso => {
-    const limites = CURSO_LIMITES_TURMA[curso] || CURSO_LIMITES_TURMA['default'];
-    somaIdeal += limites.ideal;
-    somaMax += limites.max;
-  });
-  
-  const idealMedio = somaIdeal / cursos.length;
-  const maxMedio = somaMax / cursos.length;
-  
-  // Se a média atual está próxima ou acima do ideal para os cursos, score alto
-  if (mediaTurmaAtual >= idealMedio) {
-    return 100;
-  }
-  
-  // Normalizar baseado no limite do curso
-  return normalizar(mediaTurmaAtual, 1, maxMedio);
+function calcularPontosCrescimento(taxaCrescimentoAjustada: number): number {
+  return Math.max(0, Math.min(100, ((taxaCrescimentoAjustada + 10) / 30) * 100));
 }
 
 /**
- * Hook para calcular o Health Score de um professor
+ * Calcula pontos da Média/Turma (V2)
+ * Fórmula: (media_alunos_turma / META_MEDIA_TURMA) * 100, limitado a 100
+ */
+function calcularPontosMediaTurma(mediaTurma: number, meta: number = 3.0): number {
+  return Math.min(100, (mediaTurma / meta) * 100);
+}
+
+/**
+ * Calcula pontos de Evasões (V2) - INVERSO
+ * Fórmula: 100 - (taxa_evasao * 10), mínimo 0
+ */
+function calcularPontosEvasoes(taxaEvasao: number): number {
+  return Math.max(0, 100 - (taxaEvasao * 10));
+}
+
+/**
+ * Hook para calcular o Health Score de um professor (V2)
+ * 
+ * Fatores e Pesos:
+ * - Taxa de Crescimento: 15% (com fator de demanda ponderado)
+ * - Média/Turma: 20%
+ * - Retenção: 25%
+ * - Conversão: 15%
+ * - Presença: 15%
+ * - Evasões: 10% (inverso)
  */
 export function useHealthScore(
   kpis: ProfessorKPIs,
@@ -112,97 +143,71 @@ export function useHealthScore(
   return useMemo(() => {
     const detalhes: HealthScoreResult['detalhes'] = [];
     
-    // 1. Score do Curso (fator de ajuste)
-    const scoreCurso = calcularFatorCurso(kpis.cursos, kpis.mediaTurma);
+    // 1. Taxa de Crescimento (15%) - NOVO no V2
+    const taxaCrescimento = kpis.taxaCrescimentoAjustada ?? 0;
+    const scoreCrescimento = calcularPontosCrescimento(taxaCrescimento);
     detalhes.push({
-      kpi: 'Curso',
-      valor: kpis.cursos.length,
-      scoreNormalizado: scoreCurso,
-      peso: weights.curso / 100,
-      contribuicao: scoreCurso * (weights.curso / 100)
+      kpi: 'Taxa Crescimento',
+      valor: taxaCrescimento,
+      scoreNormalizado: scoreCrescimento,
+      peso: weights.taxaCrescimento / 100,
+      contribuicao: scoreCrescimento * (weights.taxaCrescimento / 100)
     });
     
-    // 2. Score da Média/Turma
-    const scoreMT = normalizar(
-      kpis.mediaTurma, 
-      METAS_REFERENCIA.mediaTurma.min, 
-      METAS_REFERENCIA.mediaTurma.max
-    );
+    // 2. Média/Turma (20%)
+    const mediaTurma = kpis.mediaTurma || 2.0; // Default 2.0 se não tiver dados
+    const scoreMT = calcularPontosMediaTurma(mediaTurma, METAS_REFERENCIA.mediaTurma.meta);
     detalhes.push({
       kpi: 'Média/Turma',
-      valor: kpis.mediaTurma,
+      valor: mediaTurma,
       scoreNormalizado: scoreMT,
       peso: weights.mediaTurma / 100,
       contribuicao: scoreMT * (weights.mediaTurma / 100)
     });
     
-    // 3. Score da Retenção
-    const scoreRet = normalizar(
-      kpis.retencao, 
-      METAS_REFERENCIA.retencao.min, 
-      METAS_REFERENCIA.retencao.max
-    );
+    // 3. Retenção (25%) - Default 100% se não houver dados
+    const retencao = kpis.retencao || 100;
+    const scoreRet = retencao; // Já é 0-100
     detalhes.push({
       kpi: 'Retenção',
-      valor: kpis.retencao,
+      valor: retencao,
       scoreNormalizado: scoreRet,
       peso: weights.retencao / 100,
       contribuicao: scoreRet * (weights.retencao / 100)
     });
     
-    // 4. Score da Conversão
-    const scoreConv = normalizar(
-      kpis.conversao, 
-      METAS_REFERENCIA.conversao.min, 
-      METAS_REFERENCIA.conversao.max
-    );
+    // 4. Conversão (15%)
+    const conversao = kpis.conversao || 0;
+    const scoreConv = Math.min(100, conversao); // Já é 0-100
     detalhes.push({
       kpi: 'Conversão',
-      valor: kpis.conversao,
+      valor: conversao,
       scoreNormalizado: scoreConv,
       peso: weights.conversao / 100,
       contribuicao: scoreConv * (weights.conversao / 100)
     });
     
-    // 5. Score do NPS (se disponível)
-    const npsValor = kpis.nps ?? 7.5; // Valor neutro se não tem NPS
-    const scoreNPS = normalizar(
-      npsValor, 
-      METAS_REFERENCIA.nps.min, 
-      METAS_REFERENCIA.nps.max
-    );
-    detalhes.push({
-      kpi: 'NPS',
-      valor: npsValor,
-      scoreNormalizado: scoreNPS,
-      peso: weights.nps / 100,
-      contribuicao: scoreNPS * (weights.nps / 100)
-    });
-    
-    // 6. Score da Presença
-    const scorePres = normalizar(
-      kpis.presenca, 
-      METAS_REFERENCIA.presenca.min, 
-      METAS_REFERENCIA.presenca.max
-    );
+    // 5. Presença (15%)
+    const presenca = kpis.presenca || 75; // Default 75% se não tiver dados
+    const scorePres = presenca; // Já é 0-100
     detalhes.push({
       kpi: 'Presença',
-      valor: kpis.presenca,
+      valor: presenca,
       scoreNormalizado: scorePres,
       peso: weights.presenca / 100,
       contribuicao: scorePres * (weights.presenca / 100)
     });
     
-    // 7. Score das Evasões (INVERSO: menos = melhor)
-    const scoreEvasoes = normalizar(
-      kpis.evasoes, 
-      METAS_REFERENCIA.evasoes.min, 
-      METAS_REFERENCIA.evasoes.max,
-      true // Inverso
-    );
+    // 6. Evasões (10%) - INVERSO
+    // Calcular taxa de evasão se não vier pronta
+    const taxaEvasao = kpis.taxaEvasao ?? 
+      (kpis.carteiraAlunos && kpis.carteiraAlunos > 0 
+        ? (kpis.evasoes / kpis.carteiraAlunos) * 100 
+        : 0);
+    const scoreEvasoes = calcularPontosEvasoes(taxaEvasao);
     detalhes.push({
       kpi: 'Evasões',
-      valor: kpis.evasoes,
+      valor: taxaEvasao,
       scoreNormalizado: scoreEvasoes,
       peso: weights.evasoes / 100,
       contribuicao: scoreEvasoes * (weights.evasoes / 100)
@@ -211,11 +216,11 @@ export function useHealthScore(
     // Calcular score total
     const score = detalhes.reduce((sum, d) => sum + d.contribuicao, 0);
     
-    // Determinar status
+    // Determinar status (V2: 70/50)
     let status: 'critico' | 'atencao' | 'saudavel' = 'saudavel';
-    if (score < 50) {
+    if (score < LIMITES_HEALTH_SCORE.atencao) {
       status = 'critico';
-    } else if (score < 75) {
+    } else if (score < LIMITES_HEALTH_SCORE.saudavel) {
       status = 'atencao';
     }
     
@@ -228,7 +233,7 @@ export function useHealthScore(
 }
 
 /**
- * Função utilitária para calcular Health Score sem hook (para uso em loops)
+ * Função utilitária para calcular Health Score sem hook (para uso em loops) - V2
  */
 export function calcularHealthScore(
   kpis: ProfessorKPIs,
@@ -236,97 +241,70 @@ export function calcularHealthScore(
 ): HealthScoreResult {
   const detalhes: HealthScoreResult['detalhes'] = [];
   
-  // 1. Score do Curso (fator de ajuste)
-  const scoreCurso = calcularFatorCurso(kpis.cursos, kpis.mediaTurma);
+  // 1. Taxa de Crescimento (15%) - NOVO no V2
+  const taxaCrescimento = kpis.taxaCrescimentoAjustada ?? 0;
+  const scoreCrescimento = calcularPontosCrescimento(taxaCrescimento);
   detalhes.push({
-    kpi: 'Curso',
-    valor: kpis.cursos.length,
-    scoreNormalizado: scoreCurso,
-    peso: weights.curso / 100,
-    contribuicao: scoreCurso * (weights.curso / 100)
+    kpi: 'Taxa Crescimento',
+    valor: taxaCrescimento,
+    scoreNormalizado: scoreCrescimento,
+    peso: weights.taxaCrescimento / 100,
+    contribuicao: scoreCrescimento * (weights.taxaCrescimento / 100)
   });
   
-  // 2. Score da Média/Turma
-  const scoreMT = normalizar(
-    kpis.mediaTurma, 
-    METAS_REFERENCIA.mediaTurma.min, 
-    METAS_REFERENCIA.mediaTurma.max
-  );
+  // 2. Média/Turma (20%)
+  const mediaTurma = kpis.mediaTurma || 2.0;
+  const scoreMT = calcularPontosMediaTurma(mediaTurma, METAS_REFERENCIA.mediaTurma.meta);
   detalhes.push({
     kpi: 'Média/Turma',
-    valor: kpis.mediaTurma,
+    valor: mediaTurma,
     scoreNormalizado: scoreMT,
     peso: weights.mediaTurma / 100,
     contribuicao: scoreMT * (weights.mediaTurma / 100)
   });
   
-  // 3. Score da Retenção
-  const scoreRet = normalizar(
-    kpis.retencao, 
-    METAS_REFERENCIA.retencao.min, 
-    METAS_REFERENCIA.retencao.max
-  );
+  // 3. Retenção (25%) - Default 100% se não houver dados
+  const retencao = kpis.retencao || 100;
+  const scoreRet = retencao;
   detalhes.push({
     kpi: 'Retenção',
-    valor: kpis.retencao,
+    valor: retencao,
     scoreNormalizado: scoreRet,
     peso: weights.retencao / 100,
     contribuicao: scoreRet * (weights.retencao / 100)
   });
   
-  // 4. Score da Conversão
-  const scoreConv = normalizar(
-    kpis.conversao, 
-    METAS_REFERENCIA.conversao.min, 
-    METAS_REFERENCIA.conversao.max
-  );
+  // 4. Conversão (15%)
+  const conversao = kpis.conversao || 0;
+  const scoreConv = Math.min(100, conversao);
   detalhes.push({
     kpi: 'Conversão',
-    valor: kpis.conversao,
+    valor: conversao,
     scoreNormalizado: scoreConv,
     peso: weights.conversao / 100,
     contribuicao: scoreConv * (weights.conversao / 100)
   });
   
-  // 5. Score do NPS
-  const npsValor = kpis.nps ?? 7.5;
-  const scoreNPS = normalizar(
-    npsValor, 
-    METAS_REFERENCIA.nps.min, 
-    METAS_REFERENCIA.nps.max
-  );
-  detalhes.push({
-    kpi: 'NPS',
-    valor: npsValor,
-    scoreNormalizado: scoreNPS,
-    peso: weights.nps / 100,
-    contribuicao: scoreNPS * (weights.nps / 100)
-  });
-  
-  // 6. Score da Presença
-  const scorePres = normalizar(
-    kpis.presenca, 
-    METAS_REFERENCIA.presenca.min, 
-    METAS_REFERENCIA.presenca.max
-  );
+  // 5. Presença (15%)
+  const presenca = kpis.presenca || 75;
+  const scorePres = presenca;
   detalhes.push({
     kpi: 'Presença',
-    valor: kpis.presenca,
+    valor: presenca,
     scoreNormalizado: scorePres,
     peso: weights.presenca / 100,
     contribuicao: scorePres * (weights.presenca / 100)
   });
   
-  // 7. Score das Evasões (INVERSO)
-  const scoreEvasoes = normalizar(
-    kpis.evasoes, 
-    METAS_REFERENCIA.evasoes.min, 
-    METAS_REFERENCIA.evasoes.max,
-    true
-  );
+  // 6. Evasões (10%) - INVERSO
+  const taxaEvasao = kpis.taxaEvasao ?? 
+    (kpis.carteiraAlunos && kpis.carteiraAlunos > 0 
+      ? (kpis.evasoes / kpis.carteiraAlunos) * 100 
+      : 0);
+  const scoreEvasoes = calcularPontosEvasoes(taxaEvasao);
   detalhes.push({
     kpi: 'Evasões',
-    valor: kpis.evasoes,
+    valor: taxaEvasao,
     scoreNormalizado: scoreEvasoes,
     peso: weights.evasoes / 100,
     contribuicao: scoreEvasoes * (weights.evasoes / 100)
@@ -335,11 +313,11 @@ export function calcularHealthScore(
   // Calcular score total
   const score = detalhes.reduce((sum, d) => sum + d.contribuicao, 0);
   
-  // Determinar status
+  // Determinar status (V2: 70/50)
   let status: 'critico' | 'atencao' | 'saudavel' = 'saudavel';
-  if (score < 50) {
+  if (score < LIMITES_HEALTH_SCORE.atencao) {
     status = 'critico';
-  } else if (score < 75) {
+  } else if (score < LIMITES_HEALTH_SCORE.saudavel) {
     status = 'atencao';
   }
   
@@ -349,5 +327,9 @@ export function calcularHealthScore(
     detalhes
   };
 }
+
+// Exportar tipos e constantes úteis
+export type { ProfessorKPIs, ProfessorKPIsV2, HealthScoreResult };
+export { calcularPontosCrescimento, calcularPontosMediaTurma, calcularPontosEvasoes };
 
 export default useHealthScore;

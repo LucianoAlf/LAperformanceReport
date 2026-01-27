@@ -69,7 +69,6 @@ const KPIS_PROFESSORES: KPIConfig[] = [
   { id: 'media_alunos_turma', label: 'Média Alunos/Turma', icon: Users, formato: 'numero', cor: 'violet', descricao: 'Alunos por turma em média', agregacao: 'media' },
   { id: 'media_alunos_prof', label: 'Média Alunos/Professor', icon: Users, formato: 'numero', cor: 'emerald', descricao: 'Carteira média por professor', agregacao: 'media' },
   { id: 'taxa_renovacao_prof', label: 'Taxa Renovação Prof (%)', icon: RefreshCw, formato: 'percentual', cor: 'amber', descricao: 'Renovação média dos professores', agregacao: 'media' },
-  { id: 'nps_medio', label: 'NPS Médio', icon: Star, formato: 'numero', cor: 'cyan', descricao: 'Net Promoter Score médio', agregacao: 'media' },
   { id: 'presenca_media', label: 'Presença Média (%)', icon: UserCheck, formato: 'percentual', cor: 'emerald', descricao: 'Taxa de presença nas aulas', agregacao: 'media' },
   { id: 'taxa_conversao_exp', label: 'Taxa Conversão Aula Exp (%)', icon: TrendingUp, formato: 'percentual', cor: 'cyan', descricao: 'Conversão de experimental do professor', agregacao: 'media' },
   { id: 'melhor_retencao', label: 'Melhor Retenção (Menor Churn %)', icon: TrendingDown, formato: 'percentual', cor: 'rose', descricao: 'Meta de menor churn por professor', agregacao: 'media' },

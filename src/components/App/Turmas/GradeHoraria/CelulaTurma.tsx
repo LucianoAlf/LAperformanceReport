@@ -47,9 +47,13 @@ export function CelulaTurma({ turma, onClick, draggable = false }: CelulaTurmaPr
 
   // Handler para clique - só dispara se não estiver arrastando
   const handleClick = (e: React.MouseEvent) => {
-    if (!isDragging) {
-      onClick();
+    // Só prevenir clique se estiver realmente arrastando
+    if (isDragging) {
+      e.stopPropagation();
+      return;
     }
+    // Se não está arrastando, permitir clique normalmente
+    onClick();
   };
 
   return (

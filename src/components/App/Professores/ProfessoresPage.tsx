@@ -27,6 +27,7 @@ import { CardProfessor } from './CardProfessor';
 import { TabPerformanceProfessores } from './TabPerformanceProfessores';
 import { TabAgendaProfessores } from './TabAgendaProfessores';
 import { HealthScoreConfig } from './HealthScoreConfig';
+import { FatorDemandaCursos } from './FatorDemandaCursos';
 import type { 
   Professor, Unidade, Curso, KPIsProfessores, 
   FiltrosProfessores, ProfessorFormData
@@ -602,6 +603,11 @@ export function ProfessoresPage() {
             }}
           />
 
+          {/* Fator de Demanda por Curso */}
+          <FatorDemandaCursos 
+            unidadeId={unidadeAtual !== 'todos' ? unidadeAtual : undefined}
+          />
+
           {/* Referência de Metas */}
           <div className="bg-slate-900/50 rounded-2xl border border-slate-700/50 p-6">
             <div className="flex items-center gap-3 mb-6">
@@ -637,16 +643,6 @@ export function ProfessoresPage() {
                   <p className="flex items-center gap-2 text-slate-300"><span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span> &lt;70% Ruim</p>
                   <p className="flex items-center gap-2 text-slate-300"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span> 70-90% Bom</p>
                   <p className="flex items-center gap-2 text-slate-300"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> &gt;90% Mestre</p>
-                </div>
-              </div>
-
-              {/* NPS */}
-              <div className="space-y-3">
-                <p className="text-sm font-semibold text-white">NPS</p>
-                <div className="space-y-2 text-sm">
-                  <p className="flex items-center gap-2 text-slate-300"><span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span> &lt;7 Ruim</p>
-                  <p className="flex items-center gap-2 text-slate-300"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span> 7-8.5 Regular</p>
-                  <p className="flex items-center gap-2 text-slate-300"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> &gt;8.5 Excelente</p>
                 </div>
               </div>
 
@@ -709,17 +705,10 @@ export function ProfessoresPage() {
         />
         <KPICard
           label="Média Alunos/Turma"
-          value={kpis.mediaAlunosTurmaGeral > 0 ? kpis.mediaAlunosTurmaGeral.toFixed(1) : '-'}
-          icon={BarChart3}
+          value={kpis.mediaAlunosTurmaGeral > 0 ? kpis.mediaAlunosTurmaGeral.toFixed(2) : '-'}
+          icon={Users}
           variant="purple"
           subvalue="por turma"
-        />
-        <KPICard
-          label="NPS Médio"
-          value={kpis.npsMedio > 0 ? kpis.npsMedio.toFixed(1) : '-'}
-          icon={TrendingUp}
-          variant="emerald"
-          subvalue="satisfação"
         />
       </div>
 

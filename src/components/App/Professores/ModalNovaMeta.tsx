@@ -23,7 +23,6 @@ const TIPOS_META = [
   { value: 'media_turma', label: 'Média de Alunos por Turma' },
   { value: 'retencao', label: 'Taxa de Retenção' },
   { value: 'conversao', label: 'Taxa de Conversão' },
-  { value: 'nps', label: 'NPS' },
   { value: 'presenca', label: 'Taxa de Presença' }
 ];
 

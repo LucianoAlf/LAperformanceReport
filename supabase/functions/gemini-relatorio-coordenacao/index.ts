@@ -15,23 +15,22 @@ interface RelatorioCoordenacaoRequest {
 // CÁLCULO DO HEALTH SCORE - IDÊNTICO AO FRONTEND
 // ═══════════════════════════════════════════════════════════════
 
-// Pesos padrão do Health Score (igual ao HealthScoreConfig.tsx)
+// Pesos padrão do Health Score V2 (igual ao HealthScoreConfig.tsx)
 const DEFAULT_HEALTH_WEIGHTS = {
-  curso: 10,        // Fator de ajuste pelo tipo de curso
-  mediaTurma: 20,   // Média de alunos por turma
-  retencao: 20,     // Taxa de retenção
-  conversao: 15,    // Taxa de conversão
-  nps: 15,          // NPS médio
-  presenca: 10,     // Taxa de presença
-  evasoes: 10,      // Evasões (inverso)
+  taxaCrescimento: 15,  // Taxa de crescimento ajustada
+  mediaTurma: 20,       // Média de alunos por turma
+  retencao: 25,         // Taxa de retenção (aumentado)
+  conversao: 15,        // Taxa de conversão
+  presenca: 15,         // Taxa de presença (aumentado)
+  evasoes: 10,          // Evasões (inverso)
 };
 
-// Metas de referência (igual ao useHealthScore.ts)
+// Metas de referência V2 (igual ao useHealthScore.ts)
 const METAS_REFERENCIA = {
+  taxaCrescimento: { min: -10, max: 20 },
   mediaTurma: { min: 1.0, max: 2.0 },
   retencao: { min: 60, max: 100 },
   conversao: { min: 50, max: 100 },
-  nps: { min: 5, max: 10 },
   presenca: { min: 60, max: 100 },
   evasoes: { min: 0, max: 5 },
 };
@@ -85,21 +84,20 @@ function calcularFatorCurso(cursos: string[], mediaTurmaAtual: number): number {
   return normalizar(mediaTurmaAtual, 1, maxMedio);
 }
 
-// Função principal de cálculo do Health Score (igual ao useHealthScore.ts)
+// Função principal de cálculo do Health Score V2 (igual ao useHealthScore.ts)
 function calcularHealthScore(kpis: {
+  taxaCrescimento: number;
   mediaTurma: number;
   retencao: number;
   conversao: number;
-  nps: number | null;
   presenca: number;
   evasoes: number;
-  cursos: string[];
 }): { score: number; status: 'critico' | 'atencao' | 'saudavel' } {
   const weights = DEFAULT_HEALTH_WEIGHTS;
   
-  // 1. Score do Curso
-  const scoreCurso = calcularFatorCurso(kpis.cursos, kpis.mediaTurma);
-  const contribCurso = scoreCurso * (weights.curso / 100);
+  // 1. Score da Taxa de Crescimento
+  const scoreTaxaCres = normalizar(kpis.taxaCrescimento, METAS_REFERENCIA.taxaCrescimento.min, METAS_REFERENCIA.taxaCrescimento.max);
+  const contribTaxaCres = scoreTaxaCres * (weights.taxaCrescimento / 100);
   
   // 2. Score da Média/Turma
   const scoreMT = normalizar(kpis.mediaTurma, METAS_REFERENCIA.mediaTurma.min, METAS_REFERENCIA.mediaTurma.max);
@@ -113,27 +111,22 @@ function calcularHealthScore(kpis: {
   const scoreConv = normalizar(kpis.conversao, METAS_REFERENCIA.conversao.min, METAS_REFERENCIA.conversao.max);
   const contribConv = scoreConv * (weights.conversao / 100);
   
-  // 5. Score do NPS (default 7.5 se não tem)
-  const npsValor = kpis.nps ?? 7.5;
-  const scoreNPS = normalizar(npsValor, METAS_REFERENCIA.nps.min, METAS_REFERENCIA.nps.max);
-  const contribNPS = scoreNPS * (weights.nps / 100);
-  
-  // 6. Score da Presença
+  // 5. Score da Presença
   const scorePres = normalizar(kpis.presenca, METAS_REFERENCIA.presenca.min, METAS_REFERENCIA.presenca.max);
   const contribPres = scorePres * (weights.presenca / 100);
   
-  // 7. Score das Evasões (INVERSO)
+  // 6. Score das Evasões (INVERSO)
   const scoreEvasoes = normalizar(kpis.evasoes, METAS_REFERENCIA.evasoes.min, METAS_REFERENCIA.evasoes.max, true);
   const contribEvasoes = scoreEvasoes * (weights.evasoes / 100);
   
   // Calcular score total
-  const score = contribCurso + contribMT + contribRet + contribConv + contribNPS + contribPres + contribEvasoes;
+  const score = contribTaxaCres + contribMT + contribRet + contribConv + contribPres + contribEvasoes;
   
-  // Determinar status
+  // Determinar status V2
   let status: 'critico' | 'atencao' | 'saudavel' = 'saudavel';
   if (score < 50) {
     status = 'critico';
-  } else if (score < 75) {
+  } else if (score < 70) {
     status = 'atencao';
   }
   
@@ -199,24 +192,22 @@ Deno.serve(async (req) => {
     const mediaAlunosProfessor = totais.media_alunos_professor || 0;
     const mediaAlunosTurma = totais.media_alunos_turma || 0;
     const mediaPresenca = totais.media_presenca || 0;
-    const npsMedio = totais.nps_medio || null;
     const taxaConversaoMedia = totais.taxa_conversao_media || 0;
     const taxaRenovacaoMedia = totais.taxa_renovacao_media || 0;
     const totalEvasoes = totais.total_evasoes || 0;
     const totalMatriculas = totais.total_matriculas || 0;
     const mrrTotal = totais.mrr_total || 0;
 
-    // KPIs de professores - calcular Health Score para cada um
+    // KPIs de professores - calcular Health Score V2 para cada um
     const kpisProfessoresRaw = dados.kpis_professores || [];
     const kpisProfessores = kpisProfessoresRaw.map((p: any) => {
       const healthResult = calcularHealthScore({
+        taxaCrescimento: Number(p.taxa_crescimento) || 0,
         mediaTurma: Number(p.media_alunos_turma) || 0,
-        retencao: Number(p.taxa_retencao) || 100, // 100 - taxa_cancelamento
+        retencao: Number(p.taxa_retencao) || 100,
         conversao: Number(p.taxa_conversao) || 0,
-        nps: p.nps_medio && Number(p.nps_medio) > 0 ? Number(p.nps_medio) : null,
         presenca: Number(p.media_presenca) || 0,
-        evasoes: Number(p.evasoes) || 0,
-        cursos: p.cursos || []
+        evasoes: Number(p.evasoes) || 0
       });
       return {
         ...p,
@@ -305,7 +296,6 @@ Deno.serve(async (req) => {
     relatorioTemplate += `• Média Alunos/Professor: *${mediaAlunosProfessor.toFixed(1)}*\n`;
     relatorioTemplate += `• Média Alunos/Turma: *${mediaAlunosTurma ? mediaAlunosTurma.toFixed(2) : 'N/D'}*\n`;
     relatorioTemplate += `• Presença Média: *${mediaPresenca.toFixed(1)}%*\n`;
-    relatorioTemplate += `• NPS Médio: *${npsMedio ? npsMedio.toFixed(1) : 'N/D'}*\n`;
     relatorioTemplate += `• MRR Total: *R$ ${formatarMoeda(mrrTotal)}*\n\n`;
 
     // RETENÇÃO & CONVERSÃO
@@ -431,12 +421,6 @@ Deno.serve(async (req) => {
         const pct = Math.min((taxaConversaoMedia / metasProfessores.taxa_conversao_exp) * 100, 100);
         const status = pct >= 100 ? '✅' : (pct >= 70 ? '⚠️' : '❌');
         relatorioTemplate += `${criarBarraProgresso(pct)} ${pct.toFixed(0)}% Conversão (${taxaConversaoMedia.toFixed(1)}%/${metasProfessores.taxa_conversao_exp}%) ${status}\n`;
-      }
-      if (metasProfessores.nps_medio) {
-        const npsAtual = npsMedio || 0;
-        const pct = Math.min((npsAtual / metasProfessores.nps_medio) * 100, 100);
-        const status = pct >= 100 ? '✅' : (pct >= 80 ? '⚠️' : '❌');
-        relatorioTemplate += `${criarBarraProgresso(pct)} ${pct.toFixed(0)}% NPS (${npsAtual.toFixed(1)}/${metasProfessores.nps_medio}) ${status}\n`;
       }
     } else {
       relatorioTemplate += `• Metas ainda não cadastradas para este período\n`;

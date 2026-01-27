@@ -1,5 +1,6 @@
 // Slot de horário droppable na grade
 
+import { ReactNode } from 'react';
 import { useDroppable } from '@dnd-kit/core';
 import { cn } from '@/lib/utils';
 
@@ -7,7 +8,7 @@ interface SlotHorarioProps {
   id: string;
   dia: string;
   horario: string;
-  children?: React.ReactNode;
+  children?: ReactNode;
   ocupado?: boolean;
   disabled?: boolean;
 }
@@ -28,8 +29,9 @@ export function SlotHorario({
 
   // Determinar estilo baseado no estado
   const isDragging = !!active;
-  const isValidDrop = isDragging && !ocupado && !disabled;
-  const isInvalidDrop = isDragging && (ocupado || disabled);
+  // Permitir drop em qualquer slot quando drag está habilitado
+  const isValidDrop = isDragging && !disabled;
+  const isInvalidDrop = isDragging && disabled;
 
   return (
     <div
@@ -47,6 +49,7 @@ export function SlotHorario({
         // Arrastando - hover em slot inválido
         isInvalidDrop && isOver && 'border-solid border-red-500 bg-red-500/20'
       )}
+      style={{ pointerEvents: disabled ? 'none' : 'auto' }}
     >
       {children}
       

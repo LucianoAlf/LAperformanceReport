@@ -1,19 +1,19 @@
 import React, { useState, useCallback } from 'react';
 import { 
   HeartPulse, ChevronUp, ChevronDown, Save, RotateCcw,
-  Music, Users, RefreshCw, Target, Star, Calendar, DoorOpen
+  Users, RefreshCw, Target, Calendar, DoorOpen, TrendingUp
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
-// Pesos padrão do Health Score do Professor
+// Pesos padrão do Health Score do Professor (V2)
+// Total deve somar 100%
 export const DEFAULT_HEALTH_WEIGHTS = {
-  curso: 10,        // Fator de ajuste pelo tipo de curso (bateria vs canto)
-  mediaTurma: 20,   // Média de alunos por turma
-  retencao: 20,     // Taxa de retenção
-  conversao: 15,    // Taxa de conversão de experimentais
-  nps: 15,          // NPS médio
-  presenca: 10,     // Taxa de presença
-  evasoes: 10,      // Evasões/Churn (inverso)
+  taxaCrescimento: 15, // Taxa de crescimento com fator de demanda ponderado
+  mediaTurma: 20,      // Média de alunos por turma
+  retencao: 25,        // Taxa de retenção (renovações)
+  conversao: 15,       // Taxa de conversão de experimentais
+  presenca: 15,        // Taxa de presença dos alunos
+  evasoes: 10,         // Evasões/Churn (inverso: menos = melhor)
 };
 
 export type HealthWeightKey = keyof typeof DEFAULT_HEALTH_WEIGHTS;
@@ -31,16 +31,20 @@ const WEIGHT_CONFIG: Record<HealthWeightKey, {
   description?: string;
   color: string;
 }> = {
-  curso: { 
-    icon: Music, 
-    label: 'Curso', 
-    description: 'Ajuste por tipo de instrumento (bateria tem limite menor que canto)',
-    color: 'text-yellow-400'
+  taxaCrescimento: { 
+    icon: TrendingUp, 
+    label: 'Taxa de Crescimento', 
+    description: 'Crescimento da carteira com fator de demanda',
+    color: 'text-emerald-400'
   },
   mediaTurma: { icon: Users, label: 'Média/Turma', color: 'text-purple-400' },
-  retencao: { icon: RefreshCw, label: 'Retenção', color: 'text-cyan-400' },
+  retencao: { 
+    icon: RefreshCw, 
+    label: 'Retenção', 
+    description: 'Taxa de renovações',
+    color: 'text-cyan-400' 
+  },
   conversao: { icon: Target, label: 'Conversão', color: 'text-pink-400' },
-  nps: { icon: Star, label: 'NPS', color: 'text-amber-400' },
   presenca: { icon: Calendar, label: 'Presença', color: 'text-green-400' },
   evasoes: { 
     icon: DoorOpen, 
@@ -179,7 +183,7 @@ export const HealthScoreConfig: React.FC<HealthScoreConfigProps> = ({
             })}
           </div>
 
-          {/* Classificação do Score */}
+          {/* Classificação do Score (V2: 70/50) */}
           <div className="space-y-4 pt-4 border-t border-slate-700/50">
             <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
               Classificação do Health Score
@@ -194,7 +198,7 @@ export const HealthScoreConfig: React.FC<HealthScoreConfigProps> = ({
                   </span>
                 </div>
                 <p className="text-sm text-emerald-300">
-                  75 a 100 pontos
+                  ≥ 70 pontos
                 </p>
               </div>
 
@@ -207,7 +211,7 @@ export const HealthScoreConfig: React.FC<HealthScoreConfigProps> = ({
                   </span>
                 </div>
                 <p className="text-sm text-amber-300">
-                  50 a 74 pontos
+                  50 a 69 pontos
                 </p>
               </div>
 
@@ -220,7 +224,7 @@ export const HealthScoreConfig: React.FC<HealthScoreConfigProps> = ({
                   </span>
                 </div>
                 <p className="text-sm text-rose-300">
-                  0 a 49 pontos
+                  &lt; 50 pontos
                 </p>
               </div>
             </div>

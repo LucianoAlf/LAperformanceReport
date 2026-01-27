@@ -15,11 +15,12 @@ interface RelatorioProfessorRequest {
     media_alunos_turma: number;
     taxa_retencao: number;
     taxa_conversao: number;
-    nps: number | null;
+    nps?: number | null; // DEPRECATED - mantido para compatibilidade
     taxa_presenca: number;
     evasoes_mes: number;
     health_score: number;
     health_status: string;
+    fator_demanda_ponderado?: number; // V2: Fator de demanda ponderado pela carteira
   };
   metas: any[];
   acoes: any[];
@@ -94,7 +95,7 @@ Deno.serve(async (req) => {
     relatorio += `• Taxa de Presença: *${professor.taxa_presenca.toFixed(1)}%*\n`;
     relatorio += `• Taxa de Retenção: *${professor.taxa_retencao.toFixed(1)}%*\n`;
     relatorio += `• Taxa de Conversão: *${professor.taxa_conversao.toFixed(1)}%*\n`;
-    relatorio += `• NPS: *${professor.nps ? professor.nps.toFixed(1) : 'N/D'}*\n`;
+    relatorio += `• Fator de Demanda: *${(professor.fator_demanda_ponderado || 1.0).toFixed(1)}*\n`;
     relatorio += `• Evasões no Mês: *${professor.evasoes_mes}*\n\n`;
 
     // Especialidades
@@ -197,7 +198,7 @@ Responda EXATAMENTE neste formato JSON:
       taxa_presenca: professor.taxa_presenca,
       taxa_retencao: professor.taxa_retencao,
       taxa_conversao: professor.taxa_conversao,
-      nps: professor.nps,
+      fator_demanda_ponderado: professor.fator_demanda_ponderado || 1.0,
       evasoes_mes: professor.evasoes_mes,
       especialidades: professor.especialidades,
       metas_ativas: metas?.length || 0,

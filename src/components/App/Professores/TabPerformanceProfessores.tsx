@@ -40,6 +40,7 @@ interface ProfessorPerformance {
   tendencia_media?: 'subindo' | 'estavel' | 'caindo';
   health_score: number;
   health_status: 'critico' | 'atencao' | 'saudavel';
+  fator_demanda_ponderado: number; // Fator de demanda ponderado pela composição da carteira
 }
 
 interface AlertaPerformance {
@@ -127,6 +128,17 @@ export function TabPerformanceProfessores({ unidadeAtual }: Props) {
       
       const { data: kpisHistorico } = await historicoQuery;
 
+      // Buscar fator de demanda ponderado por professor
+      let fatorDemandaQuery = supabase
+        .from('vw_fator_demanda_professor')
+        .select('professor_id, fator_demanda_ponderado, total_alunos, unidade_id');
+      
+      if (unidadeAtual !== 'todos') {
+        fatorDemandaQuery = fatorDemandaQuery.eq('unidade_id', unidadeAtual);
+      }
+      
+      const { data: fatoresDemanda } = await fatorDemandaQuery;
+
       // Buscar relacionamentos de unidades
       const { data: unidadesRelData } = await supabase
         .from('professores_unidades')
@@ -187,6 +199,14 @@ export function TabPerformanceProfessores({ unidadeAtual }: Props) {
           historicoMap.set(h.professor_id, []);
         }
         historicoMap.get(h.professor_id)!.push(h);
+      });
+
+      // Criar mapa de fator de demanda ponderado por professor
+      const fatorDemandaMap = new Map<number, number>();
+      fatoresDemanda?.forEach(f => {
+        if (!fatorDemandaMap.has(f.professor_id)) {
+          fatorDemandaMap.set(f.professor_id, Number(f.fator_demanda_ponderado) || 1.0);
+        }
       });
 
       // Montar mapas de contagens
@@ -273,15 +293,16 @@ export function TabPerformanceProfessores({ unidadeAtual }: Props) {
             else if (atual < anterior - 0.1) tendencia = 'caindo';
           }
 
-          // Calcular Health Score usando os KPIs reais
+          // Calcular Health Score V2 usando os KPIs reais
           const healthResult = calcularHealthScore({
             mediaTurma: mediaAlunosTurma,
             retencao: taxaRetencao,
             conversao: taxaConversao,
-            nps: nps,
             presenca: taxaPresenca,
             evasoes: evasoesMes,
-            cursos: cursosProf // Cursos do professor para ajuste de peso
+            taxaCrescimentoAjustada: 0, // TODO: buscar da view vw_taxa_crescimento_professor
+            taxaEvasao: totalAlunos > 0 ? (evasoesMes / totalAlunos) * 100 : 0,
+            carteiraAlunos: totalAlunos
           });
 
           // Determinar status baseado no Health Score
@@ -291,6 +312,9 @@ export function TabPerformanceProfessores({ unidadeAtual }: Props) {
           } else if (healthResult.status === 'atencao' || taxaRetencao < 95 || mediaAlunosTurma < 1.5 || evasoesMes >= 1 || taxaPresenca < 80) {
             status = 'atencao';
           }
+
+          // Obter fator de demanda ponderado do mapa
+          const fatorDemandaPonderado = fatorDemandaMap.get(prof.id) || 1.0;
 
           return {
             id: prof.id,
@@ -309,7 +333,8 @@ export function TabPerformanceProfessores({ unidadeAtual }: Props) {
             status,
             tendencia_media: tendencia,
             health_score: healthResult.score,
-            health_status: healthResult.status
+            health_status: healthResult.status,
+            fator_demanda_ponderado: Math.round(fatorDemandaPonderado * 100) / 100
           };
         })
         .filter(p => {
@@ -364,14 +389,12 @@ export function TabPerformanceProfessores({ unidadeAtual }: Props) {
   // Rankings
   const rankings = useMemo(() => {
     const comConversao = professores.filter(p => p.total_alunos > 0);
-    const comNps = professores.filter(p => p.nps !== null);
     const comTurmas = professores.filter(p => p.total_turmas > 0);
 
     return {
       topConversao: [...comConversao].sort((a, b) => b.taxa_conversao - a.taxa_conversao)[0],
       topRetencao: [...comConversao].sort((a, b) => b.taxa_retencao - a.taxa_retencao)[0],
-      topMediaTurma: [...comTurmas].sort((a, b) => b.media_alunos_turma - a.media_alunos_turma)[0],
-      topNps: [...comNps].sort((a, b) => (b.nps || 0) - (a.nps || 0))[0]
+      topMediaTurma: [...comTurmas].sort((a, b) => b.media_alunos_turma - a.media_alunos_turma)[0]
     };
   }, [professores]);
 
@@ -380,7 +403,6 @@ export function TabPerformanceProfessores({ unidadeAtual }: Props) {
     const totalAlunos = professores.reduce((acc, p) => acc + p.total_alunos, 0);
     const totalTurmas = professores.reduce((acc, p) => acc + p.total_turmas, 0);
     const totalEvasoes = professores.reduce((acc, p) => acc + p.evasoes_mes, 0);
-    const comNps = professores.filter(p => p.nps !== null);
 
     return {
       total_professores: professores.length,
@@ -392,9 +414,7 @@ export function TabPerformanceProfessores({ unidadeAtual }: Props) {
       taxa_conversao_media: professores.length > 0 
         ? professores.reduce((acc, p) => acc + p.taxa_conversao, 0) / professores.length 
         : 0,
-      nps_medio: comNps.length > 0 
-        ? comNps.reduce((acc, p) => acc + (p.nps || 0), 0) / comNps.length 
-        : 0,
+      nps_medio: 0, // DEPRECATED - mantido para compatibilidade
       total_evasoes: totalEvasoes,
       professores_criticos: professores.filter(p => p.status === 'critico').length,
       professores_atencao: professores.filter(p => p.status === 'atencao').length,
@@ -485,7 +505,7 @@ export function TabPerformanceProfessores({ unidadeAtual }: Props) {
       </div>
 
       {/* Ranking Rápido + Health Score com Gauge */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
         {/* Top Conversão */}
         <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50 h-[115px] flex flex-col justify-center">
           <p className="text-xs text-slate-400 mb-1">🏆 Top Conversão</p>
@@ -599,19 +619,6 @@ export function TabPerformanceProfessores({ unidadeAtual }: Props) {
             <p className="text-slate-500 text-sm">-</p>
           )}
         </div>
-
-        {/* Top NPS */}
-        <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50 h-[115px] flex flex-col justify-center">
-          <p className="text-xs text-slate-400 mb-1">🏆 Top NPS</p>
-          {rankings.topNps ? (
-            <>
-              <p className="text-white font-semibold text-sm truncate">{rankings.topNps.nome}</p>
-              <p className="text-green-400 text-sm">{rankings.topNps.nps?.toFixed(1)} NPS</p>
-            </>
-          ) : (
-            <p className="text-slate-500 text-sm">-</p>
-          )}
-        </div>
       </div>
 
       {/* Filtros e Relatório */}
@@ -688,11 +695,16 @@ export function TabPerformanceProfessores({ unidadeAtual }: Props) {
                     <span>Health</span>
                   </div>
                 </th>
+                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">
+                  <div className="flex items-center justify-center gap-1">
+                    <TrendingUp className="w-3 h-3 text-amber-400" />
+                    <span>Fator</span>
+                  </div>
+                </th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Alunos</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Média/Turma</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Retenção</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Conversão</th>
-                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">NPS</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Presença</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Evasões</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Status</th>
@@ -702,7 +714,7 @@ export function TabPerformanceProfessores({ unidadeAtual }: Props) {
             <tbody className="divide-y divide-slate-700/50">
               {professoresFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="p-8 text-center text-slate-400">
+                  <td colSpan={11} className="p-8 text-center text-slate-400">
                     Nenhum professor encontrado
                   </td>
                 </tr>
@@ -742,6 +754,20 @@ export function TabPerformanceProfessores({ unidadeAtual }: Props) {
                         <span className="text-sm font-black">{Math.round(professor.health_score)}</span>
                       </div>
                     </td>
+                    {/* Fator de Demanda Ponderado */}
+                    <td className="text-center px-4 py-3">
+                      <span className={`px-2 py-1 rounded-lg text-sm font-medium ${
+                        professor.fator_demanda_ponderado <= 1.2 
+                          ? 'bg-emerald-500/20 text-emerald-400' 
+                          : professor.fator_demanda_ponderado <= 1.8
+                          ? 'bg-cyan-500/20 text-cyan-400'
+                          : professor.fator_demanda_ponderado <= 2.3
+                          ? 'bg-amber-500/20 text-amber-400'
+                          : 'bg-rose-500/20 text-rose-400'
+                      }`}>
+                        {professor.fator_demanda_ponderado.toFixed(1)}
+                      </span>
+                    </td>
                     <td className="text-center px-4 py-3 text-white">{professor.total_alunos}</td>
                     <td className="text-center px-4 py-3">
                       <span className={`font-medium ${getMetricaColor(professor.media_alunos_turma, { critico: 1.3, atencao: 1.5 })}`}>
@@ -764,11 +790,6 @@ export function TabPerformanceProfessores({ unidadeAtual }: Props) {
                     <td className="text-center px-4 py-3">
                       <span className={`font-medium ${getMetricaColor(professor.taxa_conversao, { critico: 70, atencao: 90 })}`}>
                         {professor.taxa_conversao.toFixed(0)}%
-                      </span>
-                    </td>
-                    <td className="text-center px-4 py-3">
-                      <span className={`font-medium ${professor.nps ? getMetricaColor(professor.nps, { critico: 7, atencao: 8.5 }) : 'text-slate-500'}`}>
-                        {professor.nps?.toFixed(1) || '-'}
                       </span>
                     </td>
                     <td className="text-center px-4 py-3">
@@ -828,12 +849,6 @@ export function TabPerformanceProfessores({ unidadeAtual }: Props) {
             <p className="text-red-400">🔴 &lt;70% Ruim</p>
             <p className="text-yellow-400">🟡 70-90% Bom</p>
             <p className="text-green-400">🟢 &gt;90% Mestre</p>
-          </div>
-          <div>
-            <p className="text-slate-300 font-medium">NPS</p>
-            <p className="text-red-400">🔴 &lt;7 Ruim</p>
-            <p className="text-yellow-400">🟡 7-8.5 Regular</p>
-            <p className="text-green-400">🟢 &gt;8.5 Excelente</p>
           </div>
           <div>
             <p className="text-slate-300 font-medium">Presença</p>

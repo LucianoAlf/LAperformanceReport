@@ -489,22 +489,8 @@ export function GradeHoraria({
           </Select>
         </div>
 
-        {/* Legenda */}
-        <div className="flex items-center gap-4 mt-3 pt-3 border-t border-slate-700/50">
-          <span className="text-xs text-slate-500">Legenda:</span>
-          <div className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded bg-emerald-500/50" />
-            <span className="text-xs text-slate-400">Disponível</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded bg-amber-500/50" />
-            <span className="text-xs text-slate-400">Quase cheio</span>
-          </div>
-          <div className="flex items-center gap-1">
-            <div className="w-3 h-3 rounded bg-red-500/50" />
-            <span className="text-xs text-slate-400">Cheio</span>
-          </div>
-          <div className="flex-1" />
+        {/* Contador de turmas */}
+        <div className="flex items-center justify-end mt-3 pt-3 border-t border-slate-700/50">
           <span className="text-xs text-slate-500">
             {turmasFiltradas.length} turma(s) encontrada(s)
           </span>

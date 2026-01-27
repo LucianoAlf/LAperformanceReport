@@ -46,7 +46,7 @@ export function ModalAdicionarAlunoTurma({
   const [mostrarConfirmacao, setMostrarConfirmacao] = useState(false);
   
   // Filtros toggle
-  const [filtroMesmoCurso, setFiltroMesmoCurso] = useState(false);
+  const [filtroMesmoProfessor, setFiltroMesmoProfessor] = useState(false);
   const [filtroHorarioProximo, setFiltroHorarioProximo] = useState(false);
   const [filtroIdadeProxima, setFiltroIdadeProxima] = useState(false);
 
@@ -173,7 +173,10 @@ export function ModalAdicionarAlunoTurma({
         }
         
         // Aplicar filtros toggle
-        const mesmoCurso = !!(aluno.curso_id && turma.curso_id && aluno.curso_id === turma.curso_id);
+        const mesmoProfessor = turmasExistentes.some(t => 
+          t.ids_alunos?.includes(aluno.id) &&
+          t.professor_id === turma.professor_id
+        );
         const horarioProximo = turmasExistentes.some(t => 
           t.ids_alunos?.includes(aluno.id) &&
           t.dia_semana === turma.dia_semana &&
@@ -181,7 +184,7 @@ export function ModalAdicionarAlunoTurma({
         );
         const idadeProxima = isIdadeProxima(aluno);
         
-        if (filtroMesmoCurso && !mesmoCurso) return false;
+        if (filtroMesmoProfessor && !mesmoProfessor) return false;
         if (filtroHorarioProximo && !horarioProximo) return false;
         if (filtroIdadeProxima && !idadeProxima) return false;
         
@@ -212,7 +215,7 @@ export function ModalAdicionarAlunoTurma({
       })
       .slice(0, 25) // Limitar a 25 resultados
       .map(item => item.aluno);
-  }, [alunosDisponiveis, turma.ids_alunos, turma.curso_id, turma.dia_semana, busca, calcularIndicadores, turmasExistentes, isHorarioProximo, isIdadeProxima, filtroMesmoCurso, filtroHorarioProximo, filtroIdadeProxima]);
+  }, [alunosDisponiveis, turma.ids_alunos, turma.curso_id, turma.dia_semana, turma.professor_id, busca, calcularIndicadores, turmasExistentes, isHorarioProximo, isIdadeProxima, filtroMesmoProfessor, filtroHorarioProximo, filtroIdadeProxima]);
 
   // Detectar conflitos quando um aluno é selecionado
   const detectarConflitos = useCallback((aluno: Aluno): ConflitosAluno[] => {
@@ -442,17 +445,17 @@ export function ModalAdicionarAlunoTurma({
               {/* Filtros toggle - botões compactos */}
               <div className="mb-3 flex flex-wrap gap-2">
                 <button
-                  onClick={() => setFiltroMesmoCurso(!filtroMesmoCurso)}
+                  onClick={() => setFiltroMesmoProfessor(!filtroMesmoProfessor)}
                   className={`
                     px-2.5 py-1 rounded-full text-xs font-medium transition-all flex items-center gap-1.5
-                    ${filtroMesmoCurso 
-                      ? 'bg-emerald-500/30 text-emerald-300 border border-emerald-500' 
-                      : 'bg-slate-700/50 text-slate-400 border border-slate-600 hover:border-emerald-500/50'
+                    ${filtroMesmoProfessor 
+                      ? 'bg-purple-500/30 text-purple-300 border border-purple-500' 
+                      : 'bg-slate-700/50 text-slate-400 border border-slate-600 hover:border-purple-500/50'
                     }
                   `}
                 >
-                  <BookOpen className="w-3 h-3" />
-                  Mesmo curso
+                  <Users className="w-3 h-3" />
+                  Mesmo professor
                 </button>
                 <button
                   onClick={() => setFiltroHorarioProximo(!filtroHorarioProximo)}

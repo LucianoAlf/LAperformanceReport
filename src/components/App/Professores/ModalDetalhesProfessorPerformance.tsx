@@ -24,13 +24,14 @@ interface ProfessorPerformance {
   media_alunos_turma: number;
   taxa_retencao: number;
   taxa_conversao: number;
-  nps: number | null;
+  nps: number | null; // DEPRECATED - mantido para compatibilidade
   taxa_presenca: number;
   evasoes_mes: number;
   status: 'critico' | 'atencao' | 'excelente';
   tendencia_media?: 'subindo' | 'estavel' | 'caindo';
   health_score?: number;
   health_status?: 'critico' | 'atencao' | 'saudavel';
+  fator_demanda_ponderado?: number; // V2: Fator de demanda ponderado pela carteira
 }
 
 interface Meta {
@@ -86,6 +87,15 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
   const [relatorioTexto, setRelatorioTexto] = useState('');
   const [loadingRelatorio, setLoadingRelatorio] = useState(false);
   const [copiado, setCopiado] = useState(false);
+
+  // Limpar estados quando o professor muda para evitar dados de outro professor
+  useEffect(() => {
+    if (professor) {
+      setRelatorioTexto('');
+      setInsights(null);
+      setCopiado(false);
+    }
+  }, [professor?.id]);
 
   useEffect(() => {
     if (open && professor) {
@@ -147,67 +157,68 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
     setLoadingInsights(true);
     setInsights(null);
 
+    // Calcular Health Score V2 para enviar à IA
+    const healthScoreAtual = calcularHealthScore({
+      mediaTurma: professor.media_alunos_turma,
+      retencao: professor.taxa_retencao,
+      conversao: professor.taxa_conversao,
+      presenca: professor.taxa_presenca,
+      evasoes: professor.evasoes_mes,
+      taxaCrescimentoAjustada: 0, // TODO: buscar da view quando disponível
+      taxaEvasao: professor.total_alunos > 0 ? (professor.evasoes_mes / professor.total_alunos) * 100 : 0,
+      carteiraAlunos: professor.total_alunos
+    });
+
+    const payload = {
+      professor: {
+        id: professor.id,
+        nome: professor.nome,
+        especialidades: professor.especialidades,
+        unidades: professor.unidades.map(u => u.codigo),
+        data_admissao: '2020-01-01',
+        tipo_contrato: 'PJ'
+      },
+      metricas_atuais: {
+        total_alunos: professor.total_alunos,
+        total_turmas: professor.total_turmas,
+        media_alunos_turma: professor.media_alunos_turma,
+        taxa_retencao: professor.taxa_retencao,
+        taxa_conversao: professor.taxa_conversao,
+        taxa_presenca: professor.taxa_presenca,
+        evasoes_mes: professor.evasoes_mes,
+        fator_demanda_ponderado: professor.fator_demanda_ponderado || 1.0
+      },
+      health_score: {
+        score: healthScoreAtual.score,
+        status: healthScoreAtual.status,
+        detalhes: healthScoreAtual.detalhes
+      },
+      historico: [],
+      evasoes_recentes: evasoes.map(e => ({
+        aluno_nome: e.aluno_nome,
+        data: e.data,
+        motivo: e.motivo,
+        curso: e.curso
+      })),
+      metas_ativas: metas.filter(m => m.status === 'em_andamento').map(m => ({
+        id: m.id,
+        tipo: m.tipo,
+        valor_atual: m.valor_atual,
+        valor_meta: m.valor_meta,
+        prazo: m.data_fim || 'Contínua',
+        status: m.status
+      })),
+      acoes_recentes: acoes.slice(0, 5).map(a => ({
+        tipo: a.tipo,
+        titulo: a.titulo,
+        data: format(new Date(a.data_agendada), 'dd/MM/yyyy'),
+        status: a.status
+      })),
+      alunos_solo: [],
+      competencia
+    };
+
     try {
-      // Calcular Health Score para enviar à IA
-      const healthScoreAtual = calcularHealthScore({
-        mediaTurma: professor.media_alunos_turma,
-        retencao: professor.taxa_retencao,
-        conversao: professor.taxa_conversao,
-        nps: professor.nps,
-        presenca: professor.taxa_presenca,
-        evasoes: professor.evasoes_mes,
-        cursos: professor.especialidades
-      });
-
-      const payload = {
-        professor: {
-          id: professor.id,
-          nome: professor.nome,
-          especialidades: professor.especialidades,
-          unidades: professor.unidades.map(u => u.codigo),
-          data_admissao: '2020-01-01',
-          tipo_contrato: 'PJ'
-        },
-        metricas_atuais: {
-          total_alunos: professor.total_alunos,
-          total_turmas: professor.total_turmas,
-          media_alunos_turma: professor.media_alunos_turma,
-          taxa_retencao: professor.taxa_retencao,
-          taxa_conversao: professor.taxa_conversao,
-          nps: professor.nps,
-          taxa_presenca: professor.taxa_presenca,
-          evasoes_mes: professor.evasoes_mes
-        },
-        health_score: {
-          score: healthScoreAtual.score,
-          status: healthScoreAtual.status,
-          detalhes: healthScoreAtual.detalhes
-        },
-        historico: [],
-        evasoes_recentes: evasoes.map(e => ({
-          aluno_nome: e.aluno_nome,
-          data: e.data,
-          motivo: e.motivo,
-          curso: e.curso
-        })),
-        metas_ativas: metas.filter(m => m.status === 'em_andamento').map(m => ({
-          id: m.id,
-          tipo: m.tipo,
-          valor_atual: m.valor_atual,
-          valor_meta: m.valor_meta,
-          prazo: m.data_fim || 'Contínua',
-          status: m.status
-        })),
-        acoes_recentes: acoes.slice(0, 5).map(a => ({
-          tipo: a.tipo,
-          titulo: a.titulo,
-          data: format(new Date(a.data_agendada), 'dd/MM/yyyy'),
-          status: a.status
-        })),
-        alunos_solo: [],
-        competencia
-      };
-
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/gemini-insights-professor`,
         {
@@ -221,13 +232,18 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
       );
 
       if (!response.ok) {
-        throw new Error('Erro ao gerar insights');
+        const errorText = await response.text();
+        console.error('❌ Erro HTTP:', response.status, response.statusText);
+        console.error('📄 Resposta:', errorText);
+        throw new Error(`Erro ${response.status}: ${errorText}`);
       }
 
       const data = await response.json();
+      console.log('✅ Insights gerados com sucesso:', data);
       setInsights(data);
     } catch (error) {
-      console.error('Erro ao gerar insights:', error);
+      console.error('❌ Erro ao gerar insights:', error);
+      console.error('📦 Payload enviado:', JSON.stringify(payload, null, 2));
       setInsights({
         resumo: 'Não foi possível gerar insights no momento. Tente novamente.',
         pontos_fortes: [],
@@ -254,10 +270,11 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
             mediaTurma: professor.media_alunos_turma,
             retencao: professor.taxa_retencao,
             conversao: professor.taxa_conversao,
-            nps: professor.nps,
             presenca: professor.taxa_presenca,
             evasoes: professor.evasoes_mes,
-            cursos: professor.especialidades
+            taxaCrescimentoAjustada: 0,
+            taxaEvasao: professor.total_alunos > 0 ? (professor.evasoes_mes / professor.total_alunos) * 100 : 0,
+            carteiraAlunos: professor.total_alunos
           });
 
       const { data: responseIA, error: errorIA } = await supabase.functions.invoke(
@@ -273,11 +290,11 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
               media_alunos_turma: professor.media_alunos_turma,
               taxa_retencao: professor.taxa_retencao,
               taxa_conversao: professor.taxa_conversao,
-              nps: professor.nps,
               taxa_presenca: professor.taxa_presenca,
               evasoes_mes: professor.evasoes_mes,
               health_score: healthScoreAtual.score,
-              health_status: healthScoreAtual.status
+              health_status: healthScoreAtual.status,
+              fator_demanda_ponderado: professor.fator_demanda_ponderado || 1.0
             },
             metas: metas,
             acoes: acoes,
@@ -364,15 +381,16 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
       };
     }
     
-    // Fallback: calcular se não tiver
+    // Fallback: calcular se não tiver (V2)
     return calcularHealthScore({
       mediaTurma: professor.media_alunos_turma,
       retencao: professor.taxa_retencao,
       conversao: professor.taxa_conversao,
-      nps: professor.nps,
       presenca: professor.taxa_presenca,
       evasoes: professor.evasoes_mes,
-      cursos: professor.especialidades
+      taxaCrescimentoAjustada: 0,
+      taxaEvasao: professor.total_alunos > 0 ? (professor.evasoes_mes / professor.total_alunos) * 100 : 0,
+      carteiraAlunos: professor.total_alunos
     });
   }, [professor]);
 
@@ -534,10 +552,18 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
                 <p className="text-xs text-slate-400">Conversão</p>
               </div>
               <div className="bg-slate-800/50 rounded-lg p-3 text-center">
-                <p className={`text-xl font-bold ${professor.nps ? getMetricaColor(professor.nps, { critico: 7, atencao: 8.5 }) : 'text-slate-500'}`}>
-                  {professor.nps?.toFixed(1) || '-'}
+                <p className={`text-xl font-bold ${
+                  (professor.fator_demanda_ponderado || 1.0) <= 1.2 
+                    ? 'text-emerald-400' 
+                    : (professor.fator_demanda_ponderado || 1.0) <= 1.8
+                    ? 'text-cyan-400'
+                    : (professor.fator_demanda_ponderado || 1.0) <= 2.3
+                    ? 'text-amber-400'
+                    : 'text-rose-400'
+                }`}>
+                  {(professor.fator_demanda_ponderado || 1.0).toFixed(1)}
                 </p>
-                <p className="text-xs text-slate-400">NPS</p>
+                <p className="text-xs text-slate-400">Fator Demanda</p>
               </div>
             </div>
           </div>
