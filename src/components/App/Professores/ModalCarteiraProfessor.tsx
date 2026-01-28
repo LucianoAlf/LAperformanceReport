@@ -60,7 +60,7 @@ export function ModalCarteiraProfessor({ open, onClose, professor, unidadeAtual 
         .from('alunos')
         .select(`
           id, nome, classificacao, valor_parcela, tempo_permanencia_meses,
-          dia_aula, horario_aula, data_fim_contrato, telefone, email,
+          dia_aula, horario_aula, data_fim_contrato, data_matricula, telefone, email,
           cursos(nome), unidades(nome)
         `)
         .eq('professor_atual_id', professor.id)
@@ -73,8 +73,20 @@ export function ModalCarteiraProfessor({ open, onClose, professor, unidadeAtual 
 
       const { data } = await query;
 
+      // Calcular data_fim_contrato para alunos que não têm
+      const alunosComContrato = (data || []).map((aluno: any) => {
+        let fimContrato = aluno.data_fim_contrato;
+        if (!fimContrato && aluno.data_matricula) {
+          const dataMatricula = new Date(aluno.data_matricula);
+          const fimCalculado = new Date(dataMatricula);
+          fimCalculado.setFullYear(fimCalculado.getFullYear() + 1);
+          fimContrato = fimCalculado.toISOString().split('T')[0];
+        }
+        return { ...aluno, data_fim_contrato: fimContrato };
+      });
+
       // Salvar alunos completos para exportação
-      setAlunosCompletos(data || []);
+      setAlunosCompletos(alunosComContrato);
 
       // Agrupar por curso
       const contagem = new Map<string, number>();

@@ -34,6 +34,7 @@ interface AlunoCarteira {
   id: number;
   nome: string;
   classificacao: 'LAMK' | 'EMLA';
+  idade_atual: number | null;
   curso: string;
   dia_aula: string;
   horario_aula: string;
@@ -207,8 +208,8 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
       let query = supabase
         .from('alunos')
         .select(`
-          id, nome, classificacao, valor_parcela, tempo_permanencia_meses,
-          dia_aula, horario_aula, data_fim_contrato, status,
+          id, nome, classificacao, idade_atual, valor_parcela, tempo_permanencia_meses,
+          dia_aula, horario_aula, data_fim_contrato, data_matricula, status,
           cursos(nome)
         `)
         .eq('professor_atual_id', professorId)
@@ -221,18 +222,30 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
 
       const { data } = await query;
 
-      const alunosFormatados: AlunoCarteira[] = (data || []).map((a: any) => ({
-        id: a.id,
-        nome: a.nome,
-        classificacao: a.classificacao || 'EMLA',
-        curso: (a.cursos as any)?.nome || '-',
-        dia_aula: a.dia_aula || '-',
-        horario_aula: a.horario_aula ? a.horario_aula.substring(0, 5) : '-',
-        valor_parcela: Number(a.valor_parcela) || 0,
-        tempo_permanencia_meses: a.tempo_permanencia_meses || 0,
-        data_fim_contrato: a.data_fim_contrato,
-        status: a.status
-      }));
+      const alunosFormatados: AlunoCarteira[] = (data || []).map((a: any) => {
+        // Calcular data_fim_contrato se não existir: data_matricula + 12 meses
+        let fimContrato = a.data_fim_contrato;
+        if (!fimContrato && a.data_matricula) {
+          const dataMatricula = new Date(a.data_matricula);
+          const fimCalculado = new Date(dataMatricula);
+          fimCalculado.setFullYear(fimCalculado.getFullYear() + 1);
+          fimContrato = fimCalculado.toISOString().split('T')[0];
+        }
+
+        return {
+          id: a.id,
+          nome: a.nome,
+          classificacao: a.classificacao || 'EMLA',
+          idade_atual: a.idade_atual || null,
+          curso: (a.cursos as any)?.nome || '-',
+          dia_aula: a.dia_aula || '-',
+          horario_aula: a.horario_aula ? a.horario_aula.substring(0, 5) : '-',
+          valor_parcela: Number(a.valor_parcela) || 0,
+          tempo_permanencia_meses: a.tempo_permanencia_meses || 0,
+          data_fim_contrato: fimContrato,
+          status: a.status
+        };
+      });
 
       setAlunosExpandido(alunosFormatados);
     } catch (error) {
@@ -466,29 +479,48 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
                 </p>
               </div>
 
-              {/* Métricas */}
-              <div className="hidden md:flex items-center gap-6 text-sm">
-                <div className="text-center">
-                  <p className="text-white font-semibold">{carteira.total_alunos}</p>
-                  <p className="text-xs text-slate-400">alunos</p>
+              {/* Badges com métricas */}
+              <div className="hidden md:flex items-center gap-2">
+                {/* Badge Alunos */}
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-500/10 border border-violet-500/20">
+                  <Users className="w-3.5 h-3.5 text-violet-400" />
+                  <span className="text-sm font-semibold text-white">{carteira.total_alunos}</span>
+                  <span className="text-xs text-slate-400">alunos</span>
                 </div>
-                <div className="text-center">
-                  <p className="text-emerald-400 font-semibold">
-                    {carteira.mrr_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                  </p>
-                  <p className="text-xs text-slate-400">MRR</p>
+
+                {/* Badge MRR */}
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                  <Wallet className="w-3.5 h-3.5 text-emerald-400" />
+                  <span className="text-sm font-semibold text-emerald-400">
+                    {carteira.mrr_total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                  </span>
+                  <span className="text-xs text-slate-400">MRR</span>
                 </div>
-                <div className="text-center">
-                  <p className="text-cyan-400 font-semibold">
-                    {carteira.ticket_medio.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                  </p>
-                  <p className="text-xs text-slate-400">ticket</p>
+
+                {/* Badge Ticket */}
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/20">
+                  <TrendingUp className="w-3.5 h-3.5 text-cyan-400" />
+                  <span className="text-sm font-semibold text-cyan-400">
+                    {carteira.ticket_medio.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                  </span>
+                  <span className="text-xs text-slate-400">ticket</span>
                 </div>
-                <div className="text-center">
-                  <p className={`font-semibold ${getCorMediaTurma(carteira.media_alunos_turma)}`}>
-                    {getIndicadorMediaTurma(carteira.media_alunos_turma)} {carteira.media_alunos_turma.toFixed(1)}
-                  </p>
-                  <p className="text-xs text-slate-400">al/turma</p>
+
+                {/* Badge Média/Turma */}
+                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border ${
+                  carteira.media_alunos_turma >= 1.8 
+                    ? 'bg-green-500/10 border-green-500/20' 
+                    : carteira.media_alunos_turma >= 1.5 
+                      ? 'bg-yellow-500/10 border-yellow-500/20' 
+                      : 'bg-red-500/10 border-red-500/20'
+                }`}>
+                  <span className="text-sm">
+                    {getIndicadorMediaTurma(carteira.media_alunos_turma)}
+                  </span>
+                  <span className={`text-sm font-semibold ${getCorMediaTurma(carteira.media_alunos_turma)}`}>
+                    {carteira.media_alunos_turma.toFixed(1)}
+                  </span>
+                  <span className="text-xs text-slate-400">al/turma</span>
                 </div>
               </div>
 
@@ -522,11 +554,12 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
                         <tr className="text-left text-slate-400 border-b border-slate-700/50">
                           <th className="pb-2 font-medium">Nome</th>
                           <th className="pb-2 font-medium">Escola</th>
+                          <th className="pb-2 font-medium text-center">Idade</th>
                           <th className="pb-2 font-medium">Curso</th>
                           <th className="pb-2 font-medium">Dia/Horário</th>
                           <th className="pb-2 font-medium text-right">Parcela</th>
-                          <th className="pb-2 font-medium text-right">Perm.</th>
-                          <th className="pb-2 font-medium">Contrato</th>
+                          <th className="pb-2 font-medium text-center">Perm.</th>
+                          <th className="pb-2 font-medium text-center">Fim Contrato</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -542,6 +575,9 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
                                 {aluno.classificacao}
                               </span>
                             </td>
+                            <td className="py-2 text-center text-slate-300">
+                              {aluno.idade_atual ? `${aluno.idade_atual} anos` : '-'}
+                            </td>
                             <td className="py-2 text-slate-300">{aluno.curso}</td>
                             <td className="py-2 text-slate-300">
                               <span className="flex items-center gap-1">
@@ -554,10 +590,10 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
                             <td className="py-2 text-right text-emerald-400">
                               {aluno.valor_parcela.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                             </td>
-                            <td className="py-2 text-right text-slate-300">{aluno.tempo_permanencia_meses}m</td>
-                            <td className="py-2">
+                            <td className="py-2 text-center text-slate-300">{aluno.tempo_permanencia_meses}m</td>
+                            <td className="py-2 text-center">
                               {aluno.data_fim_contrato ? (
-                                <span className={`flex items-center gap-1 ${
+                                <span className={`flex items-center justify-center gap-1 ${
                                   contratoProximoVencer(aluno.data_fim_contrato) 
                                     ? 'text-yellow-400' 
                                     : 'text-slate-400'

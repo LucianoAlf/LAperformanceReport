@@ -204,7 +204,7 @@ export function KPICard({
 
   const valueSizeClasses = {
     sm: 'text-2xl',
-    md: 'text-3xl md:text-4xl',
+    md: 'text-2xl md:text-3xl',
     lg: 'text-4xl md:text-5xl',
   };
 

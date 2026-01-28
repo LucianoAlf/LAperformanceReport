@@ -24,6 +24,7 @@ import { ProfessoresPage } from './components/App/Professores';
 import { AdministrativoPage } from './components/App/Administrativo';
 import { AlunosPage } from './components/App/Alunos';
 import { SalasPage } from './components/App/Salas';
+import { ProjetosPage } from './components/App/Projetos';
 
 // Metas
 import { MetasPageNew } from './components/App/Metas';
@@ -164,6 +165,10 @@ export const router = createBrowserRouter([
           {
             path: 'professores',
             element: <ProfessoresPage />,
+          },
+          {
+            path: 'projetos',
+            element: <ProjetosPage />,
           },
           {
             path: 'salas',

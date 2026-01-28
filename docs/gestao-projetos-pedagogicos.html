@@ -1,0 +1,4586 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestão de Projetos Pedagógicos | LA Music</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            /* Core Colors - Dark Theme LA Music */
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #12121a;
+            --bg-tertiary: #1a1a24;
+            --bg-card: #16161f;
+            --bg-hover: #1e1e2a;
+            --bg-elevated: #202030;
+            
+            /* Borders */
+            --border-subtle: rgba(255, 255, 255, 0.06);
+            --border-default: rgba(255, 255, 255, 0.1);
+            --border-strong: rgba(255, 255, 255, 0.15);
+            
+            /* Text */
+            --text-primary: #f4f4f5;
+            --text-secondary: #a1a1aa;
+            --text-muted: #71717a;
+            
+            /* Accent Colors */
+            --cyan-500: #06b6d4;
+            --cyan-400: #22d3ee;
+            --cyan-900: rgba(6, 182, 212, 0.15);
+            
+            --emerald-500: #10b981;
+            --emerald-400: #34d399;
+            --emerald-900: rgba(16, 185, 129, 0.15);
+            
+            --violet-500: #8b5cf6;
+            --violet-400: #a78bfa;
+            --violet-900: rgba(139, 92, 246, 0.15);
+            
+            --amber-500: #f59e0b;
+            --amber-400: #fbbf24;
+            --amber-900: rgba(245, 158, 11, 0.15);
+            
+            --rose-500: #f43f5e;
+            --rose-400: #fb7185;
+            --rose-900: rgba(244, 63, 94, 0.15);
+            
+            --blue-500: #3b82f6;
+            --blue-400: #60a5fa;
+            --blue-900: rgba(59, 130, 246, 0.15);
+            
+            --pink-500: #ec4899;
+            --pink-400: #f472b6;
+            --pink-900: rgba(236, 72, 153, 0.15);
+            
+            /* Status Colors */
+            --status-planning: var(--violet-500);
+            --status-progress: var(--blue-500);
+            --status-review: var(--amber-500);
+            --status-done: var(--emerald-500);
+            --status-paused: var(--text-muted);
+            --status-late: var(--rose-500);
+            
+            /* Shadows */
+            --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+            --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.4);
+            --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.5);
+            --shadow-xl: 0 20px 25px rgba(0, 0, 0, 0.6);
+            
+            /* Transitions */
+            --transition-fast: 150ms ease;
+            --transition-normal: 250ms ease;
+            --transition-slow: 400ms ease;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        /* ===== LAYOUT ===== */
+        .app-container {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        /* ===== SIDEBAR ===== */
+        .sidebar {
+            width: 240px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-subtle);
+            display: flex;
+            flex-direction: column;
+            position: fixed;
+            top: 0;
+            left: 0;
+            bottom: 0;
+            z-index: 100;
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 700;
+            font-size: 16px;
+        }
+
+        .logo-icon {
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, var(--cyan-500), var(--violet-500));
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .sidebar-nav {
+            flex: 1;
+            padding: 16px 12px;
+            overflow-y: auto;
+        }
+
+        .nav-section {
+            margin-bottom: 24px;
+        }
+
+        .nav-section-title {
+            font-size: 10px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            padding: 0 12px;
+            margin-bottom: 8px;
+        }
+
+        .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            transition: var(--transition-fast);
+            cursor: pointer;
+        }
+
+        .nav-item:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .nav-item.active {
+            background: var(--cyan-900);
+            color: var(--cyan-400);
+        }
+
+        .nav-item-icon {
+            font-size: 18px;
+            width: 20px;
+            text-align: center;
+        }
+
+        .nav-item-badge {
+            margin-left: auto;
+            background: var(--rose-500);
+            color: white;
+            font-size: 10px;
+            font-weight: 600;
+            padding: 2px 6px;
+            border-radius: 10px;
+        }
+
+        /* ===== MAIN CONTENT ===== */
+        .main-content {
+            flex: 1;
+            margin-left: 240px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ===== TOP HEADER ===== */
+        .top-header {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-subtle);
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: sticky;
+            top: 0;
+            z-index: 50;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .page-title-section h1 {
+            font-size: 20px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .page-title-section p {
+            font-size: 13px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .header-select {
+            padding: 8px 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-default);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 13px;
+            cursor: pointer;
+        }
+
+        .btn-primary {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            background: linear-gradient(135deg, var(--cyan-500), var(--blue-500));
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition-fast);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(6, 182, 212, 0.4);
+        }
+
+        .btn-icon {
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-default);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: var(--transition-fast);
+            position: relative;
+        }
+
+        .btn-icon:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .btn-icon .badge {
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            width: 18px;
+            height: 18px;
+            background: var(--rose-500);
+            border-radius: 50%;
+            font-size: 10px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* ===== TABS ===== */
+        .tabs-container {
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-subtle);
+            padding: 0 24px;
+        }
+
+        .tabs-nav {
+            display: flex;
+            gap: 4px;
+        }
+
+        .tab-btn {
+            padding: 12px 16px;
+            background: transparent;
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: var(--text-secondary);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition-fast);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .tab-btn:hover {
+            color: var(--text-primary);
+        }
+
+        .tab-btn.active {
+            color: var(--cyan-400);
+            border-bottom-color: var(--cyan-400);
+        }
+
+        .tab-btn .count {
+            background: var(--bg-tertiary);
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+        }
+
+        .tab-btn.active .count {
+            background: var(--cyan-900);
+        }
+
+        /* ===== PAGE CONTENT ===== */
+        .page-content {
+            flex: 1;
+            padding: 24px;
+            overflow-y: auto;
+        }
+
+        /* ===== DASHBOARD VIEW ===== */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .kpi-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 20px;
+            transition: var(--transition-normal);
+        }
+
+        .kpi-card:hover {
+            border-color: var(--border-default);
+            transform: translateY(-2px);
+        }
+
+        .kpi-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+        }
+
+        .kpi-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .kpi-icon.cyan { background: var(--cyan-900); }
+        .kpi-icon.emerald { background: var(--emerald-900); }
+        .kpi-icon.violet { background: var(--violet-900); }
+        .kpi-icon.amber { background: var(--amber-900); }
+        .kpi-icon.rose { background: var(--rose-900); }
+        .kpi-icon.blue { background: var(--blue-900); }
+
+        .kpi-trend {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .kpi-trend.up { color: var(--emerald-400); }
+        .kpi-trend.down { color: var(--rose-400); }
+
+        .kpi-value {
+            font-size: 32px;
+            font-weight: 800;
+            font-family: 'JetBrains Mono', monospace;
+            color: var(--text-primary);
+            margin-bottom: 4px;
+        }
+
+        .kpi-label {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        /* ===== DASHBOARD SECTIONS ===== */
+        .dashboard-sections {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 24px;
+        }
+
+        .section-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .section-title {
+            font-size: 15px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .section-action {
+            font-size: 12px;
+            color: var(--cyan-400);
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .section-action:hover {
+            text-decoration: underline;
+        }
+
+        /* ===== UPCOMING DEADLINES ===== */
+        .deadline-list {
+            padding: 12px;
+        }
+
+        .deadline-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px;
+            border-radius: 8px;
+            transition: var(--transition-fast);
+            cursor: pointer;
+        }
+
+        .deadline-item:hover {
+            background: var(--bg-hover);
+        }
+
+        .deadline-date {
+            width: 48px;
+            height: 48px;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+        }
+
+        .deadline-date.urgent {
+            background: var(--rose-900);
+            color: var(--rose-400);
+        }
+
+        .deadline-date.warning {
+            background: var(--amber-900);
+            color: var(--amber-400);
+        }
+
+        .deadline-date .day {
+            font-size: 18px;
+            line-height: 1;
+        }
+
+        .deadline-date .month {
+            font-size: 10px;
+            text-transform: uppercase;
+        }
+
+        .deadline-info {
+            flex: 1;
+        }
+
+        .deadline-title {
+            font-weight: 600;
+            font-size: 14px;
+            margin-bottom: 2px;
+        }
+
+        .deadline-project {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .deadline-assignee {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .avatar-sm {
+            width: 24px;
+            height: 24px;
+            border-radius: 6px;
+            background: linear-gradient(135deg, var(--violet-500), var(--pink-500));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 600;
+            color: white;
+        }
+
+        /* ===== PROJECT STATUS BREAKDOWN ===== */
+        .status-breakdown {
+            padding: 16px 20px;
+        }
+
+        .status-bar-container {
+            margin-bottom: 20px;
+        }
+
+        .status-bar {
+            height: 12px;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            overflow: hidden;
+            display: flex;
+        }
+
+        .status-bar-segment {
+            height: 100%;
+            transition: width 0.5s ease;
+        }
+
+        .status-bar-segment.planning { background: var(--status-planning); }
+        .status-bar-segment.progress { background: var(--status-progress); }
+        .status-bar-segment.review { background: var(--status-review); }
+        .status-bar-segment.done { background: var(--status-done); }
+
+        .status-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+        }
+
+        .legend-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 3px;
+        }
+
+        .legend-dot.planning { background: var(--status-planning); }
+        .legend-dot.progress { background: var(--status-progress); }
+        .legend-dot.review { background: var(--status-review); }
+        .legend-dot.done { background: var(--status-done); }
+
+        .legend-value {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        /* ===== ALERTS/NOTIFICATIONS ===== */
+        .alerts-list {
+            padding: 12px;
+        }
+
+        .alert-item {
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            background: var(--bg-tertiary);
+            border-left: 3px solid;
+        }
+
+        .alert-item.danger {
+            border-left-color: var(--rose-500);
+            background: var(--rose-900);
+        }
+
+        .alert-item.warning {
+            border-left-color: var(--amber-500);
+            background: var(--amber-900);
+        }
+
+        .alert-item.info {
+            border-left-color: var(--blue-500);
+            background: var(--blue-900);
+        }
+
+        .alert-icon {
+            font-size: 18px;
+        }
+
+        .alert-content {
+            flex: 1;
+        }
+
+        .alert-title {
+            font-weight: 600;
+            font-size: 13px;
+            margin-bottom: 2px;
+        }
+
+        .alert-description {
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .alert-time {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        /* ===== KANBAN VIEW ===== */
+        .kanban-container {
+            display: flex;
+            gap: 16px;
+            overflow-x: auto;
+            padding-bottom: 16px;
+            min-height: calc(100vh - 250px);
+        }
+
+        .kanban-column {
+            min-width: 300px;
+            width: 300px;
+            background: var(--bg-secondary);
+            border-radius: 12px;
+            border: 1px solid var(--border-subtle);
+            display: flex;
+            flex-direction: column;
+            max-height: calc(100vh - 280px);
+        }
+
+        .kanban-column-header {
+            padding: 16px;
+            border-bottom: 1px solid var(--border-subtle);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .kanban-column-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .kanban-column-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .kanban-column-dot.planning { background: var(--status-planning); }
+        .kanban-column-dot.progress { background: var(--status-progress); }
+        .kanban-column-dot.review { background: var(--status-review); }
+        .kanban-column-dot.done { background: var(--status-done); }
+
+        .kanban-column-count {
+            background: var(--bg-tertiary);
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .kanban-column-add {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 18px;
+        }
+
+        .kanban-column-body {
+            flex: 1;
+            padding: 12px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .kanban-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            padding: 14px;
+            cursor: grab;
+            transition: var(--transition-fast);
+        }
+
+        .kanban-card:hover {
+            border-color: var(--border-default);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+
+        .kanban-card-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .kanban-card-type {
+            font-size: 10px;
+            font-weight: 600;
+            padding: 3px 8px;
+            border-radius: 4px;
+            text-transform: uppercase;
+        }
+
+        .kanban-card-type.semana { background: var(--violet-900); color: var(--violet-400); }
+        .kanban-card-type.recital { background: var(--pink-900); color: var(--pink-400); }
+        .kanban-card-type.conteudo { background: var(--cyan-900); color: var(--cyan-400); }
+        .kanban-card-type.material { background: var(--emerald-900); color: var(--emerald-400); }
+        .kanban-card-type.show { background: var(--amber-900); color: var(--amber-400); }
+
+        .kanban-card-menu {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 4px;
+        }
+
+        .kanban-card-title {
+            font-weight: 600;
+            font-size: 14px;
+            margin-bottom: 8px;
+            line-height: 1.4;
+        }
+
+        .kanban-card-progress {
+            margin-bottom: 12px;
+        }
+
+        .progress-bar {
+            height: 4px;
+            background: var(--bg-tertiary);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-bottom: 4px;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--cyan-500), var(--emerald-500));
+            border-radius: 2px;
+            transition: width 0.3s ease;
+        }
+
+        .progress-text {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .kanban-card-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .kanban-card-assignees {
+            display: flex;
+        }
+
+        .kanban-card-assignees .avatar-sm {
+            margin-left: -6px;
+            border: 2px solid var(--bg-card);
+        }
+
+        .kanban-card-assignees .avatar-sm:first-child {
+            margin-left: 0;
+        }
+
+        .kanban-card-due {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .kanban-card-due.urgent {
+            color: var(--rose-400);
+        }
+
+        .kanban-card-due.warning {
+            color: var(--amber-400);
+        }
+
+        /* ===== LIST VIEW ===== */
+        .list-filters {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+        }
+
+        .filter-chip {
+            padding: 8px 14px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-default);
+            border-radius: 20px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: var(--transition-fast);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .filter-chip:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .filter-chip.active {
+            background: var(--cyan-900);
+            border-color: var(--cyan-500);
+            color: var(--cyan-400);
+        }
+
+        .projects-table {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .projects-table table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .projects-table th {
+            text-align: left;
+            padding: 14px 16px;
+            background: var(--bg-secondary);
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .projects-table td {
+            padding: 16px;
+            border-bottom: 1px solid var(--border-subtle);
+            font-size: 14px;
+        }
+
+        .projects-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .projects-table tr:hover td {
+            background: var(--bg-hover);
+        }
+
+        .project-name-cell {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .project-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        .project-name-info h4 {
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .project-name-info span {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 5px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-badge.planning {
+            background: var(--violet-900);
+            color: var(--violet-400);
+        }
+
+        .status-badge.progress {
+            background: var(--blue-900);
+            color: var(--blue-400);
+        }
+
+        .status-badge.review {
+            background: var(--amber-900);
+            color: var(--amber-400);
+        }
+
+        .status-badge.done {
+            background: var(--emerald-900);
+            color: var(--emerald-400);
+        }
+
+        .status-badge.late {
+            background: var(--rose-900);
+            color: var(--rose-400);
+        }
+
+        .assignees-cell {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .assignees-stack {
+            display: flex;
+        }
+
+        .assignees-stack .avatar-sm {
+            margin-left: -8px;
+            border: 2px solid var(--bg-card);
+        }
+
+        .assignees-stack .avatar-sm:first-child {
+            margin-left: 0;
+        }
+
+        .assignees-more {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .progress-cell {
+            min-width: 120px;
+        }
+
+        .due-date-cell {
+            white-space: nowrap;
+        }
+
+        .due-date-cell.urgent {
+            color: var(--rose-400);
+        }
+
+        .due-date-cell.warning {
+            color: var(--amber-400);
+        }
+
+        /* ===== TIMELINE/GANTT VIEW ===== */
+        .timeline-container {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .timeline-header {
+            display: flex;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .timeline-sidebar-header {
+            width: 280px;
+            padding: 16px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-subtle);
+            font-weight: 600;
+            font-size: 13px;
+        }
+
+        .timeline-dates-header {
+            flex: 1;
+            display: flex;
+            background: var(--bg-secondary);
+        }
+
+        .timeline-month {
+            flex: 1;
+            text-align: center;
+            padding: 8px;
+            border-right: 1px solid var(--border-subtle);
+        }
+
+        .timeline-month:last-child {
+            border-right: none;
+        }
+
+        .timeline-month-name {
+            font-weight: 600;
+            font-size: 13px;
+            margin-bottom: 4px;
+        }
+
+        .timeline-weeks {
+            display: flex;
+        }
+
+        .timeline-week {
+            flex: 1;
+            text-align: center;
+            font-size: 10px;
+            color: var(--text-muted);
+            padding: 4px;
+        }
+
+        .timeline-body {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .timeline-row {
+            display: flex;
+            border-bottom: 1px solid var(--border-subtle);
+            min-height: 60px;
+        }
+
+        .timeline-row:last-child {
+            border-bottom: none;
+        }
+
+        .timeline-project-info {
+            width: 280px;
+            padding: 12px 16px;
+            border-right: 1px solid var(--border-subtle);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: var(--bg-primary);
+        }
+
+        .timeline-project-name {
+            font-weight: 600;
+            font-size: 13px;
+            margin-bottom: 2px;
+        }
+
+        .timeline-project-type {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .timeline-bars {
+            flex: 1;
+            position: relative;
+            background: 
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent calc(25% - 1px),
+                    var(--border-subtle) calc(25% - 1px),
+                    var(--border-subtle) 25%
+                );
+        }
+
+        .timeline-bar {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            height: 28px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            padding: 0 10px;
+            font-size: 11px;
+            font-weight: 600;
+            color: white;
+            cursor: pointer;
+            transition: var(--transition-fast);
+        }
+
+        .timeline-bar:hover {
+            filter: brightness(1.1);
+            transform: translateY(-50%) scale(1.02);
+        }
+
+        .timeline-bar.planning { background: linear-gradient(90deg, var(--violet-500), var(--violet-400)); }
+        .timeline-bar.progress { background: linear-gradient(90deg, var(--blue-500), var(--cyan-500)); }
+        .timeline-bar.review { background: linear-gradient(90deg, var(--amber-500), var(--amber-400)); }
+        .timeline-bar.done { background: linear-gradient(90deg, var(--emerald-500), var(--emerald-400)); }
+
+        /* ===== BY PERSON VIEW ===== */
+        .person-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+
+        .person-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        .person-card-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px;
+            border-bottom: 1px solid var(--border-subtle);
+            background: var(--bg-secondary);
+        }
+
+        .person-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 16px;
+            color: white;
+        }
+
+        .person-info h3 {
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .person-info span {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .person-stats {
+            margin-left: auto;
+            text-align: right;
+        }
+
+        .person-stats-value {
+            font-size: 20px;
+            font-weight: 700;
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        .person-stats-label {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .person-tasks {
+            padding: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .person-task {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 6px;
+            background: var(--bg-tertiary);
+            transition: var(--transition-fast);
+            cursor: pointer;
+        }
+
+        .person-task:hover {
+            background: var(--bg-hover);
+        }
+
+        .person-task-checkbox {
+            width: 18px;
+            height: 18px;
+            border: 2px solid var(--border-strong);
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .person-task-checkbox.done {
+            background: var(--emerald-500);
+            border-color: var(--emerald-500);
+        }
+
+        .person-task-info {
+            flex: 1;
+        }
+
+        .person-task-title {
+            font-size: 13px;
+            font-weight: 500;
+            margin-bottom: 2px;
+        }
+
+        .person-task-project {
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .person-task-due {
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 4px;
+            background: var(--bg-primary);
+        }
+
+        .person-task-due.urgent {
+            background: var(--rose-900);
+            color: var(--rose-400);
+        }
+
+        /* ===== CHAT FÁBIO (AI ASSISTANT) ===== */
+        .fabio-chat {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            z-index: 1000;
+        }
+
+        .fabio-toggle {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--violet-500), var(--pink-500));
+            border: none;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+            box-shadow: var(--shadow-lg), 0 0 20px rgba(139, 92, 246, 0.4);
+            transition: var(--transition-normal);
+        }
+
+        .fabio-toggle:hover {
+            transform: scale(1.1);
+        }
+
+        .fabio-window {
+            position: absolute;
+            bottom: 80px;
+            right: 0;
+            width: 380px;
+            height: 500px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-default);
+            border-radius: 16px;
+            box-shadow: var(--shadow-xl);
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .fabio-window.active {
+            display: flex;
+            animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .fabio-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px;
+            background: linear-gradient(135deg, var(--violet-500), var(--pink-500));
+        }
+
+        .fabio-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
+
+        .fabio-info h3 {
+            font-size: 15px;
+            font-weight: 600;
+            color: white;
+        }
+
+        .fabio-info span {
+            font-size: 12px;
+            color: rgba(255, 255, 255, 0.8);
+        }
+
+        .fabio-close {
+            margin-left: auto;
+            background: rgba(255, 255, 255, 0.2);
+            border: none;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            color: white;
+            cursor: pointer;
+            font-size: 18px;
+        }
+
+        .fabio-messages {
+            flex: 1;
+            padding: 16px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .fabio-message {
+            max-width: 85%;
+            padding: 12px 16px;
+            border-radius: 16px;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+
+        .fabio-message.bot {
+            background: var(--bg-tertiary);
+            border-bottom-left-radius: 4px;
+            align-self: flex-start;
+        }
+
+        .fabio-message.user {
+            background: linear-gradient(135deg, var(--violet-500), var(--pink-500));
+            color: white;
+            border-bottom-right-radius: 4px;
+            align-self: flex-end;
+        }
+
+        .fabio-suggestions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            padding: 12px 16px;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .fabio-suggestion {
+            padding: 8px 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-default);
+            border-radius: 20px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: var(--transition-fast);
+        }
+
+        .fabio-suggestion:hover {
+            background: var(--violet-900);
+            border-color: var(--violet-500);
+            color: var(--violet-400);
+        }
+
+        .fabio-input-area {
+            display: flex;
+            gap: 8px;
+            padding: 12px 16px;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .fabio-input {
+            flex: 1;
+            padding: 10px 14px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-default);
+            border-radius: 20px;
+            color: var(--text-primary);
+            font-size: 13px;
+            outline: none;
+        }
+
+        .fabio-input:focus {
+            border-color: var(--violet-500);
+        }
+
+        .fabio-send {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--violet-500), var(--pink-500));
+            border: none;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+
+        /* ===== MODAL - NEW PROJECT ===== */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(4px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            padding: 24px;
+        }
+
+        .modal-overlay.active {
+            display: flex;
+        }
+
+        .modal {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-default);
+            border-radius: 16px;
+            width: 100%;
+            max-width: 600px;
+            max-height: 90vh;
+            overflow: hidden;
+            box-shadow: var(--shadow-xl);
+        }
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 20px 24px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .modal-title {
+            font-size: 18px;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .modal-close {
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--bg-tertiary);
+            border: none;
+            border-radius: 8px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 20px;
+        }
+
+        .modal-close:hover {
+            background: var(--rose-900);
+            color: var(--rose-400);
+        }
+
+        .modal-body {
+            padding: 24px;
+            overflow-y: auto;
+            max-height: calc(90vh - 140px);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: var(--text-secondary);
+        }
+
+        .form-input,
+        .form-select,
+        .form-textarea {
+            width: 100%;
+            padding: 12px 14px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-default);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 14px;
+            font-family: inherit;
+            transition: var(--transition-fast);
+        }
+
+        .form-input:focus,
+        .form-select:focus,
+        .form-textarea:focus {
+            outline: none;
+            border-color: var(--cyan-500);
+            box-shadow: 0 0 0 3px var(--cyan-900);
+        }
+
+        .form-textarea {
+            min-height: 100px;
+            resize: vertical;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 16px;
+        }
+
+        .form-chips {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .form-chip {
+            padding: 8px 14px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-default);
+            border-radius: 20px;
+            font-size: 13px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: var(--transition-fast);
+        }
+
+        .form-chip:hover {
+            border-color: var(--border-strong);
+        }
+
+        .form-chip.selected {
+            background: var(--cyan-900);
+            border-color: var(--cyan-500);
+            color: var(--cyan-400);
+        }
+
+        .team-selector {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .team-member {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-default);
+            border-radius: 8px;
+            cursor: pointer;
+            transition: var(--transition-fast);
+        }
+
+        .team-member:hover {
+            border-color: var(--border-strong);
+        }
+
+        .team-member.selected {
+            background: var(--cyan-900);
+            border-color: var(--cyan-500);
+        }
+
+        .team-member .avatar-sm {
+            width: 28px;
+            height: 28px;
+        }
+
+        .team-member span {
+            font-size: 13px;
+        }
+
+        .modal-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            padding: 16px 24px;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        .btn-secondary {
+            padding: 10px 20px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-default);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition-fast);
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-hover);
+        }
+
+        /* ===== SCROLLBAR ===== */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-primary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--border-strong);
+        }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 1200px) {
+            .dashboard-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+            
+            .dashboard-sections {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+            
+            .main-content {
+                margin-left: 0;
+            }
+            
+            .dashboard-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* ==================== SETTINGS STYLES ==================== */
+        .settings-layout {
+            display: grid;
+            grid-template-columns: 250px 1fr;
+            gap: 24px;
+            min-height: calc(100vh - 200px);
+        }
+
+        .settings-sidebar {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 16px;
+            height: fit-content;
+            position: sticky;
+            top: 20px;
+        }
+
+        .settings-nav {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .settings-nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            background: transparent;
+            border: none;
+            border-radius: 8px;
+            color: var(--text-secondary);
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-align: left;
+        }
+
+        .settings-nav-item:hover {
+            background: var(--bg-hover);
+            color: var(--text-primary);
+        }
+
+        .settings-nav-item.active {
+            background: var(--cyan-900);
+            color: var(--cyan-400);
+        }
+
+        .settings-nav-icon {
+            font-size: 18px;
+        }
+
+        .settings-content {
+            flex: 1;
+        }
+
+        .settings-section {
+            display: none;
+        }
+
+        .settings-section.active {
+            display: block;
+        }
+
+        .settings-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+
+        .settings-title {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 4px;
+        }
+
+        .settings-subtitle {
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        .settings-card {
+            background: var(--bg-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+
+        .card-section-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .card-section-hint {
+            color: var(--text-muted);
+            font-size: 13px;
+            margin-bottom: 20px;
+        }
+
+        /* Settings Table */
+        .settings-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .settings-table th {
+            text-align: left;
+            padding: 12px 16px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid var(--border-subtle);
+        }
+
+        .settings-table td {
+            padding: 16px;
+            border-bottom: 1px solid var(--border-subtle);
+            vertical-align: middle;
+        }
+
+        .settings-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .settings-table tr:hover {
+            background: var(--bg-hover);
+        }
+
+        .type-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .color-badge {
+            width: 16px;
+            height: 16px;
+            border-radius: 4px;
+            display: inline-block;
+            vertical-align: middle;
+            margin-right: 8px;
+        }
+
+        .status-badge-sm {
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+
+        .status-badge-sm.active {
+            background: var(--emerald-900);
+            color: var(--emerald-400);
+        }
+
+        .btn-icon-sm {
+            padding: 6px 10px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s ease;
+        }
+
+        .btn-icon-sm:hover {
+            background: var(--bg-hover);
+            border-color: var(--border-default);
+        }
+
+        .btn-icon-sm.danger:hover {
+            background: var(--rose-900);
+            border-color: var(--rose-500);
+        }
+
+        .btn-secondary-sm {
+            padding: 8px 16px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-default);
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-secondary-sm:hover {
+            background: var(--bg-hover);
+        }
+
+        .btn-ghost-sm {
+            padding: 8px 16px;
+            background: transparent;
+            border: 1px dashed var(--border-default);
+            border-radius: 8px;
+            color: var(--text-secondary);
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-ghost-sm:hover {
+            border-color: var(--cyan-500);
+            color: var(--cyan-400);
+            background: var(--cyan-900);
+        }
+
+        /* Template Selector */
+        .template-selector {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+
+        .template-selector label {
+            font-size: 14px;
+            color: var(--text-secondary);
+        }
+
+        .template-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 20px;
+        }
+
+        .template-header h3 {
+            font-size: 16px;
+            font-weight: 600;
+        }
+
+        .template-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid var(--border-subtle);
+        }
+
+        /* Phases List */
+        .phases-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .phase-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 12px 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 8px;
+            transition: all 0.2s ease;
+        }
+
+        .phase-item:hover {
+            border-color: var(--border-default);
+        }
+
+        .phase-drag {
+            color: var(--text-muted);
+            cursor: grab;
+            font-size: 14px;
+        }
+
+        .phase-number {
+            width: 28px;
+            height: 28px;
+            background: var(--cyan-900);
+            color: var(--cyan-400);
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .phase-info {
+            flex: 1;
+        }
+
+        .phase-input {
+            background: transparent;
+            border: none;
+            color: var(--text-primary);
+            font-size: 14px;
+            font-weight: 500;
+            padding: 0;
+            width: 100%;
+        }
+
+        .phase-input:focus {
+            outline: none;
+        }
+
+        .phase-hint {
+            display: block;
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 2px;
+        }
+
+        .phase-tasks {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .phase-tasks-count {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        /* Notification Settings */
+        .notification-settings {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .notification-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+        }
+
+        .notification-info {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .notification-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .notification-info h4 {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .notification-info p {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .notification-config {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        /* Toggle Switch */
+        .toggle-switch {
+            position: relative;
+            width: 48px;
+            height: 26px;
+            display: inline-block;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border-default);
+            transition: 0.3s;
+            border-radius: 26px;
+        }
+
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: var(--text-muted);
+            transition: 0.3s;
+            border-radius: 50%;
+        }
+
+        .toggle-switch input:checked + .toggle-slider {
+            background-color: var(--cyan-900);
+            border-color: var(--cyan-500);
+        }
+
+        .toggle-switch input:checked + .toggle-slider:before {
+            transform: translateX(22px);
+            background-color: var(--cyan-400);
+        }
+
+        .toggle-switch.large {
+            width: 60px;
+            height: 32px;
+        }
+
+        .toggle-switch.large .toggle-slider:before {
+            height: 24px;
+            width: 24px;
+        }
+
+        .toggle-switch.large input:checked + .toggle-slider:before {
+            transform: translateX(28px);
+        }
+
+        .form-select-sm {
+            padding: 8px 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-default);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 13px;
+        }
+
+        /* Recipients Grid */
+        .recipients-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 16px;
+        }
+
+        .recipient-card {
+            padding: 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+        }
+
+        .recipient-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .recipient-role {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .recipient-card p {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+        }
+
+        .recipient-alerts {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+        }
+
+        .alert-badge {
+            padding: 4px 8px;
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .alert-badge.active {
+            background: var(--emerald-900);
+            color: var(--emerald-400);
+        }
+
+        /* Team List */
+        .team-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .team-member-row {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+        }
+
+        .team-member-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex: 1;
+        }
+
+        .avatar-md {
+            width: 44px;
+            height: 44px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            font-weight: 600;
+            color: white;
+        }
+
+        .team-member-info h4 {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .team-member-info span {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .team-member-phone {
+            min-width: 150px;
+        }
+
+        .phone-badge {
+            padding: 6px 12px;
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .team-member-actions {
+            display: flex;
+            gap: 8px;
+        }
+
+        /* Permissions Grid */
+        .permissions-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .permission-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+        }
+
+        .permission-info h4 {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .permission-info p {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        /* Fábio Status Card */
+        .fabio-status-card {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            padding: 24px;
+            background: linear-gradient(135deg, var(--violet-900), var(--cyan-900));
+            border: 1px solid var(--violet-500);
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+
+        .fabio-status-icon {
+            font-size: 48px;
+        }
+
+        .fabio-status-info {
+            flex: 1;
+        }
+
+        .fabio-status-info h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .fabio-status-info p {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .status-online {
+            color: var(--emerald-400);
+        }
+
+        /* Fábio Features */
+        .fabio-features {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .fabio-feature {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+        }
+
+        .fabio-feature-icon {
+            width: 44px;
+            height: 44px;
+            background: var(--bg-tertiary);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .fabio-feature-info {
+            flex: 1;
+        }
+
+        .fabio-feature-info h4 {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 2px;
+        }
+
+        .fabio-feature-info p {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        /* Channels Grid */
+        .channels-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+        }
+
+        .channel-card {
+            padding: 20px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .channel-card.active {
+            border-color: var(--emerald-500);
+            background: var(--emerald-900);
+        }
+
+        .channel-icon {
+            font-size: 32px;
+            margin-bottom: 12px;
+        }
+
+        .channel-card h4 {
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .channel-card p {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-bottom: 12px;
+        }
+
+        .channel-status {
+            font-size: 12px;
+            color: var(--emerald-400);
+            font-weight: 600;
+        }
+
+        /* WhatsApp */
+        .whatsapp-status-card {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            padding: 24px;
+            background: var(--bg-card);
+            border: 1px solid var(--emerald-500);
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+
+        .whatsapp-status-icon {
+            font-size: 48px;
+        }
+
+        .whatsapp-status-info {
+            flex: 1;
+        }
+
+        .whatsapp-status-info h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .whatsapp-status-info p {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        /* Phone List */
+        .phone-list {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .phone-item {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 16px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 10px;
+        }
+
+        .phone-info {
+            flex: 1;
+        }
+
+        .phone-number {
+            font-size: 14px;
+            font-weight: 600;
+            display: block;
+            margin-bottom: 2px;
+        }
+
+        .phone-name {
+            font-size: 12px;
+            color: var(--text-muted);
+        }
+
+        .phone-alerts {
+            display: flex;
+            gap: 8px;
+        }
+
+        .alert-chip {
+            padding: 4px 10px;
+            background: var(--bg-tertiary);
+            border-radius: 20px;
+            font-size: 11px;
+            color: var(--text-muted);
+        }
+
+        .alert-chip.active {
+            background: var(--cyan-900);
+            color: var(--cyan-400);
+        }
+
+        /* Schedule Grid */
+        .schedule-grid {
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            flex-wrap: wrap;
+        }
+
+        .schedule-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .schedule-item label {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        /* Test Send */
+        .test-send {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        @media (max-width: 900px) {
+            .settings-layout {
+                grid-template-columns: 1fr;
+            }
+            
+            .settings-sidebar {
+                position: relative;
+                top: 0;
+            }
+            
+            .settings-nav {
+                flex-direction: row;
+                flex-wrap: wrap;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <div class="logo-icon">🎵</div>
+                    <span>LA Music</span>
+                </div>
+            </div>
+            
+            <nav class="sidebar-nav">
+                <div class="nav-section">
+                    <div class="nav-section-title">Sistema</div>
+                    <a class="nav-item" href="#">
+                        <span class="nav-item-icon">📊</span>
+                        Dashboard
+                    </a>
+                    <a class="nav-item" href="#">
+                        <span class="nav-item-icon">📈</span>
+                        Analytics
+                    </a>
+                    <a class="nav-item" href="#">
+                        <span class="nav-item-icon">🎯</span>
+                        Metas
+                    </a>
+                </div>
+                
+                <div class="nav-section">
+                    <div class="nav-section-title">Operacional</div>
+                    <a class="nav-item" href="#">
+                        <span class="nav-item-icon">💼</span>
+                        Comercial
+                    </a>
+                    <a class="nav-item" href="#">
+                        <span class="nav-item-icon">📋</span>
+                        Administrativo
+                    </a>
+                    <a class="nav-item" href="#">
+                        <span class="nav-item-icon">👥</span>
+                        Alunos
+                    </a>
+                    <a class="nav-item" href="#">
+                        <span class="nav-item-icon">👨‍🏫</span>
+                        Professores
+                    </a>
+                    <a class="nav-item active" href="#">
+                        <span class="nav-item-icon">📁</span>
+                        Projetos
+                        <span class="nav-item-badge">3</span>
+                    </a>
+                    <a class="nav-item" href="#">
+                        <span class="nav-item-icon">🏠</span>
+                        Salas
+                    </a>
+                </div>
+                
+                <div class="nav-section">
+                    <div class="nav-section-title">Admin</div>
+                    <a class="nav-item" href="#">
+                        <span class="nav-item-icon">⚙️</span>
+                        Configurações
+                    </a>
+                </div>
+            </nav>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Top Header -->
+            <header class="top-header">
+                <div class="header-left">
+                    <div class="page-title-section">
+                        <h1>📁 Gestão de Projetos</h1>
+                        <p>Gerencie todos os projetos pedagógicos da escola</p>
+                    </div>
+                </div>
+                
+                <div class="header-right">
+                    <select class="header-select">
+                        <option>Todas as unidades</option>
+                        <option>Campo Grande</option>
+                        <option>Recreio</option>
+                        <option>Barra</option>
+                    </select>
+                    
+                    <button class="btn-icon" title="Notificações">
+                        🔔
+                        <span class="badge">5</span>
+                    </button>
+                    
+                    <button class="btn-primary" onclick="openModal('newProject')">
+                        ➕ Novo Projeto
+                    </button>
+                </div>
+            </header>
+
+            <!-- Tabs -->
+            <div class="tabs-container">
+                <nav class="tabs-nav">
+                    <button class="tab-btn active" onclick="showView('dashboard')">
+                        📊 Dashboard
+                    </button>
+                    <button class="tab-btn" onclick="showView('list')">
+                        📋 Lista
+                        <span class="count">12</span>
+                    </button>
+                    <button class="tab-btn" onclick="showView('kanban')">
+                        📊 Kanban
+                    </button>
+                    <button class="tab-btn" onclick="showView('calendar')">
+                        📅 Calendário
+                    </button>
+                    <button class="tab-btn" onclick="showView('timeline')">
+                        📈 Timeline
+                    </button>
+                    <button class="tab-btn" onclick="showView('person')">
+                        👤 Por Pessoa
+                    </button>
+                    <button class="tab-btn" onclick="showView('settings')">
+                        ⚙️ Configurações
+                    </button>
+                </nav>
+            </div>
+
+            <!-- Page Content -->
+            <div class="page-content">
+                
+                <!-- ==================== DASHBOARD VIEW ==================== -->
+                <div id="view-dashboard" class="view-content">
+                    <!-- KPI Cards -->
+                    <div class="dashboard-grid">
+                        <div class="kpi-card">
+                            <div class="kpi-header">
+                                <div class="kpi-icon cyan">📁</div>
+                                <span class="kpi-trend up">↑ 2</span>
+                            </div>
+                            <div class="kpi-value">12</div>
+                            <div class="kpi-label">Projetos Ativos</div>
+                        </div>
+                        
+                        <div class="kpi-card">
+                            <div class="kpi-header">
+                                <div class="kpi-icon rose">⚠️</div>
+                            </div>
+                            <div class="kpi-value">3</div>
+                            <div class="kpi-label">Projetos Atrasados</div>
+                        </div>
+                        
+                        <div class="kpi-card">
+                            <div class="kpi-header">
+                                <div class="kpi-icon amber">📋</div>
+                            </div>
+                            <div class="kpi-value">47</div>
+                            <div class="kpi-label">Tarefas Pendentes</div>
+                        </div>
+                        
+                        <div class="kpi-card">
+                            <div class="kpi-header">
+                                <div class="kpi-icon emerald">✅</div>
+                                <span class="kpi-trend up">↑ 8%</span>
+                            </div>
+                            <div class="kpi-value">78%</div>
+                            <div class="kpi-label">Taxa de Conclusão</div>
+                        </div>
+                    </div>
+
+                    <!-- Dashboard Sections -->
+                    <div class="dashboard-sections">
+                        <!-- Upcoming Deadlines -->
+                        <div class="section-card">
+                            <div class="section-header">
+                                <h2 class="section-title">📅 Próximos Prazos</h2>
+                                <a class="section-action">Ver todos →</a>
+                            </div>
+                            <div class="deadline-list">
+                                <div class="deadline-item">
+                                    <div class="deadline-date urgent">
+                                        <span class="day">29</span>
+                                        <span class="month">Jan</span>
+                                    </div>
+                                    <div class="deadline-info">
+                                        <div class="deadline-title">Finalizar repertório</div>
+                                        <div class="deadline-project">Recital Kids - Março 2026</div>
+                                    </div>
+                                    <div class="deadline-assignee">
+                                        <div class="avatar-sm" style="background: linear-gradient(135deg, #10b981, #34d399);">Q</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="deadline-item">
+                                    <div class="deadline-date warning">
+                                        <span class="day">31</span>
+                                        <span class="month">Jan</span>
+                                    </div>
+                                    <div class="deadline-info">
+                                        <div class="deadline-title">Gravar vídeo aula #5</div>
+                                        <div class="deadline-project">Curso Online Bateria Kids</div>
+                                    </div>
+                                    <div class="deadline-assignee">
+                                        <div class="avatar-sm" style="background: linear-gradient(135deg, #8b5cf6, #ec4899);">J</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="deadline-item">
+                                    <div class="deadline-date">
+                                        <span class="day">05</span>
+                                        <span class="month">Fev</span>
+                                    </div>
+                                    <div class="deadline-info">
+                                        <div class="deadline-title">Aprovar artes Instagram</div>
+                                        <div class="deadline-project">Conteúdo Fevereiro 2026</div>
+                                    </div>
+                                    <div class="deadline-assignee">
+                                        <div class="avatar-sm" style="background: linear-gradient(135deg, #06b6d4, #3b82f6);">M</div>
+                                    </div>
+                                </div>
+                                
+                                <div class="deadline-item">
+                                    <div class="deadline-date">
+                                        <span class="day">10</span>
+                                        <span class="month">Fev</span>
+                                    </div>
+                                    <div class="deadline-info">
+                                        <div class="deadline-title">Semana do Baterista - Início</div>
+                                        <div class="deadline-project">Semana Temática Bateria</div>
+                                    </div>
+                                    <div class="deadline-assignee">
+                                        <div class="avatar-sm" style="background: linear-gradient(135deg, #f59e0b, #f97316);">R</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Right Column -->
+                        <div style="display: flex; flex-direction: column; gap: 24px;">
+                            <!-- Project Status Breakdown -->
+                            <div class="section-card">
+                                <div class="section-header">
+                                    <h2 class="section-title">📊 Status dos Projetos</h2>
+                                </div>
+                                <div class="status-breakdown">
+                                    <div class="status-bar-container">
+                                        <div class="status-bar">
+                                            <div class="status-bar-segment planning" style="width: 25%;"></div>
+                                            <div class="status-bar-segment progress" style="width: 42%;"></div>
+                                            <div class="status-bar-segment review" style="width: 17%;"></div>
+                                            <div class="status-bar-segment done" style="width: 16%;"></div>
+                                        </div>
+                                    </div>
+                                    <div class="status-legend">
+                                        <div class="legend-item">
+                                            <span class="legend-dot planning"></span>
+                                            <span>Planejamento</span>
+                                            <span class="legend-value">3</span>
+                                        </div>
+                                        <div class="legend-item">
+                                            <span class="legend-dot progress"></span>
+                                            <span>Em Andamento</span>
+                                            <span class="legend-value">5</span>
+                                        </div>
+                                        <div class="legend-item">
+                                            <span class="legend-dot review"></span>
+                                            <span>Em Revisão</span>
+                                            <span class="legend-value">2</span>
+                                        </div>
+                                        <div class="legend-item">
+                                            <span class="legend-dot done"></span>
+                                            <span>Concluído</span>
+                                            <span class="legend-value">2</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Alerts -->
+                            <div class="section-card">
+                                <div class="section-header">
+                                    <h2 class="section-title">🚨 Alertas</h2>
+                                </div>
+                                <div class="alerts-list">
+                                    <div class="alert-item danger">
+                                        <span class="alert-icon">🔴</span>
+                                        <div class="alert-content">
+                                            <div class="alert-title">Projeto atrasado!</div>
+                                            <div class="alert-description">Recital Kids tem 3 tarefas vencidas</div>
+                                        </div>
+                                        <span class="alert-time">2h</span>
+                                    </div>
+                                    
+                                    <div class="alert-item warning">
+                                        <span class="alert-icon">🟡</span>
+                                        <div class="alert-content">
+                                            <div class="alert-title">Prazo próximo</div>
+                                            <div class="alert-description">Semana Temática vence em 3 dias</div>
+                                        </div>
+                                        <span class="alert-time">5h</span>
+                                    </div>
+                                    
+                                    <div class="alert-item info">
+                                        <span class="alert-icon">💬</span>
+                                        <div class="alert-content">
+                                            <div class="alert-title">Fábio sugere</div>
+                                            <div class="alert-description">Redistribuir tarefas de Maria para João</div>
+                                        </div>
+                                        <span class="alert-time">1d</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ==================== LIST VIEW ==================== -->
+                <div id="view-list" class="view-content" style="display: none;">
+                    <div class="list-filters">
+                        <div class="filter-chip active">Todos</div>
+                        <div class="filter-chip">Semana Temática</div>
+                        <div class="filter-chip">Recital</div>
+                        <div class="filter-chip">Conteúdo</div>
+                        <div class="filter-chip">Material Didático</div>
+                        <div class="filter-chip">Show</div>
+                    </div>
+                    
+                    <div class="projects-table">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Projeto</th>
+                                    <th>Status</th>
+                                    <th>Equipe</th>
+                                    <th>Progresso</th>
+                                    <th>Prazo</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>
+                                        <div class="project-name-cell">
+                                            <div class="project-icon" style="background: var(--pink-900);">🎤</div>
+                                            <div class="project-name-info">
+                                                <h4>Recital Kids - Março 2026</h4>
+                                                <span>Recital • LAMK</span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td><span class="status-badge late">⚠️ Atrasado</span></td>
+                                    <td>
+                                        <div class="assignees-cell">
+                                            <div class="assignees-stack">
+                                                <div class="avatar-sm" style="background: linear-gradient(135deg, #10b981, #34d399);">Q</div>
+                                                <div class="avatar-sm" style="background: linear-gradient(135deg, #f59e0b, #f97316);">R</div>
+                                                <div class="avatar-sm" style="background: linear-gradient(135deg, #06b6d4, #3b82f6);">M</div>
+                                            </div>
+                                            <span class="assignees-more">+2</span>
+                                        </div>
+                                    </td>
+                                    <td class="progress-cell">
+                                        <div class="progress-bar">
+                                            <div class="progress-bar-fill" style="width: 45%;"></div>
+                                        </div>
+                                        <span class="progress-text">45% • 9/20 tarefas</span>
+                                    </td>
+                                    <td class="due-date-cell urgent">15 Mar 2026</td>
+                                    <td><button class="btn-icon">👁️</button></td>
+                                </tr>
+                                
+                                <tr>
+                                    <td>
+                                        <div class="project-name-cell">
+                                            <div class="project-icon" style="background: var(--violet-900);">🥁</div>
+                                            <div class="project-name-info">
+                                                <h4>Semana do Baterista 2026</h4>
+                                                <span>Semana Temática • Todas</span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td><span class="status-badge progress">🔄 Em Andamento</span></td>
+                                    <td>
+                                        <div class="assignees-cell">
+                                            <div class="assignees-stack">
+                                                <div class="avatar-sm" style="background: linear-gradient(135deg, #8b5cf6, #ec4899);">J</div>
+                                                <div class="avatar-sm" style="background: linear-gradient(135deg, #10b981, #34d399);">Q</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="progress-cell">
+                                        <div class="progress-bar">
+                                            <div class="progress-bar-fill" style="width: 70%;"></div>
+                                        </div>
+                                        <span class="progress-text">70% • 14/20 tarefas</span>
+                                    </td>
+                                    <td class="due-date-cell warning">10 Fev 2026</td>
+                                    <td><button class="btn-icon">👁️</button></td>
+                                </tr>
+                                
+                                <tr>
+                                    <td>
+                                        <div class="project-name-cell">
+                                            <div class="project-icon" style="background: var(--cyan-900);">📱</div>
+                                            <div class="project-name-info">
+                                                <h4>Conteúdo Instagram Fev/2026</h4>
+                                                <span>Produção de Conteúdo • Marketing</span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td><span class="status-badge planning">📝 Planejamento</span></td>
+                                    <td>
+                                        <div class="assignees-cell">
+                                            <div class="assignees-stack">
+                                                <div class="avatar-sm" style="background: linear-gradient(135deg, #06b6d4, #3b82f6);">M</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="progress-cell">
+                                        <div class="progress-bar">
+                                            <div class="progress-bar-fill" style="width: 15%;"></div>
+                                        </div>
+                                        <span class="progress-text">15% • 3/20 tarefas</span>
+                                    </td>
+                                    <td class="due-date-cell">28 Fev 2026</td>
+                                    <td><button class="btn-icon">👁️</button></td>
+                                </tr>
+                                
+                                <tr>
+                                    <td>
+                                        <div class="project-name-cell">
+                                            <div class="project-icon" style="background: var(--emerald-900);">📚</div>
+                                            <div class="project-name-info">
+                                                <h4>Apostila Violão Nível 2</h4>
+                                                <span>Material Didático • EMLA</span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td><span class="status-badge review">🔍 Em Revisão</span></td>
+                                    <td>
+                                        <div class="assignees-cell">
+                                            <div class="assignees-stack">
+                                                <div class="avatar-sm" style="background: linear-gradient(135deg, #8b5cf6, #ec4899);">J</div>
+                                                <div class="avatar-sm" style="background: linear-gradient(135deg, #f59e0b, #f97316);">P</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="progress-cell">
+                                        <div class="progress-bar">
+                                            <div class="progress-bar-fill" style="width: 90%;"></div>
+                                        </div>
+                                        <span class="progress-text">90% • 18/20 tarefas</span>
+                                    </td>
+                                    <td class="due-date-cell">20 Fev 2026</td>
+                                    <td><button class="btn-icon">👁️</button></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- ==================== KANBAN VIEW ==================== -->
+                <div id="view-kanban" class="view-content" style="display: none;">
+                    <div class="kanban-container">
+                        <!-- Planning Column -->
+                        <div class="kanban-column">
+                            <div class="kanban-column-header">
+                                <div class="kanban-column-title">
+                                    <span class="kanban-column-dot planning"></span>
+                                    Planejamento
+                                    <span class="kanban-column-count">3</span>
+                                </div>
+                                <button class="kanban-column-add">+</button>
+                            </div>
+                            <div class="kanban-column-body">
+                                <div class="kanban-card">
+                                    <div class="kanban-card-header">
+                                        <span class="kanban-card-type conteudo">Conteúdo</span>
+                                        <button class="kanban-card-menu">⋯</button>
+                                    </div>
+                                    <h4 class="kanban-card-title">Conteúdo Instagram Fev/2026</h4>
+                                    <div class="kanban-card-progress">
+                                        <div class="progress-bar">
+                                            <div class="progress-bar-fill" style="width: 15%;"></div>
+                                        </div>
+                                        <span class="progress-text">3/20 tarefas</span>
+                                    </div>
+                                    <div class="kanban-card-footer">
+                                        <div class="kanban-card-assignees">
+                                            <div class="avatar-sm" style="background: linear-gradient(135deg, #06b6d4, #3b82f6);">M</div>
+                                        </div>
+                                        <span class="kanban-card-due">📅 28 Fev</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="kanban-card">
+                                    <div class="kanban-card-header">
+                                        <span class="kanban-card-type recital">Recital</span>
+                                        <button class="kanban-card-menu">⋯</button>
+                                    </div>
+                                    <h4 class="kanban-card-title">Recital EMLA - Junho 2026</h4>
+                                    <div class="kanban-card-progress">
+                                        <div class="progress-bar">
+                                            <div class="progress-bar-fill" style="width: 5%;"></div>
+                                        </div>
+                                        <span class="progress-text">1/20 tarefas</span>
+                                    </div>
+                                    <div class="kanban-card-footer">
+                                        <div class="kanban-card-assignees">
+                                            <div class="avatar-sm" style="background: linear-gradient(135deg, #8b5cf6, #ec4899);">J</div>
+                                        </div>
+                                        <span class="kanban-card-due">📅 15 Jun</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- In Progress Column -->
+                        <div class="kanban-column">
+                            <div class="kanban-column-header">
+                                <div class="kanban-column-title">
+                                    <span class="kanban-column-dot progress"></span>
+                                    Em Andamento
+                                    <span class="kanban-column-count">5</span>
+                                </div>
+                                <button class="kanban-column-add">+</button>
+                            </div>
+                            <div class="kanban-column-body">
+                                <div class="kanban-card">
+                                    <div class="kanban-card-header">
+                                        <span class="kanban-card-type semana">Semana</span>
+                                        <button class="kanban-card-menu">⋯</button>
+                                    </div>
+                                    <h4 class="kanban-card-title">Semana do Baterista 2026</h4>
+                                    <div class="kanban-card-progress">
+                                        <div class="progress-bar">
+                                            <div class="progress-bar-fill" style="width: 70%;"></div>
+                                        </div>
+                                        <span class="progress-text">14/20 tarefas</span>
+                                    </div>
+                                    <div class="kanban-card-footer">
+                                        <div class="kanban-card-assignees">
+                                            <div class="avatar-sm" style="background: linear-gradient(135deg, #8b5cf6, #ec4899);">J</div>
+                                            <div class="avatar-sm" style="background: linear-gradient(135deg, #10b981, #34d399);">Q</div>
+                                        </div>
+                                        <span class="kanban-card-due warning">📅 10 Fev</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="kanban-card">
+                                    <div class="kanban-card-header">
+                                        <span class="kanban-card-type recital">Recital</span>
+                                        <button class="kanban-card-menu">⋯</button>
+                                    </div>
+                                    <h4 class="kanban-card-title">Recital Kids - Março 2026</h4>
+                                    <div class="kanban-card-progress">
+                                        <div class="progress-bar">
+                                            <div class="progress-bar-fill" style="width: 45%;"></div>
+                                        </div>
+                                        <span class="progress-text">9/20 tarefas</span>
+                                    </div>
+                                    <div class="kanban-card-footer">
+                                        <div class="kanban-card-assignees">
+                                            <div class="avatar-sm" style="background: linear-gradient(135deg, #10b981, #34d399);">Q</div>
+                                            <div class="avatar-sm" style="background: linear-gradient(135deg, #f59e0b, #f97316);">R</div>
+                                            <div class="avatar-sm" style="background: linear-gradient(135deg, #06b6d4, #3b82f6);">M</div>
+                                        </div>
+                                        <span class="kanban-card-due urgent">⚠️ Atrasado</span>
+                                    </div>
+                                </div>
+                                
+                                <div class="kanban-card">
+                                    <div class="kanban-card-header">
+                                        <span class="kanban-card-type show">Show</span>
+                                        <button class="kanban-card-menu">⋯</button>
+                                    </div>
+                                    <h4 class="kanban-card-title">Show das Bandas - Abril</h4>
+                                    <div class="kanban-card-progress">
+                                        <div class="progress-bar">
+                                            <div class="progress-bar-fill" style="width: 35%;"></div>
+                                        </div>
+                                        <span class="progress-text">7/20 tarefas</span>
+                                    </div>
+                                    <div class="kanban-card-footer">
+                                        <div class="kanban-card-assignees">
+                                            <div class="avatar-sm" style="background: linear-gradient(135deg, #8b5cf6, #ec4899);">J</div>
+                                        </div>
+                                        <span class="kanban-card-due">📅 20 Abr</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Review Column -->
+                        <div class="kanban-column">
+                            <div class="kanban-column-header">
+                                <div class="kanban-column-title">
+                                    <span class="kanban-column-dot review"></span>
+                                    Em Revisão
+                                    <span class="kanban-column-count">2</span>
+                                </div>
+                                <button class="kanban-column-add">+</button>
+                            </div>
+                            <div class="kanban-column-body">
+                                <div class="kanban-card">
+                                    <div class="kanban-card-header">
+                                        <span class="kanban-card-type material">Material</span>
+                                        <button class="kanban-card-menu">⋯</button>
+                                    </div>
+                                    <h4 class="kanban-card-title">Apostila Violão Nível 2</h4>
+                                    <div class="kanban-card-progress">
+                                        <div class="progress-bar">
+                                            <div class="progress-bar-fill" style="width: 90%;"></div>
+                                        </div>
+                                        <span class="progress-text">18/20 tarefas</span>
+                                    </div>
+                                    <div class="kanban-card-footer">
+                                        <div class="kanban-card-assignees">
+                                            <div class="avatar-sm" style="background: linear-gradient(135deg, #8b5cf6, #ec4899);">J</div>
+                                            <div class="avatar-sm" style="background: linear-gradient(135deg, #f59e0b, #f97316);">P</div>
+                                        </div>
+                                        <span class="kanban-card-due">📅 20 Fev</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Done Column -->
+                        <div class="kanban-column">
+                            <div class="kanban-column-header">
+                                <div class="kanban-column-title">
+                                    <span class="kanban-column-dot done"></span>
+                                    Concluído
+                                    <span class="kanban-column-count">2</span>
+                                </div>
+                            </div>
+                            <div class="kanban-column-body">
+                                <div class="kanban-card" style="opacity: 0.7;">
+                                    <div class="kanban-card-header">
+                                        <span class="kanban-card-type conteudo">Conteúdo</span>
+                                        <button class="kanban-card-menu">⋯</button>
+                                    </div>
+                                    <h4 class="kanban-card-title">Conteúdo Instagram Jan/2026</h4>
+                                    <div class="kanban-card-progress">
+                                        <div class="progress-bar">
+                                            <div class="progress-bar-fill" style="width: 100%;"></div>
+                                        </div>
+                                        <span class="progress-text">20/20 tarefas ✓</span>
+                                    </div>
+                                    <div class="kanban-card-footer">
+                                        <div class="kanban-card-assignees">
+                                            <div class="avatar-sm" style="background: linear-gradient(135deg, #06b6d4, #3b82f6);">M</div>
+                                        </div>
+                                        <span class="kanban-card-due" style="color: var(--emerald-400);">✓ Concluído</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ==================== TIMELINE VIEW ==================== -->
+                <div id="view-timeline" class="view-content" style="display: none;">
+                    <div class="timeline-container">
+                        <div class="timeline-header">
+                            <div class="timeline-sidebar-header">Projetos</div>
+                            <div class="timeline-dates-header">
+                                <div class="timeline-month">
+                                    <div class="timeline-month-name">Janeiro 2026</div>
+                                    <div class="timeline-weeks">
+                                        <span class="timeline-week">S1</span>
+                                        <span class="timeline-week">S2</span>
+                                        <span class="timeline-week">S3</span>
+                                        <span class="timeline-week">S4</span>
+                                    </div>
+                                </div>
+                                <div class="timeline-month">
+                                    <div class="timeline-month-name">Fevereiro 2026</div>
+                                    <div class="timeline-weeks">
+                                        <span class="timeline-week">S1</span>
+                                        <span class="timeline-week">S2</span>
+                                        <span class="timeline-week">S3</span>
+                                        <span class="timeline-week">S4</span>
+                                    </div>
+                                </div>
+                                <div class="timeline-month">
+                                    <div class="timeline-month-name">Março 2026</div>
+                                    <div class="timeline-weeks">
+                                        <span class="timeline-week">S1</span>
+                                        <span class="timeline-week">S2</span>
+                                        <span class="timeline-week">S3</span>
+                                        <span class="timeline-week">S4</span>
+                                    </div>
+                                </div>
+                                <div class="timeline-month">
+                                    <div class="timeline-month-name">Abril 2026</div>
+                                    <div class="timeline-weeks">
+                                        <span class="timeline-week">S1</span>
+                                        <span class="timeline-week">S2</span>
+                                        <span class="timeline-week">S3</span>
+                                        <span class="timeline-week">S4</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="timeline-body">
+                            <div class="timeline-row">
+                                <div class="timeline-project-info">
+                                    <div class="project-icon" style="background: var(--violet-900); width: 32px; height: 32px; font-size: 14px;">🥁</div>
+                                    <div>
+                                        <div class="timeline-project-name">Semana do Baterista</div>
+                                        <div class="timeline-project-type">Semana Temática</div>
+                                    </div>
+                                </div>
+                                <div class="timeline-bars">
+                                    <div class="timeline-bar progress" style="left: 5%; width: 20%;">Preparação</div>
+                                </div>
+                            </div>
+                            
+                            <div class="timeline-row">
+                                <div class="timeline-project-info">
+                                    <div class="project-icon" style="background: var(--pink-900); width: 32px; height: 32px; font-size: 14px;">🎤</div>
+                                    <div>
+                                        <div class="timeline-project-name">Recital Kids - Março</div>
+                                        <div class="timeline-project-type">Recital</div>
+                                    </div>
+                                </div>
+                                <div class="timeline-bars">
+                                    <div class="timeline-bar planning" style="left: 0%; width: 45%;">Planejamento → Ensaios → Evento</div>
+                                </div>
+                            </div>
+                            
+                            <div class="timeline-row">
+                                <div class="timeline-project-info">
+                                    <div class="project-icon" style="background: var(--cyan-900); width: 32px; height: 32px; font-size: 14px;">📱</div>
+                                    <div>
+                                        <div class="timeline-project-name">Conteúdo Fev/2026</div>
+                                        <div class="timeline-project-type">Produção de Conteúdo</div>
+                                    </div>
+                                </div>
+                                <div class="timeline-bars">
+                                    <div class="timeline-bar planning" style="left: 20%; width: 18%;">Produção</div>
+                                </div>
+                            </div>
+                            
+                            <div class="timeline-row">
+                                <div class="timeline-project-info">
+                                    <div class="project-icon" style="background: var(--emerald-900); width: 32px; height: 32px; font-size: 14px;">📚</div>
+                                    <div>
+                                        <div class="timeline-project-name">Apostila Violão Nível 2</div>
+                                        <div class="timeline-project-type">Material Didático</div>
+                                    </div>
+                                </div>
+                                <div class="timeline-bars">
+                                    <div class="timeline-bar review" style="left: 10%; width: 15%;">Revisão</div>
+                                </div>
+                            </div>
+                            
+                            <div class="timeline-row">
+                                <div class="timeline-project-info">
+                                    <div class="project-icon" style="background: var(--amber-900); width: 32px; height: 32px; font-size: 14px;">🎸</div>
+                                    <div>
+                                        <div class="timeline-project-name">Show das Bandas - Abril</div>
+                                        <div class="timeline-project-type">Show</div>
+                                    </div>
+                                </div>
+                                <div class="timeline-bars">
+                                    <div class="timeline-bar progress" style="left: 25%; width: 55%;">Preparação → Ensaios → Show</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ==================== BY PERSON VIEW ==================== -->
+                <div id="view-person" class="view-content" style="display: none;">
+                    <div class="person-grid">
+                        <!-- Quintela -->
+                        <div class="person-card">
+                            <div class="person-card-header">
+                                <div class="person-avatar" style="background: linear-gradient(135deg, #10b981, #34d399);">Q</div>
+                                <div class="person-info">
+                                    <h3>Quintela</h3>
+                                    <span>Coordenador LAMK</span>
+                                </div>
+                                <div class="person-stats">
+                                    <div class="person-stats-value">8</div>
+                                    <div class="person-stats-label">tarefas</div>
+                                </div>
+                            </div>
+                            <div class="person-tasks">
+                                <div class="person-task">
+                                    <div class="person-task-checkbox"></div>
+                                    <div class="person-task-info">
+                                        <div class="person-task-title">Finalizar repertório</div>
+                                        <div class="person-task-project">Recital Kids - Março</div>
+                                    </div>
+                                    <span class="person-task-due urgent">29 Jan</span>
+                                </div>
+                                <div class="person-task">
+                                    <div class="person-task-checkbox"></div>
+                                    <div class="person-task-info">
+                                        <div class="person-task-title">Confirmar professores</div>
+                                        <div class="person-task-project">Semana do Baterista</div>
+                                    </div>
+                                    <span class="person-task-due">05 Fev</span>
+                                </div>
+                                <div class="person-task">
+                                    <div class="person-task-checkbox"></div>
+                                    <div class="person-task-info">
+                                        <div class="person-task-title">Revisar cronograma ensaios</div>
+                                        <div class="person-task-project">Recital Kids - Março</div>
+                                    </div>
+                                    <span class="person-task-due">10 Fev</span>
+                                </div>
+                                <div class="person-task">
+                                    <div class="person-task-checkbox done"></div>
+                                    <div class="person-task-info" style="text-decoration: line-through; opacity: 0.6;">
+                                        <div class="person-task-title">Definir data do evento</div>
+                                        <div class="person-task-project">Semana do Baterista</div>
+                                    </div>
+                                    <span class="person-task-due" style="color: var(--emerald-400);">✓</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Juliana -->
+                        <div class="person-card">
+                            <div class="person-card-header">
+                                <div class="person-avatar" style="background: linear-gradient(135deg, #8b5cf6, #ec4899);">J</div>
+                                <div class="person-info">
+                                    <h3>Juliana</h3>
+                                    <span>Coordenadora EMLA</span>
+                                </div>
+                                <div class="person-stats">
+                                    <div class="person-stats-value">12</div>
+                                    <div class="person-stats-label">tarefas</div>
+                                </div>
+                            </div>
+                            <div class="person-tasks">
+                                <div class="person-task">
+                                    <div class="person-task-checkbox"></div>
+                                    <div class="person-task-info">
+                                        <div class="person-task-title">Aprovar apostila final</div>
+                                        <div class="person-task-project">Apostila Violão Nível 2</div>
+                                    </div>
+                                    <span class="person-task-due">20 Fev</span>
+                                </div>
+                                <div class="person-task">
+                                    <div class="person-task-checkbox"></div>
+                                    <div class="person-task-info">
+                                        <div class="person-task-title">Definir bandas participantes</div>
+                                        <div class="person-task-project">Show das Bandas - Abril</div>
+                                    </div>
+                                    <span class="person-task-due">15 Fev</span>
+                                </div>
+                                <div class="person-task">
+                                    <div class="person-task-checkbox"></div>
+                                    <div class="person-task-info">
+                                        <div class="person-task-title">Planejar recital EMLA</div>
+                                        <div class="person-task-project">Recital EMLA - Junho</div>
+                                    </div>
+                                    <span class="person-task-due">01 Mar</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Maria (Assistente) -->
+                        <div class="person-card">
+                            <div class="person-card-header">
+                                <div class="person-avatar" style="background: linear-gradient(135deg, #06b6d4, #3b82f6);">M</div>
+                                <div class="person-info">
+                                    <h3>Maria</h3>
+                                    <span>Assistente Pedagógica</span>
+                                </div>
+                                <div class="person-stats">
+                                    <div class="person-stats-value">6</div>
+                                    <div class="person-stats-label">tarefas</div>
+                                </div>
+                            </div>
+                            <div class="person-tasks">
+                                <div class="person-task">
+                                    <div class="person-task-checkbox"></div>
+                                    <div class="person-task-info">
+                                        <div class="person-task-title">Criar pauta mensal</div>
+                                        <div class="person-task-project">Conteúdo Fev/2026</div>
+                                    </div>
+                                    <span class="person-task-due">01 Fev</span>
+                                </div>
+                                <div class="person-task">
+                                    <div class="person-task-checkbox"></div>
+                                    <div class="person-task-info">
+                                        <div class="person-task-title">Preparar lista de alunos</div>
+                                        <div class="person-task-project">Recital Kids - Março</div>
+                                    </div>
+                                    <span class="person-task-due">05 Fev</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Rafael (Professor) -->
+                        <div class="person-card">
+                            <div class="person-card-header">
+                                <div class="person-avatar" style="background: linear-gradient(135deg, #f59e0b, #f97316);">R</div>
+                                <div class="person-info">
+                                    <h3>Rafael Akeem</h3>
+                                    <span>Professor • Bateria</span>
+                                </div>
+                                <div class="person-stats">
+                                    <div class="person-stats-value">4</div>
+                                    <div class="person-stats-label">tarefas</div>
+                                </div>
+                            </div>
+                            <div class="person-tasks">
+                                <div class="person-task">
+                                    <div class="person-task-checkbox"></div>
+                                    <div class="person-task-info">
+                                        <div class="person-task-title">Preparar workshop bateria</div>
+                                        <div class="person-task-project">Semana do Baterista</div>
+                                    </div>
+                                    <span class="person-task-due">08 Fev</span>
+                                </div>
+                                <div class="person-task">
+                                    <div class="person-task-checkbox"></div>
+                                    <div class="person-task-info">
+                                        <div class="person-task-title">Ensaiar alunos turma A</div>
+                                        <div class="person-task-project">Recital Kids - Março</div>
+                                    </div>
+                                    <span class="person-task-due">20 Fev</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ==================== CALENDAR VIEW (placeholder) ==================== -->
+                <div id="view-calendar" class="view-content" style="display: none;">
+                    <div class="section-card" style="padding: 40px; text-align: center;">
+                        <div style="font-size: 48px; margin-bottom: 16px;">📅</div>
+                        <h3 style="margin-bottom: 8px;">Visualização de Calendário</h3>
+                        <p style="color: var(--text-muted);">Similar ao calendário da Agenda, mas focado em prazos de projetos</p>
+                    </div>
+                </div>
+
+                <!-- ==================== SETTINGS VIEW ==================== -->
+                <div id="view-settings" class="view-content" style="display: none;">
+                    <div class="settings-layout">
+                        <!-- Settings Sidebar -->
+                        <div class="settings-sidebar">
+                            <div class="settings-nav">
+                                <button class="settings-nav-item active" onclick="showSettingsSection('tipos')">
+                                    <span class="settings-nav-icon">📁</span>
+                                    Tipos de Projeto
+                                </button>
+                                <button class="settings-nav-item" onclick="showSettingsSection('fases')">
+                                    <span class="settings-nav-icon">📋</span>
+                                    Templates de Fases
+                                </button>
+                                <button class="settings-nav-item" onclick="showSettingsSection('notificacoes')">
+                                    <span class="settings-nav-icon">🔔</span>
+                                    Notificações
+                                </button>
+                                <button class="settings-nav-item" onclick="showSettingsSection('equipe')">
+                                    <span class="settings-nav-icon">👥</span>
+                                    Equipe e Permissões
+                                </button>
+                                <button class="settings-nav-item" onclick="showSettingsSection('fabio')">
+                                    <span class="settings-nav-icon">🤖</span>
+                                    Fábio IA
+                                </button>
+                                <button class="settings-nav-item" onclick="showSettingsSection('whatsapp')">
+                                    <span class="settings-nav-icon">📱</span>
+                                    WhatsApp
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Settings Content -->
+                        <div class="settings-content">
+                            <!-- ===== TIPOS DE PROJETO ===== -->
+                            <div id="settings-tipos" class="settings-section active">
+                                <div class="settings-header">
+                                    <div>
+                                        <h2 class="settings-title">📁 Tipos de Projeto</h2>
+                                        <p class="settings-subtitle">Gerencie os tipos de projeto disponíveis no sistema</p>
+                                    </div>
+                                    <button class="btn-primary" onclick="openModal('novoTipo')">
+                                        + Novo Tipo
+                                    </button>
+                                </div>
+
+                                <div class="settings-card">
+                                    <table class="settings-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Ícone</th>
+                                                <th>Nome</th>
+                                                <th>Cor</th>
+                                                <th>Projetos</th>
+                                                <th>Status</th>
+                                                <th>Ações</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <tr>
+                                                <td><span class="type-icon" style="background: var(--violet-900);">🎉</span></td>
+                                                <td><strong>Semana Temática</strong></td>
+                                                <td><span class="color-badge" style="background: var(--violet-500);"></span> Violeta</td>
+                                                <td>3 projetos</td>
+                                                <td><span class="status-badge-sm active">Ativo</span></td>
+                                                <td>
+                                                    <button class="btn-icon-sm" title="Editar">✏️</button>
+                                                    <button class="btn-icon-sm" title="Ver Fases">📋</button>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td><span class="type-icon" style="background: var(--cyan-900);">🎵</span></td>
+                                                <td><strong>Recital</strong></td>
+                                                <td><span class="color-badge" style="background: var(--cyan-500);"></span> Ciano</td>
+                                                <td>5 projetos</td>
+                                                <td><span class="status-badge-sm active">Ativo</span></td>
+                                                <td>
+                                                    <button class="btn-icon-sm" title="Editar">✏️</button>
+                                                    <button class="btn-icon-sm" title="Ver Fases">📋</button>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td><span class="type-icon" style="background: var(--rose-900);">🎸</span></td>
+                                                <td><strong>Show de Banda</strong></td>
+                                                <td><span class="color-badge" style="background: var(--rose-500);"></span> Rosa</td>
+                                                <td>2 projetos</td>
+                                                <td><span class="status-badge-sm active">Ativo</span></td>
+                                                <td>
+                                                    <button class="btn-icon-sm" title="Editar">✏️</button>
+                                                    <button class="btn-icon-sm" title="Ver Fases">📋</button>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td><span class="type-icon" style="background: var(--emerald-900);">📚</span></td>
+                                                <td><strong>Material Didático</strong></td>
+                                                <td><span class="color-badge" style="background: var(--emerald-500);"></span> Verde</td>
+                                                <td>4 projetos</td>
+                                                <td><span class="status-badge-sm active">Ativo</span></td>
+                                                <td>
+                                                    <button class="btn-icon-sm" title="Editar">✏️</button>
+                                                    <button class="btn-icon-sm" title="Ver Fases">📋</button>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td><span class="type-icon" style="background: var(--amber-900);">📱</span></td>
+                                                <td><strong>Produção de Conteúdo</strong></td>
+                                                <td><span class="color-badge" style="background: var(--amber-500);"></span> Âmbar</td>
+                                                <td>6 projetos</td>
+                                                <td><span class="status-badge-sm active">Ativo</span></td>
+                                                <td>
+                                                    <button class="btn-icon-sm" title="Editar">✏️</button>
+                                                    <button class="btn-icon-sm" title="Ver Fases">📋</button>
+                                                </td>
+                                            </tr>
+                                            <tr>
+                                                <td><span class="type-icon" style="background: var(--blue-900);">🎬</span></td>
+                                                <td><strong>Vídeo Aulas</strong></td>
+                                                <td><span class="color-badge" style="background: var(--blue-500);"></span> Azul</td>
+                                                <td>2 projetos</td>
+                                                <td><span class="status-badge-sm active">Ativo</span></td>
+                                                <td>
+                                                    <button class="btn-icon-sm" title="Editar">✏️</button>
+                                                    <button class="btn-icon-sm" title="Ver Fases">📋</button>
+                                                </td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            <!-- ===== TEMPLATES DE FASES ===== -->
+                            <div id="settings-fases" class="settings-section">
+                                <div class="settings-header">
+                                    <div>
+                                        <h2 class="settings-title">📋 Templates de Fases</h2>
+                                        <p class="settings-subtitle">Configure as fases padrão para cada tipo de projeto</p>
+                                    </div>
+                                </div>
+
+                                <div class="template-selector">
+                                    <label>Selecione o tipo de projeto:</label>
+                                    <select class="form-select" onchange="showTemplate(this.value)" style="max-width: 300px;">
+                                        <option value="semana">🎉 Semana Temática</option>
+                                        <option value="recital">🎵 Recital</option>
+                                        <option value="show">🎸 Show de Banda</option>
+                                        <option value="material">📚 Material Didático</option>
+                                        <option value="conteudo">📱 Produção de Conteúdo</option>
+                                        <option value="video">🎬 Vídeo Aulas</option>
+                                    </select>
+                                </div>
+
+                                <div class="settings-card">
+                                    <div class="template-header">
+                                        <h3>🎉 Semana Temática - Fases do Template</h3>
+                                        <button class="btn-secondary-sm">+ Adicionar Fase</button>
+                                    </div>
+
+                                    <div class="phases-list">
+                                        <div class="phase-item">
+                                            <div class="phase-drag">⋮⋮</div>
+                                            <div class="phase-number">1</div>
+                                            <div class="phase-info">
+                                                <input type="text" class="phase-input" value="Planejamento">
+                                                <span class="phase-hint">Duração sugerida: 2 semanas</span>
+                                            </div>
+                                            <div class="phase-tasks">
+                                                <span class="phase-tasks-count">5 tarefas padrão</span>
+                                                <button class="btn-icon-sm" title="Configurar tarefas">📝</button>
+                                            </div>
+                                            <button class="btn-icon-sm danger" title="Remover">🗑️</button>
+                                        </div>
+
+                                        <div class="phase-item">
+                                            <div class="phase-drag">⋮⋮</div>
+                                            <div class="phase-number">2</div>
+                                            <div class="phase-info">
+                                                <input type="text" class="phase-input" value="Divulgação">
+                                                <span class="phase-hint">Duração sugerida: 1 semana</span>
+                                            </div>
+                                            <div class="phase-tasks">
+                                                <span class="phase-tasks-count">4 tarefas padrão</span>
+                                                <button class="btn-icon-sm" title="Configurar tarefas">📝</button>
+                                            </div>
+                                            <button class="btn-icon-sm danger" title="Remover">🗑️</button>
+                                        </div>
+
+                                        <div class="phase-item">
+                                            <div class="phase-drag">⋮⋮</div>
+                                            <div class="phase-number">3</div>
+                                            <div class="phase-info">
+                                                <input type="text" class="phase-input" value="Preparação">
+                                                <span class="phase-hint">Duração sugerida: 2 semanas</span>
+                                            </div>
+                                            <div class="phase-tasks">
+                                                <span class="phase-tasks-count">8 tarefas padrão</span>
+                                                <button class="btn-icon-sm" title="Configurar tarefas">📝</button>
+                                            </div>
+                                            <button class="btn-icon-sm danger" title="Remover">🗑️</button>
+                                        </div>
+
+                                        <div class="phase-item">
+                                            <div class="phase-drag">⋮⋮</div>
+                                            <div class="phase-number">4</div>
+                                            <div class="phase-info">
+                                                <input type="text" class="phase-input" value="Ensaios">
+                                                <span class="phase-hint">Duração sugerida: 1 semana</span>
+                                            </div>
+                                            <div class="phase-tasks">
+                                                <span class="phase-tasks-count">3 tarefas padrão</span>
+                                                <button class="btn-icon-sm" title="Configurar tarefas">📝</button>
+                                            </div>
+                                            <button class="btn-icon-sm danger" title="Remover">🗑️</button>
+                                        </div>
+
+                                        <div class="phase-item">
+                                            <div class="phase-drag">⋮⋮</div>
+                                            <div class="phase-number">5</div>
+                                            <div class="phase-info">
+                                                <input type="text" class="phase-input" value="Execução (Evento)">
+                                                <span class="phase-hint">Duração: 1 dia</span>
+                                            </div>
+                                            <div class="phase-tasks">
+                                                <span class="phase-tasks-count">6 tarefas padrão</span>
+                                                <button class="btn-icon-sm" title="Configurar tarefas">📝</button>
+                                            </div>
+                                            <button class="btn-icon-sm danger" title="Remover">🗑️</button>
+                                        </div>
+
+                                        <div class="phase-item">
+                                            <div class="phase-drag">⋮⋮</div>
+                                            <div class="phase-number">6</div>
+                                            <div class="phase-info">
+                                                <input type="text" class="phase-input" value="Pós-Evento">
+                                                <span class="phase-hint">Duração sugerida: 1 semana</span>
+                                            </div>
+                                            <div class="phase-tasks">
+                                                <span class="phase-tasks-count">4 tarefas padrão</span>
+                                                <button class="btn-icon-sm" title="Configurar tarefas">📝</button>
+                                            </div>
+                                            <button class="btn-icon-sm danger" title="Remover">🗑️</button>
+                                        </div>
+                                    </div>
+
+                                    <div class="template-footer">
+                                        <button class="btn-secondary">Restaurar Padrão</button>
+                                        <button class="btn-primary">💾 Salvar Template</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ===== NOTIFICAÇÕES ===== -->
+                            <div id="settings-notificacoes" class="settings-section">
+                                <div class="settings-header">
+                                    <div>
+                                        <h2 class="settings-title">🔔 Central de Notificações</h2>
+                                        <p class="settings-subtitle">Configure alertas e lembretes do sistema</p>
+                                    </div>
+                                </div>
+
+                                <div class="settings-card">
+                                    <h3 class="card-section-title">Tipos de Alerta</h3>
+                                    
+                                    <div class="notification-settings">
+                                        <div class="notification-item">
+                                            <div class="notification-info">
+                                                <div class="notification-icon" style="background: var(--rose-900); color: var(--rose-400);">⚠️</div>
+                                                <div>
+                                                    <h4>Tarefa Atrasada</h4>
+                                                    <p>Quando uma tarefa passa do prazo</p>
+                                                </div>
+                                            </div>
+                                            <div class="notification-config">
+                                                <label class="toggle-switch">
+                                                    <input type="checkbox" checked>
+                                                    <span class="toggle-slider"></span>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div class="notification-item">
+                                            <div class="notification-info">
+                                                <div class="notification-icon" style="background: var(--amber-900); color: var(--amber-400);">📅</div>
+                                                <div>
+                                                    <h4>Tarefa Vencendo Hoje</h4>
+                                                    <p>Lembrete no dia do vencimento</p>
+                                                </div>
+                                            </div>
+                                            <div class="notification-config">
+                                                <label class="toggle-switch">
+                                                    <input type="checkbox" checked>
+                                                    <span class="toggle-slider"></span>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div class="notification-item">
+                                            <div class="notification-info">
+                                                <div class="notification-icon" style="background: var(--blue-900); color: var(--blue-400);">🔔</div>
+                                                <div>
+                                                    <h4>Tarefa Vencendo em Breve</h4>
+                                                    <p>Lembrete com antecedência configurável</p>
+                                                </div>
+                                            </div>
+                                            <div class="notification-config">
+                                                <select class="form-select-sm">
+                                                    <option>1 dia antes</option>
+                                                    <option selected>3 dias antes</option>
+                                                    <option>7 dias antes</option>
+                                                    <option>15 dias antes</option>
+                                                    <option>30 dias antes</option>
+                                                </select>
+                                                <label class="toggle-switch">
+                                                    <input type="checkbox" checked>
+                                                    <span class="toggle-slider"></span>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div class="notification-item">
+                                            <div class="notification-info">
+                                                <div class="notification-icon" style="background: var(--orange-900); color: var(--orange-400);">⏸️</div>
+                                                <div>
+                                                    <h4>Projeto Parado</h4>
+                                                    <p>Sem atividade há X dias</p>
+                                                </div>
+                                            </div>
+                                            <div class="notification-config">
+                                                <select class="form-select-sm">
+                                                    <option>3 dias</option>
+                                                    <option selected>7 dias</option>
+                                                    <option>14 dias</option>
+                                                    <option>30 dias</option>
+                                                </select>
+                                                <label class="toggle-switch">
+                                                    <input type="checkbox" checked>
+                                                    <span class="toggle-slider"></span>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div class="notification-item">
+                                            <div class="notification-info">
+                                                <div class="notification-icon" style="background: var(--violet-900); color: var(--violet-400);">📊</div>
+                                                <div>
+                                                    <h4>Resumo Semanal</h4>
+                                                    <p>Relatório automático toda segunda-feira</p>
+                                                </div>
+                                            </div>
+                                            <div class="notification-config">
+                                                <select class="form-select-sm">
+                                                    <option selected>Segunda 8h</option>
+                                                    <option>Segunda 9h</option>
+                                                    <option>Segunda 10h</option>
+                                                </select>
+                                                <label class="toggle-switch">
+                                                    <input type="checkbox" checked>
+                                                    <span class="toggle-slider"></span>
+                                                </label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="settings-card">
+                                    <h3 class="card-section-title">Quem Recebe os Alertas</h3>
+                                    
+                                    <div class="recipients-grid">
+                                        <div class="recipient-card">
+                                            <div class="recipient-header">
+                                                <span class="recipient-role">Coordenadores</span>
+                                                <label class="toggle-switch">
+                                                    <input type="checkbox" checked>
+                                                    <span class="toggle-slider"></span>
+                                                </label>
+                                            </div>
+                                            <p>Quintela, Juliana</p>
+                                            <div class="recipient-alerts">
+                                                <span class="alert-badge active">Atrasadas ✓</span>
+                                                <span class="alert-badge active">Vencendo ✓</span>
+                                                <span class="alert-badge active">Resumo ✓</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="recipient-card">
+                                            <div class="recipient-header">
+                                                <span class="recipient-role">Assistentes Pedagógicos</span>
+                                                <label class="toggle-switch">
+                                                    <input type="checkbox" checked>
+                                                    <span class="toggle-slider"></span>
+                                                </label>
+                                            </div>
+                                            <p>Somente tarefas atribuídas</p>
+                                            <div class="recipient-alerts">
+                                                <span class="alert-badge active">Atrasadas ✓</span>
+                                                <span class="alert-badge active">Vencendo ✓</span>
+                                                <span class="alert-badge">Resumo</span>
+                                            </div>
+                                        </div>
+
+                                        <div class="recipient-card">
+                                            <div class="recipient-header">
+                                                <span class="recipient-role">Professores</span>
+                                                <label class="toggle-switch">
+                                                    <input type="checkbox" checked>
+                                                    <span class="toggle-slider"></span>
+                                                </label>
+                                            </div>
+                                            <p>Somente tarefas atribuídas</p>
+                                            <div class="recipient-alerts">
+                                                <span class="alert-badge active">Atrasadas ✓</span>
+                                                <span class="alert-badge active">Vencendo ✓</span>
+                                                <span class="alert-badge">Resumo</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ===== EQUIPE E PERMISSÕES ===== -->
+                            <div id="settings-equipe" class="settings-section">
+                                <div class="settings-header">
+                                    <div>
+                                        <h2 class="settings-title">👥 Equipe e Permissões</h2>
+                                        <p class="settings-subtitle">Gerencie a equipe e defina quem pode fazer o quê</p>
+                                    </div>
+                                    <button class="btn-primary" onclick="openModal('novaMembro')">
+                                        + Adicionar Pessoa
+                                    </button>
+                                </div>
+
+                                <div class="settings-card">
+                                    <h3 class="card-section-title">Coordenadores</h3>
+                                    <p class="card-section-hint">Acesso total: criar, editar, excluir projetos e gerenciar equipe</p>
+                                    
+                                    <div class="team-list">
+                                        <div class="team-member-row">
+                                            <div class="team-member-info">
+                                                <div class="avatar-md" style="background: linear-gradient(135deg, #10b981, #34d399);">Q</div>
+                                                <div>
+                                                    <h4>Quintela</h4>
+                                                    <span>Coordenador LAMK • quintela@lamusic.com.br</span>
+                                                </div>
+                                            </div>
+                                            <div class="team-member-phone">
+                                                <span class="phone-badge">📱 (21) 99999-1111</span>
+                                            </div>
+                                            <div class="team-member-actions">
+                                                <button class="btn-icon-sm">✏️</button>
+                                            </div>
+                                        </div>
+
+                                        <div class="team-member-row">
+                                            <div class="team-member-info">
+                                                <div class="avatar-md" style="background: linear-gradient(135deg, #8b5cf6, #ec4899);">J</div>
+                                                <div>
+                                                    <h4>Juliana</h4>
+                                                    <span>Coordenadora EMLA • juliana@lamusic.com.br</span>
+                                                </div>
+                                            </div>
+                                            <div class="team-member-phone">
+                                                <span class="phone-badge">📱 (21) 99999-2222</span>
+                                            </div>
+                                            <div class="team-member-actions">
+                                                <button class="btn-icon-sm">✏️</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="settings-card">
+                                    <h3 class="card-section-title">Assistentes Pedagógicos</h3>
+                                    <p class="card-section-hint">Podem criar projetos, adicionar tarefas e gerenciar equipe (delegado)</p>
+                                    
+                                    <div class="team-list">
+                                        <div class="team-member-row">
+                                            <div class="team-member-info">
+                                                <div class="avatar-md" style="background: linear-gradient(135deg, #06b6d4, #3b82f6);">MA</div>
+                                                <div>
+                                                    <h4>Maria Assistente</h4>
+                                                    <span>Assistente Pedagógico • maria@lamusic.com.br</span>
+                                                </div>
+                                            </div>
+                                            <div class="team-member-phone">
+                                                <span class="phone-badge">📱 (21) 99999-3333</span>
+                                            </div>
+                                            <div class="team-member-actions">
+                                                <button class="btn-icon-sm">✏️</button>
+                                                <button class="btn-icon-sm danger">🗑️</button>
+                                            </div>
+                                        </div>
+
+                                        <div class="team-member-row">
+                                            <div class="team-member-info">
+                                                <div class="avatar-md" style="background: linear-gradient(135deg, #f59e0b, #f97316);">PA</div>
+                                                <div>
+                                                    <h4>Pedro Assistente</h4>
+                                                    <span>Assistente Pedagógico • pedro@lamusic.com.br</span>
+                                                </div>
+                                            </div>
+                                            <div class="team-member-phone">
+                                                <span class="phone-badge">📱 (21) 99999-4444</span>
+                                            </div>
+                                            <div class="team-member-actions">
+                                                <button class="btn-icon-sm">✏️</button>
+                                                <button class="btn-icon-sm danger">🗑️</button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <button class="btn-ghost-sm" style="margin-top: 12px;">+ Adicionar Assistente</button>
+                                </div>
+
+                                <div class="settings-card">
+                                    <h3 class="card-section-title">Permissões de Professores</h3>
+                                    <p class="card-section-hint">Defina o que os professores podem ver e fazer no sistema</p>
+                                    
+                                    <div class="permissions-grid">
+                                        <div class="permission-item">
+                                            <div class="permission-info">
+                                                <h4>Visualizar Projetos</h4>
+                                                <p>Professores podem ver projetos onde estão envolvidos</p>
+                                            </div>
+                                            <label class="toggle-switch">
+                                                <input type="checkbox" checked>
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                        </div>
+
+                                        <div class="permission-item">
+                                            <div class="permission-info">
+                                                <h4>Comentar em Tarefas</h4>
+                                                <p>Professores podem adicionar comentários</p>
+                                            </div>
+                                            <label class="toggle-switch">
+                                                <input type="checkbox" checked>
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                        </div>
+
+                                        <div class="permission-item">
+                                            <div class="permission-info">
+                                                <h4>Marcar Tarefas como Concluídas</h4>
+                                                <p>Professores podem concluir tarefas atribuídas a eles</p>
+                                            </div>
+                                            <label class="toggle-switch">
+                                                <input type="checkbox" checked>
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                        </div>
+
+                                        <div class="permission-item">
+                                            <div class="permission-info">
+                                                <h4>Adicionar Anexos</h4>
+                                                <p>Professores podem fazer upload de arquivos</p>
+                                            </div>
+                                            <label class="toggle-switch">
+                                                <input type="checkbox" checked>
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                        </div>
+
+                                        <div class="permission-item">
+                                            <div class="permission-info">
+                                                <h4>Receber Notificações WhatsApp</h4>
+                                                <p>Lembretes de tarefas via WhatsApp</p>
+                                            </div>
+                                            <label class="toggle-switch">
+                                                <input type="checkbox" checked>
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ===== FÁBIO IA ===== -->
+                            <div id="settings-fabio" class="settings-section">
+                                <div class="settings-header">
+                                    <div>
+                                        <h2 class="settings-title">🤖 Fábio - Assistente Pedagógico IA</h2>
+                                        <p class="settings-subtitle">Configure o comportamento do assistente inteligente</p>
+                                    </div>
+                                </div>
+
+                                <div class="fabio-status-card">
+                                    <div class="fabio-status-icon">🤖</div>
+                                    <div class="fabio-status-info">
+                                        <h3>Fábio está <span class="status-online">Online</span></h3>
+                                        <p>Último resumo enviado: Hoje às 08:00</p>
+                                    </div>
+                                    <label class="toggle-switch large">
+                                        <input type="checkbox" checked>
+                                        <span class="toggle-slider"></span>
+                                    </label>
+                                </div>
+
+                                <div class="settings-card">
+                                    <h3 class="card-section-title">Funcionalidades Ativas</h3>
+                                    
+                                    <div class="fabio-features">
+                                        <div class="fabio-feature">
+                                            <div class="fabio-feature-icon">📊</div>
+                                            <div class="fabio-feature-info">
+                                                <h4>Resumo Semanal Automático</h4>
+                                                <p>Fábio envia um resumo dos projetos toda segunda-feira</p>
+                                            </div>
+                                            <label class="toggle-switch">
+                                                <input type="checkbox" checked>
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                        </div>
+
+                                        <div class="fabio-feature">
+                                            <div class="fabio-feature-icon">⚠️</div>
+                                            <div class="fabio-feature-info">
+                                                <h4>Alertas de Risco</h4>
+                                                <p>Fábio avisa quando projetos estão em risco de atraso</p>
+                                            </div>
+                                            <label class="toggle-switch">
+                                                <input type="checkbox" checked>
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                        </div>
+
+                                        <div class="fabio-feature">
+                                            <div class="fabio-feature-icon">📅</div>
+                                            <div class="fabio-feature-info">
+                                                <h4>Sugestão de Prazos</h4>
+                                                <p>Fábio sugere prazos baseado em projetos anteriores</p>
+                                            </div>
+                                            <label class="toggle-switch">
+                                                <input type="checkbox" checked>
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                        </div>
+
+                                        <div class="fabio-feature">
+                                            <div class="fabio-feature-icon">🔄</div>
+                                            <div class="fabio-feature-info">
+                                                <h4>Redistribuição de Tarefas</h4>
+                                                <p>Fábio sugere redistribuir tarefas quando alguém está sobrecarregado</p>
+                                            </div>
+                                            <label class="toggle-switch">
+                                                <input type="checkbox" checked>
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                        </div>
+
+                                        <div class="fabio-feature">
+                                            <div class="fabio-feature-icon">✏️</div>
+                                            <div class="fabio-feature-info">
+                                                <h4>Criar/Editar Tarefas</h4>
+                                                <p>Fábio pode criar e editar tarefas quando solicitado</p>
+                                            </div>
+                                            <label class="toggle-switch">
+                                                <input type="checkbox">
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                        </div>
+
+                                        <div class="fabio-feature">
+                                            <div class="fabio-feature-icon">💬</div>
+                                            <div class="fabio-feature-info">
+                                                <h4>Responder Perguntas sobre Status</h4>
+                                                <p>Fábio responde perguntas como "Quais projetos vencem essa semana?"</p>
+                                            </div>
+                                            <label class="toggle-switch">
+                                                <input type="checkbox" checked>
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="settings-card">
+                                    <h3 class="card-section-title">Canais de Comunicação</h3>
+                                    
+                                    <div class="channels-grid">
+                                        <div class="channel-card active">
+                                            <div class="channel-icon">💻</div>
+                                            <h4>Chat no Sistema</h4>
+                                            <p>Fábio disponível no canto da tela</p>
+                                            <span class="channel-status">✓ Ativo</span>
+                                        </div>
+
+                                        <div class="channel-card active">
+                                            <div class="channel-icon">📱</div>
+                                            <h4>WhatsApp</h4>
+                                            <p>Interação via mensagens</p>
+                                            <span class="channel-status">✓ Ativo</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- ===== WHATSAPP ===== -->
+                            <div id="settings-whatsapp" class="settings-section">
+                                <div class="settings-header">
+                                    <div>
+                                        <h2 class="settings-title">📱 Integração WhatsApp</h2>
+                                        <p class="settings-subtitle">Configure a integração com WhatsApp para notificações</p>
+                                    </div>
+                                </div>
+
+                                <div class="whatsapp-status-card">
+                                    <div class="whatsapp-status-icon">📱</div>
+                                    <div class="whatsapp-status-info">
+                                        <h3>WhatsApp <span class="status-online">Conectado</span></h3>
+                                        <p>Instância: UAZAPI • Última mensagem: há 5 minutos</p>
+                                    </div>
+                                    <button class="btn-secondary-sm">Testar Conexão</button>
+                                </div>
+
+                                <div class="settings-card">
+                                    <h3 class="card-section-title">Números Cadastrados para Notificação</h3>
+                                    <p class="card-section-hint">Adicione os números que receberão alertas via WhatsApp</p>
+                                    
+                                    <div class="phone-list">
+                                        <div class="phone-item">
+                                            <div class="phone-info">
+                                                <span class="phone-number">📱 (21) 99999-1111</span>
+                                                <span class="phone-name">Quintela (Coordenador)</span>
+                                            </div>
+                                            <div class="phone-alerts">
+                                                <span class="alert-chip active">Atrasadas</span>
+                                                <span class="alert-chip active">Vencendo</span>
+                                                <span class="alert-chip active">Resumo</span>
+                                            </div>
+                                            <button class="btn-icon-sm">✏️</button>
+                                        </div>
+
+                                        <div class="phone-item">
+                                            <div class="phone-info">
+                                                <span class="phone-number">📱 (21) 99999-2222</span>
+                                                <span class="phone-name">Juliana (Coordenadora)</span>
+                                            </div>
+                                            <div class="phone-alerts">
+                                                <span class="alert-chip active">Atrasadas</span>
+                                                <span class="alert-chip active">Vencendo</span>
+                                                <span class="alert-chip active">Resumo</span>
+                                            </div>
+                                            <button class="btn-icon-sm">✏️</button>
+                                        </div>
+
+                                        <div class="phone-item">
+                                            <div class="phone-info">
+                                                <span class="phone-number">📱 (21) 99999-3333</span>
+                                                <span class="phone-name">Maria (Assistente)</span>
+                                            </div>
+                                            <div class="phone-alerts">
+                                                <span class="alert-chip active">Atrasadas</span>
+                                                <span class="alert-chip active">Vencendo</span>
+                                                <span class="alert-chip">Resumo</span>
+                                            </div>
+                                            <button class="btn-icon-sm">✏️</button>
+                                        </div>
+                                    </div>
+
+                                    <button class="btn-ghost-sm" style="margin-top: 16px;">+ Adicionar Número</button>
+                                </div>
+
+                                <div class="settings-card">
+                                    <h3 class="card-section-title">Horários de Envio</h3>
+                                    <p class="card-section-hint">Defina quando as notificações podem ser enviadas</p>
+                                    
+                                    <div class="schedule-grid">
+                                        <div class="schedule-item">
+                                            <label>Início:</label>
+                                            <select class="form-select-sm">
+                                                <option>07:00</option>
+                                                <option selected>08:00</option>
+                                                <option>09:00</option>
+                                                <option>10:00</option>
+                                            </select>
+                                        </div>
+                                        <div class="schedule-item">
+                                            <label>Fim:</label>
+                                            <select class="form-select-sm">
+                                                <option>18:00</option>
+                                                <option>19:00</option>
+                                                <option selected>20:00</option>
+                                                <option>21:00</option>
+                                            </select>
+                                        </div>
+                                        <div class="schedule-item">
+                                            <label>Finais de semana:</label>
+                                            <label class="toggle-switch">
+                                                <input type="checkbox">
+                                                <span class="toggle-slider"></span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="settings-card">
+                                    <h3 class="card-section-title">Testar Envio</h3>
+                                    
+                                    <div class="test-send">
+                                        <input type="text" class="form-input" placeholder="(21) 99999-9999" style="max-width: 200px;">
+                                        <select class="form-select" style="max-width: 250px;">
+                                            <option>Mensagem de teste</option>
+                                            <option>Resumo semanal (exemplo)</option>
+                                            <option>Alerta de tarefa atrasada (exemplo)</option>
+                                        </select>
+                                        <button class="btn-primary">📤 Enviar Teste</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <!-- Chat Fábio (AI Assistant) -->
+    <div class="fabio-chat">
+        <div class="fabio-window" id="fabioWindow">
+            <div class="fabio-header">
+                <div class="fabio-avatar">🤖</div>
+                <div class="fabio-info">
+                    <h3>Fábio</h3>
+                    <span>Assistente Pedagógico IA</span>
+                </div>
+                <button class="fabio-close" onclick="toggleFabio()">✕</button>
+            </div>
+            
+            <div class="fabio-messages">
+                <div class="fabio-message bot">
+                    Olá! 👋 Sou o Fábio, seu assistente pedagógico. Como posso ajudar hoje?
+                </div>
+                <div class="fabio-message bot">
+                    <strong>📊 Resumo da semana:</strong><br>
+                    • 3 projetos com prazos próximos<br>
+                    • 1 projeto atrasado (Recital Kids)<br>
+                    • 12 tarefas pendentes para você
+                </div>
+                <div class="fabio-message user">
+                    Quais tarefas estão atrasadas?
+                </div>
+                <div class="fabio-message bot">
+                    O projeto <strong>Recital Kids - Março 2026</strong> tem 3 tarefas atrasadas:<br><br>
+                    1. ⚠️ Finalizar repertório (venceu 27/01)<br>
+                    2. ⚠️ Confirmar local (venceu 25/01)<br>
+                    3. ⚠️ Enviar convites (venceu 26/01)<br><br>
+                    Quer que eu notifique os responsáveis?
+                </div>
+            </div>
+            
+            <div class="fabio-suggestions">
+                <button class="fabio-suggestion">📋 Listar projetos do mês</button>
+                <button class="fabio-suggestion">⚠️ Ver atrasados</button>
+                <button class="fabio-suggestion">📊 Resumo semanal</button>
+            </div>
+            
+            <div class="fabio-input-area">
+                <input type="text" class="fabio-input" placeholder="Digite sua mensagem...">
+                <button class="fabio-send">➤</button>
+            </div>
+        </div>
+        
+        <button class="fabio-toggle" onclick="toggleFabio()">🤖</button>
+    </div>
+
+    <!-- Modal - New Project -->
+    <div class="modal-overlay" id="modal-newProject">
+        <div class="modal">
+            <div class="modal-header">
+                <h2 class="modal-title">📁 Novo Projeto</h2>
+                <button class="modal-close" onclick="closeModal('newProject')">✕</button>
+            </div>
+            
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Tipo de Projeto *</label>
+                    <div class="form-chips">
+                        <div class="form-chip selected">🥁 Semana Temática</div>
+                        <div class="form-chip">🎤 Recital</div>
+                        <div class="form-chip">🎸 Show</div>
+                        <div class="form-chip">📱 Conteúdo</div>
+                        <div class="form-chip">📚 Material</div>
+                        <div class="form-chip">🎬 Vídeo Aula</div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Nome do Projeto *</label>
+                    <input type="text" class="form-input" placeholder="Ex: Semana do Violonista 2026">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Descrição</label>
+                    <textarea class="form-textarea" placeholder="Descreva o projeto..."></textarea>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Data de Início *</label>
+                        <input type="date" class="form-input">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Data de Término *</label>
+                        <input type="date" class="form-input">
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Unidade</label>
+                    <div class="form-chips">
+                        <div class="form-chip selected">Todas</div>
+                        <div class="form-chip">Campo Grande</div>
+                        <div class="form-chip">Recreio</div>
+                        <div class="form-chip">Barra</div>
+                    </div>
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Equipe *</label>
+                    <div class="team-selector">
+                        <div class="team-member selected">
+                            <div class="avatar-sm" style="background: linear-gradient(135deg, #10b981, #34d399);">Q</div>
+                            <span>Quintela</span>
+                        </div>
+                        <div class="team-member selected">
+                            <div class="avatar-sm" style="background: linear-gradient(135deg, #8b5cf6, #ec4899);">J</div>
+                            <span>Juliana</span>
+                        </div>
+                        <div class="team-member">
+                            <div class="avatar-sm" style="background: linear-gradient(135deg, #06b6d4, #3b82f6);">M</div>
+                            <span>Maria</span>
+                        </div>
+                        <div class="team-member">
+                            <div class="avatar-sm" style="background: linear-gradient(135deg, #f59e0b, #f97316);">R</div>
+                            <span>Rafael</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Orçamento (R$)</label>
+                        <input type="number" class="form-input" placeholder="0,00">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Prioridade</label>
+                        <select class="form-select">
+                            <option>Normal</option>
+                            <option>Alta</option>
+                            <option>Urgente</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="modal-footer">
+                <button class="btn-secondary" onclick="closeModal('newProject')">Cancelar</button>
+                <button class="btn-primary">✓ Criar Projeto</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // View Switcher
+        function showView(viewName) {
+            // Hide all views
+            document.querySelectorAll('.view-content').forEach(view => {
+                view.style.display = 'none';
+            });
+            
+            // Show selected view
+            document.getElementById('view-' + viewName).style.display = 'block';
+            
+            // Update active tab
+            document.querySelectorAll('.tab-btn').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+        }
+
+        // Settings Section Switcher
+        function showSettingsSection(sectionName) {
+            // Hide all settings sections
+            document.querySelectorAll('.settings-section').forEach(section => {
+                section.classList.remove('active');
+            });
+            
+            // Show selected section
+            document.getElementById('settings-' + sectionName).classList.add('active');
+            
+            // Update active nav item
+            document.querySelectorAll('.settings-nav-item').forEach(item => {
+                item.classList.remove('active');
+            });
+            event.target.classList.add('active');
+        }
+
+        // Template Selector (for phases)
+        function showTemplate(templateType) {
+            // In a real implementation, this would load the template data
+            console.log('Loading template for:', templateType);
+        }
+
+        // Modal Functions
+        function openModal(modalId) {
+            document.getElementById('modal-' + modalId).classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeModal(modalId) {
+            document.getElementById('modal-' + modalId).classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        // Close modal on overlay click
+        document.querySelectorAll('.modal-overlay').forEach(overlay => {
+            overlay.addEventListener('click', function(e) {
+                if (e.target === this) {
+                    this.classList.remove('active');
+                    document.body.style.overflow = '';
+                }
+            });
+        });
+
+        // Fábio Chat Toggle
+        function toggleFabio() {
+            document.getElementById('fabioWindow').classList.toggle('active');
+        }
+
+        // Form Chips Selection
+        document.querySelectorAll('.form-chip').forEach(chip => {
+            chip.addEventListener('click', function() {
+                // For single selection (type of project)
+                if (this.parentElement.classList.contains('form-chips')) {
+                    this.parentElement.querySelectorAll('.form-chip').forEach(c => {
+                        c.classList.remove('selected');
+                    });
+                }
+                this.classList.toggle('selected');
+            });
+        });
+
+        // Team Member Selection
+        document.querySelectorAll('.team-member').forEach(member => {
+            member.addEventListener('click', function() {
+                this.classList.toggle('selected');
+            });
+        });
+
+        // Filter Chips
+        document.querySelectorAll('.filter-chip').forEach(chip => {
+            chip.addEventListener('click', function() {
+                document.querySelectorAll('.filter-chip').forEach(c => {
+                    c.classList.remove('active');
+                });
+                this.classList.add('active');
+            });
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            // Escape to close modals
+            if (e.key === 'Escape') {
+                document.querySelectorAll('.modal-overlay.active').forEach(modal => {
+                    modal.classList.remove('active');
+                });
+                document.body.style.overflow = '';
+            }
+            
+            // Ctrl+N for new project
+            if (e.ctrlKey && e.key === 'n') {
+                e.preventDefault();
+                openModal('newProject');
+            }
+        });
+
+        // Fábio suggestions click
+        document.querySelectorAll('.fabio-suggestion').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const input = document.querySelector('.fabio-input');
+                input.value = this.textContent;
+                input.focus();
+            });
+        });
+    </script>
+</body>
+</html>

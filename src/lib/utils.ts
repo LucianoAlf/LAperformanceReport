@@ -6,10 +6,12 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 // Formata número para moeda BRL
-export function formatCurrency(value: number): string {
+export function formatCurrency(value: number, decimals: number = 0): string {
   return new Intl.NumberFormat('pt-BR', {
     style: 'currency',
     currency: 'BRL',
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
   }).format(value);
 }
 

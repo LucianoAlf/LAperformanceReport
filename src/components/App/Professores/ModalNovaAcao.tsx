@@ -57,6 +57,7 @@ const TIPOS_ACAO = [
   { value: 'remanejamento', label: 'Remanejamento' },
   { value: 'feedback', label: 'Feedback' },
   { value: 'mentoria', label: 'Mentoria' },
+  { value: 'plantao', label: 'Plantão na Unidade' },
   { value: 'outro', label: 'Outro' }
 ];
 
@@ -69,6 +70,13 @@ const DURACOES = [
   { value: '120', label: '120 min' }
 ];
 
+const UNIDADES_ACAO = [
+  { value: 'campo_grande', label: 'Campo Grande', cor: 'bg-blue-500' },
+  { value: 'recreio', label: 'Recreio', cor: 'bg-amber-500' },
+  { value: 'barra', label: 'Barra', cor: 'bg-rose-500' },
+  { value: 'online', label: 'Online', cor: 'bg-violet-500' }
+];
+
 export function ModalNovaAcao({ open, onClose, professorId, onSave, onDelete, dataInicial, responsavelInicial, acaoParaEditar, professores = [] }: Props) {
   const [loading, setLoading] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -79,6 +87,7 @@ export function ModalNovaAcao({ open, onClose, professorId, onSave, onDelete, da
   const [horario, setHorario] = useState('10:00');
   const [duracao, setDuracao] = useState('60');
   const [local, setLocal] = useState('');
+  const [unidadeAcao, setUnidadeAcao] = useState<string>('');
   const [responsavel, setResponsavel] = useState<string>('');
   const [professorSelecionado, setProfessorSelecionado] = useState<number | null>(null);
   const [buscaProfessor, setBuscaProfessor] = useState('');
@@ -102,6 +111,7 @@ export function ModalNovaAcao({ open, onClose, professorId, onSave, onDelete, da
         setHorario(format(new Date(acaoParaEditar.data_agendada), 'HH:mm'));
         setDuracao(acaoParaEditar.duracao_minutos.toString());
         setLocal(acaoParaEditar.local || '');
+        setUnidadeAcao((acaoParaEditar as any).unidade_acao || '');
         setResponsavel(acaoParaEditar.responsavel || '');
         setProfessorSelecionado(acaoParaEditar.professor_id);
         setBuscaProfessor(acaoParaEditar.professor_nome || '');
@@ -114,6 +124,7 @@ export function ModalNovaAcao({ open, onClose, professorId, onSave, onDelete, da
         setHorario('10:00');
         setDuracao('60');
         setLocal('');
+        setUnidadeAcao('');
         setResponsavel(responsavelInicial || '');
         setProfessorSelecionado(professorId);
         setBuscaProfessor('');
@@ -138,7 +149,8 @@ export function ModalNovaAcao({ open, onClose, professorId, onSave, onDelete, da
         data_agendada: dataAgendada.toISOString(),
         duracao_minutos: parseInt(duracao),
         local: local || null,
-        responsavel: responsavel || null
+        responsavel: responsavel || null,
+        unidade_acao: unidadeAcao || null
       };
 
       if (isEditando) {
@@ -204,24 +216,11 @@ export function ModalNovaAcao({ open, onClose, professorId, onSave, onDelete, da
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-lg bg-slate-900 border-slate-700">
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto bg-slate-900 border-slate-700">
         <DialogHeader>
-          <DialogTitle className="flex items-center justify-between text-white">
-            <div className="flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-blue-400" />
-              {isEditando ? 'Editar Ação' : 'Nova Ação'}
-            </div>
-            {isEditando && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleDelete}
-                disabled={deleting}
-                className="text-red-400 hover:text-red-300 hover:bg-red-500/20"
-              >
-                {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
-              </Button>
-            )}
+          <DialogTitle className="flex items-center gap-2 text-white">
+            <Calendar className="w-5 h-5 text-blue-400" />
+            {isEditando ? 'Editar Ação' : 'Nova Ação'}
           </DialogTitle>
         </DialogHeader>
 
@@ -247,6 +246,34 @@ export function ModalNovaAcao({ open, onClose, professorId, onSave, onDelete, da
                 >
                   <div className={`w-3 h-3 rounded-full ${r.cor}`} />
                   {r.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Unidade da Ação */}
+          <div>
+            <Label className="text-slate-400">Unidade *</Label>
+            <div className="grid grid-cols-4 gap-2 mt-2">
+              {UNIDADES_ACAO.map((u) => (
+                <button
+                  key={u.value}
+                  type="button"
+                  onClick={() => setUnidadeAcao(u.value)}
+                  className={`py-1.5 px-2 rounded-lg border-2 transition-all flex items-center justify-center gap-1 text-xs ${
+                    unidadeAcao === u.value
+                      ? u.value === 'campo_grande'
+                        ? 'border-blue-500 bg-blue-500/20 text-blue-300'
+                        : u.value === 'recreio'
+                        ? 'border-amber-500 bg-amber-500/20 text-amber-300'
+                        : u.value === 'barra'
+                        ? 'border-rose-500 bg-rose-500/20 text-rose-300'
+                        : 'border-violet-500 bg-violet-500/20 text-violet-300'
+                      : 'border-slate-600 bg-slate-800 text-slate-400 hover:border-slate-500'
+                  }`}
+                >
+                  <div className={`w-2 h-2 rounded-full ${u.cor}`} />
+                  <span className="truncate">{u.label}</span>
                 </button>
               ))}
             </div>
@@ -390,7 +417,7 @@ export function ModalNovaAcao({ open, onClose, professorId, onSave, onDelete, da
           </Button>
           <Button
             onClick={handleSave}
-            disabled={loading || !titulo || !data || !responsavel}
+            disabled={loading || !titulo || !data || !responsavel || !unidadeAcao}
             className="bg-gradient-to-r from-blue-500 to-purple-500"
           >
             {loading ? (

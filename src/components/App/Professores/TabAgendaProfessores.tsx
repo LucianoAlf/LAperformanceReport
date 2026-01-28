@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { format, startOfWeek, endOfWeek, addWeeks, subWeeks, isToday, isTomorrow, isPast, isSameWeek, startOfMonth, endOfMonth, addMonths, subMonths, isSameMonth, getDay } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -6,10 +6,42 @@ import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import {
   Calendar, ChevronLeft, ChevronRight, Plus, CheckCircle2, Clock,
   AlertTriangle, Users, BookOpen, Target, MessageSquare, Loader2,
-  LayoutList, CalendarDays, Columns, RefreshCw, Trash2, Edit2
+  LayoutList, CalendarDays, Columns, RefreshCw, Trash2, Edit2, GripVertical
 } from 'lucide-react';
+import { 
+  DndContext, 
+  DragEndEvent, 
+  DragStartEvent, 
+  DragOverEvent, 
+  PointerSensor, 
+  KeyboardSensor, 
+  useSensor, 
+  useSensors, 
+  closestCorners,
+  useDroppable,
+  DragOverlay
+} from '@dnd-kit/core';
+import { 
+  SortableContext, 
+  sortableKeyboardCoordinates, 
+  useSortable, 
+  verticalListSortingStrategy, 
+  arrayMove 
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tooltip } from '@/components/ui/Tooltip';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useToast } from '@/hooks/useToast';
 import { ToastContainer } from '@/components/ui/toast';
 import { ModalNovaAcao } from './ModalNovaAcao';
@@ -65,6 +97,317 @@ interface Props {
   competencia: string;
 }
 
+// Tipos para o Kanban
+type KanbanStatus = 'pendente' | 'em_andamento' | 'concluida';
+
+interface KanbanCardProps {
+  acao: Acao;
+  getTipoBadgeColor: (tipo: string) => string;
+}
+
+// Componente de Card Arrastável
+function SortableKanbanCard({ acao, getTipoBadgeColor }: KanbanCardProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: acao.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={`bg-slate-900/50 rounded-lg p-3 border border-slate-700/30 hover:border-slate-600 transition group cursor-grab active:cursor-grabbing ${
+        isDragging ? 'shadow-2xl ring-2 ring-blue-500/50 z-50 cursor-grabbing' : ''
+      }`}
+    >
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-white mb-1 truncate">{acao.titulo}</p>
+        <p className="text-xs text-slate-400 truncate">{acao.professor_nome || 'Geral'}</p>
+        <div className="flex items-center gap-2 mt-2 flex-wrap">
+          <span className={`text-xs px-2 py-0.5 rounded ${getTipoBadgeColor(acao.tipo)}`}>
+            {acao.tipo}
+          </span>
+          {/* Badge de Responsável */}
+          <span className={`text-xs px-2 py-0.5 rounded ${
+            acao.responsavel === 'juliana'
+              ? 'bg-purple-500/30 text-purple-300'
+              : acao.responsavel === 'quintela'
+              ? 'bg-emerald-500/30 text-emerald-300'
+              : acao.responsavel === 'ambos'
+              ? 'bg-cyan-500/30 text-cyan-300'
+              : 'bg-slate-500/30 text-slate-300'
+          }`}>
+            {acao.responsavel === 'ambos' ? 'Juliana e Quintela' : acao.responsavel === 'juliana' ? 'Juliana' : acao.responsavel === 'quintela' ? 'Quintela' : '-'}
+          </span>
+          {/* Badge de Unidade */}
+          {(acao as any).unidade_acao && (
+            <span className={`text-xs px-2 py-0.5 rounded ${
+              (acao as any).unidade_acao === 'campo_grande' ? 'bg-blue-500/30 text-blue-300' :
+              (acao as any).unidade_acao === 'recreio' ? 'bg-amber-500/30 text-amber-300' :
+              (acao as any).unidade_acao === 'barra' ? 'bg-rose-500/30 text-rose-300' :
+              (acao as any).unidade_acao === 'online' ? 'bg-violet-500/30 text-violet-300' : 'bg-slate-500/30 text-slate-300'
+            }`}>
+              {(acao as any).unidade_acao === 'campo_grande' ? 'CG' :
+               (acao as any).unidade_acao === 'recreio' ? 'REC' :
+               (acao as any).unidade_acao === 'barra' ? 'BARRA' :
+               (acao as any).unidade_acao === 'online' ? 'Online' : '-'}
+            </span>
+          )}
+          <span className="text-xs text-slate-500">
+            {format(new Date(acao.data_agendada), 'dd/MM HH:mm')}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Componente de Coluna do Kanban
+interface KanbanColumnProps {
+  id: KanbanStatus;
+  title: string;
+  icon: React.ReactNode;
+  iconColor: string;
+  acoes: Acao[];
+  getTipoBadgeColor: (tipo: string) => string;
+  onExcluir: (id: string) => void;
+  isOver?: boolean;
+}
+
+function KanbanColumn({ id, title, icon, iconColor, acoes, getTipoBadgeColor, onExcluir }: KanbanColumnProps) {
+  const { setNodeRef, isOver } = useDroppable({
+    id: id,
+  });
+
+  return (
+    <div 
+      ref={setNodeRef}
+      className={`bg-slate-800/50 rounded-2xl border transition-all duration-200 p-4 min-h-[400px] ${
+        isOver 
+          ? 'border-blue-500 bg-blue-500/10 ring-2 ring-blue-500/30' 
+          : 'border-slate-700/50'
+      }`}
+    >
+      <div className="flex items-center gap-2 mb-4">
+        <div className={iconColor}>{icon}</div>
+        <h3 className="font-medium text-white">{title}</h3>
+        <span className="ml-auto bg-slate-700/50 text-slate-300 text-xs px-2 py-0.5 rounded-full">
+          {acoes.length}
+        </span>
+      </div>
+      
+      <SortableContext items={acoes.map(a => a.id)} strategy={verticalListSortingStrategy}>
+        <div className="space-y-2 min-h-[100px]">
+          {acoes.length === 0 ? (
+            <div className="text-center py-8 text-slate-500 text-sm border-2 border-dashed border-slate-700/50 rounded-lg">
+              Arraste ações aqui
+            </div>
+          ) : (
+            acoes.map(acao => (
+              <SortableKanbanCard
+                key={acao.id}
+                acao={acao}
+                getTipoBadgeColor={getTipoBadgeColor}
+              />
+            ))
+          )}
+        </div>
+      </SortableContext>
+    </div>
+  );
+}
+
+// Componente Principal do Kanban Board
+interface KanbanBoardProps {
+  acoes: Acao[];
+  getTipoBadgeColor: (tipo: string) => string;
+  onStatusChange: (acaoId: string, novoStatus: string) => Promise<void>;
+  onExcluir: (id: string) => void;
+  onReorder: (novaOrdem: Acao[]) => void;
+}
+
+function KanbanBoard({ acoes, getTipoBadgeColor, onStatusChange, onExcluir, onReorder }: KanbanBoardProps) {
+  const [activeId, setActiveId] = useState<string | null>(null);
+
+  // Separar ações por status
+  const acoesPendentes = acoes.filter(a => a.status === 'pendente' || a.status === 'reagendada');
+  const acoesEmAndamento = acoes.filter(a => a.status === 'em_andamento');
+  const acoesConcluidas = acoes.filter(a => a.status === 'concluida');
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const activeAcao = activeId ? acoes.find(a => a.id === activeId) : null;
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveId(event.active.id as string);
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    setActiveId(null);
+
+    if (!over) return;
+
+    const draggedId = active.id as string;
+    const droppedOnId = over.id as string;
+
+    // Encontrar a ação que está sendo arrastada
+    const draggedAcao = acoes.find(a => a.id === draggedId);
+    if (!draggedAcao) return;
+
+    // Determinar o container de destino
+    let destinationContainer: KanbanStatus | null = null;
+    let targetAcao: Acao | undefined;
+    
+    // Se soltou diretamente em uma coluna
+    if (['pendente', 'em_andamento', 'concluida'].includes(droppedOnId)) {
+      destinationContainer = droppedOnId as KanbanStatus;
+    } else {
+      // Se soltou em cima de outro card, encontrar a coluna desse card
+      targetAcao = acoes.find(a => a.id === droppedOnId);
+      if (targetAcao) {
+        if (targetAcao.status === 'pendente' || targetAcao.status === 'reagendada') {
+          destinationContainer = 'pendente';
+        } else if (targetAcao.status === 'em_andamento') {
+          destinationContainer = 'em_andamento';
+        } else if (targetAcao.status === 'concluida') {
+          destinationContainer = 'concluida';
+        }
+      }
+    }
+
+    if (!destinationContainer) return;
+
+    // Determinar o container de origem
+    let sourceContainer: KanbanStatus;
+    if (draggedAcao.status === 'pendente' || draggedAcao.status === 'reagendada') {
+      sourceContainer = 'pendente';
+    } else if (draggedAcao.status === 'em_andamento') {
+      sourceContainer = 'em_andamento';
+    } else {
+      sourceContainer = 'concluida';
+    }
+    
+    // Se mudou de coluna, atualizar status
+    if (sourceContainer !== destinationContainer) {
+      await onStatusChange(draggedId, destinationContainer);
+    } else if (targetAcao && draggedId !== droppedOnId) {
+      // Mesma coluna - reordenar verticalmente
+      // Pegar todas as ações da coluna atual
+      const acoesColuna = sourceContainer === 'pendente' ? acoesPendentes :
+                          sourceContainer === 'em_andamento' ? acoesEmAndamento : acoesConcluidas;
+      
+      const oldIndex = acoesColuna.findIndex(a => a.id === draggedId);
+      const newIndex = acoesColuna.findIndex(a => a.id === droppedOnId);
+      
+      if (oldIndex !== -1 && newIndex !== -1 && oldIndex !== newIndex) {
+        // Criar nova ordem da coluna
+        const novaOrdemColuna = [...acoesColuna];
+        const [removed] = novaOrdemColuna.splice(oldIndex, 1);
+        novaOrdemColuna.splice(newIndex, 0, removed);
+        
+        // Atualizar ordem_kanban localmente
+        novaOrdemColuna.forEach((acao, index) => {
+          (acao as any).ordem_kanban = index + 1;
+        });
+        
+        // Criar nova lista completa de ações com a ordem atualizada
+        const outrasAcoes = acoes.filter(a => !acoesColuna.some(ac => ac.id === a.id));
+        const novaListaCompleta = [...outrasAcoes, ...novaOrdemColuna];
+        
+        // Atualizar UI imediatamente (otimista)
+        onReorder(novaListaCompleta);
+        
+        // Atualizar ordem_kanban no banco em background
+        const updates = novaOrdemColuna.map((acao, index) => 
+          supabase
+            .from('professor_acoes')
+            .update({ ordem_kanban: index + 1 })
+            .eq('id', acao.id)
+        );
+        
+        await Promise.all(updates);
+      }
+    }
+  };
+
+  return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCorners}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+    >
+      <style>{`body { cursor: ${activeId ? 'grabbing !important' : 'auto'} }`}</style>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <KanbanColumn
+          id="pendente"
+          title="Pendente"
+          icon={<Clock className="w-4 h-4" />}
+          iconColor="text-amber-400"
+          acoes={acoesPendentes}
+          getTipoBadgeColor={getTipoBadgeColor}
+          onExcluir={onExcluir}
+        />
+        <KanbanColumn
+          id="em_andamento"
+          title="Em Andamento"
+          icon={<RefreshCw className="w-4 h-4" />}
+          iconColor="text-blue-400"
+          acoes={acoesEmAndamento}
+          getTipoBadgeColor={getTipoBadgeColor}
+          onExcluir={onExcluir}
+        />
+        <KanbanColumn
+          id="concluida"
+          title="Concluída"
+          icon={<CheckCircle2 className="w-4 h-4" />}
+          iconColor="text-emerald-400"
+          acoes={acoesConcluidas}
+          getTipoBadgeColor={getTipoBadgeColor}
+          onExcluir={onExcluir}
+        />
+      </div>
+
+      {/* Overlay do card sendo arrastado */}
+      <DragOverlay>
+        {activeAcao ? (
+          <div className="bg-slate-900 rounded-lg p-3 border-2 border-blue-500 shadow-2xl rotate-3 scale-105">
+            <div className="flex items-start gap-2">
+              <GripVertical className="w-4 h-4 text-blue-400" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-white mb-1">{activeAcao.titulo}</p>
+                <p className="text-xs text-slate-400">{activeAcao.professor_nome || 'Geral'}</p>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </DragOverlay>
+    </DndContext>
+  );
+}
+
 export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
   const toast = useToast();
 
@@ -96,6 +439,10 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
     open: false,
     slug: ''
   });
+  const [alertExcluir, setAlertExcluir] = useState<{ open: boolean; acaoId: string | null }>({
+    open: false,
+    acaoId: null
+  });
 
   useEffect(() => {
     carregarDados();
@@ -112,11 +459,12 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
         .from('professor_acoes')
         .select(`
           id, professor_id, tipo, titulo, descricao, data_agendada, 
-          duracao_minutos, local, status, meta_id,
+          duracao_minutos, local, status, meta_id, responsavel, unidade_acao, ordem_kanban,
           professores:professor_id (nome)
         `)
         .gte('data_agendada', inicioSemana.toISOString())
         .lte('data_agendada', fimSemana.toISOString())
+        .order('ordem_kanban')
         .order('data_agendada');
 
       // Também carregar atrasados (antes da semana atual, ainda pendentes)
@@ -126,11 +474,12 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
         .from('professor_acoes')
         .select(`
           id, professor_id, tipo, titulo, descricao, data_agendada, 
-          duracao_minutos, local, status, meta_id,
+          duracao_minutos, local, status, meta_id, responsavel, unidade_acao, ordem_kanban,
           professores:professor_id (nome)
         `)
         .lt('data_agendada', inicioSemana.toISOString())
         .eq('status', 'pendente')
+        .order('ordem_kanban')
         .order('data_agendada');
 
       const todasAcoes: Acao[] = [...(atrasadosData || []), ...(acoesData || [])].map((a: any) => ({
@@ -243,24 +592,49 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
     }
   };
 
-  const handleExcluirAcao = async (acaoId: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta ação?')) return;
+  const abrirAlertExcluir = (acaoId: string) => {
+    setAlertExcluir({ open: true, acaoId });
+  };
+
+  const confirmarExclusao = async () => {
+    const acaoId = alertExcluir.acaoId;
+    if (!acaoId) return;
+
+    console.log('Confirmando exclusão da ação:', acaoId);
     
     try {
-      const { error } = await supabase
+      console.log('Tentando excluir ação do banco...');
+      const { error, data } = await supabase
         .from('professor_acoes')
         .delete()
-        .eq('id', acaoId);
+        .eq('id', acaoId)
+        .select();
 
-      if (error) throw error;
+      console.log('Resposta do banco:', { error, data });
 
-      toast.success('Ação excluída!');
-      carregarDados();
+      if (error) {
+        console.error('Erro do Supabase:', error);
+        throw error;
+      }
+
+      toast.success('Ação excluída com sucesso!');
+      
+      // Atualização otimista - remover do estado local
+      setAcoes(prevAcoes => prevAcoes.filter(a => a.id !== acaoId));
+      
+      // Fechar o alert
+      setAlertExcluir({ open: false, acaoId: null });
     } catch (error) {
       console.error('Erro ao excluir ação:', error);
-      toast.error('Erro ao excluir ação');
+      toast.error(`Erro ao excluir ação: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+      // Recarregar em caso de erro
+      carregarDados();
+      // Fechar o alert
+      setAlertExcluir({ open: false, acaoId: null });
     }
   };
+
+  const handleExcluirAcao = abrirAlertExcluir;
 
   // Filtrar ações
   const acoesFiltradas = useMemo(() => {
@@ -275,7 +649,18 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
     }
 
     if (filtroResponsavel !== 'todos') {
-      resultado = resultado.filter(a => a.responsavel === filtroResponsavel);
+      resultado = resultado.filter(a => {
+        // Se filtrar por Juliana, mostrar ações de Juliana E de Ambos
+        if (filtroResponsavel === 'juliana') {
+          return a.responsavel === 'juliana' || a.responsavel === 'ambos';
+        }
+        // Se filtrar por Quintela, mostrar ações de Quintela E de Ambos
+        if (filtroResponsavel === 'quintela') {
+          return a.responsavel === 'quintela' || a.responsavel === 'ambos';
+        }
+        // Se filtrar por Ambos, mostrar apenas ações de Ambos
+        return a.responsavel === filtroResponsavel;
+      });
     }
 
     return resultado;
@@ -287,6 +672,22 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
     if (responsavel === 'quintela') return 'border-l-emerald-500 bg-emerald-500/10';
     if (responsavel === 'ambos') return 'border-l-cyan-500 bg-gradient-to-r from-purple-500/10 to-emerald-500/10';
     return 'border-l-slate-500 bg-slate-700/50';
+  };
+
+  // Função para obter cor e label da unidade da ação
+  const getUnidadeAcaoBadge = (unidade: string | null) => {
+    switch (unidade) {
+      case 'campo_grande':
+        return { label: 'CG', cor: 'bg-blue-500/30 text-blue-300' };
+      case 'recreio':
+        return { label: 'REC', cor: 'bg-amber-500/30 text-amber-300' };
+      case 'barra':
+        return { label: 'BARRA', cor: 'bg-rose-500/30 text-rose-300' };
+      case 'online':
+        return { label: 'Online', cor: 'bg-violet-500/30 text-violet-300' };
+      default:
+        return { label: '-', cor: 'bg-slate-500/30 text-slate-300' };
+    }
   };
 
   // Função para abrir modal com data específica
@@ -360,6 +761,7 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
       case 'remanejamento': return 'bg-amber-500';
       case 'feedback': return 'bg-cyan-500';
       case 'mentoria': return 'bg-pink-500';
+      case 'plantao': return 'bg-orange-500';
       default: return 'bg-slate-500';
     }
   };
@@ -372,6 +774,7 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
       case 'remanejamento': return 'bg-amber-500/20 text-amber-400';
       case 'feedback': return 'bg-cyan-500/20 text-cyan-400';
       case 'mentoria': return 'bg-pink-500/20 text-pink-400';
+      case 'plantao': return 'bg-orange-500/20 text-orange-400';
       default: return 'bg-slate-500/20 text-slate-400';
     }
   };
@@ -468,10 +871,11 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
                 onClick={() => setFiltroResponsavel('todos')}
                 className={`px-4 py-2 rounded-lg font-medium flex items-center gap-2 transition ${
                   filtroResponsavel === 'todos'
-                    ? 'bg-blue-500/20 text-blue-300 border-2 border-blue-500'
-                    : 'bg-slate-700/50 text-slate-400 border-2 border-transparent hover:border-blue-500/50'
+                    ? 'bg-cyan-500/20 text-cyan-300 border-2 border-cyan-500'
+                    : 'bg-slate-700/50 text-slate-400 border-2 border-transparent hover:border-cyan-500/50'
                 }`}
               >
+                <div className="w-3 h-3 rounded-full bg-gradient-to-r from-purple-500 to-emerald-500" />
                 Ambos
               </button>
             </div>
@@ -541,14 +945,17 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
 
       {/* Visualização Lista */}
       {visualizacao === 'lista' && (
-      <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 overflow-hidden">
+      <div className="space-y-4">
         {/* Atrasados */}
         {acoesAgrupadas.atrasados.length > 0 && (
-          <div className="border-b border-slate-700 bg-red-500/5">
-            <div className="px-4 py-3 bg-red-500/10">
+          <div className="bg-slate-800/50 rounded-2xl border border-red-500/30 overflow-hidden">
+            <div className="px-4 py-3 bg-red-500/10 border-b border-red-500/20">
               <p className="text-sm font-medium text-red-400 flex items-center gap-2">
                 <AlertTriangle className="w-4 h-4" />
-                Atrasados ({acoesAgrupadas.atrasados.length})
+                Atrasados
+                <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">
+                  {acoesAgrupadas.atrasados.length}
+                </span>
               </p>
             </div>
             <div className="divide-y divide-slate-700/50">
@@ -562,6 +969,7 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
                   onConcluir={handleConcluirAcao}
                   onReagendar={handleReagendarAcao}
                   onEditar={abrirModalEditarAcao}
+                  onExcluir={handleExcluirAcao}
                 />
               ))}
             </div>
@@ -569,10 +977,16 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
         )}
 
         {/* Hoje */}
-        <div className="border-b border-slate-700">
-          <div className="px-4 py-3 bg-slate-800/50">
-            <p className="text-sm font-medium text-white flex items-center gap-2">
-              📌 Hoje - {format(new Date(), "EEEE, dd/MM", { locale: ptBR })}
+        <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 overflow-hidden">
+          <div className="px-4 py-3 bg-blue-500/10 border-b border-blue-500/20">
+            <p className="text-sm font-medium text-blue-400 flex items-center gap-2">
+              📌 Hoje
+              <span className="bg-blue-500 text-white text-xs px-2 py-0.5 rounded-full">
+                {acoesAgrupadas.hoje.length}
+              </span>
+              <span className="text-slate-400 font-normal ml-2">
+                {format(new Date(), "EEEE, dd/MM", { locale: ptBR })}
+              </span>
             </p>
           </div>
           {acoesAgrupadas.hoje.length === 0 ? (
@@ -590,6 +1004,7 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
                   onConcluir={handleConcluirAcao}
                   onReagendar={handleReagendarAcao}
                   onEditar={abrirModalEditarAcao}
+                  onExcluir={handleExcluirAcao}
                 />
               ))}
             </div>
@@ -597,10 +1012,16 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
         </div>
 
         {/* Amanhã */}
-        <div className="border-b border-slate-700">
-          <div className="px-4 py-3 bg-slate-800/50">
-            <p className="text-sm font-medium text-white">
-              Amanhã - {format(new Date(Date.now() + 86400000), "EEEE, dd/MM", { locale: ptBR })}
+        <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 overflow-hidden">
+          <div className="px-4 py-3 bg-slate-700/30 border-b border-slate-700/50">
+            <p className="text-sm font-medium text-white flex items-center gap-2">
+              Amanhã
+              <span className="bg-slate-600 text-white text-xs px-2 py-0.5 rounded-full">
+                {acoesAgrupadas.amanha.length}
+              </span>
+              <span className="text-slate-400 font-normal ml-2">
+                {format(new Date(Date.now() + 86400000), "EEEE, dd/MM", { locale: ptBR })}
+              </span>
             </p>
           </div>
           {acoesAgrupadas.amanha.length === 0 ? (
@@ -618,6 +1039,7 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
                   onConcluir={handleConcluirAcao}
                   onReagendar={handleReagendarAcao}
                   onEditar={abrirModalEditarAcao}
+                  onExcluir={handleExcluirAcao}
                 />
               ))}
             </div>
@@ -626,9 +1048,14 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
 
         {/* Próxima Semana */}
         {acoesAgrupadas.proximaSemana.length > 0 && (
-          <div>
-            <div className="px-4 py-3 bg-slate-800/50">
-              <p className="text-sm font-medium text-slate-400">Próximos dias</p>
+          <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 overflow-hidden">
+            <div className="px-4 py-3 bg-slate-700/30 border-b border-slate-700/50">
+              <p className="text-sm font-medium text-slate-400 flex items-center gap-2">
+                Próximos dias
+                <span className="bg-slate-600 text-white text-xs px-2 py-0.5 rounded-full">
+                  {acoesAgrupadas.proximaSemana.length}
+                </span>
+              </p>
             </div>
             <div className="divide-y divide-slate-700/50">
               {acoesAgrupadas.proximaSemana.map((acao) => (
@@ -640,6 +1067,7 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
                   onConcluir={handleConcluirAcao}
                   onReagendar={handleReagendarAcao}
                   onEditar={abrirModalEditarAcao}
+                  onExcluir={handleExcluirAcao}
                 />
               ))}
             </div>
@@ -784,17 +1212,18 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
                     
                     return (
                       <div 
-                        key={i} 
-                        className={`p-2 border-r border-slate-700/50 last:border-r-0 ${
-                          isDiaHoje ? 'bg-blue-500/5' : ''
+                        key={i}
+                        onClick={() => abrirModalNovaAcao(dia)}
+                        className={`p-2 border-r border-slate-700/50 last:border-r-0 cursor-pointer transition ${
+                          isDiaHoje ? 'bg-blue-500/5' : 'hover:bg-slate-800/50'
                         }`}
                       >
                         {acoesNoDia.length === 0 ? (
                           <div className="h-full flex items-center justify-center">
-                            <span className="text-xs text-slate-600">-</span>
+                            <span className="text-xs text-slate-600">Clique para adicionar ação</span>
                           </div>
                         ) : (
-                          <div className="space-y-2">
+                          <div className="space-y-2" onClick={(e) => e.stopPropagation()}>
                             {acoesNoDia.map(acao => (
                               <div 
                                 key={acao.id}
@@ -809,10 +1238,36 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
                                     : 'border-l-slate-500 bg-slate-700/50 border-slate-600/50'
                                 } hover:shadow-lg`}
                               >
-                                <div className="flex items-center gap-1 mb-1">
+                                <div className="flex items-center gap-1 mb-1 flex-wrap">
                                   <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${getTipoBadgeColor(acao.tipo)}`}>
                                     {acao.tipo}
                                   </span>
+                                  {/* Badge de Responsável */}
+                                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                    acao.responsavel === 'juliana'
+                                      ? 'bg-purple-500/30 text-purple-300'
+                                      : acao.responsavel === 'quintela'
+                                      ? 'bg-emerald-500/30 text-emerald-300'
+                                      : acao.responsavel === 'ambos'
+                                      ? 'bg-cyan-500/30 text-cyan-300'
+                                      : 'bg-slate-500/30 text-slate-300'
+                                  }`}>
+                                    {acao.responsavel === 'ambos' ? 'Juliana e Quintela' : acao.responsavel === 'juliana' ? 'Juliana' : acao.responsavel === 'quintela' ? 'Quintela' : '-'}
+                                  </span>
+                                  {/* Badge de Unidade */}
+                                  {(acao as any).unidade_acao && (
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                      (acao as any).unidade_acao === 'campo_grande' ? 'bg-blue-500/30 text-blue-300' :
+                                      (acao as any).unidade_acao === 'recreio' ? 'bg-amber-500/30 text-amber-300' :
+                                      (acao as any).unidade_acao === 'barra' ? 'bg-rose-500/30 text-rose-300' :
+                                      (acao as any).unidade_acao === 'online' ? 'bg-violet-500/30 text-violet-300' : 'bg-slate-500/30 text-slate-300'
+                                    }`}>
+                                      {(acao as any).unidade_acao === 'campo_grande' ? 'CG' :
+                                       (acao as any).unidade_acao === 'recreio' ? 'REC' :
+                                       (acao as any).unidade_acao === 'barra' ? 'BARRA' :
+                                       (acao as any).unidade_acao === 'online' ? 'Online' : '-'}
+                                    </span>
+                                  )}
                                 </div>
                                 <p className="text-xs font-medium text-white truncate">{acao.titulo}</p>
                                 <p className="text-[10px] text-slate-400 truncate">
@@ -863,24 +1318,47 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
                         <Plus className="w-3 h-3 opacity-0 group-hover:opacity-100 text-slate-500" />
                       </div>
                       <div className="space-y-1" onClick={(e) => e.stopPropagation()}>
-                        {acoesNoDia.slice(0, 3).map(acao => (
-                          <div 
-                            key={acao.id}
-                            onClick={() => abrirModalEditarAcao(acao)}
-                            className={`px-1.5 py-0.5 rounded text-[10px] truncate cursor-pointer border-l-2 hover:opacity-80 transition ${
-                              acao.responsavel === 'juliana'
-                                ? 'border-l-purple-500 bg-purple-500/20 text-purple-200'
-                                : acao.responsavel === 'quintela'
-                                ? 'border-l-emerald-500 bg-emerald-500/20 text-emerald-200'
-                                : acao.responsavel === 'ambos'
-                                ? 'border-l-cyan-500 bg-gradient-to-r from-purple-500/20 to-emerald-500/20 text-cyan-200'
-                                : 'border-l-slate-500 bg-slate-700 text-slate-300'
-                            }`}
-                            title={`Clique para editar: ${acao.titulo} - ${format(new Date(acao.data_agendada), 'HH:mm')} (${acao.responsavel === 'ambos' ? 'Juliana e Quintela' : acao.responsavel || 'Sem responsável'})`}
-                          >
-                            {format(new Date(acao.data_agendada), 'HH:mm')} {acao.titulo}
-                          </div>
-                        ))}
+                        {acoesNoDia.slice(0, 3).map(acao => {
+                          const unidadeBadge = getUnidadeAcaoBadge((acao as any).unidade_acao);
+                          const responsavelLabel = acao.responsavel === 'ambos' ? 'Juliana e Quintela' : 
+                                                   acao.responsavel === 'juliana' ? 'Juliana' : 
+                                                   acao.responsavel === 'quintela' ? 'Quintela' : '-';
+                          
+                          return (
+                            <Tooltip
+                              key={acao.id}
+                              content={
+                                <div className="space-y-1 text-xs">
+                                  <div className="font-semibold">{acao.titulo}</div>
+                                  <div>📅 {format(new Date(acao.data_agendada), 'dd/MM/yyyy HH:mm')}</div>
+                                  <div>⏱️ {acao.duracao_minutos} min</div>
+                                  <div>👤 {acao.professor_nome || 'Geral'}</div>
+                                  <div>📋 {acao.tipo.charAt(0).toUpperCase() + acao.tipo.slice(1)}</div>
+                                  <div>👥 {responsavelLabel}</div>
+                                  <div>📍 {unidadeBadge.label}</div>
+                                  {acao.local && <div>🏢 {acao.local}</div>}
+                                  {acao.descricao && <div className="text-slate-400 mt-1">{acao.descricao}</div>}
+                                </div>
+                              }
+                              side="top"
+                            >
+                              <div 
+                                onClick={() => abrirModalEditarAcao(acao)}
+                                className={`px-1.5 py-0.5 rounded text-[10px] truncate cursor-pointer border-l-2 hover:opacity-80 transition ${
+                                  acao.responsavel === 'juliana'
+                                    ? 'border-l-purple-500 bg-purple-500/20 text-purple-200'
+                                    : acao.responsavel === 'quintela'
+                                    ? 'border-l-emerald-500 bg-emerald-500/20 text-emerald-200'
+                                    : acao.responsavel === 'ambos'
+                                    ? 'border-l-cyan-500 bg-gradient-to-r from-purple-500/20 to-emerald-500/20 text-cyan-200'
+                                    : 'border-l-slate-500 bg-slate-700 text-slate-300'
+                                }`}
+                              >
+                                {format(new Date(acao.data_agendada), 'HH:mm')} {acao.titulo}
+                              </div>
+                            </Tooltip>
+                          );
+                        })}
                         {acoesNoDia.length > 3 && (
                           <div className="text-[10px] text-cyan-400 px-1">
                             +{acoesNoDia.length - 3} mais
@@ -918,101 +1396,47 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
         );
       })()}
 
-      {/* Visualização Kanban */}
+      {/* Visualização Kanban com Drag & Drop */}
       {visualizacao === 'kanban' && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Pendente */}
-          <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 p-4">
-            <div className="flex items-center gap-2 mb-4">
-              <Clock className="w-4 h-4 text-amber-400" />
-              <h3 className="font-medium text-white">Pendente</h3>
-              <span className="ml-auto text-xs text-slate-400">
-                {acoesFiltradas.filter(a => a.status === 'pendente').length}
-              </span>
-            </div>
-            <div className="space-y-2">
-              {acoesFiltradas.filter(a => a.status === 'pendente').length === 0 ? (
-                <div className="text-center py-8 text-slate-500 text-sm">
-                  Nenhuma ação pendente
-                </div>
-              ) : (
-                acoesFiltradas
-                  .filter(a => a.status === 'pendente')
-                  .map(acao => (
-                    <div key={acao.id} className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/30 hover:border-slate-600 transition group">
-                      <div className="flex items-start justify-between">
-                        <p className="text-sm font-medium text-white mb-1">{acao.titulo}</p>
-                        <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition">
-                          <button 
-                            onClick={() => handleConcluirAcao(acao.id)}
-                            className="p-1 hover:bg-emerald-500/20 rounded text-emerald-400"
-                            title="Concluir"
-                          >
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button 
-                            onClick={() => handleExcluirAcao(acao.id)}
-                            className="p-1 hover:bg-red-500/20 rounded text-red-400"
-                            title="Excluir"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                      <p className="text-xs text-slate-400">{acao.professor_nome || 'Geral'}</p>
-                      <div className="flex items-center gap-2 mt-2">
-                        <span className={`text-xs px-2 py-0.5 rounded ${getTipoBadgeColor(acao.tipo)}`}>
-                          {acao.tipo}
-                        </span>
-                        <span className="text-xs text-slate-500">
-                          {format(new Date(acao.data_agendada), 'dd/MM HH:mm')}
-                        </span>
-                      </div>
-                    </div>
-                  ))
-              )}
-            </div>
-          </div>
+        <KanbanBoard 
+          acoes={acoesFiltradas}
+          getTipoBadgeColor={getTipoBadgeColor}
+          onStatusChange={async (acaoId: string, novoStatus: string) => {
+            // Atualização otimista - atualizar estado local imediatamente
+            setAcoes(prevAcoes => 
+              prevAcoes.map(acao => 
+                acao.id === acaoId 
+                  ? { 
+                      ...acao, 
+                      status: novoStatus,
+                      ...(novoStatus === 'concluida' ? { data_conclusao: new Date().toISOString() } : {})
+                    } 
+                  : acao
+              )
+            );
 
-          {/* Em Andamento */}
-          <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 p-4">
-            <div className="flex items-center gap-2 mb-4">
-              <RefreshCw className="w-4 h-4 text-blue-400" />
-              <h3 className="font-medium text-white">Em Andamento</h3>
-              <span className="ml-auto text-xs text-slate-400">0</span>
-            </div>
-            <div className="text-center py-8 text-slate-500 text-sm">
-              Nenhuma ação em andamento
-            </div>
-          </div>
+            // Atualizar no banco em background
+            try {
+              const { error } = await supabase
+                .from('professor_acoes')
+                .update({ 
+                  status: novoStatus,
+                  ...(novoStatus === 'concluida' ? { data_conclusao: new Date().toISOString() } : {})
+                })
+                .eq('id', acaoId);
 
-          {/* Concluída */}
-          <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 p-4">
-            <div className="flex items-center gap-2 mb-4">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-              <h3 className="font-medium text-white">Concluída</h3>
-              <span className="ml-auto text-xs text-slate-400">
-                {acoesFiltradas.filter(a => a.status === 'concluida').length}
-              </span>
-            </div>
-            <div className="space-y-2">
-              {acoesFiltradas.filter(a => a.status === 'concluida').length === 0 ? (
-                <div className="text-center py-8 text-slate-500 text-sm">
-                  Nenhuma ação concluída
-                </div>
-              ) : (
-                acoesFiltradas
-                  .filter(a => a.status === 'concluida')
-                  .map(acao => (
-                    <div key={acao.id} className="bg-slate-900/50 rounded-lg p-3 border border-slate-700/30 opacity-60">
-                      <p className="text-sm font-medium text-white mb-1 line-through">{acao.titulo}</p>
-                      <p className="text-xs text-slate-400">{acao.professor_nome}</p>
-                    </div>
-                  ))
-              )}
-            </div>
-          </div>
-        </div>
+              if (error) throw error;
+              toast.success(`Ação movida para ${novoStatus === 'pendente' ? 'Pendente' : novoStatus === 'em_andamento' ? 'Em Andamento' : 'Concluída'}!`);
+            } catch (error) {
+              console.error('Erro ao atualizar status:', error);
+              toast.error('Erro ao mover ação');
+              // Reverter mudança em caso de erro
+              carregarDados();
+            }
+          }}
+          onExcluir={handleExcluirAcao}
+          onReorder={(novaOrdem) => setAcoes(novaOrdem)}
+        />
       )}
 
       {/* Metas e Ações em Andamento */}
@@ -1216,6 +1640,27 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
         treinamentoSlug={modalTreinamento.slug}
       />
 
+      {/* AlertDialog de Confirmação de Exclusão */}
+      <AlertDialog open={alertExcluir.open} onOpenChange={(open) => setAlertExcluir({ open, acaoId: null })}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Trash2 className="w-5 h-5 text-red-400" />
+              Confirmar Exclusão
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir esta ação? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmarExclusao}>
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} />
     </div>
   );
@@ -1229,7 +1674,8 @@ function AcaoItem({
   getTipoBadgeColor,
   onConcluir,
   onReagendar,
-  onEditar
+  onEditar,
+  onExcluir
 }: {
   acao: Acao;
   isAtrasado?: boolean;
@@ -1238,6 +1684,7 @@ function AcaoItem({
   onConcluir: (id: string) => void;
   onReagendar: (id: string) => void;
   onEditar?: (acao: Acao) => void;
+  onExcluir?: (id: string) => void;
 }) {
   const dataAcao = new Date(acao.data_agendada);
 
@@ -1260,7 +1707,7 @@ function AcaoItem({
   return (
     <div 
       onClick={() => onEditar?.(acao)}
-      className={`px-4 py-3 hover:bg-slate-700/30 cursor-pointer flex items-center gap-4 border-l-4 ${getResponsavelBorderColor()} ${getResponsavelBgColor()} transition-all hover:shadow-md`}
+      className={`group px-4 py-3 hover:bg-slate-700/30 cursor-pointer flex items-center gap-4 border-l-4 ${getResponsavelBorderColor()} ${getResponsavelBgColor()} transition-all hover:shadow-md`}
     >
       <div className="flex-1">
         <div className="flex items-center gap-2 mb-1">
@@ -1287,34 +1734,75 @@ function AcaoItem({
               {acao.responsavel === 'ambos' ? 'Juliana e Quintela' : acao.responsavel.charAt(0).toUpperCase() + acao.responsavel.slice(1)}
             </span>
           )}
+          {/* Badge de Unidade */}
+          {(acao as any).unidade_acao && (
+            <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+              (acao as any).unidade_acao === 'campo_grande' ? 'bg-blue-500/20 text-blue-300' :
+              (acao as any).unidade_acao === 'recreio' ? 'bg-amber-500/20 text-amber-300' :
+              (acao as any).unidade_acao === 'barra' ? 'bg-rose-500/20 text-rose-300' :
+              (acao as any).unidade_acao === 'online' ? 'bg-violet-500/20 text-violet-300' : ''
+            }`}>
+              {(acao as any).unidade_acao === 'campo_grande' ? 'CG' :
+               (acao as any).unidade_acao === 'recreio' ? 'REC' :
+               (acao as any).unidade_acao === 'barra' ? 'BARRA' :
+               (acao as any).unidade_acao === 'online' ? 'Online' : '-'}
+            </span>
+          )}
         </div>
       </div>
-      <div className="flex items-center gap-2">
-        {acao.status === 'pendente' && (
-          <>
+      
+      {/* Ações do card */}
+      <div className="flex items-center gap-1">
+        {acao.status === 'concluida' ? (
+          <span className="text-green-400 text-xs flex items-center gap-1">
+            <CheckCircle2 className="w-4 h-4" /> Concluída
+          </span>
+        ) : (
+          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+            {/* Editar */}
+            <Tooltip content="Editar" side="top">
+              <button
+                onClick={(e) => { e.stopPropagation(); onEditar?.(acao); }}
+                className="p-1.5 hover:bg-blue-500/20 rounded text-blue-400 hover:text-blue-300 transition"
+              >
+                <Edit2 className="w-4 h-4" />
+              </button>
+            </Tooltip>
+            
+            {/* Concluir ou Reagendar */}
             {isAtrasado ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-yellow-400 hover:text-yellow-300"
-                onClick={(e) => { e.stopPropagation(); onReagendar(acao.id); }}
-              >
-                📅 Reagendar
-              </Button>
+              <Tooltip content="Reagendar" side="top">
+                <button
+                  onClick={(e) => { e.stopPropagation(); onReagendar(acao.id); }}
+                  className="p-1.5 hover:bg-yellow-500/20 rounded text-yellow-400 hover:text-yellow-300 transition"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                </button>
+              </Tooltip>
             ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-green-400 hover:text-green-300"
-                onClick={(e) => { e.stopPropagation(); onConcluir(acao.id); }}
-              >
-                ✓ Concluir
-              </Button>
+              <Tooltip content="Concluir" side="top">
+                <button
+                  onClick={(e) => { e.stopPropagation(); onConcluir(acao.id); }}
+                  className="p-1.5 hover:bg-green-500/20 rounded text-green-400 hover:text-green-300 transition"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                </button>
+              </Tooltip>
             )}
-          </>
-        )}
-        {acao.status === 'concluida' && (
-          <span className="text-green-400 text-xs">✅ Concluída</span>
+            
+            {/* Excluir */}
+            <Tooltip content="Excluir" side="top">
+              <button
+                onClick={(e) => { 
+                  e.stopPropagation(); 
+                  onExcluir?.(acao.id);
+                }}
+                className="p-1.5 hover:bg-red-500/20 rounded text-red-400 hover:text-red-300 transition"
+              >
+                <Trash2 className="w-4 h-4" />
+              </button>
+            </Tooltip>
+          </div>
         )}
       </div>
     </div>

@@ -17,7 +17,8 @@ import {
   Wrench,
   ChevronLeft,
   ChevronRight,
-  Building2
+  Building2,
+  FolderKanban
 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { Tooltip } from '../../ui/Tooltip';
@@ -34,6 +35,7 @@ const operacional = [
   { path: '/app/administrativo', label: 'Administrativo', icon: ClipboardList },
   { path: '/app/alunos', label: 'Alunos', icon: Users },
   { path: '/app/professores', label: 'Professores', icon: GraduationCap },
+  { path: '/app/projetos', label: 'Projetos', icon: FolderKanban },
   { path: '/app/salas', label: 'Salas', icon: Building2 },
 ];
 
@@ -61,32 +63,20 @@ export function AppSidebar() {
       {/* Logo */}
       <div className="p-6 border-b border-slate-800 relative">
         {!isCollapsed && (
-          <>
-            <div className="flex items-center gap-2">
-              <img 
-                src="/logo-la-music-school.png" 
-                alt="LA Music School" 
-                className="h-8 w-auto"
-              />
-              <img 
-                src="/logo-la-music-kids.png" 
-                alt="LA Music Kids" 
-                className="h-8 w-auto"
-              />
-            </div>
-            <div className="mt-3">
-              <span className="text-xs text-cyan-400 font-medium bg-cyan-500/10 px-2 py-1 rounded-full inline-flex items-center gap-1">
-                <LayoutDashboard className="w-3 h-3" /> Sistema de Gestão 2026
-              </span>
-            </div>
-          </>
+          <div className="flex items-center">
+            <img 
+              src="/logo-sidebar-la-music-report.png" 
+              alt="LA Music Report" 
+              className="h-12 w-auto"
+            />
+          </div>
         )}
         {isCollapsed && (
           <div className="flex justify-center items-center py-2">
             <img 
               src="/logo-la-icon.png" 
               alt="LA" 
-              className="w-14 h-auto"
+              className="w-10 h-auto"
             />
           </div>
         )}
