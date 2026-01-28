@@ -26,6 +26,7 @@ import { ModalDetalhesProfessor } from './ModalDetalhesProfessor';
 import { CardProfessor } from './CardProfessor';
 import { TabPerformanceProfessores } from './TabPerformanceProfessores';
 import { TabAgendaProfessores } from './TabAgendaProfessores';
+import { TabCarteiraProfessores } from './TabCarteiraProfessores';
 import { HealthScoreConfig } from './HealthScoreConfig';
 import { FatorDemandaCursos } from './FatorDemandaCursos';
 import type { 
@@ -33,7 +34,7 @@ import type {
   FiltrosProfessores, ProfessorFormData
 } from './types';
 
-type AbaAtiva = 'cadastro' | 'performance' | 'agenda' | 'configuracoes';
+type AbaAtiva = 'cadastro' | 'performance' | 'carteira' | 'agenda' | 'configuracoes';
 
 export function ProfessoresPage() {
   const context = useOutletContext<{ filtroAtivo: boolean; unidadeSelecionada: UnidadeId }>();
@@ -43,7 +44,7 @@ export function ProfessoresPage() {
   // Estado da aba ativa (com persistência no localStorage)
   const [abaAtiva, setAbaAtiva] = useState<AbaAtiva>(() => {
     const saved = localStorage.getItem('professores_aba');
-    return (saved === 'cadastro' || saved === 'performance' || saved === 'agenda' || saved === 'configuracoes') ? saved : 'cadastro';
+    return (saved === 'cadastro' || saved === 'performance' || saved === 'carteira' || saved === 'agenda' || saved === 'configuracoes') ? saved : 'cadastro';
   });
 
   // Competência atual para a aba de Agenda
@@ -553,6 +554,17 @@ export function ProfessoresPage() {
         </button>
         <button
           className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
+            abaAtiva === 'carteira'
+              ? 'bg-slate-800 text-white border-b-2 border-purple-500'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+          }`}
+          onClick={() => setAbaAtiva('carteira')}
+        >
+          <Users className="w-4 h-4" />
+          Carteira
+        </button>
+        <button
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
             abaAtiva === 'agenda'
               ? 'bg-slate-800 text-white border-b-2 border-purple-500'
               : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
@@ -578,6 +590,11 @@ export function ProfessoresPage() {
       {/* Conteúdo da aba Performance */}
       {abaAtiva === 'performance' && (
         <TabPerformanceProfessores unidadeAtual={unidadeAtual} />
+      )}
+
+      {/* Conteúdo da aba Carteira */}
+      {abaAtiva === 'carteira' && (
+        <TabCarteiraProfessores unidadeAtual={unidadeAtual} />
       )}
 
       {/* Conteúdo da aba Agenda */}
