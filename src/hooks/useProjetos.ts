@@ -1333,3 +1333,162 @@ export function useProjetoDetalhes(projetoId: number | null) {
 
   return { data, loading, error, refetch: fetchProjeto };
 }
+
+// Interface para tarefa com informações do projeto
+interface TarefaComProjeto {
+  id: number;
+  titulo: string;
+  descricao?: string;
+  prazo?: string;
+  status: string;
+  prioridade: string;
+  completed_at?: string;
+  projeto_id: number;
+  projeto_nome: string;
+  projeto_tipo_cor?: string;
+}
+
+// Interface para pessoa com suas tarefas
+interface PessoaComTarefas {
+  id: string; // formato: "usuario_1" ou "professor_1"
+  tipo: 'usuario' | 'professor';
+  nome: string;
+  cargo?: string;
+  tarefas: TarefaComProjeto[];
+  totalTarefas: number;
+  tarefasPendentes: number;
+  tarefasConcluidas: number;
+}
+
+// Hook para buscar tarefas agrupadas por pessoa
+export function useTarefasPorPessoa(unidadeSelecionada: string) {
+  const [data, setData] = useState<PessoaComTarefas[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  const fetchTarefas = async () => {
+    try {
+      setLoading(true);
+      
+      // Buscar todas as tarefas com informações do projeto
+      let query = supabase
+        .from('projeto_tarefas')
+        .select(`
+          id,
+          titulo,
+          descricao,
+          prazo,
+          status,
+          prioridade,
+          completed_at,
+          responsavel_tipo,
+          responsavel_id,
+          projeto:projetos!inner(
+            id,
+            nome,
+            unidade_id,
+            tipo:projeto_tipos(cor)
+          )
+        `)
+        .not('responsavel_id', 'is', null);
+
+      const { data: tarefas, error: tarefasError } = await query;
+      
+      if (tarefasError) throw tarefasError;
+      if (!tarefas || tarefas.length === 0) {
+        setData([]);
+        return;
+      }
+
+      // Filtrar por unidade se necessário
+      const tarefasFiltradas = unidadeSelecionada === 'todas' 
+        ? tarefas 
+        : tarefas.filter((t: any) => t.projeto?.unidade_id === unidadeSelecionada);
+
+      // Buscar usuários e professores
+      const [{ data: usuarios }, { data: professores }] = await Promise.all([
+        supabase.from('usuarios').select('id, nome, cargo'),
+        supabase.from('professores').select('id, nome, instrumento')
+      ]);
+
+      // Criar mapas para lookup rápido
+      const usuariosMap = new Map((usuarios || []).map(u => [u.id, u]));
+      const professoresMap = new Map((professores || []).map(p => [p.id, p]));
+
+      // Agrupar tarefas por pessoa
+      const pessoasMap = new Map<string, PessoaComTarefas>();
+
+      for (const tarefa of tarefasFiltradas) {
+        const tipo = tarefa.responsavel_tipo as 'usuario' | 'professor';
+        const responsavelId = tarefa.responsavel_id;
+        const key = `${tipo}_${responsavelId}`;
+
+        // Buscar informações da pessoa
+        let pessoa: { nome: string; cargo?: string } | undefined;
+        if (tipo === 'usuario') {
+          const usuario = usuariosMap.get(responsavelId);
+          pessoa = usuario ? { nome: usuario.nome, cargo: usuario.cargo } : undefined;
+        } else if (tipo === 'professor') {
+          const professor = professoresMap.get(responsavelId);
+          pessoa = professor ? { nome: professor.nome, cargo: `Professor • ${professor.instrumento || 'Música'}` } : undefined;
+        }
+
+        if (!pessoa) continue;
+
+        // Criar ou atualizar entrada da pessoa
+        if (!pessoasMap.has(key)) {
+          pessoasMap.set(key, {
+            id: key,
+            tipo,
+            nome: pessoa.nome,
+            cargo: pessoa.cargo,
+            tarefas: [],
+            totalTarefas: 0,
+            tarefasPendentes: 0,
+            tarefasConcluidas: 0,
+          });
+        }
+
+        const pessoaEntry = pessoasMap.get(key)!;
+        const projeto = tarefa.projeto as any;
+        
+        pessoaEntry.tarefas.push({
+          id: tarefa.id,
+          titulo: tarefa.titulo,
+          descricao: tarefa.descricao,
+          prazo: tarefa.prazo,
+          status: tarefa.status,
+          prioridade: tarefa.prioridade,
+          completed_at: tarefa.completed_at,
+          projeto_id: projeto?.id,
+          projeto_nome: projeto?.nome || 'Projeto',
+          projeto_tipo_cor: projeto?.tipo?.cor,
+        });
+
+        pessoaEntry.totalTarefas++;
+        if (tarefa.status === 'concluida') {
+          pessoaEntry.tarefasConcluidas++;
+        } else {
+          pessoaEntry.tarefasPendentes++;
+        }
+      }
+
+      // Converter para array e ordenar por total de tarefas
+      const resultado = Array.from(pessoasMap.values())
+        .sort((a, b) => b.tarefasPendentes - a.tarefasPendentes);
+
+      setData(resultado);
+    } catch (err) {
+      console.error('Erro ao buscar tarefas por pessoa:', err);
+      setError(err as Error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchTarefas();
+  }, [unidadeSelecionada]);
+
+  return { data, loading, error, refetch: fetchTarefas };
+}
