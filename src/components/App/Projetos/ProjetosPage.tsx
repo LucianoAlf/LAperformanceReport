@@ -20,7 +20,7 @@ import { TimelineView } from './views/TimelineView';
 import { CalendarioView } from './views/CalendarioView';
 import { PorPessoaView } from './views/PorPessoaView';
 import { ConfiguracoesView } from './views/ConfiguracoesView';
-import { FabioWidget, ModalNovoProjeto } from './components';
+import { FabioChatFlutuante, ModalNovoProjeto } from './components';
 import { useProjetos } from '../../../hooks/useProjetos';
 
 type TabId = 'dashboard' | 'lista' | 'kanban' | 'calendario' | 'timeline' | 'pessoa' | 'configuracoes';
@@ -45,7 +45,6 @@ const baseTabs: Omit<Tab, 'count'>[] = [
 export function ProjetosPage() {
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
   const [isModalNovoProjetoOpen, setIsModalNovoProjetoOpen] = useState(false);
-  const [isFabioOpen, setIsFabioOpen] = useState(false);
   const context = useOutletContext<{ unidadeSelecionada: string }>();
   const unidadeSelecionada = context?.unidadeSelecionada || 'todas';
 
@@ -168,12 +167,8 @@ export function ProjetosPage() {
         onSuccess={refetchProjetos}
       />
 
-      {/* FabioWidget - Assistente IA */}
-      <FabioWidget 
-        unidadeSelecionada={unidadeSelecionada}
-        isOpen={isFabioOpen}
-        onToggle={() => setIsFabioOpen(!isFabioOpen)}
-      />
+      {/* Chat Flutuante do Fábio - Disponível em todas as abas */}
+      <FabioChatFlutuante unidadeSelecionada={unidadeSelecionada} />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   X, 
   Calendar, 
@@ -14,7 +14,8 @@ import {
   Loader2,
   CheckCircle2,
   Circle,
-  Flag
+  Flag,
+  Eye
 } from 'lucide-react';
 import { Button } from '../../../ui/button';
 import { 
@@ -26,6 +27,8 @@ import {
   useUsuarios,
   useProfessores
 } from '../../../../hooks/useProjetos';
+import { ModalDetalhesTarefa } from './ModalDetalhesTarefa';
+import type { ProjetoTarefa } from '../../../../types/projetos';
 
 interface ModalDetalhesProjetoProps {
   isOpen: boolean;
@@ -85,6 +88,19 @@ export function ModalDetalhesProjeto({ isOpen, projetoId, onClose, onSuccess }: 
   const [novaTarefaTitulo, setNovaTarefaTitulo] = useState('');
   const [tarefaEditando, setTarefaEditando] = useState<Tarefa | null>(null);
   const [tarefaParaExcluir, setTarefaParaExcluir] = useState<Tarefa | null>(null);
+  const [tarefaSelecionada, setTarefaSelecionada] = useState<ProjetoTarefa | null>(null);
+
+  // Todas as tarefas do projeto (para dependências)
+  const todasTarefas = useMemo(() => {
+    if (!projeto?.fases) return [];
+    return projeto.fases.flatMap((fase: Fase) => 
+      (fase.tarefas || []).map((t: Tarefa) => ({
+        ...t,
+        projeto_id: projeto.id,
+        fase_id: fase.id,
+      }))
+    ) as ProjetoTarefa[];
+  }, [projeto]);
 
   // Expandir todas as fases ao abrir
   useEffect(() => {
@@ -377,6 +393,17 @@ export function ModalDetalhesProjeto({ isOpen, projetoId, onClose, onSuccess }: 
                               {/* Ações */}
                               <div className="flex items-center gap-1">
                                 <button
+                                  onClick={() => setTarefaSelecionada({
+                                    ...tarefa,
+                                    projeto_id: projeto.id,
+                                    fase_id: fase.id,
+                                  } as ProjetoTarefa)}
+                                  className="p-1.5 text-slate-400 hover:text-violet-400 hover:bg-slate-700 rounded transition-colors"
+                                  title="Ver detalhes"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </button>
+                                <button
                                   onClick={() => setTarefaEditando({ ...tarefa })}
                                   className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-700 rounded transition-colors"
                                 >
@@ -617,6 +644,18 @@ export function ModalDetalhesProjeto({ isOpen, projetoId, onClose, onSuccess }: 
           </div>
         </div>
       )}
+
+      {/* Modal de Detalhes da Tarefa */}
+      <ModalDetalhesTarefa
+        isOpen={!!tarefaSelecionada}
+        tarefa={tarefaSelecionada}
+        todasTarefas={todasTarefas}
+        onClose={() => setTarefaSelecionada(null)}
+        onUpdate={() => {
+          refetch();
+          onSuccess?.();
+        }}
+      />
     </div>
   );
 }

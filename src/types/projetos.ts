@@ -210,3 +210,64 @@ export const PRIORIDADE_LABELS: Record<ProjetoPrioridade, string> = {
   alta: 'Alta',
   urgente: 'Urgente',
 };
+
+// ============================================
+// Tipos para Anexos, Comentários e Logs
+// ============================================
+
+export interface ProjetoAnexo {
+  id: number;
+  projeto_id: number | null;
+  tarefa_id: number | null;
+  nome: string;
+  nome_original: string;
+  tipo_mime: string;
+  tamanho_bytes: number;
+  storage_path: string;
+  url_publica: string | null;
+  uploaded_by_tipo: PessoaTipo;
+  uploaded_by_id: number;
+  created_at: string;
+  // Relacionamentos
+  uploaded_by?: { nome: string };
+}
+
+export interface ProjetoComentario {
+  id: number;
+  projeto_id: number | null;
+  tarefa_id: number | null;
+  autor_tipo: PessoaTipo;
+  autor_id: number;
+  conteudo: string;
+  editado: boolean;
+  created_at: string;
+  updated_at: string;
+  // Relacionamentos
+  autor?: { nome: string };
+}
+
+export type LogAcao = 
+  | 'criado' 
+  | 'atualizado' 
+  | 'status_alterado' 
+  | 'excluido' 
+  | 'tarefa_criada' 
+  | 'tarefa_status' 
+  | 'tarefa_concluida' 
+  | 'tarefa_excluida'
+  | 'comentario'
+  | 'anexo';
+
+export interface ProjetoLogAlteracao {
+  id: number;
+  projeto_id: number | null;
+  tarefa_id: number | null;
+  acao: LogAcao;
+  campo_alterado: string | null;
+  valor_anterior: string | null;
+  valor_novo: string | null;
+  autor_tipo: 'usuario' | 'professor' | 'sistema';
+  autor_id: number | null;
+  descricao: string | null;
+  created_at: string;
+}
