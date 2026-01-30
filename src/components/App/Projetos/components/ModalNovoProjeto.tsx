@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { X, Loader2, Check } from 'lucide-react';
 import { Button } from '../../../ui/button';
+import { DatePicker } from '../../../ui/date-picker';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../ui/select';
 import { 
   useProjetoTipos, 
   useProjetoTipoFases,
@@ -10,6 +12,7 @@ import {
   useProfessores
 } from '../../../../hooks/useProjetos';
 import type { ProjetoTipo, ProjetoPrioridade } from '../../../../types/projetos';
+import { format, parse } from 'date-fns';
 
 interface ModalNovoProjetoProps {
   isOpen: boolean;
@@ -231,22 +234,20 @@ export function ModalNovoProjeto({ isOpen, onClose, onSuccess }: ModalNovoProjet
               <label className="block text-sm font-medium text-slate-300 mb-2">
                 Data de Início *
               </label>
-              <input
-                type="date"
-                value={dataInicio}
-                onChange={(e) => setDataInicio(e.target.value)}
-                className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-violet-500 transition-colors"
+              <DatePicker
+                date={dataInicio ? parse(dataInicio, 'yyyy-MM-dd', new Date()) : undefined}
+                onDateChange={(date) => setDataInicio(date ? format(date, 'yyyy-MM-dd') : '')}
+                placeholder="Selecione a data"
               />
             </div>
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">
                 Data de Término *
               </label>
-              <input
-                type="date"
-                value={dataFim}
-                onChange={(e) => setDataFim(e.target.value)}
-                className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-violet-500 transition-colors"
+              <DatePicker
+                date={dataFim ? parse(dataFim, 'yyyy-MM-dd', new Date()) : undefined}
+                onDateChange={(date) => setDataFim(date ? format(date, 'yyyy-MM-dd') : '')}
+                placeholder="Selecione a data"
               />
             </div>
           </div>
@@ -382,17 +383,18 @@ export function ModalNovoProjeto({ isOpen, onClose, onSuccess }: ModalNovoProjet
               <label className="block text-sm font-medium text-slate-300 mb-2">
                 Prioridade
               </label>
-              <select
-                value={prioridade}
-                onChange={(e) => setPrioridade(e.target.value as ProjetoPrioridade)}
-                className="w-full px-4 py-2.5 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-violet-500 transition-colors"
-              >
-                {prioridades.map((p) => (
-                  <option key={p.value} value={p.value}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
+              <Select value={prioridade} onValueChange={(value) => setPrioridade(value as ProjetoPrioridade)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Selecione a prioridade" />
+                </SelectTrigger>
+                <SelectContent>
+                  {prioridades.map((p) => (
+                    <SelectItem key={p.value} value={p.value}>
+                      {p.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
         </div>

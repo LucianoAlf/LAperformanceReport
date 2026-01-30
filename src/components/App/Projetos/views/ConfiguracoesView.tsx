@@ -21,6 +21,7 @@ import {
   FileText
 } from 'lucide-react';
 import { Button } from '../../../ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../ui/select';
 import { 
   useNotificacaoConfig, 
   NOTIFICACAO_TIPO_LABELS, 
@@ -190,14 +191,19 @@ export function ConfiguracoesView() {
 
             <div className="flex items-center gap-4">
               <label className="text-sm text-slate-400">Selecione o tipo de projeto:</label>
-              <select className="px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-violet-500">
-                <option>🎉 Semana Temática</option>
-                <option>🎵 Recital</option>
-                <option>🎸 Show de Banda</option>
-                <option>📚 Material Didático</option>
-                <option>📱 Produção de Conteúdo</option>
-                <option>🎬 Vídeo Aulas</option>
-              </select>
+              <Select defaultValue="semana_tematica">
+                <SelectTrigger className="w-64">
+                  <SelectValue placeholder="Selecione o tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="semana_tematica">🎉 Semana Temática</SelectItem>
+                  <SelectItem value="recital">🎵 Recital</SelectItem>
+                  <SelectItem value="show_banda">🎸 Show de Banda</SelectItem>
+                  <SelectItem value="material_didatico">📚 Material Didático</SelectItem>
+                  <SelectItem value="producao_conteudo">📱 Produção de Conteúdo</SelectItem>
+                  <SelectItem value="video_aulas">🎬 Vídeo Aulas</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
@@ -377,15 +383,19 @@ function NotificacoesSection() {
                   {config.tipo === 'tarefa_vencendo' && (
                     <div className="flex items-center gap-4">
                       <span className="text-sm text-slate-400 w-32">Antecedência:</span>
-                      <select 
-                        className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-violet-500"
-                        value={config.antecedencia_dias}
-                        onChange={(e) => handleUpdateConfig(config.id, 'antecedencia_dias', parseInt(e.target.value))}
+                      <Select 
+                        value={config.antecedencia_dias?.toString() || '3'}
+                        onValueChange={(value) => handleUpdateConfig(config.id, 'antecedencia_dias', parseInt(value))}
                       >
-                        {antecedenciaOptions.map(opt => (
-                          <option key={opt.value} value={opt.value}>{opt.label} antes</option>
-                        ))}
-                      </select>
+                        <SelectTrigger className="w-48">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {antecedenciaOptions.map(opt => (
+                            <SelectItem key={opt.value} value={opt.value.toString()}>{opt.label} antes</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   )}
 
@@ -393,15 +403,19 @@ function NotificacoesSection() {
                   {config.tipo === 'projeto_parado' && (
                     <div className="flex items-center gap-4">
                       <span className="text-sm text-slate-400 w-32">Após:</span>
-                      <select 
-                        className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-violet-500"
-                        value={config.dias_inatividade}
-                        onChange={(e) => handleUpdateConfig(config.id, 'dias_inatividade', parseInt(e.target.value))}
+                      <Select 
+                        value={config.dias_inatividade?.toString() || '7'}
+                        onValueChange={(value) => handleUpdateConfig(config.id, 'dias_inatividade', parseInt(value))}
                       >
-                        {antecedenciaOptions.map(opt => (
-                          <option key={opt.value} value={opt.value}>{opt.label} sem atividade</option>
-                        ))}
-                      </select>
+                        <SelectTrigger className="w-48">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {antecedenciaOptions.map(opt => (
+                            <SelectItem key={opt.value} value={opt.value.toString()}>{opt.label} sem atividade</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   )}
 
@@ -409,27 +423,38 @@ function NotificacoesSection() {
                   {config.tipo === 'resumo_semanal' && (
                     <div className="flex items-center gap-4">
                       <span className="text-sm text-slate-400 w-32">Dia de envio:</span>
-                      <select 
-                        className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-violet-500"
-                        value={config.dia_semana}
-                        onChange={(e) => handleUpdateConfig(config.id, 'dia_semana', parseInt(e.target.value))}
+                      <Select 
+                        value={config.dia_semana?.toString() || '1'}
+                        onValueChange={(value) => handleUpdateConfig(config.id, 'dia_semana', parseInt(value))}
                       >
-                        {diasSemanaOptions.map(opt => (
-                          <option key={opt.value} value={opt.value}>{opt.label}</option>
-                        ))}
-                      </select>
+                        <SelectTrigger className="w-48">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {diasSemanaOptions.map(opt => (
+                            <SelectItem key={opt.value} value={opt.value.toString()}>{opt.label}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   )}
 
                   {/* Horário de envio */}
                   <div className="flex items-center gap-4">
                     <span className="text-sm text-slate-400 w-32">Horário:</span>
-                    <input 
-                      type="time"
-                      className="px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm focus:outline-none focus:border-violet-500"
+                    <Select 
                       value={config.hora_envio?.slice(0, 5) || '09:00'}
-                      onChange={(e) => handleUpdateConfig(config.id, 'hora_envio', e.target.value)}
-                    />
+                      onValueChange={(value) => handleUpdateConfig(config.id, 'hora_envio', value)}
+                    >
+                      <SelectTrigger className="w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {['08:00', '09:00', '10:00', '11:00', '12:00', '14:00', '15:00', '16:00', '17:00', '18:00'].map(hora => (
+                          <SelectItem key={hora} value={hora}>{hora}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
 
                   {/* Info sobre destinatários */}
@@ -910,21 +935,35 @@ function WhatsAppSection() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
           <div>
             <label className="text-sm text-slate-400 block mb-2">Início</label>
-            <input 
-              type="time" 
+            <Select 
               value={horarios.inicio}
-              onChange={(e) => setHorarios(prev => ({ ...prev, inicio: e.target.value }))}
-              className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-violet-500"
-            />
+              onValueChange={(value) => setHorarios(prev => ({ ...prev, inicio: value }))}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {['06:00', '07:00', '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00'].map(hora => (
+                  <SelectItem key={hora} value={hora}>{hora}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           <div>
             <label className="text-sm text-slate-400 block mb-2">Fim</label>
-            <input 
-              type="time" 
+            <Select 
               value={horarios.fim}
-              onChange={(e) => setHorarios(prev => ({ ...prev, fim: e.target.value }))}
-              className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-violet-500"
-            />
+              onValueChange={(value) => setHorarios(prev => ({ ...prev, fim: value }))}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {['17:00', '18:00', '19:00', '20:00', '21:00', '22:00'].map(hora => (
+                  <SelectItem key={hora} value={hora}>{hora}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 

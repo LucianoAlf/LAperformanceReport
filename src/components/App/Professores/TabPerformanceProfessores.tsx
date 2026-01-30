@@ -754,6 +754,12 @@ export function TabPerformanceProfessores({ unidadeAtual }: Props) {
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Conversão</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Presença</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Evasões</th>
+                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">
+                  <div className="flex items-center justify-center gap-1">
+                    <BarChart3 className="w-3 h-3 text-violet-400" />
+                    <span>360°</span>
+                  </div>
+                </th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Status</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Ações</th>
               </tr>
@@ -761,7 +767,7 @@ export function TabPerformanceProfessores({ unidadeAtual }: Props) {
             <tbody className="divide-y divide-slate-700/50">
               {professoresFiltrados.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="p-8 text-center text-slate-400">
+                  <td colSpan={12} className="p-8 text-center text-slate-400">
                     Nenhum professor encontrado
                   </td>
                 </tr>
@@ -847,6 +853,12 @@ export function TabPerformanceProfessores({ unidadeAtual }: Props) {
                     <td className="text-center px-4 py-3">
                       <span className={`font-medium ${getMetricaColor(professor.evasoes_mes, { critico: 1, atencao: 3 }, true)}`}>
                         {professor.evasoes_mes}
+                      </span>
+                    </td>
+                    {/* Coluna 360° - Placeholder até integração completa */}
+                    <td className="text-center px-4 py-3">
+                      <span className="px-2 py-1 rounded-lg text-xs font-medium bg-slate-700/50 text-slate-400">
+                        —
                       </span>
                     </td>
                     <td className="text-center px-4 py-3">

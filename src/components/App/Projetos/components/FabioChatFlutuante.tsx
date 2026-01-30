@@ -260,7 +260,7 @@ export function FabioChatFlutuante({ unidadeSelecionada }: FabioChatFlutuantePro
   }
 
   return (
-    <div className="fixed bottom-6 right-6 w-[380px] h-[520px] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl shadow-violet-500/10 flex flex-col overflow-hidden z-50 animate-in slide-in-from-bottom-4 duration-300">
+    <div className="fixed bottom-6 right-6 w-[380px] h-[600px] bg-slate-900 border border-slate-700 rounded-2xl shadow-2xl shadow-violet-500/10 flex flex-col overflow-hidden z-50 animate-in slide-in-from-bottom-4 duration-300">
       <div className="flex items-center gap-3 p-4 bg-gradient-to-r from-violet-600 to-pink-600">
         <div className="w-11 h-11 rounded-full overflow-hidden bg-violet-600">
           <img 

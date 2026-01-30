@@ -9,8 +9,7 @@ import {
   GitBranch, 
   Users, 
   Settings,
-  Plus,
-  Bell
+  Plus
 } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { DashboardView } from './views/DashboardView';
@@ -94,18 +93,6 @@ export function ProjetosPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* Botão de Notificações */}
-          <Button
-            variant="outline"
-            size="icon"
-            className="relative border-slate-700 hover:bg-slate-800"
-          >
-            <Bell className="w-5 h-5 text-slate-400" />
-            <span className="absolute -top-1 -right-1 w-5 h-5 bg-rose-500 text-white text-xs rounded-full flex items-center justify-center font-medium">
-              5
-            </span>
-          </Button>
-
           {/* Botão Novo Projeto */}
           <Button
             onClick={() => setIsModalNovoProjetoOpen(true)}

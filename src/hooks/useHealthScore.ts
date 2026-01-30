@@ -71,6 +71,8 @@ interface ProfessorKPIs {
   taxaCrescimentoAjustada?: number;
   taxaEvasao?: number;
   carteiraAlunos?: number;
+  // Campo 360° (novo)
+  nota360?: number | null;
   // Campos legados (opcionais, não usados no V2)
   nps?: number | null;
   cursos?: string[];
@@ -198,7 +200,7 @@ export function useHealthScore(
       contribuicao: scorePres * (weights.presenca / 100)
     });
     
-    // 6. Evasões (10%) - INVERSO
+    // 6. Evasões - INVERSO
     // Calcular taxa de evasão se não vier pronta
     const taxaEvasao = kpis.taxaEvasao ?? 
       (kpis.carteiraAlunos && kpis.carteiraAlunos > 0 
@@ -212,6 +214,18 @@ export function useHealthScore(
       peso: weights.evasoes / 100,
       contribuicao: scoreEvasoes * (weights.evasoes / 100)
     });
+    
+    // 7. Professor 360° (se configurado e disponível)
+    if (weights.professor360 && weights.professor360 > 0) {
+      const nota360 = kpis.nota360 ?? 100; // Default 100 se não avaliado
+      detalhes.push({
+        kpi: 'Professor 360°',
+        valor: nota360,
+        scoreNormalizado: nota360,
+        peso: weights.professor360 / 100,
+        contribuicao: nota360 * (weights.professor360 / 100)
+      });
+    }
     
     // Calcular score total
     const score = detalhes.reduce((sum, d) => sum + d.contribuicao, 0);
@@ -296,7 +310,7 @@ export function calcularHealthScore(
     contribuicao: scorePres * (weights.presenca / 100)
   });
   
-  // 6. Evasões (10%) - INVERSO
+  // 6. Evasões - INVERSO
   const taxaEvasao = kpis.taxaEvasao ?? 
     (kpis.carteiraAlunos && kpis.carteiraAlunos > 0 
       ? (kpis.evasoes / kpis.carteiraAlunos) * 100 
@@ -309,6 +323,18 @@ export function calcularHealthScore(
     peso: weights.evasoes / 100,
     contribuicao: scoreEvasoes * (weights.evasoes / 100)
   });
+  
+  // 7. Professor 360° (se configurado e disponível)
+  if (weights.professor360 && weights.professor360 > 0) {
+    const nota360 = kpis.nota360 ?? 100; // Default 100 se não avaliado
+    detalhes.push({
+      kpi: 'Professor 360°',
+      valor: nota360,
+      scoreNormalizado: nota360,
+      peso: weights.professor360 / 100,
+      contribuicao: nota360 * (weights.professor360 / 100)
+    });
+  }
   
   // Calcular score total
   const score = detalhes.reduce((sum, d) => sum + d.contribuicao, 0);

@@ -163,7 +163,7 @@ export function ListaView({ unidadeSelecionada, onNovoProjeto }: ListaViewProps)
 
       {/* Tabela */}
       {!loading && projetosFiltrados.length > 0 && (
-        <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-hidden">
+        <div className="bg-slate-900/50 border border-slate-800 rounded-xl overflow-visible">
           <table className="w-full">
             <thead>
               <tr className="bg-slate-800/50">
@@ -288,7 +288,7 @@ export function ListaView({ unidadeSelecionada, onNovoProjeto }: ListaViewProps)
                         
                         {/* Menu dropdown */}
                         {menuAberto === projeto.id && (
-                          <div className="absolute right-0 top-full mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-10 py-1 min-w-[140px]">
+                          <div className="absolute right-0 top-full mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50 py-1 min-w-[140px]">
                             <button
                               onClick={() => {
                                 setProjetoParaEditar(projeto);

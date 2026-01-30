@@ -14,6 +14,7 @@ export const DEFAULT_HEALTH_WEIGHTS = {
   conversao: 15,       // Taxa de conversão de experimentais
   presenca: 15,        // Taxa de presença dos alunos
   evasoes: 10,         // Evasões/Churn (inverso: menos = melhor)
+  professor360: 0,     // Professor 360° (avaliação comportamental) - default 0, configurável
 };
 
 export type HealthWeightKey = keyof typeof DEFAULT_HEALTH_WEIGHTS;
@@ -51,6 +52,12 @@ const WEIGHT_CONFIG: Record<HealthWeightKey, {
     label: 'Evasões', 
     description: 'Inverso: menos = melhor',
     color: 'text-red-400'
+  },
+  professor360: { 
+    icon: HeartPulse, 
+    label: 'Professor 360°', 
+    description: 'Avaliação comportamental',
+    color: 'text-violet-400'
   },
 };
 

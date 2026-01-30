@@ -18,6 +18,8 @@ import {
   Eye
 } from 'lucide-react';
 import { Button } from '../../../ui/button';
+import { DatePicker } from '../../../ui/date-picker';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../ui/select';
 import { 
   useProjetoDetalhes, 
   useCreateTarefa, 
@@ -29,6 +31,7 @@ import {
 } from '../../../../hooks/useProjetos';
 import { ModalDetalhesTarefa } from './ModalDetalhesTarefa';
 import type { ProjetoTarefa } from '../../../../types/projetos';
+import { format, parse } from 'date-fns';
 
 interface ModalDetalhesProjetoProps {
   isOpen: boolean;
@@ -527,38 +530,41 @@ export function ModalDetalhesProjeto({ isOpen, projetoId, onClose, onSuccess }: 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1">Prazo</label>
-                  <input
-                    type="date"
-                    value={tarefaEditando.prazo || ''}
-                    onChange={(e) => setTarefaEditando({ ...tarefaEditando, prazo: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-violet-500"
+                  <DatePicker
+                    date={tarefaEditando.prazo ? parse(tarefaEditando.prazo, 'yyyy-MM-dd', new Date()) : undefined}
+                    onDateChange={(date) => setTarefaEditando({ ...tarefaEditando, prazo: date ? format(date, 'yyyy-MM-dd') : '' })}
+                    placeholder="Selecione o prazo"
                   />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-slate-300 mb-1">Prioridade</label>
-                  <select
-                    value={tarefaEditando.prioridade}
-                    onChange={(e) => setTarefaEditando({ ...tarefaEditando, prioridade: e.target.value })}
-                    className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-violet-500"
+                  <Select 
+                    value={tarefaEditando.prioridade} 
+                    onValueChange={(value) => setTarefaEditando({ ...tarefaEditando, prioridade: value })}
                   >
-                    <option value="baixa">Baixa</option>
-                    <option value="normal">Normal</option>
-                    <option value="alta">Alta</option>
-                    <option value="urgente">Urgente</option>
-                  </select>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Selecione" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="baixa">Baixa</SelectItem>
+                      <SelectItem value="normal">Normal</SelectItem>
+                      <SelectItem value="alta">Alta</SelectItem>
+                      <SelectItem value="urgente">Urgente</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">Responsável</label>
-                <select
+                <Select
                   value={tarefaEditando.responsavel_tipo && tarefaEditando.responsavel_id 
                     ? `${tarefaEditando.responsavel_tipo}:${tarefaEditando.responsavel_id}` 
-                    : ''}
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      const [tipo, id] = e.target.value.split(':');
+                    : 'none'}
+                  onValueChange={(value) => {
+                    if (value && value !== 'none') {
+                      const [tipo, id] = value.split(':');
                       setTarefaEditando({ 
                         ...tarefaEditando, 
                         responsavel_tipo: tipo,
@@ -572,20 +578,24 @@ export function ModalDetalhesProjeto({ isOpen, projetoId, onClose, onSuccess }: 
                       });
                     }
                   }}
-                  className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:border-violet-500"
                 >
-                  <option value="">Sem responsável</option>
-                  <optgroup label="Usuários">
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Selecione o responsável" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sem responsável</SelectItem>
                     {usuarios.map(u => (
-                      <option key={`usuario:${u.id}`} value={`usuario:${u.id}`}>{u.nome}</option>
+                      <SelectItem key={`usuario:${u.id}`} value={`usuario:${u.id}`}>
+                        👤 {u.nome}
+                      </SelectItem>
                     ))}
-                  </optgroup>
-                  <optgroup label="Professores">
                     {professores.map(p => (
-                      <option key={`professor:${p.id}`} value={`professor:${p.id}`}>{p.nome}</option>
+                      <SelectItem key={`professor:${p.id}`} value={`professor:${p.id}`}>
+                        🎓 {p.nome}
+                      </SelectItem>
                     ))}
-                  </optgroup>
-                </select>
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 

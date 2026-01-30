@@ -27,14 +27,16 @@ import { CardProfessor } from './CardProfessor';
 import { TabPerformanceProfessores } from './TabPerformanceProfessores';
 import { TabAgendaProfessores } from './TabAgendaProfessores';
 import { TabCarteiraProfessores } from './TabCarteiraProfessores';
+import { Tab360Professores } from './Tab360Professores';
 import { HealthScoreConfig } from './HealthScoreConfig';
 import { FatorDemandaCursos } from './FatorDemandaCursos';
+import { Professor360Config } from './Professor360Config';
 import type { 
   Professor, Unidade, Curso, KPIsProfessores, 
   FiltrosProfessores, ProfessorFormData
 } from './types';
 
-type AbaAtiva = 'cadastro' | 'performance' | 'carteira' | 'agenda' | 'configuracoes';
+type AbaAtiva = 'cadastro' | 'performance' | 'carteira' | 'agenda' | '360' | 'configuracoes';
 
 export function ProfessoresPage() {
   const context = useOutletContext<{ filtroAtivo: boolean; unidadeSelecionada: UnidadeId }>();
@@ -44,8 +46,11 @@ export function ProfessoresPage() {
   // Estado da aba ativa (com persistência no localStorage)
   const [abaAtiva, setAbaAtiva] = useState<AbaAtiva>(() => {
     const saved = localStorage.getItem('professores_aba');
-    return (saved === 'cadastro' || saved === 'performance' || saved === 'carteira' || saved === 'agenda' || saved === 'configuracoes') ? saved : 'cadastro';
+    return (saved === 'cadastro' || saved === 'performance' || saved === 'carteira' || saved === 'agenda' || saved === '360' || saved === 'configuracoes') ? saved : 'cadastro';
   });
+
+  // Competência selecionada para a aba 360°
+  const [competencia360, setCompetencia360] = useState(() => format(new Date(), 'yyyy-MM'));
 
   // Competência atual para a aba de Agenda
   const competenciaAtual = format(new Date(), 'yyyy-MM');
@@ -576,6 +581,17 @@ export function ProfessoresPage() {
         </button>
         <button
           className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
+            abaAtiva === '360'
+              ? 'bg-slate-800 text-white border-b-2 border-purple-500'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
+          }`}
+          onClick={() => setAbaAtiva('360')}
+        >
+          <BarChart3 className="w-4 h-4" />
+          360°
+        </button>
+        <button
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
             abaAtiva === 'configuracoes'
               ? 'bg-slate-800 text-white border-b-2 border-purple-500'
               : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
@@ -602,6 +618,15 @@ export function ProfessoresPage() {
         <TabAgendaProfessores unidadeAtual={unidadeAtual} competencia={competenciaAtual} />
       )}
 
+      {/* Conteúdo da aba 360° */}
+      {abaAtiva === '360' && (
+        <Tab360Professores 
+          unidadeSelecionada={unidadeAtual}
+          competencia={competencia360}
+          onCompetenciaChange={setCompetencia360}
+        />
+      )}
+
       {/* Conteúdo da aba Configurações */}
       {abaAtiva === 'configuracoes' && (
         <div className="space-y-6">
@@ -624,6 +649,15 @@ export function ProfessoresPage() {
           <FatorDemandaCursos 
             unidadeId={unidadeAtual !== 'todos' ? unidadeAtual : undefined}
           />
+
+          {/* Configurações do Professor 360° */}
+          <div className="bg-slate-900/50 rounded-2xl border border-slate-700/50 p-6">
+            <div className="flex items-center gap-3 mb-6">
+              <BarChart3 className="w-5 h-5 text-violet-400" />
+              <span className="text-sm font-bold text-white uppercase tracking-wide">Avaliação 360° dos Professores</span>
+            </div>
+            <Professor360Config />
+          </div>
 
           {/* Referência de Metas */}
           <div className="bg-slate-900/50 rounded-2xl border border-slate-700/50 p-6">
