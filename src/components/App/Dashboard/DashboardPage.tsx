@@ -10,15 +10,14 @@ import {
   AlertTriangle,
   ArrowUpRight,
   ArrowDownRight,
-  Phone,
-  GraduationCap,
-  RefreshCw,
-  FileText,
   BarChart3,
   Calendar,
   Ticket,
   Target,
-  Award
+  Award,
+  Phone,
+  GraduationCap,
+  RefreshCw
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { formatCurrency } from '@/lib/utils';
@@ -73,10 +72,16 @@ interface DadosProfessores {
 }
 
 interface Alerta {
-  tipo: string;
-  unidade: string;
+  tipo_alerta: string;
+  severidade: 'critico' | 'atencao' | 'informativo';
+  unidade_id: string;
+  unidade_nome: string;
+  quantidade: number;
   descricao: string;
-  valor: number;
+  detalhe: string;
+  valor_atual: number | null;
+  valor_meta: number | null;
+  data_referencia: string;
 }
 
 interface ResumoUnidade {
@@ -136,14 +141,20 @@ export function DashboardPage() {
           setDados(dashboardData);
         }
 
-        // Buscar alertas
-        const { data: alertasData } = await supabase
-          .from('vw_alertas')
-          .select('*')
-          .limit(5);
+        // Buscar alertas inteligentes da nova view
+        let alertasQuery = supabase
+          .from('vw_alertas_inteligentes')
+          .select('*');
+        
+        // Filtrar por unidade se não for consolidado
+        if (unidade !== 'todos') {
+          alertasQuery = alertasQuery.eq('unidade_id', unidade);
+        }
+        
+        const { data: alertasData } = await alertasQuery.limit(10);
 
         if (alertasData) {
-          setAlertas(alertasData);
+          setAlertas(alertasData as Alerta[]);
         }
 
         // ===== DADOS DE GESTÃO =====
@@ -299,14 +310,27 @@ export function DashboardPage() {
         }
 
         // ===== DADOS DE PROFESSORES =====
-        // Usar MESMAS fontes da aba Professores (TabProfessoresNew.tsx):
-        // 1. vw_kpis_professor_completo - carteira atual, ticket, média alunos/turma
-        // 2. professores_performance - renovações, conversão (filtrado por ano)
+        // MESMA LÓGICA da página ProfessoresPage.tsx:
+        // 1. Buscar professores ativos
+        // 2. Buscar relacionamentos professor-unidade
+        // 3. Buscar turmas (implícitas e explícitas) para calcular total_alunos e total_turmas
+        // 4. Filtrar por unidade e calcular KPIs
         
-        // Buscar dados de qualidade/carteira atual
-        const { data: qualidadeData } = await supabase
-          .from('vw_kpis_professor_completo')
-          .select('*');
+        // Buscar professores ativos
+        const { data: professoresData } = await supabase
+          .from('professores')
+          .select('id, nome, ativo')
+          .eq('ativo', true);
+
+        // Buscar relacionamentos professor-unidade
+        const { data: profUnidadesData } = await supabase
+          .from('professores_unidades')
+          .select('professor_id, unidade_id');
+
+        // Buscar turmas implícitas (mesma fonte da página Professores)
+        const { data: turmasImplicitas } = await supabase
+          .from('vw_turmas_implicitas')
+          .select('professor_id, total_alunos');
 
         // Buscar dados de performance (renovações, conversão)
         const { data: performanceData } = await supabase
@@ -320,31 +344,65 @@ export function DashboardPage() {
         let taxaRenovacao = 0;
         let mediaAlunosTurma = 0;
 
-        if (qualidadeData && qualidadeData.length > 0) {
-          // Filtrar por unidade se necessário
-          const qualidadeFiltrada = unidade !== 'todos' 
-            ? qualidadeData.filter((q: any) => q.unidade_id === unidade)
-            : qualidadeData;
+        if (professoresData && professoresData.length > 0) {
+          // Mapear unidades por professor
+          const unidadesPorProfessor = new Map<number, string[]>();
+          if (profUnidadesData) {
+            profUnidadesData.forEach((pu: any) => {
+              const lista = unidadesPorProfessor.get(pu.professor_id) || [];
+              lista.push(pu.unidade_id);
+              unidadesPorProfessor.set(pu.professor_id, lista);
+            });
+          }
+
+          // Calcular turmas e alunos por professor (das turmas implícitas)
+          const turmasPorProfessor = new Map<number, number>();
+          const alunosPorProfessor = new Map<number, number>();
+          turmasImplicitas?.forEach((t: any) => {
+            const profId = t.professor_id;
+            turmasPorProfessor.set(profId, (turmasPorProfessor.get(profId) || 0) + 1);
+            alunosPorProfessor.set(profId, (alunosPorProfessor.get(profId) || 0) + (t.total_alunos || 0));
+          });
+
+          // Filtrar professores por unidade (MESMA LÓGICA da página Professores)
+          let professoreFiltrados = professoresData;
+          if (unidade !== 'todos') {
+            professoreFiltrados = professoresData.filter((p: any) => {
+              const unidadesProf = unidadesPorProfessor.get(p.id) || [];
+              return unidadesProf.includes(unidade);
+            });
+          }
           
-          // Total de professores com carteira > 0
-          const profsComCarteira = qualidadeFiltrada.filter((q: any) => (q.carteira_alunos || 0) > 0);
-          totalProfs = profsComCarteira.length;
+          // Total de professores ativos
+          totalProfs = professoreFiltrados.length;
           
-          // Total de alunos e média
-          const totalAlunos = profsComCarteira.reduce((acc: number, q: any) => acc + (q.carteira_alunos || 0), 0);
+          // Total de alunos e turmas dos professores filtrados
+          let totalAlunos = 0;
+          let totalTurmas = 0;
+          professoreFiltrados.forEach((p: any) => {
+            totalAlunos += alunosPorProfessor.get(p.id) || 0;
+            totalTurmas += turmasPorProfessor.get(p.id) || 0;
+          });
+          
           mediaAlunosProf = totalProfs > 0 ? totalAlunos / totalProfs : 0;
-          
-          // Média alunos por turma
-          const profsComTurma = qualidadeFiltrada.filter((q: any) => (q.media_alunos_turma || 0) > 0);
-          mediaAlunosTurma = profsComTurma.length > 0 
-            ? profsComTurma.reduce((acc: number, q: any) => acc + Number(q.media_alunos_turma || 0), 0) / profsComTurma.length 
-            : 0;
+          mediaAlunosTurma = totalTurmas > 0 ? totalAlunos / totalTurmas : 0;
         }
 
-        // Taxa de renovação vem de professores_performance (mesma lógica da aba Professores)
+        // Taxa de renovação vem de professores_performance
         if (performanceData && performanceData.length > 0) {
-          const renovacoes = performanceData.reduce((acc: number, p: any) => acc + (p.renovacoes || 0), 0);
-          const contratosVencer = performanceData.reduce((acc: number, p: any) => acc + (p.contratos_vencer || 0), 0);
+          // Filtrar por unidade se necessário
+          let perfFiltrada = performanceData;
+          if (unidade !== 'todos') {
+            // professores_performance tem campo 'unidade' (nome), precisamos mapear
+            const unidadeNome = unidade === '2ec861f6-023f-4d7b-9927-3960ad8c2a92' ? 'Campo Grande' 
+              : unidade === '95553e96-971b-4590-a6eb-0201d013c14d' ? 'Recreio'
+              : unidade === '368d47f5-2d88-4475-bc14-ba084a9a348e' ? 'Barra' : null;
+            if (unidadeNome) {
+              perfFiltrada = performanceData.filter((p: any) => p.unidade === unidadeNome);
+            }
+          }
+          const renovacoes = perfFiltrada.reduce((acc: number, p: any) => acc + (p.renovacoes || 0), 0);
+          const contratosVencer = perfFiltrada.reduce((acc: number, p: any) => acc + (p.contratos_vencer || 0), 0);
           taxaRenovacao = contratosVencer > 0 ? (renovacoes / contratosVencer) * 100 : 0;
         }
 
@@ -379,40 +437,79 @@ export function DashboardPage() {
         }
 
         // ===== RESUMO POR UNIDADE (do período selecionado) =====
-        const { data: unidadesData } = await supabase
-          .from('unidades')
-          .select('id, nome')
-          .eq('ativo', true);
+        // Usar isPeriodoAtual já calculado acima para decidir fonte de dados
 
-        if (unidadesData) {
-          // Buscar dados_mensais para cada unidade no período
-          const { data: dadosMensaisUnidades } = await supabase
-            .from('dados_mensais')
-            .select('*')
-            .eq('ano', ano)
-            .gte('mes', mes)
-            .lte('mes', mesFim);
+        if (isPeriodoAtual) {
+          // Para período atual, usar vw_dashboard_unidade (dados em tempo real)
+          const { data: dashboardUnidades } = await supabase
+            .from('vw_dashboard_unidade')
+            .select('*');
 
-          if (dadosMensaisUnidades) {
-            const resumo: ResumoUnidade[] = unidadesData.map((u: any) => {
-              const dadosUnidade = dadosMensaisUnidades.filter((d: any) => d.unidade_id === u.id);
-              const alunosPagantes = dadosUnidade.reduce((acc: number, d: any) => acc + (d.alunos_pagantes || 0), 0);
-              const ticketTotal = dadosUnidade.reduce((acc: number, d: any) => acc + parseFloat(d.ticket_medio || 0), 0);
-              const ticketMedio = dadosUnidade.length > 0 ? ticketTotal / dadosUnidade.length : 0;
-              const faturamento = alunosPagantes * ticketMedio;
-
-              return {
-                unidade: u.nome,
-                unidade_id: u.id,
-                alunos_ativos: alunosPagantes,
-                alunos_pagantes: alunosPagantes,
-                ticket_medio: ticketMedio,
-                faturamento_previsto: faturamento,
-                tempo_medio: 0 // TODO: calcular tempo médio
-              };
-            });
-
+          if (dashboardUnidades) {
+            const resumo: ResumoUnidade[] = dashboardUnidades.map((d: any) => ({
+              unidade: d.unidade_nome,
+              unidade_id: d.unidade_id,
+              alunos_ativos: d.alunos_ativos || 0,
+              alunos_pagantes: d.alunos_pagantes || 0,
+              ticket_medio: parseFloat(d.ticket_medio || 0),
+              faturamento_previsto: parseFloat(d.mrr || 0),
+              tempo_medio: parseFloat(d.tempo_permanencia || 0)
+            }));
             setResumoUnidades(resumo);
+          }
+        } else {
+          // Para períodos históricos, usar dados_mensais
+          const { data: unidadesData } = await supabase
+            .from('unidades')
+            .select('id, nome')
+            .eq('ativo', true);
+
+          if (unidadesData) {
+            const { data: dadosMensaisUnidades } = await supabase
+              .from('dados_mensais')
+              .select('*')
+              .eq('ano', ano)
+              .gte('mes', mes)
+              .lte('mes', mesFim);
+
+            if (dadosMensaisUnidades && dadosMensaisUnidades.length > 0) {
+              const resumo: ResumoUnidade[] = unidadesData.map((u: any) => {
+                const dadosUnidade = dadosMensaisUnidades.filter((d: any) => d.unidade_id === u.id);
+                const alunosPagantes = dadosUnidade.reduce((acc: number, d: any) => acc + (d.alunos_pagantes || 0), 0);
+                const ticketTotal = dadosUnidade.reduce((acc: number, d: any) => acc + parseFloat(d.ticket_medio || 0), 0);
+                const ticketMedio = dadosUnidade.length > 0 ? ticketTotal / dadosUnidade.length : 0;
+                const faturamento = alunosPagantes * ticketMedio;
+
+                return {
+                  unidade: u.nome,
+                  unidade_id: u.id,
+                  alunos_ativos: alunosPagantes,
+                  alunos_pagantes: alunosPagantes,
+                  ticket_medio: ticketMedio,
+                  faturamento_previsto: faturamento,
+                  tempo_medio: 0
+                };
+              });
+              setResumoUnidades(resumo);
+            } else {
+              // Sem dados históricos, usar dados em tempo real como fallback
+              const { data: dashboardUnidades } = await supabase
+                .from('vw_dashboard_unidade')
+                .select('*');
+
+              if (dashboardUnidades) {
+                const resumo: ResumoUnidade[] = dashboardUnidades.map((d: any) => ({
+                  unidade: d.unidade_nome,
+                  unidade_id: d.unidade_id,
+                  alunos_ativos: d.alunos_ativos || 0,
+                  alunos_pagantes: d.alunos_pagantes || 0,
+                  ticket_medio: parseFloat(d.ticket_medio || 0),
+                  faturamento_previsto: parseFloat(d.mrr || 0),
+                  tempo_medio: parseFloat(d.tempo_permanencia || 0)
+                }));
+                setResumoUnidades(resumo);
+              }
+            }
           }
         }
 
@@ -596,81 +693,88 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* Alertas e Ações Rápidas */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Alertas */}
-        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-              <AlertTriangle className="w-5 h-5 text-amber-400" />
-              Alertas Ativos
-            </h3>
-            <span className="text-xs text-gray-500">Últimos 30 dias</span>
+      {/* Alertas Inteligentes */}
+      <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-amber-400" />
+            Alertas Inteligentes
+          </h3>
+          <div className="flex items-center gap-3">
+            {alertas.length > 0 && (
+              <div className="flex items-center gap-2 text-xs">
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-red-500" />
+                  {alertas.filter(a => a.severidade === 'critico').length} críticos
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-amber-500" />
+                  {alertas.filter(a => a.severidade === 'atencao').length} atenção
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-blue-500" />
+                  {alertas.filter(a => a.severidade === 'informativo').length} info
+                </span>
+              </div>
+            )}
           </div>
-          
-          {alertas.length > 0 ? (
-            <div className="space-y-3">
-              {alertas.map((alerta, idx) => (
+        </div>
+        
+        {alertas.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {alertas.map((alerta, idx) => {
+              const severidadeConfig = {
+                critico: { bg: 'bg-red-500/10', border: 'border-red-500/30', dot: 'bg-red-500', text: 'text-red-400' },
+                atencao: { bg: 'bg-amber-500/10', border: 'border-amber-500/30', dot: 'bg-amber-500', text: 'text-amber-400' },
+                informativo: { bg: 'bg-blue-500/10', border: 'border-blue-500/30', dot: 'bg-blue-500', text: 'text-blue-400' }
+              };
+              const config = severidadeConfig[alerta.severidade] || severidadeConfig.informativo;
+              
+              const tipoIcone: Record<string, string> = {
+                'CONTRATO_VENCENDO': '📋',
+                'RENOVACOES_PENDENTES': '🔄',
+                'CONVERSAO_BAIXA': '📉',
+                'INADIMPLENCIA_ALTA': '💰',
+                'TICKET_CAINDO': '🎫',
+                'PROFESSOR_TURMA_BAIXA': '👨‍🏫',
+                'CHURN_ALTO': '📤',
+                'META_EM_RISCO': '🎯'
+              };
+              
+              return (
                 <div 
                   key={idx}
-                  className="flex items-start gap-3 p-3 bg-slate-900/50 rounded-xl border border-slate-700/30"
+                  className={`flex flex-col gap-2 p-4 ${config.bg} rounded-xl border ${config.border} hover:scale-[1.02] transition-transform cursor-pointer`}
                 >
-                  <div className="w-2 h-2 mt-2 rounded-full bg-amber-400" />
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">{tipoIcone[alerta.tipo_alerta] || '⚠️'}</span>
+                      <div className={`w-2 h-2 rounded-full ${config.dot}`} />
+                    </div>
+                    {alerta.quantidade > 1 && (
+                      <span className={`text-xs font-bold ${config.text} bg-slate-900/50 px-2 py-0.5 rounded-full`}>
+                        {alerta.quantidade}
+                      </span>
+                    )}
+                  </div>
                   <div>
-                    <p className="text-sm text-white">{alerta.descricao}</p>
-                    <p className="text-xs text-gray-500">{alerta.unidade}</p>
+                    <p className="text-sm font-medium text-white">{alerta.descricao}</p>
+                    <p className={`text-xs ${config.text} mt-1`}>{alerta.detalhe}</p>
+                    {unidade === 'todos' && (
+                      <p className="text-xs text-gray-500 mt-1">{alerta.unidade_nome}</p>
+                    )}
                   </div>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-gray-500">
-              <AlertTriangle className="w-12 h-12 mx-auto mb-3 opacity-30" />
-              <p>Nenhum alerta ativo</p>
-            </div>
-          )}
-        </div>
-
-        {/* Ações Rápidas */}
-        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
-          <h3 className="text-lg font-semibold text-white mb-4">
-            Ações Rápidas
-          </h3>
-          
-          <div className="grid grid-cols-2 gap-3">
-            <ActionButton
-              icon={Phone}
-              label="Novo Lead"
-              href="/app/entrada/lead"
-              color="from-blue-500 to-cyan-500"
-            />
-            <ActionButton
-              icon={GraduationCap}
-              label="Nova Matrícula"
-              href="/app/entrada/matricula"
-              color="from-emerald-500 to-green-500"
-            />
-            <ActionButton
-              icon={UserMinus}
-              label="Registrar Evasão"
-              href="/app/entrada/evasao"
-              color="from-rose-500 to-red-500"
-            />
-            <ActionButton
-              icon={RefreshCw}
-              label="Renovação"
-              href="/app/entrada/renovacao"
-              color="from-purple-500 to-violet-500"
-            />
-            <ActionButton
-              icon={FileText}
-              label="Relatório Diário"
-              href="/app/relatorios/diario"
-              color="from-amber-500 to-orange-500"
-              className="col-span-2"
-            />
+              );
+            })}
           </div>
-        </div>
+        ) : (
+          <div className="text-center py-8 text-gray-500">
+            <div className="text-4xl mb-3">✅</div>
+            <p className="font-medium text-white">Tudo sob controle!</p>
+            <p className="text-sm">Nenhum alerta ativo no momento</p>
+          </div>
+        )}
       </div>
 
       {/* ===== GRÁFICOS ===== */}
@@ -787,30 +891,5 @@ export function DashboardPage() {
   );
 }
 
-
-// Componente Action Button
-function ActionButton({ 
-  icon: Icon, 
-  label, 
-  href, 
-  color,
-  className = ''
-}: {
-  icon: any;
-  label: string;
-  href: string;
-  color: string;
-  className?: string;
-}) {
-  return (
-    <a
-      href={href}
-      className={`flex items-center gap-3 p-4 rounded-xl bg-gradient-to-r ${color} text-white font-medium hover:opacity-90 transition-opacity ${className}`}
-    >
-      <Icon className="w-5 h-5" />
-      <span>{label}</span>
-    </a>
-  );
-}
 
 export default DashboardPage;

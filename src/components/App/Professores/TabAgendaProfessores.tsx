@@ -46,6 +46,8 @@ import { useToast } from '@/hooks/useToast';
 import { ToastContainer } from '@/components/ui/toast';
 import { ModalNovaAcao } from './ModalNovaAcao';
 import { ModalTreinamento } from './ModalTreinamento';
+import { DatePicker } from '@/components/ui/date-picker';
+import { Input } from '@/components/ui/input';
 
 interface Acao {
   id: string;
@@ -443,6 +445,11 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
     open: false,
     acaoId: null
   });
+  const [modalReagendar, setModalReagendar] = useState<{ open: boolean; acao: Acao | null; novaData: Date | null }>({
+    open: false,
+    acao: null,
+    novaData: null
+  });
 
   useEffect(() => {
     carregarDados();
@@ -570,21 +577,36 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
     }
   };
 
-  const handleReagendarAcao = async (acaoId: string) => {
-    // Por simplicidade, reagenda para amanhã
-    try {
-      const amanha = new Date();
-      amanha.setDate(amanha.getDate() + 1);
-      amanha.setHours(10, 0, 0, 0);
+  const handleReagendarAcao = (acaoId: string) => {
+    // Abrir modal de reagendamento
+    const acao = acoes.find(a => a.id === acaoId);
+    if (acao) {
+      // Definir data inicial como amanhã no mesmo horário
+      const dataAtual = new Date(acao.data_agendada);
+      const novaData = new Date();
+      novaData.setDate(novaData.getDate() + 1);
+      novaData.setHours(dataAtual.getHours(), dataAtual.getMinutes(), 0, 0);
+      
+      setModalReagendar({ open: true, acao, novaData });
+    }
+  };
 
+  const confirmarReagendamento = async () => {
+    if (!modalReagendar.acao || !modalReagendar.novaData) return;
+    
+    try {
       const { error } = await supabase
         .from('professor_acoes')
-        .update({ data_agendada: amanha.toISOString(), status: 'reagendada' })
-        .eq('id', acaoId);
+        .update({ 
+          data_agendada: modalReagendar.novaData.toISOString(), 
+          status: 'reagendada' 
+        })
+        .eq('id', modalReagendar.acao.id);
 
       if (error) throw error;
 
-      toast.success('Ação reagendada!');
+      toast.success('Ação reagendada com sucesso!');
+      setModalReagendar({ open: false, acao: null, novaData: null });
       carregarDados();
     } catch (error) {
       console.error('Erro ao reagendar ação:', error);
@@ -1640,6 +1662,114 @@ export function TabAgendaProfessores({ unidadeAtual, competencia }: Props) {
         treinamentoSlug={modalTreinamento.slug}
       />
 
+      {/* Modal de Reagendamento */}
+      <AlertDialog open={modalReagendar.open} onOpenChange={(open) => !open && setModalReagendar({ open: false, acao: null, novaData: null })}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <RefreshCw className="w-5 h-5 text-yellow-400" />
+              Reagendar Ação
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {modalReagendar.acao && (
+                <div className="mt-2 p-3 bg-slate-800/50 rounded-lg">
+                  <p className="text-white font-medium">{modalReagendar.acao.titulo}</p>
+                  <p className="text-sm text-slate-400 mt-1">
+                    Data atual: {format(new Date(modalReagendar.acao.data_agendada), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                  </p>
+                </div>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="text-sm text-slate-400 block mb-2">Nova Data</label>
+              <DatePicker
+                date={modalReagendar.novaData || undefined}
+                onDateChange={(date) => {
+                  if (date && modalReagendar.novaData) {
+                    const novaData = new Date(date);
+                    novaData.setHours(modalReagendar.novaData.getHours(), modalReagendar.novaData.getMinutes(), 0, 0);
+                    setModalReagendar(prev => ({ ...prev, novaData }));
+                  } else if (date) {
+                    setModalReagendar(prev => ({ ...prev, novaData: date }));
+                  }
+                }}
+                placeholder="Selecione a nova data"
+              />
+            </div>
+            
+            <div>
+              <label className="text-sm text-slate-400 block mb-2">Horário</label>
+              <div className="flex gap-2">
+                <Select
+                  value={modalReagendar.novaData ? modalReagendar.novaData.getHours().toString().padStart(2, '0') : '10'}
+                  onValueChange={(value) => {
+                    if (modalReagendar.novaData) {
+                      const novaData = new Date(modalReagendar.novaData);
+                      novaData.setHours(parseInt(value), novaData.getMinutes(), 0, 0);
+                      setModalReagendar(prev => ({ ...prev, novaData }));
+                    }
+                  }}
+                >
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="Hora" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Array.from({ length: 24 }, (_, i) => (
+                      <SelectItem key={i} value={i.toString().padStart(2, '0')}>
+                        {i.toString().padStart(2, '0')}h
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <span className="text-slate-400 flex items-center">:</span>
+                <Select
+                  value={modalReagendar.novaData ? modalReagendar.novaData.getMinutes().toString().padStart(2, '0') : '00'}
+                  onValueChange={(value) => {
+                    if (modalReagendar.novaData) {
+                      const novaData = new Date(modalReagendar.novaData);
+                      novaData.setMinutes(parseInt(value), 0, 0);
+                      setModalReagendar(prev => ({ ...prev, novaData }));
+                    }
+                  }}
+                >
+                  <SelectTrigger className="flex-1">
+                    <SelectValue placeholder="Min" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {['00', '15', '30', '45'].map((min) => (
+                      <SelectItem key={min} value={min}>
+                        {min}min
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {modalReagendar.novaData && (
+              <div className="p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+                <p className="text-sm text-yellow-400">
+                  📅 Nova data: {format(modalReagendar.novaData, "EEEE, dd 'de' MMMM 'às' HH:mm", { locale: ptBR })}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmarReagendamento}
+              className="bg-yellow-500 hover:bg-yellow-600 text-black"
+            >
+              Reagendar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* AlertDialog de Confirmação de Exclusão */}
       <AlertDialog open={alertExcluir.open} onOpenChange={(open) => setAlertExcluir({ open, acaoId: null })}>
         <AlertDialogContent>
@@ -1715,11 +1845,18 @@ function AcaoItem({
             {acao.tipo.charAt(0).toUpperCase() + acao.tipo.slice(1)}
           </span>
           <span className="text-white font-medium">{acao.titulo}</span>
-          {isAtrasado && (
-            <span className="text-red-400 text-xs bg-red-500/20 px-2 py-0.5 rounded">
-              {Math.floor((Date.now() - dataAcao.getTime()) / (1000 * 60 * 60 * 24))} dias atrasado
-            </span>
-          )}
+          {isAtrasado && (() => {
+            const hoje = new Date();
+            hoje.setHours(0, 0, 0, 0);
+            const dataAcaoNormalizada = new Date(dataAcao);
+            dataAcaoNormalizada.setHours(0, 0, 0, 0);
+            const diasAtraso = Math.floor((hoje.getTime() - dataAcaoNormalizada.getTime()) / (1000 * 60 * 60 * 24));
+            return (
+              <span className="text-red-400 text-xs bg-red-500/20 px-2 py-0.5 rounded">
+                {diasAtraso} {diasAtraso === 1 ? 'dia' : 'dias'} atrasado
+              </span>
+            );
+          })()}
         </div>
         <div className="flex items-center gap-4 text-xs text-slate-400">
           <span>🕐 {format(dataAcao, "HH:mm")} - {format(new Date(dataAcao.getTime() + acao.duracao_minutos * 60000), "HH:mm")}</span>

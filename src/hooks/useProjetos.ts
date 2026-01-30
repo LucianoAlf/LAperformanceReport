@@ -592,14 +592,22 @@ export function useProjetosAlertas(unidadeId?: string | null) {
         projetos?.forEach((projeto: any) => {
           let tarefasAtrasadas = 0;
           let tarefasProximas = 0;
+          let maiorAtraso = 0;
 
           projeto.tarefas?.forEach((tarefa: any) => {
             if (tarefa.status === 'concluida' || tarefa.status === 'cancelada') return;
             
             if (tarefa.prazo) {
-              const prazoDt = new Date(tarefa.prazo);
+              const prazoDt = new Date(tarefa.prazo + 'T00:00:00');
+              prazoDt.setHours(0, 0, 0, 0);
+              
               if (prazoDt < hoje) {
                 tarefasAtrasadas++;
+                // Calcular dias de atraso
+                const diasAtraso = Math.floor((hoje.getTime() - prazoDt.getTime()) / (1000 * 60 * 60 * 24));
+                if (diasAtraso > maiorAtraso) {
+                  maiorAtraso = diasAtraso;
+                }
               } else if (prazoDt <= tresDias) {
                 tarefasProximas++;
               }
@@ -608,12 +616,13 @@ export function useProjetosAlertas(unidadeId?: string | null) {
 
           // Alerta de projeto atrasado
           if (tarefasAtrasadas > 0) {
+            const diasTexto = maiorAtraso === 1 ? '1 dia atrasado' : `${maiorAtraso} dias atrasados`;
             alertas.push({
               id: `atrasado-${projeto.id}`,
               tipo: 'danger',
               titulo: 'Projeto atrasado!',
               descricao: `${projeto.nome} tem ${tarefasAtrasadas} tarefa${tarefasAtrasadas > 1 ? 's' : ''} vencida${tarefasAtrasadas > 1 ? 's' : ''}`,
-              tempo: 'Agora',
+              tempo: diasTexto,
               projeto_id: projeto.id,
             });
           }

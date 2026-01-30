@@ -263,12 +263,18 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
           .from('vw_evasoes_professores')
           .select('*');
 
-        const [professoresResult, totaisResult, performanceResult, qualidadeResult, evasoesResult] = await Promise.all([
+        // Buscar turmas implícitas para calcular média alunos/turma (mesma fonte da página Professores)
+        const turmasImplicitasQuery = supabase
+          .from('vw_turmas_implicitas')
+          .select('professor_id, total_alunos');
+
+        const [professoresResult, totaisResult, performanceResult, qualidadeResult, evasoesResult, turmasImplicitasResult] = await Promise.all([
           query, 
           totaisQuery, 
           performanceQuery,
           qualidadeQuery,
-          evasoesQuery
+          evasoesQuery,
+          turmasImplicitasQuery
         ]);
 
         if (professoresResult.error) throw professoresResult.error;
@@ -279,6 +285,23 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
         const performanceData = performanceResult.data || [];
         const qualidadeData = qualidadeResult.data || [];
         const evasoesData = evasoesResult.data || [];
+        const turmasImplicitas = turmasImplicitasResult.data || [];
+
+        // Calcular média alunos/turma por professor (mesma lógica da página Professores)
+        const turmasPorProfessor = new Map<number, number>();
+        const alunosPorProfessorTurma = new Map<number, number>();
+        turmasImplicitas.forEach((t: any) => {
+          const profId = t.professor_id;
+          turmasPorProfessor.set(profId, (turmasPorProfessor.get(profId) || 0) + 1);
+          alunosPorProfessorTurma.set(profId, (alunosPorProfessorTurma.get(profId) || 0) + (t.total_alunos || 0));
+        });
+
+        // Calcular média alunos/turma por professor
+        const mediaAlunosTurmaPorProfessor = new Map<number, number>();
+        turmasPorProfessor.forEach((turmas, profId) => {
+          const alunos = alunosPorProfessorTurma.get(profId) || 0;
+          mediaAlunosTurmaPorProfessor.set(profId, turmas > 0 ? alunos / turmas : 0);
+        });
         
         // Calcular totais corretos do CSV
         const experimentaisTotalCSV = totaisUnidade.reduce((acc, t) => acc + (t.total_experimentais || 0), 0);
@@ -358,13 +381,16 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
             existing.evasoes += p.evasoes || 0;
             existing.mrr_perdido += Number(p.mrr_perdido) || 0;
           } else {
+            // Usar média alunos/turma calculada de vw_turmas_implicitas (mesma fonte da página Professores)
+            const mediaAlunosTurmaCalculada = mediaAlunosTurmaPorProfessor.get(id) || 0;
+            
             professoresMap.set(id, {
               id: p.professor_id,
               nome: nome,
               unidade_nome: '',
               // Carteira - usar dados da view diretamente
               carteira_alunos: p.carteira_alunos ?? qual?.carteira_alunos ?? 0,
-              media_alunos_turma: p.media_alunos_turma ? Number(p.media_alunos_turma) : (qual?.media_alunos_turma ? Number(qual.media_alunos_turma) : 0),
+              media_alunos_turma: mediaAlunosTurmaCalculada > 0 ? mediaAlunosTurmaCalculada : (p.media_alunos_turma ? Number(p.media_alunos_turma) : 0),
               ticket_medio: p.ticket_medio ? Number(p.ticket_medio) : (qual?.ticket_medio ? Number(qual.ticket_medio) : 0),
               // Conversão - usar dados da view, fallback para performance anual
               experimentais: p.experimentais ?? perf?.experimentais ?? 0,
@@ -398,12 +424,15 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
             
             if (perf) {
               const newId = Math.max(...Array.from(professoresMap.keys()), 0) + 1000 + professoresMap.size;
+              // Buscar média alunos/turma calculada (pode não existir para professores só em performance)
+              const mediaAlunosTurmaCalc = mediaAlunosTurmaPorProfessor.get(newId) || 0;
+              
               professoresMap.set(newId, {
                 id: newId,
                 nome: nomeUpper,
                 unidade_nome: p.unidade || '',
                 carteira_alunos: qual?.carteira_alunos || 0,
-                media_alunos_turma: qual?.media_alunos_turma ? Number(qual.media_alunos_turma) : 0,
+                media_alunos_turma: mediaAlunosTurmaCalc > 0 ? mediaAlunosTurmaCalc : (qual?.media_alunos_turma ? Number(qual.media_alunos_turma) : 0),
                 ticket_medio: qual?.ticket_medio ? Number(qual.ticket_medio) : 0,
                 experimentais: perf.experimentais,
                 matriculas: perf.matriculas,
@@ -426,7 +455,8 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
         const professoresKPIs: ProfessorKPI[] = Array.from(professoresMap.values());
 
         // Calcular totais e médias
-        const totalProfessores = professoresKPIs.filter(p => p.carteira_alunos > 0).length;
+        // Total de professores = todos os professores únicos (não filtrar por carteira > 0)
+        const totalProfessores = professoresKPIs.length;
         const alunosTotal = professoresKPIs.reduce((acc, p) => acc + p.carteira_alunos, 0);
         const carteiraMedia = totalProfessores > 0 ? alunosTotal / totalProfessores : 0;
         
