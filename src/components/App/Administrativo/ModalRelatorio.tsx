@@ -3,7 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Copy, Check, RotateCcw, FileText, Calendar, RefreshCw, AlertTriangle, LogOut, Sparkles, Loader2 } from 'lucide-react';
+import { Copy, Check, RotateCcw, FileText, Calendar, RefreshCw, AlertTriangle, LogOut, Sparkles, Loader2, Send } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DatePicker } from '@/components/ui/date-picker';
 import { supabase } from '@/lib/supabase';
@@ -55,6 +55,9 @@ export function ModalRelatorio({
   const [copiado, setCopiado] = useState(false);
   const [loadingIA, setLoadingIA] = useState(false);
   const [erroIA, setErroIA] = useState<string | null>(null);
+  const [enviandoWhatsApp, setEnviandoWhatsApp] = useState(false);
+  const [enviadoWhatsApp, setEnviadoWhatsApp] = useState(false);
+  const [erroWhatsApp, setErroWhatsApp] = useState<string | null>(null);
   
   // Estado para período do relatório
   const [relatorioPeriodo, setRelatorioPeriodo] = useState<'hoje' | 'ontem' | 'semana' | 'mes' | 'personalizado'>('hoje');
@@ -732,6 +735,46 @@ export function ModalRelatorio({
   function voltar() {
     setTipoSelecionado(null);
     setTextoRelatorio('');
+    setEnviadoWhatsApp(false);
+    setErroWhatsApp(null);
+  }
+
+  async function enviarWhatsAppGrupo() {
+    if (!textoRelatorio || enviandoWhatsApp) return;
+    
+    setEnviandoWhatsApp(true);
+    setErroWhatsApp(null);
+    setEnviadoWhatsApp(false);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('relatorio-admin-whatsapp', {
+        body: {
+          texto: textoRelatorio,
+          tipoRelatorio: tipoSelecionado,
+          unidade: unidade,
+          competencia: competencia,
+        },
+      });
+      
+      if (error) {
+        console.error('[WhatsApp] Erro ao enviar:', error);
+        setErroWhatsApp('Erro ao enviar mensagem');
+        return;
+      }
+      
+      if (data?.success || data?.partial) {
+        console.log('[WhatsApp] ✅ Mensagem enviada!', data.resultados);
+        setEnviadoWhatsApp(true);
+        setTimeout(() => setEnviadoWhatsApp(false), 3000);
+      } else {
+        setErroWhatsApp(data?.error || 'Erro desconhecido');
+      }
+    } catch (err) {
+      console.error('[WhatsApp] Erro inesperado:', err);
+      setErroWhatsApp('Erro de conexão');
+    } finally {
+      setEnviandoWhatsApp(false);
+    }
   }
 
   return (
@@ -745,7 +788,7 @@ export function ModalRelatorio({
         </DialogHeader>
 
         {!tipoSelecionado ? (
-          <div className="space-y-4">
+          <div className="space-y-4 overflow-y-auto max-h-[60vh] pr-2">
             {/* Seleção de Período */}
             <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
               <Label className="text-slate-300 text-sm font-medium mb-3 block">Período do Relatório</Label>
@@ -885,8 +928,46 @@ export function ModalRelatorio({
                     </>
                   )}
                 </Button>
+                <Button
+                  onClick={enviarWhatsAppGrupo}
+                  disabled={loadingIA || enviandoWhatsApp || !textoRelatorio}
+                  className={cn(
+                    'transition-all',
+                    enviadoWhatsApp 
+                      ? 'bg-emerald-500' 
+                      : erroWhatsApp 
+                        ? 'bg-red-500 hover:bg-red-600'
+                        : 'bg-green-600 hover:bg-green-700'
+                  )}
+                >
+                  {enviandoWhatsApp ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Enviando...
+                    </>
+                  ) : enviadoWhatsApp ? (
+                    <>
+                      <Check className="w-4 h-4 mr-2" />
+                      Enviado!
+                    </>
+                  ) : erroWhatsApp ? (
+                    <>
+                      <Send className="w-4 h-4 mr-2" />
+                      Tentar novamente
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4 mr-2" />
+                      WhatsApp
+                    </>
+                  )}
+                </Button>
               </div>
             </div>
+
+            {erroWhatsApp && (
+              <p className="text-xs text-red-400 mb-2">❌ {erroWhatsApp}</p>
+            )}
             
             {loadingIA ? (
               <div className="flex-1 flex flex-col items-center justify-center min-h-[300px] bg-slate-800/50 rounded-xl border border-slate-700">

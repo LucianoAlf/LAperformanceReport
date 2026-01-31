@@ -71,7 +71,7 @@ export function FunnelChart({ steps, title, className }: FunnelChartProps) {
       </div>
 
       {/* Conversion rates */}
-      <div className="mt-6 flex justify-center gap-8">
+      <div className="mt-6 flex justify-center gap-8 flex-wrap">
         {steps.slice(1).map((step, index) => {
           const prevValue = steps[index].value;
           const conversionRate = prevValue > 0 ? ((step.value / prevValue) * 100).toFixed(1) : '0';
@@ -87,6 +87,18 @@ export function FunnelChart({ steps, title, className }: FunnelChartProps) {
             </div>
           );
         })}
+        
+        {/* Conversão direta Leads → Matrículas (se houver 3 etapas) */}
+        {steps.length === 3 && (
+          <div className="text-center">
+            <div className="text-xs text-slate-500">
+              {steps[0].label} → {steps[2].label}
+            </div>
+            <div className="text-sm font-bold text-cyan-400">
+              {steps[0].value > 0 ? ((steps[2].value / steps[0].value) * 100).toFixed(1) : '0'}%
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

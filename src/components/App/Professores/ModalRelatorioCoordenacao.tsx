@@ -17,7 +17,8 @@ import {
   Sparkles,
   Users,
   Trophy,
-  AlertTriangle
+  AlertTriangle,
+  Send
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/useToast';
@@ -46,6 +47,9 @@ export function ModalRelatorioCoordenacao({
   const [textoRelatorio, setTextoRelatorio] = useState('');
   const [loadingIA, setLoadingIA] = useState(false);
   const [copiado, setCopiado] = useState(false);
+  const [enviandoWhatsApp, setEnviandoWhatsApp] = useState(false);
+  const [enviadoWhatsApp, setEnviadoWhatsApp] = useState(false);
+  const [erroWhatsApp, setErroWhatsApp] = useState<string | null>(null);
 
   const mesesPorExtenso: Record<number, string> = {
     1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril',
@@ -173,6 +177,50 @@ export function ModalRelatorioCoordenacao({
     setTipoRelatorio(null);
     setTextoRelatorio('');
     setCopiado(false);
+    setEnviadoWhatsApp(false);
+    setErroWhatsApp(null);
+  };
+
+  const enviarWhatsAppGrupo = async () => {
+    if (!textoRelatorio || enviandoWhatsApp) return;
+    
+    setEnviandoWhatsApp(true);
+    setErroWhatsApp(null);
+    setEnviadoWhatsApp(false);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('relatorio-coordenacao-whatsapp', {
+        body: {
+          texto: textoRelatorio,
+          tipoRelatorio: tipoRelatorio,
+          unidadeNome: unidadeNome,
+          competencia: `${ano}-${String(mes).padStart(2, '0')}`,
+        },
+      });
+      
+      if (error) {
+        console.error('[WhatsApp Coordenação] Erro ao enviar:', error);
+        setErroWhatsApp('Erro ao enviar mensagem');
+        toast.error('Erro', 'Não foi possível enviar para o grupo');
+        return;
+      }
+      
+      if (data?.success) {
+        console.log('[WhatsApp Coordenação] ✅ Mensagem enviada!', data);
+        setEnviadoWhatsApp(true);
+        toast.success('Enviado!', 'Relatório enviado para o grupo da Coordenação');
+        setTimeout(() => setEnviadoWhatsApp(false), 3000);
+      } else {
+        setErroWhatsApp(data?.error || 'Erro desconhecido');
+        toast.error('Erro', data?.error || 'Erro ao enviar');
+      }
+    } catch (err) {
+      console.error('[WhatsApp Coordenação] Erro inesperado:', err);
+      setErroWhatsApp('Erro de conexão');
+      toast.error('Erro', 'Erro de conexão');
+    } finally {
+      setEnviandoWhatsApp(false);
+    }
   };
 
   return (
@@ -284,7 +332,7 @@ export function ModalRelatorioCoordenacao({
                 <Button
                   onClick={copiarRelatorio}
                   disabled={!textoRelatorio}
-                  className={`min-w-[180px] ${
+                  className={`min-w-[140px] ${
                     copiado 
                       ? 'bg-emerald-600 hover:bg-emerald-700' 
                       : 'bg-violet-600 hover:bg-violet-700'
@@ -298,7 +346,36 @@ export function ModalRelatorioCoordenacao({
                   ) : (
                     <>
                       <Copy className="w-4 h-4 mr-2" />
-                      Copiar para WhatsApp
+                      Copiar
+                    </>
+                  )}
+                </Button>
+
+                <Button
+                  onClick={enviarWhatsAppGrupo}
+                  disabled={!textoRelatorio || enviandoWhatsApp}
+                  className={`min-w-[140px] ${
+                    enviadoWhatsApp 
+                      ? 'bg-emerald-600 hover:bg-emerald-700' 
+                      : erroWhatsApp
+                        ? 'bg-red-600 hover:bg-red-700'
+                        : 'bg-green-600 hover:bg-green-700'
+                  }`}
+                >
+                  {enviandoWhatsApp ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Enviando...
+                    </>
+                  ) : enviadoWhatsApp ? (
+                    <>
+                      <Check className="w-4 h-4 mr-2" />
+                      Enviado!
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-4 h-4 mr-2" />
+                      WhatsApp
                     </>
                   )}
                 </Button>
