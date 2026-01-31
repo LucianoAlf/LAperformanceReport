@@ -78,6 +78,7 @@ export interface Config360 {
   peso_health_score: number;
   bonus_max_projetos: number;
   pontos_por_projeto: number;
+  nota_minima_corte: number;
 }
 
 export interface OcorrenciaFormData {
@@ -181,6 +182,7 @@ export function useConfig360() {
     peso_health_score: 20,
     bonus_max_projetos: 10,
     pontos_por_projeto: 5,
+    nota_minima_corte: 80,
   });
   const [loading, setLoading] = useState(true);
 
@@ -197,12 +199,14 @@ export function useConfig360() {
         peso_health_score: 20,
         bonus_max_projetos: 10,
         pontos_por_projeto: 5,
+        nota_minima_corte: 80,
       };
 
       data?.forEach((item: { chave: string; valor: string }) => {
         if (item.chave === 'peso_health_score') configObj.peso_health_score = parseInt(item.valor);
         if (item.chave === 'bonus_max_projetos') configObj.bonus_max_projetos = parseInt(item.valor);
         if (item.chave === 'pontos_por_projeto') configObj.pontos_por_projeto = parseInt(item.valor);
+        if (item.chave === 'nota_minima_corte') configObj.nota_minima_corte = parseInt(item.valor);
       });
 
       setConfig(configObj);
@@ -434,6 +438,7 @@ export function useProfessor360(competencia: string, unidadeId?: string) {
   const fetchProfessores = useCallback(async () => {
     setLoadingProfessores(true);
     try {
+      // Buscar apenas professores ativos (consistente com aba Cadastro)
       const { data: profs } = await supabase
         .from('professores')
         .select('id, nome, foto_url, ativo')
@@ -444,11 +449,24 @@ export function useProfessor360(competencia: string, unidadeId?: string) {
         .from('professores_unidades')
         .select('professor_id, unidade_id, unidades:unidade_id (id, nome, codigo)');
 
+      // Buscar todas as unidades para associar professores sem unidade
+      const { data: todasUnidades } = await supabase
+        .from('unidades')
+        .select('id, nome, codigo')
+        .eq('ativo', true);
+
       const professoresComUnidades = (profs || []).map(prof => {
         const unidades = (unidadesRel || [])
           .filter(u => u.professor_id === prof.id)
           .map(u => u.unidades)
           .filter(Boolean);
+        
+        // Se professor não tem unidades associadas, usar todas as unidades
+        // (para garantir que apareça no consolidado)
+        if (unidades.length === 0 && todasUnidades && todasUnidades.length > 0) {
+          return { ...prof, unidades: todasUnidades, semUnidadeDefinida: true };
+        }
+        
         return { ...prof, unidades };
       });
 
@@ -495,6 +513,9 @@ export function useProfessor360(competencia: string, unidadeId?: string) {
       const unidadesProf = unidadeId && unidadeId !== 'todos'
         ? prof.unidades.filter((u: any) => u.id === unidadeId)
         : prof.unidades;
+
+      // Se o professor não tem unidades, pular
+      if (!unidadesProf || unidadesProf.length === 0) return;
 
       unidadesProf.forEach((unidade: any) => {
         const key = `${prof.id}-${unidade.id}`;
@@ -576,11 +597,38 @@ export function useProfessor360(competencia: string, unidadeId?: string) {
 
   // KPIs resumidos
   const kpis = useMemo(() => {
-    const total = avaliacoesCalculadas.length;
-    const semOcorrencia = avaliacoesCalculadas.filter(a => a.qtd_ocorrencias === 0).length;
-    const comOcorrencia = total - semOcorrencia;
+    // Se não há filtro de unidade (consolidado), contar apenas professores únicos
+    let total: number;
+    let semOcorrencia: number;
+    let comOcorrencia: number;
+    let acimaDaMedia: number;
+    
+    if (!unidadeId) {
+      // Consolidado: agrupar por professor_id e pegar a melhor nota
+      const professoresUnicos = new Map<number, typeof avaliacoesCalculadas[0]>();
+      
+      avaliacoesCalculadas.forEach(avaliacao => {
+        const existing = professoresUnicos.get(avaliacao.professor_id);
+        if (!existing || avaliacao.nota_final > existing.nota_final) {
+          professoresUnicos.set(avaliacao.professor_id, avaliacao);
+        }
+      });
+      
+      const avaliacoesUnicas = Array.from(professoresUnicos.values());
+      total = avaliacoesUnicas.length;
+      semOcorrencia = avaliacoesUnicas.filter(a => a.qtd_ocorrencias === 0).length;
+      comOcorrencia = total - semOcorrencia;
+      acimaDaMedia = avaliacoesUnicas.filter(a => a.nota_final >= config.nota_minima_corte).length;
+    } else {
+      // Unidade específica: contar todas as avaliações
+      total = avaliacoesCalculadas.length;
+      semOcorrencia = avaliacoesCalculadas.filter(a => a.qtd_ocorrencias === 0).length;
+      comOcorrencia = total - semOcorrencia;
+      acimaDaMedia = avaliacoesCalculadas.filter(a => a.nota_final >= config.nota_minima_corte).length;
+    }
+    
     const mediaNotas = total > 0
-      ? avaliacoesCalculadas.reduce((sum, a) => sum + a.nota_final, 0) / total
+      ? avaliacoesCalculadas.reduce((sum, a) => sum + a.nota_final, 0) / avaliacoesCalculadas.length
       : 0;
     const top3 = avaliacoesCalculadas.slice(0, 3);
 
@@ -590,8 +638,9 @@ export function useProfessor360(competencia: string, unidadeId?: string) {
       comOcorrencia,
       mediaNotas: Math.round(mediaNotas * 10) / 10,
       top3,
+      acimaDaMedia,
     };
-  }, [avaliacoesCalculadas]);
+  }, [avaliacoesCalculadas, config.nota_minima_corte, unidadeId]);
 
   // Salvar/atualizar avaliação no banco
   const salvarAvaliacao = useCallback(async (professorId: number, unidadeIdParam: string) => {

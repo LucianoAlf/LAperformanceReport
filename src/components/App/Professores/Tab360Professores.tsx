@@ -3,6 +3,8 @@ import {
   BarChart3, 
   CheckCircle2, 
   AlertTriangle, 
+  AlertCircle,
+  XCircle,
   Trophy,
   Plus,
   Eye,
@@ -12,15 +14,24 @@ import {
   Calendar,
   Building2,
   Search,
+  Target,
+  Monitor,
+  Shirt,
+  MessageCircle,
+  Settings2,
+  ChevronDown,
+  ChevronUp,
+  Info,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { KPICard } from '@/components/ui/KPICard';
-import { useProfessor360, Professor360Resumo } from '@/hooks/useProfessor360';
+import { useProfessor360, Professor360Resumo, useConfig360 } from '@/hooks/useProfessor360';
 import { Modal360Ocorrencia } from './Modal360Ocorrencia';
 import { Modal360Detalhes } from './Modal360Detalhes';
+import { Professor360Config } from './Professor360Config';
 
 interface Tab360ProfessoresProps {
   unidadeSelecionada: string;
@@ -28,11 +39,11 @@ interface Tab360ProfessoresProps {
   onCompetenciaChange?: (competencia: string) => void;
 }
 
-// Cores para status de ocorrências
-const getOcorrenciaStatus = (qtd: number, tolerancia: number = 0) => {
-  if (qtd === 0) return { color: 'text-emerald-400', icon: '✅' };
-  if (qtd <= tolerancia) return { color: 'text-amber-400', icon: '⚠️' };
-  return { color: 'text-rose-400', icon: '❌' };
+// Cores para status de ocorrências (sem ícone, apenas cor)
+const getOcorrenciaColor = (qtd: number, tolerancia: number = 0) => {
+  if (qtd === 0) return 'text-slate-500';
+  if (qtd <= tolerancia) return 'text-amber-400';
+  return 'text-rose-400';
 };
 
 // Cor da nota
@@ -54,9 +65,11 @@ export function Tab360Professores({
   onCompetenciaChange,
 }: Tab360ProfessoresProps) {
   const [busca, setBusca] = useState('');
+  const [filtroNota, setFiltroNota] = useState<'todos' | 'acima' | 'abaixo'>('todos');
   const [modalOcorrencia, setModalOcorrencia] = useState(false);
   const [modalDetalhes, setModalDetalhes] = useState<Professor360Resumo | null>(null);
   const [professorSelecionado, setProfessorSelecionado] = useState<any>(null);
+  const [showConfig, setShowConfig] = useState(false);
 
   const {
     criterios,
@@ -65,18 +78,33 @@ export function Tab360Professores({
     kpis,
     loading,
     createOcorrencia,
-  } = useProfessor360(competencia, unidadeSelecionada === 'todas' ? undefined : unidadeSelecionada);
+  } = useProfessor360(competencia, unidadeSelecionada === 'todos' ? undefined : unidadeSelecionada);
 
-  // Filtrar por busca
+  const { config } = useConfig360();
+
+  // Filtrar por busca e nota
   const avaliacoesFiltradas = useMemo(() => {
-    if (!busca.trim()) return avaliacoesCalculadas;
-    const termo = busca.toLowerCase();
-    return avaliacoesCalculadas.filter(a => 
-      a.professor_nome.toLowerCase().includes(termo) ||
-      a.unidade_nome.toLowerCase().includes(termo) ||
-      a.unidade_codigo.toLowerCase().includes(termo)
-    );
-  }, [avaliacoesCalculadas, busca]);
+    let filtradas = avaliacoesCalculadas;
+
+    // Filtrar por nota de corte
+    if (filtroNota === 'acima') {
+      filtradas = filtradas.filter(a => a.nota_final >= config.nota_minima_corte);
+    } else if (filtroNota === 'abaixo') {
+      filtradas = filtradas.filter(a => a.nota_final < config.nota_minima_corte);
+    }
+
+    // Filtrar por busca
+    if (busca.trim()) {
+      const termo = busca.toLowerCase();
+      filtradas = filtradas.filter(a => 
+        a.professor_nome.toLowerCase().includes(termo) ||
+        a.unidade_nome.toLowerCase().includes(termo) ||
+        a.unidade_codigo.toLowerCase().includes(termo)
+      );
+    }
+
+    return filtradas;
+  }, [avaliacoesCalculadas, busca, filtroNota, config.nota_minima_corte]);
 
   // Gerar opções de competência (últimos 12 meses)
   const competenciaOptions = useMemo(() => {
@@ -155,13 +183,91 @@ export function Tab360Professores({
               className="pl-9 w-[200px]"
             />
           </div>
+
+          {/* Filtros de Nota */}
+          <div className="flex gap-2 border-l border-slate-700 pl-3">
+            <Button
+              variant={filtroNota === 'todos' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setFiltroNota('todos')}
+              className={filtroNota === 'todos' ? 'bg-violet-600 hover:bg-violet-700' : ''}
+            >
+              Todos
+            </Button>
+            <Button
+              variant={filtroNota === 'acima' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setFiltroNota('acima')}
+              className={filtroNota === 'acima' ? 'bg-emerald-600 hover:bg-emerald-700' : ''}
+            >
+              Acima do corte
+            </Button>
+            <Button
+              variant={filtroNota === 'abaixo' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setFiltroNota('abaixo')}
+              className={filtroNota === 'abaixo' ? 'bg-rose-600 hover:bg-rose-700' : ''}
+            >
+              Abaixo do corte
+            </Button>
+          </div>
         </div>
 
-        <Button onClick={() => handleNovaOcorrencia()} className="gap-2 bg-violet-600 hover:bg-violet-700">
-          <Plus className="h-4 w-4" />
-          Registrar Ocorrência
-        </Button>
+        <div className="flex gap-2">
+          <Button 
+            variant="outline" 
+            onClick={() => setShowConfig(!showConfig)} 
+            className="gap-2"
+          >
+            <Settings2 className="h-4 w-4" />
+            {showConfig ? 'Ocultar Config' : 'Configurações'}
+          </Button>
+          <Button onClick={() => handleNovaOcorrencia()} className="gap-2 bg-violet-600 hover:bg-violet-700">
+            <Plus className="h-4 w-4" />
+            Registrar Ocorrência
+          </Button>
+        </div>
       </div>
+
+      {/* Nota de Corte - Informativo */}
+      <div className="bg-gradient-to-r from-violet-500/10 to-purple-500/10 rounded-xl border border-violet-500/30 p-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-full bg-violet-500/20 flex items-center justify-center">
+            <Target className="h-5 w-5 text-violet-400" />
+          </div>
+          <div className="flex-1">
+            <h4 className="font-semibold text-white">Nota de Corte: {config.nota_minima_corte || 80} pontos</h4>
+            <p className="text-sm text-slate-400">
+              Professores precisam atingir a nota mínima para participar do programa de gamificação
+            </p>
+          </div>
+          <div className="text-right">
+            <p className="text-2xl font-bold text-violet-400">{kpis.acimaDaMedia}</p>
+            <p className="text-xs text-slate-500">acima do corte</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Seção de Configurações (colapsável) */}
+      {showConfig && (
+        <div className="bg-slate-900/50 rounded-2xl border border-slate-700/50 overflow-hidden">
+          <button
+            onClick={() => setShowConfig(!showConfig)}
+            className="w-full px-6 py-4 flex items-center justify-between hover:bg-slate-800/50 transition-colors"
+          >
+            <div className="flex items-center gap-3">
+              <Settings2 className="w-5 h-5 text-violet-400" />
+              <h3 className="font-semibold text-white text-sm">
+                Configurações do Professor 360°
+              </h3>
+            </div>
+            <ChevronUp className="w-5 h-5 text-slate-400" />
+          </button>
+          <div className="px-6 pb-6">
+            <Professor360Config />
+          </div>
+        </div>
+      )}
 
       {/* KPIs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -221,7 +327,7 @@ export function Tab360Professores({
             Avaliações 360° - {competenciaOptions.find(c => c.valor === competencia)?.label}
           </h3>
           <span className="text-xs text-slate-400 bg-slate-800 px-2 py-1 rounded">
-            {avaliacoesFiltradas.length} professor{avaliacoesFiltradas.length !== 1 ? 'es' : ''}
+            {avaliacoesFiltradas.length} avaliações
           </span>
         </div>
 
@@ -247,8 +353,18 @@ export function Tab360Professores({
                   </Tooltip>
                 </th>
                 <th className="text-center px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                  <Tooltip content="Dresscode">
+                    <Shirt className="h-4 w-4 mx-auto" />
+                  </Tooltip>
+                </th>
+                <th className="text-center px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+                  <Tooltip content="Cumprimento de Prazos">
+                    <Calendar className="h-4 w-4 mx-auto" />
+                  </Tooltip>
+                </th>
+                <th className="text-center px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
                   <Tooltip content="EMUSYS">
-                    <span>💻</span>
+                    <Monitor className="h-4 w-4 mx-auto" />
                   </Tooltip>
                 </th>
                 <th className="text-center px-4 py-3 text-xs font-semibold text-slate-400 uppercase tracking-wider">
@@ -264,7 +380,7 @@ export function Tab360Professores({
             <tbody className="divide-y divide-slate-700/30">
               {avaliacoesFiltradas.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="text-center py-12 text-slate-500">
+                  <td colSpan={12} className="text-center py-12 text-slate-500">
                     Nenhum professor encontrado
                   </td>
                 </tr>
@@ -273,13 +389,17 @@ export function Tab360Professores({
                   const atrasos = avaliacao.avaliacao?.qtd_atrasos || 0;
                   const faltas = avaliacao.avaliacao?.qtd_faltas || 0;
                   const organizacao = avaliacao.avaliacao?.qtd_organizacao_sala || 0;
+                  const uniforme = avaliacao.avaliacao?.qtd_uniforme || 0;
+                  const prazos = avaliacao.avaliacao?.qtd_prazos || 0;
                   const emusys = avaliacao.avaliacao?.qtd_emusys || 0;
                   const projetos = avaliacao.avaliacao?.qtd_projetos || 0;
 
-                  const statusAtrasos = getOcorrenciaStatus(atrasos, 2);
-                  const statusFaltas = getOcorrenciaStatus(faltas);
-                  const statusOrganizacao = getOcorrenciaStatus(organizacao);
-                  const statusEmusys = getOcorrenciaStatus(emusys);
+                  const colorAtrasos = getOcorrenciaColor(atrasos, 2);
+                  const colorFaltas = getOcorrenciaColor(faltas);
+                  const colorOrganizacao = getOcorrenciaColor(organizacao);
+                  const colorUniforme = getOcorrenciaColor(uniforme);
+                  const colorPrazos = getOcorrenciaColor(prazos);
+                  const colorEmusys = getOcorrenciaColor(emusys);
 
                   return (
                     <tr key={`${avaliacao.professor_id}-${avaliacao.unidade_id}`} className="hover:bg-slate-800/30 transition-colors">
@@ -303,29 +423,39 @@ export function Tab360Professores({
                         </span>
                       </td>
                       <td className="text-center px-4 py-4">
-                        <span className={`text-sm font-medium ${statusAtrasos.color}`}>
-                          {statusAtrasos.icon} {atrasos}
+                        <span className={`text-sm font-medium ${colorAtrasos}`}>
+                          {atrasos}
                         </span>
                       </td>
                       <td className="text-center px-4 py-4">
-                        <span className={`text-sm font-medium ${statusFaltas.color}`}>
-                          {statusFaltas.icon} {faltas}
+                        <span className={`text-sm font-medium ${colorFaltas}`}>
+                          {faltas}
                         </span>
                       </td>
                       <td className="text-center px-4 py-4">
-                        <span className={`text-sm font-medium ${statusOrganizacao.color}`}>
-                          {statusOrganizacao.icon} {organizacao}
+                        <span className={`text-sm font-medium ${colorOrganizacao}`}>
+                          {organizacao}
                         </span>
                       </td>
                       <td className="text-center px-4 py-4">
-                        <span className={`text-sm font-medium ${statusEmusys.color}`}>
-                          {statusEmusys.icon} {emusys}
+                        <span className={`text-sm font-medium ${colorUniforme}`}>
+                          {uniforme}
+                        </span>
+                      </td>
+                      <td className="text-center px-4 py-4">
+                        <span className={`text-sm font-medium ${colorPrazos}`}>
+                          {prazos}
+                        </span>
+                      </td>
+                      <td className="text-center px-4 py-4">
+                        <span className={`text-sm font-medium ${colorEmusys}`}>
+                          {emusys}
                         </span>
                       </td>
                       <td className="text-center px-4 py-4">
                         {projetos > 0 ? (
-                          <span className="text-sm font-medium text-purple-400">
-                            🎯 {projetos}
+                          <span className="text-sm font-medium text-purple-400 flex items-center justify-center gap-1">
+                            <Target className="w-4 h-4" /> {projetos}
                           </span>
                         ) : (
                           <span className="text-sm text-slate-500">-</span>
@@ -353,6 +483,22 @@ export function Tab360Professores({
                       </td>
                       <td className="text-center px-4 py-4">
                         <div className="flex items-center justify-center gap-1">
+                          {/* Ícone de observação - mostra última ocorrência */}
+                          {avaliacao.avaliacao?.ultima_observacao && (
+                            <Tooltip content={
+                              <div className="max-w-[250px]">
+                                <p className="font-medium text-white mb-1">Última observação:</p>
+                                <p className="text-slate-300 text-xs">{avaliacao.avaliacao.ultima_observacao}</p>
+                                {avaliacao.avaliacao.registrado_por && (
+                                  <p className="text-slate-500 text-xs mt-1">Por: {avaliacao.avaliacao.registrado_por}</p>
+                                )}
+                              </div>
+                            }>
+                              <button className="p-2 rounded-lg hover:bg-slate-700 transition-colors text-amber-400">
+                                <MessageCircle className="h-4 w-4" />
+                              </button>
+                            </Tooltip>
+                          )}
                           <Tooltip content="Ver detalhes">
                             <button
                               onClick={() => handleVerDetalhes(avaliacao)}

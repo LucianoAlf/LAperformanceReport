@@ -30,7 +30,6 @@ import { TabCarteiraProfessores } from './TabCarteiraProfessores';
 import { Tab360Professores } from './Tab360Professores';
 import { HealthScoreConfig } from './HealthScoreConfig';
 import { FatorDemandaCursos } from './FatorDemandaCursos';
-import { Professor360Config } from './Professor360Config';
 import type { 
   Professor, Unidade, Curso, KPIsProfessores, 
   FiltrosProfessores, ProfessorFormData
@@ -650,14 +649,7 @@ export function ProfessoresPage() {
             unidadeId={unidadeAtual !== 'todos' ? unidadeAtual : undefined}
           />
 
-          {/* Configurações do Professor 360° */}
-          <div className="bg-slate-900/50 rounded-2xl border border-slate-700/50 p-6">
-            <div className="flex items-center gap-3 mb-6">
-              <BarChart3 className="w-5 h-5 text-violet-400" />
-              <span className="text-sm font-bold text-white uppercase tracking-wide">Avaliação 360° dos Professores</span>
-            </div>
-            <Professor360Config />
-          </div>
+          {/* NOTA: Configurações do Professor 360° foram movidas para a aba 360° */}
 
           {/* Referência de Metas */}
           <div className="bg-slate-900/50 rounded-2xl border border-slate-700/50 p-6">

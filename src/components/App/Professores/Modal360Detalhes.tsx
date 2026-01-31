@@ -8,7 +8,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { 
   Eye, Clock, UserX, Building2, Calendar, Sparkles, 
-  TrendingUp, TrendingDown, Minus, X
+  TrendingUp, TrendingDown, Minus, X, Shirt, Monitor
 } from 'lucide-react';
 import { Criterio360, Professor360Resumo } from '@/hooks/useProfessor360';
 
@@ -26,9 +26,9 @@ const CRITERIO_ICONS: Record<string, React.ReactNode> = {
   atrasos: <Clock className="h-4 w-4" />,
   faltas: <UserX className="h-4 w-4" />,
   organizacao_sala: <Building2 className="h-4 w-4" />,
-  uniforme: <span className="text-sm">👔</span>,
+  uniforme: <Shirt className="h-4 w-4" />,
   prazos: <Calendar className="h-4 w-4" />,
-  emusys: <span className="text-sm">💻</span>,
+  emusys: <Monitor className="h-4 w-4" />,
   projetos: <Sparkles className="h-4 w-4" />,
 };
 
@@ -100,7 +100,7 @@ export function Modal360Detalhes({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg bg-slate-900 border-slate-700">
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto bg-slate-900 border-slate-700">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-white">
             <Eye className="h-5 w-5 text-cyan-400" />
@@ -136,84 +136,104 @@ export function Modal360Detalhes({
             </div>
           </div>
 
-          {/* Detalhamento por critério */}
-          <div>
+          {/* Resumo do Mês com barra de progresso */}
+          <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700/50">
             <h4 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">
-              Detalhamento por Critério
+              📊 Resumo do Mês
             </h4>
             <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-slate-400">Nota Final:</span>
+                <span className={`text-2xl font-bold ${getNotaColor(avaliacao.nota_final)}`}>
+                  {avaliacao.nota_final} / 100
+                </span>
+              </div>
+              <div className="w-full bg-slate-700 rounded-full h-3 overflow-hidden">
+                <div 
+                  className={`h-full rounded-full transition-all ${
+                    avaliacao.nota_final >= 90 ? 'bg-emerald-500' :
+                    avaliacao.nota_final >= 70 ? 'bg-amber-500' : 'bg-rose-500'
+                  }`}
+                  style={{ width: `${avaliacao.nota_final}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-sm text-slate-400 mt-2">
+                <span>Nota Base: 100</span>
+                <span>|</span>
+                <span className="text-rose-400">
+                  Penalidades: {detalhesCriterios.filter(d => d.pontosImpacto < 0).reduce((sum, d) => sum + d.pontosImpacto, 0)}
+                </span>
+                <span>|</span>
+                <span className="text-emerald-400">
+                  Bônus: +{detalhesCriterios.filter(d => d.pontosImpacto > 0).reduce((sum, d) => sum + d.pontosImpacto, 0)}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Detalhamento por critério - Layout compacto */}
+          <div>
+            <h4 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">
+              📋 Detalhamento por Critério
+            </h4>
+            <div className="space-y-1">
               {detalhesCriterios.map(({ criterio, quantidade, pontosImpacto }) => (
                 <div 
                   key={criterio.id}
-                  className="flex items-center justify-between p-3 bg-slate-800/30 rounded-lg border border-slate-700/30"
+                  className="flex items-center justify-between py-2 px-3 bg-slate-800/30 rounded-lg border border-slate-700/30"
                 >
-                  <div className="flex items-center gap-3">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                      criterio.tipo === 'bonus' ? 'bg-purple-500/20' : 'bg-slate-700'
+                  <div className="flex items-center gap-2">
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
+                      criterio.tipo === 'bonus' ? 'bg-purple-500/20 text-purple-400' : 'bg-slate-700 text-slate-400'
                     }`}>
                       {CRITERIO_ICONS[criterio.codigo] || <span>📋</span>}
                     </div>
-                    <div>
-                      <p className="font-medium text-white text-sm">{criterio.nome}</p>
-                      <p className="text-xs text-slate-500">
-                        {criterio.tipo === 'bonus' 
-                          ? 'Bônus por projeto'
-                          : `Tolerância: ${criterio.tolerancia || 0} | -${criterio.pontos_perda}pts cada`
-                        }
-                      </p>
-                    </div>
+                    <span className="text-sm text-white">
+                      {criterio.nome}
+                      {criterio.tipo === 'bonus' && (
+                        <span className="ml-1 text-xs text-purple-400">⭐</span>
+                      )}
+                    </span>
                   </div>
                   <div className="flex items-center gap-4">
-                    <div className="text-center">
-                      <p className="text-lg font-bold text-white">{quantidade}</p>
-                      <p className="text-xs text-slate-500">ocorr.</p>
-                    </div>
-                    <div className={`text-right min-w-[60px] ${
-                      pontosImpacto > 0 ? 'text-emerald-400' : 
-                      pontosImpacto < 0 ? 'text-rose-400' : 'text-slate-500'
+                    <span className={`text-sm ${
+                      quantidade === 0 ? 'text-slate-500' : 
+                      criterio.tipo === 'bonus' ? 'text-purple-400' : 'text-amber-400'
                     }`}>
-                      <p className="text-sm font-bold">
-                        {pontosImpacto > 0 ? '+' : ''}{pontosImpacto}
-                      </p>
-                      <p className="text-xs">pts</p>
-                    </div>
+                      {quantidade} ocorr.
+                    </span>
+                    <span className={`text-sm font-bold min-w-[45px] text-right ${
+                      criterio.tipo === 'bonus' ? 'text-purple-400' :
+                      pontosImpacto === 0 ? 'text-emerald-400' :
+                      pontosImpacto >= -10 ? 'text-amber-400' : 'text-rose-400'
+                    }`}>
+                      {criterio.tipo === 'bonus' ? `+${pontosImpacto}` : pontosImpacto}pts
+                    </span>
                   </div>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Resumo */}
-          <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700/50">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-slate-400">Base</p>
-                <p className="text-xl font-bold text-white">100 pts</p>
-              </div>
-              <div className="text-center">
-                <p className="text-sm text-slate-400">Penalidades</p>
-                <p className="text-xl font-bold text-rose-400">
-                  {detalhesCriterios
-                    .filter(d => d.pontosImpacto < 0)
-                    .reduce((sum, d) => sum + d.pontosImpacto, 0)} pts
-                </p>
-              </div>
-              <div className="text-center">
-                <p className="text-sm text-slate-400">Bônus</p>
-                <p className="text-xl font-bold text-emerald-400">
-                  +{detalhesCriterios
-                    .filter(d => d.pontosImpacto > 0)
-                    .reduce((sum, d) => sum + d.pontosImpacto, 0)} pts
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-sm text-slate-400">Final</p>
-                <p className={`text-xl font-bold ${getNotaColor(avaliacao.nota_final)}`}>
-                  {avaliacao.nota_final} pts
-                </p>
-              </div>
+          {/* Histórico de Ocorrências - TODO: buscar do banco */}
+          {/* 
+          <div>
+            <h4 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3">
+              📝 Histórico de Ocorrências
+            </h4>
+            <div className="space-y-2 max-h-[150px] overflow-y-auto">
+              {ocorrencias.map(oc => (
+                <div key={oc.id} className="p-2 bg-slate-800/30 rounded-lg text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">{oc.data}</span>
+                    <span className="text-slate-500">{oc.registrado_por}</span>
+                  </div>
+                  <p className="text-white">{oc.descricao}</p>
+                </div>
+              ))}
             </div>
           </div>
+          */}
 
           {/* Status */}
           <div className="flex items-center justify-between text-sm">
@@ -232,12 +252,6 @@ export function Modal360Detalhes({
               </span>
             )}
           </div>
-        </div>
-
-        <div className="flex justify-end">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Fechar
-          </Button>
         </div>
       </DialogContent>
     </Dialog>
