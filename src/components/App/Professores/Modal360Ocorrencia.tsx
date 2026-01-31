@@ -111,10 +111,7 @@ export function Modal360Ocorrencia({
         data_ocorrencia: format(dataOcorrencia, 'yyyy-MM-dd'),
         descricao: descricao.trim() || null,
         registrado_por: registradoPor,
-        registrado_por_nome: colaboradorAtual?.nome || '',
         competencia,
-        // TODO: Integração WhatsApp - enviar notificação ao professor
-        // whatsapp_enviado: false,
       });
     } catch (error) {
       console.error('Erro ao salvar:', error);

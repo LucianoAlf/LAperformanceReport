@@ -370,6 +370,7 @@ export function ProfessoresPage() {
         comissao_percentual: data.comissao_percentual,
         observacoes: data.observacoes || null,
         foto_url: data.foto_url || null,
+        telefone_whatsapp: data.telefone_whatsapp || null,
         ativo: true
       };
 

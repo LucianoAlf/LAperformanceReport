@@ -441,7 +441,7 @@ export function useProfessor360(competencia: string, unidadeId?: string) {
       // Buscar apenas professores ativos (consistente com aba Cadastro)
       const { data: profs } = await supabase
         .from('professores')
-        .select('id, nome, foto_url, ativo')
+        .select('id, nome, foto_url, ativo, telefone_whatsapp')
         .eq('ativo', true)
         .order('nome');
 

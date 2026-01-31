@@ -9,6 +9,7 @@ export interface Professor {
   comissao_percentual: number;
   observacoes: string | null;
   foto_url: string | null;
+  telefone_whatsapp: string | null;
   nps_medio: number | null;
   media_alunos_turma: number | null;
   created_at: string;
@@ -80,6 +81,7 @@ export interface ProfessorFormData {
   comissao_percentual: number;
   observacoes: string;
   foto_url: string;
+  telefone_whatsapp: string;
   unidades_ids: string[];
   cursos_ids: number[];
 }

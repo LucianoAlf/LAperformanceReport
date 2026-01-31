@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Calendar, Building2, Music, Save, Loader2 } from 'lucide-react';
+import { User, Calendar, Building2, Music, Save, Loader2, Phone } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -36,6 +36,7 @@ export function ModalProfessor({
     comissao_percentual: 0,
     observacoes: '',
     foto_url: '',
+    telefone_whatsapp: '',
     unidades_ids: [],
     cursos_ids: []
   });
@@ -50,6 +51,7 @@ export function ModalProfessor({
         comissao_percentual: professor.comissao_percentual || 0,
         observacoes: professor.observacoes || '',
         foto_url: professor.foto_url || '',
+        telefone_whatsapp: professor.telefone_whatsapp || '',
         unidades_ids: professor.unidades?.map(u => u.unidade_id) || [],
         cursos_ids: professor.cursos?.map(c => c.curso_id) || []
       });
@@ -61,6 +63,7 @@ export function ModalProfessor({
         comissao_percentual: 0,
         observacoes: '',
         foto_url: '',
+        telefone_whatsapp: '',
         unidades_ids: [],
         cursos_ids: []
       });
@@ -197,6 +200,27 @@ export function ModalProfessor({
                 />
               </div>
             </div>
+          </div>
+
+          {/* WhatsApp */}
+          <div>
+            <Label className="flex items-center gap-2 mb-2">
+              <Phone className="w-4 h-4 text-emerald-400" />
+              WhatsApp
+            </Label>
+            <Input
+              value={formData.telefone_whatsapp}
+              onChange={(e) => {
+                // Permitir apenas números
+                const value = e.target.value.replace(/\D/g, '');
+                setFormData(prev => ({ ...prev, telefone_whatsapp: value }));
+              }}
+              placeholder="5521999999999 (apenas números com DDI)"
+              maxLength={13}
+            />
+            <p className="text-xs text-slate-500 mt-1">
+              Formato: 55 + DDD + número (ex: 5521999999999)
+            </p>
           </div>
 
           {/* Unidades (Multi-select com checkboxes) */}

@@ -18,8 +18,8 @@ export interface WhatsAppConnectionStatus {
   error?: string;
 }
 
-const UAZAPI_BASE_URL = import.meta.env.VITE_UAZAPI_URL || 'https://lamusic.uazapi.com';
-const UAZAPI_TOKEN = import.meta.env.VITE_UAZAPI_TOKEN;
+const UAZAPI_BASE_URL = import.meta.env.VITE_UAZAPI_URL || import.meta.env.NEXT_PUBLIC_UAZAPI_URL || 'https://lamusic.uazapi.com';
+const UAZAPI_TOKEN = import.meta.env.VITE_UAZAPI_TOKEN || import.meta.env.UAZAPI_TOKEN;
 
 /**
  * Envia uma mensagem de texto via WhatsApp usando UAZAPI

@@ -32,6 +32,8 @@ import { useProfessor360, Professor360Resumo, useConfig360 } from '@/hooks/usePr
 import { Modal360Ocorrencia } from './Modal360Ocorrencia';
 import { Modal360Detalhes } from './Modal360Detalhes';
 import { Professor360Config } from './Professor360Config';
+import { ModalWhatsAppPreview } from './ModalWhatsAppPreview';
+import { supabase } from '@/lib/supabase';
 
 interface Tab360ProfessoresProps {
   unidadeSelecionada: string;
@@ -70,6 +72,18 @@ export function Tab360Professores({
   const [modalDetalhes, setModalDetalhes] = useState<Professor360Resumo | null>(null);
   const [professorSelecionado, setProfessorSelecionado] = useState<any>(null);
   const [showConfig, setShowConfig] = useState(false);
+  
+  // Estado para o modal de WhatsApp
+  const [showWhatsAppPreview, setShowWhatsAppPreview] = useState(false);
+  const [dadosWhatsApp, setDadosWhatsApp] = useState<{
+    professorNome: string;
+    professorWhatsApp: string | null;
+    tipoOcorrencia: string;
+    dataOcorrencia: string;
+    unidadeNome: string;
+    registradoPor: string;
+    descricao: string | null;
+  } | null>(null);
 
   const {
     criterios,
@@ -135,10 +149,95 @@ export function Tab360Professores({
     try {
       const professor = professores.find(p => p.id === data.professor_id);
       const unidadesProf = professor?.unidades?.map((u: any) => u.id) || [];
+      const criterio = criterios.find(c => c.id === parseInt(data.criterio_id));
+      const unidade = professor?.unidades?.find((u: any) => u.id === data.unidade_id || u.unidade_id === data.unidade_id);
+      
+      // Buscar nome do colaborador que registrou
+      const COLABORADORES = [
+        { id: 'luciano', nome: 'Luciano Alf' },
+        { id: 'gabi', nome: 'Gabriela' },
+        { id: 'jhon', nome: 'Jhonatan' },
+        { id: 'fernanda', nome: 'Fernanda' },
+        { id: 'daiana', nome: 'Daiana' },
+        { id: 'duda', nome: 'Eduarda' },
+        { id: 'arthur', nome: 'Arthur' },
+        { id: 'vitoria', nome: 'Vitória' },
+        { id: 'clayton', nome: 'Clayton' },
+        { id: 'kailane', nome: 'Kailane' },
+      ];
+      const colaborador = COLABORADORES.find(c => c.id === data.registrado_por);
       
       await createOcorrencia(data, undefined, unidadesProf);
+      
+      // Preparar dados para o WhatsApp
+      const professorNome = professor?.nome || '';
+      const professorWhatsApp = professor?.telefone_whatsapp || null;
+      const tipoOcorrencia = criterio?.nome || '';
+      const dataOcorrencia = data.data_ocorrencia;
+      const unidadeNome = unidade?.nome || unidade?.unidade_nome || '';
+      const registradoPor = colaborador?.nome || '';
+      const descricao = data.descricao;
+      
+      // Montar mensagem
+      const primeiroNome = professorNome.split(' ')[0];
+      let mensagem = `🔔 *LA Music - Avaliação 360°*\n\n`;
+      mensagem += `Olá, ${primeiroNome}!\n\n`;
+      mensagem += `Uma ocorrência foi registrada em seu perfil:\n\n`;
+      mensagem += `📋 *Tipo:* ${tipoOcorrencia}\n`;
+      mensagem += `📅 *Data:* ${dataOcorrencia.split('-').reverse().join('/')}\n`;
+      mensagem += `🏢 *Unidade:* ${unidadeNome}\n`;
+      mensagem += `👤 *Registrado por:* ${registradoPor}\n`;
+      if (descricao) {
+        mensagem += `\n📝 *Observação:* ${descricao}\n`;
+      }
+      mensagem += `\n---\nEm caso de dúvidas, procure a coordenação.`;
+      
+      // Disparo automático via Edge Function se tiver WhatsApp cadastrado
+      if (professorWhatsApp) {
+        console.log('[WhatsApp 360°] Enviando notificação automática para:', professorWhatsApp);
+        try {
+          const { data: resultado, error } = await supabase.functions.invoke('professor-360-whatsapp', {
+            body: {
+              professorNome,
+              professorWhatsApp,
+              tipoOcorrencia,
+              dataOcorrencia,
+              unidadeNome,
+              registradoPor,
+              descricao,
+            },
+          });
+          
+          if (error) {
+            console.error('[WhatsApp 360°] ❌ Erro ao chamar Edge Function:', error);
+          } else if (resultado?.success) {
+            console.log('[WhatsApp 360°] ✅ Mensagem enviada com sucesso! ID:', resultado.messageId);
+          } else {
+            console.error('[WhatsApp 360°] ❌ Erro ao enviar:', resultado?.error);
+          }
+        } catch (err) {
+          console.error('[WhatsApp 360°] ❌ Erro inesperado:', err);
+        }
+      } else {
+        console.log('[WhatsApp 360°] Professor sem WhatsApp cadastrado, pulando envio automático');
+      }
+      
+      // Preparar dados para o modal de WhatsApp (fallback/confirmação)
+      setDadosWhatsApp({
+        professorNome,
+        professorWhatsApp,
+        tipoOcorrencia,
+        dataOcorrencia,
+        unidadeNome,
+        registradoPor,
+        descricao,
+      });
+      
       setModalOcorrencia(false);
       setProfessorSelecionado(null);
+      
+      // Abrir modal de WhatsApp (para confirmação ou envio manual)
+      setShowWhatsAppPreview(true);
     } catch (error) {
       console.error('Erro ao salvar ocorrência:', error);
       throw error;
@@ -550,6 +649,21 @@ export function Tab360Professores({
           criterios={criterios}
           competencia={competencia}
           competenciaLabel={competenciaOptions.find(c => c.valor === competencia)?.label || ''}
+        />
+      )}
+
+      {/* Modal de Preview do WhatsApp */}
+      {dadosWhatsApp && (
+        <ModalWhatsAppPreview
+          open={showWhatsAppPreview}
+          onOpenChange={setShowWhatsAppPreview}
+          professorNome={dadosWhatsApp.professorNome}
+          professorWhatsApp={dadosWhatsApp.professorWhatsApp}
+          tipoOcorrencia={dadosWhatsApp.tipoOcorrencia}
+          dataOcorrencia={dadosWhatsApp.dataOcorrencia}
+          unidadeNome={dadosWhatsApp.unidadeNome}
+          registradoPor={dadosWhatsApp.registradoPor}
+          descricao={dadosWhatsApp.descricao}
         />
       )}
     </div>
