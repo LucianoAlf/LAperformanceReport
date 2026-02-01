@@ -64,20 +64,23 @@ export function CelulaTurma({ turma, onClick, draggable = false }: CelulaTurmaPr
       <div
         ref={setNodeRef}
         style={style}
-        {...(draggable ? { ...attributes, ...listeners } : {})}
+        {...attributes}
         className={cn(
           'w-full p-1.5 rounded-lg border text-left transition-all relative group',
           corOcupacao,
           'hover:scale-[1.02] hover:shadow-lg',
           'focus:outline-none focus:ring-2 focus:ring-violet-500/50',
           isDragging && 'opacity-50 scale-95 z-50',
-          draggable && 'cursor-grab active:cursor-grabbing touch-none'
+          draggable ? 'cursor-pointer' : 'cursor-pointer'
         )}
         onClick={handleClick}
       >
       {/* Indicador de arraste ativo */}
       {draggable && (
-        <div className="absolute -left-0.5 top-1/2 -translate-y-1/2 opacity-40 group-hover:opacity-100 transition-opacity">
+        <div 
+          {...listeners}
+          className="absolute -left-0.5 top-1/2 -translate-y-1/2 opacity-40 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing touch-none"
+        >
           <GripVertical className="w-3 h-3 text-slate-400" />
         </div>
       )}
