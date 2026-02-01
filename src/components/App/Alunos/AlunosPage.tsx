@@ -39,6 +39,8 @@ export interface Aluno {
   valor_parcela: number | null;
   tempo_permanencia_meses: number | null;
   status: string;
+  status_pagamento?: string;
+  dia_vencimento?: number;
   tipo_matricula_id: number | null;
   tipo_matricula_nome?: string;
   unidade_id: string;
@@ -47,6 +49,8 @@ export interface Aluno {
   total_alunos_turma?: number;
   turma_id?: number;
   nomes_alunos_turma?: string[];
+  total_anotacoes?: number;
+  ultimas_anotacoes?: { texto: string; categoria: string }[];
 }
 
 export interface Turma {
@@ -93,6 +97,7 @@ export interface Filtros {
   classificacao: string;
   turma_size: string;
   tempo_permanencia: string;
+  status_pagamento: string;
 }
 
 type TabAtiva = 'lista' | 'turmas' | 'grade' | 'distribuicao' | 'importar';
@@ -128,7 +133,8 @@ export function AlunosPage() {
     tipo_matricula_id: '',
     classificacao: '',
     turma_size: '',
-    tempo_permanencia: ''
+    tempo_permanencia: '',
+    status_pagamento: ''
   });
   
   // Estados de opções para selects
@@ -141,6 +147,24 @@ export function AlunosPage() {
   // Estados de UI
   const [loading, setLoading] = useState(true);
   const [modalNovoAluno, setModalNovoAluno] = useState(false);
+
+  // Calcular alunos sem lançamento de pagamento (após dia 15)
+  const alertaPagamentos = useMemo(() => {
+    const hoje = new Date();
+    const diaAtual = hoje.getDate();
+    const mostrarAlerta = diaAtual >= 15;
+    
+    const alunosSemLancamento = alunos.filter(a => 
+      a.status === 'Ativo' && 
+      (!a.status_pagamento || a.status_pagamento === '-' || a.status_pagamento === null)
+    );
+    
+    return {
+      mostrar: mostrarAlerta && alunosSemLancamento.length > 0,
+      quantidade: alunosSemLancamento.length,
+      diaAtual
+    };
+  }, [alunos]);
   const [modalNovaTurma, setModalNovaTurma] = useState(false);
   const [turmaParaEditar, setTurmaParaEditar] = useState<Turma | null>(null);
   const [turmaParaAdicionarAluno, setTurmaParaAdicionarAluno] = useState<Turma | null>(null);
@@ -191,7 +215,7 @@ export function AlunosPage() {
       .select(`
         id, nome, classificacao, idade_atual, professor_atual_id, curso_id, 
         dia_aula, horario_aula, valor_parcela, tempo_permanencia_meses,
-        status, tipo_matricula_id, unidade_id, data_matricula,
+        status, status_pagamento, dia_vencimento, tipo_matricula_id, unidade_id, data_matricula,
         professores:professor_atual_id(nome),
         cursos:curso_id(nome),
         tipos_matricula:tipo_matricula_id(nome),
@@ -218,6 +242,26 @@ export function AlunosPage() {
         t
       ]) || []);
 
+      // Buscar apenas anotações PENDENTES por aluno (resolvido = false)
+      const alunoIds = data.map((a: any) => a.id);
+      const { data: anotacoesData } = await supabase
+        .from('anotacoes_alunos')
+        .select('aluno_id, texto, categoria, created_at')
+        .in('aluno_id', alunoIds)
+        .eq('resolvido', false)
+        .order('created_at', { ascending: false });
+      
+      // Criar mapa de anotações PENDENTES por aluno (contagem + últimas anotações)
+      const anotacoesMap = new Map<number, { total: number; ultimas: { texto: string; categoria: string }[] }>();
+      anotacoesData?.forEach(a => {
+        const atual = anotacoesMap.get(a.aluno_id) || { total: 0, ultimas: [] };
+        atual.total += 1;
+        if (atual.ultimas.length < 3) {
+          atual.ultimas.push({ texto: a.texto, categoria: a.categoria });
+        }
+        anotacoesMap.set(a.aluno_id, atual);
+      });
+
       const alunosFormatados = data.map((a: any) => {
         const turmaKey = `${a.unidade_id}-${a.professor_atual_id}-${a.dia_aula}-${a.horario_aula}`;
         const turmaInfo = turmasMap.get(turmaKey);
@@ -230,7 +274,9 @@ export function AlunosPage() {
           unidade_codigo: a.unidades?.codigo || '',
           total_alunos_turma: turmaInfo?.total_alunos || 1,
           turma_id: turmaInfo?.id,
-          nomes_alunos_turma: turmaInfo?.nomes_alunos || []
+          nomes_alunos_turma: turmaInfo?.nomes_alunos || [],
+          total_anotacoes: anotacoesMap.get(a.id)?.total || 0,
+          ultimas_anotacoes: anotacoesMap.get(a.id)?.ultimas || []
         };
       });
       setAlunos(alunosFormatados);
@@ -563,6 +609,11 @@ export function AlunosPage() {
       });
     }
 
+    // Filtro por status de pagamento
+    if (filtros.status_pagamento) {
+      resultado = resultado.filter(a => (a.status_pagamento || 'em_dia') === filtros.status_pagamento);
+    }
+
     return resultado;
   }, [alunos, filtros, turmas]);
 
@@ -632,7 +683,8 @@ export function AlunosPage() {
       tipo_matricula_id: '',
       classificacao: '',
       turma_size: '',
-      tempo_permanencia: ''
+      tempo_permanencia: '',
+      status_pagamento: ''
     });
   }
 
@@ -935,10 +987,26 @@ export function AlunosPage() {
         <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center">
           <Users className="w-5 h-5 text-white" />
         </div>
-        <div>
+        <div className="flex-1">
           <h1 className="text-xl font-bold text-white">Gestão de Alunos</h1>
           <p className="text-sm text-slate-400">Controle completo de alunos, turmas e horários</p>
         </div>
+        
+        {/* Badge de Alerta - Alunos sem lançamento de pagamento */}
+        {alertaPagamentos.mostrar && (
+          <button
+            onClick={() => {
+              setTabAtiva('lista');
+              setFiltros(prev => ({ ...prev, status_pagamento: '-' }));
+            }}
+            className="flex items-center gap-2 px-4 py-2 bg-orange-500/20 border border-orange-500/50 rounded-lg hover:bg-orange-500/30 transition-colors"
+          >
+            <AlertTriangle className="w-5 h-5 text-orange-400" />
+            <span className="text-orange-300 font-medium">
+              {alertaPagamentos.quantidade} aluno{alertaPagamentos.quantidade > 1 ? 's' : ''} sem lançamento
+            </span>
+          </button>
+        )}
       </header>
 
       {/* KPI Cards */}
@@ -1062,15 +1130,6 @@ export function AlunosPage() {
 
           {/* Botões de Ação */}
           <div className="flex items-center gap-2 mr-4">
-            {tabAtiva === 'lista' && (
-              <button
-                onClick={() => setModalNovoAluno(true)}
-                className="h-10 bg-purple-600 hover:bg-purple-500 px-5 rounded-xl text-sm font-medium transition flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                Novo Aluno
-              </button>
-            )}
             {tabAtiva === 'turmas' && (
               <button
                 onClick={() => setModalNovaTurma(true)}

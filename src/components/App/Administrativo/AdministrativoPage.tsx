@@ -351,20 +351,35 @@ export function AdministrativoPage() {
         if (error) throw error;
       }
 
-      // Atualizar status do aluno quando for trancamento
-      if (data.aluno_nome && data.tipo === 'trancamento') {
-        // Buscar o aluno pelo nome para obter o ID
-        const { data: alunoData } = await supabase
-          .from('alunos')
-          .select('id')
-          .eq('nome', data.aluno_nome)
-          .single();
+      // Atualizar status do aluno quando for trancamento, evasão ou não renovação
+      if (data.aluno_nome && (data.tipo === 'trancamento' || data.tipo === 'evasao' || data.tipo === 'nao_renovacao')) {
+        // Usar aluno_id se disponível, senão buscar pelo nome
+        let alunoId = (data as any).aluno_id;
         
-        if (alunoData) {
+        if (!alunoId) {
+          const { data: alunoData } = await supabase
+            .from('alunos')
+            .select('id')
+            .eq('nome', data.aluno_nome)
+            .single();
+          alunoId = alunoData?.id;
+        }
+        
+        if (alunoId) {
+          // Definir status e campos baseado no tipo de movimentação
+          const updateData: { status: string; data_saida?: string } = {
+            status: data.tipo === 'trancamento' ? 'trancado' : 'inativo'
+          };
+          
+          // Para evasão e não renovação, também preencher data_saida
+          if (data.tipo === 'evasao' || data.tipo === 'nao_renovacao') {
+            updateData.data_saida = data.data;
+          }
+          
           const { error: alunoError } = await supabase
             .from('alunos')
-            .update({ status: 'trancado' })
-            .eq('id', alunoData.id);
+            .update(updateData)
+            .eq('id', alunoId);
           
           if (alunoError) {
             console.error('Erro ao atualizar status do aluno:', alunoError);

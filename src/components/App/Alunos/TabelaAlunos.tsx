@@ -1,9 +1,10 @@
 import { useState, useMemo, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical, Play } from 'lucide-react';
+import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical, Play, MessageSquarePlus, MessageCircle, CheckCircle2, Circle } from 'lucide-react';
 import { CelulaEditavel } from '@/components/ui/CelulaEditavel';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/contexts/AuthContext';
 import { Tooltip } from '@/components/ui/Tooltip';
 import {
@@ -68,6 +69,29 @@ export function TabelaAlunos({
   const [modalDestrancamento, setModalDestrancamento] = useState(false);
   const [alunoParaDestrancar, setAlunoParaDestrancar] = useState<Aluno | null>(null);
   const [destrancando, setDestrancando] = useState(false);
+  const [modalHistorico, setModalHistorico] = useState(false);
+  const [alunoHistorico, setAlunoHistorico] = useState<Aluno | null>(null);
+  const [historicoAluno, setHistoricoAluno] = useState<any[]>([]);
+  const [carregandoHistorico, setCarregandoHistorico] = useState(false);
+  const [modalAnotacao, setModalAnotacao] = useState(false);
+  const [alunoAnotacao, setAlunoAnotacao] = useState<Aluno | null>(null);
+  const [textoAnotacao, setTextoAnotacao] = useState('');
+  const [categoriaAnotacao, setCategoriaAnotacao] = useState('geral');
+  const [salvandoAnotacao, setSalvandoAnotacao] = useState(false);
+  const [modalVerAnotacoes, setModalVerAnotacoes] = useState(false);
+  const [alunoVerAnotacoes, setAlunoVerAnotacoes] = useState<Aluno | null>(null);
+  const [anotacoesDoAluno, setAnotacoesDoAluno] = useState<any[]>([]);
+  const [carregandoAnotacoes, setCarregandoAnotacoes] = useState(false);
+  const [editandoAnotacaoId, setEditandoAnotacaoId] = useState<number | null>(null);
+  const [textoEdicao, setTextoEdicao] = useState('');
+  const [categoriaEdicao, setCategoriaEdicao] = useState('geral');
+  const [anotacaoParaExcluir, setAnotacaoParaExcluir] = useState<number | null>(null);
+  const [alunosSelecionados, setAlunosSelecionados] = useState<Set<number>>(new Set());
+  const [processandoMassa, setProcessandoMassa] = useState(false);
+  const [modalResetMes, setModalResetMes] = useState(false);
+  const [confirmacaoReset, setConfirmacaoReset] = useState('');
+  const [processandoReset, setProcessandoReset] = useState(false);
+  const [filtrosExpandidos, setFiltrosExpandidos] = useState(false);
   const itensPorPagina = 30;
 
   // Paginação
@@ -137,6 +161,12 @@ export function TabelaAlunos({
       case 'status':
         updateData.status = valor || 'ativo';
         break;
+      case 'status_pagamento':
+        updateData.status_pagamento = valor === '-' ? null : valor;
+        break;
+      case 'dia_vencimento':
+        updateData.dia_vencimento = valor ? Number(valor) : 5;
+        break;
     }
 
     const { error } = await supabase
@@ -165,6 +195,375 @@ export function TabelaAlunos({
       onRecarregar();
     }
     setAlunoParaExcluir(null);
+  }
+
+  // Função para carregar histórico do aluno
+  async function carregarHistorico(aluno: Aluno) {
+    setAlunoHistorico(aluno);
+    setModalHistorico(true);
+    setCarregandoHistorico(true);
+    setHistoricoAluno([]);
+
+    try {
+      // Buscar movimentações do aluno
+      const { data: movimentacoes } = await supabase
+        .from('movimentacoes_admin')
+        .select('*')
+        .eq('aluno_id', aluno.id)
+        .order('created_at', { ascending: false });
+
+      // Buscar renovações do aluno
+      const { data: renovacoes } = await supabase
+        .from('renovacoes')
+        .select('*')
+        .eq('aluno_id', aluno.id)
+        .order('created_at', { ascending: false });
+
+      // Buscar anotações do aluno
+      const { data: anotacoes } = await supabase
+        .from('anotacoes_alunos')
+        .select('*')
+        .eq('aluno_id', aluno.id)
+        .order('created_at', { ascending: false });
+
+      // Combinar e ordenar por data
+      const historico: any[] = [];
+
+      if (movimentacoes) {
+        movimentacoes.forEach(m => {
+          historico.push({
+            tipo: m.tipo || 'Movimentação',
+            data: m.created_at,
+            descricao: m.tipo === 'evasao' 
+              ? `Evasão registrada - ${m.motivo || 'Sem motivo'}` 
+              : m.tipo === 'trancamento'
+              ? `Trancamento - ${m.observacoes || 'Sem observações'}`
+              : m.tipo === 'renovacao'
+              ? `Renovação - R$ ${m.valor_parcela_anterior} → R$ ${m.valor_parcela_novo}`
+              : `${m.tipo} - ${m.observacoes || ''}`,
+            agente: m.agente_comercial || '-'
+          });
+        });
+      }
+
+      if (renovacoes) {
+        renovacoes.forEach(r => {
+          historico.push({
+            tipo: 'Renovação',
+            data: r.created_at,
+            descricao: `Renovação de contrato - R$ ${r.valor_parcela_anterior || 0} → R$ ${r.valor_parcela_novo || 0} (${r.percentual_reajuste || 0}% reajuste)`,
+            agente: r.agente || '-'
+          });
+        });
+      }
+
+      if (anotacoes) {
+        const categoriaEmoji: Record<string, string> = {
+          geral: '📝',
+          pedagogico: '📚',
+          financeiro: '💰',
+          comportamento: '⚠️',
+          elogio: '⭐',
+          reclamacao: '😤',
+          contato: '📞'
+        };
+        anotacoes.forEach(a => {
+          historico.push({
+            tipo: 'Anotação',
+            data: a.created_at,
+            descricao: `${categoriaEmoji[a.categoria] || '📝'} ${a.texto}`,
+            agente: a.criado_por || '-',
+            categoria: a.categoria
+          });
+        });
+      }
+
+      // Adicionar data de matrícula como primeiro evento
+      if (aluno.data_matricula) {
+        historico.push({
+          tipo: 'Matrícula',
+          data: aluno.data_matricula,
+          descricao: `Matrícula realizada`,
+          agente: '-'
+        });
+      }
+
+      // Ordenar por data (mais recente primeiro)
+      historico.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
+
+      setHistoricoAluno(historico);
+    } catch (error) {
+      console.error('Erro ao carregar histórico:', error);
+    } finally {
+      setCarregandoHistorico(false);
+    }
+  }
+
+  // Função para carregar anotações do aluno (para o modal de ver anotações)
+  async function carregarAnotacoesDoAluno(aluno: Aluno) {
+    setAlunoVerAnotacoes(aluno);
+    setModalVerAnotacoes(true);
+    setCarregandoAnotacoes(true);
+    setAnotacoesDoAluno([]);
+
+    try {
+      const { data } = await supabase
+        .from('anotacoes_alunos')
+        .select('*')
+        .eq('aluno_id', aluno.id)
+        .order('created_at', { ascending: false });
+
+      setAnotacoesDoAluno(data || []);
+    } catch (error) {
+      console.error('Erro ao carregar anotações:', error);
+    } finally {
+      setCarregandoAnotacoes(false);
+    }
+  }
+
+  // Função para marcar/desmarcar anotação como resolvida
+  async function toggleResolvidoAnotacao(anotacaoId: number, resolvidoAtual: boolean) {
+    try {
+      const { error } = await supabase
+        .from('anotacoes_alunos')
+        .update({ resolvido: !resolvidoAtual })
+        .eq('id', anotacaoId);
+
+      if (error) throw error;
+
+      // Atualizar lista local
+      setAnotacoesDoAluno(prev => 
+        prev.map(a => a.id === anotacaoId ? { ...a, resolvido: !resolvidoAtual } : a)
+      );
+      
+      // Recarregar dados para atualizar contagem
+      onRecarregar();
+    } catch (error) {
+      console.error('Erro ao atualizar anotação:', error);
+    }
+  }
+
+  // Função para confirmar exclusão de anotação
+  async function confirmarExclusaoAnotacao() {
+    if (!anotacaoParaExcluir) return;
+
+    try {
+      const { error } = await supabase
+        .from('anotacoes_alunos')
+        .delete()
+        .eq('id', anotacaoParaExcluir);
+
+      if (error) throw error;
+
+      // Atualizar lista local
+      setAnotacoesDoAluno(prev => prev.filter(a => a.id !== anotacaoParaExcluir));
+      
+      // Limpar e fechar modal
+      setAnotacaoParaExcluir(null);
+      
+      // Recarregar dados para atualizar contagem
+      onRecarregar();
+    } catch (error) {
+      console.error('Erro ao excluir anotação:', error);
+    }
+  }
+
+  // Função para salvar edição de anotação
+  async function salvarEdicaoAnotacao(anotacaoId: number) {
+    if (!textoEdicao.trim()) return;
+
+    try {
+      const { error } = await supabase
+        .from('anotacoes_alunos')
+        .update({ 
+          texto: textoEdicao.trim(),
+          categoria: categoriaEdicao,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', anotacaoId);
+
+      if (error) throw error;
+
+      // Atualizar lista local
+      setAnotacoesDoAluno(prev => 
+        prev.map(a => a.id === anotacaoId 
+          ? { ...a, texto: textoEdicao.trim(), categoria: categoriaEdicao } 
+          : a
+        )
+      );
+      
+      // Limpar edição
+      setEditandoAnotacaoId(null);
+      setTextoEdicao('');
+      setCategoriaEdicao('geral');
+      
+      // Recarregar dados
+      onRecarregar();
+    } catch (error) {
+      console.error('Erro ao editar anotação:', error);
+    }
+  }
+
+  // Função para salvar anotação
+  async function salvarAnotacao() {
+    if (!alunoAnotacao || !textoAnotacao.trim()) return;
+
+    setSalvandoAnotacao(true);
+    try {
+      const { error } = await supabase
+        .from('anotacoes_alunos')
+        .insert({
+          aluno_id: alunoAnotacao.id,
+          texto: textoAnotacao.trim(),
+          categoria: categoriaAnotacao,
+          criado_por: usuario?.nome || usuario?.email || 'Sistema'
+        });
+
+      if (error) throw error;
+
+      // Limpar e fechar modal
+      setTextoAnotacao('');
+      setCategoriaAnotacao('geral');
+      setModalAnotacao(false);
+      setAlunoAnotacao(null);
+      
+      // Recarregar dados para atualizar contagem de anotações
+      onRecarregar();
+    } catch (error) {
+      console.error('Erro ao salvar anotação:', error);
+    } finally {
+      setSalvandoAnotacao(false);
+    }
+  }
+
+  // Funções de seleção em massa
+  function toggleSelecionarAluno(alunoId: number) {
+    setAlunosSelecionados(prev => {
+      const novo = new Set(prev);
+      if (novo.has(alunoId)) {
+        novo.delete(alunoId);
+      } else {
+        novo.add(alunoId);
+      }
+      return novo;
+    });
+  }
+
+  // Seleciona TODOS os alunos filtrados (não apenas os paginados)
+  function toggleSelecionarTodos() {
+    if (alunosSelecionados.size === alunos.length) {
+      setAlunosSelecionados(new Set());
+    } else {
+      setAlunosSelecionados(new Set(alunos.map(a => a.id)));
+    }
+  }
+
+  async function marcarSelecionadosComoPagos() {
+    if (alunosSelecionados.size === 0) return;
+    if (!confirm(`Marcar ${alunosSelecionados.size} aluno(s) como PAGOS?`)) return;
+
+    setProcessandoMassa(true);
+    try {
+      const { error } = await supabase
+        .from('alunos')
+        .update({ status_pagamento: 'em_dia' })
+        .in('id', Array.from(alunosSelecionados));
+
+      if (error) throw error;
+
+      setAlunosSelecionados(new Set());
+      onRecarregar();
+    } catch (error) {
+      console.error('Erro ao marcar como pagos:', error);
+      alert('Erro ao atualizar pagamentos. Tente novamente.');
+    } finally {
+      setProcessandoMassa(false);
+    }
+  }
+
+  async function marcarSelecionadosComoInadimplentes() {
+    if (alunosSelecionados.size === 0) return;
+    if (!confirm(`Marcar ${alunosSelecionados.size} aluno(s) como INADIMPLENTES?`)) return;
+
+    setProcessandoMassa(true);
+    try {
+      const { error } = await supabase
+        .from('alunos')
+        .update({ status_pagamento: 'inadimplente' })
+        .in('id', Array.from(alunosSelecionados));
+
+      if (error) throw error;
+
+      setAlunosSelecionados(new Set());
+      onRecarregar();
+    } catch (error) {
+      console.error('Erro ao marcar como inadimplentes:', error);
+      alert('Erro ao atualizar pagamentos. Tente novamente.');
+    } finally {
+      setProcessandoMassa(false);
+    }
+  }
+
+  // Função para resetar mês (Admin) - grava snapshot antes de resetar
+  async function handleResetMes() {
+    if (confirmacaoReset !== 'RESETAR') return;
+
+    setProcessandoReset(true);
+    const agora = new Date();
+    const ano = agora.getFullYear();
+    const mes = agora.getMonth() + 1; // Janeiro = 1
+
+    try {
+      // 1. Buscar todos os alunos ativos com seus dados de pagamento
+      const { data: alunosAtivos, error: errorBusca } = await supabase
+        .from('alunos')
+        .select('id, status_pagamento, valor_parcela, dia_vencimento, unidade_id')
+        .eq('status', 'Ativo');
+
+      if (errorBusca) throw errorBusca;
+
+      // 2. Gravar snapshot no histórico (apenas alunos com status_pagamento definido)
+      const snapshotData = alunosAtivos
+        ?.filter(a => a.status_pagamento && a.status_pagamento !== '-')
+        .map(a => ({
+          aluno_id: a.id,
+          ano,
+          mes,
+          status_pagamento: a.status_pagamento,
+          valor_parcela: a.valor_parcela,
+          dia_vencimento: a.dia_vencimento,
+          unidade_id: a.unidade_id,
+          created_by: usuario?.nome || usuario?.email || 'Sistema'
+        }));
+
+      if (snapshotData && snapshotData.length > 0) {
+        const { error: errorSnapshot } = await supabase
+          .from('historico_pagamentos')
+          .upsert(snapshotData, { onConflict: 'aluno_id,ano,mes' });
+
+        if (errorSnapshot) throw errorSnapshot;
+      }
+
+      // 3. Resetar status_pagamento de todos os alunos ativos para null
+      const { error: errorReset } = await supabase
+        .from('alunos')
+        .update({ status_pagamento: null })
+        .eq('status', 'Ativo');
+
+      if (errorReset) throw errorReset;
+
+      // 4. Fechar modal e recarregar
+      setModalResetMes(false);
+      setConfirmacaoReset('');
+      onRecarregar();
+      
+      alert(`✅ Reset concluído!\n\n• ${snapshotData?.length || 0} registros salvos no histórico\n• ${alunosAtivos?.length || 0} alunos resetados para "Não lançado"`);
+    } catch (error) {
+      console.error('Erro ao resetar mês:', error);
+      alert('Erro ao resetar mês. Tente novamente.');
+    } finally {
+      setProcessandoReset(false);
+    }
   }
 
   async function handleConfirmarDestrancamento() {
@@ -329,6 +728,7 @@ export function TabelaAlunos({
           </div>
         </div>
         
+        {/* Linha 1: Filtros Primários + Botões */}
         <div className="flex flex-wrap items-center gap-3">
           {/* Busca por nome */}
           <div className="relative">
@@ -358,22 +758,6 @@ export function TabelaAlunos({
             </SelectContent>
           </Select>
 
-          {/* Filtro Curso */}
-          <Select
-            value={filtros.curso_id || "todos"}
-            onValueChange={(value) => setFiltros({ ...filtros, curso_id: value === "todos" ? "" : value })}
-          >
-            <SelectTrigger className={`w-[140px] ${filtros.curso_id && filtros.curso_id !== 'todos' ? 'border-2 border-purple-500 bg-purple-500/10' : ''}`}>
-              <SelectValue placeholder="Curso" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Curso</SelectItem>
-              {cursos.map(c => (
-                <SelectItem key={c.id} value={String(c.id)}>{c.nome}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
           {/* Filtro Dia */}
           <Select
             value={filtros.dia_aula || "todos"}
@@ -390,19 +774,20 @@ export function TabelaAlunos({
             </SelectContent>
           </Select>
 
-          {/* Filtro Horário */}
+          {/* Filtro Pagamento */}
           <Select
-            value={filtros.horario_aula || "todos"}
-            onValueChange={(value) => setFiltros({ ...filtros, horario_aula: value === "todos" ? "" : value })}
+            value={filtros.status_pagamento || "todos"}
+            onValueChange={(value) => setFiltros({ ...filtros, status_pagamento: value === "todos" ? "" : value })}
           >
-            <SelectTrigger className={`w-[100px] ${filtros.horario_aula && filtros.horario_aula !== 'todos' ? 'border-2 border-purple-500 bg-purple-500/10' : ''}`}>
-              <SelectValue placeholder="Horário" />
+            <SelectTrigger className={`w-[130px] ${filtros.status_pagamento && filtros.status_pagamento !== 'todos' ? 'border-2 border-red-500 bg-red-500/10' : ''}`}>
+              <SelectValue placeholder="Pagamento" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="todos">Horário</SelectItem>
-              {HORARIOS_LISTA.map(h => (
-                <SelectItem key={h} value={h}>{h}</SelectItem>
-              ))}
+              <SelectItem value="todos">Pagamento</SelectItem>
+              <SelectItem value="-">Não lançado</SelectItem>
+              <SelectItem value="em_dia">Em dia</SelectItem>
+              <SelectItem value="inadimplente">Inadimplente</SelectItem>
+              <SelectItem value="parcial">Parcial</SelectItem>
             </SelectContent>
           </Select>
 
@@ -439,56 +824,13 @@ export function TabelaAlunos({
             </SelectContent>
           </Select>
 
-          {/* Filtro Escola */}
-          <Select
-            value={filtros.classificacao || "todos"}
-            onValueChange={(value) => setFiltros({ ...filtros, classificacao: value === "todos" ? "" : value })}
+          {/* Botão Mais Filtros */}
+          <button
+            onClick={() => setFiltrosExpandidos(!filtrosExpandidos)}
+            className="h-10 bg-slate-700 hover:bg-slate-600 px-4 rounded-xl text-sm transition flex items-center gap-2"
           >
-            <SelectTrigger className={`w-[100px] ${filtros.classificacao && filtros.classificacao !== 'todos' ? 'border-2 border-purple-500 bg-purple-500/10' : ''}`}>
-              <SelectValue placeholder="Escola" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Escola</SelectItem>
-              <SelectItem value="EMLA">EMLA</SelectItem>
-              <SelectItem value="LAMK">LAMK</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {/* Filtro Turma */}
-          <Select
-            value={filtros.turma_size || "todos"}
-            onValueChange={(value) => setFiltros({ ...filtros, turma_size: value === "todos" ? "" : value })}
-          >
-            <SelectTrigger className={`w-[140px] ${filtros.turma_size && filtros.turma_size !== 'todos' ? 'border-2 border-purple-500 bg-purple-500/10' : ''}`}>
-              <SelectValue placeholder="Turma" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Turma</SelectItem>
-              <SelectItem value="1">1 aluno (sozinho)</SelectItem>
-              <SelectItem value="2">2 alunos</SelectItem>
-              <SelectItem value="3+">3+ alunos</SelectItem>
-            </SelectContent>
-          </Select>
-
-          {/* Filtro Tempo de Permanência */}
-          <Select
-            value={filtros.tempo_permanencia || "todos"}
-            onValueChange={(value) => setFiltros({ ...filtros, tempo_permanencia: value === "todos" ? "" : value })}
-          >
-            <SelectTrigger className={`w-[160px] ${filtros.tempo_permanencia && filtros.tempo_permanencia !== 'todos' ? 'border-2 border-purple-500 bg-purple-500/10' : ''}`}>
-              <SelectValue placeholder="Tempo" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Tempo</SelectItem>
-              <SelectItem value="novo">Novo (0-1 mês)</SelectItem>
-              <SelectItem value="menos-1">Menos de 1 ano</SelectItem>
-              <SelectItem value="1-2">1-2 anos</SelectItem>
-              <SelectItem value="2-3">2-3 anos</SelectItem>
-              <SelectItem value="3-4">3-4 anos</SelectItem>
-              <SelectItem value="4-5">4-5 anos</SelectItem>
-              <SelectItem value="5+">5+ anos</SelectItem>
-            </SelectContent>
-          </Select>
+            {filtrosExpandidos ? '⊖' : '⊕'} {filtrosExpandidos ? 'Menos' : 'Mais'} Filtros
+          </button>
 
           {/* Limpar filtros */}
           <button
@@ -498,14 +840,159 @@ export function TabelaAlunos({
             <RotateCcw className="w-4 h-4" />
             Limpar
           </button>
+
+          {/* Botão Reset Mês - Apenas Admin */}
+          {isAdmin && (
+            <button
+              onClick={() => setModalResetMes(true)}
+              className="h-10 bg-orange-600 hover:bg-orange-700 px-4 rounded-xl text-sm transition flex items-center gap-2 text-white font-medium"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Reset Mês
+            </button>
+          )}
+
+          {/* Botão Novo Aluno - Canto Direito */}
+          <button
+            onClick={onNovoAluno}
+            className="ml-auto h-10 bg-purple-600 hover:bg-purple-500 px-5 rounded-xl text-sm font-medium transition flex items-center gap-2 text-white"
+          >
+            <Plus className="w-4 h-4" />
+            Novo Aluno
+          </button>
         </div>
+
+        {/* Linha 2: Filtros Secundários (Expansível) */}
+        {filtrosExpandidos && (
+          <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-slate-700/50">
+            {/* Filtro Curso */}
+            <Select
+              value={filtros.curso_id || "todos"}
+              onValueChange={(value) => setFiltros({ ...filtros, curso_id: value === "todos" ? "" : value })}
+            >
+              <SelectTrigger className={`w-[140px] ${filtros.curso_id && filtros.curso_id !== 'todos' ? 'border-2 border-purple-500 bg-purple-500/10' : ''}`}>
+                <SelectValue placeholder="Curso" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Curso</SelectItem>
+                {cursos.map(c => (
+                  <SelectItem key={c.id} value={String(c.id)}>{c.nome}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Filtro Horário */}
+            <Select
+              value={filtros.horario_aula || "todos"}
+              onValueChange={(value) => setFiltros({ ...filtros, horario_aula: value === "todos" ? "" : value })}
+            >
+              <SelectTrigger className={`w-[100px] ${filtros.horario_aula && filtros.horario_aula !== 'todos' ? 'border-2 border-purple-500 bg-purple-500/10' : ''}`}>
+                <SelectValue placeholder="Horário" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Horário</SelectItem>
+                {HORARIOS_LISTA.map(h => (
+                  <SelectItem key={h} value={h}>{h}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            {/* Filtro Escola */}
+            <Select
+              value={filtros.classificacao || "todos"}
+              onValueChange={(value) => setFiltros({ ...filtros, classificacao: value === "todos" ? "" : value })}
+            >
+              <SelectTrigger className={`w-[100px] ${filtros.classificacao && filtros.classificacao !== 'todos' ? 'border-2 border-purple-500 bg-purple-500/10' : ''}`}>
+                <SelectValue placeholder="Escola" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Escola</SelectItem>
+                <SelectItem value="EMLA">EMLA</SelectItem>
+                <SelectItem value="LAMK">LAMK</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Filtro Turma */}
+            <Select
+              value={filtros.turma_size || "todos"}
+              onValueChange={(value) => setFiltros({ ...filtros, turma_size: value === "todos" ? "" : value })}
+            >
+              <SelectTrigger className={`w-[140px] ${filtros.turma_size && filtros.turma_size !== 'todos' ? 'border-2 border-purple-500 bg-purple-500/10' : ''}`}>
+                <SelectValue placeholder="Turma" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Turma</SelectItem>
+                <SelectItem value="1">1 aluno (sozinho)</SelectItem>
+                <SelectItem value="2">2 alunos</SelectItem>
+                <SelectItem value="3+">3+ alunos</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {/* Filtro Tempo de Permanência */}
+            <Select
+              value={filtros.tempo_permanencia || "todos"}
+              onValueChange={(value) => setFiltros({ ...filtros, tempo_permanencia: value === "todos" ? "" : value })}
+            >
+              <SelectTrigger className={`w-[160px] ${filtros.tempo_permanencia && filtros.tempo_permanencia !== 'todos' ? 'border-2 border-purple-500 bg-purple-500/10' : ''}`}>
+                <SelectValue placeholder="Tempo" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Tempo</SelectItem>
+                <SelectItem value="novo">Novo (0-1 mês)</SelectItem>
+                <SelectItem value="menos-1">Menos de 1 ano</SelectItem>
+                <SelectItem value="1-2">1-2 anos</SelectItem>
+                <SelectItem value="2-3">2-3 anos</SelectItem>
+                <SelectItem value="3-4">3-4 anos</SelectItem>
+                <SelectItem value="4-5">4-5 anos</SelectItem>
+                <SelectItem value="5+">5+ anos</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
+
+      {/* Botões de Ação em Massa */}
+      {alunosSelecionados.size > 0 && (
+        <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-50 bg-slate-800 border border-slate-600 rounded-lg shadow-2xl px-6 py-4 flex items-center gap-4">
+          <span className="text-white font-medium">
+            {alunosSelecionados.size} selecionado(s)
+          </span>
+          <button
+            onClick={marcarSelecionadosComoPagos}
+            disabled={processandoMassa}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-800 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+          >
+            <Check className="w-4 h-4" />
+            {processandoMassa ? 'Processando...' : 'Marcar como Pagos'}
+          </button>
+          <button
+            onClick={marcarSelecionadosComoInadimplentes}
+            disabled={processandoMassa}
+            className="px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-red-800 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+          >
+            <AlertTriangle className="w-4 h-4" />
+            {processandoMassa ? 'Processando...' : 'Marcar como Inadimplentes'}
+          </button>
+          <button
+            onClick={() => setAlunosSelecionados(new Set())}
+            className="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors"
+          >
+            Cancelar
+          </button>
+        </div>
+      )}
 
       {/* Tabela */}
       <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-slate-700/50">
             <tr className="text-left text-slate-400 text-xs uppercase">
+              <th className="px-2 py-3 font-medium w-12">
+                <Checkbox
+                  checked={alunos.length > 0 && alunosSelecionados.size === alunos.length}
+                  onCheckedChange={toggleSelecionarTodos}
+                />
+              </th>
               <th className="px-4 py-3 font-medium">#</th>
               <th className="px-4 py-3 font-medium">Nome</th>
               <th className="px-4 py-3 font-medium">Escola</th>
@@ -515,6 +1002,8 @@ export function TabelaAlunos({
               <th className="px-4 py-3 font-medium">Horário</th>
               <th className="px-4 py-3 font-medium">Turma</th>
               <th className="px-4 py-3 font-medium">Parcela</th>
+              <th className="px-2 py-3 font-medium">Pago</th>
+              <th className="px-2 py-3 font-medium">Venc.</th>
               <th className="px-4 py-3 font-medium">Tempo</th>
               <th className="px-2 py-3 font-medium">Status</th>
               <th className="px-2 py-3 font-medium text-right">Ações</th>
@@ -532,6 +1021,14 @@ export function TabelaAlunos({
                     ${isSozinho ? 'bg-red-900/10' : ''}
                   `}
                 >
+                  {/* Checkbox de seleção */}
+                  <td className="px-2 py-3">
+                    <Checkbox
+                      checked={alunosSelecionados.has(aluno.id)}
+                      onCheckedChange={() => toggleSelecionarAluno(aluno.id)}
+                    />
+                  </td>
+
                   <td className="px-4 py-3 text-slate-500">
                     {(paginaAtual - 1) * itensPorPagina + index + 1}
                   </td>
@@ -546,6 +1043,35 @@ export function TabelaAlunos({
                         placeholder="-"
                         className="min-w-[150px]"
                       />
+                      {(aluno.total_anotacoes || 0) > 0 && (
+                        <Tooltip 
+                          content={
+                            <div className="max-w-xs space-y-1">
+                              {aluno.ultimas_anotacoes?.slice(0, 2).map((an, i) => {
+                                const emoji: Record<string, string> = { geral: '📝', pedagogico: '📚', financeiro: '💰', comportamento: '⚠️', elogio: '⭐', reclamacao: '😤', contato: '📞' };
+                                return (
+                                  <p key={i} className="text-xs text-slate-200 line-clamp-2">
+                                    {emoji[an.categoria] || '📝'} {an.texto.length > 80 ? an.texto.substring(0, 80) + '...' : an.texto}
+                                  </p>
+                                );
+                              })}
+                              {(aluno.total_anotacoes || 0) > 2 && (
+                                <p className="text-[10px] text-slate-400 mt-1">+ {aluno.total_anotacoes - 2} mais...</p>
+                              )}
+                            </div>
+                          }
+                        >
+                          <button
+                            onClick={() => carregarAnotacoesDoAluno(aluno)}
+                            className="relative p-1 hover:bg-purple-500/20 rounded transition-colors"
+                          >
+                            <MessageCircle className="w-4 h-4 text-purple-400" />
+                            <span className="absolute -top-1 -right-1 bg-purple-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                              {aluno.total_anotacoes}
+                            </span>
+                          </button>
+                        </Tooltip>
+                      )}
                       {getBadgesAluno(aluno)}
                     </div>
                   </td>
@@ -631,6 +1157,42 @@ export function TabelaAlunos({
                     />
                   </td>
 
+                  {/* Status Pagamento - Edição inline */}
+                  <td className="px-2 py-2">
+                    <CelulaEditavel
+                      value={aluno.status_pagamento || '-'}
+                      onChange={async (valor) => salvarCampo(aluno.id, 'status_pagamento', valor)}
+                      tipo="select"
+                      opcoes={[
+                        { value: '-', label: '- Não lançado' },
+                        { value: 'em_dia', label: '✓ Em dia' },
+                        { value: 'inadimplente', label: '✗ Inadimplente' },
+                        { value: 'parcial', label: '~ Parcial' },
+                      ]}
+                      placeholder="-"
+                      formatarExibicao={() => {
+                        switch (aluno.status_pagamento) {
+                          case 'inadimplente': return <span className="text-red-400 font-bold" title="Inadimplente">✗</span>;
+                          case 'parcial': return <span className="text-yellow-400 font-bold" title="Pagamento Parcial">~</span>;
+                          case 'em_dia': return <span className="text-emerald-400" title="Em dia">✓</span>;
+                          default: return <span className="text-slate-500" title="Não lançado">-</span>;
+                        }
+                      }}
+                      className="min-w-[40px]"
+                    />
+                  </td>
+
+                  {/* Dia Vencimento - Edição inline */}
+                  <td className="px-2 py-2">
+                    <CelulaEditavel
+                      value={aluno.dia_vencimento?.toString() || '5'}
+                      onChange={async (valor) => salvarCampo(aluno.id, 'dia_vencimento', valor)}
+                      tipo="numero"
+                      placeholder="5"
+                      className="min-w-[40px] text-center"
+                    />
+                  </td>
+
                   {/* Tempo - Não editável */}
                   <td className="px-4 py-3 text-slate-300">
                     {formatarTempoPermanencia(aluno.tempo_permanencia_meses)}
@@ -671,9 +1233,22 @@ export function TabelaAlunos({
                         </button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-48">
-                        <DropdownMenuItem className="cursor-pointer">
+                        <DropdownMenuItem 
+                          onClick={() => carregarHistorico(aluno)}
+                          className="cursor-pointer"
+                        >
                           <History className="w-4 h-4 mr-2 text-slate-400" />
                           Ver histórico
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          onClick={() => {
+                            setAlunoAnotacao(aluno);
+                            setModalAnotacao(true);
+                          }}
+                          className="cursor-pointer"
+                        >
+                          <MessageSquarePlus className="w-4 h-4 mr-2 text-purple-400" />
+                          Registrar anotação
                         </DropdownMenuItem>
                         {aluno.status === 'trancado' && (
                           <DropdownMenuItem 
@@ -786,6 +1361,387 @@ export function TabelaAlunos({
         textoCancelar="Cancelar"
         carregando={destrancando}
       />
+
+      {/* Modal de Histórico do Aluno */}
+      <AlertDialog open={modalHistorico} onOpenChange={() => setModalHistorico(false)}>
+        <AlertDialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <History className="w-5 h-5 text-purple-400" />
+              Histórico do Aluno
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {alunoHistorico?.nome}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          
+          <div className="flex-1 overflow-y-auto py-4">
+            {carregandoHistorico ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500"></div>
+              </div>
+            ) : historicoAluno.length === 0 ? (
+              <div className="text-center py-8 text-slate-400">
+                <History className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>Nenhum histórico encontrado para este aluno.</p>
+                <p className="text-sm mt-1">Movimentações como renovações, trancamentos e evasões aparecerão aqui.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {historicoAluno.map((item, index) => (
+                  <div 
+                    key={index} 
+                    className="flex items-start gap-3 p-3 bg-slate-800/50 rounded-lg border border-slate-700"
+                  >
+                    <div className={`w-2 h-2 rounded-full mt-2 flex-shrink-0 ${
+                      item.tipo === 'Matrícula' ? 'bg-emerald-400' :
+                      item.tipo === 'Renovação' || item.tipo === 'renovacao' ? 'bg-blue-400' :
+                      item.tipo === 'evasao' ? 'bg-red-400' :
+                      item.tipo === 'trancamento' ? 'bg-yellow-400' :
+                      item.tipo === 'Anotação' ? 'bg-purple-400' :
+                      'bg-slate-400'
+                    }`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={`text-sm font-medium ${
+                          item.tipo === 'Matrícula' ? 'text-emerald-400' :
+                          item.tipo === 'Renovação' || item.tipo === 'renovacao' ? 'text-blue-400' :
+                          item.tipo === 'evasao' ? 'text-red-400' :
+                          item.tipo === 'trancamento' ? 'text-yellow-400' :
+                          item.tipo === 'Anotação' ? 'text-purple-400' :
+                          'text-slate-300'
+                        }`}>
+                          {item.tipo === 'evasao' ? 'Evasão' : 
+                           item.tipo === 'trancamento' ? 'Trancamento' :
+                           item.tipo === 'renovacao' ? 'Renovação' :
+                           item.tipo}
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          {new Date(item.data).toLocaleDateString('pt-BR')}
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-400 mt-1">{item.descricao}</p>
+                      {item.agente && item.agente !== '-' && (
+                        <p className="text-xs text-slate-500 mt-1">Por: {item.agente}</p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>Fechar</AlertDialogCancel>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Modal de Registrar Anotação */}
+      <AlertDialog open={modalAnotacao} onOpenChange={() => {
+        setModalAnotacao(false);
+        setAlunoAnotacao(null);
+        setTextoAnotacao('');
+        setCategoriaAnotacao('geral');
+      }}>
+        <AlertDialogContent className="max-w-lg">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <MessageSquarePlus className="w-5 h-5 text-purple-400" />
+              Registrar Anotação
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {alunoAnotacao?.nome}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="text-sm font-medium text-slate-300 mb-2 block">Categoria</label>
+              <Select value={categoriaAnotacao} onValueChange={setCategoriaAnotacao}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="geral">📝 Geral</SelectItem>
+                  <SelectItem value="pedagogico">📚 Pedagógico</SelectItem>
+                  <SelectItem value="financeiro">💰 Financeiro</SelectItem>
+                  <SelectItem value="comportamento">⚠️ Comportamento</SelectItem>
+                  <SelectItem value="elogio">⭐ Elogio</SelectItem>
+                  <SelectItem value="reclamacao">😤 Reclamação</SelectItem>
+                  <SelectItem value="contato">📞 Contato/Ligação</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div>
+              <label className="text-sm font-medium text-slate-300 mb-2 block">Anotação</label>
+              <textarea
+                value={textoAnotacao}
+                onChange={(e) => setTextoAnotacao(e.target.value)}
+                placeholder="Digite a anotação sobre o aluno..."
+                className="w-full h-32 px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500 resize-none"
+              />
+            </div>
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={salvarAnotacao}
+              disabled={!textoAnotacao.trim() || salvandoAnotacao}
+              className="bg-purple-600 hover:bg-purple-700"
+            >
+              {salvandoAnotacao ? 'Salvando...' : 'Salvar Anotação'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Modal de Ver Anotações do Aluno */}
+      <AlertDialog open={modalVerAnotacoes} onOpenChange={() => setModalVerAnotacoes(false)}>
+        <AlertDialogContent className="max-w-2xl max-h-[80vh] overflow-hidden flex flex-col">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <MessageCircle className="w-5 h-5 text-purple-400" />
+              Anotações do Aluno
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {alunoVerAnotacoes?.nome}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          
+          <div className="flex-1 overflow-y-auto py-4">
+            {carregandoAnotacoes ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-500"></div>
+              </div>
+            ) : anotacoesDoAluno.length === 0 ? (
+              <div className="text-center py-8 text-slate-400">
+                <MessageCircle className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p>Nenhuma anotação encontrada.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {anotacoesDoAluno.map((anotacao, index) => {
+                  const categoriaEmoji: Record<string, string> = {
+                    geral: '📝',
+                    pedagogico: '📚',
+                    financeiro: '💰',
+                    comportamento: '⚠️',
+                    elogio: '⭐',
+                    reclamacao: '😤',
+                    contato: '📞'
+                  };
+                  const categoriaLabel: Record<string, string> = {
+                    geral: 'Geral',
+                    pedagogico: 'Pedagógico',
+                    financeiro: 'Financeiro',
+                    comportamento: 'Comportamento',
+                    elogio: 'Elogio',
+                    reclamacao: 'Reclamação',
+                    contato: 'Contato'
+                  };
+                  const estaEditando = editandoAnotacaoId === anotacao.id;
+                  
+                  return (
+                    <div 
+                      key={index} 
+                      className={`p-3 rounded-lg border ${
+                        anotacao.resolvido 
+                          ? 'bg-emerald-900/20 border-emerald-700/50' 
+                          : 'bg-slate-800/50 border-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <div className="flex items-center gap-2">
+                          <Tooltip content={anotacao.resolvido ? 'Marcar como pendente' : 'Marcar como resolvido'}>
+                            <button
+                              onClick={() => toggleResolvidoAnotacao(anotacao.id, anotacao.resolvido)}
+                              className="hover:scale-110 transition-transform"
+                            >
+                              {anotacao.resolvido ? (
+                                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+                              ) : (
+                                <Circle className="w-5 h-5 text-slate-500" />
+                              )}
+                            </button>
+                          </Tooltip>
+                          <span className={`text-sm font-medium ${anotacao.resolvido ? 'text-emerald-400 line-through' : 'text-purple-400'}`}>
+                            {categoriaEmoji[anotacao.categoria] || '📝'} {categoriaLabel[anotacao.categoria] || 'Geral'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-slate-500">
+                            {new Date(anotacao.created_at).toLocaleDateString('pt-BR')} às {new Date(anotacao.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                          {!estaEditando && (
+                            <>
+                              <Tooltip content="Editar anotação">
+                                <button
+                                  onClick={() => {
+                                    setEditandoAnotacaoId(anotacao.id);
+                                    setTextoEdicao(anotacao.texto);
+                                    setCategoriaEdicao(anotacao.categoria);
+                                  }}
+                                  className="p-1 hover:bg-blue-500/20 rounded transition-colors"
+                                >
+                                  <Edit2 className="w-4 h-4 text-blue-400" />
+                                </button>
+                              </Tooltip>
+                              <Tooltip content="Excluir anotação">
+                                <button
+                                  onClick={() => setAnotacaoParaExcluir(anotacao.id)}
+                                  className="p-1 hover:bg-red-500/20 rounded transition-colors"
+                                >
+                                  <Trash2 className="w-4 h-4 text-red-400" />
+                                </button>
+                              </Tooltip>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {estaEditando ? (
+                        <div className="space-y-2">
+                          <Select value={categoriaEdicao} onValueChange={setCategoriaEdicao}>
+                            <SelectTrigger className="w-full">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="geral">📝 Geral</SelectItem>
+                              <SelectItem value="pedagogico">📚 Pedagógico</SelectItem>
+                              <SelectItem value="financeiro">💰 Financeiro</SelectItem>
+                              <SelectItem value="comportamento">⚠️ Comportamento</SelectItem>
+                              <SelectItem value="elogio">⭐ Elogio</SelectItem>
+                              <SelectItem value="reclamacao">😤 Reclamação</SelectItem>
+                              <SelectItem value="contato">📞 Contato/Ligação</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <textarea
+                            value={textoEdicao}
+                            onChange={(e) => setTextoEdicao(e.target.value)}
+                            className="w-full h-24 px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+                          />
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => salvarEdicaoAnotacao(anotacao.id)}
+                              className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm flex items-center gap-1"
+                            >
+                              <Check className="w-4 h-4" />
+                              Salvar
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditandoAnotacaoId(null);
+                                setTextoEdicao('');
+                                setCategoriaEdicao('geral');
+                              }}
+                              className="px-3 py-1.5 bg-slate-600 hover:bg-slate-700 text-white rounded text-sm flex items-center gap-1"
+                            >
+                              <X className="w-4 h-4" />
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <p className={`text-sm ${anotacao.resolvido ? 'text-slate-500 line-through' : 'text-slate-300'}`}>
+                            {anotacao.texto}
+                          </p>
+                          {anotacao.criado_por && (
+                            <p className="text-xs text-slate-500 mt-2">Por: {anotacao.criado_por}</p>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>Fechar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={() => {
+                setModalVerAnotacoes(false);
+                if (alunoVerAnotacoes) {
+                  setAlunoAnotacao(alunoVerAnotacoes);
+                  setModalAnotacao(true);
+                }
+              }}
+              className="bg-purple-600 hover:bg-purple-700"
+            >
+              <MessageSquarePlus className="w-4 h-4 mr-2" />
+              Nova Anotação
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Modal de Confirmação de Exclusão de Anotação */}
+      <ModalConfirmacao
+        aberto={anotacaoParaExcluir !== null}
+        onClose={() => setAnotacaoParaExcluir(null)}
+        onConfirmar={confirmarExclusaoAnotacao}
+        titulo="Excluir Anotação"
+        mensagem="Tem certeza que deseja excluir esta anotação? Esta ação não pode ser desfeita."
+        tipo="danger"
+        textoConfirmar="Excluir"
+        textoCancelar="Cancelar"
+      />
+
+      {/* Modal Reset Mês - Confirmação Dupla (Admin) */}
+      <AlertDialog open={modalResetMes} onOpenChange={(open) => {
+        setModalResetMes(open);
+        if (!open) setConfirmacaoReset('');
+      }}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-orange-400">
+              <AlertTriangle className="w-5 h-5" />
+              Reset Mensal de Pagamentos
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3">
+              <p className="text-slate-300">
+                Esta ação irá:
+              </p>
+              <ul className="list-disc list-inside text-sm text-slate-400 space-y-1">
+                <li>Salvar um snapshot do status atual no histórico</li>
+                <li>Resetar <strong className="text-white">TODOS</strong> os alunos para "Não lançado"</li>
+              </ul>
+              <p className="text-red-400 font-medium text-sm">
+                ⚠️ Esta ação não pode ser desfeita!
+              </p>
+              <div className="pt-2">
+                <label className="text-sm text-slate-400 block mb-2">
+                  Digite <strong className="text-white">RESETAR</strong> para confirmar:
+                </label>
+                <input
+                  type="text"
+                  value={confirmacaoReset}
+                  onChange={(e) => setConfirmacaoReset(e.target.value.toUpperCase())}
+                  placeholder="RESETAR"
+                  className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                />
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setConfirmacaoReset('')}>
+              Cancelar
+            </AlertDialogCancel>
+            <button
+              onClick={handleResetMes}
+              disabled={confirmacaoReset !== 'RESETAR' || processandoReset}
+              className="px-4 py-2 bg-orange-600 hover:bg-orange-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded-lg text-sm font-medium transition-colors"
+            >
+              {processandoReset ? 'Processando...' : 'Confirmar Reset'}
+            </button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
