@@ -4,13 +4,15 @@ import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import {
   Users, Wallet, TrendingUp, GraduationCap, Baby, School,
   ChevronDown, ChevronRight, Search, ArrowUpDown, Eye,
-  Loader2, Calendar, Clock, AlertTriangle
+  Loader2, Calendar, Clock, AlertTriangle, Heart
 } from 'lucide-react';
 import { KPICard } from '@/components/ui/KPICard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ModalCarteiraProfessor } from './ModalCarteiraProfessor';
+import { Tooltip } from '@/components/ui/Tooltip';
+import { calcularHealthScore } from '@/hooks/useHealthScore';
 
 // Interface para carteira do professor
 interface CarteiraProfessor {
@@ -27,6 +29,8 @@ interface CarteiraProfessor {
   media_alunos_turma: number;
   cursos: string[];
   unidades: string[];
+  health_score: number;
+  health_status: 'critico' | 'atencao' | 'saudavel';
 }
 
 // Interface para aluno na carteira
@@ -131,6 +135,31 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
 
       const { data: turmasData } = await queryTurmas;
 
+      // Buscar KPIs de performance para calcular Health Score (mesma fonte da aba Performance)
+      const agora = new Date();
+      const ano = agora.getFullYear();
+      const mes = agora.getMonth() + 1;
+      
+      let kpisQuery = supabase
+        .from('vw_kpis_professor_mensal')
+        .select('professor_id, media_alunos_turma, taxa_cancelamento, taxa_conversao, media_presenca, evasoes, unidade_id')
+        .eq('ano', ano)
+        .eq('mes', mes);
+      
+      if (unidadeAtual !== 'todos') {
+        kpisQuery = kpisQuery.eq('unidade_id', unidadeAtual);
+      }
+      
+      const { data: kpisData } = await kpisQuery;
+      
+      // Criar mapa de KPIs por professor
+      const kpisPorProfessor = new Map<number, any>();
+      (kpisData || []).forEach((kpi: any) => {
+        if (!kpisPorProfessor.has(kpi.professor_id)) {
+          kpisPorProfessor.set(kpi.professor_id, kpi);
+        }
+      });
+
       // Calcular turmas únicas por professor (dia + horário)
       const turmasPorProfessor = new Map<number, Set<string>>();
       (turmasData || []).forEach((t: any) => {
@@ -175,6 +204,26 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
         // Unidades únicas
         const unidadesUnicas = [...new Set(alunos.map((a: any) => (a.unidades as any)?.nome).filter(Boolean))];
 
+        // Calcular Health Score usando os KPIs reais (mesma lógica da aba Performance)
+        const kpis = kpisPorProfessor.get(prof.id);
+        const taxaRetencao = kpis?.taxa_cancelamento 
+          ? 100 - Number(kpis.taxa_cancelamento) 
+          : (totalAlunos > 0 ? 100 : 0);
+        const taxaConversao = kpis?.taxa_conversao ? Number(kpis.taxa_conversao) : 0;
+        const taxaPresenca = kpis?.media_presenca ? Number(kpis.media_presenca) : 75;
+        const evasoesMes = kpis?.evasoes || 0;
+        
+        const healthResult = calcularHealthScore({
+          mediaTurma: mediaAlunosTurma,
+          retencao: taxaRetencao,
+          conversao: taxaConversao,
+          presenca: taxaPresenca,
+          evasoes: evasoesMes,
+          taxaCrescimentoAjustada: 0,
+          taxaEvasao: totalAlunos > 0 ? (evasoesMes / totalAlunos) * 100 : 0,
+          carteiraAlunos: totalAlunos
+        });
+
         return {
           id: prof.id,
           nome: prof.nome,
@@ -188,7 +237,9 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
           total_turmas: turmas,
           media_alunos_turma: mediaAlunosTurma,
           cursos: cursosUnicos,
-          unidades: unidadesUnicas
+          unidades: unidadesUnicas,
+          health_score: healthResult.score,
+          health_status: healthResult.status
         };
       });
 
@@ -522,6 +573,28 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
                   </span>
                   <span className="text-xs text-slate-400">al/turma</span>
                 </div>
+
+                {/* Badge Health Score */}
+                <Tooltip content={`Health Score: ${carteira.health_score} (${carteira.health_status === 'saudavel' ? 'Saudável' : carteira.health_status === 'atencao' ? 'Atenção' : 'Crítico'})`}>
+                  <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border ${
+                    carteira.health_status === 'saudavel' 
+                      ? 'bg-emerald-500/10 border-emerald-500/20' 
+                      : carteira.health_status === 'atencao' 
+                        ? 'bg-amber-500/10 border-amber-500/20' 
+                        : 'bg-rose-500/10 border-rose-500/20'
+                  }`}>
+                    <Heart className={`w-3.5 h-3.5 ${
+                      carteira.health_status === 'saudavel' ? 'text-emerald-400' : 
+                      carteira.health_status === 'atencao' ? 'text-amber-400' : 'text-rose-400'
+                    }`} />
+                    <span className={`text-sm font-bold ${
+                      carteira.health_status === 'saudavel' ? 'text-emerald-400' : 
+                      carteira.health_status === 'atencao' ? 'text-amber-400' : 'text-rose-400'
+                    }`}>
+                      {Math.round(carteira.health_score)}
+                    </span>
+                  </div>
+                </Tooltip>
               </div>
 
               {/* Botão Ver Detalhes */}

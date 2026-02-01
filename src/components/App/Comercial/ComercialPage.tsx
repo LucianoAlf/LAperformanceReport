@@ -38,6 +38,7 @@ import { DatePickerNascimento } from '@/components/ui/date-picker-nascimento';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -253,6 +254,7 @@ export function ComercialPage() {
     quantidade: number;
     status_experimental?: string;
     professor_id?: number | null;
+    sabia_preco?: boolean | null;
   }
   
   const [loteData, setLoteData] = useState(new Date());
@@ -260,7 +262,7 @@ export function ComercialPage() {
     { id: crypto.randomUUID(), aluno_nome: '', canal_origem_id: null, curso_id: null, quantidade: 1 }
   ]);
   const [loteExperimentais, setLoteExperimentais] = useState<LoteLinha[]>([
-    { id: crypto.randomUUID(), aluno_nome: '', canal_origem_id: null, curso_id: null, quantidade: 1, status_experimental: 'experimental_agendada', professor_id: null }
+    { id: crypto.randomUUID(), aluno_nome: '', canal_origem_id: null, curso_id: null, quantidade: 1, status_experimental: 'experimental_agendada', professor_id: null, sabia_preco: null }
   ]);
   const [loteVisitas, setLoteVisitas] = useState<LoteLinha[]>([
     { id: crypto.randomUUID(), aluno_nome: '', canal_origem_id: null, curso_id: null, quantidade: 1 }
@@ -292,22 +294,58 @@ export function ComercialPage() {
     parcelas_passaporte: 1 as number,
     dia_vencimento: 5 as number | null,
     unidade_id: null as string | null,
+    // Novos campos para turma e flags
+    dia_aula: '' as string,
+    horario_aula: '' as string,
+    is_ex_aluno: false,
+    is_aluno_retorno: false,
   });
 
   // Carregar dados mestres
   useEffect(() => {
     const loadMasterData = async () => {
       try {
-        const [canaisRes, cursosRes, professoresRes, formasRes, unidadesRes] = await Promise.all([
+        // Determinar a unidade para filtrar cursos
+        const unidadeFiltro = unidadeParaSalvar;
+        
+        const [canaisRes, professoresRes, formasRes, unidadesRes] = await Promise.all([
           supabase.from('canais_origem').select('id, nome').eq('ativo', true).order('nome'),
-          supabase.from('cursos').select('id, nome').eq('ativo', true).order('nome'),
           supabase.from('professores').select('id, nome').eq('ativo', true).order('nome'),
           supabase.from('formas_pagamento').select('id, nome').eq('ativo', true).order('nome'),
           supabase.from('unidades').select('id, nome').eq('ativo', true).order('nome'),
         ]);
 
+        // Buscar cursos filtrados por unidade (se houver unidade selecionada)
+        let cursosData: { value: string; label: string }[] = [];
+        if (unidadeFiltro) {
+          // Buscar cursos ativos na unidade específica via unidades_cursos
+          const { data: unidadesCursosData } = await supabase
+            .from('unidades_cursos')
+            .select(`
+              curso_id,
+              ativo,
+              cursos (id, nome, ativo)
+            `)
+            .eq('unidade_id', unidadeFiltro)
+            .eq('ativo', true);
+          
+          // Filtrar apenas cursos que também estão ativos globalmente
+          cursosData = (unidadesCursosData || [])
+            .filter((uc: any) => uc.cursos && uc.cursos.ativo)
+            .map((uc: any) => ({ value: uc.cursos.id, label: uc.cursos.nome }))
+            .sort((a, b) => a.label.localeCompare(b.label));
+        } else {
+          // Sem unidade selecionada (admin consolidado) - buscar todos os cursos ativos
+          const { data: cursosGlobais } = await supabase
+            .from('cursos')
+            .select('id, nome')
+            .eq('ativo', true)
+            .order('nome');
+          cursosData = (cursosGlobais || []).map((c: any) => ({ value: c.id, label: c.nome }));
+        }
+
         if (canaisRes.data) setCanais(canaisRes.data.map((c: any) => ({ value: c.id, label: c.nome })));
-        if (cursosRes.data) setCursos(cursosRes.data.map((c: any) => ({ value: c.id, label: c.nome })));
+        setCursos(cursosData);
         if (professoresRes.data) setProfessores(professoresRes.data.map((p: any) => ({ value: p.id, label: p.nome })));
         if (formasRes.data) setFormasPagamento(formasRes.data.map((f: any) => ({ value: f.id, label: f.nome })));
         if (unidadesRes.data) setUnidades(unidadesRes.data.map((u: any) => ({ value: u.id, label: u.nome })));
@@ -317,7 +355,7 @@ export function ComercialPage() {
     };
 
     loadMasterData();
-  }, []);
+  }, [unidadeParaSalvar]);
 
   // Carregar resumo do período e registros do dia
   const loadData = useCallback(async () => {
@@ -642,7 +680,7 @@ export function ComercialPage() {
       status_experimental: 'experimental_agendada',
       professor_id: null,
       aluno_nome: '',
-      aluno_idade: null,
+      aluno_data_nascimento: null,
       tipo_matricula: 'EMLA',
       tipo_aluno: 'pagante',
       teve_experimental: false,
@@ -651,6 +689,15 @@ export function ComercialPage() {
       valor_passaporte: null,
       valor_parcela: null,
       forma_pagamento_id: null,
+      forma_pagamento_passaporte_id: null,
+      forma_pagamento_passaporte: '',
+      parcelas_passaporte: 1,
+      dia_vencimento: 5,
+      unidade_id: null,
+      dia_aula: '',
+      horario_aula: '',
+      is_ex_aluno: false,
+      is_aluno_retorno: false,
     });
     // Reset lotes
     setLoteData(new Date());
@@ -701,6 +748,7 @@ export function ComercialPage() {
       setModalOpen(null);
       resetForm();
       loadData();
+      loadSugestoesLeads(); // Recarregar sugestões após salvar leads
     } catch (error) {
       console.error('Erro ao salvar leads:', error);
       toast.error('Erro ao salvar leads');
@@ -742,7 +790,8 @@ export function ComercialPage() {
         canal_origem_id: linha.canal_origem_id,
         curso_id: linha.curso_id,
         quantidade: 1, // Sempre 1 por experimental
-        professor_id: linha.professor_id,
+        professor_experimental_id: linha.professor_id,
+        sabia_preco: linha.sabia_preco,
       }));
 
       const { error } = await supabase.from('leads_diarios').insert(registros);
@@ -818,7 +867,7 @@ export function ComercialPage() {
   };
 
   const addLinhaExperimental = () => {
-    setLoteExperimentais([...loteExperimentais, { id: crypto.randomUUID(), aluno_nome: '', canal_origem_id: null, curso_id: null, quantidade: 1, status_experimental: 'experimental_agendada', professor_id: null }]);
+    setLoteExperimentais([...loteExperimentais, { id: crypto.randomUUID(), aluno_nome: '', canal_origem_id: null, curso_id: null, quantidade: 1, status_experimental: 'experimental_agendada', professor_id: null, sabia_preco: null }]);
   };
 
   const removeLinhaExperimental = (id: string) => {
@@ -921,6 +970,17 @@ export function ComercialPage() {
       // Se for matrícula, criar também o registro na tabela alunos
       // A trigger calcular_campos_aluno() calcula automaticamente: idade_atual e classificacao (EMLA/LAMK)
       if (modalOpen === 'matricula' && formData.aluno_nome) {
+        // Determinar tipo_matricula_id baseado em tipo_aluno
+        let tipo_matricula_id = 1; // Regular por padrão
+        if (formData.tipo_aluno === 'bolsista_integral') tipo_matricula_id = 2;
+        else if (formData.tipo_aluno === 'bolsista_parcial') tipo_matricula_id = 3;
+        else if (formData.tipo_aluno === 'nao_pagante') tipo_matricula_id = 4;
+
+        // Calcular datas de contrato automaticamente (12 meses)
+        const dataMatricula = formData.data.toISOString().split('T')[0];
+        const dataFimContrato = new Date(formData.data);
+        dataFimContrato.setFullYear(dataFimContrato.getFullYear() + 1);
+
         const novoAluno: Record<string, any> = {
           nome: formData.aluno_nome.trim(),
           unidade_id: unidadeFinal,
@@ -928,12 +988,24 @@ export function ComercialPage() {
           // idade_atual e classificacao são calculados automaticamente pela trigger baseado em data_nascimento
           status: 'ativo',
           tipo_aluno: formData.tipo_aluno || 'pagante',
+          tipo_matricula_id,
           valor_parcela: formData.valor_parcela || 0,
-          data_matricula: formData.data.toISOString().split('T')[0],
+          valor_passaporte: formData.valor_passaporte || null,
+          forma_pagamento_id: formData.forma_pagamento_id || null,
+          dia_vencimento: formData.dia_vencimento || 5,
+          data_matricula: dataMatricula,
+          data_inicio_contrato: dataMatricula,
+          data_fim_contrato: dataFimContrato.toISOString().split('T')[0],
           curso_id: formData.curso_id || null,
           professor_atual_id: formData.professor_fixo_id || null,
           canal_origem_id: formData.canal_origem_id || null,
           professor_experimental_id: formData.teve_experimental ? formData.professor_experimental_id : null,
+          agente_comercial: usuario?.nome || usuario?.email || null,
+          // Novos campos de turma e flags
+          dia_aula: formData.dia_aula || null,
+          horario_aula: formData.horario_aula || null,
+          is_ex_aluno: formData.is_ex_aluno || false,
+          is_aluno_retorno: formData.is_aluno_retorno || false,
         };
 
         console.log('Inserindo aluno:', novoAluno);
@@ -2968,6 +3040,7 @@ export function ComercialPage() {
                     <th className="py-2 px-1 text-left w-24">Canal</th>
                     <th className="py-2 px-1 text-left w-24">Curso</th>
                     <th className="py-2 px-1 text-left w-24">Prof.</th>
+                    <th className="py-2 px-1 text-center w-16">💰</th>
                     <th className="py-2 px-1 w-8"></th>
                   </tr>
                 </thead>
@@ -2979,14 +3052,17 @@ export function ComercialPage() {
                           value={linha.aluno_nome || ''}
                           onChange={(nome) => updateLinhaExperimental(linha.id, 'aluno_nome', nome)}
                           onSelectSugestao={(sugestao) => {
-                            // Auto-preencher canal e curso quando selecionar um lead existente
-                            updateLinhaExperimental(linha.id, 'aluno_nome', sugestao.nome);
-                            if (sugestao.canal_origem_id) {
-                              updateLinhaExperimental(linha.id, 'canal_origem_id', sugestao.canal_origem_id);
-                            }
-                            if (sugestao.curso_id) {
-                              updateLinhaExperimental(linha.id, 'curso_id', sugestao.curso_id);
-                            }
+                            // Auto-preencher todos os campos de uma vez quando selecionar um lead existente
+                            setLoteExperimentais(prev => prev.map(l => 
+                              l.id === linha.id 
+                                ? { 
+                                    ...l, 
+                                    aluno_nome: sugestao.nome,
+                                    canal_origem_id: sugestao.canal_origem_id || l.canal_origem_id,
+                                    curso_id: sugestao.curso_id || l.curso_id,
+                                  } 
+                                : l
+                            ));
                           }}
                           sugestoes={sugestoesLeads.filter(s => s.tipo === 'lead')}
                           placeholder="Nome do aluno..."
@@ -3052,6 +3128,13 @@ export function ComercialPage() {
                           </SelectContent>
                         </Select>
                       </td>
+                      <td className="py-2 px-1 text-center">
+                        <Checkbox
+                          checked={linha.sabia_preco === true}
+                          onCheckedChange={(checked) => updateLinhaExperimental(linha.id, 'sabia_preco', checked ? true : false)}
+                          className="data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
+                        />
+                      </td>
                       <td className="py-2 px-1">
                         <button
                           onClick={() => removeLinhaExperimental(linha.id)}
@@ -3066,6 +3149,9 @@ export function ComercialPage() {
                 </tbody>
               </table>
             </div>
+
+            {/* Legenda do checkbox */}
+            <p className="text-xs text-slate-500">💰 = Lead sabia o preço antes da experimental</p>
 
             {/* Botão adicionar linha */}
             <button
@@ -3381,6 +3467,72 @@ export function ComercialPage() {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Dia e Horário da Aula */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <Label className="mb-2 block">Dia da Aula</Label>
+                <Select
+                  value={formData.dia_aula || ''}
+                  onValueChange={(value) => setFormData({ ...formData, dia_aula: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Segunda">Segunda</SelectItem>
+                    <SelectItem value="Terça">Terça</SelectItem>
+                    <SelectItem value="Quarta">Quarta</SelectItem>
+                    <SelectItem value="Quinta">Quinta</SelectItem>
+                    <SelectItem value="Sexta">Sexta</SelectItem>
+                    <SelectItem value="Sábado">Sábado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="mb-2 block">Horário</Label>
+                <Select
+                  value={formData.horario_aula || ''}
+                  onValueChange={(value) => setFormData({ ...formData, horario_aula: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="08:00">08:00</SelectItem>
+                    <SelectItem value="09:00">09:00</SelectItem>
+                    <SelectItem value="10:00">10:00</SelectItem>
+                    <SelectItem value="11:00">11:00</SelectItem>
+                    <SelectItem value="14:00">14:00</SelectItem>
+                    <SelectItem value="15:00">15:00</SelectItem>
+                    <SelectItem value="16:00">16:00</SelectItem>
+                    <SelectItem value="17:00">17:00</SelectItem>
+                    <SelectItem value="18:00">18:00</SelectItem>
+                    <SelectItem value="19:00">19:00</SelectItem>
+                    <SelectItem value="20:00">20:00</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Flags do Aluno */}
+            <div className="flex flex-wrap gap-4 py-2">
+              <label className="flex items-center gap-2 cursor-pointer">
+                <Checkbox
+                  checked={formData.is_ex_aluno}
+                  onCheckedChange={(checked) => setFormData({ ...formData, is_ex_aluno: !!checked })}
+                />
+                <span className="text-sm text-slate-300">É ex-aluno (já estudou antes)</span>
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <Checkbox
+                  checked={formData.is_aluno_retorno}
+                  onCheckedChange={(checked) => setFormData({ ...formData, is_aluno_retorno: !!checked })}
+                />
+                <span className="text-sm text-slate-300">É aluno retorno</span>
+              </label>
+            </div>
+
             {/* Passaporte */}
             <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-3">
               <h4 className="text-sm font-semibold text-amber-400">🎫 Passaporte</h4>

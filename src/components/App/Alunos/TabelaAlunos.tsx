@@ -1,12 +1,13 @@
-import { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical, Play, MessageSquarePlus, MessageCircle, CheckCircle2, Circle } from 'lucide-react';
+import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical, Play, MessageSquarePlus, MessageCircle, CheckCircle2, Circle, FileEdit, ChevronDown, ChevronRight, Music2 } from 'lucide-react';
 import { CelulaEditavel } from '@/components/ui/CelulaEditavel';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/contexts/AuthContext';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { ModalFichaAluno } from './ModalFichaAluno';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -46,7 +47,7 @@ const DIAS_SEMANA = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'
 const HORARIOS_LISTA = ['08:00', '09:00', '10:00', '11:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00'];
 
 export function TabelaAlunos({
-  alunos,
+  alunos: alunosProp,
   todosAlunos,
   filtros,
   setFiltros,
@@ -63,6 +64,16 @@ export function TabelaAlunos({
 }: TabelaAlunosProps) {
   const { usuario } = useAuth();
   const isAdmin = usuario?.perfil === 'admin' && usuario?.unidade_id === null;
+  
+  // Estado local para permitir edição otimista
+  const [alunosLocal, setAlunosLocal] = useState<Aluno[]>(alunosProp);
+  
+  // Sincronizar com props quando mudarem
+  React.useEffect(() => {
+    setAlunosLocal(alunosProp);
+  }, [alunosProp]);
+  
+  const alunos = alunosLocal;
   
   const [paginaAtual, setPaginaAtual] = useState(1);
   const [alunoParaExcluir, setAlunoParaExcluir] = useState<Aluno | null>(null);
@@ -92,7 +103,22 @@ export function TabelaAlunos({
   const [confirmacaoReset, setConfirmacaoReset] = useState('');
   const [processandoReset, setProcessandoReset] = useState(false);
   const [filtrosExpandidos, setFiltrosExpandidos] = useState(false);
+  const [alunoFicha, setAlunoFicha] = useState<Aluno | null>(null);
+  const [alunosExpandidos, setAlunosExpandidos] = useState<Set<number>>(new Set());
   const itensPorPagina = 30;
+
+  // Toggle expansão de aluno com segundo curso
+  const toggleExpandirAluno = (alunoId: number) => {
+    setAlunosExpandidos(prev => {
+      const novo = new Set(prev);
+      if (novo.has(alunoId)) {
+        novo.delete(alunoId);
+      } else {
+        novo.add(alunoId);
+      }
+      return novo;
+    });
+  };
 
   // Paginação
   const totalPaginas = Math.ceil(alunos.length / itensPorPagina);
@@ -134,11 +160,50 @@ export function TabelaAlunos({
 
   // Função para salvar campo individual do aluno
   const salvarCampo = useCallback(async (alunoId: number, campo: string, valor: string | number | null) => {
+    // Atualização otimista - atualiza UI imediatamente
+    setAlunosLocal(prev => prev.map(aluno => {
+      if (aluno.id !== alunoId) return aluno;
+      
+      const updated = { ...aluno };
+      switch (campo) {
+        case 'nome':
+          updated.nome = valor as string;
+          break;
+        case 'professor_atual_id':
+          updated.professor_atual_id = valor ? Number(valor) : null;
+          updated.professor_nome = professores.find(p => p.id === Number(valor))?.nome || null;
+          break;
+        case 'curso_id':
+          updated.curso_id = valor ? Number(valor) : null;
+          updated.curso_nome = cursos.find(c => c.id === Number(valor))?.nome || null;
+          break;
+        case 'dia_aula':
+          updated.dia_aula = valor as string || null;
+          break;
+        case 'horario_aula':
+          updated.horario_aula = valor ? `${valor}:00` : null;
+          break;
+        case 'valor_parcela':
+          updated.valor_parcela = valor ? Number(valor) : null;
+          break;
+        case 'status':
+          updated.status = (valor as string) || 'ativo';
+          break;
+        case 'status_pagamento':
+          updated.status_pagamento = valor === '-' ? null : (valor as string);
+          break;
+        case 'dia_vencimento':
+          updated.dia_vencimento = valor ? Number(valor) : 5;
+          break;
+      }
+      return updated;
+    }));
+
+    // Preparar dados para o banco
     const updateData: Record<string, any> = {
       updated_at: new Date().toISOString()
     };
 
-    // Mapear campo para coluna do banco
     switch (campo) {
       case 'nome':
         updateData.nome = valor;
@@ -169,6 +234,7 @@ export function TabelaAlunos({
         break;
     }
 
+    // Salvar no banco
     const { error } = await supabase
       .from('alunos')
       .update(updateData)
@@ -176,12 +242,11 @@ export function TabelaAlunos({
 
     if (error) {
       console.error('Erro ao salvar:', error);
+      // Reverter otimista em caso de erro
+      setAlunosLocal(alunosProp);
       throw error;
     }
-
-    // Recarregar dados após salvar
-    onRecarregar();
-  }, [onRecarregar]);
+  }, [professores, cursos, alunosProp]);
 
   async function confirmarExclusao() {
     if (!alunoParaExcluir) return;
@@ -864,7 +929,7 @@ export function TabelaAlunos({
 
         {/* Linha 2: Filtros Secundários (Expansível) */}
         {filtrosExpandidos && (
-          <div className="flex flex-wrap items-center gap-3 pt-3 border-t border-slate-700/50">
+          <div className="flex flex-wrap items-center gap-3 pt-3">
             {/* Filtro Curso */}
             <Select
               value={filtros.curso_id || "todos"}
@@ -994,7 +1059,7 @@ export function TabelaAlunos({
                 />
               </th>
               <th className="px-4 py-3 font-medium">#</th>
-              <th className="px-4 py-3 font-medium">Nome</th>
+              <th className="px-4 py-3 font-medium text-left">Nome</th>
               <th className="px-4 py-3 font-medium">Escola</th>
               <th className="px-4 py-3 font-medium">Professor</th>
               <th className="px-4 py-3 font-medium">Curso</th>
@@ -1014,8 +1079,8 @@ export function TabelaAlunos({
               const isSozinho = aluno.total_alunos_turma === 1;
               
               return (
+                <React.Fragment key={aluno.id}>
                 <tr
-                  key={aluno.id}
                   className={`
                     transition hover:bg-slate-700/30
                     ${isSozinho ? 'bg-red-900/10' : ''}
@@ -1033,16 +1098,39 @@ export function TabelaAlunos({
                     {(paginaAtual - 1) * itensPorPagina + index + 1}
                   </td>
                   
-                  {/* Nome - Edição inline */}
+                  {/* Nome - Clicável para abrir ficha */}
                   <td className="px-4 py-2">
-                    <div className="flex items-center gap-2">
-                      <CelulaEditavel
-                        value={aluno.nome}
-                        onChange={async (valor) => salvarCampo(aluno.id, 'nome', valor)}
-                        tipo="texto"
-                        placeholder="-"
-                        className="min-w-[150px]"
-                      />
+                    <div className="flex items-center gap-1">
+                      {/* Botão de expansão apenas para alunos com segundo curso */}
+                      {aluno.outros_cursos && aluno.outros_cursos.length > 0 && (
+                        <button
+                          onClick={() => toggleExpandirAluno(aluno.id)}
+                          className="p-0.5 hover:bg-purple-500/20 rounded transition-colors flex-shrink-0"
+                          title={alunosExpandidos.has(aluno.id) ? 'Recolher cursos' : 'Expandir cursos'}
+                        >
+                          {alunosExpandidos.has(aluno.id) ? (
+                            <ChevronDown className="w-4 h-4 text-purple-400" />
+                          ) : (
+                            <ChevronRight className="w-4 h-4 text-purple-400" />
+                          )}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setAlunoFicha(aluno)}
+                        className="text-left text-white hover:text-purple-400 hover:underline transition-colors font-medium min-w-[150px]"
+                        title="Clique para abrir a ficha do aluno"
+                      >
+                        {aluno.nome || '-'}
+                      </button>
+                      {/* Badge de múltiplos cursos */}
+                      {aluno.outros_cursos && aluno.outros_cursos.length > 0 && (
+                        <Tooltip content={`${aluno.outros_cursos.length + 1} cursos • Ticket: R$ ${aluno.valor_total?.toLocaleString('pt-BR')}`}>
+                          <span className="flex items-center gap-1 bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full text-xs font-medium">
+                            <Music2 className="w-3 h-3" />
+                            {aluno.outros_cursos.length + 1}
+                          </span>
+                        </Tooltip>
+                      )}
                       {(aluno.total_anotacoes || 0) > 0 && (
                         <Tooltip 
                           content={
@@ -1234,10 +1322,17 @@ export function TabelaAlunos({
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-48">
                         <DropdownMenuItem 
-                          onClick={() => carregarHistorico(aluno)}
-                          className="cursor-pointer"
+                          onClick={() => setAlunoFicha(aluno)}
+                          className="cursor-pointer text-purple-400 focus:text-purple-400 focus:bg-purple-500/10"
                         >
-                          <History className="w-4 h-4 mr-2 text-slate-400" />
+                          <FileEdit className="w-4 h-4 mr-2" />
+                          Editar cadastro
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          onClick={() => carregarHistorico(aluno)}
+                          className="cursor-pointer text-blue-400 focus:text-blue-400 focus:bg-blue-500/10"
+                        >
+                          <History className="w-4 h-4 mr-2" />
                           Ver histórico
                         </DropdownMenuItem>
                         <DropdownMenuItem 
@@ -1245,9 +1340,9 @@ export function TabelaAlunos({
                             setAlunoAnotacao(aluno);
                             setModalAnotacao(true);
                           }}
-                          className="cursor-pointer"
+                          className="cursor-pointer text-amber-400 focus:text-amber-400 focus:bg-amber-500/10"
                         >
-                          <MessageSquarePlus className="w-4 h-4 mr-2 text-purple-400" />
+                          <MessageSquarePlus className="w-4 h-4 mr-2" />
                           Registrar anotação
                         </DropdownMenuItem>
                         {aluno.status === 'trancado' && (
@@ -1256,7 +1351,7 @@ export function TabelaAlunos({
                               setAlunoParaDestrancar(aluno);
                               setModalDestrancamento(true);
                             }}
-                            className="cursor-pointer text-emerald-400 focus:text-emerald-400"
+                            className="cursor-pointer text-emerald-400 focus:text-emerald-400 focus:bg-emerald-500/10"
                           >
                             <Play className="w-4 h-4 mr-2" />
                             Destrancar aluno
@@ -1264,7 +1359,7 @@ export function TabelaAlunos({
                         )}
                         <DropdownMenuItem 
                           onClick={() => setAlunoParaExcluir(aluno)}
-                          className="cursor-pointer text-red-400 focus:text-red-400"
+                          className="cursor-pointer text-red-400 focus:text-red-400 focus:bg-red-500/10"
                         >
                           <Trash2 className="w-4 h-4 mr-2" />
                           Excluir
@@ -1273,6 +1368,67 @@ export function TabelaAlunos({
                     </DropdownMenu>
                   </td>
                 </tr>
+                
+                {/* Linhas expandidas para outros cursos (segundo curso) */}
+                {alunosExpandidos.has(aluno.id) && aluno.outros_cursos?.map((outroCurso, idx) => (
+                  <tr 
+                    key={`${aluno.id}-curso-${idx}`}
+                    className="bg-purple-500/5 border-l-2 border-purple-500"
+                  >
+                    <td className="px-2 py-2"></td>
+                    <td className="px-4 py-2 text-slate-500 text-xs">↳</td>
+                    <td className="px-4 py-2">
+                      <div className="flex items-center gap-2 pl-6">
+                        <span className="text-slate-400 text-sm italic">2º curso</span>
+                        <button
+                          onClick={() => setAlunoFicha(outroCurso)}
+                          className="text-purple-400 hover:text-purple-300 hover:underline text-sm"
+                        >
+                          Editar
+                        </button>
+                        <button
+                          onClick={() => setAlunoParaExcluir(outroCurso)}
+                          className="text-red-400 hover:text-red-300 hover:underline text-sm"
+                        >
+                          Excluir
+                        </button>
+                      </div>
+                    </td>
+                    <td className="px-4 py-2">
+                      {getBadgeEscola(outroCurso.classificacao)}
+                    </td>
+                    <td className="px-4 py-2 text-slate-300 text-sm">
+                      {outroCurso.professor_nome || '-'}
+                    </td>
+                    <td className="px-4 py-2 text-slate-300 text-sm">
+                      {outroCurso.curso_nome || '-'}
+                    </td>
+                    <td className="px-4 py-2 text-slate-300 text-sm">
+                      {outroCurso.dia_aula || '-'}
+                    </td>
+                    <td className="px-4 py-2 text-slate-300 text-sm">
+                      {outroCurso.horario_aula?.substring(0, 5) || '-'}
+                    </td>
+                    <td className="px-4 py-2 text-slate-400 text-sm">-</td>
+                    <td className="px-4 py-2 text-emerald-400 text-sm font-medium">
+                      R$ {outroCurso.valor_parcela?.toLocaleString('pt-BR') || '0'}
+                    </td>
+                    <td className="px-2 py-2">
+                      {outroCurso.status_pagamento === 'em_dia' ? (
+                        <span className="text-emerald-400" title="Em dia">✓</span>
+                      ) : outroCurso.status_pagamento === 'inadimplente' ? (
+                        <span className="text-red-400" title="Inadimplente">✗</span>
+                      ) : (
+                        <span className="text-slate-500">-</span>
+                      )}
+                    </td>
+                    <td className="px-2 py-2 text-slate-400 text-sm">{outroCurso.dia_vencimento || 5}</td>
+                    <td className="px-4 py-2 text-slate-400 text-sm">-</td>
+                    <td className="px-2 py-2 text-slate-400 text-sm">{outroCurso.status || '-'}</td>
+                    <td className="px-2 py-2"></td>
+                  </tr>
+                ))}
+                </React.Fragment>
               );
             })}
           </tbody>
@@ -1742,6 +1898,18 @@ export function TabelaAlunos({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Modal Ficha do Aluno */}
+      {alunoFicha && (
+        <ModalFichaAluno
+          aluno={alunoFicha}
+          onClose={() => setAlunoFicha(null)}
+          onSalvar={onRecarregar}
+          professores={professores}
+          cursos={cursos}
+          tiposMatricula={tiposMatricula}
+        />
+      )}
     </>
   );
 }

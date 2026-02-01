@@ -63,8 +63,13 @@ export function ComboboxNome({
 
   const handleSelect = (sugestao: SugestaoLead) => {
     setInputValue(sugestao.nome);
-    onChange(sugestao.nome);
-    onSelectSugestao?.(sugestao);
+    // Se tem onSelectSugestao, ele é responsável por atualizar o estado completo
+    // Não chamar onChange para evitar sobrescrever os campos preenchidos
+    if (onSelectSugestao) {
+      onSelectSugestao(sugestao);
+    } else {
+      onChange(sugestao.nome);
+    }
     setOpen(false);
   };
 

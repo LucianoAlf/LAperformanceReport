@@ -152,14 +152,14 @@ export function Tab360Professores({
       const criterio = criterios.find(c => c.id === parseInt(data.criterio_id));
       const unidade = professor?.unidades?.find((u: any) => u.id === data.unidade_id || u.unidade_id === data.unidade_id);
       
-      // Buscar nome do colaborador que registrou
+      // Buscar nome do colaborador que registrou (IDs devem corresponder ao Modal360Ocorrencia)
       const COLABORADORES = [
         { id: 'luciano', nome: 'Luciano Alf' },
-        { id: 'gabi', nome: 'Gabriela' },
-        { id: 'jhon', nome: 'Jhonatan' },
+        { id: 'gabriela', nome: 'Gabriela' },
+        { id: 'jhonatan', nome: 'Jhonatan' },
         { id: 'fernanda', nome: 'Fernanda' },
         { id: 'daiana', nome: 'Daiana' },
-        { id: 'duda', nome: 'Eduarda' },
+        { id: 'eduarda', nome: 'Eduarda' },
         { id: 'arthur', nome: 'Arthur' },
         { id: 'vitoria', nome: 'Vitória' },
         { id: 'clayton', nome: 'Clayton' },
@@ -177,16 +177,39 @@ export function Tab360Professores({
       const unidadeNome = unidade?.nome || unidade?.unidade_nome || '';
       const registradoPor = colaborador?.nome || '';
       const descricao = data.descricao;
+      const toleranciaInfo = data.tolerancia_info;
+      const minutosAtraso = data.minutos_atraso;
+      const atrasoGrave = data.atraso_grave;
       
-      // Montar mensagem
+      // Montar mensagem com informação de tolerância
       const primeiroNome = professorNome.split(' ')[0];
       let mensagem = `🔔 *LA Music - Avaliação 360°*\n\n`;
       mensagem += `Olá, ${primeiroNome}!\n\n`;
       mensagem += `Uma ocorrência foi registrada em seu perfil:\n\n`;
       mensagem += `📋 *Tipo:* ${tipoOcorrencia}\n`;
+      
+      // Adicionar tempo de atraso se for pontualidade
+      if (minutosAtraso) {
+        mensagem += `⏱️ *Tempo de atraso:* ${minutosAtraso >= 60 ? '1 hora ou mais' : `${minutosAtraso} minutos`}\n`;
+      }
+      
       mensagem += `📅 *Data:* ${dataOcorrencia.split('-').reverse().join('/')}\n`;
       mensagem += `🏢 *Unidade:* ${unidadeNome}\n`;
       mensagem += `👤 *Registrado por:* ${registradoPor}\n`;
+      
+      // Adicionar info de tolerância/atraso grave
+      if (atrasoGrave) {
+        mensagem += `\n❌ *Atraso acima de 10 minutos!* Pontuação descontada: -${toleranciaInfo?.pontos_descontados || 0} pts (sem tolerância)\n`;
+      } else if (toleranciaInfo) {
+        if (toleranciaInfo.tolerancia_esgotada) {
+          mensagem += `\n❌ *Tolerância esgotada!* Pontuação descontada: -${toleranciaInfo.pontos_descontados} pts\n`;
+        } else if (toleranciaInfo.ultima_tolerancia) {
+          mensagem += `\n⚠️ *Atenção:* Esta foi sua última tolerância (${toleranciaInfo.ocorrencia_numero}/${toleranciaInfo.tolerancia_total}). A próxima ocorrência descontará pontos.\n`;
+        } else {
+          mensagem += `\nℹ️ *Tolerância:* ${toleranciaInfo.ocorrencia_numero}/${toleranciaInfo.tolerancia_total} (ainda dentro da tolerância)\n`;
+        }
+      }
+      
       if (descricao) {
         mensagem += `\n📝 *Observação:* ${descricao}\n`;
       }
@@ -231,6 +254,9 @@ export function Tab360Professores({
         unidadeNome,
         registradoPor,
         descricao,
+        toleranciaInfo,
+        minutosAtraso,
+        atrasoGrave,
       });
       
       setModalOcorrencia(false);

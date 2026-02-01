@@ -114,6 +114,11 @@ export function ModalNovoAluno({
           valor_parcela: formData.valor_parcela,
           valor_passaporte: formData.valor_passaporte,
           tipo_matricula_id,
+          tipo_aluno: formData.tipo_aluno,
+          forma_pagamento_id: formData.forma_pagamento_id,
+          dia_vencimento: formData.dia_vencimento || 5,
+          canal_origem_id: formData.canal_origem_id,
+          professor_experimental_id: formData.teve_experimental ? formData.professor_experimental_id : null,
           status: 'ativo',
           data_matricula: formData.data.toISOString().split('T')[0],
         });

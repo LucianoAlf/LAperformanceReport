@@ -51,6 +51,13 @@ export interface Aluno {
   nomes_alunos_turma?: string[];
   total_anotacoes?: number;
   ultimas_anotacoes?: { texto: string; categoria: string }[];
+  // Campos para segundo curso
+  is_segundo_curso?: boolean;
+  data_nascimento?: string;
+  // Campos calculados para agrupamento
+  cursos_ids?: number[]; // IDs de todos os cursos do aluno
+  outros_cursos?: Aluno[]; // Outros registros do mesmo aluno (segundo curso)
+  valor_total?: number; // Soma de todos os valores de parcela
 }
 
 export interface Turma {
@@ -216,6 +223,7 @@ export function AlunosPage() {
         id, nome, classificacao, idade_atual, professor_atual_id, curso_id, 
         dia_aula, horario_aula, valor_parcela, tempo_permanencia_meses,
         status, status_pagamento, dia_vencimento, tipo_matricula_id, unidade_id, data_matricula,
+        is_segundo_curso, data_nascimento,
         professores:professor_atual_id(nome),
         cursos:curso_id(nome),
         tipos_matricula:tipo_matricula_id(nome),
@@ -279,7 +287,50 @@ export function AlunosPage() {
           ultimas_anotacoes: anotacoesMap.get(a.id)?.ultimas || []
         };
       });
-      setAlunos(alunosFormatados);
+
+      // Agrupar alunos com mesmo nome e data_nascimento (segundo curso)
+      // Chave: nome + data_nascimento + unidade_id
+      const alunosAgrupados = new Map<string, Aluno[]>();
+      alunosFormatados.forEach((aluno: Aluno) => {
+        const chave = `${aluno.nome?.toLowerCase().trim()}-${aluno.data_nascimento || ''}-${aluno.unidade_id}`;
+        const grupo = alunosAgrupados.get(chave) || [];
+        grupo.push(aluno);
+        alunosAgrupados.set(chave, grupo);
+      });
+
+      // Processar grupos: aluno principal + outros_cursos
+      const alunosComSegundoCurso: Aluno[] = [];
+      alunosAgrupados.forEach((grupo) => {
+        if (grupo.length === 1) {
+          // Aluno sem segundo curso
+          alunosComSegundoCurso.push(grupo[0]);
+        } else {
+          // Aluno com múltiplos cursos - ordenar por is_segundo_curso (principal primeiro)
+          const ordenado = grupo.sort((a, b) => {
+            if (a.is_segundo_curso && !b.is_segundo_curso) return 1;
+            if (!a.is_segundo_curso && b.is_segundo_curso) return -1;
+            return 0;
+          });
+          
+          const principal = ordenado[0];
+          const outrosCursos = ordenado.slice(1);
+          
+          // Calcular valor total (soma de todos os cursos)
+          const valorTotal = grupo.reduce((acc, a) => acc + (a.valor_parcela || 0), 0);
+          
+          alunosComSegundoCurso.push({
+            ...principal,
+            outros_cursos: outrosCursos,
+            valor_total: valorTotal,
+            cursos_ids: grupo.map(a => a.curso_id).filter(Boolean) as number[],
+          });
+        }
+      });
+
+      // Ordenar por nome
+      alunosComSegundoCurso.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+      
+      setAlunos(alunosComSegundoCurso);
     }
   }
 
@@ -479,10 +530,11 @@ export function AlunosPage() {
     const { data: bolsistasData } = await queryBolsistas;
     const totalBolsistas = bolsistasData?.length || 0;
 
-    // Ticket médio (só pagantes)
+    // Ticket médio (só pagantes) - IMPORTANTE: soma valores de alunos com múltiplos cursos
+    // Aluno com 2 cursos (R$400 + R$300) = ticket de R$700, não R$350
     let queryTicket = supabase
       .from('alunos')
-      .select('valor_parcela, tipos_matricula!inner(entra_ticket_medio)')
+      .select('nome, data_nascimento, unidade_id, valor_parcela, tipos_matricula!inner(entra_ticket_medio)')
       .eq('status', 'ativo')
       .eq('tipos_matricula.entra_ticket_medio', true)
       .not('valor_parcela', 'is', null);
@@ -493,8 +545,18 @@ export function AlunosPage() {
     
     const { data: ticketData } = await queryTicket;
     
-    const ticketMedio = ticketData && ticketData.length > 0
-      ? ticketData.reduce((sum, a) => sum + (a.valor_parcela || 0), 0) / ticketData.length
+    // Agrupar por aluno único (nome + data_nascimento + unidade) e somar valores
+    const alunosUnicos = new Map<string, number>();
+    ticketData?.forEach((a: any) => {
+      const chave = `${a.nome?.toLowerCase().trim()}-${a.data_nascimento || ''}-${a.unidade_id}`;
+      const valorAtual = alunosUnicos.get(chave) || 0;
+      alunosUnicos.set(chave, valorAtual + (a.valor_parcela || 0));
+    });
+    
+    // Ticket médio = soma dos tickets de cada aluno único / número de alunos únicos
+    const valoresUnicos = Array.from(alunosUnicos.values());
+    const ticketMedio = valoresUnicos.length > 0
+      ? valoresUnicos.reduce((sum, v) => sum + v, 0) / valoresUnicos.length
       : 0;
 
     // LTV médio
