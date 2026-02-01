@@ -310,7 +310,30 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
           .from('vw_turmas_implicitas')
           .select('professor_id, total_alunos');
 
-        const [professoresResult, totaisResult, performanceResult, qualidadeResult, evasoesResult, evasoesMRRResult, movimentacoesResult, turmasImplicitasResult] = await Promise.all([
+        // ========== QUERIES PARA TOTAIS REAIS (fonte de verdade) ==========
+        // Total Professores: via professores + professores_unidades
+        const professoresReaisQuery = supabase
+          .from('professores')
+          .select('id, nome, ativo')
+          .eq('ativo', true);
+
+        let profUnidadesQuery = supabase
+          .from('professores_unidades')
+          .select('professor_id, unidade_id');
+        if (unidade !== 'todos') {
+          profUnidadesQuery = profUnidadesQuery.eq('unidade_id', unidade);
+        }
+
+        // Total Alunos: via tabela alunos (status ativo)
+        let alunosTotalQuery = supabase
+          .from('alunos')
+          .select('id, professor_atual_id, unidade_id, valor_parcela, percentual_presenca', { count: 'exact' })
+          .eq('status', 'ativo');
+        if (unidade !== 'todos') {
+          alunosTotalQuery = alunosTotalQuery.eq('unidade_id', unidade);
+        }
+
+        const [professoresResult, totaisResult, performanceResult, qualidadeResult, evasoesResult, evasoesMRRResult, movimentacoesResult, turmasImplicitasResult, professoresReaisResult, profUnidadesResult, alunosTotalResult] = await Promise.all([
           query, 
           totaisQuery, 
           performanceQuery,
@@ -318,7 +341,10 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
           evasoesQuery,
           evasoesMRRQuery,
           movimentacoesQuery,
-          turmasImplicitasQuery
+          turmasImplicitasQuery,
+          professoresReaisQuery,
+          profUnidadesQuery,
+          alunosTotalQuery
         ]);
 
         if (professoresResult.error) throw professoresResult.error;
@@ -330,6 +356,34 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
         const qualidadeData = qualidadeResult.data || [];
         const evasoesData = evasoesResult.data || [];
         const turmasImplicitas = turmasImplicitasResult.data || [];
+
+        // ========== PROCESSAR TOTAIS REAIS (fonte de verdade) ==========
+        const professoresReais = professoresReaisResult.data || [];
+        const profUnidades = profUnidadesResult.data || [];
+        const alunosReais = alunosTotalResult.data || [];
+        const alunosTotalCount = alunosTotalResult.count || alunosReais.length;
+
+        // Filtrar professores por unidade (via professores_unidades)
+        const profIdsNaUnidade = new Set(profUnidades.map((pu: any) => pu.professor_id));
+        const professoresFiltrados = unidade === 'todos' 
+          ? professoresReais 
+          : professoresReais.filter((p: any) => profIdsNaUnidade.has(p.id));
+        
+        // Total real de professores e alunos (para KPI cards)
+        const totalProfessoresReal = professoresFiltrados.length;
+        const alunosTotalReal = alunosTotalCount;
+
+        // Calcular carteira por professor a partir dos alunos reais
+        const carteiraPorProfessorReal = new Map<number, { alunos: number; ticketTotal: number; presencaTotal: number }>();
+        alunosReais.forEach((a: any) => {
+          const profId = a.professor_atual_id;
+          if (!profId) return;
+          const current = carteiraPorProfessorReal.get(profId) || { alunos: 0, ticketTotal: 0, presencaTotal: 0 };
+          current.alunos += 1;
+          current.ticketTotal += Number(a.valor_parcela) || 0;
+          current.presencaTotal += Number(a.percentual_presenca) || 0;
+          carteiraPorProfessorReal.set(profId, current);
+        });
 
         // Calcular média alunos/turma por professor (mesma lógica da página Professores)
         const turmasPorProfessor = new Map<number, number>();
@@ -536,9 +590,10 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
         const professoresKPIs: ProfessorKPI[] = Array.from(professoresMap.values());
 
         // Calcular totais e médias
-        // Total de professores = todos os professores únicos (não filtrar por carteira > 0)
-        const totalProfessores = professoresKPIs.length;
-        const alunosTotal = professoresKPIs.reduce((acc, p) => acc + p.carteira_alunos, 0);
+        // USAR TOTAIS REAIS (fonte de verdade: professores_unidades + alunos)
+        // Em vez de calcular a partir da view que pode ter dados incompletos
+        const totalProfessores = totalProfessoresReal;
+        const alunosTotal = alunosTotalReal;
         const carteiraMedia = totalProfessores > 0 ? alunosTotal / totalProfessores : 0;
         
         // Usar totais do CSV (dados corretos)
