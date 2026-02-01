@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DatePicker } from '@/components/ui/date-picker';
-import { Plus, Clock, UserX, Building2, Calendar, Sparkles, Shirt, Monitor, UserCircle, MessageSquare, AlertTriangle, AlertCircle, CheckCircle } from 'lucide-react';
+import { Plus, Clock, UserX, Building2, Calendar, Sparkles, Shirt, Monitor, UserCircle, MessageSquare, AlertTriangle, AlertCircle, CheckCircle, X } from 'lucide-react';
 import { Criterio360 } from '@/hooks/useProfessor360';
 import { format } from 'date-fns';
 import { supabase } from '@/lib/supabase';
@@ -212,21 +212,28 @@ export function Modal360Ocorrencia({
     }
   };
 
+  if (!open) return null;
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md max-h-[90vh] bg-slate-900 border-slate-700 flex flex-col">
-        <DialogHeader className="flex-shrink-0">
-          <DialogTitle className="flex items-center gap-2 text-white">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-md shadow-2xl max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-slate-700 flex-shrink-0">
+          <h3 className="text-lg font-semibold text-white flex items-center gap-2">
             <Plus className="h-5 w-5 text-violet-400" />
             Registrar Ocorrência
-          </DialogTitle>
-        </DialogHeader>
+          </h3>
+          <button onClick={() => onOpenChange(false)} className="p-2 text-slate-400 hover:text-white transition-colors">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
 
+        {/* Content com scroll */}
         <div 
-          className="space-y-4 py-4 px-6 overflow-y-auto flex-1"
+          className="p-6 overflow-y-auto flex-1 space-y-4"
           style={{
             scrollbarWidth: 'thin',
-            scrollbarColor: '#334155 #1e293b',
+            scrollbarColor: '#475569 transparent',
           }}
         >
           {/* Professor */}
@@ -439,7 +446,8 @@ export function Modal360Ocorrencia({
           )}
         </div>
 
-        <DialogFooter className="flex-shrink-0 border-t border-slate-700 pt-4">
+        {/* Footer */}
+        <div className="flex justify-end gap-3 p-6 border-t border-slate-700 flex-shrink-0">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancelar
           </Button>
@@ -450,9 +458,9 @@ export function Modal360Ocorrencia({
           >
             {saving ? 'Salvando...' : 'Registrar'}
           </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+        </div>
+      </div>
+    </div>
   );
 }
 

@@ -7,7 +7,8 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { MessageSquare, Copy, Send, Check, ExternalLink } from 'lucide-react';
+import { MessageSquare, Copy, Send, Check, Loader2 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 interface ToleranciaInfo {
   ocorrencia_numero: number;
@@ -108,26 +109,46 @@ Em caso de dúvidas, procure a coordenação.`;
     }
   };
 
-  // Abrir WhatsApp Web com a mensagem
-  const handleEnviarWhatsApp = () => {
+  // Enviar via Edge Function (API WhatsApp)
+  const handleEnviarWhatsApp = async () => {
     if (!professorWhatsApp) return;
     
     setEnviando(true);
     
-    // Formatar número (garantir que tem apenas números)
-    const numero = professorWhatsApp.replace(/\D/g, '');
-    
-    // Codificar mensagem para URL
-    const mensagemCodificada = encodeURIComponent(mensagem);
-    
-    // Abrir WhatsApp Web
-    window.open(`https://wa.me/${numero}?text=${mensagemCodificada}`, '_blank');
-    
-    // Feedback visual e fechar modal após um breve delay
-    setTimeout(() => {
+    try {
+      console.log('[WhatsApp 360°] Enviando notificação para:', professorWhatsApp);
+      
+      const { data: resultado, error } = await supabase.functions.invoke('professor-360-whatsapp', {
+        body: {
+          professorNome,
+          professorWhatsApp,
+          tipoOcorrencia,
+          dataOcorrencia,
+          unidadeNome,
+          registradoPor,
+          descricao,
+          toleranciaInfo,
+          minutosAtraso,
+          atrasoGrave,
+        },
+      });
+      
+      if (error) {
+        console.error('[WhatsApp 360°] ❌ Erro ao chamar Edge Function:', error);
+        alert('Erro ao enviar mensagem. Tente copiar e enviar manualmente.');
+      } else if (resultado?.success) {
+        console.log('[WhatsApp 360°] ✅ Mensagem enviada com sucesso! ID:', resultado.messageId);
+        onOpenChange(false);
+      } else {
+        console.error('[WhatsApp 360°] ❌ Erro ao enviar:', resultado?.error);
+        alert('Erro ao enviar mensagem. Tente copiar e enviar manualmente.');
+      }
+    } catch (err) {
+      console.error('[WhatsApp 360°] ❌ Erro inesperado:', err);
+      alert('Erro ao enviar mensagem. Tente copiar e enviar manualmente.');
+    } finally {
       setEnviando(false);
-      onOpenChange(false);
-    }, 500);
+    }
   };
 
   return (
@@ -203,14 +224,13 @@ Em caso de dúvidas, procure a coordenação.`;
             >
               {enviando ? (
                 <>
-                  <Check className="h-4 w-4 animate-pulse" />
+                  <Loader2 className="h-4 w-4 animate-spin" />
                   Enviando...
                 </>
               ) : (
                 <>
                   <Send className="h-4 w-4" />
                   Enviar
-                  <ExternalLink className="h-3 w-3" />
                 </>
               )}
             </Button>

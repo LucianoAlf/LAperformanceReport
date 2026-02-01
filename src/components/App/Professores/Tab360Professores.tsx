@@ -215,37 +215,7 @@ export function Tab360Professores({
       }
       mensagem += `\n---\nEm caso de dúvidas, procure a coordenação.`;
       
-      // Disparo automático via Edge Function se tiver WhatsApp cadastrado
-      if (professorWhatsApp) {
-        console.log('[WhatsApp 360°] Enviando notificação automática para:', professorWhatsApp);
-        try {
-          const { data: resultado, error } = await supabase.functions.invoke('professor-360-whatsapp', {
-            body: {
-              professorNome,
-              professorWhatsApp,
-              tipoOcorrencia,
-              dataOcorrencia,
-              unidadeNome,
-              registradoPor,
-              descricao,
-            },
-          });
-          
-          if (error) {
-            console.error('[WhatsApp 360°] ❌ Erro ao chamar Edge Function:', error);
-          } else if (resultado?.success) {
-            console.log('[WhatsApp 360°] ✅ Mensagem enviada com sucesso! ID:', resultado.messageId);
-          } else {
-            console.error('[WhatsApp 360°] ❌ Erro ao enviar:', resultado?.error);
-          }
-        } catch (err) {
-          console.error('[WhatsApp 360°] ❌ Erro inesperado:', err);
-        }
-      } else {
-        console.log('[WhatsApp 360°] Professor sem WhatsApp cadastrado, pulando envio automático');
-      }
-      
-      // Preparar dados para o modal de WhatsApp (fallback/confirmação)
+      // Preparar dados para o modal de WhatsApp (prévia antes do envio)
       setDadosWhatsApp({
         professorNome,
         professorWhatsApp,

@@ -282,10 +282,13 @@ export function useOcorrencias360(competencia: string, unidadeId?: string) {
     userId?: string,
     professorUnidades?: string[]
   ) => {
+    // Remover campos que não existem no banco (são apenas para UI/WhatsApp)
+    const { atraso_grave, tolerancia_info, ...dadosBanco } = data as any;
+    
     // Se escopo = 'todas', criar ocorrência para todas as unidades do professor
-    if (data.escopo === 'todas' && professorUnidades && professorUnidades.length > 1) {
+    if (dadosBanco.escopo === 'todas' && professorUnidades && professorUnidades.length > 1) {
       const ocorrencias = professorUnidades.map(unidadeId => ({
-        ...data,
+        ...dadosBanco,
         unidade_id: unidadeId,
         competencia,
         registrado_por: userId,
@@ -300,7 +303,7 @@ export function useOcorrencias360(competencia: string, unidadeId?: string) {
       const { error } = await supabase
         .from('professor_360_ocorrencias')
         .insert({
-          ...data,
+          ...dadosBanco,
           competencia,
           registrado_por: userId,
         });
