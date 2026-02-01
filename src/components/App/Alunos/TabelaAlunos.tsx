@@ -38,6 +38,7 @@ interface TabelaAlunosProps {
   onNovoAluno: () => void;
   onRecarregar: () => void;
   verificarTurmaAoSalvar: (aluno: Aluno) => Promise<boolean>;
+  onAbrirModalTurma?: (professor_id: number, dia: string, horario: string) => void;
 }
 
 const DIAS_SEMANA = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
@@ -56,7 +57,8 @@ export function TabelaAlunos({
   horarios,
   onNovoAluno,
   onRecarregar,
-  verificarTurmaAoSalvar
+  verificarTurmaAoSalvar,
+  onAbrirModalTurma
 }: TabelaAlunosProps) {
   const { usuario } = useAuth();
   const isAdmin = usuario?.perfil === 'admin' && usuario?.unidade_id === null;
@@ -190,17 +192,9 @@ export function TabelaAlunos({
 
   function getBadgeTurma(totalAlunos: number, aluno: Aluno) {
     const handleClick = () => {
-      // Navegar para aba de Gestão de Turmas com filtro aplicado
+      // Abrir modal de detalhes da turma
       if (aluno.professor_atual_id && aluno.dia_aula && aluno.horario_aula) {
-        // Trigger navegação para aba de turmas
-        const event = new CustomEvent('navegarParaTurma', {
-          detail: {
-            professor_id: aluno.professor_atual_id,
-            dia: aluno.dia_aula,
-            horario: aluno.horario_aula
-          }
-        });
-        window.dispatchEvent(event);
+        onAbrirModalTurma?.(aluno.professor_atual_id, aluno.dia_aula, aluno.horario_aula);
       }
     };
 

@@ -248,7 +248,7 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
         }
 
         // Buscar dados de performance anual (conversão e retenção)
-        let performanceQuery = supabase
+        const performanceQuery = supabase
           .from('professores_performance')
           .select('*')
           .eq('ano', ano);
@@ -263,17 +263,61 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
           .from('vw_evasoes_professores')
           .select('*');
 
+        // Buscar MRR Perdido do período de DUAS fontes:
+        // 1. Tabela evasoes (dados históricos importados via CSV)
+        // 2. Tabela movimentacoes_admin (lançamentos das Farmers no dia-a-dia)
+        const startDate = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
+        // Calcular último dia do mês corretamente
+        const ultimoDiaMes = new Date(ano, mesFinal, 0).getDate();
+        const endDate = `${ano}-${String(mesFinal).padStart(2, '0')}-${String(ultimoDiaMes).padStart(2, '0')}`;
+        
+        // Buscar nome da unidade para filtrar (se necessário)
+        let nomeUnidade = '';
+        if (unidade !== 'todos') {
+          const { data: unidadeData } = await supabase
+            .from('unidades')
+            .select('nome')
+            .eq('id', unidade)
+            .single();
+          nomeUnidade = unidadeData?.nome || '';
+        }
+        
+        // Query 1: Tabela evasoes (histórico CSV)
+        let evasoesMRRQuery = supabase
+          .from('evasoes')
+          .select('professor, unidade, parcela')
+          .gte('competencia', startDate)
+          .lte('competencia', endDate);
+        
+        if (nomeUnidade) {
+          evasoesMRRQuery = evasoesMRRQuery.ilike('unidade', nomeUnidade);
+        }
+        
+        // Query 2: Tabela movimentacoes_admin (lançamentos das Farmers)
+        let movimentacoesQuery = supabase
+          .from('movimentacoes_admin')
+          .select('professor_id, unidade_id, valor_parcela_evasao, tipo')
+          .in('tipo', ['evasao', 'nao_renovacao'])
+          .gte('data', startDate)
+          .lte('data', endDate);
+        
+        if (unidade !== 'todos') {
+          movimentacoesQuery = movimentacoesQuery.eq('unidade_id', unidade);
+        }
+
         // Buscar turmas implícitas para calcular média alunos/turma (mesma fonte da página Professores)
         const turmasImplicitasQuery = supabase
           .from('vw_turmas_implicitas')
           .select('professor_id, total_alunos');
 
-        const [professoresResult, totaisResult, performanceResult, qualidadeResult, evasoesResult, turmasImplicitasResult] = await Promise.all([
+        const [professoresResult, totaisResult, performanceResult, qualidadeResult, evasoesResult, evasoesMRRResult, movimentacoesResult, turmasImplicitasResult] = await Promise.all([
           query, 
           totaisQuery, 
           performanceQuery,
           qualidadeQuery,
           evasoesQuery,
+          evasoesMRRQuery,
+          movimentacoesQuery,
           turmasImplicitasQuery
         ]);
 
@@ -318,6 +362,40 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
         evasoesData.forEach(e => {
           const key = `${e.professor}-${e.unidade}`;
           evasoesMap.set(key, e);
+        });
+
+        // Processar MRR Perdido de DUAS fontes:
+        // 1. Tabela evasoes (dados históricos CSV)
+        // 2. Tabela movimentacoes_admin (lançamentos das Farmers)
+        const evasoesMRRData = evasoesMRRResult.data || [];
+        const movimentacoesData = movimentacoesResult.data || [];
+        const mrrPerdidoPorProfessor = new Map<string, number>();
+        let mrrPerdidoTotalDireto = 0; // Soma direta de todas as evasões
+        
+        // Fonte 1: Tabela evasoes (histórico CSV)
+        evasoesMRRData.forEach((e: any) => {
+          const parcela = Number(e.parcela) || 0;
+          mrrPerdidoTotalDireto += parcela;
+          
+          const professorNome = e.professor?.toUpperCase().trim() || '';
+          if (professorNome && professorNome !== 'DESCONHECIDO') {
+            const mrrAtual = mrrPerdidoPorProfessor.get(professorNome) || 0;
+            mrrPerdidoPorProfessor.set(professorNome, mrrAtual + parcela);
+          }
+        });
+        
+        // Fonte 2: Tabela movimentacoes_admin (lançamentos das Farmers)
+        movimentacoesData.forEach((m: any) => {
+          const parcela = Number(m.valor_parcela_evasao) || 0;
+          mrrPerdidoTotalDireto += parcela;
+          
+          // Para movimentacoes_admin, temos professor_id, não nome
+          // O MRR por professor será atribuído via ID depois
+          if (m.professor_id) {
+            const profKey = `ID_${m.professor_id}`;
+            const mrrAtual = mrrPerdidoPorProfessor.get(profKey) || 0;
+            mrrPerdidoPorProfessor.set(profKey, mrrAtual + parcela);
+          }
         });
 
         // Consolidar dados de performance por professor (somando unidades)
@@ -379,7 +457,9 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
             existing.renovacoes += p.renovacoes || 0;
             existing.nao_renovacoes += p.nao_renovacoes || 0;
             existing.evasoes += p.evasoes || 0;
-            existing.mrr_perdido += Number(p.mrr_perdido) || 0;
+            // Usar MRR Perdido da tabela evasoes (fonte real)
+            const mrrPerdidoReal = mrrPerdidoPorProfessor.get(nome.toUpperCase()) || 0;
+            existing.mrr_perdido += mrrPerdidoReal;
           } else {
             // Usar média alunos/turma calculada de vw_turmas_implicitas (mesma fonte da página Professores)
             const mediaAlunosTurmaCalculada = mediaAlunosTurmaPorProfessor.get(id) || 0;
@@ -402,7 +482,8 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
               taxa_renovacao: p.taxa_renovacao ? Number(p.taxa_renovacao) : (perf?.taxa_renovacao ?? 0),
               evasoes: p.evasoes ?? perf?.evasoes ?? 0,
               taxa_cancelamento: p.taxa_cancelamento ? Number(p.taxa_cancelamento) : 0,
-              mrr_perdido: p.mrr_perdido ? Number(p.mrr_perdido) : 0,
+              // Usar MRR Perdido da tabela evasoes (fonte real)
+              mrr_perdido: mrrPerdidoPorProfessor.get(nome.toUpperCase()) || 0,
               // Qualidade - usar dados da view
               nps: p.nps_medio ? Number(p.nps_medio) : (qual?.nps_medio ? Number(qual.nps_medio) : 0),
               media_presenca: p.media_presenca ? Number(p.media_presenca) : (qual?.media_presenca ? Number(qual.media_presenca) : 0),
@@ -471,7 +552,8 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
         const taxaRenovacaoGeral = totalRenovacoesPrevistas > 0 ? (renovacoesTotal / totalRenovacoesPrevistas) * 100 : 0;
         
         const evasoesTotal = professoresKPIs.reduce((acc, p) => acc + p.evasoes, 0);
-        const mrrPerdidoTotal = professoresKPIs.reduce((acc, p) => acc + p.mrr_perdido, 0);
+        // Usar MRR Perdido calculado diretamente da tabela evasoes (não depende de match de nomes)
+        const mrrPerdidoTotal = mrrPerdidoTotalDireto;
         
         const profsComNPS = professoresKPIs.filter(p => p.nps > 0);
         const npsMedio = profsComNPS.length > 0 ? profsComNPS.reduce((acc, p) => acc + p.nps, 0) / profsComNPS.length : 0;

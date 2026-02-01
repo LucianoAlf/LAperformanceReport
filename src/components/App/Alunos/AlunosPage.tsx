@@ -10,6 +10,7 @@ import {
   Calendar, Upload
 } from 'lucide-react';
 import { KPICard } from '@/components/ui/KPICard';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TabelaAlunos } from './TabelaAlunos';
 import { GestaoTurmas } from './GestaoTurmas';
 import { DistribuicaoAlunos } from './DistribuicaoAlunos';
@@ -144,6 +145,7 @@ export function AlunosPage() {
   const [turmaParaEditar, setTurmaParaEditar] = useState<Turma | null>(null);
   const [turmaParaAdicionarAluno, setTurmaParaAdicionarAluno] = useState<Turma | null>(null);
   const [alertaTurma, setAlertaTurma] = useState<{show: boolean, aluno?: Aluno, turmaExistente?: Turma} | null>(null);
+  const [turmaDetalheAbrir, setTurmaDetalheAbrir] = useState<Turma | null>(null);
   
   // Carregar dados iniciais
   useEffect(() => {
@@ -653,6 +655,269 @@ export function AlunosPage() {
     return true;
   }
 
+  // Abrir modal de detalhes da turma
+  function handleAbrirModalTurma(professor_id: number, dia: string, horario: string) {
+    // Buscar a turma na lista de turmas já carregadas
+    const turmaEncontrada = turmas.find(t => 
+      t.professor_id === professor_id &&
+      t.dia_semana === dia &&
+      t.horario_inicio === horario
+    );
+
+    if (turmaEncontrada) {
+      // Abrir o modal diretamente sem mudar de aba
+      setTurmaDetalheAbrir(turmaEncontrada);
+    } else {
+      toast.addToast('Turma não encontrada', 'error');
+    }
+  }
+
+  // Componente Modal de Detalhes da Turma
+  function ModalDetalhesTurmaGlobal() {
+    const [modoEdicaoSala, setModoEdicaoSala] = useState(false);
+    const [salasDisponiveis, setSalasDisponiveis] = useState<{id: number, nome: string, capacidade_maxima: number}[]>([]);
+    const [salaIdSelecionada, setSalaIdSelecionada] = useState<number | null>(turmaDetalheAbrir?.sala_id || null);
+    const [salvando, setSalvando] = useState(false);
+    const [carregandoSalas, setCarregandoSalas] = useState(false);
+
+    useEffect(() => {
+      if (modoEdicaoSala && turmaDetalheAbrir) {
+        carregarSalasModal();
+      }
+    }, [modoEdicaoSala]);
+
+    async function carregarSalasModal() {
+      if (!turmaDetalheAbrir?.unidade_id) return;
+      
+      setCarregandoSalas(true);
+      try {
+        const { data, error } = await supabase
+          .from('salas')
+          .select('id, nome, capacidade_maxima')
+          .eq('unidade_id', turmaDetalheAbrir.unidade_id)
+          .eq('ativo', true)
+          .order('nome');
+
+        if (error) throw error;
+        setSalasDisponiveis(data || []);
+        setSalaIdSelecionada(turmaDetalheAbrir.sala_id || null);
+      } catch (error) {
+        console.error('Erro ao carregar salas:', error);
+      } finally {
+        setCarregandoSalas(false);
+      }
+    }
+
+    async function handleVincularSala() {
+      if (!turmaDetalheAbrir || !salaIdSelecionada) return;
+
+      setSalvando(true);
+      try {
+        const salaSelecionada = salasDisponiveis.find(s => s.id === salaIdSelecionada);
+        
+        // Verificar se já existe turma explícita
+        const { data: turmaExistente } = await supabase
+          .from('turmas_explicitas')
+          .select('id')
+          .eq('unidade_id', turmaDetalheAbrir.unidade_id)
+          .eq('professor_id', turmaDetalheAbrir.professor_id)
+          .eq('dia_semana', turmaDetalheAbrir.dia_semana)
+          .eq('horario_inicio', turmaDetalheAbrir.horario_inicio)
+          .maybeSingle();
+
+        if (turmaExistente) {
+          // Atualizar turma existente
+          const { error } = await supabase
+            .from('turmas_explicitas')
+            .update({
+              sala_id: salaIdSelecionada,
+              capacidade_maxima: salaSelecionada?.capacidade_maxima || 4,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', turmaExistente.id);
+
+          if (error) throw error;
+        } else {
+          // Criar nova turma explícita
+          const { error } = await supabase
+            .from('turmas_explicitas')
+            .insert({
+              tipo: 'turma',
+              nome: `${turmaDetalheAbrir.curso_nome} - ${turmaDetalheAbrir.professor_nome}`,
+              professor_id: turmaDetalheAbrir.professor_id,
+              curso_id: turmaDetalheAbrir.curso_id,
+              dia_semana: turmaDetalheAbrir.dia_semana,
+              horario_inicio: turmaDetalheAbrir.horario_inicio,
+              sala_id: salaIdSelecionada,
+              unidade_id: turmaDetalheAbrir.unidade_id,
+              capacidade_maxima: salaSelecionada?.capacidade_maxima || 4,
+              ativo: true
+            });
+
+          if (error) throw error;
+        }
+
+        // Fechar modal e recarregar dados
+        setModoEdicaoSala(false);
+        setTurmaDetalheAbrir(null);
+        carregarDados();
+        toast.addToast('Sala vinculada com sucesso!', 'success');
+      } catch (error) {
+        console.error('Erro ao vincular sala:', error);
+        toast.addToast('Erro ao vincular sala', 'error');
+      } finally {
+        setSalvando(false);
+      }
+    }
+
+    if (!turmaDetalheAbrir) return null;
+
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+        <div className="bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-lg mx-4 shadow-2xl">
+          <div className="p-6 border-b border-slate-700">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold">
+                  Turma: {turmaDetalheAbrir.dia_semana} {turmaDetalheAbrir.horario_inicio?.substring(0, 5)}
+                </h2>
+                <p className="text-sm text-slate-400">
+                  {turmaDetalheAbrir.sala_nome || 'Sala'} • {turmaDetalheAbrir.curso_nome} • {turmaDetalheAbrir.professor_nome}
+                </p>
+              </div>
+              <button
+                onClick={() => setTurmaDetalheAbrir(null)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+          </div>
+          <div className="p-6">
+            {/* Seção de Sala */}
+            <div className="mb-6 p-4 bg-slate-700/30 rounded-lg border border-slate-600">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-semibold text-slate-300 uppercase flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  SALA
+                </span>
+                {!modoEdicaoSala && (
+                  <button
+                    onClick={() => setModoEdicaoSala(true)}
+                    className="text-xs text-violet-400 hover:text-violet-300 transition"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              
+              {!modoEdicaoSala ? (
+                <div className="text-slate-300">
+                  {turmaDetalheAbrir.sala_nome || (
+                    <span className="text-slate-500 text-sm">
+                      Não vinculada <span className="text-xs">(clique para vincular)</span>
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {carregandoSalas ? (
+                    <div className="text-sm text-slate-400">Carregando salas...</div>
+                  ) : (
+                    <>
+                      <Select
+                        value={salaIdSelecionada?.toString() || ''}
+                        onValueChange={(v) => setSalaIdSelecionada(parseInt(v))}
+                      >
+                        <SelectTrigger className="bg-slate-800 border-slate-600">
+                          <SelectValue placeholder="Selecione uma sala" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {salasDisponiveis.map(sala => (
+                            <SelectItem key={sala.id} value={sala.id.toString()}>
+                              {sala.nome} (cap. {sala.capacidade_maxima})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            setModoEdicaoSala(false);
+                            setSalaIdSelecionada(turmaDetalheAbrir.sala_id || null);
+                          }}
+                          disabled={salvando}
+                          className="flex-1 px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors border border-slate-600 rounded-lg"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          onClick={handleVincularSala}
+                          disabled={!salaIdSelecionada || salvando}
+                          className="flex-1 px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white rounded-lg text-sm transition-colors disabled:opacity-50"
+                        >
+                          {salvando ? 'Salvando...' : 'Vincular Sala'}
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-sm text-slate-400">Capacidade:</span>
+              <span className={`px-2 py-0.5 rounded text-xs ${
+                turmaDetalheAbrir.total_alunos === 1
+                  ? 'bg-red-500/30 text-red-400 animate-pulse'
+                  : turmaDetalheAbrir.total_alunos === 2
+                  ? 'bg-yellow-500/20 text-yellow-400'
+                  : 'bg-emerald-500/20 text-emerald-400'
+              }`}>
+                {turmaDetalheAbrir.total_alunos === 1 && <AlertTriangle className="w-3 h-3 inline mr-1" />}
+                {turmaDetalheAbrir.total_alunos}/{turmaDetalheAbrir.capacidade_maxima || 4} {turmaDetalheAbrir.total_alunos === 1 ? 'aluno' : 'alunos'}
+              </span>
+            </div>
+            
+            <h3 className="text-sm font-semibold text-slate-400 uppercase mb-3">Alunos na Turma</h3>
+            <div className="space-y-2">
+              {turmaDetalheAbrir.nomes_alunos && turmaDetalheAbrir.nomes_alunos.length > 0 ? (
+                turmaDetalheAbrir.nomes_alunos.map((nome, index) => (
+                  <div key={index} className="flex items-center justify-between bg-slate-700/50 rounded-lg p-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center text-sm font-bold">
+                        {nome.charAt(0)}
+                      </div>
+                      <div>
+                        <p className="font-medium">{nome}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-slate-500 text-center py-4">Nenhum aluno nesta turma</p>
+              )}
+            </div>
+            
+            <button 
+              onClick={() => {
+                handleAdicionarAlunoTurma(turmaDetalheAbrir);
+                setTurmaDetalheAbrir(null);
+              }}
+              className="w-full mt-4 bg-purple-600 hover:bg-purple-500 py-2 rounded-lg text-sm font-medium transition flex items-center justify-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Adicionar Aluno à Turma
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const mesFormatado = format(new Date(), 'MMM/yyyy', { locale: ptBR });
 
   if (loading) {
@@ -834,6 +1099,7 @@ export function AlunosPage() {
             onNovoAluno={() => setModalNovoAluno(true)}
             onRecarregar={carregarDados}
             verificarTurmaAoSalvar={verificarTurmaAoSalvar}
+            onAbrirModalTurma={handleAbrirModalTurma}
           />
         )}
 
@@ -852,6 +1118,28 @@ export function AlunosPage() {
         {tabAtiva === 'grade' && (
           <GradeHoraria 
             unidadeId={unidadeAtual === 'todos' ? undefined : unidadeAtual}
+            onEditarTurma={(turmaGrade) => {
+              // Converter TurmaGrade para Turma
+              const turma: Turma = {
+                id: turmaGrade.id,
+                unidade_id: turmaGrade.unidade_id,
+                unidade_nome: turmaGrade.unidade_nome,
+                professor_id: turmaGrade.professor_id,
+                professor_nome: turmaGrade.professor_nome,
+                curso_id: turmaGrade.curso_id || undefined,
+                curso_nome: turmaGrade.curso_nome,
+                dia_semana: turmaGrade.dia_semana,
+                horario_inicio: turmaGrade.horario_inicio,
+                sala_id: turmaGrade.sala_id || undefined,
+                sala_nome: turmaGrade.sala_nome,
+                capacidade_maxima: turmaGrade.capacidade_maxima,
+                total_alunos: turmaGrade.num_alunos,
+                nomes_alunos: [],
+                ids_alunos: turmaGrade.alunos || [],
+                tipo: 'explicita',
+              };
+              handleEditarTurma(turma);
+            }}
           />
         )}
 
@@ -923,8 +1211,12 @@ export function AlunosPage() {
         />
       )}
 
+      {/* Modal Detalhes da Turma - Renderizado globalmente */}
+      {turmaDetalheAbrir && <ModalDetalhesTurmaGlobal />}
+
       {/* Toast Container */}
       <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} />
     </div>
   );
 }
+
