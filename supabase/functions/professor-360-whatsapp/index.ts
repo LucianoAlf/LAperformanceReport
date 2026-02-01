@@ -16,6 +16,7 @@ interface NotificacaoPayload {
   professorNome: string;
   professorWhatsApp: string;
   tipoOcorrencia: string;
+  tipoCategoria?: 'penalidade' | 'bonus';
   dataOcorrencia: string;
   unidadeNome: string;
   registradoPor: string;
@@ -43,6 +44,27 @@ function montarMensagem(dados: NotificacaoPayload): string {
   const primeiroNome = dados.professorNome.split(' ')[0];
   const dataFormatada = dados.dataOcorrencia.split('-').reverse().join('/');
   
+  // Mensagem diferenciada para bônus
+  if (dados.tipoCategoria === 'bonus') {
+    let mensagem = `🎉 *LA Music - Reconhecimento 360°*\n\n`;
+    mensagem += `Olá, ${primeiroNome}! 🌟\n\n`;
+    mensagem += `*Parabéns!* Você acaba de ganhar pontos extras na sua avaliação!\n\n`;
+    mensagem += `🏆 *Conquista:* ${dados.tipoOcorrencia}\n`;
+    mensagem += `📅 *Data:* ${dataFormatada}\n`;
+    mensagem += `🏢 *Unidade:* ${dados.unidadeNome}\n`;
+    mensagem += `👤 *Registrado por:* ${dados.registradoPor}`;
+    
+    if (dados.descricao) {
+      mensagem += `\n\n💬 *Mensagem:*\n${dados.descricao}`;
+    }
+    
+    mensagem += `\n\nContinue assim! Seu engajamento faz a diferença na LA Music! 💪🎵`;
+    mensagem += `\n\n---\nDúvidas? Fale com a coordenação.`;
+    
+    return mensagem;
+  }
+  
+  // Mensagem padrão para penalidades
   let mensagem = `🔔 *LA Music - Avaliação 360°*\n\n`;
   mensagem += `Olá, ${primeiroNome}!\n\n`;
   mensagem += `Uma ocorrência foi registrada em seu perfil:\n\n`;

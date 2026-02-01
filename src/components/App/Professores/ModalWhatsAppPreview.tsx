@@ -24,6 +24,7 @@ interface ModalWhatsAppPreviewProps {
   professorNome: string;
   professorWhatsApp: string | null;
   tipoOcorrencia: string;
+  tipoCategoria?: 'penalidade' | 'bonus';
   dataOcorrencia: string;
   unidadeNome: string;
   registradoPor: string;
@@ -39,6 +40,7 @@ export function ModalWhatsAppPreview({
   professorNome,
   professorWhatsApp,
   tipoOcorrencia,
+  tipoCategoria = 'penalidade',
   dataOcorrencia,
   unidadeNome,
   registradoPor,
@@ -81,10 +83,36 @@ export function ModalWhatsAppPreview({
     }
   };
 
-  // Gerar mensagem formatada
-  const mensagem = `🔔 *LA Music - Avaliação 360°*
+  // Gerar mensagem formatada baseada no tipo (bônus ou penalidade)
+  const getMensagem = () => {
+    const primeiroNome = professorNome.split(' ')[0];
+    
+    if (tipoCategoria === 'bonus') {
+      // Mensagem positiva e engajadora para bônus
+      return `🎉 *LA Music - Reconhecimento 360°*
 
-Olá, ${professorNome.split(' ')[0]}!
+Olá, ${primeiroNome}! 🌟
+
+*Parabéns!* Você acaba de ganhar pontos extras na sua avaliação!
+
+🏆 *Conquista:* ${tipoOcorrencia}
+📅 *Data:* ${dataFormatada}
+🏢 *Unidade:* ${unidadeNome}
+👤 *Registrado por:* ${registradoPor}${descricao ? `
+
+💬 *Mensagem:*
+${descricao}` : ''}
+
+Continue assim! Seu engajamento faz a diferença na LA Music! 💪🎵
+
+---
+Dúvidas? Fale com a coordenação.`;
+    }
+    
+    // Mensagem padrão para penalidades
+    return `🔔 *LA Music - Avaliação 360°*
+
+Olá, ${primeiroNome}!
 
 Uma ocorrência foi registrada em seu perfil:
 
@@ -97,6 +125,9 @@ ${descricao}
 ` : ''}
 ---
 Em caso de dúvidas, procure a coordenação.`;
+  };
+
+  const mensagem = getMensagem();
 
   // Copiar mensagem
   const handleCopiar = async () => {
@@ -123,6 +154,7 @@ Em caso de dúvidas, procure a coordenação.`;
           professorNome,
           professorWhatsApp,
           tipoOcorrencia,
+          tipoCategoria,
           dataOcorrencia,
           unidadeNome,
           registradoPor,

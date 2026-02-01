@@ -32,6 +32,7 @@ import {
   RotateCcw,
   Shirt,
   Monitor,
+  Smartphone,
 } from 'lucide-react';
 import { useCriterios360, useConfig360, Criterio360 } from '@/hooks/useProfessor360';
 import { toast } from 'sonner';
@@ -49,6 +50,7 @@ const CRITERIO_ICONS: Record<string, React.ReactNode> = {
   prazos: <Calendar className="h-4 w-4" />,
   emusys: <Monitor className="h-4 w-4" />,
   projetos: <Sparkles className="h-4 w-4" />,
+  videos_renovacao: <Smartphone className="h-4 w-4" />,
 };
 
 export function Professor360Config({ readOnly = false }: Professor360ConfigProps) {
@@ -194,7 +196,7 @@ export function Professor360Config({ readOnly = false }: Professor360ConfigProps
                     {criterio.tipo === 'penalidade' ? (
                       <span className="text-rose-400 font-medium">-{criterio.pontos_perda}</span>
                     ) : (
-                      <span className="text-emerald-400 font-medium">+{pontosPorProjeto}</span>
+                      <span className="text-emerald-400 font-medium">+{criterio.pontos_perda || pontosPorProjeto}</span>
                     )}
                   </td>
                   <td className="text-center px-4 py-4">
@@ -308,7 +310,7 @@ export function Professor360Config({ readOnly = false }: Professor360ConfigProps
               />
             </div>
 
-            {editingCriterio.tipo === 'penalidade' && (
+            {editingCriterio.tipo === 'penalidade' ? (
               <>
                 <div className="space-y-2">
                   <Label className="text-slate-300">Tolerância</Label>
@@ -334,6 +336,20 @@ export function Professor360Config({ readOnly = false }: Professor360ConfigProps
                   />
                 </div>
               </>
+            ) : (
+              <div className="space-y-2">
+                <Label className="text-slate-300">Pontos ganhos por ocorrência</Label>
+                <Input
+                  type="number"
+                  value={editingCriterio.pontos_perda || 0}
+                  onChange={(e) => setEditingCriterio({ ...editingCriterio, pontos_perda: parseInt(e.target.value) || 0 })}
+                  min={0}
+                  max={20}
+                />
+                <p className="text-xs text-slate-500">
+                  Pontos extras ganhos quando o professor atinge este critério
+                </p>
+              </div>
             )}
 
             <div className="space-y-2">

@@ -79,10 +79,14 @@ export function Tab360Professores({
     professorNome: string;
     professorWhatsApp: string | null;
     tipoOcorrencia: string;
+    tipoCategoria: 'penalidade' | 'bonus';
     dataOcorrencia: string;
     unidadeNome: string;
     registradoPor: string;
     descricao: string | null;
+    toleranciaInfo?: any;
+    minutosAtraso?: number | null;
+    atrasoGrave?: boolean;
   } | null>(null);
 
   const {
@@ -220,6 +224,7 @@ export function Tab360Professores({
         professorNome,
         professorWhatsApp,
         tipoOcorrencia,
+        tipoCategoria: criterio?.tipo as 'penalidade' | 'bonus' || 'penalidade',
         dataOcorrencia,
         unidadeNome,
         registradoPor,
@@ -656,10 +661,14 @@ export function Tab360Professores({
           professorNome={dadosWhatsApp.professorNome}
           professorWhatsApp={dadosWhatsApp.professorWhatsApp}
           tipoOcorrencia={dadosWhatsApp.tipoOcorrencia}
+          tipoCategoria={dadosWhatsApp.tipoCategoria}
           dataOcorrencia={dadosWhatsApp.dataOcorrencia}
           unidadeNome={dadosWhatsApp.unidadeNome}
           registradoPor={dadosWhatsApp.registradoPor}
           descricao={dadosWhatsApp.descricao}
+          toleranciaInfo={dadosWhatsApp.toleranciaInfo}
+          minutosAtraso={dadosWhatsApp.minutosAtraso}
+          atrasoGrave={dadosWhatsApp.atrasoGrave}
         />
       )}
     </div>

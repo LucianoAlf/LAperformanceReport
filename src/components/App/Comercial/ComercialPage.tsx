@@ -24,7 +24,8 @@ import {
   FileText,
   RotateCcw,
   Send,
-  GraduationCap
+  GraduationCap,
+  Trophy
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
@@ -55,6 +56,7 @@ import { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
 import { CelulaEditavelInline } from '@/components/ui/CelulaEditavelInline';
 import { AlertasComercial } from './AlertasComercial';
 import { PlanoAcaoComercial } from './PlanoAcaoComercial';
+import { TabProgramaMatriculador } from './TabProgramaMatriculador';
 
 // Tipos
 interface LeadDiario {
@@ -172,6 +174,7 @@ export function ComercialPage() {
     : unidadeId;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [abaPrincipal, setAbaPrincipal] = useState<'lancamentos' | 'programa'>('lancamentos');
   const [modalOpen, setModalOpen] = useState<'lead' | 'experimental' | 'visita' | 'matricula' | null>(null);
   const [relatorioOpen, setRelatorioOpen] = useState(false);
   const [tipoRelatorio, setTipoRelatorio] = useState<'diario' | 'semanal' | 'mensal' | 'matriculas' | 'comparativo_mensal' | 'comparativo_anual' | null>(null);
@@ -1945,6 +1948,51 @@ export function ComercialPage() {
         </div>
       </div>
 
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {/* ABAS PRINCIPAIS */}
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      <div className="flex gap-2 border-b border-slate-700 pb-2">
+        <button
+          onClick={() => setAbaPrincipal('lancamentos')}
+          className={cn(
+            "flex items-center gap-2 px-5 py-2.5 rounded-t-xl text-sm font-medium transition-all",
+            abaPrincipal === 'lancamentos' 
+              ? "bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg shadow-cyan-500/20" 
+              : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white"
+          )}
+        >
+          <Zap className="w-4 h-4" />
+          Lançamentos
+        </button>
+        <button
+          onClick={() => setAbaPrincipal('programa')}
+          className={cn(
+            "flex items-center gap-2 px-5 py-2.5 rounded-t-xl text-sm font-medium transition-all",
+            abaPrincipal === 'programa' 
+              ? "bg-gradient-to-r from-yellow-500 to-orange-500 text-white shadow-lg shadow-yellow-500/20" 
+              : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white"
+          )}
+        >
+          <Trophy className="w-4 h-4" />
+          Programa Matriculador+ LA
+        </button>
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {/* CONTEÚDO DA ABA PROGRAMA */}
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {abaPrincipal === 'programa' && (
+        <TabProgramaMatriculador 
+          unidadeId={isAdmin ? (context?.unidadeSelecionada || 'todos') : unidadeId}
+          ano={competencia.filtro.ano}
+        />
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {/* CONTEÚDO DA ABA LANÇAMENTOS */}
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {abaPrincipal === 'lancamentos' && (
+        <>
       {/* ═══════════════════════════════════════════════════════════════ */}
       {/* ALERTAS COMERCIAL (IA) */}
       {/* ═══════════════════════════════════════════════════════════════ */}
@@ -3992,6 +4040,8 @@ export function ComercialPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+        </>
+      )}
     </div>
   );
 }

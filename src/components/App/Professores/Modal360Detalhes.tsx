@@ -8,7 +8,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { 
   Eye, Clock, UserX, Building2, Calendar, Sparkles, 
-  TrendingUp, TrendingDown, Minus, X, Shirt, Monitor
+  TrendingUp, TrendingDown, Minus, X, Shirt, Monitor, Smartphone
 } from 'lucide-react';
 import { Criterio360, Professor360Resumo } from '@/hooks/useProfessor360';
 
@@ -30,6 +30,7 @@ const CRITERIO_ICONS: Record<string, React.ReactNode> = {
   prazos: <Calendar className="h-4 w-4" />,
   emusys: <Monitor className="h-4 w-4" />,
   projetos: <Sparkles className="h-4 w-4" />,
+  videos_renovacao: <Smartphone className="h-4 w-4" />,
 };
 
 // Cor da nota

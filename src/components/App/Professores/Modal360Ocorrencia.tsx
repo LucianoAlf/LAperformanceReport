@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DatePicker } from '@/components/ui/date-picker';
-import { Plus, Clock, UserX, Building2, Calendar, Sparkles, Shirt, Monitor, UserCircle, MessageSquare, AlertTriangle, AlertCircle, CheckCircle, X } from 'lucide-react';
+import { Plus, Clock, UserX, Building2, Calendar, Sparkles, Shirt, Monitor, UserCircle, MessageSquare, AlertTriangle, AlertCircle, CheckCircle, X, Smartphone } from 'lucide-react';
 import { Criterio360 } from '@/hooks/useProfessor360';
 import { format } from 'date-fns';
 import { supabase } from '@/lib/supabase';
@@ -35,6 +35,7 @@ const CRITERIO_ICONS: Record<string, React.ReactNode> = {
   prazos: <Calendar className="h-4 w-4" />,
   emusys: <Monitor className="h-4 w-4" />,
   projetos: <Sparkles className="h-4 w-4" />,
+  videos_renovacao: <Smartphone className="h-4 w-4" />,
 };
 
 // Lista de colaboradores que podem registrar ocorrências

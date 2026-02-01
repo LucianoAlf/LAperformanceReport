@@ -530,21 +530,21 @@ export function useProfessor360(competencia: string, unidadeId?: string) {
           contagem[c.codigo] = ocsProf.filter(oc => oc.criterio_id === c.id).length;
         });
 
-        // Calcular pontos por critério
+        // Calcular pontos por critério (subtração direta da nota base 100)
         const pontos: Record<string, number> = {};
-        let somaNotasPonderadas = 0;
-        let somaPesos = 0;
+        let totalPenalidades = 0;
 
         criteriosPenalidade.forEach(c => {
           const qtd = contagem[c.codigo] || 0;
           const excedente = Math.max(0, qtd - c.tolerancia);
-          const pontoCriterio = Math.max(0, 100 - excedente * c.pontos_perda);
+          const penalidade = excedente * c.pontos_perda;
+          const pontoCriterio = Math.max(0, 100 - penalidade);
           pontos[c.codigo] = pontoCriterio;
-          somaNotasPonderadas += pontoCriterio * c.peso;
-          somaPesos += c.peso;
+          totalPenalidades += penalidade;
         });
 
-        const notaBase = somaPesos > 0 ? somaNotasPonderadas / somaPesos : 100;
+        // Nota base = 100 - total de penalidades (mínimo 0)
+        const notaBase = Math.max(0, 100 - totalPenalidades);
 
         // Calcular bônus de projetos
         const qtdProjetos = contagem['projetos'] || 0;
@@ -560,6 +560,31 @@ export function useProfessor360(competencia: string, unidadeId?: string) {
           a => a.professor_id === prof.id && a.unidade_id === unidade.id
         );
 
+        // Sempre incluir as contagens calculadas, mesmo sem avaliação salva no banco
+        const avaliacaoCalculada = {
+          ...(avaliacaoExistente || {}),
+          professor_id: prof.id,
+          unidade_id: unidade.id,
+          competencia,
+          pontos_atrasos: pontos['atrasos'] || 100,
+          pontos_faltas: pontos['faltas'] || 100,
+          pontos_organizacao_sala: pontos['organizacao_sala'] || 100,
+          pontos_uniforme: pontos['uniforme'] || 100,
+          pontos_prazos: pontos['prazos'] || 100,
+          pontos_emusys: pontos['emusys'] || 100,
+          pontos_projetos: bonusProjetos,
+          qtd_atrasos: contagem['atrasos'] || 0,
+          qtd_faltas: contagem['faltas'] || 0,
+          qtd_organizacao_sala: contagem['organizacao_sala'] || 0,
+          qtd_uniforme: contagem['uniforme'] || 0,
+          qtd_prazos: contagem['prazos'] || 0,
+          qtd_emusys: contagem['emusys'] || 0,
+          qtd_projetos: qtdProjetos,
+          nota_base: Math.round(notaBase * 10) / 10,
+          bonus_projetos: bonusProjetos,
+          nota_final: Math.round(notaFinal * 10) / 10,
+        };
+
         resultados.push({
           professor_id: prof.id,
           professor_nome: prof.nome,
@@ -570,26 +595,7 @@ export function useProfessor360(competencia: string, unidadeId?: string) {
           nota_final: Math.round(notaFinal * 10) / 10,
           status: avaliacaoExistente?.status || 'pendente',
           qtd_ocorrencias: ocsProf.length,
-          avaliacao: avaliacaoExistente ? {
-            ...avaliacaoExistente,
-            pontos_atrasos: pontos['atrasos'] || 100,
-            pontos_faltas: pontos['faltas'] || 100,
-            pontos_organizacao_sala: pontos['organizacao_sala'] || 100,
-            pontos_uniforme: pontos['uniforme'] || 100,
-            pontos_prazos: pontos['prazos'] || 100,
-            pontos_emusys: pontos['emusys'] || 100,
-            pontos_projetos: bonusProjetos,
-            qtd_atrasos: contagem['atrasos'] || 0,
-            qtd_faltas: contagem['faltas'] || 0,
-            qtd_organizacao_sala: contagem['organizacao_sala'] || 0,
-            qtd_uniforme: contagem['uniforme'] || 0,
-            qtd_prazos: contagem['prazos'] || 0,
-            qtd_emusys: contagem['emusys'] || 0,
-            qtd_projetos: qtdProjetos,
-            nota_base: Math.round(notaBase * 10) / 10,
-            bonus_projetos: bonusProjetos,
-            nota_final: Math.round(notaFinal * 10) / 10,
-          } : undefined,
+          avaliacao: avaliacaoCalculada as any,
         });
       });
     });

@@ -1,0 +1,854 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe - Programa Matriculador+ LA</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+  </style>
+</head>
+<body class="bg-slate-950 text-white min-h-screen p-6">
+  
+  <!-- Header -->
+  <div class="max-w-7xl mx-auto">
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-bold">Programa Matriculador+ LA 2026</h1>
+        <p class="text-slate-400">Competição anual de Janeiro a Novembro • Prêmio: Viagem com acompanhante</p>
+      </div>
+      <div class="flex gap-3">
+        <button class="px-4 py-2 bg-slate-800 rounded-lg text-sm hover:bg-slate-700">
+          ⚙️ Configurações do Programa
+        </button>
+      </div>
+    </div>
+
+    <!-- Tabs de navegação -->
+    <div class="flex gap-2 mb-6 border-b border-slate-800 pb-2">
+      <button class="px-4 py-2 bg-emerald-600 rounded-t-lg text-sm font-medium" onclick="showView('admin')">
+        👑 Visão Admin (Ranking)
+      </button>
+      <button class="px-4 py-2 bg-slate-800 rounded-t-lg text-sm hover:bg-slate-700" onclick="showView('hunter')">
+        🎯 Visão Hunter (Individual)
+      </button>
+      <button class="px-4 py-2 bg-slate-800 rounded-t-lg text-sm hover:bg-slate-700" onclick="showView('emusys')">
+        📋 Avaliação Emusys
+      </button>
+      <button class="px-4 py-2 bg-slate-800 rounded-t-lg text-sm hover:bg-slate-700" onclick="showView('config')">
+        ⚙️ Configurações
+      </button>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- VISÃO ADMIN - RANKING CONSOLIDADO -->
+    <!-- ========================================== -->
+    <div id="view-admin">
+      
+      <!-- Cards de Ranking -->
+      <div class="grid grid-cols-3 gap-4 mb-6">
+        
+        <!-- 1º Lugar -->
+        <div class="bg-gradient-to-br from-yellow-900/30 to-yellow-600/10 border-2 border-yellow-500/50 rounded-2xl p-6 relative">
+          <div class="absolute -top-3 -right-3 bg-yellow-500 text-black font-bold px-3 py-1 rounded-full text-sm">
+            🥇 1º Lugar
+          </div>
+          <div class="flex items-center gap-4 mb-4">
+            <div class="w-16 h-16 bg-yellow-500/20 rounded-full flex items-center justify-center text-2xl font-bold text-yellow-400">
+              V
+            </div>
+            <div>
+              <h3 class="text-xl font-bold text-yellow-400">Vitória</h3>
+              <p class="text-slate-400 text-sm">Campo Grande</p>
+            </div>
+          </div>
+          <div class="text-center mb-4">
+            <span class="text-5xl font-bold text-yellow-400">92</span>
+            <span class="text-slate-400 text-lg"> pontos</span>
+          </div>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between">
+              <span class="text-slate-400">Taxa Geral</span>
+              <span class="text-emerald-400">15.2% ✓</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-400">Média Matrículas</span>
+              <span class="text-emerald-400">27/mês ✓</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-400">Ticket Médio</span>
+              <span class="text-emerald-400">R$ 402 ✓</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2º Lugar -->
+        <div class="bg-gradient-to-br from-slate-700/30 to-slate-600/10 border-2 border-slate-500/50 rounded-2xl p-6 relative">
+          <div class="absolute -top-3 -right-3 bg-slate-400 text-black font-bold px-3 py-1 rounded-full text-sm">
+            🥈 2º Lugar
+          </div>
+          <div class="flex items-center gap-4 mb-4">
+            <div class="w-16 h-16 bg-slate-500/20 rounded-full flex items-center justify-center text-2xl font-bold text-slate-300">
+              C
+            </div>
+            <div>
+              <h3 class="text-xl font-bold text-slate-300">Clayton</h3>
+              <p class="text-slate-400 text-sm">Recreio</p>
+            </div>
+          </div>
+          <div class="text-center mb-4">
+            <span class="text-5xl font-bold text-slate-300">85</span>
+            <span class="text-slate-400 text-lg"> pontos</span>
+          </div>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between">
+              <span class="text-slate-400">Taxa Geral</span>
+              <span class="text-emerald-400">14.1% ✓</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-400">Média Matrículas</span>
+              <span class="text-emerald-400">22/mês ✓</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-400">Ticket Médio</span>
+              <span class="text-amber-400">R$ 428 ⚠</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3º Lugar -->
+        <div class="bg-gradient-to-br from-orange-900/30 to-orange-600/10 border-2 border-orange-500/50 rounded-2xl p-6 relative">
+          <div class="absolute -top-3 -right-3 bg-orange-600 text-white font-bold px-3 py-1 rounded-full text-sm">
+            🥉 3º Lugar
+          </div>
+          <div class="flex items-center gap-4 mb-4">
+            <div class="w-16 h-16 bg-orange-500/20 rounded-full flex items-center justify-center text-2xl font-bold text-orange-400">
+              K
+            </div>
+            <div>
+              <h3 class="text-xl font-bold text-orange-400">Kailane</h3>
+              <p class="text-slate-400 text-sm">Barra</p>
+            </div>
+          </div>
+          <div class="text-center mb-4">
+            <span class="text-5xl font-bold text-orange-400">78</span>
+            <span class="text-slate-400 text-lg"> pontos</span>
+          </div>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between">
+              <span class="text-slate-400">Taxa Geral</span>
+              <span class="text-emerald-400">13.8% ✓</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-400">Média Matrículas</span>
+              <span class="text-red-400">14/mês ✗</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-400">Ticket Médio</span>
+              <span class="text-emerald-400">R$ 465 ✓</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabela Comparativa Detalhada -->
+      <div class="bg-slate-900 rounded-xl p-6 mb-6">
+        <h3 class="text-lg font-semibold mb-4">📊 Comparativo Detalhado - Médias Anuais (Jan-Nov 2026)</h3>
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-slate-400 border-b border-slate-700">
+              <th class="text-left py-3">Métrica</th>
+              <th class="text-center py-3">Meta</th>
+              <th class="text-center py-3">Vitória (CG)</th>
+              <th class="text-center py-3">Clayton (REC)</th>
+              <th class="text-center py-3">Kailane (BARRA)</th>
+              <th class="text-center py-3">Pontos</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="border-b border-slate-800">
+              <td class="py-3 font-medium">Taxa Show-up → Experimental</td>
+              <td class="text-center text-slate-400">18%</td>
+              <td class="text-center text-emerald-400">21.5% ✓</td>
+              <td class="text-center text-emerald-400">19.2% ✓</td>
+              <td class="text-center text-amber-400">17.8% ⚠</td>
+              <td class="text-center text-slate-400">20 pts</td>
+            </tr>
+            <tr class="border-b border-slate-800">
+              <td class="py-3 font-medium">Taxa Experimental → Matrícula</td>
+              <td class="text-center text-slate-400">75%</td>
+              <td class="text-center text-emerald-400">78.3% ✓</td>
+              <td class="text-center text-emerald-400">76.1% ✓</td>
+              <td class="text-center text-emerald-400">77.5% ✓</td>
+              <td class="text-center text-slate-400">25 pts</td>
+            </tr>
+            <tr class="border-b border-slate-800">
+              <td class="py-3 font-medium">Taxa Lead → Matrícula (Geral)</td>
+              <td class="text-center text-slate-400">13.5%</td>
+              <td class="text-center text-emerald-400 font-bold">15.2% ✓</td>
+              <td class="text-center text-emerald-400">14.1% ✓</td>
+              <td class="text-center text-emerald-400">13.8% ✓</td>
+              <td class="text-center text-slate-400">30 pts</td>
+            </tr>
+            <tr class="border-b border-slate-800">
+              <td class="py-3 font-medium">Volume Médio Matrículas/Mês</td>
+              <td class="text-center text-slate-400">25 / 20 / 15</td>
+              <td class="text-center text-emerald-400">27/mês ✓</td>
+              <td class="text-center text-emerald-400">22/mês ✓</td>
+              <td class="text-center text-red-400">14/mês ✗</td>
+              <td class="text-center text-slate-400">15 pts</td>
+            </tr>
+            <tr class="border-b border-slate-800">
+              <td class="py-3 font-medium">Ticket Médio Anual</td>
+              <td class="text-center text-slate-400">R$387 / R$435 / R$450</td>
+              <td class="text-center text-emerald-400">R$ 402 ✓</td>
+              <td class="text-center text-amber-400">R$ 428 ⚠</td>
+              <td class="text-center text-emerald-400">R$ 465 ✓</td>
+              <td class="text-center text-slate-400">10 pts</td>
+            </tr>
+            <tr class="border-b border-slate-800 bg-red-500/10">
+              <td class="py-3 font-medium text-red-400">Penalidades Emusys</td>
+              <td class="text-center text-slate-400">-</td>
+              <td class="text-center text-red-400">-3 pts</td>
+              <td class="text-center text-red-400">-5 pts</td>
+              <td class="text-center text-red-400">-7 pts</td>
+              <td class="text-center text-red-400">Desconto</td>
+            </tr>
+            <tr class="bg-slate-800/50 font-bold">
+              <td class="py-3">TOTAL DE PONTOS</td>
+              <td class="text-center">100 pts</td>
+              <td class="text-center text-yellow-400">92 pts 🥇</td>
+              <td class="text-center text-slate-300">85 pts 🥈</td>
+              <td class="text-center text-orange-400">78 pts 🥉</td>
+              <td class="text-center">-</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Nota de Corte -->
+      <div class="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 mb-6">
+        <div class="flex items-center gap-3">
+          <span class="text-2xl">⚠️</span>
+          <div>
+            <p class="font-medium text-amber-400">Nota de Corte: 80 pontos</p>
+            <p class="text-sm text-slate-400">Hunters abaixo de 80 pontos não participam da premiação final. Kailane está com 78 pontos - precisa recuperar!</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ========================================== -->
+    <!-- VISÃO HUNTER - INDIVIDUAL -->
+    <!-- ========================================== -->
+    <div id="view-hunter" class="hidden">
+      
+      <!-- Header do Hunter -->
+      <div class="bg-gradient-to-r from-emerald-900/30 to-emerald-600/10 border border-emerald-500/30 rounded-2xl p-6 mb-6">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-4">
+            <div class="w-20 h-20 bg-emerald-500/20 rounded-full flex items-center justify-center text-3xl font-bold text-emerald-400">
+              V
+            </div>
+            <div>
+              <h2 class="text-2xl font-bold">Olá, Vitórinha! 🚀</h2>
+              <p class="text-slate-400">Campo Grande • Programa Matriculador+ LA 2026</p>
+            </div>
+          </div>
+          <div class="text-right">
+            <div class="text-5xl font-bold text-emerald-400">92</div>
+            <div class="text-slate-400">pontos</div>
+            <div class="text-emerald-400 text-sm mt-1">✓ Acima do corte (80)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Progresso das Metas -->
+      <div class="grid grid-cols-2 gap-4 mb-6">
+        
+        <!-- Taxa Show-up → Experimental -->
+        <div class="bg-slate-900 rounded-xl p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h4 class="font-medium">Taxa Show-up → Experimental</h4>
+              <p class="text-sm text-slate-400">Meta: 18%</p>
+            </div>
+            <div class="text-right">
+              <span class="text-2xl font-bold text-emerald-400">21.5%</span>
+              <span class="text-emerald-400 text-sm block">+20 pts ✓</span>
+            </div>
+          </div>
+          <div class="w-full bg-slate-700 rounded-full h-3">
+            <div class="bg-emerald-500 h-3 rounded-full" style="width: 100%"></div>
+          </div>
+          <p class="text-xs text-emerald-400 mt-2">🎉 +3.5% acima da meta! Bônus: +5 pts</p>
+        </div>
+
+        <!-- Taxa Experimental → Matrícula -->
+        <div class="bg-slate-900 rounded-xl p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h4 class="font-medium">Taxa Experimental → Matrícula</h4>
+              <p class="text-sm text-slate-400">Meta: 75%</p>
+            </div>
+            <div class="text-right">
+              <span class="text-2xl font-bold text-emerald-400">78.3%</span>
+              <span class="text-emerald-400 text-sm block">+25 pts ✓</span>
+            </div>
+          </div>
+          <div class="w-full bg-slate-700 rounded-full h-3">
+            <div class="bg-emerald-500 h-3 rounded-full" style="width: 100%"></div>
+          </div>
+          <p class="text-xs text-emerald-400 mt-2">🎉 +3.3% acima da meta!</p>
+        </div>
+
+        <!-- Taxa Lead → Matrícula (Geral) -->
+        <div class="bg-slate-900 rounded-xl p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h4 class="font-medium">Taxa Lead → Matrícula (Geral)</h4>
+              <p class="text-sm text-slate-400">Meta: 13.5% • Critério de desempate!</p>
+            </div>
+            <div class="text-right">
+              <span class="text-2xl font-bold text-emerald-400">15.2%</span>
+              <span class="text-emerald-400 text-sm block">+30 pts ✓</span>
+            </div>
+          </div>
+          <div class="w-full bg-slate-700 rounded-full h-3">
+            <div class="bg-emerald-500 h-3 rounded-full" style="width: 100%"></div>
+          </div>
+          <p class="text-xs text-yellow-400 mt-2">⭐ Esta é a métrica de desempate! Você está na frente!</p>
+        </div>
+
+        <!-- Volume Médio Matrículas/Mês -->
+        <div class="bg-slate-900 rounded-xl p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h4 class="font-medium">Volume Médio Matrículas/Mês</h4>
+              <p class="text-sm text-slate-400">Meta: 25 matrículas/mês</p>
+            </div>
+            <div class="text-right">
+              <span class="text-2xl font-bold text-emerald-400">27</span>
+              <span class="text-emerald-400 text-sm block">+15 pts ✓</span>
+            </div>
+          </div>
+          <div class="w-full bg-slate-700 rounded-full h-3">
+            <div class="bg-emerald-500 h-3 rounded-full" style="width: 100%"></div>
+          </div>
+          <p class="text-xs text-slate-400 mt-2">Média de Jan-Fev: (25+29)/2 = 27 matrículas</p>
+        </div>
+
+        <!-- Ticket Médio Anual -->
+        <div class="bg-slate-900 rounded-xl p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h4 class="font-medium">Ticket Médio Anual</h4>
+              <p class="text-sm text-slate-400">Meta: R$ 387</p>
+            </div>
+            <div class="text-right">
+              <span class="text-2xl font-bold text-emerald-400">R$ 402</span>
+              <span class="text-emerald-400 text-sm block">+10 pts ✓</span>
+            </div>
+          </div>
+          <div class="w-full bg-slate-700 rounded-full h-3">
+            <div class="bg-emerald-500 h-3 rounded-full" style="width: 100%"></div>
+          </div>
+          <p class="text-xs text-emerald-400 mt-2">🎉 R$15 acima da meta!</p>
+        </div>
+
+        <!-- Penalidades Emusys -->
+        <div class="bg-slate-900 rounded-xl p-5 border border-red-500/30">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h4 class="font-medium text-red-400">Penalidades Emusys</h4>
+              <p class="text-sm text-slate-400">Avaliação da líder comercial</p>
+            </div>
+            <div class="text-right">
+              <span class="text-2xl font-bold text-red-400">-3</span>
+              <span class="text-red-400 text-sm block">pts descontados</span>
+            </div>
+          </div>
+          <div class="text-sm text-slate-400 space-y-1">
+            <p>• 01/02: Não preencheu relatório Emusys (-3 pts)</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Evolução Mensal -->
+      <div class="bg-slate-900 rounded-xl p-6 mb-6">
+        <h3 class="text-lg font-semibold mb-4">📈 Evolução Mensal - 2026</h3>
+        <div class="grid grid-cols-11 gap-2 text-center text-sm">
+          <div class="bg-emerald-500/20 rounded-lg p-3">
+            <div class="font-bold text-emerald-400">Jan</div>
+            <div class="text-lg font-bold">25</div>
+            <div class="text-xs text-slate-400">matrículas</div>
+          </div>
+          <div class="bg-emerald-500/20 rounded-lg p-3">
+            <div class="font-bold text-emerald-400">Fev</div>
+            <div class="text-lg font-bold">29</div>
+            <div class="text-xs text-slate-400">matrículas</div>
+          </div>
+          <div class="bg-slate-700/50 rounded-lg p-3">
+            <div class="font-bold text-slate-500">Mar</div>
+            <div class="text-lg font-bold text-slate-500">-</div>
+            <div class="text-xs text-slate-500">pendente</div>
+          </div>
+          <div class="bg-slate-700/50 rounded-lg p-3">
+            <div class="font-bold text-slate-500">Abr</div>
+            <div class="text-lg font-bold text-slate-500">-</div>
+            <div class="text-xs text-slate-500">pendente</div>
+          </div>
+          <div class="bg-slate-700/50 rounded-lg p-3">
+            <div class="font-bold text-slate-500">Mai</div>
+            <div class="text-lg font-bold text-slate-500">-</div>
+            <div class="text-xs text-slate-500">pendente</div>
+          </div>
+          <div class="bg-slate-700/50 rounded-lg p-3">
+            <div class="font-bold text-slate-500">Jun</div>
+            <div class="text-lg font-bold text-slate-500">-</div>
+            <div class="text-xs text-slate-500">pendente</div>
+          </div>
+          <div class="bg-slate-700/50 rounded-lg p-3">
+            <div class="font-bold text-slate-500">Jul</div>
+            <div class="text-lg font-bold text-slate-500">-</div>
+            <div class="text-xs text-slate-500">pendente</div>
+          </div>
+          <div class="bg-slate-700/50 rounded-lg p-3">
+            <div class="font-bold text-slate-500">Ago</div>
+            <div class="text-lg font-bold text-slate-500">-</div>
+            <div class="text-xs text-slate-500">pendente</div>
+          </div>
+          <div class="bg-slate-700/50 rounded-lg p-3">
+            <div class="font-bold text-slate-500">Set</div>
+            <div class="text-lg font-bold text-slate-500">-</div>
+            <div class="text-xs text-slate-500">pendente</div>
+          </div>
+          <div class="bg-slate-700/50 rounded-lg p-3">
+            <div class="font-bold text-slate-500">Out</div>
+            <div class="text-lg font-bold text-slate-500">-</div>
+            <div class="text-xs text-slate-500">pendente</div>
+          </div>
+          <div class="bg-slate-700/50 rounded-lg p-3">
+            <div class="font-bold text-slate-500">Nov</div>
+            <div class="text-lg font-bold text-slate-500">-</div>
+            <div class="text-xs text-slate-500">pendente</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mensagem Motivacional -->
+      <div class="bg-gradient-to-r from-yellow-900/20 to-yellow-600/10 border border-yellow-500/30 rounded-xl p-6">
+        <div class="flex items-center gap-4">
+          <span class="text-4xl">🏆</span>
+          <div>
+            <h4 class="font-bold text-yellow-400 text-lg">Você está na liderança, Vitórinha!</h4>
+            <p class="text-slate-300">Continue assim! Com 92 pontos você está 7 pontos à frente do Clayton. A viagem com acompanhante pode ser sua!</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ========================================== -->
+    <!-- AVALIAÇÃO EMUSYS (LÍDER COMERCIAL) -->
+    <!-- ========================================== -->
+    <div id="view-emusys" class="hidden">
+      
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h2 class="text-xl font-bold">📋 Avaliação Emusys</h2>
+          <p class="text-slate-400">Lançamento de penalidades por não preenchimento de sistemas</p>
+        </div>
+        <button class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-medium flex items-center gap-2">
+          ➕ Registrar Penalidade
+        </button>
+      </div>
+
+      <!-- Resumo por Hunter -->
+      <div class="grid grid-cols-3 gap-4 mb-6">
+        <div class="bg-slate-900 rounded-xl p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 bg-emerald-500/20 rounded-full flex items-center justify-center font-bold text-emerald-400">V</div>
+              <div>
+                <h4 class="font-medium">Vitória</h4>
+                <p class="text-xs text-slate-400">Campo Grande</p>
+              </div>
+            </div>
+            <div class="text-right">
+              <span class="text-xl font-bold text-red-400">-3</span>
+              <span class="text-xs text-slate-400 block">pts</span>
+            </div>
+          </div>
+          <div class="text-sm text-slate-400">1 penalidade este ano</div>
+        </div>
+
+        <div class="bg-slate-900 rounded-xl p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 bg-blue-500/20 rounded-full flex items-center justify-center font-bold text-blue-400">C</div>
+              <div>
+                <h4 class="font-medium">Clayton</h4>
+                <p class="text-xs text-slate-400">Recreio</p>
+              </div>
+            </div>
+            <div class="text-right">
+              <span class="text-xl font-bold text-red-400">-5</span>
+              <span class="text-xs text-slate-400 block">pts</span>
+            </div>
+          </div>
+          <div class="text-sm text-slate-400">2 penalidades este ano</div>
+        </div>
+
+        <div class="bg-slate-900 rounded-xl p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 bg-orange-500/20 rounded-full flex items-center justify-center font-bold text-orange-400">K</div>
+              <div>
+                <h4 class="font-medium">Kailane</h4>
+                <p class="text-xs text-slate-400">Barra</p>
+              </div>
+            </div>
+            <div class="text-right">
+              <span class="text-xl font-bold text-red-400">-7</span>
+              <span class="text-xs text-slate-400 block">pts</span>
+            </div>
+          </div>
+          <div class="text-sm text-slate-400">3 penalidades este ano</div>
+        </div>
+      </div>
+
+      <!-- Histórico de Penalidades -->
+      <div class="bg-slate-900 rounded-xl p-6">
+        <h3 class="text-lg font-semibold mb-4">Histórico de Penalidades - 2026</h3>
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-slate-400 border-b border-slate-700">
+              <th class="text-left py-3">Data</th>
+              <th class="text-left py-3">Hunter</th>
+              <th class="text-left py-3">Tipo</th>
+              <th class="text-left py-3">Descrição</th>
+              <th class="text-center py-3">Pontos</th>
+              <th class="text-left py-3">Registrado por</th>
+              <th class="text-center py-3">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="border-b border-slate-800">
+              <td class="py-3">01/02/2026</td>
+              <td class="py-3">
+                <div class="flex items-center gap-2">
+                  <div class="w-6 h-6 bg-orange-500/20 rounded-full flex items-center justify-center text-xs font-bold text-orange-400">K</div>
+                  Kailane
+                </div>
+              </td>
+              <td class="py-3"><span class="px-2 py-1 bg-red-500/20 text-red-400 rounded text-xs">Emusys</span></td>
+              <td class="py-3">Não preencheu relatório diário no Emusys</td>
+              <td class="py-3 text-center text-red-400 font-bold">-3</td>
+              <td class="py-3 text-slate-400">Líder Comercial</td>
+              <td class="py-3 text-center">
+                <button class="text-slate-400 hover:text-white">✏️</button>
+                <button class="text-slate-400 hover:text-red-400 ml-2">🗑️</button>
+              </td>
+            </tr>
+            <tr class="border-b border-slate-800">
+              <td class="py-3">28/01/2026</td>
+              <td class="py-3">
+                <div class="flex items-center gap-2">
+                  <div class="w-6 h-6 bg-orange-500/20 rounded-full flex items-center justify-center text-xs font-bold text-orange-400">K</div>
+                  Kailane
+                </div>
+              </td>
+              <td class="py-3"><span class="px-2 py-1 bg-amber-500/20 text-amber-400 rounded text-xs">LA Report</span></td>
+              <td class="py-3">Leads abandonados há mais de 5 dias</td>
+              <td class="py-3 text-center text-red-400 font-bold">-2</td>
+              <td class="py-3 text-slate-400">Líder Comercial</td>
+              <td class="py-3 text-center">
+                <button class="text-slate-400 hover:text-white">✏️</button>
+                <button class="text-slate-400 hover:text-red-400 ml-2">🗑️</button>
+              </td>
+            </tr>
+            <tr class="border-b border-slate-800">
+              <td class="py-3">25/01/2026</td>
+              <td class="py-3">
+                <div class="flex items-center gap-2">
+                  <div class="w-6 h-6 bg-blue-500/20 rounded-full flex items-center justify-center text-xs font-bold text-blue-400">C</div>
+                  Clayton
+                </div>
+              </td>
+              <td class="py-3"><span class="px-2 py-1 bg-red-500/20 text-red-400 rounded text-xs">Emusys</span></td>
+              <td class="py-3">Tarefas atrasadas no Emusys</td>
+              <td class="py-3 text-center text-red-400 font-bold">-3</td>
+              <td class="py-3 text-slate-400">Líder Comercial</td>
+              <td class="py-3 text-center">
+                <button class="text-slate-400 hover:text-white">✏️</button>
+                <button class="text-slate-400 hover:text-red-400 ml-2">🗑️</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Modal de Registrar Penalidade (exemplo) -->
+      <div class="fixed inset-0 bg-black/50 hidden items-center justify-center" id="modal-penalidade">
+        <div class="bg-slate-900 rounded-2xl p-6 w-full max-w-md border border-slate-700">
+          <h3 class="text-lg font-bold mb-4">Registrar Penalidade Emusys</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Hunter</label>
+              <select class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+                <option>Selecione o Hunter</option>
+                <option>Vitória - Campo Grande</option>
+                <option>Clayton - Recreio</option>
+                <option>Kailane - Barra</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Tipo de Penalidade</label>
+              <select class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+                <option>Não preencheu Emusys (-3 pts)</option>
+                <option>Não preencheu LA Report (-3 pts)</option>
+                <option>Leads abandonados (-2 pts por lead)</option>
+                <option>Tarefas atrasadas (-3 pts)</option>
+                <option>Reincidência no mês (-5 pts)</option>
+                <option>Outro (personalizado)</option>
+              </select>
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Descrição</label>
+              <textarea class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 h-20" placeholder="Descreva o motivo da penalidade..."></textarea>
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Data</label>
+              <input type="date" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+            </div>
+            <div class="flex gap-3 pt-2">
+              <button class="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg">Cancelar</button>
+              <button class="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg">Registrar Penalidade</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ========================================== -->
+    <!-- CONFIGURAÇÕES DO PROGRAMA -->
+    <!-- ========================================== -->
+    <div id="view-config" class="hidden">
+      
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h2 class="text-xl font-bold">⚙️ Configurações do Programa Matriculador+ LA</h2>
+          <p class="text-slate-400">Edite as metas, pontuações e nota de corte</p>
+        </div>
+        <button class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-lg text-sm font-medium">
+          💾 Salvar Alterações
+        </button>
+      </div>
+
+      <div class="grid grid-cols-2 gap-6">
+        
+        <!-- Metas de Conversão -->
+        <div class="bg-slate-900 rounded-xl p-6">
+          <h3 class="text-lg font-semibold mb-4">📊 Metas de Taxa de Conversão</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Taxa Show-up → Experimental</label>
+              <div class="flex gap-2">
+                <input type="number" value="18" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+                <span class="flex items-center text-slate-400">%</span>
+              </div>
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Taxa Experimental → Matrícula</label>
+              <div class="flex gap-2">
+                <input type="number" value="75" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+                <span class="flex items-center text-slate-400">%</span>
+              </div>
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Taxa Lead → Matrícula (Geral/Desempate)</label>
+              <div class="flex gap-2">
+                <input type="number" value="13.5" step="0.1" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+                <span class="flex items-center text-slate-400">%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Volume Médio por Unidade -->
+        <div class="bg-slate-900 rounded-xl p-6">
+          <h3 class="text-lg font-semibold mb-4">📈 Volume Médio Matrículas/Mês</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Campo Grande (Vitória)</label>
+              <div class="flex gap-2">
+                <input type="number" value="25" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+                <span class="flex items-center text-slate-400">matrículas</span>
+              </div>
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Recreio (Clayton)</label>
+              <div class="flex gap-2">
+                <input type="number" value="20" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+                <span class="flex items-center text-slate-400">matrículas</span>
+              </div>
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Barra (Kailane)</label>
+              <div class="flex gap-2">
+                <input type="number" value="15" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+                <span class="flex items-center text-slate-400">matrículas</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Ticket Médio por Unidade -->
+        <div class="bg-slate-900 rounded-xl p-6">
+          <h3 class="text-lg font-semibold mb-4">💰 Ticket Médio Anual</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Campo Grande (Vitória)</label>
+              <div class="flex gap-2">
+                <span class="flex items-center text-slate-400">R$</span>
+                <input type="number" value="387" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+              </div>
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Recreio (Clayton)</label>
+              <div class="flex gap-2">
+                <span class="flex items-center text-slate-400">R$</span>
+                <input type="number" value="435" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+              </div>
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Barra (Kailane)</label>
+              <div class="flex gap-2">
+                <span class="flex items-center text-slate-400">R$</span>
+                <input type="number" value="450" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pontuação -->
+        <div class="bg-slate-900 rounded-xl p-6">
+          <h3 class="text-lg font-semibold mb-4">🎯 Sistema de Pontuação</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Pontos - Taxa Show-up → Exp</label>
+              <input type="number" value="20" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Pontos - Taxa Exp → Matrícula</label>
+              <input type="number" value="25" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Pontos - Taxa Geral (Desempate)</label>
+              <input type="number" value="30" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Pontos - Volume Médio</label>
+              <input type="number" value="15" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Pontos - Ticket Médio</label>
+              <input type="number" value="10" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+            </div>
+          </div>
+        </div>
+
+        <!-- Penalidades Emusys -->
+        <div class="bg-slate-900 rounded-xl p-6">
+          <h3 class="text-lg font-semibold mb-4">⚠️ Penalidades Emusys</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Não preencheu Emusys</label>
+              <div class="flex gap-2">
+                <span class="flex items-center text-red-400">-</span>
+                <input type="number" value="3" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+                <span class="flex items-center text-slate-400">pts</span>
+              </div>
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Não preencheu LA Report</label>
+              <div class="flex gap-2">
+                <span class="flex items-center text-red-400">-</span>
+                <input type="number" value="3" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+                <span class="flex items-center text-slate-400">pts</span>
+              </div>
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Leads abandonados (por lead)</label>
+              <div class="flex gap-2">
+                <span class="flex items-center text-red-400">-</span>
+                <input type="number" value="2" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+                <span class="flex items-center text-slate-400">pts</span>
+              </div>
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Reincidência no mês</label>
+              <div class="flex gap-2">
+                <span class="flex items-center text-red-400">-</span>
+                <input type="number" value="5" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+                <span class="flex items-center text-slate-400">pts</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Nota de Corte -->
+        <div class="bg-slate-900 rounded-xl p-6">
+          <h3 class="text-lg font-semibold mb-4">🚫 Nota de Corte</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Pontuação mínima para participar</label>
+              <div class="flex gap-2">
+                <input type="number" value="80" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+                <span class="flex items-center text-slate-400">pontos</span>
+              </div>
+              <p class="text-xs text-slate-500 mt-2">Hunters abaixo desta pontuação não participam da premiação final</p>
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Período do Programa</label>
+              <div class="flex gap-2">
+                <select class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+                  <option>Janeiro</option>
+                  <option selected>Fevereiro</option>
+                </select>
+                <span class="flex items-center text-slate-400">até</span>
+                <select class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+                  <option selected>Novembro</option>
+                  <option>Dezembro</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <script>
+    function showView(view) {
+      // Esconder todas as views
+      document.getElementById('view-admin').classList.add('hidden');
+      document.getElementById('view-hunter').classList.add('hidden');
+      document.getElementById('view-emusys').classList.add('hidden');
+      document.getElementById('view-config').classList.add('hidden');
+      
+      // Mostrar a view selecionada
+      document.getElementById('view-' + view).classList.remove('hidden');
+    }
+  </script>
+
+</body>
+</html>

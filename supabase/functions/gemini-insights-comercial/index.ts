@@ -20,31 +20,37 @@ const HUNTERS_MAP: Record<string, { nome: string; apelido: string }> = {
   "368d47f5-2d88-4475-bc14-ba084a9a348e": { nome: "Kailane", apelido: "Kai" },
 };
 
-// Programa Matriculador+ LA - Metas por unidade
-const MATRICULADOR_PLUS_METAS: Record<string, {
-  matricula_plus: number;
-  max_indicacao: number;
-  la_music_family: number;
-  ticket_acima_meta: number;
-}> = {
-  "2ec861f6-023f-4d7b-9927-3960ad8c2a92": { // Campo Grande - Vitória
-    matricula_plus: 21,
-    max_indicacao: 5,
-    la_music_family: 3,
-    ticket_acima_meta: 10,
+// Programa Matriculador+ LA 2026 - METAS ANUAIS (Jan-Nov)
+// Sistema de pontuação baseado em médias anuais, não mais estrelas mensais
+const MATRICULADOR_PLUS_CONFIG = {
+  // Metas de taxas de conversão (iguais para todos)
+  metas_taxas: {
+    taxa_showup_experimental: 18, // % de leads que comparecem à experimental
+    taxa_experimental_matricula: 75, // % de experimentais que viram matrícula
+    taxa_lead_matricula: 13.5, // % geral (critério de desempate!)
   },
-  "95553e96-971b-4590-a6eb-0201d013c14d": { // Recreio - Clayton
-    matricula_plus: 17,
-    max_indicacao: 4,
-    la_music_family: 3,
-    ticket_acima_meta: 10,
+  // Metas de volume médio mensal por unidade
+  metas_volume: {
+    "2ec861f6-023f-4d7b-9927-3960ad8c2a92": 21, // Campo Grande - Vitória
+    "95553e96-971b-4590-a6eb-0201d013c14d": 17, // Recreio - Clayton
+    "368d47f5-2d88-4475-bc14-ba084a9a348e": 14, // Barra - Kailane
   },
-  "368d47f5-2d88-4475-bc14-ba084a9a348e": { // Barra - Kailane
-    matricula_plus: 14,
-    max_indicacao: 3,
-    la_music_family: 3,
-    ticket_acima_meta: 10,
+  // Metas de ticket médio anual por unidade
+  metas_ticket: {
+    "2ec861f6-023f-4d7b-9927-3960ad8c2a92": 450, // Campo Grande
+    "95553e96-971b-4590-a6eb-0201d013c14d": 420, // Recreio
+    "368d47f5-2d88-4475-bc14-ba084a9a348e": 450, // Barra
   },
+  // Sistema de pontuação (100 pts base)
+  pontuacao: {
+    taxa_showup: 20,
+    taxa_exp_mat: 25,
+    taxa_geral: 30, // Critério de desempate!
+    volume_medio: 15,
+    ticket_medio: 10,
+  },
+  nota_corte: 80, // Mínimo para participar da premiação
+  premio: "Viagem com acompanhante ✈️",
 };
 
 // Função para obter info dos outros Hunters (concorrentes)
@@ -99,7 +105,15 @@ Deno.serve(async (req) => {
     const nomeHunter = hunter?.nome || "Administrador";
     const apelidoHunter = hunter?.apelido || "Administrador";
     const outrosHunters = isSuperAdmin ? [] : getOutrosHunters(unidade_id);
-    const metasMatriculadorPlus = isSuperAdmin ? null : MATRICULADOR_PLUS_METAS[unidade_id];
+    // Metas do programa Matriculador+ LA 2026 (anuais)
+    const metasPrograma = isSuperAdmin ? null : {
+      volume: MATRICULADOR_PLUS_CONFIG.metas_volume[unidade_id] || 15,
+      ticket: MATRICULADOR_PLUS_CONFIG.metas_ticket[unidade_id] || 400,
+      ...MATRICULADOR_PLUS_CONFIG.metas_taxas,
+      ...MATRICULADOR_PLUS_CONFIG.pontuacao,
+      nota_corte: MATRICULADOR_PLUS_CONFIG.nota_corte,
+      premio: MATRICULADOR_PLUS_CONFIG.premio,
+    };
 
     // Extrair KPIs
     const kpis = dados.kpis_atual || {};
@@ -126,33 +140,36 @@ Deno.serve(async (req) => {
     const matriculasFaltam = Math.max(0, metaMatriculas - matriculasAtuais);
     const ritmoNecessario = matriculasFaltam / diasUteisRestantes;
 
-    // Calcular progresso no programa Matriculador+ LA
-    let progressoMatriculadorPlus = null;
-    if (metasMatriculadorPlus && !isSuperAdmin) {
-      const ticketMeta = metas.ticket_medio || 300;
+    // Calcular progresso no programa Matriculador+ LA 2026 (métricas anuais)
+    let progressoPrograma = null;
+    if (metasPrograma && !isSuperAdmin) {
+      const taxaShowup = kpis.taxa_conversao_lead_exp || 0;
+      const taxaExpMat = kpis.taxa_conversao_exp_mat || 0;
+      const taxaGeral = kpis.taxa_conversao_geral || 0;
       const ticketAtual = kpis.ticket_medio_novos || 0;
       
-      progressoMatriculadorPlus = {
-        matricula_plus: {
-          atual: matriculasAtuais,
-          meta: metasMatriculadorPlus.matricula_plus,
-          conquistou: matriculasAtuais >= metasMatriculadorPlus.matricula_plus,
-          faltam: Math.max(0, metasMatriculadorPlus.matricula_plus - matriculasAtuais),
+      // Calcular pontos por métrica
+      const pontosTaxaShowup = taxaShowup >= metasPrograma.taxa_showup_experimental ? metasPrograma.taxa_showup : 0;
+      const pontosTaxaExpMat = taxaExpMat >= metasPrograma.taxa_experimental_matricula ? metasPrograma.taxa_exp_mat : 0;
+      const pontosTaxaGeral = taxaGeral >= metasPrograma.taxa_lead_matricula ? metasPrograma.taxa_geral : 0;
+      const pontosVolume = matriculasAtuais >= metasPrograma.volume ? metasPrograma.volume_medio : 0;
+      const pontosTicket = ticketAtual >= metasPrograma.ticket ? metasPrograma.ticket_medio : 0;
+      
+      const totalPontos = pontosTaxaShowup + pontosTaxaExpMat + pontosTaxaGeral + pontosVolume + pontosTicket;
+      const acimaCorte = totalPontos >= metasPrograma.nota_corte;
+      
+      progressoPrograma = {
+        metricas: {
+          taxa_showup: { atual: taxaShowup, meta: metasPrograma.taxa_showup_experimental, pontos: pontosTaxaShowup, bateu: taxaShowup >= metasPrograma.taxa_showup_experimental },
+          taxa_exp_mat: { atual: taxaExpMat, meta: metasPrograma.taxa_experimental_matricula, pontos: pontosTaxaExpMat, bateu: taxaExpMat >= metasPrograma.taxa_experimental_matricula },
+          taxa_geral: { atual: taxaGeral, meta: metasPrograma.taxa_lead_matricula, pontos: pontosTaxaGeral, bateu: taxaGeral >= metasPrograma.taxa_lead_matricula, desempate: true },
+          volume: { atual: matriculasAtuais, meta: metasPrograma.volume, pontos: pontosVolume, bateu: matriculasAtuais >= metasPrograma.volume },
+          ticket: { atual: ticketAtual, meta: metasPrograma.ticket, pontos: pontosTicket, bateu: ticketAtual >= metasPrograma.ticket },
         },
-        max_indicacao: {
-          meta: metasMatriculadorPlus.max_indicacao,
-          // Nota: precisaria de dados de indicações no banco
-        },
-        la_music_family: {
-          meta: metasMatriculadorPlus.la_music_family,
-          // Nota: precisaria de dados de pacotes family no banco
-        },
-        ticket_premiado: {
-          atual: ticketAtual,
-          meta: ticketMeta,
-          diferenca: ticketAtual - ticketMeta,
-          conquistou: (ticketAtual - ticketMeta) >= metasMatriculadorPlus.ticket_acima_meta,
-        },
+        total_pontos: totalPontos,
+        nota_corte: metasPrograma.nota_corte,
+        acima_corte: acimaCorte,
+        premio: metasPrograma.premio,
         leads_abandonados: leadsPendentes.length,
       };
     }
@@ -161,15 +178,16 @@ Deno.serve(async (req) => {
     let contextoCompetitivo = "";
     if (!isSuperAdmin && outrosHunters.length > 0) {
       contextoCompetitivo = `
-## SEUS CONCORRENTES NO MATRICULADOR+ LA:
+## SEUS CONCORRENTES NO MATRICULADOR+ LA 2026:
 ${outrosHunters.map(h => `- ${h.nome} (${h.apelido}) - ${h.unidade}`).join("\n")}
 
 Use os nomes/apelidos deles para criar provocações saudáveis e competitivas!
 Exemplos de provocações:
-- "Será que o ${outrosHunters[0]?.apelido} vai deixar você passar?"
-- "A ${outrosHunters[1]?.apelido || outrosHunters[0]?.apelido} tá voando, hein!"
-- "Quem vai levar o Matriculador+ LA esse mês?"
-- "Imagina a experiência que você vai curtir quando bater a meta!"
+- "Será que o ${outrosHunters[0]?.apelido} vai deixar você passar no ranking?"
+- "A ${outrosHunters[1]?.apelido || outrosHunters[0]?.apelido} tá voando, hein! Cuidado!"
+- "Quem vai levar a VIAGEM COM ACOMPANHANTE esse ano?"
+- "Imagina você e um acompanhante curtindo a viagem... Bora bater essas metas!"
+- "A taxa geral é o critério de desempate! Foco total!"
 `;
     }
 
@@ -181,8 +199,9 @@ Seu papel é fornecer uma visão gerencial comparativa entre as unidades.
 CONTEXTO DO NEGÓCIO:
 - LA Music é um grupo de de escolas de música contendo a LA Music School (EMLA) e a LA Music Kids (LAMK) com 3 unidades no Rio de Janeiro: Barra, Campo Grande e Recreio
 - O TIME DE HUNTERS são os responsáveis pelo atendimento de leads, agendamento de aulas experimentais e fechamento de matrículas
-- Eles são VENDEDORES - ganham comissão por matrícula fechada e estrelas no programa Matriculador + LA que geram experiencias culinárias, culturais, artisticas e viagens.
-- Uma dor deles é preencher relatórios diários e o Sistema Emusys - ajude-os a otimizar tempo para conseguir ganhar a estrela Matriculador Emusys.
+- Eles são VENDEDORES - ganham comissão por matrícula fechada e PONTOS no programa Matriculador+ LA 2026 que vale uma VIAGEM COM ACOMPANHANTE!
+- O programa é ANUAL (Jan-Nov) baseado em MÉDIAS de taxas de conversão, volume e ticket.
+- Uma dor deles é preencher relatórios diários e o Sistema Emusys - penalidades Emusys descontam pontos!
 
 IMPORTANTE:
 - Você está falando com o ADMINISTRADOR (visão geral)
@@ -223,16 +242,25 @@ SAZONALIDADE:
 - Meses FRIOS (baixa demanda): Abril, Maio, Julho, Dezembro
 - Compare com mesmo período do ano anterior para contextualizar
 
-## PROGRAMA MATRICULADOR+ LA (5 ESTRELAS):
-${metasMatriculadorPlus ? `
-Para ${nomeHunter} ganhar as estrelas este mês:
-⭐ Matrícula Plus: ${metasMatriculadorPlus.matricula_plus}+ matrículas (a partir da ${metasMatriculadorPlus.matricula_plus}ª)
-⭐ Max Indicação: ${metasMatriculadorPlus.max_indicacao} matrículas de indicações
-⭐ LA Music Family: ${metasMatriculadorPlus.la_music_family} Pacotes Family ou 2º curso
-⭐ Ticket Médio Premiado: R$${metasMatriculadorPlus.ticket_acima_meta}+ acima da meta de ticket
-⭐ Matriculador Emusys: Zero leads abandonados, tarefas em dia, anamnese completa
+## PROGRAMA MATRICULADOR+ LA 2026 (SISTEMA DE PONTOS - 100 pts base):
+${metasPrograma ? `
+Para ${nomeHunter} ganhar a VIAGEM COM ACOMPANHANTE:
 
-PRÊMIOS: Troféu, viagem, experiências mensais! Provoque: "Qual experiência você vai curtir esse mês?"
+📊 METAS DE TAXAS (médias anuais Jan-Nov):
+- Taxa Show-up → Experimental: ${metasPrograma.taxa_showup_experimental}% = ${metasPrograma.taxa_showup} pts
+- Taxa Experimental → Matrícula: ${metasPrograma.taxa_experimental_matricula}% = ${metasPrograma.taxa_exp_mat} pts
+- Taxa Lead → Matrícula (GERAL): ${metasPrograma.taxa_lead_matricula}% = ${metasPrograma.taxa_geral} pts ⭐ CRITÉRIO DE DESEMPATE!
+
+📈 METAS DE VOLUME E TICKET:
+- Volume Médio: ${metasPrograma.volume} matrículas/mês = ${metasPrograma.volume_medio} pts
+- Ticket Médio Anual: R$ ${metasPrograma.ticket} = ${metasPrograma.ticket_medio} pts
+
+⚠️ PENALIDADES EMUSYS: Descontam pontos! (Não preencher Emusys, leads abandonados, etc.)
+
+🎯 NOTA DE CORTE: ${metasPrograma.nota_corte} pontos (abaixo disso não participa da premiação!)
+🏆 PRÊMIO: ${metasPrograma.premio}
+
+Provoque: "Quem vai levar a viagem esse ano? Você ou ${outrosHunters[0]?.apelido || 'a concorrência'}?"
 ` : ""}
 
 REGRAS DE OURO:
@@ -270,11 +298,16 @@ ${!isSuperAdmin ? `## HUNTER: ${nomeHunter} (${apelidoHunter})` : "## VISÃO CON
 - Matrículas faltando para meta: ${matriculasFaltam}
 - Ritmo necessário: ${ritmoNecessario.toFixed(1)} matrículas/dia útil
 
-${progressoMatriculadorPlus ? `
-## PROGRESSO MATRICULADOR+ LA:
-⭐ Matrícula Plus: ${progressoMatriculadorPlus.matricula_plus.atual}/${progressoMatriculadorPlus.matricula_plus.meta} ${progressoMatriculadorPlus.matricula_plus.conquistou ? "✅ CONQUISTOU!" : `(faltam ${progressoMatriculadorPlus.matricula_plus.faltam})`}
-⭐ Ticket Premiado: R$ ${progressoMatriculadorPlus.ticket_premiado.diferenca.toFixed(2)} ${progressoMatriculadorPlus.ticket_premiado.conquistou ? "acima da meta ✅" : "em relação à meta"}
-⭐ Leads Abandonados: ${progressoMatriculadorPlus.leads_abandonados} ${progressoMatriculadorPlus.leads_abandonados === 0 ? "✅ ZERO!" : "⚠️ ATENÇÃO!"}
+${progressoPrograma ? `
+## PROGRESSO MATRICULADOR+ LA 2026 (${progressoPrograma.total_pontos}/${100} pontos):
+📊 Taxa Show-up: ${progressoPrograma.metricas.taxa_showup.atual.toFixed(1)}% (meta: ${progressoPrograma.metricas.taxa_showup.meta}%) ${progressoPrograma.metricas.taxa_showup.bateu ? `✅ +${progressoPrograma.metricas.taxa_showup.pontos}pts` : "❌ 0pts"}
+📊 Taxa Exp→Mat: ${progressoPrograma.metricas.taxa_exp_mat.atual.toFixed(1)}% (meta: ${progressoPrograma.metricas.taxa_exp_mat.meta}%) ${progressoPrograma.metricas.taxa_exp_mat.bateu ? `✅ +${progressoPrograma.metricas.taxa_exp_mat.pontos}pts` : "❌ 0pts"}
+⭐ Taxa Geral: ${progressoPrograma.metricas.taxa_geral.atual.toFixed(1)}% (meta: ${progressoPrograma.metricas.taxa_geral.meta}%) ${progressoPrograma.metricas.taxa_geral.bateu ? `✅ +${progressoPrograma.metricas.taxa_geral.pontos}pts` : "❌ 0pts"} [DESEMPATE!]
+📈 Volume: ${progressoPrograma.metricas.volume.atual} matrículas (meta: ${progressoPrograma.metricas.volume.meta}/mês) ${progressoPrograma.metricas.volume.bateu ? `✅ +${progressoPrograma.metricas.volume.pontos}pts` : "❌ 0pts"}
+💰 Ticket: R$ ${progressoPrograma.metricas.ticket.atual.toFixed(0)} (meta: R$ ${progressoPrograma.metricas.ticket.meta}) ${progressoPrograma.metricas.ticket.bateu ? `✅ +${progressoPrograma.metricas.ticket.pontos}pts` : "❌ 0pts"}
+
+🎯 TOTAL: ${progressoPrograma.total_pontos} pontos ${progressoPrograma.acima_corte ? "✅ ACIMA DO CORTE!" : `⚠️ ABAIXO DO CORTE (${progressoPrograma.nota_corte}pts)!`}
+⚠️ Leads Abandonados: ${progressoPrograma.leads_abandonados} ${progressoPrograma.leads_abandonados === 0 ? "✅ ZERO!" : "⚠️ CUIDADO! Pode virar penalidade!"}
 ` : ""}
 
 ## COMPARATIVO COM ANO PASSADO (mesmo mês):
@@ -327,9 +360,11 @@ Gere uma análise em JSON com a estrutura:
     "desafio": "Desafio direto para o Hunter"
   },
   "matriculador_plus": {
-    "estrelas_provaveis": X,
-    "proxima_estrela": "Qual estrela está mais perto de conquistar",
-    "dica_experiencia": "Provocação sobre a experiência/prêmio"
+    "pontos_atuais": X,
+    "acima_corte": true/false,
+    "metrica_mais_proxima": "Qual métrica está mais perto de bater",
+    "metrica_critica": "Qual métrica precisa de mais atenção",
+    "provocacao_viagem": "Provocação sobre a viagem com acompanhante"
   },
   "canais_destaque": ["Top 2 canais com dica de ação"],
   "professores_destaque": ["Top 2 professores matriculadores"],
@@ -406,10 +441,12 @@ Gere uma análise em JSON com a estrutura:
           provocacao: `Será que ${outrosHunters[0]?.apelido || "a concorrência"} vai te passar?`,
           desafio: "Mostre quem manda!",
         },
-        matriculador_plus: progressoMatriculadorPlus ? {
-          estrelas_provaveis: progressoMatriculadorPlus.matricula_plus.conquistou ? 1 : 0,
-          proxima_estrela: "Matrícula Plus",
-          dica_experiencia: "Qual experiência você vai curtir esse mês?",
+        matriculador_plus: progressoPrograma ? {
+          pontos_atuais: progressoPrograma.total_pontos,
+          acima_corte: progressoPrograma.acima_corte,
+          metrica_mais_proxima: "Taxa Geral (critério de desempate!)",
+          metrica_critica: "Foco nas taxas de conversão!",
+          provocacao_viagem: `Quem vai levar a viagem? Você ou ${outrosHunters[0]?.apelido || 'a concorrência'}?`,
         } : null,
         canais_destaque: leadsPorCanal.slice(0, 2).map((c: any) => c.canal),
         professores_destaque: professoresMatriculadores.slice(0, 2).map((p: any) => p.professor),
@@ -418,7 +455,7 @@ Gere uma análise em JSON com a estrutura:
         dica_do_dia: "Foco no follow-up! Cada lead conta.",
         mensagem_final: isSuperAdmin 
           ? "Acompanhe os números e apoie as equipes!"
-          : `Vambora, ${apelidoHunter}! 🚀 O Matriculador+ LA te espera!`,
+          : `Vambora, ${apelidoHunter}! 🚀 A viagem com acompanhante te espera! ✈️`,
       };
     }
 
