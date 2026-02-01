@@ -49,7 +49,7 @@ export function SlotHorario({
         // Arrastando - hover em slot inválido
         isInvalidDrop && isOver && 'border-solid border-red-500 bg-red-500/20'
       )}
-      style={{ pointerEvents: disabled ? 'none' : 'auto' }}
+      style={{ pointerEvents: 'auto' }}
     >
       {children}
       

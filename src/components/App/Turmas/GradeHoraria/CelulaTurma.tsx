@@ -1,11 +1,10 @@
 import React from 'react';
-import { Users, GripVertical } from 'lucide-react';
+import { Users } from 'lucide-react';
 import { useDraggable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import { TurmaGrade } from './types';
 import { gerarCorPorId } from '@/lib/horarios';
 import { cn } from '@/lib/utils';
-import { Tooltip } from '@/components/ui/Tooltip';
 
 interface CelulaTurmaProps {
   turma: TurmaGrade;
@@ -45,48 +44,24 @@ export function CelulaTurma({ turma, onClick, draggable = false }: CelulaTurmaPr
   // Cor do professor (consistente)
   const corProfessor = gerarCorPorId(turma.professor_id);
 
-  // Handler para clique - só dispara se não estiver arrastando
-  const handleClick = (e: React.MouseEvent) => {
-    // Só prevenir clique se estiver realmente arrastando
-    if (isDragging) {
-      e.stopPropagation();
-      return;
-    }
-    // Se não está arrastando, permitir clique normalmente
-    onClick();
-  };
-
   return (
-    <Tooltip 
-      content={`${turma.professor_nome} - ${turma.sala_nome} (${turma.horario_inicio} - ${turma.horario_fim})`}
-      side="top"
-    >
-      <div
-        ref={setNodeRef}
-        style={style}
-        {...attributes}
-        className={cn(
-          'w-full p-1.5 rounded-lg border text-left transition-all relative group',
-          corOcupacao,
-          'hover:scale-[1.02] hover:shadow-lg',
-          'focus:outline-none focus:ring-2 focus:ring-violet-500/50',
-          isDragging && 'opacity-50 scale-95 z-50',
-          draggable ? 'cursor-pointer' : 'cursor-pointer'
-        )}
-        onClick={handleClick}
-      >
-      {/* Indicador de arraste ativo */}
-      {draggable && (
-        <div 
-          {...listeners}
-          className="absolute -left-0.5 top-1/2 -translate-y-1/2 opacity-40 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing touch-none"
-        >
-          <GripVertical className="w-3 h-3 text-slate-400" />
-        </div>
+    <div
+      ref={draggable ? setNodeRef : undefined}
+      style={draggable ? style : undefined}
+      {...(draggable ? { ...attributes, ...listeners } : {})}
+      className={cn(
+        'w-full p-1.5 rounded-lg border text-left transition-all relative group',
+        corOcupacao,
+        'hover:scale-[1.02] hover:shadow-lg',
+        'focus:outline-none focus:ring-2 focus:ring-violet-500/50',
+        isDragging && 'opacity-50 scale-95 z-50',
+        draggable ? 'cursor-grab active:cursor-grabbing touch-none' : 'cursor-pointer'
       )}
-
+      onClick={draggable ? undefined : onClick}
+      title={`${turma.professor_nome} - ${turma.sala_nome} (${turma.horario_inicio} - ${turma.horario_fim})`}
+    >
       {/* Conteúdo */}
-      <div className={cn(draggable && 'pl-2')}>
+      <div>
         {/* Nome do professor */}
         <div className="text-xs font-medium text-white truncate">
           {turma.professor_nome?.split(' ')[0] || 'Professor'}
@@ -117,8 +92,7 @@ export function CelulaTurma({ turma, onClick, draggable = false }: CelulaTurmaPr
           </div>
         )}
       </div>
-      </div>
-    </Tooltip>
+    </div>
   );
 }
 
