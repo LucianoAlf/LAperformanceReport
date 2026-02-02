@@ -116,14 +116,27 @@ export function Professor360Config({ readOnly = false }: Professor360ConfigProps
 
     setSaving(true);
     try {
-      await updateCriterio(modalCriterio.id, {
+      const updateData: Partial<Criterio360> = {
         nome: editingCriterio.nome,
         descricao: editingCriterio.descricao,
         peso: editingCriterio.peso,
         pontos_perda: editingCriterio.pontos_perda,
         tolerancia: editingCriterio.tolerancia,
         regra_detalhada: editingCriterio.regra_detalhada,
-      });
+      };
+      
+      // Para critério de pontualidade: atualizar limite, descrição e regra detalhada automaticamente
+      if (modalCriterio.codigo === 'atrasos') {
+        const limiteMinutos = editingCriterio.limite_minutos_atraso || 10;
+        const tolerancia = editingCriterio.tolerancia || 0;
+        updateData.limite_minutos_atraso = limiteMinutos;
+        // Atualizar descrição automaticamente com o novo limite
+        updateData.descricao = `Atrasos acima de ${limiteMinutos} minutos`;
+        // Atualizar regra detalhada automaticamente
+        updateData.regra_detalhada = `Se o professor chegar acima de ${limiteMinutos} min atrasado, perde ponto. Tem direito a ${tolerancia} atrasos menores que ${limiteMinutos} min, a partir do ${tolerancia + 1}º também perde ponto.`;
+      }
+      
+      await updateCriterio(modalCriterio.id, updateData);
       toast.success('Critério atualizado com sucesso!');
       setModalCriterio(null);
     } catch (error) {
@@ -335,6 +348,23 @@ export function Professor360Config({ readOnly = false }: Professor360ConfigProps
                     max={100}
                   />
                 </div>
+
+                {/* Campo específico para Pontualidade - limite de minutos para atraso grave */}
+                {modalCriterio?.codigo === 'atrasos' && (
+                  <div className="space-y-2">
+                    <Label className="text-slate-300">Limite de minutos para atraso grave</Label>
+                    <Input
+                      type="number"
+                      value={editingCriterio.limite_minutos_atraso || 10}
+                      onChange={(e) => setEditingCriterio({ ...editingCriterio, limite_minutos_atraso: parseInt(e.target.value) || 10 })}
+                      min={1}
+                      max={60}
+                    />
+                    <p className="text-xs text-slate-500">
+                      Atrasos acima deste limite perdem pontos automaticamente (sem usar tolerância)
+                    </p>
+                  </div>
+                )}
               </>
             ) : (
               <div className="space-y-2">

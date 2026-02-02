@@ -22,6 +22,7 @@ import {
   ChevronDown,
   ChevronUp,
   Info,
+  History,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,6 +34,7 @@ import { Modal360Ocorrencia } from './Modal360Ocorrencia';
 import { Modal360Detalhes } from './Modal360Detalhes';
 import { Professor360Config } from './Professor360Config';
 import { ModalWhatsAppPreview } from './ModalWhatsAppPreview';
+import ModalHistoricoOcorrencias from './ModalHistoricoOcorrencias';
 import { supabase } from '@/lib/supabase';
 
 interface Tab360ProfessoresProps {
@@ -73,6 +75,9 @@ export function Tab360Professores({
   const [professorSelecionado, setProfessorSelecionado] = useState<any>(null);
   const [showConfig, setShowConfig] = useState(false);
   
+  // Estado para o modal de Histórico
+  const [modalHistorico, setModalHistorico] = useState<{ professorId: number; professorNome: string } | null>(null);
+
   // Estado para o modal de WhatsApp
   const [showWhatsAppPreview, setShowWhatsAppPreview] = useState(false);
   const [dadosWhatsApp, setDadosWhatsApp] = useState<{
@@ -96,6 +101,7 @@ export function Tab360Professores({
     kpis,
     loading,
     createOcorrencia,
+    refetch,
   } = useProfessor360(competencia, unidadeSelecionada === 'todos' ? undefined : unidadeSelecionada);
 
   const { config } = useConfig360();
@@ -607,6 +613,17 @@ export function Tab360Professores({
                               <Eye className="h-4 w-4" />
                             </button>
                           </Tooltip>
+                          <Tooltip content="Histórico completo">
+                            <button
+                              onClick={() => setModalHistorico({
+                                professorId: avaliacao.professor_id,
+                                professorNome: avaliacao.professor_nome
+                              })}
+                              className="p-2 rounded-lg hover:bg-slate-700 transition-colors text-slate-400 hover:text-violet-400"
+                            >
+                              <History className="h-4 w-4" />
+                            </button>
+                          </Tooltip>
                           <Tooltip content="Nova ocorrência">
                             <button
                               onClick={() => handleNovaOcorrencia({
@@ -650,6 +667,7 @@ export function Tab360Professores({
           criterios={criterios}
           competencia={competencia}
           competenciaLabel={competenciaOptions.find(c => c.valor === competencia)?.label || ''}
+          onRefresh={refetch}
         />
       )}
 
@@ -669,6 +687,18 @@ export function Tab360Professores({
           toleranciaInfo={dadosWhatsApp.toleranciaInfo}
           minutosAtraso={dadosWhatsApp.minutosAtraso}
           atrasoGrave={dadosWhatsApp.atrasoGrave}
+        />
+      )}
+
+      {/* Modal de Histórico de Ocorrências */}
+      {modalHistorico && (
+        <ModalHistoricoOcorrencias
+          isOpen={!!modalHistorico}
+          onClose={() => setModalHistorico(null)}
+          professorId={modalHistorico.professorId}
+          professorNome={modalHistorico.professorNome}
+          competencia={competencia}
+          criterios={criterios}
         />
       )}
     </div>

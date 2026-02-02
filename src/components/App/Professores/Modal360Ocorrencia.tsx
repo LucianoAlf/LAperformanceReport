@@ -95,14 +95,16 @@ export function Modal360Ocorrencia({
       
       setLoadingTolerancia(true);
       try {
-        // Contar ocorrências do mês para este professor/unidade/critério
+        // Contar ocorrências ATIVAS do mês para este professor/unidade/critério
+        // Não conta ocorrências revertidas
         const { data, error } = await supabase
           .from('professor_360_ocorrencias')
-          .select('id')
+          .select('id, status')
           .eq('professor_id', parseInt(professorId))
           .eq('unidade_id', unidadeId)
           .eq('criterio_id', parseInt(criterioId))
-          .eq('competencia', competencia);
+          .eq('competencia', competencia)
+          .neq('status', 'revertido');
         
         if (error) throw error;
         
@@ -169,9 +171,10 @@ export function Modal360Ocorrencia({
 
     setSaving(true);
     try {
-      // Para pontualidade: atraso > 10 min = perde ponto direto (sem tolerância)
+      // Para pontualidade: atraso > limite configurado = perde ponto direto (sem tolerância)
       const minutosInt = isPontualidade ? parseInt(minutosAtraso) : null;
-      const atrasoGrave = isPontualidade && minutosInt && minutosInt > 10;
+      const limiteMinutos = criterioAtual?.limite_minutos_atraso || 10;
+      const atrasoGrave = isPontualidade && minutosInt && minutosInt > limiteMinutos;
       
       // Calcular info de tolerância considerando regra de atraso grave
       let toleranciaInfoFinal = toleranciaInfo ? {
@@ -182,7 +185,7 @@ export function Modal360Ocorrencia({
         pontos_descontados: toleranciaInfo.ocorrenciasRestantes === 0 ? (criterioAtual?.pontos_perda || 0) : 0,
       } : null;
       
-      // Se atraso > 10 min, sempre perde ponto (ignora tolerância)
+      // Se atraso > limite configurado, sempre perde ponto (ignora tolerância)
       if (atrasoGrave) {
         toleranciaInfoFinal = {
           ocorrencia_numero: (toleranciaInfo?.totalOcorrencias || 0) + 1,
@@ -325,23 +328,23 @@ export function Modal360Ocorrencia({
                   <SelectItem value="60">1 hora ou mais</SelectItem>
                 </SelectContent>
               </Select>
-              {minutosAtraso && parseInt(minutosAtraso) > 10 && (
+              {minutosAtraso && parseInt(minutosAtraso) > (criterioAtual?.limite_minutos_atraso || 10) && (
                 <div className="p-2 bg-rose-500/10 border border-rose-500/30 rounded-lg">
                   <p className="text-xs text-rose-400">
-                    ⚠️ Atraso acima de 10 minutos: desconto automático de pontos (sem tolerância)
+                    ⚠️ Atraso acima de {criterioAtual?.limite_minutos_atraso || 10} minutos: desconto automático de pontos (sem tolerância)
                   </p>
                 </div>
               )}
-              {minutosAtraso && parseInt(minutosAtraso) <= 10 && (
+              {minutosAtraso && parseInt(minutosAtraso) <= (criterioAtual?.limite_minutos_atraso || 10) && (
                 <p className="text-xs text-slate-500">
-                  Atraso até 10 minutos: usa a tolerância configurada
+                  Atraso até {criterioAtual?.limite_minutos_atraso || 10} minutos: usa a tolerância configurada
                 </p>
               )}
             </div>
           )}
 
-          {/* Status de Tolerância */}
-          {toleranciaInfo && (
+          {/* Status de Tolerância - NÃO mostrar se atraso > limite (nesses casos não há tolerância) */}
+          {toleranciaInfo && !(isPontualidade && minutosAtraso && parseInt(minutosAtraso) > (criterioAtual?.limite_minutos_atraso || 10)) && (
             <div className={`p-3 rounded-lg border ${
               toleranciaInfo.ocorrenciasRestantes === 0
                 ? 'bg-rose-500/10 border-rose-500/30'

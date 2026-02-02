@@ -200,6 +200,9 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026 }: TabProgr
     emoji: '🎁',
     valor_estimado: 100,
   });
+  
+  // Estado para alternar visao tabela/grafico no historico
+  const [historicoView, setHistoricoView] = useState<'tabela' | 'grafico'>('tabela');
 
   // Hook do programa
   const {
@@ -375,7 +378,7 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026 }: TabProgr
       )}>
         {/* Badge de posicao */}
         <div className={cn("absolute -top-3 -right-3 font-bold px-3 py-1 rounded-full text-sm", badgeBg)}>
-          <Trophy className="w-3 h-3 inline mr-1" /> {posicao}o Lugar
+          {posicao === 1 ? '🥇' : posicao === 2 ? '🥈' : '🥉'} {posicao}o Lugar
         </div>
 
         {/* Header com avatares */}
@@ -619,6 +622,341 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026 }: TabProgr
                     </tr>
                   </tbody>
                 </table>
+              </div>
+            </div>
+
+            {/* Historico Trimestral - 2026 */}
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-semibold flex items-center gap-2">
+                  <TrendingUp className="w-5 h-5 text-cyan-400" />
+                  Historico Trimestral - {ano}
+                </h3>
+                <div className="flex gap-1 bg-slate-800 rounded-lg p-1">
+                  <button
+                    onClick={() => setHistoricoView('tabela')}
+                    className={cn(
+                      "px-3 py-1 rounded text-sm transition-colors",
+                      historicoView === 'tabela' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
+                    )}
+                  >
+                    Tabela
+                  </button>
+                  <button
+                    onClick={() => setHistoricoView('grafico')}
+                    className={cn(
+                      "px-3 py-1 rounded text-sm transition-colors",
+                      historicoView === 'grafico' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'
+                    )}
+                  >
+                    Grafico
+                  </button>
+                </div>
+              </div>
+
+              {historicoView === 'tabela' ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-slate-400 border-b border-slate-700">
+                        <th className="text-left py-3">Trimestre</th>
+                        <th className="text-center py-3">Churn</th>
+                        <th className="text-center py-3">Inadimpl.</th>
+                        <th className="text-center py-3">Renovacao</th>
+                        <th className="text-center py-3">Reajuste</th>
+                        <th className="text-center py-3">Lojinha</th>
+                        <th className="text-center py-3 bg-emerald-500/10">Pontos</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {TRIMESTRES.map(trim => {
+                        const hist = historico.find(h => h.trimestre === trim.value);
+                        const isAtual = trim.value === trimestreEfetivo;
+                        
+                        return (
+                          <tr key={trim.value} className={cn(
+                            "border-b border-slate-800",
+                            isAtual && "bg-cyan-500/5"
+                          )}>
+                            <td className={cn("py-3 font-medium", isAtual && "text-cyan-400")}>
+                              {trim.label} {isAtual && "(atual)"}
+                            </td>
+                            {hist ? (
+                              <>
+                                <td className={cn("text-center", hist.bateu_churn ? 'text-emerald-400' : 'text-red-400')}>
+                                  {hist.churn_rate.toFixed(1)}% {hist.bateu_churn ? <Check className="w-3 h-3 inline" /> : <X className="w-3 h-3 inline" />}
+                                </td>
+                                <td className={cn("text-center", hist.bateu_inadimplencia ? 'text-emerald-400' : 'text-red-400')}>
+                                  {hist.inadimplencia_pct.toFixed(1)}% {hist.bateu_inadimplencia ? <Check className="w-3 h-3 inline" /> : <X className="w-3 h-3 inline" />}
+                                </td>
+                                <td className={cn("text-center", hist.bateu_renovacao ? 'text-emerald-400' : 'text-red-400')}>
+                                  {hist.taxa_renovacao.toFixed(0)}% {hist.bateu_renovacao ? <Check className="w-3 h-3 inline" /> : <X className="w-3 h-3 inline" />}
+                                </td>
+                                <td className={cn("text-center", hist.bateu_reajuste ? 'text-emerald-400' : 'text-red-400')}>
+                                  {hist.reajuste_medio.toFixed(1)}% {hist.bateu_reajuste ? <Check className="w-3 h-3 inline" /> : <X className="w-3 h-3 inline" />}
+                                </td>
+                                <td className="text-center text-slate-400">
+                                  R$ {hist.vendas_lojinha?.toLocaleString('pt-BR') || '-'}
+                                </td>
+                                <td className="text-center bg-emerald-500/10 font-bold text-emerald-400">
+                                  {hist.pontos_total} pts
+                                </td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="text-center text-slate-600">-</td>
+                                <td className="text-center text-slate-600">-</td>
+                                <td className="text-center text-slate-600">-</td>
+                                <td className="text-center text-slate-600">-</td>
+                                <td className="text-center text-slate-600">-</td>
+                                <td className="text-center bg-emerald-500/10 text-slate-600">-</td>
+                              </>
+                            )}
+                          </tr>
+                        );
+                      })}
+                      {/* Media Anual */}
+                      <tr className="font-bold border-t-2 border-slate-600">
+                        <td className="py-3">MEDIA ANUAL</td>
+                        {historico.length > 0 ? (
+                          <>
+                            <td className="text-center">
+                              {(historico.reduce((acc, h) => acc + h.churn_rate, 0) / historico.length).toFixed(1)}%
+                            </td>
+                            <td className="text-center">
+                              {(historico.reduce((acc, h) => acc + h.inadimplencia_pct, 0) / historico.length).toFixed(1)}%
+                            </td>
+                            <td className="text-center">
+                              {(historico.reduce((acc, h) => acc + h.taxa_renovacao, 0) / historico.length).toFixed(0)}%
+                            </td>
+                            <td className="text-center">
+                              {(historico.reduce((acc, h) => acc + h.reajuste_medio, 0) / historico.length).toFixed(1)}%
+                            </td>
+                            <td className="text-center">
+                              R$ {(historico.reduce((acc, h) => acc + (h.vendas_lojinha || 0), 0) / historico.length).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
+                            </td>
+                            <td className="text-center bg-emerald-500/10 text-emerald-400">
+                              {(historico.reduce((acc, h) => acc + h.pontos_total, 0) / historico.length).toFixed(0)} pts
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="text-center text-slate-600">-</td>
+                            <td className="text-center text-slate-600">-</td>
+                            <td className="text-center text-slate-600">-</td>
+                            <td className="text-center text-slate-600">-</td>
+                            <td className="text-center text-slate-600">-</td>
+                            <td className="text-center bg-emerald-500/10 text-slate-600">-</td>
+                          </>
+                        )}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="h-64">
+                  <p className="text-sm text-slate-400 mb-4">
+                    Evolucao do Churn (Criterio de Desempate) - Meta: ≤ {config?.metas.churn_maximo}%
+                  </p>
+                  <div className="relative h-48 border-l border-b border-slate-700">
+                    {/* Linha de meta */}
+                    <div 
+                      className="absolute left-0 right-0 border-t-2 border-dashed border-amber-500/50"
+                      style={{ bottom: `${((config?.metas.churn_maximo || 4) / 10) * 100}%` }}
+                    >
+                      <span className="absolute right-0 -top-4 text-xs text-amber-400">
+                        Meta: {config?.metas.churn_maximo}%
+                      </span>
+                    </div>
+                    
+                    {/* Barras dos trimestres */}
+                    <div className="absolute inset-0 flex items-end justify-around px-4">
+                      {TRIMESTRES.map(trim => {
+                        const hist = historico.find(h => h.trimestre === trim.value);
+                        const churn = hist?.churn_rate || 0;
+                        const height = Math.min((churn / 10) * 100, 100);
+                        const isAtual = trim.value === trimestreEfetivo;
+                        const bateu = churn <= (config?.metas.churn_maximo || 4);
+                        
+                        return (
+                          <div key={trim.value} className="flex flex-col items-center gap-1 w-16">
+                            {hist ? (
+                              <>
+                                <span className={cn(
+                                  "text-sm font-bold",
+                                  bateu ? 'text-emerald-400' : 'text-red-400'
+                                )}>
+                                  {churn.toFixed(1)}%
+                                </span>
+                                <div 
+                                  className={cn(
+                                    "w-10 rounded-t transition-all",
+                                    bateu ? 'bg-emerald-500' : 'bg-red-500',
+                                    isAtual && 'ring-2 ring-cyan-400'
+                                  )}
+                                  style={{ height: `${height}%`, minHeight: '4px' }}
+                                />
+                              </>
+                            ) : (
+                              <div className="w-10 h-1 bg-slate-700 rounded" />
+                            )}
+                            <span className={cn(
+                              "text-xs",
+                              isAtual ? 'text-cyan-400 font-bold' : 'text-slate-500'
+                            )}>
+                              Q{trim.value}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Metas vs Media do Grupo */}
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+              <h3 className="text-lg font-semibold flex items-center gap-2 mb-2">
+                <Target className="w-5 h-5 text-purple-400" />
+                Comparativo: Unidades vs Media do Grupo
+              </h3>
+              <p className="text-sm text-slate-400 mb-4">
+                Compare o desempenho de cada unidade com a media das 3 escolas (sem revelar posicoes individuais)
+              </p>
+              
+              <div className="grid grid-cols-4 gap-4">
+                {/* Churn */}
+                <div className="bg-slate-800/50 rounded-xl p-4">
+                  <div className="text-sm text-slate-400 mb-3">Churn (Desempate)</div>
+                  <div className="space-y-2">
+                    {farmers.map(f => {
+                      const valor = f.metricas.churn_rate;
+                      const meta = config?.metas.churn_maximo || 4;
+                      const bateu = valor <= meta;
+                      return (
+                        <div key={f.unidade_id} className="flex items-center justify-between">
+                          <span className="text-xs text-slate-400">{f.unidade_nome.split(' ')[0]}</span>
+                          <span className={cn(
+                            "text-sm font-bold px-2 py-0.5 rounded",
+                            bateu ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
+                          )}>
+                            {valor.toFixed(1)}%
+                          </span>
+                        </div>
+                      );
+                    })}
+                    <div className="border-t border-slate-700 pt-2 flex items-center justify-between">
+                      <span className="text-xs text-slate-500">Media</span>
+                      <span className="text-sm font-medium text-slate-300">
+                        {farmers.length > 0 ? (farmers.reduce((acc, f) => acc + f.metricas.churn_rate, 0) / farmers.length).toFixed(1) : 0}%
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-500">Meta</span>
+                      <span className="text-sm font-medium text-amber-400">≤ {config?.metas.churn_maximo}%</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Inadimplencia */}
+                <div className="bg-slate-800/50 rounded-xl p-4">
+                  <div className="text-sm text-slate-400 mb-3">Inadimplencia</div>
+                  <div className="space-y-2">
+                    {farmers.map(f => {
+                      const valor = f.metricas.inadimplencia_pct;
+                      const meta = config?.metas.inadimplencia_maxima || 1;
+                      const bateu = valor <= meta;
+                      return (
+                        <div key={f.unidade_id} className="flex items-center justify-between">
+                          <span className="text-xs text-slate-400">{f.unidade_nome.split(' ')[0]}</span>
+                          <span className={cn(
+                            "text-sm font-bold px-2 py-0.5 rounded",
+                            bateu ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
+                          )}>
+                            {valor.toFixed(1)}%
+                          </span>
+                        </div>
+                      );
+                    })}
+                    <div className="border-t border-slate-700 pt-2 flex items-center justify-between">
+                      <span className="text-xs text-slate-500">Media</span>
+                      <span className="text-sm font-medium text-slate-300">
+                        {farmers.length > 0 ? (farmers.reduce((acc, f) => acc + f.metricas.inadimplencia_pct, 0) / farmers.length).toFixed(1) : 0}%
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-500">Meta</span>
+                      <span className="text-sm font-medium text-amber-400">≤ {config?.metas.inadimplencia_maxima}%</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Renovacao */}
+                <div className="bg-slate-800/50 rounded-xl p-4">
+                  <div className="text-sm text-slate-400 mb-3">Renovacao</div>
+                  <div className="space-y-2">
+                    {farmers.map(f => {
+                      const valor = f.metricas.taxa_renovacao;
+                      const meta = config?.metas.renovacao_minima || 90;
+                      const bateu = valor >= meta;
+                      return (
+                        <div key={f.unidade_id} className="flex items-center justify-between">
+                          <span className="text-xs text-slate-400">{f.unidade_nome.split(' ')[0]}</span>
+                          <span className={cn(
+                            "text-sm font-bold px-2 py-0.5 rounded",
+                            bateu ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
+                          )}>
+                            {valor.toFixed(0)}%
+                          </span>
+                        </div>
+                      );
+                    })}
+                    <div className="border-t border-slate-700 pt-2 flex items-center justify-between">
+                      <span className="text-xs text-slate-500">Media</span>
+                      <span className="text-sm font-medium text-slate-300">
+                        {farmers.length > 0 ? (farmers.reduce((acc, f) => acc + f.metricas.taxa_renovacao, 0) / farmers.length).toFixed(0) : 0}%
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-500">Meta</span>
+                      <span className="text-sm font-medium text-amber-400">≥ {config?.metas.renovacao_minima}%</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Reajuste */}
+                <div className="bg-slate-800/50 rounded-xl p-4">
+                  <div className="text-sm text-slate-400 mb-3">Reajuste</div>
+                  <div className="space-y-2">
+                    {farmers.map(f => {
+                      const valor = f.metricas.reajuste_medio;
+                      const meta = config?.metas.reajuste_minimo || 7;
+                      const bateu = valor >= meta;
+                      return (
+                        <div key={f.unidade_id} className="flex items-center justify-between">
+                          <span className="text-xs text-slate-400">{f.unidade_nome.split(' ')[0]}</span>
+                          <span className={cn(
+                            "text-sm font-bold px-2 py-0.5 rounded",
+                            bateu ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
+                          )}>
+                            {valor.toFixed(1)}%
+                          </span>
+                        </div>
+                      );
+                    })}
+                    <div className="border-t border-slate-700 pt-2 flex items-center justify-between">
+                      <span className="text-xs text-slate-500">Media</span>
+                      <span className="text-sm font-medium text-slate-300">
+                        {farmers.length > 0 ? (farmers.reduce((acc, f) => acc + f.metricas.reajuste_medio, 0) / farmers.length).toFixed(1) : 0}%
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs text-slate-500">Meta</span>
+                      <span className="text-sm font-medium text-amber-400">≥ {config?.metas.reajuste_minimo}%</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -1442,11 +1780,10 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026 }: TabProgr
             </div>
             <div className="text-slate-400">pontos</div>
             <div className={cn(
-              "text-sm mt-1 flex items-center justify-end gap-1",
+              "text-sm mt-1",
               pontos >= (config?.nota_corte || 60) ? "text-emerald-400" : "text-amber-400"
             )}>
-              <Medal className="w-4 h-4" />
-              {posicao}o lugar no Q{trimestreEfetivo}
+              Q{trimestreEfetivo} - {ano}
             </div>
           </div>
         </div>
@@ -1546,7 +1883,244 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026 }: TabProgr
         </div>
       </div>
 
-      {/* Evolucao Trimestral */}
+      {/* Historico Trimestral - Tabela e Grafico */}
+      <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <TrendingUp className="w-5 h-5 text-cyan-400" />
+            Historico Trimestral - {ano}
+          </h3>
+          <div className="flex gap-1 bg-slate-800 rounded-lg p-1">
+            <button
+              onClick={() => setHistoricoView('tabela')}
+              className={cn(
+                "px-3 py-1 rounded text-sm transition-colors",
+                historicoView === 'tabela' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
+              )}
+            >
+              Tabela
+            </button>
+            <button
+              onClick={() => setHistoricoView('grafico')}
+              className={cn(
+                "px-3 py-1 rounded text-sm transition-colors",
+                historicoView === 'grafico' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'
+              )}
+            >
+              Grafico
+            </button>
+          </div>
+        </div>
+
+        {historicoView === 'tabela' ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-slate-400 border-b border-slate-700">
+                  <th className="text-left py-3">Trimestre</th>
+                  <th className="text-center py-3">Churn</th>
+                  <th className="text-center py-3">Inadimpl.</th>
+                  <th className="text-center py-3">Renovacao</th>
+                  <th className="text-center py-3">Reajuste</th>
+                  <th className="text-center py-3">Lojinha</th>
+                  <th className="text-center py-3 bg-emerald-500/10">Pontos</th>
+                </tr>
+              </thead>
+              <tbody>
+                {TRIMESTRES.map(trim => {
+                  const hist = historico.find(h => h.trimestre === trim.value && h.unidade_id === farmerAtual.unidade_id);
+                  const isAtual = trim.value === trimestreAtual;
+                  
+                  // Se e trimestre atual, usar dados em tempo real do farmerAtual
+                  const dadosTrimestre = isAtual ? {
+                    churn_rate: farmerAtual.metricas.churn_rate,
+                    inadimplencia_pct: farmerAtual.metricas.inadimplencia_pct,
+                    taxa_renovacao: farmerAtual.metricas.taxa_renovacao,
+                    reajuste_medio: farmerAtual.metricas.reajuste_medio,
+                    vendas_lojinha: farmerAtual.metricas.vendas_lojinha,
+                    pontos_total: pontos,
+                    bateu_churn: farmerAtual.metricas.churn_rate <= (config?.metas.churn_maximo || 4),
+                    bateu_inadimplencia: farmerAtual.metricas.inadimplencia_pct <= (config?.metas.inadimplencia_maxima || 1),
+                    bateu_renovacao: farmerAtual.metricas.taxa_renovacao >= (config?.metas.renovacao_minima || 90),
+                    bateu_reajuste: farmerAtual.metricas.reajuste_medio >= (config?.metas.reajuste_minimo || 7),
+                  } : hist;
+                  
+                  return (
+                    <tr key={trim.value} className={cn(
+                      "border-b border-slate-800",
+                      isAtual && "bg-cyan-500/5"
+                    )}>
+                      <td className={cn("py-3 font-medium", isAtual && "text-cyan-400")}>
+                        {trim.label} {isAtual && "(atual)"}
+                      </td>
+                      {dadosTrimestre ? (
+                        <>
+                          <td className={cn("text-center", dadosTrimestre.bateu_churn ? 'text-emerald-400' : 'text-red-400')}>
+                            {dadosTrimestre.churn_rate.toFixed(1)}% {dadosTrimestre.bateu_churn ? <Check className="w-3 h-3 inline" /> : <X className="w-3 h-3 inline" />}
+                          </td>
+                          <td className={cn("text-center", dadosTrimestre.bateu_inadimplencia ? 'text-emerald-400' : 'text-red-400')}>
+                            {dadosTrimestre.inadimplencia_pct.toFixed(1)}% {dadosTrimestre.bateu_inadimplencia ? <Check className="w-3 h-3 inline" /> : <X className="w-3 h-3 inline" />}
+                          </td>
+                          <td className={cn("text-center", dadosTrimestre.bateu_renovacao ? 'text-emerald-400' : 'text-red-400')}>
+                            {dadosTrimestre.taxa_renovacao.toFixed(0)}% {dadosTrimestre.bateu_renovacao ? <Check className="w-3 h-3 inline" /> : <X className="w-3 h-3 inline" />}
+                          </td>
+                          <td className={cn("text-center", dadosTrimestre.bateu_reajuste ? 'text-emerald-400' : 'text-red-400')}>
+                            {dadosTrimestre.reajuste_medio.toFixed(1)}% {dadosTrimestre.bateu_reajuste ? <Check className="w-3 h-3 inline" /> : <X className="w-3 h-3 inline" />}
+                          </td>
+                          <td className="text-center text-slate-400">
+                            R$ {dadosTrimestre.vendas_lojinha?.toLocaleString('pt-BR') || '0'}
+                          </td>
+                          <td className="text-center bg-emerald-500/10 font-bold text-emerald-400">
+                            {dadosTrimestre.pontos_total} pts
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="text-center text-slate-600">-</td>
+                          <td className="text-center text-slate-600">-</td>
+                          <td className="text-center text-slate-600">-</td>
+                          <td className="text-center text-slate-600">-</td>
+                          <td className="text-center text-slate-600">-</td>
+                          <td className="text-center bg-emerald-500/10 text-slate-600">-</td>
+                        </>
+                      )}
+                    </tr>
+                  );
+                })}
+                {/* Media Anual */}
+                <tr className="font-bold border-t-2 border-slate-600">
+                  <td className="py-3">MEDIA ANUAL</td>
+                  {(() => {
+                    // Incluir dados do trimestre atual nos calculos
+                    const historicoUnidade = historico.filter(h => h.unidade_id === farmerAtual.unidade_id);
+                    const dadosParaMedia = [...historicoUnidade];
+                    
+                    // Adicionar trimestre atual se nao estiver no historico
+                    if (!historicoUnidade.find(h => h.trimestre === trimestreAtual)) {
+                      dadosParaMedia.push({
+                        ano,
+                        trimestre: trimestreAtual,
+                        unidade_id: farmerAtual.unidade_id,
+                        unidade_nome: farmerAtual.unidade_nome,
+                        churn_rate: farmerAtual.metricas.churn_rate,
+                        inadimplencia_pct: farmerAtual.metricas.inadimplencia_pct,
+                        taxa_renovacao: farmerAtual.metricas.taxa_renovacao,
+                        reajuste_medio: farmerAtual.metricas.reajuste_medio,
+                        vendas_lojinha: farmerAtual.metricas.vendas_lojinha,
+                        bateu_churn: farmerAtual.metricas.churn_rate <= (config?.metas.churn_maximo || 4),
+                        bateu_inadimplencia: farmerAtual.metricas.inadimplencia_pct <= (config?.metas.inadimplencia_maxima || 1),
+                        bateu_renovacao: farmerAtual.metricas.taxa_renovacao >= (config?.metas.renovacao_minima || 90),
+                        bateu_reajuste: farmerAtual.metricas.reajuste_medio >= (config?.metas.reajuste_minimo || 7),
+                        bateu_lojinha: false,
+                        pontos_total: pontos,
+                        posicao: posicao,
+                        experiencia_tipo: farmerAtual.experiencia_tipo || null,
+                      });
+                    }
+                    
+                    if (dadosParaMedia.length > 0) {
+                      return (
+                        <>
+                          <td className="text-center">
+                            {(dadosParaMedia.reduce((acc, h) => acc + h.churn_rate, 0) / dadosParaMedia.length).toFixed(1)}%
+                          </td>
+                          <td className="text-center">
+                            {(dadosParaMedia.reduce((acc, h) => acc + h.inadimplencia_pct, 0) / dadosParaMedia.length).toFixed(1)}%
+                          </td>
+                          <td className="text-center">
+                            {(dadosParaMedia.reduce((acc, h) => acc + h.taxa_renovacao, 0) / dadosParaMedia.length).toFixed(0)}%
+                          </td>
+                          <td className="text-center">
+                            {(dadosParaMedia.reduce((acc, h) => acc + h.reajuste_medio, 0) / dadosParaMedia.length).toFixed(1)}%
+                          </td>
+                          <td className="text-center">
+                            R$ {(dadosParaMedia.reduce((acc, h) => acc + (h.vendas_lojinha || 0), 0) / dadosParaMedia.length).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}
+                          </td>
+                          <td className="text-center bg-emerald-500/10 text-emerald-400">
+                            {(dadosParaMedia.reduce((acc, h) => acc + h.pontos_total, 0) / dadosParaMedia.length).toFixed(0)} pts
+                          </td>
+                        </>
+                      );
+                    }
+                    return (
+                      <>
+                        <td className="text-center text-slate-600">-</td>
+                        <td className="text-center text-slate-600">-</td>
+                        <td className="text-center text-slate-600">-</td>
+                        <td className="text-center text-slate-600">-</td>
+                        <td className="text-center text-slate-600">-</td>
+                        <td className="text-center bg-emerald-500/10 text-slate-600">-</td>
+                      </>
+                    );
+                  })()}
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="h-64">
+            <p className="text-sm text-slate-400 mb-4">
+              Evolucao do Churn (Criterio de Desempate) - Meta: ≤ {config?.metas.churn_maximo}%
+            </p>
+            <div className="relative h-48 border-l border-b border-slate-700">
+              {/* Linha de meta */}
+              <div 
+                className="absolute left-0 right-0 border-t-2 border-dashed border-amber-500/50"
+                style={{ bottom: `${((config?.metas.churn_maximo || 4) / 10) * 100}%` }}
+              >
+                <span className="absolute right-0 -top-4 text-xs text-amber-400">
+                  Meta: {config?.metas.churn_maximo}%
+                </span>
+              </div>
+              
+              {/* Barras dos trimestres */}
+              <div className="absolute inset-0 flex items-end justify-around px-4">
+                {TRIMESTRES.map(trim => {
+                  const hist = historico.find(h => h.trimestre === trim.value && h.unidade_id === farmerAtual.unidade_id);
+                  const isAtual = trim.value === trimestreAtual;
+                  const churn = isAtual ? farmerAtual.metricas.churn_rate : (hist?.churn_rate || 0);
+                  const height = Math.min((churn / 10) * 100, 100);
+                  const bateu = churn <= (config?.metas.churn_maximo || 4);
+                  const temDados = hist || isAtual;
+                  
+                  return (
+                    <div key={trim.value} className="flex flex-col items-center gap-1 w-16">
+                      {temDados ? (
+                        <>
+                          <span className={cn(
+                            "text-sm font-bold",
+                            bateu ? 'text-emerald-400' : 'text-red-400'
+                          )}>
+                            {churn.toFixed(1)}%
+                          </span>
+                          <div 
+                            className={cn(
+                              "w-10 rounded-t transition-all",
+                              bateu ? 'bg-emerald-500' : 'bg-red-500',
+                              isAtual && 'ring-2 ring-cyan-400'
+                            )}
+                            style={{ height: `${height}%`, minHeight: '4px' }}
+                          />
+                        </>
+                      ) : (
+                        <div className="w-10 h-1 bg-slate-700 rounded" />
+                      )}
+                      <span className={cn(
+                        "text-xs",
+                        isAtual ? 'text-cyan-400 font-bold' : 'text-slate-500'
+                      )}>
+                        Q{trim.value}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Evolucao Trimestral - Cards */}
       <div className="bg-slate-900 rounded-xl p-6">
         <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
           <Trophy className="w-5 h-5 text-emerald-400" />
@@ -1557,7 +2131,6 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026 }: TabProgr
             const hist = historico.find(h => h.trimestre === t.value && h.unidade_id === farmerAtual.unidade_id);
             const isAtual = t.value === trimestreAtual;
             const pontosQ = hist?.pontos_total || (isAtual ? pontos : 0);
-            const posQ = hist?.posicao || (isAtual ? posicao : null);
             
             return (
               <div key={t.value} className={cn(
@@ -1577,11 +2150,6 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026 }: TabProgr
                   {pontosQ || '-'}
                 </div>
                 <div className="text-xs text-slate-400">pontos</div>
-                {posQ && (
-                  <div className="text-xs text-emerald-400 mt-1 flex items-center justify-center gap-1">
-                    <Medal className="w-3 h-3" /> {posQ}o lugar
-                  </div>
-                )}
                 {!hist && !isAtual && (
                   <div className="text-xs text-slate-500 mt-1">pendente</div>
                 )}

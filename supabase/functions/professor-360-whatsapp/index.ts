@@ -21,6 +21,15 @@ interface NotificacaoPayload {
   unidadeNome: string;
   registradoPor: string;
   descricao?: string | null;
+  toleranciaInfo?: {
+    ocorrencia_numero: number;
+    tolerancia_total: number;
+    tolerancia_esgotada: boolean;
+    ultima_tolerancia: boolean;
+    pontos_descontados: number;
+  } | null;
+  minutosAtraso?: number | null;
+  atrasoGrave?: boolean;
 }
 
 /**
@@ -35,6 +44,34 @@ function formatPhoneNumber(phone: string): string {
     cleaned = '55' + cleaned;
   }
   return cleaned;
+}
+
+/**
+ * Gera texto de tempo de atraso
+ */
+function getAtrasoTexto(minutosAtraso?: number | null): string {
+  if (!minutosAtraso) return '';
+  return `⏱️ *Tempo de atraso:* ${minutosAtraso >= 60 ? '1 hora ou mais' : `${minutosAtraso} minutos`}\n`;
+}
+
+/**
+ * Gera texto de tolerância/atraso grave
+ */
+function getToleranciaTexto(dados: NotificacaoPayload): string {
+  // Se atraso grave, mostrar mensagem específica
+  if (dados.atrasoGrave) {
+    return `\n❌ *Atraso acima de 10 minutos!* Pontuação descontada: -${dados.toleranciaInfo?.pontos_descontados || 0} pts (sem tolerância)\n`;
+  }
+  
+  if (!dados.toleranciaInfo) return '';
+  
+  if (dados.toleranciaInfo.tolerancia_esgotada) {
+    return `\n❌ *Tolerância esgotada!* Pontuação descontada: -${dados.toleranciaInfo.pontos_descontados} pts\n`;
+  } else if (dados.toleranciaInfo.ultima_tolerancia) {
+    return `\n⚠️ *Atenção:* Esta foi sua última tolerância (${dados.toleranciaInfo.ocorrencia_numero}/${dados.toleranciaInfo.tolerancia_total}). A próxima ocorrência descontará pontos.\n`;
+  } else {
+    return `\nℹ️ *Tolerância:* ${dados.toleranciaInfo.ocorrencia_numero}/${dados.toleranciaInfo.tolerancia_total} (ainda dentro da tolerância)\n`;
+  }
 }
 
 /**
@@ -69,9 +106,11 @@ function montarMensagem(dados: NotificacaoPayload): string {
   mensagem += `Olá, ${primeiroNome}!\n\n`;
   mensagem += `Uma ocorrência foi registrada em seu perfil:\n\n`;
   mensagem += `📋 *Tipo:* ${dados.tipoOcorrencia}\n`;
+  mensagem += getAtrasoTexto(dados.minutosAtraso);
   mensagem += `📅 *Data:* ${dataFormatada}\n`;
   mensagem += `🏢 *Unidade:* ${dados.unidadeNome}\n`;
-  mensagem += `👤 *Registrado por:* ${dados.registradoPor}\n`;
+  mensagem += `👤 *Registrado por:* ${dados.registradoPor}`;
+  mensagem += getToleranciaTexto(dados);
   
   if (dados.descricao) {
     mensagem += `\n📝 *Observação:* ${dados.descricao}\n`;
@@ -143,15 +182,6 @@ serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
-  }
-
-  // Verificar Authorization header (aceita anon key ou service role)
-  const authHeader = req.headers.get('Authorization');
-  if (!authHeader) {
-    return new Response(
-      JSON.stringify({ success: false, error: 'Authorization header required' }),
-      { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
   }
 
   try {

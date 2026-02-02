@@ -17,6 +17,7 @@ export interface Criterio360 {
   regra_detalhada: string | null;
   ativo: boolean;
   ordem: number;
+  limite_minutos_atraso?: number; // Limite de minutos para atraso grave (sem tolerância)
 }
 
 export interface Ocorrencia360 {
@@ -34,6 +35,13 @@ export interface Ocorrencia360 {
   observacoes: string | null;
   created_at: string;
   updated_at: string;
+  // Campos de status/reversão
+  status?: 'ativo' | 'revertido';
+  revertido_em?: string | null;
+  revertido_por?: string | null;
+  revertido_por_nome?: string | null;
+  justificativa_reversao?: string | null;
+  minutos_atraso?: number | null;
   // Joins
   criterio?: Criterio360;
   professor?: { id: number; nome: string; foto_url: string | null };
@@ -90,6 +98,29 @@ export interface OcorrenciaFormData {
   escopo?: 'unidade' | 'todas';
   notificado?: boolean;
   observacoes?: string;
+}
+
+// Interface para ocorrência com campos de status/reversão
+export interface Ocorrencia360Completa extends Ocorrencia360 {
+  status?: 'ativo' | 'revertido';
+  revertido_em?: string | null;
+  revertido_por?: string | null;
+  revertido_por_nome?: string | null;
+  justificativa_reversao?: string | null;
+  minutos_atraso?: number | null;
+}
+
+// Interface para log de ocorrência
+export interface OcorrenciaLog {
+  id: number;
+  ocorrencia_id: number;
+  acao: 'criado' | 'editado' | 'revertido' | 'restaurado';
+  usuario_id: string | null;
+  usuario_nome: string;
+  justificativa: string | null;
+  dados_anteriores: any | null;
+  dados_novos: any | null;
+  created_at: string;
 }
 
 export interface Professor360Resumo {
@@ -523,11 +554,14 @@ export function useProfessor360(competencia: string, unidadeId?: string) {
       unidadesProf.forEach((unidade: any) => {
         const key = `${prof.id}-${unidade.id}`;
         const ocsProf = ocorrenciasPorProfUnidade.get(key) || [];
+        
+        // Filtrar apenas ocorrências ativas (não revertidas)
+        const ocsAtivas = ocsProf.filter(oc => oc.status !== 'revertido');
 
-        // Contar ocorrências por critério
+        // Contar ocorrências por critério (apenas ativas)
         const contagem: Record<string, number> = {};
         criterios.forEach(c => {
-          contagem[c.codigo] = ocsProf.filter(oc => oc.criterio_id === c.id).length;
+          contagem[c.codigo] = ocsAtivas.filter(oc => oc.criterio_id === c.id).length;
         });
 
         // Calcular pontos por critério (subtração direta da nota base 100)
@@ -721,6 +755,208 @@ export function useProfessor360(competencia: string, unidadeId?: string) {
         fetchProfessores(),
       ]);
     }, [refetchOcorrencias, refetchAvaliacoes, fetchProfessores]),
+  };
+}
+
+// ============================================================================
+// HOOK: useNota360Professor (Para buscar nota 360 de um professor específico)
+// ============================================================================
+
+// ============================================================================
+// HOOK: useOcorrenciasComLog (CRUD com auditoria)
+// ============================================================================
+
+export function useOcorrenciasComLog() {
+  const [loading, setLoading] = useState(false);
+
+  // Buscar logs de uma ocorrência específica
+  const fetchLogsOcorrencia = useCallback(async (ocorrenciaId: number): Promise<OcorrenciaLog[]> => {
+    const { data, error } = await supabase
+      .from('professor_360_ocorrencias_log')
+      .select('*')
+      .eq('ocorrencia_id', ocorrenciaId)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return data || [];
+  }, []);
+
+  // Buscar histórico completo de um professor
+  const fetchHistoricoProfessor = useCallback(async (
+    professorId: number, 
+    competencia?: string
+  ): Promise<{ ocorrencia: Ocorrencia360Completa; logs: OcorrenciaLog[] }[]> => {
+    let query = supabase
+      .from('professor_360_ocorrencias')
+      .select(`
+        *,
+        criterio:criterio_id (id, codigo, nome, tipo, peso, pontos_perda, tolerancia),
+        unidade:unidade_id (id, nome, codigo)
+      `)
+      .eq('professor_id', professorId)
+      .order('data_ocorrencia', { ascending: false });
+
+    if (competencia) {
+      query = query.eq('competencia', competencia);
+    }
+
+    const { data: ocorrencias, error } = await query;
+    if (error) throw error;
+
+    // Buscar logs para cada ocorrência
+    const resultado = await Promise.all(
+      (ocorrencias || []).map(async (oc) => {
+        const logs = await fetchLogsOcorrencia(oc.id);
+        return { ocorrencia: oc as Ocorrencia360Completa, logs };
+      })
+    );
+
+    return resultado;
+  }, [fetchLogsOcorrencia]);
+
+  // Buscar ocorrências de uma avaliação (professor + unidade + competência)
+  const fetchOcorrenciasAvaliacao = useCallback(async (
+    professorId: number,
+    unidadeId: string,
+    competencia: string
+  ): Promise<Ocorrencia360Completa[]> => {
+    const { data, error } = await supabase
+      .from('professor_360_ocorrencias')
+      .select(`
+        *,
+        criterio:criterio_id (id, codigo, nome, tipo, peso, pontos_perda, tolerancia),
+        unidade:unidade_id (id, nome, codigo)
+      `)
+      .eq('professor_id', professorId)
+      .eq('unidade_id', unidadeId)
+      .eq('competencia', competencia)
+      .order('data_ocorrencia', { ascending: false });
+
+    if (error) throw error;
+    return (data || []) as Ocorrencia360Completa[];
+  }, []);
+
+  // Reverter ocorrência (soft delete com log)
+  const reverterOcorrencia = useCallback(async (
+    ocorrenciaId: number,
+    usuarioId: string | null,
+    usuarioNome: string,
+    justificativa: string
+  ): Promise<boolean> => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.rpc('reverter_ocorrencia', {
+        p_ocorrencia_id: ocorrenciaId,
+        p_usuario_id: usuarioId,
+        p_usuario_nome: usuarioNome,
+        p_justificativa: justificativa,
+      });
+
+      if (error) throw error;
+      return true;
+    } catch (err) {
+      console.error('[reverterOcorrencia] Erro:', err);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Restaurar ocorrência revertida
+  const restaurarOcorrencia = useCallback(async (
+    ocorrenciaId: number,
+    usuarioId: string | null,
+    usuarioNome: string,
+    justificativa: string
+  ): Promise<boolean> => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.rpc('restaurar_ocorrencia', {
+        p_ocorrencia_id: ocorrenciaId,
+        p_usuario_id: usuarioId,
+        p_usuario_nome: usuarioNome,
+        p_justificativa: justificativa,
+      });
+
+      if (error) throw error;
+      return true;
+    } catch (err) {
+      console.error('[restaurarOcorrencia] Erro:', err);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Editar ocorrência com log
+  const editarOcorrencia = useCallback(async (
+    ocorrenciaId: number,
+    usuarioId: string | null,
+    usuarioNome: string,
+    justificativa: string,
+    dados: {
+      data_ocorrencia?: string;
+      descricao?: string;
+      minutos_atraso?: number;
+    }
+  ): Promise<boolean> => {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.rpc('editar_ocorrencia', {
+        p_ocorrencia_id: ocorrenciaId,
+        p_usuario_id: usuarioId,
+        p_usuario_nome: usuarioNome,
+        p_justificativa: justificativa,
+        p_data_ocorrencia: dados.data_ocorrencia || null,
+        p_descricao: dados.descricao || null,
+        p_minutos_atraso: dados.minutos_atraso || null,
+      });
+
+      if (error) throw error;
+      return true;
+    } catch (err) {
+      console.error('[editarOcorrencia] Erro:', err);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Registrar log de criação (chamado após criar ocorrência)
+  const registrarLogCriacao = useCallback(async (
+    ocorrenciaId: number,
+    usuarioId: string | null,
+    usuarioNome: string
+  ): Promise<void> => {
+    // Buscar dados da ocorrência criada
+    const { data: ocorrencia } = await supabase
+      .from('professor_360_ocorrencias')
+      .select('*')
+      .eq('id', ocorrenciaId)
+      .single();
+
+    if (ocorrencia) {
+      await supabase.rpc('registrar_log_ocorrencia', {
+        p_ocorrencia_id: ocorrenciaId,
+        p_acao: 'criado',
+        p_usuario_id: usuarioId,
+        p_usuario_nome: usuarioNome,
+        p_justificativa: null,
+        p_dados_anteriores: null,
+        p_dados_novos: ocorrencia,
+      });
+    }
+  }, []);
+
+  return {
+    loading,
+    fetchLogsOcorrencia,
+    fetchHistoricoProfessor,
+    fetchOcorrenciasAvaliacao,
+    reverterOcorrencia,
+    restaurarOcorrencia,
+    editarOcorrencia,
+    registrarLogCriacao,
   };
 }
 

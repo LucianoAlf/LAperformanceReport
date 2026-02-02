@@ -140,7 +140,15 @@ Em caso de dúvidas, procure a coordenação.`;
     }
   };
 
-  // Enviar via Edge Function (API WhatsApp)
+  // Formatar número para WhatsApp Web
+  const formatarNumeroWhatsApp = (numero: string): string => {
+    let limpo = numero.replace(/\D/g, '');
+    if (limpo.startsWith('0')) limpo = limpo.substring(1);
+    if (!limpo.startsWith('55')) limpo = '55' + limpo;
+    return limpo;
+  };
+
+  // Enviar via Edge Function (API WhatsApp) com fallback para WhatsApp Web
   const handleEnviarWhatsApp = async () => {
     if (!professorWhatsApp) return;
     
@@ -167,17 +175,29 @@ Em caso de dúvidas, procure a coordenação.`;
       
       if (error) {
         console.error('[WhatsApp 360°] ❌ Erro ao chamar Edge Function:', error);
-        alert('Erro ao enviar mensagem. Tente copiar e enviar manualmente.');
+        // Fallback: abrir WhatsApp Web
+        const numeroFormatado = formatarNumeroWhatsApp(professorWhatsApp);
+        const mensagemEncoded = encodeURIComponent(mensagem);
+        window.open(`https://wa.me/${numeroFormatado}?text=${mensagemEncoded}`, '_blank');
+        onOpenChange(false);
       } else if (resultado?.success) {
         console.log('[WhatsApp 360°] ✅ Mensagem enviada com sucesso! ID:', resultado.messageId);
         onOpenChange(false);
       } else {
         console.error('[WhatsApp 360°] ❌ Erro ao enviar:', resultado?.error);
-        alert('Erro ao enviar mensagem. Tente copiar e enviar manualmente.');
+        // Fallback: abrir WhatsApp Web
+        const numeroFormatado = formatarNumeroWhatsApp(professorWhatsApp);
+        const mensagemEncoded = encodeURIComponent(mensagem);
+        window.open(`https://wa.me/${numeroFormatado}?text=${mensagemEncoded}`, '_blank');
+        onOpenChange(false);
       }
     } catch (err) {
       console.error('[WhatsApp 360°] ❌ Erro inesperado:', err);
-      alert('Erro ao enviar mensagem. Tente copiar e enviar manualmente.');
+      // Fallback: abrir WhatsApp Web
+      const numeroFormatado = formatarNumeroWhatsApp(professorWhatsApp);
+      const mensagemEncoded = encodeURIComponent(mensagem);
+      window.open(`https://wa.me/${numeroFormatado}?text=${mensagemEncoded}`, '_blank');
+      onOpenChange(false);
     } finally {
       setEnviando(false);
     }
