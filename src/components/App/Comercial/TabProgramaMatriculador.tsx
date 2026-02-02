@@ -22,6 +22,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useMatriculadorPrograma, HunterDados, Penalidade } from '@/hooks/useMatriculadorPrograma';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { CelulaEditavelInline } from '@/components/ui/CelulaEditavelInline';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -182,7 +183,8 @@ export function TabProgramaMatriculador({ unidadeId, ano = 2026 }: TabProgramaMa
     error, 
     recarregar,
     registrarPenalidade,
-    deletarPenalidade 
+    deletarPenalidade,
+    atualizarPenalidade
   } = useMatriculadorPrograma(ano, unidadeId);
 
   // Estados para modais
@@ -636,32 +638,82 @@ export function TabProgramaMatriculador({ unidadeId, ano = 2026 }: TabProgramaMa
                   </thead>
                   <tbody>
                     {penalidades.map(p => (
-                      <tr key={p.id} className="border-b border-slate-800">
-                        <td className="py-3">
-                          {new Date(p.data_ocorrencia).toLocaleDateString('pt-BR')}
+                      <tr key={p.id} className="border-b border-slate-800 hover:bg-slate-800/30">
+                        {/* Data - Edição inline com DatePicker */}
+                        <td className="py-2 px-1">
+                          <CelulaEditavelInline
+                            value={p.data_ocorrencia}
+                            onChange={async (valor) => {
+                              await atualizarPenalidade(p.id, 'data_ocorrencia', valor);
+                            }}
+                            tipo="data"
+                            placeholder="-"
+                          />
                         </td>
-                        <td className="py-3">
-                          <div className="flex items-center gap-2">
-                            <div className="w-6 h-6 bg-slate-700 rounded-full flex items-center justify-center text-xs font-bold">
-                              {hunters.find(h => h.unidade_id === p.unidade_id)?.hunter_nome?.charAt(0)}
-                            </div>
-                            {hunters.find(h => h.unidade_id === p.unidade_id)?.hunter_nome}
-                          </div>
+                        {/* Hunter - Edição inline */}
+                        <td className="py-2 px-1">
+                          <CelulaEditavelInline
+                            value={p.unidade_id}
+                            onChange={async (valor) => {
+                              await atualizarPenalidade(p.id, 'unidade_id', valor);
+                            }}
+                            tipo="select"
+                            opcoes={hunters.map(h => ({ value: h.unidade_id, label: h.hunter_nome }))}
+                            placeholder="-"
+                            className="min-w-[120px]"
+                          />
                         </td>
-                        <td className="py-3">
-                          <span className={cn(
-                            "px-2 py-1 rounded text-xs",
-                            p.tipo === 'nao_preencheu_emusys' ? "bg-red-500/20 text-red-400" :
-                            p.tipo === 'nao_preencheu_lareport' ? "bg-amber-500/20 text-amber-400" :
-                            "bg-slate-500/20 text-slate-400"
-                          )}>
-                            {TIPOS_PENALIDADE.find(t => t.value === p.tipo)?.label || p.tipo}
-                          </span>
+                        {/* Tipo - Edição inline */}
+                        <td className="py-2 px-1">
+                          <CelulaEditavelInline
+                            value={p.tipo}
+                            onChange={async (valor) => {
+                              await atualizarPenalidade(p.id, 'tipo', valor);
+                            }}
+                            tipo="select"
+                            opcoes={TIPOS_PENALIDADE}
+                            placeholder="-"
+                            className="min-w-[140px]"
+                          />
                         </td>
-                        <td className="py-3 text-slate-400">{p.descricao || '-'}</td>
-                        <td className="py-3 text-center text-red-400 font-bold">-{p.pontos_descontados}</td>
-                        <td className="py-3 text-slate-400">{p.registrado_por}</td>
-                        <td className="py-3 text-center">
+                        {/* Descrição - Edição inline */}
+                        <td className="py-2 px-1">
+                          <CelulaEditavelInline
+                            value={p.descricao}
+                            onChange={async (valor) => {
+                              await atualizarPenalidade(p.id, 'descricao', valor);
+                            }}
+                            tipo="texto"
+                            placeholder="-"
+                            className="min-w-[150px]"
+                          />
+                        </td>
+                        {/* Pontos - Edição inline */}
+                        <td className="py-2 px-1 text-center">
+                          <CelulaEditavelInline
+                            value={p.pontos_descontados}
+                            onChange={async (valor) => {
+                              await atualizarPenalidade(p.id, 'pontos_descontados', valor);
+                            }}
+                            tipo="numero"
+                            placeholder="0"
+                            formatarExibicao={(val) => `-${val}`}
+                            className="min-w-[50px] text-red-400 font-bold"
+                          />
+                        </td>
+                        {/* Registrado por - Edição inline */}
+                        <td className="py-2 px-1">
+                          <CelulaEditavelInline
+                            value={p.registrado_por}
+                            onChange={async (valor) => {
+                              await atualizarPenalidade(p.id, 'registrado_por', valor);
+                            }}
+                            tipo="texto"
+                            placeholder="-"
+                            className="min-w-[100px]"
+                          />
+                        </td>
+                        <td className="py-2 text-center">
                           <button
                             onClick={() => setDeletePenalidadeId(p.id)}
                             className="text-slate-400 hover:text-red-400 transition-colors"
@@ -1522,6 +1574,41 @@ function HistoricoMensal({ historico, mediaGrupo, config, metaVolume, metaTicket
             </table>
           </div>
         )}
+      </div>
+
+      {/* Evolução Mensal - Cards de Matrículas */}
+      <div className="bg-slate-900 rounded-2xl p-6">
+        <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
+          <TrendingUp className="w-5 h-5" />
+          Evolução Mensal - 2026
+        </h3>
+        <div className="grid grid-cols-11 gap-2 text-center text-sm">
+          {MESES.map((mes, idx) => {
+            const dadosMes = historico.find(h => h.mes === idx + 1);
+            const temDados = dadosMes && dadosMes.total_matriculas > 0;
+            const matriculas = dadosMes?.total_matriculas || 0;
+            
+            return (
+              <div 
+                key={mes} 
+                className={cn(
+                  "rounded-lg p-3",
+                  temDados ? "bg-emerald-500/20" : "bg-slate-700/50"
+                )}
+              >
+                <div className={cn("font-bold", temDados ? "text-emerald-400" : "text-slate-500")}>
+                  {mes}
+                </div>
+                <div className={cn("text-lg font-bold", temDados ? "text-white" : "text-slate-500")}>
+                  {temDados ? matriculas : '-'}
+                </div>
+                <div className={cn("text-xs", temDados ? "text-slate-400" : "text-slate-500")}>
+                  {temDados ? 'matrículas' : 'pendente'}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* Comparativo com Média do Grupo */}

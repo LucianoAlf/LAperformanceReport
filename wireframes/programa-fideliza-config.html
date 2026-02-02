@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe - Fideliza+ LA - Configurações</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>body { font-family: 'Inter', sans-serif; }</style>
+</head>
+<body class="bg-slate-950 text-white min-h-screen p-6">
+  <div class="max-w-7xl mx-auto">
+    
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h2 class="text-xl font-bold">⚙️ Configurações do Programa Fideliza+ LA</h2>
+        <p class="text-sm text-slate-400">Edite as metas, pontuações e nota de corte • <span class="text-emerald-400">Salvo automaticamente</span></p>
+      </div>
+    </div>
+
+    <!-- Grid de Configurações -->
+    <div class="grid grid-cols-3 gap-6 mb-6">
+      
+      <!-- Metas de Retenção -->
+      <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
+        <h4 class="font-medium text-slate-300 border-b border-slate-700 pb-2 mb-4">Metas de Retenção (Trimestral)</h4>
+        <div class="space-y-4">
+          <div>
+            <label class="text-sm text-slate-400 block mb-1">Churn Premiado (máximo)</label>
+            <div class="flex items-center gap-2">
+              <input type="number" value="4" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 w-24 text-sm">
+              <span class="text-slate-400">%</span>
+            </div>
+          </div>
+          <div>
+            <label class="text-sm text-slate-400 block mb-1">Inadimplência (máximo)</label>
+            <div class="flex items-center gap-2">
+              <input type="number" value="1" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 w-24 text-sm">
+              <span class="text-slate-400">%</span>
+            </div>
+          </div>
+          <div>
+            <label class="text-sm text-slate-400 block mb-1">Max Renovação (mínimo)</label>
+            <div class="flex items-center gap-2">
+              <input type="number" value="90" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 w-24 text-sm">
+              <span class="text-slate-400">%</span>
+            </div>
+          </div>
+          <div>
+            <label class="text-sm text-slate-400 block mb-1">Reajuste Campeão (mínimo)</label>
+            <div class="flex items-center gap-2">
+              <input type="number" value="7" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 w-24 text-sm">
+              <span class="text-slate-400">%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Metas de Lojinha -->
+      <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
+        <h4 class="font-medium text-slate-300 border-b border-slate-700 pb-2 mb-4">Mestres da Lojinha (Meta Trimestral)</h4>
+        <div class="space-y-4">
+          <div>
+            <label class="text-sm text-slate-400 block mb-1">Campo Grande (Gabi & Jhon)</label>
+            <div class="flex items-center gap-2">
+              <span class="text-slate-400">R$</span>
+              <input type="number" value="5000" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 w-28 text-sm">
+            </div>
+          </div>
+          <div>
+            <label class="text-sm text-slate-400 block mb-1">Recreio (Fefê & Dai)</label>
+            <div class="flex items-center gap-2">
+              <span class="text-slate-400">R$</span>
+              <input type="number" value="3000" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 w-28 text-sm">
+            </div>
+          </div>
+          <div>
+            <label class="text-sm text-slate-400 block mb-1">Barra (Duda & Arthur)</label>
+            <div class="flex items-center gap-2">
+              <span class="text-slate-400">R$</span>
+              <input type="number" value="3000" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 w-28 text-sm">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Sistema de Pontuação -->
+      <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
+        <h4 class="font-medium text-slate-300 border-b border-slate-700 pb-2 mb-4">Sistema de Pontuação</h4>
+        <div class="space-y-4">
+          <div>
+            <label class="text-sm text-slate-400 block mb-1">Pontos - Churn Premiado</label>
+            <input type="number" value="25" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 w-24 text-sm">
+          </div>
+          <div>
+            <label class="text-sm text-slate-400 block mb-1">Pontos - Inadimplência</label>
+            <input type="number" value="20" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 w-24 text-sm">
+          </div>
+          <div>
+            <label class="text-sm text-slate-400 block mb-1">Pontos - Max Renovação</label>
+            <input type="number" value="25" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 w-24 text-sm">
+          </div>
+          <div>
+            <label class="text-sm text-slate-400 block mb-1">Pontos - Reajuste Campeão</label>
+            <input type="number" value="15" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 w-24 text-sm">
+          </div>
+          <div>
+            <label class="text-sm text-slate-400 block mb-1">Pontos - Mestres da Lojinha</label>
+            <input type="number" value="15" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 w-24 text-sm">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Penalidades e Regras -->
+    <div class="grid grid-cols-2 gap-6 mb-6">
+      <!-- Penalidades -->
+      <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
+        <h4 class="font-medium text-slate-300 border-b border-slate-700 pb-2 mb-4">Penalidades</h4>
+        <div class="space-y-4">
+          <div>
+            <label class="text-sm text-slate-400 block mb-1">Não preencheu sistema</label>
+            <div class="flex items-center gap-2">
+              <span class="text-red-400">-</span>
+              <input type="number" value="3" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 w-20 text-sm">
+              <span class="text-slate-400">pts</span>
+            </div>
+          </div>
+          <div>
+            <label class="text-sm text-slate-400 block mb-1">Não preencheu LA Report</label>
+            <div class="flex items-center gap-2">
+              <span class="text-red-400">-</span>
+              <input type="number" value="3" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 w-20 text-sm">
+              <span class="text-slate-400">pts</span>
+            </div>
+          </div>
+          <div>
+            <label class="text-sm text-slate-400 block mb-1">Reincidência no mês</label>
+            <div class="flex items-center gap-2">
+              <span class="text-red-400">-</span>
+              <input type="number" value="5" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 w-20 text-sm">
+              <span class="text-slate-400">pts</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Nota de Corte e Período -->
+      <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
+        <h4 class="font-medium text-slate-300 border-b border-slate-700 pb-2 mb-4">Nota de Corte e Regras</h4>
+        <div class="space-y-4">
+          <div>
+            <label class="text-sm text-slate-400 block mb-1">Pontuação mínima para participar</label>
+            <div class="flex items-center gap-2">
+              <input type="number" value="60" class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 w-24 text-sm">
+              <span class="text-slate-400">pontos</span>
+            </div>
+            <p class="text-xs text-slate-500 mt-1">Duplas abaixo desta pontuação não participam das experiências</p>
+          </div>
+          <div>
+            <label class="text-sm text-slate-400 block mb-1">Critério de Desempate Anual</label>
+            <select class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 w-full text-sm">
+              <option selected>Menor Churn Acumulado</option>
+              <option>Maior Taxa de Renovação</option>
+              <option>Maior Venda na Lojinha</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-sm text-slate-400 block mb-1">Período do Programa</label>
+            <div class="flex items-center gap-2">
+              <select class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm">
+                <option>Q1 (Jan-Mar)</option>
+              </select>
+              <span class="text-slate-400">até</span>
+              <select class="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm">
+                <option>Q4 (Out-Dez)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Experiências Cadastradas -->
+    <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h4 class="font-medium text-slate-300">🎁 Experiências Cadastradas</h4>
+        <button class="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 rounded-lg text-sm">+ Adicionar Experiência</button>
+      </div>
+      
+      <div class="grid grid-cols-2 gap-6">
+        <!-- Standard -->
+        <div>
+          <h5 class="text-sm text-slate-400 mb-3">⭐ Standard (4/5 critérios)</h5>
+          <div class="space-y-2">
+            <div class="bg-slate-800/50 rounded-lg p-3 flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <span class="text-xl">🍿</span>
+                <div>
+                  <div class="text-sm font-medium">Cinema + Pipoca</div>
+                  <div class="text-xs text-slate-400">Ingresso + combo para 2 pessoas</div>
+                </div>
+              </div>
+              <div class="flex gap-2">
+                <button class="text-slate-400 hover:text-white text-sm">✏️</button>
+                <button class="text-slate-400 hover:text-red-400 text-sm">🗑️</button>
+              </div>
+            </div>
+            <div class="bg-slate-800/50 rounded-lg p-3 flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <span class="text-xl">🍕</span>
+                <div>
+                  <div class="text-sm font-medium">Jantar Casual</div>
+                  <div class="text-xs text-slate-400">Vale R$150 em restaurante parceiro</div>
+                </div>
+              </div>
+              <div class="flex gap-2">
+                <button class="text-slate-400 hover:text-white text-sm">✏️</button>
+                <button class="text-slate-400 hover:text-red-400 text-sm">🗑️</button>
+              </div>
+            </div>
+            <div class="bg-slate-800/50 rounded-lg p-3 flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <span class="text-xl">🎮</span>
+                <div>
+                  <div class="text-sm font-medium">Experiência Gamer</div>
+                  <div class="text-xs text-slate-400">2h em arena de games</div>
+                </div>
+              </div>
+              <div class="flex gap-2">
+                <button class="text-slate-400 hover:text-white text-sm">✏️</button>
+                <button class="text-slate-400 hover:text-red-400 text-sm">🗑️</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Premium -->
+        <div>
+          <h5 class="text-sm text-slate-400 mb-3">🌟 Premium (5/5 critérios)</h5>
+          <div class="space-y-2">
+            <div class="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <span class="text-xl">🍽️</span>
+                <div>
+                  <div class="text-sm font-medium text-yellow-400">Jantar Gastronômico</div>
+                  <div class="text-xs text-slate-400">Experiência em restaurante premium para 2</div>
+                </div>
+              </div>
+              <div class="flex gap-2">
+                <button class="text-slate-400 hover:text-white text-sm">✏️</button>
+                <button class="text-slate-400 hover:text-red-400 text-sm">🗑️</button>
+              </div>
+            </div>
+            <div class="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <span class="text-xl">🎭</span>
+                <div>
+                  <div class="text-sm font-medium text-yellow-400">Teatro/Show</div>
+                  <div class="text-xs text-slate-400">Ingressos para espetáculo + jantar</div>
+                </div>
+              </div>
+              <div class="flex gap-2">
+                <button class="text-slate-400 hover:text-white text-sm">✏️</button>
+                <button class="text-slate-400 hover:text-red-400 text-sm">🗑️</button>
+              </div>
+            </div>
+            <div class="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <span class="text-xl">🏖️</span>
+                <div>
+                  <div class="text-sm font-medium text-yellow-400">Day Use Resort</div>
+                  <div class="text-xs text-slate-400">Dia em resort com acompanhante</div>
+                </div>
+              </div>
+              <div class="flex gap-2">
+                <button class="text-slate-400 hover:text-white text-sm">✏️</button>
+                <button class="text-slate-400 hover:text-red-400 text-sm">🗑️</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

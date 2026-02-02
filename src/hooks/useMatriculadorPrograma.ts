@@ -128,32 +128,34 @@ function calcularPontuacao(
     ? pontosConfig.ticket_medio : 0;
 
   // Calcular bônus por performance acima da meta
+  // LIMITE: máximo 20 pontos de bônus por categoria para evitar distorções com poucos dados
+  const MAX_BONUS_POR_CATEGORIA = 20;
   let bonus = 0;
   if (config.bonus) {
-    // Bônus taxa showup: +5 pts a cada 2% acima
+    // Bônus taxa showup: +5 pts a cada 2% acima (máx 20 pts)
     if (metricas.taxa_showup_exp > metas.taxa_showup_experimental) {
       const acima = metricas.taxa_showup_exp - metas.taxa_showup_experimental;
-      bonus += Math.floor(acima / 2) * config.bonus.taxa_showup_por_2pct;
+      bonus += Math.min(MAX_BONUS_POR_CATEGORIA, Math.floor(acima / 2) * config.bonus.taxa_showup_por_2pct);
     }
-    // Bônus taxa exp→mat: +5 pts a cada 5% acima
+    // Bônus taxa exp→mat: +5 pts a cada 5% acima (máx 20 pts)
     if (metricas.taxa_exp_mat > metas.taxa_experimental_matricula) {
       const acima = metricas.taxa_exp_mat - metas.taxa_experimental_matricula;
-      bonus += Math.floor(acima / 5) * config.bonus.taxa_exp_mat_por_5pct;
+      bonus += Math.min(MAX_BONUS_POR_CATEGORIA, Math.floor(acima / 5) * config.bonus.taxa_exp_mat_por_5pct);
     }
-    // Bônus taxa geral: +10 pts a cada 1% acima
+    // Bônus taxa geral: +10 pts a cada 1% acima (máx 20 pts)
     if (metricas.taxa_geral > metas.taxa_lead_matricula) {
       const acima = metricas.taxa_geral - metas.taxa_lead_matricula;
-      bonus += Math.floor(acima / 1) * config.bonus.taxa_geral_por_1pct;
+      bonus += Math.min(MAX_BONUS_POR_CATEGORIA, Math.floor(acima / 1) * config.bonus.taxa_geral_por_1pct);
     }
-    // Bônus volume: +5 pts a cada 2 acima
+    // Bônus volume: +5 pts a cada 2 acima (máx 20 pts)
     if (metricas.media_matriculas_mes > metaVolume) {
       const acima = metricas.media_matriculas_mes - metaVolume;
-      bonus += Math.floor(acima / 2) * config.bonus.volume_por_2_acima;
+      bonus += Math.min(MAX_BONUS_POR_CATEGORIA, Math.floor(acima / 2) * config.bonus.volume_por_2_acima);
     }
-    // Bônus ticket: +5 pts a cada R$20 acima
+    // Bônus ticket: +5 pts a cada R$20 acima (máx 20 pts)
     if (metricas.media_ticket > metaTicket) {
       const acima = metricas.media_ticket - metaTicket;
-      bonus += Math.floor(acima / 20) * config.bonus.ticket_por_20_acima;
+      bonus += Math.min(MAX_BONUS_POR_CATEGORIA, Math.floor(acima / 20) * config.bonus.ticket_por_20_acima);
     }
   }
 
@@ -270,6 +272,29 @@ export function useMatriculadorPrograma(ano: number = 2026, unidadeId?: string |
     }
   }, [carregarDados]);
 
+  // Atualizar penalidade (edição inline)
+  const atualizarPenalidade = useCallback(async (
+    id: number,
+    campo: string,
+    valor: string | number | null
+  ) => {
+    try {
+      const { error } = await supabase
+        .from('programa_matriculador_penalidades')
+        .update({ [campo]: valor, updated_at: new Date().toISOString() })
+        .eq('id', id);
+
+      if (error) throw error;
+
+      // Recarregar dados
+      await carregarDados();
+      return { success: true };
+    } catch (err) {
+      console.error('Erro ao atualizar penalidade:', err);
+      return { success: false, error: err instanceof Error ? err.message : 'Erro desconhecido' };
+    }
+  }, [carregarDados]);
+
   // Atualizar configurações
   const atualizarConfig = useCallback(async (novaConfig: Partial<ConfigPrograma>) => {
     try {
@@ -337,6 +362,7 @@ export function useMatriculadorPrograma(ano: number = 2026, unidadeId?: string |
     recarregar: carregarDados,
     registrarPenalidade,
     deletarPenalidade,
+    atualizarPenalidade,
     atualizarConfig,
   };
 }

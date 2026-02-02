@@ -1,0 +1,1096 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe - Programa Fideliza+ LA</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+  </style>
+</head>
+<body class="bg-slate-950 text-white min-h-screen p-6">
+  
+  <!-- Header -->
+  <div class="max-w-7xl mx-auto">
+    <div class="flex items-center justify-between mb-6">
+      <div>
+        <h1 class="text-2xl font-bold">🏆 Programa Fideliza+ LA 2026</h1>
+        <p class="text-slate-400">Competição trimestral de retenção • Prêmio anual: 14º Salário + VR 6 meses</p>
+      </div>
+      <div class="flex gap-3">
+        <select class="px-4 py-2 bg-slate-800 rounded-lg text-sm border border-slate-700">
+          <option>Q1 (Jan-Mar)</option>
+          <option selected>Q2 (Abr-Jun)</option>
+          <option>Q3 (Jul-Set)</option>
+          <option>Q4 (Out-Dez)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Tabs de navegação -->
+    <div class="flex gap-2 mb-6 border-b border-slate-800 pb-2">
+      <button class="px-4 py-2 bg-purple-600 rounded-t-lg text-sm font-medium" onclick="showView('admin')">
+        👑 Visão Admin (Ranking)
+      </button>
+      <button class="px-4 py-2 bg-slate-800 rounded-t-lg text-sm hover:bg-slate-700" onclick="showView('farmer')">
+        🌾 Visão Farmer (Individual)
+      </button>
+      <button class="px-4 py-2 bg-slate-800 rounded-t-lg text-sm hover:bg-slate-700" onclick="showView('penalidades')">
+        ⚠️ Penalidades
+      </button>
+      <button class="px-4 py-2 bg-slate-800 rounded-t-lg text-sm hover:bg-slate-700" onclick="showView('config')">
+        ⚙️ Configurações
+      </button>
+    </div>
+
+    <!-- ========================================== -->
+    <!-- VISÃO ADMIN - RANKING CONSOLIDADO -->
+    <!-- ========================================== -->
+    <div id="view-admin">
+      
+      <!-- Cards de Ranking -->
+      <div class="grid grid-cols-3 gap-4 mb-6">
+        
+        <!-- 1º Lugar -->
+        <div class="bg-gradient-to-br from-yellow-900/30 to-yellow-600/10 border-2 border-yellow-500/50 rounded-2xl p-6 relative">
+          <div class="absolute -top-3 -right-3 bg-yellow-500 text-black font-bold px-3 py-1 rounded-full text-sm">
+            🥇 1º Lugar
+          </div>
+          <div class="flex items-center gap-4 mb-4">
+            <div class="flex -space-x-3">
+              <div class="w-12 h-12 bg-yellow-500/20 rounded-full flex items-center justify-center text-lg font-bold text-yellow-400 border-2 border-yellow-500/50">G</div>
+              <div class="w-12 h-12 bg-yellow-500/20 rounded-full flex items-center justify-center text-lg font-bold text-yellow-400 border-2 border-yellow-500/50">J</div>
+            </div>
+            <div>
+              <h3 class="text-xl font-bold text-yellow-400">Gabi & Jhon</h3>
+              <p class="text-slate-400 text-sm">Campo Grande</p>
+            </div>
+          </div>
+          <div class="text-center mb-4">
+            <span class="text-5xl font-bold text-yellow-400">85</span>
+            <span class="text-slate-400 text-lg"> pontos</span>
+          </div>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between">
+              <span class="text-slate-400">Churn</span>
+              <span class="text-emerald-400">2.8% ✓</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-400">Inadimplência</span>
+              <span class="text-emerald-400">0.5% ✓</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-400">Renovação</span>
+              <span class="text-emerald-400">95% ✓</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-400">Reajuste</span>
+              <span class="text-emerald-400">8.2% ✓</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-400">Lojinha</span>
+              <span class="text-emerald-400">R$ 5.200 ✓</span>
+            </div>
+            <div class="flex justify-between border-t border-slate-700 pt-2 mt-2">
+              <span class="text-slate-400">Penalidades</span>
+              <span class="text-red-400">-0 pts</span>
+            </div>
+          </div>
+          <div class="mt-4 p-2 bg-yellow-500/10 border border-yellow-500/30 rounded-lg text-center">
+            <span class="text-xs font-medium text-yellow-400">🌟 Experiência Premium Desbloqueada!</span>
+          </div>
+        </div>
+
+        <!-- 2º Lugar -->
+        <div class="bg-gradient-to-br from-slate-700/30 to-slate-600/10 border-2 border-slate-500/50 rounded-2xl p-6 relative">
+          <div class="absolute -top-3 -right-3 bg-slate-400 text-black font-bold px-3 py-1 rounded-full text-sm">
+            🥈 2º Lugar
+          </div>
+          <div class="flex items-center gap-4 mb-4">
+            <div class="flex -space-x-3">
+              <div class="w-12 h-12 bg-slate-500/20 rounded-full flex items-center justify-center text-lg font-bold text-slate-300 border-2 border-slate-500/50">F</div>
+              <div class="w-12 h-12 bg-slate-500/20 rounded-full flex items-center justify-center text-lg font-bold text-slate-300 border-2 border-slate-500/50">D</div>
+            </div>
+            <div>
+              <h3 class="text-xl font-bold text-slate-300">Fefê & Dai</h3>
+              <p class="text-slate-400 text-sm">Recreio</p>
+            </div>
+          </div>
+          <div class="text-center mb-4">
+            <span class="text-5xl font-bold text-slate-300">72</span>
+            <span class="text-slate-400 text-lg"> pontos</span>
+          </div>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between">
+              <span class="text-slate-400">Churn</span>
+              <span class="text-emerald-400">3.2% ✓</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-400">Inadimplência</span>
+              <span class="text-emerald-400">0.8% ✓</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-400">Renovação</span>
+              <span class="text-emerald-400">92% ✓</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-400">Reajuste</span>
+              <span class="text-amber-400">6.5% ⚠</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-400">Lojinha</span>
+              <span class="text-emerald-400">R$ 3.100 ✓</span>
+            </div>
+            <div class="flex justify-between border-t border-slate-700 pt-2 mt-2">
+              <span class="text-slate-400">Penalidades</span>
+              <span class="text-red-400">-3 pts</span>
+            </div>
+          </div>
+          <div class="mt-4 p-2 bg-slate-500/10 border border-slate-500/30 rounded-lg text-center">
+            <span class="text-xs font-medium text-slate-400">⭐ Experiência Standard (4/5 critérios)</span>
+          </div>
+        </div>
+
+        <!-- 3º Lugar -->
+        <div class="bg-gradient-to-br from-orange-900/30 to-orange-600/10 border-2 border-orange-500/50 rounded-2xl p-6 relative">
+          <div class="absolute -top-3 -right-3 bg-orange-600 text-white font-bold px-3 py-1 rounded-full text-sm">
+            🥉 3º Lugar
+          </div>
+          <div class="flex items-center gap-4 mb-4">
+            <div class="flex -space-x-3">
+              <div class="w-12 h-12 bg-orange-500/20 rounded-full flex items-center justify-center text-lg font-bold text-orange-400 border-2 border-orange-500/50">D</div>
+              <div class="w-12 h-12 bg-orange-500/20 rounded-full flex items-center justify-center text-lg font-bold text-orange-400 border-2 border-orange-500/50">A</div>
+            </div>
+            <div>
+              <h3 class="text-xl font-bold text-orange-400">Duda & Arthur</h3>
+              <p class="text-slate-400 text-sm">Barra</p>
+            </div>
+          </div>
+          <div class="text-center mb-4">
+            <span class="text-5xl font-bold text-orange-400">58</span>
+            <span class="text-slate-400 text-lg"> pontos</span>
+          </div>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between">
+              <span class="text-slate-400">Churn</span>
+              <span class="text-red-400">4.5% ✗</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-400">Inadimplência</span>
+              <span class="text-emerald-400">0.9% ✓</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-400">Renovação</span>
+              <span class="text-emerald-400">91% ✓</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-400">Reajuste</span>
+              <span class="text-emerald-400">7.8% ✓</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-400">Lojinha</span>
+              <span class="text-red-400">R$ 2.100 ✗</span>
+            </div>
+            <div class="flex justify-between border-t border-slate-700 pt-2 mt-2">
+              <span class="text-slate-400">Penalidades</span>
+              <span class="text-red-400">-5 pts</span>
+            </div>
+          </div>
+          <div class="mt-4 p-2 bg-slate-800/30 border border-slate-700 rounded-lg text-center">
+            <span class="text-xs text-slate-500">📈 3/5 critérios - Continue assim!</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabela Comparativa Detalhada -->
+      <div class="bg-slate-900 rounded-xl p-6 mb-6">
+        <h3 class="text-lg font-semibold mb-4">📊 Comparativo Detalhado - Q2 2026 (Abr-Jun)</h3>
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-slate-400 border-b border-slate-700">
+              <th class="text-left py-3">Métrica</th>
+              <th class="text-center py-3">Meta</th>
+              <th class="text-center py-3">Gabi & Jhon (CG)</th>
+              <th class="text-center py-3">Fefê & Dai (REC)</th>
+              <th class="text-center py-3">Duda & Arthur (BARRA)</th>
+              <th class="text-center py-3">Pontos</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="border-b border-slate-800">
+              <td class="py-3 font-medium">Churn Premiado</td>
+              <td class="text-center text-slate-400">≤ 4%</td>
+              <td class="text-center text-emerald-400">2.8% ✓</td>
+              <td class="text-center text-emerald-400">3.2% ✓</td>
+              <td class="text-center text-red-400">4.5% ✗</td>
+              <td class="text-center text-slate-400">25 pts</td>
+            </tr>
+            <tr class="border-b border-slate-800">
+              <td class="py-3 font-medium">Inadimplência Zero</td>
+              <td class="text-center text-slate-400">≤ 1%</td>
+              <td class="text-center text-emerald-400">0.5% ✓</td>
+              <td class="text-center text-emerald-400">0.8% ✓</td>
+              <td class="text-center text-emerald-400">0.9% ✓</td>
+              <td class="text-center text-slate-400">20 pts</td>
+            </tr>
+            <tr class="border-b border-slate-800">
+              <td class="py-3 font-medium">Max Renovação</td>
+              <td class="text-center text-slate-400">≥ 90%</td>
+              <td class="text-center text-emerald-400">95% ✓</td>
+              <td class="text-center text-emerald-400">92% ✓</td>
+              <td class="text-center text-emerald-400">91% ✓</td>
+              <td class="text-center text-slate-400">25 pts</td>
+            </tr>
+            <tr class="border-b border-slate-800">
+              <td class="py-3 font-medium">Reajuste Campeão</td>
+              <td class="text-center text-slate-400">≥ 7%</td>
+              <td class="text-center text-emerald-400">8.2% ✓</td>
+              <td class="text-center text-amber-400">6.5% ⚠</td>
+              <td class="text-center text-emerald-400">7.8% ✓</td>
+              <td class="text-center text-slate-400">15 pts</td>
+            </tr>
+            <tr class="border-b border-slate-800">
+              <td class="py-3 font-medium">Mestres da Lojinha</td>
+              <td class="text-center text-slate-400">CG: R$5k / Outros: R$3k</td>
+              <td class="text-center text-emerald-400">R$ 5.200 ✓</td>
+              <td class="text-center text-emerald-400">R$ 3.100 ✓</td>
+              <td class="text-center text-red-400">R$ 2.100 ✗</td>
+              <td class="text-center text-slate-400">15 pts</td>
+            </tr>
+            <tr class="border-b border-slate-800 text-red-400">
+              <td class="py-3 font-medium">Penalidades</td>
+              <td class="text-center text-slate-400">-</td>
+              <td class="text-center">-0 pts</td>
+              <td class="text-center">-3 pts</td>
+              <td class="text-center">-5 pts</td>
+              <td class="text-center text-slate-400">Desconto</td>
+            </tr>
+            <tr class="font-bold text-lg">
+              <td class="py-3">TOTAL</td>
+              <td class="text-center text-slate-400">100</td>
+              <td class="text-center text-yellow-400">85 pts 🥇</td>
+              <td class="text-center text-slate-300">72 pts 🥈</td>
+              <td class="text-center text-orange-400">58 pts 🥉</td>
+              <td class="text-center">-</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Evolução Trimestral -->
+      <div class="bg-slate-900 rounded-xl p-6 mb-6">
+        <h3 class="text-lg font-semibold mb-4">📈 Evolução Trimestral - 2026</h3>
+        <div class="grid grid-cols-4 gap-4 text-center text-sm">
+          <div class="bg-purple-500/20 rounded-lg p-4 border border-purple-500/30">
+            <div class="font-bold text-purple-400">Q1</div>
+            <div class="text-2xl font-bold">78</div>
+            <div class="text-xs text-slate-400">pontos</div>
+            <div class="text-xs text-emerald-400 mt-1">🥇 1º lugar</div>
+          </div>
+          <div class="bg-purple-500/20 rounded-lg p-4 border border-purple-500/30">
+            <div class="font-bold text-purple-400">Q2</div>
+            <div class="text-2xl font-bold">85</div>
+            <div class="text-xs text-slate-400">pontos</div>
+            <div class="text-xs text-emerald-400 mt-1">🥇 1º lugar</div>
+          </div>
+          <div class="bg-slate-700/50 rounded-lg p-4">
+            <div class="font-bold text-slate-500">Q3</div>
+            <div class="text-2xl font-bold text-slate-500">-</div>
+            <div class="text-xs text-slate-500">pendente</div>
+          </div>
+          <div class="bg-slate-700/50 rounded-lg p-4">
+            <div class="font-bold text-slate-500">Q4</div>
+            <div class="text-2xl font-bold text-slate-500">-</div>
+            <div class="text-xs text-slate-500">pendente</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Experiências Disponíveis -->
+      <div class="bg-slate-900 rounded-xl p-6">
+        <h3 class="text-lg font-semibold mb-4">🎁 Experiências Disponíveis</h3>
+        <div class="grid grid-cols-2 gap-6">
+          <div>
+            <h4 class="text-sm text-slate-400 mb-3 flex items-center gap-2">⭐ Standard (4/5 critérios)</h4>
+            <div class="space-y-2">
+              <div class="bg-slate-800/50 rounded-lg p-3 flex items-center gap-3">
+                <span class="text-xl">🍿</span>
+                <div>
+                  <div class="text-sm font-medium">Cinema + Pipoca</div>
+                  <div class="text-xs text-slate-400">Ingresso + combo para 2 pessoas</div>
+                </div>
+              </div>
+              <div class="bg-slate-800/50 rounded-lg p-3 flex items-center gap-3">
+                <span class="text-xl">🍕</span>
+                <div>
+                  <div class="text-sm font-medium">Jantar Casual</div>
+                  <div class="text-xs text-slate-400">Vale R$150 em restaurante parceiro</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <h4 class="text-sm text-slate-400 mb-3 flex items-center gap-2">🌟 Premium (5/5 critérios)</h4>
+            <div class="space-y-2">
+              <div class="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 flex items-center gap-3">
+                <span class="text-xl">🍽️</span>
+                <div>
+                  <div class="text-sm font-medium text-yellow-400">Jantar Gastronômico</div>
+                  <div class="text-xs text-slate-400">Experiência em restaurante premium para 2</div>
+                </div>
+              </div>
+              <div class="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-3 flex items-center gap-3">
+                <span class="text-xl">🎭</span>
+                <div>
+                  <div class="text-sm font-medium text-yellow-400">Teatro/Show</div>
+                  <div class="text-xs text-slate-400">Ingressos para espetáculo + jantar</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ========================================== -->
+    <!-- VISÃO FARMER - INDIVIDUAL (UNIDADE) -->
+    <!-- ========================================== -->
+    <div id="view-farmer" class="hidden">
+      
+      <!-- Card Principal do Farmer -->
+      <div class="bg-gradient-to-br from-purple-900/30 to-purple-600/10 border border-purple-500/30 rounded-2xl p-6 mb-6">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-4">
+            <div class="flex -space-x-3">
+              <div class="w-14 h-14 bg-purple-500/20 rounded-full flex items-center justify-center text-xl font-bold text-purple-400 border-2 border-purple-500/50">G</div>
+              <div class="w-14 h-14 bg-purple-500/20 rounded-full flex items-center justify-center text-xl font-bold text-purple-400 border-2 border-purple-500/50">J</div>
+            </div>
+            <div>
+              <h2 class="text-2xl font-bold">Olá, Gabi e Jhon! 🌟</h2>
+              <p class="text-slate-400">Campo Grande • Programa Fideliza+ LA 2026</p>
+            </div>
+          </div>
+          <div class="text-right">
+            <span class="text-5xl font-bold text-purple-400">85</span>
+            <span class="text-slate-400 text-lg block">pontos</span>
+            <span class="text-xs text-emerald-400">🥇 1º lugar no Q2</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cards de Métricas -->
+      <div class="grid grid-cols-2 gap-4 mb-6">
+        
+        <!-- Churn Premiado -->
+        <div class="bg-slate-900 rounded-xl p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h4 class="font-medium">Churn Premiado</h4>
+              <p class="text-sm text-slate-400">Meta: ≤ 4%</p>
+            </div>
+            <div class="text-right">
+              <span class="text-2xl font-bold text-emerald-400">2.8%</span>
+              <span class="text-emerald-400 text-sm block">+25 pts ✓</span>
+            </div>
+          </div>
+          <div class="w-full bg-slate-700 rounded-full h-3">
+            <div class="bg-emerald-500 h-3 rounded-full" style="width: 100%"></div>
+          </div>
+          <p class="text-xs text-emerald-400 mt-2">🎉 1.2% abaixo da meta! Excelente retenção!</p>
+        </div>
+
+        <!-- Inadimplência Zero -->
+        <div class="bg-slate-900 rounded-xl p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h4 class="font-medium">Inadimplência Zero</h4>
+              <p class="text-sm text-slate-400">Meta: ≤ 1%</p>
+            </div>
+            <div class="text-right">
+              <span class="text-2xl font-bold text-emerald-400">0.5%</span>
+              <span class="text-emerald-400 text-sm block">+20 pts ✓</span>
+            </div>
+          </div>
+          <div class="w-full bg-slate-700 rounded-full h-3">
+            <div class="bg-emerald-500 h-3 rounded-full" style="width: 100%"></div>
+          </div>
+          <p class="text-xs text-emerald-400 mt-2">🎉 Cobrança em dia! Apenas 2 alunos pendentes.</p>
+        </div>
+
+        <!-- Max Renovação -->
+        <div class="bg-slate-900 rounded-xl p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h4 class="font-medium">Max Renovação</h4>
+              <p class="text-sm text-slate-400">Meta: ≥ 90%</p>
+            </div>
+            <div class="text-right">
+              <span class="text-2xl font-bold text-emerald-400">95%</span>
+              <span class="text-emerald-400 text-sm block">+25 pts ✓</span>
+            </div>
+          </div>
+          <div class="w-full bg-slate-700 rounded-full h-3">
+            <div class="bg-emerald-500 h-3 rounded-full" style="width: 100%"></div>
+          </div>
+          <p class="text-xs text-emerald-400 mt-2">🎉 38 de 40 renovações realizadas!</p>
+        </div>
+
+        <!-- Reajuste Campeão -->
+        <div class="bg-slate-900 rounded-xl p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h4 class="font-medium">Reajuste Campeão</h4>
+              <p class="text-sm text-slate-400">Meta: ≥ 7%</p>
+            </div>
+            <div class="text-right">
+              <span class="text-2xl font-bold text-emerald-400">8.2%</span>
+              <span class="text-emerald-400 text-sm block">+15 pts ✓</span>
+            </div>
+          </div>
+          <div class="w-full bg-slate-700 rounded-full h-3">
+            <div class="bg-emerald-500 h-3 rounded-full" style="width: 100%"></div>
+          </div>
+          <p class="text-xs text-emerald-400 mt-2">🎉 Média de reajuste acima da meta!</p>
+        </div>
+
+        <!-- Mestres da Lojinha -->
+        <div class="bg-slate-900 rounded-xl p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h4 class="font-medium">Mestres da Lojinha</h4>
+              <p class="text-sm text-slate-400">Meta: R$ 5.000</p>
+            </div>
+            <div class="text-right">
+              <span class="text-2xl font-bold text-emerald-400">R$ 5.200</span>
+              <span class="text-emerald-400 text-sm block">+15 pts ✓</span>
+            </div>
+          </div>
+          <div class="w-full bg-slate-700 rounded-full h-3">
+            <div class="bg-emerald-500 h-3 rounded-full" style="width: 100%"></div>
+          </div>
+          <p class="text-xs text-emerald-400 mt-2">🎉 R$200 acima da meta trimestral!</p>
+        </div>
+
+        <!-- Penalidades -->
+        <div class="bg-slate-900 rounded-xl p-5 border border-emerald-500/30">
+          <div class="flex items-center justify-between mb-3">
+            <div>
+              <h4 class="font-medium text-emerald-400">Penalidades</h4>
+              <p class="text-sm text-slate-400">Avaliação do líder administrativo</p>
+            </div>
+            <div class="text-right">
+              <span class="text-2xl font-bold text-emerald-400">0</span>
+              <span class="text-emerald-400 text-sm block">pts descontados</span>
+            </div>
+          </div>
+          <div class="text-sm text-slate-400">
+            <p>✨ Nenhuma penalidade registrada este trimestre!</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Histórico Mensal -->
+      <div class="bg-slate-900 rounded-xl p-6 mb-6">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-lg font-semibold">📈 Histórico Mensal - 2026</h3>
+          <div class="flex gap-2">
+            <button class="px-3 py-1 bg-slate-800 rounded text-sm">Tabela</button>
+            <button class="px-3 py-1 bg-purple-600 rounded text-sm">Gráfico</button>
+          </div>
+        </div>
+        <p class="text-sm text-slate-400 mb-4">Evolução do Churn (critério principal)</p>
+        <div class="h-32 flex items-end gap-2 mb-2">
+          <div class="flex-1 flex flex-col items-center">
+            <div class="w-full bg-emerald-500 rounded-t" style="height: 70%"></div>
+            <span class="text-xs text-slate-400 mt-2">Jan</span>
+            <span class="text-xs text-emerald-400">2.5%</span>
+          </div>
+          <div class="flex-1 flex flex-col items-center">
+            <div class="w-full bg-emerald-500 rounded-t" style="height: 80%"></div>
+            <span class="text-xs text-slate-400 mt-2">Fev</span>
+            <span class="text-xs text-emerald-400">2.8%</span>
+          </div>
+          <div class="flex-1 flex flex-col items-center">
+            <div class="w-full bg-emerald-500 rounded-t" style="height: 75%"></div>
+            <span class="text-xs text-slate-400 mt-2">Mar</span>
+            <span class="text-xs text-emerald-400">3.0%</span>
+          </div>
+          <div class="flex-1 flex flex-col items-center">
+            <div class="w-full bg-emerald-500 rounded-t" style="height: 85%"></div>
+            <span class="text-xs text-slate-400 mt-2">Abr</span>
+            <span class="text-xs text-emerald-400">2.6%</span>
+          </div>
+          <div class="flex-1 flex flex-col items-center">
+            <div class="w-full bg-emerald-500 rounded-t" style="height: 90%"></div>
+            <span class="text-xs text-slate-400 mt-2">Mai</span>
+            <span class="text-xs text-emerald-400">2.4%</span>
+          </div>
+          <div class="flex-1 flex flex-col items-center">
+            <div class="w-full bg-emerald-500 rounded-t" style="height: 78%"></div>
+            <span class="text-xs text-slate-400 mt-2">Jun</span>
+            <span class="text-xs text-emerald-400">2.8%</span>
+          </div>
+          <div class="flex-1 flex flex-col items-center">
+            <div class="w-full bg-slate-700 rounded-t" style="height: 20%"></div>
+            <span class="text-xs text-slate-500 mt-2">Jul</span>
+            <span class="text-xs text-slate-500">-</span>
+          </div>
+          <div class="flex-1 flex flex-col items-center">
+            <div class="w-full bg-slate-700 rounded-t" style="height: 20%"></div>
+            <span class="text-xs text-slate-500 mt-2">Ago</span>
+            <span class="text-xs text-slate-500">-</span>
+          </div>
+          <div class="flex-1 flex flex-col items-center">
+            <div class="w-full bg-slate-700 rounded-t" style="height: 20%"></div>
+            <span class="text-xs text-slate-500 mt-2">Set</span>
+            <span class="text-xs text-slate-500">-</span>
+          </div>
+          <div class="flex-1 flex flex-col items-center">
+            <div class="w-full bg-slate-700 rounded-t" style="height: 20%"></div>
+            <span class="text-xs text-slate-500 mt-2">Out</span>
+            <span class="text-xs text-slate-500">-</span>
+          </div>
+          <div class="flex-1 flex flex-col items-center">
+            <div class="w-full bg-slate-700 rounded-t" style="height: 20%"></div>
+            <span class="text-xs text-slate-500 mt-2">Nov</span>
+            <span class="text-xs text-slate-500">-</span>
+          </div>
+          <div class="flex-1 flex flex-col items-center">
+            <div class="w-full bg-slate-700 rounded-t" style="height: 20%"></div>
+            <span class="text-xs text-slate-500 mt-2">Dez</span>
+            <span class="text-xs text-slate-500">-</span>
+          </div>
+        </div>
+        <div class="flex justify-end">
+          <span class="text-xs text-red-400">--- Meta: 4%</span>
+        </div>
+      </div>
+
+      <!-- Evolução Trimestral -->
+      <div class="bg-slate-900 rounded-xl p-6 mb-6">
+        <h3 class="text-lg font-semibold mb-4">🏆 Evolução Trimestral - 2026</h3>
+        <div class="grid grid-cols-4 gap-4 text-center text-sm">
+          <div class="bg-emerald-500/20 rounded-lg p-4 border border-emerald-500/30">
+            <div class="font-bold text-emerald-400">Q1</div>
+            <div class="text-2xl font-bold">78</div>
+            <div class="text-xs text-slate-400">pontos</div>
+            <div class="text-xs text-emerald-400 mt-1">🥇 1º lugar</div>
+          </div>
+          <div class="bg-emerald-500/20 rounded-lg p-4 border border-emerald-500/30">
+            <div class="font-bold text-emerald-400">Q2</div>
+            <div class="text-2xl font-bold">85</div>
+            <div class="text-xs text-slate-400">pontos</div>
+            <div class="text-xs text-emerald-400 mt-1">🥇 1º lugar</div>
+          </div>
+          <div class="bg-slate-700/50 rounded-lg p-4">
+            <div class="font-bold text-slate-500">Q3</div>
+            <div class="text-2xl font-bold text-slate-500">-</div>
+            <div class="text-xs text-slate-500">pendente</div>
+          </div>
+          <div class="bg-slate-700/50 rounded-lg p-4">
+            <div class="font-bold text-slate-500">Q4</div>
+            <div class="text-2xl font-bold text-slate-500">-</div>
+            <div class="text-xs text-slate-500">pendente</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Suas Metas vs Média do Grupo -->
+      <div class="bg-slate-900 rounded-xl p-6 mb-6">
+        <h3 class="text-lg font-semibold mb-2">⚖️ Suas Metas vs Média do Grupo</h3>
+        <p class="text-sm text-slate-400 mb-4">Compare seu desempenho com a média dos Farmers (sem revelar posições individuais)</p>
+        <div class="grid grid-cols-3 gap-4">
+          <div class="bg-slate-800/50 rounded-lg p-4">
+            <h4 class="text-sm text-slate-400 mb-3">Churn (Desempate)</h4>
+            <div class="flex justify-between items-end gap-2">
+              <div class="text-center">
+                <div class="text-xs text-slate-400 mb-1">Você</div>
+                <div class="px-3 py-2 bg-emerald-500 rounded text-sm font-bold">2.8%</div>
+              </div>
+              <div class="text-center">
+                <div class="text-xs text-slate-400 mb-1">Média</div>
+                <div class="px-3 py-2 bg-amber-500 rounded text-sm font-bold">3.5%</div>
+              </div>
+              <div class="text-center">
+                <div class="text-xs text-slate-400 mb-1">Meta</div>
+                <div class="px-3 py-2 bg-slate-600 rounded text-sm font-bold">4.0%</div>
+              </div>
+            </div>
+            <p class="text-xs text-emerald-400 mt-2">0.7% abaixo da média!</p>
+          </div>
+          <div class="bg-slate-800/50 rounded-lg p-4">
+            <h4 class="text-sm text-slate-400 mb-3">Renovação</h4>
+            <div class="flex justify-between items-end gap-2">
+              <div class="text-center">
+                <div class="text-xs text-slate-400 mb-1">Você</div>
+                <div class="px-3 py-2 bg-emerald-500 rounded text-sm font-bold">95%</div>
+              </div>
+              <div class="text-center">
+                <div class="text-xs text-slate-400 mb-1">Média</div>
+                <div class="px-3 py-2 bg-amber-500 rounded text-sm font-bold">92.7%</div>
+              </div>
+              <div class="text-center">
+                <div class="text-xs text-slate-400 mb-1">Meta</div>
+                <div class="px-3 py-2 bg-slate-600 rounded text-sm font-bold">90%</div>
+              </div>
+            </div>
+            <p class="text-xs text-emerald-400 mt-2">2.3% acima da média!</p>
+          </div>
+          <div class="bg-slate-800/50 rounded-lg p-4">
+            <h4 class="text-sm text-slate-400 mb-3">Lojinha</h4>
+            <div class="flex justify-between items-end gap-2">
+              <div class="text-center">
+                <div class="text-xs text-slate-400 mb-1">Você</div>
+                <div class="px-3 py-2 bg-emerald-500 rounded text-sm font-bold">R$5.2k</div>
+              </div>
+              <div class="text-center">
+                <div class="text-xs text-slate-400 mb-1">Média</div>
+                <div class="px-3 py-2 bg-amber-500 rounded text-sm font-bold">R$3.5k</div>
+              </div>
+              <div class="text-center">
+                <div class="text-xs text-slate-400 mb-1">Meta</div>
+                <div class="px-3 py-2 bg-slate-600 rounded text-sm font-bold">R$5k</div>
+              </div>
+            </div>
+            <p class="text-xs text-emerald-400 mt-2">R$1.7k acima da média!</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mensagem Motivacional -->
+      <div class="bg-gradient-to-r from-yellow-900/20 to-yellow-600/10 border border-yellow-500/30 rounded-xl p-6">
+        <div class="flex items-center gap-4">
+          <span class="text-4xl">✈️</span>
+          <div>
+            <h4 class="font-bold text-yellow-400 text-lg">Foco total, Gabi e Jhon!</h4>
+            <p class="text-slate-300">Vocês estão com 85 pontos e na liderança do Q2! Mantendo esse ritmo, a experiência Premium está garantida. O 14º salário + VR por 6 meses pode ser de vocês!</p>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- ========================================== -->
+    <!-- PENALIDADES -->
+    <!-- ========================================== -->
+    <div id="view-penalidades" class="hidden">
+      
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h2 class="text-xl font-bold">⚠️ Penalidades</h2>
+          <p class="text-slate-400">Lançamento de penalidades por falhas operacionais</p>
+        </div>
+        <button class="px-4 py-2 bg-red-600 hover:bg-red-700 rounded-lg text-sm font-medium flex items-center gap-2">
+          ➕ Registrar Penalidade
+        </button>
+      </div>
+
+      <!-- Resumo por Farmer -->
+      <div class="grid grid-cols-3 gap-4 mb-6">
+        <div class="bg-slate-900 rounded-xl p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-3">
+              <div class="flex -space-x-2">
+                <div class="w-8 h-8 bg-emerald-500/20 rounded-full flex items-center justify-center font-bold text-emerald-400 text-sm">G</div>
+                <div class="w-8 h-8 bg-emerald-500/20 rounded-full flex items-center justify-center font-bold text-emerald-400 text-sm">J</div>
+              </div>
+              <div>
+                <h4 class="font-medium">Gabi & Jhon</h4>
+                <p class="text-xs text-slate-400">Campo Grande</p>
+              </div>
+            </div>
+            <div class="text-right">
+              <span class="text-xl font-bold text-emerald-400">0</span>
+              <span class="text-xs text-slate-400 block">pts</span>
+            </div>
+          </div>
+          <div class="text-sm text-slate-400">Nenhuma penalidade este trimestre</div>
+        </div>
+
+        <div class="bg-slate-900 rounded-xl p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-3">
+              <div class="flex -space-x-2">
+                <div class="w-8 h-8 bg-blue-500/20 rounded-full flex items-center justify-center font-bold text-blue-400 text-sm">F</div>
+                <div class="w-8 h-8 bg-blue-500/20 rounded-full flex items-center justify-center font-bold text-blue-400 text-sm">D</div>
+              </div>
+              <div>
+                <h4 class="font-medium">Fefê & Dai</h4>
+                <p class="text-xs text-slate-400">Recreio</p>
+              </div>
+            </div>
+            <div class="text-right">
+              <span class="text-xl font-bold text-red-400">-3</span>
+              <span class="text-xs text-slate-400 block">pts</span>
+            </div>
+          </div>
+          <div class="text-sm text-slate-400">1 penalidade este trimestre</div>
+        </div>
+
+        <div class="bg-slate-900 rounded-xl p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-3">
+              <div class="flex -space-x-2">
+                <div class="w-8 h-8 bg-orange-500/20 rounded-full flex items-center justify-center font-bold text-orange-400 text-sm">D</div>
+                <div class="w-8 h-8 bg-orange-500/20 rounded-full flex items-center justify-center font-bold text-orange-400 text-sm">A</div>
+              </div>
+              <div>
+                <h4 class="font-medium">Duda & Arthur</h4>
+                <p class="text-xs text-slate-400">Barra</p>
+              </div>
+            </div>
+            <div class="text-right">
+              <span class="text-xl font-bold text-red-400">-5</span>
+              <span class="text-xs text-slate-400 block">pts</span>
+            </div>
+          </div>
+          <div class="text-sm text-slate-400">2 penalidades este trimestre</div>
+        </div>
+      </div>
+
+      <!-- Histórico de Penalidades -->
+      <div class="bg-slate-900 rounded-xl p-6">
+        <h3 class="text-lg font-semibold mb-4">Histórico de Penalidades - Q2 2026</h3>
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="text-slate-400 border-b border-slate-700">
+              <th class="text-left py-3">Data</th>
+              <th class="text-left py-3">Farmer</th>
+              <th class="text-left py-3">Tipo</th>
+              <th class="text-left py-3">Descrição</th>
+              <th class="text-center py-3">Pontos</th>
+              <th class="text-left py-3">Registrado por</th>
+              <th class="text-center py-3">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="border-b border-slate-800">
+              <td class="py-3">15/05/2026</td>
+              <td class="py-3">
+                <div class="flex items-center gap-2">
+                  <div class="flex -space-x-1">
+                    <div class="w-5 h-5 bg-orange-500/20 rounded-full flex items-center justify-center text-xs font-bold text-orange-400">D</div>
+                    <div class="w-5 h-5 bg-orange-500/20 rounded-full flex items-center justify-center text-xs font-bold text-orange-400">A</div>
+                  </div>
+                  Duda & Arthur
+                </div>
+              </td>
+              <td class="py-3"><span class="px-2 py-1 bg-red-500/20 text-red-400 rounded text-xs">Cobrança</span></td>
+              <td class="py-3">Não realizou cobrança de inadimplentes no prazo</td>
+              <td class="py-3 text-center text-red-400 font-bold">-3</td>
+              <td class="py-3 text-slate-400">Líder Administrativo</td>
+              <td class="py-3 text-center">
+                <button class="text-slate-400 hover:text-white">✏️</button>
+                <button class="text-slate-400 hover:text-red-400 ml-2">🗑️</button>
+              </td>
+            </tr>
+            <tr class="border-b border-slate-800">
+              <td class="py-3">02/05/2026</td>
+              <td class="py-3">
+                <div class="flex items-center gap-2">
+                  <div class="flex -space-x-1">
+                    <div class="w-5 h-5 bg-blue-500/20 rounded-full flex items-center justify-center text-xs font-bold text-blue-400">F</div>
+                    <div class="w-5 h-5 bg-blue-500/20 rounded-full flex items-center justify-center text-xs font-bold text-blue-400">D</div>
+                  </div>
+                  Fefê & Dai
+                </div>
+              </td>
+              <td class="py-3"><span class="px-2 py-1 bg-amber-500/20 text-amber-400 rounded text-xs">Renovação</span></td>
+              <td class="py-3">Não contatou aluno para renovação no prazo</td>
+              <td class="py-3 text-center text-red-400 font-bold">-3</td>
+              <td class="py-3 text-slate-400">Líder Administrativo</td>
+              <td class="py-3 text-center">
+                <button class="text-slate-400 hover:text-white">✏️</button>
+                <button class="text-slate-400 hover:text-red-400 ml-2">🗑️</button>
+              </td>
+            </tr>
+            <tr class="border-b border-slate-800">
+              <td class="py-3">18/04/2026</td>
+              <td class="py-3">
+                <div class="flex items-center gap-2">
+                  <div class="flex -space-x-1">
+                    <div class="w-5 h-5 bg-orange-500/20 rounded-full flex items-center justify-center text-xs font-bold text-orange-400">D</div>
+                    <div class="w-5 h-5 bg-orange-500/20 rounded-full flex items-center justify-center text-xs font-bold text-orange-400">A</div>
+                  </div>
+                  Duda & Arthur
+                </div>
+              </td>
+              <td class="py-3"><span class="px-2 py-1 bg-purple-500/20 text-purple-400 rounded text-xs">Lojinha</span></td>
+              <td class="py-3">Não ofereceu produtos da lojinha durante atendimento</td>
+              <td class="py-3 text-center text-red-400 font-bold">-2</td>
+              <td class="py-3 text-slate-400">Líder Administrativo</td>
+              <td class="py-3 text-center">
+                <button class="text-slate-400 hover:text-white">✏️</button>
+                <button class="text-slate-400 hover:text-red-400 ml-2">🗑️</button>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+    </div>
+
+    <!-- ========================================== -->
+    <!-- CONFIGURAÇÕES DO PROGRAMA -->
+    <!-- ========================================== -->
+    <div id="view-config" class="hidden">
+      
+      <div class="flex items-center justify-between mb-6">
+        <div>
+          <h2 class="text-xl font-bold">⚙️ Configurações do Programa Fideliza+ LA</h2>
+          <p class="text-slate-400">Edite as metas, pontuações e nota de corte</p>
+        </div>
+        <button class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-lg text-sm font-medium">
+          💾 Salvar Alterações
+        </button>
+      </div>
+
+      <div class="grid grid-cols-2 gap-6">
+        
+        <!-- Metas de Retenção -->
+        <div class="bg-slate-900 rounded-xl p-6">
+          <h3 class="text-lg font-semibold mb-4">📊 Metas de Retenção</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Churn Premiado (máximo)</label>
+              <div class="flex gap-2">
+                <input type="number" value="4" step="0.1" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+                <span class="flex items-center text-slate-400">%</span>
+              </div>
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Inadimplência Zero (máximo)</label>
+              <div class="flex gap-2">
+                <input type="number" value="1" step="0.1" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+                <span class="flex items-center text-slate-400">%</span>
+              </div>
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Max Renovação (mínimo)</label>
+              <div class="flex gap-2">
+                <input type="number" value="90" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+                <span class="flex items-center text-slate-400">%</span>
+              </div>
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Reajuste Campeão (mínimo)</label>
+              <div class="flex gap-2">
+                <input type="number" value="7" step="0.1" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+                <span class="flex items-center text-slate-400">%</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Metas de Lojinha por Unidade -->
+        <div class="bg-slate-900 rounded-xl p-6">
+          <h3 class="text-lg font-semibold mb-4">🛍️ Metas de Lojinha (Trimestral)</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Campo Grande (Gabi & Jhon)</label>
+              <div class="flex gap-2">
+                <span class="flex items-center text-slate-400">R$</span>
+                <input type="number" value="5000" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+              </div>
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Recreio (Fefê & Dai)</label>
+              <div class="flex gap-2">
+                <span class="flex items-center text-slate-400">R$</span>
+                <input type="number" value="3000" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+              </div>
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Barra (Duda & Arthur)</label>
+              <div class="flex gap-2">
+                <span class="flex items-center text-slate-400">R$</span>
+                <input type="number" value="3000" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pontuação -->
+        <div class="bg-slate-900 rounded-xl p-6">
+          <h3 class="text-lg font-semibold mb-4">🎯 Sistema de Pontuação</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Pontos - Churn Premiado</label>
+              <input type="number" value="25" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Pontos - Inadimplência Zero</label>
+              <input type="number" value="20" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Pontos - Max Renovação</label>
+              <input type="number" value="25" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Pontos - Reajuste Campeão</label>
+              <input type="number" value="15" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Pontos - Mestres da Lojinha</label>
+              <input type="number" value="15" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+            </div>
+          </div>
+        </div>
+
+        <!-- Penalidades -->
+        <div class="bg-slate-900 rounded-xl p-6">
+          <h3 class="text-lg font-semibold mb-4">⚠️ Penalidades</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Falha na cobrança</label>
+              <div class="flex gap-2">
+                <span class="flex items-center text-red-400">-</span>
+                <input type="number" value="3" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+                <span class="flex items-center text-slate-400">pts</span>
+              </div>
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Não contatou para renovação</label>
+              <div class="flex gap-2">
+                <span class="flex items-center text-red-400">-</span>
+                <input type="number" value="3" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+                <span class="flex items-center text-slate-400">pts</span>
+              </div>
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Não ofereceu lojinha</label>
+              <div class="flex gap-2">
+                <span class="flex items-center text-red-400">-</span>
+                <input type="number" value="2" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+                <span class="flex items-center text-slate-400">pts</span>
+              </div>
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Reincidência no trimestre</label>
+              <div class="flex gap-2">
+                <span class="flex items-center text-red-400">-</span>
+                <input type="number" value="5" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+                <span class="flex items-center text-slate-400">pts</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Nota de Corte e Período -->
+        <div class="bg-slate-900 rounded-xl p-6">
+          <h3 class="text-lg font-semibold mb-4">🚫 Nota de Corte</h3>
+          <div class="space-y-4">
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Pontuação mínima para experiência Standard</label>
+              <div class="flex gap-2">
+                <input type="number" value="60" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+                <span class="flex items-center text-slate-400">pontos (4/5 critérios)</span>
+              </div>
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Pontuação mínima para experiência Premium</label>
+              <div class="flex gap-2">
+                <input type="number" value="80" class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+                <span class="flex items-center text-slate-400">pontos (5/5 critérios)</span>
+              </div>
+            </div>
+            <div>
+              <label class="text-sm text-slate-400 block mb-1">Período do Programa</label>
+              <div class="flex gap-2">
+                <select class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+                  <option selected>Q1 (Jan-Mar)</option>
+                  <option>Q2 (Abr-Jun)</option>
+                  <option>Q3 (Jul-Set)</option>
+                  <option>Q4 (Out-Dez)</option>
+                </select>
+                <span class="flex items-center text-slate-400">até</span>
+                <select class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2">
+                  <option>Q1 (Jan-Mar)</option>
+                  <option>Q2 (Abr-Jun)</option>
+                  <option>Q3 (Jul-Set)</option>
+                  <option selected>Q4 (Out-Dez)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Experiências Cadastradas -->
+        <div class="bg-slate-900 rounded-xl p-6">
+          <h3 class="text-lg font-semibold mb-4">🎁 Experiências Cadastradas</h3>
+          <div class="space-y-3">
+            <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+              <div class="flex items-center gap-3">
+                <span class="text-xl">🍿</span>
+                <div>
+                  <div class="text-sm font-medium">Cinema + Pipoca</div>
+                  <div class="text-xs text-slate-400">Standard</div>
+                </div>
+              </div>
+              <button class="text-slate-400 hover:text-red-400">🗑️</button>
+            </div>
+            <div class="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+              <div class="flex items-center gap-3">
+                <span class="text-xl">🍕</span>
+                <div>
+                  <div class="text-sm font-medium">Jantar Casual</div>
+                  <div class="text-xs text-slate-400">Standard</div>
+                </div>
+              </div>
+              <button class="text-slate-400 hover:text-red-400">🗑️</button>
+            </div>
+            <div class="flex items-center justify-between p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+              <div class="flex items-center gap-3">
+                <span class="text-xl">🍽️</span>
+                <div>
+                  <div class="text-sm font-medium text-yellow-400">Jantar Gastronômico</div>
+                  <div class="text-xs text-slate-400">Premium</div>
+                </div>
+              </div>
+              <button class="text-slate-400 hover:text-red-400">🗑️</button>
+            </div>
+            <div class="flex items-center justify-between p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+              <div class="flex items-center gap-3">
+                <span class="text-xl">🎭</span>
+                <div>
+                  <div class="text-sm font-medium text-yellow-400">Teatro/Show</div>
+                  <div class="text-xs text-slate-400">Premium</div>
+                </div>
+              </div>
+              <button class="text-slate-400 hover:text-red-400">🗑️</button>
+            </div>
+            <button class="w-full py-2 border border-dashed border-slate-600 rounded-lg text-slate-400 hover:border-purple-500 hover:text-purple-400 transition-colors">
+              + Adicionar Experiência
+            </button>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+  <script>
+    function showView(view) {
+      document.getElementById('view-admin').classList.add('hidden');
+      document.getElementById('view-farmer').classList.add('hidden');
+      document.getElementById('view-penalidades').classList.add('hidden');
+      document.getElementById('view-config').classList.add('hidden');
+      
+      document.getElementById('view-' + view).classList.remove('hidden');
+      
+      document.querySelectorAll('[onclick^="showView"]').forEach(btn => {
+        btn.classList.remove('bg-purple-600');
+        btn.classList.add('bg-slate-800');
+      });
+      event.target.classList.remove('bg-slate-800');
+      event.target.classList.add('bg-purple-600');
+    }
+  </script>
+
+</body>
+</html>

@@ -29,6 +29,8 @@ import { TabelaTrancamentos } from './TabelaTrancamentos';
 import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
 import { AlertasRetencao } from './AlertasRetencao';
 import { PlanoAcaoRetencao } from './PlanoAcaoRetencao';
+import { TabProgramaFideliza } from './TabProgramaFideliza';
+import { Trophy } from 'lucide-react';
 
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 
@@ -102,6 +104,7 @@ export function AdministrativoPage() {
   // Estado
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>('renovacoes');
+  const [mainTab, setMainTab] = useState<'lancamentos' | 'fideliza'>('lancamentos');
   
   // Dados
   const [resumo, setResumo] = useState<ResumoMes | null>(null);
@@ -533,26 +536,66 @@ export function AdministrativoPage() {
           <p className="text-slate-400 mt-1">Gestão de Renovações, Avisos e Cancelamentos</p>
         </div>
         <div className="flex items-center gap-4">
-          <CompetenciaFilter
-            filtro={competenciaFiltro.filtro}
-            range={competenciaFiltro.range}
-            anosDisponiveis={competenciaFiltro.anosDisponiveis}
-            onTipoChange={competenciaFiltro.setTipo}
-            onAnoChange={competenciaFiltro.setAno}
-            onMesChange={competenciaFiltro.setMes}
-            onTrimestreChange={competenciaFiltro.setTrimestre}
-            onSemestreChange={competenciaFiltro.setSemestre}
-          />
-          <button
-            onClick={() => setModalRelatorio(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-cyan-500/20"
-          >
-            <FileText className="w-4 h-4" />
-            Gerar Relatório WhatsApp
-          </button>
+          {mainTab === 'lancamentos' && (
+            <>
+              <CompetenciaFilter
+                filtro={competenciaFiltro.filtro}
+                range={competenciaFiltro.range}
+                anosDisponiveis={competenciaFiltro.anosDisponiveis}
+                onTipoChange={competenciaFiltro.setTipo}
+                onAnoChange={competenciaFiltro.setAno}
+                onMesChange={competenciaFiltro.setMes}
+                onTrimestreChange={competenciaFiltro.setTrimestre}
+                onSemestreChange={competenciaFiltro.setSemestre}
+              />
+              <button
+                onClick={() => setModalRelatorio(true)}
+                className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-cyan-500/20"
+              >
+                <FileText className="w-4 h-4" />
+                Gerar Relatório WhatsApp
+              </button>
+            </>
+          )}
         </div>
       </div>
 
+      {/* Tabs Principais */}
+      <div className="flex gap-2 border-b border-slate-700 pb-2">
+        <button
+          onClick={() => setMainTab('lancamentos')}
+          className={cn(
+            "flex items-center gap-2 px-5 py-2.5 rounded-t-xl text-sm font-medium transition-all",
+            mainTab === 'lancamentos'
+              ? "bg-gradient-to-r from-purple-500 to-violet-500 text-white shadow-lg shadow-purple-500/20"
+              : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white"
+          )}
+        >
+          <CheckCircle className="w-4 h-4" />
+          Lançamentos
+        </button>
+        <button
+          onClick={() => setMainTab('fideliza')}
+          className={cn(
+            "flex items-center gap-2 px-5 py-2.5 rounded-t-xl text-sm font-medium transition-all",
+            mainTab === 'fideliza'
+              ? "bg-gradient-to-r from-yellow-500 to-orange-500 text-white shadow-lg shadow-yellow-500/20"
+              : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white"
+          )}
+        >
+          <Trophy className="w-4 h-4" />
+          Programa Fideliza+ LA
+        </button>
+      </div>
+
+      {/* Conteúdo baseado na tab principal */}
+      {mainTab === 'fideliza' ? (
+        <TabProgramaFideliza 
+          unidadeSelecionada={unidade} 
+          ano={competenciaFiltro.filtro.ano} 
+        />
+      ) : (
+        <>
       {/* Alertas Inteligentes de Retenção */}
       <AlertasRetencao 
         unidadeId={unidade} 
@@ -1142,6 +1185,8 @@ export function AdministrativoPage() {
         textoCancelar="Cancelar"
         carregando={excluindo}
       />
+        </>
+      )}
     </div>
   );
 }
