@@ -1,0 +1,1557 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LA Music Report — Lojinha</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #0b0f19;
+  --bg2: #0f1525;
+  --surface: #141c2e;
+  --surface2: #1a2540;
+  --surface3: #1f2d4a;
+  --border: #1e2d48;
+  --border2: #2a3a58;
+  --text: #e8ecf4;
+  --text2: #8a9bb8;
+  --text3: #5a6e8a;
+  --accent: #38bdf8;
+  --green: #34d399;
+  --green2: #059669;
+  --yellow: #fbbf24;
+  --yellow2: #d97706;
+  --red: #f87171;
+  --red2: #dc2626;
+  --purple: #a78bfa;
+  --orange: #fb923c;
+  --pink: #f472b6;
+  --teal: #2dd4bf;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family:'DM Sans',sans-serif; background:var(--bg); color:var(--text); min-height:100vh; }
+::-webkit-scrollbar { width:6px; height:6px; }
+::-webkit-scrollbar-track { background:var(--bg2); }
+::-webkit-scrollbar-thumb { background:var(--border2); border-radius:3px; }
+
+/* HEADER */
+.page-header {
+  background:var(--surface);
+  border-bottom:1px solid var(--border);
+  padding:20px 28px;
+  display:flex; justify-content:space-between; align-items:center;
+}
+.page-title { display:flex; align-items:center; gap:12px; }
+.page-title h1 { font-size:22px; font-weight:700; }
+.page-title span { color:var(--text2); font-size:14px; }
+.header-right { display:flex; gap:12px; align-items:center; }
+.unit-select {
+  background:var(--surface2); border:1px solid var(--border); color:var(--text);
+  padding:8px 14px; border-radius:8px; font-family:'DM Sans'; font-size:13px; cursor:pointer;
+}
+.date-badge {
+  background:var(--surface2); border:1px solid var(--border);
+  padding:8px 14px; border-radius:8px; font-size:13px; color:var(--text2);
+  display:flex; align-items:center; gap:6px;
+}
+
+/* MAIN TABS */
+.main-tabs {
+  display:flex; gap:6px; padding:16px 28px;
+  background:var(--bg2); border-bottom:1px solid var(--border);
+}
+.main-tab {
+  padding:8px 18px; border-radius:8px; font-size:13px; font-weight:600;
+  cursor:pointer; transition:all .15s; border:none; background:transparent;
+  color:var(--text2); display:flex; align-items:center; gap:6px;
+}
+.main-tab:hover { background:var(--surface); color:var(--text); }
+.main-tab.active { background:var(--accent); color:#0b0f19; }
+
+/* CONTENT */
+.content { padding:24px 28px; }
+.tab-panel { display:none; }
+.tab-panel.active { display:block; }
+
+/* CARDS ROW */
+.cards-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:14px; margin-bottom:24px; }
+.stat-card {
+  background:var(--surface); border:1px solid var(--border); border-radius:12px;
+  padding:18px 20px; display:flex; flex-direction:column; gap:6px;
+}
+.stat-card .label { font-size:12px; color:var(--text2); font-weight:500; text-transform:uppercase; letter-spacing:.5px; }
+.stat-card .value { font-size:28px; font-weight:800; font-family:'JetBrains Mono'; }
+.stat-card .sub { font-size:11px; color:var(--text3); }
+
+/* TABLE */
+.table-container {
+  background:var(--surface); border:1px solid var(--border); border-radius:12px;
+  overflow:hidden; margin-bottom:24px;
+}
+.table-header {
+  padding:14px 18px; display:flex; justify-content:space-between; align-items:center;
+  border-bottom:1px solid var(--border);
+}
+.table-header h3 { font-size:15px; font-weight:700; display:flex; align-items:center; gap:8px; }
+.table-actions { display:flex; gap:8px; }
+table { width:100%; border-collapse:collapse; }
+thead th {
+  text-align:left; padding:10px 16px; font-size:11px; font-weight:600;
+  text-transform:uppercase; letter-spacing:.5px; color:var(--text2);
+  border-bottom:1px solid var(--border); background:var(--bg2);
+}
+tbody td { padding:12px 16px; font-size:13px; border-bottom:1px solid var(--border); }
+tbody tr { transition:background .1s; }
+tbody tr:hover { background:var(--surface2); }
+tbody tr:last-child td { border-bottom:none; }
+
+/* BADGES */
+.badge {
+  display:inline-flex; padding:3px 10px; border-radius:5px;
+  font-size:11px; font-weight:600; font-family:'JetBrains Mono';
+}
+.badge-green { background:rgba(52,211,153,.12); color:var(--green); }
+.badge-red { background:rgba(248,113,113,.12); color:var(--red); }
+.badge-yellow { background:rgba(251,191,36,.12); color:var(--yellow); }
+.badge-blue { background:rgba(56,189,248,.12); color:var(--accent); }
+.badge-purple { background:rgba(167,139,250,.12); color:var(--purple); }
+.badge-orange { background:rgba(251,146,60,.12); color:var(--orange); }
+.badge-gray { background:rgba(138,155,184,.1); color:var(--text2); }
+
+/* BUTTONS */
+.btn {
+  padding:8px 16px; border-radius:8px; font-size:13px; font-weight:600;
+  cursor:pointer; border:none; transition:all .15s; font-family:'DM Sans';
+  display:inline-flex; align-items:center; gap:6px;
+}
+.btn-primary { background:var(--accent); color:#0b0f19; }
+.btn-primary:hover { background:#5ccffc; }
+.btn-success { background:var(--green); color:#0b0f19; }
+.btn-success:hover { background:#5ee8b7; }
+.btn-danger { background:var(--red); color:#fff; }
+.btn-ghost { background:transparent; border:1px solid var(--border); color:var(--text2); }
+.btn-ghost:hover { border-color:var(--accent); color:var(--text); }
+.btn-sm { padding:5px 10px; font-size:12px; }
+.btn-pink { background:linear-gradient(135deg,#ec4899,#f97316); color:#fff; }
+.btn-pink:hover { opacity:.9; }
+
+/* SEARCH */
+.search-box {
+  display:flex; align-items:center; gap:8px;
+  background:var(--bg2); border:1px solid var(--border); border-radius:8px;
+  padding:8px 14px; min-width:240px;
+}
+.search-box input {
+  background:transparent; border:none; color:var(--text); font-size:13px;
+  outline:none; width:100%; font-family:'DM Sans';
+}
+.search-box input::placeholder { color:var(--text3); }
+
+/* FILTER PILLS */
+.filter-row { display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap; align-items:center; }
+
+/* MODAL */
+.modal-overlay {
+  position:fixed; inset:0; background:rgba(0,0,0,.6); backdrop-filter:blur(4px);
+  z-index:1000; display:flex; justify-content:center; align-items:flex-start;
+  padding:40px 20px; overflow-y:auto;
+}
+.modal-overlay.hidden { display:none; }
+.modal {
+  background:var(--surface); border:1px solid var(--border); border-radius:16px;
+  width:100%; max-width:680px; animation:slideUp .25s ease;
+}
+@keyframes slideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+.modal-header {
+  padding:20px 24px; border-bottom:1px solid var(--border);
+  display:flex; justify-content:space-between; align-items:center;
+}
+.modal-header h2 { font-size:18px; font-weight:700; }
+.modal-close { background:none; border:none; color:var(--text2); font-size:24px; cursor:pointer; }
+.modal-body { padding:24px; }
+.modal-footer { padding:16px 24px; border-top:1px solid var(--border); display:flex; justify-content:flex-end; gap:10px; }
+
+/* FORM */
+.form-grid { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+.form-group { display:flex; flex-direction:column; gap:5px; }
+.form-group.full { grid-column:1/-1; }
+.form-group label { font-size:12px; font-weight:600; color:var(--text2); text-transform:uppercase; letter-spacing:.3px; }
+.form-input {
+  background:var(--bg2); border:1px solid var(--border); border-radius:8px;
+  padding:10px 14px; color:var(--text); font-size:13px; font-family:'DM Sans';
+}
+.form-input:focus { outline:none; border-color:var(--accent); }
+select.form-input { cursor:pointer; }
+textarea.form-input { min-height:70px; resize:vertical; }
+
+/* PDV */
+.pdv-layout { display:grid; grid-template-columns:1fr 380px; gap:20px; }
+.cart-panel {
+  background:var(--surface); border:1px solid var(--border); border-radius:12px;
+  display:flex; flex-direction:column; height:fit-content; position:sticky; top:20px;
+}
+.cart-header {
+  padding:16px 18px; border-bottom:1px solid var(--border);
+  font-size:15px; font-weight:700; display:flex; align-items:center; gap:8px;
+}
+.cart-items { padding:12px; flex:1; max-height:340px; overflow-y:auto; }
+.cart-item {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:10px 8px; border-bottom:1px solid var(--border);
+}
+.cart-item:last-child { border-bottom:none; }
+.cart-item-info { display:flex; flex-direction:column; gap:2px; }
+.cart-item-name { font-size:13px; font-weight:600; }
+.cart-item-detail { font-size:11px; color:var(--text2); }
+.cart-item-price { font-family:'JetBrains Mono'; font-size:13px; font-weight:600; color:var(--green); }
+.cart-item-remove { background:none; border:none; color:var(--red); cursor:pointer; font-size:14px; margin-left:8px; }
+.cart-totals { padding:16px 18px; border-top:1px solid var(--border); }
+.cart-total-row { display:flex; justify-content:space-between; margin-bottom:6px; font-size:13px; }
+.cart-total-row.final { font-size:18px; font-weight:800; color:var(--green); margin-top:8px; font-family:'JetBrains Mono'; }
+.cart-actions { padding:12px 18px; border-top:1px solid var(--border); display:flex; flex-direction:column; gap:8px; }
+
+/* PRODUCT GRID (for PDV search results) */
+.product-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:12px; }
+.product-card {
+  background:var(--surface); border:1px solid var(--border); border-radius:10px;
+  padding:14px; cursor:pointer; transition:all .15s;
+}
+.product-card:hover { border-color:var(--accent); transform:translateY(-2px); }
+.product-card .p-img {
+  width:100%; height:100px; background:var(--surface2); border-radius:8px;
+  display:flex; align-items:center; justify-content:center; font-size:32px; margin-bottom:10px;
+}
+.product-card .p-name { font-size:13px; font-weight:600; margin-bottom:4px; }
+.product-card .p-cat { font-size:11px; color:var(--text2); margin-bottom:6px; }
+.product-card .p-price { font-family:'JetBrains Mono'; font-size:15px; font-weight:700; color:var(--green); }
+
+/* STOCK INDICATORS */
+.stock-bar { width:80px; height:6px; background:var(--bg); border-radius:3px; overflow:hidden; }
+.stock-bar-fill { height:100%; border-radius:3px; transition:width .3s; }
+
+/* WALLET CARDS */
+.wallet-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:16px; margin-bottom:24px; }
+.wallet-card {
+  background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px;
+}
+.wallet-header { display:flex; align-items:center; gap:12px; margin-bottom:16px; }
+.wallet-avatar {
+  width:42px; height:42px; border-radius:50%; display:flex;
+  align-items:center; justify-content:center; font-weight:700; font-size:16px;
+}
+.wallet-info h4 { font-size:14px; font-weight:700; }
+.wallet-info span { font-size:12px; color:var(--text2); }
+.wallet-balance {
+  font-family:'JetBrains Mono'; font-size:32px; font-weight:800;
+  color:var(--green); margin-bottom:4px;
+}
+.wallet-sub { font-size:12px; color:var(--text2); margin-bottom:14px; }
+.wallet-actions { display:flex; gap:8px; }
+
+/* CONFIG PANELS */
+.config-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:18px; }
+.config-panel {
+  background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:20px;
+}
+.config-panel h3 {
+  font-size:14px; font-weight:700; margin-bottom:14px;
+  padding-bottom:10px; border-bottom:1px solid var(--border);
+}
+.config-row { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+.config-row label { font-size:13px; color:var(--text2); }
+.config-input {
+  width:80px; background:var(--bg2); border:1px solid var(--border); border-radius:6px;
+  padding:6px 10px; color:var(--text); font-family:'JetBrains Mono'; font-size:14px;
+  text-align:center;
+}
+.config-input:focus { outline:none; border-color:var(--accent); }
+
+/* CATEGORY TAGS */
+.category-list { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.category-tag {
+  display:flex; align-items:center; gap:6px; padding:6px 12px;
+  background:var(--surface2); border:1px solid var(--border); border-radius:20px;
+  font-size:12px; font-weight:500;
+}
+.category-tag .remove { cursor:pointer; color:var(--red); font-size:14px; }
+
+/* ALERT CARD */
+.alert-card {
+  background:var(--surface); border:1px solid var(--border); border-radius:12px;
+  padding:16px 20px; display:flex; align-items:center; gap:14px; margin-bottom:14px;
+}
+.alert-icon {
+  width:40px; height:40px; border-radius:10px;
+  display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0;
+}
+.alert-content { flex:1; }
+.alert-content h4 { font-size:14px; font-weight:600; margin-bottom:2px; }
+.alert-content p { font-size:12px; color:var(--text2); }
+
+/* RESPONSIVE */
+@media(max-width:900px) {
+  .pdv-layout { grid-template-columns:1fr; }
+  .form-grid { grid-template-columns:1fr; }
+  .config-grid { grid-template-columns:1fr; }
+  .content { padding:16px; }
+}
+
+/* SECTION TITLE */
+.section-title {
+  font-size:16px; font-weight:700; margin-bottom:16px;
+  display:flex; align-items:center; gap:8px;
+}
+
+/* VARIATION TABLE */
+.var-table { width:100%; margin-top:10px; }
+.var-table th { font-size:11px; text-align:left; padding:6px 10px; color:var(--text2); border-bottom:1px solid var(--border); }
+.var-table td { padding:8px 10px; font-size:13px; border-bottom:1px solid var(--border); }
+
+/* IMAGE PLACEHOLDER */
+.img-placeholder {
+  width:40px; height:40px; border-radius:8px; background:var(--surface2);
+  display:flex; align-items:center; justify-content:center; font-size:18px; flex-shrink:0;
+}
+
+/* WHATSAPP BUTTON */
+.btn-whatsapp { background:#25D366; color:#fff; }
+.btn-whatsapp:hover { background:#20bd5a; }
+
+/* PROGRESS */
+.progress-thin { width:100%; height:4px; background:var(--bg); border-radius:2px; overflow:hidden; }
+.progress-thin-fill { height:100%; border-radius:2px; }
+
+/* TAB CONTENT TRANSITION */
+.tab-panel { animation:fadeIn .2s ease; }
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+
+/* COMBO / STATUS DOT */
+.status-dot { width:8px; height:8px; border-radius:50%; display:inline-block; margin-right:6px; }
+
+/* TOAST */
+.toast {
+  position:fixed; bottom:24px; right:24px; padding:12px 20px;
+  border-radius:10px; font-size:13px; font-weight:600; z-index:2000;
+  opacity:0; transform:translateY(10px); transition:all .3s; pointer-events:none;
+}
+.toast.show { opacity:1; transform:translateY(0); }
+.toast-success { background:var(--green); color:#0b0f19; }
+.toast-whatsapp { background:#25D366; color:#fff; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="page-header">
+  <div class="page-title">
+    <span style="font-size:24px">🏪</span>
+    <div>
+      <h1>Lojinha</h1>
+      <span>Gestão de Produtos, Vendas e Estoque</span>
+    </div>
+  </div>
+  <div class="header-right">
+    <select class="unit-select" id="unitSelect">
+      <option>📍 Barra</option>
+      <option>📍 Campo Grande</option>
+      <option>📍 Recreio</option>
+      <option>📍 Consolidado</option>
+    </select>
+    <div class="date-badge">📅 Fev/2026</div>
+  </div>
+</div>
+
+<!-- MAIN TABS -->
+<div class="main-tabs">
+  <button class="main-tab active" onclick="switchTab('produtos')">📦 Produtos</button>
+  <button class="main-tab" onclick="switchTab('vendas')">🛒 Vendas</button>
+  <button class="main-tab" onclick="switchTab('estoque')">📊 Estoque</button>
+  <button class="main-tab" onclick="switchTab('comissoes')">💰 Comissões</button>
+  <button class="main-tab" onclick="switchTab('config')">⚙️ Configurações</button>
+</div>
+
+<!-- ============================================ -->
+<!-- TAB: PRODUTOS -->
+<!-- ============================================ -->
+<div class="content">
+<div class="tab-panel active" id="tab-produtos">
+  <div class="cards-row">
+    <div class="stat-card">
+      <div class="label">Total Produtos</div>
+      <div class="value" style="color:var(--accent)">24</div>
+      <div class="sub">18 ativos • 6 inativos</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Categorias</div>
+      <div class="value" style="color:var(--purple)">7</div>
+      <div class="sub">Todas ativas</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Estoque Baixo</div>
+      <div class="value" style="color:var(--red)">3</div>
+      <div class="sub">Produtos abaixo do mínimo</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Valor em Estoque</div>
+      <div class="value" style="color:var(--green)">R$ 8.4k</div>
+      <div class="sub">Preço de custo</div>
+    </div>
+  </div>
+
+  <div class="table-container">
+    <div class="table-header">
+      <h3>📦 Catálogo de Produtos</h3>
+      <div class="table-actions">
+        <div class="search-box"><span>🔍</span><input placeholder="Buscar produto..."></div>
+        <select class="form-input" style="font-size:12px;padding:8px 12px">
+          <option>📂 Todas Categorias</option>
+          <option>🎸 Cordas</option>
+          <option>🎵 Palhetas</option>
+          <option>🥁 Baquetas</option>
+          <option>👕 Camisetas</option>
+          <option>📕 Material Didático</option>
+          <option>🎧 Acessórios</option>
+        </select>
+        <select class="form-input" style="font-size:12px;padding:8px 12px">
+          <option>📊 Todos Status</option>
+          <option>✅ Ativos</option>
+          <option>❌ Inativos</option>
+          <option>⚠️ Estoque Baixo</option>
+        </select>
+        <button class="btn btn-ghost" onclick="openModal('modalEntradaLote')">📥 Entrada Lote</button>
+        <button class="btn btn-primary" onclick="openModal('modalProduto')">+ Novo Produto</button>
+      </div>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th></th><th>Produto</th><th>Categoria</th><th>Variações</th><th>Preço</th><th>Estoque</th><th>Comissão</th><th>Status</th><th>Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><div class="img-placeholder">🎸</div></td>
+          <td><strong>Corda de Violão</strong><br><span style="font-size:11px;color:var(--text2)">SKU: CRD-001</span></td>
+          <td><span class="badge badge-blue">Cordas</span></td>
+          <td>3 variações</td>
+          <td style="font-family:'JetBrains Mono'">R$ 25,00</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div class="stock-bar"><div class="stock-bar-fill" style="width:70%;background:var(--green)"></div></div>
+              <span style="font-family:'JetBrains Mono';font-size:12px">42</span>
+            </div>
+          </td>
+          <td><span style="font-family:'JetBrains Mono';font-size:12px;color:var(--text2)">Padrão (5%)</span></td>
+          <td><span class="badge badge-green">Ativo</span></td>
+          <td><button class="btn btn-ghost btn-sm" onclick="openModal('modalProduto')">✏️</button></td>
+        </tr>
+        <tr>
+          <td><div class="img-placeholder">🥁</div></td>
+          <td><strong>Baqueta 5A</strong><br><span style="font-size:11px;color:var(--text2)">SKU: BAQ-001</span></td>
+          <td><span class="badge badge-purple">Baquetas</span></td>
+          <td>2 variações</td>
+          <td style="font-family:'JetBrains Mono'">R$ 35,00</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div class="stock-bar"><div class="stock-bar-fill" style="width:25%;background:var(--yellow)"></div></div>
+              <span style="font-family:'JetBrains Mono';font-size:12px;color:var(--yellow)">4</span>
+            </div>
+          </td>
+          <td><span style="font-family:'JetBrains Mono';font-size:12px;color:var(--text2)">Padrão (5%)</span></td>
+          <td><span class="badge badge-green">Ativo</span></td>
+          <td><button class="btn btn-ghost btn-sm" onclick="openModal('modalProduto')">✏️</button></td>
+        </tr>
+        <tr>
+          <td><div class="img-placeholder">🎵</div></td>
+          <td><strong>Palheta Dunlop</strong><br><span style="font-size:11px;color:var(--text2)">SKU: PLH-001</span></td>
+          <td><span class="badge badge-blue">Palhetas</span></td>
+          <td>5 variações</td>
+          <td style="font-family:'JetBrains Mono'">R$ 6,00</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div class="stock-bar"><div class="stock-bar-fill" style="width:90%;background:var(--green)"></div></div>
+              <span style="font-family:'JetBrains Mono';font-size:12px">120</span>
+            </div>
+          </td>
+          <td><span style="font-family:'JetBrains Mono';font-size:12px;color:var(--orange)">8%</span></td>
+          <td><span class="badge badge-green">Ativo</span></td>
+          <td><button class="btn btn-ghost btn-sm" onclick="openModal('modalProduto')">✏️</button></td>
+        </tr>
+        <tr>
+          <td><div class="img-placeholder">👕</div></td>
+          <td><strong>Camiseta LA Music</strong><br><span style="font-size:11px;color:var(--text2)">SKU: CAM-001</span></td>
+          <td><span class="badge badge-orange">Camisetas</span></td>
+          <td>4 variações</td>
+          <td style="font-family:'JetBrains Mono'">R$ 45,00</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div class="stock-bar"><div class="stock-bar-fill" style="width:50%;background:var(--green)"></div></div>
+              <span style="font-family:'JetBrains Mono';font-size:12px">28</span>
+            </div>
+          </td>
+          <td><span style="font-family:'JetBrains Mono';font-size:12px;color:var(--text2)">Padrão (5%)</span></td>
+          <td><span class="badge badge-green">Ativo</span></td>
+          <td><button class="btn btn-ghost btn-sm" onclick="openModal('modalProduto')">✏️</button></td>
+        </tr>
+        <tr>
+          <td><div class="img-placeholder">📕</div></td>
+          <td><strong>Método de Teclado Vol.1</strong><br><span style="font-size:11px;color:var(--text2)">SKU: MTD-001</span></td>
+          <td><span class="badge badge-yellow">Material Didático</span></td>
+          <td>—</td>
+          <td style="font-family:'JetBrains Mono'">R$ 65,00</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div class="stock-bar"><div class="stock-bar-fill" style="width:10%;background:var(--red)"></div></div>
+              <span style="font-family:'JetBrains Mono';font-size:12px;color:var(--red)">2</span>
+            </div>
+          </td>
+          <td><span style="font-family:'JetBrains Mono';font-size:12px;color:var(--text2)">Padrão (5%)</span></td>
+          <td><span class="badge badge-green">Ativo</span></td>
+          <td><button class="btn btn-ghost btn-sm" onclick="openModal('modalProduto')">✏️</button></td>
+        </tr>
+        <tr style="opacity:.5">
+          <td><div class="img-placeholder">🎧</div></td>
+          <td><strong>Fone Monitor</strong><br><span style="font-size:11px;color:var(--text2)">SKU: FON-001</span></td>
+          <td><span class="badge badge-gray">Acessórios</span></td>
+          <td>—</td>
+          <td style="font-family:'JetBrains Mono'">R$ 89,00</td>
+          <td>
+            <div style="display:flex;align-items:center;gap:8px">
+              <div class="stock-bar"><div class="stock-bar-fill" style="width:0%"></div></div>
+              <span style="font-family:'JetBrains Mono';font-size:12px;color:var(--text3)">0</span>
+            </div>
+          </td>
+          <td><span style="font-family:'JetBrains Mono';font-size:12px;color:var(--text2)">Padrão (5%)</span></td>
+          <td><span class="badge badge-red">Inativo</span></td>
+          <td><button class="btn btn-ghost btn-sm">✏️</button></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- TAB: VENDAS -->
+<!-- ============================================ -->
+<div class="tab-panel" id="tab-vendas">
+  <!-- SUB TABS -->
+  <div style="display:flex;gap:8px;margin-bottom:20px">
+    <button class="main-tab active" onclick="switchSubTab(this,'vendas-pdv','vendas-hist')" style="font-size:12px;padding:6px 14px">🛒 Novo Pedido</button>
+    <button class="main-tab" onclick="switchSubTab(this,'vendas-hist','vendas-pdv')" style="font-size:12px;padding:6px 14px">📋 Histórico</button>
+  </div>
+
+  <!-- PDV -->
+  <div id="vendas-pdv">
+    <div class="pdv-layout">
+      <div>
+        <!-- SEARCH & PRODUCTS -->
+        <div class="search-box" style="margin-bottom:16px;min-width:100%">
+          <span>🔍</span><input placeholder="Buscar produto por nome ou SKU...">
+        </div>
+        <div class="product-grid">
+          <div class="product-card" onclick="addToCart('Corda Nylon','Cordas','25.00')">
+            <div class="p-img">🎸</div>
+            <div class="p-name">Corda Violão Nylon</div>
+            <div class="p-cat">Cordas • 42 em estoque</div>
+            <div class="p-price">R$ 25,00</div>
+          </div>
+          <div class="product-card" onclick="addToCart('Baqueta 5A Hickory','Baquetas','35.00')">
+            <div class="p-img">🥁</div>
+            <div class="p-name">Baqueta 5A Hickory</div>
+            <div class="p-cat">Baquetas • 4 em estoque</div>
+            <div class="p-price">R$ 35,00</div>
+          </div>
+          <div class="product-card" onclick="addToCart('Palheta 0.73mm','Palhetas','6.00')">
+            <div class="p-img">🎵</div>
+            <div class="p-name">Palheta Dunlop 0.73</div>
+            <div class="p-cat">Palhetas • 120 em estoque</div>
+            <div class="p-price">R$ 6,00</div>
+          </div>
+          <div class="product-card" onclick="addToCart('Camiseta LA Music M','Camisetas','45.00')">
+            <div class="p-img">👕</div>
+            <div class="p-name">Camiseta LA Music M</div>
+            <div class="p-cat">Camisetas • 28 em estoque</div>
+            <div class="p-price">R$ 45,00</div>
+          </div>
+          <div class="product-card" onclick="addToCart('Método Teclado Vol.1','Didático','65.00')">
+            <div class="p-img">📕</div>
+            <div class="p-name">Método Teclado Vol.1</div>
+            <div class="p-cat">Mat. Didático • 2 em estoque</div>
+            <div class="p-price">R$ 65,00</div>
+          </div>
+          <div class="product-card" onclick="addToCart('Correia Guitarra','Acessórios','28.00')">
+            <div class="p-img">🎸</div>
+            <div class="p-name">Correia de Guitarra</div>
+            <div class="p-cat">Acessórios • 15 em estoque</div>
+            <div class="p-price">R$ 28,00</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- CART -->
+      <div class="cart-panel">
+        <div class="cart-header">🛒 Carrinho <span class="badge badge-blue" id="cartCount">2 itens</span></div>
+        <div class="cart-items" id="cartItems">
+          <div class="cart-item">
+            <div class="cart-item-info">
+              <div class="cart-item-name">Corda Violão Nylon</div>
+              <div class="cart-item-detail">Cordas • 2x R$ 25,00</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:4px">
+              <div class="cart-item-price">R$ 50,00</div>
+              <button class="cart-item-remove">✕</button>
+            </div>
+          </div>
+          <div class="cart-item">
+            <div class="cart-item-info">
+              <div class="cart-item-name">Palheta Dunlop 0.73</div>
+              <div class="cart-item-detail">Palhetas • 3x R$ 6,00</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:4px">
+              <div class="cart-item-price">R$ 18,00</div>
+              <button class="cart-item-remove">✕</button>
+            </div>
+          </div>
+        </div>
+        <!-- CLIENT -->
+        <div style="padding:14px 18px;border-top:1px solid var(--border)">
+          <label style="font-size:11px;color:var(--text2);font-weight:600;text-transform:uppercase;display:block;margin-bottom:6px">Cliente</label>
+          <select class="form-input" style="width:100%;margin-bottom:8px;font-size:12px">
+            <option>👤 Aluno</option>
+            <option>👨‍💼 Colaborador</option>
+            <option>🏷️ Venda Avulsa</option>
+          </select>
+          <input class="form-input" placeholder="Buscar aluno..." style="width:100%;font-size:12px;margin-bottom:8px">
+          <div style="padding:6px 10px;background:var(--bg2);border-radius:6px;font-size:12px;color:var(--green)">✓ Carlos Augusto — Barra</div>
+          <div style="margin-top:10px">
+            <label style="font-size:11px;color:var(--text2);font-weight:600;text-transform:uppercase;display:block;margin-bottom:6px">Professor Indicador (opcional)</label>
+            <input class="form-input" placeholder="Buscar professor..." style="width:100%;font-size:12px">
+          </div>
+        </div>
+        <!-- TOTALS -->
+        <div class="cart-totals">
+          <div class="cart-total-row"><span style="color:var(--text2)">Subtotal</span><span>R$ 68,00</span></div>
+          <div class="cart-total-row"><span style="color:var(--text2)">Desconto</span><span style="color:var(--red)">- R$ 0,00</span></div>
+          <div class="cart-total-row final"><span>Total</span><span>R$ 68,00</span></div>
+        </div>
+        <!-- PAYMENT -->
+        <div style="padding:10px 18px;border-top:1px solid var(--border)">
+          <label style="font-size:11px;color:var(--text2);font-weight:600;text-transform:uppercase;display:block;margin-bottom:6px">Pagamento</label>
+          <select class="form-input" style="width:100%;font-size:12px" id="formaPagamento" onchange="toggleParcelas()">
+            <option value="pix">💰 Pix</option>
+            <option value="dinheiro">💵 Dinheiro</option>
+            <option value="debito">💳 Cartão Débito</option>
+            <option value="credito">💳 Cartão Crédito</option>
+            <option value="folha">📋 Desconto em Folha</option>
+            <option value="saldo">👛 Saldo Carteira</option>
+          </select>
+          <div id="parcelasField" style="display:none;margin-top:8px">
+            <label style="font-size:11px;color:var(--text2);font-weight:600;text-transform:uppercase;display:block;margin-bottom:4px">Parcelas</label>
+            <select class="form-input" style="width:100%;font-size:12px">
+              <option>1x de R$ 68,00</option>
+              <option>2x de R$ 34,00</option>
+              <option>3x de R$ 22,67</option>
+              <option>4x de R$ 17,00</option>
+              <option>5x de R$ 13,60</option>
+              <option>6x de R$ 11,33</option>
+            </select>
+          </div>
+          <div style="margin-top:10px">
+            <label style="font-size:11px;color:var(--text2);font-weight:600;text-transform:uppercase;display:block;margin-bottom:4px">Desconto</label>
+            <div style="display:flex;gap:6px">
+              <input class="form-input" placeholder="0,00" style="flex:1;font-size:12px;font-family:'JetBrains Mono'">
+              <select class="form-input" style="width:60px;font-size:12px">
+                <option>R$</option>
+                <option>%</option>
+              </select>
+            </div>
+          </div>
+          <div style="margin-top:10px">
+            <label style="font-size:11px;color:var(--text2);font-weight:600;text-transform:uppercase;display:block;margin-bottom:4px">Observações</label>
+            <input class="form-input" placeholder="Observações da venda..." style="width:100%;font-size:12px">
+          </div>
+          <label style="display:flex;align-items:center;gap:8px;margin-top:10px;font-size:12px;color:var(--text2);cursor:pointer">
+            <input type="checkbox" checked> Enviar comprovante WhatsApp
+          </label>
+        </div>
+        <div class="cart-actions">
+          <button class="btn btn-success" style="width:100%;justify-content:center;padding:12px" onclick="showToast('success','✓ Venda registrada! Comprovante enviado via WhatsApp')">
+            ✅ Finalizar Venda (R$ 68,00)
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- HISTORICO -->
+  <div id="vendas-hist" style="display:none">
+    <div class="cards-row">
+      <div class="stat-card">
+        <div class="label">Vendas Hoje</div>
+        <div class="value" style="color:var(--green)">R$ 234</div>
+        <div class="sub">4 vendas</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Vendas Fev/2026</div>
+        <div class="value" style="color:var(--accent)">R$ 1.850</div>
+        <div class="sub">28 vendas</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Ticket Médio</div>
+        <div class="value" style="color:var(--yellow)">R$ 66</div>
+        <div class="sub">Média por venda</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Meta Lojinha Q1</div>
+        <div class="value" style="color:var(--purple)">62%</div>
+        <div class="sub">R$ 1.850 / R$ 3.000</div>
+      </div>
+    </div>
+    <div class="table-container">
+      <div class="table-header">
+        <h3>📋 Histórico de Vendas</h3>
+        <div class="search-box"><span>🔍</span><input placeholder="Buscar venda..."></div>
+      </div>
+      <table>
+        <thead><tr><th>Data</th><th>Cliente</th><th>Itens</th><th>Total</th><th>Pagamento</th><th>Vendedor</th><th>Status</th><th></th></tr></thead>
+        <tbody>
+          <tr>
+            <td style="font-family:'JetBrains Mono';font-size:12px">02/02 14:32</td>
+            <td><strong>Carlos Augusto</strong><br><span style="font-size:11px;color:var(--text2)">Aluno</span></td>
+            <td>2x Corda Nylon, 3x Palheta</td>
+            <td style="font-family:'JetBrains Mono';color:var(--green);font-weight:600">R$ 68,00</td>
+            <td><span class="badge badge-green">Pix</span></td>
+            <td>Duda</td>
+            <td><span class="badge badge-green">✓</span></td>
+            <td><button class="btn btn-ghost btn-sm" onclick="openModal('modalVendaDetalhes')">👁</button></td>
+          </tr>
+          <tr>
+            <td style="font-family:'JetBrains Mono';font-size:12px">02/02 11:15</td>
+            <td><strong>Ana Clara</strong><br><span style="font-size:11px;color:var(--text2)">Aluna</span></td>
+            <td>1x Camiseta LA M</td>
+            <td style="font-family:'JetBrains Mono';color:var(--green);font-weight:600">R$ 45,00</td>
+            <td><span class="badge badge-blue">Cartão</span></td>
+            <td>Duda</td>
+            <td><span class="badge badge-green">✓</span></td>
+            <td><button class="btn btn-ghost btn-sm" onclick="openModal('modalVendaDetalhes')">👁</button></td>
+          </tr>
+          <tr>
+            <td style="font-family:'JetBrains Mono';font-size:12px">01/02 16:40</td>
+            <td><strong>Prof. Gabriel</strong><br><span style="font-size:11px;color:var(--text2)">Colaborador</span></td>
+            <td>1x Baqueta 5A</td>
+            <td style="font-family:'JetBrains Mono';color:var(--green);font-weight:600">R$ 35,00</td>
+            <td><span class="badge badge-orange">Desc. Folha</span></td>
+            <td>Arthur</td>
+            <td><span class="badge badge-green">✓</span></td>
+            <td><button class="btn btn-ghost btn-sm" onclick="openModal('modalVendaDetalhes')">👁</button></td>
+          </tr>
+          <tr>
+            <td style="font-family:'JetBrains Mono';font-size:12px">01/02 10:22</td>
+            <td><strong>Visitante</strong><br><span style="font-size:11px;color:var(--text2)">Avulso</span></td>
+            <td>2x Palheta, 1x Correia</td>
+            <td style="font-family:'JetBrains Mono';color:var(--green);font-weight:600">R$ 40,00</td>
+            <td><span class="badge badge-green">Dinheiro</span></td>
+            <td>Duda</td>
+            <td><span class="badge badge-green">✓</span></td>
+            <td><button class="btn btn-ghost btn-sm" onclick="openModal('modalVendaDetalhes')">👁</button></td>
+          </tr>
+          <tr style="opacity:.5">
+            <td style="font-family:'JetBrains Mono';font-size:12px">31/01 14:00</td>
+            <td><strong>Felipe Santos</strong><br><span style="font-size:11px;color:var(--text2)">Aluno</span></td>
+            <td>1x Método Teclado</td>
+            <td style="font-family:'JetBrains Mono';color:var(--text2);font-weight:600;text-decoration:line-through">R$ 65,00</td>
+            <td><span class="badge badge-gray">Pix</span></td>
+            <td>Arthur</td>
+            <td><span class="badge badge-red">Estornada</span></td>
+            <td><button class="btn btn-ghost btn-sm" onclick="openModal('modalVendaDetalhes')">👁</button></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- TAB: ESTOQUE -->
+<!-- ============================================ -->
+<div class="tab-panel" id="tab-estoque">
+  <!-- ALERTS -->
+  <div class="section-title">⚠️ Alertas de Reposição</div>
+  <div class="alert-card" style="border-left:3px solid var(--red)">
+    <div class="alert-icon" style="background:rgba(248,113,113,.12)">🔴</div>
+    <div class="alert-content">
+      <h4>Método Teclado Vol.1</h4>
+      <p>Estoque: <strong style="color:var(--red)">2 unidades</strong> (mínimo: 5) — Mat. Didático</p>
+    </div>
+    <button class="btn btn-whatsapp btn-sm" onclick="showToast('whatsapp','📱 Alerta enviado para Maria (Gerente)')">📱 Alertar</button>
+  </div>
+  <div class="alert-card" style="border-left:3px solid var(--yellow)">
+    <div class="alert-icon" style="background:rgba(251,191,36,.12)">🟡</div>
+    <div class="alert-content">
+      <h4>Baqueta 5A Hickory</h4>
+      <p>Estoque: <strong style="color:var(--yellow)">4 unidades</strong> (mínimo: 3) — Baquetas</p>
+    </div>
+    <button class="btn btn-ghost btn-sm">📱 Alertar</button>
+  </div>
+  <div class="alert-card" style="border-left:3px solid var(--red)">
+    <div class="alert-icon" style="background:rgba(248,113,113,.12)">⚫</div>
+    <div class="alert-content">
+      <h4>Fone Monitor</h4>
+      <p>Estoque: <strong style="color:var(--red)">0 unidades</strong> (mínimo: 2) — Acessórios</p>
+    </div>
+    <button class="btn btn-whatsapp btn-sm">📱 Alertar</button>
+  </div>
+  <div style="text-align:right;margin-bottom:24px">
+    <button class="btn btn-whatsapp" onclick="showToast('whatsapp','📱 Alerta com 3 produtos enviado para Maria (Gerente)')">📱 Disparar Todos os Alertas</button>
+  </div>
+
+  <!-- STOCK TABLE -->
+  <div class="table-container">
+    <div class="table-header">
+      <h3>📊 Estoque — Barra</h3>
+      <div class="table-actions">
+        <div class="search-box"><span>🔍</span><input placeholder="Buscar..."></div>
+        <button class="btn btn-ghost">📥 Entrada Lote</button>
+      </div>
+    </div>
+    <table>
+      <thead><tr><th></th><th>Produto</th><th>Variação</th><th>Estoque</th><th>Mínimo</th><th>Status</th><th>Última Mov.</th></tr></thead>
+      <tbody>
+        <tr><td><div class="img-placeholder">🎸</div></td><td>Corda Violão</td><td>Nylon Clássica</td>
+          <td style="font-family:'JetBrains Mono'">18</td><td style="font-family:'JetBrains Mono';color:var(--text2)">5</td>
+          <td><span class="badge badge-green">🟢 OK</span></td><td style="font-size:12px;color:var(--text2)">02/02 14:32</td>
+        </tr>
+        <tr><td></td><td></td><td>Aço 0.10</td>
+          <td style="font-family:'JetBrains Mono'">14</td><td style="font-family:'JetBrains Mono';color:var(--text2)">5</td>
+          <td><span class="badge badge-green">🟢 OK</span></td><td style="font-size:12px;color:var(--text2)">01/02 16:40</td>
+        </tr>
+        <tr><td></td><td></td><td>Aço 0.12</td>
+          <td style="font-family:'JetBrains Mono'">10</td><td style="font-family:'JetBrains Mono';color:var(--text2)">5</td>
+          <td><span class="badge badge-green">🟢 OK</span></td><td style="font-size:12px;color:var(--text2)">30/01 10:15</td>
+        </tr>
+        <tr><td><div class="img-placeholder">🥁</div></td><td>Baqueta 5A</td><td>Hickory</td>
+          <td style="font-family:'JetBrains Mono';color:var(--yellow)">4</td><td style="font-family:'JetBrains Mono';color:var(--text2)">3</td>
+          <td><span class="badge badge-yellow">🟡 Atenção</span></td><td style="font-size:12px;color:var(--text2)">01/02 16:40</td>
+        </tr>
+        <tr><td></td><td></td><td>Maple</td>
+          <td style="font-family:'JetBrains Mono'">8</td><td style="font-family:'JetBrains Mono';color:var(--text2)">3</td>
+          <td><span class="badge badge-green">🟢 OK</span></td><td style="font-size:12px;color:var(--text2)">28/01 09:00</td>
+        </tr>
+        <tr><td><div class="img-placeholder">📕</div></td><td>Método Teclado V1</td><td>—</td>
+          <td style="font-family:'JetBrains Mono';color:var(--red)">2</td><td style="font-family:'JetBrains Mono';color:var(--text2)">5</td>
+          <td><span class="badge badge-red">🔴 Crítico</span></td><td style="font-size:12px;color:var(--text2)">31/01 14:00</td>
+        </tr>
+        <tr><td><div class="img-placeholder">🎧</div></td><td>Fone Monitor</td><td>—</td>
+          <td style="font-family:'JetBrains Mono';color:var(--red)">0</td><td style="font-family:'JetBrains Mono';color:var(--text2)">2</td>
+          <td><span class="badge badge-red">⚫ Zerado</span></td><td style="font-size:12px;color:var(--text2)">—</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- MOVIMENTACOES -->
+  <div class="table-container">
+    <div class="table-header">
+      <h3>📋 Movimentações Recentes</h3>
+    </div>
+    <table>
+      <thead><tr><th>Data</th><th>Produto</th><th>Tipo</th><th>Qtd</th><th>Saldo</th><th>Por</th></tr></thead>
+      <tbody>
+        <tr><td style="font-family:'JetBrains Mono';font-size:12px">02/02 14:32</td><td>Corda Nylon</td><td><span class="badge badge-red">Venda</span></td><td style="font-family:'JetBrains Mono';color:var(--red)">-2</td><td style="font-family:'JetBrains Mono'">18</td><td>Duda</td></tr>
+        <tr><td style="font-family:'JetBrains Mono';font-size:12px">02/02 14:32</td><td>Palheta 0.73</td><td><span class="badge badge-red">Venda</span></td><td style="font-family:'JetBrains Mono';color:var(--red)">-3</td><td style="font-family:'JetBrains Mono'">120</td><td>Duda</td></tr>
+        <tr><td style="font-family:'JetBrains Mono';font-size:12px">01/02 10:00</td><td>Corda Nylon</td><td><span class="badge badge-green">Entrada</span></td><td style="font-family:'JetBrains Mono';color:var(--green)">+20</td><td style="font-family:'JetBrains Mono'">20</td><td>Arthur</td></tr>
+        <tr><td style="font-family:'JetBrains Mono';font-size:12px">01/02 10:00</td><td>Palheta 0.73</td><td><span class="badge badge-green">Entrada</span></td><td style="font-family:'JetBrains Mono';color:var(--green)">+50</td><td style="font-family:'JetBrains Mono'">123</td><td>Arthur</td></tr>
+        <tr><td style="font-family:'JetBrains Mono';font-size:12px">31/01 14:00</td><td>Método Teclado</td><td><span class="badge badge-yellow">Estorno</span></td><td style="font-family:'JetBrains Mono';color:var(--green)">+1</td><td style="font-family:'JetBrains Mono'">2</td><td>Arthur</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- TAB: COMISSÕES -->
+<!-- ============================================ -->
+<div class="tab-panel" id="tab-comissoes">
+  <div class="cards-row" style="grid-template-columns:repeat(4,1fr)">
+    <div class="stat-card"><div class="label">Comissões Fev</div><div class="value" style="color:var(--green)">R$ 92</div><div class="sub">Total distribuído</div></div>
+    <div class="stat-card"><div class="label">Farmers</div><div class="value" style="color:var(--accent)">R$ 62</div><div class="sub">Duda R$38 • Arthur R$24</div></div>
+    <div class="stat-card"><div class="label">Professores</div><div class="value" style="color:var(--purple)">R$ 30</div><div class="sub">2 indicações</div></div>
+    <div class="stat-card"><div class="label">Moedas LA</div><div class="value" style="color:var(--yellow)">🪙 4</div><div class="sub">R$ 120 creditados</div></div>
+  </div>
+
+  <!-- FARMERS -->
+  <div class="section-title">👩‍💼 Carteira Digital — Farmers</div>
+  <div class="wallet-grid">
+    <div class="wallet-card">
+      <div class="wallet-header">
+        <div class="wallet-avatar" style="background:linear-gradient(135deg,#ec4899,#f97316);color:#fff">D</div>
+        <div class="wallet-info"><h4>Duda</h4><span>Barra • 15 vendas este mês</span></div>
+      </div>
+      <div class="wallet-balance">R$ 138,50</div>
+      <div class="wallet-sub">Saldo disponível para saque ou uso na loja</div>
+      <div class="wallet-actions">
+        <button class="btn btn-success btn-sm" onclick="openModal('modalUsarLoja')">💳 Usar na Loja</button>
+        <button class="btn btn-ghost btn-sm" onclick="openModal('modalSaque')">💸 Registrar Saque</button>
+        <button class="btn btn-ghost btn-sm" onclick="openModal('modalHistoricoCarteira')">📋 Histórico</button>
+      </div>
+    </div>
+    <div class="wallet-card">
+      <div class="wallet-header">
+        <div class="wallet-avatar" style="background:linear-gradient(135deg,#38bdf8,#8b5cf6);color:#fff">A</div>
+        <div class="wallet-info"><h4>Arthur</h4><span>Barra • 8 vendas este mês</span></div>
+      </div>
+      <div class="wallet-balance">R$ 76,00</div>
+      <div class="wallet-sub">Saldo disponível para saque ou uso na loja</div>
+      <div class="wallet-actions">
+        <button class="btn btn-success btn-sm" onclick="openModal('modalUsarLoja')">💳 Usar na Loja</button>
+        <button class="btn btn-ghost btn-sm" onclick="openModal('modalSaque')">💸 Registrar Saque</button>
+        <button class="btn btn-ghost btn-sm" onclick="openModal('modalHistoricoCarteira')">📋 Histórico</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- PROFESSORS -->
+  <div class="section-title" style="margin-top:12px">🎓 Carteira Digital — Professores</div>
+  <div class="wallet-grid">
+    <div class="wallet-card" style="border-left:3px solid var(--yellow)">
+      <div class="wallet-header">
+        <div class="wallet-avatar" style="background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#0b0f19">G</div>
+        <div class="wallet-info"><h4>Prof. Gabriel Menezes</h4><span>Barra • Bateria</span></div>
+      </div>
+      <div class="wallet-balance">R$ 195,00</div>
+      <div class="wallet-sub">
+        Comissões: R$ 45,00 • Moedas LA: 🪙 5 (R$ 150,00)
+      </div>
+      <div style="margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+          <span style="font-size:20px">🪙</span>
+          <span style="font-family:'JetBrains Mono';font-size:14px;font-weight:700;color:var(--yellow)">5 Moedas LA</span>
+          <span style="font-size:12px;color:var(--text2)">(5 matrículas convertidas)</span>
+        </div>
+      </div>
+      <div class="wallet-actions">
+        <button class="btn btn-success btn-sm" onclick="openModal('modalUsarLoja')">💳 Usar na Loja</button>
+        <button class="btn btn-ghost btn-sm" onclick="openModal('modalSaque')">💸 Saque</button>
+        <button class="btn btn-whatsapp btn-sm" onclick="showToast('whatsapp','📱 Relatório enviado para Prof. Gabriel')">📱 Enviar Relatório</button>
+      </div>
+    </div>
+    <div class="wallet-card" style="border-left:3px solid var(--purple)">
+      <div class="wallet-header">
+        <div class="wallet-avatar" style="background:linear-gradient(135deg,#a78bfa,#7c3aed);color:#fff">I</div>
+        <div class="wallet-info"><h4>Prof. Isaque Mendes</h4><span>Barra • Teclado</span></div>
+      </div>
+      <div class="wallet-balance">R$ 90,00</div>
+      <div class="wallet-sub">
+        Comissões: R$ 0,00 • Moedas LA: 🪙 3 (R$ 90,00)
+      </div>
+      <div style="margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:20px">🪙</span>
+          <span style="font-family:'JetBrains Mono';font-size:14px;font-weight:700;color:var(--yellow)">3 Moedas LA</span>
+        </div>
+      </div>
+      <div class="wallet-actions">
+        <button class="btn btn-success btn-sm" onclick="openModal('modalUsarLoja')">💳 Usar na Loja</button>
+        <button class="btn btn-ghost btn-sm" onclick="openModal('modalSaque')">💸 Saque</button>
+        <button class="btn btn-whatsapp btn-sm" onclick="showToast('whatsapp','📱 Relatório enviado!')">📱 Enviar Relatório</button>
+      </div>
+    </div>
+    <div class="wallet-card" style="border-left:3px solid var(--green)">
+      <div class="wallet-header">
+        <div class="wallet-avatar" style="background:linear-gradient(135deg,#34d399,#059669);color:#fff">L</div>
+        <div class="wallet-info"><h4>Prof. Léo Castro</h4><span>Barra • Violão</span></div>
+      </div>
+      <div class="wallet-balance">R$ 60,00</div>
+      <div class="wallet-sub">
+        Comissões: R$ 30,00 • Moedas LA: 🪙 1 (R$ 30,00)
+      </div>
+      <div style="margin-bottom:12px">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:20px">🪙</span>
+          <span style="font-family:'JetBrains Mono';font-size:14px;font-weight:700;color:var(--yellow)">1 Moeda LA</span>
+        </div>
+      </div>
+      <div class="wallet-actions">
+        <button class="btn btn-success btn-sm" onclick="openModal('modalUsarLoja')">💳 Usar na Loja</button>
+        <button class="btn btn-ghost btn-sm" onclick="openModal('modalSaque')">💸 Saque</button>
+        <button class="btn btn-whatsapp btn-sm" onclick="showToast('whatsapp','📱 Relatório enviado!')">📱 Enviar Relatório</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- HISTORY TABLE -->
+  <div class="table-container" style="margin-top:8px">
+    <div class="table-header">
+      <h3>📋 Histórico de Movimentações</h3>
+      <div class="table-actions">
+        <select class="form-input" style="font-size:12px"><option>Todos</option><option>Farmers</option><option>Professores</option></select>
+      </div>
+    </div>
+    <table>
+      <thead><tr><th>Data</th><th>Titular</th><th>Tipo</th><th>Valor</th><th>Saldo Após</th><th>Ref.</th></tr></thead>
+      <tbody>
+        <tr><td style="font-family:'JetBrains Mono';font-size:12px">02/02</td><td>Duda</td><td><span class="badge badge-green">Comissão venda</span></td><td style="font-family:'JetBrains Mono';color:var(--green)">+ R$ 3,40</td><td style="font-family:'JetBrains Mono'">R$ 138,50</td><td style="font-size:11px;color:var(--text2)">Venda #47</td></tr>
+        <tr><td style="font-family:'JetBrains Mono';font-size:12px">02/02</td><td>Prof. Gabriel</td><td><span class="badge badge-yellow">🪙 Moeda LA</span></td><td style="font-family:'JetBrains Mono';color:var(--green)">+ R$ 30,00</td><td style="font-family:'JetBrains Mono'">R$ 195,00</td><td style="font-size:11px;color:var(--text2)">Matrícula Ana Clara</td></tr>
+        <tr><td style="font-family:'JetBrains Mono';font-size:12px">01/02</td><td>Prof. Léo</td><td><span class="badge badge-purple">Comissão indicação</span></td><td style="font-family:'JetBrains Mono';color:var(--green)">+ R$ 15,00</td><td style="font-family:'JetBrains Mono'">R$ 60,00</td><td style="font-size:11px;color:var(--text2)">Venda #45</td></tr>
+        <tr><td style="font-family:'JetBrains Mono';font-size:12px">31/01</td><td>Duda</td><td><span class="badge badge-orange">Compra loja</span></td><td style="font-family:'JetBrains Mono';color:var(--red)">- R$ 25,00</td><td style="font-family:'JetBrains Mono'">R$ 135,10</td><td style="font-size:11px;color:var(--text2)">Compra pessoal</td></tr>
+        <tr><td style="font-family:'JetBrains Mono';font-size:12px">30/01</td><td>Arthur</td><td><span class="badge badge-blue">Saque</span></td><td style="font-family:'JetBrains Mono';color:var(--red)">- R$ 50,00</td><td style="font-family:'JetBrains Mono'">R$ 76,00</td><td style="font-size:11px;color:var(--text2)">Desc. folha Jan</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- TAB: CONFIGURAÇÕES -->
+<!-- ============================================ -->
+<div class="tab-panel" id="tab-config">
+  <div class="config-grid">
+    <!-- COMISSÕES -->
+    <div class="config-panel">
+      <h3>💰 Comissionamento</h3>
+      <div class="config-row">
+        <label>Comissão Farmer (padrão)</label>
+        <div style="display:flex;align-items:center;gap:4px">
+          <input class="config-input" value="5" style="width:60px"> <span style="color:var(--text2)">%</span>
+        </div>
+      </div>
+      <div class="config-row">
+        <label>Comissão Professor Indicação</label>
+        <div style="display:flex;align-items:center;gap:4px">
+          <input class="config-input" value="5" style="width:60px"> <span style="color:var(--text2)">%</span>
+        </div>
+      </div>
+      <div class="config-row">
+        <label>Valor Moeda LA</label>
+        <div style="display:flex;align-items:center;gap:4px">
+          <span style="color:var(--text2)">R$</span> <input class="config-input" value="30" style="width:70px">
+        </div>
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-top:8px">
+        🪙 Moeda LA: creditada na carteira do professor por cada aula experimental convertida em matrícula
+      </div>
+    </div>
+
+    <!-- ESTOQUE -->
+    <div class="config-panel">
+      <h3>📊 Estoque</h3>
+      <div class="config-row">
+        <label>Estoque mínimo padrão</label>
+        <input class="config-input" value="5" style="width:60px">
+      </div>
+      <div class="config-row">
+        <label>Alerta WhatsApp automático</label>
+        <div style="display:flex;align-items:center;gap:8px">
+          <label style="display:flex;align-items:center;gap:4px;cursor:pointer;font-size:13px;color:var(--green)">
+            <input type="checkbox" checked> Ativado
+          </label>
+        </div>
+      </div>
+      <div style="margin-top:10px;font-size:12px;color:var(--text2)">Dispara quando estoque atinge nível crítico ao registrar venda</div>
+    </div>
+
+    <!-- RESPONSÁVEIS -->
+    <div class="config-panel">
+      <h3>📱 Responsáveis Reposição</h3>
+      <div style="margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+          <div><strong style="font-size:13px">Barra</strong><br><span style="font-size:12px;color:var(--text2)">Maria Silva — (21) 99999-1234</span></div>
+          <button class="btn btn-ghost btn-sm">✏️</button>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border)">
+          <div><strong style="font-size:13px">Campo Grande</strong><br><span style="font-size:12px;color:var(--text2)">João Almeida — (21) 99999-5678</span></div>
+          <button class="btn btn-ghost btn-sm">✏️</button>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;">
+          <div><strong style="font-size:13px">Recreio</strong><br><span style="font-size:12px;color:var(--text2)">Ana Costa — (21) 99999-9012</span></div>
+          <button class="btn btn-ghost btn-sm">✏️</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- CATEGORIAS -->
+    <div class="config-panel">
+      <h3>🏷️ Categorias de Produtos</h3>
+      <div class="category-list">
+        <div class="category-tag">🎸 Cordas <span class="remove">✕</span></div>
+        <div class="category-tag">🎵 Palhetas <span class="remove">✕</span></div>
+        <div class="category-tag">🥁 Baquetas <span class="remove">✕</span></div>
+        <div class="category-tag">👕 Camisetas <span class="remove">✕</span></div>
+        <div class="category-tag">📕 Material Didático <span class="remove">✕</span></div>
+        <div class="category-tag">🎧 Acessórios <span class="remove">✕</span></div>
+        <div class="category-tag">🎁 Outros <span class="remove">✕</span></div>
+      </div>
+      <div style="margin-top:12px;display:flex;gap:8px">
+        <input class="form-input" placeholder="Nova categoria..." style="flex:1;font-size:12px">
+        <button class="btn btn-primary btn-sm">+ Adicionar</button>
+      </div>
+    </div>
+
+    <!-- WHATSAPP -->
+    <div class="config-panel" style="grid-column:1/-1">
+      <h3>📱 WhatsApp — Templates & Opt-in</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+        <div>
+          <label style="font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:6px">Template Comprovante de Compra</label>
+          <textarea class="form-input" style="width:100%;min-height:120px;font-size:12px;font-family:'JetBrains Mono'">🛍️ *LA Music - Comprovante de Compra*
+📍 Unidade: {unidade}
+📅 Data: {data}
+👤 Cliente: {cliente}
+
+{itens}
+
+💰 *Total: {total}*
+💳 Pagamento: {forma_pagamento}
+
+Obrigado pela compra! 🎵</textarea>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:6px">Template Alerta de Estoque</label>
+          <textarea class="form-input" style="width:100%;min-height:120px;font-size:12px;font-family:'JetBrains Mono'">⚠️ *Alerta de Estoque - LA Music {unidade}*
+
+Produtos com estoque crítico:
+
+{lista_produtos}
+
+Favor providenciar reposição.
+📅 {data}</textarea>
+        </div>
+      </div>
+      <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <strong style="font-size:14px">📢 Lista Opt-in Novidades</strong>
+            <p style="font-size:12px;color:var(--text2);margin-top:4px">Alunos que recebem avisos de novos produtos (32 inscritos nesta unidade)</p>
+          </div>
+          <button class="btn btn-whatsapp">📱 Disparar Novidade</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /content -->
+
+<!-- ============================================ -->
+<!-- MODAL: PRODUTO -->
+<!-- ============================================ -->
+<div class="modal-overlay hidden" id="modalProduto">
+  <div class="modal" style="max-width:720px">
+    <div class="modal-header">
+      <h2>📦 Cadastro de Produto</h2>
+      <button class="modal-close" onclick="closeModal('modalProduto')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-grid">
+        <div class="form-group full">
+          <label>Nome do Produto *</label>
+          <input class="form-input" value="Corda de Violão" placeholder="Ex: Corda de Violão">
+        </div>
+        <div class="form-group">
+          <label>Categoria *</label>
+          <select class="form-input">
+            <option>🎸 Cordas</option><option>🎵 Palhetas</option><option>🥁 Baquetas</option>
+            <option>👕 Camisetas</option><option>📕 Material Didático</option><option>🎧 Acessórios</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>SKU</label>
+          <input class="form-input" value="CRD-001" placeholder="Auto-gerado">
+        </div>
+        <div class="form-group">
+          <label>Preço Base (R$) *</label>
+          <input class="form-input" value="25,00" type="text">
+        </div>
+        <div class="form-group">
+          <label>Custo (R$)</label>
+          <input class="form-input" value="12,00" type="text">
+        </div>
+        <div class="form-group">
+          <label>Estoque Mínimo</label>
+          <input class="form-input" value="5" type="number">
+        </div>
+        <div class="form-group">
+          <label>Comissão Especial (%)</label>
+          <input class="form-input" placeholder="Deixe vazio para padrão" type="text">
+        </div>
+        <div class="form-group full">
+          <label>Foto do Produto</label>
+          <div style="display:flex;gap:12px;align-items:center">
+            <div style="width:80px;height:80px;background:var(--surface2);border:2px dashed var(--border);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:28px">🎸</div>
+            <div style="flex:1">
+              <input type="file" id="fotoUpload" style="display:none" accept="image/*">
+              <button class="btn btn-ghost btn-sm" onclick="document.getElementById('fotoUpload').click()">📷 Escolher Foto</button>
+              <p style="font-size:11px;color:var(--text3);margin-top:6px">PNG, JPG até 2MB. Opcional.</p>
+            </div>
+          </div>
+        </div>
+        <div class="form-group full">
+          <label>Descrição</label>
+          <textarea class="form-input" placeholder="Descrição do produto...">Cordas para violão, diversos materiais e espessuras disponíveis.</textarea>
+        </div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox"> Disponível para divulgação WhatsApp
+          </label>
+        </div>
+        <div class="form-group">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+            <input type="checkbox" checked> Produto Ativo
+          </label>
+        </div>
+      </div>
+
+      <!-- VARIAÇÕES -->
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+          <h3 style="font-size:14px;font-weight:700">🔀 Variações</h3>
+          <button class="btn btn-ghost btn-sm">+ Variação</button>
+        </div>
+        <table class="var-table">
+          <thead><tr><th>Variação</th><th>Preço (R$)</th><th>SKU</th><th>Est. Barra</th><th>Est. CG</th><th>Est. Recreio</th><th></th></tr></thead>
+          <tbody>
+            <tr>
+              <td><input class="form-input" value="Nylon Clássica" style="width:140px;padding:6px 10px;font-size:12px"></td>
+              <td><input class="form-input" value="25,00" style="width:80px;padding:6px 10px;font-size:12px"></td>
+              <td style="font-family:'JetBrains Mono';font-size:12px;color:var(--text2)">CRD-001-A</td>
+              <td><input class="form-input" value="18" style="width:50px;padding:6px;font-size:12px;text-align:center"></td>
+              <td><input class="form-input" value="22" style="width:50px;padding:6px;font-size:12px;text-align:center"></td>
+              <td><input class="form-input" value="15" style="width:50px;padding:6px;font-size:12px;text-align:center"></td>
+              <td><button class="btn btn-ghost btn-sm" style="color:var(--red)">🗑</button></td>
+            </tr>
+            <tr>
+              <td><input class="form-input" value="Aço 0.10" style="width:140px;padding:6px 10px;font-size:12px"></td>
+              <td><input class="form-input" value="30,00" style="width:80px;padding:6px 10px;font-size:12px"></td>
+              <td style="font-family:'JetBrains Mono';font-size:12px;color:var(--text2)">CRD-001-B</td>
+              <td><input class="form-input" value="14" style="width:50px;padding:6px;font-size:12px;text-align:center"></td>
+              <td><input class="form-input" value="10" style="width:50px;padding:6px;font-size:12px;text-align:center"></td>
+              <td><input class="form-input" value="8" style="width:50px;padding:6px;font-size:12px;text-align:center"></td>
+              <td><button class="btn btn-ghost btn-sm" style="color:var(--red)">🗑</button></td>
+            </tr>
+            <tr>
+              <td><input class="form-input" value="Aço 0.12" style="width:140px;padding:6px 10px;font-size:12px"></td>
+              <td><input class="form-input" value="30,00" style="width:80px;padding:6px 10px;font-size:12px"></td>
+              <td style="font-family:'JetBrains Mono';font-size:12px;color:var(--text2)">CRD-001-C</td>
+              <td><input class="form-input" value="10" style="width:50px;padding:6px;font-size:12px;text-align:center"></td>
+              <td><input class="form-input" value="12" style="width:50px;padding:6px;font-size:12px;text-align:center"></td>
+              <td><input class="form-input" value="6" style="width:50px;padding:6px;font-size:12px;text-align:center"></td>
+              <td><button class="btn btn-ghost btn-sm" style="color:var(--red)">🗑</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modalProduto')">Cancelar</button>
+      <button class="btn btn-success" onclick="closeModal('modalProduto');showToast('success','✓ Produto salvo com sucesso!')">💾 Salvar Produto</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- MODAL: ENTRADA LOTE -->
+<!-- ============================================ -->
+<div class="modal-overlay hidden" id="modalEntradaLote">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-header">
+      <h2>📥 Entrada de Estoque em Lote</h2>
+      <button class="modal-close" onclick="closeModal('modalEntradaLote')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group" style="margin-bottom:16px">
+        <label>Unidade</label>
+        <select class="form-input" style="width:100%">
+          <option>📍 Barra</option><option>📍 Campo Grande</option><option>📍 Recreio</option>
+        </select>
+      </div>
+      <table style="width:100%">
+        <thead><tr><th style="text-align:left;padding:8px;font-size:11px;color:var(--text2)">Produto / Variação</th><th style="padding:8px;font-size:11px;color:var(--text2)">Estoque Atual</th><th style="padding:8px;font-size:11px;color:var(--text2)">Entrada</th></tr></thead>
+        <tbody>
+          <tr><td style="padding:8px;font-size:13px">Corda Nylon</td><td style="padding:8px;text-align:center;font-family:'JetBrains Mono';font-size:13px">18</td><td style="padding:8px;text-align:center"><input class="form-input" value="20" style="width:60px;padding:6px;text-align:center;font-size:13px"></td></tr>
+          <tr><td style="padding:8px;font-size:13px">Corda Aço 0.10</td><td style="padding:8px;text-align:center;font-family:'JetBrains Mono';font-size:13px">14</td><td style="padding:8px;text-align:center"><input class="form-input" value="15" style="width:60px;padding:6px;text-align:center;font-size:13px"></td></tr>
+          <tr><td style="padding:8px;font-size:13px">Baqueta 5A Hickory</td><td style="padding:8px;text-align:center;font-family:'JetBrains Mono';font-size:13px;color:var(--yellow)">4</td><td style="padding:8px;text-align:center"><input class="form-input" value="10" style="width:60px;padding:6px;text-align:center;font-size:13px"></td></tr>
+          <tr><td style="padding:8px;font-size:13px">Método Teclado Vol.1</td><td style="padding:8px;text-align:center;font-family:'JetBrains Mono';font-size:13px;color:var(--red)">2</td><td style="padding:8px;text-align:center"><input class="form-input" value="8" style="width:60px;padding:6px;text-align:center;font-size:13px"></td></tr>
+          <tr><td style="padding:8px;font-size:13px">Palheta 0.73mm</td><td style="padding:8px;text-align:center;font-family:'JetBrains Mono';font-size:13px">120</td><td style="padding:8px;text-align:center"><input class="form-input" value="" placeholder="0" style="width:60px;padding:6px;text-align:center;font-size:13px"></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modalEntradaLote')">Cancelar</button>
+      <button class="btn btn-success" onclick="closeModal('modalEntradaLote');showToast('success','✓ Estoque atualizado! 4 produtos atualizados')">📥 Registrar Entrada</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- ============================================ -->
+<!-- MODAL: DETALHES DA VENDA -->
+<!-- ============================================ -->
+<div class="modal-overlay hidden" id="modalVendaDetalhes">
+  <div class="modal" style="max-width:540px">
+    <div class="modal-header">
+      <h2>🧾 Detalhes da Venda #47</h2>
+      <button class="modal-close" onclick="closeModal('modalVendaDetalhes')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        <div><span style="font-size:11px;color:var(--text2);text-transform:uppercase">Data</span><br><strong>02/02/2026 14:32</strong></div>
+        <div><span style="font-size:11px;color:var(--text2);text-transform:uppercase">Vendedor</span><br><strong>Duda</strong></div>
+        <div><span style="font-size:11px;color:var(--text2);text-transform:uppercase">Cliente</span><br><strong>Carlos Augusto</strong><br><span style="font-size:12px;color:var(--text2)">Aluno — Barra</span></div>
+        <div><span style="font-size:11px;color:var(--text2);text-transform:uppercase">Pagamento</span><br><strong style="color:var(--green)">Pix</strong></div>
+      </div>
+      <div style="background:var(--bg2);border-radius:8px;padding:14px;margin-bottom:16px">
+        <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:10px">ITENS</div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--border)">
+          <span>2x Corda Violão Nylon</span>
+          <span style="font-family:'JetBrains Mono'">R$ 50,00</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;padding:6px 0">
+          <span>3x Palheta Dunlop 0.73</span>
+          <span style="font-family:'JetBrains Mono'">R$ 18,00</span>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:var(--text2)">Subtotal</span><span style="font-family:'JetBrains Mono'">R$ 68,00</span></div>
+      <div style="display:flex;justify-content:space-between;margin-bottom:6px"><span style="color:var(--text2)">Desconto</span><span style="font-family:'JetBrains Mono'">R$ 0,00</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:18px;font-weight:700;padding-top:8px;border-top:1px solid var(--border)"><span>Total</span><span style="font-family:'JetBrains Mono';color:var(--green)">R$ 68,00</span></div>
+      <div style="margin-top:16px;padding:10px;background:rgba(52,211,153,.1);border-radius:8px;font-size:12px;color:var(--green)">
+        ✓ Comprovante enviado via WhatsApp em 02/02 14:33
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-whatsapp btn-sm" onclick="showToast('whatsapp','📱 Comprovante reenviado!')">📱 Reenviar Comprovante</button>
+      <button class="btn btn-danger btn-sm" onclick="closeModal('modalVendaDetalhes');openModal('modalEstorno')">🔄 Estornar Venda</button>
+      <button class="btn btn-ghost" onclick="closeModal('modalVendaDetalhes')">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- MODAL: ESTORNO -->
+<!-- ============================================ -->
+<div class="modal-overlay hidden" id="modalEstorno">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header" style="border-bottom-color:var(--red)">
+      <h2 style="color:var(--red)">🔄 Estornar Venda #47</h2>
+      <button class="modal-close" onclick="closeModal('modalEstorno')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:rgba(248,113,113,.1);border:1px solid var(--red);border-radius:8px;padding:14px;margin-bottom:16px">
+        <strong style="color:var(--red)">⚠️ Atenção!</strong>
+        <p style="font-size:13px;color:var(--text2);margin-top:6px">Esta ação irá:</p>
+        <ul style="font-size:13px;color:var(--text);margin:8px 0 0 16px">
+          <li>Reverter o estoque dos produtos</li>
+          <li>Estornar a comissão do vendedor (R$ 3,40)</li>
+          <li>Estornar a comissão do professor indicador (se houver)</li>
+        </ul>
+      </div>
+      <div class="form-group">
+        <label>Motivo do Estorno *</label>
+        <select class="form-input">
+          <option>Selecione...</option>
+          <option>Desistência do cliente</option>
+          <option>Produto com defeito</option>
+          <option>Erro no registro</option>
+          <option>Troca de produto</option>
+          <option>Outro</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-top:12px">
+        <label>Observações</label>
+        <textarea class="form-input" placeholder="Detalhes adicionais..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modalEstorno')">Cancelar</button>
+      <button class="btn btn-danger" onclick="closeModal('modalEstorno');showToast('success','✓ Venda #47 estornada com sucesso')">🔄 Confirmar Estorno</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- MODAL: REGISTRAR SAQUE -->
+<!-- ============================================ -->
+<div class="modal-overlay hidden" id="modalSaque">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <h2>💸 Registrar Saque</h2>
+      <button class="modal-close" onclick="closeModal('modalSaque')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="text-align:center;margin-bottom:20px">
+        <div class="wallet-avatar" style="background:linear-gradient(135deg,#ec4899,#f97316);color:#fff;width:56px;height:56px;font-size:22px;margin:0 auto 10px">D</div>
+        <h3 style="font-size:16px">Duda</h3>
+        <p style="font-size:13px;color:var(--text2)">Barra • Farmer</p>
+        <div style="font-family:'JetBrains Mono';font-size:28px;font-weight:800;color:var(--green);margin-top:10px">R$ 138,50</div>
+        <p style="font-size:12px;color:var(--text2)">Saldo disponível</p>
+      </div>
+      <div class="form-group">
+        <label>Valor do Saque (R$) *</label>
+        <input class="form-input" type="text" value="138,50" style="font-family:'JetBrains Mono';font-size:18px;text-align:center">
+      </div>
+      <div class="form-group" style="margin-top:12px">
+        <label>Forma de Recebimento *</label>
+        <select class="form-input">
+          <option>📋 Desconto em folha (próximo pagamento)</option>
+          <option>💰 Pix</option>
+          <option>💵 Dinheiro</option>
+        </select>
+      </div>
+      <div class="form-group" style="margin-top:12px">
+        <label>Observações</label>
+        <input class="form-input" placeholder="Ex: Referente a Jan/2026">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modalSaque')">Cancelar</button>
+      <button class="btn btn-success" onclick="closeModal('modalSaque');showToast('success','✓ Saque de R$ 138,50 registrado!')">💸 Confirmar Saque</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- MODAL: USAR NA LOJA -->
+<!-- ============================================ -->
+<div class="modal-overlay hidden" id="modalUsarLoja">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-header">
+      <h2>💳 Usar Saldo na Loja</h2>
+      <button class="modal-close" onclick="closeModal('modalUsarLoja')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="text-align:center;margin-bottom:20px">
+        <div class="wallet-avatar" style="background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#0b0f19;width:56px;height:56px;font-size:22px;margin:0 auto 10px">G</div>
+        <h3 style="font-size:16px">Prof. Gabriel Menezes</h3>
+        <p style="font-size:13px;color:var(--text2)">Barra • Professor</p>
+        <div style="font-family:'JetBrains Mono';font-size:28px;font-weight:800;color:var(--green);margin-top:10px">R$ 195,00</div>
+        <p style="font-size:12px;color:var(--text2)">Saldo disponível (inclui 🪙 5 Moedas LA)</p>
+      </div>
+      <div class="form-group">
+        <label>Valor a Utilizar (R$) *</label>
+        <input class="form-input" type="text" value="35,00" style="font-family:'JetBrains Mono';font-size:18px;text-align:center">
+      </div>
+      <div class="form-group" style="margin-top:12px">
+        <label>Descrição da Compra *</label>
+        <input class="form-input" placeholder="Ex: 1x Baqueta 5A">
+      </div>
+      <div style="background:var(--bg2);border-radius:8px;padding:12px;margin-top:14px">
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
+          <span style="color:var(--text2)">Saldo atual</span>
+          <span style="font-family:'JetBrains Mono'">R$ 195,00</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px">
+          <span style="color:var(--text2)">Valor da compra</span>
+          <span style="font-family:'JetBrains Mono';color:var(--red)">- R$ 35,00</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:14px;font-weight:700;padding-top:8px;border-top:1px solid var(--border)">
+          <span>Novo saldo</span>
+          <span style="font-family:'JetBrains Mono';color:var(--green)">R$ 160,00</span>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modalUsarLoja')">Cancelar</button>
+      <button class="btn btn-success" onclick="closeModal('modalUsarLoja');showToast('success','✓ Compra registrada! Novo saldo: R$ 160,00')">💳 Confirmar Uso</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- MODAL: HISTÓRICO DA CARTEIRA -->
+<!-- ============================================ -->
+<div class="modal-overlay hidden" id="modalHistoricoCarteira">
+  <div class="modal" style="max-width:600px">
+    <div class="modal-header">
+      <h2>📋 Histórico da Carteira</h2>
+      <button class="modal-close" onclick="closeModal('modalHistoricoCarteira')">✕</button>
+    </div>
+    <div class="modal-body" style="padding:0">
+      <div style="padding:16px 24px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px">
+        <div class="wallet-avatar" style="background:linear-gradient(135deg,#ec4899,#f97316);color:#fff">D</div>
+        <div>
+          <h4 style="font-size:15px">Duda</h4>
+          <span style="font-size:12px;color:var(--text2)">Barra • Farmer</span>
+        </div>
+        <div style="margin-left:auto;text-align:right">
+          <div style="font-family:'JetBrains Mono';font-size:20px;font-weight:700;color:var(--green)">R$ 138,50</div>
+          <span style="font-size:11px;color:var(--text2)">Saldo atual</span>
+        </div>
+      </div>
+      <div style="max-height:340px;overflow-y:auto">
+        <table style="width:100%">
+          <thead><tr>
+            <th style="padding:10px 16px;font-size:11px;color:var(--text2);text-align:left;background:var(--bg2)">Data</th>
+            <th style="padding:10px 16px;font-size:11px;color:var(--text2);text-align:left;background:var(--bg2)">Tipo</th>
+            <th style="padding:10px 16px;font-size:11px;color:var(--text2);text-align:right;background:var(--bg2)">Valor</th>
+            <th style="padding:10px 16px;font-size:11px;color:var(--text2);text-align:right;background:var(--bg2)">Saldo</th>
+          </tr></thead>
+          <tbody>
+            <tr><td style="padding:10px 16px;font-size:12px;font-family:'JetBrains Mono'">02/02</td><td style="padding:10px 16px"><span class="badge badge-green">Comissão venda</span></td><td style="padding:10px 16px;font-family:'JetBrains Mono';color:var(--green);text-align:right">+ R$ 3,40</td><td style="padding:10px 16px;font-family:'JetBrains Mono';text-align:right">R$ 138,50</td></tr>
+            <tr><td style="padding:10px 16px;font-size:12px;font-family:'JetBrains Mono'">01/02</td><td style="padding:10px 16px"><span class="badge badge-green">Comissão venda</span></td><td style="padding:10px 16px;font-family:'JetBrains Mono';color:var(--green);text-align:right">+ R$ 2,25</td><td style="padding:10px 16px;font-family:'JetBrains Mono';text-align:right">R$ 135,10</td></tr>
+            <tr><td style="padding:10px 16px;font-size:12px;font-family:'JetBrains Mono'">31/01</td><td style="padding:10px 16px"><span class="badge badge-orange">Compra loja</span></td><td style="padding:10px 16px;font-family:'JetBrains Mono';color:var(--red);text-align:right">- R$ 25,00</td><td style="padding:10px 16px;font-family:'JetBrains Mono';text-align:right">R$ 132,85</td></tr>
+            <tr><td style="padding:10px 16px;font-size:12px;font-family:'JetBrains Mono'">28/01</td><td style="padding:10px 16px"><span class="badge badge-green">Comissão venda</span></td><td style="padding:10px 16px;font-family:'JetBrains Mono';color:var(--green);text-align:right">+ R$ 4,60</td><td style="padding:10px 16px;font-family:'JetBrains Mono';text-align:right">R$ 157,85</td></tr>
+            <tr><td style="padding:10px 16px;font-size:12px;font-family:'JetBrains Mono'">25/01</td><td style="padding:10px 16px"><span class="badge badge-green">Comissão venda</span></td><td style="padding:10px 16px;font-family:'JetBrains Mono';color:var(--green);text-align:right">+ R$ 3,25</td><td style="padding:10px 16px;font-family:'JetBrains Mono';text-align:right">R$ 153,25</td></tr>
+            <tr><td style="padding:10px 16px;font-size:12px;font-family:'JetBrains Mono'">20/01</td><td style="padding:10px 16px"><span class="badge badge-blue">Saque</span></td><td style="padding:10px 16px;font-family:'JetBrains Mono';color:var(--red);text-align:right">- R$ 100,00</td><td style="padding:10px 16px;font-family:'JetBrains Mono';text-align:right">R$ 150,00</td></tr>
+            <tr><td style="padding:10px 16px;font-size:12px;font-family:'JetBrains Mono'">15/01</td><td style="padding:10px 16px"><span class="badge badge-green">Comissão venda</span></td><td style="padding:10px 16px;font-family:'JetBrains Mono';color:var(--green);text-align:right">+ R$ 5,80</td><td style="padding:10px 16px;font-family:'JetBrains Mono';text-align:right">R$ 250,00</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('modalHistoricoCarteira')">Fechar</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// TAB SWITCHING
+function switchTab(tabId) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.main-tabs .main-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + tabId).classList.add('active');
+  event.target.classList.add('active');
+}
+
+// SUB TAB SWITCHING
+function switchSubTab(btn, showId, hideId) {
+  document.getElementById(showId).style.display = 'block';
+  document.getElementById(hideId).style.display = 'none';
+  btn.parentElement.querySelectorAll('.main-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+// MODAL
+function openModal(id) { document.getElementById(id).classList.remove('hidden'); }
+function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+
+// Close modal on overlay click
+document.querySelectorAll('.modal-overlay').forEach(ov => {
+  ov.addEventListener('click', e => { if (e.target === ov) ov.classList.add('hidden'); });
+});
+
+// TOAST
+function showToast(type, msg) {
+  const t = document.getElementById('toast');
+  t.className = 'toast toast-' + type + ' show';
+  t.textContent = msg;
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
+
+// ADD TO CART (simple demo)
+function addToCart(name, cat, price) {
+  showToast('success', '✓ ' + name + ' adicionado ao carrinho');
+}
+
+// TOGGLE PARCELAS (when credit card is selected)
+function toggleParcelas() {
+  const forma = document.getElementById('formaPagamento').value;
+  const parcelasField = document.getElementById('parcelasField');
+  if (forma === 'credito') {
+    parcelasField.style.display = 'block';
+  } else {
+    parcelasField.style.display = 'none';
+  }
+}
+</script>
+</body>
+</html>

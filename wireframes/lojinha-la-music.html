@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe - Lojinha LA Music</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .tab-active { background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%); }
+    .input-field { background: #1e293b; border: 1px solid #334155; }
+    .input-field:focus { border-color: #7c3aed; outline: none; }
+    .btn-primary { background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 100%); }
+    .btn-secondary { background: #334155; }
+    .btn-success { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
+    .btn-danger { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); }
+    .badge { padding: 2px 8px; border-radius: 9999px; font-size: 11px; font-weight: 600; }
+    .badge-success { background: rgba(16, 185, 129, 0.2); color: #10b981; }
+    .badge-warning { background: rgba(245, 158, 11, 0.2); color: #f59e0b; }
+    .badge-danger { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+    .badge-info { background: rgba(59, 130, 246, 0.2); color: #3b82f6; }
+    .badge-purple { background: rgba(139, 92, 246, 0.2); color: #8b5cf6; }
+    .lalita-coin { display: inline-flex; align-items: center; gap: 4px; background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%); color: #000; padding: 2px 8px; border-radius: 9999px; font-weight: 600; font-size: 12px; }
+  </style>
+</head>
+<body class="bg-slate-950 text-white min-h-screen">
+  <div class="flex">
+    <!-- Sidebar -->
+    <aside class="w-64 bg-slate-900 min-h-screen p-4 border-r border-slate-800 fixed">
+      <div class="flex items-center gap-3 mb-8">
+        <div class="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center font-bold">LA</div>
+        <div><h1 class="font-bold text-sm">LA Music Report</h1><p class="text-xs text-slate-400">Sistema de Gestão</p></div>
+      </div>
+      <nav class="space-y-1">
+        <p class="text-xs text-slate-500 font-semibold mb-2 px-3">OPERACIONAL</p>
+        <a href="#" class="flex items-center gap-3 px-3 py-2 bg-purple-600/20 text-purple-400 rounded-lg text-sm font-medium">
+          <i data-lucide="clipboard-list" class="w-4 h-4"></i> Administrativo
+        </a>
+      </nav>
+      <div class="absolute bottom-4 left-4 right-4">
+        <div class="flex items-center gap-3 p-3 bg-slate-800 rounded-lg">
+          <div class="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center text-sm font-bold">G</div>
+          <div><p class="text-sm font-medium">Gabi</p><p class="text-xs text-slate-400">Campo Grande</p></div>
+        </div>
+      </div>
+    </aside>
+    
+    <!-- Main -->
+    <main class="flex-1 ml-64 p-6">
+      <div class="flex items-center justify-between mb-6">
+        <div><h1 class="text-2xl font-bold">🏪 Lojinha LA Music</h1><p class="text-slate-400 text-sm">Gestão de produtos, vendas, estoque e comissões</p></div>
+        <select class="input-field px-4 py-2 rounded-lg text-sm"><option>Campo Grande</option><option>Recreio</option><option>Barra</option></select>
+      </div>
+      
+      <!-- Tabs -->
+      <div class="flex gap-2 mb-6 border-b border-slate-800 pb-2">
+        <button onclick="showTab('produtos')" id="tab-produtos" class="px-4 py-2 tab-active rounded-t-lg text-sm font-medium">📦 Produtos</button>
+        <button onclick="showTab('vendas')" id="tab-vendas" class="px-4 py-2 bg-slate-800 rounded-t-lg text-sm text-slate-400 hover:bg-slate-700">🛒 Vendas</button>
+        <button onclick="showTab('estoque')" id="tab-estoque" class="px-4 py-2 bg-slate-800 rounded-t-lg text-sm text-slate-400 hover:bg-slate-700">📊 Estoque</button>
+        <button onclick="showTab('comissoes')" id="tab-comissoes" class="px-4 py-2 bg-slate-800 rounded-t-lg text-sm text-slate-400 hover:bg-slate-700">💰 Comissões</button>
+        <button onclick="showTab('config')" id="tab-config" class="px-4 py-2 bg-slate-800 rounded-t-lg text-sm text-slate-400 hover:bg-slate-700">⚙️ Config</button>
+      </div>
+      
+      <!-- TAB PRODUTOS -->
+      <div id="content-produtos" class="bg-slate-900 rounded-2xl border border-slate-800 p-6">
+        <div class="flex items-center justify-between mb-6">
+          <div class="flex gap-3">
+            <input type="text" placeholder="Buscar produto..." class="input-field px-4 py-2 rounded-lg text-sm w-64">
+            <select class="input-field px-3 py-2 rounded-lg text-sm"><option>Todas categorias</option><option>Cordas</option><option>Palhetas</option><option>Camisetas</option></select>
+          </div>
+          <div class="flex gap-2">
+            <button onclick="openModal('modal-entrada')" class="btn-secondary px-4 py-2 rounded-lg text-sm">📥 Entrada em Lote</button>
+            <button onclick="openModal('modal-produto')" class="btn-primary px-4 py-2 rounded-lg text-sm">+ Novo Produto</button>
+          </div>
+        </div>
+        <table class="w-full">
+          <thead><tr class="text-left text-xs text-slate-400 uppercase border-b border-slate-800">
+            <th class="pb-3">Produto</th><th class="pb-3">Categoria</th><th class="pb-3">Variações</th><th class="pb-3 text-right">Preço</th><th class="pb-3 text-center">Estoque</th><th class="pb-3 text-center">Status</th><th class="pb-3 text-right">Ações</th>
+          </tr></thead>
+          <tbody class="divide-y divide-slate-800">
+            <tr class="hover:bg-slate-800/50"><td class="py-4"><div class="flex items-center gap-3"><div class="w-10 h-10 bg-slate-700 rounded-lg flex items-center justify-center">🎸</div><div><p class="font-medium">Corda de Violão</p><p class="text-xs text-slate-400">SKU: CRD-001</p></div></div></td><td><span class="badge badge-info">Cordas</span></td><td>3 variações</td><td class="text-right font-medium">R$ 25,00</td><td class="text-center text-emerald-400 font-bold">47</td><td class="text-center"><span class="badge badge-success">Ativo</span></td><td class="text-right"><button class="p-2 hover:bg-slate-700 rounded">✏️</button></td></tr>
+            <tr class="hover:bg-slate-800/50"><td class="py-4"><div class="flex items-center gap-3"><div class="w-10 h-10 bg-slate-700 rounded-lg flex items-center justify-center">🎵</div><div><p class="font-medium">Palheta Dunlop</p><p class="text-xs text-slate-400">SKU: PLH-001</p></div></div></td><td><span class="badge badge-purple">Palhetas</span></td><td>5 variações</td><td class="text-right font-medium">R$ 6,00</td><td class="text-center text-amber-400 font-bold">12</td><td class="text-center"><span class="badge badge-warning">Baixo</span></td><td class="text-right"><button class="p-2 hover:bg-slate-700 rounded">✏️</button></td></tr>
+            <tr class="hover:bg-slate-800/50"><td class="py-4"><div class="flex items-center gap-3"><div class="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-lg flex items-center justify-center font-bold text-xs">LA</div><div><p class="font-medium">Camiseta LA Music</p><p class="text-xs text-slate-400">SKU: CAM-001</p></div></div></td><td><span class="badge" style="background:rgba(236,72,153,0.2);color:#ec4899">Camisetas</span></td><td>4 variações</td><td class="text-right font-medium">R$ 45,00</td><td class="text-center text-emerald-400 font-bold">28</td><td class="text-center"><span class="badge badge-success">Ativo</span></td><td class="text-right"><button class="p-2 hover:bg-slate-700 rounded">✏️</button></td></tr>
+            <tr class="hover:bg-slate-800/50"><td class="py-4"><div class="flex items-center gap-3"><div class="w-10 h-10 bg-slate-700 rounded-lg flex items-center justify-center">🥁</div><div><p class="font-medium">Baqueta 5A</p><p class="text-xs text-slate-400">SKU: BAQ-001</p></div></div></td><td><span class="badge" style="background:rgba(251,146,60,0.2);color:#fb923c">Baquetas</span></td><td>2 variações</td><td class="text-right font-medium">R$ 35,00</td><td class="text-center text-red-400 font-bold">0</td><td class="text-center"><span class="badge badge-danger">Zerado</span></td><td class="text-right"><button class="p-2 hover:bg-slate-700 rounded">✏️</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+      
+      <!-- TAB VENDAS -->
+      <div id="content-vendas" class="hidden bg-slate-900 rounded-2xl border border-slate-800 overflow-hidden">
+        <div class="flex h-[600px]">
+          <!-- Lado esquerdo -->
+          <div class="flex-1 p-6 border-r border-slate-800 overflow-y-auto">
+            <div class="mb-6">
+              <label class="block text-sm font-medium mb-2">Adicionar Produto</label>
+              <input type="text" placeholder="Digite o nome ou SKU..." class="input-field w-full px-4 py-3 rounded-xl text-sm">
+              <div class="mt-2 bg-slate-800 rounded-xl border border-slate-700">
+                <div class="p-3 hover:bg-slate-700 cursor-pointer flex justify-between"><div><p class="font-medium text-sm">Corda Violão - Nylon</p><p class="text-xs text-slate-400">Estoque: 23</p></div><span class="text-emerald-400">R$ 25,00</span></div>
+                <div class="p-3 hover:bg-slate-700 cursor-pointer flex justify-between border-t border-slate-700"><div><p class="font-medium text-sm">Corda Violão - Aço 0.10</p><p class="text-xs text-slate-400">Estoque: 15</p></div><span class="text-emerald-400">R$ 30,00</span></div>
+              </div>
+            </div>
+            <h3 class="font-semibold mb-4">📋 Vendas de Hoje</h3>
+            <div class="space-y-3">
+              <div class="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                <div class="flex justify-between mb-2"><span class="badge badge-success">Concluída</span><span class="font-bold text-emerald-400">R$ 82,00</span></div>
+                <p class="text-sm">João Silva (Aluno)</p><p class="text-xs text-slate-400">1x Corda, 2x Palheta, 1x Camiseta M</p>
+              </div>
+              <div class="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                <div class="flex justify-between mb-2"><span class="badge badge-success">Concluída</span><span class="font-bold text-emerald-400">R$ 35,00</span></div>
+                <p class="text-sm">Prof. Gabriel (Saldo Carteira)</p><p class="text-xs text-slate-400">1x Baqueta 5A</p>
+              </div>
+            </div>
+            <div class="grid grid-cols-3 gap-3 mt-6">
+              <div class="bg-slate-800/50 rounded-xl p-4 text-center"><p class="text-2xl font-bold">8</p><p class="text-xs text-slate-400">Vendas</p></div>
+              <div class="bg-slate-800/50 rounded-xl p-4 text-center"><p class="text-2xl font-bold text-emerald-400">R$ 487</p><p class="text-xs text-slate-400">Faturamento</p></div>
+              <div class="bg-slate-800/50 rounded-xl p-4 text-center"><p class="text-2xl font-bold text-purple-400">R$ 60,87</p><p class="text-xs text-slate-400">Ticket Médio</p></div>
+            </div>
+          </div>
+          <!-- Carrinho -->
+          <div class="w-[400px] flex flex-col bg-slate-800/30">
+            <div class="p-4 border-b border-slate-700"><h3 class="font-semibold">🛒 Nova Venda</h3></div>
+            <div class="flex-1 overflow-y-auto p-4 space-y-3">
+              <div class="bg-slate-800 rounded-xl p-3"><div class="flex justify-between mb-2"><p class="font-medium text-sm">Corda Violão - Nylon</p><button class="text-red-400">✕</button></div><div class="flex justify-between"><div class="flex items-center gap-2"><button class="w-7 h-7 bg-slate-700 rounded">-</button><span>2</span><button class="w-7 h-7 bg-slate-700 rounded">+</button></div><span>R$ 50,00</span></div></div>
+              <div class="bg-slate-800 rounded-xl p-3"><div class="flex justify-between mb-2"><p class="font-medium text-sm">Palheta 0.73mm</p><button class="text-red-400">✕</button></div><div class="flex justify-between"><div class="flex items-center gap-2"><button class="w-7 h-7 bg-slate-700 rounded">-</button><span>3</span><button class="w-7 h-7 bg-slate-700 rounded">+</button></div><span>R$ 18,00</span></div></div>
+            </div>
+            <div class="p-4 border-t border-slate-700 space-y-3">
+              <div><label class="text-xs text-slate-400">Tipo Cliente</label><div class="flex gap-2 mt-1"><button class="flex-1 py-2 bg-purple-600 rounded-lg text-sm">Aluno</button><button class="flex-1 py-2 bg-slate-700 rounded-lg text-sm">Colaborador</button><button class="flex-1 py-2 bg-slate-700 rounded-lg text-sm">Avulso</button></div></div>
+              <div><label class="text-xs text-slate-400">Cliente</label><select class="input-field w-full px-3 py-2 rounded-lg text-sm mt-1"><option>João Silva</option><option>Maria Santos</option></select></div>
+              <div><label class="text-xs text-slate-400">Prof. Indicador (opcional)</label><select class="input-field w-full px-3 py-2 rounded-lg text-sm mt-1"><option>Nenhum</option><option>Prof. Alexandre</option></select></div>
+              <div><label class="text-xs text-slate-400">Pagamento</label><select class="input-field w-full px-3 py-2 rounded-lg text-sm mt-1"><option>Pix</option><option>Dinheiro</option><option>Cartão Débito</option><option>Cartão Crédito</option><option>Desconto Folha</option><option>Saldo Carteira</option></select></div>
+            </div>
+            <div class="p-4 bg-slate-800 border-t border-slate-700">
+              <div class="flex justify-between mb-2"><span class="text-slate-400">Subtotal</span><span>R$ 68,00</span></div>
+              <div class="flex justify-between text-lg font-bold mb-4"><span>Total</span><span class="text-emerald-400">R$ 68,00</span></div>
+              <label class="flex items-center gap-2 mb-4 text-sm"><input type="checkbox" checked class="rounded"> Enviar comprovante WhatsApp</label>
+              <button class="btn-success w-full py-3 rounded-xl font-semibold">✓ Finalizar Venda</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- TAB ESTOQUE -->
+      <div id="content-estoque" class="hidden bg-slate-900 rounded-2xl border border-slate-800 p-6">
+        <div class="flex justify-between mb-6">
+          <div class="flex gap-3">
+            <select class="input-field px-3 py-2 rounded-lg text-sm"><option>Campo Grande</option><option>Todas Unidades</option></select>
+            <select class="input-field px-3 py-2 rounded-lg text-sm"><option>Todos status</option><option>🟢 OK</option><option>🟡 Atenção</option><option>🔴 Crítico</option></select>
+          </div>
+          <button class="btn-danger px-4 py-2 rounded-lg text-sm">⚠️ Disparar Alerta (3 críticos)</button>
+        </div>
+        <div class="grid grid-cols-4 gap-4 mb-6">
+          <div class="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 text-center"><p class="text-2xl font-bold text-emerald-400">18</p><p class="text-xs text-slate-400">Estoque OK</p></div>
+          <div class="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 text-center"><p class="text-2xl font-bold text-amber-400">5</p><p class="text-xs text-slate-400">Atenção</p></div>
+          <div class="bg-red-500/10 border border-red-500/30 rounded-xl p-4 text-center"><p class="text-2xl font-bold text-red-400">3</p><p class="text-xs text-slate-400">Crítico</p></div>
+          <div class="bg-slate-500/10 border border-slate-500/30 rounded-xl p-4 text-center"><p class="text-2xl font-bold text-slate-400">2</p><p class="text-xs text-slate-400">Zerado</p></div>
+        </div>
+        <table class="w-full">
+          <thead><tr class="text-left text-xs text-slate-400 uppercase border-b border-slate-800"><th class="pb-3">Produto</th><th class="pb-3 text-center">Atual</th><th class="pb-3 text-center">Mínimo</th><th class="pb-3 text-center">Status</th><th class="pb-3">Última Mov.</th><th class="pb-3 text-right">Ações</th></tr></thead>
+          <tbody class="divide-y divide-slate-800">
+            <tr class="bg-red-500/5"><td class="py-4"><p class="font-medium">Palheta 0.73mm</p><p class="text-xs text-slate-400">SKU: PLH-001-73</p></td><td class="text-center text-2xl font-bold text-red-400">2</td><td class="text-center text-slate-400">10</td><td class="text-center"><span class="badge badge-danger">🔴 Crítico</span></td><td><p class="text-sm">Venda #1247</p><p class="text-xs text-slate-400">Hoje 14:32</p></td><td class="text-right"><button class="btn-secondary px-3 py-1 rounded text-xs">+ Entrada</button></td></tr>
+            <tr class="bg-amber-500/5"><td class="py-4"><p class="font-medium">Corda Aço 0.12</p><p class="text-xs text-slate-400">SKU: CRD-001-A12</p></td><td class="text-center text-2xl font-bold text-amber-400">9</td><td class="text-center text-slate-400">5</td><td class="text-center"><span class="badge badge-warning">🟡 Atenção</span></td><td><p class="text-sm">Venda #1245</p><p class="text-xs text-slate-400">Hoje 09:48</p></td><td class="text-right"><button class="btn-secondary px-3 py-1 rounded text-xs">+ Entrada</button></td></tr>
+            <tr><td class="py-4"><p class="font-medium">Corda Nylon</p><p class="text-xs text-slate-400">SKU: CRD-001-NY</p></td><td class="text-center text-2xl font-bold text-emerald-400">23</td><td class="text-center text-slate-400">5</td><td class="text-center"><span class="badge badge-success">🟢 OK</span></td><td><p class="text-sm">Entrada #87</p><p class="text-xs text-slate-400">28/01 10:00</p></td><td class="text-right"><button class="btn-secondary px-3 py-1 rounded text-xs">+ Entrada</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+      
+      <!-- TAB COMISSÕES -->
+      <div id="content-comissoes" class="hidden bg-slate-900 rounded-2xl border border-slate-800 p-6">
+        <div class="flex gap-2 mb-6">
+          <button class="px-4 py-2 bg-purple-600 rounded-lg text-sm font-medium">👩‍💼 Farmers</button>
+          <button class="px-4 py-2 bg-slate-700 rounded-lg text-sm">👨‍🏫 Professores</button>
+        </div>
+        
+        <!-- Cards Farmers -->
+        <div class="grid grid-cols-3 gap-4 mb-6">
+          <div class="bg-gradient-to-br from-purple-900/30 to-purple-600/10 border border-purple-500/30 rounded-2xl p-5">
+            <div class="flex items-center gap-3 mb-4"><div class="w-12 h-12 bg-purple-500 rounded-full flex items-center justify-center font-bold">G</div><div><h3 class="font-bold">Gabi</h3><p class="text-xs text-slate-400">Campo Grande</p></div></div>
+            <div class="space-y-2 text-sm">
+              <div class="flex justify-between"><span class="text-slate-400">Vendas (mês)</span><span class="font-medium">R$ 1.847,00</span></div>
+              <div class="flex justify-between"><span class="text-slate-400">Comissão (5%)</span><span class="text-emerald-400 font-medium">R$ 92,35</span></div>
+              <div class="flex justify-between border-t border-slate-700 pt-2 mt-2"><span class="text-slate-400">Saldo Carteira</span><span class="text-purple-400 font-bold">R$ 245,80</span></div>
+            </div>
+            <button class="w-full mt-4 btn-secondary py-2 rounded-lg text-sm">Ver Carteira →</button>
+          </div>
+          <div class="bg-slate-800/50 border border-slate-700 rounded-2xl p-5">
+            <div class="flex items-center gap-3 mb-4"><div class="w-12 h-12 bg-slate-600 rounded-full flex items-center justify-center font-bold">J</div><div><h3 class="font-bold">Jhon</h3><p class="text-xs text-slate-400">Campo Grande</p></div></div>
+            <div class="space-y-2 text-sm">
+              <div class="flex justify-between"><span class="text-slate-400">Vendas (mês)</span><span class="font-medium">R$ 1.523,00</span></div>
+              <div class="flex justify-between"><span class="text-slate-400">Comissão (5%)</span><span class="text-emerald-400 font-medium">R$ 76,15</span></div>
+              <div class="flex justify-between border-t border-slate-700 pt-2 mt-2"><span class="text-slate-400">Saldo Carteira</span><span class="text-purple-400 font-bold">R$ 189,50</span></div>
+            </div>
+            <button class="w-full mt-4 btn-secondary py-2 rounded-lg text-sm">Ver Carteira →</button>
+          </div>
+        </div>
+        
+        <!-- Carteira Digital Professor -->
+        <div class="bg-slate-800/50 rounded-2xl p-6 border border-slate-700">
+          <div class="flex items-center justify-between mb-6">
+            <div class="flex items-center gap-4">
+              <div class="w-14 h-14 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full flex items-center justify-center"><span class="text-2xl">🪙</span></div>
+              <div><h3 class="text-xl font-bold">Carteira Digital - Prof. Gabriel</h3><p class="text-slate-400">Saldo disponível para uso na loja ou saque</p></div>
+            </div>
+            <div class="text-right">
+              <p class="text-3xl font-bold text-emerald-400">R$ 195,00</p>
+              <p class="text-sm text-slate-400">Saldo atual</p>
+            </div>
+          </div>
+          <div class="grid grid-cols-3 gap-4 mb-6">
+            <div class="bg-slate-700/50 rounded-xl p-4 text-center"><p class="text-lg font-bold text-purple-400">R$ 45,00</p><p class="text-xs text-slate-400">Comissões Indicação</p></div>
+            <div class="bg-slate-700/50 rounded-xl p-4 text-center"><div class="lalita-coin mx-auto mb-1">🪙 6 Lalitas</div><p class="text-lg font-bold text-amber-400">R$ 180,00</p><p class="text-xs text-slate-400">Moeda LA (2 matrículas)</p></div>
+            <div class="bg-slate-700/50 rounded-xl p-4 text-center"><p class="text-lg font-bold text-red-400">- R$ 30,00</p><p class="text-xs text-slate-400">Compras na Loja</p></div>
+          </div>
+          <h4 class="font-semibold mb-3">📋 Histórico de Movimentações</h4>
+          <table class="w-full text-sm">
+            <thead><tr class="text-left text-xs text-slate-400 border-b border-slate-700"><th class="pb-2">Data</th><th class="pb-2">Tipo</th><th class="pb-2">Descrição</th><th class="pb-2 text-right">Valor</th><th class="pb-2 text-right">Saldo</th></tr></thead>
+            <tbody class="divide-y divide-slate-700">
+              <tr><td class="py-2">02/02</td><td><span class="badge badge-success">Comissão</span></td><td>Indicação venda #1245</td><td class="text-right text-emerald-400">+ R$ 5,95</td><td class="text-right">R$ 195,00</td></tr>
+              <tr><td class="py-2">01/02</td><td><span class="badge" style="background:rgba(251,191,36,0.2);color:#fbbf24">Lalita</span></td><td>Matrícula Pedro Silva</td><td class="text-right text-amber-400">+ R$ 30,00</td><td class="text-right">R$ 189,05</td></tr>
+              <tr><td class="py-2">28/01</td><td><span class="badge badge-danger">Compra</span></td><td>1x Baqueta 5A</td><td class="text-right text-red-400">- R$ 35,00</td><td class="text-right">R$ 159,05</td></tr>
+            </tbody>
+          </table>
+          <div class="flex gap-3 mt-6">
+            <button class="btn-primary px-6 py-2 rounded-lg text-sm">💳 Registrar Uso na Loja</button>
+            <button class="btn-secondary px-6 py-2 rounded-lg text-sm">💸 Registrar Saque</button>
+            <button class="btn-secondary px-6 py-2 rounded-lg text-sm">📱 Enviar Relatório WhatsApp</button>
+          </div>
+        </div>
+      </div>
+      
+      <!-- TAB CONFIG -->
+      <div id="content-config" class="hidden bg-slate-900 rounded-2xl border border-slate-800 p-6">
+        <div class="grid grid-cols-2 gap-6">
+          <!-- Comissionamento -->
+          <div class="bg-slate-800/50 rounded-xl p-5 border border-slate-700">
+            <h3 class="font-semibold mb-4 flex items-center gap-2">💰 Comissionamento</h3>
+            <div class="space-y-4">
+              <div><label class="text-sm text-slate-400">Comissão Farmer (%)</label><input type="number" value="5" class="input-field w-full px-3 py-2 rounded-lg mt-1"></div>
+              <div><label class="text-sm text-slate-400">Comissão Professor Indicação (%)</label><input type="number" value="5" class="input-field w-full px-3 py-2 rounded-lg mt-1"></div>
+              <div><label class="text-sm text-slate-400">Valor da Lalita (R$)</label><div class="flex items-center gap-2 mt-1"><span class="lalita-coin">🪙</span><input type="number" value="30" class="input-field flex-1 px-3 py-2 rounded-lg"></div></div>
+            </div>
+          </div>
+          <!-- Estoque -->
+          <div class="bg-slate-800/50 rounded-xl p-5 border border-slate-700">
+            <h3 class="font-semibold mb-4 flex items-center gap-2">📦 Estoque</h3>
+            <div class="space-y-4">
+              <div><label class="text-sm text-slate-400">Estoque Mínimo Padrão</label><input type="number" value="5" class="input-field w-full px-3 py-2 rounded-lg mt-1"></div>
+              <div class="flex items-center justify-between"><span class="text-sm">Alerta WhatsApp Automático</span><button class="w-12 h-6 bg-emerald-500 rounded-full relative"><span class="absolute right-1 top-1 w-4 h-4 bg-white rounded-full"></span></button></div>
+            </div>
+          </div>
+          <!-- Responsáveis Reposição -->
+          <div class="bg-slate-800/50 rounded-xl p-5 border border-slate-700">
+            <h3 class="font-semibold mb-4 flex items-center gap-2">👤 Responsáveis Reposição</h3>
+            <div class="space-y-3">
+              <div class="flex items-center justify-between p-3 bg-slate-700/50 rounded-lg"><div><p class="font-medium">Campo Grande</p><p class="text-xs text-slate-400">Luciano - 21 98127-8047</p></div><button class="text-purple-400 text-sm">Editar</button></div>
+              <div class="flex items-center justify-between p-3 bg-slate-700/50 rounded-lg"><div><p class="font-medium">Recreio</p><p class="text-xs text-slate-400">Luciano - 21 98127-8047</p></div><button class="text-purple-400 text-sm">Editar</button></div>
+              <div class="flex items-center justify-between p-3 bg-slate-700/50 rounded-lg"><div><p class="font-medium">Barra</p><p class="text-xs text-slate-400">Luciano - 21 98127-8047</p></div><button class="text-purple-400 text-sm">Editar</button></div>
+            </div>
+          </div>
+          <!-- Categorias -->
+          <div class="bg-slate-800/50 rounded-xl p-5 border border-slate-700">
+            <h3 class="font-semibold mb-4 flex items-center gap-2">🏷️ Categorias de Produtos</h3>
+            <div class="flex flex-wrap gap-2 mb-4">
+              <span class="badge badge-info">Cordas ✕</span>
+              <span class="badge badge-purple">Palhetas ✕</span>
+              <span class="badge" style="background:rgba(251,146,60,0.2);color:#fb923c">Baquetas ✕</span>
+              <span class="badge" style="background:rgba(236,72,153,0.2);color:#ec4899">Camisetas ✕</span>
+              <span class="badge" style="background:rgba(34,197,94,0.2);color:#22c55e">Material Didático ✕</span>
+              <span class="badge" style="background:rgba(148,163,184,0.2);color:#94a3b8">Acessórios ✕</span>
+            </div>
+            <div class="flex gap-2"><input type="text" placeholder="Nova categoria..." class="input-field flex-1 px-3 py-2 rounded-lg text-sm"><button class="btn-primary px-4 py-2 rounded-lg text-sm">+ Adicionar</button></div>
+          </div>
+          <!-- Opt-in Novidades -->
+          <div class="bg-slate-800/50 rounded-xl p-5 border border-slate-700 col-span-2">
+            <h3 class="font-semibold mb-4 flex items-center gap-2">📱 Lista Opt-in Novidades WhatsApp</h3>
+            <p class="text-sm text-slate-400 mb-4">Alunos que receberão notificações de novos produtos. Gerencie na ficha do aluno ou adicione manualmente aqui.</p>
+            <div class="flex items-center justify-between mb-4">
+              <span class="text-sm"><strong>247</strong> alunos cadastrados para receber novidades</span>
+              <button class="btn-primary px-4 py-2 rounded-lg text-sm">📤 Disparar Novidade</button>
+            </div>
+            <div class="flex gap-2"><input type="text" placeholder="Buscar aluno para adicionar..." class="input-field flex-1 px-3 py-2 rounded-lg text-sm"><button class="btn-secondary px-4 py-2 rounded-lg text-sm">+ Adicionar</button></div>
+          </div>
+        </div>
+        <div class="flex justify-end mt-6"><button class="btn-success px-6 py-2 rounded-lg font-medium">💾 Salvar Configurações</button></div>
+      </div>
+      
+    </main>
+  </div>
+  
+  <!-- MODAL PRODUTO -->
+  <div id="modal-produto" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-50" onclick="if(event.target===this)closeModal('modal-produto')">
+    <div class="bg-slate-900 rounded-2xl w-[700px] max-h-[90vh] overflow-y-auto border border-slate-700">
+      <div class="p-6 border-b border-slate-800 flex justify-between items-center">
+        <h2 class="text-xl font-bold">📦 Novo Produto</h2>
+        <button onclick="closeModal('modal-produto')" class="text-slate-400 hover:text-white">✕</button>
+      </div>
+      <div class="p-6 space-y-4">
+        <div class="grid grid-cols-2 gap-4">
+          <div><label class="text-sm text-slate-400">Nome do Produto *</label><input type="text" placeholder="Ex: Corda de Violão" class="input-field w-full px-3 py-2 rounded-lg mt-1"></div>
+          <div><label class="text-sm text-slate-400">SKU</label><input type="text" placeholder="Auto-gerado ou manual" class="input-field w-full px-3 py-2 rounded-lg mt-1"></div>
+        </div>
+        <div><label class="text-sm text-slate-400">Descrição</label><textarea placeholder="Descrição do produto..." class="input-field w-full px-3 py-2 rounded-lg mt-1 h-20"></textarea></div>
+        <div class="grid grid-cols-3 gap-4">
+          <div><label class="text-sm text-slate-400">Categoria *</label><select class="input-field w-full px-3 py-2 rounded-lg mt-1"><option>Selecione...</option><option>Cordas</option><option>Palhetas</option><option>Camisetas</option></select></div>
+          <div><label class="text-sm text-slate-400">Preço Base (R$) *</label><input type="number" placeholder="0,00" class="input-field w-full px-3 py-2 rounded-lg mt-1"></div>
+          <div><label class="text-sm text-slate-400">Custo (R$)</label><input type="number" placeholder="0,00" class="input-field w-full px-3 py-2 rounded-lg mt-1"></div>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div><label class="text-sm text-slate-400">Estoque Mínimo</label><input type="number" value="5" class="input-field w-full px-3 py-2 rounded-lg mt-1"></div>
+          <div><label class="text-sm text-slate-400">Comissão Especial (%)</label><input type="number" placeholder="Deixe vazio para usar padrão" class="input-field w-full px-3 py-2 rounded-lg mt-1"></div>
+        </div>
+        <div class="flex items-center gap-4">
+          <label class="flex items-center gap-2"><input type="checkbox" checked class="rounded"> Produto Ativo</label>
+          <label class="flex items-center gap-2"><input type="checkbox" class="rounded"> Disponível para divulgação WhatsApp</label>
+        </div>
+        <!-- Variações -->
+        <div class="border-t border-slate-700 pt-4 mt-4">
+          <div class="flex justify-between items-center mb-3"><h4 class="font-semibold">🔀 Variações</h4><button class="btn-secondary px-3 py-1 rounded text-sm">+ Adicionar Variação</button></div>
+          <table class="w-full text-sm">
+            <thead><tr class="text-left text-xs text-slate-400 border-b border-slate-700"><th class="pb-2">Nome</th><th class="pb-2">Preço</th><th class="pb-2">SKU</th><th class="pb-2 text-right">Ações</th></tr></thead>
+            <tbody class="divide-y divide-slate-700">
+              <tr><td class="py-2"><input type="text" value="Nylon Clássica" class="input-field px-2 py-1 rounded w-full"></td><td><input type="text" value="25,00" class="input-field px-2 py-1 rounded w-20"></td><td><input type="text" value="CRD-001-NY" class="input-field px-2 py-1 rounded w-28"></td><td class="text-right"><button class="text-red-400">🗑️</button></td></tr>
+              <tr><td class="py-2"><input type="text" value="Aço 0.10" class="input-field px-2 py-1 rounded w-full"></td><td><input type="text" value="30,00" class="input-field px-2 py-1 rounded w-20"></td><td><input type="text" value="CRD-001-A10" class="input-field px-2 py-1 rounded w-28"></td><td class="text-right"><button class="text-red-400">🗑️</button></td></tr>
+              <tr><td class="py-2"><input type="text" value="Aço 0.12" class="input-field px-2 py-1 rounded w-full"></td><td><input type="text" value="35,00" class="input-field px-2 py-1 rounded w-20"></td><td><input type="text" value="CRD-001-A12" class="input-field px-2 py-1 rounded w-28"></td><td class="text-right"><button class="text-red-400">🗑️</button></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="p-6 border-t border-slate-800 flex justify-end gap-3">
+        <button onclick="closeModal('modal-produto')" class="btn-secondary px-6 py-2 rounded-lg">Cancelar</button>
+        <button class="btn-success px-6 py-2 rounded-lg font-medium">💾 Salvar Produto</button>
+      </div>
+    </div>
+  </div>
+  
+  <!-- MODAL ENTRADA LOTE -->
+  <div id="modal-entrada" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-50" onclick="if(event.target===this)closeModal('modal-entrada')">
+    <div class="bg-slate-900 rounded-2xl w-[600px] max-h-[90vh] overflow-y-auto border border-slate-700">
+      <div class="p-6 border-b border-slate-800 flex justify-between items-center">
+        <h2 class="text-xl font-bold">📥 Entrada de Estoque em Lote</h2>
+        <button onclick="closeModal('modal-entrada')" class="text-slate-400 hover:text-white">✕</button>
+      </div>
+      <div class="p-6">
+        <p class="text-sm text-slate-400 mb-4">Selecione os produtos e informe as quantidades recebidas.</p>
+        <table class="w-full text-sm">
+          <thead><tr class="text-left text-xs text-slate-400 border-b border-slate-700"><th class="pb-2">Produto</th><th class="pb-2 text-center">Atual</th><th class="pb-2 text-center">Entrada</th><th class="pb-2 text-center">Novo</th></tr></thead>
+          <tbody class="divide-y divide-slate-700">
+            <tr><td class="py-3"><label class="flex items-center gap-2"><input type="checkbox" checked class="rounded"> Corda Nylon</label></td><td class="text-center">23</td><td class="text-center"><input type="number" value="20" class="input-field w-16 px-2 py-1 rounded text-center"></td><td class="text-center text-emerald-400 font-bold">43</td></tr>
+            <tr><td class="py-3"><label class="flex items-center gap-2"><input type="checkbox" checked class="rounded"> Palheta 0.73mm</label></td><td class="text-center text-red-400">2</td><td class="text-center"><input type="number" value="50" class="input-field w-16 px-2 py-1 rounded text-center"></td><td class="text-center text-emerald-400 font-bold">52</td></tr>
+            <tr><td class="py-3"><label class="flex items-center gap-2"><input type="checkbox" class="rounded"> Baqueta 5A</label></td><td class="text-center text-slate-500">0</td><td class="text-center"><input type="number" value="0" class="input-field w-16 px-2 py-1 rounded text-center"></td><td class="text-center">0</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="p-6 border-t border-slate-800 flex justify-end gap-3">
+        <button onclick="closeModal('modal-entrada')" class="btn-secondary px-6 py-2 rounded-lg">Cancelar</button>
+        <button class="btn-success px-6 py-2 rounded-lg font-medium">✓ Confirmar Entrada</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    lucide.createIcons();
+    
+    function showTab(tab) {
+      ['produtos','vendas','estoque','comissoes','config'].forEach(t => {
+        document.getElementById('content-'+t).classList.add('hidden');
+        document.getElementById('tab-'+t).classList.remove('tab-active');
+        document.getElementById('tab-'+t).classList.add('bg-slate-800','text-slate-400');
+      });
+      document.getElementById('content-'+tab).classList.remove('hidden');
+      document.getElementById('tab-'+tab).classList.add('tab-active');
+      document.getElementById('tab-'+tab).classList.remove('bg-slate-800','text-slate-400');
+    }
+    
+    function openModal(id) {
+      document.getElementById(id).classList.remove('hidden');
+      document.getElementById(id).classList.add('flex');
+    }
+    
+    function closeModal(id) {
+      document.getElementById(id).classList.add('hidden');
+      document.getElementById(id).classList.remove('flex');
+    }
+  </script>
+</body>
+</html>

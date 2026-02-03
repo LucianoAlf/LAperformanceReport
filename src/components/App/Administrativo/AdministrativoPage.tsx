@@ -30,7 +30,8 @@ import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
 import { AlertasRetencao } from './AlertasRetencao';
 import { PlanoAcaoRetencao } from './PlanoAcaoRetencao';
 import { TabProgramaFideliza } from './TabProgramaFideliza';
-import { Trophy } from 'lucide-react';
+import { TabLojinha } from '../Lojinha';
+import { Trophy, ShoppingBag } from 'lucide-react';
 
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 
@@ -104,7 +105,7 @@ export function AdministrativoPage() {
   // Estado
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>('renovacoes');
-  const [mainTab, setMainTab] = useState<'lancamentos' | 'fideliza'>('lancamentos');
+  const [mainTab, setMainTab] = useState<'lancamentos' | 'fideliza' | 'lojinha'>('lancamentos');
   
   // Dados
   const [resumo, setResumo] = useState<ResumoMes | null>(null);
@@ -586,6 +587,18 @@ export function AdministrativoPage() {
           <Trophy className="w-4 h-4" />
           Programa Fideliza+ LA
         </button>
+        <button
+          onClick={() => setMainTab('lojinha')}
+          className={cn(
+            "flex items-center gap-2 px-5 py-2.5 rounded-t-xl text-sm font-medium transition-all",
+            mainTab === 'lojinha'
+              ? "bg-gradient-to-r from-sky-500 to-cyan-500 text-white shadow-lg shadow-sky-500/20"
+              : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white"
+          )}
+        >
+          <ShoppingBag className="w-4 h-4" />
+          Lojinha
+        </button>
       </div>
 
       {/* Conteúdo baseado na tab principal */}
@@ -594,6 +607,8 @@ export function AdministrativoPage() {
           unidadeSelecionada={unidade} 
           ano={competenciaFiltro.filtro.ano} 
         />
+      ) : mainTab === 'lojinha' ? (
+        <TabLojinha unidadeId={unidade} />
       ) : (
         <>
       {/* Alertas Inteligentes de Retenção */}
