@@ -235,19 +235,19 @@ export function TabComissoes({ unidadeId }: TabComissoesProps) {
       professores: { id: 3, nome: 'Prof. Léo Castro' },
       unidades: { codigo: 'barra', nome: 'Barra' }
     },
-    // Campo Grande
+    // Campo Grande - IDs reais do banco de dados
     {
-      id: 12, tipo_titular: 'professor', colaborador_id: null, professor_id: 10,
+      id: 3, tipo_titular: 'professor', colaborador_id: null, professor_id: 43,
       unidade_id: '2ec861f6-023f-4d7b-9927-3960ad8c2a92', saldo: 120.00, moedas_la: 4,
       updated_at: new Date().toISOString(),
-      professores: { id: 10, nome: 'Prof. Marcelo Silva' },
+      professores: { id: 43, nome: 'Prof. Alexandre de Sá' },
       unidades: { codigo: 'cg', nome: 'Campo Grande' }
     },
     {
-      id: 13, tipo_titular: 'professor', colaborador_id: null, professor_id: 11,
+      id: 4, tipo_titular: 'professor', colaborador_id: null, professor_id: 1,
       unidade_id: '2ec861f6-023f-4d7b-9927-3960ad8c2a92', saldo: 75.00, moedas_la: 2,
       updated_at: new Date().toISOString(),
-      professores: { id: 11, nome: 'Prof. Ana Paula' },
+      professores: { id: 1, nome: 'Prof. Antonio Marcos' },
       unidades: { codigo: 'cg', nome: 'Campo Grande' }
     },
     // Recreio

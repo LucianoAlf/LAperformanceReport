@@ -49,16 +49,16 @@ function formatCurrency(value: number): string {
 }
 
 /**
- * Formata data para exibição
+ * Formata data para exibição (fuso horário Brasil UTC-3)
  */
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
+  // Ajustar para fuso horário do Brasil (UTC-3)
   return date.toLocaleDateString('pt-BR', { 
     day: '2-digit', 
     month: '2-digit', 
     year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
+    timeZone: 'America/Sao_Paulo'
   });
 }
 
@@ -84,6 +84,7 @@ function montarMensagem(
     itens: string;
     total: string;
     forma_pagamento: string;
+    vendedor?: string;
   }
 ): string {
   let mensagem = template;
@@ -95,6 +96,7 @@ function montarMensagem(
   mensagem = mensagem.replace(/{itens}/g, dados.itens);
   mensagem = mensagem.replace(/{total}/g, dados.total);
   mensagem = mensagem.replace(/{forma_pagamento}/g, dados.forma_pagamento);
+  mensagem = mensagem.replace(/{vendedor}/g, dados.vendedor || '');
   
   return mensagem;
 }
@@ -107,6 +109,7 @@ const TEMPLATE_PADRAO = `🛒 *Comprovante de Compra - LA Music*
 📍 *Unidade:* {unidade}
 📅 *Data:* {data}
 👤 *Cliente:* {cliente}
+🧑‍💼 *Vendedor:* {vendedor}
 
 📦 *Itens:*
 {itens}
@@ -193,7 +196,7 @@ serve(async (req) => {
     // Criar cliente Supabase
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
 
-    // Buscar dados da venda
+    // Buscar dados da venda incluindo vendedor
     const { data: venda, error: vendaError } = await supabase
       .from('loja_vendas')
       .select(`
@@ -205,9 +208,11 @@ serve(async (req) => {
         unidade_id,
         aluno_id,
         professor_indicador_id,
+        vendedor_id,
         unidades:unidade_id (nome),
         alunos:aluno_id (nome, whatsapp),
-        professores:professor_indicador_id (nome, telefone_whatsapp)
+        professores:professor_indicador_id (nome, telefone_whatsapp),
+        colaboradores:vendedor_id (nome, apelido)
       `)
       .eq('id', payload.venda_id)
       .single();
@@ -219,25 +224,35 @@ serve(async (req) => {
       );
     }
 
-    // Buscar WhatsApp - prioridade: aluno > professor indicador
-    // Se aluno não tem WhatsApp, envia para o professor indicador
-    let clienteWhatsapp: string | null = null;
-    let clienteNome = venda.cliente_nome;
+    // Coletar todos os destinatários para envio
+    const destinatarios: { telefone: string; tipo: string }[] = [];
     
-    // Primeiro tenta o aluno
-    if (venda.aluno_id && (venda.alunos as any)?.whatsapp) {
-      clienteWhatsapp = (venda.alunos as any).whatsapp;
-      clienteNome = clienteNome || (venda.alunos as any).nome;
+    // Nome do cliente - prioridade: cliente_nome > nome do aluno
+    let clienteNome = venda.cliente_nome;
+    if (!clienteNome && venda.aluno_id && (venda.alunos as any)?.nome) {
+      clienteNome = (venda.alunos as any).nome;
     }
     
-    // Se aluno não tem WhatsApp, tenta o professor indicador
-    if (!clienteWhatsapp && venda.professor_indicador_id && (venda.professores as any)?.telefone_whatsapp) {
-      clienteWhatsapp = (venda.professores as any).telefone_whatsapp;
-      // Mantém o nome do cliente original, não substitui pelo professor
+    // Adicionar aluno se tiver WhatsApp
+    if (venda.aluno_id && (venda.alunos as any)?.whatsapp) {
+      destinatarios.push({
+        telefone: (venda.alunos as any).whatsapp,
+        tipo: 'aluno'
+      });
+      console.log(`[lojinha-enviar-comprovante] Aluno com WhatsApp: ${(venda.alunos as any).whatsapp}`);
+    }
+    
+    // Adicionar professor indicador se tiver WhatsApp
+    if (venda.professor_indicador_id && (venda.professores as any)?.telefone_whatsapp) {
+      destinatarios.push({
+        telefone: (venda.professores as any).telefone_whatsapp,
+        tipo: 'professor'
+      });
+      console.log(`[lojinha-enviar-comprovante] Professor indicador com WhatsApp: ${(venda.professores as any).telefone_whatsapp}`);
     }
 
-    // Verificar se tem WhatsApp disponível
-    if (!clienteWhatsapp) {
+    // Verificar se tem pelo menos um destinatário
+    if (destinatarios.length === 0) {
       console.log('[lojinha-enviar-comprovante] Nenhum WhatsApp disponível para envio');
       return new Response(
         JSON.stringify({ success: false, error: 'Nenhum WhatsApp disponível (aluno ou professor indicador)' }),
@@ -245,7 +260,10 @@ serve(async (req) => {
       );
     }
     
-    console.log(`[lojinha-enviar-comprovante] Enviando para: ${clienteWhatsapp}`);
+    // Nome do vendedor
+    const vendedorNome = (venda.colaboradores as any)?.apelido || (venda.colaboradores as any)?.nome || 'Equipe LA Music';
+    
+    console.log(`[lojinha-enviar-comprovante] Enviando para ${destinatarios.length} destinatário(s)`);
 
     // Buscar itens da venda
     const { data: itens, error: itensError } = await supabase
@@ -289,13 +307,31 @@ serve(async (req) => {
       itens: formatItens(itensFormatados),
       total: formatCurrency(venda.total),
       forma_pagamento: venda.forma_pagamento || 'Não informado',
+      vendedor: vendedorNome,
     });
 
-    // Enviar WhatsApp
-    const resultado = await enviarWhatsApp(clienteWhatsapp, mensagem);
+    // Enviar WhatsApp para TODOS os destinatários (aluno + professor)
+    const resultados: { tipo: string; success: boolean; messageId?: string; error?: string }[] = [];
+    
+    for (const dest of destinatarios) {
+      console.log(`[lojinha-enviar-comprovante] Enviando para ${dest.tipo}: ${dest.telefone}`);
+      const resultado = await enviarWhatsApp(dest.telefone, mensagem);
+      resultados.push({
+        tipo: dest.tipo,
+        ...resultado
+      });
+      
+      // Pequeno delay entre envios para não sobrecarregar a API
+      if (destinatarios.length > 1) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
+    }
+
+    // Verificar se pelo menos um envio foi bem sucedido
+    const algumSucesso = resultados.some(r => r.success);
 
     // Atualizar venda com status de envio
-    if (resultado.success) {
+    if (algumSucesso) {
       await supabase
         .from('loja_vendas')
         .update({ 
@@ -306,9 +342,14 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify(resultado),
+      JSON.stringify({ 
+        success: algumSucesso, 
+        enviados: resultados.filter(r => r.success).length,
+        total: resultados.length,
+        detalhes: resultados
+      }),
       { 
-        status: resultado.success ? 200 : 500, 
+        status: algumSucesso ? 200 : 500, 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       }
     );

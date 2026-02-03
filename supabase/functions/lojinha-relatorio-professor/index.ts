@@ -66,8 +66,8 @@ function getTipoLabel(tipo: string): string {
   const labels: Record<string, string> = {
     'comissao_venda': '💰 Comissão venda',
     'comissao_indicacao': '🎯 Comissão indicação',
-    'lalita': '🪙 Lalita',
-    'moeda_la': '🪙 Lalita',
+    'lalita': '🐶 Lalita',
+    'moeda_la': '🐶 Lalita',
     'compra_loja': '🛒 Compra loja',
     'saque': '💸 Saque',
     'ajuste': '⚙️ Ajuste',
@@ -108,7 +108,7 @@ function montarMensagem(dados: {
   mensagem += `Aqui está seu extrato atualizado:\n\n`;
   
   mensagem += `💰 *Saldo Disponível:* ${formatCurrency(dados.saldo)}\n`;
-  mensagem += `🪙 *Lalitas:* ${dados.lalitas} (${formatCurrency(dados.valor_lalitas)})\n\n`;
+  mensagem += `🐶 *Lalitas:* ${dados.lalitas} (${formatCurrency(dados.valor_lalitas)})\n\n`;
   
   mensagem += `📋 *Últimas Movimentações:*\n`;
   mensagem += `─────────────────\n`;
