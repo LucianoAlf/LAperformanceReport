@@ -35,7 +35,8 @@ const FARMERS_MAP: Record<string, { dupla: Array<{ nome: string; apelido: string
 };
 
 // Programa Fideliza+ LA - Metas (conforme banco programa_fideliza_config)
-// Sistema de pontuação trimestral com 5 critérios (100 pts base)
+// Sistema de pontuação TRIMESTRAL com 5 critérios (100 pts base)
+// Período: TRIMESTRAL (avaliação a cada 3 meses)
 const FIDELIZA_PLUS_METAS = {
   churn_maximo: 4, // Taxa de churn ≤ 4% → 25 pts
   inadimplencia_maxima: 1, // Inadimplência ≤ 1% → 20 pts
@@ -399,7 +400,8 @@ PAINEL DE METAS DE GESTÃO (o que você deve analisar):
 6. **Inadimplência (%)**: Taxa de inadimplência (meta máxima)
 7. **Reajuste Médio (%)**: Percentual médio de reajuste nas renovações
 
-## PROGRAMA FIDELIZA+ LA (5 CRITÉRIOS - 100 pts):
+## PROGRAMA FIDELIZA+ LA (TRIMESTRAL - 5 CRITÉRIOS - 100 pts):
+Período de avaliação: TRIMESTRAL
 Para ${duplaFormatada?.nomes || "a dupla"} conquistar pontos este trimestre:
 ⭐ Churn Premiado (25 pts): Taxa de churn ≤ ${FIDELIZA_PLUS_METAS.churn_maximo}%
 ⭐ Inadimplência 1% (20 pts): Inadimplência ≤ ${FIDELIZA_PLUS_METAS.inadimplencia_maxima}%
@@ -620,7 +622,7 @@ ${permanenciaFormatada ? `⏱️ DISTRIBUIÇÃO POR PERMANÊNCIA:\n${permanencia
 
 ${comparativoUnidades}
 
-🏆 PROGRAMA FIDELIZA+ LA (${pontuacaoTotal}/100 pts - ${criteriosBatidos}/5 critérios):
+🏆 PROGRAMA FIDELIZA+ LA - TRIMESTRAL (${pontuacaoTotal}/100 pts - ${criteriosBatidos}/5 critérios):
 ⭐ Churn Premiado (≤${FIDELIZA_PLUS_METAS.churn_maximo}% → 25pts): ${progressoFidelizaPlus.churn_premiado.conquistou ? '✅ +25pts' : '❌ 0pts'} (${churnRate.toFixed(1)}%)
 ⭐ Inadimplência 1% (≤${FIDELIZA_PLUS_METAS.inadimplencia_maxima}% → 20pts): ${progressoFidelizaPlus.inadimplencia_zero.conquistou ? '✅ +20pts' : '❌ 0pts'} (${inadimplencia.toFixed(1)}%)
 ⭐ Max Renovação (≥${FIDELIZA_PLUS_METAS.renovacao_minima}% → 25pts): ${progressoFidelizaPlus.max_renovacao.conquistou ? '✅ +25pts' : '❌ 0pts'} (${taxaRenovacao.toFixed(0)}%)

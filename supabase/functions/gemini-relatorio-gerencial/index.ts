@@ -475,43 +475,55 @@ Deno.serve(async (req) => {
     }
     relatorioTemplate += `\n`;
 
-    // PROGRAMA FIDELIZA+ LA
+    // PROGRAMA FIDELIZA+ LA (5 Critérios - 100 pts - TRIMESTRAL)
     relatorioTemplate += `───────────────────────\n`;
-    relatorioTemplate += `🏆 *PROGRAMA FIDELIZA+ LA*\n`;
+    relatorioTemplate += `🏆 *PROGRAMA FIDELIZA+ LA* (Trimestral)\n`;
     relatorioTemplate += `───────────────────────\n\n`;
 
-    // Churn Premiado (meta: <3%)
-    const metaChurnFideliza = 3;
-    const pctChurnFideliza = churnRate < metaChurnFideliza ? 100 : Math.max(0, (1 - (churnRate - metaChurnFideliza) / metaChurnFideliza) * 100);
-    const statusChurn = churnRate < metaChurnFideliza ? '✅ BATIDA 🎉' : '❌';
-    relatorioTemplate += `⭐ *CHURN PREMIADO* (meta: <3%)\n`;
+    // Churn Premiado (meta: ≤4% → 25 pts)
+    const metaChurnFideliza = 4;
+    const pctChurnFideliza = churnRate <= metaChurnFideliza ? 100 : Math.max(0, (1 - (churnRate - metaChurnFideliza) / metaChurnFideliza) * 100);
+    const statusChurn = churnRate <= metaChurnFideliza ? '✅ BATIDA 🎉' : '❌';
+    relatorioTemplate += `⭐ *CHURN PREMIADO* (meta: ≤4% → 25 pts)\n`;
     relatorioTemplate += `${criarBarraProgresso(pctChurnFideliza)} ${churnRate.toFixed(1).replace('.', ',')}% ${statusChurn}\n`;
-    relatorioTemplate += `Atual: *${churnRate.toFixed(1).replace('.', ',')}%* | Meta: *<3%*\n\n`;
+    relatorioTemplate += `Atual: *${churnRate.toFixed(1).replace('.', ',')}%* | Meta: *≤4%*\n\n`;
 
-    // Inadimplência Zero
-    const statusInad = inadimplencia === 0 ? '✅ BATIDA 🎉' : '❌';
-    const pctInad = inadimplencia === 0 ? 100 : Math.max(0, 100 - inadimplencia * 10);
-    relatorioTemplate += `⭐ *INADIMPLÊNCIA ZERO* (meta: 0%)\n`;
+    // Inadimplência 1% (meta: ≤1% → 20 pts)
+    const metaInadFideliza = 1;
+    const statusInad = inadimplencia <= metaInadFideliza ? '✅ BATIDA 🎉' : '❌';
+    const pctInad = inadimplencia <= metaInadFideliza ? 100 : Math.max(0, 100 - (inadimplencia - metaInadFideliza) * 20);
+    relatorioTemplate += `⭐ *INADIMPLÊNCIA 1%* (meta: ≤1% → 20 pts)\n`;
     relatorioTemplate += `${criarBarraProgresso(pctInad)} ${inadimplencia.toFixed(1).replace('.', ',')}% ${statusInad}\n`;
-    relatorioTemplate += `Atual: *${inadimplencia.toFixed(1).replace('.', ',')}%* | Meta: *0%*\n\n`;
+    relatorioTemplate += `Atual: *${inadimplencia.toFixed(1).replace('.', ',')}%* | Meta: *≤1%*\n\n`;
 
-    // Max Renovação
-    const statusRenov = taxaRenovacao >= 100 ? '✅ BATIDA 🎉' : (taxaRenovacao >= 90 ? '⚠️' : '❌');
-    relatorioTemplate += `⭐ *MAX RENOVAÇÃO* (meta: 100%)\n`;
-    relatorioTemplate += `${criarBarraProgresso(taxaRenovacao)} ${taxaRenovacao.toFixed(0)}% ${statusRenov}\n`;
-    relatorioTemplate += `Atual: *${taxaRenovacao.toFixed(0)}%* | Meta: *100%*\n\n`;
+    // Max Renovação (meta: ≥90% → 25 pts)
+    const metaRenovFideliza = 90;
+    const statusRenov = taxaRenovacao >= metaRenovFideliza ? '✅ BATIDA 🎉' : (taxaRenovacao >= 80 ? '⚠️' : '❌');
+    const pctRenov = Math.min((taxaRenovacao / metaRenovFideliza) * 100, 100);
+    relatorioTemplate += `⭐ *MAX RENOVAÇÃO* (meta: ≥90% → 25 pts)\n`;
+    relatorioTemplate += `${criarBarraProgresso(pctRenov)} ${taxaRenovacao.toFixed(0)}% ${statusRenov}\n`;
+    relatorioTemplate += `Atual: *${taxaRenovacao.toFixed(0)}%* | Meta: *≥90%*\n\n`;
 
-    // Reajuste Campeão
-    const metaReajuste = 8.5;
-    const statusReajuste = reajusteMedio > metaReajuste ? '✅ BATIDA 🎉' : '❌';
+    // Reajuste Campeão (meta: ≥7% → 15 pts)
+    const metaReajuste = 7;
+    const statusReajuste = reajusteMedio >= metaReajuste ? '✅ BATIDA 🎉' : '❌';
     const pctReajuste = Math.min((reajusteMedio / metaReajuste) * 100, 100);
-    relatorioTemplate += `⭐ *REAJUSTE CAMPEÃO* (meta: >8,5%)\n`;
+    relatorioTemplate += `⭐ *REAJUSTE CAMPEÃO* (meta: ≥7% → 15 pts)\n`;
     relatorioTemplate += `${criarBarraProgresso(pctReajuste)} ${reajusteMedio.toFixed(1).replace('.', ',')}% ${statusReajuste}\n`;
-    relatorioTemplate += `Atual: *${reajusteMedio.toFixed(1).replace('.', ',')}%* | Meta: *>8,5%*\n\n`;
+    relatorioTemplate += `Atual: *${reajusteMedio.toFixed(1).replace('.', ',')}%* | Meta: *≥7%*\n\n`;
 
-    // PROGRAMA MATRICULADOR+ LA
+    // Mestres da Lojinha (meta: CG R$5.000 / BR+RC R$3.000 → 15 pts)
+    const metaLojinha = unidadeNome === 'Campo Grande' ? 5000 : 3000;
+    const vendasLojinha = dados.vendas_lojinha || 0;
+    const statusLojinha = vendasLojinha >= metaLojinha ? '✅ BATIDA 🎉' : '❌';
+    const pctLojinha = Math.min((vendasLojinha / metaLojinha) * 100, 100);
+    relatorioTemplate += `🛒 *MESTRES DA LOJINHA* (meta: R$${metaLojinha.toLocaleString('pt-BR')} → 15 pts)\n`;
+    relatorioTemplate += `${criarBarraProgresso(pctLojinha)} R$${vendasLojinha.toLocaleString('pt-BR')} ${statusLojinha}\n`;
+    relatorioTemplate += `Atual: *R$${vendasLojinha.toLocaleString('pt-BR')}* | Meta: *R$${metaLojinha.toLocaleString('pt-BR')}*\n\n`;
+
+    // PROGRAMA MATRICULADOR+ LA (5 Estrelas - ANUAL)
     relatorioTemplate += `───────────────────────\n`;
-    relatorioTemplate += `🎯 *PROGRAMA MATRICULADOR+ LA*\n`;
+    relatorioTemplate += `🎯 *PROGRAMA MATRICULADOR+ LA* (Anual)\n`;
     relatorioTemplate += `───────────────────────\n`;
     relatorioTemplate += `Hunter: *${hunterNome}*\n\n`;
 
@@ -519,24 +531,47 @@ Deno.serve(async (req) => {
     const metaMatriculaPlus = unidadeNome === 'Campo Grande' ? 21 : (unidadeNome === 'Recreio' ? 17 : 14);
     const metaIndicacao = unidadeNome === 'Campo Grande' ? 5 : (unidadeNome === 'Recreio' ? 4 : 3);
     const metaFamily = 3;
+    const metaTicketAcima = 10; // +R$10 acima da meta
+    
+    // Dados para Matriculador+
+    const ticketAcimaMeta = metasKpi.ticket_medio ? Math.max(0, ticketMedio - metasKpi.ticket_medio) : 0;
+    const leadsAbandonados = dados.leads_abandonados || 0;
+    const tarefasEmDia = dados.tarefas_em_dia !== false; // default true
 
+    // ⭐ Matrícula Plus
     const pctMatPlus = Math.min((novasMatriculas / metaMatriculaPlus) * 100, 100);
     const statusMatPlus = novasMatriculas >= metaMatriculaPlus ? '✅ BATIDA 🎉' : (pctMatPlus >= 70 ? '⚠️' : '❌');
-    relatorioTemplate += `⭐ *MATRÍCULA PLUS* (meta: ${metaMatriculaPlus})\n`;
+    relatorioTemplate += `⭐ *MATRÍCULA PLUS* (meta: ${metaMatriculaPlus}+)\n`;
     relatorioTemplate += `${criarBarraProgresso(pctMatPlus)} ${pctMatPlus.toFixed(0)}% ${statusMatPlus}\n`;
-    relatorioTemplate += `Atual: *${novasMatriculas}* | Meta: *${metaMatriculaPlus}*\n\n`;
+    relatorioTemplate += `Atual: *${novasMatriculas}* | Meta: *${metaMatriculaPlus}+*\n\n`;
 
+    // ⭐ Max Indicação
     const pctInd = Math.min((totalIndicacoes / metaIndicacao) * 100, 100);
     const statusInd = totalIndicacoes >= metaIndicacao ? '✅ BATIDA 🎉' : (pctInd >= 70 ? '⚠️' : '❌');
     relatorioTemplate += `⭐ *MAX INDICAÇÃO* (meta: ${metaIndicacao})\n`;
     relatorioTemplate += `${criarBarraProgresso(pctInd)} ${pctInd.toFixed(0)}% ${statusInd}\n`;
     relatorioTemplate += `Atual: *${totalIndicacoes}* | Meta: *${metaIndicacao}*\n\n`;
 
+    // ⭐ LA Music Family
     const pctFamily = Math.min((totalFamilyPacotes / metaFamily) * 100, 100);
     const statusFamily = totalFamilyPacotes >= metaFamily ? '✅ BATIDA 🎉' : (pctFamily >= 70 ? '⚠️' : '❌');
-    relatorioTemplate += `⭐ *LA MUSIC FAMILY* (meta: ${metaFamily})\n`;
+    relatorioTemplate += `⭐ *LA MUSIC FAMILY* (meta: ${metaFamily} pacotes/2º curso)\n`;
     relatorioTemplate += `${criarBarraProgresso(pctFamily)} ${pctFamily.toFixed(0)}% ${statusFamily}\n`;
     relatorioTemplate += `Atual: *${totalFamilyPacotes}* | Meta: *${metaFamily}*\n\n`;
+
+    // ⭐ Ticket Premiado
+    const pctTicketAcima = Math.min((ticketAcimaMeta / metaTicketAcima) * 100, 100);
+    const statusTicketAcima = ticketAcimaMeta >= metaTicketAcima ? '✅ BATIDA 🎉' : '❌';
+    relatorioTemplate += `⭐ *TICKET PREMIADO* (meta: +R$${metaTicketAcima} acima da meta)\n`;
+    relatorioTemplate += `${criarBarraProgresso(pctTicketAcima)} +R$${ticketAcimaMeta.toFixed(0)} ${statusTicketAcima}\n`;
+    relatorioTemplate += `Atual: *+R$${ticketAcimaMeta.toFixed(0)}* | Meta: *+R$${metaTicketAcima}*\n\n`;
+
+    // ⭐ Matriculador Emusys
+    const statusEmusys = (leadsAbandonados === 0 && tarefasEmDia) ? '✅ BATIDA 🎉' : '❌';
+    const pctEmusys = (leadsAbandonados === 0 && tarefasEmDia) ? 100 : 0;
+    relatorioTemplate += `⭐ *MATRICULADOR EMUSYS* (0 leads abandonados + tarefas em dia)\n`;
+    relatorioTemplate += `${criarBarraProgresso(pctEmusys)} ${statusEmusys}\n`;
+    relatorioTemplate += `Leads abandonados: *${leadsAbandonados}* | Tarefas: *${tarefasEmDia ? 'Em dia' : 'Pendentes'}*\n\n`;
 
     // Seções que a IA vai preencher
     relatorioTemplate += `───────────────────────\n`;

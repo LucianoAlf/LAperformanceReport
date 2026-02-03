@@ -1338,16 +1338,14 @@ export function TabProgramaMatriculador({ unidadeId, ano = 2026 }: TabProgramaMa
         </div>
       </div>
 
-      {/* Histórico Mensal */}
-      {historico && historico.historico && historico.historico.length > 0 && (
-        <HistoricoMensal 
-          historico={historico.historico.filter(h => h.unidade_id === unidadeId)}
-          mediaGrupo={historico.media_grupo}
-          config={config}
-          metaVolume={metaVolume}
-          metaTicket={metaTicket}
-        />
-      )}
+      {/* Histórico Mensal - sempre exibe, mesmo sem dados */}
+      <HistoricoMensal 
+        historico={historico?.historico?.filter(h => h.unidade_id === unidadeId) || []}
+        mediaGrupo={historico?.media_grupo || { taxa_geral: 0, volume_medio: 0, ticket_medio: 0 }}
+        config={config}
+        metaVolume={metaVolume}
+        metaTicket={metaTicket}
+      />
 
       {/* Mensagem Motivacional */}
       <div className={cn(
