@@ -34,12 +34,21 @@ const FARMERS_MAP: Record<string, { dupla: Array<{ nome: string; apelido: string
   },
 };
 
-// Programa Fideliza+ LA - Metas (iguais para todas as unidades)
+// Programa Fideliza+ LA - Metas (conforme banco programa_fideliza_config)
+// Sistema de pontuação trimestral com 5 critérios (100 pts base)
 const FIDELIZA_PLUS_METAS = {
-  churn_premiado: 3, // Taxa de churn abaixo de 3%
-  inadimplencia_zero: 0, // 0% de inadimplência
-  max_renovacao: 100, // 100% das renovações previstas
-  reajuste_campeao: 8.5, // Média de reajustes > 8,5%
+  churn_maximo: 4, // Taxa de churn ≤ 4% → 25 pts
+  inadimplencia_maxima: 1, // Inadimplência ≤ 1% → 20 pts
+  renovacao_minima: 90, // Taxa renovação ≥ 90% → 25 pts
+  reajuste_minimo: 7, // Reajuste médio ≥ 7% → 15 pts
+  // Lojinha: CG R$5.000 / BR+RC R$3.000 → 15 pts (verificado por unidade)
+};
+
+// Metas de Lojinha por unidade (trimestral)
+const METAS_LOJINHA: Record<string, number> = {
+  "2ec861f6-023f-4d7b-9927-3960ad8c2a92": 5000, // Campo Grande
+  "95553e96-971b-4590-a6eb-0201d013c14d": 3000, // Recreio
+  "368d47f5-2d88-4475-bc14-ba084a9a348e": 3000, // Barra
 };
 
 // Função para obter info das outras duplas de Farmers (concorrentes)
@@ -262,31 +271,61 @@ Deno.serve(async (req) => {
     const duplaFormatada = farmers ? formatarDupla(farmers.dupla) : null;
     const outrosFarmers = unidadeId ? getOutrosFarmers(unidadeId) : [];
 
-    // Calcular progresso no Fideliza+ LA
+    // Meta de Lojinha específica da unidade
+    const metaLojinhaUnidade = unidadeId ? METAS_LOJINHA[unidadeId] || 3000 : 3000;
+
+    // Calcular progresso no Fideliza+ LA (5 critérios conforme banco)
     const progressoFidelizaPlus = {
       churn_premiado: {
         atual: churnRate,
-        meta: FIDELIZA_PLUS_METAS.churn_premiado,
-        conquistou: churnRate < FIDELIZA_PLUS_METAS.churn_premiado,
+        meta: FIDELIZA_PLUS_METAS.churn_maximo,
+        conquistou: churnRate <= FIDELIZA_PLUS_METAS.churn_maximo,
+        pontos: 25,
       },
       inadimplencia_zero: {
         atual: inadimplencia,
-        meta: FIDELIZA_PLUS_METAS.inadimplencia_zero,
-        conquistou: inadimplencia === FIDELIZA_PLUS_METAS.inadimplencia_zero,
+        meta: FIDELIZA_PLUS_METAS.inadimplencia_maxima,
+        conquistou: inadimplencia <= FIDELIZA_PLUS_METAS.inadimplencia_maxima,
+        pontos: 20,
       },
       max_renovacao: {
         atual: taxaRenovacao,
-        meta: FIDELIZA_PLUS_METAS.max_renovacao,
-        conquistou: taxaRenovacao >= FIDELIZA_PLUS_METAS.max_renovacao,
+        meta: FIDELIZA_PLUS_METAS.renovacao_minima,
+        conquistou: taxaRenovacao >= FIDELIZA_PLUS_METAS.renovacao_minima,
+        pontos: 25,
       },
       reajuste_campeao: {
         atual: reajusteMedio,
-        meta: FIDELIZA_PLUS_METAS.reajuste_campeao,
-        conquistou: reajusteMedio !== null && reajusteMedio > FIDELIZA_PLUS_METAS.reajuste_campeao,
+        meta: FIDELIZA_PLUS_METAS.reajuste_minimo,
+        conquistou: reajusteMedio !== null && reajusteMedio >= FIDELIZA_PLUS_METAS.reajuste_minimo,
+        pontos: 15,
+      },
+      mestres_lojinha: {
+        atual: 0, // Será preenchido com dados reais quando disponível
+        meta: metaLojinhaUnidade,
+        conquistou: false, // Será calculado com dados reais
+        pontos: 15,
       },
     };
 
-    // Contar estrelas conquistadas
+    // Contar critérios batidos (5 critérios no total)
+    const criteriosBatidos = [
+      progressoFidelizaPlus.churn_premiado.conquistou,
+      progressoFidelizaPlus.inadimplencia_zero.conquistou,
+      progressoFidelizaPlus.max_renovacao.conquistou,
+      progressoFidelizaPlus.reajuste_campeao.conquistou,
+      progressoFidelizaPlus.mestres_lojinha.conquistou,
+    ].filter(Boolean).length;
+
+    // Calcular pontuação total
+    const pontuacaoTotal = 
+      (progressoFidelizaPlus.churn_premiado.conquistou ? 25 : 0) +
+      (progressoFidelizaPlus.inadimplencia_zero.conquistou ? 20 : 0) +
+      (progressoFidelizaPlus.max_renovacao.conquistou ? 25 : 0) +
+      (progressoFidelizaPlus.reajuste_campeao.conquistou ? 15 : 0) +
+      (progressoFidelizaPlus.mestres_lojinha.conquistou ? 15 : 0);
+
+    // Manter compatibilidade com código antigo (4 estrelas principais)
     const estrelasConquistadas = [
       progressoFidelizaPlus.churn_premiado.conquistou,
       progressoFidelizaPlus.inadimplencia_zero.conquistou,
@@ -360,12 +399,13 @@ PAINEL DE METAS DE GESTÃO (o que você deve analisar):
 6. **Inadimplência (%)**: Taxa de inadimplência (meta máxima)
 7. **Reajuste Médio (%)**: Percentual médio de reajuste nas renovações
 
-## PROGRAMA FIDELIZA+ LA (4 ESTRELAS):
-Para ${duplaFormatada?.nomes || "a dupla"} ganhar as estrelas este mês:
-⭐ Churn Premiado: Taxa de churn abaixo de ${FIDELIZA_PLUS_METAS.churn_premiado}%
-⭐ Inadimplência Zero: Fechar o mês com 0% de inadimplência
-⭐ Max Renovação: Realizar 100% das renovações previstas
-⭐ Reajuste Campeão: Média de reajustes superior a ${FIDELIZA_PLUS_METAS.reajuste_campeao}%
+## PROGRAMA FIDELIZA+ LA (5 CRITÉRIOS - 100 pts):
+Para ${duplaFormatada?.nomes || "a dupla"} conquistar pontos este trimestre:
+⭐ Churn Premiado (25 pts): Taxa de churn ≤ ${FIDELIZA_PLUS_METAS.churn_maximo}%
+⭐ Inadimplência 1% (20 pts): Inadimplência ≤ ${FIDELIZA_PLUS_METAS.inadimplencia_maxima}%
+⭐ Max Renovação (25 pts): Taxa de renovação ≥ ${FIDELIZA_PLUS_METAS.renovacao_minima}%
+⭐ Reajuste Campeão (15 pts): Média de reajustes ≥ ${FIDELIZA_PLUS_METAS.reajuste_minimo}%
+🛒 Mestres da Lojinha (15 pts): Vendas ≥ R$ ${metaLojinhaUnidade.toLocaleString('pt-BR')}
 
 PRÊMIOS: Experiências culinárias, culturais, passeios, cinema, troféus! 
 GANHADOR DO ANO: 14º Salário + VR por 6 meses! 🏆
@@ -493,7 +533,7 @@ Responda APENAS em JSON válido, sem markdown, no formato:
     "estrelas_possiveis": 4,
     "detalhamento": [
       {
-        "estrela": "Churn Premiado" | "Inadimplência Zero" | "Max Renovação" | "Reajuste Campeão",
+        "estrela": "Churn Premiado" | "Inadimplência 1%" | "Max Renovação" | "Reajuste Campeão",
         "status": "conquistada" | "proxima" | "longe",
         "atual": number,
         "meta": number,
@@ -545,7 +585,7 @@ ${!is_consolidado && duplaFormatada ? `## FARMERS: ${duplaFormatada.nomes} (${du
 | Taxa Renovação | ${taxaRenovacao.toFixed(0)}% | ${metaTaxaRenovacao ? `${metaTaxaRenovacao}%` : 'N/D'} | ${metaTaxaRenovacao ? (taxaRenovacao >= metaTaxaRenovacao ? '✅' : '❌') : '⚪'} |
 | Tempo Permanência | ${tempoPermanencia.toFixed(0)} meses | ${metaTempoPermanencia ? `${metaTempoPermanencia} meses` : 'N/D'} | ${metaTempoPermanencia ? (tempoPermanencia >= metaTempoPermanencia ? '✅' : '❌') : '⚪'} |
 | Inadimplência | ${inadimplencia.toFixed(1)}% | ${metaInadimplenciaMaxima ? `máx ${metaInadimplenciaMaxima}%` : 'N/D'} | ${metaInadimplenciaMaxima ? (inadimplencia <= metaInadimplenciaMaxima ? '✅' : '❌') : '⚪'} |
-| Reajuste Médio | ${reajusteMedio ? `${reajusteMedio.toFixed(1)}%` : 'N/D'} | >${FIDELIZA_PLUS_METAS.reajuste_campeao}% (Fideliza+) | ${reajusteMedio ? (reajusteMedio > FIDELIZA_PLUS_METAS.reajuste_campeao ? '✅' : '❌') : '⚪'} |
+| Reajuste Médio | ${reajusteMedio ? `${reajusteMedio.toFixed(1)}%` : 'N/D'} | ≥${FIDELIZA_PLUS_METAS.reajuste_minimo}% (Fideliza+) | ${reajusteMedio ? (reajusteMedio >= FIDELIZA_PLUS_METAS.reajuste_minimo ? '✅' : '❌') : '⚪'} |
 
 📅 ANÁLISE TEMPORAL - DIA ${diaAtual}/${diasNoMes} (${percentualMesDecorrido}% do mês):
 - Dias restantes: ${diasRestantes}
@@ -580,11 +620,12 @@ ${permanenciaFormatada ? `⏱️ DISTRIBUIÇÃO POR PERMANÊNCIA:\n${permanencia
 
 ${comparativoUnidades}
 
-🏆 PROGRAMA FIDELIZA+ LA (${estrelasConquistadas}/4 estrelas):
-⭐ Churn Premiado (<${FIDELIZA_PLUS_METAS.churn_premiado}%): ${progressoFidelizaPlus.churn_premiado.conquistou ? '✅ CONQUISTOU!' : '❌'} (${churnRate.toFixed(1)}%)
-⭐ Inadimplência Zero (0%): ${progressoFidelizaPlus.inadimplencia_zero.conquistou ? '✅ CONQUISTOU!' : '❌'} (${inadimplencia.toFixed(1)}%)
-⭐ Max Renovação (100%): ${progressoFidelizaPlus.max_renovacao.conquistou ? '✅ CONQUISTOU!' : '❌'} (${taxaRenovacao.toFixed(0)}%)
-⭐ Reajuste Campeão (>${FIDELIZA_PLUS_METAS.reajuste_campeao}%): ${progressoFidelizaPlus.reajuste_campeao.conquistou ? '✅ CONQUISTOU!' : '❌'} (${reajusteMedio ? `${reajusteMedio.toFixed(1)}%` : 'N/D'})
+🏆 PROGRAMA FIDELIZA+ LA (${pontuacaoTotal}/100 pts - ${criteriosBatidos}/5 critérios):
+⭐ Churn Premiado (≤${FIDELIZA_PLUS_METAS.churn_maximo}% → 25pts): ${progressoFidelizaPlus.churn_premiado.conquistou ? '✅ +25pts' : '❌ 0pts'} (${churnRate.toFixed(1)}%)
+⭐ Inadimplência 1% (≤${FIDELIZA_PLUS_METAS.inadimplencia_maxima}% → 20pts): ${progressoFidelizaPlus.inadimplencia_zero.conquistou ? '✅ +20pts' : '❌ 0pts'} (${inadimplencia.toFixed(1)}%)
+⭐ Max Renovação (≥${FIDELIZA_PLUS_METAS.renovacao_minima}% → 25pts): ${progressoFidelizaPlus.max_renovacao.conquistou ? '✅ +25pts' : '❌ 0pts'} (${taxaRenovacao.toFixed(0)}%)
+⭐ Reajuste Campeão (≥${FIDELIZA_PLUS_METAS.reajuste_minimo}% → 15pts): ${progressoFidelizaPlus.reajuste_campeao.conquistou ? '✅ +15pts' : '❌ 0pts'} (${reajusteMedio ? `${reajusteMedio.toFixed(1)}%` : 'N/D'})
+🛒 Mestres da Lojinha (≥R$${metaLojinhaUnidade.toLocaleString('pt-BR')} → 15pts): ${progressoFidelizaPlus.mestres_lojinha.conquistou ? '✅ +15pts' : '❌ 0pts'}
 
 ---
 
@@ -650,7 +691,7 @@ ${!is_consolidado && duplaFormatada ? `LEMBRE-SE: Chame ${duplaFormatada.apelido
         conquistas: progressoFidelizaPlus.churn_premiado.conquistou ? [{
           tipo: 'meta_batida',
           titulo: 'Churn Premiado!',
-          descricao: `Churn de ${churnRate.toFixed(1)}% está abaixo de ${FIDELIZA_PLUS_METAS.churn_premiado}% - Estrela Fideliza+ conquistada!`,
+          descricao: `Churn de ${churnRate.toFixed(1)}% está dentro da meta de ${FIDELIZA_PLUS_METAS.churn_maximo}% - +25 pontos Fideliza+!`,
           emoji: '🏆'
         }] : [],
         alertas_urgentes: totalUrgente7Dias > 0 ? [{
@@ -698,7 +739,7 @@ ${!is_consolidado && duplaFormatada ? `LEMBRE-SE: Chame ${duplaFormatada.apelido
           estrelas_conquistadas: estrelasConquistadas,
           estrelas_possiveis: 4,
           proxima_estrela: !progressoFidelizaPlus.churn_premiado.conquistou ? 'Churn Premiado' : 
-                          !progressoFidelizaPlus.inadimplencia_zero.conquistou ? 'Inadimplência Zero' :
+                          !progressoFidelizaPlus.inadimplencia_zero.conquistou ? 'Inadimplência 1%' :
                           !progressoFidelizaPlus.max_renovacao.conquistou ? 'Max Renovação' : 'Reajuste Campeão',
           dica_experiencia: 'Qual experiência vocês vão curtir esse mês?'
         },

@@ -379,21 +379,23 @@ export function ModalProduto({ open, onClose, onSuccess, produto, categorias, un
                   )}
                 </div>
                 <div>
-                  <label className="cursor-pointer">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFotoUpload}
-                      className="hidden"
-                      disabled={uploadingFoto}
-                    />
-                    <Button variant="outline" size="sm" asChild disabled={uploadingFoto}>
-                      <span>
-                        <Upload className="w-4 h-4 mr-1" />
-                        {uploadingFoto ? 'Enviando...' : fotoPreview ? 'Trocar Foto' : 'Escolher Foto'}
-                      </span>
-                    </Button>
-                  </label>
+                  <input
+                    type="file"
+                    id="foto-produto-input"
+                    accept="image/*"
+                    onChange={handleFotoUpload}
+                    className="hidden"
+                    disabled={uploadingFoto}
+                  />
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    disabled={uploadingFoto}
+                    onClick={() => document.getElementById('foto-produto-input')?.click()}
+                  >
+                    <Upload className="w-4 h-4 mr-1" />
+                    {uploadingFoto ? 'Enviando...' : fotoPreview ? 'Trocar Foto' : 'Escolher Foto'}
+                  </Button>
                   <p className="text-xs text-slate-500 mt-1">PNG, JPG até 2MB. Opcional.</p>
                   {fotoPreview && (
                     <button

@@ -548,19 +548,23 @@ function ModalResponsavel({ open, onClose, onSuccess, responsavel }: ModalRespon
     setLoading(true);
     try {
       if (responsavel) {
-        await supabase
+        const { error } = await supabase
           .from('loja_responsaveis_reposicao')
           .update({ nome, whatsapp: whatsappFormatado, unidade_id: unidadeId })
           .eq('id', responsavel.id);
+        
+        if (error) throw error;
       } else {
-        await supabase
+        const { error } = await supabase
           .from('loja_responsaveis_reposicao')
           .insert({ nome, whatsapp: whatsappFormatado, unidade_id: unidadeId, ativo: true });
+        
+        if (error) throw error;
       }
       onSuccess();
     } catch (error) {
       console.error('Erro ao salvar responsável:', error);
-      alert('Erro ao salvar');
+      alert(`Erro ao salvar: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
     } finally {
       setLoading(false);
     }

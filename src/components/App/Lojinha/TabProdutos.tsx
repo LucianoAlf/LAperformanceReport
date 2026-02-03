@@ -219,10 +219,10 @@ export function TabProdutos({ unidadeId }: TabProdutosProps) {
                 <SelectValue placeholder="Todos Status" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="todos">📊 Todos Status</SelectItem>
-                <SelectItem value="ativos">✅ Ativos</SelectItem>
-                <SelectItem value="inativos">❌ Inativos</SelectItem>
-                <SelectItem value="estoque_baixo">⚠️ Estoque Baixo</SelectItem>
+                <SelectItem value="todos">� Todos Status</SelectItem>
+                <SelectItem value="ativos">🟢 Ativos</SelectItem>
+                <SelectItem value="inativos">🔴 Inativos</SelectItem>
+                <SelectItem value="estoque_baixo">🟡 Estoque Baixo</SelectItem>
               </SelectContent>
             </Select>
             {/* Botões */}

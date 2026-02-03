@@ -118,41 +118,43 @@ export function AlertasRetencao({ unidadeId, ano, mes }: AlertasRetencaoProps) {
         const churnMedio = kpis.reduce((acc, k) => acc + (k.churn_rate || 0), 0) / kpis.length;
         const inadimplenciaMedio = kpis.reduce((acc, k) => acc + (k.inadimplencia_pct || 0), 0) / kpis.length;
 
-        // Verificar metas Fideliza+
-        // Churn Premiado: <3,5%
-        if (churnMedio < 3.5) {
+        // Verificar metas Fideliza+ LA (conforme banco programa_fideliza_config)
+        // Churn Premiado: ≤ 4% → 25 pts
+        if (churnMedio <= 4) {
           alertasGerados.push({
             id: 'churn-premiado',
             tipo: 'sucesso',
-            titulo: '🏆 Churn Premiado! Meta Fideliza+ batida!',
-            descricao: `Churn de ${churnMedio.toFixed(1)}% está abaixo de 3,5%`,
+            titulo: '🏆 Churn Premiado! +25 pts Fideliza+',
+            descricao: `Churn de ${churnMedio.toFixed(1)}% está dentro da meta de 4%`,
             icone: <CheckCircle className="w-5 h-5" />
           });
         } else if (churnMedio > 5) {
           alertasGerados.push({
             id: 'churn-alto',
             tipo: 'critico',
-            titulo: `Churn de ${churnMedio.toFixed(1)}% acima do ideal`,
-            descricao: 'Meta Fideliza+ é abaixo de 3,5%. Foco em retenção!',
+            titulo: `Churn de ${churnMedio.toFixed(1)}% acima da meta`,
+            descricao: 'Meta Fideliza+ é ≤ 4%. Foco em retenção!',
             icone: <TrendingDown className="w-5 h-5" />
           });
         }
 
-        // Inadimplência Zero: 0%
-        if (inadimplenciaMedio === 0) {
+        // Inadimplência 1%: ≤ 1% → 20 pts
+        if (inadimplenciaMedio <= 1) {
           alertasGerados.push({
-            id: 'inadimplencia-zero',
+            id: 'inadimplencia-1pct',
             tipo: 'sucesso',
-            titulo: '🎉 Inadimplência Zero! Meta Fideliza+ batida!',
-            descricao: 'Parabéns! Nenhuma inadimplência no mês!',
+            titulo: '🎉 Inadimplência 1%! +20 pts Fideliza+',
+            descricao: inadimplenciaMedio === 0 
+              ? 'Parabéns! Nenhuma inadimplência no mês!' 
+              : `Inadimplência de ${inadimplenciaMedio.toFixed(1)}% está dentro da meta de 1%`,
             icone: <CheckCircle className="w-5 h-5" />
           });
-        } else if (inadimplenciaMedio >= 2) {
+        } else if (inadimplenciaMedio > 2) {
           alertasGerados.push({
             id: 'inadimplencia-alta',
             tipo: 'atencao',
             titulo: `Inadimplência de ${inadimplenciaMedio.toFixed(1)}%`,
-            descricao: 'Meta Fideliza+ é 0%. Verificar cobranças pendentes.',
+            descricao: 'Meta Fideliza+ é ≤ 1%. Verificar cobranças pendentes.',
             icone: <AlertTriangle className="w-5 h-5" />
           });
         }
@@ -172,21 +174,23 @@ export function AlertasRetencao({ unidadeId, ano, mes }: AlertasRetencaoProps) {
       if (retencao && retencao.length > 0) {
         const taxaRenovacaoMedia = retencao.reduce((acc, r) => acc + (r.taxa_renovacao || 0), 0) / retencao.length;
 
-        // Max Renovação: 100%
-        if (taxaRenovacaoMedia >= 100) {
+        // Max Renovação: ≥ 90% → 25 pts
+        if (taxaRenovacaoMedia >= 90) {
           alertasGerados.push({
             id: 'max-renovacao',
             tipo: 'sucesso',
-            titulo: '🔥 Max Renovação! Meta Fideliza+ batida!',
-            descricao: '100% das renovações previstas realizadas!',
+            titulo: '🔥 Max Renovação! +25 pts Fideliza+',
+            descricao: taxaRenovacaoMedia >= 100 
+              ? '100% das renovações previstas realizadas!' 
+              : `Taxa de ${taxaRenovacaoMedia.toFixed(0)}% está dentro da meta de 90%`,
             icone: <TrendingUp className="w-5 h-5" />
           });
-        } else if (taxaRenovacaoMedia < 90) {
+        } else if (taxaRenovacaoMedia < 80) {
           alertasGerados.push({
             id: 'renovacao-baixa',
             tipo: 'atencao',
             titulo: `Taxa de renovação de ${taxaRenovacaoMedia.toFixed(0)}%`,
-            descricao: 'Meta Fideliza+ é 100%. Foco nas renovações pendentes!',
+            descricao: 'Meta Fideliza+ é ≥ 90%. Foco nas renovações pendentes!',
             icone: <TrendingDown className="w-5 h-5" />
           });
         }
