@@ -146,6 +146,22 @@ export function TabComissoes({ unidadeId }: TabComissoesProps) {
     }
   }
 
+  // Mapeamento de Farmers por unidade
+  const FARMERS_POR_UNIDADE: Record<string, { nomes: string; detalhes: string }> = {
+    '2ec861f6-023f-4d7b-9927-3960ad8c2a92': { nomes: 'Gabi e Jhon', detalhes: 'Gabi R$38 • Jhon R$24' }, // Campo Grande
+    '95553e96-971b-4590-a6eb-0201d013c14d': { nomes: 'Fefê e Dai', detalhes: 'Fefê R$35 • Dai R$27' }, // Recreio
+    '368d47f5-2d88-4475-bc14-ba084a9a348e': { nomes: 'Duda e Arthur', detalhes: 'Duda R$38 • Arthur R$24' }, // Barra
+  };
+
+  // Obter detalhes dos farmers baseado na unidade selecionada
+  const getFarmersDetalhes = () => {
+    if (!unidadeId || unidadeId === 'todos') {
+      // Consolidado: mostrar todos
+      return 'Todas as unidades';
+    }
+    return FARMERS_POR_UNIDADE[unidadeId]?.detalhes || 'Farmers da unidade';
+  };
+
   // KPIs
   const totalComissoesMes = 92; // TODO: calcular do banco
   const comissoesFarmers = 62;
@@ -211,7 +227,7 @@ export function TabComissoes({ unidadeId }: TabComissoesProps) {
         <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
           <p className="text-xs text-slate-400 uppercase font-medium">Farmers</p>
           <p className="text-2xl font-bold text-sky-400 font-mono mt-1">R$ {comissoesFarmers}</p>
-          <p className="text-xs text-slate-500 mt-1">Duda R$38 • Arthur R$24</p>
+          <p className="text-xs text-slate-500 mt-1">{getFarmersDetalhes()}</p>
         </div>
         <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
           <p className="text-xs text-slate-400 uppercase font-medium">Professores</p>
