@@ -177,58 +177,44 @@ export function LoginPage() {
             />
           </motion.div>
 
-          {/* Features - posicionado mais abaixo */}
+          {/* Features */}
           <motion.div 
-            className="flex-1 flex flex-col justify-end pb-16 max-w-lg"
+            className="flex-1 flex flex-col justify-center max-w-lg"
             variants={containerVariants}
             initial="hidden"
             animate="visible"
           >
             <motion.h2 
-              className="text-2xl font-bold text-white mb-2"
+              className="text-3xl font-bold text-white mb-3"
               variants={itemVariants}
             >
               Tudo que nosso Time precisa
             </motion.h2>
             <motion.p 
-              className="text-gray-400 mb-6 text-base"
+              className="text-gray-400 mb-10 text-lg"
               variants={itemVariants}
             >
               Gestão completa da LA Music em um só lugar
             </motion.p>
 
-            {/* Container com Glassmorphism */}
-            <motion.div 
-              className="relative p-4 rounded-2xl bg-white/[0.08] backdrop-blur-xl border border-white/[0.15] shadow-2xl"
-              variants={itemVariants}
-              style={{
-                background: 'linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0.03) 100%)',
-              }}
-            >
-              {/* Brilho sutil nas bordas */}
-              <div className="absolute inset-0 rounded-2xl overflow-hidden pointer-events-none">
-                <div className="absolute -top-px -left-px w-1/2 h-px bg-gradient-to-r from-transparent via-white/25 to-transparent" />
-                <div className="absolute -top-px -left-px h-1/2 w-px bg-gradient-to-b from-transparent via-white/25 to-transparent" />
-              </div>
-              
-              <div className="space-y-2">
-                {features.map((feature, index) => (
-                  <motion.div
-                    key={feature.title}
-                    className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-white/[0.05] transition-colors"
-                    variants={itemVariants}
-                  >
-                    <div className="flex-shrink-0 w-9 h-9 rounded-lg bg-gradient-to-br from-cyan-500/25 to-violet-500/25 flex items-center justify-center border border-white/10">
-                      <feature.icon className="w-4 h-4 text-cyan-400" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-white font-medium text-sm">{feature.title}</h3>
-                      <p className="text-gray-500 text-xs">{feature.description}</p>
-                    </div>
-                  </motion.div>
-                ))}
-              </div>
-            </motion.div>
+            {/* Cards descidos um pouco */}
+            <div className="space-y-3 mt-8">
+              {features.map((feature, index) => (
+                <motion.div
+                  key={feature.title}
+                  className="flex items-center gap-4 p-4 rounded-xl bg-white/[0.06] backdrop-blur-md border border-white/[0.12] shadow-lg"
+                  variants={itemVariants}
+                >
+                  <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-500/20 to-violet-500/20 flex items-center justify-center border border-white/10">
+                    <feature.icon className="w-5 h-5 text-cyan-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-white font-medium text-sm">{feature.title}</h3>
+                    <p className="text-gray-500 text-xs">{feature.description}</p>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
           </motion.div>
 
           {/* Footer */}
