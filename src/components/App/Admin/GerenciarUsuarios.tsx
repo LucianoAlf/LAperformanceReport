@@ -16,6 +16,8 @@ import {
   X,
   Loader2,
   KeyRound,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
@@ -54,6 +56,8 @@ export function GerenciarUsuarios() {
   const [formPerfil, setFormPerfil] = useState<'admin' | 'unidade'>('unidade');
   const [formUnidadeId, setFormUnidadeId] = useState<string>('');
   const [formAtivo, setFormAtivo] = useState(true);
+  const [formNovaSenha, setFormNovaSenha] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     if (!isAdmin) {
@@ -115,6 +119,8 @@ export function GerenciarUsuarios() {
       setFormUnidadeId('');
       setFormAtivo(true);
     }
+    setFormNovaSenha('');
+    setShowPassword(false);
     setShowModal(true);
   };
 
@@ -188,23 +194,46 @@ export function GerenciarUsuarios() {
     }
   };
 
-  const handleResetPassword = async () => {
-    if (!editingUser?.email) return;
+  const handleChangePassword = async () => {
+    if (!editingUser?.id || !formNovaSenha) {
+      toast.error('Digite a nova senha');
+      return;
+    }
+
+    if (formNovaSenha.length < 6) {
+      toast.error('A senha deve ter pelo menos 6 caracteres');
+      return;
+    }
 
     setSendingReset(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(editingUser.email, {
-        redirectTo: `${window.location.origin}/reset-password`,
+      // Buscar o auth_user_id do usuário
+      const { data: userData, error: userError } = await supabase
+        .from('usuarios')
+        .select('auth_user_id')
+        .eq('id', editingUser.id)
+        .single();
+
+      if (userError || !userData?.auth_user_id) {
+        throw new Error('Usuário não encontrado no sistema de autenticação');
+      }
+
+      // Chamar Edge Function para alterar senha
+      const { data, error } = await supabase.functions.invoke('admin-update-password', {
+        body: {
+          userId: userData.auth_user_id,
+          newPassword: formNovaSenha,
+        },
       });
 
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
-      toast.success(
-        `Email de redefinição enviado para ${editingUser.email}. O usuário receberá um link para criar nova senha.`,
-        { duration: 6000 }
-      );
+      toast.success(`Senha de ${editingUser.nome} alterada com sucesso!`);
+      setFormNovaSenha('');
+      setShowPassword(false);
     } catch (error: any) {
-      toast.error(`Erro ao enviar email: ${error.message}`);
+      toast.error(`Erro ao alterar senha: ${error.message}`);
     } finally {
       setSendingReset(false);
     }
@@ -426,24 +455,41 @@ export function GerenciarUsuarios() {
                 </Label>
               </div>
 
-              {/* Botão de Redefinir Senha - apenas para usuários existentes */}
+              {/* Campo de Nova Senha - apenas para usuários existentes */}
               {editingUser && (
-                <div className="pt-4 border-t border-slate-700">
+                <div className="pt-4 border-t border-slate-700 space-y-3">
+                  <label className="block text-sm text-gray-400">
+                    <KeyRound className="w-4 h-4 inline mr-1" />
+                    Nova Senha (opcional)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      value={formNovaSenha}
+                      onChange={(e) => setFormNovaSenha(e.target.value)}
+                      className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 pr-12 text-white placeholder-gray-500 focus:outline-none focus:border-amber-500/50"
+                      placeholder="Digite a nova senha (mín. 6 caracteres)"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                    >
+                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                    </button>
+                  </div>
                   <button
-                    onClick={handleResetPassword}
-                    disabled={sendingReset}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-amber-500/20 text-amber-400 rounded-xl hover:bg-amber-500/30 transition-colors disabled:opacity-50"
+                    onClick={handleChangePassword}
+                    disabled={sendingReset || !formNovaSenha}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-amber-500/20 text-amber-400 rounded-xl hover:bg-amber-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {sendingReset ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
                       <KeyRound className="w-4 h-4" />
                     )}
-                    {sendingReset ? 'Enviando...' : 'Enviar Email de Redefinição de Senha'}
+                    {sendingReset ? 'Alterando...' : 'Alterar Senha'}
                   </button>
-                  <p className="text-xs text-gray-500 mt-2 text-center">
-                    O usuário receberá um email com link para criar nova senha
-                  </p>
                 </div>
               )}
             </div>
