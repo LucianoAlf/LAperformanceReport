@@ -15,6 +15,7 @@ import {
   Check,
   X,
   Loader2,
+  KeyRound,
 } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
@@ -45,6 +46,7 @@ export function GerenciarUsuarios() {
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState<Usuario | null>(null);
   const [saving, setSaving] = useState(false);
+  const [sendingReset, setSendingReset] = useState(false);
 
   // Form state
   const [formEmail, setFormEmail] = useState('');
@@ -183,6 +185,28 @@ export function GerenciarUsuarios() {
       carregarDados();
     } catch (error: any) {
       toast.error(`Erro: ${error.message}`);
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!editingUser?.email) return;
+
+    setSendingReset(true);
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(editingUser.email, {
+        redirectTo: `${window.location.origin}/reset-password`,
+      });
+
+      if (error) throw error;
+
+      toast.success(
+        `Email de redefinição enviado para ${editingUser.email}. O usuário receberá um link para criar nova senha.`,
+        { duration: 6000 }
+      );
+    } catch (error: any) {
+      toast.error(`Erro ao enviar email: ${error.message}`);
+    } finally {
+      setSendingReset(false);
     }
   };
 
@@ -401,6 +425,27 @@ export function GerenciarUsuarios() {
                   Usuário ativo
                 </Label>
               </div>
+
+              {/* Botão de Redefinir Senha - apenas para usuários existentes */}
+              {editingUser && (
+                <div className="pt-4 border-t border-slate-700">
+                  <button
+                    onClick={handleResetPassword}
+                    disabled={sendingReset}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-amber-500/20 text-amber-400 rounded-xl hover:bg-amber-500/30 transition-colors disabled:opacity-50"
+                  >
+                    {sendingReset ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <KeyRound className="w-4 h-4" />
+                    )}
+                    {sendingReset ? 'Enviando...' : 'Enviar Email de Redefinição de Senha'}
+                  </button>
+                  <p className="text-xs text-gray-500 mt-2 text-center">
+                    O usuário receberá um email com link para criar nova senha
+                  </p>
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end gap-3 mt-6">
