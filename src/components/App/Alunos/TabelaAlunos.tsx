@@ -1115,6 +1115,19 @@ export function TabelaAlunos({
                           )}
                         </button>
                       )}
+                      {/* Health Score - Coração de percepção do professor */}
+                      {aluno.health_score && (
+                        <Tooltip content={
+                          aluno.health_score === 'verde' ? 'Aluno saudável' :
+                          aluno.health_score === 'amarelo' ? 'Aluno em alerta' :
+                          'Aluno em situação emergente'
+                        }>
+                          <span className="text-base">
+                            {aluno.health_score === 'verde' ? '💚' :
+                             aluno.health_score === 'amarelo' ? '💛' : '❤️'}
+                          </span>
+                        </Tooltip>
+                      )}
                       <button
                         onClick={() => setAlunoFicha(aluno)}
                         className="text-left text-white hover:text-purple-400 hover:underline transition-colors font-medium min-w-[150px]"

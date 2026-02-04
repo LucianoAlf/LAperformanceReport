@@ -699,37 +699,53 @@ export function ModalRelatorio({
     setTextoRelatorio(texto);
   }
 
-  function copiarRelatorio() {
-    // Usar método mais compatível com webviews/IDEs
-    const textarea = document.createElement('textarea');
-    textarea.value = textoRelatorio;
-    textarea.style.position = 'fixed';
-    textarea.style.top = '0';
-    textarea.style.left = '0';
-    textarea.style.width = '2em';
-    textarea.style.height = '2em';
-    textarea.style.padding = '0';
-    textarea.style.border = 'none';
-    textarea.style.outline = 'none';
-    textarea.style.boxShadow = 'none';
-    textarea.style.background = 'transparent';
-    document.body.appendChild(textarea);
-    textarea.focus();
-    textarea.select();
+  async function copiarRelatorio() {
+    if (!textoRelatorio) return;
     
     try {
+      // Tentar usar a API moderna primeiro
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(textoRelatorio);
+        setCopiado(true);
+        setTimeout(() => setCopiado(false), 2000);
+        return;
+      }
+      
+      // Fallback para método legado
+      const textarea = document.createElement('textarea');
+      textarea.value = textoRelatorio;
+      textarea.style.position = 'fixed';
+      textarea.style.top = '0';
+      textarea.style.left = '0';
+      textarea.style.width = '2em';
+      textarea.style.height = '2em';
+      textarea.style.padding = '0';
+      textarea.style.border = 'none';
+      textarea.style.outline = 'none';
+      textarea.style.boxShadow = 'none';
+      textarea.style.background = 'transparent';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      
       const successful = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      
       if (successful) {
         setCopiado(true);
         setTimeout(() => setCopiado(false), 2000);
       } else {
-        console.error('execCommand retornou false');
+        throw new Error('execCommand retornou false');
       }
     } catch (err) {
       console.error('Erro ao copiar:', err);
+      // Tentar abrir em nova janela como último recurso
+      const blob = new Blob([textoRelatorio], { type: 'text/plain' });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
+      URL.revokeObjectURL(url);
     }
-    
-    document.body.removeChild(textarea);
   }
 
   function voltar() {

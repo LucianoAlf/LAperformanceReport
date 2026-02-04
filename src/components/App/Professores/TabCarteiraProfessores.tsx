@@ -46,6 +46,7 @@ interface AlunoCarteira {
   tempo_permanencia_meses: number;
   data_fim_contrato: string | null;
   status: string;
+  health_score?: 'verde' | 'amarelo' | 'vermelho' | null;
 }
 
 interface Props {
@@ -260,7 +261,7 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
         .from('alunos')
         .select(`
           id, nome, classificacao, idade_atual, valor_parcela, tempo_permanencia_meses,
-          dia_aula, horario_aula, data_fim_contrato, data_matricula, status,
+          dia_aula, horario_aula, data_fim_contrato, data_matricula, status, health_score,
           cursos(nome)
         `)
         .eq('professor_atual_id', professorId)
@@ -294,7 +295,8 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
           valor_parcela: Number(a.valor_parcela) || 0,
           tempo_permanencia_meses: a.tempo_permanencia_meses || 0,
           data_fim_contrato: fimContrato,
-          status: a.status
+          status: a.status,
+          health_score: a.health_score || null
         };
       });
 
@@ -638,7 +640,21 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
                       <tbody>
                         {alunosExpandido.map((aluno) => (
                           <tr key={aluno.id} className="border-b border-slate-800/50 hover:bg-slate-800/30">
-                            <td className="py-2 text-white">{aluno.nome}</td>
+                            <td className="py-2 text-white flex items-center gap-2">
+                              {aluno.health_score && (
+                                <Tooltip content={
+                                  aluno.health_score === 'verde' ? 'Aluno saudável' :
+                                  aluno.health_score === 'amarelo' ? 'Aluno em alerta' :
+                                  'Aluno em situação emergente'
+                                }>
+                                  <span className="text-base">
+                                    {aluno.health_score === 'verde' ? '💚' :
+                                     aluno.health_score === 'amarelo' ? '💛' : '❤️'}
+                                  </span>
+                                </Tooltip>
+                              )}
+                              {aluno.nome}
+                            </td>
                             <td className="py-2">
                               <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                                 aluno.classificacao === 'LAMK' 

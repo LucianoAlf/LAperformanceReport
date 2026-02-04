@@ -31,7 +31,8 @@ import { AlertasRetencao } from './AlertasRetencao';
 import { PlanoAcaoRetencao } from './PlanoAcaoRetencao';
 import { TabProgramaFideliza } from './TabProgramaFideliza';
 import { TabLojinha } from '../Lojinha';
-import { Trophy, ShoppingBag } from 'lucide-react';
+import { PainelFarmer } from './PainelFarmer';
+import { Trophy, ShoppingBag, ClipboardList } from 'lucide-react';
 
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 
@@ -105,7 +106,7 @@ export function AdministrativoPage() {
   // Estado
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>('renovacoes');
-  const [mainTab, setMainTab] = useState<'lancamentos' | 'fideliza' | 'lojinha'>('lancamentos');
+  const [mainTab, setMainTab] = useState<'lancamentos' | 'fideliza' | 'lojinha' | 'farmer'>('lancamentos');
   
   // Dados
   const [resumo, setResumo] = useState<ResumoMes | null>(null);
@@ -599,6 +600,18 @@ export function AdministrativoPage() {
           <ShoppingBag className="w-4 h-4" />
           Lojinha
         </button>
+        <button
+          onClick={() => setMainTab('farmer')}
+          className={cn(
+            "flex items-center gap-2 px-5 py-2.5 rounded-t-xl text-sm font-medium transition-all",
+            mainTab === 'farmer'
+              ? "bg-gradient-to-r from-violet-500 to-purple-500 text-white shadow-lg shadow-violet-500/20"
+              : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white"
+          )}
+        >
+          <ClipboardList className="w-4 h-4" />
+          Painel Farmer
+        </button>
       </div>
 
       {/* Conteúdo baseado na tab principal */}
@@ -609,6 +622,12 @@ export function AdministrativoPage() {
         />
       ) : mainTab === 'lojinha' ? (
         <TabLojinha unidadeId={unidade} />
+      ) : mainTab === 'farmer' ? (
+        <PainelFarmer 
+          unidadeId={unidade} 
+          ano={competenciaFiltro.filtro.ano}
+          mes={competenciaFiltro.filtro.mes}
+        />
       ) : (
         <>
       {/* Alertas Inteligentes de Retenção */}

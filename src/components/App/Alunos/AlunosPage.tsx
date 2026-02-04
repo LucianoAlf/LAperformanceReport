@@ -58,6 +58,8 @@ export interface Aluno {
   cursos_ids?: number[]; // IDs de todos os cursos do aluno
   outros_cursos?: Aluno[]; // Outros registros do mesmo aluno (segundo curso)
   valor_total?: number; // Soma de todos os valores de parcela
+  // Health Score - percepção do professor
+  health_score?: 'verde' | 'amarelo' | 'vermelho' | null;
 }
 
 export interface Turma {

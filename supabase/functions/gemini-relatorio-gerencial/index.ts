@@ -521,57 +521,83 @@ Deno.serve(async (req) => {
     relatorioTemplate += `${criarBarraProgresso(pctLojinha)} R$${vendasLojinha.toLocaleString('pt-BR')} ${statusLojinha}\n`;
     relatorioTemplate += `Atual: *R$${vendasLojinha.toLocaleString('pt-BR')}* | Meta: *R$${metaLojinha.toLocaleString('pt-BR')}*\n\n`;
 
-    // PROGRAMA MATRICULADOR+ LA (5 Estrelas - ANUAL)
+    // PROGRAMA MATRICULADOR+ LA (Taxas de Conversão - ANUAL)
     relatorioTemplate += `───────────────────────\n`;
     relatorioTemplate += `🎯 *PROGRAMA MATRICULADOR+ LA* (Anual)\n`;
     relatorioTemplate += `───────────────────────\n`;
     relatorioTemplate += `Hunter: *${hunterNome}*\n\n`;
 
-    // Metas do Matriculador+ variam por unidade
-    const metaMatriculaPlus = unidadeNome === 'Campo Grande' ? 21 : (unidadeNome === 'Recreio' ? 17 : 14);
-    const metaIndicacao = unidadeNome === 'Campo Grande' ? 5 : (unidadeNome === 'Recreio' ? 4 : 3);
-    const metaFamily = 3;
-    const metaTicketAcima = 10; // +R$10 acima da meta
+    // Metas do Matriculador+ (taxas de conversão)
+    const metaTaxaShowup = 18; // 18%
+    const metaTaxaExpMat = 75; // 75%
+    const metaTaxaGeral = 13.5; // 13.5% (critério de desempate)
+    const metaVolumeMatriculas = unidadeNome === 'Campo Grande' ? 25 : (unidadeNome === 'Recreio' ? 20 : 15);
+    const metaTicketMatriculador = unidadeNome === 'Campo Grande' ? 387 : (unidadeNome === 'Recreio' ? 435 : 450);
     
-    // Dados para Matriculador+
-    const ticketAcimaMeta = metasKpi.ticket_medio ? Math.max(0, ticketMedio - metasKpi.ticket_medio) : 0;
+    // Pontuação por critério
+    const pontosShowup = 20;
+    const pontosExpMat = 25;
+    const pontosTaxaGeral = 30;
+    const pontosVolume = 15;
+    const pontosTicket = 10;
+    
+    // Dados para Matriculador+ (usando dados comerciais)
     const leadsAbandonados = dados.leads_abandonados || 0;
-    const tarefasEmDia = dados.tarefas_em_dia !== false; // default true
+    
+    // Calcular média de matrículas por mês (considerando meses com dados)
+    const mesesComDados = dados.meses_com_dados || 1;
+    const mediaMatriculasMes = mesesComDados > 0 ? novasMatriculas / mesesComDados : 0;
 
-    // ⭐ Matrícula Plus
-    const pctMatPlus = Math.min((novasMatriculas / metaMatriculaPlus) * 100, 100);
-    const statusMatPlus = novasMatriculas >= metaMatriculaPlus ? '✅ BATIDA 🎉' : (pctMatPlus >= 70 ? '⚠️' : '❌');
-    relatorioTemplate += `⭐ *MATRÍCULA PLUS* (meta: ${metaMatriculaPlus}+)\n`;
-    relatorioTemplate += `${criarBarraProgresso(pctMatPlus)} ${pctMatPlus.toFixed(0)}% ${statusMatPlus}\n`;
-    relatorioTemplate += `Atual: *${novasMatriculas}* | Meta: *${metaMatriculaPlus}+*\n\n`;
+    // ⭐ Taxa Show-up → Experimental (meta: 18% → 20 pts)
+    const pctShowup = Math.min((taxaLeadExp / metaTaxaShowup) * 100, 100);
+    const statusShowup = taxaLeadExp >= metaTaxaShowup ? '✅ BATIDA 🎉' : (pctShowup >= 80 ? '⚠️' : '❌');
+    const pontosShowupAtual = taxaLeadExp >= metaTaxaShowup ? pontosShowup : 0;
+    relatorioTemplate += `📊 *TAXA SHOW-UP → EXP* (meta: ${metaTaxaShowup}% → ${pontosShowup} pts)\n`;
+    relatorioTemplate += `${criarBarraProgresso(pctShowup)} ${taxaLeadExp.toFixed(1).replace('.', ',')}% ${statusShowup}\n`;
+    relatorioTemplate += `Atual: *${taxaLeadExp.toFixed(1).replace('.', ',')}%* | Meta: *${metaTaxaShowup}%* | Pts: *${pontosShowupAtual}*\n\n`;
 
-    // ⭐ Max Indicação
-    const pctInd = Math.min((totalIndicacoes / metaIndicacao) * 100, 100);
-    const statusInd = totalIndicacoes >= metaIndicacao ? '✅ BATIDA 🎉' : (pctInd >= 70 ? '⚠️' : '❌');
-    relatorioTemplate += `⭐ *MAX INDICAÇÃO* (meta: ${metaIndicacao})\n`;
-    relatorioTemplate += `${criarBarraProgresso(pctInd)} ${pctInd.toFixed(0)}% ${statusInd}\n`;
-    relatorioTemplate += `Atual: *${totalIndicacoes}* | Meta: *${metaIndicacao}*\n\n`;
+    // ⭐ Taxa Experimental → Matrícula (meta: 75% → 25 pts)
+    const pctExpMatMat = Math.min((taxaExpMat / metaTaxaExpMat) * 100, 100);
+    const statusExpMatMat = taxaExpMat >= metaTaxaExpMat ? '✅ BATIDA 🎉' : (pctExpMatMat >= 80 ? '⚠️' : '❌');
+    const pontosExpMatAtual = taxaExpMat >= metaTaxaExpMat ? pontosExpMat : 0;
+    relatorioTemplate += `📊 *TAXA EXP → MATRÍCULA* (meta: ${metaTaxaExpMat}% → ${pontosExpMat} pts)\n`;
+    relatorioTemplate += `${criarBarraProgresso(pctExpMatMat)} ${taxaExpMat.toFixed(1).replace('.', ',')}% ${statusExpMatMat}\n`;
+    relatorioTemplate += `Atual: *${taxaExpMat.toFixed(1).replace('.', ',')}%* | Meta: *${metaTaxaExpMat}%* | Pts: *${pontosExpMatAtual}*\n\n`;
 
-    // ⭐ LA Music Family
-    const pctFamily = Math.min((totalFamilyPacotes / metaFamily) * 100, 100);
-    const statusFamily = totalFamilyPacotes >= metaFamily ? '✅ BATIDA 🎉' : (pctFamily >= 70 ? '⚠️' : '❌');
-    relatorioTemplate += `⭐ *LA MUSIC FAMILY* (meta: ${metaFamily} pacotes/2º curso)\n`;
-    relatorioTemplate += `${criarBarraProgresso(pctFamily)} ${pctFamily.toFixed(0)}% ${statusFamily}\n`;
-    relatorioTemplate += `Atual: *${totalFamilyPacotes}* | Meta: *${metaFamily}*\n\n`;
+    // ⭐ Taxa Lead → Matrícula (Geral) - CRITÉRIO DE DESEMPATE (meta: 13.5% → 30 pts)
+    const pctTaxaGeral = Math.min((taxaConversaoGeral / metaTaxaGeral) * 100, 100);
+    const statusTaxaGeral = taxaConversaoGeral >= metaTaxaGeral ? '✅ BATIDA 🎉' : (pctTaxaGeral >= 80 ? '⚠️' : '❌');
+    const pontosTaxaGeralAtual = taxaConversaoGeral >= metaTaxaGeral ? pontosTaxaGeral : 0;
+    relatorioTemplate += `⭐ *TAXA GERAL (DESEMPATE)* (meta: ${metaTaxaGeral}% → ${pontosTaxaGeral} pts)\n`;
+    relatorioTemplate += `${criarBarraProgresso(pctTaxaGeral)} ${taxaConversaoGeral.toFixed(1).replace('.', ',')}% ${statusTaxaGeral}\n`;
+    relatorioTemplate += `Atual: *${taxaConversaoGeral.toFixed(1).replace('.', ',')}%* | Meta: *${metaTaxaGeral}%* | Pts: *${pontosTaxaGeralAtual}*\n\n`;
 
-    // ⭐ Ticket Premiado
-    const pctTicketAcima = Math.min((ticketAcimaMeta / metaTicketAcima) * 100, 100);
-    const statusTicketAcima = ticketAcimaMeta >= metaTicketAcima ? '✅ BATIDA 🎉' : '❌';
-    relatorioTemplate += `⭐ *TICKET PREMIADO* (meta: +R$${metaTicketAcima} acima da meta)\n`;
-    relatorioTemplate += `${criarBarraProgresso(pctTicketAcima)} +R$${ticketAcimaMeta.toFixed(0)} ${statusTicketAcima}\n`;
-    relatorioTemplate += `Atual: *+R$${ticketAcimaMeta.toFixed(0)}* | Meta: *+R$${metaTicketAcima}*\n\n`;
+    // ⭐ Volume Médio Matrículas/Mês (meta: varia por unidade → 15 pts)
+    const pctVolume = Math.min((mediaMatriculasMes / metaVolumeMatriculas) * 100, 100);
+    const statusVolume = mediaMatriculasMes >= metaVolumeMatriculas ? '✅ BATIDA 🎉' : (pctVolume >= 80 ? '⚠️' : '❌');
+    const pontosVolumeAtual = mediaMatriculasMes >= metaVolumeMatriculas ? pontosVolume : 0;
+    relatorioTemplate += `📊 *VOLUME MÉDIO/MÊS* (meta: ${metaVolumeMatriculas} → ${pontosVolume} pts)\n`;
+    relatorioTemplate += `${criarBarraProgresso(pctVolume)} ${mediaMatriculasMes.toFixed(1).replace('.', ',')} mat/mês ${statusVolume}\n`;
+    relatorioTemplate += `Atual: *${mediaMatriculasMes.toFixed(1).replace('.', ',')}* | Meta: *${metaVolumeMatriculas}* | Pts: *${pontosVolumeAtual}*\n\n`;
 
-    // ⭐ Matriculador Emusys
-    const statusEmusys = (leadsAbandonados === 0 && tarefasEmDia) ? '✅ BATIDA 🎉' : '❌';
-    const pctEmusys = (leadsAbandonados === 0 && tarefasEmDia) ? 100 : 0;
-    relatorioTemplate += `⭐ *MATRICULADOR EMUSYS* (0 leads abandonados + tarefas em dia)\n`;
-    relatorioTemplate += `${criarBarraProgresso(pctEmusys)} ${statusEmusys}\n`;
-    relatorioTemplate += `Leads abandonados: *${leadsAbandonados}* | Tarefas: *${tarefasEmDia ? 'Em dia' : 'Pendentes'}*\n\n`;
+    // ⭐ Ticket Médio Anual (meta: varia por unidade → 10 pts)
+    const pctTicketMat = Math.min((ticketMedio / metaTicketMatriculador) * 100, 100);
+    const statusTicketMat = ticketMedio >= metaTicketMatriculador ? '✅ BATIDA 🎉' : (pctTicketMat >= 90 ? '⚠️' : '❌');
+    const pontosTicketAtual = ticketMedio >= metaTicketMatriculador ? pontosTicket : 0;
+    relatorioTemplate += `📊 *TICKET MÉDIO ANUAL* (meta: R$${metaTicketMatriculador} → ${pontosTicket} pts)\n`;
+    relatorioTemplate += `${criarBarraProgresso(pctTicketMat)} R$${ticketMedio.toFixed(0)} ${statusTicketMat}\n`;
+    relatorioTemplate += `Atual: *R$${ticketMedio.toFixed(0)}* | Meta: *R$${metaTicketMatriculador}* | Pts: *${pontosTicketAtual}*\n\n`;
+
+    // Penalidades Emusys
+    const penalidades = dados.penalidades_matriculador || 0;
+    relatorioTemplate += `⚠️ *PENALIDADES EMUSYS*\n`;
+    relatorioTemplate += `Leads abandonados: *${leadsAbandonados}* | Penalidades: *-${penalidades} pts*\n\n`;
+
+    // Total de pontos
+    const totalPontosMatriculador = pontosShowupAtual + pontosExpMatAtual + pontosTaxaGeralAtual + pontosVolumeAtual + pontosTicketAtual - penalidades;
+    const notaCorte = 80;
+    const statusCorte = totalPontosMatriculador >= notaCorte ? '✅ Acima do corte' : '⚠️ Abaixo do corte';
+    relatorioTemplate += `🏆 *TOTAL: ${totalPontosMatriculador} pts* (corte: ${notaCorte}) ${statusCorte}\n\n`;
 
     // Seções que a IA vai preencher
     relatorioTemplate += `───────────────────────\n`;

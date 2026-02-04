@@ -1,0 +1,2212 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Painel Farmer - LA Music</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    
+    /* Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .header h1 {
+      font-size: 24px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+    }
+    .farmer-info {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: #1e293b;
+      padding: 8px 16px;
+      border-radius: 8px;
+    }
+    .farmer-avatar {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, #8b5cf6, #6366f1);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+    }
+    .farmer-name { font-weight: 500; }
+    .farmer-unit { color: #94a3b8; font-size: 13px; }
+    
+    select {
+      background: #1e293b;
+      color: #e2e8f0;
+      border: 1px solid #334155;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid #334155;
+      padding-bottom: 12px;
+      flex-wrap: wrap;
+    }
+    .tab {
+      padding: 10px 20px;
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      border-radius: 6px;
+      font-size: 14px;
+      transition: all 0.2s;
+    }
+    .tab:hover { background: #1e293b; color: #e2e8f0; }
+    .tab.active {
+      background: #3b82f6;
+      color: white;
+    }
+    .tab .badge {
+      background: #ef4444;
+      color: white;
+      font-size: 11px;
+      padding: 2px 6px;
+      border-radius: 10px;
+      margin-left: 6px;
+    }
+    
+    /* Grid Principal */
+    .main-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 1200px) {
+      .main-grid { grid-template-columns: 1fr; }
+    }
+    
+    /* Cards */
+    .card {
+      background: #1e293b;
+      border-radius: 12px;
+      border: 1px solid #334155;
+      overflow: hidden;
+    }
+    .card-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid #334155;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .card-header h2 {
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-body { padding: 16px 20px; }
+    
+    /* Alertas */
+    .alert-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: #0f172a;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      border-left: 4px solid;
+    }
+    .alert-item.urgent { border-color: #ef4444; }
+    .alert-item.warning { border-color: #f59e0b; }
+    .alert-item.info { border-color: #3b82f6; }
+    .alert-item.success { border-color: #10b981; }
+    .alert-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .alert-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+    .alert-item.urgent .alert-icon { background: #ef444420; }
+    .alert-item.warning .alert-icon { background: #f59e0b20; }
+    .alert-item.info .alert-icon { background: #3b82f620; }
+    .alert-item.success .alert-icon { background: #10b98120; }
+    .alert-count {
+      font-size: 20px;
+      font-weight: 700;
+      min-width: 30px;
+    }
+    .alert-item.urgent .alert-count { color: #ef4444; }
+    .alert-item.warning .alert-count { color: #f59e0b; }
+    .alert-item.info .alert-count { color: #3b82f6; }
+    .alert-item.success .alert-count { color: #10b981; }
+    .alert-text { font-size: 14px; }
+    .alert-sub { font-size: 12px; color: #94a3b8; }
+    
+    .btn {
+      padding: 8px 14px;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .btn-primary { background: #3b82f6; color: white; }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-success { background: #10b981; color: white; }
+    .btn-success:hover { background: #059669; }
+    .btn-warning { background: #f59e0b; color: white; }
+    .btn-warning:hover { background: #d97706; }
+    .btn-danger { background: #ef4444; color: white; }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-secondary { background: #475569; color: white; }
+    .btn-secondary:hover { background: #64748b; }
+    .btn-ghost { background: transparent; color: #94a3b8; border: 1px solid #475569; }
+    .btn-ghost:hover { background: #334155; color: #e2e8f0; }
+    .btn-sm { padding: 6px 10px; font-size: 12px; }
+    .btn-whatsapp { background: #25d366; color: white; }
+    .btn-whatsapp:hover { background: #128c7e; }
+    
+    /* Rotinas */
+    .rotina-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid #334155;
+    }
+    .rotina-item:last-child { border-bottom: none; }
+    .rotina-check {
+      width: 22px;
+      height: 22px;
+      border: 2px solid #475569;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+    .rotina-check:hover { border-color: #3b82f6; }
+    .rotina-check.checked {
+      background: #10b981;
+      border-color: #10b981;
+    }
+    .rotina-check.checked::after {
+      content: '✓';
+      color: white;
+      font-size: 14px;
+      font-weight: bold;
+    }
+    .rotina-content { flex: 1; }
+    .rotina-title { font-size: 14px; }
+    .rotina-title.done { text-decoration: line-through; color: #64748b; }
+    .rotina-meta {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+    }
+    .rotina-freq {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: #334155;
+      color: #94a3b8;
+    }
+    .rotina-freq.diario { background: #3b82f620; color: #60a5fa; }
+    .rotina-freq.semanal { background: #8b5cf620; color: #a78bfa; }
+    .rotina-freq.mensal { background: #f59e0b20; color: #fbbf24; }
+    .rotina-actions {
+      display: flex;
+      gap: 4px;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+    .rotina-item:hover .rotina-actions { opacity: 1; }
+    .btn-icon {
+      width: 28px;
+      height: 28px;
+      border: none;
+      background: transparent;
+      color: #64748b;
+      cursor: pointer;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .btn-icon:hover { background: #334155; color: #e2e8f0; }
+    
+    /* Progress bar */
+    .progress-container {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      background: #0f172a;
+      border-radius: 8px;
+      margin-bottom: 16px;
+    }
+    .progress-bar {
+      flex: 1;
+      height: 8px;
+      background: #334155;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #10b981, #3b82f6);
+      border-radius: 4px;
+      transition: width 0.3s;
+    }
+    .progress-text {
+      font-size: 14px;
+      font-weight: 600;
+      color: #10b981;
+      min-width: 50px;
+      text-align: right;
+    }
+    
+    /* Tarefas */
+    .tarefa-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px 16px;
+      background: #0f172a;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      border-left: 4px solid #475569;
+    }
+    .tarefa-item.alta { border-color: #ef4444; }
+    .tarefa-item.media { border-color: #f59e0b; }
+    .tarefa-item.baixa { border-color: #3b82f6; }
+    .tarefa-item.concluida { 
+      border-color: #10b981; 
+      opacity: 0.6;
+    }
+    .tarefa-content { flex: 1; }
+    .tarefa-title { font-size: 14px; margin-bottom: 4px; }
+    .tarefa-item.concluida .tarefa-title { text-decoration: line-through; }
+    .tarefa-meta {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .tarefa-tag {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: #334155;
+    }
+    .tarefa-tag.hoje { background: #ef444420; color: #f87171; }
+    .tarefa-tag.amanha { background: #f59e0b20; color: #fbbf24; }
+    .tarefa-tag.atrasada { background: #ef4444; color: white; }
+    .tarefa-tag.aluno { background: #3b82f620; color: #60a5fa; }
+    
+    /* Recados */
+    .recado-item {
+      display: flex;
+      gap: 12px;
+      padding: 14px 16px;
+      background: #0f172a;
+      border-radius: 8px;
+      margin-bottom: 10px;
+    }
+    .recado-avatar {
+      width: 40px;
+      height: 40px;
+      background: linear-gradient(135deg, #f59e0b, #ef4444);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+    .recado-content { flex: 1; }
+    .recado-header {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 6px;
+    }
+    .recado-prof { font-weight: 500; font-size: 14px; }
+    .recado-time { font-size: 12px; color: #64748b; }
+    .recado-text { font-size: 13px; color: #94a3b8; }
+    .recado-status {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: 8px;
+      font-size: 12px;
+    }
+    .status-enviado { color: #64748b; }
+    .status-entregue { color: #3b82f6; }
+    .status-lido { color: #10b981; }
+    
+    /* Lista de Alertas Expandida */
+    .alert-list-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px;
+      background: #0f172a;
+      border-radius: 8px;
+      margin-bottom: 8px;
+    }
+    .alert-list-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .alert-list-avatar {
+      width: 40px;
+      height: 40px;
+      background: #334155;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+    .alert-list-info h4 { font-size: 14px; font-weight: 500; }
+    .alert-list-info p { font-size: 12px; color: #94a3b8; }
+    .alert-list-actions {
+      display: flex;
+      gap: 8px;
+    }
+    
+    /* Filtros */
+    .filters {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .filter-btn {
+      padding: 6px 12px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      color: #94a3b8;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.2s;
+    }
+    .filter-btn:hover { border-color: #3b82f6; color: #e2e8f0; }
+    .filter-btn.active {
+      background: #3b82f6;
+      border-color: #3b82f6;
+      color: white;
+    }
+    
+    /* Modal */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.7);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 20px;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal {
+      background: #1e293b;
+      border-radius: 16px;
+      width: 100%;
+      max-width: 500px;
+      max-height: 90vh;
+      overflow-y: auto;
+      border: 1px solid #334155;
+    }
+    .modal-lg { max-width: 700px; }
+    .modal-header {
+      padding: 20px;
+      border-bottom: 1px solid #334155;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .modal-header h3 {
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .modal-close {
+      background: none;
+      border: none;
+      color: #64748b;
+      font-size: 24px;
+      cursor: pointer;
+    }
+    .modal-close:hover { color: #e2e8f0; }
+    .modal-body { padding: 20px; }
+    .modal-footer {
+      padding: 16px 20px;
+      border-top: 1px solid #334155;
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+    
+    /* Form */
+    .form-group { margin-bottom: 16px; }
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      color: #94a3b8;
+      margin-bottom: 6px;
+    }
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      padding: 10px 14px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      color: #e2e8f0;
+      font-size: 14px;
+    }
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: #3b82f6;
+    }
+    .form-group textarea { resize: vertical; min-height: 80px; }
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    .form-hint { font-size: 12px; color: #64748b; margin-top: 4px; }
+    
+    /* Template select */
+    .template-card {
+      padding: 12px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .template-card:hover { border-color: #3b82f6; }
+    .template-card.selected {
+      border-color: #3b82f6;
+      background: #3b82f620;
+    }
+    .template-card h4 { font-size: 14px; margin-bottom: 4px; }
+    .template-card p { font-size: 12px; color: #94a3b8; }
+    
+    /* Dias da semana */
+    .dias-semana {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .dia-btn {
+      width: 40px;
+      height: 40px;
+      border: 1px solid #334155;
+      background: #0f172a;
+      color: #94a3b8;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.2s;
+    }
+    .dia-btn:hover { border-color: #3b82f6; }
+    .dia-btn.active {
+      background: #3b82f6;
+      border-color: #3b82f6;
+      color: white;
+    }
+    
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #64748b;
+    }
+    .empty-state-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+    }
+    
+    /* Seção de Configurações */
+    .config-section {
+      margin-bottom: 24px;
+    }
+    .config-section h3 {
+      font-size: 14px;
+      color: #94a3b8;
+      margin-bottom: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .config-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 16px;
+      background: #0f172a;
+      border-radius: 8px;
+      margin-bottom: 8px;
+    }
+    .config-item-info h4 { font-size: 14px; margin-bottom: 2px; }
+    .config-item-info p { font-size: 12px; color: #64748b; }
+    
+    /* Toggle */
+    .toggle {
+      width: 48px;
+      height: 26px;
+      background: #475569;
+      border-radius: 13px;
+      position: relative;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .toggle.active { background: #10b981; }
+    .toggle::after {
+      content: '';
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      background: white;
+      border-radius: 50%;
+      top: 3px;
+      left: 3px;
+      transition: left 0.2s;
+    }
+    .toggle.active::after { left: 25px; }
+    
+    /* Histórico */
+    .historico-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 0;
+      border-bottom: 1px solid #334155;
+    }
+    .historico-item:last-child { border-bottom: none; }
+    .historico-date { font-size: 13px; color: #94a3b8; }
+    .historico-stats {
+      display: flex;
+      gap: 16px;
+    }
+    .historico-stat {
+      font-size: 13px;
+    }
+    .historico-stat.complete { color: #10b981; }
+    .historico-stat.partial { color: #f59e0b; }
+    
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #10b981;
+      color: white;
+      padding: 14px 20px;
+      border-radius: 8px;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      z-index: 1100;
+      animation: slideIn 0.3s ease;
+    }
+    .toast.show { display: flex; }
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    
+    /* Alerta expandido */
+    .alert-expanded {
+      display: none;
+    }
+    .alert-expanded.active {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div class="header">
+    <h1>📋 Painel Farmer</h1>
+    <div class="header-right">
+      <select id="unidadeSelect" onchange="changeUnidade()">
+        <option value="barra">📍 Barra</option>
+        <option value="recreio">📍 Recreio</option>
+        <option value="campo-grande">📍 Campo Grande</option>
+      </select>
+      <div class="farmer-info">
+        <div class="farmer-avatar">D</div>
+        <div>
+          <div class="farmer-name">Duda</div>
+          <div class="farmer-unit">Farmer</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('dashboard')">
+      🏠 Dashboard
+      <span class="badge">8</span>
+    </button>
+    <button class="tab" onclick="showTab('rotinas')">✅ Minhas Rotinas</button>
+    <button class="tab" onclick="showTab('tarefas')">📝 Tarefas</button>
+    <button class="tab" onclick="showTab('recados')">💬 Recados</button>
+    <button class="tab" onclick="showTab('templates')">📄 Templates</button>
+    <button class="tab" onclick="showTab('historico')">📊 Histórico</button>
+  </div>
+
+  <!-- Tab: Dashboard -->
+  <div id="tab-dashboard" class="tab-content">
+    <div class="main-grid">
+      <!-- Coluna Esquerda -->
+      <div>
+        <!-- Alertas do Dia -->
+        <div class="card" style="margin-bottom: 20px;">
+          <div class="card-header">
+            <h2>🚨 Alertas do Dia</h2>
+            <span style="color: #64748b; font-size: 13px;">Terça, 03 Fev</span>
+          </div>
+          <div class="card-body">
+            <!-- Alerta: Renovações -->
+            <div class="alert-item urgent" onclick="toggleAlertExpand('renovacoes')" style="cursor: pointer;">
+              <div class="alert-left">
+                <div class="alert-icon">📅</div>
+                <div>
+                  <div class="alert-count">5</div>
+                </div>
+                <div>
+                  <div class="alert-text">Renovações vencendo em 7 dias</div>
+                  <div class="alert-sub">Clique para ver lista</div>
+                </div>
+              </div>
+              <button class="btn btn-sm btn-primary">Ver todos</button>
+            </div>
+            
+            <!-- Lista expandida de renovações -->
+            <div id="expand-renovacoes" class="alert-expanded">
+              <div class="alert-list-item">
+                <div class="alert-list-left">
+                  <div class="alert-list-avatar">👤</div>
+                  <div class="alert-list-info">
+                    <h4>João Pedro Silva</h4>
+                    <p>Violão • Vence em 3 dias (06/02)</p>
+                  </div>
+                </div>
+                <div class="alert-list-actions">
+                  <button class="btn btn-sm btn-whatsapp" onclick="openModal('modalMensagem')">📱</button>
+                  <button class="btn btn-sm btn-ghost">📋 Relatório</button>
+                </div>
+              </div>
+              <div class="alert-list-item">
+                <div class="alert-list-left">
+                  <div class="alert-list-avatar">👤</div>
+                  <div class="alert-list-info">
+                    <h4>Maria Clara Santos</h4>
+                    <p>Piano • Vence em 5 dias (08/02)</p>
+                  </div>
+                </div>
+                <div class="alert-list-actions">
+                  <button class="btn btn-sm btn-whatsapp" onclick="openModal('modalMensagem')">📱</button>
+                  <button class="btn btn-sm btn-ghost">📋 Relatório</button>
+                </div>
+              </div>
+              <div class="alert-list-item">
+                <div class="alert-list-left">
+                  <div class="alert-list-avatar">👤</div>
+                  <div class="alert-list-info">
+                    <h4>Lucas Oliveira</h4>
+                    <p>Bateria • Vence em 6 dias (09/02)</p>
+                  </div>
+                </div>
+                <div class="alert-list-actions">
+                  <button class="btn btn-sm btn-whatsapp" onclick="openModal('modalMensagem')">📱</button>
+                  <button class="btn btn-sm btn-ghost">📋 Relatório</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Alerta: Inadimplentes -->
+            <div class="alert-item warning" onclick="toggleAlertExpand('inadimplentes')" style="cursor: pointer;">
+              <div class="alert-left">
+                <div class="alert-icon">💰</div>
+                <div>
+                  <div class="alert-count">3</div>
+                </div>
+                <div>
+                  <div class="alert-text">Inadimplentes (+5 dias)</div>
+                  <div class="alert-sub">Precisam de cobrança</div>
+                </div>
+              </div>
+              <button class="btn btn-sm btn-warning">Cobrar</button>
+            </div>
+            
+            <!-- Lista expandida de inadimplentes -->
+            <div id="expand-inadimplentes" class="alert-expanded">
+              <div class="alert-list-item">
+                <div class="alert-list-left">
+                  <div class="alert-list-avatar">👤</div>
+                  <div class="alert-list-info">
+                    <h4>Roberto Almeida</h4>
+                    <p>R$ 350,00 • Vencido há 8 dias</p>
+                  </div>
+                </div>
+                <div class="alert-list-actions">
+                  <button class="btn btn-sm btn-whatsapp" onclick="openModal('modalCobranca')">📱 Cobrar</button>
+                </div>
+              </div>
+              <div class="alert-list-item">
+                <div class="alert-list-left">
+                  <div class="alert-list-avatar">👤</div>
+                  <div class="alert-list-info">
+                    <h4>Fernanda Lima</h4>
+                    <p>R$ 280,00 • Vencido há 12 dias</p>
+                  </div>
+                </div>
+                <div class="alert-list-actions">
+                  <button class="btn btn-sm btn-whatsapp" onclick="openModal('modalCobranca')">📱 Cobrar</button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Alerta: Aniversariantes -->
+            <div class="alert-item success">
+              <div class="alert-left">
+                <div class="alert-icon">🎂</div>
+                <div>
+                  <div class="alert-count">2</div>
+                </div>
+                <div>
+                  <div class="alert-text">Aniversariantes hoje</div>
+                  <div class="alert-sub">Ana Clara, Pedro Henrique</div>
+                </div>
+              </div>
+              <button class="btn btn-sm btn-success" onclick="openModal('modalAniversario')">Enviar msg</button>
+            </div>
+
+            <!-- Alerta: Experimentais -->
+            <div class="alert-item info">
+              <div class="alert-left">
+                <div class="alert-icon">🎸</div>
+                <div>
+                  <div class="alert-count">4</div>
+                </div>
+                <div>
+                  <div class="alert-text">Experimentais agendadas hoje</div>
+                  <div class="alert-sub">14h, 15h, 16h, 17h</div>
+                </div>
+              </div>
+              <button class="btn btn-sm btn-primary" onclick="openModal('modalExperimentais')">Confirmar</button>
+            </div>
+
+            <!-- Alerta: Faltosos -->
+            <div class="alert-item warning">
+              <div class="alert-left">
+                <div class="alert-icon">📞</div>
+                <div>
+                  <div class="alert-count">3</div>
+                </div>
+                <div>
+                  <div class="alert-text">Faltaram ontem</div>
+                  <div class="alert-sub">Ligar para reagendar</div>
+                </div>
+              </div>
+              <button class="btn btn-sm btn-warning">Ligar</button>
+            </div>
+
+            <!-- Alerta: Novos Matriculados -->
+            <div class="alert-item success">
+              <div class="alert-left">
+                <div class="alert-icon">✨</div>
+                <div>
+                  <div class="alert-count">2</div>
+                </div>
+                <div>
+                  <div class="alert-text">Novos matriculados</div>
+                  <div class="alert-sub">Enviar boas-vindas</div>
+                </div>
+              </div>
+              <button class="btn btn-sm btn-success" onclick="openModal('modalBoasVindas')">Enviar</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Tarefas Urgentes -->
+        <div class="card">
+          <div class="card-header">
+            <h2>📝 Tarefas Urgentes</h2>
+            <button class="btn btn-sm btn-primary" onclick="openModal('modalNovaTarefa')">+ Nova</button>
+          </div>
+          <div class="card-body">
+            <div class="tarefa-item alta">
+              <div class="rotina-check" onclick="this.classList.toggle('checked')"></div>
+              <div class="tarefa-content">
+                <div class="tarefa-title">Ligar pra João sobre renovação</div>
+                <div class="tarefa-meta">
+                  <span class="tarefa-tag hoje">🔴 Hoje</span>
+                  <span class="tarefa-tag aluno">João Pedro</span>
+                </div>
+              </div>
+              <button class="btn btn-sm btn-whatsapp">📱</button>
+            </div>
+            <div class="tarefa-item alta">
+              <div class="rotina-check" onclick="this.classList.toggle('checked')"></div>
+              <div class="tarefa-content">
+                <div class="tarefa-title">Resolver problema de horário - Pedro</div>
+                <div class="tarefa-meta">
+                  <span class="tarefa-tag hoje">🔴 Hoje</span>
+                  <span class="tarefa-tag aluno">Pedro Souza</span>
+                </div>
+              </div>
+            </div>
+            <div class="tarefa-item media">
+              <div class="rotina-check" onclick="this.classList.toggle('checked')"></div>
+              <div class="tarefa-content">
+                <div class="tarefa-title">2ª cobrança - Maria boleto jan</div>
+                <div class="tarefa-meta">
+                  <span class="tarefa-tag amanha">🟡 Amanhã</span>
+                  <span class="tarefa-tag aluno">Maria Silva</span>
+                </div>
+              </div>
+              <button class="btn btn-sm btn-whatsapp">📱</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Coluna Direita -->
+      <div>
+        <!-- Rotinas do Dia -->
+        <div class="card" style="margin-bottom: 20px;">
+          <div class="card-header">
+            <h2>✅ Rotinas de Hoje</h2>
+            <button class="btn btn-sm btn-ghost" onclick="openModal('modalNovaRotina')">+ Rotina</button>
+          </div>
+          <div class="card-body">
+            <div class="progress-container">
+              <span>Progresso:</span>
+              <div class="progress-bar">
+                <div class="progress-fill" style="width: 50%;"></div>
+              </div>
+              <span class="progress-text">4/8</span>
+            </div>
+
+            <div class="rotina-item">
+              <div class="rotina-check checked"></div>
+              <div class="rotina-content">
+                <div class="rotina-title done">Conferir agenda do dia</div>
+                <div class="rotina-meta">
+                  <span class="rotina-freq diario">Diário</span>
+                </div>
+              </div>
+              <div class="rotina-actions">
+                <button class="btn-icon">✏️</button>
+              </div>
+            </div>
+
+            <div class="rotina-item">
+              <div class="rotina-check checked"></div>
+              <div class="rotina-content">
+                <div class="rotina-title done">Verificar caixa abertura</div>
+                <div class="rotina-meta">
+                  <span class="rotina-freq diario">Diário</span>
+                </div>
+              </div>
+              <div class="rotina-actions">
+                <button class="btn-icon">✏️</button>
+              </div>
+            </div>
+
+            <div class="rotina-item">
+              <div class="rotina-check checked"></div>
+              <div class="rotina-content">
+                <div class="rotina-title done">Confirmar experimentais via WhatsApp</div>
+                <div class="rotina-meta">
+                  <span class="rotina-freq diario">Diário</span>
+                </div>
+              </div>
+              <div class="rotina-actions">
+                <button class="btn-icon">✏️</button>
+              </div>
+            </div>
+
+            <div class="rotina-item">
+              <div class="rotina-check checked"></div>
+              <div class="rotina-content">
+                <div class="rotina-title done">Ligar para faltosos de ontem</div>
+                <div class="rotina-meta">
+                  <span class="rotina-freq diario">Diário</span>
+                </div>
+              </div>
+              <div class="rotina-actions">
+                <button class="btn-icon">✏️</button>
+              </div>
+            </div>
+
+            <div class="rotina-item">
+              <div class="rotina-check" onclick="this.classList.toggle('checked')"></div>
+              <div class="rotina-content">
+                <div class="rotina-title">Enviar boas-vindas novos alunos</div>
+                <div class="rotina-meta">
+                  <span class="rotina-freq diario">Diário</span>
+                </div>
+              </div>
+              <div class="rotina-actions">
+                <button class="btn-icon">✏️</button>
+              </div>
+            </div>
+
+            <div class="rotina-item">
+              <div class="rotina-check" onclick="this.classList.toggle('checked')"></div>
+              <div class="rotina-content">
+                <div class="rotina-title">Fazer cobrança semanal</div>
+                <div class="rotina-meta">
+                  <span class="rotina-freq semanal">Toda Terça</span>
+                </div>
+              </div>
+              <div class="rotina-actions">
+                <button class="btn-icon">✏️</button>
+              </div>
+            </div>
+
+            <div class="rotina-item">
+              <div class="rotina-check" onclick="this.classList.toggle('checked')"></div>
+              <div class="rotina-content">
+                <div class="rotina-title">Solicitar relatórios de renovação</div>
+                <div class="rotina-meta">
+                  <span class="rotina-freq semanal">Toda Terça</span>
+                </div>
+              </div>
+              <div class="rotina-actions">
+                <button class="btn-icon">✏️</button>
+              </div>
+            </div>
+
+            <div class="rotina-item">
+              <div class="rotina-check" onclick="this.classList.toggle('checked')"></div>
+              <div class="rotina-content">
+                <div class="rotina-title">Fechamento do dia</div>
+                <div class="rotina-meta">
+                  <span class="rotina-freq diario">Diário</span>
+                </div>
+              </div>
+              <div class="rotina-actions">
+                <button class="btn-icon">✏️</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recados Recentes -->
+        <div class="card">
+          <div class="card-header">
+            <h2>💬 Recados Enviados</h2>
+            <button class="btn btn-sm btn-primary" onclick="openModal('modalNovoRecado')">+ Recado</button>
+          </div>
+          <div class="card-body">
+            <div class="recado-item">
+              <div class="recado-avatar">G</div>
+              <div class="recado-content">
+                <div class="recado-header">
+                  <span class="recado-prof">Prof. Gabriel</span>
+                  <span class="recado-time">Há 2h</span>
+                </div>
+                <div class="recado-text">Aluno Lucas pediu pra trocar de horário para 15h</div>
+                <div class="recado-status status-lido">✓✓ Lido</div>
+              </div>
+            </div>
+            <div class="recado-item">
+              <div class="recado-avatar">M</div>
+              <div class="recado-content">
+                <div class="recado-header">
+                  <span class="recado-prof">Prof. Marina</span>
+                  <span class="recado-time">Há 4h</span>
+                </div>
+                <div class="recado-text">Aluna Ana precisa do relatório de renovação até sexta</div>
+                <div class="recado-status status-entregue">✓✓ Entregue</div>
+              </div>
+            </div>
+            <div class="recado-item">
+              <div class="recado-avatar">R</div>
+              <div class="recado-content">
+                <div class="recado-header">
+                  <span class="recado-prof">Prof. Ricardo</span>
+                  <span class="recado-time">Ontem</span>
+                </div>
+                <div class="recado-text">Lembrar de preencher avaliação trimestral dos alunos</div>
+                <div class="recado-status status-lido">✓✓ Lido</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: Minhas Rotinas -->
+  <div id="tab-rotinas" class="tab-content" style="display: none;">
+    <div class="card">
+      <div class="card-header">
+        <h2>✅ Minhas Rotinas</h2>
+        <button class="btn btn-primary" onclick="openModal('modalNovaRotina')">+ Nova Rotina</button>
+      </div>
+      <div class="card-body">
+        <div class="filters">
+          <button class="filter-btn active">Todas</button>
+          <button class="filter-btn">Diárias</button>
+          <button class="filter-btn">Semanais</button>
+          <button class="filter-btn">Mensais</button>
+        </div>
+
+        <!-- Rotinas Diárias -->
+        <h3 style="font-size: 14px; color: #94a3b8; margin: 20px 0 12px; text-transform: uppercase;">☀️ Rotinas Diárias</h3>
+        
+        <div class="rotina-item">
+          <div class="rotina-check" onclick="this.classList.toggle('checked')"></div>
+          <div class="rotina-content">
+            <div class="rotina-title">Conferir agenda do dia</div>
+            <div class="rotina-meta">
+              <span class="rotina-freq diario">Todo dia</span>
+            </div>
+          </div>
+          <div class="rotina-actions" style="opacity: 1;">
+            <button class="btn-icon" onclick="openModal('modalEditarRotina')">✏️</button>
+            <button class="btn-icon" style="color: #ef4444;">🗑️</button>
+          </div>
+        </div>
+
+        <div class="rotina-item">
+          <div class="rotina-check" onclick="this.classList.toggle('checked')"></div>
+          <div class="rotina-content">
+            <div class="rotina-title">Verificar caixa abertura</div>
+            <div class="rotina-meta">
+              <span class="rotina-freq diario">Todo dia</span>
+            </div>
+          </div>
+          <div class="rotina-actions" style="opacity: 1;">
+            <button class="btn-icon" onclick="openModal('modalEditarRotina')">✏️</button>
+            <button class="btn-icon" style="color: #ef4444;">🗑️</button>
+          </div>
+        </div>
+
+        <div class="rotina-item">
+          <div class="rotina-check" onclick="this.classList.toggle('checked')"></div>
+          <div class="rotina-content">
+            <div class="rotina-title">Confirmar experimentais via WhatsApp</div>
+            <div class="rotina-meta">
+              <span class="rotina-freq diario">Todo dia</span>
+            </div>
+          </div>
+          <div class="rotina-actions" style="opacity: 1;">
+            <button class="btn-icon" onclick="openModal('modalEditarRotina')">✏️</button>
+            <button class="btn-icon" style="color: #ef4444;">🗑️</button>
+          </div>
+        </div>
+
+        <div class="rotina-item">
+          <div class="rotina-check" onclick="this.classList.toggle('checked')"></div>
+          <div class="rotina-content">
+            <div class="rotina-title">Ligar para faltosos de ontem</div>
+            <div class="rotina-meta">
+              <span class="rotina-freq diario">Todo dia</span>
+            </div>
+          </div>
+          <div class="rotina-actions" style="opacity: 1;">
+            <button class="btn-icon" onclick="openModal('modalEditarRotina')">✏️</button>
+            <button class="btn-icon" style="color: #ef4444;">🗑️</button>
+          </div>
+        </div>
+
+        <div class="rotina-item">
+          <div class="rotina-check" onclick="this.classList.toggle('checked')"></div>
+          <div class="rotina-content">
+            <div class="rotina-title">Enviar boas-vindas novos alunos</div>
+            <div class="rotina-meta">
+              <span class="rotina-freq diario">Todo dia</span>
+            </div>
+          </div>
+          <div class="rotina-actions" style="opacity: 1;">
+            <button class="btn-icon" onclick="openModal('modalEditarRotina')">✏️</button>
+            <button class="btn-icon" style="color: #ef4444;">🗑️</button>
+          </div>
+        </div>
+
+        <div class="rotina-item">
+          <div class="rotina-check" onclick="this.classList.toggle('checked')"></div>
+          <div class="rotina-content">
+            <div class="rotina-title">Fechamento do dia</div>
+            <div class="rotina-meta">
+              <span class="rotina-freq diario">Todo dia</span>
+            </div>
+          </div>
+          <div class="rotina-actions" style="opacity: 1;">
+            <button class="btn-icon" onclick="openModal('modalEditarRotina')">✏️</button>
+            <button class="btn-icon" style="color: #ef4444;">🗑️</button>
+          </div>
+        </div>
+
+        <!-- Rotinas Semanais -->
+        <h3 style="font-size: 14px; color: #94a3b8; margin: 20px 0 12px; text-transform: uppercase;">📅 Rotinas Semanais</h3>
+        
+        <div class="rotina-item">
+          <div class="rotina-check" onclick="this.classList.toggle('checked')"></div>
+          <div class="rotina-content">
+            <div class="rotina-title">Fazer cobrança semanal</div>
+            <div class="rotina-meta">
+              <span class="rotina-freq semanal">Toda Terça</span>
+            </div>
+          </div>
+          <div class="rotina-actions" style="opacity: 1;">
+            <button class="btn-icon" onclick="openModal('modalEditarRotina')">✏️</button>
+            <button class="btn-icon" style="color: #ef4444;">🗑️</button>
+          </div>
+        </div>
+
+        <div class="rotina-item">
+          <div class="rotina-check" onclick="this.classList.toggle('checked')"></div>
+          <div class="rotina-content">
+            <div class="rotina-title">Solicitar relatórios de renovação</div>
+            <div class="rotina-meta">
+              <span class="rotina-freq semanal">Toda Terça</span>
+            </div>
+          </div>
+          <div class="rotina-actions" style="opacity: 1;">
+            <button class="btn-icon" onclick="openModal('modalEditarRotina')">✏️</button>
+            <button class="btn-icon" style="color: #ef4444;">🗑️</button>
+          </div>
+        </div>
+
+        <div class="rotina-item">
+          <div class="rotina-check" onclick="this.classList.toggle('checked')"></div>
+          <div class="rotina-content">
+            <div class="rotina-title">Enviar vídeos de aula para renovação</div>
+            <div class="rotina-meta">
+              <span class="rotina-freq semanal">Toda Quinta</span>
+            </div>
+          </div>
+          <div class="rotina-actions" style="opacity: 1;">
+            <button class="btn-icon" onclick="openModal('modalEditarRotina')">✏️</button>
+            <button class="btn-icon" style="color: #ef4444;">🗑️</button>
+          </div>
+        </div>
+
+        <!-- Rotinas Mensais -->
+        <h3 style="font-size: 14px; color: #94a3b8; margin: 20px 0 12px; text-transform: uppercase;">📆 Rotinas Mensais</h3>
+        
+        <div class="rotina-item">
+          <div class="rotina-check" onclick="this.classList.toggle('checked')"></div>
+          <div class="rotina-content">
+            <div class="rotina-title">Enviar relatório mensal de renovação</div>
+            <div class="rotina-meta">
+              <span class="rotina-freq mensal">Dia 25</span>
+            </div>
+          </div>
+          <div class="rotina-actions" style="opacity: 1;">
+            <button class="btn-icon" onclick="openModal('modalEditarRotina')">✏️</button>
+            <button class="btn-icon" style="color: #ef4444;">🗑️</button>
+          </div>
+        </div>
+
+        <div class="rotina-item">
+          <div class="rotina-check" onclick="this.classList.toggle('checked')"></div>
+          <div class="rotina-content">
+            <div class="rotina-title">Revisar metas do mês</div>
+            <div class="rotina-meta">
+              <span class="rotina-freq mensal">Dia 1</span>
+            </div>
+          </div>
+          <div class="rotina-actions" style="opacity: 1;">
+            <button class="btn-icon" onclick="openModal('modalEditarRotina')">✏️</button>
+            <button class="btn-icon" style="color: #ef4444;">🗑️</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: Tarefas -->
+  <div id="tab-tarefas" class="tab-content" style="display: none;">
+    <div class="card">
+      <div class="card-header">
+        <h2>📝 Minhas Tarefas</h2>
+        <button class="btn btn-primary" onclick="openModal('modalNovaTarefa')">+ Nova Tarefa</button>
+      </div>
+      <div class="card-body">
+        <div class="filters">
+          <button class="filter-btn active">Todas</button>
+          <button class="filter-btn">Hoje</button>
+          <button class="filter-btn">Esta semana</button>
+          <button class="filter-btn">Atrasadas <span class="badge" style="background:#ef4444;color:white;font-size:10px;padding:2px 6px;border-radius:10px;margin-left:4px;">2</span></button>
+          <button class="filter-btn">Concluídas</button>
+        </div>
+
+        <div class="tarefa-item atrasada" style="border-color: #ef4444;">
+          <div class="rotina-check" onclick="this.classList.toggle('checked')"></div>
+          <div class="tarefa-content">
+            <div class="tarefa-title">Cobrar Ana - boleto dezembro</div>
+            <div class="tarefa-meta">
+              <span class="tarefa-tag atrasada">⚠️ Atrasada 3 dias</span>
+              <span class="tarefa-tag aluno">Ana Beatriz</span>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-sm btn-whatsapp">📱</button>
+            <button class="btn-icon">✏️</button>
+            <button class="btn-icon" style="color: #ef4444;">🗑️</button>
+          </div>
+        </div>
+
+        <div class="tarefa-item alta">
+          <div class="rotina-check" onclick="this.classList.toggle('checked')"></div>
+          <div class="tarefa-content">
+            <div class="tarefa-title">Ligar pra João sobre renovação</div>
+            <div class="tarefa-meta">
+              <span class="tarefa-tag hoje">🔴 Hoje</span>
+              <span class="tarefa-tag aluno">João Pedro</span>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-sm btn-whatsapp">📱</button>
+            <button class="btn-icon">✏️</button>
+            <button class="btn-icon" style="color: #ef4444;">🗑️</button>
+          </div>
+        </div>
+
+        <div class="tarefa-item alta">
+          <div class="rotina-check" onclick="this.classList.toggle('checked')"></div>
+          <div class="tarefa-content">
+            <div class="tarefa-title">Resolver problema de horário - Pedro</div>
+            <div class="tarefa-meta">
+              <span class="tarefa-tag hoje">🔴 Hoje</span>
+              <span class="tarefa-tag aluno">Pedro Souza</span>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn-icon">✏️</button>
+            <button class="btn-icon" style="color: #ef4444;">🗑️</button>
+          </div>
+        </div>
+
+        <div class="tarefa-item media">
+          <div class="rotina-check" onclick="this.classList.toggle('checked')"></div>
+          <div class="tarefa-content">
+            <div class="tarefa-title">2ª cobrança - Maria boleto jan</div>
+            <div class="tarefa-meta">
+              <span class="tarefa-tag amanha">🟡 Amanhã</span>
+              <span class="tarefa-tag aluno">Maria Silva</span>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn btn-sm btn-whatsapp">📱</button>
+            <button class="btn-icon">✏️</button>
+            <button class="btn-icon" style="color: #ef4444;">🗑️</button>
+          </div>
+        </div>
+
+        <div class="tarefa-item baixa">
+          <div class="rotina-check" onclick="this.classList.toggle('checked')"></div>
+          <div class="tarefa-content">
+            <div class="tarefa-title">Verificar turma de sábado</div>
+            <div class="tarefa-meta">
+              <span class="tarefa-tag" style="background: #3b82f620; color: #60a5fa;">📅 Sexta</span>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn-icon">✏️</button>
+            <button class="btn-icon" style="color: #ef4444;">🗑️</button>
+          </div>
+        </div>
+
+        <div class="tarefa-item concluida">
+          <div class="rotina-check checked"></div>
+          <div class="tarefa-content">
+            <div class="tarefa-title">Enviar contrato novo aluno</div>
+            <div class="tarefa-meta">
+              <span class="tarefa-tag" style="background: #10b98120; color: #34d399;">✅ Concluída</span>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button class="btn-icon" style="color: #ef4444;">🗑️</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: Recados -->
+  <div id="tab-recados" class="tab-content" style="display: none;">
+    <div class="card">
+      <div class="card-header">
+        <h2>💬 Recados para Professores</h2>
+        <button class="btn btn-primary" onclick="openModal('modalNovoRecado')">+ Novo Recado</button>
+      </div>
+      <div class="card-body">
+        <div class="filters">
+          <button class="filter-btn active">Todos</button>
+          <button class="filter-btn">Enviados</button>
+          <button class="filter-btn">Entregues</button>
+          <button class="filter-btn">Lidos</button>
+        </div>
+
+        <div class="recado-item">
+          <div class="recado-avatar">G</div>
+          <div class="recado-content">
+            <div class="recado-header">
+              <span class="recado-prof">Prof. Gabriel</span>
+              <span class="recado-time">Há 2h</span>
+            </div>
+            <div class="recado-text">Aluno Lucas pediu pra trocar de horário para 15h na terça</div>
+            <div class="recado-status status-lido">✓✓ Lido às 10:45</div>
+          </div>
+          <button class="btn btn-sm btn-ghost">Reenviar</button>
+        </div>
+
+        <div class="recado-item">
+          <div class="recado-avatar">M</div>
+          <div class="recado-content">
+            <div class="recado-header">
+              <span class="recado-prof">Prof. Marina</span>
+              <span class="recado-time">Há 4h</span>
+            </div>
+            <div class="recado-text">Aluna Ana Clara precisa do relatório de renovação até sexta-feira</div>
+            <div class="recado-status status-entregue">✓✓ Entregue</div>
+          </div>
+          <button class="btn btn-sm btn-ghost">Reenviar</button>
+        </div>
+
+        <div class="recado-item">
+          <div class="recado-avatar">R</div>
+          <div class="recado-content">
+            <div class="recado-header">
+              <span class="recado-prof">Prof. Ricardo</span>
+              <span class="recado-time">Ontem 18:30</span>
+            </div>
+            <div class="recado-text">Lembrete: preencher avaliação trimestral dos alunos até dia 10</div>
+            <div class="recado-status status-lido">✓✓ Lido ontem 19:15</div>
+          </div>
+          <button class="btn btn-sm btn-ghost">Reenviar</button>
+        </div>
+
+        <div class="recado-item">
+          <div class="recado-avatar">C</div>
+          <div class="recado-content">
+            <div class="recado-header">
+              <span class="recado-prof">Prof. Carla</span>
+              <span class="recado-time">02/02 14:00</span>
+            </div>
+            <div class="recado-text">Responsável do Pedro vai passar na escola amanhã às 16h para conversar</div>
+            <div class="recado-status status-lido">✓✓ Lido 02/02 14:35</div>
+          </div>
+          <button class="btn btn-sm btn-ghost">Reenviar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: Templates -->
+  <div id="tab-templates" class="tab-content" style="display: none;">
+    <div class="card">
+      <div class="card-header">
+        <h2>📄 Templates de Mensagens</h2>
+        <button class="btn btn-primary" onclick="openModal('modalNovoTemplate')">+ Novo Template</button>
+      </div>
+      <div class="card-body">
+        <div class="config-section">
+          <h3>🎂 Aniversário</h3>
+          <div class="config-item">
+            <div class="config-item-info">
+              <h4>Mensagem de Aniversário</h4>
+              <p>🎂 Parabéns, {nome}! A família LA Music deseja um dia incrível cheio de música! 🎶</p>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-sm btn-ghost" onclick="openModal('modalEditarTemplate')">Editar</button>
+              <button class="btn btn-sm btn-primary">Testar</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="config-section">
+          <h3>✨ Boas-vindas</h3>
+          <div class="config-item">
+            <div class="config-item-info">
+              <h4>Novo Matriculado</h4>
+              <p>🎸 Bem-vindo à LA Music, {nome}! Sua primeira aula de {instrumento} está marcada...</p>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-sm btn-ghost" onclick="openModal('modalEditarTemplate')">Editar</button>
+              <button class="btn btn-sm btn-primary">Testar</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="config-section">
+          <h3>📅 Renovação</h3>
+          <div class="config-item">
+            <div class="config-item-info">
+              <h4>Lembrete de Renovação (7 dias)</h4>
+              <p>Olá! Sua matrícula na LA Music vence em 7 dias. Renove e continue sua jornada musical! 🎵</p>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-sm btn-ghost" onclick="openModal('modalEditarTemplate')">Editar</button>
+              <button class="btn btn-sm btn-primary">Testar</button>
+            </div>
+          </div>
+          <div class="config-item">
+            <div class="config-item-info">
+              <h4>Lembrete de Renovação (3 dias)</h4>
+              <p>⚠️ {nome}, faltam apenas 3 dias para sua renovação! Não perca a vaga com seu professor...</p>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-sm btn-ghost" onclick="openModal('modalEditarTemplate')">Editar</button>
+              <button class="btn btn-sm btn-primary">Testar</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="config-section">
+          <h3>💰 Cobrança</h3>
+          <div class="config-item">
+            <div class="config-item-info">
+              <h4>1ª Cobrança (5 dias)</h4>
+              <p>Olá {nome}! Identificamos que sua mensalidade venceu há 5 dias. Podemos ajudar?</p>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-sm btn-ghost" onclick="openModal('modalEditarTemplate')">Editar</button>
+              <button class="btn btn-sm btn-primary">Testar</button>
+            </div>
+          </div>
+          <div class="config-item">
+            <div class="config-item-info">
+              <h4>2ª Cobrança (10 dias)</h4>
+              <p>⚠️ {nome}, sua mensalidade está em atraso há 10 dias. Entre em contato para regularizar...</p>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-sm btn-ghost" onclick="openModal('modalEditarTemplate')">Editar</button>
+              <button class="btn btn-sm btn-primary">Testar</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="config-section">
+          <h3>🎸 Experimentais</h3>
+          <div class="config-item">
+            <div class="config-item-info">
+              <h4>Confirmação de Experimental</h4>
+              <p>🎵 Olá! Confirmando sua aula experimental de {instrumento} hoje às {horario} na LA Music {unidade}!</p>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-sm btn-ghost" onclick="openModal('modalEditarTemplate')">Editar</button>
+              <button class="btn btn-sm btn-primary">Testar</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="config-section">
+          <h3>📞 Faltosos</h3>
+          <div class="config-item">
+            <div class="config-item-info">
+              <h4>Aluno que Faltou</h4>
+              <p>Olá! Sentimos sua falta na aula de ontem. Está tudo bem? Quer reagendar a reposição?</p>
+            </div>
+            <div style="display: flex; gap: 8px;">
+              <button class="btn btn-sm btn-ghost" onclick="openModal('modalEditarTemplate')">Editar</button>
+              <button class="btn btn-sm btn-primary">Testar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: Histórico -->
+  <div id="tab-historico" class="tab-content" style="display: none;">
+    <div class="card">
+      <div class="card-header">
+        <h2>📊 Histórico de Rotinas</h2>
+        <select style="padding: 6px 12px;">
+          <option>Últimos 7 dias</option>
+          <option>Últimos 30 dias</option>
+          <option>Este mês</option>
+        </select>
+      </div>
+      <div class="card-body">
+        <div class="progress-container" style="margin-bottom: 24px;">
+          <span>Média da semana:</span>
+          <div class="progress-bar">
+            <div class="progress-fill" style="width: 78%;"></div>
+          </div>
+          <span class="progress-text">78%</span>
+        </div>
+
+        <div class="historico-item">
+          <div class="historico-date">Hoje, 03/02</div>
+          <div class="historico-stats">
+            <span class="historico-stat complete">✅ 4/8 rotinas</span>
+            <span class="historico-stat">📝 2 tarefas concluídas</span>
+          </div>
+        </div>
+
+        <div class="historico-item">
+          <div class="historico-date">Ontem, 02/02</div>
+          <div class="historico-stats">
+            <span class="historico-stat complete">✅ 7/8 rotinas</span>
+            <span class="historico-stat">📝 5 tarefas concluídas</span>
+          </div>
+        </div>
+
+        <div class="historico-item">
+          <div class="historico-date">Sábado, 01/02</div>
+          <div class="historico-stats">
+            <span class="historico-stat complete">✅ 6/6 rotinas</span>
+            <span class="historico-stat">📝 3 tarefas concluídas</span>
+          </div>
+        </div>
+
+        <div class="historico-item">
+          <div class="historico-date">Sexta, 31/01</div>
+          <div class="historico-stats">
+            <span class="historico-stat partial">⚠️ 5/8 rotinas</span>
+            <span class="historico-stat">📝 4 tarefas concluídas</span>
+          </div>
+        </div>
+
+        <div class="historico-item">
+          <div class="historico-date">Quinta, 30/01</div>
+          <div class="historico-stats">
+            <span class="historico-stat complete">✅ 8/8 rotinas</span>
+            <span class="historico-stat">📝 6 tarefas concluídas</span>
+          </div>
+        </div>
+
+        <div class="historico-item">
+          <div class="historico-date">Quarta, 29/01</div>
+          <div class="historico-stats">
+            <span class="historico-stat complete">✅ 7/8 rotinas</span>
+            <span class="historico-stat">📝 4 tarefas concluídas</span>
+          </div>
+        </div>
+
+        <div class="historico-item">
+          <div class="historico-date">Terça, 28/01</div>
+          <div class="historico-stats">
+            <span class="historico-stat partial">⚠️ 4/8 rotinas</span>
+            <span class="historico-stat">📝 2 tarefas concluídas</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== MODAIS ========== -->
+
+  <!-- Modal: Nova Rotina -->
+  <div class="modal-overlay" id="modalNovaRotina">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>✅ Nova Rotina</h3>
+        <button class="modal-close" onclick="closeModal('modalNovaRotina')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Descrição da Rotina *</label>
+          <input type="text" placeholder="Ex: Conferir caixa abertura">
+        </div>
+
+        <div class="form-group">
+          <label>Frequência *</label>
+          <select id="frequenciaSelect" onchange="toggleFrequenciaOptions()">
+            <option value="diario">Diário</option>
+            <option value="semanal">Semanal</option>
+            <option value="mensal">Mensal</option>
+          </select>
+        </div>
+
+        <div class="form-group" id="diasSemanaGroup" style="display: none;">
+          <label>Dias da Semana</label>
+          <div class="dias-semana">
+            <button class="dia-btn" onclick="this.classList.toggle('active')">Seg</button>
+            <button class="dia-btn" onclick="this.classList.toggle('active')">Ter</button>
+            <button class="dia-btn" onclick="this.classList.toggle('active')">Qua</button>
+            <button class="dia-btn" onclick="this.classList.toggle('active')">Qui</button>
+            <button class="dia-btn" onclick="this.classList.toggle('active')">Sex</button>
+            <button class="dia-btn" onclick="this.classList.toggle('active')">Sáb</button>
+          </div>
+        </div>
+
+        <div class="form-group" id="diaMesGroup" style="display: none;">
+          <label>Dia do Mês</label>
+          <select>
+            <option value="1">Dia 1</option>
+            <option value="5">Dia 5</option>
+            <option value="10">Dia 10</option>
+            <option value="15">Dia 15</option>
+            <option value="20">Dia 20</option>
+            <option value="25">Dia 25</option>
+            <option value="ultimo">Último dia</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Prioridade</label>
+          <select>
+            <option value="normal">Normal</option>
+            <option value="alta">Alta</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Lembrete WhatsApp</label>
+          <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+          <p class="form-hint">Receber lembrete no WhatsApp quando a rotina estiver pendente</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modalNovaRotina')">Cancelar</button>
+        <button class="btn btn-primary" onclick="showToast('Rotina criada!'); closeModal('modalNovaRotina')">Salvar Rotina</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Nova Tarefa -->
+  <div class="modal-overlay" id="modalNovaTarefa">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>📝 Nova Tarefa</h3>
+        <button class="modal-close" onclick="closeModal('modalNovaTarefa')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Descrição *</label>
+          <input type="text" placeholder="Ex: Ligar para João sobre renovação">
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Data</label>
+            <input type="date">
+          </div>
+          <div class="form-group">
+            <label>Prioridade</label>
+            <select>
+              <option value="alta">🔴 Alta</option>
+              <option value="media">🟡 Média</option>
+              <option value="baixa">🔵 Baixa</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Aluno (opcional)</label>
+          <select>
+            <option value="">Selecione um aluno...</option>
+            <option>João Pedro Silva</option>
+            <option>Maria Clara Santos</option>
+            <option>Lucas Oliveira</option>
+            <option>Ana Beatriz Costa</option>
+            <option>Pedro Henrique Lima</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Observações</label>
+          <textarea placeholder="Detalhes adicionais..."></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modalNovaTarefa')">Cancelar</button>
+        <button class="btn btn-primary" onclick="showToast('Tarefa criada!'); closeModal('modalNovaTarefa')">Criar Tarefa</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Novo Recado -->
+  <div class="modal-overlay" id="modalNovoRecado">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>💬 Enviar Recado ao Professor</h3>
+        <button class="modal-close" onclick="closeModal('modalNovoRecado')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Professor *</label>
+          <select>
+            <option value="">Selecione o professor...</option>
+            <option>Prof. Gabriel - Violão</option>
+            <option>Prof. Marina - Piano</option>
+            <option>Prof. Ricardo - Bateria</option>
+            <option>Prof. Carla - Canto</option>
+            <option>Prof. André - Guitarra</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Assunto (opcional)</label>
+          <select>
+            <option value="">Geral</option>
+            <option>Troca de horário</option>
+            <option>Relatório de renovação</option>
+            <option>Avaliação de aluno</option>
+            <option>Reposição de aula</option>
+            <option>Reunião com responsável</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Aluno relacionado (opcional)</label>
+          <select>
+            <option value="">Nenhum</option>
+            <option>João Pedro Silva</option>
+            <option>Maria Clara Santos</option>
+            <option>Lucas Oliveira</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Mensagem *</label>
+          <textarea placeholder="Digite o recado para o professor..." rows="4"></textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modalNovoRecado')">Cancelar</button>
+        <button class="btn btn-whatsapp" onclick="showToast('Recado enviado via WhatsApp!'); closeModal('modalNovoRecado')">📱 Enviar WhatsApp</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Mensagem Genérica -->
+  <div class="modal-overlay" id="modalMensagem">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>📱 Enviar Mensagem</h3>
+        <button class="modal-close" onclick="closeModal('modalMensagem')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="display: flex; align-items: center; gap: 12px; padding: 16px; background: #0f172a; border-radius: 8px; margin-bottom: 16px;">
+          <div class="alert-list-avatar">👤</div>
+          <div>
+            <h4 style="font-size: 16px;">João Pedro Silva</h4>
+            <p style="font-size: 13px; color: #94a3b8;">(21) 99999-1234 • Violão • Prof. Gabriel</p>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Template</label>
+          <div class="template-card selected" onclick="selectTemplate(this)">
+            <h4>📅 Lembrete de Renovação (7 dias)</h4>
+            <p>Olá! Sua matrícula na LA Music vence em 7 dias. Renove e continue sua jornada musical!</p>
+          </div>
+          <div class="template-card" onclick="selectTemplate(this)">
+            <h4>📅 Lembrete de Renovação (3 dias)</h4>
+            <p>⚠️ João, faltam apenas 3 dias para sua renovação! Não perca a vaga...</p>
+          </div>
+          <div class="template-card" onclick="selectTemplate(this)">
+            <h4>✍️ Mensagem Personalizada</h4>
+            <p>Escrever mensagem personalizada...</p>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Prévia da Mensagem</label>
+          <textarea rows="4">Olá João Pedro! Sua matrícula na LA Music vence em 7 dias (10/02). Renove e continue sua jornada musical! 🎵
+
+Para renovar, basta responder esta mensagem ou passar na unidade Barra.
+
+LA Music - Transformando vidas através da música! 🎸</textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modalMensagem')">Cancelar</button>
+        <button class="btn btn-whatsapp" onclick="showToast('Mensagem enviada!'); closeModal('modalMensagem')">📱 Enviar WhatsApp</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Aniversário -->
+  <div class="modal-overlay" id="modalAniversario">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <h3>🎂 Aniversariantes de Hoje</h3>
+        <button class="modal-close" onclick="closeModal('modalAniversario')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="alert-list-item" style="margin-bottom: 12px;">
+          <div class="alert-list-left">
+            <div class="alert-list-avatar">🎂</div>
+            <div class="alert-list-info">
+              <h4>Ana Clara Mendes</h4>
+              <p>Piano • Prof. Marina • 12 anos</p>
+            </div>
+          </div>
+          <div class="alert-list-actions">
+            <button class="btn btn-sm btn-whatsapp" onclick="showToast('Mensagem de aniversário enviada!')">📱 Enviar Parabéns</button>
+          </div>
+        </div>
+
+        <div class="alert-list-item">
+          <div class="alert-list-left">
+            <div class="alert-list-avatar">🎂</div>
+            <div class="alert-list-info">
+              <h4>Pedro Henrique Lima</h4>
+              <p>Bateria • Prof. Ricardo • 15 anos</p>
+            </div>
+          </div>
+          <div class="alert-list-actions">
+            <button class="btn btn-sm btn-whatsapp" onclick="showToast('Mensagem de aniversário enviada!')">📱 Enviar Parabéns</button>
+          </div>
+        </div>
+
+        <div style="margin-top: 20px; padding: 16px; background: #0f172a; border-radius: 8px;">
+          <h4 style="font-size: 14px; margin-bottom: 8px;">Mensagem que será enviada:</h4>
+          <p style="color: #94a3b8; font-size: 13px;">🎂 Parabéns, {nome}! A família LA Music deseja um dia incrível cheio de música! 🎶 Que esse novo ciclo traga ainda mais conquistas e muitas músicas novas!</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modalAniversario')">Fechar</button>
+        <button class="btn btn-whatsapp" onclick="showToast('Parabéns enviado para todos!'); closeModal('modalAniversario')">📱 Enviar para Todos</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Boas-vindas -->
+  <div class="modal-overlay" id="modalBoasVindas">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <h3>✨ Novos Matriculados</h3>
+        <button class="modal-close" onclick="closeModal('modalBoasVindas')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="alert-list-item" style="margin-bottom: 12px;">
+          <div class="alert-list-left">
+            <div class="alert-list-avatar">✨</div>
+            <div class="alert-list-info">
+              <h4>Rafael Santos</h4>
+              <p>Violão • Prof. Gabriel • Início: 05/02 às 14h</p>
+            </div>
+          </div>
+          <div class="alert-list-actions">
+            <button class="btn btn-sm btn-whatsapp" onclick="showToast('Boas-vindas enviada!')">📱 Enviar Boas-vindas</button>
+          </div>
+        </div>
+
+        <div class="alert-list-item">
+          <div class="alert-list-left">
+            <div class="alert-list-avatar">✨</div>
+            <div class="alert-list-info">
+              <h4>Isabela Costa</h4>
+              <p>Canto • Prof. Carla • Início: 06/02 às 16h</p>
+            </div>
+          </div>
+          <div class="alert-list-actions">
+            <button class="btn btn-sm btn-whatsapp" onclick="showToast('Boas-vindas enviada!')">📱 Enviar Boas-vindas</button>
+          </div>
+        </div>
+
+        <div style="margin-top: 20px; padding: 16px; background: #0f172a; border-radius: 8px;">
+          <h4 style="font-size: 14px; margin-bottom: 8px;">Mensagem que será enviada:</h4>
+          <p style="color: #94a3b8; font-size: 13px;">🎸 Bem-vindo(a) à LA Music, {nome}! Sua primeira aula de {instrumento} está marcada para {data} às {horario}. Estamos muito felizes em te receber! Qualquer dúvida, é só chamar. 🎵</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modalBoasVindas')">Fechar</button>
+        <button class="btn btn-whatsapp" onclick="showToast('Boas-vindas enviada para todos!'); closeModal('modalBoasVindas')">📱 Enviar para Todos</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Cobrança -->
+  <div class="modal-overlay" id="modalCobranca">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>💰 Enviar Cobrança</h3>
+        <button class="modal-close" onclick="closeModal('modalCobranca')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="display: flex; align-items: center; gap: 12px; padding: 16px; background: #0f172a; border-radius: 8px; margin-bottom: 16px;">
+          <div class="alert-list-avatar">👤</div>
+          <div>
+            <h4 style="font-size: 16px;">Roberto Almeida</h4>
+            <p style="font-size: 13px; color: #94a3b8;">(21) 98888-5678 • R$ 350,00 • Vencido há 8 dias</p>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Tipo de Cobrança</label>
+          <div class="template-card selected" onclick="selectTemplate(this)">
+            <h4>📱 1ª Cobrança (amigável)</h4>
+            <p>Olá! Identificamos que sua mensalidade venceu. Podemos ajudar?</p>
+          </div>
+          <div class="template-card" onclick="selectTemplate(this)">
+            <h4>⚠️ 2ª Cobrança</h4>
+            <p>Sua mensalidade está em atraso há mais de 10 dias...</p>
+          </div>
+          <div class="template-card" onclick="selectTemplate(this)">
+            <h4>🚨 3ª Cobrança (urgente)</h4>
+            <p>Último aviso antes de suspensão das aulas...</p>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Mensagem</label>
+          <textarea rows="4">Olá Roberto! 
+
+Identificamos que sua mensalidade de janeiro (R$ 350,00) venceu há 8 dias. 
+
+Podemos ajudar com alguma condição especial? Responda essa mensagem ou ligue para a gente!
+
+LA Music Barra 🎵</textarea>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modalCobranca')">Cancelar</button>
+        <button class="btn btn-whatsapp" onclick="showToast('Cobrança enviada!'); closeModal('modalCobranca')">📱 Enviar Cobrança</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Experimentais -->
+  <div class="modal-overlay" id="modalExperimentais">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <h3>🎸 Experimentais de Hoje</h3>
+        <button class="modal-close" onclick="closeModal('modalExperimentais')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="alert-list-item" style="margin-bottom: 12px;">
+          <div class="alert-list-left">
+            <div class="alert-list-avatar">🎸</div>
+            <div class="alert-list-info">
+              <h4>Marcos Vinícius</h4>
+              <p>Violão • 14h • Prof. Gabriel</p>
+            </div>
+          </div>
+          <div class="alert-list-actions">
+            <span style="color: #10b981; font-size: 13px; margin-right: 8px;">✓ Confirmado</span>
+            <button class="btn btn-sm btn-whatsapp">📱</button>
+          </div>
+        </div>
+
+        <div class="alert-list-item" style="margin-bottom: 12px;">
+          <div class="alert-list-left">
+            <div class="alert-list-avatar">🎹</div>
+            <div class="alert-list-info">
+              <h4>Juliana Ferreira</h4>
+              <p>Piano • 15h • Prof. Marina</p>
+            </div>
+          </div>
+          <div class="alert-list-actions">
+            <span style="color: #f59e0b; font-size: 13px; margin-right: 8px;">⏳ Aguardando</span>
+            <button class="btn btn-sm btn-whatsapp" onclick="showToast('Confirmação enviada!')">📱 Confirmar</button>
+          </div>
+        </div>
+
+        <div class="alert-list-item" style="margin-bottom: 12px;">
+          <div class="alert-list-left">
+            <div class="alert-list-avatar">🥁</div>
+            <div class="alert-list-info">
+              <h4>Gabriel Souza</h4>
+              <p>Bateria • 16h • Prof. Ricardo</p>
+            </div>
+          </div>
+          <div class="alert-list-actions">
+            <span style="color: #f59e0b; font-size: 13px; margin-right: 8px;">⏳ Aguardando</span>
+            <button class="btn btn-sm btn-whatsapp" onclick="showToast('Confirmação enviada!')">📱 Confirmar</button>
+          </div>
+        </div>
+
+        <div class="alert-list-item">
+          <div class="alert-list-left">
+            <div class="alert-list-avatar">🎤</div>
+            <div class="alert-list-info">
+              <h4>Carolina Lima</h4>
+              <p>Canto • 17h • Prof. Carla</p>
+            </div>
+          </div>
+          <div class="alert-list-actions">
+            <span style="color: #10b981; font-size: 13px; margin-right: 8px;">✓ Confirmado</span>
+            <button class="btn btn-sm btn-whatsapp">📱</button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modalExperimentais')">Fechar</button>
+        <button class="btn btn-primary" onclick="showToast('Confirmação enviada para todos os pendentes!'); closeModal('modalExperimentais')">📱 Confirmar Todos Pendentes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Editar Rotina -->
+  <div class="modal-overlay" id="modalEditarRotina">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>✏️ Editar Rotina</h3>
+        <button class="modal-close" onclick="closeModal('modalEditarRotina')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Descrição da Rotina *</label>
+          <input type="text" value="Conferir agenda do dia">
+        </div>
+
+        <div class="form-group">
+          <label>Frequência *</label>
+          <select>
+            <option value="diario" selected>Diário</option>
+            <option value="semanal">Semanal</option>
+            <option value="mensal">Mensal</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Prioridade</label>
+          <select>
+            <option value="normal" selected>Normal</option>
+            <option value="alta">Alta</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label style="display: flex; align-items: center; gap: 12px;">
+            Lembrete WhatsApp
+            <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-danger" onclick="closeModal('modalEditarRotina')">Excluir</button>
+        <button class="btn btn-ghost" onclick="closeModal('modalEditarRotina')">Cancelar</button>
+        <button class="btn btn-primary" onclick="showToast('Rotina atualizada!'); closeModal('modalEditarRotina')">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast">
+    <span>✅</span>
+    <span id="toastMessage">Ação realizada com sucesso!</span>
+  </div>
+
+  <script>
+    function showTab(tabName) {
+      // Hide all tabs
+      document.querySelectorAll('.tab-content').forEach(tab => {
+        tab.style.display = 'none';
+      });
+      // Show selected tab
+      document.getElementById('tab-' + tabName).style.display = 'block';
+      // Update tab buttons
+      document.querySelectorAll('.tab').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      event.target.classList.add('active');
+    }
+
+    function openModal(modalId) {
+      document.getElementById(modalId).classList.add('active');
+    }
+
+    function closeModal(modalId) {
+      document.getElementById(modalId).classList.remove('active');
+    }
+
+    function toggleFrequenciaOptions() {
+      const freq = document.getElementById('frequenciaSelect').value;
+      document.getElementById('diasSemanaGroup').style.display = freq === 'semanal' ? 'block' : 'none';
+      document.getElementById('diaMesGroup').style.display = freq === 'mensal' ? 'block' : 'none';
+    }
+
+    function toggleAlertExpand(alertId) {
+      const expand = document.getElementById('expand-' + alertId);
+      expand.classList.toggle('active');
+    }
+
+    function selectTemplate(element) {
+      document.querySelectorAll('.template-card').forEach(card => {
+        card.classList.remove('selected');
+      });
+      element.classList.add('selected');
+    }
+
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toastMessage').textContent = message;
+      toast.classList.add('show');
+      setTimeout(() => {
+        toast.classList.remove('show');
+      }, 3000);
+    }
+
+    function changeUnidade() {
+      const unidade = document.getElementById('unidadeSelect').value;
+      showToast('Unidade alterada para ' + unidade.charAt(0).toUpperCase() + unidade.slice(1));
+    }
+
+    // Close modal on outside click
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) {
+          overlay.classList.remove('active');
+        }
+      });
+    });
+
+    // Filter buttons
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        btn.parentElement.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+      });
+    });
+  </script>
+</body>
+</html>
