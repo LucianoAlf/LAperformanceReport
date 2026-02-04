@@ -5,6 +5,7 @@ import { RouterProvider } from 'react-router-dom';
 import { router } from './src/router';
 import { Toaster } from 'sonner';
 import { AuthProvider } from './src/contexts/AuthContext';
+import { OnboardingProvider } from './src/contexts/OnboardingContext';
 import { ErrorBoundary } from './src/components/App/Auth/ErrorBoundary';
 import './src/index.css';
 
@@ -18,8 +19,10 @@ root.render(
   <React.StrictMode>
     <ErrorBoundary>
       <AuthProvider>
-        <RouterProvider router={router} />
-        <Toaster position="top-right" richColors />
+        <OnboardingProvider>
+          <RouterProvider router={router} />
+          <Toaster position="top-right" richColors />
+        </OnboardingProvider>
       </AuthProvider>
     </ErrorBoundary>
   </React.StrictMode>

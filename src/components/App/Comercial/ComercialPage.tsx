@@ -27,6 +27,8 @@ import {
   GraduationCap,
   Trophy
 } from 'lucide-react';
+import { PageTour, TourHelpButton } from '@/components/Onboarding';
+import { comercialTourSteps } from '@/components/Onboarding/tours';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -2041,7 +2043,7 @@ export function ComercialPage() {
             <Plus className="w-4 h-4" />
             Clique para adicionar um novo registro
           </p>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div data-tour="cards-resumo" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             {quickInputCards.map((card) => {
               const Icon = card.icon;
               const contagemHoje = getContagemHoje(card.id);
@@ -2049,6 +2051,7 @@ export function ComercialPage() {
               return (
                 <button
                   key={card.id}
+                  data-tour={`btn-${card.id}`}
                   onClick={() => setModalOpen(card.id)}
                   className={cn(
                     "group relative p-5 rounded-2xl border-2 transition-all hover:scale-[1.02] hover:shadow-xl",
@@ -2304,7 +2307,7 @@ export function ComercialPage() {
       {/* ═══════════════════════════════════════════════════════════════ */}
       {/* SEÇÃO 3: DETALHAMENTO DO FUNIL */}
       {/* ═══════════════════════════════════════════════════════════════ */}
-      <section className="bg-slate-800/50 border border-slate-700/50 rounded-2xl overflow-hidden">
+      <section data-tour="comercial-detalhamento" className="bg-slate-800/50 border border-slate-700/50 rounded-2xl overflow-hidden">
         {/* Header da seção com abas */}
         <div className="px-6 py-4 border-b border-slate-700/50">
           <div className="flex items-center justify-between mb-4">
@@ -2320,7 +2323,7 @@ export function ComercialPage() {
           </div>
           
           {/* Abas de navegação */}
-          <div className="flex gap-2 flex-wrap">
+          <div data-tour="comercial-abas-funil" className="flex gap-2 flex-wrap">
             <button
               onClick={() => setAbaDetalhamento('leads')}
               className={cn(
@@ -4053,6 +4056,10 @@ export function ComercialPage() {
       </AlertDialog>
         </>
       )}
+
+      {/* Tour e Botão de Ajuda */}
+      <PageTour tourName="comercial" steps={comercialTourSteps} />
+      <TourHelpButton tourName="comercial" />
     </div>
   );
 }

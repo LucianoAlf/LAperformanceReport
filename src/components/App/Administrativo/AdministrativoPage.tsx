@@ -7,6 +7,8 @@ import {
   FileText, Calendar, Plus, Pause, RefreshCw, XCircle, AlertTriangle, LogOut,
   Zap, BarChart3, CheckCircle, DoorOpen, PauseCircle, Search
 } from 'lucide-react';
+import { PageTour, TourHelpButton } from '@/components/Onboarding';
+import { administrativoTourSteps } from '@/components/Onboarding/tours';
 import { supabase } from '@/lib/supabase';
 import { KPICard } from '@/components/ui/KPICard';
 import { Button } from '@/components/ui/button';
@@ -651,7 +653,7 @@ export function AdministrativoPage() {
           </div>
         </div>
         <div className="p-6">
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+        <div data-tour="administrativo-kpis" className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
           <KPICard
             icon={Users}
             label="Alunos Ativos"
@@ -696,7 +698,7 @@ export function AdministrativoPage() {
       </section>
 
       {/* Quick Input */}
-      <section className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 border border-violet-500/20 rounded-2xl overflow-hidden">
+      <section data-tour="administrativo-lancamento" className="bg-gradient-to-br from-slate-800/80 to-slate-900/80 border border-violet-500/20 rounded-2xl overflow-hidden">
         <div className="bg-gradient-to-r from-violet-500/10 to-purple-500/10 border-b border-violet-500/20 px-6 py-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center">
@@ -769,7 +771,7 @@ export function AdministrativoPage() {
         <div className="p-6 space-y-6">
           
           {/* INDICADORES */}
-          <div>
+          <div data-tour="administrativo-indicadores">
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-cyan-500"></span>
               Indicadores
@@ -819,7 +821,7 @@ export function AdministrativoPage() {
           </div>
 
           {/* PRINCIPAIS MOTIVOS DE SAÍDA */}
-          <div>
+          <div data-tour="administrativo-motivos">
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-rose-500"></span>
               Principais Motivos de Saída (Não Renovação + Cancelamento)
@@ -1221,6 +1223,10 @@ export function AdministrativoPage() {
       />
         </>
       )}
+
+      {/* Tour e Botão de Ajuda */}
+      <PageTour tourName="administrativo" steps={administrativoTourSteps} />
+      <TourHelpButton tourName="administrativo" />
     </div>
   );
 }

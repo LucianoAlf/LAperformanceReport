@@ -191,7 +191,26 @@ export function ModalEditarPerfil({ open, onOpenChange }: ModalEditarPerfilProps
       }, 1500);
     } catch (error: any) {
       console.error('Erro ao alterar senha:', error);
-      setMessage({ type: 'error', text: error.message || 'Erro ao alterar senha. Tente novamente.' });
+      
+      // Traduzir mensagens de erro do Supabase para português
+      let mensagemErro = 'Erro ao alterar senha. Tente novamente.';
+      
+      // Ignorar erro de senha igual (permitir usar a mesma senha)
+      if (error.message?.includes('New password should be different')) {
+        // Considerar como sucesso se a senha é igual
+        setMessage({ type: 'success', text: 'Senha confirmada com sucesso!' });
+        setSenhaAtual('');
+        setNovaSenha('');
+        setConfirmarSenha('');
+        setTimeout(() => onOpenChange(false), 1500);
+        return;
+      } else if (error.message?.includes('Password should be at least')) {
+        mensagemErro = 'A senha deve ter pelo menos 6 caracteres.';
+      } else if (error.message) {
+        mensagemErro = error.message;
+      }
+      
+      setMessage({ type: 'error', text: mensagemErro });
     } finally {
       setSaving(false);
     }

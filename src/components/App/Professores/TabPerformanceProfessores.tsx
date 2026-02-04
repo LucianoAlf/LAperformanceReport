@@ -522,7 +522,7 @@ export function TabPerformanceProfessores({ unidadeAtual }: Props) {
   return (
     <div className="space-y-6">
       {/* Alertas de Performance */}
-      <div className="bg-slate-800/50 rounded-2xl p-4 border border-slate-700/50">
+      <div data-tour="professores-alertas" className="bg-slate-800/50 rounded-2xl p-4 border border-slate-700/50">
         <div className="flex items-center gap-2 mb-3">
           <AlertTriangle className="w-5 h-5 text-yellow-400" />
           <h2 className="font-semibold text-white">Alertas de Performance</h2>
@@ -730,7 +730,7 @@ export function TabPerformanceProfessores({ unidadeAtual }: Props) {
       </div>
 
       {/* Tabela de Performance */}
-      <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 overflow-hidden">
+      <div data-tour="professores-tabela" className="bg-slate-800/50 rounded-2xl border border-slate-700/50 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>

@@ -3,6 +3,8 @@ import { Settings, Save, Plus, Trash2, RefreshCw, Building2, Users, Tag, Megapho
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOutletContext } from 'react-router-dom';
+import { PageTour, TourHelpButton } from '@/components/Onboarding';
+import { configTourSteps } from '@/components/Onboarding/tours';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -534,7 +536,7 @@ export function ConfigPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex items-center gap-2 border-b border-slate-700 pb-1">
+      <div data-tour="config-tabs" className="flex items-center gap-2 border-b border-slate-700 pb-1">
         {tabs.map(tab => (
           <button
             key={tab.id}
@@ -555,7 +557,7 @@ export function ConfigPage() {
       <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
         {/* Tab Unidades */}
         {activeTab === 'unidades' && (
-          <div className="space-y-4">
+          <div data-tour="config-unidades" className="space-y-4">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-lg font-bold text-white">Unidades</h3>
               {editedUnidades.size > 0 && (
@@ -721,7 +723,7 @@ export function ConfigPage() {
 
         {/* Tab Canais */}
         {activeTab === 'canais' && (
-          <div className="space-y-4">
+          <div data-tour="config-canais" className="space-y-4">
             <h3 className="text-lg font-bold text-white mb-4">Canais de Origem</h3>
             <div className="flex gap-2 mb-4">
               <input
@@ -772,7 +774,7 @@ export function ConfigPage() {
 
         {/* Tab Motivos de Saída */}
         {activeTab === 'motivos' && (
-          <div className="space-y-4">
+          <div data-tour="config-motivos" className="space-y-4">
             <h3 className="text-lg font-bold text-white mb-4">Motivos de Saída</h3>
             <div className="flex gap-2 mb-4">
               <input
@@ -1117,6 +1119,10 @@ export function ConfigPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Tour e Botão de Ajuda */}
+      <PageTour tourName="config" steps={configTourSteps} />
+      <TourHelpButton tourName="config" />
     </div>
   );
 }

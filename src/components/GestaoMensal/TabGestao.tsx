@@ -920,7 +920,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
     <div className="space-y-6">
       {/* Sub-abas */}
       <div className="flex items-center justify-between flex-wrap gap-4">
-        <div className="bg-slate-800/50 p-1 rounded-lg inline-flex gap-1">
+        <div data-tour="analytics-sub-abas" className="bg-slate-800/50 p-1 rounded-lg inline-flex gap-1">
           {subTabs.map((tab) => (
             <button
               key={tab.id}
@@ -953,7 +953,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             </div>
           )}
           {/* Linha 1: KPIs principais */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div data-tour="analytics-kpis" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <KPICard
               icon={Users}
               label="Total Alunos Ativos"
@@ -1043,6 +1043,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               />
             )}
             {evolucao.length > 0 ? (
+              <div data-tour="analytics-grafico">
               <EvolutionChart
                 data={evolucao}
                 title="Evolução Mensal"
@@ -1053,6 +1054,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
                 ]}
                 className={unidade !== 'todos' ? 'lg:col-span-2' : ''}
               />
+              </div>
             ) : (
               <div className={unidade !== 'todos' ? 'lg:col-span-2' : ''}>
                 <EstadoVazio

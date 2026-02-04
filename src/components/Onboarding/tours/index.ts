@@ -1,0 +1,10 @@
+export { dashboardTourSteps } from './dashboardTour';
+export { analyticsTourSteps } from './analyticsTour';
+export { alunosTourSteps } from './alunosTour';
+export { comercialTourSteps } from './comercialTour';
+export { salasTourSteps } from './salasTour';
+export { professoresTourSteps } from './professoresTour';
+export { projetosTourSteps } from './projetosTour';
+export { administrativoTourSteps } from './administrativoTour';
+export { metasTourSteps } from './metasTour';
+export { configTourSteps } from './configTour';

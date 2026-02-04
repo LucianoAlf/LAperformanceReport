@@ -27,6 +27,8 @@ import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
 import { TipoCompetencia, CompetenciaFiltro, CompetenciaRange } from '@/hooks/useCompetenciaFiltro';
 import { useMetasKPI } from '@/hooks/useMetasKPI';
 import { KPICard } from '@/components/ui/KPICard';
+import { PageTour, TourHelpButton } from '@/components/Onboarding';
+import { dashboardTourSteps } from '@/components/Onboarding/tours';
 
 interface OutletContextType {
   filtroAtivo: string | null;
@@ -605,13 +607,14 @@ export function DashboardPage() {
       )}
 
       {/* ===== LINHA 1: GESTÃO ===== */}
-      <div>
+      <div data-tour="secao-gestao">
         <div className="flex items-center gap-2 mb-3">
           <BarChart3 className="w-5 h-5 text-cyan-400" />
           <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide">Gestão</h3>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <KPICard
+            dataTour="card-alunos"
             icon={Users}
             label="Alunos Ativos"
             value={dadosGestao?.alunos_ativos || totais.alunosAtivos}
@@ -620,6 +623,7 @@ export function DashboardPage() {
             variant="cyan"
           />
           <KPICard
+            dataTour="card-matriculas"
             icon={UserPlus}
             label="Matrículas (Mês)"
             value={dadosGestao?.matriculas_mes ?? '--'}
@@ -629,6 +633,7 @@ export function DashboardPage() {
             variant="emerald"
           />
           <KPICard
+            dataTour="card-evasoes"
             icon={UserMinus}
             label="Evasões (Mês)"
             value={dadosGestao?.evasoes_mes ?? '--'}
@@ -637,6 +642,7 @@ export function DashboardPage() {
             inverterCor={true}
           />
           <KPICard
+            dataTour="card-ticket"
             icon={DollarSign}
             label="Ticket Médio Parcelas"
             value={dadosGestao?.ticket_medio ?? ticketMedioGeral}
@@ -648,7 +654,7 @@ export function DashboardPage() {
       </div>
 
       {/* ===== LINHA 2: COMERCIAL ===== */}
-      <div>
+      <div data-tour="secao-comercial">
         <div className="flex items-center gap-2 mb-3">
           <TrendingUp className="w-5 h-5 text-violet-400" />
           <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide">Comercial</h3>
@@ -692,7 +698,7 @@ export function DashboardPage() {
       </div>
 
       {/* ===== LINHA 3: PROFESSORES ===== */}
-      <div>
+      <div data-tour="secao-professores">
         <div className="flex items-center gap-2 mb-3">
           <Award className="w-5 h-5 text-amber-400" />
           <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide">Professores</h3>
@@ -821,7 +827,7 @@ export function DashboardPage() {
       {/* ===== GRÁFICOS ===== */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Evolução de Alunos */}
-        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
+        <div data-tour="grafico-evolucao" className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
           <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-cyan-400" />
             Evolução de Alunos (12 meses)
@@ -928,6 +934,10 @@ export function DashboardPage() {
           </table>
         </div>
       </div>
+
+      {/* Tour e Botão de Ajuda */}
+      <PageTour tourName="dashboard" steps={dashboardTourSteps} />
+      <TourHelpButton tourName="dashboard" />
     </div>
   );
 }

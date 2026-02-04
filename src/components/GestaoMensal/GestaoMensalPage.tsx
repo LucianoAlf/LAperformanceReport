@@ -6,6 +6,9 @@ import { TabGestao } from './TabGestao';
 import { TabComercialNew } from './TabComercialNew';
 import { TabProfessoresNew } from './TabProfessoresNew';
 import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
+import { PageTour } from '@/components/Onboarding/PageTour';
+import { TourHelpButton } from '@/components/Onboarding/TourHelpButton';
+import { analyticsTourSteps } from '@/components/Onboarding/tours';
 
 type TabId = 'gestao' | 'comercial' | 'professores';
 
@@ -57,7 +60,7 @@ export function GestaoMensalPage({ mesReferencia }: GestaoMensalPageProps) {
         <div className="hidden lg:block border-b border-slate-700">
           <div className="flex items-center justify-between gap-4 px-4">
             {/* Abas à esquerda */}
-            <div className="flex items-center gap-2 pb-1 overflow-x-auto scrollbar-hide">
+            <div data-tour="analytics-abas" className="flex items-center gap-2 pb-1 overflow-x-auto scrollbar-hide">
               {tabs.map(tab => (
                 <button
                   key={tab.id}
@@ -77,7 +80,7 @@ export function GestaoMensalPage({ mesReferencia }: GestaoMensalPageProps) {
 
             {/* Filtro de Competência à direita */}
             {competenciaFiltro && competenciaRange && setTipo && setAno && setMes && setTrimestre && setSemestre && (
-              <div className="flex-shrink-0">
+              <div data-tour="analytics-filtro-periodo" className="flex-shrink-0">
                 <CompetenciaFilter
                   filtro={competenciaFiltro}
                   range={competenciaRange}
@@ -148,6 +151,9 @@ export function GestaoMensalPage({ mesReferencia }: GestaoMensalPageProps) {
           />
         )}
       </div>
+      {/* Tour de Onboarding */}
+      <PageTour tourName="analytics" steps={analyticsTourSteps} />
+      <TourHelpButton tourName="analytics" />
     </div>
   );
 }

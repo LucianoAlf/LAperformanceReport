@@ -10,6 +10,8 @@ import {
   ChevronDown, Filter, Music, BarChart3, Table, LayoutGrid, MapPin, Clock,
   Calendar, Target, Settings
 } from 'lucide-react';
+import { PageTour, TourHelpButton } from '@/components/Onboarding';
+import { professoresTourSteps } from '@/components/Onboarding/tours';
 import { KPICard } from '@/components/ui/KPICard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -534,7 +536,7 @@ export function ProfessoresPage() {
       </div>
 
       {/* Abas */}
-      <div className="flex items-center gap-2 border-b border-slate-700 pb-1">
+      <div data-tour="professores-abas" className="flex items-center gap-2 border-b border-slate-700 pb-1">
         <button
           className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
             abaAtiva === 'cadastro'
@@ -653,7 +655,7 @@ export function ProfessoresPage() {
           {/* NOTA: Configurações do Professor 360° foram movidas para a aba 360° */}
 
           {/* Referência de Metas */}
-          <div className="bg-slate-900/50 rounded-2xl border border-slate-700/50 p-6">
+          <div data-tour="professores-metas" className="bg-slate-900/50 rounded-2xl border border-slate-700/50 p-6">
             <div className="flex items-center gap-3 mb-6">
               <BarChart3 className="w-5 h-5 text-violet-400" />
               <span className="text-sm font-bold text-white uppercase tracking-wide">Referência de Metas</span>
@@ -718,7 +720,7 @@ export function ProfessoresPage() {
       {abaAtiva === 'cadastro' && (
         <>
       {/* KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div data-tour="professores-kpis" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <KPICard
           label="Total Ativos"
           value={kpis.totalAtivos}
@@ -877,6 +879,7 @@ export function ProfessoresPage() {
           </div>
 
           <Button 
+            data-tour="btn-novo-professor"
             onClick={() => setModalProfessor({ open: true, modo: 'novo', professor: null })}
             className="bg-violet-600 hover:bg-violet-700"
           >
@@ -888,7 +891,7 @@ export function ProfessoresPage() {
 
       {/* Visualização: Tabela ou Cards */}
       {visualizacao === 'tabela' ? (
-        <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
+        <div data-tour="professores-tabela" className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
             <thead>
@@ -1176,6 +1179,10 @@ export function ProfessoresPage() {
 
       {/* Toast Container */}
       <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} />
+
+      {/* Tour e Botão de Ajuda */}
+      <PageTour tourName="professores" steps={professoresTourSteps} />
+      <TourHelpButton tourName="professores" />
     </div>
   );
 }

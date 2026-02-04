@@ -102,7 +102,9 @@ export function AppSidebar() {
   };
 
   return (
-    <aside className={`fixed left-0 top-0 h-screen bg-slate-900/95 backdrop-blur-sm border-r border-slate-800 flex flex-col z-50 transition-all duration-300 ${
+    <aside 
+      data-tour="sidebar"
+      className={`fixed left-0 top-0 h-screen bg-slate-900/95 backdrop-blur-sm border-r border-slate-800 flex flex-col z-50 transition-all duration-300 ${
       isCollapsed ? 'w-24' : 'w-64'
     }`}>
       {/* Logo */}

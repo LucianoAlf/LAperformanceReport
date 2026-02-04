@@ -4,6 +4,7 @@ import { AppSidebar } from './AppSidebar';
 import { AppHeader } from './AppHeader';
 import { useUnidadeFiltro } from '../../../hooks/useUnidadeFiltro';
 import { useCompetenciaFiltro } from '../../../hooks/useCompetenciaFiltro';
+import { OnboardingChecklist } from '@/components/Onboarding/OnboardingChecklist';
 
 export function AppLayout() {
   const { unidadeSelecionada, setUnidadeSelecionada, filtroAtivo } = useUnidadeFiltro();
@@ -36,7 +37,7 @@ export function AppLayout() {
 
   return (
     <div className="flex min-h-screen bg-slate-950">
-      <AppSidebar />
+      <AppSidebar data-tour="sidebar" />
       <div 
         className="flex-1 transition-all duration-300"
         style={{ 
@@ -52,6 +53,9 @@ export function AppLayout() {
           <Outlet context={{ filtroAtivo, unidadeSelecionada, competencia }} />
         </main>
       </div>
+      
+      {/* Modal de Onboarding - aparece no primeiro acesso */}
+      <OnboardingChecklist />
     </div>
   );
 }

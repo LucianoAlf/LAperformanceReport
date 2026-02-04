@@ -5,6 +5,8 @@ import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import { 
   Building2, Plus, Search, Edit2, Trash2, Users, Clock, AlertTriangle, Package, DoorOpen, Sparkles, Calendar
 } from 'lucide-react';
+import { PageTour, TourHelpButton } from '@/components/Onboarding';
+import { salasTourSteps } from '@/components/Onboarding/tours';
 import {
   Select,
   SelectContent,
@@ -364,7 +366,7 @@ export function SalasPage() {
       </header>
 
       {/* Sistema de Abas */}
-      <div className="flex items-center gap-2 border-b border-slate-700 pb-1">
+      <div data-tour="salas-abas" className="flex items-center gap-2 border-b border-slate-700 pb-1">
         <button
           onClick={() => setTabAtiva('salas')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
@@ -393,7 +395,7 @@ export function SalasPage() {
       {tabAtiva === 'salas' && (
         <>
           {/* KPI Cards */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div data-tour="salas-kpis" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-purple-500/20 rounded-lg flex items-center justify-center">
@@ -507,7 +509,7 @@ export function SalasPage() {
           </div>
 
           {/* Barra de Filtros */}
-          <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+          <div data-tour="salas-filtros" className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
             <div className="flex flex-wrap items-center gap-4">
               {/* Busca */}
               <div className="flex-1 min-w-[200px]">
@@ -577,6 +579,7 @@ export function SalasPage() {
 
               {/* Botão Nova Sala */}
               <button 
+                data-tour="btn-nova-sala"
                 onClick={handleNovaSala}
                 className="bg-purple-600 hover:bg-purple-500 px-4 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2"
               >
@@ -606,7 +609,7 @@ export function SalasPage() {
             </div>
           ) : (
             /* Grid de Cards de Salas */
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div data-tour="salas-cards" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {salasFiltradas.map((sala) => {
             const tipoConfig = getTipoConfig(sala.tipo_sala);
             const isSalaCoringa = sala.sala_coringa;
@@ -804,6 +807,10 @@ export function SalasPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Tour e Botão de Ajuda */}
+      <PageTour tourName="salas" steps={salasTourSteps} />
+      <TourHelpButton tourName="salas" />
     </div>
   );
 }

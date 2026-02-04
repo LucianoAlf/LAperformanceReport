@@ -11,6 +11,8 @@ import {
   Settings,
   Plus
 } from 'lucide-react';
+import { PageTour, TourHelpButton } from '@/components/Onboarding';
+import { projetosTourSteps } from '@/components/Onboarding/tours';
 import { Button } from '../../ui/button';
 import { DashboardView } from './views/DashboardView';
 import { ListaView } from './views/ListaView';
@@ -95,6 +97,7 @@ export function ProjetosPage() {
         <div className="flex items-center gap-3">
           {/* Botão Novo Projeto */}
           <Button
+            data-tour="btn-novo-projeto"
             onClick={() => setIsModalNovoProjetoOpen(true)}
             className="bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white gap-2"
           >
@@ -156,6 +159,10 @@ export function ProjetosPage() {
 
       {/* Chat Flutuante do Fábio - Disponível em todas as abas */}
       <FabioChatFlutuante unidadeSelecionada={unidadeSelecionada} />
+
+      {/* Tour e Botão de Ajuda */}
+      <PageTour tourName="projetos" steps={projetosTourSteps} />
+      <TourHelpButton tourName="projetos" />
     </div>
   );
 }

@@ -70,7 +70,7 @@ export function AppHeader({ unidadeSelecionada, onUnidadeChange, periodoLabel }:
         <div className="flex items-center gap-4">
           {/* Seletor de Unidade - APENAS PARA ADMIN */}
           {isAdmin ? (
-            <div className="flex items-center gap-2">
+            <div data-tour="header-unidade" className="flex items-center gap-2">
               <MapPin className="w-4 h-4 text-gray-500" />
               <Select
                 value={unidadeSelecionada || 'consolidado'}
@@ -99,7 +99,7 @@ export function AppHeader({ unidadeSelecionada, onUnidadeChange, periodoLabel }:
 
           {/* Label do Período Selecionado */}
           {periodoLabel && (
-            <div className="flex items-center gap-2 bg-violet-600/20 border border-violet-500/30 rounded-xl px-3 py-2">
+            <div data-tour="header-competencia" className="flex items-center gap-2 bg-violet-600/20 border border-violet-500/30 rounded-xl px-3 py-2">
               <Calendar className="w-4 h-4 text-violet-400" />
               <span className="text-sm font-medium text-violet-300">{periodoLabel}</span>
             </div>

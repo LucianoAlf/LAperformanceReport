@@ -5,6 +5,8 @@ import {
   Percent, Clock, BarChart3, ShoppingCart, UserCheck, Star,
   AlertCircle, LucideIcon
 } from 'lucide-react';
+import { PageTour, TourHelpButton } from '@/components/Onboarding';
+import { metasTourSteps } from '@/components/Onboarding/tours';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { MetaInput, FormatoMeta } from '@/components/ui/MetaInput';
@@ -405,7 +407,7 @@ export function MetasPageNew() {
       </div>
 
       {/* Abas */}
-      <div className="flex gap-1 p-1 bg-slate-800/50 rounded-xl w-fit">
+      <div data-tour="metas-abas" className="flex gap-1 p-1 bg-slate-800/50 rounded-xl w-fit">
         {[
           { id: 'gestao' as const, label: 'Gestão', icon: BarChart3 },
           { id: 'comercial' as const, label: 'Comercial', icon: TrendingUp },
@@ -441,7 +443,7 @@ export function MetasPageNew() {
 
       {/* Tabela de Metas - renderiza quando NÃO é simulador */}
       {abaAtiva !== 'simulador' && abaAtiva !== 'simulador-turma' && (
-      <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl overflow-hidden">
+      <div data-tour="metas-tabela" className="bg-slate-800/50 border border-slate-700/50 rounded-2xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
@@ -614,6 +616,10 @@ export function MetasPageNew() {
         </div>
       </div>
       )}
+
+      {/* Tour e Botão de Ajuda */}
+      <PageTour tourName="metas" steps={metasTourSteps} />
+      <TourHelpButton tourName="metas" />
     </div>
   );
 }

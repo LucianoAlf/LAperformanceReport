@@ -767,7 +767,7 @@ export function TabelaAlunos({
   return (
     <>
       {/* Filtros */}
-      <div className="p-4 bg-slate-800/50 border-b border-slate-700">
+      <div data-tour="filtros-alunos" className="p-4 bg-slate-800/50 border-b border-slate-700">
         {/* Resumo de Turmas */}
         <div className="mb-3 flex items-center gap-3 text-sm">
           <span className="text-slate-400">Turmas:</span>
@@ -919,6 +919,7 @@ export function TabelaAlunos({
 
           {/* Botão Novo Aluno - Canto Direito */}
           <button
+            data-tour="btn-novo-aluno"
             onClick={onNovoAluno}
             className="ml-auto h-10 bg-purple-600 hover:bg-purple-500 px-5 rounded-xl text-sm font-medium transition flex items-center gap-2 text-white"
           >
@@ -1048,7 +1049,7 @@ export function TabelaAlunos({
       )}
 
       {/* Tabela */}
-      <div className="overflow-x-auto">
+      <div data-tour="tabela-alunos" className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-slate-700/50">
             <tr className="text-left text-slate-400 text-xs uppercase">

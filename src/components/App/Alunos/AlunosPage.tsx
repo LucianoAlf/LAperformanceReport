@@ -22,6 +22,8 @@ import { AlertaTurma } from './AlertaTurma';
 import { GradeHoraria } from '../Turmas/GradeHoraria';
 import { ToastContainer } from '@/components/ui/toast';
 import { useToast } from '@/hooks/useToast';
+import { PageTour, TourHelpButton } from '@/components/Onboarding';
+import { alunosTourSteps } from '@/components/Onboarding/tours';
 
 // Interfaces
 export interface Aluno {
@@ -1074,7 +1076,7 @@ export function AlunosPage() {
       </header>
 
       {/* KPI Cards */}
-      <section className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+      <section data-tour="alunos-kpis" className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
         <KPICard
           title="Alunos Ativos"
           value={kpis.totalAtivos}
@@ -1139,7 +1141,7 @@ export function AlunosPage() {
         {/* Tabs + Novo Aluno */}
         <div className="flex items-center justify-between border-b border-slate-700">
           {/* Tabs de navegação */}
-          <div className="flex items-center gap-2 pb-1">
+          <div data-tour="alunos-tabs" className="flex items-center gap-2 pb-1">
             <button
               onClick={() => setTabAtiva('lista')}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
@@ -1193,7 +1195,7 @@ export function AlunosPage() {
           </div>
 
           {/* Botões de Ação */}
-          <div className="flex items-center gap-2 mr-4">
+          <div data-tour="alunos-acoes" className="flex items-center gap-2 mr-4">
             {tabAtiva === 'turmas' && (
               <button
                 onClick={() => setModalNovaTurma(true)}
@@ -1339,6 +1341,10 @@ export function AlunosPage() {
 
       {/* Toast Container */}
       <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} />
+
+      {/* Tour e Botão de Ajuda */}
+      <PageTour tourName="alunos" steps={alunosTourSteps} />
+      <TourHelpButton tourName="alunos" />
     </div>
   );
 }

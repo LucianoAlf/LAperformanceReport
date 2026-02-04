@@ -31,6 +31,8 @@ export interface KPICardProps {
   metaInversa?: boolean;
   // Mostrar barra de progresso (default: true se target definido)
   showProgress?: boolean;
+  // Atributo data-tour para onboarding
+  dataTour?: string;
 }
 
 const colorMap: Record<string, string> = {
@@ -115,6 +117,7 @@ export function KPICard({
   inverterCor = false,
   metaInversa = false,
   showProgress = true,
+  dataTour,
 }: KPICardProps) {
   const displayLabel = title || label || '';
   const effectiveVariant = color || variant;
@@ -232,6 +235,7 @@ export function KPICard({
 
   return (
     <div 
+      data-tour={dataTour}
       className={cn(
         "bg-slate-800/50 border border-slate-700/50 rounded-2xl",
         "hover:border-slate-600/50 transition-all duration-300",

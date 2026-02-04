@@ -376,7 +376,7 @@ export function PlanoAcaoComercial({ unidadeId, ano, mes }: PlanoAcaoComercialPr
   };
 
   return (
-    <div className="bg-slate-800/30 rounded-2xl border border-slate-700/50 overflow-hidden">
+    <div data-tour="comercial-plano-acao" className="bg-slate-800/30 rounded-2xl border border-slate-700/50 overflow-hidden">
       {/* Header */}
       <div 
         className="flex items-center justify-between p-6 cursor-pointer hover:bg-slate-800/50 transition-colors"
@@ -434,6 +434,7 @@ export function PlanoAcaoComercial({ unidadeId, ano, mes }: PlanoAcaoComercialPr
           {/* Botão Gerar (só aparece se não tiver insights) */}
           {!insights && (
             <Button
+              data-tour="comercial-btn-gerar-plano"
               onClick={(e) => {
                 e.stopPropagation();
                 gerarAnalise();
