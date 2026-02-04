@@ -30,6 +30,7 @@ interface Usuario {
   perfil: 'admin' | 'unidade';
   unidade_id: string | null;
   unidade_nome?: string;
+  auth_user_id: string | null;
   ativo: boolean;
   created_at: string;
 }
@@ -195,7 +196,12 @@ export function GerenciarUsuarios() {
   };
 
   const handleChangePassword = async () => {
-    if (!editingUser?.id || !formNovaSenha) {
+    if (!editingUser?.email) {
+      toast.error('Email do usuário não encontrado');
+      return;
+    }
+
+    if (!formNovaSenha) {
       toast.error('Digite a nova senha');
       return;
     }
@@ -207,21 +213,12 @@ export function GerenciarUsuarios() {
 
     setSendingReset(true);
     try {
-      // Buscar o auth_user_id do usuário
-      const { data: userData, error: userError } = await supabase
-        .from('usuarios')
-        .select('auth_user_id')
-        .eq('id', editingUser.id)
-        .single();
-
-      if (userError || !userData?.auth_user_id) {
-        throw new Error('Usuário não encontrado no sistema de autenticação');
-      }
-
       // Chamar Edge Function para alterar senha
       const { data, error } = await supabase.functions.invoke('admin-update-password', {
         body: {
-          userId: userData.auth_user_id,
+          userId: editingUser.id,
+          email: editingUser.email,
+          authUserId: editingUser.auth_user_id,
           newPassword: formNovaSenha,
         },
       });
