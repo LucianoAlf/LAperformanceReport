@@ -2,10 +2,10 @@ import { useState } from 'react';
 import { BarChart3, TrendingUp, TrendingDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-// Importar os componentes existentes de apresentação (2025)
-import App from '../../../../App';
-import { ComercialDashboard } from '@/components/Comercial';
-import { RetencaoDashboard } from '@/components/Retencao';
+// Importar os componentes embedded (sem sidebar interna)
+import { GestaoEmbedded } from './GestaoEmbedded';
+import { ComercialEmbedded } from './ComercialEmbedded';
+import { RetencaoEmbedded } from './RetencaoEmbedded';
 
 type TabId = 'gestao' | 'comercial' | 'retencao';
 
@@ -86,20 +86,20 @@ export function Apresentacoes2025Page() {
       </div>
 
       {/* Conteúdo da Aba Ativa */}
-      <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 bg-slate-900/30 rounded-2xl border border-slate-800/50 p-4">
+      <div className="animate-in fade-in slide-in-from-bottom-4 duration-300 bg-slate-900/30 rounded-2xl border border-slate-800/50 overflow-hidden">
         {activeTab === 'gestao' && (
-          <div className="min-h-[600px]">
-            <App />
+          <div className="w-full">
+            <GestaoEmbedded />
           </div>
         )}
         {activeTab === 'comercial' && (
-          <div className="min-h-[600px]">
-            <ComercialDashboard onPageChange={() => {}} />
+          <div className="w-full">
+            <ComercialEmbedded />
           </div>
         )}
         {activeTab === 'retencao' && (
-          <div className="min-h-[600px]">
-            <RetencaoDashboard onPageChange={() => {}} />
+          <div className="w-full">
+            <RetencaoEmbedded />
           </div>
         )}
       </div>

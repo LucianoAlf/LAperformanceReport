@@ -1,15 +1,34 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, ReactNode, useCallback } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 
 export interface Usuario {
-  id: string;
+  id: number;
   email: string;
   nome: string;
   perfil: 'admin' | 'unidade';
   unidade_id: string | null;
   unidade_nome?: string;
   ativo: boolean;
+}
+
+// Interface para perfis do novo sistema
+export interface PerfilUsuario {
+  perfil_id: string;
+  perfil_nome: string;
+  perfil_nivel: number;
+  perfil_icone: string;
+  perfil_cor: string;
+  unidade_id: string | null;
+  unidade_nome: string | null;
+}
+
+// Interface para permissões
+export interface Permissao {
+  codigo: string;
+  modulo: string;
+  acao: string;
+  descricao: string;
 }
 
 interface AuthContextType {
@@ -23,6 +42,12 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   canViewConsolidated: () => boolean;
   canManageUsers: () => boolean;
+  // Novo sistema de permissões
+  perfis: PerfilUsuario[];
+  permissoes: Set<string>;
+  hasPermission: (codigo: string) => boolean;
+  hasAnyPermission: (codigos: string[]) => boolean;
+  refreshPermissoes: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -32,6 +57,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  
+  // Novo sistema de permissões
+  const [perfis, setPerfis] = useState<PerfilUsuario[]>([]);
+  const [permissoes, setPermissoes] = useState<Set<string>>(new Set());
 
   // Buscar dados do usuário na tabela usuarios - com timeout
   const fetchUsuario = async (userId: string, userEmail?: string): Promise<Usuario | null> => {
@@ -119,6 +148,75 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  // Função para carregar permissões do novo sistema
+  const fetchPermissoes = useCallback(async (usuarioId: number, isAdminAntigo: boolean) => {
+    try {
+      // Se é admin antigo, carrega TODAS as permissões
+      if (isAdminAntigo) {
+        const { data: todasPermissoes } = await supabase
+          .from('permissoes')
+          .select('codigo')
+          .eq('ativo', true);
+        
+        if (todasPermissoes) {
+          setPermissoes(new Set(todasPermissoes.map(p => p.codigo)));
+        }
+        
+        // Admin antigo não precisa de perfis do novo sistema
+        setPerfis([]);
+        return;
+      }
+
+      // Buscar perfis do usuário
+      const { data: perfisData } = await supabase
+        .rpc('usuario_perfis_lista', { p_usuario_id: usuarioId });
+      
+      if (perfisData) {
+        setPerfis(perfisData as PerfilUsuario[]);
+      }
+
+      // Buscar permissões do usuário
+      const { data: permissoesData } = await supabase
+        .rpc('usuario_permissoes', { p_usuario_id: usuarioId });
+      
+      if (permissoesData) {
+        setPermissoes(new Set(permissoesData.map((p: Permissao) => p.codigo)));
+      }
+    } catch (err) {
+      console.error('Erro ao carregar permissões:', err);
+    }
+  }, []);
+
+  // Função para verificar se tem uma permissão específica
+  const hasPermission = useCallback((codigo: string): boolean => {
+    // Admin antigo tem TODAS as permissões
+    if (usuario?.perfil === 'admin') return true;
+    
+    // Verifica permissão direta
+    if (permissoes.has(codigo)) return true;
+    
+    // Verifica permissão pai (ex: 'administrativo.lojinha' para 'administrativo.lojinha.vender')
+    const partes = codigo.split('.');
+    for (let i = partes.length - 1; i > 0; i--) {
+      const pai = partes.slice(0, i).join('.');
+      if (permissoes.has(pai)) return true;
+    }
+    
+    return false;
+  }, [usuario?.perfil, permissoes]);
+
+  // Função para verificar se tem alguma das permissões
+  const hasAnyPermission = useCallback((codigos: string[]): boolean => {
+    return codigos.some(codigo => hasPermission(codigo));
+  }, [hasPermission]);
+
+  // Função para recarregar permissões (útil após alterações)
+  const refreshPermissoes = useCallback(async () => {
+    if (usuario) {
+      await fetchPermissoes(usuario.id, usuario.perfil === 'admin');
+    }
+  }, [usuario, fetchPermissoes]);
+
   useEffect(() => {
     let mounted = true;
     
@@ -144,7 +242,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         
         if (session?.user) {
           const usuarioData = await fetchUsuario(session.user.id, session.user.email);
-          if (mounted) setUsuario(usuarioData);
+          if (mounted) {
+            setUsuario(usuarioData);
+            // Carregar permissões após obter dados do usuário
+            if (usuarioData) {
+              await fetchPermissoes(usuarioData.id, usuarioData.perfil === 'admin');
+            }
+          }
         }
       } catch (error) {
         console.error('Erro ao carregar sessão:', error);
@@ -166,10 +270,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (session?.user) {
           // Busca em background, não bloqueia
           fetchUsuario(session.user.id, session.user.email).then(data => {
-            if (mounted) setUsuario(data);
+            if (mounted) {
+              setUsuario(data);
+              // Carregar permissões após obter dados do usuário
+              if (data) {
+                fetchPermissoes(data.id, data.perfil === 'admin');
+              }
+            }
           });
         } else {
           setUsuario(null);
+          setPerfis([]);
+          setPermissoes(new Set());
         }
       }
     );
@@ -194,6 +306,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setUsuario(null);
     setSession(null);
+    setPerfis([]);
+    setPermissoes(new Set());
   };
 
   const isAdmin = usuario?.perfil === 'admin';
@@ -213,6 +327,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signOut,
     canViewConsolidated,
     canManageUsers,
+    // Novo sistema de permissões
+    perfis,
+    permissoes,
+    hasPermission,
+    hasAnyPermission,
+    refreshPermissoes,
   };
 
   return (

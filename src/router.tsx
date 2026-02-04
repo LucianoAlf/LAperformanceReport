@@ -16,6 +16,7 @@ import { LoginPage, PrivateRoute } from './components/App/Auth';
 
 // Admin
 import { GerenciarUsuarios } from './components/App/Admin';
+import { PainelPermissoes } from './components/App/Admin/PainelPermissoes';
 
 // Operacional
 import { ComercialPage } from './components/App/Comercial';
@@ -182,6 +183,10 @@ export const router = createBrowserRouter([
           {
             path: 'admin/usuarios',
             element: <GerenciarUsuarios />,
+          },
+          {
+            path: 'admin/permissoes',
+            element: <PainelPermissoes />,
           },
         ],
       },

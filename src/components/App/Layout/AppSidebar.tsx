@@ -181,6 +181,24 @@ export function AppSidebar() {
                 {!isCollapsed && <span className="text-sm font-medium">Gerenciar Usuários</span>}
               </NavLink>
             </Tooltip>
+            <Tooltip content="Permissões" enabled={isCollapsed}>
+              <NavLink
+                to="/app/admin/permissoes"
+                className={({ isActive }) =>
+                  isCollapsed
+                    ? "w-full flex items-center justify-center py-3"
+                    : `w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${
+                        isActive
+                          ? 'bg-gradient-to-r from-purple-500/20 to-pink-500/20 text-purple-400 border border-purple-500/30'
+                          : 'text-gray-400 hover:text-white hover:bg-slate-800/50'
+                      }`
+                }
+                style={isCollapsed ? { background: 'none', border: 'none', boxShadow: 'none', outline: 'none' } : {}}
+              >
+                <Shield className={`w-5 h-5 ${isCollapsed ? (window.location.pathname === "/app/admin/permissoes" ? 'text-purple-400' : 'text-gray-400 hover:text-white') : ''}`} />
+                {!isCollapsed && <span className="text-sm font-medium">Permissões</span>}
+              </NavLink>
+            </Tooltip>
           </>
         )}
 

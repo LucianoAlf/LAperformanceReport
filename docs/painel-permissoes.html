@@ -1,0 +1,1412 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gerenciar Permissões - LA Music Report</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    
+    /* Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .header h1 {
+      font-size: 24px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    
+    .btn {
+      padding: 10px 18px;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s;
+      font-weight: 500;
+    }
+    .btn-primary { background: #3b82f6; color: white; }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-success { background: #10b981; color: white; }
+    .btn-success:hover { background: #059669; }
+    .btn-danger { background: #ef4444; color: white; }
+    .btn-danger:hover { background: #dc2626; }
+    .btn-ghost { background: transparent; color: #94a3b8; border: 1px solid #334155; }
+    .btn-ghost:hover { background: #1e293b; color: #e2e8f0; }
+    .btn-sm { padding: 6px 12px; font-size: 13px; }
+    
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 24px;
+      border-bottom: 1px solid #334155;
+      padding-bottom: 0;
+    }
+    .tab {
+      padding: 12px 24px;
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 14px;
+      transition: all 0.2s;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+    }
+    .tab:hover { color: #e2e8f0; }
+    .tab.active {
+      color: #3b82f6;
+      border-bottom-color: #3b82f6;
+    }
+    
+    /* Card */
+    .card {
+      background: #1e293b;
+      border-radius: 12px;
+      border: 1px solid #334155;
+      overflow: hidden;
+    }
+    .card-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid #334155;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .card-header h2 {
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-body { padding: 20px; }
+    
+    /* Perfil Cards */
+    .perfis-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .perfil-card {
+      background: #0f172a;
+      border: 2px solid #334155;
+      border-radius: 12px;
+      padding: 16px;
+      cursor: pointer;
+      transition: all 0.2s;
+      text-align: center;
+    }
+    .perfil-card:hover { border-color: #475569; }
+    .perfil-card.selected { 
+      border-color: #3b82f6; 
+      background: #1e293b;
+    }
+    .perfil-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      margin: 0 auto 12px;
+    }
+    .perfil-card.admin .perfil-icon { background: #ef444420; }
+    .perfil-card.gerente .perfil-icon { background: #f59e0b20; }
+    .perfil-card.farmer .perfil-icon { background: #10b98120; }
+    .perfil-card.hunter .perfil-icon { background: #3b82f620; }
+    .perfil-card.professor .perfil-icon { background: #8b5cf620; }
+    .perfil-card.visualizador .perfil-icon { background: #64748b20; }
+    .perfil-nome { font-weight: 600; font-size: 15px; margin-bottom: 4px; }
+    .perfil-desc { font-size: 12px; color: #64748b; }
+    .perfil-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      margin-top: 8px;
+    }
+    .perfil-card.admin .perfil-badge { background: #ef4444; color: white; }
+    .perfil-card.gerente .perfil-badge { background: #f59e0b; color: white; }
+    .perfil-card.farmer .perfil-badge { background: #10b981; color: white; }
+    .perfil-card.hunter .perfil-badge { background: #3b82f6; color: white; }
+    .perfil-card.professor .perfil-badge { background: #8b5cf6; color: white; }
+    .perfil-card.visualizador .perfil-badge { background: #64748b; color: white; }
+    
+    /* Módulos */
+    .modulo-section {
+      margin-bottom: 24px;
+    }
+    .modulo-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 16px;
+      background: #334155;
+      border-radius: 8px;
+      margin-bottom: 12px;
+      cursor: pointer;
+    }
+    .modulo-header:hover { background: #475569; }
+    .modulo-icon {
+      width: 32px;
+      height: 32px;
+      background: #3b82f620;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .modulo-title { font-weight: 600; flex: 1; }
+    .modulo-count {
+      font-size: 12px;
+      color: #64748b;
+      background: #1e293b;
+      padding: 4px 10px;
+      border-radius: 12px;
+    }
+    .modulo-arrow { 
+      color: #64748b; 
+      transition: transform 0.2s;
+    }
+    .modulo-header.expanded .modulo-arrow {
+      transform: rotate(90deg);
+    }
+    
+    /* Permissões */
+    .permissoes-list {
+      padding-left: 16px;
+    }
+    .permissao-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      background: #0f172a;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      transition: all 0.2s;
+    }
+    .permissao-item:hover { background: #1e293b; }
+    .permissao-item.sub {
+      margin-left: 24px;
+      border-left: 2px solid #334155;
+      border-radius: 0 8px 8px 0;
+    }
+    .permissao-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .permissao-icon {
+      width: 28px;
+      height: 28px;
+      background: #334155;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 14px;
+    }
+    .permissao-nome { font-size: 14px; }
+    .permissao-codigo {
+      font-size: 11px;
+      color: #64748b;
+      font-family: monospace;
+      background: #334155;
+      padding: 2px 6px;
+      border-radius: 4px;
+      margin-left: 8px;
+    }
+    
+    /* Toggle */
+    .toggle {
+      width: 44px;
+      height: 24px;
+      background: #475569;
+      border-radius: 12px;
+      position: relative;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .toggle.active { background: #10b981; }
+    .toggle::after {
+      content: '';
+      position: absolute;
+      width: 18px;
+      height: 18px;
+      background: white;
+      border-radius: 50%;
+      top: 3px;
+      left: 3px;
+      transition: left 0.2s;
+    }
+    .toggle.active::after { left: 23px; }
+    .toggle.disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    
+    /* Categoria Badge */
+    .categoria-badge {
+      font-size: 11px;
+      padding: 4px 12px;
+      border-radius: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      font-weight: 600;
+    }
+    .categoria-badge.sistema { background: #3b82f620; color: #60a5fa; }
+    .categoria-badge.operacional { background: #10b98120; color: #34d399; }
+    .categoria-badge.admin { background: #ef444420; color: #f87171; }
+    
+    /* Stats */
+    .stats-row {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .stat-card {
+      flex: 1;
+      background: #0f172a;
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+    }
+    .stat-value {
+      font-size: 32px;
+      font-weight: 700;
+      color: #3b82f6;
+    }
+    .stat-label {
+      font-size: 13px;
+      color: #64748b;
+      margin-top: 4px;
+    }
+    
+    /* Modal */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0,0,0,0.7);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      padding: 20px;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal {
+      background: #1e293b;
+      border-radius: 16px;
+      width: 100%;
+      max-width: 500px;
+      max-height: 90vh;
+      overflow-y: auto;
+      border: 1px solid #334155;
+    }
+    .modal-lg { max-width: 700px; }
+    .modal-header {
+      padding: 20px;
+      border-bottom: 1px solid #334155;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .modal-header h3 {
+      font-size: 18px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .modal-close {
+      background: none;
+      border: none;
+      color: #64748b;
+      font-size: 24px;
+      cursor: pointer;
+    }
+    .modal-close:hover { color: #e2e8f0; }
+    .modal-body { padding: 20px; }
+    .modal-footer {
+      padding: 16px 20px;
+      border-top: 1px solid #334155;
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+    
+    /* Form */
+    .form-group { margin-bottom: 16px; }
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      color: #94a3b8;
+      margin-bottom: 6px;
+    }
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      width: 100%;
+      padding: 10px 14px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      color: #e2e8f0;
+      font-size: 14px;
+    }
+    .form-group input:focus,
+    .form-group select:focus {
+      outline: none;
+      border-color: #3b82f6;
+    }
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+    
+    /* Color picker */
+    .color-options {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .color-option {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: all 0.2s;
+    }
+    .color-option:hover { transform: scale(1.1); }
+    .color-option.selected { border-color: white; }
+    
+    /* Table */
+    .table-container {
+      overflow-x: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    th, td {
+      padding: 12px 16px;
+      text-align: left;
+      border-bottom: 1px solid #334155;
+    }
+    th {
+      background: #0f172a;
+      font-weight: 500;
+      font-size: 13px;
+      color: #94a3b8;
+    }
+    td { font-size: 14px; }
+    tr:hover td { background: #0f172a20; }
+    
+    /* Audit log */
+    .audit-item {
+      display: flex;
+      gap: 16px;
+      padding: 16px;
+      background: #0f172a;
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+    .audit-time {
+      min-width: 140px;
+      font-size: 13px;
+      color: #64748b;
+    }
+    .audit-user {
+      min-width: 150px;
+      font-weight: 500;
+    }
+    .audit-action {
+      flex: 1;
+    }
+    .audit-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      margin-right: 8px;
+    }
+    .audit-badge.create { background: #10b98120; color: #34d399; }
+    .audit-badge.update { background: #3b82f620; color: #60a5fa; }
+    .audit-badge.delete { background: #ef444420; color: #f87171; }
+    .audit-badge.login { background: #8b5cf620; color: #a78bfa; }
+    
+    /* Search */
+    .search-box {
+      position: relative;
+      margin-bottom: 16px;
+    }
+    .search-box input {
+      width: 100%;
+      padding: 10px 14px 10px 40px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      color: #e2e8f0;
+      font-size: 14px;
+    }
+    .search-box input:focus {
+      outline: none;
+      border-color: #3b82f6;
+    }
+    .search-icon {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: #64748b;
+    }
+    
+    /* Empty state */
+    .empty-state {
+      text-align: center;
+      padding: 40px;
+      color: #64748b;
+    }
+    .empty-state-icon {
+      font-size: 48px;
+      margin-bottom: 12px;
+    }
+    
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: #10b981;
+      color: white;
+      padding: 14px 20px;
+      border-radius: 8px;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      z-index: 1100;
+      animation: slideIn 0.3s ease;
+    }
+    .toast.show { display: flex; }
+    @keyframes slideIn {
+      from { transform: translateX(100%); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    
+    /* Info box */
+    .info-box {
+      background: #1e3a5f;
+      border: 1px solid #3b82f6;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 20px;
+    }
+    .info-box-title {
+      font-weight: 600;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .info-box p {
+      font-size: 13px;
+      color: #94a3b8;
+      line-height: 1.5;
+    }
+    
+    /* Hierarquia visual */
+    .hierarquia {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 16px;
+      background: #0f172a;
+      border-radius: 8px;
+      margin-bottom: 16px;
+    }
+    .hierarquia-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: #334155;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+    .hierarquia-arrow {
+      color: #64748b;
+    }
+    
+    /* Quick actions */
+    .quick-actions {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 20px;
+    }
+    .quick-action {
+      padding: 8px 16px;
+      background: #0f172a;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 13px;
+      transition: all 0.2s;
+    }
+    .quick-action:hover {
+      border-color: #3b82f6;
+      color: #e2e8f0;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div class="header">
+    <h1>🔐 Gerenciar Permissões</h1>
+    <button class="btn btn-primary" onclick="openModal('modalNovoPerfil')">+ Novo Perfil</button>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" onclick="showTab('perfis')">👥 Perfis</button>
+    <button class="tab" onclick="showTab('matriz')">⚙️ Matriz de Permissões</button>
+    <button class="tab" onclick="showTab('usuarios')">👤 Usuários por Perfil</button>
+    <button class="tab" onclick="showTab('auditoria')">📋 Auditoria</button>
+  </div>
+
+  <!-- Tab: Perfis -->
+  <div id="tab-perfis" class="tab-content">
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-value">6</div>
+        <div class="stat-label">Perfis Ativos</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">47</div>
+        <div class="stat-label">Permissões</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">12</div>
+        <div class="stat-label">Usuários</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">3</div>
+        <div class="stat-label">Unidades</div>
+      </div>
+    </div>
+
+    <div class="info-box">
+      <div class="info-box-title">ℹ️ Hierarquia de Acesso</div>
+      <p>Usuários com perfis de maior nível podem gerenciar usuários de menor nível. O perfil Admin é protegido e não pode ser excluído.</p>
+    </div>
+
+    <div class="hierarquia">
+      <div class="hierarquia-item" style="background: #ef444440;">🛡️ Admin (100)</div>
+      <span class="hierarquia-arrow">→</span>
+      <div class="hierarquia-item" style="background: #f59e0b40;">💼 Gerente (50)</div>
+      <span class="hierarquia-arrow">→</span>
+      <div class="hierarquia-item" style="background: #10b98140;">👥 Farmer (30)</div>
+      <span class="hierarquia-arrow">→</span>
+      <div class="hierarquia-item" style="background: #3b82f640;">🎯 Hunter (30)</div>
+      <span class="hierarquia-arrow">→</span>
+      <div class="hierarquia-item" style="background: #8b5cf640;">🎵 Professor (20)</div>
+      <span class="hierarquia-arrow">→</span>
+      <div class="hierarquia-item" style="background: #64748b40;">👁️ Visualizador (10)</div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h2>Perfis Disponíveis</h2>
+      </div>
+      <div class="card-body">
+        <div class="perfis-grid">
+          <div class="perfil-card admin selected" onclick="selectPerfil(this, 'admin')">
+            <div class="perfil-icon">🛡️</div>
+            <div class="perfil-nome">Admin</div>
+            <div class="perfil-desc">Acesso total ao sistema</div>
+            <div class="perfil-badge">47 permissões</div>
+          </div>
+          
+          <div class="perfil-card gerente" onclick="selectPerfil(this, 'gerente')">
+            <div class="perfil-icon">💼</div>
+            <div class="perfil-nome">Gerente</div>
+            <div class="perfil-desc">Gerente de unidade</div>
+            <div class="perfil-badge">38 permissões</div>
+          </div>
+          
+          <div class="perfil-card farmer" onclick="selectPerfil(this, 'farmer')">
+            <div class="perfil-icon">👥</div>
+            <div class="perfil-nome">Farmer</div>
+            <div class="perfil-desc">Atendimento e rotinas</div>
+            <div class="perfil-badge">22 permissões</div>
+          </div>
+          
+          <div class="perfil-card hunter" onclick="selectPerfil(this, 'hunter')">
+            <div class="perfil-icon">🎯</div>
+            <div class="perfil-nome">Hunter</div>
+            <div class="perfil-desc">Captação e vendas</div>
+            <div class="perfil-badge">15 permissões</div>
+          </div>
+          
+          <div class="perfil-card professor" onclick="selectPerfil(this, 'professor')">
+            <div class="perfil-icon">🎵</div>
+            <div class="perfil-nome">Professor</div>
+            <div class="perfil-desc">Acesso aos alunos</div>
+            <div class="perfil-badge">8 permissões</div>
+          </div>
+          
+          <div class="perfil-card visualizador" onclick="selectPerfil(this, 'visualizador')">
+            <div class="perfil-icon">👁️</div>
+            <div class="perfil-nome">Visualizador</div>
+            <div class="perfil-desc">Apenas visualização</div>
+            <div class="perfil-badge">12 permissões</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: Matriz de Permissões -->
+  <div id="tab-matriz" class="tab-content" style="display: none;">
+    <div class="card">
+      <div class="card-header">
+        <h2>⚙️ Permissões do Perfil</h2>
+        <select id="perfilSelect" onchange="changePerfil()" style="padding: 8px 12px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #e2e8f0;">
+          <option value="admin">🛡️ Admin</option>
+          <option value="gerente">💼 Gerente</option>
+          <option value="farmer" selected>👥 Farmer</option>
+          <option value="hunter">🎯 Hunter</option>
+          <option value="professor">🎵 Professor</option>
+          <option value="visualizador">👁️ Visualizador</option>
+        </select>
+      </div>
+      <div class="card-body">
+        <div class="quick-actions">
+          <button class="quick-action" onclick="showToast('Todas ativadas!')">✓ Ativar Todas</button>
+          <button class="quick-action" onclick="showToast('Todas desativadas!')">✕ Desativar Todas</button>
+          <button class="quick-action" onclick="showToast('Apenas visualização!')">👁️ Apenas Ver</button>
+          <button class="quick-action" onclick="showToast('Copiado de Gerente!')">📋 Copiar de...</button>
+        </div>
+
+        <!-- SISTEMA -->
+        <div class="modulo-section">
+          <div class="modulo-header expanded" onclick="toggleModulo(this)">
+            <div class="modulo-icon">📊</div>
+            <div class="modulo-title">SISTEMA</div>
+            <span class="categoria-badge sistema">Sistema</span>
+            <div class="modulo-count">4/10 ativos</div>
+            <span class="modulo-arrow">▶</span>
+          </div>
+          <div class="permissoes-list">
+            <!-- Dashboard -->
+            <div class="permissao-item">
+              <div class="permissao-info">
+                <div class="permissao-icon">📊</div>
+                <div>
+                  <span class="permissao-nome">Dashboard</span>
+                  <span class="permissao-codigo">dashboard.ver</span>
+                </div>
+              </div>
+              <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+            </div>
+            <div class="permissao-item sub">
+              <div class="permissao-info">
+                <div class="permissao-icon">📤</div>
+                <div>
+                  <span class="permissao-nome">Exportar dados</span>
+                  <span class="permissao-codigo">dashboard.exportar</span>
+                </div>
+              </div>
+              <div class="toggle" onclick="this.classList.toggle('active')"></div>
+            </div>
+            
+            <!-- Analytics -->
+            <div class="permissao-item">
+              <div class="permissao-info">
+                <div class="permissao-icon">📈</div>
+                <div>
+                  <span class="permissao-nome">Analytics</span>
+                  <span class="permissao-codigo">analytics.ver</span>
+                </div>
+              </div>
+              <div class="toggle" onclick="this.classList.toggle('active')"></div>
+            </div>
+            
+            <!-- Metas -->
+            <div class="permissao-item">
+              <div class="permissao-info">
+                <div class="permissao-icon">🎯</div>
+                <div>
+                  <span class="permissao-nome">Metas</span>
+                  <span class="permissao-codigo">metas.ver</span>
+                </div>
+              </div>
+              <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+            </div>
+            <div class="permissao-item sub">
+              <div class="permissao-info">
+                <div class="permissao-icon">✏️</div>
+                <div>
+                  <span class="permissao-nome">Editar metas</span>
+                  <span class="permissao-codigo">metas.editar</span>
+                </div>
+              </div>
+              <div class="toggle" onclick="this.classList.toggle('active')"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- OPERACIONAL -->
+        <div class="modulo-section">
+          <div class="modulo-header expanded" onclick="toggleModulo(this)">
+            <div class="modulo-icon">🏢</div>
+            <div class="modulo-title">OPERACIONAL</div>
+            <span class="categoria-badge operacional">Operacional</span>
+            <div class="modulo-count">15/25 ativos</div>
+            <span class="modulo-arrow">▶</span>
+          </div>
+          <div class="permissoes-list">
+            <!-- Comercial -->
+            <div class="permissao-item">
+              <div class="permissao-info">
+                <div class="permissao-icon">🛒</div>
+                <div>
+                  <span class="permissao-nome">Comercial</span>
+                  <span class="permissao-codigo">comercial.ver</span>
+                </div>
+              </div>
+              <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+            </div>
+            <div class="permissao-item sub">
+              <div class="permissao-info">
+                <div class="permissao-icon">👥</div>
+                <div>
+                  <span class="permissao-nome">Visualizar leads</span>
+                  <span class="permissao-codigo">comercial.leads.ver</span>
+                </div>
+              </div>
+              <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+            </div>
+            <div class="permissao-item sub">
+              <div class="permissao-info">
+                <div class="permissao-icon">➕</div>
+                <div>
+                  <span class="permissao-nome">Criar leads</span>
+                  <span class="permissao-codigo">comercial.leads.criar</span>
+                </div>
+              </div>
+              <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+            </div>
+            <div class="permissao-item sub">
+              <div class="permissao-info">
+                <div class="permissao-icon">✏️</div>
+                <div>
+                  <span class="permissao-nome">Editar leads</span>
+                  <span class="permissao-codigo">comercial.leads.editar</span>
+                </div>
+              </div>
+              <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+            </div>
+            <div class="permissao-item sub">
+              <div class="permissao-info">
+                <div class="permissao-icon">🗑️</div>
+                <div>
+                  <span class="permissao-nome">Excluir leads</span>
+                  <span class="permissao-codigo">comercial.leads.excluir</span>
+                </div>
+              </div>
+              <div class="toggle" onclick="this.classList.toggle('active')"></div>
+            </div>
+
+            <!-- Administrativo -->
+            <div class="permissao-item">
+              <div class="permissao-info">
+                <div class="permissao-icon">📋</div>
+                <div>
+                  <span class="permissao-nome">Administrativo</span>
+                  <span class="permissao-codigo">administrativo.ver</span>
+                </div>
+              </div>
+              <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+            </div>
+            <div class="permissao-item sub">
+              <div class="permissao-info">
+                <div class="permissao-icon">📝</div>
+                <div>
+                  <span class="permissao-nome">Lançamentos</span>
+                  <span class="permissao-codigo">administrativo.lancamentos</span>
+                </div>
+              </div>
+              <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+            </div>
+            <div class="permissao-item sub">
+              <div class="permissao-info">
+                <div class="permissao-icon">⭐</div>
+                <div>
+                  <span class="permissao-nome">Fideliza+</span>
+                  <span class="permissao-codigo">administrativo.fideliza</span>
+                </div>
+              </div>
+              <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+            </div>
+            <div class="permissao-item sub">
+              <div class="permissao-info">
+                <div class="permissao-icon">🛍️</div>
+                <div>
+                  <span class="permissao-nome">Lojinha</span>
+                  <span class="permissao-codigo">administrativo.lojinha</span>
+                </div>
+              </div>
+              <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+            </div>
+            <div class="permissao-item sub" style="margin-left: 48px;">
+              <div class="permissao-info">
+                <div class="permissao-icon">💰</div>
+                <div>
+                  <span class="permissao-nome">Realizar vendas</span>
+                  <span class="permissao-codigo">administrativo.lojinha.vender</span>
+                </div>
+              </div>
+              <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+            </div>
+            <div class="permissao-item sub" style="margin-left: 48px;">
+              <div class="permissao-info">
+                <div class="permissao-icon">📦</div>
+                <div>
+                  <span class="permissao-nome">Gerenciar estoque</span>
+                  <span class="permissao-codigo">administrativo.lojinha.estoque</span>
+                </div>
+              </div>
+              <div class="toggle" onclick="this.classList.toggle('active')"></div>
+            </div>
+            <div class="permissao-item sub">
+              <div class="permissao-info">
+                <div class="permissao-icon">📋</div>
+                <div>
+                  <span class="permissao-nome">Painel Farmer</span>
+                  <span class="permissao-codigo">administrativo.painel_farmer</span>
+                </div>
+              </div>
+              <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+            </div>
+
+            <!-- Alunos -->
+            <div class="permissao-item">
+              <div class="permissao-info">
+                <div class="permissao-icon">🎓</div>
+                <div>
+                  <span class="permissao-nome">Alunos</span>
+                  <span class="permissao-codigo">alunos.ver</span>
+                </div>
+              </div>
+              <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+            </div>
+            <div class="permissao-item sub">
+              <div class="permissao-info">
+                <div class="permissao-icon">➕</div>
+                <div>
+                  <span class="permissao-nome">Matricular</span>
+                  <span class="permissao-codigo">alunos.criar</span>
+                </div>
+              </div>
+              <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+            </div>
+            <div class="permissao-item sub">
+              <div class="permissao-info">
+                <div class="permissao-icon">✏️</div>
+                <div>
+                  <span class="permissao-nome">Editar</span>
+                  <span class="permissao-codigo">alunos.editar</span>
+                </div>
+              </div>
+              <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+            </div>
+            <div class="permissao-item sub">
+              <div class="permissao-info">
+                <div class="permissao-icon">📱</div>
+                <div>
+                  <span class="permissao-nome">Enviar WhatsApp</span>
+                  <span class="permissao-codigo">alunos.whatsapp</span>
+                </div>
+              </div>
+              <div class="toggle active" onclick="this.classList.toggle('active')"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ADMIN -->
+        <div class="modulo-section">
+          <div class="modulo-header" onclick="toggleModulo(this)">
+            <div class="modulo-icon">⚙️</div>
+            <div class="modulo-title">ADMIN</div>
+            <span class="categoria-badge admin">Admin</span>
+            <div class="modulo-count">0/12 ativos</div>
+            <span class="modulo-arrow">▶</span>
+          </div>
+          <div class="permissoes-list" style="display: none;">
+            <div class="permissao-item">
+              <div class="permissao-info">
+                <div class="permissao-icon">👤</div>
+                <div>
+                  <span class="permissao-nome">Gerenciar Usuários</span>
+                  <span class="permissao-codigo">usuarios.ver</span>
+                </div>
+              </div>
+              <div class="toggle" onclick="this.classList.toggle('active')"></div>
+            </div>
+            <div class="permissao-item">
+              <div class="permissao-info">
+                <div class="permissao-icon">🔐</div>
+                <div>
+                  <span class="permissao-nome">Gerenciar Permissões</span>
+                  <span class="permissao-codigo">permissoes.gerenciar</span>
+                </div>
+              </div>
+              <div class="toggle" onclick="this.classList.toggle('active')"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: Usuários por Perfil -->
+  <div id="tab-usuarios" class="tab-content" style="display: none;">
+    <div class="card">
+      <div class="card-header">
+        <h2>👤 Usuários por Perfil</h2>
+        <button class="btn btn-primary btn-sm" onclick="openModal('modalAtribuirPerfil')">+ Atribuir Perfil</button>
+      </div>
+      <div class="card-body">
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" placeholder="Buscar usuário...">
+        </div>
+
+        <div class="table-container">
+          <table>
+            <thead>
+              <tr>
+                <th>Usuário</th>
+                <th>Email</th>
+                <th>Perfis</th>
+                <th>Unidade</th>
+                <th>Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 36px; height: 36px; background: #ef444440; border-radius: 50%; display: flex; align-items: center; justify-content: center;">L</div>
+                    <strong>Luciano Alf</strong>
+                  </div>
+                </td>
+                <td>lucianoalf.la@gmail.com</td>
+                <td><span class="perfil-badge" style="background: #ef4444;">Admin</span></td>
+                <td>Todas</td>
+                <td>
+                  <button class="btn btn-ghost btn-sm" onclick="openModal('modalEditarPerfis')">Editar</button>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 36px; height: 36px; background: #10b98140; border-radius: 50%; display: flex; align-items: center; justify-content: center;">D</div>
+                    <strong>Duda Silva</strong>
+                  </div>
+                </td>
+                <td>duda@lamusic.com.br</td>
+                <td>
+                  <span class="perfil-badge" style="background: #10b981;">Farmer</span>
+                </td>
+                <td>Barra</td>
+                <td>
+                  <button class="btn btn-ghost btn-sm" onclick="openModal('modalEditarPerfis')">Editar</button>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 36px; height: 36px; background: #3b82f640; border-radius: 50%; display: flex; align-items: center; justify-content: center;">A</div>
+                    <strong>Arthur Costa</strong>
+                  </div>
+                </td>
+                <td>arthur@lamusic.com.br</td>
+                <td>
+                  <span class="perfil-badge" style="background: #3b82f6;">Hunter</span>
+                  <span class="perfil-badge" style="background: #10b981;">Farmer</span>
+                </td>
+                <td>Barra</td>
+                <td>
+                  <button class="btn btn-ghost btn-sm" onclick="openModal('modalEditarPerfis')">Editar</button>
+                </td>
+              </tr>
+              <tr>
+                <td>
+                  <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 36px; height: 36px; background: #f59e0b40; border-radius: 50%; display: flex; align-items: center; justify-content: center;">M</div>
+                    <strong>Marina Souza</strong>
+                  </div>
+                </td>
+                <td>marina@lamusic.com.br</td>
+                <td>
+                  <span class="perfil-badge" style="background: #f59e0b;">Gerente</span>
+                </td>
+                <td>Recreio</td>
+                <td>
+                  <button class="btn btn-ghost btn-sm" onclick="openModal('modalEditarPerfis')">Editar</button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tab: Auditoria -->
+  <div id="tab-auditoria" class="tab-content" style="display: none;">
+    <div class="card">
+      <div class="card-header">
+        <h2>📋 Log de Auditoria</h2>
+        <div style="display: flex; gap: 8px;">
+          <select style="padding: 8px 12px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #e2e8f0;">
+            <option>Todas as ações</option>
+            <option>Login</option>
+            <option>Criar</option>
+            <option>Editar</option>
+            <option>Excluir</option>
+          </select>
+          <select style="padding: 8px 12px; background: #0f172a; border: 1px solid #334155; border-radius: 8px; color: #e2e8f0;">
+            <option>Últimos 7 dias</option>
+            <option>Últimos 30 dias</option>
+            <option>Este mês</option>
+          </select>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="audit-item">
+          <div class="audit-time">Hoje 15:32</div>
+          <div class="audit-user">Luciano Alf</div>
+          <div class="audit-action">
+            <span class="audit-badge update">Atualização</span>
+            Alterou permissões do perfil <strong>Farmer</strong>
+          </div>
+        </div>
+        <div class="audit-item">
+          <div class="audit-time">Hoje 14:20</div>
+          <div class="audit-user">Luciano Alf</div>
+          <div class="audit-action">
+            <span class="audit-badge create">Criação</span>
+            Criou novo perfil <strong>Visualizador</strong>
+          </div>
+        </div>
+        <div class="audit-item">
+          <div class="audit-time">Hoje 11:45</div>
+          <div class="audit-user">Marina Souza</div>
+          <div class="audit-action">
+            <span class="audit-badge login">Login</span>
+            Acessou o sistema (Recreio)
+          </div>
+        </div>
+        <div class="audit-item">
+          <div class="audit-time">Ontem 18:30</div>
+          <div class="audit-user">Luciano Alf</div>
+          <div class="audit-action">
+            <span class="audit-badge update">Atualização</span>
+            Atribuiu perfil <strong>Hunter</strong> para <strong>Arthur Costa</strong>
+          </div>
+        </div>
+        <div class="audit-item">
+          <div class="audit-time">Ontem 16:15</div>
+          <div class="audit-user">Duda Silva</div>
+          <div class="audit-action">
+            <span class="audit-badge login">Login</span>
+            Acessou o sistema (Barra)
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== MODAIS ========== -->
+
+  <!-- Modal: Novo Perfil -->
+  <div class="modal-overlay" id="modalNovoPerfil">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>➕ Novo Perfil</h3>
+        <button class="modal-close" onclick="closeModal('modalNovoPerfil')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Nome do Perfil *</label>
+          <input type="text" placeholder="Ex: Coordenador">
+        </div>
+        
+        <div class="form-group">
+          <label>Descrição</label>
+          <input type="text" placeholder="Ex: Coordenador pedagógico da unidade">
+        </div>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label>Nível Hierárquico *</label>
+            <select>
+              <option value="10">10 - Básico</option>
+              <option value="20">20 - Intermediário</option>
+              <option value="30" selected>30 - Operacional</option>
+              <option value="50">50 - Gerencial</option>
+              <option value="100">100 - Administrador</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Ícone</label>
+            <select>
+              <option>👤 Usuário</option>
+              <option>🛡️ Escudo</option>
+              <option>💼 Maleta</option>
+              <option>🎯 Alvo</option>
+              <option selected>📋 Prancheta</option>
+              <option>👁️ Olho</option>
+            </select>
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label>Cor</label>
+          <div class="color-options">
+            <div class="color-option" style="background: #ef4444;"></div>
+            <div class="color-option" style="background: #f59e0b;"></div>
+            <div class="color-option" style="background: #10b981;"></div>
+            <div class="color-option selected" style="background: #3b82f6;"></div>
+            <div class="color-option" style="background: #8b5cf6;"></div>
+            <div class="color-option" style="background: #ec4899;"></div>
+            <div class="color-option" style="background: #64748b;"></div>
+          </div>
+        </div>
+        
+        <div class="form-group">
+          <label>Copiar permissões de:</label>
+          <select>
+            <option value="">Nenhum (começar vazio)</option>
+            <option value="admin">Admin</option>
+            <option value="gerente">Gerente</option>
+            <option value="farmer">Farmer</option>
+            <option value="hunter">Hunter</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modalNovoPerfil')">Cancelar</button>
+        <button class="btn btn-primary" onclick="showToast('Perfil criado!'); closeModal('modalNovoPerfil')">Criar Perfil</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Atribuir Perfil -->
+  <div class="modal-overlay" id="modalAtribuirPerfil">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>👤 Atribuir Perfil a Usuário</h3>
+        <button class="modal-close" onclick="closeModal('modalAtribuirPerfil')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Usuário *</label>
+          <select>
+            <option value="">Selecione o usuário...</option>
+            <option>Luciano Alf</option>
+            <option>Duda Silva</option>
+            <option>Arthur Costa</option>
+            <option>Marina Souza</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label>Perfil *</label>
+          <select>
+            <option value="">Selecione o perfil...</option>
+            <option>🛡️ Admin</option>
+            <option>💼 Gerente</option>
+            <option>👥 Farmer</option>
+            <option>🎯 Hunter</option>
+            <option>🎵 Professor</option>
+            <option>👁️ Visualizador</option>
+          </select>
+        </div>
+        
+        <div class="form-group">
+          <label>Unidade (opcional)</label>
+          <select>
+            <option value="">Todas as unidades</option>
+            <option>Barra</option>
+            <option>Recreio</option>
+            <option>Campo Grande</option>
+          </select>
+          <p style="font-size: 12px; color: #64748b; margin-top: 6px;">
+            Se vazio, o perfil vale para todas as unidades. Se selecionada, vale apenas para a unidade escolhida.
+          </p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modalAtribuirPerfil')">Cancelar</button>
+        <button class="btn btn-primary" onclick="showToast('Perfil atribuído!'); closeModal('modalAtribuirPerfil')">Atribuir</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Editar Perfis do Usuário -->
+  <div class="modal-overlay" id="modalEditarPerfis">
+    <div class="modal modal-lg">
+      <div class="modal-header">
+        <h3>✏️ Editar Perfis - Arthur Costa</h3>
+        <button class="modal-close" onclick="closeModal('modalEditarPerfis')">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div style="display: flex; align-items: center; gap: 16px; padding: 16px; background: #0f172a; border-radius: 12px; margin-bottom: 20px;">
+          <div style="width: 56px; height: 56px; background: #3b82f640; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px;">A</div>
+          <div>
+            <div style="font-size: 18px; font-weight: 600;">Arthur Costa</div>
+            <div style="color: #64748b;">arthur@lamusic.com.br</div>
+          </div>
+        </div>
+        
+        <h4 style="margin-bottom: 12px; font-size: 14px; color: #94a3b8;">Perfis Atuais</h4>
+        
+        <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: #0f172a; border-radius: 8px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <span class="perfil-badge" style="background: #3b82f6;">🎯 Hunter</span>
+              <span style="color: #64748b; font-size: 13px;">Unidade: Barra</span>
+            </div>
+            <button class="btn btn-danger btn-sm">Remover</button>
+          </div>
+          
+          <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; background: #0f172a; border-radius: 8px;">
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <span class="perfil-badge" style="background: #10b981;">👥 Farmer</span>
+              <span style="color: #64748b; font-size: 13px;">Unidade: Barra</span>
+            </div>
+            <button class="btn btn-danger btn-sm">Remover</button>
+          </div>
+        </div>
+        
+        <h4 style="margin-bottom: 12px; font-size: 14px; color: #94a3b8;">Adicionar Novo Perfil</h4>
+        
+        <div class="form-row">
+          <div class="form-group">
+            <label>Perfil</label>
+            <select>
+              <option value="">Selecione...</option>
+              <option>💼 Gerente</option>
+              <option>👁️ Visualizador</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Unidade</label>
+            <select>
+              <option value="">Todas</option>
+              <option>Barra</option>
+              <option>Recreio</option>
+              <option>Campo Grande</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn btn-success btn-sm">+ Adicionar Perfil</button>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-ghost" onclick="closeModal('modalEditarPerfis')">Fechar</button>
+        <button class="btn btn-primary" onclick="showToast('Perfis atualizados!'); closeModal('modalEditarPerfis')">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast">
+    <span>✅</span>
+    <span id="toastMessage">Ação realizada!</span>
+  </div>
+
+  <script>
+    function showTab(tabName) {
+      document.querySelectorAll('.tab-content').forEach(tab => tab.style.display = 'none');
+      document.querySelectorAll('.tab').forEach(btn => btn.classList.remove('active'));
+      document.getElementById('tab-' + tabName).style.display = 'block';
+      event.target.classList.add('active');
+    }
+
+    function openModal(modalId) {
+      document.getElementById(modalId).classList.add('active');
+    }
+
+    function closeModal(modalId) {
+      document.getElementById(modalId).classList.remove('active');
+    }
+
+    function toggleModulo(header) {
+      header.classList.toggle('expanded');
+      const list = header.nextElementSibling;
+      list.style.display = list.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function selectPerfil(card, perfil) {
+      document.querySelectorAll('.perfil-card').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+    }
+
+    function changePerfil() {
+      const perfil = document.getElementById('perfilSelect').value;
+      showToast('Carregando permissões de ' + perfil);
+    }
+
+    function showToast(message) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toastMessage').textContent = message;
+      toast.classList.add('show');
+      setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+    // Color picker
+    document.querySelectorAll('.color-option').forEach(opt => {
+      opt.addEventListener('click', () => {
+        document.querySelectorAll('.color-option').forEach(o => o.classList.remove('selected'));
+        opt.classList.add('selected');
+      });
+    });
+
+    // Close modal on outside click
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) overlay.classList.remove('active');
+      });
+    });
+  </script>
+</body>
+</html>
