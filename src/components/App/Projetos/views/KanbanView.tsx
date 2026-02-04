@@ -335,10 +335,18 @@ export function KanbanView({ unidadeSelecionada }: KanbanViewProps) {
   const handleDragOver = (event: DragOverEvent) => {
     const { over } = event;
     if (over) {
-      // Verificar se é uma coluna válida
-      const colunaId = over.id as ProjetoStatus;
-      if (colunas.find(c => c.id === colunaId)) {
-        setOverId(colunaId);
+      const overId = over.id;
+      
+      // Verificar se é uma coluna válida diretamente
+      if (colunas.find(c => c.id === overId)) {
+        setOverId(overId as ProjetoStatus);
+        return;
+      }
+      
+      // Se não é coluna, pode ser um card - encontrar a coluna do card
+      const projetoOver = projetos.find(p => p.id === overId);
+      if (projetoOver) {
+        setOverId(projetoOver.status);
       }
     }
   };

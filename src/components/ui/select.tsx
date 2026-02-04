@@ -70,7 +70,7 @@ const SelectContent = React.forwardRef<
   React.ElementRef<typeof SelectPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof SelectPrimitive.Content>
 >(({ className, children, position = "popper", ...props }, ref) => (
-  <SelectPrimitive.Portal>
+  <SelectPrimitive.Portal container={document.body}>
     <SelectPrimitive.Content
       ref={ref}
       className={cn(
@@ -80,7 +80,6 @@ const SelectContent = React.forwardRef<
         className
       )}
       position={position}
-      modal={false}
       {...props}
     >
       <SelectScrollUpButton />

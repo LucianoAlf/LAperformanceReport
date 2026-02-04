@@ -1,48 +1,84 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom';
+import { lazy, Suspense } from 'react';
 
-// Páginas do Sistema
+// =============================================================================
+// LAZY LOADING - Componentes carregados sob demanda para reduzir bundle inicial
+// =============================================================================
+
+// Componente de loading para Suspense
+function PageLoader() {
+  return (
+    <div className="flex items-center justify-center h-96">
+      <div className="flex flex-col items-center gap-4">
+        <div className="w-8 h-8 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin" />
+        <p className="text-gray-400 text-sm">Carregando...</p>
+      </div>
+    </div>
+  );
+}
+
+// Wrapper para lazy loading com Suspense
+function lazyLoad(importFn: () => Promise<{ default: React.ComponentType<any> }>) {
+  const LazyComponent = lazy(importFn);
+  return (
+    <Suspense fallback={<PageLoader />}>
+      <LazyComponent />
+    </Suspense>
+  );
+}
+
+// =============================================================================
+// IMPORTS SÍNCRONOS - Componentes essenciais carregados imediatamente
+// =============================================================================
+
+// Layout e Autenticação (sempre necessários)
 import { AppLayout } from './components/App/Layout';
-import { DashboardPage } from './components/App/Dashboard';
-import { EntradaMenu } from './components/App/Entrada';
-import { FormLead } from './components/App/Entrada/FormLead';
-import { FormMatricula } from './components/App/Entrada/FormMatricula';
-import { FormEvasao } from './components/App/Entrada/FormEvasao';
-import { FormRenovacao } from './components/App/Entrada/FormRenovacao';
-import { RelatorioDiario } from './components/App/Entrada/RelatorioDiario';
-import { HomePage } from './components/App/Pages';
-
-// Autenticação
 import { LoginPage, PrivateRoute } from './components/App/Auth';
 
+// Dashboard (página inicial - carrega imediatamente)
+import { DashboardPage } from './components/App/Dashboard';
+
+// =============================================================================
+// IMPORTS LAZY - Componentes carregados sob demanda
+// =============================================================================
+
+// Entrada
+const EntradaMenu = lazy(() => import('./components/App/Entrada').then(m => ({ default: m.EntradaMenu })));
+const FormLead = lazy(() => import('./components/App/Entrada/FormLead').then(m => ({ default: m.FormLead })));
+const FormMatricula = lazy(() => import('./components/App/Entrada/FormMatricula').then(m => ({ default: m.FormMatricula })));
+const FormEvasao = lazy(() => import('./components/App/Entrada/FormEvasao').then(m => ({ default: m.FormEvasao })));
+const FormRenovacao = lazy(() => import('./components/App/Entrada/FormRenovacao').then(m => ({ default: m.FormRenovacao })));
+const RelatorioDiario = lazy(() => import('./components/App/Entrada/RelatorioDiario').then(m => ({ default: m.RelatorioDiario })));
+
 // Admin
-import { GerenciarUsuarios } from './components/App/Admin';
-import { PainelPermissoes } from './components/App/Admin/PainelPermissoes';
+const GerenciarUsuarios = lazy(() => import('./components/App/Admin').then(m => ({ default: m.GerenciarUsuarios })));
+const PainelPermissoes = lazy(() => import('./components/App/Admin/PainelPermissoes').then(m => ({ default: m.PainelPermissoes })));
 
 // Operacional
-import { ComercialPage } from './components/App/Comercial';
-import { PlanilhaRetencao } from './components/App/Retencao';
-import { ProfessoresPage } from './components/App/Professores';
-import { AdministrativoPage } from './components/App/Administrativo';
-import { AlunosPage } from './components/App/Alunos';
-import { SalasPage } from './components/App/Salas';
-import { ProjetosPage } from './components/App/Projetos';
+const ComercialPage = lazy(() => import('./components/App/Comercial').then(m => ({ default: m.ComercialPage })));
+const PlanilhaRetencao = lazy(() => import('./components/App/Retencao').then(m => ({ default: m.PlanilhaRetencao })));
+const ProfessoresPage = lazy(() => import('./components/App/Professores').then(m => ({ default: m.ProfessoresPage })));
+const AdministrativoPage = lazy(() => import('./components/App/Administrativo').then(m => ({ default: m.AdministrativoPage })));
+const AlunosPage = lazy(() => import('./components/App/Alunos').then(m => ({ default: m.AlunosPage })));
+const SalasPage = lazy(() => import('./components/App/Salas').then(m => ({ default: m.SalasPage })));
+const ProjetosPage = lazy(() => import('./components/App/Projetos').then(m => ({ default: m.ProjetosPage })));
 
 // Metas
-import { MetasPageNew } from './components/App/Metas';
+const MetasPageNew = lazy(() => import('./components/App/Metas').then(m => ({ default: m.MetasPageNew })));
 
 // Configurações
-import { ConfigPage } from './components/App/Config';
+const ConfigPage = lazy(() => import('./components/App/Config').then(m => ({ default: m.ConfigPage })));
 
-// Analytics (Cockpit com abas: Gestão, Comercial, Professores)
-import { GestaoMensalPage } from './components/GestaoMensal';
+// Analytics
+const GestaoMensalPage = lazy(() => import('./components/GestaoMensal').then(m => ({ default: m.GestaoMensalPage })));
 
-// Histórico - Apresentações 2025
-import { Apresentacoes2025Page } from './components/App/Historico';
+// Histórico
+const Apresentacoes2025Page = lazy(() => import('./components/App/Historico').then(m => ({ default: m.Apresentacoes2025Page })));
 
-// Apresentações (componentes existentes - mantidos para rotas legadas)
-import App from '../App';
-import { ComercialDashboard } from './components/Comercial';
-import { RetencaoDashboard } from './components/Retencao';
+// Apresentações (legado)
+const AppLegacy = lazy(() => import('../App'));
+const ComercialDashboard = lazy(() => import('./components/Comercial').then(m => ({ default: m.ComercialDashboard })));
+const RetencaoDashboard = lazy(() => import('./components/Retencao').then(m => ({ default: m.RetencaoDashboard })));
 
 // Placeholder para páginas ainda não implementadas
 function PlaceholderPage({ title }: { title: string }) {
@@ -56,17 +92,29 @@ function PlaceholderPage({ title }: { title: string }) {
   );
 }
 
-// Wrapper para apresentações - usa o App original que já gerencia o estado
+// Wrapper para apresentações - usa os componentes lazy com Suspense
 function GestaoApresentacao() {
-  return <App />;
+  return (
+    <Suspense fallback={<PageLoader />}>
+      <AppLegacy />
+    </Suspense>
+  );
 }
 
 function ComercialApresentacao() {
-  return <ComercialDashboard onPageChange={() => {}} />;
+  return (
+    <Suspense fallback={<PageLoader />}>
+      <ComercialDashboard onPageChange={() => {}} />
+    </Suspense>
+  );
 }
 
 function RetencaoApresentacao() {
-  return <RetencaoDashboard onPageChange={() => {}} />;
+  return (
+    <Suspense fallback={<PageLoader />}>
+      <RetencaoDashboard onPageChange={() => {}} />
+    </Suspense>
+  );
 }
 
 export const router = createBrowserRouter([
@@ -96,11 +144,11 @@ export const router = createBrowserRouter([
           },
           {
             path: 'entrada',
-            element: <EntradaMenu />,
+            element: <Suspense fallback={<PageLoader />}><EntradaMenu /></Suspense>,
           },
           {
             path: 'entrada/lead',
-            element: <FormLead />,
+            element: <Suspense fallback={<PageLoader />}><FormLead /></Suspense>,
           },
           {
             path: 'entrada/experimental',
@@ -108,15 +156,15 @@ export const router = createBrowserRouter([
           },
           {
             path: 'entrada/matricula',
-            element: <FormMatricula />,
+            element: <Suspense fallback={<PageLoader />}><FormMatricula /></Suspense>,
           },
           {
             path: 'entrada/evasao',
-            element: <FormEvasao />,
+            element: <Suspense fallback={<PageLoader />}><FormEvasao /></Suspense>,
           },
           {
             path: 'entrada/renovacao',
-            element: <FormRenovacao />,
+            element: <Suspense fallback={<PageLoader />}><FormRenovacao /></Suspense>,
           },
           {
             path: 'entrada/aviso-previo',
@@ -132,61 +180,61 @@ export const router = createBrowserRouter([
           },
           {
             path: 'relatorios/diario',
-            element: <RelatorioDiario />,
+            element: <Suspense fallback={<PageLoader />}><RelatorioDiario /></Suspense>,
           },
           {
             path: 'gestao-mensal',
-            element: <GestaoMensalPage />,
+            element: <Suspense fallback={<PageLoader />}><GestaoMensalPage /></Suspense>,
           },
           {
             path: 'metas',
-            element: <MetasPageNew />,
+            element: <Suspense fallback={<PageLoader />}><MetasPageNew /></Suspense>,
           },
           {
             path: 'config',
-            element: <ConfigPage />,
+            element: <Suspense fallback={<PageLoader />}><ConfigPage /></Suspense>,
           },
           // Operacional
           {
             path: 'comercial',
-            element: <ComercialPage />,
+            element: <Suspense fallback={<PageLoader />}><ComercialPage /></Suspense>,
           },
           {
             path: 'administrativo',
-            element: <AdministrativoPage />,
+            element: <Suspense fallback={<PageLoader />}><AdministrativoPage /></Suspense>,
           },
           {
             path: 'retencao',
-            element: <PlanilhaRetencao />,
+            element: <Suspense fallback={<PageLoader />}><PlanilhaRetencao /></Suspense>,
           },
           {
             path: 'alunos',
-            element: <AlunosPage />,
+            element: <Suspense fallback={<PageLoader />}><AlunosPage /></Suspense>,
           },
           {
             path: 'professores',
-            element: <ProfessoresPage />,
+            element: <Suspense fallback={<PageLoader />}><ProfessoresPage /></Suspense>,
           },
           {
             path: 'projetos',
-            element: <ProjetosPage />,
+            element: <Suspense fallback={<PageLoader />}><ProjetosPage /></Suspense>,
           },
           {
             path: 'salas',
-            element: <SalasPage />,
+            element: <Suspense fallback={<PageLoader />}><SalasPage /></Suspense>,
           },
           {
             path: 'apresentacoes-2025',
-            element: <Apresentacoes2025Page />,
+            element: <Suspense fallback={<PageLoader />}><Apresentacoes2025Page /></Suspense>,
           },
           // Rotas Admin - apenas para admin
           {
             path: 'admin/usuarios',
-            element: <GerenciarUsuarios />,
+            element: <Suspense fallback={<PageLoader />}><GerenciarUsuarios /></Suspense>,
           },
           {
             path: 'admin/permissoes',
-            element: <PainelPermissoes />,
+            element: <Suspense fallback={<PageLoader />}><PainelPermissoes /></Suspense>,
           },
         ],
       },

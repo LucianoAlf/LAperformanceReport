@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { 
   LayoutDashboard, 
   Target,
@@ -33,6 +33,27 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { ModalEditarPerfil } from './ModalEditarPerfil';
 
+// =============================================================================
+// PREFETCH - Pré-carrega páginas no hover para navegação instantânea
+// =============================================================================
+const prefetchMap: Record<string, () => Promise<any>> = {
+  '/app/gestao-mensal': () => import('@/components/GestaoMensal'),
+  '/app/metas': () => import('@/components/App/Metas'),
+  '/app/config': () => import('@/components/App/Config'),
+  '/app/comercial': () => import('@/components/App/Comercial'),
+  '/app/administrativo': () => import('@/components/App/Administrativo'),
+  '/app/alunos': () => import('@/components/App/Alunos'),
+  '/app/professores': () => import('@/components/App/Professores'),
+  '/app/projetos': () => import('@/components/App/Projetos'),
+  '/app/salas': () => import('@/components/App/Salas'),
+  '/app/admin/usuarios': () => import('@/components/App/Admin'),
+  '/app/admin/permissoes': () => import('@/components/App/Admin/PainelPermissoes'),
+  '/app/apresentacoes-2025': () => import('@/components/App/Historico'),
+};
+
+// Cache para evitar prefetch duplicado
+const prefetchedPages = new Set<string>();
+
 const menuItems = [
   { path: '/app', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { path: '/app/gestao-mensal', label: 'Analytics', icon: BarChart3 },
@@ -61,6 +82,19 @@ export function AppSidebar() {
   useEffect(() => {
     localStorage.setItem('sidebar-collapsed', String(isCollapsed));
   }, [isCollapsed]);
+
+  // Prefetch de página no hover - carrega o chunk antes do clique
+  const handlePrefetch = useCallback((path: string) => {
+    if (prefetchedPages.has(path)) return;
+    const prefetchFn = prefetchMap[path];
+    if (prefetchFn) {
+      prefetchedPages.add(path);
+      prefetchFn().catch(() => {
+        // Silenciosamente ignora erros de prefetch
+        prefetchedPages.delete(path);
+      });
+    }
+  }, []);
 
   const handleLogout = async () => {
     await signOut();
@@ -116,6 +150,7 @@ export function AppSidebar() {
               <NavLink
                 to={item.path}
                 end={item.end}
+                onMouseEnter={() => handlePrefetch(item.path)}
                 className={({ isActive }) =>
                   isCollapsed
                     ? "w-full flex items-center justify-center py-3"
@@ -147,6 +182,7 @@ export function AppSidebar() {
             <Tooltip key={item.path} content={item.label} enabled={isCollapsed}>
               <NavLink
                 to={item.path}
+                onMouseEnter={() => handlePrefetch(item.path)}
                 className={({ isActive }) =>
                   isCollapsed
                     ? "w-full flex items-center justify-center py-2.5"
@@ -177,6 +213,7 @@ export function AppSidebar() {
             <Tooltip content="Gerenciar Usuários" enabled={isCollapsed}>
               <NavLink
                 to="/app/admin/usuarios"
+                onMouseEnter={() => handlePrefetch('/app/admin/usuarios')}
                 className={({ isActive }) =>
                   isCollapsed
                     ? "w-full flex items-center justify-center py-3"
@@ -195,6 +232,7 @@ export function AppSidebar() {
             <Tooltip content="Permissões" enabled={isCollapsed}>
               <NavLink
                 to="/app/admin/permissoes"
+                onMouseEnter={() => handlePrefetch('/app/admin/permissoes')}
                 className={({ isActive }) =>
                   isCollapsed
                     ? "w-full flex items-center justify-center py-3"
@@ -225,6 +263,7 @@ export function AppSidebar() {
         <Tooltip content="Apresentações 2025" enabled={isCollapsed}>
           <NavLink
             to="/app/apresentacoes-2025"
+            onMouseEnter={() => handlePrefetch('/app/apresentacoes-2025')}
             className={({ isActive }) =>
               isCollapsed
                 ? "w-full flex items-center justify-center py-2.5"
