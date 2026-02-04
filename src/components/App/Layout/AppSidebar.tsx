@@ -18,10 +18,22 @@ import {
   ChevronLeft,
   ChevronRight,
   Building2,
-  FolderKanban
+  FolderKanban,
+  Pencil,
+  Key,
+  Camera
 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { Tooltip } from '../../ui/Tooltip';
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuLabel, 
+  DropdownMenuSeparator, 
+  DropdownMenuTrigger 
+} from '@/components/ui/dropdown-menu';
+import { ModalEditarPerfil } from './ModalEditarPerfil';
 
 const menuItems = [
   { path: '/app', label: 'Dashboard', icon: LayoutDashboard, end: true },
@@ -46,6 +58,7 @@ export function AppSidebar() {
     const saved = localStorage.getItem('sidebar-collapsed');
     return saved === 'true';
   });
+  const [modalPerfilAberto, setModalPerfilAberto] = useState(false);
 
   useEffect(() => {
     localStorage.setItem('sidebar-collapsed', String(isCollapsed));
@@ -233,34 +246,64 @@ export function AppSidebar() {
 
       {/* Footer */}
       <div className="p-4 border-t border-slate-800">
-        <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2`}>
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold ${
-            isAdmin 
-              ? 'bg-gradient-to-br from-purple-500 to-pink-600' 
-              : 'bg-gradient-to-br from-cyan-500 to-blue-600'
-          }`}
-          title={isCollapsed ? usuario?.nome || 'Usuário' : ''}>
-            {usuario?.nome?.charAt(0).toUpperCase() || 'U'}
-          </div>
-          {!isCollapsed && (
-            <>
-              <div className="flex-1">
-                <div className="text-sm text-white font-medium">{usuario?.nome || 'Usuário'}</div>
-                <div className="text-xs text-gray-500">
-                  {isAdmin ? 'Admin (todas)' : usuario?.unidade_nome || 'Unidade'}
-                </div>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className={`w-full flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 rounded-xl hover:bg-slate-800/50 transition-colors`}>
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold ${
+                isAdmin 
+                  ? 'bg-gradient-to-br from-purple-500 to-pink-600' 
+                  : 'bg-gradient-to-br from-cyan-500 to-blue-600'
+              }`}
+              title={isCollapsed ? usuario?.nome || 'Usuário' : ''}>
+                {usuario?.nome?.charAt(0).toUpperCase() || 'U'}
               </div>
-              <button 
-                onClick={handleLogout}
-                className="p-2 text-gray-500 hover:text-red-400 transition-colors"
-                title="Sair"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
-            </>
-          )}
-        </div>
+              {!isCollapsed && (
+                <>
+                  <div className="flex-1 text-left">
+                    <div className="text-sm text-white font-medium">{usuario?.nome || 'Usuário'}</div>
+                    <div className="text-xs text-gray-500">
+                      {isAdmin ? 'Admin (todas)' : usuario?.unidade_nome || 'Unidade'}
+                    </div>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-gray-500" />
+                </>
+              )}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent side="right" align="end" className="w-56 bg-slate-800 border-slate-700">
+            <DropdownMenuLabel className="text-slate-400">Minha Conta</DropdownMenuLabel>
+            <DropdownMenuSeparator className="bg-slate-700" />
+            <DropdownMenuItem 
+              onClick={() => setModalPerfilAberto(true)}
+              className="cursor-pointer text-white hover:bg-slate-700 focus:bg-slate-700"
+            >
+              <Pencil className="w-4 h-4 mr-2" />
+              Editar Perfil
+            </DropdownMenuItem>
+            <DropdownMenuItem 
+              onClick={() => setModalPerfilAberto(true)}
+              className="cursor-pointer text-white hover:bg-slate-700 focus:bg-slate-700"
+            >
+              <Key className="w-4 h-4 mr-2" />
+              Alterar Senha
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className="bg-slate-700" />
+            <DropdownMenuItem 
+              onClick={handleLogout}
+              className="cursor-pointer text-red-400 hover:bg-slate-700 focus:bg-slate-700 hover:text-red-300"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Sair
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
+
+      {/* Modal Editar Perfil */}
+      <ModalEditarPerfil 
+        open={modalPerfilAberto} 
+        onOpenChange={setModalPerfilAberto} 
+      />
     </aside>
   );
 }

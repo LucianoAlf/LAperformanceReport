@@ -6,6 +6,7 @@ export interface Usuario {
   id: number;
   email: string;
   nome: string;
+  apelido?: string;
   perfil: 'admin' | 'unidade';
   unidade_id: string | null;
   unidade_nome?: string;
@@ -42,6 +43,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   canViewConsolidated: () => boolean;
   canManageUsers: () => boolean;
+  refreshUser: () => Promise<void>;
   // Novo sistema de permissões
   perfis: PerfilUsuario[];
   permissoes: Set<string>;
@@ -316,6 +318,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const canViewConsolidated = () => isAdmin;
   const canManageUsers = () => isAdmin;
 
+  // Função para recarregar dados do usuário
+  const refreshUser = async () => {
+    if (!user) return;
+    const usuarioData = await fetchUsuario(user.id, user.email);
+    if (usuarioData) {
+      setUsuario(usuarioData);
+    }
+  };
+
   const value: AuthContextType = {
     user,
     usuario,
@@ -327,6 +338,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signOut,
     canViewConsolidated,
     canManageUsers,
+    refreshUser,
     // Novo sistema de permissões
     perfis,
     permissoes,
