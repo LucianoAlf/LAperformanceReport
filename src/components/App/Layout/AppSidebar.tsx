@@ -29,8 +29,6 @@ import {
   DropdownMenu, 
   DropdownMenuContent, 
   DropdownMenuItem, 
-  DropdownMenuLabel, 
-  DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from '@/components/ui/dropdown-menu';
 import { ModalEditarPerfil } from './ModalEditarPerfil';
@@ -249,14 +247,23 @@ export function AppSidebar() {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button className={`w-full flex items-center ${isCollapsed ? 'justify-center' : 'gap-3'} px-3 py-2 rounded-xl hover:bg-slate-800/50 transition-colors`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold ${
-                isAdmin 
-                  ? 'bg-gradient-to-br from-purple-500 to-pink-600' 
-                  : 'bg-gradient-to-br from-cyan-500 to-blue-600'
-              }`}
-              title={isCollapsed ? usuario?.nome || 'Usuário' : ''}>
-                {usuario?.nome?.charAt(0).toUpperCase() || 'U'}
-              </div>
+              {usuario?.avatar_url ? (
+                <img 
+                  src={usuario.avatar_url} 
+                  alt={usuario.nome || 'Avatar'} 
+                  className="w-8 h-8 rounded-full object-cover"
+                  title={isCollapsed ? usuario?.nome || 'Usuário' : ''}
+                />
+              ) : (
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold ${
+                  isAdmin 
+                    ? 'bg-gradient-to-br from-purple-500 to-pink-600' 
+                    : 'bg-gradient-to-br from-cyan-500 to-blue-600'
+                }`}
+                title={isCollapsed ? usuario?.nome || 'Usuário' : ''}>
+                  {usuario?.nome?.charAt(0).toUpperCase() || 'U'}
+                </div>
+              )}
               {!isCollapsed && (
                 <>
                   <div className="flex-1 text-left">
@@ -271,8 +278,8 @@ export function AppSidebar() {
             </button>
           </DropdownMenuTrigger>
           <DropdownMenuContent side="right" align="end" className="w-56 bg-slate-800 border-slate-700">
-            <DropdownMenuLabel className="text-slate-400">Minha Conta</DropdownMenuLabel>
-            <DropdownMenuSeparator className="bg-slate-700" />
+            <div className="px-2 py-1.5 text-xs font-medium text-slate-400">Minha Conta</div>
+            <div className="h-px bg-slate-700 my-1" />
             <DropdownMenuItem 
               onClick={() => setModalPerfilAberto(true)}
               className="cursor-pointer text-white hover:bg-slate-700 focus:bg-slate-700"
@@ -287,7 +294,7 @@ export function AppSidebar() {
               <Key className="w-4 h-4 mr-2" />
               Alterar Senha
             </DropdownMenuItem>
-            <DropdownMenuSeparator className="bg-slate-700" />
+            <div className="h-px bg-slate-700 my-1" />
             <DropdownMenuItem 
               onClick={handleLogout}
               className="cursor-pointer text-red-400 hover:bg-slate-700 focus:bg-slate-700 hover:text-red-300"

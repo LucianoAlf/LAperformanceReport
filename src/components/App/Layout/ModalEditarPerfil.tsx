@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, User, Key, Check, AlertCircle } from 'lucide-react';
+import { Loader2, User, Key, Check, AlertCircle, Camera, X } from 'lucide-react';
+import { ImageCropModal } from './ImageCropModal';
 
 interface ModalEditarPerfilProps {
   open: boolean;
@@ -17,11 +18,19 @@ export function ModalEditarPerfil({ open, onOpenChange }: ModalEditarPerfilProps
   const { usuario, refreshUser } = useAuth();
   const [activeTab, setActiveTab] = useState('perfil');
   const [saving, setSaving] = useState(false);
+  const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Campos do perfil
   const [nome, setNome] = useState('');
   const [apelido, setApelido] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+
+  // Modal de crop
+  const [cropModalOpen, setCropModalOpen] = useState(false);
+  const [imageToCrop, setImageToCrop] = useState<string | null>(null);
 
   // Campos de senha
   const [senhaAtual, setSenhaAtual] = useState('');
@@ -32,9 +41,83 @@ export function ModalEditarPerfil({ open, onOpenChange }: ModalEditarPerfilProps
     if (open && usuario) {
       setNome(usuario.nome || '');
       setApelido(usuario.apelido || '');
+      setAvatarUrl(usuario.avatar_url || null);
+      setAvatarPreview(null);
       setMessage(null);
     }
   }, [open, usuario]);
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validar tipo de arquivo
+    if (!file.type.startsWith('image/')) {
+      setMessage({ type: 'error', text: 'Por favor, selecione uma imagem.' });
+      return;
+    }
+
+    // Validar tamanho (máx 5MB para imagem original, será comprimida após crop)
+    if (file.size > 5 * 1024 * 1024) {
+      setMessage({ type: 'error', text: 'A imagem deve ter no máximo 5MB.' });
+      return;
+    }
+
+    // Ler arquivo e abrir modal de crop
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setImageToCrop(e.target?.result as string);
+      setCropModalOpen(true);
+    };
+    reader.readAsDataURL(file);
+
+    // Limpar input para permitir selecionar o mesmo arquivo novamente
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleCropComplete = async (croppedBlob: Blob) => {
+    setUploadingPhoto(true);
+    setMessage(null);
+
+    try {
+      const fileName = `${usuario?.id}-${Date.now()}.jpg`;
+
+      // Fazer upload da imagem cortada
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, croppedBlob, { 
+          upsert: true,
+          contentType: 'image/jpeg'
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Obter URL pública
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(fileName);
+
+      setAvatarUrl(publicUrl);
+      setAvatarPreview(URL.createObjectURL(croppedBlob));
+      setMessage({ type: 'success', text: 'Foto ajustada! Clique em Salvar para confirmar.' });
+    } catch (error: any) {
+      console.error('Erro ao fazer upload:', error);
+      setMessage({ type: 'error', text: 'Erro ao carregar foto. Tente novamente.' });
+    } finally {
+      setUploadingPhoto(false);
+      setImageToCrop(null);
+    }
+  };
+
+  const handleRemovePhoto = async () => {
+    setAvatarUrl(null);
+    setAvatarPreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   const handleSalvarPerfil = async () => {
     if (!usuario?.id) return;
@@ -48,6 +131,7 @@ export function ModalEditarPerfil({ open, onOpenChange }: ModalEditarPerfilProps
         .update({
           nome: nome.trim(),
           apelido: apelido.trim() || null,
+          avatar_url: avatarUrl,
         })
         .eq('id', usuario.id);
 
@@ -136,10 +220,61 @@ export function ModalEditarPerfil({ open, onOpenChange }: ModalEditarPerfilProps
           </TabsList>
 
           <TabsContent value="perfil" className="space-y-4 mt-4">
-            <div className="flex justify-center mb-4">
-              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center text-white text-3xl font-bold">
-                {nome?.charAt(0).toUpperCase() || 'U'}
+            {/* Avatar com upload */}
+            <div className="flex flex-col items-center gap-3 mb-4">
+              <div className="relative group">
+                {avatarPreview || avatarUrl ? (
+                  <img 
+                    src={avatarPreview || avatarUrl || ''} 
+                    alt="Avatar" 
+                    className="w-24 h-24 rounded-full object-cover border-4 border-slate-600"
+                  />
+                ) : (
+                  <div className="w-24 h-24 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center text-white text-3xl font-bold border-4 border-slate-600">
+                    {nome?.charAt(0).toUpperCase() || 'U'}
+                  </div>
+                )}
+                
+                {/* Overlay de upload */}
+                <div 
+                  className="absolute inset-0 rounded-full bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  {uploadingPhoto ? (
+                    <Loader2 className="w-6 h-6 text-white animate-spin" />
+                  ) : (
+                    <Camera className="w-6 h-6 text-white" />
+                  )}
+                </div>
+
+                {/* Botão remover foto */}
+                {(avatarPreview || avatarUrl) && (
+                  <button
+                    onClick={handleRemovePhoto}
+                    className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center hover:bg-red-600 transition-colors"
+                  >
+                    <X className="w-4 h-4 text-white" />
+                  </button>
+                )}
               </div>
+
+              {/* Input de arquivo oculto */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
+
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="text-sm text-violet-400 hover:text-violet-300 transition-colors"
+                disabled={uploadingPhoto}
+              >
+                {uploadingPhoto ? 'Carregando...' : 'Alterar foto'}
+              </button>
+              <p className="text-xs text-slate-500">JPG, PNG ou GIF. Máx 2MB.</p>
             </div>
 
             <div className="space-y-2">
@@ -242,6 +377,19 @@ export function ModalEditarPerfil({ open, onOpenChange }: ModalEditarPerfilProps
           </TabsContent>
         </Tabs>
       </DialogContent>
+
+      {/* Modal de Crop */}
+      {imageToCrop && (
+        <ImageCropModal
+          open={cropModalOpen}
+          onOpenChange={(open) => {
+            setCropModalOpen(open);
+            if (!open) setImageToCrop(null);
+          }}
+          imageSrc={imageToCrop}
+          onCropComplete={handleCropComplete}
+        />
+      )}
     </Dialog>
   );
 }

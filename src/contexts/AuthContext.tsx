@@ -7,6 +7,7 @@ export interface Usuario {
   email: string;
   nome: string;
   apelido?: string;
+  avatar_url?: string;
   perfil: 'admin' | 'unidade';
   unidade_id: string | null;
   unidade_nome?: string;
@@ -139,6 +140,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         id: data.id,
         email: data.email,
         nome: data.nome,
+        apelido: data.apelido,
+        avatar_url: data.avatar_url,
         perfil: data.perfil as 'admin' | 'unidade',
         unidade_id: data.unidade_id,
         unidade_nome: unidadeNome,
