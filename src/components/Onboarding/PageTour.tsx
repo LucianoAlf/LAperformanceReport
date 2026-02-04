@@ -66,6 +66,7 @@ const joyrideStyles = {
     fontSize: '14px',
     lineHeight: 1.6,
     color: '#cbd5e1',
+    whiteSpace: 'pre-line' as const,
   },
   spotlight: {
     borderRadius: '12px',
