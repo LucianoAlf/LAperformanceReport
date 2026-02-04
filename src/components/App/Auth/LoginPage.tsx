@@ -11,9 +11,7 @@ import {
   Target, 
   Users, 
   Calendar, 
-  Bot,
-  TrendingUp,
-  ChevronRight
+  TrendingUp
 } from 'lucide-react';
 
 // Features do sistema para exibir no lado esquerdo
@@ -37,11 +35,6 @@ const features = [
     icon: Calendar,
     title: 'Agenda Inteligente',
     description: 'Horários e salas otimizados automaticamente'
-  },
-  {
-    icon: Bot,
-    title: 'Jarvis IA',
-    description: 'Assistente inteligente para insights e análises'
   },
   {
     icon: TrendingUp,
@@ -204,22 +197,20 @@ export function LoginPage() {
               Gestão completa da LA Music em um só lugar
             </motion.p>
 
-            <div className="space-y-4">
+            <div className="space-y-3">
               {features.map((feature, index) => (
                 <motion.div
                   key={feature.title}
-                  className="group flex items-start gap-4 p-4 rounded-2xl bg-white/5 backdrop-blur-sm border border-white/10 hover:bg-white/10 hover:border-cyan-500/30 transition-all duration-300 cursor-default"
+                  className="flex items-center gap-4 p-3 rounded-xl bg-white/5 backdrop-blur-sm border border-white/10"
                   variants={itemVariants}
-                  whileHover={{ x: 8, transition: { duration: 0.2 } }}
                 >
-                  <div className="flex-shrink-0 w-11 h-11 rounded-xl bg-gradient-to-br from-cyan-500/20 to-violet-500/20 flex items-center justify-center group-hover:from-cyan-500/30 group-hover:to-violet-500/30 transition-all">
+                  <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-gradient-to-br from-cyan-500/20 to-violet-500/20 flex items-center justify-center">
                     <feature.icon className="w-5 h-5 text-cyan-400" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-white font-medium text-sm mb-0.5">{feature.title}</h3>
+                    <h3 className="text-white font-medium text-sm">{feature.title}</h3>
                     <p className="text-gray-500 text-xs">{feature.description}</p>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-gray-600 group-hover:text-cyan-400 transition-colors flex-shrink-0 mt-1" />
                 </motion.div>
               ))}
             </div>
