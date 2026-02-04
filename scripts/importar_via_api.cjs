@@ -1,8 +1,17 @@
 const fs = require('fs');
 const path = require('path');
 
-const SUPABASE_URL = 'https://ouqwbbermlzqqvtqwlul.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im91cXdiYmVybWx6cXF2dHF3bHVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc1Nzg5NTgsImV4cCI6MjA4MzE1NDk1OH0.KGEzs2T-NPBc1DaWjgIVbJkEsjAdluT4q5kHrFvIJus';
+// SEGURANÇA: Credenciais devem ser passadas via variáveis de ambiente
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.error('❌ ERRO: Variáveis de ambiente não definidas!');
+  console.log('Execute:');
+  console.log('  set SUPABASE_URL=sua_url_aqui');
+  console.log('  set SUPABASE_ANON_KEY=sua_chave_aqui');
+  process.exit(1);
+}
 
 const UNIDADE_MAP = {
   'Campo Grande': '2ec861f6-023f-4d7b-9927-3960ad8c2a92',

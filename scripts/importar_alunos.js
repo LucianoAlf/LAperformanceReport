@@ -13,8 +13,14 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Configuração Supabase
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://ouqwbbermlzqqvtqwlul.supabase.co';
+const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_KEY;
+
+if (!SUPABASE_URL) {
+  console.error('❌ ERRO: SUPABASE_URL não definida!');
+  console.log('Execute: $env:SUPABASE_URL="sua_url_aqui"');
+  process.exit(1);
+}
 
 if (!SUPABASE_KEY) {
   console.error('❌ ERRO: SUPABASE_SERVICE_KEY não definida!');

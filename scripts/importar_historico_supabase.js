@@ -6,9 +6,15 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Configuração Supabase
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://ouqwbbermlzqqvtqwlul.supabase.co';
+// Configuração Supabase - SEGURANÇA: Sem fallbacks hardcoded
+const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+if (!supabaseUrl) {
+  console.error('ERRO: SUPABASE_URL não definida');
+  console.log('Execute: $env:SUPABASE_URL="sua_url"');
+  process.exit(1);
+}
 
 if (!supabaseKey) {
   console.error('ERRO: SUPABASE_SERVICE_ROLE_KEY não definida');

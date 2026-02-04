@@ -1,8 +1,17 @@
 // Script para verificar dados mensais de matrículas e leads por unidade
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = 'https://hhoszrmpkjqnkuqnqcjz.supabase.co';
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imhob3N6cm1wa2pxbmt1cW5xY2p6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzU3NTM0NTYsImV4cCI6MjA1MTMyOTQ1Nn0.YEwOXEqhXEpPwqDPJYbDqHNYxJJlWCBwEkPCpHWQgDg';
+// SEGURANÇA: Credenciais via variáveis de ambiente
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_ANON_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error('❌ ERRO: Variáveis de ambiente não definidas!');
+  console.log('Execute:');
+  console.log('  set SUPABASE_URL=sua_url_aqui');
+  console.log('  set SUPABASE_ANON_KEY=sua_chave_aqui');
+  process.exit(1);
+}
 
 const supabase = createClient(supabaseUrl, supabaseKey);
 
