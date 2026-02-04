@@ -141,6 +141,12 @@ export function GerenciarUsuarios() {
       return;
     }
 
+    // Para novo usuário, senha é obrigatória
+    if (!editingUser && (!formNovaSenha || formNovaSenha.length < 6)) {
+      toast.error('Digite uma senha com pelo menos 6 caracteres');
+      return;
+    }
+
     setSaving(true);
     try {
       const userData = {
@@ -161,14 +167,22 @@ export function GerenciarUsuarios() {
         if (error) throw error;
         toast.success('Usuário atualizado com sucesso!');
       } else {
-        // Para criar novo usuário, primeiro precisa criar no Auth
-        // Por enquanto, apenas mostra instrução
-        toast.info(
-          'Para criar novo usuário: 1) Convide pelo Supabase Auth, 2) Após aceitar, adicione aqui com o mesmo ID'
-        );
-        closeModal();
-        setSaving(false);
-        return;
+        // Criar novo usuário via Edge Function
+        const { data, error } = await supabase.functions.invoke('admin-create-user', {
+          body: {
+            email: formEmail,
+            password: formNovaSenha,
+            nome: formNome,
+            perfil: formPerfil,
+            unidade_id: formPerfil === 'admin' ? null : formUnidadeId,
+            ativo: formAtivo,
+          },
+        });
+
+        if (error) throw error;
+        if (data?.error) throw new Error(data.error);
+
+        toast.success(`Usuário ${formNome} criado com sucesso!`);
       }
 
       closeModal();
@@ -452,29 +466,29 @@ export function GerenciarUsuarios() {
                 </Label>
               </div>
 
-              {/* Campo de Nova Senha - apenas para usuários existentes */}
-              {editingUser && (
-                <div className="pt-4 border-t border-slate-700 space-y-3">
-                  <label className="block text-sm text-gray-400">
-                    <KeyRound className="w-4 h-4 inline mr-1" />
-                    Nova Senha (opcional)
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      value={formNovaSenha}
-                      onChange={(e) => setFormNovaSenha(e.target.value)}
-                      className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 pr-12 text-white placeholder-gray-500 focus:outline-none focus:border-amber-500/50"
-                      placeholder="Digite a nova senha (mín. 6 caracteres)"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
-                    >
-                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                    </button>
-                  </div>
+              {/* Campo de Senha - para novos usuários é obrigatório, para edição é opcional */}
+              <div className={editingUser ? "pt-4 border-t border-slate-700 space-y-3" : "space-y-3"}>
+                <label className="block text-sm text-gray-400">
+                  <KeyRound className="w-4 h-4 inline mr-1" />
+                  {editingUser ? 'Nova Senha (opcional)' : 'Senha *'}
+                </label>
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={formNovaSenha}
+                    onChange={(e) => setFormNovaSenha(e.target.value)}
+                    className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 pr-12 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50"
+                    placeholder={editingUser ? "Digite a nova senha (mín. 6 caracteres)" : "Senha inicial (mín. 6 caracteres)"}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white"
+                  >
+                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  </button>
+                </div>
+                {editingUser && (
                   <button
                     onClick={handleChangePassword}
                     disabled={sendingReset || !formNovaSenha}
@@ -487,8 +501,8 @@ export function GerenciarUsuarios() {
                     )}
                     {sendingReset ? 'Alterando...' : 'Alterar Senha'}
                   </button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
 
             <div className="flex justify-end gap-3 mt-6">

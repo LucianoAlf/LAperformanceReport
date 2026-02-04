@@ -321,7 +321,7 @@ export function ComercialPage() {
         // Buscar cursos filtrados por unidade (se houver unidade selecionada)
         let cursosData: { value: string; label: string }[] = [];
         if (unidadeFiltro) {
-          // Buscar cursos ativos na unidade específica via unidades_cursos
+          // Tentar buscar cursos ativos na unidade específica via unidades_cursos
           const { data: unidadesCursosData } = await supabase
             .from('unidades_cursos')
             .select(`
@@ -337,6 +337,16 @@ export function ComercialPage() {
             .filter((uc: any) => uc.cursos && uc.cursos.ativo)
             .map((uc: any) => ({ value: uc.cursos.id, label: uc.cursos.nome }))
             .sort((a, b) => a.label.localeCompare(b.label));
+          
+          // Fallback: se unidades_cursos estiver vazio, buscar todos os cursos ativos
+          if (cursosData.length === 0) {
+            const { data: cursosGlobais } = await supabase
+              .from('cursos')
+              .select('id, nome')
+              .eq('ativo', true)
+              .order('nome');
+            cursosData = (cursosGlobais || []).map((c: any) => ({ value: c.id, label: c.nome }));
+          }
         } else {
           // Sem unidade selecionada (admin consolidado) - buscar todos os cursos ativos
           const { data: cursosGlobais } = await supabase
@@ -3350,6 +3360,7 @@ export function ComercialPage() {
                 date={formData.data}
                 onDateChange={(date) => setFormData({ ...formData, data: date || new Date() })}
                 placeholder="Selecione a data"
+                maxDate={new Date()}
               />
             </div>
             <div>

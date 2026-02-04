@@ -14,14 +14,33 @@ interface DatePickerProps {
   onDateChange: (date: Date | undefined) => void
   placeholder?: string
   className?: string
+  maxDate?: Date
+  minDate?: Date
+  disabled?: (date: Date) => boolean
 }
 
-export function DatePicker({ date, onDateChange, placeholder = "Selecione uma data", className }: DatePickerProps) {
+export function DatePicker({ 
+  date, 
+  onDateChange, 
+  placeholder = "Selecione uma data", 
+  className,
+  maxDate,
+  minDate,
+  disabled
+}: DatePickerProps) {
   const [open, setOpen] = React.useState(false)
 
   const handleSelect = (selectedDate: Date | undefined) => {
     onDateChange(selectedDate)
     setOpen(false) // Fecha o popover ao selecionar
+  }
+
+  // Função para desabilitar datas fora do range permitido
+  const isDateDisabled = (dateToCheck: Date) => {
+    if (disabled && disabled(dateToCheck)) return true
+    if (maxDate && dateToCheck > maxDate) return true
+    if (minDate && dateToCheck < minDate) return true
+    return false
   }
 
   return (
@@ -44,6 +63,7 @@ export function DatePicker({ date, onDateChange, placeholder = "Selecione uma da
           mode="single"
           selected={date}
           onSelect={handleSelect}
+          disabled={isDateDisabled}
           initialFocus
         />
       </PopoverContent>

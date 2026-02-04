@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Users, DollarSign, Percent, Clock, AlertTriangle, Wallet, Calendar, TrendingDown, RefreshCw, UserMinus, Filter, Info, XCircle, UserX, CheckCircle, Bell, Star, CreditCard, TrendingUp, Target, UserPlus, GraduationCap, Ticket, Music, Baby } from 'lucide-react';
+import { Users, DollarSign, Percent, Clock, AlertTriangle, Wallet, Calendar, TrendingDown, RefreshCw, UserMinus, Info, XCircle, UserX, CheckCircle, Bell, Star, CreditCard, TrendingUp, Target, UserPlus, GraduationCap, Ticket, Music, Baby } from 'lucide-react';
 import { KPICard } from '@/components/ui/KPICard';
 import { DistributionChart } from '@/components/ui/DistributionChart';
 import { EvolutionChart } from '@/components/ui/EvolutionChart';
@@ -88,8 +88,6 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
   const [dadosAnterior, setDadosAnterior] = useState<Partial<DadosGestao> | null>(null);
   const [evolucao, setEvolucao] = useState<any[]>([]);
   const [distribuicao, setDistribuicao] = useState<any[]>([]);
-  const [cursoFiltro, setCursoFiltro] = useState<string>('todos');
-  const [cursosDisponiveis, setCursosDisponiveis] = useState<string[]>([]);
   
   // Estados para gráficos financeiros
   const [evolucaoMRR, setEvolucaoMRR] = useState<any[]>([]);
@@ -564,18 +562,6 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             name: item.unidade_nome || 'N/A',
             value: item.total_alunos_ativos || 0,
           })));
-
-          // Extrair lista de cursos disponíveis (usando IDs por enquanto)
-          const todosCursos = new Set<string>();
-          matriculasData?.forEach((m: any) => {
-            const curso = (m.cursos as any)?.nome || (m.curso_id ? `Curso ${m.curso_id}` : null);
-            if (curso) todosCursos.add(curso);
-          });
-          evasoesData?.forEach((e: any) => {
-            const curso = e.curso_id ? `Curso ${e.curso_id}` : null;
-            if (curso) todosCursos.add(curso);
-          });
-          setCursosDisponiveis(Array.from(todosCursos).sort());
         }
 
         // Buscar evolução mensal (últimos 12 meses até o mês selecionado)
@@ -913,15 +899,6 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
   const variacaoMatriculas = dadosAnterior ? calcularVariacao(dados?.novas_matriculas || 0, dadosAnterior.novas_matriculas || 0) : null;
   const variacaoEvasoes = dadosAnterior ? calcularVariacao(dados?.evasoes || 0, dadosAnterior.evasoes || 0) : null;
 
-  // Filtrar dados por curso selecionado
-  const dadosFiltrados = cursoFiltro === 'todos' ? dados : dados ? {
-    ...dados,
-    matriculas_por_curso: dados.matriculas_por_curso.filter(c => c.name === cursoFiltro),
-    evasoes_por_curso: dados.evasoes_por_curso.filter(c => c.name === cursoFiltro),
-    novas_matriculas: dados.matriculas_por_curso.find(c => c.name === cursoFiltro)?.value || 0,
-    evasoes: dados.evasoes_por_curso.find(c => c.name === cursoFiltro)?.value || 0,
-  } : null;
-
   if (!dados) {
     return (
       <div className="text-center text-slate-400 py-12">
@@ -960,25 +937,6 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             </button>
           ))}
         </div>
-
-        {/* Filtro de Curso - apenas na sub-aba Alunos */}
-        {activeSubTab === 'alunos' && cursosDisponiveis.length > 0 && (
-          <div className="flex items-center gap-2 bg-slate-800/50 rounded-lg px-3 py-2">
-            <Filter className="w-4 h-4 text-slate-400" />
-            <select
-              value={cursoFiltro}
-              onChange={(e) => setCursoFiltro(e.target.value)}
-              className="bg-transparent text-sm text-white border-none outline-none cursor-pointer"
-            >
-              <option value="todos" className="bg-slate-900">Todos os Cursos</option>
-              {cursosDisponiveis.map((curso) => (
-                <option key={curso} value={curso} className="bg-slate-900">
-                  {curso}
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
       </div>
 
       {/* Conteúdo da Sub-aba */}
@@ -1039,7 +997,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             <KPICard
               icon={UserPlus}
               label="Novas Matrículas"
-              value={mesFechado ? (cursoFiltro === 'todos' ? dados.novas_matriculas : dadosFiltrados?.novas_matriculas || 0) : '—'}
+              value={mesFechado ? dados.novas_matriculas : '—'}
               variant="green"
               comparativoMesAnterior={mesFechado && dadosMesAnterior ? { valor: dadosMesAnterior.novas_matriculas, label: dadosMesAnterior.label } : undefined}
               comparativoAnoAnterior={mesFechado && dadosAnoAnterior ? { valor: dadosAnoAnterior.novas_matriculas, label: dadosAnoAnterior.label } : undefined}
@@ -1047,7 +1005,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             <KPICard
               icon={UserMinus}
               label="Evasões"
-              value={mesFechado ? (cursoFiltro === 'todos' ? dados.evasoes : dadosFiltrados?.evasoes || 0) : '—'}
+              value={mesFechado ? dados.evasoes : '—'}
               variant="rose"
               inverterCor={true}
               comparativoMesAnterior={mesFechado && dadosMesAnterior ? { valor: dadosMesAnterior.evasoes, label: dadosMesAnterior.label } : undefined}
@@ -1107,15 +1065,15 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
 
           {/* Gráficos - Linha 2: Matrículas */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {(cursoFiltro === 'todos' ? dados.matriculas_por_curso : dadosFiltrados?.matriculas_por_curso || []).length > 0 ? (
+            {dados.matriculas_por_curso.length > 0 ? (
               <DistributionChart
-                data={cursoFiltro === 'todos' ? dados.matriculas_por_curso : dadosFiltrados?.matriculas_por_curso || []}
-                title={cursoFiltro === 'todos' ? "Novas Matrículas por Curso" : `Matrículas - ${cursoFiltro}`}
+                data={dados.matriculas_por_curso}
+                title="Novas Matrículas por Curso"
               />
             ) : (
               <EstadoVazio
                 titulo="Sem matrículas no período"
-                mensagem={`Nenhuma matrícula registrada em ${getMesNomeCurto(mes)}/${ano}${cursoFiltro !== 'todos' ? ` para ${cursoFiltro}` : ''}. Isso pode indicar período de baixa ou dados ainda não lançados.`}
+                mensagem={`Nenhuma matrícula registrada em ${getMesNomeCurto(mes)}/${ano}. Isso pode indicar período de baixa ou dados ainda não lançados.`}
               />
             )}
             {dados.matriculas_por_professor.length > 0 ? (
@@ -1134,15 +1092,15 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
 
           {/* Gráficos - Linha 3: Evasões */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {(cursoFiltro === 'todos' ? dados.evasoes_por_curso : dadosFiltrados?.evasoes_por_curso || []).length > 0 ? (
+            {dados.evasoes_por_curso.length > 0 ? (
               <DistributionChart
-                data={cursoFiltro === 'todos' ? dados.evasoes_por_curso : dadosFiltrados?.evasoes_por_curso || []}
-                title={cursoFiltro === 'todos' ? "Evasões por Curso" : `Evasões - ${cursoFiltro}`}
+                data={dados.evasoes_por_curso}
+                title="Evasões por Curso"
               />
             ) : (
               <EstadoVazio
                 titulo="Sem evasões no período"
-                mensagem={`Nenhuma evasão registrada em ${getMesNomeCurto(mes)}/${ano}${cursoFiltro !== 'todos' ? ` para ${cursoFiltro}` : ''}. Ótima notícia! 🎉`}
+                mensagem={`Nenhuma evasão registrada em ${getMesNomeCurto(mes)}/${ano}. Ótima notícia! 🎉`}
               />
             )}
             {dados.evasoes_por_professor.length > 0 ? (

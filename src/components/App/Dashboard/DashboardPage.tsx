@@ -133,9 +133,16 @@ export function DashboardPage() {
     async function fetchDados() {
       try {
         // Buscar dados do dashboard (unidades)
-        const { data: dashboardData } = await supabase
+        // IMPORTANTE: Filtrar por unidade se não for consolidado
+        let dashboardQuery = supabase
           .from('vw_dashboard_unidade')
           .select('*');
+        
+        if (unidade !== 'todos') {
+          dashboardQuery = dashboardQuery.eq('unidade_id', unidade);
+        }
+        
+        const { data: dashboardData } = await dashboardQuery;
 
         if (dashboardData) {
           setDados(dashboardData);
@@ -414,12 +421,19 @@ export function DashboardPage() {
         });
 
         // ===== EVOLUÇÃO DE ALUNOS (12 meses) =====
-        const { data: evolucaoData } = await supabase
+        // IMPORTANTE: Filtrar por unidade se não for consolidado
+        let evolucaoQuery = supabase
           .from('dados_mensais')
-          .select('ano, mes, alunos_pagantes')
+          .select('ano, mes, alunos_pagantes, unidade_id')
           .gte('ano', ano - 1)
           .order('ano', { ascending: true })
           .order('mes', { ascending: true });
+        
+        if (unidade !== 'todos') {
+          evolucaoQuery = evolucaoQuery.eq('unidade_id', unidade);
+        }
+        
+        const { data: evolucaoData } = await evolucaoQuery;
 
         if (evolucaoData) {
           const mesesNomes = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
@@ -438,12 +452,19 @@ export function DashboardPage() {
 
         // ===== RESUMO POR UNIDADE (do período selecionado) =====
         // Usar isPeriodoAtual já calculado acima para decidir fonte de dados
+        // IMPORTANTE: Filtrar por unidade se não for consolidado
 
         if (isPeriodoAtual) {
           // Para período atual, usar vw_dashboard_unidade (dados em tempo real)
-          const { data: dashboardUnidades } = await supabase
+          let resumoQuery = supabase
             .from('vw_dashboard_unidade')
             .select('*');
+          
+          if (unidade !== 'todos') {
+            resumoQuery = resumoQuery.eq('unidade_id', unidade);
+          }
+          
+          const { data: dashboardUnidades } = await resumoQuery;
 
           if (dashboardUnidades) {
             const resumo: ResumoUnidade[] = dashboardUnidades.map((d: any) => ({
@@ -459,18 +480,32 @@ export function DashboardPage() {
           }
         } else {
           // Para períodos históricos, usar dados_mensais
-          const { data: unidadesData } = await supabase
+          // Filtrar unidades se não for consolidado
+          let unidadesQuery = supabase
             .from('unidades')
             .select('id, nome')
             .eq('ativo', true);
+          
+          if (unidade !== 'todos') {
+            unidadesQuery = unidadesQuery.eq('id', unidade);
+          }
+          
+          const { data: unidadesData } = await unidadesQuery;
 
           if (unidadesData) {
-            const { data: dadosMensaisUnidades } = await supabase
+            // Filtrar dados_mensais por unidade se não for consolidado
+            let dadosMensaisQuery = supabase
               .from('dados_mensais')
               .select('*')
               .eq('ano', ano)
               .gte('mes', mes)
               .lte('mes', mesFim);
+            
+            if (unidade !== 'todos') {
+              dadosMensaisQuery = dadosMensaisQuery.eq('unidade_id', unidade);
+            }
+            
+            const { data: dadosMensaisUnidades } = await dadosMensaisQuery;
 
             if (dadosMensaisUnidades && dadosMensaisUnidades.length > 0) {
               const resumo: ResumoUnidade[] = unidadesData.map((u: any) => {
@@ -493,9 +528,15 @@ export function DashboardPage() {
               setResumoUnidades(resumo);
             } else {
               // Sem dados históricos, usar dados em tempo real como fallback
-              const { data: dashboardUnidades } = await supabase
+              let fallbackQuery = supabase
                 .from('vw_dashboard_unidade')
                 .select('*');
+              
+              if (unidade !== 'todos') {
+                fallbackQuery = fallbackQuery.eq('unidade_id', unidade);
+              }
+              
+              const { data: dashboardUnidades } = await fallbackQuery;
 
               if (dashboardUnidades) {
                 const resumo: ResumoUnidade[] = dashboardUnidades.map((d: any) => ({

@@ -173,6 +173,7 @@ export function ModalNovoAluno({
                 date={formData.data}
                 onDateChange={(date) => setFormData({ ...formData, data: date || new Date() })}
                 placeholder="Selecione a data"
+                maxDate={new Date()}
               />
             </div>
             <div>
