@@ -106,6 +106,8 @@ export function PageTour({ tourName, steps, onComplete }: PageTourProps) {
   const [run, setRun] = useState(false);
   const [stepIndex, setStepIndex] = useState(0);
   const [filteredSteps, setFilteredSteps] = useState<Step[]>([]);
+  const [hasBeenDismissed, setHasBeenDismissed] = useState(false);
+  const [hasAutoStarted, setHasAutoStarted] = useState(false);
 
   // Filtrar steps para incluir apenas elementos que existem no DOM
   const filterMountedSteps = () => {
@@ -114,24 +116,35 @@ export function PageTour({ tourName, steps, onComplete }: PageTourProps) {
     return mounted;
   };
 
-  // Verificar se deve iniciar o tour automaticamente
+  // Verificar se deve iniciar o tour automaticamente (apenas uma vez)
   useEffect(() => {
+    // Não iniciar se já foi fechado/pulado nesta sessão
+    if (hasBeenDismissed) return;
+    
+    // Não iniciar se já foi iniciado automaticamente
+    if (hasAutoStarted) return;
+    
     // Só inicia se o checklist estiver completo
     if (!onboarding?.checklist_completo) return;
+    
+    // Não iniciar se já estiver rodando
+    if (run) return;
     
     // Verificar se deve mostrar este tour
     if (shouldShowTour(tourName)) {
       // Pequeno delay para garantir que os elementos estejam renderizados
       const timer = setTimeout(() => {
         const mounted = filterMountedSteps();
-        if (mounted.length > 0) {
+        if (mounted.length > 0 && !run && !hasBeenDismissed && !hasAutoStarted) {
+          setHasAutoStarted(true);
           setRun(true);
           setCurrentTour(tourName);
         }
       }, 800);
       return () => clearTimeout(timer);
     }
-  }, [tourName, shouldShowTour, setCurrentTour, onboarding?.checklist_completo]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tourName, onboarding?.checklist_completo]);
 
   // Reagir ao reset do tour (botão ?)
   useEffect(() => {
@@ -140,6 +153,8 @@ export function PageTour({ tourName, steps, onComplete }: PageTourProps) {
     if (runTour && currentTour === tourName && !run) {
       const mounted = filterMountedSteps();
       if (mounted.length > 0) {
+        // Resetar flags para permitir reinício manual
+        setHasBeenDismissed(false);
         setStepIndex(0);
         setRun(true);
       }
@@ -164,11 +179,14 @@ export function PageTour({ tourName, steps, onComplete }: PageTourProps) {
 
     // Botão Fechar (X) foi clicado
     if (action === ACTIONS.CLOSE) {
+      setHasBeenDismissed(true);
       setRun(false);
       setRunTour(false);
       setCurrentTour(null);
       setStepIndex(0);
       clearResetTour(tourName);
+      // Marcar como completo para não reiniciar
+      await markTourComplete(tourName);
       return;
     }
 
@@ -183,15 +201,17 @@ export function PageTour({ tourName, steps, onComplete }: PageTourProps) {
 
     // Tour finalizado ou pulado
     if (status === STATUS.FINISHED || status === STATUS.SKIPPED) {
+      setHasBeenDismissed(true);
       setRun(false);
       setRunTour(false);
       setCurrentTour(null);
       setStepIndex(0);
       clearResetTour(tourName);
       
-      // Marcar como completo apenas se finalizou (não pulou)
+      // Marcar como completo em ambos os casos para não reiniciar
+      await markTourComplete(tourName);
+      
       if (status === STATUS.FINISHED) {
-        await markTourComplete(tourName);
         onComplete?.();
       }
     }
