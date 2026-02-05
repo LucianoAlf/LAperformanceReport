@@ -390,14 +390,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
         // Buscar leads usando a view unificada
         let leadsQuery = supabase
           .from('vw_leads_comercial')
-          .select(`
-            *,
-            canais_origem(nome),
-            cursos(nome),
-            professores:professor_experimental_id(nome),
-            motivos_arquivamento(nome),
-            motivos_nao_matricula(nome)
-          `)
+          .select('*')
           .gte('data', startDate)
           .lte('data', endDate);
 
@@ -462,28 +455,28 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
         // Leads por Canal
         const canaisMap = new Map<string, number>();
         leads.filter(l => l.tipo === 'lead').forEach(l => {
-          const canal = (l.canais_origem as any)?.nome || 'Outros';
+          const canal = l.canal_origem_nome || 'Outros';
           canaisMap.set(canal, (canaisMap.get(canal) || 0) + (l.quantidade || 1));
         });
 
         // Leads por Curso
         const cursosLeadMap = new Map<string, number>();
         leads.filter(l => l.tipo === 'lead').forEach(l => {
-          const curso = (l.cursos as any)?.nome || 'Não informado';
+          const curso = l.curso_nome || 'Não informado';
           cursosLeadMap.set(curso, (cursosLeadMap.get(curso) || 0) + (l.quantidade || 1));
         });
 
         // Motivos Arquivamento
         const motivosArqMap = new Map<string, number>();
         leads.filter(l => l.arquivado).forEach(l => {
-          const motivo = (l.motivos_arquivamento as any)?.nome || 'Outros';
+          const motivo = l.motivo_arquivamento_texto || 'Outros';
           motivosArqMap.set(motivo, (motivosArqMap.get(motivo) || 0) + (l.quantidade || 1));
         });
 
         // Experimentais por Professor
         const expProfMap = new Map<string, { id: number; total: number; convertidas: number }>();
         leads.filter(l => l.tipo === 'experimental_realizada' || l.tipo === 'matricula').forEach(l => {
-          const prof = (l.professores as any)?.nome || 'Sem Professor';
+          const prof = l.professor_experimental_nome || 'Sem Professor';
           const profId = l.professor_experimental_id || 0;
           const current = expProfMap.get(prof) || { id: profId, total: 0, convertidas: 0 };
           current.total += l.quantidade || 1;
@@ -494,7 +487,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
         // Experimentais por Canal (origem das pessoas que fizeram experimentais)
         const expCanalMap = new Map<string, number>();
         leads.filter(l => l.tipo === 'experimental_realizada').forEach(l => {
-          const canal = (l.canais_origem as any)?.nome || 'Outros';
+          const canal = l.canal_origem_nome || 'Outros';
           expCanalMap.set(canal, (expCanalMap.get(canal) || 0) + (l.quantidade || 1));
         });
 

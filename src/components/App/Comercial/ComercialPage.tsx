@@ -386,7 +386,7 @@ export function ComercialPage() {
       // Query base - usar view de compatibilidade que combina dados de leads
       let query = supabase
         .from('vw_leads_comercial')
-        .select('*, canais_origem(nome), cursos(nome), unidades(codigo)')
+        .select('*')
         .gte('data', startDate)
         .lte('data', endDate)
         .order('data', { ascending: false });
@@ -419,7 +419,7 @@ export function ComercialPage() {
       // Leads por canal
       const canalMap = new Map<string, number>();
       registros.filter(r => r.tipo === 'lead').forEach(r => {
-        const canal = (r.canais_origem as any)?.nome || 'Não informado';
+        const canal = r.canal_origem_nome || 'Não informado';
         canalMap.set(canal, (canalMap.get(canal) || 0) + r.quantidade);
       });
       const leadsPorCanal = Array.from(canalMap.entries())
@@ -429,7 +429,7 @@ export function ComercialPage() {
       // Leads por curso
       const cursoMap = new Map<string, number>();
       registros.filter(r => r.tipo === 'lead').forEach(r => {
-        const curso = (r.cursos as any)?.nome || 'Não informado';
+        const curso = r.curso_nome || 'Não informado';
         cursoMap.set(curso, (cursoMap.get(curso) || 0) + r.quantidade);
       });
       const leadsPorCurso = Array.from(cursoMap.entries())
@@ -461,8 +461,8 @@ export function ComercialPage() {
         .filter(r => r.tipo === 'matricula')
         .map(m => ({
           ...m,
-          canal_nome: (m.canais_origem as any)?.nome || '',
-          curso_nome: (m.cursos as any)?.nome || '',
+          canal_nome: m.canal_origem_nome || '',
+          curso_nome: m.curso_nome || '',
         }));
 
       // Buscar nomes dos professores e formas de pagamento
@@ -503,8 +503,8 @@ export function ComercialPage() {
         .filter(r => r.tipo === 'lead')
         .map(l => ({
           ...l,
-          canal_nome: (l.canais_origem as any)?.nome || '',
-          curso_nome: (l.cursos as any)?.nome || '',
+          canal_nome: l.canal_origem_nome || '',
+          curso_nome: l.curso_nome || '',
         }));
       setLeadsMes(leadsDoMes);
 
@@ -513,8 +513,8 @@ export function ComercialPage() {
         .filter(r => r.tipo.startsWith('experimental'))
         .map(e => ({
           ...e,
-          canal_nome: (e.canais_origem as any)?.nome || '',
-          curso_nome: (e.cursos as any)?.nome || '',
+          canal_nome: e.canal_origem_nome || '',
+          curso_nome: e.curso_nome || '',
         }));
 
       // Buscar nomes dos professores para experimentais
@@ -543,8 +543,8 @@ export function ComercialPage() {
         .filter(r => r.tipo === 'visita_escola')
         .map(v => ({
           ...v,
-          canal_nome: (v.canais_origem as any)?.nome || '',
-          curso_nome: (v.cursos as any)?.nome || '',
+          canal_nome: v.canal_origem_nome || '',
+          curso_nome: v.curso_nome || '',
         }));
       setVisitasMes(visitasDoMes);
 
@@ -1270,7 +1270,7 @@ export function ComercialPage() {
     const primeiroDiaMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
     const { data: registrosMes } = await supabase
       .from('vw_leads_comercial')
-      .select('tipo, quantidade, canal_id, curso_id, canais_origem(nome), cursos(nome)')
+      .select('tipo, quantidade, canal_origem_id, curso_id, canal_origem_nome, curso_nome')
       .eq('unidade_id', unidadeId)
       .gte('data', primeiroDiaMes.toISOString().split('T')[0])
       .lte('data', hoje.toISOString().split('T')[0]);
@@ -1295,8 +1295,8 @@ export function ComercialPage() {
         tipo_matricula,
         valor_passaporte, 
         valor_parcela,
-        canais_origem(nome),
-        cursos(nome)
+        canal_origem_nome,
+        curso_nome
       `)
       .eq('unidade_id', unidadeId)
       .eq('tipo', 'matricula')
@@ -1307,28 +1307,28 @@ export function ComercialPage() {
     // Agrupar leads por canal
     const leadsPorCanal: { [key: string]: number } = {};
     registrosMes?.filter(r => r.tipo === 'lead').forEach(r => {
-      const canal = (r.canais_origem as any)?.nome || 'Não informado';
+      const canal = r.canal_origem_nome || 'Não informado';
       leadsPorCanal[canal] = (leadsPorCanal[canal] || 0) + r.quantidade;
     });
 
     // Agrupar leads por curso
     const leadsPorCurso: { [key: string]: number } = {};
     registrosMes?.filter(r => r.tipo === 'lead').forEach(r => {
-      const curso = (r.cursos as any)?.nome || 'Não informado';
+      const curso = r.curso_nome || 'Não informado';
       leadsPorCurso[curso] = (leadsPorCurso[curso] || 0) + r.quantidade;
     });
 
     // Agrupar matrículas por canal
     const matriculasPorCanal: { [key: string]: number } = {};
     registrosMes?.filter(r => r.tipo === 'matricula').forEach(r => {
-      const canal = (r.canais_origem as any)?.nome || 'Não informado';
+      const canal = r.canal_origem_nome || 'Não informado';
       matriculasPorCanal[canal] = (matriculasPorCanal[canal] || 0) + r.quantidade;
     });
 
     // Agrupar matrículas por curso
     const matriculasPorCurso: { [key: string]: number } = {};
     registrosMes?.filter(r => r.tipo === 'matricula').forEach(r => {
-      const curso = (r.cursos as any)?.nome || 'Não informado';
+      const curso = r.curso_nome || 'Não informado';
       matriculasPorCurso[curso] = (matriculasPorCurso[curso] || 0) + r.quantidade;
     });
 
@@ -1444,8 +1444,8 @@ export function ComercialPage() {
         texto += `${i + 1}. ${mat.aluno_nome}`;
         if (mat.aluno_idade) texto += ` (${mat.aluno_idade} anos)`;
         texto += `\n   📅 ${dataFormatada}`;
-        if ((mat.cursos as any)?.nome) texto += ` | 🎵 ${(mat.cursos as any).nome}`;
-        if ((mat.canais_origem as any)?.nome) texto += ` | 📱 ${(mat.canais_origem as any).nome}`;
+        if (mat.curso_nome) texto += ` | 🎵 ${mat.curso_nome}`;
+        if (mat.canal_origem_nome) texto += ` | 📱 ${mat.canal_origem_nome}`;
         texto += `\n   💵 Pass: R$ ${(mat.valor_passaporte || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
         texto += ` | Parc: R$ ${(mat.valor_parcela || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n\n`;
       });
