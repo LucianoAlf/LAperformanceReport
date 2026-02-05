@@ -141,10 +141,16 @@ export function ModalRelatorio({
   }
 
   async function gerarRelatorioDiario(): Promise<string> {
-    const hoje = new Date();
-    const dia = hoje.getDate().toString().padStart(2, '0');
-    const mesNome = hoje.toLocaleString('pt-BR', { month: 'long' });
-    const ano = hoje.getFullYear();
+    // Usar a data selecionada pelo usuário (não hardcoded como hoje)
+    const dataSelecionada = relatorioDataInicio;
+    const dia = dataSelecionada.getDate().toString().padStart(2, '0');
+    const mesNome = dataSelecionada.toLocaleString('pt-BR', { month: 'long' });
+    const ano = dataSelecionada.getFullYear();
+    
+    // Para range de datas (personalizado com início e fim diferentes)
+    const dataInicio = relatorioDataInicio;
+    const dataFim = relatorioDataFim;
+    const isRange = dataInicio.toDateString() !== dataFim.toDateString();
     
     // Buscar nome da unidade e farmers
     let unidadeNome = 'Unidade';
@@ -166,23 +172,23 @@ export function ModalRelatorio({
       farmersNomes = 'Todas as Unidades';
     }
 
-    // Filtrar renovações do dia
-    const renovacoesHoje = renovacoes.filter(r => {
-      const dataRenovacao = new Date(r.data);
-      return dataRenovacao.toDateString() === hoje.toDateString();
-    });
+    // Função auxiliar para verificar se uma data está no range selecionado
+    const dentroDoRange = (dataStr: string) => {
+      const data = new Date(dataStr);
+      if (isRange) {
+        return data >= new Date(dataInicio.toDateString()) && data <= new Date(dataFim.toDateString());
+      }
+      return data.toDateString() === dataSelecionada.toDateString();
+    };
 
-    // Filtrar avisos prévios do dia
-    const avisosPreviosHoje = avisosPrevios.filter(a => {
-      const dataAviso = new Date(a.data);
-      return dataAviso.toDateString() === hoje.toDateString();
-    });
+    // Filtrar renovações do período selecionado
+    const renovacoesHoje = renovacoes.filter(r => dentroDoRange(r.data));
 
-    // Filtrar evasões do dia
-    const evasoesHoje = evasoes.filter(e => {
-      const dataEvasao = new Date(e.data);
-      return dataEvasao.toDateString() === hoje.toDateString();
-    });
+    // Filtrar avisos prévios do período selecionado
+    const avisosPreviosHoje = avisosPrevios.filter(a => dentroDoRange(a.data));
+
+    // Filtrar evasões do período selecionado
+    const evasoesHoje = evasoes.filter(e => dentroDoRange(e.data));
 
     // Calcular KPIs
     const totalBolsistas = (resumo?.bolsistas_integrais || 0) + (resumo?.bolsistas_parciais || 0);
@@ -193,10 +199,15 @@ export function ModalRelatorio({
       ? ((resumo?.renovacoes_realizadas || 0) / resumo.renovacoes_previstas * 100)
       : 0;
 
+    // Formatar período para exibição
+    const periodoTexto = isRange 
+      ? `${dataInicio.toLocaleDateString('pt-BR')} a ${dataFim.toLocaleDateString('pt-BR')}`
+      : `${dia}/${mesNome}/${ano}`;
+
     let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
     texto += `📋 *RELATÓRIO DIÁRIO ADMINISTRATIVO*\n`;
     texto += `🏢 *${unidadeNome.toUpperCase()}*\n`;
-    texto += `📆 ${dia}/${mesNome}/${ano}\n`;
+    texto += `📆 ${periodoTexto}\n`;
     texto += `👥 ${farmersNomes}\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
@@ -241,7 +252,7 @@ export function ModalRelatorio({
     }
 
     // Avisos Prévios
-    texto += `⚠️ *AVISOS PRÉVIOS PARA SAIR EM ${new Date(ano, hoje.getMonth() + 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase()}*\n`;
+    texto += `⚠️ *AVISOS PRÉVIOS PARA SAIR EM ${new Date(ano, dataSelecionada.getMonth() + 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase()}*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
     if (avisosPrevios.length === 0) {
       texto += `Nenhum aviso prévio registrado 🎉\n\n`;
@@ -277,7 +288,8 @@ export function ModalRelatorio({
     }
 
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `📅 Gerado em: ${dia}/${(hoje.getMonth() + 1).toString().padStart(2, '0')}/${ano} às ${hoje.getHours()}:${hoje.getMinutes().toString().padStart(2, '0')}\n`;
+    const agora = new Date();
+    texto += `📅 Gerado em: ${agora.getDate().toString().padStart(2, '0')}/${(agora.getMonth() + 1).toString().padStart(2, '0')}/${agora.getFullYear()} às ${agora.getHours()}:${agora.getMinutes().toString().padStart(2, '0')}\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━`;
 
     return texto;
