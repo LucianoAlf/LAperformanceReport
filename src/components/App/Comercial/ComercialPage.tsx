@@ -186,7 +186,7 @@ export function ComercialPage() {
   const [erroWhatsApp, setErroWhatsApp] = useState<string | null>(null);
   
   // Estado para período do relatório (simplificado)
-  const [relatorioPeriodo, setRelatorioPeriodo] = useState<'ontem' | 'personalizado'>('ontem');
+  const [relatorioPeriodo, setRelatorioPeriodo] = useState<'hoje' | 'ontem' | 'personalizado'>('hoje');
   const [relatorioDataInicio, setRelatorioDataInicio] = useState<Date>(new Date());
   const [relatorioDataFim, setRelatorioDataFim] = useState<Date>(new Date());
   const [canais, setCanais] = useState<Option[]>([]);
@@ -1055,6 +1055,10 @@ export function ComercialPage() {
     let dataFim: Date;
 
     switch (relatorioPeriodo) {
+      case 'hoje':
+        dataInicio = hoje;
+        dataFim = hoje;
+        break;
       case 'ontem':
         const ontem = new Date(hoje);
         ontem.setDate(hoje.getDate() - 1);
@@ -3722,6 +3726,7 @@ export function ComercialPage() {
               {/* Botões de atalho */}
               <div className="flex flex-wrap gap-2 mb-3">
                 {[
+                  { id: 'hoje', label: 'Hoje' },
                   { id: 'ontem', label: 'Ontem' },
                   { id: 'personalizado', label: 'Personalizado' },
                 ].map((p) => (
@@ -3730,7 +3735,10 @@ export function ComercialPage() {
                     onClick={() => {
                       setRelatorioPeriodo(p.id as typeof relatorioPeriodo);
                       const hoje = new Date();
-                      if (p.id === 'ontem') {
+                      if (p.id === 'hoje') {
+                        setRelatorioDataInicio(hoje);
+                        setRelatorioDataFim(hoje);
+                      } else if (p.id === 'ontem') {
                         const ontem = new Date(hoje);
                         ontem.setDate(ontem.getDate() - 1);
                         setRelatorioDataInicio(ontem);
