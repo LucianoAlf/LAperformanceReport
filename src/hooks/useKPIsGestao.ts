@@ -63,7 +63,9 @@ export function useKPIsGestao(
       // Buscar dados da view
       let query = supabase
         .from('vw_kpis_gestao_mensal')
-        .select('*');
+        .select('*')
+        .eq('ano', currentYear)
+        .eq('mes', currentMonth);
 
       if (unidadeId !== 'todos') {
         query = query.eq('unidade_id', unidadeId);

@@ -181,7 +181,9 @@ export function DashboardPage() {
           // PERÍODO ATUAL: usar view em tempo real
           let gestaoQuery = supabase
             .from('vw_kpis_gestao_mensal')
-            .select('*');
+            .select('*')
+            .eq('ano', currentYear)
+            .eq('mes', currentMonth);
           
           if (unidade !== 'todos') {
             gestaoQuery = gestaoQuery.eq('unidade_id', unidade);
@@ -393,8 +395,8 @@ export function DashboardPage() {
             totalTurmas += turmasPorProfessor.get(p.id) || 0;
           });
           
-          mediaAlunosProf = totalProfs > 0 ? totalAlunos / totalProfs : 0;
-          mediaAlunosTurma = totalTurmas > 0 ? totalAlunos / totalTurmas : 0;
+          mediaAlunosProf = totalProfs > 0 ? Math.round((totalAlunos / totalProfs) * 10) / 10 : 0;
+          mediaAlunosTurma = totalTurmas > 0 ? Math.round((totalAlunos / totalTurmas) * 10) / 10 : 0;
         }
 
         // Taxa de renovação vem de professores_performance

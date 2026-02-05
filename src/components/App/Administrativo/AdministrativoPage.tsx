@@ -209,7 +209,9 @@ export function AdministrativoPage() {
         // PERÍODO ATUAL: usar view em tempo real
         let kpisQuery = supabase
           .from('vw_kpis_gestao_mensal')
-          .select('*');
+          .select('*')
+          .eq('ano', ano)
+          .eq('mes', mes);
 
         if (unidade !== 'todos') {
           kpisQuery = kpisQuery.eq('unidade_id', unidade);
