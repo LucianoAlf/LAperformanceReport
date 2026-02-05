@@ -158,22 +158,19 @@ export function SalasPage() {
       // Carregar ocupação das salas (turmas ativas com horários)
       const { data: turmasData } = await supabase
         .from('turmas')
-        .select('sala_id, alunos, dia_semana, horario_inicio')
+        .select('sala_id, capacidade_maxima, dia_semana, horario_inicio')
         .eq('ativo', true);
 
       if (turmasData) {
-        // Calcular ocupação por sala (número de alunos)
+        // Calcular ocupação por sala (capacidade máxima das turmas)
         const ocupacao: Record<number, number> = {};
         // Calcular horas ocupadas por sala (número de turmas = horas ocupadas)
         const horasOcupadas: Record<number, number> = {};
         
         turmasData.forEach((turma: any) => {
           if (turma.sala_id) {
-            // Contar alunos
-            if (turma.alunos) {
-              const numAlunos = Array.isArray(turma.alunos) ? turma.alunos.length : 0;
-              ocupacao[turma.sala_id] = (ocupacao[turma.sala_id] || 0) + numAlunos;
-            }
+            // Usar capacidade máxima da turma como estimativa de ocupação
+            ocupacao[turma.sala_id] = (ocupacao[turma.sala_id] || 0) + (turma.capacidade_maxima || 0);
             // Contar horas ocupadas (cada turma = 1 hora por semana)
             horasOcupadas[turma.sala_id] = (horasOcupadas[turma.sala_id] || 0) + 1;
           }

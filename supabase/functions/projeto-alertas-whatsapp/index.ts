@@ -491,7 +491,7 @@ serve(async (req) => {
         break;
       default:
         return new Response(
-          JSON.stringify({ error: 'Action inválida. Use: tarefa_atrasada, tarefa_vencendo, projeto_parado, resumo_semanal, all' }),
+          JSON.stringify({ error: 'Action inválida. Use: status, test, tarefa_atrasada, tarefa_vencendo, projeto_parado, resumo_semanal, all' }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
         );
     }
