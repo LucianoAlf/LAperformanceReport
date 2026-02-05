@@ -64,12 +64,12 @@ interface ModalEditarSalaProps {
 }
 
 export function ModalEditarSala({ sala, unidades, onClose, onSalvar }: ModalEditarSalaProps) {
-  const { isAdmin, user } = useAuth();
+  const { isAdmin, usuario } = useAuth();
   const isEdicao = !!sala;
   
   // Estados do formulário
   const [nome, setNome] = useState(sala?.nome || '');
-  const [unidadeId, setUnidadeId] = useState(sala?.unidade_id || user?.unidade_id || '');
+  const [unidadeId, setUnidadeId] = useState(sala?.unidade_id || usuario?.unidade_id || '');
   const [tipoSala, setTipoSala] = useState(sala?.tipo_sala || '');
   const [capacidadeMaxima, setCapacidadeMaxima] = useState(sala?.capacidade_maxima || 4);
   const [bufferOperacional, setBufferOperacional] = useState(sala?.buffer_operacional || 10);
