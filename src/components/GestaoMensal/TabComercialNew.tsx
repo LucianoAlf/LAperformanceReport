@@ -33,7 +33,7 @@ interface DadosComercial {
   leads_por_canal: { name: string; value: number }[];
   leads_por_curso: { name: string; value: number }[];
   motivos_arquivamento: { name: string; value: number }[];
-  
+
   // Experimentais
   experimentais_marcadas: number;
   experimentais_realizadas: number;
@@ -42,7 +42,7 @@ interface DadosComercial {
   taxa_conversao_exp_mat: number;
   experimentais_por_professor: { id: number; nome: string; valor: number; subvalor?: string }[];
   experimentais_por_canal: { name: string; value: number }[];
-  
+
   // Matrículas
   novas_matriculas: number;
   matriculas_por_curso: { name: string; value: number }[];
@@ -54,7 +54,7 @@ interface DadosComercial {
   ticket_medio_passaporte: number;
   ticket_medio_parcela: number;
   motivos_nao_matricula: { name: string; value: number }[];
-  
+
   // Faturamento
   faturamento_passaportes: number;
   faturamento_parcelas: number;
@@ -76,12 +76,12 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
   const [activeSubTab, setActiveSubTab] = useState<SubTabId>('leads');
   const [loading, setLoading] = useState(true);
   const [dados, setDados] = useState<DadosComercial | null>(null);
-  
+
   // Buscar metas do período
   const unidadeIdParaMetas = unidade === 'todos' ? null : unidade;
   const { metas } = useMetasKPI(unidadeIdParaMetas, ano, mes);
   const [mesFechado, setMesFechado] = useState(false);
-  
+
   // Estados para comparativos históricos
   const [dadosMesAnterior, setDadosMesAnterior] = useState<DadosComparativo | null>(null);
   const [dadosAnoAnterior, setDadosAnoAnterior] = useState<DadosComparativo | null>(null);
@@ -108,7 +108,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
         // ========== BUSCAR DADOS COMPARATIVOS (Mês Anterior e Ano Anterior) ==========
         const mesAnterior = mes === 1 ? 12 : mes - 1;
         const anoMesAnterior = mes === 1 ? ano - 1 : ano;
-        
+
         // Mapeamento de unidades para nomes
         const unidadeNomesMap: Record<string, string> = {
           '2ec861f6-023f-4d7b-9927-3960ad8c2a92': 'Campo Grande',
@@ -170,12 +170,12 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
         if (dadosMesAnt.length > 0 || dadosMesAntMensal.length > 0) {
           const totalLeadsMesAnt = dadosMesAnt.reduce((acc, d) => acc + (d.total_leads || 0), 0);
           const expMesAnt = dadosMesAnt.reduce((acc, d) => acc + (d.aulas_experimentais || 0), 0);
-          const matMesAnt = dadosMesAnt.length > 0 
+          const matMesAnt = dadosMesAnt.length > 0
             ? dadosMesAnt.reduce((acc, d) => acc + (d.novas_matriculas_total || 0), 0)
             : dadosMesAntMensal.reduce((acc, d) => acc + (d.novas_matriculas || 0), 0);
           const ticketParcelaMesAnt = dadosMesAnt.length > 0 && dadosMesAnt.some(d => d.ticket_medio_parcelas)
             ? dadosMesAnt.reduce((acc, d) => acc + (Number(d.ticket_medio_parcelas) || 0), 0) / dadosMesAnt.filter(d => d.ticket_medio_parcelas).length
-            : dadosMesAntMensal.length > 0 
+            : dadosMesAntMensal.length > 0
               ? dadosMesAntMensal.reduce((acc, d) => acc + (Number(d.ticket_medio) || 0), 0) / dadosMesAntMensal.length
               : 0;
           const ticketPassMesAnt = dadosMesAnt.length > 0 && dadosMesAnt.some(d => d.ticket_medio_passaporte)
@@ -200,12 +200,12 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
         if (dadosAnoAnt.length > 0 || dadosAnoAntMensal.length > 0) {
           const totalLeadsAnoAnt = dadosAnoAnt.reduce((acc, d) => acc + (d.total_leads || 0), 0);
           const expAnoAnt = dadosAnoAnt.reduce((acc, d) => acc + (d.aulas_experimentais || 0), 0);
-          const matAnoAnt = dadosAnoAnt.length > 0 
+          const matAnoAnt = dadosAnoAnt.length > 0
             ? dadosAnoAnt.reduce((acc, d) => acc + (d.novas_matriculas_total || 0), 0)
             : dadosAnoAntMensal.reduce((acc, d) => acc + (d.novas_matriculas || 0), 0);
           const ticketParcelaAnoAnt = dadosAnoAnt.length > 0 && dadosAnoAnt.some(d => d.ticket_medio_parcelas)
             ? dadosAnoAnt.reduce((acc, d) => acc + (Number(d.ticket_medio_parcelas) || 0), 0) / dadosAnoAnt.filter(d => d.ticket_medio_parcelas).length
-            : dadosAnoAntMensal.length > 0 
+            : dadosAnoAntMensal.length > 0
               ? dadosAnoAntMensal.reduce((acc, d) => acc + (Number(d.ticket_medio) || 0), 0) / dadosAnoAntMensal.length
               : 0;
           const ticketPassAnoAnt = dadosAnoAnt.length > 0 && dadosAnoAnt.some(d => d.ticket_medio_passaporte)
@@ -301,10 +301,10 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           const novasMatriculas = historico.reduce((acc, h) => acc + (h.novas_matriculas_total || 0), 0);
           const matriculasLamk = historico.reduce((acc, h) => acc + (h.novas_matriculas_lamk || 0), 0);
           const matriculasEmla = historico.reduce((acc, h) => acc + (h.novas_matriculas_emla || 0), 0);
-          const ticketMedioParcela = historico.length > 0 
+          const ticketMedioParcela = historico.length > 0
             ? historico.reduce((acc, h) => acc + (Number(h.ticket_medio_parcelas) || 0), 0) / historico.filter(h => h.ticket_medio_parcelas).length || 0
             : 0;
-          const ticketMedioPassaporte = historico.length > 0 
+          const ticketMedioPassaporte = historico.length > 0
             ? historico.reduce((acc, h) => acc + (Number(h.ticket_medio_passaporte) || 0), 0) / historico.filter(h => h.ticket_medio_passaporte).length || 0
             : 0;
           const faturamentoPassaportes = historico.reduce((acc, h) => acc + (Number(h.faturamento_passaporte) || 0), 0);
@@ -345,7 +345,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             leads_por_canal: Array.from(leadsCanaisMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
             leads_por_curso: [], // Não disponível no histórico
             motivos_arquivamento: [], // Não disponível no histórico
-            
+
             // Experimentais
             experimentais_marcadas: expRealizadas, // Só temos realizadas no histórico
             experimentais_realizadas: expRealizadas,
@@ -359,7 +359,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
               subvalor: ''
             })).sort((a, b) => b.valor - a.valor),
             experimentais_por_canal: Array.from(expCanaisMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
-            
+
             // Matrículas
             novas_matriculas: novasMatriculas,
             matriculas_por_curso: Array.from(cursosMatMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
@@ -374,7 +374,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             ticket_medio_passaporte: ticketMedioPassaporte,
             ticket_medio_parcela: ticketMedioParcela,
             motivos_nao_matricula: [], // Não disponível no histórico
-            
+
             // Faturamento
             faturamento_passaportes: faturamentoPassaportes,
             faturamento_parcelas: novasMatriculas * ticketMedioParcela,
@@ -387,9 +387,9 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
         }
 
         // ========== CÓDIGO ORIGINAL PARA PERÍODO ATUAL ==========
-        // Buscar leads_diarios
+        // Buscar leads usando a view unificada
         let leadsQuery = supabase
-          .from('leads_diarios')
+          .from('vw_leads_comercial')
           .select(`
             *,
             canais_origem(nome),
@@ -424,7 +424,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
         const { data: dadosMensaisData } = await dadosMensaisQuery;
 
         // Verificar se o mês está fechado (tem dados em dados_mensais)
-        const temDadosMes = dadosMensaisData && dadosMensaisData.length > 0 && 
+        const temDadosMes = dadosMensaisData && dadosMensaisData.length > 0 &&
           dadosMensaisData.some(d => d.ticket_medio_passaporte !== null && d.ticket_medio_passaporte > 0);
         setMesFechado(temDadosMes);
 
@@ -543,16 +543,16 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
         // Faturamento - usar dados_mensais para passaporte (dados históricos) ou calcular de matrículas
         const dadosMensais = dadosMensaisData || [];
         const faturamentoPassaportesHistorico = dadosMensais.reduce((acc, dm) => acc + (Number(dm.faturamento_passaporte) || 0), 0);
-        const ticketMedioPassaporteHistorico = dadosMensais.length > 0 
-          ? dadosMensais.reduce((acc, dm) => acc + (Number(dm.ticket_medio_passaporte) || 0), 0) / dadosMensais.length 
+        const ticketMedioPassaporteHistorico = dadosMensais.length > 0
+          ? dadosMensais.reduce((acc, dm) => acc + (Number(dm.ticket_medio_passaporte) || 0), 0) / dadosMensais.length
           : 0;
-        
+
         // Calcular de matrículas como fallback
         const faturamentoPassaportesMatriculas = matriculas.reduce((acc, m) => acc + (Number(m.valor_passaporte) || 0), 0);
         const faturamentoParcelas = matriculas.reduce((acc, m) => acc + (Number(m.valor_parcela) || 0), 0);
         const ticketMedioPassaporteMatriculas = matriculas.length > 0 ? faturamentoPassaportesMatriculas / matriculas.length : 0;
         const ticketMedioParcela = matriculas.length > 0 ? faturamentoParcelas / matriculas.length : 0;
-        
+
         // Usar dados históricos se disponíveis, senão calcular de matrículas
         const faturamentoPassaportes = faturamentoPassaportesHistorico > 0 ? faturamentoPassaportesHistorico : faturamentoPassaportesMatriculas;
         const ticketMedioPassaporte = ticketMedioPassaporteHistorico > 0 ? ticketMedioPassaporteHistorico : ticketMedioPassaporteMatriculas;
@@ -566,7 +566,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           leads_por_canal: Array.from(canaisMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
           leads_por_curso: Array.from(cursosLeadMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
           motivos_arquivamento: Array.from(motivosArqMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
-          
+
           // Experimentais
           experimentais_marcadas: expMarcadas + expRealizadas + faltaram,
           experimentais_realizadas: expRealizadas,
@@ -580,7 +580,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             subvalor: `${data.convertidas} matrículas (${data.total > 0 ? ((data.convertidas / data.total) * 100).toFixed(0) : 0}%)`
           })).sort((a, b) => b.valor - a.valor),
           experimentais_por_canal: Array.from(expCanalMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
-          
+
           // Matrículas
           novas_matriculas: novasMatriculas || matriculas.length,
           matriculas_por_curso: Array.from(cursoMatMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
@@ -599,7 +599,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           ticket_medio_passaporte: ticketMedioPassaporte,
           ticket_medio_parcela: ticketMedioParcela,
           motivos_nao_matricula: Array.from(motivosNaoMatMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
-          
+
           // Faturamento
           faturamento_passaportes: faturamentoPassaportes,
           faturamento_parcelas: faturamentoParcelas,

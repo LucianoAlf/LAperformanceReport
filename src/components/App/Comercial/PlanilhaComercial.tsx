@@ -98,7 +98,7 @@ export function PlanilhaComercial() {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let query = (supabase as any)
-        .from('leads_diarios')
+        .from('vw_leads_comercial')
         .select('*, unidades(codigo)')
         .order('data', { ascending: false })
         .order('id', { ascending: false });
@@ -229,7 +229,7 @@ export function PlanilhaComercial() {
       if (row.isNew) {
         dataToSave.created_by = usuario?.id;
         const { data, error } = await supabaseAny
-          .from('leads_diarios')
+          .from('leads')
           .insert(dataToSave)
           .select()
           .single();
@@ -245,7 +245,7 @@ export function PlanilhaComercial() {
         toast.success('Registro salvo!');
       } else {
         const { data, error } = await supabaseAny
-          .from('leads_diarios')
+          .from('leads')
           .update(dataToSave)
           .eq('id', row.id)
           .select()
@@ -283,7 +283,7 @@ export function PlanilhaComercial() {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
-        .from('leads_diarios')
+        .from('leads')
         .delete()
         .eq('id', row.id);
 
@@ -479,11 +479,10 @@ export function PlanilhaComercial() {
                               <label className="text-xs text-muted-foreground">Escola</label>
                               <div className="flex items-center gap-1.5 mt-1 px-3 py-2 border rounded bg-muted/30">
                                 {row.tipo_matricula && (
-                                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                    row.tipo_matricula === 'EMLA' 
-                                      ? 'bg-violet-500/20 text-violet-400' 
+                                  <span className={`px-2 py-0.5 rounded text-xs font-medium ${row.tipo_matricula === 'EMLA'
+                                      ? 'bg-violet-500/20 text-violet-400'
                                       : 'bg-cyan-500/20 text-cyan-400'
-                                  }`}>
+                                    }`}>
                                     {row.tipo_matricula}
                                   </span>
                                 )}

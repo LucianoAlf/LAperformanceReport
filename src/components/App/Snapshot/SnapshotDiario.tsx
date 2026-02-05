@@ -128,7 +128,7 @@ export function SnapshotDiario() {
 
       // Leads do mês
       const { data: leadsData } = await sb
-        .from('leads_diarios')
+        .from('vw_leads_comercial')
         .select('tipo, quantidade')
         .eq('unidade_id', selectedUnidade)
         .gte('data', inicioMes)

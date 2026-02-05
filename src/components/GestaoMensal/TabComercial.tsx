@@ -56,8 +56,8 @@ export function TabComercial({ ano, mes, unidade }: TabComercialProps) {
     passaportes: 0,
     faturamentoPassaportes: 0,
   });
-  const [leadsPorCanal, setLeadsPorCanal] = useState<{name: string; value: number}[]>([]);
-  const [matriculasPorProfessor, setMatriculasPorProfessor] = useState<{id: number; nome: string; valor: number}[]>([]);
+  const [leadsPorCanal, setLeadsPorCanal] = useState<{ name: string; value: number }[]>([]);
+  const [matriculasPorProfessor, setMatriculasPorProfessor] = useState<{ id: number; nome: string; valor: number }[]>([]);
 
   useEffect(() => {
     async function fetchDados() {
@@ -68,7 +68,7 @@ export function TabComercial({ ano, mes, unidade }: TabComercialProps) {
         const endDate = `${ano}-${String(mes).padStart(2, '0')}-31`;
 
         let query = supabase
-          .from('leads_diarios')
+          .from('vw_leads_comercial')
           .select('*')
           .gte('data', startDate)
           .lte('data', endDate);
@@ -312,18 +312,17 @@ export function TabComercial({ ano, mes, unidade }: TabComercialProps) {
                         {new Date(d.data).toLocaleDateString('pt-BR')}
                       </td>
                       <td className="py-2 px-4">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          d.tipo === 'lead' ? 'bg-cyan-500/20 text-cyan-400' :
-                          d.tipo === 'experimental_realizada' ? 'bg-amber-500/20 text-amber-400' :
-                          d.tipo === 'experimental_agendada' ? 'bg-amber-500/10 text-amber-300' :
-                          d.tipo === 'matricula' ? 'bg-emerald-500/20 text-emerald-400' :
-                          'bg-slate-500/20 text-slate-400'
-                        }`}>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${d.tipo === 'lead' ? 'bg-cyan-500/20 text-cyan-400' :
+                            d.tipo === 'experimental_realizada' ? 'bg-amber-500/20 text-amber-400' :
+                              d.tipo === 'experimental_agendada' ? 'bg-amber-500/10 text-amber-300' :
+                                d.tipo === 'matricula' ? 'bg-emerald-500/20 text-emerald-400' :
+                                  'bg-slate-500/20 text-slate-400'
+                          }`}>
                           {d.tipo === 'lead' ? 'Lead' :
-                           d.tipo === 'experimental_realizada' ? 'Exp. Realizada' :
-                           d.tipo === 'experimental_agendada' ? 'Exp. Agendada' :
-                           d.tipo === 'matricula' ? 'Matrícula' :
-                           d.tipo}
+                            d.tipo === 'experimental_realizada' ? 'Exp. Realizada' :
+                              d.tipo === 'experimental_agendada' ? 'Exp. Agendada' :
+                                d.tipo === 'matricula' ? 'Matrícula' :
+                                  d.tipo}
                         </span>
                       </td>
                       <td className="py-2 px-4 text-right text-slate-300">{d.quantidade || 1}</td>
