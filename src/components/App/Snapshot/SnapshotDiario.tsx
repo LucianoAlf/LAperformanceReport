@@ -128,11 +128,11 @@ export function SnapshotDiario() {
 
       // Leads do mês
       const { data: leadsData } = await sb
-        .from('leads_diarios')
-        .select('tipo, quantidade')
+        .from('leads')
+        .select('status, quantidade')
         .eq('unidade_id', selectedUnidade)
-        .gte('data', inicioMes)
-        .lte('data', fimMes);
+        .gte('data_contato', inicioMes)
+        .lte('data_contato', fimMes);
 
       // Evasões do mês
       const { data: evasoesData } = await sb
@@ -164,10 +164,10 @@ export function SnapshotDiario() {
 
       if (leadsData) {
         leadsData.forEach((l: any) => {
-          if (l.tipo === 'lead') resumo.leads += l.quantidade || 0;
-          if (l.tipo === 'experimental_agendada') resumo.experimentais_agendadas += l.quantidade || 0;
-          if (l.tipo === 'experimental_realizada') resumo.experimentais_realizadas += l.quantidade || 0;
-          if (l.tipo === 'matricula') resumo.matriculas += 1;
+          if (['novo','agendado'].includes(l.status)) resumo.leads += l.quantidade || 0;
+          if (l.status === 'experimental_agendada') resumo.experimentais_agendadas += l.quantidade || 0;
+          if (['experimental_realizada','compareceu'].includes(l.status)) resumo.experimentais_realizadas += l.quantidade || 0;
+          if (['matriculado','convertido'].includes(l.status)) resumo.matriculas += 1;
         });
       }
 

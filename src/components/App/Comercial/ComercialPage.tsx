@@ -64,14 +64,14 @@ import { TabProgramaMatriculador } from './TabProgramaMatriculador';
 interface LeadDiario {
   id?: number;
   unidade_id: string;
-  data: string;
-  tipo: string;
+  data_contato: string;
+  status: string;
   canal_origem_id: number | null;
-  curso_id: number | null;
+  curso_interesse_id: number | null;
   quantidade: number;
   observacoes: string | null;
-  aluno_nome: string | null;
-  aluno_idade: number | null;
+  nome: string | null;
+  idade: number | null;
   professor_experimental_id: number | null;
   professor_fixo_id: number | null;
   agente_comercial: string | null;
@@ -385,11 +385,11 @@ export function ComercialPage() {
 
       // Query base - buscar também cursos e unidades
       let query = supabase
-        .from('leads_diarios')
+        .from('leads')
         .select('*, canais_origem(nome), cursos(nome), unidades(codigo)')
-        .gte('data', startDate)
-        .lte('data', endDate)
-        .order('data', { ascending: false });
+        .gte('data_contato', startDate)
+        .lte('data_contato', endDate)
+        .order('data_contato', { ascending: false });
 
       // Aplicar filtro de unidade
       if (isAdmin) {
@@ -411,14 +411,14 @@ export function ComercialPage() {
       const registros = data || [];
 
       // Calcular resumo
-      const leads = registros.filter(r => r.tipo === 'lead').reduce((acc, r) => acc + r.quantidade, 0);
-      const experimentais = registros.filter(r => r.tipo.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0);
-      const visitas = registros.filter(r => r.tipo === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0);
-      const matriculas = registros.filter(r => r.tipo === 'matricula').reduce((acc, r) => acc + r.quantidade, 0);
+      const leads = registros.filter(r => ['novo','agendado'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0);
+      const experimentais = registros.filter(r => r.status?.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0);
+      const visitas = registros.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0);
+      const matriculas = registros.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0);
 
       // Leads por canal
       const canalMap = new Map<string, number>();
-      registros.filter(r => r.tipo === 'lead').forEach(r => {
+      registros.filter(r => ['novo','agendado'].includes(r.status)).forEach(r => {
         const canal = (r.canais_origem as any)?.nome || 'Não informado';
         canalMap.set(canal, (canalMap.get(canal) || 0) + r.quantidade);
       });
@@ -428,7 +428,7 @@ export function ComercialPage() {
 
       // Leads por curso
       const cursoMap = new Map<string, number>();
-      registros.filter(r => r.tipo === 'lead').forEach(r => {
+      registros.filter(r => ['novo','agendado'].includes(r.status)).forEach(r => {
         const curso = (r.cursos as any)?.nome || 'Não informado';
         cursoMap.set(curso, (cursoMap.get(curso) || 0) + r.quantidade);
       });
@@ -454,11 +454,11 @@ export function ComercialPage() {
       });
 
       // Registros de hoje
-      setRegistrosHoje(registros.filter(r => r.data === hoje));
+      setRegistrosHoje(registros.filter(r => r.data_contato === hoje));
 
       // Matrículas do mês (com nomes dos relacionamentos)
       const matriculasDoMes = registros
-        .filter(r => r.tipo === 'matricula')
+        .filter(r => ['matriculado','convertido'].includes(r.status))
         .map(m => ({
           ...m,
           canal_nome: (m.canais_origem as any)?.nome || '',
@@ -500,7 +500,7 @@ export function ComercialPage() {
 
       // Leads do mês (com nomes dos relacionamentos)
       const leadsDoMes = registros
-        .filter(r => r.tipo === 'lead')
+        .filter(r => ['novo','agendado'].includes(r.status))
         .map(l => ({
           ...l,
           canal_nome: (l.canais_origem as any)?.nome || '',
@@ -510,7 +510,7 @@ export function ComercialPage() {
 
       // Experimentais do mês (com nomes dos relacionamentos)
       const experimentaisDoMes = registros
-        .filter(r => r.tipo.startsWith('experimental'))
+        .filter(r => r.status?.startsWith('experimental'))
         .map(e => ({
           ...e,
           canal_nome: (e.canais_origem as any)?.nome || '',
@@ -540,7 +540,7 @@ export function ComercialPage() {
 
       // Visitas do mês (com nomes dos relacionamentos)
       const visitasDoMes = registros
-        .filter(r => r.tipo === 'visita_escola')
+        .filter(r => r.status === 'visita_escola')
         .map(v => ({
           ...v,
           canal_nome: (v.canais_origem as any)?.nome || '',
@@ -568,26 +568,26 @@ export function ComercialPage() {
       const { startDate, endDate } = competencia.range;
       
       const { data, error } = await supabase
-        .from('leads_diarios')
-        .select('id, aluno_nome, tipo, canal_origem_id, curso_id, professor_experimental_id, data')
+        .from('leads')
+        .select('id, nome, status, canal_origem_id, curso_interesse_id, professor_experimental_id, data_contato')
         .eq('unidade_id', unidadeParaSalvar)
-        .gte('data', startDate)
-        .lte('data', endDate)
-        .not('aluno_nome', 'is', null)
-        .neq('aluno_nome', '')
-        .order('data', { ascending: false });
+        .gte('data_contato', startDate)
+        .lte('data_contato', endDate)
+        .not('nome', 'is', null)
+        .neq('nome', '')
+        .order('data_contato', { ascending: false });
       
       if (error) throw error;
       
       // Mapear para o formato do ComboboxNome
       const sugestoes: SugestaoLead[] = (data || []).map(item => ({
         id: item.id,
-        nome: item.aluno_nome || '',
-        tipo: item.tipo as SugestaoLead['tipo'],
+        nome: item.nome || '',
+        tipo: item.status as SugestaoLead['tipo'],
         canal_origem_id: item.canal_origem_id,
-        curso_id: item.curso_id,
+        curso_id: item.curso_interesse_id,
         professor_id: item.professor_experimental_id,
-        data: item.data,
+        data: item.data_contato,
       }));
       
       setSugestoesLeads(sugestoes);
@@ -604,9 +604,9 @@ export function ComercialPage() {
   const startEditing = (matricula: LeadDiario) => {
     setEditingId(matricula.id || null);
     setEditingData({
-      aluno_nome: matricula.aluno_nome,
-      aluno_idade: matricula.aluno_idade,
-      curso_id: matricula.curso_id,
+      nome: matricula.nome,
+      idade: matricula.idade,
+      curso_interesse_id: matricula.curso_interesse_id,
       canal_origem_id: matricula.canal_origem_id,
       professor_experimental_id: matricula.professor_experimental_id,
       professor_fixo_id: matricula.professor_fixo_id,
@@ -628,7 +628,7 @@ export function ComercialPage() {
     setSaving(true);
     try {
       const { error } = await supabase
-        .from('leads_diarios')
+        .from('leads')
         .update(editingData)
         .eq('id', editingId);
 
@@ -653,7 +653,7 @@ export function ComercialPage() {
       updateData[campo] = valor;
 
       const { error } = await supabase
-        .from('leads_diarios')
+        .from('leads')
         .update(updateData)
         .eq('id', matriculaId);
 
@@ -670,7 +670,7 @@ export function ComercialPage() {
     
     try {
       const { error } = await supabase
-        .from('leads_diarios')
+        .from('leads')
         .delete()
         .eq('id', deleteId);
 
@@ -748,15 +748,15 @@ export function ComercialPage() {
       // Cada lead atendido é 1 registro (quantidade sempre 1)
       const registros = linhasValidas.map(linha => ({
         unidade_id: unidadeParaSalvar,
-        data: dataLancamento,
-        tipo: 'lead',
-        aluno_nome: linha.aluno_nome?.trim(),
+        data_contato: dataLancamento,
+        status: 'novo',
+        nome: linha.aluno_nome?.trim(),
         canal_origem_id: linha.canal_origem_id,
-        curso_id: linha.curso_id,
+        curso_interesse_id: linha.curso_id,
         quantidade: 1, // Sempre 1 por lead atendido
       }));
 
-      const { error } = await supabase.from('leads_diarios').insert(registros);
+      const { error } = await supabase.from('leads').insert(registros);
       if (error) throw error;
 
       toast.success(`${linhasValidas.length} lead(s) atendido(s) registrado(s)!`);
@@ -799,17 +799,17 @@ export function ComercialPage() {
       // Cada experimental é 1 registro (quantidade sempre 1)
       const registros = linhasValidas.map(linha => ({
         unidade_id: unidadeParaSalvar,
-        data: dataLancamento,
-        tipo: linha.status_experimental || 'experimental_agendada',
-        aluno_nome: linha.aluno_nome?.trim(),
+        data_contato: dataLancamento,
+        status: linha.status_experimental || 'experimental_agendada',
+        nome: linha.aluno_nome?.trim(),
         canal_origem_id: linha.canal_origem_id,
-        curso_id: linha.curso_id,
+        curso_interesse_id: linha.curso_id,
         quantidade: 1, // Sempre 1 por experimental
         professor_experimental_id: linha.professor_id,
         sabia_preco: linha.sabia_preco,
       }));
 
-      const { error } = await supabase.from('leads_diarios').insert(registros);
+      const { error } = await supabase.from('leads').insert(registros);
       if (error) throw error;
 
       toast.success(`${linhasValidas.length} experimental(is) registrada(s)!`);
@@ -843,15 +843,15 @@ export function ComercialPage() {
       
       const registros = loteVisitas.map(linha => ({
         unidade_id: unidadeParaSalvar,
-        data: dataLancamento,
-        tipo: 'visita',
-        aluno_nome: linha.aluno_nome || null,
+        data_contato: dataLancamento,
+        status: 'visita_escola',
+        nome: linha.aluno_nome || null,
         canal_origem_id: linha.canal_origem_id,
-        curso_id: linha.curso_id,
+        curso_interesse_id: linha.curso_id,
         quantidade: 1,
       }));
 
-      const { error } = await supabase.from('leads_diarios').insert(registros);
+      const { error } = await supabase.from('leads').insert(registros);
       if (error) throw error;
 
       toast.success(`${loteVisitas.length} visita${loteVisitas.length !== 1 ? 's' : ''} registrada${loteVisitas.length !== 1 ? 's' : ''}!`);
@@ -946,19 +946,19 @@ export function ComercialPage() {
 
       const registro: Partial<LeadDiario> = {
         unidade_id: unidadeFinal,
-        data: dataLancamento,
-        tipo: tipo || 'lead',
+        data_contato: dataLancamento,
+        status: tipo === 'matricula' ? 'convertido' : (tipo || 'novo'),
         canal_origem_id: formData.canal_origem_id,
-        curso_id: formData.curso_id,
+        curso_interesse_id: formData.curso_id,
         quantidade: formData.quantidade,
         observacoes: null,
       };
 
       // Campos extras para matrícula
       if (modalOpen === 'matricula') {
-        registro.aluno_nome = formData.aluno_nome;
+        registro.nome = formData.aluno_nome;
         // Calcular idade a partir da data de nascimento
-        registro.aluno_idade = formData.aluno_data_nascimento 
+        registro.idade = formData.aluno_data_nascimento 
           ? Math.floor((new Date().getTime() - formData.aluno_data_nascimento.getTime()) / (365.25 * 24 * 60 * 60 * 1000))
           : null;
         registro.tipo_matricula = formData.tipo_matricula;
@@ -978,7 +978,7 @@ export function ComercialPage() {
         registro.professor_experimental_id = formData.professor_id;
       }
 
-      const { data: leadData, error } = await supabase.from('leads_diarios').insert(registro).select().single();
+      const { data: leadData, error } = await supabase.from('leads').insert(registro).select().single();
 
       if (error) throw error;
 
@@ -1110,33 +1110,33 @@ export function ComercialPage() {
 
     // Buscar dados do período selecionado
     const { data: registrosPeriodo } = await supabase
-      .from('leads_diarios')
-      .select('tipo, quantidade')
+      .from('leads')
+      .select('status, quantidade')
       .eq('unidade_id', unidadeId)
-      .gte('data', dataInicio)
-      .lte('data', dataFim);
+      .gte('data_contato', dataInicio)
+      .lte('data_contato', dataFim);
 
-    const leadsPeriodo = registrosPeriodo?.filter(r => r.tipo === 'lead').reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const experimentaisPeriodo = registrosPeriodo?.filter(r => r.tipo.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const matriculasPeriodo = registrosPeriodo?.filter(r => r.tipo === 'matricula').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const leadsPeriodo = registrosPeriodo?.filter(r => ['novo','agendado'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const experimentaisPeriodo = registrosPeriodo?.filter(r => r.status?.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const matriculasPeriodo = registrosPeriodo?.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
 
     // Buscar experimentais agendadas para o dia final do período
     const { data: experimentaisDia } = await supabase
-      .from('leads_diarios')
+      .from('leads')
       .select('quantidade')
       .eq('unidade_id', unidadeId)
-      .eq('data', dataFim)
-      .like('tipo', 'experimental%');
+      .eq('data_contato', dataFim)
+      .like('status', 'experimental%');
     
     const experimentaisAgendadasDia = experimentaisDia?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
 
     // Buscar visitas do dia final do período
     const { data: visitasDia } = await supabase
-      .from('leads_diarios')
+      .from('leads')
       .select('quantidade')
       .eq('unidade_id', unidadeId)
-      .eq('data', dataFim)
-      .eq('tipo', 'visita_escola');
+      .eq('data_contato', dataFim)
+      .eq('status', 'visita_escola');
     
     const visitasDiaTotal = visitasDia?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
 
@@ -1182,16 +1182,16 @@ export function ComercialPage() {
 
     // Buscar dados dos últimos 7 dias
     const { data: registrosSemana } = await supabase
-      .from('leads_diarios')
-      .select('tipo, quantidade, valor_passaporte, valor_parcela')
+      .from('leads')
+      .select('status, quantidade, valor_passaporte, valor_parcela')
       .eq('unidade_id', unidadeId)
-      .gte('data', seteDiasAtras.toISOString().split('T')[0])
-      .lte('data', hoje.toISOString().split('T')[0]);
+      .gte('data_contato', seteDiasAtras.toISOString().split('T')[0])
+      .lte('data_contato', hoje.toISOString().split('T')[0]);
 
-    const leadsSemana = registrosSemana?.filter(r => r.tipo === 'lead').reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const experimentaisSemana = registrosSemana?.filter(r => r.tipo.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const visitasSemana = registrosSemana?.filter(r => r.tipo === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const matriculasSemana = registrosSemana?.filter(r => r.tipo === 'matricula').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const leadsSemana = registrosSemana?.filter(r => ['novo','agendado'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const experimentaisSemana = registrosSemana?.filter(r => r.status?.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const visitasSemana = registrosSemana?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const matriculasSemana = registrosSemana?.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
 
     // Calcular conversões
     const conversaoLeadExp = leadsSemana > 0 ? (experimentaisSemana / leadsSemana) * 100 : 0;
@@ -1199,7 +1199,7 @@ export function ComercialPage() {
     const conversaoLeadMat = leadsSemana > 0 ? (matriculasSemana / leadsSemana) * 100 : 0;
 
     // Calcular tickets médios
-    const matriculas = registrosSemana?.filter(r => r.tipo === 'matricula') || [];
+    const matriculas = registrosSemana?.filter(r => ['matriculado','convertido'].includes(r.status)) || [];
     const totalPassaporte = matriculas.reduce((acc, r) => acc + (r.valor_passaporte || 0), 0);
     const totalParcela = matriculas.reduce((acc, r) => acc + (r.valor_parcela || 0), 0);
     const ticketMedioPassaporte = matriculasSemana > 0 ? totalPassaporte / matriculasSemana : 0;
@@ -1263,16 +1263,16 @@ export function ComercialPage() {
     // Buscar dados do mês completo
     const primeiroDiaMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
     const { data: registrosMes } = await supabase
-      .from('leads_diarios')
-      .select('tipo, quantidade, canal_id, curso_id, canais_origem(nome), cursos(nome)')
+      .from('leads')
+      .select('status, quantidade, canal_origem_id, curso_interesse_id, canais_origem(nome), cursos(nome)')
       .eq('unidade_id', unidadeId)
-      .gte('data', primeiroDiaMes.toISOString().split('T')[0])
-      .lte('data', hoje.toISOString().split('T')[0]);
+      .gte('data_contato', primeiroDiaMes.toISOString().split('T')[0])
+      .lte('data_contato', hoje.toISOString().split('T')[0]);
 
-    const leadsMes = registrosMes?.filter(r => r.tipo === 'lead').reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const experimentaisMes = registrosMes?.filter(r => r.tipo.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const visitasMes = registrosMes?.filter(r => r.tipo === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const matriculasMes = registrosMes?.filter(r => r.tipo === 'matricula').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const leadsMes = registrosMes?.filter(r => ['novo','agendado'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const experimentaisMes = registrosMes?.filter(r => r.status?.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const visitasMes = registrosMes?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const matriculasMes = registrosMes?.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
 
     // Calcular conversões
     const conversaoLeadExp = leadsMes > 0 ? (experimentaisMes / leadsMes) * 100 : 0;
@@ -1281,11 +1281,11 @@ export function ComercialPage() {
 
     // Buscar matrículas detalhadas do mês
     const { data: matriculasDetalhadas } = await supabase
-      .from('leads_diarios')
+      .from('leads')
       .select(`
-        data, 
-        aluno_nome, 
-        aluno_idade, 
+        data_contato, 
+        nome, 
+        idade, 
         tipo_matricula,
         valor_passaporte, 
         valor_parcela,
@@ -1293,35 +1293,35 @@ export function ComercialPage() {
         cursos(nome)
       `)
       .eq('unidade_id', unidadeId)
-      .eq('tipo', 'matricula')
-      .gte('data', primeiroDiaMes.toISOString().split('T')[0])
-      .lte('data', hoje.toISOString().split('T')[0])
-      .order('data', { ascending: true });
+      .in('status', ['matriculado','convertido'])
+      .gte('data_contato', primeiroDiaMes.toISOString().split('T')[0])
+      .lte('data_contato', hoje.toISOString().split('T')[0])
+      .order('data_contato', { ascending: true });
 
     // Agrupar leads por canal
     const leadsPorCanal: { [key: string]: number } = {};
-    registrosMes?.filter(r => r.tipo === 'lead').forEach(r => {
+    registrosMes?.filter(r => ['novo','agendado'].includes(r.status)).forEach(r => {
       const canal = (r.canais_origem as any)?.nome || 'Não informado';
       leadsPorCanal[canal] = (leadsPorCanal[canal] || 0) + r.quantidade;
     });
 
     // Agrupar leads por curso
     const leadsPorCurso: { [key: string]: number } = {};
-    registrosMes?.filter(r => r.tipo === 'lead').forEach(r => {
+    registrosMes?.filter(r => ['novo','agendado'].includes(r.status)).forEach(r => {
       const curso = (r.cursos as any)?.nome || 'Não informado';
       leadsPorCurso[curso] = (leadsPorCurso[curso] || 0) + r.quantidade;
     });
 
     // Agrupar matrículas por canal
     const matriculasPorCanal: { [key: string]: number } = {};
-    registrosMes?.filter(r => r.tipo === 'matricula').forEach(r => {
+    registrosMes?.filter(r => ['matriculado','convertido'].includes(r.status)).forEach(r => {
       const canal = (r.canais_origem as any)?.nome || 'Não informado';
       matriculasPorCanal[canal] = (matriculasPorCanal[canal] || 0) + r.quantidade;
     });
 
     // Agrupar matrículas por curso
     const matriculasPorCurso: { [key: string]: number } = {};
-    registrosMes?.filter(r => r.tipo === 'matricula').forEach(r => {
+    registrosMes?.filter(r => ['matriculado','convertido'].includes(r.status)).forEach(r => {
       const curso = (r.cursos as any)?.nome || 'Não informado';
       matriculasPorCurso[curso] = (matriculasPorCurso[curso] || 0) + r.quantidade;
     });
@@ -1434,9 +1434,9 @@ export function ComercialPage() {
       texto += `📋 *LISTA DE MATRÍCULAS*\n`;
       texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
       matriculasDetalhadas.forEach((mat, i) => {
-        const dataFormatada = new Date(mat.data + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-        texto += `${i + 1}. ${mat.aluno_nome}`;
-        if (mat.aluno_idade) texto += ` (${mat.aluno_idade} anos)`;
+        const dataFormatada = new Date(mat.data_contato + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+        texto += `${i + 1}. ${mat.nome}`;
+        if (mat.idade) texto += ` (${mat.idade} anos)`;
         texto += `\n   📅 ${dataFormatada}`;
         if ((mat.cursos as any)?.nome) texto += ` | 🎵 ${(mat.cursos as any).nome}`;
         if ((mat.canais_origem as any)?.nome) texto += ` | 📱 ${(mat.canais_origem as any).nome}`;
@@ -1562,12 +1562,12 @@ export function ComercialPage() {
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
     matriculasMes.forEach((mat, i) => {
-      const dataFormatada = new Date(mat.data + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+      const dataFormatada = new Date(mat.data_contato + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
       
       texto += `MAT. ${(i + 1).toString().padStart(2, '0')}\n`;
       texto += `📅 Data: ${dataFormatada}\n`;
-      texto += `👤 Aluno: ${mat.aluno_nome || 'Não informado'}`;
-      if (mat.aluno_idade) texto += ` (${mat.aluno_idade} anos)`;
+      texto += `👤 Aluno: ${mat.nome || 'Não informado'}`;
+      if (mat.idade) texto += ` (${mat.idade} anos)`;
       texto += `\n`;
       texto += `🎵 Curso: ${mat.curso_nome || 'Não informado'}\n`;
       texto += `👨‍🏫 Professor: ${mat.professor_fixo_nome || 'Não informado'}\n`;
@@ -1622,34 +1622,34 @@ export function ComercialPage() {
     const fimMesAtual = hoje;
     
     const { data: dadosMesAtual } = await supabase
-      .from('leads_diarios')
-      .select('tipo, quantidade')
+      .from('leads')
+      .select('status, quantidade')
       .eq('unidade_id', unidadeId)
-      .gte('data', inicioMesAtual.toISOString().split('T')[0])
-      .lte('data', fimMesAtual.toISOString().split('T')[0]);
+      .gte('data_contato', inicioMesAtual.toISOString().split('T')[0])
+      .lte('data_contato', fimMesAtual.toISOString().split('T')[0]);
 
     // Buscar dados do mês anterior
     const inicioMesAnterior = new Date(anoAnterior, mesAnterior, 1);
     const fimMesAnterior = new Date(anoAnterior, mesAnterior + 1, 0); // Último dia do mês
     
     const { data: dadosMesAnterior } = await supabase
-      .from('leads_diarios')
-      .select('tipo, quantidade')
+      .from('leads')
+      .select('status, quantidade')
       .eq('unidade_id', unidadeId)
-      .gte('data', inicioMesAnterior.toISOString().split('T')[0])
-      .lte('data', fimMesAnterior.toISOString().split('T')[0]);
+      .gte('data_contato', inicioMesAnterior.toISOString().split('T')[0])
+      .lte('data_contato', fimMesAnterior.toISOString().split('T')[0]);
 
     // Calcular totais mês atual
-    const leadsAtual = dadosMesAtual?.filter(r => r.tipo === 'lead').reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const experimentaisAtual = dadosMesAtual?.filter(r => r.tipo.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const visitasAtual = dadosMesAtual?.filter(r => r.tipo === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const matriculasAtual = dadosMesAtual?.filter(r => r.tipo === 'matricula').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const leadsAtual = dadosMesAtual?.filter(r => ['novo','agendado'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const experimentaisAtual = dadosMesAtual?.filter(r => r.status?.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const visitasAtual = dadosMesAtual?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const matriculasAtual = dadosMesAtual?.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
 
     // Calcular totais mês anterior
-    const leadsAnterior = dadosMesAnterior?.filter(r => r.tipo === 'lead').reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const experimentaisAnterior = dadosMesAnterior?.filter(r => r.tipo.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const visitasAnterior = dadosMesAnterior?.filter(r => r.tipo === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const matriculasAnterior = dadosMesAnterior?.filter(r => r.tipo === 'matricula').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const leadsAnterior = dadosMesAnterior?.filter(r => ['novo','agendado'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const experimentaisAnterior = dadosMesAnterior?.filter(r => r.status?.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const visitasAnterior = dadosMesAnterior?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const matriculasAnterior = dadosMesAnterior?.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
 
     // Calcular variações
     const varLeads = leadsAnterior > 0 ? ((leadsAtual - leadsAnterior) / leadsAnterior * 100) : 0;
@@ -1720,34 +1720,34 @@ export function ComercialPage() {
     const fimMesAtual = hoje;
     
     const { data: dadosAnoAtual } = await supabase
-      .from('leads_diarios')
-      .select('tipo, quantidade')
+      .from('leads')
+      .select('status, quantidade')
       .eq('unidade_id', unidadeId)
-      .gte('data', inicioMesAtual.toISOString().split('T')[0])
-      .lte('data', fimMesAtual.toISOString().split('T')[0]);
+      .gte('data_contato', inicioMesAtual.toISOString().split('T')[0])
+      .lte('data_contato', fimMesAtual.toISOString().split('T')[0]);
 
     // Buscar dados do mesmo mês no ano anterior
     const inicioMesAnterior = new Date(anoAnterior, mesAtual, 1);
     const fimMesAnterior = new Date(anoAnterior, mesAtual + 1, 0);
     
     const { data: dadosAnoAnterior } = await supabase
-      .from('leads_diarios')
-      .select('tipo, quantidade')
+      .from('leads')
+      .select('status, quantidade')
       .eq('unidade_id', unidadeId)
-      .gte('data', inicioMesAnterior.toISOString().split('T')[0])
-      .lte('data', fimMesAnterior.toISOString().split('T')[0]);
+      .gte('data_contato', inicioMesAnterior.toISOString().split('T')[0])
+      .lte('data_contato', fimMesAnterior.toISOString().split('T')[0]);
 
     // Calcular totais ano atual
-    const leadsAtual = dadosAnoAtual?.filter(r => r.tipo === 'lead').reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const experimentaisAtual = dadosAnoAtual?.filter(r => r.tipo.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const visitasAtual = dadosAnoAtual?.filter(r => r.tipo === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const matriculasAtual = dadosAnoAtual?.filter(r => r.tipo === 'matricula').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const leadsAtual = dadosAnoAtual?.filter(r => ['novo','agendado'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const experimentaisAtual = dadosAnoAtual?.filter(r => r.status?.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const visitasAtual = dadosAnoAtual?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const matriculasAtual = dadosAnoAtual?.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
 
     // Calcular totais ano anterior
-    const leadsAnterior = dadosAnoAnterior?.filter(r => r.tipo === 'lead').reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const experimentaisAnterior = dadosAnoAnterior?.filter(r => r.tipo.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const visitasAnterior = dadosAnoAnterior?.filter(r => r.tipo === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const matriculasAnterior = dadosAnoAnterior?.filter(r => r.tipo === 'matricula').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const leadsAnterior = dadosAnoAnterior?.filter(r => ['novo','agendado'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const experimentaisAnterior = dadosAnoAnterior?.filter(r => r.status?.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const visitasAnterior = dadosAnoAnterior?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const matriculasAnterior = dadosAnoAnterior?.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
 
     // Calcular variações
     const varLeads = leadsAnterior > 0 ? ((leadsAtual - leadsAnterior) / leadsAnterior * 100) : 0;
@@ -1896,16 +1896,26 @@ export function ComercialPage() {
   const getContagemHoje = (tipo: string) => {
     if (tipo === 'experimental') {
       return registrosHoje
-        .filter(r => r.tipo.startsWith('experimental'))
+        .filter(r => r.status?.startsWith('experimental'))
         .reduce((acc, r) => acc + r.quantidade, 0);
     }
     if (tipo === 'visita') {
       return registrosHoje
-        .filter(r => r.tipo === 'visita_escola')
+        .filter(r => r.status === 'visita_escola')
+        .reduce((acc, r) => acc + r.quantidade, 0);
+    }
+    if (tipo === 'lead') {
+      return registrosHoje
+        .filter(r => ['novo','agendado'].includes(r.status))
+        .reduce((acc, r) => acc + r.quantidade, 0);
+    }
+    if (tipo === 'matricula') {
+      return registrosHoje
+        .filter(r => ['matriculado','convertido'].includes(r.status))
         .reduce((acc, r) => acc + r.quantidade, 0);
     }
     return registrosHoje
-      .filter(r => r.tipo === tipo)
+      .filter(r => r.status === tipo)
       .reduce((acc, r) => acc + r.quantidade, 0);
   };
 
@@ -2097,16 +2107,16 @@ export function ComercialPage() {
                     <div className="flex items-center gap-3">
                       <span className={cn(
                         "w-2 h-2 rounded-full",
-                        r.tipo === 'lead' ? 'bg-blue-400' :
-                        r.tipo.startsWith('experimental') ? 'bg-purple-400' :
-                        r.tipo === 'visita_escola' ? 'bg-amber-400' : 'bg-emerald-400'
+                        ['novo','agendado'].includes(r.status) ? 'bg-blue-400' :
+                        r.status?.startsWith('experimental') ? 'bg-purple-400' :
+                        r.status === 'visita_escola' ? 'bg-amber-400' : 'bg-emerald-400'
                       )} />
                       <span className="text-slate-300 capitalize">
-                        {r.tipo === 'lead' ? 'Lead' :
-                         r.tipo === 'experimental_agendada' ? 'Exp. Agendada' :
-                         r.tipo === 'experimental_realizada' ? 'Exp. Realizada' :
-                         r.tipo === 'experimental_faltou' ? 'Exp. Faltou' :
-                         r.tipo === 'visita_escola' ? 'Visita' : 'Matrícula'}
+                        {['novo','agendado'].includes(r.status) ? 'Lead' :
+                         r.status === 'experimental_agendada' ? 'Exp. Agendada' :
+                         r.status === 'experimental_realizada' ? 'Exp. Realizada' :
+                         r.status === 'experimental_faltou' ? 'Exp. Faltou' :
+                         r.status === 'visita_escola' ? 'Visita' : 'Matrícula'}
                       </span>
                     </div>
                     <span className="text-white font-medium">+{r.quantidade}</span>
@@ -2433,16 +2443,16 @@ export function ComercialPage() {
                       <td className="py-3 px-2 text-slate-500 font-medium border-r border-slate-700/30">{index + 1}</td>
                       <td className="py-3 px-2 border-r border-slate-700/30">
                         <CelulaEditavelInline
-                          value={lead.data}
-                          onChange={async (valor) => lead.id && salvarCampoMatricula(lead.id, 'data', valor)}
+                          value={lead.data_contato}
+                          onChange={async (valor) => lead.id && salvarCampoMatricula(lead.id, 'data_contato', valor)}
                           tipo="data"
                           textClassName="text-slate-300"
                         />
                       </td>
                       <td className="py-3 px-2 border-r border-slate-700/30">
                         <CelulaEditavelInline
-                          value={lead.aluno_nome}
-                          onChange={async (valor) => lead.id && salvarCampoMatricula(lead.id, 'aluno_nome', valor)}
+                          value={lead.nome}
+                          onChange={async (valor) => lead.id && salvarCampoMatricula(lead.id, 'nome', valor)}
                           tipo="texto"
                           textClassName="text-white font-medium"
                           placeholder="-"
@@ -2460,8 +2470,8 @@ export function ComercialPage() {
                       </td>
                       <td className="py-3 px-2 border-r border-slate-700/30">
                         <CelulaEditavelInline
-                          value={lead.curso_id}
-                          onChange={async (valor) => lead.id && salvarCampoMatricula(lead.id, 'curso_id', valor ? Number(valor) : null)}
+                          value={lead.curso_interesse_id}
+                          onChange={async (valor) => lead.id && salvarCampoMatricula(lead.id, 'curso_interesse_id', valor ? Number(valor) : null)}
                           tipo="select"
                           opcoes={cursos.map(c => ({ value: c.value, label: c.label }))}
                           placeholder="-"
@@ -2527,16 +2537,16 @@ export function ComercialPage() {
                       <td className="py-3 px-2 text-slate-500 font-medium border-r border-slate-700/30">{index + 1}</td>
                       <td className="py-3 px-2 border-r border-slate-700/30">
                         <CelulaEditavelInline
-                          value={exp.data}
-                          onChange={async (valor) => exp.id && salvarCampoMatricula(exp.id, 'data', valor)}
+                          value={exp.data_contato}
+                          onChange={async (valor) => exp.id && salvarCampoMatricula(exp.id, 'data_contato', valor)}
                           tipo="data"
                           textClassName="text-slate-300"
                         />
                       </td>
                       <td className="py-3 px-2 border-r border-slate-700/30">
                         <CelulaEditavelInline
-                          value={exp.aluno_nome}
-                          onChange={async (valor) => exp.id && salvarCampoMatricula(exp.id, 'aluno_nome', valor)}
+                          value={exp.nome}
+                          onChange={async (valor) => exp.id && salvarCampoMatricula(exp.id, 'nome', valor)}
                           tipo="texto"
                           textClassName="text-white font-medium"
                           placeholder="-"
@@ -2545,14 +2555,14 @@ export function ComercialPage() {
                       <td className="py-3 px-2 border-r border-slate-700/30">
                         <span className={cn(
                           "px-2 py-0.5 rounded text-xs font-medium",
-                          exp.tipo === 'experimental_agendada' ? 'bg-amber-500/20 text-amber-400' :
-                          exp.tipo === 'experimental_realizada' ? 'bg-emerald-500/20 text-emerald-400' :
-                          exp.tipo === 'experimental_nao_compareceu' ? 'bg-red-500/20 text-red-400' :
+                          exp.status === 'experimental_agendada' ? 'bg-amber-500/20 text-amber-400' :
+                          exp.status === 'experimental_realizada' ? 'bg-emerald-500/20 text-emerald-400' :
+                          exp.status === 'experimental_nao_compareceu' ? 'bg-red-500/20 text-red-400' :
                           'bg-slate-500/20 text-slate-400'
                         )}>
-                          {exp.tipo === 'experimental_agendada' ? 'Agendada' :
-                           exp.tipo === 'experimental_realizada' ? 'Realizada' :
-                           exp.tipo === 'experimental_nao_compareceu' ? 'Não compareceu' : exp.tipo}
+                          {exp.status === 'experimental_agendada' ? 'Agendada' :
+                           exp.status === 'experimental_realizada' ? 'Realizada' :
+                           exp.status === 'experimental_nao_compareceu' ? 'Não compareceu' : exp.status}
                         </span>
                       </td>
                       <td className="py-3 px-2 border-r border-slate-700/30">
@@ -2567,8 +2577,8 @@ export function ComercialPage() {
                       </td>
                       <td className="py-3 px-2 border-r border-slate-700/30">
                         <CelulaEditavelInline
-                          value={exp.curso_id}
-                          onChange={async (valor) => exp.id && salvarCampoMatricula(exp.id, 'curso_id', valor ? Number(valor) : null)}
+                          value={exp.curso_interesse_id}
+                          onChange={async (valor) => exp.id && salvarCampoMatricula(exp.id, 'curso_interesse_id', valor ? Number(valor) : null)}
                           tipo="select"
                           opcoes={cursos.map(c => ({ value: c.value, label: c.label }))}
                           placeholder="-"
@@ -2642,8 +2652,8 @@ export function ComercialPage() {
                       <td className="py-3 px-2 text-slate-500 font-medium border-r border-slate-700/30">{index + 1}</td>
                       <td className="py-3 px-2 border-r border-slate-700/30">
                         <CelulaEditavelInline
-                          value={visita.data}
-                          onChange={async (valor) => visita.id && salvarCampoMatricula(visita.id, 'data', valor)}
+                          value={visita.data_contato}
+                          onChange={async (valor) => visita.id && salvarCampoMatricula(visita.id, 'data_contato', valor)}
                           tipo="data"
                           textClassName="text-slate-300"
                         />
@@ -2755,8 +2765,8 @@ export function ComercialPage() {
                     {/* Data - Edição inline */}
                     <td className="py-3 px-2 border-r border-slate-700/30">
                       <CelulaEditavelInline
-                        value={mat.data}
-                        onChange={async (valor) => mat.id && salvarCampoMatricula(mat.id, 'data', valor)}
+                        value={mat.data_contato}
+                        onChange={async (valor) => mat.id && salvarCampoMatricula(mat.id, 'data_contato', valor)}
                         tipo="data"
                         textClassName="text-slate-300"
                       />
@@ -2765,8 +2775,8 @@ export function ComercialPage() {
                     {/* Aluno - Edição inline */}
                     <td className="py-3 px-2 border-r border-slate-700/30">
                       <CelulaEditavelInline
-                        value={mat.aluno_nome}
-                        onChange={async (valor) => mat.id && salvarCampoMatricula(mat.id, 'aluno_nome', valor)}
+                        value={mat.nome}
+                        onChange={async (valor) => mat.id && salvarCampoMatricula(mat.id, 'nome', valor)}
                         tipo="texto"
                         textClassName="text-white font-medium"
                         placeholder="-"
@@ -2776,8 +2786,8 @@ export function ComercialPage() {
                     {/* Idade - Edição inline */}
                     <td className="py-3 px-2 border-r border-slate-700/30">
                       <CelulaEditavelInline
-                        value={mat.aluno_idade}
-                        onChange={async (valor) => mat.id && salvarCampoMatricula(mat.id, 'aluno_idade', valor ? Number(valor) : null)}
+                        value={mat.idade}
+                        onChange={async (valor) => mat.id && salvarCampoMatricula(mat.id, 'idade', valor ? Number(valor) : null)}
                         tipo="numero"
                         textClassName="text-slate-300"
                         placeholder="-"
@@ -2787,8 +2797,8 @@ export function ComercialPage() {
                     {/* Curso - Edição inline */}
                     <td className="py-3 px-2 border-r border-slate-700/30">
                       <CelulaEditavelInline
-                        value={mat.curso_id}
-                        onChange={async (valor) => mat.id && salvarCampoMatricula(mat.id, 'curso_id', valor ? Number(valor) : null)}
+                        value={mat.curso_interesse_id}
+                        onChange={async (valor) => mat.id && salvarCampoMatricula(mat.id, 'curso_interesse_id', valor ? Number(valor) : null)}
                         tipo="select"
                         opcoes={cursos.map(c => ({ value: c.value, label: c.label }))}
                         placeholder="-"
@@ -3129,7 +3139,7 @@ export function ComercialPage() {
                                 : l
                             ));
                           }}
-                          sugestoes={sugestoesLeads.filter(s => s.tipo === 'lead')}
+                          sugestoes={sugestoesLeads.filter(s => ['novo','agendado','lead'].includes(s.tipo))}
                           placeholder="Nome do aluno..."
                         />
                       </td>

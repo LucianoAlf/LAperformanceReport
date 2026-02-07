@@ -68,10 +68,10 @@ export function TabComercial({ ano, mes, unidade }: TabComercialProps) {
         const endDate = `${ano}-${String(mes).padStart(2, '0')}-31`;
 
         let query = supabase
-          .from('leads_diarios')
+          .from('leads')
           .select('*')
-          .gte('data', startDate)
-          .lte('data', endDate);
+          .gte('data_contato', startDate)
+          .lte('data_contato', endDate);
 
         // Filtrar por unidade se não for consolidado
         if (unidade !== 'todos') {
@@ -100,12 +100,12 @@ export function TabComercial({ ano, mes, unidade }: TabComercialProps) {
           setDados(data);
 
           // Calcular totais por tipo
-          const leads = data.filter(d => d.tipo === 'lead').reduce((acc, d) => acc + (d.quantidade || 1), 0);
-          const leadsArquivados = data.filter(d => d.tipo === 'lead' && d.arquivado).reduce((acc, d) => acc + (d.quantidade || 1), 0);
-          const experimentaisAgendadas = data.filter(d => d.tipo === 'experimental_agendada').reduce((acc, d) => acc + (d.quantidade || 1), 0);
-          const experimentaisRealizadas = data.filter(d => d.tipo === 'experimental_realizada').reduce((acc, d) => acc + (d.quantidade || 1), 0);
+          const leads = data.filter(d => ['novo','agendado'].includes(d.status)).reduce((acc, d) => acc + (d.quantidade || 1), 0);
+          const leadsArquivados = data.filter(d => ['novo','agendado'].includes(d.status) && d.arquivado).reduce((acc, d) => acc + (d.quantidade || 1), 0);
+          const experimentaisAgendadas = data.filter(d => d.status === 'experimental_agendada').reduce((acc, d) => acc + (d.quantidade || 1), 0);
+          const experimentaisRealizadas = data.filter(d => ['experimental_realizada','compareceu'].includes(d.status)).reduce((acc, d) => acc + (d.quantidade || 1), 0);
           const taxaShowUp = experimentaisAgendadas > 0 ? (experimentaisRealizadas / experimentaisAgendadas) * 100 : 0;
-          const matriculas = data.filter(d => d.tipo === 'matricula').reduce((acc, d) => acc + (d.quantidade || 1), 0);
+          const matriculas = data.filter(d => ['matriculado','convertido'].includes(d.status)).reduce((acc, d) => acc + (d.quantidade || 1), 0);
           const taxaConversao = experimentaisRealizadas > 0 ? (matriculas / experimentaisRealizadas) * 100 : 0;
 
           // Buscar valor médio das matrículas para calcular faturamento novo
@@ -120,7 +120,7 @@ export function TabComercial({ ano, mes, unidade }: TabComercialProps) {
 
           // Leads por canal
           const leadsPorCanalMap = new Map<number, number>();
-          data.filter(d => d.tipo === 'lead').forEach(d => {
+          data.filter(d => ['novo','agendado'].includes(d.status)).forEach(d => {
             const canalId = d.canal_origem_id || 0;
             leadsPorCanalMap.set(canalId, (leadsPorCanalMap.get(canalId) || 0) + (d.quantidade || 1));
           });
@@ -132,7 +132,7 @@ export function TabComercial({ ano, mes, unidade }: TabComercialProps) {
 
           // Matrículas por professor
           const matriculasPorProfMap = new Map<number, number>();
-          data.filter(d => d.tipo === 'matricula').forEach(d => {
+          data.filter(d => ['matriculado','convertido'].includes(d.status)).forEach(d => {
             const profId = d.professor_experimental_id || 0;
             matriculasPorProfMap.set(profId, (matriculasPorProfMap.get(profId) || 0) + (d.quantidade || 1));
           });
@@ -309,21 +309,21 @@ export function TabComercial({ ano, mes, unidade }: TabComercialProps) {
                   dados.slice(0, 10).map((d) => (
                     <tr key={d.id} className="border-b border-slate-700/30 hover:bg-slate-800/30">
                       <td className="py-2 px-4 text-slate-300 text-sm">
-                        {new Date(d.data).toLocaleDateString('pt-BR')}
+                        {new Date(d.data_contato).toLocaleDateString('pt-BR')}
                       </td>
                       <td className="py-2 px-4">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          d.tipo === 'lead' ? 'bg-cyan-500/20 text-cyan-400' :
-                          d.tipo === 'experimental_realizada' ? 'bg-amber-500/20 text-amber-400' :
-                          d.tipo === 'experimental_agendada' ? 'bg-amber-500/10 text-amber-300' :
-                          d.tipo === 'matricula' ? 'bg-emerald-500/20 text-emerald-400' :
+                          ['novo','agendado'].includes(d.status) ? 'bg-cyan-500/20 text-cyan-400' :
+                          d.status === 'experimental_realizada' ? 'bg-amber-500/20 text-amber-400' :
+                          d.status === 'experimental_agendada' ? 'bg-amber-500/10 text-amber-300' :
+                          ['matriculado','convertido'].includes(d.status) ? 'bg-emerald-500/20 text-emerald-400' :
                           'bg-slate-500/20 text-slate-400'
                         }`}>
-                          {d.tipo === 'lead' ? 'Lead' :
-                           d.tipo === 'experimental_realizada' ? 'Exp. Realizada' :
-                           d.tipo === 'experimental_agendada' ? 'Exp. Agendada' :
-                           d.tipo === 'matricula' ? 'Matrícula' :
-                           d.tipo}
+                          {['novo','agendado'].includes(d.status) ? 'Lead' :
+                           d.status === 'experimental_realizada' ? 'Exp. Realizada' :
+                           d.status === 'experimental_agendada' ? 'Exp. Agendada' :
+                           ['matriculado','convertido'].includes(d.status) ? 'Matrícula' :
+                           d.status}
                         </span>
                       </td>
                       <td className="py-2 px-4 text-right text-slate-300">{d.quantidade || 1}</td>

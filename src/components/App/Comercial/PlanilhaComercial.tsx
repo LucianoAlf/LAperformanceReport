@@ -10,15 +10,15 @@ import { toast } from 'sonner';
 interface LeadDiario {
   id?: number;
   unidade_id: string;
-  data: string;
-  tipo: string;
+  data_contato: string;
+  status: string;
   canal_origem_id: number | null;
-  curso_id: number | null;
+  curso_interesse_id: number | null;
   quantidade: number;
   observacoes: string | null;
   // Campos de matrícula
-  aluno_nome: string | null;
-  aluno_idade: number | null;
+  nome: string | null;
+  idade: number | null;
   professor_experimental_id: number | null;
   professor_fixo_id: number | null;
   agente_comercial: string | null;
@@ -36,12 +36,13 @@ interface Option {
 }
 
 const TIPOS_COMERCIAL = [
-  { value: 'lead', label: 'Lead' },
+  { value: 'novo', label: 'Lead' },
+  { value: 'agendado', label: 'Agendado' },
   { value: 'experimental_agendada', label: 'Exp. Agendada' },
   { value: 'experimental_realizada', label: 'Exp. Realizada' },
   { value: 'experimental_faltou', label: 'Exp. Faltou' },
   { value: 'visita_escola', label: 'Visita à Escola' },
-  { value: 'matricula', label: 'Matrícula' },
+  { value: 'convertido', label: 'Matrícula' },
 ];
 
 const TIPOS_MATRICULA = [
@@ -98,9 +99,9 @@ export function PlanilhaComercial() {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let query = (supabase as any)
-        .from('leads_diarios')
+        .from('leads')
         .select('*, unidades(codigo)')
-        .order('data', { ascending: false })
+        .order('data_contato', { ascending: false })
         .order('id', { ascending: false });
 
       // Filtrar por unidade se não for admin
@@ -134,14 +135,14 @@ export function PlanilhaComercial() {
   const addRow = () => {
     const newRow: LeadDiario & { isNew: boolean; isDirty: boolean; expanded: boolean } = {
       unidade_id: usuario?.unidade_id || '',
-      data: new Date().toISOString().split('T')[0],
-      tipo: 'lead',
+      data_contato: new Date().toISOString().split('T')[0],
+      status: 'novo',
       canal_origem_id: null,
-      curso_id: null,
+      curso_interesse_id: null,
       quantidade: 1,
       observacoes: null,
-      aluno_nome: null,
-      aluno_idade: null,
+      nome: null,
+      idade: null,
       professor_experimental_id: null,
       professor_fixo_id: null,
       agente_comercial: null,
@@ -169,7 +170,7 @@ export function PlanilhaComercial() {
       };
 
       // Se mudou para matrícula, expandir automaticamente
-      if (field === 'tipo' && value === 'matricula') {
+      if (field === 'status' && value === 'convertido') {
         newRows[index].expanded = true;
         newRows[index].quantidade = 1; // Matrícula sempre é 1
       }
@@ -200,19 +201,19 @@ export function PlanilhaComercial() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const dataToSave: any = {
         unidade_id: row.unidade_id,
-        data: row.data,
-        tipo: row.tipo,
+        data_contato: row.data_contato,
+        status: row.status,
         canal_origem_id: row.canal_origem_id,
-        curso_id: row.curso_id,
+        curso_interesse_id: row.curso_interesse_id,
         quantidade: row.quantidade,
         observacoes: row.observacoes,
         updated_at: new Date().toISOString(),
       };
 
       // Campos de matrícula
-      if (row.tipo === 'matricula') {
-        dataToSave.aluno_nome = row.aluno_nome;
-        dataToSave.aluno_idade = row.aluno_idade;
+      if (row.status === 'convertido') {
+        dataToSave.nome = row.nome;
+        dataToSave.idade = row.idade;
         dataToSave.professor_experimental_id = row.professor_experimental_id;
         dataToSave.professor_fixo_id = row.professor_fixo_id;
         dataToSave.agente_comercial = row.agente_comercial;
@@ -229,7 +230,7 @@ export function PlanilhaComercial() {
       if (row.isNew) {
         dataToSave.created_by = usuario?.id;
         const { data, error } = await supabaseAny
-          .from('leads_diarios')
+          .from('leads')
           .insert(dataToSave)
           .select()
           .single();
@@ -245,7 +246,7 @@ export function PlanilhaComercial() {
         toast.success('Registro salvo!');
       } else {
         const { data, error } = await supabaseAny
-          .from('leads_diarios')
+          .from('leads')
           .update(dataToSave)
           .eq('id', row.id)
           .select()
@@ -283,7 +284,7 @@ export function PlanilhaComercial() {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)
-        .from('leads_diarios')
+        .from('leads')
         .delete()
         .eq('id', row.id);
 
@@ -376,16 +377,16 @@ export function PlanilhaComercial() {
                       </td>
                       <td className="px-1 py-1">
                         <EditableCell
-                          value={row.data}
-                          onChange={(v) => updateCell(index, 'data', v)}
+                          value={row.data_contato}
+                          onChange={(v) => updateCell(index, 'data_contato', v)}
                           type="date"
                         />
                       </td>
                       <td className="px-1 py-1">
                         <DropdownCell
-                          value={row.tipo}
+                          value={row.status}
                           options={TIPOS_COMERCIAL}
-                          onChange={(v) => updateCell(index, 'tipo', v)}
+                          onChange={(v) => updateCell(index, 'status', v)}
                         />
                       </td>
                       <td className="px-1 py-1">
@@ -395,14 +396,14 @@ export function PlanilhaComercial() {
                           onChange={(v) => updateCell(index, 'canal_origem_id', v)}
                           placeholder="Selecione..."
                           allowClear
-                          disabled={row.tipo !== 'lead'}
+                          disabled={!['novo','agendado'].includes(row.status)}
                         />
                       </td>
                       <td className="px-1 py-1">
                         <DropdownCell
-                          value={row.curso_id}
+                          value={row.curso_interesse_id}
                           options={cursos}
-                          onChange={(v) => updateCell(index, 'curso_id', v)}
+                          onChange={(v) => updateCell(index, 'curso_interesse_id', v)}
                           placeholder="Selecione..."
                           allowClear
                         />
@@ -413,7 +414,7 @@ export function PlanilhaComercial() {
                           onChange={(v) => updateCell(index, 'quantidade', v)}
                           type="number"
                           min={1}
-                          disabled={row.tipo === 'matricula'}
+                          disabled={['matriculado','convertido'].includes(row.status)}
                         />
                       </td>
                       <td className="px-1 py-1">
@@ -451,15 +452,15 @@ export function PlanilhaComercial() {
                     </tr>
 
                     {/* Linha expandida para matrícula */}
-                    {row.tipo === 'matricula' && row.expanded && (
+                    {['matriculado','convertido'].includes(row.status) && row.expanded && (
                       <tr className="bg-muted/20 border-b">
                         <td colSpan={8} className="px-6 py-4">
                           <div className="grid grid-cols-4 gap-4">
                             <div>
                               <label className="text-xs text-muted-foreground">Nome do Aluno</label>
                               <EditableCell
-                                value={row.aluno_nome}
-                                onChange={(v) => updateCell(index, 'aluno_nome', v)}
+                                value={row.nome}
+                                onChange={(v) => updateCell(index, 'nome', v)}
                                 placeholder="Nome completo"
                                 className="border rounded mt-1"
                               />
@@ -467,8 +468,8 @@ export function PlanilhaComercial() {
                             <div>
                               <label className="text-xs text-muted-foreground">Idade</label>
                               <EditableCell
-                                value={row.aluno_idade}
-                                onChange={(v) => updateCell(index, 'aluno_idade', v)}
+                                value={row.idade}
+                                onChange={(v) => updateCell(index, 'idade', v)}
                                 type="number"
                                 min={3}
                                 max={100}
@@ -591,7 +592,7 @@ export function PlanilhaComercial() {
           <div className="text-sm text-muted-foreground">Leads Hoje</div>
           <div className="text-2xl font-bold">
             {rows
-              .filter(r => r.tipo === 'lead' && r.data === new Date().toISOString().split('T')[0])
+              .filter(r => ['novo','agendado'].includes(r.status) && r.data_contato === new Date().toISOString().split('T')[0])
               .reduce((sum, r) => sum + (r.quantidade || 0), 0)}
           </div>
         </div>
@@ -599,7 +600,7 @@ export function PlanilhaComercial() {
           <div className="text-sm text-muted-foreground">Experimentais Hoje</div>
           <div className="text-2xl font-bold">
             {rows
-              .filter(r => r.tipo.startsWith('experimental') && r.data === new Date().toISOString().split('T')[0])
+              .filter(r => r.status?.startsWith('experimental') && r.data_contato === new Date().toISOString().split('T')[0])
               .reduce((sum, r) => sum + (r.quantidade || 0), 0)}
           </div>
         </div>
@@ -607,7 +608,7 @@ export function PlanilhaComercial() {
           <div className="text-sm text-muted-foreground">Matrículas Hoje</div>
           <div className="text-2xl font-bold">
             {rows
-              .filter(r => r.tipo === 'matricula' && r.data === new Date().toISOString().split('T')[0])
+              .filter(r => ['matriculado','convertido'].includes(r.status) && r.data_contato === new Date().toISOString().split('T')[0])
               .length}
           </div>
         </div>

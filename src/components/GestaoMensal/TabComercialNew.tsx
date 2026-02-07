@@ -387,9 +387,9 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
         }
 
         // ========== CÓDIGO ORIGINAL PARA PERÍODO ATUAL ==========
-        // Buscar leads_diarios
+        // Buscar leads
         let leadsQuery = supabase
-          .from('leads_diarios')
+          .from('leads')
           .select(`
             *,
             canais_origem(nome),
@@ -398,8 +398,8 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             motivos_arquivamento(nome),
             motivos_nao_matricula(nome)
           `)
-          .gte('data', startDate)
-          .lte('data', endDate);
+          .gte('data_contato', startDate)
+          .lte('data_contato', endDate);
 
         if (unidade !== 'todos') {
           leadsQuery = leadsQuery.eq('unidade_id', unidade);
@@ -452,23 +452,23 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
         const matriculas = matriculasData || [];
 
         // Processar Leads
-        const totalLeads = leads.filter(l => l.tipo === 'lead').reduce((acc, l) => acc + (l.quantidade || 1), 0);
+        const totalLeads = leads.filter(l => ['novo','agendado'].includes(l.status)).reduce((acc, l) => acc + (l.quantidade || 1), 0);
         const leadsArquivados = leads.filter(l => l.arquivado === true).reduce((acc, l) => acc + (l.quantidade || 1), 0);
-        const expMarcadas = leads.filter(l => l.tipo === 'experimental_agendada').reduce((acc, l) => acc + (l.quantidade || 1), 0);
-        const expRealizadas = leads.filter(l => l.tipo === 'experimental_realizada').reduce((acc, l) => acc + (l.quantidade || 1), 0);
-        const faltaram = leads.filter(l => l.tipo === 'experimental_faltou').reduce((acc, l) => acc + (l.quantidade || 1), 0);
-        const novasMatriculas = leads.filter(l => l.tipo === 'matricula').reduce((acc, l) => acc + (l.quantidade || 1), 0) || matriculas.length;
+        const expMarcadas = leads.filter(l => l.status === 'experimental_agendada').reduce((acc, l) => acc + (l.quantidade || 1), 0);
+        const expRealizadas = leads.filter(l => ['experimental_realizada','compareceu'].includes(l.status)).reduce((acc, l) => acc + (l.quantidade || 1), 0);
+        const faltaram = leads.filter(l => l.status === 'experimental_faltou').reduce((acc, l) => acc + (l.quantidade || 1), 0);
+        const novasMatriculas = leads.filter(l => ['matriculado','convertido'].includes(l.status)).reduce((acc, l) => acc + (l.quantidade || 1), 0) || matriculas.length;
 
         // Leads por Canal
         const canaisMap = new Map<string, number>();
-        leads.filter(l => l.tipo === 'lead').forEach(l => {
+        leads.filter(l => ['novo','agendado'].includes(l.status)).forEach(l => {
           const canal = (l.canais_origem as any)?.nome || 'Outros';
           canaisMap.set(canal, (canaisMap.get(canal) || 0) + (l.quantidade || 1));
         });
 
         // Leads por Curso
         const cursosLeadMap = new Map<string, number>();
-        leads.filter(l => l.tipo === 'lead').forEach(l => {
+        leads.filter(l => ['novo','agendado'].includes(l.status)).forEach(l => {
           const curso = (l.cursos as any)?.nome || 'Não informado';
           cursosLeadMap.set(curso, (cursosLeadMap.get(curso) || 0) + (l.quantidade || 1));
         });
@@ -482,18 +482,18 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
 
         // Experimentais por Professor
         const expProfMap = new Map<string, { id: number; total: number; convertidas: number }>();
-        leads.filter(l => l.tipo === 'experimental_realizada' || l.tipo === 'matricula').forEach(l => {
+        leads.filter(l => ['experimental_realizada','compareceu','matriculado','convertido'].includes(l.status)).forEach(l => {
           const prof = (l.professores as any)?.nome || 'Sem Professor';
           const profId = l.professor_experimental_id || 0;
           const current = expProfMap.get(prof) || { id: profId, total: 0, convertidas: 0 };
           current.total += l.quantidade || 1;
-          if (l.tipo === 'matricula') current.convertidas += l.quantidade || 1;
+          if (['matriculado','convertido'].includes(l.status)) current.convertidas += l.quantidade || 1;
           expProfMap.set(prof, current);
         });
 
         // Experimentais por Canal (origem das pessoas que fizeram experimentais)
         const expCanalMap = new Map<string, number>();
-        leads.filter(l => l.tipo === 'experimental_realizada').forEach(l => {
+        leads.filter(l => ['experimental_realizada','compareceu'].includes(l.status)).forEach(l => {
           const canal = (l.canais_origem as any)?.nome || 'Outros';
           expCanalMap.set(canal, (expCanalMap.get(canal) || 0) + (l.quantidade || 1));
         });
@@ -535,7 +535,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
 
         // Motivos de Não Matrícula (experimentais que não converteram)
         const motivosNaoMatMap = new Map<string, number>();
-        leads.filter(l => l.tipo === 'experimental_nao_matriculou' || (l.tipo === 'experimental_realizada' && l.motivo_nao_matricula_id)).forEach(l => {
+        leads.filter(l => l.status === 'experimental_nao_matriculou' || (l.status === 'experimental_realizada' && l.motivo_nao_matricula_id)).forEach(l => {
           const motivo = (l as any).motivos_nao_matricula?.nome || 'Não informado';
           motivosNaoMatMap.set(motivo, (motivosNaoMatMap.get(motivo) || 0) + (l.quantidade || 1));
         });
