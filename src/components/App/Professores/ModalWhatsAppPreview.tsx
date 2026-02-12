@@ -9,6 +9,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { MessageSquare, Copy, Send, Check, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
 
 interface ToleranciaInfo {
   ocorrencia_numero: number;
@@ -175,29 +176,18 @@ Em caso de dúvidas, procure a coordenação.`;
       
       if (error) {
         console.error('[WhatsApp 360°] ❌ Erro ao chamar Edge Function:', error);
-        // Fallback: abrir WhatsApp Web
-        const numeroFormatado = formatarNumeroWhatsApp(professorWhatsApp);
-        const mensagemEncoded = encodeURIComponent(mensagem);
-        window.open(`https://wa.me/${numeroFormatado}?text=${mensagemEncoded}`, '_blank');
-        onOpenChange(false);
+        toast.error(`Erro ao enviar: ${error.message || 'Falha na Edge Function'}. Tente novamente.`);
       } else if (resultado?.success) {
         console.log('[WhatsApp 360°] ✅ Mensagem enviada com sucesso! ID:', resultado.messageId);
+        toast.success(`✅ Mensagem enviada para ${professorNome.split(' ')[0]} via WhatsApp!`);
         onOpenChange(false);
       } else {
         console.error('[WhatsApp 360°] ❌ Erro ao enviar:', resultado?.error);
-        // Fallback: abrir WhatsApp Web
-        const numeroFormatado = formatarNumeroWhatsApp(professorWhatsApp);
-        const mensagemEncoded = encodeURIComponent(mensagem);
-        window.open(`https://wa.me/${numeroFormatado}?text=${mensagemEncoded}`, '_blank');
-        onOpenChange(false);
+        toast.error(`Erro ao enviar: ${resultado?.error || 'Falha no envio'}. Tente novamente.`);
       }
     } catch (err) {
       console.error('[WhatsApp 360°] ❌ Erro inesperado:', err);
-      // Fallback: abrir WhatsApp Web
-      const numeroFormatado = formatarNumeroWhatsApp(professorWhatsApp);
-      const mensagemEncoded = encodeURIComponent(mensagem);
-      window.open(`https://wa.me/${numeroFormatado}?text=${mensagemEncoded}`, '_blank');
-      onOpenChange(false);
+      toast.error('Erro de conexão com UAZAPI. Verifique sua internet e tente novamente.');
     } finally {
       setEnviando(false);
     }
