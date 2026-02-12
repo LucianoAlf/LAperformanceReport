@@ -1183,12 +1183,9 @@ export function AlunosPage() {
               <BarChart3 className="w-4 h-4" /> Distribuição
             </button>
             <button
-              onClick={() => setTabAtiva('importar')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
-                tabAtiva === 'importar'
-                  ? 'bg-slate-800 text-white border-b-2 border-purple-500'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-              }`}
+              disabled
+              title="Em breve — funcionalidade em desenvolvimento"
+              className="flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium text-slate-600 cursor-not-allowed opacity-50"
             >
               <Upload className="w-4 h-4" /> Importar Alunos
             </button>
