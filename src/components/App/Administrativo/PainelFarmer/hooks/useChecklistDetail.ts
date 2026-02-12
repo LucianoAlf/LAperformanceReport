@@ -116,17 +116,80 @@ export function useChecklistDetail(checklistId: string | null, unidadeId?: strin
     fetchDetail();
   }, [fetchDetail]);
 
-  // Marcar/desmarcar item
+  // Atualização otimista do estado local de um item (sem fetch)
+  const updateItemLocally = (itemId: string, concluida: boolean) => {
+    setItems(prev => prev.map(item => {
+      if (item.id === itemId) return { ...item, concluida };
+      if (item.sub_items?.some(s => s.id === itemId)) {
+        return {
+          ...item,
+          sub_items: item.sub_items.map(s =>
+            s.id === itemId ? { ...s, concluida } : s
+          ),
+        };
+      }
+      return item;
+    }));
+  };
+
+  // Reverter status do checklist para 'em_andamento' se estava 'concluido'
+  const revertStatusSeNecessario = async (concluida: boolean) => {
+    if (!concluida && detail?.status === 'concluido' && checklistId) {
+      // Atualizar estado local imediatamente
+      setDetail(prev => prev ? { ...prev, status: 'em_andamento' } : prev);
+      // Persistir no banco
+      await supabase
+        .from('farmer_checklists')
+        .update({ status: 'em_andamento', updated_at: new Date().toISOString() })
+        .eq('id', checklistId);
+    }
+  };
+
+  // Marcar/desmarcar item (otimista — atualiza UI imediatamente)
   const toggleItem = async (itemId: string, concluida: boolean, colaboradorId: number) => {
+    // 1. Atualizar estado local imediatamente
+    updateItemLocally(itemId, concluida);
+
+    // 2. Se desmarcando e checklist estava concluido, reverter status
+    await revertStatusSeNecessario(concluida);
+
+    // 3. Persistir no banco em background
     try {
       await supabase.rpc('marcar_checklist_item', {
         p_item_id: itemId,
         p_concluida: concluida,
         p_colaborador_id: colaboradorId,
       });
-      await fetchDetail();
     } catch (err) {
       console.error('Erro ao marcar item:', err);
+      // Reverter em caso de erro
+      updateItemLocally(itemId, !concluida);
+    }
+  };
+
+  // Marcar/desmarcar vários itens de uma vez (para "Selecionar Todos")
+  const toggleItemsBatch = async (itemIds: string[], concluida: boolean, colaboradorId: number) => {
+    // 1. Atualizar estado local imediatamente para todos
+    itemIds.forEach(id => updateItemLocally(id, concluida));
+
+    // 2. Se desmarcando e checklist estava concluido, reverter status
+    await revertStatusSeNecessario(concluida);
+
+    // 3. Persistir todos em paralelo
+    try {
+      await Promise.all(
+        itemIds.map(id =>
+          supabase.rpc('marcar_checklist_item', {
+            p_item_id: id,
+            p_concluida: concluida,
+            p_colaborador_id: colaboradorId,
+          })
+        )
+      );
+    } catch (err) {
+      console.error('Erro ao marcar itens em batch:', err);
+      // Em caso de erro, refetch para sincronizar
+      await fetchDetail();
     }
   };
 
@@ -305,6 +368,7 @@ export function useChecklistDetail(checklistId: string | null, unidadeId?: strin
     contatosResponderam,
     taxaSucesso,
     toggleItem,
+    toggleItemsBatch,
     adicionarItem,
     editarItem,
     removerItem,

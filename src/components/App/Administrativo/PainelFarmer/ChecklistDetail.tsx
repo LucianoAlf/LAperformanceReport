@@ -20,9 +20,14 @@ import {
   ChevronUp,
   Trash2,
   Pencil,
+  Sparkles,
+  Send,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
+import { sendWhatsAppMessage, formatPhoneNumber } from '@/services/whatsapp';
+import { gerarTemplateChecklist, gerarMensagemChecklist } from '@/services/mensagemGenerativa';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -80,6 +85,7 @@ export function ChecklistDetail({ checklistId, unidadeId, onVoltar }: ChecklistD
     contatosResponderam,
     taxaSucesso,
     toggleItem,
+    toggleItemsBatch,
     adicionarItem,
     editarItem,
     removerItem,
@@ -185,6 +191,11 @@ export function ChecklistDetail({ checklistId, unidadeId, onVoltar }: ChecklistD
   const handleToggleItem = async (itemId: string, concluida: boolean) => {
     if (!colaborador?.id) return;
     await toggleItem(itemId, concluida, colaborador.id);
+  };
+
+  const handleToggleBatch = async (itemIds: string[], concluida: boolean) => {
+    if (!colaborador?.id) return;
+    await toggleItemsBatch(itemIds, concluida, colaborador.id);
   };
 
   const handleAdicionarItem = async () => {
@@ -454,6 +465,7 @@ export function ChecklistDetail({ checklistId, unidadeId, onVoltar }: ChecklistD
             items={items}
             isConcluido={isConcluido}
             onToggle={handleToggleItem}
+            onToggleBatch={handleToggleBatch}
             onAddItem={() => setModalNovoItemAberto(true)}
             onEditItem={editarItem}
             onAddSubItem={async (parentId, descricao, canal) => {
@@ -472,6 +484,7 @@ export function ChecklistDetail({ checklistId, unidadeId, onVoltar }: ChecklistD
             onAtualizarContato={atualizarContato}
             cursosUnidade={cursosUnidade}
             professoresUnidade={professoresUnidade}
+            checklistDetail={detail}
           />
         )}
         {activeSubTab === 'sucesso' && (
@@ -727,6 +740,7 @@ interface TarefasSubTabProps {
   items: FarmerChecklistItem[];
   isConcluido: boolean;
   onToggle: (itemId: string, concluida: boolean) => void;
+  onToggleBatch: (itemIds: string[], concluida: boolean) => void;
   onAddItem: () => void;
   onEditItem: (itemId: string, dados: { descricao?: string; canal?: string | null; info?: string | null; responsavel_id?: number | null }) => Promise<void>;
   onAddSubItem: (parentId: string, descricao: string, canal?: string) => Promise<void>;
@@ -737,7 +751,7 @@ interface TarefasSubTabProps {
   colaboradores: { id: number; nome: string; apelido: string | null; perfil: string }[];
 }
 
-function TarefasSubTab({ items, isConcluido, onToggle, onAddItem, onEditItem, onAddSubItem, onDeleteItem, inlineValue, onInlineChange, onInlineSubmit, colaboradores }: TarefasSubTabProps) {
+function TarefasSubTab({ items, isConcluido, onToggle, onToggleBatch, onAddItem, onEditItem, onAddSubItem, onDeleteItem, inlineValue, onInlineChange, onInlineSubmit, colaboradores }: TarefasSubTabProps) {
   const [filtro, setFiltro] = useState<'todos' | 'professor' | 'curso'>('todos');
 
   // Estado de edição inline de item
@@ -796,12 +810,17 @@ function TarefasSubTab({ items, isConcluido, onToggle, onAddItem, onEditItem, on
   const allDone = totalAll > 0 && doneAll === totalAll;
 
   const handleSelectAll = (checked: boolean) => {
+    // Coletar todos os IDs que precisam mudar
+    const idsParaMudar: string[] = [];
     items.forEach(item => {
-      if (item.concluida !== checked) onToggle(item.id, checked);
+      if (item.concluida !== checked) idsParaMudar.push(item.id);
       item.sub_items?.forEach(sub => {
-        if (sub.concluida !== checked) onToggle(sub.id, checked);
+        if (sub.concluida !== checked) idsParaMudar.push(sub.id);
       });
     });
+    if (idsParaMudar.length > 0) {
+      onToggleBatch(idsParaMudar, checked);
+    }
   };
 
   return (
@@ -812,7 +831,6 @@ function TarefasSubTab({ items, isConcluido, onToggle, onAddItem, onEditItem, on
           <Checkbox
             checked={allDone}
             onCheckedChange={(checked) => handleSelectAll(!!checked)}
-            disabled={isConcluido}
           />
           <span className={cn('text-sm font-medium group-hover:text-white', allDone ? 'text-emerald-400' : 'text-slate-300')}>
             Selecionar Todos
@@ -866,7 +884,7 @@ function TarefasSubTab({ items, isConcluido, onToggle, onAddItem, onEditItem, on
                 <Checkbox
                   checked={item.concluida}
                   onCheckedChange={(checked) => onToggle(item.id, !!checked)}
-                  disabled={isConcluido || isEditing}
+                  disabled={isEditing}
                   className="mt-0.5"
                 />
 
@@ -954,7 +972,6 @@ function TarefasSubTab({ items, isConcluido, onToggle, onAddItem, onEditItem, on
                           <Checkbox
                             checked={sub.concluida}
                             onCheckedChange={(checked) => onToggle(sub.id, !!checked)}
-                            disabled={isConcluido}
                             className="h-3.5 w-3.5"
                           />
                           <p className={cn('text-xs flex-1', sub.concluida ? 'text-slate-500 line-through' : 'text-slate-300')}>
@@ -1088,15 +1105,100 @@ interface CarteiraSubTabProps {
   onAtualizarContato: (id: string, status: string, canal?: string, obs?: string) => void;
   cursosUnidade: { id: number; nome: string }[];
   professoresUnidade: { id: number; nome: string }[];
+  checklistDetail: { titulo: string; descricao: string | null; data_prazo: string | null } | null;
 }
 
-function CarteiraSubTab({ contatos, onAtualizarContato, cursosUnidade, professoresUnidade }: CarteiraSubTabProps) {
+function CarteiraSubTab({ contatos, onAtualizarContato, cursosUnidade, professoresUnidade, checklistDetail }: CarteiraSubTabProps) {
   const [filtroCurso, setFiltroCurso] = useState('todos');
   const [filtroProf, setFiltroProf] = useState('todos');
   const [filtroStatus, setFiltroStatus] = useState('todos');
   const [pagina, setPagina] = useState(0);
   const [acoesAbertoId, setAcoesAbertoId] = useState<string | null>(null);
   const POR_PAGINA = 10;
+
+  // Estado do modal WhatsApp
+  const [whatsappModalAberto, setWhatsappModalAberto] = useState(false);
+  const [contatoSelecionado, setContatoSelecionado] = useState<FarmerChecklistContato | null>(null);
+  const [mensagemEditavel, setMensagemEditavel] = useState('');
+  const [enviandoWhatsApp, setEnviandoWhatsApp] = useState(false);
+  const [gerandoIA, setGerandoIA] = useState(false);
+
+  const abrirModalWhatsApp = (contato: FarmerChecklistContato) => {
+    console.log('[ChecklistWhatsApp] abrirModalWhatsApp chamado:', contato.alunos?.nome, 'wp:', contato.alunos?.whatsapp);
+    const wp = contato.alunos?.whatsapp?.replace(/\D/g, '');
+    if (!wp) {
+      console.log('[ChecklistWhatsApp] WhatsApp não encontrado, mostrando toast');
+      toast.error('WhatsApp não cadastrado para este aluno.');
+      return;
+    }
+    setContatoSelecionado(contato);
+    // Gerar template fixo
+    const template = gerarTemplateChecklist({
+      aluno_nome: contato.alunos?.nome || 'Aluno',
+      titulo_checklist: checklistDetail?.titulo || 'Comunicação',
+      descricao_checklist: checklistDetail?.descricao,
+      data_prazo: checklistDetail?.data_prazo,
+      curso: contato.alunos?.cursos?.nome,
+      professor_nome: contato.alunos?.professores?.nome,
+      status_contato: contato.status,
+    });
+    setMensagemEditavel(template);
+    setWhatsappModalAberto(true);
+    setAcoesAbertoId(null);
+  };
+
+  const gerarComIA = async () => {
+    if (!contatoSelecionado) return;
+    setGerandoIA(true);
+    try {
+      const mensagem = await gerarMensagemChecklist({
+        aluno_nome: contatoSelecionado.alunos?.nome || 'Aluno',
+        titulo_checklist: checklistDetail?.titulo || 'Comunicação',
+        descricao_checklist: checklistDetail?.descricao,
+        data_prazo: checklistDetail?.data_prazo,
+        curso: contatoSelecionado.alunos?.cursos?.nome,
+        professor_nome: contatoSelecionado.alunos?.professores?.nome,
+        status_contato: contatoSelecionado.status,
+      });
+      setMensagemEditavel(mensagem);
+    } catch (err) {
+      console.error('[ChecklistWhatsApp] Erro ao gerar com IA:', err);
+      toast.error('Erro ao gerar mensagem com IA. Usando template padrão.');
+    } finally {
+      setGerandoIA(false);
+    }
+  };
+
+  const enviarWhatsApp = async () => {
+    if (!contatoSelecionado) return;
+    const wp = contatoSelecionado.alunos?.whatsapp?.replace(/\D/g, '');
+    if (!wp) return;
+
+    setEnviandoWhatsApp(true);
+    try {
+      const numeroFormatado = formatPhoneNumber(wp);
+      const resultado = await sendWhatsAppMessage({
+        to: numeroFormatado,
+        text: mensagemEditavel,
+      });
+
+      if (resultado.success) {
+        toast.success(`✅ Mensagem enviada para ${contatoSelecionado.alunos?.nome?.split(' ')[0]} via WhatsApp!`);
+        // Atualizar status do contato para 'visualizou' e canal 'WhatsApp'
+        onAtualizarContato(contatoSelecionado.id, 'visualizou', 'WhatsApp', undefined);
+        setWhatsappModalAberto(false);
+        setContatoSelecionado(null);
+      } else {
+        console.error('[ChecklistWhatsApp] Erro UAZAPI:', resultado.error);
+        toast.error(`Erro ao enviar: ${resultado.error || 'Falha na conexão com UAZAPI'}. Tente novamente.`);
+      }
+    } catch (err) {
+      console.error('[ChecklistWhatsApp] Erro inesperado:', err);
+      toast.error('Erro de conexão com UAZAPI. Verifique sua internet e tente novamente.');
+    } finally {
+      setEnviandoWhatsApp(false);
+    }
+  };
 
   const statusColors: Record<string, string> = {
     pendente: 'text-slate-400',
@@ -1255,12 +1357,7 @@ function CarteiraSubTab({ contatos, onAtualizarContato, cursosUnidade, professor
                       {acoesAbertoId === contato.id && (
                         <div className="absolute right-0 top-full mt-1 z-50 bg-slate-800 border border-slate-700 rounded-lg shadow-xl py-1 w-44">
                           <button
-                            onClick={() => {
-                              const wp = contato.alunos?.whatsapp?.replace(/\D/g, '');
-                              if (wp) window.open(`https://wa.me/55${wp}`, '_blank');
-                              else alert('WhatsApp não cadastrado');
-                              setAcoesAbertoId(null);
-                            }}
+                            onClick={() => abrirModalWhatsApp(contato)}
                             className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700/50 hover:text-emerald-400"
                           >
                             <MessageSquare className="w-3.5 h-3.5" /> Enviar WhatsApp
@@ -1351,6 +1448,81 @@ function CarteiraSubTab({ contatos, onAtualizarContato, cursosUnidade, professor
           </div>
         </div>
       )}
+
+      {/* Modal WhatsApp Preview */}
+      <Dialog open={whatsappModalAberto} onOpenChange={(open) => {
+        setWhatsappModalAberto(open);
+        if (!open) setContatoSelecionado(null);
+      }}>
+        <DialogContent className="max-w-md bg-slate-900 border-slate-700">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-white text-sm">
+              <MessageSquare className="w-4 h-4 text-emerald-400" />
+              Enviar WhatsApp para {contatoSelecionado?.alunos?.nome?.split(' ')[0] || 'Aluno'}
+            </DialogTitle>
+            <DialogDescription className="text-xs text-slate-400">
+              {checklistDetail?.titulo || 'Checklist'} • Edite a mensagem antes de enviar
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <Textarea
+              value={mensagemEditavel}
+              onChange={(e) => setMensagemEditavel(e.target.value)}
+              disabled={gerandoIA}
+              className={cn(
+                "min-h-[160px] bg-slate-800 border-slate-600 text-white text-xs resize-none focus:border-violet-500",
+                gerandoIA && "opacity-60 animate-pulse"
+              )}
+              placeholder="Digite a mensagem..."
+            />
+
+            <div className="flex items-center justify-between">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-violet-400 hover:text-violet-300 hover:bg-violet-500/10 gap-1.5"
+                onClick={gerarComIA}
+                disabled={gerandoIA || enviandoWhatsApp}
+              >
+                {gerandoIA ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Sparkles className="w-3.5 h-3.5" />
+                )}
+                {gerandoIA ? 'Gerando...' : 'Gerar com IA'}
+              </Button>
+
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs text-slate-400"
+                  onClick={() => {
+                    setWhatsappModalAberto(false);
+                    setContatoSelecionado(null);
+                  }}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  size="sm"
+                  className="text-xs bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5"
+                  onClick={enviarWhatsApp}
+                  disabled={enviandoWhatsApp || gerandoIA || !mensagemEditavel.trim()}
+                >
+                  {enviandoWhatsApp ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Send className="w-3.5 h-3.5" />
+                  )}
+                  {enviandoWhatsApp ? 'Enviando...' : 'Enviar WhatsApp'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

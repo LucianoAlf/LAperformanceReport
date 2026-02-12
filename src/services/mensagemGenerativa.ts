@@ -53,7 +53,77 @@ function fallbackBoasVindas(dados: DadosBoasVindas): string {
   return `🎸 Bem-vindo(a) à LA Music, ${primeiroNome}! Sua jornada no ${instrumento} começa agora! 🎵${professor}${horario} Qualquer dúvida, é só chamar. ✨`;
 }
 
+export interface DadosChecklist {
+  aluno_nome: string;
+  titulo_checklist: string;
+  descricao_checklist?: string | null;
+  data_prazo?: string | null;
+  curso?: string | null;
+  professor_nome?: string | null;
+  status_contato?: string | null;
+}
+
+function templateChecklist(dados: DadosChecklist): string {
+  const primeiroNome = dados.aluno_nome.split(' ')[0];
+  const prazo = dados.data_prazo
+    ? new Date(dados.data_prazo + 'T00:00:00').toLocaleDateString('pt-BR')
+    : null;
+
+  let msg = `📋 Olá, ${primeiroNome}! Aqui é da LA Music. 🎵\n\n`;
+  msg += `Estamos entrando em contato sobre: *${dados.titulo_checklist}*.`;
+
+  if (dados.descricao_checklist) {
+    msg += `\n${dados.descricao_checklist}`;
+  }
+
+  if (prazo) {
+    msg += `\n\n⏰ Prazo: ${prazo}`;
+  }
+
+  msg += `\n\nQualquer dúvida, estamos à disposição! 😊`;
+  msg += `\n\nFamília LA Music`;
+
+  return msg;
+}
+
 // === Funções principais ===
+
+export async function gerarMensagemChecklist(dados: DadosChecklist): Promise<string> {
+  try {
+    const response = await fetch(
+      `${SUPABASE_URL}/functions/v1/gerar-mensagem-checklist`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(dados),
+      }
+    );
+
+    if (!response.ok) {
+      console.error('[MensagemGenerativa] Erro HTTP checklist:', response.status);
+      return templateChecklist(dados);
+    }
+
+    const result: MensagemResponse = await response.json();
+
+    if (result.mensagem) {
+      return result.mensagem;
+    }
+
+    console.warn('[MensagemGenerativa] Resposta sem mensagem, usando template');
+    return templateChecklist(dados);
+  } catch (error) {
+    console.error('[MensagemGenerativa] Erro ao gerar mensagem de checklist:', error);
+    return templateChecklist(dados);
+  }
+}
+
+export function gerarTemplateChecklist(dados: DadosChecklist): string {
+  return templateChecklist(dados);
+}
 
 export async function gerarMensagemAniversario(dados: DadosAniversario): Promise<string> {
   try {
