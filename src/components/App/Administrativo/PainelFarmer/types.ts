@@ -160,6 +160,7 @@ export interface FarmerChecklistContato {
   alunos?: {
     nome: string;
     whatsapp?: string | null;
+    telefone?: string | null;
     health_score?: string | null;
     cursos?: { nome: string } | null;
     professores?: { nome: string } | null;

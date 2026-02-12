@@ -97,7 +97,7 @@ export function useChecklistDetail(checklistId: string | null, unidadeId?: strin
         .from('farmer_checklist_contatos')
         .select(`
           *,
-          alunos:aluno_id(nome, whatsapp, health_score, cursos:curso_id(nome), professores:professor_atual_id(nome)),
+          alunos:aluno_id(nome, whatsapp, telefone, health_score, cursos:curso_id(nome), professores:professor_atual_id(nome)),
           colaboradores:farmer_id(nome, apelido)
         `)
         .eq('checklist_id', checklistId)

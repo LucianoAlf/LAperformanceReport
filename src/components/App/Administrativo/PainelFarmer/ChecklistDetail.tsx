@@ -1124,11 +1124,10 @@ function CarteiraSubTab({ contatos, onAtualizarContato, cursosUnidade, professor
   const [gerandoIA, setGerandoIA] = useState(false);
 
   const abrirModalWhatsApp = (contato: FarmerChecklistContato) => {
-    console.log('[ChecklistWhatsApp] abrirModalWhatsApp chamado:', contato.alunos?.nome, 'wp:', contato.alunos?.whatsapp);
-    const wp = contato.alunos?.whatsapp?.replace(/\D/g, '');
+    const numeroOriginal = contato.alunos?.whatsapp || contato.alunos?.telefone;
+    const wp = numeroOriginal?.replace(/\D/g, '');
     if (!wp) {
-      console.log('[ChecklistWhatsApp] WhatsApp não encontrado, mostrando toast');
-      toast.error('WhatsApp não cadastrado para este aluno.');
+      toast.error('WhatsApp/telefone não cadastrado para este aluno.');
       return;
     }
     setContatoSelecionado(contato);
@@ -1171,7 +1170,8 @@ function CarteiraSubTab({ contatos, onAtualizarContato, cursosUnidade, professor
 
   const enviarWhatsApp = async () => {
     if (!contatoSelecionado) return;
-    const wp = contatoSelecionado.alunos?.whatsapp?.replace(/\D/g, '');
+    const numeroOriginal = contatoSelecionado.alunos?.whatsapp || contatoSelecionado.alunos?.telefone;
+    const wp = numeroOriginal?.replace(/\D/g, '');
     if (!wp) return;
 
     setEnviandoWhatsApp(true);
@@ -1364,9 +1364,9 @@ function CarteiraSubTab({ contatos, onAtualizarContato, cursosUnidade, professor
                           </button>
                           <button
                             onClick={() => {
-                              const wp = contato.alunos?.whatsapp?.replace(/\D/g, '');
-                              if (wp) window.open(`tel:+55${wp}`);
-                              else alert('Telefone não cadastrado');
+                              const num = (contato.alunos?.telefone || contato.alunos?.whatsapp)?.replace(/\D/g, '');
+                              if (num) window.open(`tel:+55${num}`);
+                              else toast.error('Telefone não cadastrado para este aluno.');
                               setAcoesAbertoId(null);
                             }}
                             className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-slate-300 hover:bg-slate-700/50 hover:text-amber-400"
