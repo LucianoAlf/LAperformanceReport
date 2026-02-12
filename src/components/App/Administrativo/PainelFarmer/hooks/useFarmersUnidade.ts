@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 
 interface Farmer {
-  id: string;
+  id: number;
   nome: string;
   apelido: string | null;
   unidade_id: string;

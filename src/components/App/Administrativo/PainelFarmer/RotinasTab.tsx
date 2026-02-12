@@ -49,10 +49,10 @@ export function RotinasTab({ unidadeId, modalAberto: modalAbertoExterno, onModal
   // Passar unidadeId para o hook respeitar o filtro global
   const { colaborador } = useColaboradorAtual(unidadeId);
   const { farmers } = useFarmersUnidade(unidadeId);
-  const [farmerSelecionado, setFarmerSelecionado] = useState<string | null>(null);
+  const [farmerSelecionado, setFarmerSelecionado] = useState<number | null>(null);
   
   // Usar o farmer selecionado ou o colaborador atual para as rotinas
-  const colaboradorIdParaRotinas = farmerSelecionado || colaborador?.id || null;
+  const colaboradorIdParaRotinas = farmerSelecionado ?? colaborador?.id ?? null;
   
   const { rotinas, loading, criarRotina, atualizarRotina, excluirRotina } = useRotinas(
     colaboradorIdParaRotinas,
@@ -100,7 +100,7 @@ export function RotinasTab({ unidadeId, modalAberto: modalAbertoExterno, onModal
       setDiaMes(1);
       setPrioridade('normal');
       setLembreteWhatsapp(false);
-      setResponsavelId(colaborador?.id || '');
+      setResponsavelId(colaborador?.id ? String(colaborador.id) : '');
     }
     setModalAberto(true);
   };
@@ -131,7 +131,9 @@ export function RotinasTab({ unidadeId, modalAberto: modalAbertoExterno, onModal
       if (editando) {
         await atualizarRotina(editando.id, input);
       } else {
-        await criarRotina(input);
+        // Usar o responsável selecionado no modal (se houver) para criar a rotina
+        const idResponsavel = responsavelId ? Number(responsavelId) : null;
+        await criarRotina(input, idResponsavel || undefined);
       }
 
       fecharModal();
@@ -357,7 +359,7 @@ export function RotinasTab({ unidadeId, modalAberto: modalAbertoExterno, onModal
                   </SelectTrigger>
                   <SelectContent className="bg-slate-800 border-slate-700">
                     {farmers.map(farmer => (
-                      <SelectItem key={farmer.id} value={farmer.id}>
+                      <SelectItem key={farmer.id} value={String(farmer.id)}>
                         {farmer.apelido || farmer.nome}
                       </SelectItem>
                     ))}

@@ -104,14 +104,15 @@ export function useRotinas(colaboradorId: number | null, unidadeId: string) {
   };
 
   // Criar nova rotina
-  const criarRotina = async (input: CreateRotinaInput) => {
-    if (!colaboradorId) return;
+  const criarRotina = async (input: CreateRotinaInput, overrideColaboradorId?: number) => {
+    const idFinal = overrideColaboradorId ?? colaboradorId;
+    if (!idFinal) return;
 
     try {
       const { error: insertError } = await supabase
         .from('farmer_rotinas')
         .insert({
-          colaborador_id: colaboradorId,
+          colaborador_id: idFinal,
           unidade_id: unidadeId,
           ...input
         });
