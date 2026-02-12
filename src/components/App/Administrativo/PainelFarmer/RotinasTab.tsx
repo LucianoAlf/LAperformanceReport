@@ -16,6 +16,16 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { useColaboradorAtual, useRotinas, useFarmersUnidade } from './hooks';
 import type { FarmerRotina, CreateRotinaInput } from './types';
 
@@ -60,6 +70,8 @@ export function RotinasTab({ unidadeId, modalAberto: modalAbertoExterno, onModal
     }
   };
   const [editando, setEditando] = useState<FarmerRotina | null>(null);
+  const [rotinaParaExcluir, setRotinaParaExcluir] = useState<string | null>(null);
+  const [modalConfirmacaoAberto, setModalConfirmacaoAberto] = useState(false);
   const [salvando, setSalvando] = useState(false);
 
   // Form state
@@ -130,11 +142,18 @@ export function RotinasTab({ unidadeId, modalAberto: modalAbertoExterno, onModal
     }
   };
 
-  const handleExcluir = async (id: string) => {
-    if (!confirm('Tem certeza que deseja excluir esta rotina?')) return;
+  const handleExcluir = (id: string) => {
+    setRotinaParaExcluir(id);
+    setModalConfirmacaoAberto(true);
+  };
+
+  const confirmarExclusao = async () => {
+    if (!rotinaParaExcluir) return;
     
     try {
-      await excluirRotina(id);
+      await excluirRotina(rotinaParaExcluir);
+      setModalConfirmacaoAberto(false);
+      setRotinaParaExcluir(null);
     } catch (err) {
       console.error('Erro ao excluir rotina:', err);
     }
@@ -470,6 +489,38 @@ export function RotinasTab({ unidadeId, modalAberto: modalAbertoExterno, onModal
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* AlertDialog de Confirmação de Exclusão */}
+      <AlertDialog open={modalConfirmacaoAberto} onOpenChange={setModalConfirmacaoAberto}>
+        <AlertDialogContent className="bg-slate-900 border-slate-700">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white flex items-center gap-2">
+              <Trash2 className="w-5 h-5 text-rose-400" />
+              Excluir Rotina
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-400">
+              Tem certeza que deseja excluir esta rotina? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel 
+              onClick={() => {
+                setModalConfirmacaoAberto(false);
+                setRotinaParaExcluir(null);
+              }}
+              className="bg-slate-800 text-white border-slate-700 hover:bg-slate-700"
+            >
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmarExclusao}
+              className="bg-rose-500 text-white hover:bg-rose-600"
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

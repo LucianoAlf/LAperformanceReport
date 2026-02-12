@@ -41,6 +41,9 @@ export function TarefasTab({ unidadeId }: TarefasTabProps) {
   const [salvando, setSalvando] = useState(false);
   const [filtro, setFiltro] = useState<'todas' | 'pendentes' | 'concluidas'>('pendentes');
 
+  // Input inline tarefa rápida
+  const [tarefaRapidaTexto, setTarefaRapidaTexto] = useState('');
+
   // Form state
   const [descricao, setDescricao] = useState('');
   const [dataPrazo, setDataPrazo] = useState<Date | undefined>(undefined);
@@ -199,6 +202,25 @@ export function TarefasTab({ unidadeId }: TarefasTabProps) {
             ))}
           </div>
         )}
+      </div>
+
+      {/* Input inline — Adicionar tarefa rápida (wireframe L329-333) */}
+      <div className="flex items-center gap-3 border border-dashed border-slate-700/40 rounded-lg px-3 py-2.5 hover:border-violet-500/30 transition-colors">
+        <Plus className="w-4 h-4 text-slate-600 flex-shrink-0" />
+        <input
+          type="text"
+          placeholder="Adicionar tarefa rápida..."
+          className="flex-1 bg-transparent border-none text-sm text-slate-300 placeholder-slate-600 outline-none"
+          value={tarefaRapidaTexto}
+          onChange={e => setTarefaRapidaTexto(e.target.value)}
+          onKeyDown={async (e) => {
+            if (e.key === 'Enter' && tarefaRapidaTexto.trim()) {
+              await criarTarefa({ descricao: tarefaRapidaTexto.trim(), prioridade: 'media' });
+              setTarefaRapidaTexto('');
+            }
+          }}
+        />
+        <span className="text-xs text-slate-600 flex-shrink-0">Enter para salvar</span>
       </div>
 
       {/* Modal de Nova Tarefa */}

@@ -5,27 +5,25 @@ import { useOutletContext } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   CheckSquare, 
-  ListTodo, 
+  ClipboardList, 
   MessageSquare, 
-  FileText, 
   BarChart3,
-  ClipboardList
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { DashboardTab } from './DashboardTab';
 import { RotinasTab } from './RotinasTab';
-import { TarefasTab } from './TarefasTab';
+import { ChecklistsTab } from './ChecklistsTab';
 import { HistoricoTab } from './HistoricoTab';
 import { RecadosTab } from './RecadosTab';
 
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 
-type SubTabId = 'dashboard' | 'rotinas' | 'tarefas' | 'recados' | 'historico';
+type SubTabId = 'dashboard' | 'rotinas' | 'checklists' | 'recados' | 'historico';
 
 const subTabs: { id: SubTabId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'rotinas', label: 'Minhas Rotinas', icon: CheckSquare },
-  { id: 'tarefas', label: 'Tarefas', icon: ListTodo },
+  { id: 'checklists', label: 'Checklists', icon: ClipboardList },
   { id: 'recados', label: 'Recados', icon: MessageSquare },
   { id: 'historico', label: 'Histórico', icon: BarChart3 },
 ];
@@ -55,7 +53,7 @@ export function PainelFarmer({ unidadeId, ano, mes }: PainelFarmerProps) {
           </div>
           <div>
             <h2 className="text-lg font-bold text-white">Painel Farmer</h2>
-            <p className="text-sm text-slate-400">Gerencie suas rotinas e tarefas diárias</p>
+            <p className="text-sm text-slate-400">Gerencie suas rotinas, checklists e tarefas diárias</p>
           </div>
         </div>
       </div>
@@ -101,8 +99,8 @@ export function PainelFarmer({ unidadeId, ano, mes }: PainelFarmerProps) {
             onModalClose={() => setRotinaModalAberto(false)}
           />
         )}
-        {activeSubTab === 'tarefas' && (
-          <TarefasTab unidadeId={unidadeId} />
+        {activeSubTab === 'checklists' && (
+          <ChecklistsTab unidadeId={unidadeId} />
         )}
         {activeSubTab === 'recados' && (
           <RecadosTab unidadeId={unidadeId} />

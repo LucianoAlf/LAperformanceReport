@@ -6,7 +6,8 @@ import {
   CheckCircle2, 
   ListTodo,
   Calendar,
-  TrendingUp
+  TrendingUp,
+  ClipboardList,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
@@ -51,6 +52,7 @@ export function HistoricoTab({ unidadeId }: HistoricoTabProps) {
   const totalRotinas = historico.reduce((acc, h) => acc + h.total_rotinas, 0);
   const totalConcluidas = historico.reduce((acc, h) => acc + h.rotinas_concluidas, 0);
   const totalTarefas = historico.reduce((acc, h) => acc + h.tarefas_concluidas, 0);
+  const totalChecklists = historico.reduce((acc, h) => acc + (h.checklists_concluidos || 0), 0);
   const mediaPercentual = historico.length > 0 
     ? Math.round(historico.reduce((acc, h) => acc + h.percentual, 0) / historico.length)
     : 0;
@@ -97,7 +99,7 @@ export function HistoricoTab({ unidadeId }: HistoricoTabProps) {
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold text-white">Histórico de Desempenho</h3>
-          <p className="text-sm text-slate-400">Acompanhe sua evolução nas rotinas e tarefas</p>
+          <p className="text-sm text-slate-400">Acompanhe sua evolução nas rotinas, tarefas e checklists</p>
         </div>
         <div className="flex gap-2">
           {[7, 14, 30].map(dias => (
@@ -118,7 +120,7 @@ export function HistoricoTab({ unidadeId }: HistoricoTabProps) {
       </div>
 
       {/* Cards de Estatísticas */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <StatCard
           icon={<CheckCircle2 className="w-5 h-5" />}
           label="Rotinas Concluídas"
@@ -136,6 +138,12 @@ export function HistoricoTab({ unidadeId }: HistoricoTabProps) {
           label="Tarefas Concluídas"
           value={String(totalTarefas)}
           color="blue"
+        />
+        <StatCard
+          icon={<ClipboardList className="w-5 h-5" />}
+          label="Checklists Concluídos"
+          value={String(totalChecklists)}
+          color="cyan"
         />
         <StatCard
           icon={<Calendar className="w-5 h-5" />}
@@ -202,6 +210,15 @@ export function HistoricoTab({ unidadeId }: HistoricoTabProps) {
                     </div>
                   )}
 
+                  {(item.checklists_concluidos || 0) > 0 && (
+                    <div className="text-right">
+                      <p className="text-sm font-medium text-cyan-400">
+                        +{item.checklists_concluidos}
+                      </p>
+                      <p className="text-xs text-slate-400">checklists</p>
+                    </div>
+                  )}
+
                   {/* Badge de status */}
                   <div className={cn(
                     "w-8 h-8 rounded-full flex items-center justify-center",
@@ -228,7 +245,7 @@ interface StatCardProps {
   icon: React.ReactNode;
   label: string;
   value: string;
-  color: 'emerald' | 'violet' | 'blue' | 'amber';
+  color: 'emerald' | 'violet' | 'blue' | 'amber' | 'cyan';
 }
 
 function StatCard({ icon, label, value, color }: StatCardProps) {
@@ -237,6 +254,7 @@ function StatCard({ icon, label, value, color }: StatCardProps) {
     violet: 'from-violet-500/10 to-purple-500/10 border-violet-500/20 text-violet-400',
     blue: 'from-blue-500/10 to-cyan-500/10 border-blue-500/20 text-blue-400',
     amber: 'from-amber-500/10 to-orange-500/10 border-amber-500/20 text-amber-400',
+    cyan: 'from-cyan-500/10 to-teal-500/10 border-cyan-500/20 text-cyan-400',
   };
 
   return (

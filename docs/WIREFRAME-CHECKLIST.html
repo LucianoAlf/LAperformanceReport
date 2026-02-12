@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wireframe — Painel Farmer: Checklists</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+body{font-family:'Inter',sans-serif}
+.fade-in{animation:fadeIn .2s ease-out}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.slide-in{animation:slideIn .25s ease-out}
+@keyframes slideIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}
+.modal-overlay{animation:ov .15s ease-out}@keyframes ov{from{opacity:0}to{opacity:1}}
+.modal-content{animation:mc .2s ease-out}@keyframes mc{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
+.progress-bar{transition:width .5s ease-out}
+input[type=checkbox]{accent-color:#8b5cf6}
+select,input[type=text],input[type=date],textarea{background:#1e293b;border:1px solid #334155;color:#e2e8f0;border-radius:.5rem;padding:.5rem .75rem;font-size:.875rem;outline:none;transition:border-color .15s}
+select:focus,input[type=text]:focus,input[type=date]:focus,textarea:focus{border-color:#8b5cf6}
+::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#334155;border-radius:3px}
+</style>
+</head>
+<body class="bg-slate-950 text-slate-200 min-h-screen">
+<div id="app" class="max-w-6xl mx-auto px-4 py-6"></div>
+<script>
+// ========== DATA ==========
+const CHECKLISTS = [
+  {id:'carnaval',emoji:'📣',title:'Recesso de Carnaval — Comunicação',tasks:8,done:5,alunos:498,resp:'Gabi & Jhon',prazo:'14/02',prio:'urgente',period:'Diário',dept:'Administrativo',
+   color:'red',desc:'Avisar todos os alunos e professores sobre o recesso de 01 a 05 de março.',
+   items:[
+     {t:'Disparar mensagem no WhatsApp para todos os alunos',canal:'WhatsApp',done:true,subs:[{t:'Conferir se todos receberam',done:true,info:'94% receberam'}]},
+     {t:'Enviar email institucional sobre recesso',canal:'Email',done:true},
+     {t:'Publicar comunicado no Instagram',canal:'Instagram',done:true},
+     {t:'Avisar todos os professores via WhatsApp',canal:'WhatsApp',done:true},
+     {t:'Atualizar site com aviso de recesso',done:true},
+     {t:'Ligar para alunos que não confirmaram recebimento',canal:'Telefone',done:false,info:'32 alunos sem confirmação',subs:[{t:'Registrar tentativa de contato para cada aluno',done:false,info:'Pendente'},{t:'Tentar contato presencial com os que não atenderam',canal:'Presencial',done:false}]},
+     {t:'Atualizar mural físico da escola',done:false},
+     {t:'Confirmar com coordenação pedagógica',canal:'Presencial',done:false}
+   ],
+   carteira:[
+     {nome:'Lucas Mendes',curso:'Guitarra',prof:'Prof. Ricardo',canal:'WhatsApp',status:'Respondeu',cor:'emerald'},
+     {nome:'Ana Paula Silva',curso:'Piano',prof:'Prof. Maria',canal:'Email',status:'Visualizou',cor:'blue'},
+     {nome:'Rafael Costa',curso:'Bateria',prof:'Prof. André',canal:'Telefone',status:'Sem Resposta',cor:'amber'},
+     {nome:'Fernanda Oliveira',curso:'Canto',prof:'Prof. Fernanda',canal:'WhatsApp',status:'Não Recebeu',cor:'red'},
+     {nome:'Pedro Henrique',curso:'Violão',prof:'Prof. Ricardo',canal:'Presencial',status:'Confirmou',cor:'emerald'}
+   ],
+   canais:[{nome:'WhatsApp',pct:94,total:498,ok:468,cor:'emerald'},{nome:'Email',pct:78,total:498,ok:388,cor:'blue'},{nome:'Telefone',pct:45,total:32,ok:14,cor:'amber'},{nome:'Presencial',pct:100,total:8,ok:8,cor:'purple'}]
+  },
+  {id:'onboarding',emoji:'🎓',title:'Primeiro Dia de Aula — Onboarding',tasks:12,done:9,alunos:3,resp:'Gabi',prazo:'13/02',prio:'normal',period:'Pontual',dept:'Pedagógico',color:'emerald',
+   desc:'Garantir que novos alunos tenham a melhor experiência no primeiro dia.',
+   items:[
+     {t:'Confirmar horário da aula experimental com professor',done:true},
+     {t:'Enviar WhatsApp de boas-vindas para o aluno',canal:'WhatsApp',done:true},
+     {t:'Preparar material de boas-vindas (pasta, crachá)',done:true},
+     {t:'Verificar se a sala está reservada',done:true},
+     {t:'Avisar recepção sobre o novo aluno',done:true},
+     {t:'Lembrete WhatsApp no dia anterior',canal:'WhatsApp',done:true},
+     {t:'Receber aluno na recepção com sorriso',done:true},
+     {t:'Apresentar a escola (tour rápido)',done:true},
+     {t:'Levar até a sala e apresentar ao professor',done:true},
+     {t:'Após a aula: perguntar como foi a experiência',done:false},
+     {t:'Enviar WhatsApp de agradecimento no dia seguinte',canal:'WhatsApp',done:false},
+     {t:'Registrar feedback no sistema',done:false}
+   ]},
+  {id:'renovacoes',emoji:'🔄',title:'Renovações Fevereiro — Acompanhamento',tasks:6,done:2,alunos:45,resp:'Gabi',prazo:'28/02',prio:'alta',period:'Mensal',dept:'Administrativo',color:'blue',
+   desc:'Acompanhar e garantir a renovação de 45 alunos com contrato vencendo em fevereiro.',
+   items:[
+     {t:'Levantar lista de alunos com renovação em fevereiro',done:true},
+     {t:'Enviar primeiro contato via WhatsApp (30 dias antes)',canal:'WhatsApp',done:true},
+     {t:'Ligar para quem não respondeu o WhatsApp (15 dias antes)',canal:'Telefone',done:false},
+     {t:'Conversa presencial com alunos indecisos',canal:'Presencial',done:false},
+     {t:'Aplicar reajuste e gerar novo contrato',done:false},
+     {t:'Registrar renovação no sistema e atualizar status',done:false}
+   ]},
+  {id:'conferencia',emoji:'📊',title:'Conferência Mensal de Dados',tasks:15,done:2,alunos:0,resp:'Gabi',prazo:'05/03',prio:'normal',period:'Mensal',dept:'Administrativo',color:'purple',
+   desc:'Conferir todos os dados do mês no sistema.',
+   items:[
+     {t:'Conferir total de alunos ativos no sistema',done:true},
+     {t:'Verificar alunos pagantes vs inadimplentes',done:true},
+     {t:'Conferir ticket médio atualizado',done:false},
+     {t:'Verificar renovações pendentes',done:false},
+     {t:'Conferir evasões do mês',done:false}
+   ]},
+  {id:'abertura',emoji:'🏫',title:'Abertura da Escola — Diário',tasks:8,done:8,alunos:0,resp:'Gabi',prazo:'Recorrente',prio:'normal',period:'Diário',dept:'Geral',color:'cyan',
+   desc:'Checklist diário de abertura da escola.',
+   items:[
+     {t:'Abrir portas e ligar luzes',done:true},
+     {t:'Ligar ar-condicionado das salas',done:true},
+     {t:'Verificar agenda do dia',done:true},
+     {t:'Conferir recados pendentes',done:true},
+     {t:'Preparar recepção',done:true},
+     {t:'Verificar limpeza das salas',done:true},
+     {t:'Testar equipamentos de som',done:true},
+     {t:'Abrir sistema e conferir horários',done:true}
+   ]}
+];
+
+const TAREFAS_RAPIDAS = [
+  {t:'Falar com Leandro, pai do Davi, sobre atraso na parcela',prio:'Alta',data:'19/02',cor:'red'},
+  {t:'Ligar para Maria sobre renovação do contrato',prio:'Média',data:'—',cor:'amber'}
+];
+
+const TEMPLATES = [
+  {nome:'Comunicação de Recesso',itens:8,dept:'Administrativo'},
+  {nome:'Primeiro Dia de Aula — Onboarding',itens:12,dept:'Pedagógico'},
+  {nome:'Processo de Matrícula',itens:18,dept:'Comercial'},
+  {nome:'Conferência Mensal de Dados',itens:15,dept:'Administrativo'},
+  {nome:'Abertura da Escola — Diário',itens:8,dept:'Geral'}
+];
+
+let currentTab = 'checklists';
+let currentDetail = null;
+let currentDetailTab = 'tarefas';
+
+// ========== ICONS (SVG inline) ==========
+const IC = {
+  dash:`<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1" stroke-width="2"/><rect x="14" y="3" width="7" height="7" rx="1" stroke-width="2"/><rect x="3" y="14" width="7" height="7" rx="1" stroke-width="2"/><rect x="14" y="14" width="7" height="7" rx="1" stroke-width="2"/></svg>`,
+  check:`<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`,
+  clip:`<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>`,
+  msg:`<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>`,
+  bar:`<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>`,
+  plus:`<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>`,
+  back:`<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>`,
+  edit:`<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>`,
+  trash:`<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>`,
+  x:`<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>`,
+  bolt:`<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>`,
+  warn:`<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>`,
+  grip:`<svg class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8h16M4 16h16"/></svg>`,
+};
+
+const canalColor = {WhatsApp:'emerald',Email:'blue',Telefone:'amber',Presencial:'purple',Instagram:'pink'};
+const prioStyle = {urgente:'bg-red-500/20 text-red-400',alta:'bg-amber-500/20 text-amber-400',normal:'bg-emerald-500/20 text-emerald-400'};
+
+// ========== RENDER ==========
+function render(){
+  const app = document.getElementById('app');
+  app.innerHTML = renderHeader() + renderTabs() + renderContent();
+  attachEvents();
+}
+
+function renderHeader(){
+  return `<div class="flex items-center justify-between mb-6">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
+        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+      </div>
+      <div><h2 class="text-lg font-bold text-white">Painel Farmer</h2><p class="text-sm text-slate-400">Gerencie suas rotinas, checklists e tarefas diárias</p></div>
+    </div>
+    <div class="flex items-center gap-2"><span class="text-xs text-slate-500">Farmer:</span><span class="text-sm font-medium text-violet-400">Gabriela (Gabi)</span><span class="text-xs text-slate-600">· Campo Grande</span></div>
+  </div>`;
+}
+
+function renderTabs(){
+  const tabs = [
+    {id:'dashboard',label:'Dashboard',icon:IC.dash},
+    {id:'rotinas',label:'Minhas Rotinas',icon:IC.check},
+    {id:'checklists',label:'Checklists',icon:IC.clip},
+    {id:'recados',label:'Recados',icon:IC.msg},
+    {id:'historico',label:'Histórico',icon:IC.bar}
+  ];
+  return `<div class="flex gap-1 mb-0">${tabs.map(t=>{
+    const active = currentTab===t.id;
+    return `<button onclick="switchTab('${t.id}')" class="px-4 py-2.5 rounded-t-xl text-sm font-medium transition-all flex items-center gap-2 border border-b-0 ${active?'bg-gradient-to-r from-violet-600 to-purple-600 text-white border-violet-600':'bg-slate-800/50 text-slate-400 hover:text-white hover:bg-slate-700/50 border-slate-700/50'}">${t.icon} ${t.label}</button>`;
+  }).join('')}</div>`;
+}
+
+function renderContent(){
+  const wrap = (html) => `<div class="bg-slate-900/50 border border-slate-700/50 border-t-0 rounded-b-xl p-6 fade-in">${html}</div>`;
+  switch(currentTab){
+    case 'dashboard': return wrap(renderDashboard());
+    case 'rotinas': return wrap(renderRotinas());
+    case 'checklists': return wrap(currentDetail ? renderChecklistDetail() : renderChecklistsList());
+    case 'recados': return wrap(renderRecados());
+    case 'historico': return wrap(renderHistorico());
+  }
+}
+
+// ========== ALERTAS AUTO (helper) ==========
+const ALERTAS_AUTO = [
+  {regra:'Primeiro dia de aula',quando:'2 dias antes',whatsapp:true,ativo:true},
+  {regra:'Prazo de checklist vencendo',quando:'1 dia antes',whatsapp:true,ativo:true},
+  {regra:'Renovação de contrato',quando:'30 dias antes',whatsapp:false,ativo:true},
+  {regra:'Aluno inadimplente (novo)',quando:'Imediato',whatsapp:true,ativo:false}
+];
+function renderAlertaAutoRow(a){
+  const wpBadge = a.whatsapp
+    ? '<span class="flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-medium rounded bg-emerald-500/15 text-emerald-400">' + IC.msg + ' WhatsApp</span>'
+    : '<span class="text-[9px] text-slate-600 px-1.5 py-0.5">Só no painel</span>';
+  return '<div class="flex items-center justify-between py-2 px-3 rounded-lg ' + (a.ativo ? 'bg-slate-800/40' : 'bg-slate-800/20 opacity-50') + '">'
+    + '<div class="flex items-center gap-3">'
+    + '<input type="checkbox" ' + (a.ativo ? 'checked' : '') + ' class="w-3.5 h-3.5 rounded flex-shrink-0">'
+    + '<div><p class="text-xs ' + (a.ativo ? 'text-slate-200' : 'text-slate-500') + '">' + a.regra + '</p>'
+    + '<p class="text-[10px] text-slate-500">Dispara: ' + a.quando + '</p></div>'
+    + '</div>'
+    + '<div class="flex items-center gap-2">' + wpBadge + '</div>'
+    + '</div>';
+}
+function renderAlertasAuto(){
+  return '<div class="bg-slate-800/30 border border-slate-700/30 rounded-xl p-4">'
+    + '<div class="flex items-center justify-between mb-3">'
+    + '<div class="flex items-center gap-2"><svg class="w-4 h-4 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>'
+    + '<h4 class="text-sm font-semibold text-white">Alertas Automáticos</h4></div>'
+    + '<button class="text-[10px] text-violet-400 hover:text-violet-300 font-medium px-2 py-1 rounded-lg hover:bg-violet-500/10">Configurar</button>'
+    + '</div>'
+    + '<div class="space-y-2.5">' + ALERTAS_AUTO.map(renderAlertaAutoRow).join('') + '</div>'
+    + '<p class="text-[10px] text-slate-600 mt-3">Alertas com WhatsApp ativado serão enviados automaticamente no horário configurado do checklist.</p>'
+    + '</div>';
+}
+
+// ========== DASHBOARD ==========
+function renderDashboard(){
+  return `<div class="space-y-6">
+    <div class="flex items-center justify-between">
+      <div><h3 class="text-xl font-bold text-white">Bom dia, Gabi! 👋</h3><p class="text-sm text-slate-400">Quarta, 12 Fev · Campo Grande</p></div>
+      <div class="flex items-center gap-4">
+        <div class="text-center"><div class="text-2xl font-bold text-emerald-400">78%</div><div class="text-xs text-slate-500">Rotinas Hoje</div></div>
+        <div class="text-center"><div class="text-2xl font-bold text-violet-400">3/5</div><div class="text-xs text-slate-500">Checklists Ativos</div></div>
+      </div>
+    </div>
+    <div class="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4"><div class="flex items-start gap-3">
+      <div class="w-8 h-8 rounded-lg bg-amber-500/20 flex items-center justify-center flex-shrink-0 mt-0.5"><span class="text-amber-400">${IC.bolt}</span></div>
+      <div class="flex-1"><p class="text-sm font-semibold text-amber-300">3 alunos com primeiro dia de aula amanhã!</p><p class="text-xs text-amber-400/70 mt-1">Lucas (Guitarra), Ana (Piano), Rafael (Bateria)</p>
+        <div class="flex gap-2 mt-3"><button onclick="switchTab('checklists');currentDetail='onboarding';render()" class="text-xs px-3 py-1.5 bg-amber-500/20 text-amber-300 rounded-lg hover:bg-amber-500/30 font-medium">Ver Checklist</button><button class="text-xs px-3 py-1.5 text-slate-400 hover:text-slate-300">Dispensar</button></div>
+      </div></div></div>
+    <div class="bg-red-500/10 border border-red-500/20 rounded-xl p-4"><div class="flex items-start gap-3">
+      <div class="w-8 h-8 rounded-lg bg-red-500/20 flex items-center justify-center flex-shrink-0 mt-0.5"><span class="text-red-400">${IC.warn}</span></div>
+      <div class="flex-1"><p class="text-sm font-semibold text-red-300">Checklist "Recesso de Carnaval" com 3 itens pendentes!</p><p class="text-xs text-red-400/70 mt-1">Prazo: 14/02 · 62% concluído</p>
+        <div class="flex gap-2 mt-3"><button onclick="switchTab('checklists');currentDetail='carnaval';render()" class="text-xs px-3 py-1.5 bg-red-500/20 text-red-300 rounded-lg hover:bg-red-500/30 font-medium">Abrir Checklist</button><button class="text-xs px-3 py-1.5 text-slate-400 hover:text-slate-300">Dispensar</button></div>
+      </div></div></div>
+    <div class="grid grid-cols-4 gap-4">
+      ${[{v:'5',l:'Checklists Ativos',c:'violet'},{v:'12',l:'Concluídos este mês',c:'emerald'},{v:'2',l:'Tarefas Rápidas',c:'amber'},{v:'87%',l:'Taxa Sucesso Contatos',c:'cyan'}].map(k=>`<div class="bg-slate-800/50 border border-slate-700/30 rounded-xl p-4 text-center"><div class="text-2xl font-bold text-${k.c}-400">${k.v}</div><div class="text-xs text-slate-500 mt-1">${k.l}</div></div>`).join('')}
+    </div>
+    <div class="bg-slate-800/30 border border-slate-700/30 rounded-xl p-4">
+      <div class="flex items-center justify-between mb-3"><h4 class="text-sm font-semibold text-white">Rotinas de Hoje</h4><span class="text-xs text-emerald-400 font-medium">7/9 concluídas</span></div>
+      <div class="w-full bg-slate-700/50 rounded-full h-2 mb-3"><div class="bg-gradient-to-r from-violet-500 to-emerald-500 h-2 rounded-full progress-bar" style="width:78%"></div></div>
+      <div class="space-y-2">
+        ${['Conferir agenda do dia','Verificar inadimplentes'].map(r=>`<div class="flex items-center gap-2 text-xs"><svg class="w-4 h-4 text-emerald-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg><span class="text-slate-400 line-through">${r}</span></div>`).join('')}
+        ${['Responder WhatsApp pendentes','Conferir renovações do mês'].map(r=>`<div class="flex items-center gap-2 text-xs"><svg class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2"/></svg><span class="text-slate-300">${r}</span></div>`).join('')}
+      </div>
+    </div>
+    ${renderAlertasAuto()}
+  </div>`;
+}
+
+// ========== ROTINAS ==========
+function renderRotinas(){
+  const rotinas = [
+    {t:'Conferir agenda do dia',freq:'Diário · Normal',done:true},
+    {t:'Verificar inadimplentes',freq:'Diário · Alta',done:true},
+    {t:'Responder WhatsApp pendentes',freq:'Diário · Normal',done:false},
+    {t:'Conferir renovações do mês',freq:'Semanal (Seg, Qua, Sex) · Alta',done:false}
+  ];
+  return `<div class="space-y-4">
+    <div class="flex items-center justify-between"><h3 class="text-lg font-bold text-white">Minhas Rotinas</h3>
+      <button class="px-4 py-2 bg-gradient-to-r from-violet-600 to-purple-600 text-white text-sm font-medium rounded-xl flex items-center gap-2">${IC.plus} Nova Rotina</button></div>
+    <p class="text-sm text-slate-400">Aba existente — sem alterações. Rotinas recorrentes continuam aqui.</p>
+    <div class="space-y-2">${rotinas.map(r=>`<div class="bg-slate-800/50 border border-slate-700/30 rounded-xl p-4 flex items-center justify-between">
+      <div class="flex items-center gap-3"><input type="checkbox" ${r.done?'checked':''} class="w-4 h-4 rounded"><div><p class="text-sm ${r.done?'text-slate-300 line-through':'text-white'}">${r.t}</p><p class="text-xs text-slate-500">${r.freq}</p></div></div>
+      <span class="text-xs ${r.done?'text-emerald-400':'text-amber-400'}">${r.done?'✓ Concluída':'Pendente'}</span>
+    </div>`).join('')}</div>
+  </div>`;
+}
+
+// ========== CHECKLISTS LIST ==========
+function renderChecklistsList(){
+  return `<div>
+    <div class="flex items-center justify-between mb-5">
+      <div><h3 class="text-lg font-bold text-white">Checklists</h3><p class="text-sm text-slate-400">Gerencie seus checklists e tarefas</p></div>
+      <div class="flex items-center gap-2">
+        <button onclick="openModal('templates')" class="px-3 py-2 bg-slate-800 text-slate-300 text-sm font-medium rounded-xl hover:bg-slate-700 border border-slate-700 flex items-center gap-2"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6z"/></svg> Templates</button>
+        <button onclick="openModal('novo')" class="px-4 py-2 bg-gradient-to-r from-violet-600 to-purple-600 text-white text-sm font-medium rounded-xl shadow-lg shadow-violet-500/20 flex items-center gap-2">${IC.plus} Novo Checklist</button>
+      </div>
+    </div>
+    <div class="flex items-center gap-3 mb-4">
+      <div class="flex bg-slate-800/70 rounded-xl p-1 border border-slate-700/50">
+        <button class="px-3 py-1.5 text-xs font-medium rounded-lg bg-violet-600 text-white">Ativos (5)</button>
+        <button class="px-3 py-1.5 text-xs font-medium rounded-lg text-slate-400 hover:text-white">Concluídos (12)</button>
+        <button class="px-3 py-1.5 text-xs font-medium rounded-lg text-slate-400 hover:text-white">Arquivados</button>
+      </div>
+      <div class="flex gap-1.5">
+        ${['Todos','Administrativo','Comercial','Pedagógico'].map((d,i)=>`<button class="px-3 py-1.5 text-xs font-medium rounded-lg ${i===0?'bg-slate-700/50 text-white border border-slate-600/50':'text-slate-400 hover:text-white border border-transparent hover:border-slate-600/50'}">${d}</button>`).join('')}
+      </div>
+    </div>
+    <div class="space-y-3 mb-8">${CHECKLISTS.map(renderChecklistCard).join('')}</div>
+    ${renderTarefasRapidas()}
+  </div>`;
+}
+
+function renderChecklistCard(c){
+  const pct = Math.round(c.done/c.tasks*100);
+  const gradColors = {red:'from-violet-500 to-amber-500',emerald:'from-violet-500 to-emerald-500',blue:'from-violet-500 to-blue-500',purple:'from-violet-500 to-purple-500',cyan:'from-violet-500 to-cyan-500'};
+  return `<div onclick="currentDetail='${c.id}';render()" class="bg-slate-800/40 border border-slate-700/30 rounded-xl p-4 hover:bg-slate-800/60 hover:border-violet-500/30 transition-all cursor-pointer group">
+    <div class="flex items-start justify-between mb-3">
+      <div class="flex items-start gap-3">
+        <div class="w-9 h-9 rounded-lg bg-${c.color}-500/20 flex items-center justify-center flex-shrink-0 mt-0.5"><span class="text-lg">${c.emoji}</span></div>
+        <div><h4 class="text-sm font-semibold text-white group-hover:text-violet-300 transition-colors">${c.title}</h4>
+          <p class="text-xs text-slate-500 mt-0.5">${c.tasks} tarefas${c.alunos?' · '+c.alunos+' alunos':''} · ${c.resp} · Prazo: ${c.prazo}</p></div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="px-2 py-0.5 text-[10px] font-bold rounded-md ${prioStyle[c.prio]} uppercase tracking-wider">${c.prio}</span>
+        <span class="px-2 py-0.5 text-[10px] font-medium rounded-md bg-slate-700/50 text-slate-400">${c.period}</span>
+      </div>
+    </div>
+    <div class="flex items-center gap-3">
+      <div class="flex-1 bg-slate-700/50 rounded-full h-2"><div class="bg-gradient-to-r ${gradColors[c.color]||'from-violet-500 to-slate-500'} h-2 rounded-full progress-bar" style="width:${pct}%"></div></div>
+      <span class="text-xs font-semibold ${pct===100?'text-emerald-400':'text-slate-300'} whitespace-nowrap">${c.done}/${c.tasks} · ${pct}%${pct===100?' ✓':''}</span>
+    </div>
+    ${c.canais?`<div class="flex items-center gap-4 mt-3">${c.canais.map(ch=>`<div class="flex items-center gap-1.5 text-xs text-slate-500"><span class="w-2 h-2 rounded-full bg-${ch.cor}-400"></span>${ch.nome} ${ch.pct}%</div>`).join('')}</div>`:''}
+  </div>`;
+}
+
+function renderTarefasRapidas(){
+  return `<div class="border-t border-slate-700/50 pt-6">
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center gap-2"><svg class="w-4 h-4 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+        <h4 class="text-sm font-semibold text-slate-300">Tarefas Rápidas</h4><span class="text-xs text-slate-600">· To-dos simples</span></div>
+      <button onclick="openModal('tarefa')" class="text-xs px-3 py-1.5 text-violet-400 hover:text-violet-300 hover:bg-violet-500/10 rounded-lg flex items-center gap-1.5 font-medium">${IC.plus} Nova Tarefa</button>
+    </div>
+    <div class="space-y-2">
+      ${TAREFAS_RAPIDAS.map(t=>`<div class="flex items-center gap-3 bg-slate-800/30 border border-slate-700/20 rounded-lg px-3 py-2.5 group hover:border-slate-600/40">
+        <input type="checkbox" class="w-4 h-4 rounded flex-shrink-0">
+        <div class="flex-1 min-w-0"><p class="text-sm text-slate-200 truncate">${t.t}</p></div>
+        <span class="px-2 py-0.5 text-[10px] font-bold rounded bg-${t.cor}-500/20 text-${t.cor}-400 flex-shrink-0">${t.prio}</span>
+        <span class="text-xs text-slate-500 flex-shrink-0">${t.data}</span>
+        <button class="opacity-0 group-hover:opacity-100 text-slate-500 hover:text-red-400 flex-shrink-0">${IC.trash}</button>
+      </div>`).join('')}
+      <div class="flex items-center gap-3 border border-dashed border-slate-700/40 rounded-lg px-3 py-2.5 hover:border-violet-500/30">
+        <svg class="w-4 h-4 text-slate-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        <input type="text" placeholder="Adicionar tarefa rápida..." class="flex-1 bg-transparent border-none text-sm text-slate-300 placeholder-slate-600 outline-none" style="border:none;padding:0">
+        <span class="text-xs text-slate-600">Enter para salvar</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ========== CHECKLIST DETAIL ==========
+function renderChecklistDetail(){
+  const c = CHECKLISTS.find(x=>x.id===currentDetail);
+  if(!c) return '';
+  const pct = Math.round(c.done/c.tasks*100);
+  const gradColors = {red:'from-violet-500 to-amber-500',emerald:'from-violet-500 to-emerald-500',blue:'from-violet-500 to-blue-500',purple:'from-violet-500 to-purple-500',cyan:'from-violet-500 to-cyan-500'};
+  
+  const detailTabs = [{id:'tarefas',label:`Tarefas (${c.tasks})`}];
+  if(c.carteira) detailTabs.push({id:'carteira',label:`Carteira de Alunos (${c.alunos})`});
+  if(c.canais) detailTabs.push({id:'sucesso',label:'Sucesso por Canal'});
+
+  return `<div class="slide-in space-y-6">
+    <button onclick="currentDetail=null;render()" class="flex items-center gap-2 text-sm text-slate-400 hover:text-white">${IC.back} Voltar para Checklists</button>
+    <div class="flex items-start justify-between">
+      <div class="flex items-start gap-4">
+        <div class="w-12 h-12 rounded-xl bg-${c.color}-500/20 flex items-center justify-center flex-shrink-0"><span class="text-2xl">${c.emoji}</span></div>
+        <div><h3 class="text-xl font-bold text-white">${c.title}</h3><p class="text-sm text-slate-400 mt-1">${c.desc}</p>
+          <div class="flex items-center gap-3 mt-2">
+            <span class="px-2 py-0.5 text-[10px] font-bold rounded-md ${prioStyle[c.prio]} uppercase tracking-wider">${c.prio}</span>
+            <span class="px-2 py-0.5 text-[10px] font-medium rounded-md bg-slate-700/50 text-slate-400">${c.period}</span>
+            <span class="px-2 py-0.5 text-[10px] font-medium rounded-md bg-slate-700/50 text-slate-400">${c.dept}</span>
+            <span class="text-xs text-slate-500">Prazo: ${c.prazo}</span>
+          </div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="openModal('editar')" class="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg" title="Editar">${IC.edit}</button>
+        <button class="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg" title="Arquivar"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg></button>
+      </div>
+    </div>
+    <div class="bg-slate-800/50 border border-slate-700/30 rounded-xl p-4">
+      <div class="flex items-center justify-between mb-2"><span class="text-sm font-medium text-slate-300">Progresso Geral</span><span class="text-sm font-bold text-${c.color}-400">${c.done}/${c.tasks} concluídas (${pct}%)</span></div>
+      <div class="w-full bg-slate-700/50 rounded-full h-3"><div class="bg-gradient-to-r ${gradColors[c.color]} h-3 rounded-full progress-bar" style="width:${pct}%"></div></div>
+    </div>
+    <div class="flex gap-2 border-b border-slate-700/50 pb-0">
+      ${detailTabs.map(t=>`<button onclick="currentDetailTab='${t.id}';render()" class="px-4 py-2 text-sm font-medium ${currentDetailTab===t.id?'text-violet-400 border-b-2 border-violet-500':'text-slate-400 border-b-2 border-transparent hover:text-white'}">${t.label}</button>`).join('')}
+    </div>
+    ${currentDetailTab==='tarefas'?renderDetailTarefas(c):''}
+    ${currentDetailTab==='carteira'&&c.carteira?renderDetailCarteira(c):''}
+    ${currentDetailTab==='sucesso'&&c.canais?renderDetailSucesso(c):''}
+  </div>`;
+}
+
+function renderDetailTarefas(c){
+  const allDone = (c.items||[]).every(i=>i.done);
+  const totalDone = (c.items||[]).filter(i=>i.done).length;
+  return `<div class="space-y-3">
+    <div class="flex items-center justify-between">
+      <label class="flex items-center gap-2.5 cursor-pointer group">
+        <input type="checkbox" ${allDone?'checked':''} class="w-4 h-4 rounded">
+        <span class="text-sm font-medium ${allDone?'text-emerald-400':'text-slate-300'} group-hover:text-white">Selecionar Todos</span>
+        <span class="text-xs text-slate-500">(${totalDone}/${c.tasks} concluídas)</span>
+      </label>
+      <div class="flex items-center gap-1.5">
+        ${['Todos','Por Professor','Por Curso'].map((f,i)=>`<button class="px-2.5 py-1 text-[11px] font-medium rounded-lg ${i===0?'bg-violet-600/20 text-violet-400 border border-violet-500/30':'text-slate-500 hover:text-slate-300 border border-transparent hover:border-slate-600/40'}">${f}</button>`).join('')}
+      </div>
+    </div>
+    <div class="space-y-1">${(c.items||[]).map(item=>{
+    const canalBadge = item.canal?`<span class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-${canalColor[item.canal]||'slate'}-500/20 text-${canalColor[item.canal]||'slate'}-400">${item.canal}</span>`:'';
+    const subs = (item.subs||[]).map(s=>{
+      const sCanalBadge = s.canal?`<span class="px-1.5 py-0.5 text-[10px] font-medium rounded bg-${canalColor[s.canal]||'slate'}-500/20 text-${canalColor[s.canal]||'slate'}-400">${s.canal}</span>`:'';
+      return `<div class="flex items-center gap-2 p-2 rounded-md bg-slate-800/20">
+        <input type="checkbox" ${s.done?'checked':''} class="w-3.5 h-3.5 rounded flex-shrink-0">
+        <p class="text-xs ${s.done?'text-slate-500 line-through':'text-slate-300'} flex-1">${s.t}</p>
+        ${sCanalBadge}
+        ${s.info?`<span class="text-xs ${s.done?'text-emerald-400':'text-amber-400'}">${s.info}</span>`:''}
+      </div>`;
+    }).join('');
+    const highlight = !item.done&&(item.subs||item.info);
+    return `<div class="flex items-start gap-3 p-3 rounded-lg hover:bg-slate-800/30 ${highlight?'bg-amber-500/5 border border-amber-500/10':''}">
+      <input type="checkbox" ${item.done?'checked':''} class="w-4 h-4 rounded mt-0.5 flex-shrink-0">
+      <div class="flex-1">
+        <div class="flex items-center gap-2">
+          <p class="text-sm ${item.done?'text-slate-400 line-through':'text-white'} ${!item.done&&highlight?'font-medium':''}">${item.t}</p>
+          ${canalBadge}
+        </div>
+        ${item.info&&!item.done?`<p class="text-xs text-slate-500 mt-1">${item.info}</p>`:''}
+        ${subs?`<div class="ml-5 mt-2 space-y-1.5">${subs}</div>`:''}
+      </div>
+    </div>`;
+  }).join('')}
+    <div class="flex items-center gap-3 p-3 border border-dashed border-slate-700/40 rounded-lg hover:border-violet-500/30 mt-2">
+      <svg class="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+      <input type="text" placeholder="Adicionar nova tarefa ao checklist..." class="flex-1 bg-transparent border-none text-sm text-slate-300 placeholder-slate-600 outline-none" style="border:none;padding:0">
+    </div>
+    </div>
+  </div>`;
+}
+
+function renderDetailCarteira(c){
+  return `<div class="space-y-4">
+    <div class="flex items-center gap-3">
+      <select class="text-xs w-48"><option>Todos os Cursos</option><option>Guitarra</option><option>Piano</option><option>Bateria</option><option>Canto</option><option>Violão</option></select>
+      <select class="text-xs w-48"><option>Todos os Professores</option><option>Prof. Ricardo</option><option>Prof. Maria</option><option>Prof. André</option><option>Prof. Fernanda</option></select>
+      <select class="text-xs w-40"><option>Todos os Status</option><option>Respondeu</option><option>Visualizou</option><option>Sem Resposta</option><option>Não Recebeu</option></select>
+      <div class="flex-1"></div><span class="text-xs text-slate-500">Minha carteira: 250 de 498</span>
+    </div>
+    <div class="grid grid-cols-4 gap-3">
+      ${[{v:'250',l:'Meus Alunos',c:'white',bc:'slate'},{v:'92%',l:'Taxa de Sucesso',c:'emerald',bc:'emerald'},{v:'18',l:'Pendentes',c:'amber',bc:'amber'},{v:'5',l:'Sem Resposta',c:'red',bc:'red'}].map(k=>`<div class="bg-slate-800/50 border border-${k.bc}-500/20 rounded-xl p-3 text-center"><div class="text-xl font-bold text-${k.c}-400">${k.v}</div><div class="text-[10px] text-slate-500 mt-0.5">${k.l}</div></div>`).join('')}
+    </div>
+    <div class="overflow-hidden rounded-xl border border-slate-700/30"><table class="w-full text-xs">
+      <thead><tr class="bg-slate-800/70 text-slate-400"><th class="text-left px-3 py-2.5 font-medium">Aluno</th><th class="text-left px-3 py-2.5 font-medium">Curso</th><th class="text-left px-3 py-2.5 font-medium">Professor</th><th class="text-left px-3 py-2.5 font-medium">Canal</th><th class="text-left px-3 py-2.5 font-medium">Status</th><th class="text-center px-3 py-2.5 font-medium">Ações</th></tr></thead>
+      <tbody class="divide-y divide-slate-700/30">
+        ${c.carteira.map(a=>`<tr class="hover:bg-slate-800/30 ${a.cor==='amber'||a.cor==='red'?'bg-'+a.cor+'-500/5':''}">
+          <td class="px-3 py-2.5 text-slate-200 font-medium">${a.nome}</td>
+          <td class="px-3 py-2.5 text-slate-400">${a.curso}</td>
+          <td class="px-3 py-2.5 text-slate-400">${a.prof}</td>
+          <td class="px-3 py-2.5"><span class="px-1.5 py-0.5 text-[10px] rounded bg-${canalColor[a.canal]}-500/20 text-${canalColor[a.canal]}-400">${a.canal}</span></td>
+          <td class="px-3 py-2.5"><span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-${a.cor}-400"></span><span class="text-${a.cor}-400">${a.status}</span></span></td>
+          <td class="px-3 py-2.5 text-center"><button class="text-slate-500 hover:text-emerald-400">${IC.msg}</button></td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>
+    <div class="flex items-center justify-between"><span class="text-xs text-slate-500">Mostrando 5 de 250</span>
+      <div class="flex items-center gap-1">
+        <button class="px-2.5 py-1 text-xs text-slate-400 bg-slate-800/50 rounded-lg border border-slate-700/50">← Anterior</button>
+        <button class="px-2.5 py-1 text-xs text-white bg-violet-600 rounded-lg">1</button>
+        <button class="px-2.5 py-1 text-xs text-slate-400 bg-slate-800/50 rounded-lg border border-slate-700/50">2</button>
+        <button class="px-2.5 py-1 text-xs text-slate-400 bg-slate-800/50 rounded-lg border border-slate-700/50">3</button>
+        <span class="text-xs text-slate-600">...</span>
+        <button class="px-2.5 py-1 text-xs text-slate-400 bg-slate-800/50 rounded-lg border border-slate-700/50">50</button>
+        <button class="px-2.5 py-1 text-xs text-slate-400 bg-slate-800/50 rounded-lg border border-slate-700/50">Próxima →</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function renderDetailSucesso(c){
+  const icCanal = {WhatsApp:IC.msg,Email:`<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>`,Telefone:`<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>`,Presencial:`<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>`};
+  return `<div class="space-y-4">
+    <h4 class="text-sm font-semibold text-white">Percentual de Sucesso por Canal</h4>
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">${c.canais.map(ch=>`<div class="bg-slate-800/50 border border-${ch.cor}-500/20 rounded-xl p-4 text-center">
+      <div class="w-10 h-10 rounded-lg bg-${ch.cor}-500/20 flex items-center justify-center mx-auto mb-2"><span class="text-${ch.cor}-400">${icCanal[ch.nome]||''}</span></div>
+      <div class="text-2xl font-bold text-${ch.cor}-400">${ch.pct}%</div>
+      <div class="text-xs text-slate-500 mt-1">${ch.nome}</div>
+      <div class="text-[10px] text-slate-600 mt-0.5">${ch.ok} de ${ch.total}</div>
+      <div class="w-full bg-slate-700/50 rounded-full h-1.5 mt-2"><div class="bg-${ch.cor}-500 h-1.5 rounded-full" style="width:${ch.pct}%"></div></div>
+    </div>`).join('')}</div>
+    <div class="bg-slate-800/30 border border-slate-700/30 rounded-xl p-4">
+      <h5 class="text-xs font-semibold text-slate-400 mb-3 uppercase tracking-wider">Resumo Geral</h5>
+      <div class="grid grid-cols-3 gap-4 text-center">
+        <div><div class="text-lg font-bold text-emerald-400">87%</div><div class="text-[10px] text-slate-500">Taxa Geral</div></div>
+        <div><div class="text-lg font-bold text-white">498</div><div class="text-[10px] text-slate-500">Total Contatos</div></div>
+        <div><div class="text-lg font-bold text-amber-400">32</div><div class="text-[10px] text-slate-500">Pendentes</div></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+// ========== RECADOS / HISTORICO ==========
+function renderRecados(){
+  return `<div class="flex items-center justify-between mb-4"><h3 class="text-lg font-bold text-white">Recados</h3><button class="px-4 py-2 bg-gradient-to-r from-violet-600 to-purple-600 text-white text-sm font-medium rounded-xl">Nova Campanha</button></div><p class="text-sm text-slate-400">Aba existente — sem alterações. Disparo em massa de WhatsApp para professores.</p>`;
+}
+
+function renderHistorico(){
+  const dias = [
+    {d:'12/02',rot:7,rotT:9,chk:1,chkT:2,tr:1,trT:1},
+    {d:'11/02',rot:9,rotT:9,chk:2,chkT:2,tr:2,trT:3},
+    {d:'10/02',rot:8,rotT:9,chk:1,chkT:3,tr:0,trT:1},
+    {d:'09/02',rot:6,rotT:9,chk:0,chkT:1,tr:1,trT:2},
+    {d:'08/02',rot:9,rotT:9,chk:2,chkT:2,tr:3,trT:3},
+    {d:'07/02',rot:7,rotT:9,chk:1,chkT:1,tr:0,trT:0},
+    {d:'06/02',rot:9,rotT:9,chk:3,chkT:3,tr:2,trT:2}
+  ];
+  const concluidos = [
+    {t:'Abertura da Escola — Diário',data:'12/02',emoji:'🏫',pct:100},
+    {t:'Primeiro Dia de Aula — Onboarding',data:'11/02',emoji:'🎓',pct:100},
+    {t:'Conferência Mensal de Dados',data:'08/02',emoji:'📊',pct:100},
+    {t:'Comunicação Dia dos Namorados',data:'05/02',emoji:'💌',pct:100}
+  ];
+  return `<div class="space-y-6">
+    <div class="flex items-center justify-between">
+      <div><h3 class="text-lg font-bold text-white">Histórico</h3><p class="text-sm text-slate-400">Desempenho diário de rotinas, checklists e tarefas</p></div>
+      <div class="flex items-center gap-2">
+        <select class="text-xs w-36"><option selected>Últimos 7 dias</option><option>Últimos 15 dias</option><option>Últimos 30 dias</option><option>Este mês</option></select>
+      </div>
+    </div>
+    <div class="grid grid-cols-4 gap-4">${[{v:'89%',l:'Rotinas (média 7d)',c:'violet'},{v:'12',l:'Checklists Concluídos',c:'emerald'},{v:'87%',l:'Taxa Sucesso Contatos',c:'cyan'},{v:'15',l:'Tarefas Rápidas Feitas',c:'amber'}].map(k=>`<div class="bg-slate-800/50 border border-slate-700/30 rounded-xl p-4 text-center"><div class="text-2xl font-bold text-${k.c}-400">${k.v}</div><div class="text-xs text-slate-500 mt-1">${k.l}</div></div>`).join('')}</div>
+    <div class="bg-slate-800/30 border border-slate-700/30 rounded-xl p-4">
+      <div class="flex items-center justify-between mb-4">
+        <h4 class="text-sm font-semibold text-white">Desempenho Diário</h4>
+        <div class="flex items-center gap-4 text-[10px]">
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-violet-500"></span>Rotinas</span>
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-emerald-500"></span>Checklists</span>
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-amber-500"></span>Tarefas Rápidas</span>
+        </div>
+      </div>
+      <div class="space-y-3">${dias.map(dia=>{
+        const rotPct = dia.rotT>0?Math.round(dia.rot/dia.rotT*100):0;
+        const chkPct = dia.chkT>0?Math.round(dia.chk/dia.chkT*100):0;
+        const trPct = dia.trT>0?Math.round(dia.tr/dia.trT*100):0;
+        const isToday = dia.d==='12/02';
+        return `<div class="group ${isToday?'bg-violet-500/5 border border-violet-500/10 rounded-lg p-2.5 -mx-2.5':''}">
+          <div class="flex items-center gap-3 mb-1.5">
+            <span class="text-xs font-medium ${isToday?'text-violet-400':'text-slate-400'} w-12 flex-shrink-0">${dia.d}${isToday?' <span class="text-[9px] text-violet-500">hoje</span>':''}</span>
+            <div class="flex-1 space-y-1">
+              <div class="flex items-center gap-2"><span class="text-[10px] text-slate-500 w-16 flex-shrink-0">Rotinas</span><div class="flex-1 bg-slate-700/40 rounded-full h-2"><div class="bg-violet-500 h-2 rounded-full progress-bar" style="width:${rotPct}%"></div></div><span class="text-[10px] ${rotPct===100?'text-emerald-400 font-semibold':'text-slate-400'} w-14 text-right flex-shrink-0">${dia.rot}/${dia.rotT} · ${rotPct}%</span></div>
+              <div class="flex items-center gap-2"><span class="text-[10px] text-slate-500 w-16 flex-shrink-0">Checklists</span><div class="flex-1 bg-slate-700/40 rounded-full h-2"><div class="bg-emerald-500 h-2 rounded-full progress-bar" style="width:${chkPct}%"></div></div><span class="text-[10px] ${chkPct===100?'text-emerald-400 font-semibold':'text-slate-400'} w-14 text-right flex-shrink-0">${dia.chk}/${dia.chkT} · ${chkPct}%</span></div>
+              ${dia.trT>0?`<div class="flex items-center gap-2"><span class="text-[10px] text-slate-500 w-16 flex-shrink-0">Tarefas</span><div class="flex-1 bg-slate-700/40 rounded-full h-2"><div class="bg-amber-500 h-2 rounded-full progress-bar" style="width:${trPct}%"></div></div><span class="text-[10px] ${trPct===100?'text-emerald-400 font-semibold':'text-slate-400'} w-14 text-right flex-shrink-0">${dia.tr}/${dia.trT} · ${trPct}%</span></div>`:''}
+            </div>
+          </div>
+        </div>`;
+      }).join('')}</div>
+    </div>
+    <div class="bg-slate-800/30 border border-slate-700/30 rounded-xl p-4">
+      <h4 class="text-sm font-semibold text-white mb-3">Checklists Concluídos Recentemente</h4>
+      <div class="space-y-2">${concluidos.map(c=>`<div class="flex items-center justify-between py-2 px-3 rounded-lg bg-slate-800/40">
+        <div class="flex items-center gap-3"><span class="text-lg">${c.emoji}</span><div><p class="text-xs font-medium text-slate-200">${c.t}</p><p class="text-[10px] text-slate-500">Concluído em ${c.data}</p></div></div>
+        <span class="text-xs font-semibold text-emerald-400">${c.pct}% ✓</span>
+      </div>`).join('')}</div>
+    </div>
+  </div>`;
+}
+
+// ========== MODALS ==========
+function openModal(type){
+  document.getElementById('modal-overlay').classList.remove('hidden');
+  document.querySelectorAll('.modal-panel').forEach(m=>m.classList.add('hidden'));
+  document.getElementById('modal-'+type)?.classList.remove('hidden');
+}
+function closeModal(){
+  document.getElementById('modal-overlay').classList.add('hidden');
+}
+
+function switchTab(id){
+  currentTab=id;currentDetail=null;currentDetailTab='tarefas';render();
+}
+
+function attachEvents(){}
+
+// ========== INIT ==========
+render();
+
+// Inject modals after first render
+const modalsHTML = `
+<div id="modal-overlay" class="fixed inset-0 z-50 hidden">
+  <div class="modal-overlay fixed inset-0 bg-black/60 backdrop-blur-sm" onclick="closeModal()"></div>
+  <div class="fixed inset-0 flex items-center justify-center p-4 pointer-events-none">
+
+    <!-- MODAL: NOVO CHECKLIST -->
+    <div id="modal-novo" class="modal-panel hidden modal-content bg-slate-900 border border-slate-700/50 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto pointer-events-auto shadow-2xl">
+      <div class="flex items-center justify-between p-6 border-b border-slate-700/50">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-lg bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">${IC.plus}</div>
+          <div><h3 class="text-lg font-bold text-white">Novo Checklist</h3><p class="text-xs text-slate-400">Crie um checklist com tarefas, subtarefas e vínculos</p></div>
+        </div>
+        <button onclick="closeModal()" class="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg">${IC.x}</button>
+      </div>
+      <div class="p-6 space-y-5">
+        <div><label class="text-xs font-medium text-slate-400 mb-1.5 block">Título do Checklist *</label><input type="text" placeholder="Ex: Recesso de Carnaval — Comunicação" class="w-full"></div>
+        <div><label class="text-xs font-medium text-slate-400 mb-1.5 block">Descrição</label><textarea rows="2" placeholder="Descreva o objetivo..." class="w-full resize-none"></textarea></div>
+        <div class="grid grid-cols-3 gap-4">
+          <div><label class="text-xs font-medium text-slate-400 mb-1.5 block">Periodicidade</label><select class="w-full"><option>Pontual</option><option>Diário</option><option>Semanal</option><option>Mensal</option></select></div>
+          <div><label class="text-xs font-medium text-slate-400 mb-1.5 block">Departamento</label><select class="w-full"><option>Administrativo</option><option>Comercial</option><option>Pedagógico</option><option>Geral</option></select></div>
+          <div><label class="text-xs font-medium text-slate-400 mb-1.5 block">Prioridade</label><select class="w-full"><option>Normal</option><option>Alta</option><option>Urgente</option></select></div>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div><label class="text-xs font-medium text-slate-400 mb-1.5 block">Data Início</label><input type="date" class="w-full" value="2026-02-12"></div>
+          <div><label class="text-xs font-medium text-slate-400 mb-1.5 block">Data Prazo</label><input type="date" class="w-full" value="2026-02-28"></div>
+        </div>
+        <div><label class="text-xs font-medium text-slate-400 mb-1.5 block">Vincular Alunos</label>
+          <div class="grid grid-cols-2 gap-3">
+            <select class="w-full" onchange="document.getElementById('carteira-div').style.display=this.value!=='nenhum'?'block':'none'"><option value="nenhum">Sem vínculo</option><option value="todos">Todos os Alunos (498)</option><option value="curso">Por Curso</option><option value="professor">Por Professor</option><option value="manual">Seleção Manual</option></select>
+            <select class="w-full"><option>Selecione...</option></select>
+          </div>
+          <div id="carteira-div" class="mt-3 p-3 bg-slate-800/30 border border-slate-700/30 rounded-lg" style="display:none">
+            <div class="flex items-center justify-between mb-2"><span class="text-xs font-medium text-slate-400">Divisão de Carteira</span><button class="text-[10px] text-violet-400 hover:text-violet-300">Sugestão automática (A-M / N-Z)</button></div>
+            <div class="space-y-2">
+              <div class="flex items-center gap-3"><span class="text-xs text-slate-300 w-20">Gabi:</span><div class="flex-1 bg-slate-700/50 rounded-full h-2"><div class="bg-violet-500 h-2 rounded-full" style="width:50%"></div></div><span class="text-xs text-slate-400">249 alunos</span></div>
+              <div class="flex items-center gap-3"><span class="text-xs text-slate-300 w-20">Jhon:</span><div class="flex-1 bg-slate-700/50 rounded-full h-2"><div class="bg-cyan-500 h-2 rounded-full" style="width:50%"></div></div><span class="text-xs text-slate-400">249 alunos</span></div>
+            </div>
+          </div>
+        </div>
+        <div><label class="text-xs font-medium text-slate-400 mb-1.5 block">Tarefas</label>
+          <div class="space-y-2" id="tasks-builder">
+            <div class="flex items-center gap-2">${IC.grip}<input type="text" placeholder="Descrição da tarefa..." class="flex-1" value="Disparar mensagem no WhatsApp"><select class="w-32 text-xs"><option>Sem canal</option><option selected>WhatsApp</option><option>Email</option><option>Telefone</option><option>Presencial</option><option>Instagram</option></select><button class="text-xs text-violet-400">↳ Sub</button></div>
+            <div class="flex items-center gap-2 ml-8"><svg class="w-3 h-3 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg><input type="text" placeholder="Subtarefa..." class="flex-1" value="Conferir se todos receberam" style="font-size:.75rem"><select class="w-28" style="font-size:.7rem"><option selected>Sem canal</option></select></div>
+            <div class="flex items-center gap-2">${IC.grip}<input type="text" placeholder="Descrição da tarefa..." class="flex-1" value="Enviar email institucional"><select class="w-32 text-xs"><option>Sem canal</option><option>WhatsApp</option><option selected>Email</option><option>Telefone</option></select><button class="text-xs text-violet-400">↳ Sub</button></div>
+            <div class="flex items-center gap-2">${IC.grip}<input type="text" placeholder="Descrição da tarefa..." class="flex-1"><select class="w-32 text-xs"><option selected>Sem canal</option><option>WhatsApp</option><option>Email</option></select><button class="text-xs text-violet-400">↳ Sub</button></div>
+          </div>
+          <button class="mt-2 text-xs text-violet-400 hover:text-violet-300 flex items-center gap-1.5 font-medium px-2 py-1.5 rounded-lg hover:bg-violet-500/10">${IC.plus} Adicionar Tarefa</button>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div><label class="text-xs font-medium text-slate-400 mb-1.5 block">Alerta (dias antes)</label><select class="w-full"><option>Sem alerta</option><option>1 dia antes</option><option selected>2 dias antes</option><option>1 semana antes</option></select></div>
+          <div><label class="text-xs font-medium text-slate-400 mb-1.5 block">Horário do lembrete</label><select class="w-full"><option selected>08:00</option><option>09:00</option><option>14:00</option></select></div>
+        </div>
+        <div class="flex items-center gap-3 p-3 bg-slate-800/30 border border-slate-700/30 rounded-lg"><input type="checkbox" class="w-4 h-4 rounded"><label class="text-sm text-slate-300 cursor-pointer">Receber lembrete no meu WhatsApp</label></div>
+        <div><label class="text-xs font-medium text-slate-400 mb-1.5 block">Criar a partir de template</label><select class="w-full"><option>Sem template (criar do zero)</option>${TEMPLATES.map(t=>`<option>${t.nome} (${t.itens} itens)</option>`).join('')}</select></div>
+      </div>
+      <div class="flex items-center justify-end gap-3 p-6 border-t border-slate-700/50">
+        <button onclick="closeModal()" class="px-4 py-2 text-sm text-slate-400 hover:text-white rounded-xl hover:bg-slate-800">Cancelar</button>
+        <button onclick="closeModal()" class="px-6 py-2.5 bg-gradient-to-r from-violet-600 to-purple-600 text-white text-sm font-medium rounded-xl shadow-lg shadow-violet-500/20 hover:from-violet-500 hover:to-purple-500">🚀 Criar Checklist</button>
+      </div>
+    </div>
+
+    <!-- MODAL: EDITAR CHECKLIST -->
+    <div id="modal-editar" class="modal-panel hidden modal-content bg-slate-900 border border-slate-700/50 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto pointer-events-auto shadow-2xl">
+      <div class="flex items-center justify-between p-6 border-b border-slate-700/50">
+        <div class="flex items-center gap-3"><div class="w-9 h-9 rounded-lg bg-slate-700 flex items-center justify-center">${IC.edit}</div><div><h3 class="text-lg font-bold text-white">Editar Checklist</h3><p class="text-xs text-slate-400">Altere título, prazo, prioridade e tarefas</p></div></div>
+        <button onclick="closeModal()" class="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg">${IC.x}</button>
+      </div>
+      <div class="p-6 space-y-5">
+        <div><label class="text-xs font-medium text-slate-400 mb-1.5 block">Título</label><input type="text" class="w-full" value="Recesso de Carnaval — Comunicação"></div>
+        <div><label class="text-xs font-medium text-slate-400 mb-1.5 block">Descrição</label><textarea rows="2" class="w-full resize-none">Avisar todos os alunos e professores sobre o recesso de 01 a 05 de março.</textarea></div>
+        <div class="grid grid-cols-3 gap-4">
+          <div><label class="text-xs font-medium text-slate-400 mb-1.5 block">Periodicidade</label><select class="w-full"><option>Pontual</option><option selected>Diário</option><option>Semanal</option><option>Mensal</option></select></div>
+          <div><label class="text-xs font-medium text-slate-400 mb-1.5 block">Departamento</label><select class="w-full"><option selected>Administrativo</option><option>Comercial</option><option>Pedagógico</option></select></div>
+          <div><label class="text-xs font-medium text-slate-400 mb-1.5 block">Prioridade</label><select class="w-full"><option>Normal</option><option>Alta</option><option selected>Urgente</option></select></div>
+        </div>
+        <div class="grid grid-cols-2 gap-4">
+          <div><label class="text-xs font-medium text-slate-400 mb-1.5 block">Data Início</label><input type="date" class="w-full" value="2026-02-10"></div>
+          <div><label class="text-xs font-medium text-slate-400 mb-1.5 block">Data Prazo</label><input type="date" class="w-full" value="2026-02-14"></div>
+        </div>
+      </div>
+      <div class="flex items-center justify-between p-6 border-t border-slate-700/50">
+        <button class="px-4 py-2 text-sm text-red-400 hover:text-red-300 rounded-xl hover:bg-red-500/10 flex items-center gap-2">${IC.trash} Excluir Checklist</button>
+        <div class="flex gap-3">
+          <button onclick="closeModal()" class="px-4 py-2 text-sm text-slate-400 hover:text-white rounded-xl hover:bg-slate-800">Cancelar</button>
+          <button onclick="closeModal()" class="px-6 py-2.5 bg-gradient-to-r from-violet-600 to-purple-600 text-white text-sm font-medium rounded-xl shadow-lg shadow-violet-500/20">Salvar Alterações</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MODAL: NOVA TAREFA RÁPIDA -->
+    <div id="modal-tarefa" class="modal-panel hidden modal-content bg-slate-900 border border-slate-700/50 rounded-2xl w-full max-w-md pointer-events-auto shadow-2xl">
+      <div class="flex items-center justify-between p-6 border-b border-slate-700/50">
+        <h3 class="text-lg font-bold text-white">Nova Tarefa Rápida</h3>
+        <button onclick="closeModal()" class="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg">${IC.x}</button>
+      </div>
+      <div class="p-6 space-y-4">
+        <div><label class="text-xs font-medium text-slate-400 mb-1.5 block">Descrição *</label><input type="text" placeholder="O que precisa ser feito?" class="w-full"></div>
+        <div class="grid grid-cols-2 gap-4">
+          <div><label class="text-xs font-medium text-slate-400 mb-1.5 block">Prioridade</label><select class="w-full"><option>Baixa</option><option selected>Média</option><option>Alta</option></select></div>
+          <div><label class="text-xs font-medium text-slate-400 mb-1.5 block">Prazo</label><input type="date" class="w-full"></div>
+        </div>
+        <div><label class="text-xs font-medium text-slate-400 mb-1.5 block">Vincular Aluno (opcional)</label><select class="w-full"><option>Nenhum</option><option>Lucas Mendes</option><option>Ana Paula Silva</option></select></div>
+        <div><label class="text-xs font-medium text-slate-400 mb-1.5 block">Observações</label><textarea rows="2" placeholder="Detalhes adicionais..." class="w-full resize-none"></textarea></div>
+      </div>
+      <div class="flex items-center justify-end gap-3 p-6 border-t border-slate-700/50">
+        <button onclick="closeModal()" class="px-4 py-2 text-sm text-slate-400 hover:text-white rounded-xl">Cancelar</button>
+        <button onclick="closeModal()" class="px-6 py-2.5 bg-gradient-to-r from-violet-600 to-purple-600 text-white text-sm font-medium rounded-xl shadow-lg shadow-violet-500/20">Criar Tarefa</button>
+      </div>
+    </div>
+
+    <!-- MODAL: TEMPLATES -->
+    <div id="modal-templates" class="modal-panel hidden modal-content bg-slate-900 border border-slate-700/50 rounded-2xl w-full max-w-lg pointer-events-auto shadow-2xl">
+      <div class="flex items-center justify-between p-6 border-b border-slate-700/50">
+        <h3 class="text-lg font-bold text-white">Templates de Checklist</h3>
+        <button onclick="closeModal()" class="p-2 text-slate-400 hover:text-white hover:bg-slate-700/50 rounded-lg">${IC.x}</button>
+      </div>
+      <div class="p-6 space-y-3">
+        <p class="text-xs text-slate-400 mb-4">Selecione um template para criar um checklist pré-configurado.</p>
+        ${TEMPLATES.map(t=>`<div class="bg-slate-800/50 border border-slate-700/30 rounded-xl p-4 hover:bg-slate-800/70 hover:border-violet-500/30 cursor-pointer transition-all" onclick="closeModal();openModal('novo')">
+          <div class="flex items-center justify-between">
+            <div><h4 class="text-sm font-semibold text-white">${t.nome}</h4><p class="text-xs text-slate-500 mt-0.5">${t.itens} itens · ${t.dept}</p></div>
+            <button class="text-xs px-3 py-1.5 bg-violet-600/20 text-violet-400 rounded-lg hover:bg-violet-600/30 font-medium">Usar</button>
+          </div>
+        </div>`).join('')}
+      </div>
+    </div>
+
+  </div>
+</div>`;
+document.body.insertAdjacentHTML('beforeend', modalsHTML);
+</script>
+</body>
+</html>

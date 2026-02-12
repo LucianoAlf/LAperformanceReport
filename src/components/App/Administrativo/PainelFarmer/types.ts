@@ -89,6 +89,146 @@ export interface HistoricoRotinas {
   rotinas_concluidas: number;
   percentual: number;
   tarefas_concluidas: number;
+  checklists_concluidos: number;
+}
+
+// ============================================
+// TIPOS DE CHECKLISTS
+// ============================================
+
+export interface FarmerChecklist {
+  id: string;
+  titulo: string;
+  descricao: string | null;
+  tipo: 'manual' | 'template' | 'recorrente';
+  periodicidade: 'pontual' | 'diario' | 'semanal' | 'mensal';
+  departamento: 'administrativo' | 'comercial' | 'pedagogico' | 'geral';
+  tipo_vinculo: 'nenhum' | 'todos_alunos' | 'por_curso' | 'por_professor' | 'manual';
+  filtro_vinculo: Record<string, unknown> | null;
+  data_inicio: string | null;
+  data_prazo: string | null;
+  prioridade: 'alta' | 'media' | 'baixa';
+  status: 'ativo' | 'concluido' | 'arquivado';
+  lembrete_whatsapp: boolean;
+  alerta_dias_antes: number;
+  alerta_hora: string | null;
+  total_items: number;
+  items_concluidos: number;
+  percentual_progresso: number;
+  total_contatos: number;
+  contatos_responderam: number;
+  taxa_sucesso: number;
+  canais_resumo: Array<{ canal: string; total: number; responderam: number; pct: number }>;
+  created_at: string;
+  colaborador_nome: string;
+  colaborador_apelido: string | null;
+}
+
+export interface FarmerChecklistItem {
+  id: string;
+  checklist_id: string;
+  descricao: string;
+  ordem: number;
+  canal: string | null;
+  info: string | null;
+  parent_id: string | null;
+  concluida: boolean;
+  concluida_em: string | null;
+  concluida_por: number | null;
+  created_at: string;
+  // Sub-itens carregados no frontend
+  sub_items?: FarmerChecklistItem[];
+}
+
+export interface FarmerChecklistContato {
+  id: string;
+  checklist_id: string;
+  aluno_id: number;
+  farmer_id: number;
+  status: 'pendente' | 'respondeu' | 'visualizou' | 'sem_resposta' | 'nao_recebeu';
+  canal_contato: string | null;
+  observacoes: string | null;
+  contatado_em: string | null;
+  created_at: string;
+  // Joins
+  alunos?: {
+    nome: string;
+    whatsapp?: string | null;
+    health_score?: string | null;
+    cursos?: { nome: string } | null;
+    professores?: { nome: string } | null;
+  };
+  colaboradores?: { nome: string; apelido: string | null };
+}
+
+export interface FarmerChecklistTemplate {
+  id: string;
+  nome: string;
+  descricao: string | null;
+  categoria: 'onboarding' | 'recesso' | 'evento' | 'comunicacao' | 'administrativo';
+  itens: ChecklistTemplateItem[];
+  unidade_id: string | null;
+  ativo: boolean;
+  ordem: number;
+}
+
+export interface ChecklistTemplateItem {
+  descricao: string;
+  canal: string | null;
+  ordem: number;
+  subs: { descricao: string; canal: string | null; ordem: number }[];
+}
+
+export interface ChecklistAlerta {
+  checklist_id: string;
+  titulo: string;
+  descricao: string | null;
+  data_prazo: string;
+  prioridade: string;
+  alerta_dias_antes: number;
+  lembrete_whatsapp: boolean;
+  colaborador_id: number;
+  unidade_id: string;
+  colaborador_nome: string;
+  colaborador_apelido: string | null;
+  total_items: number;
+  items_concluidos: number;
+  percentual_progresso: number;
+  dias_restantes: number;
+  urgencia: 'vencido' | 'urgente' | 'atencao' | 'normal';
+}
+
+export interface CreateChecklistInput {
+  titulo: string;
+  descricao?: string;
+  tipo?: 'manual' | 'template' | 'recorrente';
+  template_id?: string;
+  periodicidade?: 'pontual' | 'diario' | 'semanal' | 'mensal';
+  departamento?: 'administrativo' | 'comercial' | 'pedagogico' | 'geral';
+  tipo_vinculo?: 'nenhum' | 'todos_alunos' | 'por_curso' | 'por_professor' | 'manual';
+  filtro_vinculo?: Record<string, unknown>;
+  data_inicio?: string;
+  data_prazo?: string;
+  prioridade?: 'alta' | 'media' | 'baixa';
+  alerta_dias_antes?: number;
+  alerta_hora?: string;
+  lembrete_whatsapp?: boolean;
+}
+
+// Item do Task Builder (usado no modal de criação)
+export interface TaskBuilderItem {
+  id: string;
+  descricao: string;
+  canal: string | null;
+  subtarefas: { id: string; descricao: string; canal: string | null }[];
+}
+
+export interface CreateChecklistItemInput {
+  descricao: string;
+  ordem?: number;
+  canal?: string;
+  info?: string;
+  parent_id?: string;
 }
 
 // Alertas

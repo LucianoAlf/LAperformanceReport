@@ -131,9 +131,30 @@ export function GerenciarUsuarios() {
   };
 
   const handleSave = async () => {
-    if (!formEmail || !formNome) {
+    // Normalizar email: trim + lowercase
+    const emailNormalizado = formEmail.trim().toLowerCase();
+    setFormEmail(emailNormalizado);
+
+    if (!emailNormalizado || !formNome.trim()) {
       toast.error('Preencha email e nome');
       return;
+    }
+
+    // Validar formato de email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailNormalizado)) {
+      toast.error('Email inválido. Verifique o formato.');
+      return;
+    }
+
+    // Aviso se domínio não é @lamusic.com.br (mas permite continuar)
+    const dominiosConhecidos = ['lamusic.com.br', 'gmail.com'];
+    const dominio = emailNormalizado.split('@')[1];
+    if (!dominiosConhecidos.includes(dominio)) {
+      const confirmar = window.confirm(
+        `O domínio "${dominio}" não é o padrão (@lamusic.com.br).\n\nEmail digitado: ${emailNormalizado}\n\nDeseja continuar mesmo assim?`
+      );
+      if (!confirmar) return;
     }
 
     if (formPerfil === 'unidade' && !formUnidadeId) {
@@ -150,8 +171,8 @@ export function GerenciarUsuarios() {
     setSaving(true);
     try {
       const userData = {
-        email: formEmail,
-        nome: formNome,
+        email: emailNormalizado,
+        nome: formNome.trim(),
         perfil: formPerfil,
         unidade_id: formPerfil === 'admin' ? null : formUnidadeId,
         ativo: formAtivo,
@@ -170,9 +191,9 @@ export function GerenciarUsuarios() {
         // Criar novo usuário via Edge Function
         const { data, error } = await supabase.functions.invoke('admin-create-user', {
           body: {
-            email: formEmail,
+            email: emailNormalizado,
             password: formNovaSenha,
-            nome: formNome,
+            nome: formNome.trim(),
             perfil: formPerfil,
             unidade_id: formPerfil === 'admin' ? null : formUnidadeId,
             ativo: formAtivo,
@@ -182,7 +203,7 @@ export function GerenciarUsuarios() {
         if (error) throw error;
         if (data?.error) throw new Error(data.error);
 
-        toast.success(`Usuário ${formNome} criado com sucesso!`);
+        toast.success(`Usuário criado! Login: ${emailNormalizado}`, { duration: 8000 });
       }
 
       closeModal();

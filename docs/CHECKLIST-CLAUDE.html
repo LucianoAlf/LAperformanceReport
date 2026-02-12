@@ -1,0 +1,2120 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LA Music · Checklist Manager</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Playfair+Display:wght@700;800&display=swap" rel="stylesheet">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.1/lucide.min.js" rel="stylesheet">
+<style>
+:root {
+  --bg-primary: #0f1117;
+  --bg-secondary: #1a1d27;
+  --bg-card: #21242f;
+  --bg-card-hover: #282c3a;
+  --bg-elevated: #2a2e3b;
+  --accent: #6c5ce7;
+  --accent-light: #a29bfe;
+  --accent-glow: rgba(108, 92, 231, 0.25);
+  --green: #00cec9;
+  --green-soft: rgba(0, 206, 201, 0.15);
+  --yellow: #fdcb6e;
+  --yellow-soft: rgba(253, 203, 110, 0.15);
+  --red: #ff6b6b;
+  --red-soft: rgba(255, 107, 107, 0.15);
+  --orange: #e17055;
+  --blue: #74b9ff;
+  --text-primary: #f0f0f5;
+  --text-secondary: #8b8fa3;
+  --text-muted: #5a5e72;
+  --border: rgba(255,255,255,0.06);
+  --border-light: rgba(255,255,255,0.1);
+  --sidebar-width: 260px;
+  --header-height: 64px;
+  --radius: 12px;
+  --radius-sm: 8px;
+  --transition: all 0.2s ease;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ===== SIDEBAR ===== */
+.sidebar {
+  position: fixed;
+  left: 0; top: 0; bottom: 0;
+  width: var(--sidebar-width);
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  transition: var(--transition);
+}
+
+.sidebar-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sidebar-logo {
+  width: 40px; height: 40px;
+  background: linear-gradient(135deg, var(--accent), #a29bfe);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Playfair Display', serif;
+  font-weight: 800;
+  font-size: 18px;
+  color: white;
+}
+
+.sidebar-brand h2 {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+
+.sidebar-brand span {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.sidebar-nav { flex: 1; padding: 16px 12px; overflow-y: auto; }
+
+.nav-section {
+  margin-bottom: 24px;
+}
+
+.nav-section-title {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  color: var(--text-muted);
+  padding: 0 12px;
+  margin-bottom: 8px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+  font-size: 13.5px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  position: relative;
+}
+
+.nav-item:hover { background: var(--bg-card); color: var(--text-primary); }
+
+.nav-item.active {
+  background: var(--accent-glow);
+  color: var(--accent-light);
+  font-weight: 500;
+}
+
+.nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 20px;
+  background: var(--accent);
+  border-radius: 0 4px 4px 0;
+}
+
+.nav-icon {
+  width: 20px; height: 20px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+
+.nav-badge {
+  margin-left: auto;
+  background: var(--red);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 10px;
+  min-width: 20px;
+  text-align: center;
+}
+
+.sidebar-user {
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.user-avatar {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--green), #55efc4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--bg-primary);
+}
+
+.user-info h4 { font-size: 13px; font-weight: 500; }
+.user-info span { font-size: 11px; color: var(--text-muted); }
+
+/* ===== HEADER ===== */
+.main-header {
+  position: fixed;
+  left: var(--sidebar-width);
+  right: 0; top: 0;
+  height: var(--header-height);
+  background: rgba(15, 17, 23, 0.85);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  z-index: 90;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 32px;
+}
+
+.header-left { display: flex; align-items: center; gap: 20px; }
+
+.unit-selector {
+  display: flex;
+  background: var(--bg-card);
+  border-radius: var(--radius-sm);
+  padding: 3px;
+  gap: 2px;
+}
+
+.unit-btn {
+  padding: 7px 16px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12.5px;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.unit-btn.active {
+  background: var(--accent);
+  color: white;
+  box-shadow: 0 2px 8px var(--accent-glow);
+}
+
+.unit-btn:hover:not(.active) { color: var(--text-primary); }
+
+.header-search {
+  position: relative;
+}
+
+.header-search input {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 8px 14px 8px 36px;
+  color: var(--text-primary);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  width: 280px;
+  outline: none;
+  transition: var(--transition);
+}
+
+.header-search input::placeholder { color: var(--text-muted); }
+.header-search input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+
+.header-search .search-icon {
+  position: absolute;
+  left: 12px; top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.header-right { display: flex; align-items: center; gap: 12px; }
+
+.header-btn {
+  width: 38px; height: 38px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: var(--transition);
+  position: relative;
+}
+
+.header-btn:hover { border-color: var(--accent); color: var(--accent-light); }
+
+.notif-dot {
+  position: absolute;
+  top: 6px; right: 6px;
+  width: 8px; height: 8px;
+  background: var(--red);
+  border-radius: 50%;
+  border: 2px solid var(--bg-primary);
+}
+
+/* ===== MAIN CONTENT ===== */
+.main-content {
+  margin-left: var(--sidebar-width);
+  padding-top: var(--header-height);
+  min-height: 100vh;
+}
+
+.page-container {
+  padding: 28px 32px;
+  max-width: 1400px;
+}
+
+/* ===== ALERTS BANNER ===== */
+.alerts-banner {
+  background: linear-gradient(135deg, rgba(253, 203, 110, 0.08), rgba(255, 107, 107, 0.05));
+  border: 1px solid rgba(253, 203, 110, 0.15);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  animation: slideDown 0.4s ease;
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.alert-icon {
+  width: 42px; height: 42px;
+  background: var(--yellow-soft);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.alert-content { flex: 1; }
+.alert-content h4 { font-size: 13.5px; font-weight: 600; color: var(--yellow); margin-bottom: 2px; }
+.alert-content p { font-size: 12.5px; color: var(--text-secondary); }
+
+.alert-actions { display: flex; gap: 8px; }
+
+.alert-btn {
+  padding: 7px 14px;
+  border-radius: 6px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+  border: none;
+}
+
+.alert-btn.primary { background: var(--yellow); color: var(--bg-primary); }
+.alert-btn.ghost { background: transparent; color: var(--yellow); border: 1px solid rgba(253, 203, 110, 0.3); }
+
+/* ===== STATS ROW ===== */
+.stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 28px;
+}
+
+.stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  transition: var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+}
+
+.stat-card:nth-child(1)::after { background: var(--accent); }
+.stat-card:nth-child(2)::after { background: var(--green); }
+.stat-card:nth-child(3)::after { background: var(--yellow); }
+.stat-card:nth-child(4)::after { background: var(--red); }
+
+.stat-card:hover { border-color: var(--border-light); transform: translateY(-1px); }
+
+.stat-top { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+
+.stat-icon {
+  width: 38px; height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.stat-icon.purple { background: var(--accent-glow); color: var(--accent-light); }
+.stat-icon.teal { background: var(--green-soft); color: var(--green); }
+.stat-icon.gold { background: var(--yellow-soft); color: var(--yellow); }
+.stat-icon.coral { background: var(--red-soft); color: var(--red); }
+
+.stat-trend {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 20px;
+}
+
+.stat-trend.up { background: var(--green-soft); color: var(--green); }
+.stat-trend.down { background: var(--red-soft); color: var(--red); }
+
+.stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -1px;
+  margin-bottom: 4px;
+}
+
+.stat-label {
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+/* ===== TABS ===== */
+.tab-bar {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 4px;
+  margin-bottom: 24px;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 11px 20px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.tab-btn:hover { color: var(--text-primary); }
+
+.tab-btn.active {
+  background: var(--accent);
+  color: white;
+  box-shadow: 0 2px 10px var(--accent-glow);
+}
+
+.tab-count {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+.tab-btn.active .tab-count { background: rgba(255,255,255,0.2); }
+.tab-btn:not(.active) .tab-count { background: var(--bg-elevated); }
+
+/* ===== CONTENT SECTIONS ===== */
+.content-section { display: none; }
+.content-section.active { display: block; animation: fadeIn 0.3s ease; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ===== CHECKLISTS ===== */
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.section-title {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+}
+
+.section-subtitle {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.btn {
+  padding: 9px 18px;
+  border-radius: var(--radius-sm);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: white;
+  box-shadow: 0 2px 10px var(--accent-glow);
+}
+
+.btn-primary:hover { background: #5b4bd5; transform: translateY(-1px); }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
+.btn-ghost:hover { border-color: var(--accent); color: var(--accent-light); }
+
+/* Filter bar */
+.filter-bar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.filter-chip {
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: var(--transition);
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.filter-chip.active { background: var(--accent); border-color: var(--accent); color: white; }
+.filter-chip:hover:not(.active) { border-color: var(--text-muted); color: var(--text-primary); }
+
+/* Checklist cards */
+.checklist-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.checklist-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  transition: var(--transition);
+  cursor: pointer;
+}
+
+.checklist-card:hover { border-color: var(--border-light); background: var(--bg-card-hover); }
+
+.checklist-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 14px;
+}
+
+.checklist-card-left { display: flex; gap: 14px; align-items: flex-start; }
+
+.checklist-icon {
+  width: 42px; height: 42px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.checklist-title {
+  font-size: 14.5px;
+  font-weight: 600;
+  margin-bottom: 3px;
+}
+
+.checklist-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.meta-dot {
+  width: 3px; height: 3px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+
+.checklist-badges { display: flex; gap: 6px; align-items: center; }
+
+.badge {
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.badge-daily { background: var(--accent-glow); color: var(--accent-light); }
+.badge-weekly { background: var(--green-soft); color: var(--green); }
+.badge-monthly { background: var(--yellow-soft); color: var(--yellow); }
+.badge-urgent { background: var(--red-soft); color: var(--red); }
+
+/* Progress bar */
+.progress-section { margin-top: 14px; }
+
+.progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.progress-label { font-size: 12px; color: var(--text-muted); }
+.progress-value { font-size: 13px; font-weight: 600; }
+
+.progress-bar {
+  height: 6px;
+  background: var(--bg-elevated);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 10px;
+  transition: width 1s ease;
+}
+
+.progress-fill.purple { background: linear-gradient(90deg, var(--accent), var(--accent-light)); }
+.progress-fill.teal { background: linear-gradient(90deg, #00b894, var(--green)); }
+.progress-fill.gold { background: linear-gradient(90deg, var(--orange), var(--yellow)); }
+
+/* Task list inside expanded checklist */
+.task-list { margin-top: 16px; }
+
+.task-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  transition: var(--transition);
+  border-bottom: 1px solid var(--border);
+}
+
+.task-item:last-child { border-bottom: none; }
+.task-item:hover { background: rgba(255,255,255,0.02); }
+
+.task-check {
+  width: 20px; height: 20px;
+  border: 2px solid var(--text-muted);
+  border-radius: 5px;
+  cursor: pointer;
+  transition: var(--transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.task-check.checked {
+  background: var(--green);
+  border-color: var(--green);
+}
+
+.task-check.checked::after {
+  content: '✓';
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.task-text {
+  flex: 1;
+  font-size: 13.5px;
+}
+
+.task-text.completed {
+  text-decoration: line-through;
+  color: var(--text-muted);
+}
+
+.task-channel {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+}
+
+.channel-whatsapp { background: rgba(37, 211, 102, 0.15); color: #25d366; }
+.channel-email { background: rgba(116, 185, 255, 0.15); color: var(--blue); }
+.channel-phone { background: rgba(162, 155, 254, 0.15); color: var(--accent-light); }
+.channel-presencial { background: rgba(253, 203, 110, 0.15); color: var(--yellow); }
+.channel-instagram { background: rgba(225, 48, 108, 0.15); color: #e1306c; }
+
+.subtask-indicator {
+  font-size: 11px;
+  color: var(--text-muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ===== MODAL ===== */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  backdrop-filter: blur(8px);
+  z-index: 200;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease;
+}
+
+.modal-overlay.show { display: flex; }
+
+.modal {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  width: 640px;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  animation: modalSlide 0.3s ease;
+}
+
+@keyframes modalSlide {
+  from { opacity: 0; transform: translateY(20px) scale(0.97); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.modal-header {
+  padding: 24px 28px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header h3 { font-size: 17px; font-weight: 600; }
+
+.modal-close {
+  width: 32px; height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  transition: var(--transition);
+}
+
+.modal-close:hover { background: var(--bg-card); color: var(--text-primary); }
+
+.modal-body { padding: 24px 28px; }
+
+.form-group { margin-bottom: 20px; }
+
+.form-label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 7px;
+}
+
+.form-input {
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13.5px;
+  outline: none;
+  transition: var(--transition);
+}
+
+.form-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+.form-input::placeholder { color: var(--text-muted); }
+
+select.form-input {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='12' height='8' viewBox='0 0 12 8' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L6 6L11 1' stroke='%238b8fa3' stroke-width='2' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 36px;
+}
+
+select.form-input option { background: var(--bg-card); }
+
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+.student-selector {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  max-height: 200px;
+  overflow-y: auto;
+  padding: 8px;
+}
+
+.student-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.student-row:hover { background: var(--bg-elevated); }
+
+.student-row .task-check { width: 18px; height: 18px; }
+
+.student-name { font-size: 13px; flex: 1; }
+.student-course { font-size: 11px; color: var(--text-muted); }
+
+.select-all-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+}
+
+.select-all-bar label {
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.modal-footer {
+  padding: 20px 28px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* ===== CARTEIRA TAB ===== */
+.carteira-header {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.carteira-stat {
+  flex: 1;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+  text-align: center;
+}
+
+.carteira-stat .stat-value { font-size: 24px; }
+
+.carteira-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.carteira-table thead th {
+  padding: 12px 16px;
+  text-align: left;
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--border);
+}
+
+.carteira-table thead th:first-child { border-radius: var(--radius) 0 0 0; }
+.carteira-table thead th:last-child { border-radius: 0 var(--radius) 0 0; }
+
+.carteira-table tbody td {
+  padding: 14px 16px;
+  font-size: 13.5px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-secondary);
+}
+
+.carteira-table tbody tr:hover td { background: var(--bg-card); }
+
+.contact-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.status-dot {
+  width: 7px; height: 7px;
+  border-radius: 50%;
+}
+
+.status-dot.success { background: var(--green); }
+.status-dot.pending { background: var(--yellow); }
+.status-dot.failed { background: var(--red); }
+
+.success-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.success-bar .progress-bar { flex: 1; height: 5px; }
+.success-bar span { font-size: 12px; font-weight: 600; min-width: 36px; }
+
+/* ===== EXPANDED CHECKLIST VIEW ===== */
+.expanded-view {
+  display: none;
+}
+
+.expanded-view.active {
+  display: block;
+  animation: fadeIn 0.3s ease;
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-muted);
+  cursor: pointer;
+  margin-bottom: 20px;
+  padding: 6px 0;
+  transition: var(--transition);
+}
+
+.back-link:hover { color: var(--accent-light); }
+
+.expanded-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.expanded-title { font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
+.expanded-desc { font-size: 13px; color: var(--text-muted); margin-top: 6px; }
+
+/* ===== SCROLLBAR ===== */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--text-muted); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+
+/* ===== ANIMATIONS ===== */
+.stagger-1 { animation-delay: 0.05s; }
+.stagger-2 { animation-delay: 0.1s; }
+.stagger-3 { animation-delay: 0.15s; }
+.stagger-4 { animation-delay: 0.2s; }
+
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.stat-card { animation: countUp 0.5s ease both; }
+.stat-card:nth-child(2) { animation-delay: 0.08s; }
+.stat-card:nth-child(3) { animation-delay: 0.16s; }
+.stat-card:nth-child(4) { animation-delay: 0.24s; }
+
+/* ===== RESPONSIVE ===== */
+@media (max-width: 1200px) {
+  .stats-row { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 768px) {
+  .sidebar { display: none; }
+  .main-header { left: 0; }
+  .main-content { margin-left: 0; }
+  .stats-row { grid-template-columns: 1fr; }
+  .header-search input { width: 180px; }
+}
+</style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <div class="sidebar-logo">LA</div>
+    <div class="sidebar-brand">
+      <h2>LA Music</h2>
+      <span>Checklist Manager</span>
+    </div>
+  </div>
+  <nav class="sidebar-nav">
+    <div class="nav-section">
+      <div class="nav-section-title">Principal</div>
+      <div class="nav-item active" onclick="showPage('dashboard')">
+        <span class="nav-icon">📊</span>
+        Dashboard
+      </div>
+      <div class="nav-item" onclick="showPage('checklists')">
+        <span class="nav-icon">✅</span>
+        Meus Checklists
+        <span class="nav-badge">3</span>
+      </div>
+      <div class="nav-item" onclick="showPage('carteira')">
+        <span class="nav-icon">👥</span>
+        Carteira de Alunos
+      </div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-title">Gestão</div>
+      <div class="nav-item" onclick="showPage('equipe')">
+        <span class="nav-icon">👤</span>
+        Visão Gerente
+      </div>
+      <div class="nav-item">
+        <span class="nav-icon">📋</span>
+        Templates
+      </div>
+      <div class="nav-item">
+        <span class="nav-icon">📈</span>
+        Relatórios
+      </div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-section-title">Sistema</div>
+      <div class="nav-item">
+        <span class="nav-icon">🔔</span>
+        Alertas
+        <span class="nav-badge">5</span>
+      </div>
+      <div class="nav-item">
+        <span class="nav-icon">⚙️</span>
+        Configurações
+      </div>
+    </div>
+  </nav>
+  <div class="sidebar-user">
+    <div class="user-avatar">GB</div>
+    <div class="user-info">
+      <h4>Gabi Martins</h4>
+      <span>Administrativo · Campo Grande</span>
+    </div>
+  </div>
+</aside>
+
+<!-- HEADER -->
+<header class="main-header">
+  <div class="header-left">
+    <div class="unit-selector">
+      <button class="unit-btn active">Campo Grande</button>
+      <button class="unit-btn">Recreio</button>
+      <button class="unit-btn">Barra</button>
+    </div>
+    <div class="header-search">
+      <span class="search-icon">🔍</span>
+      <input type="text" placeholder="Buscar checklist, aluno, tarefa...">
+    </div>
+  </div>
+  <div class="header-right">
+    <button class="header-btn" title="Alertas">
+      🔔
+      <span class="notif-dot"></span>
+    </button>
+    <button class="header-btn" title="Calendário">📅</button>
+    <button class="btn btn-primary" onclick="openModal()">+ Novo Checklist</button>
+  </div>
+</header>
+
+<!-- MAIN -->
+<main class="main-content">
+  <div class="page-container">
+
+    <!-- ===== DASHBOARD ===== -->
+    <div id="page-dashboard" class="page active">
+      
+      <!-- Alerts -->
+      <div class="alerts-banner">
+        <div class="alert-icon">⚡</div>
+        <div class="alert-content">
+          <h4>3 alunos com primeiro dia de aula amanhã!</h4>
+          <p>Lucas Mendes (Guitarra), Ana Paula (Piano), Rafael Costa (Bateria) — Verifique se os professores e alunos foram notificados.</p>
+        </div>
+        <div class="alert-actions">
+          <button class="alert-btn primary">Ver Alunos</button>
+          <button class="alert-btn ghost">Dispensar</button>
+        </div>
+      </div>
+
+      <!-- Stats -->
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-top">
+            <div class="stat-icon purple">📋</div>
+            <span class="stat-trend up">↑ 12%</span>
+          </div>
+          <div class="stat-value">24</div>
+          <div class="stat-label">Checklists Ativos</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-top">
+            <div class="stat-icon teal">✅</div>
+            <span class="stat-trend up">↑ 8%</span>
+          </div>
+          <div class="stat-value">87%</div>
+          <div class="stat-label">Taxa de Conclusão</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-top">
+            <div class="stat-icon gold">⏰</div>
+            <span class="stat-trend down">↓ 3</span>
+          </div>
+          <div class="stat-value">7</div>
+          <div class="stat-label">Tarefas Pendentes Hoje</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-top">
+            <div class="stat-icon coral">📞</div>
+            <span class="stat-trend up">↑ 15%</span>
+          </div>
+          <div class="stat-value">92%</div>
+          <div class="stat-label">Sucesso de Contato</div>
+        </div>
+      </div>
+
+      <!-- Tabs -->
+      <div class="tab-bar">
+        <button class="tab-btn active" onclick="switchTab(this, 'today')">
+          Hoje <span class="tab-count">7</span>
+        </button>
+        <button class="tab-btn" onclick="switchTab(this, 'week')">
+          Semana <span class="tab-count">18</span>
+        </button>
+        <button class="tab-btn" onclick="switchTab(this, 'month')">
+          Mês <span class="tab-count">42</span>
+        </button>
+        <button class="tab-btn" onclick="switchTab(this, 'all')">
+          Todos
+        </button>
+      </div>
+
+      <!-- Filter -->
+      <div class="filter-bar">
+        <button class="filter-chip active">Todos</button>
+        <button class="filter-chip">Comercial</button>
+        <button class="filter-chip">Administrativo</button>
+        <button class="filter-chip">Pedagógico</button>
+        <button class="filter-chip">Urgente 🔴</button>
+      </div>
+
+      <!-- Checklist Cards -->
+      <div class="checklist-grid" id="checklist-list">
+
+        <!-- Card 1 -->
+        <div class="checklist-card" onclick="expandChecklist(1)">
+          <div class="checklist-card-header">
+            <div class="checklist-card-left">
+              <div class="checklist-icon" style="background: var(--red-soft); color: var(--red);">📣</div>
+              <div>
+                <div class="checklist-title">Recesso de Carnaval — Comunicação</div>
+                <div class="checklist-meta">
+                  <span>8 tarefas</span>
+                  <span class="meta-dot"></span>
+                  <span>498 alunos vinculados</span>
+                  <span class="meta-dot"></span>
+                  <span>Criado por Gabi</span>
+                </div>
+              </div>
+            </div>
+            <div class="checklist-badges">
+              <span class="badge badge-urgent">Urgente</span>
+              <span class="badge badge-daily">Diário</span>
+            </div>
+          </div>
+          <div class="progress-section">
+            <div class="progress-header">
+              <span class="progress-label">5 de 8 tarefas concluídas</span>
+              <span class="progress-value" style="color: var(--orange);">62%</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill gold" style="width: 62%;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2 -->
+        <div class="checklist-card" onclick="expandChecklist(2)">
+          <div class="checklist-card-header">
+            <div class="checklist-card-left">
+              <div class="checklist-icon" style="background: var(--green-soft); color: var(--green);">🎓</div>
+              <div>
+                <div class="checklist-title">Primeiro Dia de Aula — Onboarding</div>
+                <div class="checklist-meta">
+                  <span>12 tarefas</span>
+                  <span class="meta-dot"></span>
+                  <span>3 alunos novos</span>
+                  <span class="meta-dot"></span>
+                  <span>Criado por Gabi</span>
+                </div>
+              </div>
+            </div>
+            <div class="checklist-badges">
+              <span class="badge badge-daily">Diário</span>
+            </div>
+          </div>
+          <div class="progress-section">
+            <div class="progress-header">
+              <span class="progress-label">9 de 12 tarefas concluídas</span>
+              <span class="progress-value" style="color: var(--green);">75%</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill teal" style="width: 75%;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 3 -->
+        <div class="checklist-card" onclick="expandChecklist(3)">
+          <div class="checklist-card-header">
+            <div class="checklist-card-left">
+              <div class="checklist-icon" style="background: var(--accent-glow); color: var(--accent-light);">🥁</div>
+              <div>
+                <div class="checklist-title">Workshop de Bateria — Divulgação</div>
+                <div class="checklist-meta">
+                  <span>6 tarefas</span>
+                  <span class="meta-dot"></span>
+                  <span>78 alunos de bateria</span>
+                  <span class="meta-dot"></span>
+                  <span>Criado por John</span>
+                </div>
+              </div>
+            </div>
+            <div class="checklist-badges">
+              <span class="badge badge-weekly">Semanal</span>
+            </div>
+          </div>
+          <div class="progress-section">
+            <div class="progress-header">
+              <span class="progress-label">6 de 6 tarefas concluídas</span>
+              <span class="progress-value" style="color: var(--green);">100%</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill teal" style="width: 100%;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 4 -->
+        <div class="checklist-card">
+          <div class="checklist-card-header">
+            <div class="checklist-card-left">
+              <div class="checklist-icon" style="background: var(--yellow-soft); color: var(--yellow);">💬</div>
+              <div>
+                <div class="checklist-title">Comunidade WhatsApp — Cadastro de Alunos</div>
+                <div class="checklist-meta">
+                  <span>4 tarefas</span>
+                  <span class="meta-dot"></span>
+                  <span>250 alunos (minha carteira)</span>
+                  <span class="meta-dot"></span>
+                  <span>Criado por Gabi</span>
+                </div>
+              </div>
+            </div>
+            <div class="checklist-badges">
+              <span class="badge badge-weekly">Semanal</span>
+            </div>
+          </div>
+          <div class="progress-section">
+            <div class="progress-header">
+              <span class="progress-label">2 de 4 tarefas concluídas</span>
+              <span class="progress-value" style="color: var(--accent-light);">50%</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill purple" style="width: 50%;"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 5 -->
+        <div class="checklist-card">
+          <div class="checklist-card-header">
+            <div class="checklist-card-left">
+              <div class="checklist-icon" style="background: rgba(225, 48, 108, 0.15); color: #e1306c;">📱</div>
+              <div>
+                <div class="checklist-title">Conferência Mensal — Dados Cadastrais</div>
+                <div class="checklist-meta">
+                  <span>15 tarefas</span>
+                  <span class="meta-dot"></span>
+                  <span>Todos os alunos</span>
+                  <span class="meta-dot"></span>
+                  <span>Criado por Gabi</span>
+                </div>
+              </div>
+            </div>
+            <div class="checklist-badges">
+              <span class="badge badge-monthly">Mensal</span>
+            </div>
+          </div>
+          <div class="progress-section">
+            <div class="progress-header">
+              <span class="progress-label">3 de 15 tarefas concluídas</span>
+              <span class="progress-value" style="color: var(--orange);">20%</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill gold" style="width: 20%;"></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- EXPANDED CHECKLIST VIEW -->
+      <div class="expanded-view" id="expanded-checklist">
+        <div class="back-link" onclick="closeChecklist()">← Voltar aos Checklists</div>
+        
+        <div class="expanded-header">
+          <div>
+            <div class="expanded-title">📣 Recesso de Carnaval — Comunicação</div>
+            <div class="expanded-desc">Avisar todos os alunos e professores sobre o recesso. Verificar recebimento e confirmar ciência.</div>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <span class="badge badge-urgent">Urgente</span>
+            <span class="badge badge-daily">Diário</span>
+          </div>
+        </div>
+
+        <!-- Select all + filter -->
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <div class="select-all-bar" style="margin-bottom:0; flex:1; margin-right:12px;">
+            <div class="task-check" id="selectAll" onclick="toggleSelectAll()"></div>
+            <label onclick="toggleSelectAll()">Selecionar Todos</label>
+            <span style="margin-left:auto; font-size:12px; color:var(--text-muted);">5 de 8 concluídas (62%)</span>
+          </div>
+          <div style="display:flex; gap:6px;">
+            <button class="filter-chip active" style="font-size:11px; padding:5px 10px;">Todos</button>
+            <button class="filter-chip" style="font-size:11px; padding:5px 10px;">Por Professor</button>
+            <button class="filter-chip" style="font-size:11px; padding:5px 10px;">Por Curso</button>
+          </div>
+        </div>
+
+        <!-- Tasks -->
+        <div style="background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden;">
+          <div class="task-list">
+            <div class="task-item">
+              <div class="task-check checked" onclick="toggleCheck(this)"></div>
+              <span class="task-text completed">Disparar mensagem de recesso no WhatsApp para todos os alunos</span>
+              <span class="task-channel channel-whatsapp">WhatsApp</span>
+              <span class="subtask-indicator">📎 1 subtarefa</span>
+            </div>
+            <div class="task-item" style="padding-left:48px; background:rgba(255,255,255,0.01);">
+              <div class="task-check checked" onclick="toggleCheck(this)"></div>
+              <span class="task-text completed" style="font-size:12.5px; color:var(--text-muted);">↳ Conferir se todos alunos receberam a mensagem</span>
+              <span class="contact-status"><span class="status-dot success"></span>94% receberam</span>
+            </div>
+            <div class="task-item">
+              <div class="task-check checked" onclick="toggleCheck(this)"></div>
+              <span class="task-text completed">Enviar email institucional sobre recesso</span>
+              <span class="task-channel channel-email">Email</span>
+            </div>
+            <div class="task-item">
+              <div class="task-check checked" onclick="toggleCheck(this)"></div>
+              <span class="task-text completed">Publicar comunicado no Instagram</span>
+              <span class="task-channel channel-instagram">Instagram</span>
+            </div>
+            <div class="task-item">
+              <div class="task-check checked" onclick="toggleCheck(this)"></div>
+              <span class="task-text completed">Avisar todos os professores via WhatsApp</span>
+              <span class="task-channel channel-whatsapp">WhatsApp</span>
+            </div>
+            <div class="task-item">
+              <div class="task-check" onclick="toggleCheck(this)"></div>
+              <span class="task-text">Ligar para alunos que não confirmaram recebimento</span>
+              <span class="task-channel channel-phone">Telefone</span>
+              <span class="subtask-indicator">📎 2 subtarefas</span>
+            </div>
+            <div class="task-item" style="padding-left:48px; background:rgba(255,255,255,0.01);">
+              <div class="task-check" onclick="toggleCheck(this)"></div>
+              <span class="task-text" style="font-size:12.5px;">↳ Registrar tentativa de contato telefônico</span>
+              <span class="contact-status"><span class="status-dot pending"></span>Pendente</span>
+            </div>
+            <div class="task-item" style="padding-left:48px; background:rgba(255,255,255,0.01);">
+              <div class="task-check" onclick="toggleCheck(this)"></div>
+              <span class="task-text" style="font-size:12.5px;">↳ Tentar contato presencial na próxima aula</span>
+              <span class="task-channel channel-presencial">Presencial</span>
+            </div>
+            <div class="task-item">
+              <div class="task-check" onclick="toggleCheck(this)"></div>
+              <span class="task-text">Atualizar mural físico da escola</span>
+            </div>
+            <div class="task-item">
+              <div class="task-check" onclick="toggleCheck(this)"></div>
+              <span class="task-text">Confirmar com coordenação que todos foram avisados</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Contact success -->
+        <div style="margin-top:24px; background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); padding:20px;">
+          <h4 style="font-size:14px; margin-bottom:14px;">📊 Percentual de Sucesso — Comunicação</h4>
+          <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:12px;">
+            <div style="text-align:center;">
+              <div style="font-size:24px; font-weight:700; color:var(--green);">94%</div>
+              <div style="font-size:11px; color:var(--text-muted);">WhatsApp</div>
+            </div>
+            <div style="text-align:center;">
+              <div style="font-size:24px; font-weight:700; color:var(--blue);">78%</div>
+              <div style="font-size:11px; color:var(--text-muted);">Email</div>
+            </div>
+            <div style="text-align:center;">
+              <div style="font-size:24px; font-weight:700; color:var(--accent-light);">45%</div>
+              <div style="font-size:11px; color:var(--text-muted);">Telefone</div>
+            </div>
+            <div style="text-align:center;">
+              <div style="font-size:24px; font-weight:700; color:var(--yellow);">100%</div>
+              <div style="font-size:11px; color:var(--text-muted);">Presencial</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== CHECKLISTS PAGE ===== -->
+    <div id="page-checklists" class="page" style="display:none;">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Meus Checklists</div>
+          <div class="section-subtitle">Gerencie e organize suas listas de tarefas pessoais</div>
+        </div>
+        <button class="btn btn-primary" onclick="openModal()">+ Novo Checklist</button>
+      </div>
+
+      <div class="tab-bar" style="max-width:400px;">
+        <button class="tab-btn active">Ativos <span class="tab-count">8</span></button>
+        <button class="tab-btn">Concluídos <span class="tab-count">23</span></button>
+        <button class="tab-btn">Arquivados</button>
+      </div>
+
+      <div class="checklist-grid">
+        <div class="checklist-card">
+          <div class="checklist-card-header">
+            <div class="checklist-card-left">
+              <div class="checklist-icon" style="background: var(--accent-glow); color: var(--accent-light);">📝</div>
+              <div>
+                <div class="checklist-title">Matrícula — Processo Completo</div>
+                <div class="checklist-meta">
+                  <span>18 tarefas</span>
+                  <span class="meta-dot"></span>
+                  <span>Template padrão</span>
+                </div>
+              </div>
+            </div>
+            <div class="checklist-badges">
+              <span class="badge badge-daily">Diário</span>
+            </div>
+          </div>
+          <div class="task-list">
+            <div class="task-item">
+              <div class="task-check checked" onclick="toggleCheck(this)"></div>
+              <span class="task-text completed">Receber documentos do aluno</span>
+            </div>
+            <div class="task-item">
+              <div class="task-check checked" onclick="toggleCheck(this)"></div>
+              <span class="task-text completed">Cadastrar no sistema</span>
+            </div>
+            <div class="task-item">
+              <div class="task-check" onclick="toggleCheck(this)"></div>
+              <span class="task-text">Enviar contrato por email</span>
+              <span class="task-channel channel-email">Email</span>
+            </div>
+            <div class="task-item">
+              <div class="task-check" onclick="toggleCheck(this)"></div>
+              <span class="task-text">Adicionar na comunidade WhatsApp</span>
+              <span class="task-channel channel-whatsapp">WhatsApp</span>
+            </div>
+            <div class="task-item">
+              <div class="task-check" onclick="toggleCheck(this)"></div>
+              <span class="task-text">Avisar professor responsável</span>
+            </div>
+          </div>
+          <div style="padding:6px 14px; font-size:12px; color:var(--text-muted);">... +13 tarefas</div>
+          <div class="progress-section" style="padding:0 14px 14px;">
+            <div class="progress-header">
+              <span class="progress-label">2 de 18 concluídas</span>
+              <span class="progress-value">11%</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill purple" style="width:11%;"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="checklist-card">
+          <div class="checklist-card-header">
+            <div class="checklist-card-left">
+              <div class="checklist-icon" style="background: var(--green-soft); color: var(--green);">🏫</div>
+              <div>
+                <div class="checklist-title">Abertura da Escola — Diário</div>
+                <div class="checklist-meta">
+                  <span>8 tarefas</span>
+                  <span class="meta-dot"></span>
+                  <span>Rotina operacional</span>
+                </div>
+              </div>
+            </div>
+            <div class="checklist-badges">
+              <span class="badge badge-daily">Diário</span>
+            </div>
+          </div>
+          <div class="progress-section">
+            <div class="progress-header">
+              <span class="progress-label">8 de 8 concluídas</span>
+              <span class="progress-value" style="color:var(--green);">100%</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill teal" style="width:100%;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== CARTEIRA PAGE ===== -->
+    <div id="page-carteira" class="page" style="display:none;">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Carteira de Alunos</div>
+          <div class="section-subtitle">Sua carteira pessoal — 250 alunos atribuídos</div>
+        </div>
+        <div style="display:flex; gap:8px;">
+          <select class="form-input" style="width:180px; padding:8px 12px; font-size:12.5px;">
+            <option>Filtrar por Curso</option>
+            <option>Guitarra</option>
+            <option>Piano</option>
+            <option>Bateria</option>
+            <option>Violão</option>
+            <option>Canto</option>
+            <option>Baixo</option>
+          </select>
+          <select class="form-input" style="width:180px; padding:8px 12px; font-size:12.5px;">
+            <option>Filtrar por Professor</option>
+            <option>Prof. Ricardo</option>
+            <option>Prof. Maria</option>
+            <option>Prof. André</option>
+            <option>Prof. Fernanda</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="carteira-header">
+        <div class="carteira-stat">
+          <div class="stat-value" style="color:var(--accent-light);">250</div>
+          <div class="stat-label">Meus Alunos</div>
+        </div>
+        <div class="carteira-stat">
+          <div class="stat-value" style="color:var(--green);">92%</div>
+          <div class="stat-label">Contato com Sucesso</div>
+        </div>
+        <div class="carteira-stat">
+          <div class="stat-value" style="color:var(--yellow);">18</div>
+          <div class="stat-label">Pendente Contato</div>
+        </div>
+        <div class="carteira-stat">
+          <div class="stat-value" style="color:var(--red);">5</div>
+          <div class="stat-label">Sem Resposta</div>
+        </div>
+      </div>
+
+      <div style="background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden;">
+        <table class="carteira-table">
+          <thead>
+            <tr>
+              <th style="width:30px;"><div class="task-check" onclick="toggleCheck(this)" style="width:16px;height:16px;"></div></th>
+              <th>Aluno</th>
+              <th>Curso</th>
+              <th>Professor</th>
+              <th>Último Contato</th>
+              <th>Canal</th>
+              <th>Status</th>
+              <th>Sucesso</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><div class="task-check checked" onclick="toggleCheck(this)" style="width:16px;height:16px;"></div></td>
+              <td><strong>Lucas Mendes</strong></td>
+              <td>Guitarra</td>
+              <td>Prof. Ricardo</td>
+              <td style="font-size:12px; color:var(--text-muted);">Hoje, 14:30</td>
+              <td><span class="task-channel channel-whatsapp">WhatsApp</span></td>
+              <td><span class="contact-status"><span class="status-dot success"></span>Respondeu</span></td>
+              <td>
+                <div class="success-bar">
+                  <div class="progress-bar" style="width:80px;"><div class="progress-fill teal" style="width:100%;"></div></div>
+                  <span style="color:var(--green);">100%</span>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td><div class="task-check checked" onclick="toggleCheck(this)" style="width:16px;height:16px;"></div></td>
+              <td><strong>Ana Paula Silva</strong></td>
+              <td>Piano</td>
+              <td>Prof. Maria</td>
+              <td style="font-size:12px; color:var(--text-muted);">Hoje, 13:15</td>
+              <td><span class="task-channel channel-email">Email</span></td>
+              <td><span class="contact-status"><span class="status-dot success"></span>Visualizou</span></td>
+              <td>
+                <div class="success-bar">
+                  <div class="progress-bar" style="width:80px;"><div class="progress-fill teal" style="width:85%;"></div></div>
+                  <span style="color:var(--green);">85%</span>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td><div class="task-check" onclick="toggleCheck(this)" style="width:16px;height:16px;"></div></td>
+              <td><strong>Rafael Costa</strong></td>
+              <td>Bateria</td>
+              <td>Prof. André</td>
+              <td style="font-size:12px; color:var(--text-muted);">Ontem, 16:45</td>
+              <td><span class="task-channel channel-phone">Telefone</span></td>
+              <td><span class="contact-status"><span class="status-dot pending"></span>Sem resposta</span></td>
+              <td>
+                <div class="success-bar">
+                  <div class="progress-bar" style="width:80px;"><div class="progress-fill gold" style="width:40%;"></div></div>
+                  <span style="color:var(--yellow);">40%</span>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td><div class="task-check" onclick="toggleCheck(this)" style="width:16px;height:16px;"></div></td>
+              <td><strong>Fernanda Oliveira</strong></td>
+              <td>Canto</td>
+              <td>Prof. Fernanda</td>
+              <td style="font-size:12px; color:var(--text-muted);">3 dias atrás</td>
+              <td><span class="task-channel channel-whatsapp">WhatsApp</span></td>
+              <td><span class="contact-status"><span class="status-dot failed"></span>Não recebeu</span></td>
+              <td>
+                <div class="success-bar">
+                  <div class="progress-bar" style="width:80px;"><div class="progress-fill" style="width:20%; background:var(--red);"></div></div>
+                  <span style="color:var(--red);">20%</span>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td><div class="task-check checked" onclick="toggleCheck(this)" style="width:16px;height:16px;"></div></td>
+              <td><strong>Pedro Henrique Santos</strong></td>
+              <td>Violão</td>
+              <td>Prof. Ricardo</td>
+              <td style="font-size:12px; color:var(--text-muted);">Hoje, 10:20</td>
+              <td><span class="task-channel channel-presencial">Presencial</span></td>
+              <td><span class="contact-status"><span class="status-dot success"></span>Confirmou</span></td>
+              <td>
+                <div class="success-bar">
+                  <div class="progress-bar" style="width:80px;"><div class="progress-fill teal" style="width:100%;"></div></div>
+                  <span style="color:var(--green);">100%</span>
+                </div>
+              </td>
+            </tr>
+            <tr>
+              <td><div class="task-check" onclick="toggleCheck(this)" style="width:16px;height:16px;"></div></td>
+              <td><strong>Mariana Lima</strong></td>
+              <td>Piano</td>
+              <td>Prof. Maria</td>
+              <td style="font-size:12px; color:var(--text-muted);">5 dias atrás</td>
+              <td><span class="task-channel channel-phone">Telefone</span></td>
+              <td><span class="contact-status"><span class="status-dot pending"></span>2ª tentativa</span></td>
+              <td>
+                <div class="success-bar">
+                  <div class="progress-bar" style="width:80px;"><div class="progress-fill gold" style="width:50%;"></div></div>
+                  <span style="color:var(--yellow);">50%</span>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-top:16px; font-size:12.5px; color:var(--text-muted);">
+        <span>Mostrando 6 de 250 alunos</span>
+        <div style="display:flex; gap:6px;">
+          <button class="btn-ghost btn" style="padding:6px 12px; font-size:12px;">← Anterior</button>
+          <button class="btn-ghost btn" style="padding:6px 12px; font-size:12px; background:var(--accent); color:white; border:none;">1</button>
+          <button class="btn-ghost btn" style="padding:6px 12px; font-size:12px;">2</button>
+          <button class="btn-ghost btn" style="padding:6px 12px; font-size:12px;">3</button>
+          <button class="btn-ghost btn" style="padding:6px 12px; font-size:12px;">Próximo →</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== VISÃO GERENTE ===== -->
+    <div id="page-equipe" class="page" style="display:none;">
+      <div class="section-header">
+        <div>
+          <div class="section-title">Visão Gerente</div>
+          <div class="section-subtitle">Acompanhe o progresso de toda a equipe — Campo Grande</div>
+        </div>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat-card">
+          <div class="stat-top">
+            <div class="stat-icon purple">👥</div>
+          </div>
+          <div class="stat-value">6</div>
+          <div class="stat-label">Colaboradores</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-top">
+            <div class="stat-icon teal">📋</div>
+          </div>
+          <div class="stat-value">42</div>
+          <div class="stat-label">Checklists Ativos</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-top">
+            <div class="stat-icon gold">✅</div>
+          </div>
+          <div class="stat-value">79%</div>
+          <div class="stat-label">Conclusão Média</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-top">
+            <div class="stat-icon coral">⚠️</div>
+          </div>
+          <div class="stat-value">12</div>
+          <div class="stat-label">Atrasadas</div>
+        </div>
+      </div>
+
+      <!-- Team members -->
+      <div class="checklist-grid">
+        <div class="checklist-card">
+          <div class="checklist-card-header">
+            <div class="checklist-card-left">
+              <div style="width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,var(--green),#55efc4);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:14px;color:var(--bg-primary);">GB</div>
+              <div>
+                <div class="checklist-title">Gabi Martins</div>
+                <div class="checklist-meta">
+                  <span>Administrativo</span>
+                  <span class="meta-dot"></span>
+                  <span>8 checklists ativos</span>
+                  <span class="meta-dot"></span>
+                  <span>250 alunos</span>
+                </div>
+              </div>
+            </div>
+            <span class="badge" style="background:var(--green-soft); color:var(--green);">87% concluído</span>
+          </div>
+          <div class="progress-section">
+            <div class="progress-bar">
+              <div class="progress-fill teal" style="width:87%;"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="checklist-card">
+          <div class="checklist-card-header">
+            <div class="checklist-card-left">
+              <div style="width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,var(--accent),#a29bfe);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:14px;color:white;">JN</div>
+              <div>
+                <div class="checklist-title">John Nascimento</div>
+                <div class="checklist-meta">
+                  <span>Comercial</span>
+                  <span class="meta-dot"></span>
+                  <span>6 checklists ativos</span>
+                  <span class="meta-dot"></span>
+                  <span>250 alunos</span>
+                </div>
+              </div>
+            </div>
+            <span class="badge" style="background:var(--yellow-soft); color:var(--yellow);">72% concluído</span>
+          </div>
+          <div class="progress-section">
+            <div class="progress-bar">
+              <div class="progress-fill gold" style="width:72%;"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="checklist-card">
+          <div class="checklist-card-header">
+            <div class="checklist-card-left">
+              <div style="width:42px;height:42px;border-radius:50%;background:linear-gradient(135deg,var(--yellow),#ffeaa7);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:14px;color:var(--bg-primary);">VT</div>
+              <div>
+                <div class="checklist-title">Vitória Torres</div>
+                <div class="checklist-meta">
+                  <span>Administrativo</span>
+                  <span class="meta-dot"></span>
+                  <span>5 checklists ativos</span>
+                  <span class="meta-dot"></span>
+                  <span>200 alunos</span>
+                </div>
+              </div>
+            </div>
+            <span class="badge" style="background:var(--green-soft); color:var(--green);">91% concluído</span>
+          </div>
+          <div class="progress-section">
+            <div class="progress-bar">
+              <div class="progress-fill teal" style="width:91%;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<!-- MODAL: Novo Checklist -->
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>✨ Novo Checklist</h3>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label class="form-label">Nome do Checklist</label>
+        <input type="text" class="form-input" placeholder="Ex: Recesso de Carnaval — Comunicação">
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Periodicidade</label>
+          <select class="form-input">
+            <option>Diário</option>
+            <option>Semanal</option>
+            <option>Mensal</option>
+            <option>Pontual</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Departamento</label>
+          <select class="form-input">
+            <option>Administrativo</option>
+            <option>Comercial</option>
+            <option>Pedagógico</option>
+            <option>Geral</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Vincular Alunos</label>
+        <div class="form-row" style="margin-bottom:10px;">
+          <select class="form-input" id="filterType" onchange="updateStudentFilter()">
+            <option value="todos">Todos os Alunos</option>
+            <option value="curso">Por Curso</option>
+            <option value="professor">Por Professor</option>
+            <option value="manual">Seleção Manual</option>
+          </select>
+          <select class="form-input" id="filterValue">
+            <option>498 alunos selecionados</option>
+          </select>
+        </div>
+        <div class="student-selector" id="studentSelector" style="display:none;">
+          <div class="select-all-bar">
+            <div class="task-check" onclick="toggleCheck(this)" style="width:16px;height:16px;"></div>
+            <label>Selecionar Todos</label>
+          </div>
+          <div class="student-row">
+            <div class="task-check checked" onclick="toggleCheck(this)" style="width:16px;height:16px;"></div>
+            <span class="student-name">Lucas Mendes</span>
+            <span class="student-course">Guitarra · Prof. Ricardo</span>
+          </div>
+          <div class="student-row">
+            <div class="task-check checked" onclick="toggleCheck(this)" style="width:16px;height:16px;"></div>
+            <span class="student-name">Ana Paula Silva</span>
+            <span class="student-course">Piano · Prof. Maria</span>
+          </div>
+          <div class="student-row">
+            <div class="task-check checked" onclick="toggleCheck(this)" style="width:16px;height:16px;"></div>
+            <span class="student-name">Rafael Costa</span>
+            <span class="student-course">Bateria · Prof. André</span>
+          </div>
+          <div class="student-row">
+            <div class="task-check" onclick="toggleCheck(this)" style="width:16px;height:16px;"></div>
+            <span class="student-name">Fernanda Oliveira</span>
+            <span class="student-course">Canto · Prof. Fernanda</span>
+          </div>
+          <div class="student-row">
+            <div class="task-check" onclick="toggleCheck(this)" style="width:16px;height:16px;"></div>
+            <span class="student-name">Pedro Henrique Santos</span>
+            <span class="student-course">Violão · Prof. Ricardo</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Tarefas</label>
+        <div id="taskBuilder" style="display:flex; flex-direction:column; gap:8px;">
+          <div style="display:flex; gap:8px; align-items:center;">
+            <input type="text" class="form-input" placeholder="Descrição da tarefa..." style="flex:1;">
+            <select class="form-input" style="width:130px;">
+              <option>Sem canal</option>
+              <option>WhatsApp</option>
+              <option>Email</option>
+              <option>Telefone</option>
+              <option>Presencial</option>
+              <option>Instagram</option>
+            </select>
+            <button class="btn btn-ghost" style="padding:8px; font-size:16px;" title="Adicionar subtarefa">↳</button>
+          </div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <input type="text" class="form-input" placeholder="Descrição da tarefa..." style="flex:1;">
+            <select class="form-input" style="width:130px;">
+              <option>Sem canal</option>
+              <option>WhatsApp</option>
+              <option>Email</option>
+              <option>Telefone</option>
+              <option>Presencial</option>
+              <option>Instagram</option>
+            </select>
+            <button class="btn btn-ghost" style="padding:8px; font-size:16px;" title="Adicionar subtarefa">↳</button>
+          </div>
+        </div>
+        <button class="btn btn-ghost" style="margin-top:10px; width:100%; justify-content:center;" onclick="addTask()">+ Adicionar Tarefa</button>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Alerta / Lembrete</label>
+          <select class="form-input">
+            <option>Sem alerta</option>
+            <option>1 dia antes</option>
+            <option>2 dias antes</option>
+            <option>3 dias antes</option>
+            <option>1 semana antes</option>
+            <option>No dia, às 8h</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Prioridade</label>
+          <select class="form-input">
+            <option>Normal</option>
+            <option>Alta</option>
+            <option>Urgente 🔴</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancelar</button>
+      <button class="btn btn-primary" onclick="closeModal()">🚀 Criar Checklist</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Page navigation
+function showPage(pageId) {
+  document.querySelectorAll('.page').forEach(p => p.style.display = 'none');
+  document.getElementById('page-' + pageId).style.display = 'block';
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  // Reset expanded view
+  document.getElementById('expanded-checklist').classList.remove('active');
+  document.getElementById('checklist-list').style.display = 'grid';
+}
+
+// Tab switching
+function switchTab(el, tab) {
+  el.parentElement.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+}
+
+// Filter chips
+document.querySelectorAll('.filter-chip').forEach(chip => {
+  chip.addEventListener('click', function() {
+    if (!this.closest('.expanded-view')) {
+      this.parentElement.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+    }
+    this.classList.toggle('active');
+  });
+});
+
+// Checkbox toggle
+function toggleCheck(el) {
+  el.classList.toggle('checked');
+  const text = el.nextElementSibling;
+  if (text && text.classList.contains('task-text')) {
+    text.classList.toggle('completed');
+  }
+}
+
+// Select all
+function toggleSelectAll() {
+  const selectAll = document.getElementById('selectAll');
+  selectAll.classList.toggle('checked');
+  const isChecked = selectAll.classList.contains('checked');
+  document.querySelectorAll('#expanded-checklist .task-check:not(#selectAll)').forEach(c => {
+    if (isChecked) {
+      c.classList.add('checked');
+      const text = c.nextElementSibling;
+      if (text && text.classList.contains('task-text')) text.classList.add('completed');
+    } else {
+      c.classList.remove('checked');
+      const text = c.nextElementSibling;
+      if (text && text.classList.contains('task-text')) text.classList.remove('completed');
+    }
+  });
+}
+
+// Expand checklist
+function expandChecklist(id) {
+  document.getElementById('checklist-list').style.display = 'none';
+  document.querySelector('.filter-bar').style.display = 'none';
+  document.querySelector('.tab-bar').style.display = 'none';
+  document.getElementById('expanded-checklist').classList.add('active');
+}
+
+function closeChecklist() {
+  document.getElementById('checklist-list').style.display = 'grid';
+  document.querySelector('.filter-bar').style.display = 'flex';
+  document.querySelector('.tab-bar').style.display = 'flex';
+  document.getElementById('expanded-checklist').classList.remove('active');
+}
+
+// Modal
+function openModal() {
+  document.getElementById('modal').classList.add('show');
+}
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('show');
+}
+
+document.getElementById('modal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
+
+// Student filter
+function updateStudentFilter() {
+  const type = document.getElementById('filterType').value;
+  const selector = document.getElementById('studentSelector');
+  const filterValue = document.getElementById('filterValue');
+  
+  if (type === 'manual') {
+    selector.style.display = 'block';
+    filterValue.style.display = 'none';
+  } else if (type === 'curso') {
+    selector.style.display = 'none';
+    filterValue.style.display = 'block';
+    filterValue.innerHTML = '<option>Selecione o curso</option><option>Guitarra (45 alunos)</option><option>Piano (62 alunos)</option><option>Bateria (78 alunos)</option><option>Violão (55 alunos)</option><option>Canto (38 alunos)</option><option>Baixo (22 alunos)</option>';
+  } else if (type === 'professor') {
+    selector.style.display = 'none';
+    filterValue.style.display = 'block';
+    filterValue.innerHTML = '<option>Selecione o professor</option><option>Prof. Ricardo (85 alunos)</option><option>Prof. Maria (72 alunos)</option><option>Prof. André (68 alunos)</option><option>Prof. Fernanda (55 alunos)</option>';
+  } else {
+    selector.style.display = 'none';
+    filterValue.style.display = 'block';
+    filterValue.innerHTML = '<option>498 alunos selecionados</option>';
+  }
+}
+
+// Add task
+function addTask() {
+  const builder = document.getElementById('taskBuilder');
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex; gap:8px; align-items:center; animation: fadeIn 0.2s ease;';
+  row.innerHTML = `
+    <input type="text" class="form-input" placeholder="Descrição da tarefa..." style="flex:1;" autofocus>
+    <select class="form-input" style="width:130px;">
+      <option>Sem canal</option>
+      <option>WhatsApp</option>
+      <option>Email</option>
+      <option>Telefone</option>
+      <option>Presencial</option>
+      <option>Instagram</option>
+    </select>
+    <button class="btn btn-ghost" style="padding:8px; font-size:16px;" title="Adicionar subtarefa">↳</button>
+  `;
+  builder.appendChild(row);
+  row.querySelector('input').focus();
+}
+
+// Unit selector
+document.querySelectorAll('.unit-btn').forEach(btn => {
+  btn.addEventListener('click', function() {
+    document.querySelectorAll('.unit-btn').forEach(b => b.classList.remove('active'));
+    this.classList.add('active');
+  });
+});
+
+// Keyboard shortcut
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    closeModal();
+    closeChecklist();
+  }
+});
+</script>
+</body>
+</html>
