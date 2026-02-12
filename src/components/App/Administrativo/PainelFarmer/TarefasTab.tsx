@@ -26,7 +26,7 @@ interface TarefasTabProps {
 }
 
 export function TarefasTab({ unidadeId }: TarefasTabProps) {
-  const { colaborador } = useColaboradorAtual();
+  const { colaborador } = useColaboradorAtual(unidadeId);
   const { 
     tarefas, 
     tarefasPendentes, 
@@ -35,7 +35,7 @@ export function TarefasTab({ unidadeId }: TarefasTabProps) {
     criarTarefa, 
     marcarConcluida, 
     excluirTarefa 
-  } = useTarefas(colaborador?.id || null, colaborador?.unidade_id || unidadeId);
+  } = useTarefas(colaborador?.id || null, unidadeId);
 
   const [modalAberto, setModalAberto] = useState(false);
   const [salvando, setSalvando] = useState(false);

@@ -19,7 +19,7 @@ interface HistoricoTabProps {
 }
 
 export function HistoricoTab({ unidadeId }: HistoricoTabProps) {
-  const { colaborador } = useColaboradorAtual();
+  const { colaborador } = useColaboradorAtual(unidadeId);
   const [historico, setHistorico] = useState<HistoricoRotinas[]>([]);
   const [loading, setLoading] = useState(true);
   const [periodo, setPeriodo] = useState<7 | 14 | 30>(7);

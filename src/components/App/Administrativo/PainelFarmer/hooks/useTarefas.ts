@@ -13,10 +13,17 @@ export function useTarefas(colaboradorId: number | null, unidadeId: string) {
     try {
       setLoading(true);
       
-      const { data, error: fetchError } = await supabase
+      let query = supabase
         .from('farmer_tarefas')
         .select('*, alunos(nome), colaboradores(nome, apelido)')
-        .eq('colaborador_id', colaboradorId)
+        .eq('colaborador_id', colaboradorId);
+
+      // Filtrar por unidade quando não for "todos"
+      if (unidadeId && unidadeId !== 'todos') {
+        query = query.eq('unidade_id', unidadeId);
+      }
+
+      const { data, error: fetchError } = await query
         .order('concluida', { ascending: true })
         .order('data_prazo', { ascending: true, nullsFirst: false })
         .order('prioridade', { ascending: true })
@@ -30,7 +37,7 @@ export function useTarefas(colaboradorId: number | null, unidadeId: string) {
     } finally {
       setLoading(false);
     }
-  }, [colaboradorId]);
+  }, [colaboradorId, unidadeId]);
 
   useEffect(() => {
     if (colaboradorId) {

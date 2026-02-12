@@ -29,7 +29,7 @@ export function useColaboradorAtual(unidadeId?: string) {
             query = query.eq('unidade_id', unidadeId);
           }
           
-          const { data: fallbackColaborador } = await query.limit(1).single();
+          const { data: fallbackColaborador } = await query.limit(1).maybeSingle();
           
           if (fallbackColaborador) {
             setColaborador(fallbackColaborador);
@@ -43,16 +43,16 @@ export function useColaboradorAtual(unidadeId?: string) {
           .select('*')
           .eq('usuario_id', user.id)
           .eq('ativo', true)
-          .single();
+          .maybeSingle();
 
-        if (fetchError) {
+        if (fetchError || !data) {
           // Se não encontrou por usuario_id, tentar fallback por email
           const { data: fallbackByEmail } = await supabase
             .from('colaboradores')
             .select('*')
             .eq('email', user.email)
             .eq('ativo', true)
-            .single();
+            .maybeSingle();
 
           if (fallbackByEmail) {
             setColaborador(fallbackByEmail);
@@ -71,7 +71,7 @@ export function useColaboradorAtual(unidadeId?: string) {
             query = query.eq('unidade_id', unidadeId);
           }
           
-          const { data: fallbackColaborador } = await query.limit(1).single();
+          const { data: fallbackColaborador } = await query.limit(1).maybeSingle();
 
           if (fallbackColaborador) {
             setColaborador(fallbackColaborador);

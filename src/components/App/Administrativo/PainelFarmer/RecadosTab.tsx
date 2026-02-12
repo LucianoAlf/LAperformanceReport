@@ -73,7 +73,7 @@ const TIPOS_RECADO = [
 ];
 
 export function RecadosTab({ unidadeId }: RecadosTabProps) {
-  const { colaborador } = useColaboradorAtual();
+  const { colaborador } = useColaboradorAtual(unidadeId);
   const [professores, setProfessores] = useState<Professor[]>([]);
   const [templates, setTemplates] = useState<Template[]>([]);
   const [campanhas, setCampanhas] = useState<Campanha[]>([]);
