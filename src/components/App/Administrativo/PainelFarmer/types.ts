@@ -247,6 +247,7 @@ export interface AlertaAniversariante {
   data_nascimento: string;
   unidade_id: string;
   idade: number;
+  classificacao: string | null;
   professor_id: number | null;
   professor_nome: string | null;
   instrumento: string | null;
@@ -273,6 +274,8 @@ export interface AlertaNovoMatriculado {
   unidade_id: string;
   data_matricula: string;
   valor_parcela: number;
+  classificacao: string | null;
+  idade: number | null;
   professor_id: number | null;
   professor_nome: string | null;
   instrumento: string | null;

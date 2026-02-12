@@ -29,6 +29,7 @@ import { Button } from '@/components/ui/button';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { sendWhatsAppMessage, formatPhoneNumber } from '@/services/whatsapp';
+import { gerarMensagemAniversario, gerarMensagemBoasVindas } from '@/services/mensagemGenerativa';
 import { useColaboradorAtual, useRotinas, useAlertas, useTarefas, useFarmersUnidade, useDashboardStats } from './hooks';
 import type { AlertaRenovacao, AlertaInadimplente, AlertaAniversariante, AlertaNovoMatriculado } from './types';
 
@@ -339,6 +340,13 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
                     whatsapp={item.whatsapp}
                     actionLabel="Parabéns"
                     mensagemTemplate={`🎂 Parabéns, ${item.aluno_nome.split(' ')[0]}! A família LA Music deseja um dia incrível cheio de música! 🎶 Que esse novo ciclo traga ainda mais conquistas e muitas músicas novas!`}
+                    gerarMensagem={() => gerarMensagemAniversario({
+                      aluno_nome: item.aluno_nome,
+                      instrumento: item.instrumento,
+                      professor_nome: item.professor_nome,
+                      idade: item.idade,
+                      classificacao: item.classificacao,
+                    })}
                   />
                 )}
               />
@@ -363,6 +371,15 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
                     whatsapp={item.whatsapp}
                     actionLabel="Boas-vindas"
                     mensagemTemplate={`🎸 Bem-vindo(a) à LA Music, ${item.aluno_nome.split(' ')[0]}! Sua primeira aula de ${item.instrumento || 'música'} está marcada para ${item.dia_aula || 'breve'} às ${item.horario_aula || ''}. Estamos muito felizes em te receber! Qualquer dúvida, é só chamar. 🎵`}
+                    gerarMensagem={() => gerarMensagemBoasVindas({
+                      aluno_nome: item.aluno_nome,
+                      instrumento: item.instrumento,
+                      professor_nome: item.professor_nome,
+                      idade: item.idade,
+                      classificacao: item.classificacao,
+                      dia_aula: item.dia_aula,
+                      horario_aula: item.horario_aula,
+                    })}
                   />
                 )}
               />
@@ -608,16 +625,34 @@ interface AlertaListItemProps {
   whatsapp?: string | null;
   actionLabel?: string;
   mensagemTemplate?: string;
+  gerarMensagem?: () => Promise<string>;
 }
 
-function AlertaListItem({ nome, detalhe, whatsapp, actionLabel = 'Contato', mensagemTemplate }: AlertaListItemProps) {
+function AlertaListItem({ nome, detalhe, whatsapp, actionLabel = 'Contato', mensagemTemplate, gerarMensagem }: AlertaListItemProps) {
   const [showPreview, setShowPreview] = useState(false);
   const [mensagemEditavel, setMensagemEditavel] = useState('');
   const [enviando, setEnviando] = useState(false);
+  const [gerando, setGerando] = useState(false);
 
-  const abrirPreview = () => {
-    setMensagemEditavel(mensagemTemplate || '');
+  const abrirPreview = async () => {
     setShowPreview(true);
+    // Se tem função generativa, usa ela; senão, usa template fixo
+    if (gerarMensagem) {
+      setGerando(true);
+      setMensagemEditavel('✨ Gerando mensagem personalizada...');
+      try {
+        const mensagem = await gerarMensagem();
+        setMensagemEditavel(mensagem);
+      } catch (err) {
+        console.error('[MensagemGenerativa] Erro:', err);
+        // Fallback para template fixo
+        setMensagemEditavel(mensagemTemplate || '');
+      } finally {
+        setGerando(false);
+      }
+    } else {
+      setMensagemEditavel(mensagemTemplate || '');
+    }
   };
 
   const enviarWhatsApp = async () => {
@@ -666,7 +701,7 @@ function AlertaListItem({ nome, detalhe, whatsapp, actionLabel = 'Contato', mens
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {whatsapp && mensagemTemplate && (
+          {whatsapp && (mensagemTemplate || gerarMensagem) && (
             <Button 
               variant="ghost" 
               size="sm" 
@@ -676,11 +711,12 @@ function AlertaListItem({ nome, detalhe, whatsapp, actionLabel = 'Contato', mens
                 abrirPreview();
               }}
             >
+              {gerarMensagem && <Sparkles className="w-3 h-3" />}
               <MessageSquare className="w-3.5 h-3.5" />
               {actionLabel}
             </Button>
           )}
-          {whatsapp && !mensagemTemplate && (
+          {whatsapp && !mensagemTemplate && !gerarMensagem && (
             <Button 
               variant="ghost" 
               size="sm" 
@@ -713,7 +749,11 @@ function AlertaListItem({ nome, detalhe, whatsapp, actionLabel = 'Contato', mens
             <textarea
               value={mensagemEditavel}
               onChange={(e) => setMensagemEditavel(e.target.value)}
-              className="w-full bg-slate-800 border border-slate-600 rounded-md px-3 py-2 text-xs text-white resize-none focus:outline-none focus:border-violet-500"
+              disabled={gerando}
+              className={cn(
+                "w-full bg-slate-800 border border-slate-600 rounded-md px-3 py-2 text-xs text-white resize-none focus:outline-none focus:border-violet-500",
+                gerando && "opacity-60 animate-pulse"
+              )}
               rows={4}
             />
             <div className="flex justify-end gap-2">
@@ -724,7 +764,7 @@ function AlertaListItem({ nome, detalhe, whatsapp, actionLabel = 'Contato', mens
                 size="sm" 
                 className="text-xs h-7 bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5"
                 onClick={enviarWhatsApp}
-                disabled={enviando}
+                disabled={enviando || gerando}
               >
                 {enviando ? (
                   <>
