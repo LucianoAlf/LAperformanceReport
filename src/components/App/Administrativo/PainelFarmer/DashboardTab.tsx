@@ -26,6 +26,9 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { toast } from 'sonner';
+import { sendWhatsAppMessage, formatPhoneNumber } from '@/services/whatsapp';
 import { useColaboradorAtual, useRotinas, useAlertas, useTarefas, useFarmersUnidade, useDashboardStats } from './hooks';
 import type { AlertaRenovacao, AlertaInadimplente, AlertaAniversariante, AlertaNovoMatriculado } from './types';
 
@@ -468,9 +471,7 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
                   }}
                   onEditCancel={() => setEditandoRotinaId(null)}
                   onDelete={async () => {
-                    if (confirm('Excluir esta rotina?')) {
-                      await excluirRotina(rotina.rotina_id);
-                    }
+                    await excluirRotina(rotina.rotina_id);
                   }}
                 />
               ))}
@@ -612,19 +613,44 @@ interface AlertaListItemProps {
 function AlertaListItem({ nome, detalhe, whatsapp, actionLabel = 'Contato', mensagemTemplate }: AlertaListItemProps) {
   const [showPreview, setShowPreview] = useState(false);
   const [mensagemEditavel, setMensagemEditavel] = useState('');
+  const [enviando, setEnviando] = useState(false);
 
   const abrirPreview = () => {
     setMensagemEditavel(mensagemTemplate || '');
     setShowPreview(true);
   };
 
-  const enviarWhatsApp = () => {
+  const enviarWhatsApp = async () => {
     if (!whatsapp) return;
-    const numero = whatsapp.replace(/\D/g, '');
-    const numeroFormatado = numero.startsWith('55') ? numero : `55${numero}`;
-    const msgEncoded = encodeURIComponent(mensagemEditavel);
-    window.open(`https://wa.me/${numeroFormatado}?text=${msgEncoded}`, '_blank');
-    setShowPreview(false);
+    setEnviando(true);
+    try {
+      const numeroFormatado = formatPhoneNumber(whatsapp);
+      const resultado = await sendWhatsAppMessage({
+        to: numeroFormatado,
+        text: mensagemEditavel,
+      });
+
+      if (resultado.success) {
+        toast.success(`Mensagem enviada para ${nome.split(' ')[0]}!`);
+        setShowPreview(false);
+      } else {
+        // Fallback: abrir wa.me se UAZAPI falhar
+        console.error('[WhatsApp Farmer] Erro UAZAPI:', resultado.error);
+        toast.error(`Erro UAZAPI: ${resultado.error}. Abrindo WhatsApp Web...`);
+        const msgEncoded = encodeURIComponent(mensagemEditavel);
+        window.open(`https://wa.me/${numeroFormatado}?text=${msgEncoded}`, '_blank');
+        setShowPreview(false);
+      }
+    } catch (err) {
+      console.error('[WhatsApp Farmer] Erro inesperado:', err);
+      // Fallback: abrir wa.me
+      const numeroFormatado = formatPhoneNumber(whatsapp);
+      const msgEncoded = encodeURIComponent(mensagemEditavel);
+      window.open(`https://wa.me/${numeroFormatado}?text=${msgEncoded}`, '_blank');
+      setShowPreview(false);
+    } finally {
+      setEnviando(false);
+    }
   };
 
   return (
@@ -661,8 +687,7 @@ function AlertaListItem({ nome, detalhe, whatsapp, actionLabel = 'Contato', mens
               className="text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
               onClick={(e) => {
                 e.stopPropagation();
-                const numero = whatsapp.replace(/\D/g, '');
-                const numeroFormatado = numero.startsWith('55') ? numero : `55${numero}`;
+                const numeroFormatado = formatPhoneNumber(whatsapp);
                 window.open(`https://wa.me/${numeroFormatado}`, '_blank');
               }}
             >
@@ -699,9 +724,19 @@ function AlertaListItem({ nome, detalhe, whatsapp, actionLabel = 'Contato', mens
                 size="sm" 
                 className="text-xs h-7 bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5"
                 onClick={enviarWhatsApp}
+                disabled={enviando}
               >
-                <MessageSquare className="w-3 h-3" />
-                Enviar WhatsApp
+                {enviando ? (
+                  <>
+                    <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    Enviando...
+                  </>
+                ) : (
+                  <>
+                    <MessageSquare className="w-3 h-3" />
+                    Enviar WhatsApp
+                  </>
+                )}
               </Button>
             </div>
           </div>
@@ -733,6 +768,9 @@ interface RotinaItemProps {
 }
 
 function RotinaItem({ rotina, onToggle, editando, editandoTexto, onEditStart, onEditChange, onEditSave, onEditCancel, onDelete }: RotinaItemProps) {
+  const [confirmandoExclusao, setConfirmandoExclusao] = useState(false);
+  const [excluindo, setExcluindo] = useState(false);
+
   const frequenciaLabels: Record<string, string> = {
     diario: 'Diário',
     semanal: 'Semanal',
@@ -743,6 +781,20 @@ function RotinaItem({ rotina, onToggle, editando, editandoTexto, onEditStart, on
     diario: 'bg-blue-500/20 text-blue-400',
     semanal: 'bg-violet-500/20 text-violet-400',
     mensal: 'bg-amber-500/20 text-amber-400',
+  };
+
+  const handleExcluir = async () => {
+    setExcluindo(true);
+    try {
+      await onDelete?.();
+      toast.success(`Rotina "${rotina.descricao}" excluída`);
+    } catch (err) {
+      console.error('Erro ao excluir rotina:', err);
+      toast.error('Erro ao excluir rotina');
+    } finally {
+      setExcluindo(false);
+      setConfirmandoExclusao(false);
+    }
   };
 
   // Modo edição inline
@@ -771,72 +823,97 @@ function RotinaItem({ rotina, onToggle, editando, editandoTexto, onEditStart, on
   }
 
   return (
-    <div 
-      className={cn(
-        'group flex items-center gap-3 p-3 rounded-lg border transition-all',
-        rotina.concluida 
-          ? 'border-emerald-500/30 bg-emerald-500/5' 
-          : 'border-slate-700/50 bg-slate-800/30 hover:bg-slate-700/30'
-      )}
-    >
+    <>
       <div 
         className={cn(
-          'w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer flex-shrink-0',
+          'group flex items-center gap-3 p-3 rounded-lg border transition-all',
           rotina.concluida 
-            ? 'border-emerald-500 bg-emerald-500' 
-            : 'border-slate-500'
+            ? 'border-emerald-500/30 bg-emerald-500/5' 
+            : 'border-slate-700/50 bg-slate-800/30 hover:bg-slate-700/30'
         )}
-        onClick={onToggle}
       >
-        {rotina.concluida && <CheckCircle2 className="w-3 h-3 text-white" />}
-      </div>
-      
-      <div className="flex-1 cursor-pointer" onClick={onToggle}>
-        <p className={cn(
-          'text-sm font-medium transition-all',
-          rotina.concluida ? 'text-slate-400 line-through' : 'text-white'
-        )}>
-          {rotina.descricao}
-        </p>
-        <div className="flex items-center gap-2 mt-1">
-          <span className={cn(
-            'text-xs px-2 py-0.5 rounded-full',
-            frequenciaStyles[rotina.frequencia] || frequenciaStyles.diario
-          )}>
-            {frequenciaLabels[rotina.frequencia] || rotina.frequencia}
-          </span>
-          {rotina.responsavel_nome && (
-            <span className="text-xs text-slate-400">
-              • {rotina.responsavel_apelido || rotina.responsavel_nome}
-            </span>
+        <div 
+          className={cn(
+            'w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer flex-shrink-0',
+            rotina.concluida 
+              ? 'border-emerald-500 bg-emerald-500' 
+              : 'border-slate-500'
           )}
+          onClick={onToggle}
+        >
+          {rotina.concluida && <CheckCircle2 className="w-3 h-3 text-white" />}
+        </div>
+        
+        <div className="flex-1 cursor-pointer" onClick={onToggle}>
+          <p className={cn(
+            'text-sm font-medium transition-all',
+            rotina.concluida ? 'text-slate-400 line-through' : 'text-white'
+          )}>
+            {rotina.descricao}
+          </p>
+          <div className="flex items-center gap-2 mt-1">
+            <span className={cn(
+              'text-xs px-2 py-0.5 rounded-full',
+              frequenciaStyles[rotina.frequencia] || frequenciaStyles.diario
+            )}>
+              {frequenciaLabels[rotina.frequencia] || rotina.frequencia}
+            </span>
+            {rotina.responsavel_nome && (
+              <span className="text-xs text-slate-400">
+                • {rotina.responsavel_apelido || rotina.responsavel_nome}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {rotina.prioridade === 'alta' && (
+          <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />
+        )}
+
+        {/* Botões editar/excluir - aparecem no hover */}
+        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="h-7 w-7 p-0 text-slate-400 hover:text-violet-400"
+            onClick={(e) => { e.stopPropagation(); onEditStart?.(); }}
+          >
+            <Pencil className="w-3.5 h-3.5" />
+          </Button>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            className="h-7 w-7 p-0 text-slate-400 hover:text-rose-400"
+            onClick={(e) => { e.stopPropagation(); setConfirmandoExclusao(true); }}
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </Button>
         </div>
       </div>
 
-      {rotina.prioridade === 'alta' && (
-        <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />
-      )}
-
-      {/* Botões editar/excluir - aparecem no hover */}
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          className="h-7 w-7 p-0 text-slate-400 hover:text-violet-400"
-          onClick={(e) => { e.stopPropagation(); onEditStart?.(); }}
-        >
-          <Pencil className="w-3.5 h-3.5" />
-        </Button>
-        <Button 
-          variant="ghost" 
-          size="sm" 
-          className="h-7 w-7 p-0 text-slate-400 hover:text-rose-400"
-          onClick={(e) => { e.stopPropagation(); onDelete?.(); }}
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-        </Button>
-      </div>
-    </div>
+      {/* AlertDialog de confirmação de exclusão */}
+      <AlertDialog open={confirmandoExclusao} onOpenChange={setConfirmandoExclusao}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir rotina?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir a rotina <strong>"{rotina.descricao}"</strong>? 
+              Essa ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={excluindo}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleExcluir}
+              disabled={excluindo}
+              className="bg-rose-600 hover:bg-rose-500 text-white"
+            >
+              {excluindo ? 'Excluindo...' : 'Excluir'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { X, CheckCircle2, Loader2, Search, Music, Users, AlertTriangle, UserMinus, Lightbulb, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, CheckCircle2, Loader2, Search, Music, Users, AlertTriangle, UserMinus, Lightbulb, ChevronDown, ChevronUp, Clock, BookOpen, CalendarClock, UserPlus } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -343,19 +343,78 @@ export function ModalNovaTurma({
     return alunosSelecionados.length > capacidadeEfetiva;
   }, [capacidadeEfetiva, alunosSelecionados.length]);
 
-  // Filtrar alunos para busca (apenas ativos, pagantes ou bolsistas)
+  // Calcular horários livres do professor no dia selecionado
+  const horariosLivresProfessor = useMemo(() => {
+    if (!formData.professor_id || !formData.dia_semana) return [];
+    
+    // Turmas do professor neste dia
+    const turmasDoProfessorNoDia = turmasExistentes.filter(t =>
+      t.professor_id === formData.professor_id &&
+      t.dia_semana === formData.dia_semana
+    );
+
+    // Horários ocupados (extrair hora de início)
+    const horariosOcupados = turmasDoProfessorNoDia.map(t => 
+      t.horario_inicio?.substring(0, 5) || ''
+    ).filter(Boolean);
+
+    // Filtrar horários disponíveis removendo os ocupados
+    const livres = horariosDisponiveis.filter(h => !horariosOcupados.includes(h));
+    
+    return livres;
+  }, [formData.professor_id, formData.dia_semana, turmasExistentes, horariosDisponiveis]);
+
+  // Turmas do professor no dia (para exibir na seção de conflitos)
+  const turmasProfessorNoDia = useMemo(() => {
+    if (!formData.professor_id || !formData.dia_semana) return [];
+    return turmasExistentes
+      .filter(t =>
+        t.professor_id === formData.professor_id &&
+        t.dia_semana === formData.dia_semana
+      )
+      .sort((a, b) => (a.horario_inicio || '').localeCompare(b.horario_inicio || ''));
+  }, [formData.professor_id, formData.dia_semana, turmasExistentes]);
+
+  // Filtrar alunos para busca com indicadores inteligentes
   const alunosFiltrados = useMemo(() => {
     if (!buscaAluno || buscaAluno.length < 2) return [];
     
     const termo = buscaAluno.toLowerCase();
-    return alunosDisponiveis
+    const filtrados = alunosDisponiveis
       .filter(a => 
         a.status === 'ativo' &&
         a.nome.toLowerCase().includes(termo) &&
         !alunosSelecionados.some(sel => sel.id === a.id)
       )
-      .slice(0, 10); // Limitar a 10 resultados
-  }, [buscaAluno, alunosDisponiveis, alunosSelecionados]);
+      .map(aluno => {
+        // Calcular indicadores
+        const mesmoCurso = !!(formData.curso_id && aluno.curso_id === formData.curso_id);
+        const mesmoProfessor = !!(formData.professor_id && aluno.professor_atual_id === formData.professor_id);
+        const conflitoHorario = !!(formData.dia_semana && formData.horario && 
+          aluno.dia_aula === formData.dia_semana && 
+          aluno.horario_aula?.startsWith(formData.horario.substring(0, 5)));
+        
+        // Horário próximo (±1h no mesmo dia)
+        let horarioProximo = false;
+        if (formData.dia_semana && formData.horario && aluno.dia_aula === formData.dia_semana && aluno.horario_aula) {
+          const hTurma = parseInt(formData.horario.split(':')[0]);
+          const hAluno = parseInt(aluno.horario_aula.split(':')[0]);
+          horarioProximo = Math.abs(hTurma - hAluno) <= 1 && !conflitoHorario;
+        }
+
+        // Score de relevância (maior = mais relevante)
+        let score = 0;
+        if (mesmoCurso) score += 10;
+        if (mesmoProfessor) score += 5;
+        if (horarioProximo) score += 3;
+        if (conflitoHorario) score -= 20;
+
+        return { aluno, mesmoCurso, mesmoProfessor, conflitoHorario, horarioProximo, score };
+      })
+      .sort((a, b) => b.score - a.score || a.aluno.nome.localeCompare(b.aluno.nome));
+
+    return filtrados.slice(0, 15);
+  }, [buscaAluno, alunosDisponiveis, alunosSelecionados, formData.curso_id, formData.professor_id, formData.dia_semana, formData.horario]);
 
   // Verificar conflito de horário para um aluno
   function temConflitoHorario(aluno: Aluno): boolean {
@@ -753,13 +812,71 @@ export function ModalNovaTurma({
               )}
             </div>
 
-            {/* Seção de Conflitos */}
-            {conflitos.length > 0 && (
-              <div className="bg-slate-800/50 rounded-xl p-4">
-                <ListaConflitos 
-                  conflitos={conflitos}
-                  mostrarVazio={false}
-                />
+            {/* Seção de Conflitos + Horários Livres */}
+            {(conflitos.length > 0 || (turmasProfessorNoDia.length > 0 && formData.dia_semana)) && (
+              <div className="bg-slate-800/50 rounded-xl p-4 space-y-4">
+                {conflitos.length > 0 && (
+                  <ListaConflitos 
+                    conflitos={conflitos}
+                    mostrarVazio={false}
+                  />
+                )}
+
+                {/* Horários livres do professor no dia */}
+                {formData.dia_semana && turmasProfessorNoDia.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Clock className="w-4 h-4 text-cyan-400" />
+                      <h4 className="text-sm font-semibold text-cyan-400">
+                        Agenda do professor — {formData.dia_semana}
+                      </h4>
+                    </div>
+
+                    {/* Turmas ocupadas */}
+                    <div className="space-y-1">
+                      <p className="text-xs text-slate-500 uppercase tracking-wide">Ocupado</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {turmasProfessorNoDia.map((t, i) => (
+                          <span
+                            key={i}
+                            className="px-2 py-1 rounded-md text-xs font-medium bg-red-500/15 text-red-300 border border-red-500/20"
+                          >
+                            {t.horario_inicio?.substring(0, 5)} — {t.curso_nome || 'Turma'} {t.sala_nome ? `• ${t.sala_nome}` : ''}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Horários livres */}
+                    {horariosLivresProfessor.length > 0 ? (
+                      <div className="space-y-1">
+                        <p className="text-xs text-slate-500 uppercase tracking-wide">Disponível</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {horariosLivresProfessor.map(h => (
+                            <button
+                              key={h}
+                              type="button"
+                              onClick={() => setFormData(prev => ({ ...prev, horario: h }))}
+                              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
+                                formData.horario === h
+                                  ? 'bg-emerald-500/30 text-emerald-200 border border-emerald-500 ring-1 ring-emerald-500/50'
+                                  : 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-500/40'
+                              }`}
+                            >
+                              {h}
+                            </button>
+                          ))}
+                        </div>
+                        <p className="text-[10px] text-slate-500 mt-1">Clique em um horário para selecioná-lo</p>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-amber-400 flex items-center gap-1.5">
+                        <AlertTriangle className="w-3 h-3" />
+                        Professor totalmente ocupado neste dia
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -805,37 +922,71 @@ export function ModalNovaTurma({
                   className="pl-10"
                 />
                 
-                {/* Dropdown de resultados */}
+                {/* Dropdown de resultados com badges inteligentes */}
                 {alunosFiltrados.length > 0 && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-10 max-h-48 overflow-y-auto">
-                    {alunosFiltrados.map(aluno => {
-                      const conflito = temConflitoHorario(aluno);
-                      return (
-                        <button
-                          key={aluno.id}
-                          type="button"
-                          onClick={() => adicionarAluno(aluno)}
-                          disabled={conflito}
-                          className={`w-full px-4 py-2 text-left text-sm flex items-center justify-between ${
-                            conflito 
-                              ? 'text-slate-500 cursor-not-allowed bg-slate-800/50' 
-                              : 'text-white hover:bg-slate-700'
-                          }`}
-                        >
-                          <div>
-                            <span>{aluno.nome}</span>
-                            <span className="text-xs text-slate-400 ml-2">
-                              {aluno.curso_nome} • {aluno.dia_aula} {aluno.horario_aula?.substring(0, 5)}
-                            </span>
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-10 max-h-64 overflow-y-auto">
+                    {alunosFiltrados.map(({ aluno, mesmoCurso, mesmoProfessor, conflitoHorario, horarioProximo }) => (
+                      <button
+                        key={aluno.id}
+                        type="button"
+                        onClick={() => adicionarAluno(aluno)}
+                        disabled={conflitoHorario}
+                        className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-3 border-b border-slate-700/50 last:border-0 transition ${
+                          conflitoHorario 
+                            ? 'text-slate-500 cursor-not-allowed bg-slate-800/50 opacity-60' 
+                            : mesmoCurso
+                              ? 'hover:bg-emerald-500/10 bg-emerald-500/5'
+                              : 'hover:bg-slate-700'
+                        }`}
+                      >
+                        {/* Avatar */}
+                        <div className={`w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center text-xs font-bold ${
+                          conflitoHorario ? 'bg-slate-700 text-slate-500' :
+                          mesmoCurso ? 'bg-emerald-500/30 text-emerald-300' :
+                          mesmoProfessor ? 'bg-purple-500/30 text-purple-300' :
+                          'bg-slate-700 text-slate-300'
+                        }`}>
+                          {aluno.nome.charAt(0)}
+                        </div>
+
+                        {/* Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-white font-medium truncate">{aluno.nome}</span>
+                            {aluno.idade_atual && (
+                              <span className="text-[10px] text-slate-500 whitespace-nowrap">{aluno.idade_atual}a</span>
+                            )}
                           </div>
-                          {conflito && (
-                            <span className="text-xs text-red-400 flex items-center gap-1">
+                          <p className="text-[11px] text-slate-400 truncate">
+                            {aluno.curso_nome || 'Sem curso'} • {aluno.professor_nome || 'Sem prof.'} • {aluno.dia_aula} {aluno.horario_aula?.substring(0, 5)}
+                          </p>
+                        </div>
+
+                        {/* Badges */}
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          {mesmoCurso && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-emerald-500/20 text-emerald-300 whitespace-nowrap">
+                              Mesmo curso
+                            </span>
+                          )}
+                          {mesmoProfessor && !mesmoCurso && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/20 text-purple-300 whitespace-nowrap">
+                              Mesmo prof.
+                            </span>
+                          )}
+                          {horarioProximo && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-cyan-500/20 text-cyan-300 whitespace-nowrap">
+                              Horário próx.
+                            </span>
+                          )}
+                          {conflitoHorario && (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-red-500/20 text-red-300 flex items-center gap-0.5 whitespace-nowrap">
                               <AlertTriangle className="w-3 h-3" /> Conflito
                             </span>
                           )}
-                        </button>
-                      );
-                    })}
+                        </div>
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>
