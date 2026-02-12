@@ -666,23 +666,15 @@ function AlertaListItem({ nome, detalhe, whatsapp, actionLabel = 'Contato', mens
       });
 
       if (resultado.success) {
-        toast.success(`Mensagem enviada para ${nome.split(' ')[0]}!`);
+        toast.success(`✅ Mensagem enviada para ${nome.split(' ')[0]} via WhatsApp!`);
         setShowPreview(false);
       } else {
-        // Fallback: abrir wa.me se UAZAPI falhar
         console.error('[WhatsApp Farmer] Erro UAZAPI:', resultado.error);
-        toast.error(`Erro UAZAPI: ${resultado.error}. Abrindo WhatsApp Web...`);
-        const msgEncoded = encodeURIComponent(mensagemEditavel);
-        window.open(`https://wa.me/${numeroFormatado}?text=${msgEncoded}`, '_blank');
-        setShowPreview(false);
+        toast.error(`Erro ao enviar: ${resultado.error || 'Falha na conexão com UAZAPI'}. Tente novamente.`);
       }
     } catch (err) {
       console.error('[WhatsApp Farmer] Erro inesperado:', err);
-      // Fallback: abrir wa.me
-      const numeroFormatado = formatPhoneNumber(whatsapp);
-      const msgEncoded = encodeURIComponent(mensagemEditavel);
-      window.open(`https://wa.me/${numeroFormatado}?text=${msgEncoded}`, '_blank');
-      setShowPreview(false);
+      toast.error('Erro de conexão com UAZAPI. Verifique sua internet e tente novamente.');
     } finally {
       setEnviando(false);
     }
