@@ -1194,18 +1194,6 @@ export function AlunosPage() {
             </button>
           </div>
 
-          {/* Botões de Ação */}
-          <div data-tour="alunos-acoes" className="flex items-center gap-2 mr-4">
-            {tabAtiva === 'turmas' && (
-              <button
-                onClick={() => setModalNovaTurma(true)}
-                className="h-10 bg-emerald-600 hover:bg-emerald-500 px-5 rounded-xl text-sm font-medium transition flex items-center gap-2"
-              >
-                <Plus className="w-4 h-4" />
-                Nova Turma / Banda
-              </button>
-            )}
-          </div>
         </div>
 
         {/* Conteúdo das Tabs */}
@@ -1237,6 +1225,7 @@ export function AlunosPage() {
             onEditarTurma={handleEditarTurma}
             onExcluirTurma={handleExcluirTurma}
             onAdicionarAlunoTurma={handleAdicionarAlunoTurma}
+            onNovaTurma={() => setModalNovaTurma(true)}
           />
         )}
 

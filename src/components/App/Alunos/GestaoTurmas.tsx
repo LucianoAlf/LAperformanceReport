@@ -13,6 +13,7 @@ interface GestaoTurmasProps {
   onEditarTurma?: (turma: Turma) => void;
   onExcluirTurma?: (turmaId: number) => void;
   onAdicionarAlunoTurma?: (turma: Turma) => void;
+  onNovaTurma?: () => void;
 }
 
 const DIAS_SEMANA = [
@@ -35,7 +36,7 @@ const EMOJIS_CURSO: Record<string, string> = {
   'Violino': '🎻'
 };
 
-export function GestaoTurmas({ turmas, professores, salas, onRecarregar, onEditarTurma, onExcluirTurma, onAdicionarAlunoTurma }: GestaoTurmasProps) {
+export function GestaoTurmas({ turmas, professores, salas, onRecarregar, onEditarTurma, onExcluirTurma, onAdicionarAlunoTurma, onNovaTurma }: GestaoTurmasProps) {
   const [filtros, setFiltros] = useState({
     professor_id: '',
     dia: '',
@@ -298,6 +299,16 @@ export function GestaoTurmas({ turmas, professores, salas, onRecarregar, onEdita
             <RotateCcw className="w-4 h-4" />
             Limpar
           </button>
+
+          {onNovaTurma && (
+            <button
+              onClick={onNovaTurma}
+              className="ml-auto h-10 bg-emerald-600 hover:bg-emerald-500 px-5 rounded-xl text-sm font-medium transition flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Nova Turma / Banda
+            </button>
+          )}
         </div>
       </div>
 
