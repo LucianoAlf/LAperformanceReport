@@ -75,6 +75,7 @@ export function ModalNovoAluno({
     horario_aula: '',
   });
   const [disponibilidadeProfessor, setDisponibilidadeProfessor] = useState<DisponibilidadeSemanal | null>(null);
+  const [cursosProfessor, setCursosProfessor] = useState<{id: number, nome: string}[]>([]);
 
   // Buscar disponibilidade do professor fixo quando selecionado
   useEffect(() => {
@@ -95,6 +96,33 @@ export function ModalNovoAluno({
     loadDisponibilidade();
     setFormData(prev => ({ ...prev, dia_aula: '', horario_aula: '' }));
   }, [formData.professor_fixo_id, formData.unidade_id]);
+
+  // Buscar cursos vinculados ao professor fixo
+  useEffect(() => {
+    async function loadCursosProfessor() {
+      if (!formData.professor_fixo_id) {
+        setCursosProfessor([]);
+        return;
+      }
+      const { data } = await supabase
+        .from('professores_cursos')
+        .select('curso_id, cursos:curso_id (id, nome)')
+        .eq('professor_id', formData.professor_fixo_id);
+      
+      if (data && data.length > 0) {
+        const cursosFormatados = data
+          .map((pc: any) => pc.cursos)
+          .filter(Boolean)
+          .sort((a: any, b: any) => a.nome.localeCompare(b.nome));
+        setCursosProfessor(cursosFormatados);
+      } else {
+        setCursosProfessor([]);
+      }
+    }
+    loadCursosProfessor();
+    // Limpar curso ao trocar professor
+    setFormData(prev => ({ ...prev, curso_id: null }));
+  }, [formData.professor_fixo_id]);
 
   // Dias disponíveis do professor
   const diasDisponiveis = useMemo(() => {
@@ -299,14 +327,17 @@ export function ModalNovoAluno({
                 onValueChange={(value) => setFormData({ ...formData, curso_id: parseInt(value) || null })}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecione..." />
+                  <SelectValue placeholder={formData.professor_fixo_id ? "Selecione..." : "Selecione o professor primeiro"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {cursos.map((c) => (
+                  {(cursosProfessor.length > 0 ? cursosProfessor : cursos).map((c) => (
                     <SelectItem key={c.id} value={c.id.toString()}>{c.nome}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
+              {formData.professor_fixo_id && cursosProfessor.length === 0 && (
+                <p className="text-xs text-amber-400 mt-1">Professor sem cursos vinculados — mostrando todos</p>
+              )}
             </div>
             <div>
               <Label className="mb-2 block">Canal de Origem</Label>

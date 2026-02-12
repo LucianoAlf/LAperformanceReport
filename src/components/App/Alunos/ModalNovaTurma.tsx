@@ -58,6 +58,9 @@ export function ModalNovaTurma({
   const [mostrarSugestoes, setMostrarSugestoes] = useState(false);
   const [carregandoSugestoes, setCarregandoSugestoes] = useState(false);
   const [disponibilidadeProfessor, setDisponibilidadeProfessor] = useState<DisponibilidadeSemanal | null>(null);
+  const [cursosProfessor, setCursosProfessor] = useState<{id: number, nome: string}[]>([]);
+  const [unidadesProfessor, setUnidadesProfessor] = useState<{value: string, label: string}[]>([]);
+  const [salasUnidade, setSalasUnidade] = useState<{id: number, nome: string, capacidade_maxima: number, unidade_id?: string}[]>(salas);
   
   const [formData, setFormData] = useState({
     tipo: 'turma' as 'turma' | 'banda',
@@ -70,7 +73,7 @@ export function ModalNovaTurma({
     unidade_id: unidadeAtual,
   });
 
-  // Carregar unidades
+  // Carregar todas as unidades (fallback)
   useEffect(() => {
     async function loadUnidades() {
       const { data } = await supabase.from('unidades').select('id, nome').eq('ativo', true);
@@ -80,6 +83,86 @@ export function ModalNovaTurma({
     }
     loadUnidades();
   }, []);
+
+  // Buscar cursos vinculados ao professor selecionado
+  useEffect(() => {
+    async function loadCursosProfessor() {
+      if (!formData.professor_id) {
+        setCursosProfessor([]);
+        return;
+      }
+      const { data } = await supabase
+        .from('professores_cursos')
+        .select('curso_id, cursos:curso_id (id, nome)')
+        .eq('professor_id', formData.professor_id);
+      
+      if (data && data.length > 0) {
+        const cursosFormatados = data
+          .map((pc: any) => pc.cursos)
+          .filter(Boolean)
+          .sort((a: any, b: any) => a.nome.localeCompare(b.nome));
+        setCursosProfessor(cursosFormatados);
+      } else {
+        setCursosProfessor([]);
+      }
+    }
+    loadCursosProfessor();
+    // Limpar curso ao trocar professor
+    setFormData(prev => ({ ...prev, curso_id: null }));
+  }, [formData.professor_id]);
+
+  // Buscar unidades vinculadas ao professor selecionado
+  useEffect(() => {
+    async function loadUnidadesProfessor() {
+      if (!formData.professor_id) {
+        setUnidadesProfessor([]);
+        return;
+      }
+      const { data } = await supabase
+        .from('professores_unidades')
+        .select('unidade_id, unidades:unidade_id (id, nome)')
+        .eq('professor_id', formData.professor_id);
+      
+      if (data && data.length > 0) {
+        const unidadesFormatadas = data
+          .map((pu: any) => ({ value: pu.unidades?.id, label: pu.unidades?.nome }))
+          .filter((u: any) => u.value && u.label)
+          .sort((a: any, b: any) => a.label.localeCompare(b.label));
+        setUnidadesProfessor(unidadesFormatadas);
+        // Se a unidade atual não está na lista do professor, ajustar
+        const unidadeValida = unidadesFormatadas.some((u: any) => u.value === formData.unidade_id);
+        if (!unidadeValida && unidadesFormatadas.length > 0) {
+          setFormData(prev => ({ ...prev, unidade_id: unidadesFormatadas[0].value }));
+        }
+      } else {
+        setUnidadesProfessor([]);
+      }
+    }
+    loadUnidadesProfessor();
+  }, [formData.professor_id]);
+
+  // Buscar salas quando a unidade muda no modal
+  useEffect(() => {
+    async function loadSalasUnidade() {
+      if (!formData.unidade_id) {
+        setSalasUnidade(salas);
+        return;
+      }
+      const { data } = await supabase
+        .from('salas')
+        .select('id, nome, capacidade_maxima')
+        .eq('unidade_id', formData.unidade_id)
+        .eq('ativo', true)
+        .order('nome');
+      
+      if (data) {
+        setSalasUnidade(data);
+      }
+    }
+    loadSalasUnidade();
+    // Limpar sala ao trocar unidade
+    setFormData(prev => ({ ...prev, sala_id: null }));
+  }, [formData.unidade_id]);
 
   // Buscar disponibilidade do professor quando selecionado
   useEffect(() => {
@@ -516,14 +599,17 @@ export function ModalNovaTurma({
                       onValueChange={(value) => setFormData({ ...formData, curso_id: parseInt(value) || null })}
                     >
                       <SelectTrigger>
-                        <SelectValue placeholder="Selecione..." />
+                        <SelectValue placeholder={formData.professor_id ? "Selecione..." : "Selecione o professor primeiro"} />
                       </SelectTrigger>
                       <SelectContent>
-                        {cursos.map((c) => (
+                        {(cursosProfessor.length > 0 ? cursosProfessor : cursos).map((c) => (
                           <SelectItem key={c.id} value={c.id.toString()}>{c.nome}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
+                    {formData.professor_id && cursosProfessor.length === 0 && (
+                      <p className="text-xs text-amber-400 mt-1">Professor sem cursos vinculados — mostrando todos</p>
+                    )}
                   </div>
                 )}
               </div>
@@ -586,7 +672,7 @@ export function ModalNovaTurma({
                       <SelectValue placeholder="Selecione..." />
                     </SelectTrigger>
                     <SelectContent>
-                      {salas.map((s) => (
+                      {salasUnidade.map((s) => (
                         <SelectItem key={s.id} value={s.id.toString()}>
                           {s.nome} (cap. {s.capacidade_maxima})
                         </SelectItem>
@@ -634,14 +720,17 @@ export function ModalNovaTurma({
                     onValueChange={(value) => setFormData({ ...formData, unidade_id: value })}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecione a unidade..." />
+                      <SelectValue placeholder={formData.professor_id ? "Selecione..." : "Selecione a unidade..."} />
                     </SelectTrigger>
                     <SelectContent>
-                      {unidades.map((u) => (
+                      {(formData.professor_id && unidadesProfessor.length > 0 ? unidadesProfessor : unidades).map((u) => (
                         <SelectItem key={u.value} value={u.value.toString()}>{u.label}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                  {formData.professor_id && unidadesProfessor.length > 0 && (
+                    <p className="text-xs text-slate-500 mt-1">Mostrando unidades do professor selecionado</p>
+                  )}
                 </div>
               )}
 
