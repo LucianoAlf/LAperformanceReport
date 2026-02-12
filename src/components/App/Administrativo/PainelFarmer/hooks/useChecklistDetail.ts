@@ -27,13 +27,26 @@ interface ChecklistDetailData {
   colaborador_apelido: string | null;
   unidade_id: string;
   created_at: string;
+  responsavel_id: number | null;
+  responsavel_nome: string | null;
+  responsavel_apelido: string | null;
 }
 
-export function useChecklistDetail(checklistId: string | null) {
+export interface ColaboradorUnidade {
+  id: number;
+  nome: string;
+  apelido: string | null;
+  perfil: string;
+}
+
+export function useChecklistDetail(checklistId: string | null, unidadeId?: string) {
   const [detail, setDetail] = useState<ChecklistDetailData | null>(null);
   const [items, setItems] = useState<FarmerChecklistItem[]>([]);
   const [contatos, setContatos] = useState<FarmerChecklistContato[]>([]);
   const [loading, setLoading] = useState(true);
+  const [colaboradoresUnidade, setColaboradoresUnidade] = useState<ColaboradorUnidade[]>([]);
+  const [cursosUnidade, setCursosUnidade] = useState<{ id: number; nome: string }[]>([]);
+  const [professoresUnidade, setProfessoresUnidade] = useState<{ id: number; nome: string }[]>([]);
 
   const fetchDetail = useCallback(async () => {
     if (!checklistId) {
@@ -56,10 +69,10 @@ export function useChecklistDetail(checklistId: string | null) {
         setDetail(detailData[0]);
       }
 
-      // Buscar itens
+      // Buscar itens com responsável
       const { data: itemsData, error: itemsError } = await supabase
         .from('farmer_checklist_items')
-        .select('*')
+        .select('*, responsavel:responsavel_id(id, nome, apelido)')
         .eq('checklist_id', checklistId)
         .order('ordem')
         .order('created_at');
@@ -67,11 +80,15 @@ export function useChecklistDetail(checklistId: string | null) {
       if (itemsError) throw itemsError;
 
       // Organizar itens em árvore (pais + sub-itens)
-      const allItems = itemsData || [];
-      const parentItems = allItems.filter(i => !i.parent_id);
-      const organized = parentItems.map(parent => ({
+      const allItems = (itemsData || []).map((item: any) => ({
+        ...item,
+        responsavel_nome: item.responsavel?.nome || null,
+        responsavel_apelido: item.responsavel?.apelido || null,
+      }));
+      const parentItems = allItems.filter((i: any) => !i.parent_id);
+      const organized = parentItems.map((parent: any) => ({
         ...parent,
-        sub_items: allItems.filter(i => i.parent_id === parent.id),
+        sub_items: allItems.filter((i: any) => i.parent_id === parent.id),
       }));
       setItems(organized);
 
@@ -128,12 +145,13 @@ export function useChecklistDetail(checklistId: string | null) {
     await fetchDetail();
   };
 
-  // Editar item existente (descrição, canal, info)
-  const editarItem = async (itemId: string, dados: { descricao?: string; canal?: string | null; info?: string | null }) => {
+  // Editar item existente (descrição, canal, info, responsável)
+  const editarItem = async (itemId: string, dados: { descricao?: string; canal?: string | null; info?: string | null; responsavel_id?: number | null }) => {
     const updateData: Record<string, unknown> = {};
     if (dados.descricao !== undefined) updateData.descricao = dados.descricao;
     if (dados.canal !== undefined) updateData.canal = dados.canal;
     if (dados.info !== undefined) updateData.info = dados.info;
+    if (dados.responsavel_id !== undefined) updateData.responsavel_id = dados.responsavel_id;
 
     const { error } = await supabase
       .from('farmer_checklist_items')
@@ -197,6 +215,84 @@ export function useChecklistDetail(checklistId: string | null) {
   const taxaSucesso =
     totalContatos > 0 ? Math.round((contatosResponderam / totalContatos) * 100) : 0;
 
+  // Buscar colaboradores da unidade (para selects de responsável)
+  const fetchColaboradoresUnidade = useCallback(async () => {
+    const uid = (unidadeId && unidadeId !== 'todos') ? unidadeId : detail?.unidade_id;
+    if (!uid) return;
+
+    const { data, error } = await supabase
+      .from('usuarios')
+      .select('id, nome, apelido, perfil')
+      .eq('ativo', true)
+      .or(`unidade_id.eq.${uid},perfil.eq.admin`)
+      .order('nome');
+
+    if (!error && data) {
+      setColaboradoresUnidade(data);
+    }
+  }, [unidadeId, detail?.unidade_id]);
+
+  useEffect(() => {
+    fetchColaboradoresUnidade();
+  }, [fetchColaboradoresUnidade]);
+
+  // Buscar cursos e professores distintos da unidade (para filtros da Carteira)
+  const fetchCursosEProfessores = useCallback(async () => {
+    const uid = (unidadeId && unidadeId !== 'todos') ? unidadeId : detail?.unidade_id;
+    if (!uid) return;
+
+    // Cursos distintos via alunos ativos da unidade
+    const { data: cursosData } = await supabase
+      .from('alunos')
+      .select('curso_id, cursos:curso_id(id, nome)')
+      .eq('unidade_id', uid)
+      .eq('status', 'ativo')
+      .not('curso_id', 'is', null);
+
+    if (cursosData) {
+      const mapa = new Map<number, string>();
+      cursosData.forEach((a: any) => {
+        if (a.cursos?.id && a.cursos?.nome) mapa.set(a.cursos.id, a.cursos.nome);
+      });
+      setCursosUnidade(
+        Array.from(mapa.entries()).map(([id, nome]) => ({ id, nome })).sort((a, b) => a.nome.localeCompare(b.nome))
+      );
+    }
+
+    // Professores distintos via alunos ativos da unidade
+    const { data: profsData } = await supabase
+      .from('alunos')
+      .select('professor_atual_id, professores:professor_atual_id(id, nome)')
+      .eq('unidade_id', uid)
+      .eq('status', 'ativo')
+      .not('professor_atual_id', 'is', null);
+
+    if (profsData) {
+      const mapa = new Map<number, string>();
+      profsData.forEach((a: any) => {
+        if (a.professores?.id && a.professores?.nome) mapa.set(a.professores.id, a.professores.nome);
+      });
+      setProfessoresUnidade(
+        Array.from(mapa.entries()).map(([id, nome]) => ({ id, nome })).sort((a, b) => a.nome.localeCompare(b.nome))
+      );
+    }
+  }, [unidadeId, detail?.unidade_id]);
+
+  useEffect(() => {
+    fetchCursosEProfessores();
+  }, [fetchCursosEProfessores]);
+
+  // Atualizar responsável do checklist
+  const atualizarResponsavel = async (responsavelId: number | null) => {
+    if (!checklistId) return;
+    const { error } = await supabase
+      .from('farmer_checklists')
+      .update({ responsavel_id: responsavelId, updated_at: new Date().toISOString() })
+      .eq('id', checklistId);
+    if (error) throw error;
+    await fetchDetail();
+  };
+
   return {
     detail,
     items,
@@ -213,6 +309,10 @@ export function useChecklistDetail(checklistId: string | null) {
     editarItem,
     removerItem,
     atualizarContato,
+    atualizarResponsavel,
+    colaboradoresUnidade,
+    cursosUnidade,
+    professoresUnidade,
     refetch: fetchDetail,
   };
 }

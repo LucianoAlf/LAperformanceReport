@@ -84,8 +84,12 @@ export function ChecklistDetail({ checklistId, unidadeId, onVoltar }: ChecklistD
     editarItem,
     removerItem,
     atualizarContato,
+    atualizarResponsavel,
+    colaboradoresUnidade,
+    cursosUnidade,
+    professoresUnidade,
     refetch,
-  } = useChecklistDetail(checklistId);
+  } = useChecklistDetail(checklistId, unidadeId);
 
   const [activeSubTab, setActiveSubTab] = useState<DetailSubTab>('tarefas');
   const [modalNovoItemAberto, setModalNovoItemAberto] = useState(false);
@@ -103,6 +107,7 @@ export function ChecklistDetail({ checklistId, unidadeId, onVoltar }: ChecklistD
   const [editPrioridade, setEditPrioridade] = useState('media');
   const [editDataInicio, setEditDataInicio] = useState<Date | undefined>();
   const [editDataPrazo, setEditDataPrazo] = useState<Date | undefined>();
+  const [editResponsavelId, setEditResponsavelId] = useState<string>('sem');
   const [salvandoEdicao, setSalvandoEdicao] = useState(false);
   const [confirmarExclusaoChecklist, setConfirmarExclusaoChecklist] = useState(false);
 
@@ -118,6 +123,7 @@ export function ChecklistDetail({ checklistId, unidadeId, onVoltar }: ChecklistD
     setEditPrioridade(detail.prioridade || 'media');
     setEditDataInicio(detail.data_inicio ? new Date(detail.data_inicio + 'T00:00:00') : undefined);
     setEditDataPrazo(detail.data_prazo ? new Date(detail.data_prazo + 'T00:00:00') : undefined);
+    setEditResponsavelId(detail.responsavel_id?.toString() || 'sem');
     setModalEditarAberto(true);
   };
 
@@ -136,6 +142,7 @@ export function ChecklistDetail({ checklistId, unidadeId, onVoltar }: ChecklistD
           prioridade: editPrioridade,
           data_inicio: editDataInicio?.toISOString().split('T')[0] || null,
           data_prazo: editDataPrazo?.toISOString().split('T')[0] || null,
+          responsavel_id: editResponsavelId !== 'sem' ? parseInt(editResponsavelId) : null,
           updated_at: new Date().toISOString(),
         })
         .eq('id', detail.checklist_id);
@@ -356,6 +363,27 @@ export function ChecklistDetail({ checklistId, unidadeId, onVoltar }: ChecklistD
               {diasRestantes !== null && diasRestantes <= 0 && ' (Vencido!)'}
             </span>
           )}
+
+          {/* Responsável */}
+          <div className="flex items-center gap-1.5">
+            <UserCheck className="w-3 h-3 text-violet-400 shrink-0" />
+            <Select
+              value={detail.responsavel_id?.toString() || 'sem'}
+              onValueChange={(v) => atualizarResponsavel(v === 'sem' ? null : Number(v))}
+            >
+              <SelectTrigger className="h-6 w-auto min-w-[120px] text-xs bg-transparent border-slate-600/50 rounded-full px-2.5 gap-1">
+                <SelectValue placeholder="Responsável..." />
+              </SelectTrigger>
+              <SelectContent className="bg-slate-800 border-slate-700">
+                <SelectItem value="sem" className="text-xs text-slate-400">Sem responsável</SelectItem>
+                {colaboradoresUnidade.map(c => (
+                  <SelectItem key={c.id} value={c.id.toString()} className="text-xs">
+                    {c.apelido || c.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
         </div>
       </div>
@@ -435,12 +463,15 @@ export function ChecklistDetail({ checklistId, unidadeId, onVoltar }: ChecklistD
             inlineValue={inlineNovoItem}
             onInlineChange={setInlineNovoItem}
             onInlineSubmit={handleInlineAddItem}
+            colaboradores={colaboradoresUnidade}
           />
         )}
         {activeSubTab === 'carteira' && (
           <CarteiraSubTab
             contatos={contatos}
             onAtualizarContato={atualizarContato}
+            cursosUnidade={cursosUnidade}
+            professoresUnidade={professoresUnidade}
           />
         )}
         {activeSubTab === 'sucesso' && (
@@ -618,6 +649,21 @@ export function ChecklistDetail({ checklistId, unidadeId, onVoltar }: ChecklistD
                 <DatePicker date={editDataPrazo} onDateChange={setEditDataPrazo} placeholder="Selecione..." />
               </div>
             </div>
+
+            <div>
+              <label className="text-xs font-medium text-slate-400 mb-1.5 block">Responsável</label>
+              <Select value={editResponsavelId} onValueChange={setEditResponsavelId}>
+                <SelectTrigger className="bg-slate-800 border-slate-700"><SelectValue placeholder="Selecione..." /></SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectItem value="sem" className="text-xs text-slate-400">Sem responsável</SelectItem>
+                  {colaboradoresUnidade.map(c => (
+                    <SelectItem key={c.id} value={c.id.toString()} className="text-xs">
+                      {c.apelido || c.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <DialogFooter className="flex items-center justify-between border-t border-slate-700/50 pt-4">
@@ -682,21 +728,23 @@ interface TarefasSubTabProps {
   isConcluido: boolean;
   onToggle: (itemId: string, concluida: boolean) => void;
   onAddItem: () => void;
-  onEditItem: (itemId: string, dados: { descricao?: string; canal?: string | null; info?: string | null }) => Promise<void>;
+  onEditItem: (itemId: string, dados: { descricao?: string; canal?: string | null; info?: string | null; responsavel_id?: number | null }) => Promise<void>;
   onAddSubItem: (parentId: string, descricao: string, canal?: string) => Promise<void>;
   onDeleteItem: (itemId: string) => void;
   inlineValue: string;
   onInlineChange: (v: string) => void;
   onInlineSubmit: () => void;
+  colaboradores: { id: number; nome: string; apelido: string | null; perfil: string }[];
 }
 
-function TarefasSubTab({ items, isConcluido, onToggle, onAddItem, onEditItem, onAddSubItem, onDeleteItem, inlineValue, onInlineChange, onInlineSubmit }: TarefasSubTabProps) {
+function TarefasSubTab({ items, isConcluido, onToggle, onAddItem, onEditItem, onAddSubItem, onDeleteItem, inlineValue, onInlineChange, onInlineSubmit, colaboradores }: TarefasSubTabProps) {
   const [filtro, setFiltro] = useState<'todos' | 'professor' | 'curso'>('todos');
 
   // Estado de edição inline de item
   const [editandoItemId, setEditandoItemId] = useState<string | null>(null);
   const [editDescricao, setEditDescricao] = useState('');
   const [editCanal, setEditCanal] = useState<string>('');
+  const [editResponsavel, setEditResponsavel] = useState<string>('');
 
   // Estado de adicionar subtarefa
   const [addSubParentId, setAddSubParentId] = useState<string | null>(null);
@@ -704,10 +752,11 @@ function TarefasSubTab({ items, isConcluido, onToggle, onAddItem, onEditItem, on
   const [novaSubCanal, setNovaSubCanal] = useState('');
   const [salvandoSub, setSalvandoSub] = useState(false);
 
-  const iniciarEdicao = (item: { id: string; descricao: string; canal?: string | null }) => {
+  const iniciarEdicao = (item: { id: string; descricao: string; canal?: string | null; responsavel_id?: number | null }) => {
     setEditandoItemId(item.id);
     setEditDescricao(item.descricao);
     setEditCanal(item.canal || '');
+    setEditResponsavel(item.responsavel_id?.toString() || '');
   };
 
   const salvarEdicao = async () => {
@@ -715,6 +764,7 @@ function TarefasSubTab({ items, isConcluido, onToggle, onAddItem, onEditItem, on
     await onEditItem(editandoItemId, {
       descricao: editDescricao.trim(),
       canal: editCanal || null,
+      responsavel_id: editResponsavel ? Number(editResponsavel) : null,
     });
     setEditandoItemId(null);
   };
@@ -831,7 +881,7 @@ function TarefasSubTab({ items, isConcluido, onToggle, onAddItem, onEditItem, on
                         onKeyDown={e => { if (e.key === 'Enter') salvarEdicao(); if (e.key === 'Escape') cancelarEdicao(); }}
                         className="w-full bg-slate-800 border border-slate-600 rounded-md px-2.5 py-1.5 text-sm text-white outline-none focus:border-violet-500"
                       />
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <Select value={editCanal || 'nenhum'} onValueChange={v => setEditCanal(v === 'nenhum' ? '' : v)}>
                           <SelectTrigger className="h-7 text-xs bg-slate-800 border-slate-600 w-36">
                             <SelectValue placeholder="Canal" />
@@ -843,6 +893,17 @@ function TarefasSubTab({ items, isConcluido, onToggle, onAddItem, onEditItem, on
                             <SelectItem value="Email">Email</SelectItem>
                             <SelectItem value="Instagram">Instagram</SelectItem>
                             <SelectItem value="Presencial">Presencial</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Select value={editResponsavel || 'nenhum'} onValueChange={v => setEditResponsavel(v === 'nenhum' ? '' : v)}>
+                          <SelectTrigger className="h-7 text-xs bg-slate-800 border-slate-600 w-40">
+                            <SelectValue placeholder="Responsável" />
+                          </SelectTrigger>
+                          <SelectContent className="bg-slate-800 border-slate-700">
+                            <SelectItem value="nenhum">Sem responsável</SelectItem>
+                            {colaboradores.map(c => (
+                              <SelectItem key={c.id} value={c.id.toString()} className="text-xs">{c.apelido || c.nome}</SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                         <Button size="sm" className="h-7 text-xs bg-violet-600 hover:bg-violet-700" onClick={salvarEdicao}>
@@ -870,6 +931,12 @@ function TarefasSubTab({ items, isConcluido, onToggle, onAddItem, onEditItem, on
                             CANAL_COLORS[item.canal] || 'bg-slate-700/50 text-slate-400 border-slate-600/50'
                           )}>
                             {item.canal}
+                          </span>
+                        )}
+                        {item.responsavel_nome && (
+                          <span className="flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded font-medium flex-shrink-0 bg-violet-500/15 text-violet-400 border border-violet-500/20">
+                            <UserCheck className="w-2.5 h-2.5" />
+                            {item.responsavel_apelido || item.responsavel_nome}
                           </span>
                         )}
                       </div>
@@ -1019,9 +1086,11 @@ function TarefasSubTab({ items, isConcluido, onToggle, onAddItem, onEditItem, on
 interface CarteiraSubTabProps {
   contatos: FarmerChecklistContato[];
   onAtualizarContato: (id: string, status: string, canal?: string, obs?: string) => void;
+  cursosUnidade: { id: number; nome: string }[];
+  professoresUnidade: { id: number; nome: string }[];
 }
 
-function CarteiraSubTab({ contatos, onAtualizarContato }: CarteiraSubTabProps) {
+function CarteiraSubTab({ contatos, onAtualizarContato, cursosUnidade, professoresUnidade }: CarteiraSubTabProps) {
   const [filtroCurso, setFiltroCurso] = useState('todos');
   const [filtroProf, setFiltroProf] = useState('todos');
   const [filtroStatus, setFiltroStatus] = useState('todos');
@@ -1061,14 +1130,14 @@ function CarteiraSubTab({ contatos, onAtualizarContato }: CarteiraSubTabProps) {
     );
   }
 
-  // Extrair cursos e professores únicos
-  const cursos = [...new Set(contatos.map(c => c.alunos?.cursos?.nome).filter(Boolean))] as string[];
-  const professores = [...new Set(contatos.map(c => c.alunos?.professores?.nome).filter(Boolean))] as string[];
+  // Usar cursos e professores da unidade (todos os ativos, não apenas os do checklist)
+  const cursos = cursosUnidade;
+  const professores = professoresUnidade;
 
   // Filtrar contatos
   const filtrados = contatos.filter(c => {
-    if (filtroCurso !== 'todos' && c.alunos?.cursos?.nome !== filtroCurso) return false;
-    if (filtroProf !== 'todos' && c.alunos?.professores?.nome !== filtroProf) return false;
+    if (filtroCurso !== 'todos' && c.alunos?.cursos?.nome !== cursos.find(cu => cu.id.toString() === filtroCurso)?.nome) return false;
+    if (filtroProf !== 'todos' && c.alunos?.professores?.nome !== professores.find(p => p.id.toString() === filtroProf)?.nome) return false;
     if (filtroStatus !== 'todos' && c.status !== filtroStatus) return false;
     return true;
   });
@@ -1091,14 +1160,14 @@ function CarteiraSubTab({ contatos, onAtualizarContato }: CarteiraSubTabProps) {
           <SelectTrigger className="bg-slate-800 border-slate-700 h-8 text-xs w-48"><SelectValue placeholder="Todos os Cursos" /></SelectTrigger>
           <SelectContent className="bg-slate-800 border-slate-700">
             <SelectItem value="todos" className="text-xs">Todos os Cursos</SelectItem>
-            {cursos.map(c => <SelectItem key={c} value={c} className="text-xs">{c}</SelectItem>)}
+            {cursos.map(c => <SelectItem key={c.id} value={c.id.toString()} className="text-xs">{c.nome}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={filtroProf} onValueChange={v => { setFiltroProf(v); setPagina(0); }}>
           <SelectTrigger className="bg-slate-800 border-slate-700 h-8 text-xs w-48"><SelectValue placeholder="Todos os Professores" /></SelectTrigger>
           <SelectContent className="bg-slate-800 border-slate-700">
             <SelectItem value="todos" className="text-xs">Todos os Professores</SelectItem>
-            {professores.map(p => <SelectItem key={p} value={p} className="text-xs">{p}</SelectItem>)}
+            {professores.map(p => <SelectItem key={p.id} value={p.id.toString()} className="text-xs">{p.nome}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={filtroStatus} onValueChange={v => { setFiltroStatus(v); setPagina(0); }}>

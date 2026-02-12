@@ -122,6 +122,9 @@ export interface FarmerChecklist {
   created_at: string;
   colaborador_nome: string;
   colaborador_apelido: string | null;
+  responsavel_id: number | null;
+  responsavel_nome: string | null;
+  responsavel_apelido: string | null;
 }
 
 export interface FarmerChecklistItem {
@@ -136,6 +139,9 @@ export interface FarmerChecklistItem {
   concluida_em: string | null;
   concluida_por: number | null;
   created_at: string;
+  responsavel_id: number | null;
+  responsavel_nome: string | null;
+  responsavel_apelido: string | null;
   // Sub-itens carregados no frontend
   sub_items?: FarmerChecklistItem[];
 }
@@ -213,6 +219,7 @@ export interface CreateChecklistInput {
   alerta_dias_antes?: number;
   alerta_hora?: string;
   lembrete_whatsapp?: boolean;
+  responsavel_id?: number;
 }
 
 // Item do Task Builder (usado no modal de criação)
@@ -229,6 +236,7 @@ export interface CreateChecklistItemInput {
   canal?: string;
   info?: string;
   parent_id?: string;
+  responsavel_id?: number;
 }
 
 // Alertas

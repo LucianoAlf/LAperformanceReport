@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   Plus,
   ClipboardList,
@@ -26,6 +26,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { DatePicker } from '@/components/ui/date-picker';
 import { useColaboradorAtual, useChecklists } from './hooks';
+import { supabase } from '@/lib/supabase';
 import { TarefasTab } from './TarefasTab';
 import { ChecklistDetail } from './ChecklistDetail';
 import type { FarmerChecklist, FarmerChecklistTemplate, TaskBuilderItem } from './types';
@@ -70,10 +71,66 @@ export function ChecklistsTab({ unidadeId }: ChecklistsTabProps) {
   const [dataInicio, setDataInicio] = useState<Date | undefined>(new Date());
   const [dataPrazo, setDataPrazo] = useState<Date | undefined>();
   const [tipoVinculo, setTipoVinculo] = useState<'nenhum' | 'todos_alunos' | 'por_curso' | 'por_professor' | 'manual'>('nenhum');
+  const [vinculoFiltroIds, setVinculoFiltroIds] = useState<string[]>([]);
+  const [cursosUnidadeModal, setCursosUnidadeModal] = useState<{ id: number; nome: string }[]>([]);
+  const [professoresUnidadeModal, setProfessoresUnidadeModal] = useState<{ id: number; nome: string }[]>([]);
   const [alertaDiasAntes, setAlertaDiasAntes] = useState<string>('sem');
   const [alertaHora, setAlertaHora] = useState<string>('08:00');
   const [lembreteWhatsapp, setLembreteWhatsapp] = useState(false);
   const [templateNoModal, setTemplateNoModal] = useState<string>('');
+  const [responsavelId, setResponsavelId] = useState<string>('');
+  const [colaboradoresUnidade, setColaboradoresUnidade] = useState<{ id: number; nome: string; apelido: string | null }[]>([]);
+
+  // Buscar colaboradores, cursos e professores da unidade
+  useEffect(() => {
+    async function fetchDadosUnidade() {
+      if (!unidadeId || unidadeId === 'todos') return;
+
+      // Colaboradores
+      const { data: colabs } = await supabase
+        .from('usuarios')
+        .select('id, nome, apelido')
+        .eq('ativo', true)
+        .or(`unidade_id.eq.${unidadeId},perfil.eq.admin`)
+        .order('nome');
+      if (colabs) setColaboradoresUnidade(colabs);
+
+      // Cursos distintos via alunos ativos
+      const { data: cursosData } = await supabase
+        .from('alunos')
+        .select('curso_id, cursos:curso_id(id, nome)')
+        .eq('unidade_id', unidadeId)
+        .eq('status', 'ativo')
+        .not('curso_id', 'is', null);
+      if (cursosData) {
+        const mapa = new Map<number, string>();
+        cursosData.forEach((a: any) => {
+          if (a.cursos?.id && a.cursos?.nome) mapa.set(a.cursos.id, a.cursos.nome);
+        });
+        setCursosUnidadeModal(
+          Array.from(mapa.entries()).map(([id, nome]) => ({ id, nome })).sort((a, b) => a.nome.localeCompare(b.nome))
+        );
+      }
+
+      // Professores distintos via alunos ativos
+      const { data: profsData } = await supabase
+        .from('alunos')
+        .select('professor_atual_id, professores:professor_atual_id(id, nome)')
+        .eq('unidade_id', unidadeId)
+        .eq('status', 'ativo')
+        .not('professor_atual_id', 'is', null);
+      if (profsData) {
+        const mapa = new Map<number, string>();
+        profsData.forEach((a: any) => {
+          if (a.professores?.id && a.professores?.nome) mapa.set(a.professores.id, a.professores.nome);
+        });
+        setProfessoresUnidadeModal(
+          Array.from(mapa.entries()).map(([id, nome]) => ({ id, nome })).sort((a, b) => a.nome.localeCompare(b.nome))
+        );
+      }
+    }
+    fetchDadosUnidade();
+  }, [unidadeId]);
 
   // Task Builder state
   const [tarefas, setTarefas] = useState<TaskBuilderItem[]>([
@@ -158,6 +215,8 @@ export function ChecklistsTab({ unidadeId }: ChecklistsTabProps) {
     setAlertaHora('08:00');
     setLembreteWhatsapp(false);
     setTemplateNoModal('');
+    setResponsavelId('');
+    setVinculoFiltroIds([]);
     setTarefas([{ id: crypto.randomUUID(), descricao: '', canal: null, subtarefas: [] }]);
   };
 
@@ -185,6 +244,7 @@ export function ChecklistsTab({ unidadeId }: ChecklistsTabProps) {
         alerta_dias_antes: alertaDiasAntes !== 'sem' ? parseInt(alertaDiasAntes) : undefined,
         alerta_hora: alertaDiasAntes !== 'sem' ? alertaHora : undefined,
         lembrete_whatsapp: lembreteWhatsapp,
+        responsavel_id: responsavelId ? parseInt(responsavelId) : undefined,
       });
 
       // Se criou com sucesso e tem tarefas, inserir os itens
@@ -230,6 +290,22 @@ export function ChecklistsTab({ unidadeId }: ChecklistsTabProps) {
             await supabase.from('farmer_checklist_items').insert(subsParaInserir);
           }
         }
+      }
+
+      // Vincular alunos automaticamente conforme tipo_vinculo
+      if (checklist?.id && tipoVinculo !== 'nenhum' && colaborador?.id) {
+        const filtroIds = tipoVinculo === 'todos_alunos'
+          ? null
+          : vinculoFiltroIds.length > 0
+            ? vinculoFiltroIds.map(id => parseInt(id))
+            : null;
+
+        await supabase.rpc('vincular_alunos_checklist', {
+          p_checklist_id: checklist.id,
+          p_farmer_id: colaborador.id,
+          p_tipo_vinculo: tipoVinculo,
+          p_filtro_ids: filtroIds,
+        });
       }
 
       setModalNovoAberto(false);
@@ -503,11 +579,29 @@ export function ChecklistsTab({ unidadeId }: ChecklistsTabProps) {
               </div>
             </div>
 
+            {/* Responsável */}
+            <div>
+              <label className="text-xs font-medium text-slate-400 mb-1.5 block">Responsável</label>
+              <Select value={responsavelId || 'sem'} onValueChange={v => setResponsavelId(v === 'sem' ? '' : v)}>
+                <SelectTrigger className="bg-slate-800 border-slate-700">
+                  <SelectValue placeholder="Selecione o responsável..." />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectItem value="sem">Sem responsável definido</SelectItem>
+                  {colaboradoresUnidade.map(c => (
+                    <SelectItem key={c.id} value={c.id.toString()}>
+                      {c.apelido || c.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Vincular Alunos */}
             <div>
               <label className="text-xs font-medium text-slate-400 mb-1.5 block">Vincular Alunos</label>
               <div className="grid grid-cols-2 gap-3">
-                <Select value={tipoVinculo} onValueChange={(v: typeof tipoVinculo) => setTipoVinculo(v)}>
+                <Select value={tipoVinculo} onValueChange={(v: typeof tipoVinculo) => { setTipoVinculo(v); setVinculoFiltroIds([]); }}>
                   <SelectTrigger className="bg-slate-800 border-slate-700"><SelectValue /></SelectTrigger>
                   <SelectContent className="bg-slate-800 border-slate-700">
                     <SelectItem value="nenhum">Sem vínculo</SelectItem>
@@ -517,26 +611,58 @@ export function ChecklistsTab({ unidadeId }: ChecklistsTabProps) {
                     <SelectItem value="manual">Seleção Manual</SelectItem>
                   </SelectContent>
                 </Select>
-                {tipoVinculo !== 'nenhum' && (
-                  <Select>
-                    <SelectTrigger className="bg-slate-800 border-slate-700">
-                      <SelectValue placeholder="Selecione..." />
-                    </SelectTrigger>
-                    <SelectContent className="bg-slate-800 border-slate-700">
-                      {tipoVinculo === 'todos_alunos' && <SelectItem value="todos">Todos os alunos da unidade</SelectItem>}
-                      {tipoVinculo === 'por_curso' && (
-                        <>
-                          <SelectItem value="guitarra">Guitarra</SelectItem>
-                          <SelectItem value="piano">Piano</SelectItem>
-                          <SelectItem value="bateria">Bateria</SelectItem>
-                          <SelectItem value="canto">Canto</SelectItem>
-                          <SelectItem value="violao">Violão</SelectItem>
-                        </>
-                      )}
-                      {tipoVinculo === 'por_professor' && <SelectItem value="todos_prof">Todos os Professores</SelectItem>}
-                      {tipoVinculo === 'manual' && <SelectItem value="selecionar">Selecionar alunos...</SelectItem>}
-                    </SelectContent>
-                  </Select>
+                {tipoVinculo === 'todos_alunos' && (
+                  <div className="flex items-center text-xs text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 rounded-lg px-3 py-2">
+                    <Users className="w-3.5 h-3.5 mr-1.5" />
+                    Todos os alunos ativos da unidade
+                  </div>
+                )}
+                {tipoVinculo === 'por_curso' && (
+                  <div className="max-h-40 overflow-y-auto bg-slate-800 border border-slate-700 rounded-lg p-2 space-y-1">
+                    {cursosUnidadeModal.length === 0 ? (
+                      <p className="text-xs text-slate-500 px-2 py-1">Nenhum curso encontrado</p>
+                    ) : cursosUnidadeModal.map(c => (
+                      <label key={c.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-700/50 cursor-pointer">
+                        <Checkbox
+                          checked={vinculoFiltroIds.includes(c.id.toString())}
+                          onCheckedChange={(checked) => {
+                            setVinculoFiltroIds(prev =>
+                              checked
+                                ? [...prev, c.id.toString()]
+                                : prev.filter(id => id !== c.id.toString())
+                            );
+                          }}
+                        />
+                        <span className="text-xs text-slate-300">{c.nome}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                {tipoVinculo === 'por_professor' && (
+                  <div className="max-h-40 overflow-y-auto bg-slate-800 border border-slate-700 rounded-lg p-2 space-y-1">
+                    {professoresUnidadeModal.length === 0 ? (
+                      <p className="text-xs text-slate-500 px-2 py-1">Nenhum professor encontrado</p>
+                    ) : professoresUnidadeModal.map(p => (
+                      <label key={p.id} className="flex items-center gap-2 px-2 py-1 rounded hover:bg-slate-700/50 cursor-pointer">
+                        <Checkbox
+                          checked={vinculoFiltroIds.includes(p.id.toString())}
+                          onCheckedChange={(checked) => {
+                            setVinculoFiltroIds(prev =>
+                              checked
+                                ? [...prev, p.id.toString()]
+                                : prev.filter(id => id !== p.id.toString())
+                            );
+                          }}
+                        />
+                        <span className="text-xs text-slate-300">{p.nome}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                {tipoVinculo === 'manual' && (
+                  <div className="flex items-center text-xs text-slate-400 bg-slate-800/50 border border-slate-700/30 rounded-lg px-3 py-2">
+                    Seleção manual disponível após criar o checklist
+                  </div>
                 )}
               </div>
               {/* Divisão de Carteira (quando há vínculo) */}
@@ -895,7 +1021,10 @@ function ChecklistCard({ checklist, onClick }: ChecklistCardProps) {
             <p className="text-xs text-slate-500 mt-0.5">
               {checklist.total_items} tarefas
               {checklist.total_contatos > 0 && ` · ${checklist.total_contatos} alunos`}
-              {' · '}{checklist.colaborador_apelido || checklist.colaborador_nome}
+              {checklist.responsavel_nome
+                ? <> · <span className="text-violet-400">{checklist.responsavel_apelido || checklist.responsavel_nome}</span></>
+                : <> · {checklist.colaborador_apelido || checklist.colaborador_nome}</>
+              }
               {prazoLabel && ` · Prazo: ${prazoLabel}`}
             </p>
           </div>
