@@ -1,5 +1,15 @@
 // Tipos para a página de Professores
 
+// Disponibilidade do professor por dia da semana em uma unidade
+export interface DisponibilidadeDia {
+  inicio: string; // "08:00"
+  fim: string;    // "20:00"
+}
+
+// Mapa de dia da semana → horário de disponibilidade
+export type DisponibilidadeSemanal = Record<string, DisponibilidadeDia>;
+// Ex: { "Segunda": { inicio: "10:00", fim: "20:00" }, "Sexta": { inicio: "13:00", fim: "20:00" } }
+
 export interface Professor {
   id: number;
   nome: string;
@@ -29,6 +39,7 @@ export interface ProfessorUnidade {
   unidade_id: string;
   unidade_nome?: string;
   unidade_codigo?: string;
+  disponibilidade?: DisponibilidadeSemanal | null;
   created_at: string;
 }
 
@@ -40,12 +51,24 @@ export interface ProfessorCurso {
   created_at: string;
 }
 
+export interface HorarioFuncionamentoUnidade {
+  inicio: string;
+  fim: string;
+}
+
+export interface HorarioFuncionamentoConfig {
+  segunda_sexta: HorarioFuncionamentoUnidade;
+  sabado: HorarioFuncionamentoUnidade;
+  domingo?: { fechado: boolean };
+}
+
 export interface Unidade {
   id: string;
   nome: string;
   codigo: string;
   cor_primaria: string;
   ativo: boolean;
+  horario_funcionamento?: HorarioFuncionamentoConfig;
 }
 
 export interface Curso {
@@ -84,6 +107,8 @@ export interface ProfessorFormData {
   telefone_whatsapp: string;
   unidades_ids: string[];
   cursos_ids: number[];
+  // Disponibilidade por unidade: { unidade_id: { "Segunda": { inicio, fim }, ... } }
+  disponibilidade_por_unidade: Record<string, DisponibilidadeSemanal>;
 }
 
 export type TabAtivaProfessores = 'todos' | 'por-unidade' | 'por-curso';

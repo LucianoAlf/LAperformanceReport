@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { X, CheckCircle2, Loader2 } from 'lucide-react';
+import { gerarHorariosDisponiveis } from '@/lib/horarios';
+import type { DisponibilidadeSemanal } from '../Professores/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DatePicker } from '@/components/ui/date-picker';
 import { DatePickerNascimento } from '@/components/ui/date-picker-nascimento';
@@ -19,6 +21,15 @@ interface ModalNovoAlunoProps {
   horarios: {id: number, nome: string, hora_inicio: string}[];
   unidadeAtual: string;
 }
+
+const DIAS_SEMANA = [
+  { valor: 'Segunda', nome: 'Segunda-feira' },
+  { valor: 'Terça', nome: 'Terça-feira' },
+  { valor: 'Quarta', nome: 'Quarta-feira' },
+  { valor: 'Quinta', nome: 'Quinta-feira' },
+  { valor: 'Sexta', nome: 'Sexta-feira' },
+  { valor: 'Sábado', nome: 'Sábado' },
+];
 
 const TIPOS_ALUNO = [
   { value: 'pagante', label: 'Pagante' },
@@ -60,7 +71,46 @@ export function ModalNovoAluno({
     valor_parcela: null as number | null,
     forma_pagamento_id: null as number | null,
     dia_vencimento: 5,
+    dia_aula: '',
+    horario_aula: '',
   });
+  const [disponibilidadeProfessor, setDisponibilidadeProfessor] = useState<DisponibilidadeSemanal | null>(null);
+
+  // Buscar disponibilidade do professor fixo quando selecionado
+  useEffect(() => {
+    async function loadDisponibilidade() {
+      if (!formData.professor_fixo_id || !formData.unidade_id) {
+        setDisponibilidadeProfessor(null);
+        return;
+      }
+      const { data } = await supabase
+        .from('professores_unidades')
+        .select('disponibilidade')
+        .eq('professor_id', formData.professor_fixo_id)
+        .eq('unidade_id', formData.unidade_id)
+        .single();
+      
+      setDisponibilidadeProfessor(data?.disponibilidade || null);
+    }
+    loadDisponibilidade();
+    setFormData(prev => ({ ...prev, dia_aula: '', horario_aula: '' }));
+  }, [formData.professor_fixo_id, formData.unidade_id]);
+
+  // Dias disponíveis do professor
+  const diasDisponiveis = useMemo(() => {
+    if (!disponibilidadeProfessor) return DIAS_SEMANA;
+    return DIAS_SEMANA.filter(d => disponibilidadeProfessor[d.valor]);
+  }, [disponibilidadeProfessor]);
+
+  // Horários disponíveis baseados no dia selecionado
+  const horariosDisponiveis = useMemo(() => {
+    if (!formData.dia_aula) return [];
+    if (disponibilidadeProfessor && disponibilidadeProfessor[formData.dia_aula]) {
+      const disp = disponibilidadeProfessor[formData.dia_aula];
+      return gerarHorariosDisponiveis(disp.inicio, disp.fim, 60);
+    }
+    return gerarHorariosDisponiveis('08:00', '21:00', 60);
+  }, [formData.dia_aula, disponibilidadeProfessor]);
 
   useEffect(() => {
     async function loadData() {
@@ -121,6 +171,8 @@ export function ModalNovoAluno({
           professor_experimental_id: formData.teve_experimental ? formData.professor_experimental_id : null,
           status: 'ativo',
           data_matricula: formData.data.toISOString().split('T')[0],
+          dia_aula: formData.dia_aula || null,
+          horario_aula: formData.horario_aula || null,
         });
 
       if (error) throw error;
@@ -153,6 +205,8 @@ export function ModalNovoAluno({
       valor_parcela: null,
       forma_pagamento_id: null,
       dia_vencimento: 5,
+      dia_aula: '',
+      horario_aula: '',
     });
   }
 
@@ -323,6 +377,45 @@ export function ModalNovoAluno({
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Dia e Horário de Aula */}
+            {formData.professor_fixo_id && (
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="mb-2 block">Dia da Aula</Label>
+                  <Select
+                    value={formData.dia_aula}
+                    onValueChange={(value) => setFormData({ ...formData, dia_aula: value, horario_aula: '' })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o dia..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {diasDisponiveis.map((d) => (
+                        <SelectItem key={d.valor} value={d.valor}>{d.nome}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <Label className="mb-2 block">Horário da Aula</Label>
+                  <Select
+                    value={formData.horario_aula}
+                    onValueChange={(value) => setFormData({ ...formData, horario_aula: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={formData.dia_aula ? "Selecione..." : "Selecione o dia primeiro"} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {horariosDisponiveis.map((h) => (
+                        <SelectItem key={h} value={h}>{h}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
             <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-xl space-y-3">
               <h4 className="text-sm font-semibold text-amber-400">🎫 Passaporte</h4>
               <div className={`grid gap-3 ${formData.forma_pagamento_passaporte === 'cartao_credito' ? 'grid-cols-3' : 'grid-cols-2'}`}>

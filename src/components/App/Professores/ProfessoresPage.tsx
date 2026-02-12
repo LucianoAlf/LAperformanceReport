@@ -143,13 +143,14 @@ export function ProfessoresPage() {
 
       if (profError) throw profError;
 
-      // Buscar relacionamentos de unidades
+      // Buscar relacionamentos de unidades (inclui disponibilidade)
       const { data: unidadesRelData } = await supabase
         .from('professores_unidades')
         .select(`
           id,
           professor_id,
           unidade_id,
+          disponibilidade,
           unidades:unidade_id (nome, codigo)
         `);
 
@@ -232,6 +233,7 @@ export function ProfessoresPage() {
           unidade_id: u.unidade_id,
           unidade_nome: (u.unidades as any)?.nome,
           unidade_codigo: (u.unidades as any)?.codigo,
+          disponibilidade: u.disponibilidade || null,
           created_at: ''
         })) || [];
 
@@ -386,11 +388,12 @@ export function ProfessoresPage() {
 
         if (error) throw error;
 
-        // Inserir relacionamentos de unidades
+        // Inserir relacionamentos de unidades (com disponibilidade)
         if (data.unidades_ids.length > 0) {
           const unidadesInsert = data.unidades_ids.map(unidade_id => ({
             professor_id: novoProfessor.id,
-            unidade_id
+            unidade_id,
+            disponibilidade: data.disponibilidade_por_unidade?.[unidade_id] || null
           }));
           await supabase.from('professores_unidades').insert(unidadesInsert);
         }
@@ -416,12 +419,13 @@ export function ProfessoresPage() {
 
         if (error) throw error;
 
-        // Atualizar unidades (deletar e reinserir)
+        // Atualizar unidades (deletar e reinserir com disponibilidade)
         await supabase.from('professores_unidades').delete().eq('professor_id', professorId);
         if (data.unidades_ids.length > 0) {
           const unidadesInsert = data.unidades_ids.map(unidade_id => ({
             professor_id: professorId,
-            unidade_id
+            unidade_id,
+            disponibilidade: data.disponibilidade_por_unidade?.[unidade_id] || null
           }));
           await supabase.from('professores_unidades').insert(unidadesInsert);
         }

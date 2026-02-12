@@ -8,7 +8,8 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 import { detectarConflitos } from '@/lib/conflitos';
 import { gerarSugestoes, type Sugestao } from '@/lib/sugestoes-horarios';
-import { calcularHorarioFim, type Conflito, type Turma as TurmaHorarios, type Sala } from '@/lib/horarios';
+import { calcularHorarioFim, gerarHorariosDisponiveis, type Conflito, type Turma as TurmaHorarios, type Sala } from '@/lib/horarios';
+import type { DisponibilidadeSemanal } from '../Professores/types';
 import { ListaConflitos } from '../Turmas/Conflitos';
 import { ListaSugestoes } from '../Turmas/Sugestoes';
 import type { Aluno, Turma } from './AlunosPage';
@@ -56,6 +57,7 @@ export function ModalNovaTurma({
   const [sugestoes, setSugestoes] = useState<Sugestao[]>([]);
   const [mostrarSugestoes, setMostrarSugestoes] = useState(false);
   const [carregandoSugestoes, setCarregandoSugestoes] = useState(false);
+  const [disponibilidadeProfessor, setDisponibilidadeProfessor] = useState<DisponibilidadeSemanal | null>(null);
   
   const [formData, setFormData] = useState({
     tipo: 'turma' as 'turma' | 'banda',
@@ -78,6 +80,46 @@ export function ModalNovaTurma({
     }
     loadUnidades();
   }, []);
+
+  // Buscar disponibilidade do professor quando selecionado
+  useEffect(() => {
+    async function loadDisponibilidade() {
+      if (!formData.professor_id || !formData.unidade_id) {
+        setDisponibilidadeProfessor(null);
+        return;
+      }
+      const { data } = await supabase
+        .from('professores_unidades')
+        .select('disponibilidade')
+        .eq('professor_id', formData.professor_id)
+        .eq('unidade_id', formData.unidade_id)
+        .single();
+      
+      setDisponibilidadeProfessor(data?.disponibilidade || null);
+    }
+    loadDisponibilidade();
+    // Limpar dia/horário ao trocar professor
+    setFormData(prev => ({ ...prev, dia_semana: '', horario: '' }));
+  }, [formData.professor_id, formData.unidade_id]);
+
+  // Dias disponíveis do professor (filtrados pela disponibilidade)
+  const diasDisponiveis = useMemo(() => {
+    if (!disponibilidadeProfessor) return DIAS_SEMANA;
+    return DIAS_SEMANA.filter(d => disponibilidadeProfessor[d.valor]);
+  }, [disponibilidadeProfessor]);
+
+  // Horários disponíveis baseados no dia selecionado e disponibilidade do professor
+  const horariosDisponiveis = useMemo(() => {
+    if (!formData.dia_semana) return [];
+    
+    if (disponibilidadeProfessor && disponibilidadeProfessor[formData.dia_semana]) {
+      const disp = disponibilidadeProfessor[formData.dia_semana];
+      return gerarHorariosDisponiveis(disp.inicio, disp.fim, 60);
+    }
+    
+    // Fallback: horários padrão de 08:00 a 21:00
+    return gerarHorariosDisponiveis('08:00', '21:00', 60);
+  }, [formData.dia_semana, disponibilidadeProfessor]);
 
   // Capacidade da sala selecionada
   const capacidadeSala = useMemo(() => {
@@ -496,17 +538,23 @@ export function ModalNovaTurma({
                   <Label className="mb-2 block">Dia da Semana *</Label>
                   <Select
                     value={formData.dia_semana}
-                    onValueChange={(value) => setFormData({ ...formData, dia_semana: value })}
+                    onValueChange={(value) => setFormData({ ...formData, dia_semana: value, horario: '' })}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecione..." />
+                      <SelectValue placeholder={formData.professor_id ? "Selecione..." : "Selecione o professor primeiro"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {DIAS_SEMANA.map((d) => (
+                      {diasDisponiveis.map((d) => (
                         <SelectItem key={d.valor} value={d.valor}>{d.nome}</SelectItem>
                       ))}
+                      {diasDisponiveis.length === 0 && (
+                        <div className="px-3 py-2 text-xs text-slate-400">Nenhum dia cadastrado para este professor</div>
+                      )}
                     </SelectContent>
                   </Select>
+                  {formData.professor_id && disponibilidadeProfessor && diasDisponiveis.length === 0 && (
+                    <p className="text-xs text-amber-400 mt-1">Este professor não tem disponibilidade cadastrada nesta unidade</p>
+                  )}
                 </div>
 
                 <div>
@@ -516,11 +564,11 @@ export function ModalNovaTurma({
                     onValueChange={(value) => setFormData({ ...formData, horario: value })}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecione..." />
+                      <SelectValue placeholder={formData.dia_semana ? "Selecione..." : "Selecione o dia primeiro"} />
                     </SelectTrigger>
                     <SelectContent>
-                      {horarios.map((h) => (
-                        <SelectItem key={h.id} value={h.hora_inicio}>{h.hora_inicio.substring(0, 5)}</SelectItem>
+                      {horariosDisponiveis.map((h) => (
+                        <SelectItem key={h} value={h}>{h}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>

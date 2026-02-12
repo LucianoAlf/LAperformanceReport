@@ -14,11 +14,19 @@ import {
   Circle,
   AlertTriangle,
   Clock,
-  Sparkles
+  Sparkles,
+  ClipboardList,
+  Trophy,
+  ListTodo,
+  TrendingUp,
+  Pencil,
+  Trash2,
+  X,
+  Save
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { useColaboradorAtual, useRotinas, useAlertas, useTarefas, useFarmersUnidade } from './hooks';
+import { useColaboradorAtual, useRotinas, useAlertas, useTarefas, useFarmersUnidade, useDashboardStats } from './hooks';
 import type { AlertaRenovacao, AlertaInadimplente, AlertaAniversariante, AlertaNovoMatriculado } from './types';
 
 interface DashboardTabProps {
@@ -31,10 +39,14 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
   const { colaborador, loading: loadingColaborador } = useColaboradorAtual(unidadeId);
   // Buscar todos os farmers da unidade (ou todas as unidades no consolidado)
   const { farmers, loading: loadingFarmers } = useFarmersUnidade(unidadeId);
-  const { rotinasDoDia, progresso, loading: loadingRotinas, marcarConcluida } = useRotinas(
+  const { rotinasDoDia, progresso, loading: loadingRotinas, marcarConcluida, excluirRotina, atualizarRotina } = useRotinas(
     colaborador?.id || null, 
     unidadeId
   );
+
+  // Estado para edição inline de rotina
+  const [editandoRotinaId, setEditandoRotinaId] = useState<string | null>(null);
+  const [editandoRotinaTexto, setEditandoRotinaTexto] = useState('');
   const { 
     aniversariantes, 
     inadimplentes, 
@@ -47,6 +59,7 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
     colaborador?.id || null,
     unidadeId
   );
+  const { checklistAlertas, stats, loading: loadingStats } = useDashboardStats(unidadeId);
   
   // Verificar se está no consolidado
   const isConsolidado = unidadeId === 'todos';
@@ -66,7 +79,7 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
     });
   };
 
-  const loading = loadingColaborador || loadingFarmers || loadingRotinas || loadingAlertas || loadingTarefas;
+  const loading = loadingColaborador || loadingFarmers || loadingRotinas || loadingAlertas || loadingTarefas || loadingStats;
 
   // Formatar data atual
   const hoje = new Date();
@@ -116,6 +129,86 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
   }
 
   return (
+    <div className="space-y-6">
+      {/* === SEÇÃO FULL-WIDTH: Alertas de Checklist === */}
+      {checklistAlertas.length > 0 && (
+        <div className="space-y-3">
+          {checklistAlertas.map((alerta) => {
+            const isVencido = alerta.urgencia === 'vencido';
+            const itensPendentes = alerta.total_items - alerta.items_concluidos;
+            return (
+              <div
+                key={alerta.checklist_id}
+                className={cn(
+                  'rounded-xl p-4 border',
+                  isVencido
+                    ? 'bg-red-500/10 border-red-500/20'
+                    : 'bg-amber-500/10 border-amber-500/20'
+                )}
+              >
+                <div className="flex items-start gap-3">
+                  <div className={cn(
+                    'w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5',
+                    isVencido ? 'bg-red-500/20' : 'bg-amber-500/20'
+                  )}>
+                    <AlertTriangle className={cn('w-4 h-4', isVencido ? 'text-red-400' : 'text-amber-400')} />
+                  </div>
+                  <div className="flex-1">
+                    <p className={cn('text-sm font-semibold', isVencido ? 'text-red-300' : 'text-amber-300')}>
+                      Checklist &quot;{alerta.titulo}&quot; com {itensPendentes} {itensPendentes === 1 ? 'item pendente' : 'itens pendentes'}!
+                    </p>
+                    <p className={cn('text-xs mt-1', isVencido ? 'text-red-400/70' : 'text-amber-400/70')}>
+                      Prazo: {alerta.data_prazo ? new Date(alerta.data_prazo + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '—'}
+                      {' · '}{alerta.percentual_progresso}% concluído
+                      {isVencido && ` · Vencido há ${Math.abs(alerta.dias_restantes)} dias`}
+                      {!isVencido && alerta.dias_restantes > 0 && ` · ${alerta.dias_restantes} dias restantes`}
+                    </p>
+                    <div className="flex gap-2 mt-3">
+                      <Button
+                        size="sm"
+                        className={cn(
+                          'text-xs h-7 px-3 rounded-lg font-medium',
+                          isVencido
+                            ? 'bg-red-500/20 text-red-300 hover:bg-red-500/30'
+                            : 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30'
+                        )}
+                        variant="ghost"
+                      >
+                        Abrir Checklist
+                      </Button>
+                      <Button variant="ghost" size="sm" className="text-xs h-7 px-3 text-slate-400 hover:text-slate-300">
+                        Dispensar
+                      </Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* === SEÇÃO FULL-WIDTH: KPIs em Grid 4 colunas === */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="bg-slate-800/50 border border-slate-700/30 rounded-xl p-4 text-center">
+          <div className="text-2xl font-bold text-violet-400">{stats.checklistsAtivos}</div>
+          <div className="text-xs text-slate-500 mt-1">Checklists Ativos</div>
+        </div>
+        <div className="bg-slate-800/50 border border-slate-700/30 rounded-xl p-4 text-center">
+          <div className="text-2xl font-bold text-emerald-400">{stats.checklistsConcluidos}</div>
+          <div className="text-xs text-slate-500 mt-1">Concluídos este mês</div>
+        </div>
+        <div className="bg-slate-800/50 border border-slate-700/30 rounded-xl p-4 text-center">
+          <div className="text-2xl font-bold text-amber-400">{stats.tarefasPendentes}</div>
+          <div className="text-xs text-slate-500 mt-1">Tarefas Rápidas</div>
+        </div>
+        <div className="bg-slate-800/50 border border-slate-700/30 rounded-xl p-4 text-center">
+          <div className="text-2xl font-bold text-cyan-400">{stats.taxaSucessoContatos}%</div>
+          <div className="text-xs text-slate-500 mt-1">Taxa Sucesso Contatos</div>
+        </div>
+      </div>
+
+      {/* === SEÇÃO 2 COLUNAS: Alertas + Rotinas === */}
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       {/* Coluna Esquerda - Alertas e Tarefas */}
       <div className="space-y-6">
@@ -218,6 +311,7 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
                     detalhe={`R$ ${item.valor_parcela?.toFixed(2)} • ${item.dias_atraso > 0 ? `${item.dias_atraso} dias atraso` : 'Pendente'}`}
                     whatsapp={item.whatsapp}
                     actionLabel="Cobrar"
+                    mensagemTemplate={`Olá ${item.aluno_nome.split(' ')[0]}! Identificamos que sua mensalidade (R$ ${item.valor_parcela?.toFixed(2)}) está pendente. Podemos ajudar com alguma condição especial? Responda essa mensagem!`}
                   />
                 )}
               />
@@ -241,6 +335,7 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
                     detalhe={`${item.instrumento || 'Aluno'} • ${item.idade} anos`}
                     whatsapp={item.whatsapp}
                     actionLabel="Parabéns"
+                    mensagemTemplate={`🎂 Parabéns, ${item.aluno_nome.split(' ')[0]}! A família LA Music deseja um dia incrível cheio de música! 🎶 Que esse novo ciclo traga ainda mais conquistas e muitas músicas novas!`}
                   />
                 )}
               />
@@ -264,6 +359,7 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
                     detalhe={`${item.instrumento || 'Curso'} • ${item.dia_aula || ''} ${item.horario_aula || ''}`}
                     whatsapp={item.whatsapp}
                     actionLabel="Boas-vindas"
+                    mensagemTemplate={`🎸 Bem-vindo(a) à LA Music, ${item.aluno_nome.split(' ')[0]}! Sua primeira aula de ${item.instrumento || 'música'} está marcada para ${item.dia_aula || 'breve'} às ${item.horario_aula || ''}. Estamos muito felizes em te receber! Qualquer dúvida, é só chamar. 🎵`}
                   />
                 )}
               />
@@ -357,6 +453,25 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
                   key={rotina.rotina_id}
                   rotina={rotina}
                   onToggle={() => marcarConcluida(rotina.rotina_id, !rotina.concluida)}
+                  editando={editandoRotinaId === rotina.rotina_id}
+                  editandoTexto={editandoRotinaTexto}
+                  onEditStart={() => {
+                    setEditandoRotinaId(rotina.rotina_id);
+                    setEditandoRotinaTexto(rotina.descricao);
+                  }}
+                  onEditChange={setEditandoRotinaTexto}
+                  onEditSave={async () => {
+                    if (editandoRotinaTexto.trim()) {
+                      await atualizarRotina(rotina.rotina_id, { descricao: editandoRotinaTexto.trim() });
+                    }
+                    setEditandoRotinaId(null);
+                  }}
+                  onEditCancel={() => setEditandoRotinaId(null)}
+                  onDelete={async () => {
+                    if (confirm('Excluir esta rotina?')) {
+                      await excluirRotina(rotina.rotina_id);
+                    }
+                  }}
                 />
               ))}
 
@@ -415,6 +530,7 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
           </div>
         )}
       </div>
+    </div>
     </div>
   );
 }
@@ -484,41 +600,113 @@ function AlertaItem({ icon, count, title, subtitle, variant, expanded, onToggle,
   );
 }
 
-// Componente: Item da Lista de Alerta
+// Componente: Item da Lista de Alerta com WhatsApp e preview de mensagem
 interface AlertaListItemProps {
   nome: string;
   detalhe: string;
   whatsapp?: string | null;
   actionLabel?: string;
+  mensagemTemplate?: string;
 }
 
-function AlertaListItem({ nome, detalhe, whatsapp, actionLabel = 'Contato' }: AlertaListItemProps) {
+function AlertaListItem({ nome, detalhe, whatsapp, actionLabel = 'Contato', mensagemTemplate }: AlertaListItemProps) {
+  const [showPreview, setShowPreview] = useState(false);
+  const [mensagemEditavel, setMensagemEditavel] = useState('');
+
+  const abrirPreview = () => {
+    setMensagemEditavel(mensagemTemplate || '');
+    setShowPreview(true);
+  };
+
+  const enviarWhatsApp = () => {
+    if (!whatsapp) return;
+    const numero = whatsapp.replace(/\D/g, '');
+    const numeroFormatado = numero.startsWith('55') ? numero : `55${numero}`;
+    const msgEncoded = encodeURIComponent(mensagemEditavel);
+    window.open(`https://wa.me/${numeroFormatado}?text=${msgEncoded}`, '_blank');
+    setShowPreview(false);
+  };
+
   return (
-    <div className="px-4 py-3 flex items-center justify-between hover:bg-white/5">
-      <div className="flex items-center gap-3">
-        <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-sm">
-          👤
+    <div className="hover:bg-white/5">
+      <div className="px-4 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-sm">
+            👤
+          </div>
+          <div>
+            <p className="text-sm font-medium text-white">{nome}</p>
+            <p className="text-xs text-slate-400">{detalhe}</p>
+          </div>
         </div>
-        <div>
-          <p className="text-sm font-medium text-white">{nome}</p>
-          <p className="text-xs text-slate-400">{detalhe}</p>
+        <div className="flex items-center gap-2">
+          {whatsapp && mensagemTemplate && (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 gap-1.5 text-xs"
+              onClick={(e) => {
+                e.stopPropagation();
+                abrirPreview();
+              }}
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              {actionLabel}
+            </Button>
+          )}
+          {whatsapp && !mensagemTemplate && (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
+              onClick={(e) => {
+                e.stopPropagation();
+                const numero = whatsapp.replace(/\D/g, '');
+                const numeroFormatado = numero.startsWith('55') ? numero : `55${numero}`;
+                window.open(`https://wa.me/${numeroFormatado}`, '_blank');
+              }}
+            >
+              <MessageSquare className="w-4 h-4" />
+            </Button>
+          )}
+          {!whatsapp && (
+            <span className="text-xs text-slate-500 italic">Sem WhatsApp</span>
+          )}
         </div>
       </div>
-      <div className="flex items-center gap-2">
-        {whatsapp && (
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            className="text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10"
-            onClick={(e) => {
-              e.stopPropagation();
-              window.open(`https://wa.me/55${whatsapp.replace(/\D/g, '')}`, '_blank');
-            }}
-          >
-            <MessageSquare className="w-4 h-4" />
-          </Button>
-        )}
-      </div>
+
+      {/* Preview da mensagem */}
+      {showPreview && (
+        <div className="px-4 pb-3">
+          <div className="bg-slate-900/80 border border-slate-600/50 rounded-lg p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-slate-300">Preview da mensagem</span>
+              <Button variant="ghost" size="sm" className="h-5 w-5 p-0 text-slate-400 hover:text-slate-300" onClick={() => setShowPreview(false)}>
+                <X className="w-3 h-3" />
+              </Button>
+            </div>
+            <textarea
+              value={mensagemEditavel}
+              onChange={(e) => setMensagemEditavel(e.target.value)}
+              className="w-full bg-slate-800 border border-slate-600 rounded-md px-3 py-2 text-xs text-white resize-none focus:outline-none focus:border-violet-500"
+              rows={4}
+            />
+            <div className="flex justify-end gap-2">
+              <Button variant="ghost" size="sm" className="text-xs h-7 text-slate-400" onClick={() => setShowPreview(false)}>
+                Cancelar
+              </Button>
+              <Button 
+                size="sm" 
+                className="text-xs h-7 bg-emerald-600 hover:bg-emerald-500 text-white gap-1.5"
+                onClick={enviarWhatsApp}
+              >
+                <MessageSquare className="w-3 h-3" />
+                Enviar WhatsApp
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -535,9 +723,16 @@ interface RotinaItemProps {
     responsavel_apelido?: string;
   };
   onToggle: () => void;
+  editando?: boolean;
+  editandoTexto?: string;
+  onEditStart?: () => void;
+  onEditChange?: (texto: string) => void;
+  onEditSave?: () => void;
+  onEditCancel?: () => void;
+  onDelete?: () => void;
 }
 
-function RotinaItem({ rotina, onToggle }: RotinaItemProps) {
+function RotinaItem({ rotina, onToggle, editando, editandoTexto, onEditStart, onEditChange, onEditSave, onEditCancel, onDelete }: RotinaItemProps) {
   const frequenciaLabels: Record<string, string> = {
     diario: 'Diário',
     semanal: 'Semanal',
@@ -550,26 +745,53 @@ function RotinaItem({ rotina, onToggle }: RotinaItemProps) {
     mensal: 'bg-amber-500/20 text-amber-400',
   };
 
+  // Modo edição inline
+  if (editando) {
+    return (
+      <div className="flex items-center gap-2 p-3 rounded-lg border border-violet-500/30 bg-violet-500/5">
+        <input
+          type="text"
+          value={editandoTexto || ''}
+          onChange={(e) => onEditChange?.(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') onEditSave?.();
+            if (e.key === 'Escape') onEditCancel?.();
+          }}
+          className="flex-1 bg-slate-800 border border-slate-600 rounded-md px-3 py-1.5 text-sm text-white focus:outline-none focus:border-violet-500"
+          autoFocus
+        />
+        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-emerald-400 hover:text-emerald-300" onClick={onEditSave}>
+          <Save className="w-3.5 h-3.5" />
+        </Button>
+        <Button variant="ghost" size="sm" className="h-7 w-7 p-0 text-slate-400 hover:text-slate-300" onClick={onEditCancel}>
+          <X className="w-3.5 h-3.5" />
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div 
       className={cn(
-        'flex items-center gap-3 p-3 rounded-lg border transition-all cursor-pointer',
+        'group flex items-center gap-3 p-3 rounded-lg border transition-all',
         rotina.concluida 
           ? 'border-emerald-500/30 bg-emerald-500/5' 
           : 'border-slate-700/50 bg-slate-800/30 hover:bg-slate-700/30'
       )}
-      onClick={onToggle}
     >
-      <div className={cn(
-        'w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all',
-        rotina.concluida 
-          ? 'border-emerald-500 bg-emerald-500' 
-          : 'border-slate-500'
-      )}>
+      <div 
+        className={cn(
+          'w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer flex-shrink-0',
+          rotina.concluida 
+            ? 'border-emerald-500 bg-emerald-500' 
+            : 'border-slate-500'
+        )}
+        onClick={onToggle}
+      >
         {rotina.concluida && <CheckCircle2 className="w-3 h-3 text-white" />}
       </div>
       
-      <div className="flex-1">
+      <div className="flex-1 cursor-pointer" onClick={onToggle}>
         <p className={cn(
           'text-sm font-medium transition-all',
           rotina.concluida ? 'text-slate-400 line-through' : 'text-white'
@@ -592,8 +814,28 @@ function RotinaItem({ rotina, onToggle }: RotinaItemProps) {
       </div>
 
       {rotina.prioridade === 'alta' && (
-        <AlertTriangle className="w-4 h-4 text-amber-400" />
+        <AlertTriangle className="w-4 h-4 text-amber-400 flex-shrink-0" />
       )}
+
+      {/* Botões editar/excluir - aparecem no hover */}
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          className="h-7 w-7 p-0 text-slate-400 hover:text-violet-400"
+          onClick={(e) => { e.stopPropagation(); onEditStart?.(); }}
+        >
+          <Pencil className="w-3.5 h-3.5" />
+        </Button>
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          className="h-7 w-7 p-0 text-slate-400 hover:text-rose-400"
+          onClick={(e) => { e.stopPropagation(); onDelete?.(); }}
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </Button>
+      </div>
     </div>
   );
 }

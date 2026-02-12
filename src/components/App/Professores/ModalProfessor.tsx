@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Calendar, Building2, Music, Save, Loader2, Phone } from 'lucide-react';
+import { User, Calendar, Building2, Music, Save, Loader2, Phone, Clock } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,7 +8,8 @@ import { DatePickerNascimento } from '@/components/ui/date-picker-nascimento';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ImageCropUpload } from '@/components/ui/ImageCropUpload';
 import { uploadImageToStorage } from '@/lib/uploadImage';
-import type { Professor, Unidade, Curso, ProfessorFormData } from './types';
+import type { Professor, Unidade, Curso, ProfessorFormData, DisponibilidadeSemanal } from './types';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface ModalProfessorProps {
   open: boolean;
@@ -38,13 +39,22 @@ export function ModalProfessor({
     foto_url: '',
     telefone_whatsapp: '',
     unidades_ids: [],
-    cursos_ids: []
+    cursos_ids: [],
+    disponibilidade_por_unidade: {}
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Preencher formulário ao editar
   useEffect(() => {
     if (professor && modo === 'editar') {
+      // Montar disponibilidade a partir dos dados do professor
+      const dispPorUnidade: Record<string, DisponibilidadeSemanal> = {};
+      professor.unidades?.forEach(u => {
+        if (u.disponibilidade) {
+          dispPorUnidade[u.unidade_id] = u.disponibilidade;
+        }
+      });
+
       setFormData({
         nome: professor.nome || '',
         data_admissao: professor.data_admissao ? new Date(professor.data_admissao) : null,
@@ -53,7 +63,8 @@ export function ModalProfessor({
         foto_url: professor.foto_url || '',
         telefone_whatsapp: professor.telefone_whatsapp || '',
         unidades_ids: professor.unidades?.map(u => u.unidade_id) || [],
-        cursos_ids: professor.cursos?.map(c => c.curso_id) || []
+        cursos_ids: professor.cursos?.map(c => c.curso_id) || [],
+        disponibilidade_por_unidade: dispPorUnidade
       });
     } else {
       // Reset para novo professor
@@ -65,7 +76,8 @@ export function ModalProfessor({
         foto_url: '',
         telefone_whatsapp: '',
         unidades_ids: [],
-        cursos_ids: []
+        cursos_ids: [],
+        disponibilidade_por_unidade: {}
       });
     }
     setErrors({});
@@ -123,13 +135,96 @@ export function ModalProfessor({
     }
   };
 
+  const DIAS_SEMANA = [
+    { valor: 'Segunda', nome: 'Seg' },
+    { valor: 'Terça', nome: 'Ter' },
+    { valor: 'Quarta', nome: 'Qua' },
+    { valor: 'Quinta', nome: 'Qui' },
+    { valor: 'Sexta', nome: 'Sex' },
+    { valor: 'Sábado', nome: 'Sáb' },
+  ];
+
+  // Gerar horários de hora em hora
+  const gerarHorarios = (inicio: string, fim: string): string[] => {
+    const horarios: string[] = [];
+    const [hI] = inicio.split(':').map(Number);
+    const [hF] = fim.split(':').map(Number);
+    for (let h = hI; h <= hF; h++) {
+      horarios.push(`${h.toString().padStart(2, '0')}:00`);
+    }
+    return horarios;
+  };
+
+  // Obter horário de funcionamento da unidade para um dia
+  const getHorarioFuncionamento = (unidade: Unidade, dia: string) => {
+    const hf = unidade.horario_funcionamento;
+    if (!hf) return { inicio: '08:00', fim: '21:00' };
+    if (dia === 'Sábado') return hf.sabado || { inicio: '08:00', fim: '16:00' };
+    return hf.segunda_sexta || { inicio: '08:00', fim: '21:00' };
+  };
+
   const toggleUnidade = (unidadeId: string) => {
-    setFormData(prev => ({
-      ...prev,
-      unidades_ids: prev.unidades_ids.includes(unidadeId)
+    setFormData(prev => {
+      const novasUnidades = prev.unidades_ids.includes(unidadeId)
         ? prev.unidades_ids.filter(id => id !== unidadeId)
-        : [...prev.unidades_ids, unidadeId]
-    }));
+        : [...prev.unidades_ids, unidadeId];
+      
+      // Limpar disponibilidade de unidades desmarcadas
+      const novaDisp = { ...prev.disponibilidade_por_unidade };
+      if (!novasUnidades.includes(unidadeId)) {
+        delete novaDisp[unidadeId];
+      }
+      
+      return {
+        ...prev,
+        unidades_ids: novasUnidades,
+        disponibilidade_por_unidade: novaDisp
+      };
+    });
+  };
+
+  // Toggle dia de disponibilidade para uma unidade
+  const toggleDiaDisponibilidade = (unidadeId: string, dia: string, unidade: Unidade) => {
+    setFormData(prev => {
+      const dispUnidade = { ...(prev.disponibilidade_por_unidade[unidadeId] || {}) };
+      
+      if (dispUnidade[dia]) {
+        delete dispUnidade[dia];
+      } else {
+        // Usar horário de funcionamento da unidade como padrão
+        const hf = getHorarioFuncionamento(unidade, dia);
+        dispUnidade[dia] = { inicio: hf.inicio, fim: hf.fim };
+      }
+      
+      return {
+        ...prev,
+        disponibilidade_por_unidade: {
+          ...prev.disponibilidade_por_unidade,
+          [unidadeId]: dispUnidade
+        }
+      };
+    });
+  };
+
+  // Atualizar horário de disponibilidade
+  const atualizarHorarioDisponibilidade = (
+    unidadeId: string, 
+    dia: string, 
+    campo: 'inicio' | 'fim', 
+    valor: string
+  ) => {
+    setFormData(prev => {
+      const dispUnidade = { ...(prev.disponibilidade_por_unidade[unidadeId] || {}) };
+      dispUnidade[dia] = { ...dispUnidade[dia], [campo]: valor };
+      
+      return {
+        ...prev,
+        disponibilidade_por_unidade: {
+          ...prev.disponibilidade_por_unidade,
+          [unidadeId]: dispUnidade
+        }
+      };
+    });
   };
 
   const toggleCurso = (cursoId: number) => {
@@ -251,6 +346,97 @@ export function ModalProfessor({
             </div>
             {errors.unidades && <span className="text-xs text-red-400 mt-1 block">{errors.unidades}</span>}
           </div>
+
+          {/* Disponibilidade por Unidade */}
+          {formData.unidades_ids.length > 0 && (
+            <div>
+              <Label className="flex items-center gap-2 mb-3">
+                <Clock className="w-4 h-4 text-emerald-400" />
+                Disponibilidade por Unidade
+              </Label>
+              <div className="space-y-4">
+                {formData.unidades_ids.map(unidadeId => {
+                  const unidade = unidades.find(u => u.id === unidadeId);
+                  if (!unidade) return null;
+                  const dispUnidade = formData.disponibilidade_por_unidade[unidadeId] || {};
+                  
+                  return (
+                    <div key={unidadeId} className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+                      <p className="text-sm font-medium text-white mb-3">{unidade.nome}</p>
+                      
+                      {/* Dias da semana */}
+                      <div className="flex flex-wrap gap-2 mb-3">
+                        {DIAS_SEMANA.map(dia => {
+                          const ativo = !!dispUnidade[dia.valor];
+                          return (
+                            <button
+                              key={dia.valor}
+                              type="button"
+                              onClick={() => toggleDiaDisponibilidade(unidadeId, dia.valor, unidade)}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                                ativo
+                                  ? 'bg-emerald-500/20 border border-emerald-500/50 text-emerald-300'
+                                  : 'bg-slate-700/50 border border-slate-600 text-slate-400 hover:border-slate-500'
+                              }`}
+                            >
+                              {dia.nome}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      
+                      {/* Horários por dia selecionado */}
+                      {Object.keys(dispUnidade).length > 0 && (
+                        <div className="space-y-2">
+                          {DIAS_SEMANA.filter(d => dispUnidade[d.valor]).map(dia => {
+                            const hf = getHorarioFuncionamento(unidade, dia.valor);
+                            const horariosDisp = gerarHorarios(hf.inicio, hf.fim);
+                            
+                            return (
+                              <div key={dia.valor} className="flex items-center gap-2">
+                                <span className="text-xs text-slate-400 w-10 flex-shrink-0">{dia.nome}</span>
+                                <Select
+                                  value={dispUnidade[dia.valor]?.inicio || hf.inicio}
+                                  onValueChange={(v) => atualizarHorarioDisponibilidade(unidadeId, dia.valor, 'inicio', v)}
+                                >
+                                  <SelectTrigger className="h-8 text-xs w-24">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {horariosDisp.map(h => (
+                                      <SelectItem key={h} value={h}>{h}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                                <span className="text-xs text-slate-500">até</span>
+                                <Select
+                                  value={dispUnidade[dia.valor]?.fim || hf.fim}
+                                  onValueChange={(v) => atualizarHorarioDisponibilidade(unidadeId, dia.valor, 'fim', v)}
+                                >
+                                  <SelectTrigger className="h-8 text-xs w-24">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {horariosDisp.map(h => (
+                                      <SelectItem key={h} value={h}>{h}</SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                      
+                      {Object.keys(dispUnidade).length === 0 && (
+                        <p className="text-xs text-slate-500 italic">Selecione os dias que o professor está nesta unidade</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Cursos/Especialidades (Multi-select com checkboxes) */}
           <div>
