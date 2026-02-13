@@ -282,15 +282,15 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
           nomeUnidade = unidadeData?.nome || '';
         }
         
-        // Query 1: Tabela evasoes (histórico CSV)
+        // Query 1: Tabela evasoes_v2 (fonte unificada)
         let evasoesMRRQuery = supabase
-          .from('evasoes')
-          .select('professor, unidade, parcela')
-          .gte('competencia', startDate)
-          .lte('competencia', endDate);
+          .from('evasoes_v2')
+          .select('professor_id, unidade_id, valor_parcela')
+          .gte('data_evasao', startDate)
+          .lte('data_evasao', endDate);
         
-        if (nomeUnidade) {
-          evasoesMRRQuery = evasoesMRRQuery.ilike('unidade', nomeUnidade);
+        if (unidade !== 'todos') {
+          evasoesMRRQuery = evasoesMRRQuery.eq('unidade_id', unidade);
         }
         
         // Query 2: Tabela movimentacoes_admin (lançamentos das Farmers)
@@ -324,11 +324,11 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
           profUnidadesQuery = profUnidadesQuery.eq('unidade_id', unidade);
         }
 
-        // Total Alunos: via tabela alunos (status ativo)
+        // Total Alunos: via tabela alunos (inclui trancados — consistente com aba Alunos e Dashboard)
         let alunosTotalQuery = supabase
           .from('alunos')
           .select('id, professor_atual_id, unidade_id, valor_parcela, percentual_presenca', { count: 'exact' })
-          .eq('status', 'ativo');
+          .in('status', ['ativo', 'trancado']);
         if (unidade !== 'todos') {
           alunosTotalQuery = alunosTotalQuery.eq('unidade_id', unidade);
         }
@@ -419,22 +419,22 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
         });
 
         // Processar MRR Perdido de DUAS fontes:
-        // 1. Tabela evasoes (dados históricos CSV)
+        // 1. Tabela evasoes_v2 (fonte unificada)
         // 2. Tabela movimentacoes_admin (lançamentos das Farmers)
         const evasoesMRRData = evasoesMRRResult.data || [];
         const movimentacoesData = movimentacoesResult.data || [];
         const mrrPerdidoPorProfessor = new Map<string, number>();
         let mrrPerdidoTotalDireto = 0; // Soma direta de todas as evasões
         
-        // Fonte 1: Tabela evasoes (histórico CSV)
+        // Fonte 1: Tabela evasoes_v2 (fonte unificada)
         evasoesMRRData.forEach((e: any) => {
-          const parcela = Number(e.parcela) || 0;
+          const parcela = Number(e.valor_parcela) || 0;
           mrrPerdidoTotalDireto += parcela;
           
-          const professorNome = e.professor?.toUpperCase().trim() || '';
-          if (professorNome && professorNome !== 'DESCONHECIDO') {
-            const mrrAtual = mrrPerdidoPorProfessor.get(professorNome) || 0;
-            mrrPerdidoPorProfessor.set(professorNome, mrrAtual + parcela);
+          if (e.professor_id) {
+            const profKey = `ID_${e.professor_id}`;
+            const mrrAtual = mrrPerdidoPorProfessor.get(profKey) || 0;
+            mrrPerdidoPorProfessor.set(profKey, mrrAtual + parcela);
           }
         });
         

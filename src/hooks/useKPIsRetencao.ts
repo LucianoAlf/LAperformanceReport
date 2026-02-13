@@ -187,11 +187,11 @@ export function useKPIsRetencao(
 
       const { data: renovacoesData } = await renovacoesQuery;
 
-      // Buscar total de alunos ativos
+      // Buscar total de alunos ativos (inclui trancados — consistente com aba Alunos e Dashboard)
       let alunosQuery = supabase
         .from('alunos')
         .select('*', { count: 'exact', head: true })
-        .eq('status', 'ativo');
+        .in('status', ['ativo', 'trancado']);
 
       if (unidadeId !== 'todos') {
         alunosQuery = alunosQuery.eq('unidade_id', unidadeId);

@@ -128,10 +128,12 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
         let retencaoData: any[] = [];
 
         if (isPeriodoAtual) {
-          // PERÍODO ATUAL: usar views em tempo real
+          // PERÍODO ATUAL: usar views em tempo real, filtrar por ano/mês atual
           let query = supabase
             .from('vw_kpis_gestao_mensal')
-            .select('*');
+            .select('*')
+            .eq('ano', anoAtual)
+            .eq('mes', mesAtual);
 
           if (unidade !== 'todos') {
             query = query.eq('unidade_id', unidade);
@@ -169,23 +171,27 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           const { data: historicoData, error: historicoError } = await historicoQuery;
           if (historicoError) throw historicoError;
 
-          // Buscar dados de evasões detalhados da tabela evasoes
+          // Buscar dados de evasões detalhados da tabela evasoes_v2 (fonte unificada)
           const startDate = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
           const ultimoDia = new Date(ano, mesFinal, 0).getDate();
           const endDate = `${ano}-${String(mesFinal).padStart(2, '0')}-${ultimoDia}`;
 
           let evasoesQuery = supabase
-            .from('evasoes')
-            .select('tipo, parcela, competencia')
-            .gte('competencia', startDate)
-            .lte('competencia', endDate);
+            .from('evasoes_v2')
+            .select('tipo_saida_id, valor_parcela, data_evasao, unidade_id')
+            .gte('data_evasao', startDate)
+            .lte('data_evasao', endDate);
+
+          if (unidade !== 'todos') {
+            evasoesQuery = evasoesQuery.eq('unidade_id', unidade);
+          }
 
           const { data: evasoesHistorico } = await evasoesQuery;
 
-          // Consolidar dados de evasões por tipo
-          const cancelamentos = evasoesHistorico?.filter(e => e.tipo === 'Interrompido').length || 0;
-          const naoRenovacoes = evasoesHistorico?.filter(e => e.tipo === 'Não Renovação').length || 0;
-          const mrrPerdidoTotal = evasoesHistorico?.reduce((acc, e) => acc + (Number(e.parcela) || 0), 0) || 0;
+          // Consolidar dados de evasões por tipo (tipo_saida_id: 1=Interrompido, 2=Aviso Prévio, 3=Transferência)
+          const cancelamentos = evasoesHistorico?.filter(e => e.tipo_saida_id === 1).length || 0;
+          const naoRenovacoes = evasoesHistorico?.filter(e => e.tipo_saida_id === 2).length || 0;
+          const mrrPerdidoTotal = evasoesHistorico?.reduce((acc, e) => acc + (Number(e.valor_parcela) || 0), 0) || 0;
 
           // Transformar dados históricos para o formato esperado
           if (historicoData && historicoData.length > 0) {
@@ -382,29 +388,25 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           }) || { total_evasoes: 0, evasoes_interrompidas: 0, avisos_previos: 0, mrr_perdido: 0,
             renovacoes_realizadas: 0, nao_renovacoes: 0, renovacoes_pendentes: 0, taxa_renovacao: 0, count: 1 };
 
-          // Para período histórico, usar dados já consolidados em g
-          // Para período atual, buscar de dados_mensais
+          // Usar dados consolidados da view (período atual) ou dados_mensais (histórico)
           let novasMatriculas = g.novas_matriculas || 0;
           let evasoes = g.total_evasoes || 0;
           
           if (isPeriodoAtual) {
-            // Buscar dados mensais para novas matrículas (suporta range de meses)
+            // Período atual: view já tem dados em tempo real, verificar se mês está fechado
             let dadosMensaisQuery = supabase
               .from('dados_mensais')
-              .select('*')
+              .select('ticket_medio')
               .eq('ano', ano)
               .gte('mes', mesInicio)
               .lte('mes', mesFinal);
 
             const { data: dadosMensais } = await dadosMensaisQuery;
 
-            // Verificar se o mês está fechado (tem dados em dados_mensais)
             const temDadosMes = dadosMensais && dadosMensais.length > 0 && 
               dadosMensais.some(d => d.ticket_medio !== null && d.ticket_medio > 0);
             setMesFechado(temDadosMes);
-
-            novasMatriculas = dadosMensais?.reduce((acc, d) => acc + (d.novas_matriculas || 0), 0) || 0;
-            evasoes = dadosMensais?.reduce((acc, d) => acc + (d.evasoes || 0), 0) || 0;
+            // novasMatriculas e evasoes já vêm da view vw_kpis_gestao_mensal (fonte unificada)
           } else {
             // Período histórico: já temos os dados, marcar como fechado
             setMesFechado(true);
@@ -431,7 +433,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           let alunosAtivosQuery = supabase
             .from('alunos')
             .select('idade_atual, unidade_id')
-            .eq('status', 'ativo');
+            .in('status', ['ativo', 'trancado']);
 
           if (unidade !== 'todos') {
             alunosAtivosQuery = alunosAtivosQuery.eq('unidade_id', unidade);

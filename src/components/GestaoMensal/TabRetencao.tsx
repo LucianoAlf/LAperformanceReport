@@ -157,11 +157,11 @@ export function TabRetencao({ ano, mes, unidade }: TabRetencaoProps) {
         const taxaRenovacao = totalRenovacoes > 0 ? (renovadas / totalRenovacoes) * 100 : 0;
         const taxaNaoRenovacao = totalRenovacoes > 0 ? (naoRenovadas / totalRenovacoes) * 100 : 0;
 
-        // Buscar total de alunos para calcular taxa de evasão
+        // Buscar total de alunos para calcular taxa de evasão (inclui trancados — consistente com aba Alunos e Dashboard)
         const { count: totalAlunos } = await supabase
           .from('alunos')
           .select('*', { count: 'exact', head: true })
-          .eq('status', 'ativo');
+          .in('status', ['ativo', 'trancado']);
         const taxaEvasao = totalAlunos && totalAlunos > 0 ? (totalEvasoes / totalAlunos) * 100 : 0;
 
         setTotais({

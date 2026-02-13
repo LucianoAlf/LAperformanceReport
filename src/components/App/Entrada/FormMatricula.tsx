@@ -35,7 +35,7 @@ const matriculaSchema = z.object({
   valor_passaporte: z.coerce.number().optional(),
   forma_pagamento_passaporte: z.string().optional(),
   parcelas_passaporte: z.coerce.number().optional(),
-  valor_mensalidade: z.coerce.number().min(1, 'Valor obrigatório'),
+  valor_mensalidade: z.coerce.number().min(0, 'Valor não pode ser negativo'),
   dia_vencimento: z.coerce.number().min(1).max(31),
   forma_pagamento: z.string().optional(),
   duracao_contrato: z.coerce.number().default(12),

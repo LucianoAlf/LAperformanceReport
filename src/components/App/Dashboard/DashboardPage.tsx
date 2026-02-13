@@ -224,7 +224,7 @@ export function DashboardPage() {
             total_alunos_ativos_sum: acc.total_alunos_ativos_sum + (d.total_alunos_ativos || 0),
             total_alunos_pagantes_sum: acc.total_alunos_pagantes_sum + (d.total_alunos_pagantes || 0),
             novas_matriculas: acc.novas_matriculas + (d.novas_matriculas || 0),
-            evasoes: acc.evasoes + (d.evasoes || 0),
+            evasoes: acc.evasoes + (d.total_evasoes || d.evasoes || 0),
             ticket_medio_sum: acc.ticket_medio_sum + (Number(d.ticket_medio) || 0),
             count: acc.count + 1
           }), { total_alunos_ativos_sum: 0, total_alunos_pagantes_sum: 0, novas_matriculas: 0, evasoes: 0, ticket_medio_sum: 0, count: 0 });
@@ -233,8 +233,8 @@ export function DashboardPage() {
           const mesesUnicos = new Set(gestaoData.map((d: any) => `${d.ano}-${d.mes}`)).size || 1;
 
           setDadosGestao({
-            // Alunos: usar MÉDIA (snapshot mensal)
-            alunos_ativos: mesesUnicos > 0 ? Math.round(consolidado.total_alunos_pagantes_sum / mesesUnicos) : 0,
+            // Alunos: usar MÉDIA (snapshot mensal) — total_alunos_ativos inclui ativo + trancado
+            alunos_ativos: mesesUnicos > 0 ? Math.round(consolidado.total_alunos_ativos_sum / mesesUnicos) : 0,
             // Matrículas/Evasões: usar SOMA (eventos acumulam)
             matriculas_mes: consolidado.novas_matriculas,
             evasoes_mes: consolidado.evasoes,
