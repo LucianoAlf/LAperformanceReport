@@ -670,6 +670,36 @@ serve(async (req: Request) => {
         processadas++;
         console.log(`[webhook-inbox] ✅ Mensagem de ${lead.nome} salva (tipo: ${tipo})`);
 
+        // Invocar Mila para processar a mensagem (async, não bloqueia)
+        try {
+          // Verificar se Mila está pausada antes de invocar
+          if (conversa.atribuido_a === 'mila' || !conversa.atribuido_a) {
+            const { data: conversaCheck } = await supabase
+              .from('crm_conversas')
+              .select('mila_pausada')
+              .eq('id', conversa.id)
+              .single();
+
+            if (!conversaCheck?.mila_pausada) {
+              // Invocar Edge Function mila-processar-mensagem (fire-and-forget)
+              supabase.functions.invoke('mila-processar-mensagem', {
+                body: {
+                  conversa_id: conversa.id,
+                  lead_id: lead.id,
+                  mensagem_conteudo: conteudo,
+                  mensagem_tipo: tipo,
+                },
+              }).then(() => {
+                console.log(`[webhook-inbox] 🤖 Mila invocada para conversa ${conversa.id}`);
+              }).catch((milaErr: any) => {
+                console.error('[webhook-inbox] Erro ao invocar Mila:', milaErr);
+              });
+            }
+          }
+        } catch (milaInvokeErr) {
+          console.error('[webhook-inbox] Erro ao verificar/invocar Mila:', milaInvokeErr);
+        }
+
       } catch (msgErr) {
         console.error('[webhook-inbox] Erro ao processar mensagem individual:', msgErr);
       }
