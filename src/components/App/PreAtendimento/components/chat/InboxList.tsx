@@ -95,9 +95,18 @@ function InboxItem({ conversa, ativa, onClick }: { conversa: ConversaCRM; ativa:
       <div className="flex gap-3">
         {/* Avatar */}
         <div className="relative flex-shrink-0">
+          {conversa.foto_perfil_url ? (
+            <img
+              src={conversa.foto_perfil_url}
+              alt={nome}
+              className="w-11 h-11 rounded-full object-cover"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden'); }}
+            />
+          ) : null}
           <div className={cn(
             'w-11 h-11 rounded-full flex items-center justify-center text-white font-bold text-sm bg-gradient-to-br',
-            semConversa ? 'bg-slate-700' : getCorAvatar(nome)
+            semConversa ? 'bg-slate-700' : getCorAvatar(nome),
+            conversa.foto_perfil_url && 'hidden'
           )}>
             {getIniciais(nome)}
           </div>

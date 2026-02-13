@@ -1,10 +1,12 @@
 import { useState } from 'react';
-import { Check, CheckCheck, AlertCircle, Clock, Image, FileText, Download, Play, MapPin, User } from 'lucide-react';
+import { Check, CheckCheck, AlertCircle, Clock, Image, FileText, Download, Play, MapPin, User, Reply } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { MensagemCRM } from '../../types';
 
 interface ChatBubbleProps {
   mensagem: MensagemCRM;
+  mensagemOriginal?: MensagemCRM | null;
+  onResponder?: (mensagem: MensagemCRM) => void;
 }
 
 function StatusIcon({ status }: { status: string }) {
@@ -188,7 +190,7 @@ function MidiaContent({ mensagem }: { mensagem: MensagemCRM }) {
   }
 }
 
-export function ChatBubble({ mensagem }: ChatBubbleProps) {
+export function ChatBubble({ mensagem, mensagemOriginal, onResponder }: ChatBubbleProps) {
   const { direcao, tipo, conteudo, remetente, remetente_nome, status_entrega, is_sistema, created_at } = mensagem;
 
   // Mensagem de sistema (centralizada)
@@ -226,11 +228,24 @@ export function ChatBubble({ mensagem }: ChatBubbleProps) {
   const tag = isSaida ? getRemetenteTag(remetente) : null;
   const isMidia = ['imagem', 'audio', 'video', 'documento', 'sticker'].includes(tipo);
 
+  // Quote da mensagem original (reply)
+  const quote = mensagem.reply_to_id && mensagemOriginal ? mensagemOriginal : null;
+
   return (
     <div className={cn(
-      'flex animate-in fade-in slide-in-from-bottom-2 duration-200',
+      'group flex animate-in fade-in slide-in-from-bottom-2 duration-200',
       isSaida ? 'justify-end' : 'justify-start'
     )}>
+      {/* Botão responder (hover, lado esquerdo para saída) */}
+      {isSaida && onResponder && (
+        <button
+          onClick={() => onResponder(mensagem)}
+          className="self-center mr-1 p-1.5 rounded-lg text-slate-600 hover:text-violet-400 hover:bg-slate-800 opacity-0 group-hover:opacity-100 transition-all"
+          title="Responder"
+        >
+          <Reply className="w-4 h-4" />
+        </button>
+      )}
       <div className="max-w-[70%]">
         {/* Bolha */}
         <div className={cn(
@@ -240,6 +255,17 @@ export function ChatBubble({ mensagem }: ChatBubbleProps) {
             ? 'bg-violet-600/20 border border-violet-500/20 rounded-tr-md'
             : 'bg-slate-800 border border-slate-700/50 rounded-tl-md'
         )}>
+          {/* Quote (mensagem citada) */}
+          {quote && (
+            <div className="mb-2 px-3 py-1.5 rounded-lg bg-slate-700/40 border-l-2 border-violet-500">
+              <p className="text-[10px] font-medium text-violet-400 mb-0.5">
+                {quote.remetente_nome || (quote.direcao === 'saida' ? 'Você' : 'Lead')}
+              </p>
+              <p className="text-[11px] text-slate-400 line-clamp-2">
+                {quote.tipo !== 'texto' ? `[${quote.tipo}] ` : ''}{quote.conteudo || ''}
+              </p>
+            </div>
+          )}
           {isMidia && tipo !== 'audio' && (
             <div className="mb-1">
               <MidiaContent mensagem={mensagem} />
@@ -280,6 +306,16 @@ export function ChatBubble({ mensagem }: ChatBubbleProps) {
           {isSaida && <StatusIcon status={status_entrega} />}
         </div>
       </div>
+      {/* Botão responder (hover, lado direito para entrada) */}
+      {!isSaida && onResponder && (
+        <button
+          onClick={() => onResponder(mensagem)}
+          className="self-center ml-1 p-1.5 rounded-lg text-slate-600 hover:text-violet-400 hover:bg-slate-800 opacity-0 group-hover:opacity-100 transition-all"
+          title="Responder"
+        >
+          <Reply className="w-4 h-4" />
+        </button>
+      )}
     </div>
   );
 }

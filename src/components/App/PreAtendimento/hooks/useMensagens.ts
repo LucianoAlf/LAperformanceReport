@@ -85,8 +85,28 @@ export function useMensagens({ conversaId, leadId }: UseMensagensParams) {
         (payload) => {
           const novaMensagem = payload.new as MensagemCRM;
           setMensagens(prev => {
-            // Evitar duplicatas
+            // Evitar duplicatas por ID
             if (prev.some(m => m.id === novaMensagem.id)) return prev;
+
+            // Evitar duplicatas por whatsapp_message_id
+            if (novaMensagem.whatsapp_message_id && prev.some(m => m.whatsapp_message_id === novaMensagem.whatsapp_message_id)) return prev;
+
+            // Verificar se existe mensagem otimista correspondente (enviando/enviada, saída recente)
+            // Isso cobre a race condition: Realtime chega antes da Edge Function atualizar o ID
+            const idxOtimista = novaMensagem.direcao === 'saida' ? prev.findIndex(m =>
+              m.direcao === 'saida' &&
+              (m.status_entrega === 'enviando' || m.status_entrega === 'enviada') &&
+              m.tipo === novaMensagem.tipo &&
+              (m.conteudo === novaMensagem.conteudo || (m.midia_url && m.midia_url === novaMensagem.midia_url))
+            ) : -1;
+
+            if (idxOtimista !== -1) {
+              // Substituir a otimista pela mensagem real do banco
+              const updated = [...prev];
+              updated[idxOtimista] = novaMensagem;
+              return updated;
+            }
+
             return [...prev, novaMensagem];
           });
         }
@@ -119,7 +139,7 @@ export function useMensagens({ conversaId, leadId }: UseMensagensParams) {
   }, [conversaId]);
 
   // Enviar mensagem de texto via Edge Function
-  const enviarMensagem = useCallback(async (conteudo: string) => {
+  const enviarMensagem = useCallback(async (conteudo: string, replyToId?: string) => {
     if (!conversaId || !leadId || !conteudo.trim()) return null;
 
     setEnviando(true);
@@ -141,7 +161,7 @@ export function useMensagens({ conversaId, leadId }: UseMensagensParams) {
         is_sistema: false,
         whatsapp_message_id: null,
         template_id: null,
-        reply_to_id: null,
+        reply_to_id: replyToId || null,
         created_at: new Date().toISOString(),
       };
 
@@ -155,6 +175,7 @@ export function useMensagens({ conversaId, leadId }: UseMensagensParams) {
           conteudo: conteudo.trim(),
           tipo: 'texto',
           remetente: 'andreza',
+          reply_to_id: replyToId || null,
         },
       });
 

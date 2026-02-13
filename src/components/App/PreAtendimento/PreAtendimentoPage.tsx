@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useOutletContext } from 'react-router-dom';
+import { useOutletContext, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard,
   KanbanSquare,
@@ -94,6 +94,18 @@ export function PreAtendimentoPage() {
     setModalArquivarAberto(true);
   };
 
+  const navigate = useNavigate();
+  const handleMatricular = (lead: LeadCRM) => {
+    const params = new URLSearchParams();
+    if (lead.nome) params.set('nome', lead.nome);
+    if (lead.telefone) params.set('telefone', lead.telefone);
+    if (lead.email) params.set('email', lead.email);
+    if (lead.unidade_id) params.set('unidade_id', lead.unidade_id);
+    if (lead.curso_interesse_id) params.set('curso_id', String(lead.curso_interesse_id));
+    if (lead.id) params.set('lead_id', String(lead.id));
+    navigate(`/app/entrada/matricula?${params.toString()}`);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header da página */}
@@ -169,6 +181,7 @@ export function PreAtendimentoPage() {
             onLeadClick={abrirDrawer}
             onAgendar={handleAgendar}
             onMoverEtapa={handleMoverEtapa}
+            onMatricular={handleMatricular}
             onArquivar={handleArquivar}
           />
         )}

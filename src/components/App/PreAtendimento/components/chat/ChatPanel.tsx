@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  Phone, Info, Pause, Play, Send, FileText, Loader2, ChevronUp,
-  Paperclip, ImageIcon, Mic, File, X,
+  Phone, Info, Pause, Play, Send, FileText, Loader2, ChevronUp, ChevronDown,
+  Paperclip, ImageIcon, Mic, File, X, Search,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
@@ -17,7 +17,7 @@ interface ChatPanelProps {
   enviando: boolean;
   temMais: boolean;
   onCarregarMais: () => void;
-  onEnviarMensagem: (conteudo: string) => Promise<any>;
+  onEnviarMensagem: (conteudo: string, replyToId?: string) => Promise<any>;
   onEnviarMidia: (arquivo: File, tipo: 'imagem' | 'audio' | 'video' | 'documento', caption?: string) => Promise<any>;
   onToggleFicha: () => void;
 }
@@ -55,7 +55,12 @@ export function ChatPanel({
   const [menuAnexoAberto, setMenuAnexoAberto] = useState(false);
   const [arquivoPreview, setArquivoPreview] = useState<{ file: File; tipo: 'imagem' | 'audio' | 'video' | 'documento'; previewUrl?: string } | null>(null);
   const [captionMidia, setCaptionMidia] = useState('');
+  const [mensagemRespondendo, setMensagemRespondendo] = useState<MensagemCRM | null>(null);
+  const [buscaAberta, setBuscaAberta] = useState(false);
+  const [termoBusca, setTermoBusca] = useState('');
+  const [indiceBuscaAtual, setIndiceBuscaAtual] = useState(0);
   const chatAreaRef = useRef<HTMLDivElement>(null);
+  const buscaInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const prevMensagensLength = useRef(0);
   const inputImagemRef = useRef<HTMLInputElement>(null);
@@ -88,6 +93,24 @@ export function ChatPanel({
     setMilaPausada(conversa.mila_pausada);
   }, [conversa.mila_pausada]);
 
+  // Buscar foto de perfil se não tiver cacheada
+  useEffect(() => {
+    if (conversa.foto_perfil_url || !conversa.whatsapp_jid) return;
+
+    supabase.functions.invoke('buscar-foto-perfil', {
+      body: {
+        conversa_id: conversa.id,
+        whatsapp_jid: conversa.whatsapp_jid,
+      },
+    }).then(({ data }) => {
+      if (data?.foto_perfil_url) {
+        console.log('[ChatPanel] Foto de perfil cacheada:', data.foto_perfil_url);
+      }
+    }).catch((err) => {
+      console.warn('[ChatPanel] Erro ao buscar foto de perfil:', err);
+    });
+  }, [conversa.id, conversa.foto_perfil_url, conversa.whatsapp_jid]);
+
   // Auto-resize textarea
   const handleTextareaInput = useCallback(() => {
     const el = textareaRef.current;
@@ -102,12 +125,70 @@ export function ChatPanel({
     const msg = texto.trim();
     if (!msg || enviando) return;
 
+    const replyId = mensagemRespondendo?.id || undefined;
     setTexto('');
+    setMensagemRespondendo(null);
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-    await onEnviarMensagem(msg);
-  }, [texto, enviando, onEnviarMensagem]);
+    await onEnviarMensagem(msg, replyId);
+  }, [texto, enviando, onEnviarMensagem, mensagemRespondendo]);
+
+  // Callback para responder mensagem
+  const handleResponder = useCallback((msg: MensagemCRM) => {
+    setMensagemRespondendo(msg);
+    textareaRef.current?.focus();
+  }, []);
+
+  // Mapa de mensagens para lookup rápido de quotes
+  const mensagensMap = React.useMemo(() => {
+    const map = new Map<string, MensagemCRM>();
+    for (const m of mensagens) {
+      map.set(m.id, m);
+    }
+    return map;
+  }, [mensagens]);
+
+  // Resultados da busca de mensagens
+  const resultadosBusca = React.useMemo(() => {
+    if (!termoBusca.trim()) return [];
+    const termo = termoBusca.toLowerCase();
+    return mensagens
+      .map((m, idx) => ({ mensagem: m, indice: idx }))
+      .filter(({ mensagem }) => mensagem.conteudo?.toLowerCase().includes(termo));
+  }, [mensagens, termoBusca]);
+
+  // Navegar entre resultados de busca
+  const navegarBusca = useCallback((direcao: 'anterior' | 'proximo') => {
+    if (resultadosBusca.length === 0) return;
+    let novoIndice = indiceBuscaAtual;
+    if (direcao === 'proximo') {
+      novoIndice = (indiceBuscaAtual + 1) % resultadosBusca.length;
+    } else {
+      novoIndice = (indiceBuscaAtual - 1 + resultadosBusca.length) % resultadosBusca.length;
+    }
+    setIndiceBuscaAtual(novoIndice);
+
+    // Scroll até a mensagem encontrada
+    const msgId = resultadosBusca[novoIndice]?.mensagem.id;
+    if (msgId) {
+      const el = document.getElementById(`msg-${msgId}`);
+      el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [resultadosBusca, indiceBuscaAtual]);
+
+  // Abrir/fechar busca
+  const toggleBusca = useCallback(() => {
+    setBuscaAberta(prev => {
+      if (!prev) {
+        setTimeout(() => buscaInputRef.current?.focus(), 100);
+      } else {
+        setTermoBusca('');
+        setIndiceBuscaAtual(0);
+      }
+      return !prev;
+    });
+  }, []);
 
   // Enter para enviar, Shift+Enter para nova linha
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
@@ -214,9 +295,17 @@ export function ChatPanel({
       {/* Header do Chat */}
       <div className="px-4 py-3 border-b border-slate-700 flex items-center justify-between flex-shrink-0 bg-slate-800/50">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-400 to-purple-500 flex items-center justify-center text-white font-bold text-sm">
-            {getIniciais(lead.nome)}
-          </div>
+          {conversa.foto_perfil_url ? (
+            <img
+              src={conversa.foto_perfil_url}
+              alt={lead.nome || 'Lead'}
+              className="w-10 h-10 rounded-full object-cover"
+            />
+          ) : (
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-400 to-purple-500 flex items-center justify-center text-white font-bold text-sm">
+              {getIniciais(lead.nome)}
+            </div>
+          )}
           <div>
             <div className="flex items-center gap-2">
               <h3 className="font-semibold text-white text-sm">{lead.nome || 'Lead'}</h3>
@@ -258,6 +347,17 @@ export function ChatPanel({
             <Phone className="w-3.5 h-3.5" />
             Ligar
           </a>
+          {/* Botão Buscar */}
+          <button
+            onClick={toggleBusca}
+            className={cn(
+              'p-2 rounded-lg transition',
+              buscaAberta ? 'text-violet-400 bg-violet-500/10' : 'text-slate-400 hover:text-white hover:bg-slate-700'
+            )}
+            title="Buscar nas mensagens"
+          >
+            <Search className="w-4 h-4" />
+          </button>
           {/* Toggle ficha */}
           <button
             onClick={onToggleFicha}
@@ -268,6 +368,45 @@ export function ChatPanel({
           </button>
         </div>
       </div>
+
+      {/* Barra de busca de mensagens */}
+      {buscaAberta && (
+        <div className="px-4 py-2 border-b border-slate-700/50 bg-slate-800/30 flex items-center gap-2 flex-shrink-0 animate-in slide-in-from-top-2 duration-150">
+          <Search className="w-4 h-4 text-slate-500 flex-shrink-0" />
+          <input
+            ref={buscaInputRef}
+            type="text"
+            value={termoBusca}
+            onChange={(e) => { setTermoBusca(e.target.value); setIndiceBuscaAtual(0); }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') navegarBusca('proximo');
+              if (e.key === 'Escape') toggleBusca();
+            }}
+            placeholder="Buscar nas mensagens..."
+            className="flex-1 bg-transparent text-sm text-slate-200 placeholder-slate-500 outline-none"
+          />
+          {termoBusca && (
+            <span className="text-[10px] text-slate-500 flex-shrink-0">
+              {resultadosBusca.length > 0
+                ? `${indiceBuscaAtual + 1}/${resultadosBusca.length}`
+                : 'Nenhum resultado'}
+            </span>
+          )}
+          {resultadosBusca.length > 0 && (
+            <div className="flex items-center gap-0.5 flex-shrink-0">
+              <button onClick={() => navegarBusca('anterior')} className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-700 transition">
+                <ChevronUp className="w-3.5 h-3.5" />
+              </button>
+              <button onClick={() => navegarBusca('proximo')} className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-700 transition">
+                <ChevronDown className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+          <button onClick={toggleBusca} className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-700 transition flex-shrink-0">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Área de mensagens */}
       <div
@@ -308,7 +447,16 @@ export function ChatPanel({
               </div>
             );
           }
-          return <ChatBubble key={item.mensagem.id} mensagem={item.mensagem} />;
+          const isDestaque = termoBusca && resultadosBusca.length > 0 && resultadosBusca[indiceBuscaAtual]?.mensagem.id === item.mensagem.id;
+          return (
+            <div key={item.mensagem.id} id={`msg-${item.mensagem.id}`} className={cn(isDestaque && 'ring-2 ring-violet-500 ring-offset-2 ring-offset-slate-900 rounded-2xl transition-all duration-300')}>
+              <ChatBubble
+                mensagem={item.mensagem}
+                mensagemOriginal={item.mensagem.reply_to_id ? mensagensMap.get(item.mensagem.reply_to_id) || null : null}
+                onResponder={handleResponder}
+              />
+            </div>
+          );
         })}
       </div>
 
@@ -377,9 +525,30 @@ export function ChatPanel({
         </div>
       )}
 
+      {/* Barra "Respondendo a..." */}
+      {mensagemRespondendo && !arquivoPreview && (
+        <div className="px-4 py-2 border-t border-slate-700 bg-slate-800/40 flex items-center gap-3 flex-shrink-0 animate-in slide-in-from-bottom-2 duration-150">
+          <div className="flex-1 min-w-0 border-l-2 border-violet-500 pl-3">
+            <p className="text-[10px] font-medium text-violet-400">
+              {mensagemRespondendo.remetente_nome || (mensagemRespondendo.direcao === 'saida' ? 'Você' : 'Lead')}
+            </p>
+            <p className="text-[11px] text-slate-400 truncate">
+              {mensagemRespondendo.tipo !== 'texto' ? `[${mensagemRespondendo.tipo}] ` : ''}
+              {mensagemRespondendo.conteudo || ''}
+            </p>
+          </div>
+          <button
+            onClick={() => setMensagemRespondendo(null)}
+            className="p-1 rounded hover:bg-slate-700 text-slate-400 hover:text-white transition flex-shrink-0"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Input de mensagem */}
       {!arquivoPreview && (
-        <div className="px-4 py-3 border-t border-slate-700 flex-shrink-0 bg-slate-800/30">
+        <div className={cn("px-4 py-3 border-t border-slate-700 flex-shrink-0 bg-slate-800/30", mensagemRespondendo && "border-t-0")}>
           <div className="flex items-end gap-2">
             {/* Botão anexar */}
             <div className="relative pb-1">

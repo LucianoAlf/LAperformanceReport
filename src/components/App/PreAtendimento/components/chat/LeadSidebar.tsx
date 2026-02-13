@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   CalendarDays, ArrowRightLeft, FileText, Archive,
-  Loader2,
+  Loader2, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { ConversaCRM, LeadCRM, LeadHistorico } from '../../types';
@@ -10,8 +10,11 @@ interface LeadSidebarProps {
   lead: LeadCRM;
   conversa: ConversaCRM;
   mensagensCount: number;
+  colapsada: boolean;
+  onToggle: () => void;
   onAgendar?: (lead: LeadCRM) => void;
   onMoverEtapa?: (lead: LeadCRM) => void;
+  onMatricular?: (lead: LeadCRM) => void;
   onArquivar?: (lead: LeadCRM) => void;
 }
 
@@ -24,8 +27,11 @@ export function LeadSidebar({
   lead,
   conversa,
   mensagensCount,
+  colapsada,
+  onToggle,
   onAgendar,
   onMoverEtapa,
+  onMatricular,
   onArquivar,
 }: LeadSidebarProps) {
   const [historico, setHistorico] = useState<LeadHistorico[]>([]);
@@ -68,11 +74,72 @@ export function LeadSidebar({
 
   return (
     <div
-      className="w-[320px] flex-shrink-0 border-l border-slate-700 flex flex-col overflow-y-auto animate-in slide-in-from-right-4 duration-300"
+      className={`flex-shrink-0 border-l border-slate-700 flex flex-col transition-all duration-300 ease-in-out ${
+        colapsada ? 'w-12' : 'w-[320px]'
+      }`}
       style={{ background: '#0d1424' }}
     >
+      {/* Modo colapsado: barra vertical com ícones */}
+      {colapsada ? (
+        <div className="flex flex-col items-center py-3 gap-3 h-full">
+          <button
+            onClick={onToggle}
+            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition"
+            title="Expandir ficha do lead"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+
+          {/* Avatar mini */}
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-400 to-purple-500 flex items-center justify-center text-white font-bold text-[10px]" title={lead.nome || 'Lead'}>
+            {getIniciais(lead.nome)}
+          </div>
+
+          <div className="w-6 border-t border-slate-700/50" />
+
+          {/* Ações rápidas como ícones */}
+          <button
+            onClick={() => { onToggle(); setTimeout(() => onAgendar?.(lead), 100); }}
+            className="p-2 rounded-lg text-emerald-400/60 hover:text-emerald-400 hover:bg-emerald-500/10 transition"
+            title="Agendar Experimental"
+          >
+            <CalendarDays className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => { onToggle(); setTimeout(() => onMoverEtapa?.(lead), 100); }}
+            className="p-2 rounded-lg text-blue-400/60 hover:text-blue-400 hover:bg-blue-500/10 transition"
+            title="Mover Etapa"
+          >
+            <ArrowRightLeft className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => { onToggle(); setTimeout(() => onMatricular?.(lead), 100); }}
+            className="p-2 rounded-lg text-violet-400/60 hover:text-violet-400 hover:bg-violet-500/10 transition"
+            title="Matricular"
+          >
+            <FileText className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => { onToggle(); setTimeout(() => onArquivar?.(lead), 100); }}
+            className="p-2 rounded-lg text-slate-400/60 hover:text-slate-400 hover:bg-slate-500/10 transition"
+            title="Arquivar"
+          >
+            <Archive className="w-4 h-4" />
+          </button>
+        </div>
+      ) : (
+      /* Modo expandido: conteúdo completo */
+      <div className="flex flex-col overflow-y-auto h-full">
+
       {/* Header da ficha */}
-      <div className="p-4 border-b border-slate-700/50 text-center">
+      <div className="p-4 border-b border-slate-700/50 text-center relative">
+        <button
+          onClick={onToggle}
+          className="absolute top-3 left-3 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition"
+          title="Recolher ficha"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
         <div className="w-16 h-16 rounded-full bg-gradient-to-br from-violet-400 to-purple-500 flex items-center justify-center text-white font-bold text-xl mx-auto mb-3">
           {getIniciais(lead.nome)}
         </div>
@@ -142,7 +209,7 @@ export function LeadSidebar({
               icon={FileText}
               label="Matricular"
               cor="violet"
-              onClick={() => {}}
+              onClick={() => onMatricular?.(lead)}
             />
             <AcaoButton
               icon={Archive}
@@ -192,6 +259,9 @@ export function LeadSidebar({
           />
         </div>
       </div>
+
+      </div>
+      )}
     </div>
   );
 }
