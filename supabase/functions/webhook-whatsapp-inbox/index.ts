@@ -1,6 +1,7 @@
 // Edge Function: webhook-whatsapp-inbox
-// Recebe webhook da UAZAPI (messages.upsert) com mensagens recebidas dos leads
-// Identifica lead pelo telefone, cria/atualiza conversa, insere mensagem
+// Roteador unificado: recebe webhooks da UAZAPI (messages + messages_update)
+// - messages: identifica lead, cria/atualiza conversa, insere mensagem
+// - messages_update: atualiza status de entrega (enviada/entregue/lida)
 // @ts-nocheck
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
@@ -126,6 +127,81 @@ function detectMessageType(message: any): { tipo: string; conteudo: string | nul
   };
 }
 
+// ========== STATUS UPDATE HANDLER ==========
+// Mapear status UAZAPI para nosso enum
+function mapStatus(uazapiStatus: string | number): string | null {
+  const statusMap: Record<string, string> = {
+    'DELIVERY_ACK': 'entregue',
+    'READ': 'lida',
+    'PLAYED': 'lida',
+    'SERVER_ACK': 'enviada',
+    'PENDING': 'enviando',
+    'ERROR': 'erro',
+    '1': 'enviada',
+    '2': 'entregue',
+    '3': 'lida',
+    '4': 'lida',
+    '5': 'erro',
+  };
+  const key = String(uazapiStatus).toUpperCase();
+  return statusMap[key] || null;
+}
+
+async function handleStatusUpdate(payload: any, supabase: any): Promise<{ atualizadas: number }> {
+  const updates = Array.isArray(payload) ? payload : payload.data ? [payload.data] : [payload];
+  let atualizadas = 0;
+
+  for (const update of updates) {
+    try {
+      const messageId = update.key?.id || update.id || update.messageId;
+      const status = update.status || update.update?.status || update.ack;
+
+      if (!messageId || status === undefined) {
+        console.log('[webhook-status] Dados incompletos, ignorando');
+        continue;
+      }
+
+      const novoStatus = mapStatus(status);
+      if (!novoStatus) {
+        console.log('[webhook-status] Status desconhecido:', status);
+        continue;
+      }
+
+      const { data, error } = await supabase
+        .from('crm_mensagens')
+        .update({ status_entrega: novoStatus })
+        .eq('whatsapp_message_id', messageId)
+        .select('id, conversa_id')
+        .maybeSingle();
+
+      if (error) {
+        console.error('[webhook-status] Erro ao atualizar:', error);
+        continue;
+      }
+
+      if (data) {
+        atualizadas++;
+        console.log(`[webhook-status] Mensagem ${messageId} -> ${novoStatus}`);
+      }
+    } catch (updateErr) {
+      console.error('[webhook-status] Erro individual:', updateErr);
+    }
+  }
+
+  return { atualizadas };
+}
+
+// ========== DETECTAR TIPO DE EVENTO ==========
+// messages_update: tem status/ack/update e NAO tem message (conteudo)
+function isStatusUpdate(payload: any): boolean {
+  const item = Array.isArray(payload) ? payload[0] : payload.data || payload;
+  if (!item) return false;
+  // Se tem status/ack/update E nao tem message (conteudo), eh status update
+  const hasStatus = item.status !== undefined || item.ack !== undefined || item.update?.status !== undefined;
+  const hasMessage = item.message !== undefined;
+  return hasStatus && !hasMessage;
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -133,12 +209,25 @@ serve(async (req: Request) => {
 
   try {
     const payload = await req.json();
-    console.log('[webhook-inbox] Payload recebido:', JSON.stringify(payload).substring(0, 500));
+    console.log('[webhook] Payload recebido:', JSON.stringify(payload).substring(0, 500));
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // Rotear: messages_update vai para handler de status
+    if (isStatusUpdate(payload)) {
+      console.log('[webhook] Detectado: messages_update (status)');
+      const result = await handleStatusUpdate(payload, supabase);
+      return new Response(
+        JSON.stringify({ success: true, tipo: 'status_update', ...result }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('[webhook] Detectado: messages (nova mensagem)');
 
     // UAZAPI envia array de mensagens ou objeto unico
     const messages = Array.isArray(payload) ? payload : payload.data ? [payload.data] : [payload];
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     let processadas = 0;
 
     for (const msg of messages) {
@@ -256,6 +345,15 @@ serve(async (req: Request) => {
           continue;
         }
 
+        // Atualizar preview e timestamp na conversa
+        await supabase
+          .from('crm_conversas')
+          .update({
+            ultima_mensagem_at: new Date().toISOString(),
+            ultima_mensagem_preview: conteudo?.substring(0, 100) || `[${tipo}]`,
+          })
+          .eq('id', conversa.id);
+
         processadas++;
         console.log(`[webhook-inbox] ✅ Mensagem de ${lead.nome} salva (tipo: ${tipo})`);
 
@@ -265,11 +363,11 @@ serve(async (req: Request) => {
     }
 
     return new Response(
-      JSON.stringify({ success: true, processadas }),
+      JSON.stringify({ success: true, tipo: 'messages', processadas }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
-    console.error('[webhook-inbox] Erro geral:', error);
+    console.error('[webhook] Erro geral:', error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : 'Erro interno' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
