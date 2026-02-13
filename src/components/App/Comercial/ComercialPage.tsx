@@ -304,6 +304,9 @@ export function ComercialPage() {
     horario_aula: '' as string,
     is_ex_aluno: false,
     is_aluno_retorno: false,
+    responsavel_nome: '',
+    responsavel_telefone: '',
+    responsavel_parentesco: '',
   });
 
   // Carregar dados mestres
@@ -713,6 +716,9 @@ export function ComercialPage() {
       horario_aula: '',
       is_ex_aluno: false,
       is_aluno_retorno: false,
+      responsavel_nome: '',
+      responsavel_telefone: '',
+      responsavel_parentesco: '',
     });
     // Reset lotes
     setLoteData(new Date());
@@ -1021,6 +1027,9 @@ export function ComercialPage() {
           horario_aula: formData.horario_aula || null,
           is_ex_aluno: formData.is_ex_aluno || false,
           is_aluno_retorno: formData.is_aluno_retorno || false,
+          responsavel_nome: formData.responsavel_nome?.trim() || null,
+          responsavel_telefone: formData.responsavel_telefone?.trim() || null,
+          responsavel_parentesco: formData.responsavel_parentesco || null,
         };
 
         console.log('Inserindo aluno:', novoAluno);
@@ -3458,6 +3467,49 @@ export function ComercialPage() {
                 </Select>
               </div>
             </div>
+
+            {/* Responsável (opcional) */}
+            <div className="p-4 bg-slate-800/30 border border-slate-700/50 rounded-xl space-y-3">
+              <h4 className="text-sm font-semibold text-slate-300">👤 Responsável <span className="text-xs font-normal text-slate-500">(opcional)</span></h4>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2 sm:col-span-1">
+                  <Label className="mb-1 block text-xs">Nome do Responsável</Label>
+                  <Input
+                    value={formData.responsavel_nome}
+                    onChange={(e) => setFormData({ ...formData, responsavel_nome: e.target.value })}
+                    placeholder="Nome completo"
+                  />
+                </div>
+                <div className="col-span-2 sm:col-span-1">
+                  <Label className="mb-1 block text-xs">Telefone/WhatsApp</Label>
+                  <Input
+                    value={formData.responsavel_telefone}
+                    onChange={(e) => setFormData({ ...formData, responsavel_telefone: e.target.value })}
+                    placeholder="(21) 99999-9999"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label className="mb-1 block text-xs">Parentesco</Label>
+                <Select
+                  value={formData.responsavel_parentesco}
+                  onValueChange={(value) => setFormData({ ...formData, responsavel_parentesco: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="mae">Mãe</SelectItem>
+                    <SelectItem value="pai">Pai</SelectItem>
+                    <SelectItem value="avo">Avó/Avô</SelectItem>
+                    <SelectItem value="tio">Tio/Tia</SelectItem>
+                    <SelectItem value="tutor">Tutor Legal</SelectItem>
+                    <SelectItem value="outro">Outro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
             <div>
               <Label className="mb-2 block">Curso</Label>
               <Select

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Phone, Info, Pause, Play, Send, FileText, Loader2, ChevronUp,
+  Paperclip, ImageIcon, Mic, File, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
@@ -17,7 +18,23 @@ interface ChatPanelProps {
   temMais: boolean;
   onCarregarMais: () => void;
   onEnviarMensagem: (conteudo: string) => Promise<any>;
+  onEnviarMidia: (arquivo: File, tipo: 'imagem' | 'audio' | 'video' | 'documento', caption?: string) => Promise<any>;
   onToggleFicha: () => void;
+}
+
+// Detectar tipo de mídia pelo MIME type
+function detectarTipoMidia(file: File): 'imagem' | 'audio' | 'video' | 'documento' {
+  if (file.type.startsWith('image/')) return 'imagem';
+  if (file.type.startsWith('audio/')) return 'audio';
+  if (file.type.startsWith('video/')) return 'video';
+  return 'documento';
+}
+
+// Formatar tamanho do arquivo
+function formatarTamanho(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export function ChatPanel({
@@ -29,14 +46,21 @@ export function ChatPanel({
   temMais,
   onCarregarMais,
   onEnviarMensagem,
+  onEnviarMidia,
   onToggleFicha,
 }: ChatPanelProps) {
   const [texto, setTexto] = useState('');
   const [templateAberto, setTemplateAberto] = useState(false);
   const [milaPausada, setMilaPausada] = useState(conversa.mila_pausada);
+  const [menuAnexoAberto, setMenuAnexoAberto] = useState(false);
+  const [arquivoPreview, setArquivoPreview] = useState<{ file: File; tipo: 'imagem' | 'audio' | 'video' | 'documento'; previewUrl?: string } | null>(null);
+  const [captionMidia, setCaptionMidia] = useState('');
   const chatAreaRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const prevMensagensLength = useRef(0);
+  const inputImagemRef = useRef<HTMLInputElement>(null);
+  const inputDocumentoRef = useRef<HTMLInputElement>(null);
+  const inputAudioRef = useRef<HTMLInputElement>(null);
 
   // Scroll para o final quando novas mensagens chegam
   useEffect(() => {
@@ -92,6 +116,60 @@ export function ChatPanel({
       handleEnviar();
     }
   }, [handleEnviar]);
+
+  // Selecionar arquivo para envio
+  const handleArquivoSelecionado = useCallback((e: React.ChangeEvent<HTMLInputElement>, tipoForcar?: 'imagem' | 'audio' | 'documento') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const tipo = tipoForcar || detectarTipoMidia(file);
+    let previewUrl: string | undefined;
+
+    if (tipo === 'imagem') {
+      previewUrl = URL.createObjectURL(file);
+    }
+
+    setArquivoPreview({ file, tipo, previewUrl });
+    setCaptionMidia('');
+    setMenuAnexoAberto(false);
+
+    // Limpar input para permitir re-selecionar o mesmo arquivo
+    e.target.value = '';
+  }, []);
+
+  // Enviar mídia
+  const handleEnviarMidia = useCallback(async () => {
+    if (!arquivoPreview || enviando) return;
+
+    const { file, tipo } = arquivoPreview;
+    const caption = captionMidia.trim() || undefined;
+
+    // Limpar preview
+    if (arquivoPreview.previewUrl) {
+      URL.revokeObjectURL(arquivoPreview.previewUrl);
+    }
+    setArquivoPreview(null);
+    setCaptionMidia('');
+
+    await onEnviarMidia(file, tipo, caption);
+  }, [arquivoPreview, captionMidia, enviando, onEnviarMidia]);
+
+  // Cancelar preview de mídia
+  const handleCancelarMidia = useCallback(() => {
+    if (arquivoPreview?.previewUrl) {
+      URL.revokeObjectURL(arquivoPreview.previewUrl);
+    }
+    setArquivoPreview(null);
+    setCaptionMidia('');
+  }, [arquivoPreview]);
+
+  // Fechar menu de anexo ao clicar fora
+  useEffect(() => {
+    if (!menuAnexoAberto) return;
+    const handleClickFora = () => setMenuAnexoAberto(false);
+    document.addEventListener('click', handleClickFora);
+    return () => document.removeEventListener('click', handleClickFora);
+  }, [menuAnexoAberto]);
 
   // Toggle Mila
   const handleToggleMila = useCallback(async () => {
@@ -242,46 +320,167 @@ export function ChatPanel({
         />
       )}
 
-      {/* Input de mensagem */}
-      <div className="px-4 py-3 border-t border-slate-700 flex-shrink-0 bg-slate-800/30">
-        <div className="flex items-end gap-2">
-          {/* Campo de texto */}
-          <div className="flex-1 relative">
-            <textarea
-              ref={textareaRef}
-              rows={1}
-              value={texto}
-              onChange={(e) => { setTexto(e.target.value); handleTextareaInput(); }}
-              onKeyDown={handleKeyDown}
-              placeholder="Digite sua mensagem..."
-              className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none resize-none max-h-32"
-            />
-          </div>
-          {/* Botões */}
-          <div className="flex items-center gap-1 pb-1">
-            <button
-              onClick={() => setTemplateAberto(!templateAberto)}
-              className="p-2 rounded-lg text-slate-400 hover:text-violet-400 hover:bg-slate-700 transition"
-              title="Templates rápidos"
-            >
-              <FileText className="w-5 h-5" />
-            </button>
-            <button
-              onClick={handleEnviar}
-              disabled={!texto.trim() || enviando}
-              className={cn(
-                'p-2.5 rounded-xl transition',
-                texto.trim() && !enviando
-                  ? 'bg-violet-600 hover:bg-violet-500 text-white'
-                  : 'bg-slate-700 text-slate-500 cursor-not-allowed'
+      {/* Preview de mídia antes de enviar */}
+      {arquivoPreview && (
+        <div className="px-4 py-3 border-t border-slate-700 bg-slate-800/50 flex-shrink-0">
+          <div className="flex items-start gap-3">
+            {/* Preview */}
+            <div className="flex-shrink-0">
+              {arquivoPreview.tipo === 'imagem' && arquivoPreview.previewUrl ? (
+                <img
+                  src={arquivoPreview.previewUrl}
+                  alt="Preview"
+                  className="w-20 h-20 rounded-lg object-cover border border-slate-600"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-lg bg-slate-700 flex items-center justify-center">
+                  {arquivoPreview.tipo === 'audio' ? <Mic className="w-6 h-6 text-violet-400" /> :
+                   arquivoPreview.tipo === 'video' ? <Play className="w-6 h-6 text-violet-400" /> :
+                   <File className="w-6 h-6 text-violet-400" />}
+                </div>
               )}
-              title="Enviar"
+            </div>
+            {/* Info + Caption */}
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-sm text-slate-300 truncate">{arquivoPreview.file.name}</p>
+                <button
+                  onClick={handleCancelarMidia}
+                  className="p-1 rounded hover:bg-slate-700 text-slate-400 hover:text-white transition flex-shrink-0"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-500 mb-2">{formatarTamanho(arquivoPreview.file.size)}</p>
+              {arquivoPreview.tipo !== 'audio' && (
+                <input
+                  type="text"
+                  value={captionMidia}
+                  onChange={(e) => setCaptionMidia(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleEnviarMidia(); }}
+                  placeholder="Adicionar legenda..."
+                  className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-slate-200 placeholder-slate-500 focus:ring-1 focus:ring-violet-500 outline-none"
+                  autoFocus
+                />
+              )}
+            </div>
+            {/* Botão enviar */}
+            <button
+              onClick={handleEnviarMidia}
+              disabled={enviando}
+              className="p-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white transition flex-shrink-0 self-end"
+              title="Enviar mídia"
             >
               {enviando ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
             </button>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* Input de mensagem */}
+      {!arquivoPreview && (
+        <div className="px-4 py-3 border-t border-slate-700 flex-shrink-0 bg-slate-800/30">
+          <div className="flex items-end gap-2">
+            {/* Botão anexar */}
+            <div className="relative pb-1">
+              <button
+                onClick={(e) => { e.stopPropagation(); setMenuAnexoAberto(!menuAnexoAberto); }}
+                className="p-2 rounded-lg text-slate-400 hover:text-violet-400 hover:bg-slate-700 transition"
+                title="Anexar arquivo"
+              >
+                <Paperclip className="w-5 h-5" />
+              </button>
+              {/* Menu dropdown de anexo */}
+              {menuAnexoAberto && (
+                <div
+                  className="absolute bottom-full left-0 mb-2 bg-slate-800 border border-slate-700 rounded-xl shadow-xl py-1 min-w-[180px] z-10 animate-in fade-in slide-in-from-bottom-2 duration-150"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    onClick={() => inputImagemRef.current?.click()}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-700/50 hover:text-white transition"
+                  >
+                    <ImageIcon className="w-4 h-4 text-emerald-400" />
+                    Imagem ou Vídeo
+                  </button>
+                  <button
+                    onClick={() => inputDocumentoRef.current?.click()}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-700/50 hover:text-white transition"
+                  >
+                    <File className="w-4 h-4 text-blue-400" />
+                    Documento
+                  </button>
+                  <button
+                    onClick={() => inputAudioRef.current?.click()}
+                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-700/50 hover:text-white transition"
+                  >
+                    <Mic className="w-4 h-4 text-amber-400" />
+                    Áudio
+                  </button>
+                </div>
+              )}
+            </div>
+            {/* Campo de texto */}
+            <div className="flex-1 relative">
+              <textarea
+                ref={textareaRef}
+                rows={1}
+                value={texto}
+                onChange={(e) => { setTexto(e.target.value); handleTextareaInput(); }}
+                onKeyDown={handleKeyDown}
+                placeholder="Digite sua mensagem..."
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none resize-none max-h-32"
+              />
+            </div>
+            {/* Botões */}
+            <div className="flex items-center gap-1 pb-1">
+              <button
+                onClick={() => setTemplateAberto(!templateAberto)}
+                className="p-2 rounded-lg text-slate-400 hover:text-violet-400 hover:bg-slate-700 transition"
+                title="Templates rápidos"
+              >
+                <FileText className="w-5 h-5" />
+              </button>
+              <button
+                onClick={handleEnviar}
+                disabled={!texto.trim() || enviando}
+                className={cn(
+                  'p-2.5 rounded-xl transition',
+                  texto.trim() && !enviando
+                    ? 'bg-violet-600 hover:bg-violet-500 text-white'
+                    : 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                )}
+                title="Enviar"
+              >
+                {enviando ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Inputs de arquivo ocultos */}
+      <input
+        ref={inputImagemRef}
+        type="file"
+        accept="image/*,video/*"
+        className="hidden"
+        onChange={(e) => handleArquivoSelecionado(e)}
+      />
+      <input
+        ref={inputDocumentoRef}
+        type="file"
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar"
+        className="hidden"
+        onChange={(e) => handleArquivoSelecionado(e, 'documento')}
+      />
+      <input
+        ref={inputAudioRef}
+        type="file"
+        accept="audio/*"
+        className="hidden"
+        onChange={(e) => handleArquivoSelecionado(e, 'audio')}
+      />
     </div>
   );
 }

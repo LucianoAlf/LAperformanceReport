@@ -33,7 +33,7 @@ export function ConversasTab({ unidadeId, onAgendar, onMoverEtapa, onArquivar }:
 
   const leadSelecionado = conversaSelecionada?.lead as LeadCRM | null;
 
-  const { mensagens, loading: loadingMensagens, enviando, temMais, carregarMais, enviarMensagem } = useMensagens({
+  const { mensagens, loading: loadingMensagens, enviando, temMais, carregarMais, enviarMensagem, enviarMidia } = useMensagens({
     conversaId: conversaSelecionada?.id || null,
     leadId: leadSelecionado?.id || null,
   });
@@ -83,6 +83,7 @@ export function ConversasTab({ unidadeId, onAgendar, onMoverEtapa, onArquivar }:
             temMais={temMais}
             onCarregarMais={carregarMais}
             onEnviarMensagem={enviarMensagem}
+            onEnviarMidia={enviarMidia}
             onToggleFicha={toggleFicha}
           />
         ) : (

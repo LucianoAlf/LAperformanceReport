@@ -186,6 +186,101 @@ export function useMensagens({ conversaId, leadId }: UseMensagensParams) {
     }
   }, [conversaId, leadId]);
 
+  // Enviar mídia (imagem, áudio, vídeo, documento) via Storage + Edge Function
+  const enviarMidia = useCallback(async (
+    arquivo: File,
+    tipo: 'imagem' | 'audio' | 'video' | 'documento',
+    caption?: string,
+  ) => {
+    if (!conversaId || !leadId || !arquivo) return null;
+
+    setEnviando(true);
+    try {
+      // 1. Upload para Supabase Storage (bucket crm-midia)
+      const extensao = arquivo.name.split('.').pop() || 'bin';
+      const nomeArquivo = `${conversaId}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.${extensao}`;
+
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('crm-midia')
+        .upload(nomeArquivo, arquivo, {
+          contentType: arquivo.type,
+          cacheControl: '3600',
+        });
+
+      if (uploadError) throw new Error(`Erro no upload: ${uploadError.message}`);
+
+      // 2. Gerar URL pública para a UAZAPI enviar
+      const { data: urlData } = supabase.storage
+        .from('crm-midia')
+        .getPublicUrl(uploadData.path);
+
+      const midiaUrl = urlData.publicUrl;
+
+      // 3. Mensagem otimista
+      const previewConteudo = caption || (tipo === 'imagem' ? '📷 Imagem' : tipo === 'audio' ? '🎵 Áudio' : tipo === 'video' ? '🎬 Vídeo' : `📄 ${arquivo.name}`);
+      const msgOtimista: MensagemCRM = {
+        id: crypto.randomUUID(),
+        conversa_id: conversaId,
+        lead_id: leadId,
+        direcao: 'saida',
+        tipo,
+        conteudo: caption || null,
+        midia_url: midiaUrl,
+        midia_mimetype: arquivo.type,
+        midia_nome: arquivo.name,
+        remetente: 'andreza',
+        remetente_nome: 'Andreza',
+        status_entrega: 'enviando',
+        is_sistema: false,
+        whatsapp_message_id: null,
+        template_id: null,
+        reply_to_id: null,
+        created_at: new Date().toISOString(),
+      };
+
+      setMensagens(prev => [...prev, msgOtimista]);
+
+      // 4. Chamar Edge Function
+      const { data, error } = await supabase.functions.invoke('enviar-mensagem-lead', {
+        body: {
+          conversa_id: conversaId,
+          lead_id: leadId,
+          conteudo: caption || null,
+          tipo,
+          remetente: 'andreza',
+          midia_url: midiaUrl,
+          midia_mimetype: arquivo.type,
+          midia_nome: arquivo.name,
+        },
+      });
+
+      if (error) throw error;
+
+      // 5. Atualizar mensagem otimista
+      if (data?.mensagem_id) {
+        setMensagens(prev =>
+          prev.map(m =>
+            m.id === msgOtimista.id
+              ? { ...m, id: data.mensagem_id, status_entrega: 'enviada' as const, whatsapp_message_id: data.whatsapp_message_id }
+              : m
+          )
+        );
+      }
+
+      return data;
+    } catch (err) {
+      console.error('[useMensagens] Erro ao enviar mídia:', err);
+      setMensagens(prev =>
+        prev.map(m =>
+          m.status_entrega === 'enviando' ? { ...m, status_entrega: 'erro' as const } : m
+        )
+      );
+      return null;
+    } finally {
+      setEnviando(false);
+    }
+  }, [conversaId, leadId]);
+
   return {
     mensagens,
     loading,
@@ -193,6 +288,7 @@ export function useMensagens({ conversaId, leadId }: UseMensagensParams) {
     temMais,
     carregarMais,
     enviarMensagem,
+    enviarMidia,
     refetch: () => fetchMensagens(0),
   };
 }

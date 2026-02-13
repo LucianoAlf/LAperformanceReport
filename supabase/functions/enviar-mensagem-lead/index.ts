@@ -1,5 +1,5 @@
 // Edge Function: enviar-mensagem-lead
-// Envia mensagem de texto para um lead via UAZAPI
+// Envia mensagem (texto, imagem, audio, video, documento) para um lead via UAZAPI
 // Insere no crm_mensagens e envia via WhatsApp com delay de 2s (digitando...)
 // @ts-nocheck
 
@@ -35,11 +35,26 @@ serve(async (req: Request) => {
   }
 
   try {
-    const { conversa_id, lead_id, conteudo, tipo = 'texto', remetente = 'andreza' } = await req.json();
+    const { conversa_id, lead_id, conteudo, tipo = 'texto', remetente = 'andreza', midia_url, midia_mimetype, midia_nome, reply_to_id } = await req.json();
 
-    if (!conversa_id || !lead_id || !conteudo) {
+    // Texto obrigatório para tipo texto; mídia obrigatória para outros tipos
+    if (!conversa_id || !lead_id) {
       return new Response(
-        JSON.stringify({ error: 'conversa_id, lead_id e conteudo são obrigatórios' }),
+        JSON.stringify({ error: 'conversa_id e lead_id são obrigatórios' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (tipo === 'texto' && !conteudo) {
+      return new Response(
+        JSON.stringify({ error: 'conteudo é obrigatório para mensagens de texto' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (['imagem', 'audio', 'video', 'documento'].includes(tipo) && !midia_url) {
+      return new Response(
+        JSON.stringify({ error: 'midia_url é obrigatório para mensagens de mídia' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -82,11 +97,15 @@ serve(async (req: Request) => {
         lead_id,
         direcao: 'saida',
         tipo,
-        conteudo,
+        conteudo: conteudo || null,
+        midia_url: midia_url || null,
+        midia_mimetype: midia_mimetype || null,
+        midia_nome: midia_nome || null,
         remetente,
         remetente_nome: remetente === 'andreza' ? 'Andreza' : remetente === 'mila' ? 'Mila' : remetente,
         status_entrega: 'enviando',
         is_sistema: false,
+        reply_to_id: reply_to_id || null,
       })
       .select('id')
       .single();
@@ -107,19 +126,51 @@ serve(async (req: Request) => {
       baseUrl = 'https://' + baseUrl;
     }
 
-    const uazapiResponse = await fetch(`${baseUrl}/send/text`, {
+    // Montar payload e endpoint baseado no tipo
+    let endpoint = '/send/text';
+    let uazapiBody: Record<string, any> = {
+      number: numero,
+      delay: 2000,
+      readchat: true,
+    };
+
+    switch (tipo) {
+      case 'imagem':
+        endpoint = '/send/image';
+        uazapiBody.url = midia_url;
+        uazapiBody.caption = conteudo || '';
+        break;
+      case 'audio':
+        endpoint = '/send/audio';
+        uazapiBody.url = midia_url;
+        break;
+      case 'video':
+        endpoint = '/send/video';
+        uazapiBody.url = midia_url;
+        uazapiBody.caption = conteudo || '';
+        break;
+      case 'documento':
+        endpoint = '/send/document';
+        uazapiBody.url = midia_url;
+        uazapiBody.caption = conteudo || '';
+        uazapiBody.fileName = midia_nome || 'documento';
+        break;
+      default:
+        // Texto
+        uazapiBody.text = conteudo;
+        uazapiBody.linkPreview = true;
+        break;
+    }
+
+    console.log(`[enviar-mensagem-lead] Endpoint: ${endpoint}, tipo: ${tipo}`);
+
+    const uazapiResponse = await fetch(`${baseUrl}${endpoint}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'token': UAZAPI_TOKEN,
       },
-      body: JSON.stringify({
-        number: numero,
-        text: conteudo,
-        delay: 2000,
-        readchat: true,
-        linkPreview: true,
-      }),
+      body: JSON.stringify(uazapiBody),
     });
 
     const uazapiData = await uazapiResponse.json();

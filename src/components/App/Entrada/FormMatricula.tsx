@@ -26,7 +26,9 @@ const matriculaSchema = z.object({
   email: z.string().email('Email inválido').optional().or(z.literal('')),
   telefone: z.string().optional(),
   data_nascimento: z.string().optional(),
-  responsavel: z.string().optional(),
+  responsavel_nome: z.string().optional(),
+  responsavel_telefone: z.string().optional(),
+  responsavel_parentesco: z.string().optional(),
   unidade_id: z.string().uuid('Selecione uma unidade'),
   curso_id: z.coerce.number({ required_error: 'Selecione um curso' }),
   professor_id: z.coerce.number().optional(),
@@ -198,6 +200,9 @@ export function FormMatricula() {
           email: data.email || null,
           telefone: data.telefone || null,
           data_nascimento: data.data_nascimento || null,
+          responsavel_nome: data.responsavel_nome?.trim() || null,
+          responsavel_telefone: data.responsavel_telefone?.trim() || null,
+          responsavel_parentesco: data.responsavel_parentesco || null,
           unidade_id: data.unidade_id,
           curso_id: data.curso_id,
           professor_atual_id: data.professor_id || null,
@@ -440,14 +445,45 @@ export function FormMatricula() {
               />
             </div>
 
+          </div>
+
+          {/* Responsável (opcional) */}
+          <div className="mt-4 p-4 bg-slate-900/30 border border-slate-700/50 rounded-xl space-y-3">
+            <h4 className="text-sm font-semibold text-gray-300">👤 Responsável <span className="text-xs font-normal text-gray-500">(opcional)</span></h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Nome do Responsável</label>
+                <input
+                  {...register('responsavel_nome')}
+                  type="text"
+                  placeholder="Nome completo"
+                  className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Telefone/WhatsApp</label>
+                <input
+                  {...register('responsavel_telefone')}
+                  type="tel"
+                  placeholder="(21) 99999-9999"
+                  className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50"
+                />
+              </div>
+            </div>
             <div>
-              <label className="block text-sm text-gray-400 mb-1">Responsável (se menor)</label>
-              <input
-                {...register('responsavel')}
-                type="text"
-                placeholder="Nome do responsável"
-                className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50"
-              />
+              <label className="block text-sm text-gray-400 mb-1">Parentesco</label>
+              <select
+                {...register('responsavel_parentesco')}
+                className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-cyan-500/50"
+              >
+                <option value="">Selecione...</option>
+                <option value="mae">Mãe</option>
+                <option value="pai">Pai</option>
+                <option value="avo">Avó/Avô</option>
+                <option value="tio">Tio/Tia</option>
+                <option value="tutor">Tutor Legal</option>
+                <option value="outro">Outro</option>
+              </select>
             </div>
           </div>
         </section>

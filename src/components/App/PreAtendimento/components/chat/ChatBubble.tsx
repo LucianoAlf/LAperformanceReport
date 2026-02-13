@@ -1,4 +1,5 @@
-import { Check, CheckCheck, AlertCircle, Clock } from 'lucide-react';
+import { useState } from 'react';
+import { Check, CheckCheck, AlertCircle, Clock, Image, FileText, Download, Play, MapPin, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { MensagemCRM } from '../../types';
 
@@ -38,6 +39,155 @@ function formatarHora(data: string): string {
   return new Date(data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
+// Renderizar conteúdo de mídia dentro da bolha
+function MidiaContent({ mensagem }: { mensagem: MensagemCRM }) {
+  const [imagemExpandida, setImagemExpandida] = useState(false);
+  const { tipo, conteudo, midia_url, midia_mimetype, midia_nome } = mensagem;
+
+  switch (tipo) {
+    case 'imagem':
+      return (
+        <div className="space-y-1.5">
+          {midia_url ? (
+            <>
+              <img
+                src={midia_url}
+                alt={conteudo || 'Imagem'}
+                className="rounded-lg max-w-full max-h-64 object-cover cursor-pointer hover:opacity-90 transition"
+                onClick={() => setImagemExpandida(true)}
+                loading="lazy"
+              />
+              {/* Lightbox */}
+              {imagemExpandida && (
+                <div
+                  className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 cursor-pointer"
+                  onClick={() => setImagemExpandida(false)}
+                >
+                  <img
+                    src={midia_url}
+                    alt={conteudo || 'Imagem'}
+                    className="max-w-full max-h-[90vh] object-contain rounded-lg"
+                  />
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="flex items-center gap-2 text-slate-400 text-sm">
+              <Image className="w-4 h-4" />
+              <span>📷 Imagem</span>
+            </div>
+          )}
+          {conteudo && (
+            <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap break-words">{conteudo}</p>
+          )}
+        </div>
+      );
+
+    case 'audio':
+      return (
+        <div className="min-w-[220px]">
+          {midia_url ? (
+            <audio controls className="w-full max-w-[280px] h-10" preload="metadata">
+              <source src={midia_url} type={midia_mimetype || 'audio/ogg'} />
+              Áudio não suportado
+            </audio>
+          ) : (
+            <div className="flex items-center gap-2 text-slate-400 text-sm">
+              <Play className="w-4 h-4" />
+              <span>🎵 Áudio</span>
+            </div>
+          )}
+        </div>
+      );
+
+    case 'video':
+      return (
+        <div className="space-y-1.5">
+          {midia_url ? (
+            <video
+              controls
+              className="rounded-lg max-w-full max-h-64"
+              preload="metadata"
+            >
+              <source src={midia_url} type={midia_mimetype || 'video/mp4'} />
+              Vídeo não suportado
+            </video>
+          ) : (
+            <div className="flex items-center gap-2 text-slate-400 text-sm">
+              <Play className="w-4 h-4" />
+              <span>🎬 Vídeo</span>
+            </div>
+          )}
+          {conteudo && (
+            <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap break-words">{conteudo}</p>
+          )}
+        </div>
+      );
+
+    case 'documento':
+      return (
+        <div className="space-y-1.5">
+          {midia_url ? (
+            <a
+              href={midia_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-3 p-3 rounded-lg bg-slate-700/40 hover:bg-slate-700/60 transition group"
+            >
+              <div className="w-10 h-10 rounded-lg bg-violet-500/20 flex items-center justify-center flex-shrink-0">
+                <FileText className="w-5 h-5 text-violet-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm text-slate-200 truncate">{midia_nome || 'Documento'}</p>
+                <p className="text-[10px] text-slate-500">{midia_mimetype || 'Arquivo'}</p>
+              </div>
+              <Download className="w-4 h-4 text-slate-400 group-hover:text-violet-400 transition flex-shrink-0" />
+            </a>
+          ) : (
+            <div className="flex items-center gap-2 text-slate-400 text-sm">
+              <FileText className="w-4 h-4" />
+              <span>📄 {midia_nome || 'Documento'}</span>
+            </div>
+          )}
+          {conteudo && (
+            <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap break-words">{conteudo}</p>
+          )}
+        </div>
+      );
+
+    case 'sticker':
+      return midia_url ? (
+        <img src={midia_url} alt="Sticker" className="w-32 h-32 object-contain" loading="lazy" />
+      ) : (
+        <span className="text-2xl">🏷️</span>
+      );
+
+    case 'localizacao':
+      return (
+        <div className="flex items-center gap-2 text-slate-300 text-sm">
+          <MapPin className="w-4 h-4 text-red-400" />
+          <span>📍 Localização: {conteudo || 'Enviada'}</span>
+        </div>
+      );
+
+    case 'contato':
+      return (
+        <div className="flex items-center gap-2 text-slate-300 text-sm">
+          <User className="w-4 h-4 text-blue-400" />
+          <span>👤 Contato: {conteudo || 'Enviado'}</span>
+        </div>
+      );
+
+    default:
+      // Texto
+      return (
+        <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap break-words">
+          {conteudo || ''}
+        </p>
+      );
+  }
+}
+
 export function ChatBubble({ mensagem }: ChatBubbleProps) {
   const { direcao, tipo, conteudo, remetente, remetente_nome, status_entrega, is_sistema, created_at } = mensagem;
 
@@ -74,6 +224,7 @@ export function ChatBubble({ mensagem }: ChatBubbleProps) {
 
   const isSaida = direcao === 'saida';
   const tag = isSaida ? getRemetenteTag(remetente) : null;
+  const isMidia = ['imagem', 'audio', 'video', 'documento', 'sticker'].includes(tipo);
 
   return (
     <div className={cn(
@@ -83,14 +234,25 @@ export function ChatBubble({ mensagem }: ChatBubbleProps) {
       <div className="max-w-[70%]">
         {/* Bolha */}
         <div className={cn(
-          'rounded-2xl px-4 py-2.5',
+          'rounded-2xl overflow-hidden',
+          isMidia ? 'p-1.5' : 'px-4 py-2.5',
           isSaida
             ? 'bg-violet-600/20 border border-violet-500/20 rounded-tr-md'
             : 'bg-slate-800 border border-slate-700/50 rounded-tl-md'
         )}>
-          <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap break-words">
-            {conteudo || ''}
-          </p>
+          {isMidia && tipo !== 'audio' && (
+            <div className="mb-1">
+              <MidiaContent mensagem={mensagem} />
+            </div>
+          )}
+          {isMidia && tipo === 'audio' && (
+            <div className="px-2 py-1.5">
+              <MidiaContent mensagem={mensagem} />
+            </div>
+          )}
+          {!isMidia && (
+            <MidiaContent mensagem={mensagem} />
+          )}
         </div>
 
         {/* Metadados */}
