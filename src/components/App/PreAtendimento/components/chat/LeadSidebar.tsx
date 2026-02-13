@@ -4,6 +4,7 @@ import {
   Loader2, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { Tooltip } from '@/components/ui/Tooltip';
 import type { ConversaCRM, LeadCRM, LeadHistorico } from '../../types';
 
 interface LeadSidebarProps {
@@ -82,50 +83,57 @@ export function LeadSidebar({
       {/* Modo colapsado: barra vertical com ícones */}
       {colapsada ? (
         <div className="flex flex-col items-center py-3 gap-3 h-full">
-          <button
-            onClick={onToggle}
-            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition"
-            title="Expandir ficha do lead"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
+          <Tooltip content="Expandir ficha do lead" side="left">
+            <button
+              onClick={onToggle}
+              className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+          </Tooltip>
 
           {/* Avatar mini */}
-          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-400 to-purple-500 flex items-center justify-center text-white font-bold text-[10px]" title={lead.nome || 'Lead'}>
+          <Tooltip content={lead.nome || 'Lead'} side="left">
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-violet-400 to-purple-500 flex items-center justify-center text-white font-bold text-[10px]">
             {getIniciais(lead.nome)}
           </div>
+          </Tooltip>
 
           <div className="w-6 border-t border-slate-700/50" />
 
           {/* Ações rápidas como ícones */}
-          <button
-            onClick={() => { onToggle(); setTimeout(() => onAgendar?.(lead), 100); }}
-            className="p-2 rounded-lg text-emerald-400/60 hover:text-emerald-400 hover:bg-emerald-500/10 transition"
-            title="Agendar Experimental"
-          >
-            <CalendarDays className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => { onToggle(); setTimeout(() => onMoverEtapa?.(lead), 100); }}
-            className="p-2 rounded-lg text-blue-400/60 hover:text-blue-400 hover:bg-blue-500/10 transition"
-            title="Mover Etapa"
-          >
-            <ArrowRightLeft className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => { onToggle(); setTimeout(() => onMatricular?.(lead), 100); }}
-            className="p-2 rounded-lg text-violet-400/60 hover:text-violet-400 hover:bg-violet-500/10 transition"
-            title="Matricular"
-          >
-            <FileText className="w-4 h-4" />
-          </button>
-          <button
-            onClick={() => { onToggle(); setTimeout(() => onArquivar?.(lead), 100); }}
-            className="p-2 rounded-lg text-slate-400/60 hover:text-slate-400 hover:bg-slate-500/10 transition"
-            title="Arquivar"
-          >
-            <Archive className="w-4 h-4" />
-          </button>
+          <Tooltip content="Agendar Experimental" side="left">
+            <button
+              onClick={() => { onToggle(); setTimeout(() => onAgendar?.(lead), 100); }}
+              className="p-2 rounded-lg text-emerald-400/60 hover:text-emerald-400 hover:bg-emerald-500/10 transition"
+            >
+              <CalendarDays className="w-4 h-4" />
+            </button>
+          </Tooltip>
+          <Tooltip content="Mover Etapa" side="left">
+            <button
+              onClick={() => { onToggle(); setTimeout(() => onMoverEtapa?.(lead), 100); }}
+              className="p-2 rounded-lg text-blue-400/60 hover:text-blue-400 hover:bg-blue-500/10 transition"
+            >
+              <ArrowRightLeft className="w-4 h-4" />
+            </button>
+          </Tooltip>
+          <Tooltip content="Matricular" side="left">
+            <button
+              onClick={() => { onToggle(); setTimeout(() => onMatricular?.(lead), 100); }}
+              className="p-2 rounded-lg text-violet-400/60 hover:text-violet-400 hover:bg-violet-500/10 transition"
+            >
+              <FileText className="w-4 h-4" />
+            </button>
+          </Tooltip>
+          <Tooltip content="Arquivar" side="left">
+            <button
+              onClick={() => { onToggle(); setTimeout(() => onArquivar?.(lead), 100); }}
+              className="p-2 rounded-lg text-slate-400/60 hover:text-slate-400 hover:bg-slate-500/10 transition"
+            >
+              <Archive className="w-4 h-4" />
+            </button>
+          </Tooltip>
         </div>
       ) : (
       /* Modo expandido: conteúdo completo */
@@ -133,13 +141,14 @@ export function LeadSidebar({
 
       {/* Header da ficha */}
       <div className="p-4 border-b border-slate-700/50 text-center relative">
-        <button
-          onClick={onToggle}
-          className="absolute top-3 left-3 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition"
-          title="Recolher ficha"
-        >
-          <ChevronRight className="w-4 h-4" />
-        </button>
+        <Tooltip content="Recolher ficha" side="left">
+          <button
+            onClick={onToggle}
+            className="absolute top-3 left-3 p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </Tooltip>
         <div className="w-16 h-16 rounded-full bg-gradient-to-br from-violet-400 to-purple-500 flex items-center justify-center text-white font-bold text-xl mx-auto mb-3">
           {getIniciais(lead.nome)}
         </div>

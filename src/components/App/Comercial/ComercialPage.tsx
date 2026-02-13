@@ -161,6 +161,9 @@ const TIPOS_ALUNO = [
   { value: 'nao_pagante', label: 'Não Pagante' },
 ];
 
+// Tipos que dispensam forma de pagamento e valores obrigatórios
+const TIPOS_SEM_PAGAMENTO = ['bolsista_integral', 'nao_pagante'];
+
 export function ComercialPage() {
   const { usuario, isAdmin, unidadeId } = useAuth();
   const context = useOutletContext<{ filtroAtivo: string | null; unidadeSelecionada: string | null }>();
@@ -934,7 +937,7 @@ export function ComercialPage() {
         toast.error('Informe a data de nascimento do aluno');
         return;
       }
-      if (!formData.forma_pagamento_id) {
+      if (!TIPOS_SEM_PAGAMENTO.includes(formData.tipo_aluno) && !formData.forma_pagamento_id) {
         toast.error('Selecione a forma de pagamento da parcela mensal');
         return;
       }
@@ -971,9 +974,10 @@ export function ComercialPage() {
         registro.tipo_aluno = formData.tipo_aluno;
         registro.professor_experimental_id = formData.teve_experimental ? formData.professor_experimental_id : null;
         registro.professor_fixo_id = formData.professor_fixo_id;
-        registro.valor_passaporte = formData.valor_passaporte;
-        registro.valor_parcela = formData.valor_parcela;
-        registro.forma_pagamento_id = formData.forma_pagamento_id;
+        const dispensaPagamento = TIPOS_SEM_PAGAMENTO.includes(formData.tipo_aluno);
+        registro.valor_passaporte = formData.valor_passaporte || 0;
+        registro.valor_parcela = dispensaPagamento ? 0 : (formData.valor_parcela || 0);
+        registro.forma_pagamento_id = dispensaPagamento ? null : formData.forma_pagamento_id;
         registro.forma_pagamento_passaporte_id = formData.forma_pagamento_passaporte_id;
         registro.dia_vencimento = formData.dia_vencimento;
         registro.quantidade = 1; // Matrícula sempre é 1
@@ -1010,9 +1014,9 @@ export function ComercialPage() {
           status: 'ativo',
           tipo_aluno: formData.tipo_aluno || 'pagante',
           tipo_matricula_id,
-          valor_parcela: formData.valor_parcela || 0,
-          valor_passaporte: formData.valor_passaporte || null,
-          forma_pagamento_id: formData.forma_pagamento_id || null,
+          valor_parcela: TIPOS_SEM_PAGAMENTO.includes(formData.tipo_aluno) ? 0 : (formData.valor_parcela || 0),
+          valor_passaporte: formData.valor_passaporte || 0,
+          forma_pagamento_id: TIPOS_SEM_PAGAMENTO.includes(formData.tipo_aluno) ? null : (formData.forma_pagamento_id || null),
           dia_vencimento: formData.dia_vencimento || 5,
           data_matricula: dataMatricula,
           data_inicio_contrato: dataMatricula,
@@ -3767,7 +3771,7 @@ export function ComercialPage() {
             </div>
             <Button
               onClick={handleSave}
-              disabled={saving || !formData.aluno_nome || !formData.aluno_data_nascimento || !formData.forma_pagamento_id}
+              disabled={saving || !formData.aluno_nome || !formData.aluno_data_nascimento || (!TIPOS_SEM_PAGAMENTO.includes(formData.tipo_aluno) && !formData.forma_pagamento_id)}
               className="w-full bg-gradient-to-r from-emerald-500 to-teal-500"
             >
               {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}

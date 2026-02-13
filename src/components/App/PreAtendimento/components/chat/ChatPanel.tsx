@@ -1,12 +1,18 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  Phone, Info, Pause, Play, Send, FileText, Loader2, ChevronUp, ChevronDown,
-  Paperclip, ImageIcon, Mic, File, X, Search,
+  Phone, Pause, Play, Send, FileText, Loader2, ChevronUp, ChevronDown,
+  Paperclip, ImageIcon, Mic, File as FileIcon, X, Search, Square, Trash2, Settings, MessageSquare,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { supabase } from '@/lib/supabase';
 import { ChatBubble } from './ChatBubble';
 import { TemplateSelector } from './TemplateSelector';
+import { ModalGerenciarTemplates } from './ModalGerenciarTemplates';
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import type { ConversaCRM, MensagemCRM, LeadCRM } from '../../types';
 
 interface ChatPanelProps {
@@ -51,11 +57,22 @@ export function ChatPanel({
 }: ChatPanelProps) {
   const [texto, setTexto] = useState('');
   const [templateAberto, setTemplateAberto] = useState(false);
+  const [templateDropdownAberto, setTemplateDropdownAberto] = useState(false);
+  const [templateFiltroInicial, setTemplateFiltroInicial] = useState('');
+  const [modalTemplatesAberto, setModalTemplatesAberto] = useState(false);
   const [milaPausada, setMilaPausada] = useState(conversa.mila_pausada);
   const [menuAnexoAberto, setMenuAnexoAberto] = useState(false);
   const [arquivoPreview, setArquivoPreview] = useState<{ file: File; tipo: 'imagem' | 'audio' | 'video' | 'documento'; previewUrl?: string } | null>(null);
   const [captionMidia, setCaptionMidia] = useState('');
   const [mensagemRespondendo, setMensagemRespondendo] = useState<MensagemCRM | null>(null);
+  const [editandoMensagemId, setEditandoMensagemId] = useState<string | null>(null);
+  const [textoEdicao, setTextoEdicao] = useState('');
+  const [salvandoEdicao, setSalvandoEdicao] = useState(false);
+  const [mensagemDeletar, setMensagemDeletar] = useState<MensagemCRM | null>(null);
+  const [deletando, setDeletando] = useState(false);
+  const [transcrevendoId, setTranscrevendoId] = useState<string | null>(null);
+  const [scrollNoFundo, setScrollNoFundo] = useState(true);
+  const [novasMensagensAbaixo, setNovasMensagensAbaixo] = useState(0);
   const [buscaAberta, setBuscaAberta] = useState(false);
   const [termoBusca, setTermoBusca] = useState('');
   const [indiceBuscaAtual, setIndiceBuscaAtual] = useState(0);
@@ -67,18 +84,42 @@ export function ChatPanel({
   const inputDocumentoRef = useRef<HTMLInputElement>(null);
   const inputAudioRef = useRef<HTMLInputElement>(null);
 
+  // --- Gravação de áudio ---
+  const [gravando, setGravando] = useState(false);
+  const [tempoGravacao, setTempoGravacao] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Detectar posição do scroll
+  const handleScroll = useCallback(() => {
+    const el = chatAreaRef.current;
+    if (!el) return;
+    const distanciaDoFundo = el.scrollHeight - el.scrollTop - el.clientHeight;
+    setScrollNoFundo(distanciaDoFundo < 80);
+    if (distanciaDoFundo < 80) {
+      setNovasMensagensAbaixo(0);
+    }
+  }, []);
+
   // Scroll para o final quando novas mensagens chegam
   useEffect(() => {
     if (mensagens.length > prevMensagensLength.current) {
-      const el = chatAreaRef.current;
-      if (el) {
-        requestAnimationFrame(() => {
-          el.scrollTop = el.scrollHeight;
-        });
+      if (scrollNoFundo) {
+        const el = chatAreaRef.current;
+        if (el) {
+          requestAnimationFrame(() => {
+            el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+          });
+        }
+      } else {
+        const diff = mensagens.length - prevMensagensLength.current;
+        setNovasMensagensAbaixo(prev => prev + diff);
       }
     }
     prevMensagensLength.current = mensagens.length;
-  }, [mensagens.length]);
+  }, [mensagens.length, scrollNoFundo]);
 
   // Scroll inicial
   useEffect(() => {
@@ -86,7 +127,18 @@ export function ChatPanel({
     if (el) {
       el.scrollTop = el.scrollHeight;
     }
+    setScrollNoFundo(true);
+    setNovasMensagensAbaixo(0);
   }, [conversa.id]);
+
+  // Função para scrollar até o fundo
+  const scrollParaFundo = useCallback(() => {
+    const el = chatAreaRef.current;
+    if (el) {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    }
+    setNovasMensagensAbaixo(0);
+  }, []);
 
   // Sync mila_pausada com conversa
   useEffect(() => {
@@ -190,13 +242,191 @@ export function ChatPanel({
     });
   }, []);
 
+  // Detectar / no início do texto para abrir dropdown de templates
+  const handleTextoChange = useCallback((novoTexto: string) => {
+    setTexto(novoTexto);
+
+    // Se o texto começa com / e tem no máximo ~30 chars, abrir dropdown
+    if (novoTexto.startsWith('/') && novoTexto.length <= 30) {
+      const filtro = novoTexto.slice(1); // remover a /
+      setTemplateFiltroInicial(filtro);
+      setTemplateDropdownAberto(true);
+    } else if (templateDropdownAberto && !novoTexto.startsWith('/')) {
+      // Fechar dropdown se o texto não começa mais com /
+      setTemplateDropdownAberto(false);
+    } else if (templateDropdownAberto && novoTexto.startsWith('/')) {
+      // Atualizar filtro enquanto digita após /
+      setTemplateFiltroInicial(novoTexto.slice(1));
+    }
+  }, [templateDropdownAberto]);
+
+  // Usar template do dropdown (limpa o texto / antes de inserir)
+  const handleUsarTemplateDropdown = useCallback((conteudo: string) => {
+    // Substituir placeholders com dados do lead
+    const textoFinal = conteudo
+      .replace(/\{nome\}/g, lead.nome || 'Lead')
+      .replace(/\{curso\}/g, lead.cursos?.nome || 'música')
+      .replace(/\{unidade\}/g, lead.unidades?.nome || 'LA Music')
+      .replace(/\{data\}/g, lead.data_experimental || '__/__')
+      .replace(/\{hora\}/g, lead.horario_experimental || '__:__')
+      .replace(/\{horario\}/g, lead.horario_experimental || '__:__');
+
+    setTexto(textoFinal);
+    setTemplateDropdownAberto(false);
+    setTemplateAberto(false);
+    textareaRef.current?.focus();
+    requestAnimationFrame(handleTextareaInput);
+  }, [lead, handleTextareaInput]);
+
   // Enter para enviar, Shift+Enter para nova linha
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    // Se dropdown de templates está aberto, deixar ele capturar as teclas
+    if (templateDropdownAberto) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setTemplateDropdownAberto(false);
+        setTexto('');
+      }
+      // Não processar Enter aqui — o dropdown captura
+      return;
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleEnviar();
     }
-  }, [handleEnviar]);
+  }, [handleEnviar, templateDropdownAberto]);
+
+  // Editar mensagem
+  const handleEditarMensagem = useCallback((msg: MensagemCRM) => {
+    setEditandoMensagemId(msg.id);
+    setTextoEdicao(msg.conteudo || '');
+  }, []);
+
+  const handleSalvarEdicao = useCallback(async () => {
+    if (!editandoMensagemId || !textoEdicao.trim() || salvandoEdicao) return;
+
+    setSalvandoEdicao(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL || 'https://ouqwbbermlzqqvtqwlul.supabase.co'}/functions/v1/editar-mensagem-lead`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({
+            mensagem_id: editandoMensagemId,
+            novo_conteudo: textoEdicao.trim(),
+          }),
+        }
+      );
+
+      const data = await res.json();
+      if (!data.success) {
+        console.error('[ChatPanel] Erro ao editar:', data.error);
+      }
+    } catch (err) {
+      console.error('[ChatPanel] Erro ao editar mensagem:', err);
+    } finally {
+      setSalvandoEdicao(false);
+      setEditandoMensagemId(null);
+      setTextoEdicao('');
+    }
+  }, [editandoMensagemId, textoEdicao, salvandoEdicao]);
+
+  const handleCancelarEdicao = useCallback(() => {
+    setEditandoMensagemId(null);
+    setTextoEdicao('');
+  }, []);
+
+  // Deletar mensagem
+  const handleDeletarMensagem = useCallback((msg: MensagemCRM) => {
+    setMensagemDeletar(msg);
+  }, []);
+
+  const handleConfirmarDeletar = useCallback(async () => {
+    if (!mensagemDeletar || deletando) return;
+
+    setDeletando(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL || 'https://ouqwbbermlzqqvtqwlul.supabase.co'}/functions/v1/deletar-mensagem-lead`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({ mensagem_id: mensagemDeletar.id }),
+        }
+      );
+
+      const data = await res.json();
+      if (!data.success) {
+        console.error('[ChatPanel] Erro ao deletar:', data.error);
+      }
+    } catch (err) {
+      console.error('[ChatPanel] Erro ao deletar mensagem:', err);
+    } finally {
+      setDeletando(false);
+      setMensagemDeletar(null);
+    }
+  }, [mensagemDeletar, deletando]);
+
+  // Reagir a mensagem
+  const handleReagir = useCallback(async (msg: MensagemCRM, emoji: string) => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL || 'https://ouqwbbermlzqqvtqwlul.supabase.co'}/functions/v1/reagir-mensagem`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({ mensagem_id: msg.id, emoji }),
+        }
+      );
+      const data = await res.json();
+      if (!data.success) {
+        console.error('[ChatPanel] Erro ao reagir:', data.error);
+      }
+    } catch (err) {
+      console.error('[ChatPanel] Erro ao reagir:', err);
+    }
+  }, []);
+
+  // Transcrever áudio
+  const handleTranscreverAudio = useCallback(async (msg: MensagemCRM) => {
+    if (transcrevendoId) return;
+    setTranscrevendoId(msg.id);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL || 'https://ouqwbbermlzqqvtqwlul.supabase.co'}/functions/v1/transcrever-audio`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({ mensagem_id: msg.id }),
+        }
+      );
+      const data = await res.json();
+      if (!data.success && !data.transcricao) {
+        console.error('[ChatPanel] Erro ao transcrever:', data.error);
+      }
+    } catch (err) {
+      console.error('[ChatPanel] Erro ao transcrever áudio:', err);
+    } finally {
+      setTranscrevendoId(null);
+    }
+  }, [transcrevendoId]);
 
   // Selecionar arquivo para envio
   const handleArquivoSelecionado = useCallback((e: React.ChangeEvent<HTMLInputElement>, tipoForcar?: 'imagem' | 'audio' | 'documento') => {
@@ -252,6 +482,172 @@ export function ChatPanel({
     return () => document.removeEventListener('click', handleClickFora);
   }, [menuAnexoAberto]);
 
+  // Limpar gravação ao desmontar ou trocar de conversa
+  useEffect(() => {
+    return () => {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+      }
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, [conversa.id]);
+
+  // Ref para resolver a Promise de parada do recorder
+  const stopResolveRef = useRef<(() => void) | null>(null);
+
+  // Iniciar gravação de áudio
+  const iniciarGravacao = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      audioChunksRef.current = [];
+
+      // Preferir OGG/Opus (WhatsApp PTT), fallback para WebM/Opus
+      const mimeType = MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')
+        ? 'audio/ogg;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+          ? 'audio/webm;codecs=opus'
+          : 'audio/webm';
+
+      const recorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+
+      recorder.onstop = () => {
+        // Resolver a Promise de parada se existir
+        if (stopResolveRef.current) {
+          stopResolveRef.current();
+          stopResolveRef.current = null;
+        }
+      };
+
+      recorder.onerror = (e) => {
+        console.error('[ChatPanel] MediaRecorder erro:', e);
+        // Resolver a Promise de parada mesmo em caso de erro
+        if (stopResolveRef.current) {
+          stopResolveRef.current();
+          stopResolveRef.current = null;
+        }
+      };
+
+      recorder.start(250); // chunks a cada 250ms
+      setGravando(true);
+      setTempoGravacao(0);
+
+      // Timer visual
+      timerRef.current = setInterval(() => {
+        setTempoGravacao(prev => prev + 1);
+      }, 1000);
+    } catch (err) {
+      console.error('[ChatPanel] Erro ao acessar microfone:', err);
+      alert('Não foi possível acessar o microfone. Verifique as permissões do navegador.');
+    }
+  }, []);
+
+  // Parar gravação e limpar recursos (sem enviar)
+  const pararGravacaoSilencioso = useCallback(() => {
+    try {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+    } catch { /* ignorar */ }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    audioChunksRef.current = [];
+    setGravando(false);
+    setTempoGravacao(0);
+  }, []);
+
+  // Cancelar gravação
+  const cancelarGravacao = useCallback(() => {
+    pararGravacaoSilencioso();
+  }, [pararGravacaoSilencioso]);
+
+  // Enviar gravação
+  const enviarGravacao = useCallback(async () => {
+    if (!mediaRecorderRef.current || enviando) return;
+
+    const recorder = mediaRecorderRef.current;
+    const mimeType = recorder.mimeType || 'audio/webm';
+
+    try {
+      // Parar e esperar o último chunk via onstop handler
+      if (recorder.state !== 'inactive') {
+        await new Promise<void>((resolve) => {
+          stopResolveRef.current = resolve;
+          recorder.stop();
+          // Timeout de segurança: resolver após 1s se onstop não disparar
+          setTimeout(() => {
+            if (stopResolveRef.current) {
+              stopResolveRef.current();
+              stopResolveRef.current = null;
+            }
+          }, 1000);
+        });
+      }
+
+      // Parar stream e timer
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
+      }
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+
+      const chunks = [...audioChunksRef.current];
+      audioChunksRef.current = [];
+      setGravando(false);
+      setTempoGravacao(0);
+
+      if (chunks.length === 0) {
+        console.warn('[ChatPanel] Nenhum chunk de áudio gravado');
+        return;
+      }
+
+      const ext = mimeType.includes('ogg') ? 'ogg' : 'webm';
+      const blob = new Blob(chunks, { type: mimeType });
+      const file = new File([blob], `audio_${Date.now()}.${ext}`, { type: mimeType });
+
+      console.log('[ChatPanel] Enviando áudio:', file.name, (file.size / 1024).toFixed(1) + 'KB', mimeType);
+
+      await onEnviarMidia(file, 'audio');
+    } catch (err) {
+      console.error('[ChatPanel] Erro ao enviar áudio:', err);
+      // Garantir limpeza em caso de erro
+      setGravando(false);
+      setTempoGravacao(0);
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
+      }
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    }
+  }, [enviando, onEnviarMidia]);
+
+  // Formatar tempo de gravação (mm:ss)
+  const formatarTempoGravacao = (segundos: number): string => {
+    const min = Math.floor(segundos / 60).toString().padStart(2, '0');
+    const sec = (segundos % 60).toString().padStart(2, '0');
+    return `${min}:${sec}`;
+  };
+
   // Toggle Mila
   const handleToggleMila = useCallback(async () => {
     try {
@@ -267,22 +663,6 @@ export function ChatPanel({
       console.error('[ChatPanel] Erro ao toggle Mila:', err);
     }
   }, [conversa.id, milaPausada]);
-
-  // Usar template
-  const handleUsarTemplate = useCallback((conteudo: string) => {
-    // Substituir placeholders com dados do lead
-    const texto = conteudo
-      .replace(/\{nome\}/g, lead.nome || 'Lead')
-      .replace(/\{curso\}/g, lead.cursos?.nome || 'música')
-      .replace(/\{unidade\}/g, lead.unidades?.nome || 'LA Music')
-      .replace(/\{data\}/g, lead.data_experimental || '__/__')
-      .replace(/\{hora\}/g, lead.horario_experimental || '__:__');
-
-    setTexto(texto);
-    setTemplateAberto(false);
-    textareaRef.current?.focus();
-    requestAnimationFrame(handleTextareaInput);
-  }, [lead, handleTextareaInput]);
 
   const isMila = conversa.atribuido_a === 'mila';
   const etapaNome = lead.crm_pipeline_etapas?.nome || lead.status || '';
@@ -348,24 +728,17 @@ export function ChatPanel({
             Ligar
           </a>
           {/* Botão Buscar */}
-          <button
-            onClick={toggleBusca}
-            className={cn(
-              'p-2 rounded-lg transition',
-              buscaAberta ? 'text-violet-400 bg-violet-500/10' : 'text-slate-400 hover:text-white hover:bg-slate-700'
-            )}
-            title="Buscar nas mensagens"
-          >
-            <Search className="w-4 h-4" />
-          </button>
-          {/* Toggle ficha */}
-          <button
-            onClick={onToggleFicha}
-            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition"
-            title="Mostrar/ocultar ficha do lead"
-          >
-            <Info className="w-4 h-4" />
-          </button>
+          <Tooltip content="Buscar nas mensagens" side="bottom">
+            <button
+              onClick={toggleBusca}
+              className={cn(
+                'p-2 rounded-lg transition',
+                buscaAberta ? 'text-violet-400 bg-violet-500/10' : 'text-slate-400 hover:text-white hover:bg-slate-700'
+              )}
+            >
+              <Search className="w-4 h-4" />
+            </button>
+          </Tooltip>
         </div>
       </div>
 
@@ -411,7 +784,8 @@ export function ChatPanel({
       {/* Área de mensagens */}
       <div
         ref={chatAreaRef}
-        className="flex-1 overflow-y-auto px-4 py-4 space-y-3"
+        onScroll={handleScroll}
+        className="flex-1 overflow-y-auto px-4 py-4 space-y-3 scroll-smooth"
         style={{ background: 'linear-gradient(180deg, #0f172a 0%, #0d1424 100%)' }}
       >
         {/* Botão carregar mais */}
@@ -429,8 +803,67 @@ export function ChatPanel({
         )}
 
         {loading && mensagens.length === 0 && (
-          <div className="flex items-center justify-center h-32">
-            <Loader2 className="w-6 h-6 text-violet-400 animate-spin" />
+          <div className="space-y-4 py-4">
+            {/* Skeleton bolhas de chat */}
+            <div className="flex justify-start">
+              <div className="max-w-[60%] animate-pulse">
+                <div className="bg-slate-800/60 rounded-2xl rounded-tl-md px-4 py-3 space-y-2">
+                  <div className="h-3 bg-slate-700/60 rounded w-48" />
+                  <div className="h-3 bg-slate-700/40 rounded w-36" />
+                </div>
+                <div className="h-2.5 bg-slate-700/30 rounded w-16 mt-1.5 ml-1" />
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <div className="max-w-[60%] animate-pulse">
+                <div className="bg-violet-600/10 rounded-2xl rounded-tr-md px-4 py-3 space-y-2">
+                  <div className="h-3 bg-violet-500/20 rounded w-52" />
+                  <div className="h-3 bg-violet-500/15 rounded w-32" />
+                </div>
+                <div className="h-2.5 bg-slate-700/30 rounded w-20 mt-1.5 ml-auto mr-1" />
+              </div>
+            </div>
+            <div className="flex justify-start">
+              <div className="max-w-[60%] animate-pulse">
+                <div className="bg-slate-800/60 rounded-2xl rounded-tl-md px-4 py-3 space-y-2">
+                  <div className="h-3 bg-slate-700/60 rounded w-56" />
+                  <div className="h-3 bg-slate-700/40 rounded w-40" />
+                  <div className="h-3 bg-slate-700/30 rounded w-24" />
+                </div>
+                <div className="h-2.5 bg-slate-700/30 rounded w-16 mt-1.5 ml-1" />
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <div className="max-w-[60%] animate-pulse">
+                <div className="bg-violet-600/10 rounded-2xl rounded-tr-md px-4 py-3 space-y-2">
+                  <div className="h-3 bg-violet-500/20 rounded w-44" />
+                </div>
+                <div className="h-2.5 bg-slate-700/30 rounded w-20 mt-1.5 ml-auto mr-1" />
+              </div>
+            </div>
+            <div className="flex justify-start">
+              <div className="max-w-[60%] animate-pulse">
+                <div className="bg-slate-800/60 rounded-2xl rounded-tl-md px-4 py-3">
+                  <div className="h-10 bg-slate-700/40 rounded w-56" />
+                </div>
+                <div className="h-2.5 bg-slate-700/30 rounded w-16 mt-1.5 ml-1" />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Estado vazio — sem mensagens */}
+        {!loading && mensagens.length === 0 && (
+          <div className="flex flex-col items-center justify-center h-full text-center px-8 gap-4 animate-in fade-in duration-500">
+            <div className="w-16 h-16 rounded-full bg-violet-500/10 flex items-center justify-center">
+              <MessageSquare className="w-8 h-8 text-violet-400/60" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-slate-400">Nenhuma mensagem ainda</p>
+              <p className="text-xs text-slate-500 mt-1.5 max-w-[240px]">
+                Envie a primeira mensagem para iniciar a conversa com este lead
+              </p>
+            </div>
           </div>
         )}
 
@@ -454,16 +887,44 @@ export function ChatPanel({
                 mensagem={item.mensagem}
                 mensagemOriginal={item.mensagem.reply_to_id ? mensagensMap.get(item.mensagem.reply_to_id) || null : null}
                 onResponder={handleResponder}
+                onEditar={handleEditarMensagem}
+                onDeletar={handleDeletarMensagem}
+                onTranscrever={handleTranscreverAudio}
+                onReagir={handleReagir}
+                transcrevendoId={transcrevendoId}
+                editandoId={editandoMensagemId}
+                textoEdicao={textoEdicao}
+                onTextoEdicaoChange={setTextoEdicao}
+                onSalvarEdicao={handleSalvarEdicao}
+                onCancelarEdicao={handleCancelarEdicao}
+                salvandoEdicao={salvandoEdicao}
               />
             </div>
           );
         })}
       </div>
 
+      {/* Botão flutuante: scroll para o fundo */}
+      {!scrollNoFundo && (
+        <div className="relative">
+          <button
+            onClick={scrollParaFundo}
+            className="absolute -top-12 right-4 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-slate-800/90 border border-slate-700/50 text-slate-400 hover:text-white hover:bg-slate-700 shadow-lg backdrop-blur-sm transition-all animate-in fade-in slide-in-from-bottom-2 duration-200"
+          >
+            <ChevronDown className="w-4 h-4" />
+            {novasMensagensAbaixo > 0 && (
+              <span className="bg-violet-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">
+                {novasMensagensAbaixo}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
+
       {/* Barra de templates */}
       {templateAberto && (
         <TemplateSelector
-          onSelecionar={handleUsarTemplate}
+          onSelecionar={handleUsarTemplateDropdown}
           onFechar={() => setTemplateAberto(false)}
         />
       )}
@@ -484,7 +945,7 @@ export function ChatPanel({
                 <div className="w-16 h-16 rounded-lg bg-slate-700 flex items-center justify-center">
                   {arquivoPreview.tipo === 'audio' ? <Mic className="w-6 h-6 text-violet-400" /> :
                    arquivoPreview.tipo === 'video' ? <Play className="w-6 h-6 text-violet-400" /> :
-                   <File className="w-6 h-6 text-violet-400" />}
+                   <FileIcon className="w-6 h-6 text-violet-400" />}
                 </div>
               )}
             </div>
@@ -517,7 +978,6 @@ export function ChatPanel({
               onClick={handleEnviarMidia}
               disabled={enviando}
               className="p-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white transition flex-shrink-0 self-end"
-              title="Enviar mídia"
             >
               {enviando ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
             </button>
@@ -552,13 +1012,14 @@ export function ChatPanel({
           <div className="flex items-end gap-2">
             {/* Botão anexar */}
             <div className="relative pb-1">
-              <button
-                onClick={(e) => { e.stopPropagation(); setMenuAnexoAberto(!menuAnexoAberto); }}
-                className="p-2 rounded-lg text-slate-400 hover:text-violet-400 hover:bg-slate-700 transition"
-                title="Anexar arquivo"
-              >
-                <Paperclip className="w-5 h-5" />
-              </button>
+              <Tooltip content="Anexar arquivo" side="top">
+                <button
+                  onClick={(e) => { e.stopPropagation(); setMenuAnexoAberto(!menuAnexoAberto); }}
+                  className="p-2 rounded-lg text-slate-400 hover:text-violet-400 hover:bg-slate-700 transition"
+                >
+                  <Paperclip className="w-5 h-5" />
+                </button>
+              </Tooltip>
               {/* Menu dropdown de anexo */}
               {menuAnexoAberto && (
                 <div
@@ -576,53 +1037,104 @@ export function ChatPanel({
                     onClick={() => inputDocumentoRef.current?.click()}
                     className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-700/50 hover:text-white transition"
                   >
-                    <File className="w-4 h-4 text-blue-400" />
+                    <FileIcon className="w-4 h-4 text-blue-400" />
                     Documento
-                  </button>
-                  <button
-                    onClick={() => inputAudioRef.current?.click()}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-slate-300 hover:bg-slate-700/50 hover:text-white transition"
-                  >
-                    <Mic className="w-4 h-4 text-amber-400" />
-                    Áudio
                   </button>
                 </div>
               )}
             </div>
-            {/* Campo de texto */}
-            <div className="flex-1 relative">
-              <textarea
-                ref={textareaRef}
-                rows={1}
-                value={texto}
-                onChange={(e) => { setTexto(e.target.value); handleTextareaInput(); }}
-                onKeyDown={handleKeyDown}
-                placeholder="Digite sua mensagem..."
-                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none resize-none max-h-32"
-              />
-            </div>
+            {/* Campo de texto OU barra de gravação */}
+            {gravando ? (
+              /* Barra de gravação de áudio */
+              <div className="flex-1 flex items-center gap-3 bg-slate-800 border border-red-500/50 rounded-xl px-4 py-2.5">
+                {/* Indicador pulsante */}
+                <div className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse flex-shrink-0" />
+                <span className="text-sm text-red-400 font-mono font-medium flex-shrink-0">
+                  {formatarTempoGravacao(tempoGravacao)}
+                </span>
+                <span className="text-xs text-slate-400">Gravando áudio...</span>
+                <div className="flex-1" />
+                {/* Cancelar */}
+                <Tooltip content="Cancelar gravação" side="top">
+                  <button
+                    onClick={cancelarGravacao}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-red-500/10 transition"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </Tooltip>
+              </div>
+            ) : (
+              <div className="flex-1 relative">
+                {/* Dropdown de templates (ativado por /) */}
+                {templateDropdownAberto && (
+                  <TemplateSelector
+                    modo="dropdown"
+                    filtroInicial={templateFiltroInicial}
+                    onSelecionar={handleUsarTemplateDropdown}
+                    onFechar={() => { setTemplateDropdownAberto(false); setTexto(''); textareaRef.current?.focus(); }}
+                  />
+                )}
+                <textarea
+                  ref={textareaRef}
+                  rows={1}
+                  value={texto}
+                  onChange={(e) => { handleTextoChange(e.target.value); handleTextareaInput(); }}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Digite sua mensagem... (/ para templates)"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none resize-none max-h-32"
+                />
+              </div>
+            )}
             {/* Botões */}
             <div className="flex items-center gap-1 pb-1">
-              <button
-                onClick={() => setTemplateAberto(!templateAberto)}
-                className="p-2 rounded-lg text-slate-400 hover:text-violet-400 hover:bg-slate-700 transition"
-                title="Templates rápidos"
-              >
-                <FileText className="w-5 h-5" />
-              </button>
-              <button
-                onClick={handleEnviar}
-                disabled={!texto.trim() || enviando}
-                className={cn(
-                  'p-2.5 rounded-xl transition',
-                  texto.trim() && !enviando
-                    ? 'bg-violet-600 hover:bg-violet-500 text-white'
-                    : 'bg-slate-700 text-slate-500 cursor-not-allowed'
-                )}
-                title="Enviar"
-              >
-                {enviando ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-              </button>
+              {!gravando && (
+                <>
+                  <Tooltip content="Templates rápidos" side="top">
+                    <button
+                      onClick={() => setTemplateAberto(!templateAberto)}
+                      className="p-2 rounded-lg text-slate-400 hover:text-violet-400 hover:bg-slate-700 transition"
+                    >
+                      <FileText className="w-5 h-5" />
+                    </button>
+                  </Tooltip>
+                  <Tooltip content="Gerenciar templates" side="top">
+                    <button
+                      onClick={() => setModalTemplatesAberto(true)}
+                      className="p-2 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-700 transition"
+                    >
+                      <Settings className="w-4 h-4" />
+                    </button>
+                  </Tooltip>
+                </>
+              )}
+              {/* Botão Microfone / Enviar áudio / Enviar texto */}
+              {gravando ? (
+                <button
+                  onClick={enviarGravacao}
+                  disabled={enviando}
+                  className="p-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white transition"
+                >
+                  {enviando ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                </button>
+              ) : texto.trim() ? (
+                <button
+                  onClick={handleEnviar}
+                  disabled={enviando}
+                  className="p-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white transition"
+                >
+                  {enviando ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                </button>
+              ) : (
+                <Tooltip content="Gravar áudio" side="top">
+                  <button
+                    onClick={iniciarGravacao}
+                    className="p-2.5 rounded-xl text-slate-400 hover:text-amber-400 hover:bg-amber-500/10 transition"
+                  >
+                    <Mic className="w-5 h-5" />
+                  </button>
+                </Tooltip>
+              )}
             </div>
           </div>
         </div>
@@ -650,6 +1162,41 @@ export function ChatPanel({
         className="hidden"
         onChange={(e) => handleArquivoSelecionado(e, 'audio')}
       />
+
+      {/* Modal Gerenciar Templates */}
+      <ModalGerenciarTemplates
+        aberto={modalTemplatesAberto}
+        onFechar={() => setModalTemplatesAberto(false)}
+      />
+
+      {/* AlertDialog Confirmar Exclusão */}
+      <AlertDialog open={!!mensagemDeletar} onOpenChange={(open) => !open && setMensagemDeletar(null)}>
+        <AlertDialogContent className="bg-slate-900 border-slate-700">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-slate-100">Apagar mensagem?</AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-400">
+              A mensagem será apagada para todos no WhatsApp. Essa ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          {mensagemDeletar && (
+            <div className="px-4 py-2 rounded-lg bg-slate-800/60 border border-slate-700/50 text-sm text-slate-300 line-clamp-3">
+              {mensagemDeletar.conteudo || `[${mensagemDeletar.tipo}]`}
+            </div>
+          )}
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700">
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmarDeletar}
+              disabled={deletando}
+              className="bg-red-600 hover:bg-red-500 text-white"
+            >
+              {deletando ? 'Apagando...' : 'Apagar para todos'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

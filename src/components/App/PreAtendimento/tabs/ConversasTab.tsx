@@ -128,13 +128,26 @@ export function ConversasTab({ unidadeId, onAgendar, onMoverEtapa, onMatricular,
             onToggleFicha={toggleFicha}
           />
         ) : (
-          <div className="flex-1 flex items-center justify-center bg-slate-900">
-            <div className="text-center">
-              <div className="w-20 h-20 rounded-full bg-slate-800 flex items-center justify-center mx-auto mb-4">
-                <MessageSquare className="w-10 h-10 text-slate-600" />
+          <div className="flex-1 flex items-center justify-center" style={{ background: 'linear-gradient(180deg, #0f172a 0%, #0d1424 100%)' }}>
+            <div className="text-center animate-in fade-in duration-500">
+              <div className="w-20 h-20 rounded-full bg-violet-500/10 border border-violet-500/10 flex items-center justify-center mx-auto mb-5">
+                <MessageSquare className="w-9 h-9 text-violet-400/50" />
               </div>
-              <h3 className="text-lg font-semibold text-slate-400">Selecione uma conversa</h3>
-              <p className="text-sm text-slate-500 mt-1">Escolha uma conversa no inbox para começar</p>
+              <h3 className="text-lg font-semibold text-slate-300">Selecione uma conversa</h3>
+              <p className="text-sm text-slate-500 mt-1.5 max-w-[280px] mx-auto">
+                Escolha uma conversa no inbox à esquerda para começar a atender
+              </p>
+              <div className="flex items-center justify-center gap-4 mt-6 text-[11px] text-slate-600">
+                <span>← Inbox</span>
+                <span>·</span>
+                <span>{conversas.length} conversa{conversas.length !== 1 ? 's' : ''}</span>
+                {totalNaoLidas > 0 && (
+                  <>
+                    <span>·</span>
+                    <span className="text-violet-400">{totalNaoLidas} não lida{totalNaoLidas !== 1 ? 's' : ''}</span>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         )}

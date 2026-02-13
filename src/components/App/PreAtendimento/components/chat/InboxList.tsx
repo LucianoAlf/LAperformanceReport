@@ -1,4 +1,4 @@
-import { Search, Monitor, User, Loader2 } from 'lucide-react';
+import { Search, Monitor, User, Loader2, MessageSquare, Inbox } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ConversaCRM, FiltroInbox, LeadCRM } from '../../types';
 
@@ -85,10 +85,10 @@ function InboxItem({ conversa, ativa, onClick }: { conversa: ConversaCRM; ativa:
     <div
       onClick={onClick}
       className={cn(
-        'cursor-pointer px-3 py-3 hover:bg-slate-800/50 transition border-b border-slate-800/30',
+        'cursor-pointer px-3 py-3 hover:bg-slate-800/50 transition-all duration-200 border-b border-slate-800/30',
         ativa
           ? 'bg-violet-500/10 border-l-[3px] border-l-violet-500'
-          : 'border-l-[3px] border-l-transparent',
+          : 'border-l-[3px] border-l-transparent hover:border-l-slate-600',
         semConversa && 'opacity-60'
       )}
     >
@@ -232,14 +232,45 @@ export function InboxList({
       {/* Lista de conversas */}
       <div className="flex-1 overflow-y-auto">
         {loading ? (
-          <div className="flex items-center justify-center h-32">
-            <Loader2 className="w-6 h-6 text-violet-400 animate-spin" />
+          <div className="space-y-0">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="px-3 py-3 border-b border-slate-800/30 animate-pulse">
+                <div className="flex gap-3">
+                  <div className="w-11 h-11 rounded-full bg-slate-700/60 flex-shrink-0" />
+                  <div className="flex-1 space-y-2">
+                    <div className="flex justify-between">
+                      <div className="h-3.5 bg-slate-700/60 rounded w-28" />
+                      <div className="h-3 bg-slate-700/40 rounded w-10" />
+                    </div>
+                    <div className="h-3 bg-slate-700/40 rounded w-40" />
+                    <div className="flex gap-2">
+                      <div className="h-2.5 bg-slate-700/30 rounded w-16" />
+                      <div className="h-2.5 bg-slate-700/30 rounded w-12" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         ) : conversas.length === 0 ? (
-          <div className="flex items-center justify-center h-32 text-center px-4">
-            <p className="text-sm text-slate-500">
-              {busca ? 'Nenhuma conversa encontrada' : 'Nenhuma conversa ainda'}
-            </p>
+          <div className="flex flex-col items-center justify-center h-48 text-center px-6 gap-3">
+            {busca ? (
+              <>
+                <Search className="w-10 h-10 text-slate-600" />
+                <div>
+                  <p className="text-sm font-medium text-slate-400">Nenhum resultado</p>
+                  <p className="text-xs text-slate-500 mt-1">Tente buscar por outro nome ou número</p>
+                </div>
+              </>
+            ) : (
+              <>
+                <Inbox className="w-10 h-10 text-slate-600" />
+                <div>
+                  <p className="text-sm font-medium text-slate-400">Nenhuma conversa</p>
+                  <p className="text-xs text-slate-500 mt-1">As conversas aparecerão aqui quando leads enviarem mensagens</p>
+                </div>
+              </>
+            )}
           </div>
         ) : (
           conversas.map(conversa => (

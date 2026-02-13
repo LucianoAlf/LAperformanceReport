@@ -134,35 +134,52 @@ serve(async (req: Request) => {
       readchat: true,
     };
 
-    switch (tipo) {
-      case 'imagem':
-        endpoint = '/send/image';
-        uazapiBody.url = midia_url;
-        uazapiBody.caption = conteudo || '';
-        break;
-      case 'audio':
-        endpoint = '/send/audio';
-        uazapiBody.url = midia_url;
-        break;
-      case 'video':
-        endpoint = '/send/video';
-        uazapiBody.url = midia_url;
-        uazapiBody.caption = conteudo || '';
-        break;
-      case 'documento':
-        endpoint = '/send/document';
-        uazapiBody.url = midia_url;
-        uazapiBody.caption = conteudo || '';
-        uazapiBody.fileName = midia_nome || 'documento';
-        break;
-      default:
-        // Texto
-        uazapiBody.text = conteudo;
-        uazapiBody.linkPreview = true;
-        break;
+    // UAZAPI usa /send/media unificado para todos os tipos de mídia
+    // e /send/text apenas para texto puro
+    if (tipo === 'texto') {
+      endpoint = '/send/text';
+      uazapiBody.text = conteudo;
+      uazapiBody.linkPreview = true;
+    } else {
+      endpoint = '/send/media';
+      uazapiBody.file = midia_url;
+      uazapiBody.text = conteudo || '';
+
+      switch (tipo) {
+        case 'imagem':
+          uazapiBody.type = 'image';
+          break;
+        case 'audio':
+          uazapiBody.type = 'ptt'; // Push-to-Talk (mensagem de voz)
+          break;
+        case 'video':
+          uazapiBody.type = 'video';
+          break;
+        case 'documento':
+          uazapiBody.type = 'document';
+          uazapiBody.docName = midia_nome || 'documento';
+          if (midia_mimetype) uazapiBody.mimetype = midia_mimetype;
+          break;
+        default:
+          uazapiBody.type = 'document';
+          uazapiBody.docName = midia_nome || 'arquivo';
+          break;
+      }
     }
 
-    console.log(`[enviar-mensagem-lead] Endpoint: ${endpoint}, tipo: ${tipo}`);
+    // Se tem reply_to_id, buscar o whatsapp_message_id da mensagem original para o replyid da UAZAPI
+    if (reply_to_id) {
+      const { data: msgOriginal } = await supabase
+        .from('crm_mensagens')
+        .select('whatsapp_message_id')
+        .eq('id', reply_to_id)
+        .maybeSingle();
+      if (msgOriginal?.whatsapp_message_id) {
+        uazapiBody.replyid = msgOriginal.whatsapp_message_id;
+      }
+    }
+
+    console.log(`[enviar-mensagem-lead] Endpoint: ${endpoint}, tipo: ${tipo}, body:`, JSON.stringify(uazapiBody).substring(0, 500));
 
     const uazapiResponse = await fetch(`${baseUrl}${endpoint}`, {
       method: 'POST',

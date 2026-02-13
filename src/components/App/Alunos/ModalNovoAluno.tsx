@@ -38,6 +38,9 @@ const TIPOS_ALUNO = [
   { value: 'nao_pagante', label: 'Não Pagante' },
 ];
 
+// Tipos que dispensam forma de pagamento e valores obrigatórios
+const TIPOS_SEM_PAGAMENTO = ['bolsista_integral', 'nao_pagante'];
+
 export function ModalNovoAluno({
   onClose,
   onSalvar,
@@ -165,8 +168,13 @@ export function ModalNovoAluno({
   }, []);
 
   async function handleSave() {
-    if (!formData.aluno_nome || !formData.aluno_data_nascimento || !formData.forma_pagamento_id) {
-      alert('Preencha os campos obrigatórios: Nome, Data de Nascimento e Forma de Pagamento');
+    const dispensaPagamento = TIPOS_SEM_PAGAMENTO.includes(formData.tipo_aluno);
+    if (!formData.aluno_nome || !formData.aluno_data_nascimento) {
+      alert('Preencha os campos obrigatórios: Nome e Data de Nascimento');
+      return;
+    }
+    if (!dispensaPagamento && !formData.forma_pagamento_id) {
+      alert('Selecione a forma de pagamento da parcela mensal');
       return;
     }
 
@@ -192,11 +200,11 @@ export function ModalNovoAluno({
           classificacao,
           curso_id: formData.curso_id,
           professor_atual_id: formData.professor_fixo_id,
-          valor_parcela: formData.valor_parcela,
-          valor_passaporte: formData.valor_passaporte,
+          valor_parcela: dispensaPagamento ? 0 : (formData.valor_parcela || 0),
+          valor_passaporte: formData.valor_passaporte || 0,
           tipo_matricula_id,
           tipo_aluno: formData.tipo_aluno,
-          forma_pagamento_id: formData.forma_pagamento_id,
+          forma_pagamento_id: dispensaPagamento ? null : formData.forma_pagamento_id,
           dia_vencimento: formData.dia_vencimento || 5,
           canal_origem_id: formData.canal_origem_id,
           professor_experimental_id: formData.teve_experimental ? formData.professor_experimental_id : null,
@@ -604,7 +612,7 @@ export function ModalNovoAluno({
             </div>
             <Button
               onClick={handleSave}
-              disabled={saving || !formData.aluno_nome || !formData.aluno_data_nascimento || !formData.forma_pagamento_id}
+              disabled={saving || !formData.aluno_nome || !formData.aluno_data_nascimento || (!TIPOS_SEM_PAGAMENTO.includes(formData.tipo_aluno) && !formData.forma_pagamento_id)}
               className="w-full bg-gradient-to-r from-emerald-500 to-teal-500"
             >
               {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}

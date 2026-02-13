@@ -187,6 +187,10 @@ export interface MensagemCRM {
   whatsapp_message_id: string | null;
   template_id: number | null;
   reply_to_id: string | null;
+  editada?: boolean;
+  deletada?: boolean;
+  transcricao?: string | null;
+  reacoes?: { emoji: string; de: string; timestamp?: number }[];
   created_at: string;
 }
 

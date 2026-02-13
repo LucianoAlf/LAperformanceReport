@@ -318,6 +318,49 @@ serve(async (req: Request) => {
             .is('whatsapp_jid', null);
         }
 
+        // Detectar reação (reactionMessage) — não é uma mensagem nova, é uma reação a uma existente
+        if (msg.message?.reactionMessage) {
+          const reaction = msg.message.reactionMessage;
+          const reactedMsgId = reaction.key?.id;
+          const emoji = reaction.text || '';
+
+          if (reactedMsgId) {
+            console.log(`[webhook-inbox] Reação recebida: "${emoji}" na msg ${reactedMsgId}`);
+
+            // Buscar a mensagem reagida
+            const { data: msgReagida } = await supabase
+              .from('crm_mensagens')
+              .select('id, reacoes')
+              .eq('whatsapp_message_id', reactedMsgId)
+              .maybeSingle();
+
+            if (msgReagida) {
+              const reacoesAtuais = Array.isArray(msgReagida.reacoes) ? msgReagida.reacoes : [];
+              let novasReacoes;
+
+              if (!emoji) {
+                // Remover reação do lead
+                novasReacoes = reacoesAtuais.filter((r) => r.de !== 'lead');
+              } else {
+                // Adicionar/atualizar reação do lead
+                const semReacaoLead = reacoesAtuais.filter((r) => r.de !== 'lead');
+                novasReacoes = [...semReacaoLead, { emoji, de: 'lead', timestamp: Date.now() }];
+              }
+
+              await supabase
+                .from('crm_mensagens')
+                .update({ reacoes: novasReacoes })
+                .eq('id', msgReagida.id);
+
+              console.log(`[webhook-inbox] ✅ Reação salva: ${emoji || '(removida)'} na msg ${msgReagida.id}`);
+            } else {
+              console.log(`[webhook-inbox] Mensagem reagida não encontrada: ${reactedMsgId}`);
+            }
+          }
+          processadas++;
+          continue;
+        }
+
         // Detectar tipo de mensagem
         const { tipo, conteudo, midia_url, midia_mimetype, midia_nome } = detectMessageType(msg);
 
