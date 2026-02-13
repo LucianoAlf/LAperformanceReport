@@ -1121,10 +1121,10 @@ export function ComercialPage() {
       }
     }
 
-    // Buscar dados do período selecionado
+    // Buscar dados do período selecionado (com nome e curso para detalhamento)
     const { data: registrosPeriodo } = await supabase
       .from('leads')
-      .select('status, quantidade')
+      .select('status, quantidade, nome, data_contato, cursos:curso_interesse_id(nome), canais_origem(nome)')
       .eq('unidade_id', unidadeId)
       .gte('data_contato', dataInicio)
       .lte('data_contato', dataFim);
@@ -1132,6 +1132,9 @@ export function ComercialPage() {
     const leadsPeriodo = registrosPeriodo?.filter(r => ['novo','agendado'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const experimentaisPeriodo = registrosPeriodo?.filter(r => r.status?.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const matriculasPeriodo = registrosPeriodo?.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+
+    // Detalhamento das matrículas do período
+    const matriculasDetalhadas = registrosPeriodo?.filter(r => ['matriculado','convertido'].includes(r.status)) || [];
 
     // Buscar experimentais agendadas para o dia final do período
     const { data: experimentaisDia } = await supabase
@@ -1163,8 +1166,21 @@ export function ComercialPage() {
     texto += `🎸 Experimentais no período: *${experimentaisPeriodo}*\n`;
     texto += `📆 Experimentais agendadas: *${experimentaisAgendadasDia}*\n`;
     texto += `🏫 Visitas: *${visitasDiaTotal}*\n`;
-    texto += `✅ Matrículas no período: *${matriculasPeriodo}*\n\n`;
-    texto += `━━━━━━━━━━━━━━━━━━━━━━`;
+    texto += `✅ Matrículas no período: *${matriculasPeriodo}*\n`;
+
+    // Detalhamento das matrículas
+    if (matriculasDetalhadas.length > 0) {
+      texto += `\n📋 *Detalhamento das Matrículas:*\n`;
+      matriculasDetalhadas.forEach((m: any, i: number) => {
+        const cursoNome = m.cursos?.nome || '-';
+        const canalNome = m.canais_origem?.nome || '-';
+        texto += `  ${i + 1}. *${m.nome}* — ${cursoNome}`;
+        if (canalNome !== '-') texto += ` (${canalNome})`;
+        texto += `\n`;
+      });
+    }
+
+    texto += `\n━━━━━━━━━━━━━━━━━━━━━━`;
 
     return texto;
   };
