@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Phone, Pause, Play, Send, FileText, Loader2, ChevronUp, ChevronDown,
-  Paperclip, ImageIcon, Mic, File as FileIcon, X, Search, Square, Trash2, Settings, MessageSquare,
+  Paperclip, ImageIcon, Mic, File as FileIcon, X, Search, Square, Trash2, Settings, MessageSquare, Smile,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase';
 import { ChatBubble } from './ChatBubble';
 import { TemplateSelector } from './TemplateSelector';
 import { ModalGerenciarTemplates } from './ModalGerenciarTemplates';
+import { EmojiPicker } from './EmojiPicker';
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
@@ -74,6 +75,7 @@ export function ChatPanel({
   const [scrollNoFundo, setScrollNoFundo] = useState(true);
   const [novasMensagensAbaixo, setNovasMensagensAbaixo] = useState(0);
   const [buscaAberta, setBuscaAberta] = useState(false);
+  const [emojiPickerAberto, setEmojiPickerAberto] = useState(false);
   const [termoBusca, setTermoBusca] = useState('');
   const [indiceBuscaAtual, setIndiceBuscaAtual] = useState(0);
   const chatAreaRef = useRef<HTMLDivElement>(null);
@@ -180,11 +182,34 @@ export function ChatPanel({
     const replyId = mensagemRespondendo?.id || undefined;
     setTexto('');
     setMensagemRespondendo(null);
+    setEmojiPickerAberto(false);
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
     await onEnviarMensagem(msg, replyId);
   }, [texto, enviando, onEnviarMensagem, mensagemRespondendo]);
+
+  // Inserir emoji no texto na posição do cursor
+  const handleInserirEmoji = useCallback((emoji: string) => {
+    const el = textareaRef.current;
+    if (el) {
+      const inicio = el.selectionStart ?? texto.length;
+      const fim = el.selectionEnd ?? texto.length;
+      const novoTexto = texto.slice(0, inicio) + emoji + texto.slice(fim);
+      setTexto(novoTexto);
+      // Reposicionar cursor após o emoji
+      requestAnimationFrame(() => {
+        el.focus();
+        const novaPosicao = inicio + emoji.length;
+        el.setSelectionRange(novaPosicao, novaPosicao);
+        // Auto-resize
+        el.style.height = 'auto';
+        el.style.height = Math.min(el.scrollHeight, 128) + 'px';
+      });
+    } else {
+      setTexto(prev => prev + emoji);
+    }
+  }, [texto]);
 
   // Callback para responder mensagem
   const handleResponder = useCallback((msg: MensagemCRM) => {
@@ -902,6 +927,20 @@ export function ChatPanel({
             </div>
           );
         })}
+
+        {/* Indicador "digitando..." durante envio */}
+        {enviando && (
+          <div className="flex items-end gap-2 px-1 animate-in fade-in slide-in-from-bottom-2 duration-200">
+            <div className="bg-slate-800 border border-slate-700/50 rounded-2xl rounded-bl-md px-4 py-2.5 shadow-sm">
+              <div className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: '0ms', animationDuration: '600ms' }} />
+                <span className="w-2 h-2 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: '150ms', animationDuration: '600ms' }} />
+                <span className="w-2 h-2 rounded-full bg-violet-400 animate-bounce" style={{ animationDelay: '300ms', animationDuration: '600ms' }} />
+              </div>
+            </div>
+            <span className="text-[10px] text-slate-500 mb-1">enviando...</span>
+          </div>
+        )}
       </div>
 
       {/* Botão flutuante: scroll para o fundo */}
@@ -1075,6 +1114,13 @@ export function ChatPanel({
                     onFechar={() => { setTemplateDropdownAberto(false); setTexto(''); textareaRef.current?.focus(); }}
                   />
                 )}
+                {/* Emoji Picker popup */}
+                {emojiPickerAberto && (
+                  <EmojiPicker
+                    onSelecionar={handleInserirEmoji}
+                    onFechar={() => setEmojiPickerAberto(false)}
+                  />
+                )}
                 <textarea
                   ref={textareaRef}
                   rows={1}
@@ -1082,8 +1128,22 @@ export function ChatPanel({
                   onChange={(e) => { handleTextoChange(e.target.value); handleTextareaInput(); }}
                   onKeyDown={handleKeyDown}
                   placeholder="Digite sua mensagem... (/ para templates)"
-                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none resize-none max-h-32"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 pr-10 text-sm text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none resize-none max-h-32"
                 />
+                {/* Botão emoji dentro do textarea */}
+                <Tooltip content="Inserir emoji" side="top">
+                  <button
+                    onClick={() => setEmojiPickerAberto(!emojiPickerAberto)}
+                    className={cn(
+                      "absolute right-2 bottom-2 p-1 rounded-lg transition",
+                      emojiPickerAberto
+                        ? "text-yellow-400 bg-slate-700"
+                        : "text-slate-500 hover:text-yellow-400 hover:bg-slate-700/50"
+                    )}
+                  >
+                    <Smile className="w-[18px] h-[18px]" />
+                  </button>
+                </Tooltip>
               </div>
             )}
             {/* Botões */}

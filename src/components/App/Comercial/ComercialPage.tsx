@@ -828,7 +828,8 @@ export function ComercialPage() {
       loadSugestoesLeads(); // Recarregar sugestões após salvar
     } catch (error) {
       console.error('Erro ao salvar experimentais:', error);
-      toast.error('Erro ao salvar experimentais');
+      const errMsg = (error as any)?.message || (error as any)?.code || 'Erro desconhecido';
+      toast.error(`Erro ao salvar experimentais: ${errMsg}`);
     } finally {
       setSaving(false);
     }
@@ -970,7 +971,7 @@ export function ComercialPage() {
         registro.idade = formData.aluno_data_nascimento 
           ? Math.floor((new Date().getTime() - formData.aluno_data_nascimento.getTime()) / (365.25 * 24 * 60 * 60 * 1000))
           : null;
-        registro.tipo_matricula = formData.tipo_matricula;
+        registro.tipo_matricula = registro.idade != null ? (registro.idade <= 11 ? 'LAMK' : 'EMLA') : formData.tipo_matricula;
         registro.tipo_aluno = formData.tipo_aluno;
         registro.professor_experimental_id = formData.teve_experimental ? formData.professor_experimental_id : null;
         registro.professor_fixo_id = formData.professor_fixo_id;
@@ -1121,10 +1122,17 @@ export function ComercialPage() {
       }
     }
 
-    // Buscar dados do período selecionado (com nome e curso para detalhamento)
+    // Buscar dados do período selecionado (com dados completos para detalhamento)
     const { data: registrosPeriodo } = await supabase
       .from('leads')
-      .select('status, quantidade, nome, data_contato, cursos:curso_interesse_id(nome), canais_origem(nome)')
+      .select(`
+        status, quantidade, nome, idade, data_contato, tipo_matricula,
+        valor_passaporte, valor_parcela,
+        cursos:curso_interesse_id(nome),
+        canais_origem(nome),
+        forma_pgto_passaporte:forma_pagamento_passaporte_id(nome),
+        forma_pgto_parcela:forma_pagamento_id(nome)
+      `)
       .eq('unidade_id', unidadeId)
       .gte('data_contato', dataInicio)
       .lte('data_contato', dataFim);
@@ -1174,8 +1182,23 @@ export function ComercialPage() {
       matriculasDetalhadas.forEach((m: any, i: number) => {
         const cursoNome = m.cursos?.nome || '-';
         const canalNome = m.canais_origem?.nome || '-';
-        texto += `  ${i + 1}. *${m.nome}* — ${cursoNome}`;
-        if (canalNome !== '-') texto += ` (${canalNome})`;
+        const escola = m.idade != null ? (m.idade <= 11 ? 'LAMK' : 'EMLA') : (m.tipo_matricula || '-');
+        const idadeTexto = m.idade ? `${m.idade} anos` : '-';
+        const passaporte = m.valor_passaporte ? `R$ ${Number(m.valor_passaporte).toFixed(2).replace('.', ',')}` : 'R$ 0,00';
+        const parcela = m.valor_parcela ? `R$ ${Number(m.valor_parcela).toFixed(2).replace('.', ',')}` : 'R$ 0,00';
+        const formaPgtoPass = m.forma_pgto_passaporte?.nome || '-';
+        const formaPgtoParcela = m.forma_pgto_parcela?.nome || '-';
+
+        texto += `\n  *${i + 1}. ${m.nome}*\n`;
+        texto += `     👤 Idade: ${idadeTexto}\n`;
+        texto += `     🎵 Curso: ${cursoNome}\n`;
+        texto += `     📲 Canal: ${canalNome}\n`;
+        texto += `     🏫 Escola: ${escola}\n`;
+        texto += `     💳 Passaporte: ${passaporte}`;
+        if (formaPgtoPass !== '-') texto += ` (${formaPgtoPass})`;
+        texto += `\n`;
+        texto += `     💰 Parcela: ${parcela}`;
+        if (formaPgtoParcela !== '-') texto += ` (${formaPgtoParcela})`;
         texto += `\n`;
       });
     }
@@ -1362,8 +1385,8 @@ export function ComercialPage() {
     const ticketMedioPar = matriculasMes > 0 ? totalParcela / matriculasMes : 0;
 
     // Contar matrículas por tipo
-    const lamkCount = matriculasDetalhadas?.filter(m => m.tipo_matricula === 'LAMK').length || 0;
-    const emlaCount = matriculasDetalhadas?.filter(m => m.tipo_matricula === 'EMLA').length || 0;
+    const lamkCount = matriculasDetalhadas?.filter(m => m.idade != null ? m.idade <= 11 : m.tipo_matricula === 'LAMK').length || 0;
+    const emlaCount = matriculasDetalhadas?.filter(m => m.idade != null ? m.idade > 11 : m.tipo_matricula === 'EMLA').length || 0;
 
     // Cabeçalho
     let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
@@ -1510,8 +1533,8 @@ export function ComercialPage() {
 
     // Calcular totais e estatísticas
     const totalMatriculas = matriculasMes.length;
-    const lamkCount = matriculasMes.filter(m => m.tipo_matricula === 'LAMK').length;
-    const emlaCount = matriculasMes.filter(m => m.tipo_matricula === 'EMLA').length;
+    const lamkCount = matriculasMes.filter(m => m.idade != null ? m.idade <= 11 : m.tipo_matricula === 'LAMK').length;
+    const emlaCount = matriculasMes.filter(m => m.idade != null ? m.idade > 11 : m.tipo_matricula === 'EMLA').length;
     
     const totalPassaporte = matriculasMes.reduce((acc, m) => acc + (m.valor_passaporte || 0), 0);
     const totalParcela = matriculasMes.reduce((acc, m) => acc + (m.valor_parcela || 0), 0);
@@ -2921,14 +2944,17 @@ export function ComercialPage() {
                           tipo="select"
                           opcoes={TIPOS_MATRICULA.map(t => ({ value: t.value, label: t.label }))}
                           placeholder="-"
-                          formatarExibicao={() => (
-                            <span className={cn(
-                              "px-2 py-0.5 rounded text-xs font-medium",
-                              mat.tipo_matricula === 'LAMK' ? 'bg-pink-500/20 text-pink-400' : 'bg-blue-500/20 text-blue-400'
-                            )}>
-                              {mat.tipo_matricula || '-'}
-                            </span>
-                          )}
+                          formatarExibicao={() => {
+                            const escolaCalc = mat.idade != null ? (mat.idade <= 11 ? 'LAMK' : 'EMLA') : (mat.tipo_matricula || '-');
+                            return (
+                              <span className={cn(
+                                "px-2 py-0.5 rounded text-xs font-medium",
+                                escolaCalc === 'LAMK' ? 'bg-pink-500/20 text-pink-400' : 'bg-blue-500/20 text-blue-400'
+                              )}>
+                                {escolaCalc}
+                              </span>
+                            );
+                          }}
                         />
                         {isAdmin && mat.unidades?.codigo && (
                           <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-600/30 text-slate-300">
@@ -2980,13 +3006,13 @@ export function ComercialPage() {
               <div className="text-center">
                 <p className="text-slate-400 text-xs mb-1">LAMK (Kids)</p>
                 <p className="text-xl font-bold text-pink-400">
-                  {matriculasMes.filter(m => m.tipo_matricula === 'LAMK').length}
+                  {matriculasMes.filter(m => m.idade != null ? m.idade <= 11 : m.tipo_matricula === 'LAMK').length}
                 </p>
               </div>
               <div className="text-center">
                 <p className="text-slate-400 text-xs mb-1">EMLA (Adulto)</p>
                 <p className="text-xl font-bold text-blue-400">
-                  {matriculasMes.filter(m => m.tipo_matricula === 'EMLA').length}
+                  {matriculasMes.filter(m => m.idade != null ? m.idade > 11 : m.tipo_matricula === 'EMLA').length}
                 </p>
               </div>
               <div className="text-center">
