@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ata de Reunião — Onboarding Andreza | LA Music</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&family=Playfair+Display:wght@700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --primary: #6C2BD9;
+    --primary-light: #8B5CF6;
+    --primary-lighter: #C4B5FD;
+    --primary-dark: #4C1D95;
+    --primary-bg: #F5F0FF;
+    --accent: #F59E0B;
+    --accent-light: #FCD34D;
+    --success: #059669;
+    --success-light: #D1FAE5;
+    --danger: #DC2626;
+    --danger-light: #FEE2E2;
+    --blue: #2563EB;
+    --blue-light: #DBEAFE;
+    --bg: #FAFAF9;
+    --card: #FFFFFF;
+    --text: #1C1917;
+    --text-muted: #6B7280;
+    --border: #E5E7EB;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    background: white;
+    color: var(--text);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* PAGE SECTIONS */
+  .page {
+    width: 100%;
+    min-height: 100vh;
+    padding: 0;
+    position: relative;
+    overflow: hidden;
+  }
+  .page-inner {
+    max-width: 100%;
+    padding: 48px 56px 72px;
+    position: relative;
+    z-index: 2;
+  }
+  .page-number {
+    position: absolute;
+    bottom: 20px;
+    right: 56px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-muted);
+  }
+  .page-logo {
+    position: absolute;
+    bottom: 20px;
+    left: 56px;
+    font-size: 13px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    color: var(--text-muted);
+  }
+  .top-line {
+    height: 4px;
+    background: linear-gradient(90deg, var(--primary), var(--accent), var(--primary-light));
+  }
+
+  /* COVER */
+  .cover {
+    min-height: 100vh;
+    background: linear-gradient(135deg, #4C1D95 0%, #6C2BD9 30%, #8B5CF6 60%, #7C3AED 100%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 60px 40px 80px;
+    position: relative;
+    overflow: hidden;
+  }
+  .cover::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+      radial-gradient(circle at 20% 80%, white 1px, transparent 1px),
+      radial-gradient(circle at 80% 20%, white 1px, transparent 1px),
+      radial-gradient(circle at 50% 50%, white 1px, transparent 1px);
+    background-size: 60px 60px, 80px 80px, 100px 100px;
+    opacity: 0.05;
+  }
+  .cover * { position: relative; z-index: 2; }
+  .cover-icon {
+    width: 96px;
+    height: 96px;
+    background: rgba(255,255,255,0.15);
+    border-radius: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 48px;
+    margin: 0 auto 32px;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.2);
+  }
+  .cover h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 42px;
+    font-weight: 800;
+    color: white;
+    margin-bottom: 12px;
+    line-height: 1.1;
+  }
+  .cover-subtitle {
+    font-size: 18px;
+    color: rgba(255,255,255,0.85);
+    font-weight: 400;
+    margin-bottom: 40px;
+  }
+  .cover-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: center;
+    margin-bottom: 24px;
+  }
+  .cover-meta-item {
+    background: rgba(255,255,255,0.12);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 12px;
+    padding: 12px 20px;
+    text-align: center;
+  }
+  .cover-meta-item .label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: rgba(255,255,255,0.6);
+    font-weight: 700;
+    margin-bottom: 2px;
+  }
+  .cover-meta-item .value {
+    font-size: 14px;
+    font-weight: 700;
+    color: white;
+  }
+  .cover-footer {
+    position: absolute;
+    bottom: 24px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 11px;
+    color: rgba(255,255,255,0.4);
+    letter-spacing: 1px;
+  }
+
+  /* SECTION HEADERS */
+  .section-tag {
+    display: inline-block;
+    background: var(--primary-bg);
+    color: var(--primary);
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    padding: 6px 16px;
+    border-radius: 50px;
+    margin-bottom: 12px;
+  }
+  .section-header { margin-bottom: 28px; }
+  .section-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 32px;
+    font-weight: 800;
+    line-height: 1.15;
+    margin-bottom: 8px;
+    color: var(--text);
+  }
+  .section-desc {
+    font-size: 15px;
+    color: var(--text-muted);
+    line-height: 1.6;
+    max-width: 640px;
+  }
+
+  /* ACTION ITEMS */
+  .action-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .action-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px 20px;
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    transition: box-shadow 0.2s;
+  }
+  .action-item:hover { box-shadow: 0 2px 12px rgba(0,0,0,0.06); }
+  .action-owner {
+    flex-shrink: 0;
+    background: var(--primary-bg);
+    color: var(--primary);
+    font-size: 10px;
+    font-weight: 800;
+    padding: 4px 10px;
+    border-radius: 50px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+    margin-top: 2px;
+  }
+  .action-owner.hugo { background: var(--blue-light); color: var(--blue); }
+  .action-owner.rayan { background: #FEF3C7; color: #92400E; }
+  .action-owner.luciano { background: var(--success-light); color: var(--success); }
+  .action-owner.anne { background: #FCE7F3; color: #BE185D; }
+  .action-owner.andreza { background: var(--primary-bg); color: var(--primary); }
+  .action-text { font-size: 13px; line-height: 1.6; flex: 1; }
+  .action-text strong { font-weight: 700; }
+
+  /* INFO CARDS */
+  .info-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+  .info-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 22px;
+    position: relative;
+    overflow: hidden;
+  }
+  .info-card .bar {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    border-radius: 2px;
+  }
+  .info-card .icon { font-size: 28px; margin-bottom: 10px; }
+  .info-card .title { font-weight: 800; font-size: 15px; margin-bottom: 6px; }
+  .info-card .desc { font-size: 12px; color: var(--text-muted); line-height: 1.6; }
+  .info-card .tags { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .tag-pill {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 50px;
+  }
+
+  /* SCHEDULE */
+  .schedule-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
+  }
+  .schedule-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    text-align: center;
+  }
+  .schedule-card .emoji { font-size: 36px; margin-bottom: 10px; }
+  .schedule-card .time { font-weight: 900; font-size: 22px; color: var(--primary); margin-bottom: 4px; }
+  .schedule-card .label { font-size: 12px; color: var(--text-muted); font-weight: 600; }
+
+  /* COMPENSATION */
+  .comp-card {
+    background: linear-gradient(135deg, var(--success-light), #ECFDF5);
+    border: 2px solid #A7F3D0;
+    border-radius: 20px;
+    padding: 32px;
+    text-align: center;
+  }
+  .comp-value {
+    font-family: 'Playfair Display', serif;
+    font-size: 48px;
+    font-weight: 900;
+    color: var(--success);
+    margin-bottom: 4px;
+  }
+  .comp-label { font-size: 14px; color: #065F46; font-weight: 600; }
+  .comp-detail { font-size: 13px; color: var(--text-muted); margin-top: 8px; line-height: 1.6; }
+
+  /* RULES */
+  .rule-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px 22px;
+  }
+  .rule-icon {
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+  }
+  .rule-title { font-weight: 700; font-size: 14px; margin-bottom: 2px; }
+  .rule-desc { font-size: 12px; color: var(--text-muted); line-height: 1.6; }
+
+  /* ALERT BOX */
+  .alert-box {
+    border-radius: 16px;
+    padding: 22px 26px;
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+  }
+  .alert-box .alert-icon { font-size: 24px; flex-shrink: 0; }
+  .alert-box .alert-title { font-weight: 800; font-size: 14px; margin-bottom: 4px; }
+  .alert-box .alert-text { font-size: 13px; line-height: 1.7; }
+
+  /* NEXT STEPS */
+  .next-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+  .next-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 16px 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .next-check {
+    flex-shrink: 0;
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    border: 2px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+  }
+  .next-text { font-size: 13px; line-height: 1.5; flex: 1; }
+  .next-owner {
+    flex-shrink: 0;
+    font-size: 10px;
+    font-weight: 800;
+    padding: 4px 10px;
+    border-radius: 50px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    white-space: nowrap;
+  }
+
+  /* CLOSING */
+  .closing-card {
+    background: linear-gradient(135deg, #4C1D95, #6C2BD9, #8B5CF6);
+    border-radius: 20px;
+    padding: 40px;
+    text-align: center;
+    color: white;
+    margin-top: 32px;
+  }
+  .closing-emoji { font-size: 40px; margin-bottom: 16px; }
+  .closing-text { font-family: 'Playfair Display', serif; font-size: 24px; font-weight: 800; margin-bottom: 8px; line-height: 1.3; }
+  .closing-sub { font-size: 14px; opacity: 0.7; }
+
+  /* DIVIDER */
+  .divider {
+    width: 60px;
+    height: 4px;
+    background: var(--primary-lighter);
+    border-radius: 2px;
+    margin: 24px 0;
+  }
+
+  /* ====== MOBILE ====== */
+  @media (max-width: 768px) {
+    .page-inner { padding: 32px 20px 64px; }
+    .page-number { right: 20px; bottom: 16px; }
+    .page-logo { left: 20px; bottom: 16px; }
+    .page { min-height: auto; overflow: visible; }
+
+    .cover { padding: 40px 20px 60px; }
+    .cover h1 { font-size: 32px; }
+    .cover-subtitle { font-size: 15px; }
+    .cover-icon { width: 72px; height: 72px; font-size: 36px; border-radius: 18px; }
+    .cover-meta { flex-direction: column; align-items: center; }
+    .cover-meta-item { width: 100%; max-width: 280px; }
+    .cover-footer { font-size: 9px; }
+
+    .section-title { font-size: 26px; }
+    .section-desc { font-size: 14px; }
+
+    .info-grid { grid-template-columns: 1fr; }
+    .schedule-grid { grid-template-columns: 1fr; }
+
+    .action-item { flex-direction: column; gap: 8px; }
+    .action-owner { align-self: flex-start; }
+
+    .comp-card { padding: 24px 20px; }
+    .comp-value { font-size: 36px; }
+
+    .rule-item { padding: 14px 16px; }
+
+    .closing-card { padding: 28px 20px; }
+    .closing-text { font-size: 20px; }
+
+    .summary-grid { grid-template-columns: repeat(2, 1fr) !important; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ==================== COVER ==================== -->
+<div class="page">
+  <div class="cover">
+    <div class="cover-icon">📋</div>
+    <h1>Ata de Reunião<br>Onboarding Andreza</h1>
+    <div class="cover-subtitle">Alinhamento do time comercial — Ferramentas, metas, processos e próximos passos</div>
+
+    <div class="cover-meta">
+      <div class="cover-meta-item">
+        <div class="label">Data</div>
+        <div class="value">11/02/2026 (Terça)</div>
+      </div>
+      <div class="cover-meta-item">
+        <div class="label">Participantes</div>
+        <div class="value">Alf · Hugo · Rayan · Luciano · Anne · Andreza</div>
+      </div>
+      <div class="cover-meta-item">
+        <div class="label">Pauta Principal</div>
+        <div class="value">Integração da Andreza ao time comercial</div>
+      </div>
+    </div>
+
+    <div class="cover-footer">CAMPO GRANDE · RECREIO · BARRA | FEVEREIRO 2026</div>
+  </div>
+</div>
+
+<!-- ==================== PAGE 2: FERRAMENTAS E SISTEMAS ==================== -->
+<div class="page">
+  <div class="top-line"></div>
+  <div class="page-inner">
+    <div class="section-header">
+      <div class="section-tag">01 — Ferramentas e Sistemas</div>
+      <h2 class="section-title">O que a Andreza vai usar no dia a dia</h2>
+      <p class="section-desc">Todas as ferramentas que serão configuradas e disponibilizadas para a Andreza operar.</p>
+    </div>
+
+    <div class="info-grid">
+      <div class="info-card">
+        <div class="bar" style="background: var(--primary);"></div>
+        <div class="icon">📊</div>
+        <div class="title">Polirede (CRM)</div>
+        <div class="desc">Acesso ao sistema para monitorar movimentação de leads, atendimentos, visitas e matrículas. O CRM será desenvolvido com dados completos de cada lead.</div>
+        <div class="tags">
+          <span class="tag-pill" style="background: var(--primary-bg); color: var(--primary);">Leads</span>
+          <span class="tag-pill" style="background: var(--primary-bg); color: var(--primary);">Visitas</span>
+          <span class="tag-pill" style="background: var(--primary-bg); color: var(--primary);">Matrículas</span>
+        </div>
+      </div>
+
+      <div class="info-card">
+        <div class="bar" style="background: var(--success);"></div>
+        <div class="icon">📱</div>
+        <div class="title">WhatsApp Business</div>
+        <div class="desc">Será instalado no telefone da Andreza para gerenciar a Mila. O Luciano fará backup antes da transferência. Conversas serão atribuídas no sistema para evitar confusão com a Vitória.</div>
+        <div class="tags">
+          <span class="tag-pill" style="background: var(--success-light); color: var(--success);">Mila</span>
+          <span class="tag-pill" style="background: var(--success-light); color: var(--success);">Atendimento</span>
+        </div>
+      </div>
+
+      <div class="info-card">
+        <div class="bar" style="background: var(--accent);"></div>
+        <div class="icon">📡</div>
+        <div class="title">Meta Switch</div>
+        <div class="desc">Ferramenta para visualizar comentários de postagens do Instagram e mensagens vindas de tráfego pago. Hugo criará o acesso para Andreza monitorar essas mensagens.</div>
+        <div class="tags">
+          <span class="tag-pill" style="background: #FEF3C7; color: #92400E;">Instagram</span>
+          <span class="tag-pill" style="background: #FEF3C7; color: #92400E;">Tráfego Pago</span>
+        </div>
+      </div>
+
+      <div class="info-card">
+        <div class="bar" style="background: var(--blue);"></div>
+        <div class="icon">🗂️</div>
+        <div class="title">Emusys (ERP)</div>
+        <div class="desc">Sistema ERP oficial da LA Music para cadastro de clientes e base de leads frios, arquivados e abandonados.</div>
+        <div class="tags">
+          <span class="tag-pill" style="background: var(--blue-light); color: var(--blue);">Cadastro</span>
+          <span class="tag-pill" style="background: var(--blue-light); color: var(--blue);">Leads frios</span>
+          <span class="tag-pill" style="background: var(--blue-light); color: var(--blue);">Arquivados</span>
+        </div>
+      </div>
+
+      <div class="info-card">
+        <div class="bar" style="background: var(--danger);"></div>
+        <div class="icon">📈</div>
+        <div class="title">LA Music Report</div>
+        <div class="desc">Sistema de Gestão e KPIs oficial da escola. Andreza terá suas planilhas e CRMs para monitorar dados, relatórios diários e mensais.</div>
+        <div class="tags">
+          <span class="tag-pill" style="background: var(--danger-light); color: var(--danger);">CRM</span>
+          <span class="tag-pill" style="background: var(--danger-light); color: var(--danger);">KPIs</span>
+          <span class="tag-pill" style="background: var(--danger-light); color: var(--danger);">Relatórios</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="alert-box" style="background: #FEF3C7; border: 2px solid #FDE68A; margin-top: 20px;">
+      <div class="alert-icon">⚠️</div>
+      <div>
+        <div class="alert-title" style="color: #92400E;">Atenção: Integração ainda em andamento</div>
+        <div class="alert-text" style="color: #78350F;">Os dados de campanha ainda não estão 100% integrados. Informações de matrícula, valor e parcela ainda não são puxadas automaticamente. Canal, curso e faixa etária devem ser adicionados manualmente ao CRM por enquanto.</div>
+      </div>
+    </div>
+
+  </div>
+  <div class="page-logo">LA MUSIC</div>
+  <div class="page-number">02</div>
+</div>
+
+<!-- ==================== PAGE 3: METAS E COMISSÃO ==================== -->
+<div class="page">
+  <div class="top-line"></div>
+  <div class="page-inner">
+    <div class="section-header">
+      <div class="section-tag">02 — Metas e Bonificação</div>
+      <h2 class="section-title">Como a Andreza será avaliada e bonificada</h2>
+      <p class="section-desc">A meta é clara: levar leads até a escola. O resto é consequência.</p>
+    </div>
+
+    <!-- Meta principal -->
+    <div style="display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap;">
+      <div style="flex: 1; min-width: 240px; background: linear-gradient(135deg, var(--primary-bg), #EDE9FE); border: 2px solid var(--primary-lighter); border-radius: 20px; padding: 32px; text-align: center;">
+        <div style="font-size: 14px; font-weight: 700; color: var(--primary); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px;">Meta de Conversão</div>
+        <div style="font-family: 'Playfair Display', serif; font-size: 56px; font-weight: 900; color: var(--primary-dark);">30%</div>
+        <div style="font-size: 13px; color: var(--text-muted); margin-top: 4px;">dos leads quentes visitam a escola</div>
+      </div>
+
+      <div style="flex: 1; min-width: 240px;">
+        <div class="comp-card">
+          <div style="font-size: 36px; margin-bottom: 8px;">💰</div>
+          <div style="font-size: 14px; font-weight: 700; color: #065F46; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px;">Bonificação por Escola</div>
+          <div class="comp-value">R$ 150</div>
+          <div class="comp-label">por unidade quando bate a meta de 30%</div>
+          <div class="comp-detail">3 unidades = até <strong>R$ 450/mês</strong> em bonificação. Sucesso da Andreza é sucesso da empresa — possibilidade de renegociação futura.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Leads quentes vs frios -->
+    <div style="display: flex; gap: 14px; margin-bottom: 20px; flex-wrap: wrap;">
+      <div style="flex: 1; min-width: 200px; background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px 22px; display: flex; align-items: flex-start; gap: 12px;">
+        <div style="font-size: 28px; flex-shrink: 0;">🔥</div>
+        <div>
+          <div style="font-weight: 700; font-size: 14px; margin-bottom: 2px;">Leads quentes = Prioridade</div>
+          <div style="font-size: 12px; color: var(--text-muted); line-height: 1.6;">Sempre atender primeiro. São os que chegam via Mila, tráfego e orgânico. Maior probabilidade de conversão.</div>
+        </div>
+      </div>
+      <div style="flex: 1; min-width: 200px; background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px 22px; display: flex; align-items: flex-start; gap: 12px;">
+        <div style="font-size: 28px; flex-shrink: 0;">❄️</div>
+        <div>
+          <div style="font-weight: 700; font-size: 14px; margin-bottom: 2px;">Leads frios = Plus (bônus)</div>
+          <div style="font-size: 12px; color: var(--text-muted); line-height: 1.6;">Atividade secundária com meta diária. Reativações contam como plus e somam na meta, mas não afetam a taxa de conversão de quentes.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="alert-box" style="background: linear-gradient(135deg, var(--success-light), #ECFDF5); border: 2px solid #A7F3D0;">
+      <div class="alert-icon">💡</div>
+      <div>
+        <div class="alert-title" style="color: #065F46;">Exemplo: 25 novos + 5 frios = 30 visitas = Meta batida!</div>
+        <div class="alert-text" style="color: var(--text-muted);">Sem limite para o bônus de reativação. Priorizar leads que marcaram aula experimental e não compareceram — são os com maior chance de retorno.</div>
+      </div>
+    </div>
+
+  </div>
+  <div class="page-logo">LA MUSIC</div>
+  <div class="page-number">03</div>
+</div>
+
+<!-- ==================== PAGE 4: MÉTRICAS E TAGUEAMENTO ==================== -->
+<div class="page">
+  <div class="top-line"></div>
+  <div class="page-inner">
+    <div class="section-header">
+      <div class="section-tag">03 — Métricas e Monitoramento</div>
+      <h2 class="section-title">O que precisa ser tagueado e monitorado</h2>
+      <p class="section-desc">Cada lead deve ter todos os campos preenchidos. Sem dados, não tem como otimizar.</p>
+    </div>
+
+    <div class="info-grid" style="margin-bottom: 20px;">
+      <div class="info-card">
+        <div class="bar" style="background: var(--primary);"></div>
+        <div class="icon">📡</div>
+        <div class="title">Canal de Origem</div>
+        <div class="desc">Instagram, Google, tráfego pago, orgânico. Rayan e Hugo vão definir a nomenclatura padronizada dos canais.</div>
+        <div class="tags">
+          <span class="tag-pill" style="background: var(--primary-bg); color: var(--primary);">Nomenclatura em definição</span>
+        </div>
+      </div>
+
+      <div class="info-card">
+        <div class="bar" style="background: var(--accent);"></div>
+        <div class="icon">🎸</div>
+        <div class="title">Curso de Interesse</div>
+        <div class="desc">Qual instrumento ou curso o lead quer. A Mila nem sempre taguea — Andreza garante esse dado.</div>
+      </div>
+
+      <div class="info-card">
+        <div class="bar" style="background: var(--blue);"></div>
+        <div class="icon">👶🧑</div>
+        <div class="title">Faixa Etária</div>
+        <div class="desc">LAMK (até 11 anos) ou EMLA (12+). Impacta diretamente no tipo de atendimento.</div>
+      </div>
+
+      <div class="info-card">
+        <div class="bar" style="background: var(--success);"></div>
+        <div class="icon">💰</div>
+        <div class="title">Sabe o Preço?</div>
+        <div class="desc">Rastrear se o cliente já conhece o valor ou não. Essencial para análise de conversão — quem sabe o preço e vai, converte diferente.</div>
+      </div>
+    </div>
+
+    <div class="info-grid" style="grid-template-columns: 1fr; margin-bottom: 20px;">
+      <div class="info-card">
+        <div class="bar" style="background: var(--danger);"></div>
+        <div style="display: flex; align-items: flex-start; gap: 14px;">
+          <div class="icon" style="margin-bottom: 0;">🚫</div>
+          <div>
+            <div class="title">Motivo de Não Comparecimento</div>
+            <div class="desc">Registrar o motivo ESPECÍFICO. A palavra "outro" não é permitida — motivos devem ser detalhados.</div>
+            <div class="tags">
+              <span class="tag-pill" style="background: var(--danger-light); color: var(--danger);">Esqueceu</span>
+              <span class="tag-pill" style="background: var(--danger-light); color: var(--danger);">Horário</span>
+              <span class="tag-pill" style="background: var(--danger-light); color: var(--danger);">Achou longe</span>
+              <span class="tag-pill" style="background: var(--danger-light); color: var(--danger);">Achou caro</span>
+              <span class="tag-pill" style="background: var(--danger-light); color: var(--danger);">Mudou de ideia</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 14px; flex-wrap: wrap;">
+      <div style="flex: 1; min-width: 200px;" class="rule-item">
+        <div class="rule-icon" style="background: var(--primary-bg);">📅</div>
+        <div>
+          <div class="rule-title">Taxa de Agendamento</div>
+          <div class="rule-desc">Monitorar quantos leads agendam visita ou aula experimental</div>
+        </div>
+      </div>
+      <div style="flex: 1; min-width: 200px;" class="rule-item">
+        <div class="rule-icon" style="background: var(--danger-light);">❌</div>
+        <div>
+          <div class="rule-title">Taxa de Desmarcação</div>
+          <div class="rule-desc">Quantos marcam e depois cancelam — monitorar de perto</div>
+        </div>
+      </div>
+      <div style="flex: 1; min-width: 200px;" class="rule-item">
+        <div class="rule-icon" style="background: var(--success-light);">✅</div>
+        <div>
+          <div class="rule-title">Taxa de Comparecimento</div>
+          <div class="rule-desc">Quantos agendados realmente vão à escola</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <div class="page-logo">LA MUSIC</div>
+  <div class="page-number">04</div>
+</div>
+
+<!-- ==================== PAGE 5: HORÁRIO E ORGANIZAÇÃO ==================== -->
+<div class="page">
+  <div class="top-line"></div>
+  <div class="page-inner">
+    <div class="section-header">
+      <div class="section-tag">04 — Horário e Organização</div>
+      <h2 class="section-title">Como funciona a rotina da Andreza</h2>
+      <p class="section-desc">Horários, disponibilidade e modelo de trabalho.</p>
+    </div>
+
+    <div class="schedule-grid" style="margin-bottom: 24px;">
+      <div class="schedule-card">
+        <div class="emoji">🏢</div>
+        <div class="time">11h — 20h</div>
+        <div class="label">Segunda a Sexta</div>
+        <div style="font-size: 11px; color: var(--text-muted); margin-top: 4px;">Com pausa pra almoço e buscar filho na creche</div>
+      </div>
+      <div class="schedule-card">
+        <div class="emoji">📅</div>
+        <div class="time">9h — 14h</div>
+        <div class="label">Sábados</div>
+        
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px;">
+      <div class="rule-item">
+        <div class="rule-icon" style="background: #FEF3C7;">⏰</div>
+        <div>
+          <div class="rule-title">Disponibilidade antes das 11h</div>
+          <div class="rule-desc">Para tarefas urgentes, como monitoramento de mensagens da Mila que chegam de madrugada ou manhã cedo.</div>
+        </div>
+      </div>
+      <div class="rule-item">
+        <div class="rule-icon" style="background: var(--primary-bg);">🏠</div>
+        <div>
+          <div class="rule-title">Modelo 90% Home Office</div>
+          <div class="rule-desc">Trabalho remoto como padrão. Presencial em reuniões, feirões de matrícula e campanhas especiais.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="alert-box" style="background: linear-gradient(135deg, var(--primary-bg), #EDE9FE); border: 2px solid var(--primary-lighter);">
+      <div class="alert-icon">🎭</div>
+      <div>
+        <div class="alert-title" style="color: var(--primary-dark);">Carnaval — Trabalho mantido em Home Office</div>
+        <div class="alert-text" style="color: var(--text-muted);">O tráfego pago continua rodando durante o carnaval. Andreza trabalha de casa monitorando leads. Hugo vai verificar com Mateus a configuração de recesso para agendamento durante o período.</div>
+      </div>
+    </div>
+
+    <div style="height: 28px;"></div>
+    <div class="divider"></div>
+    <div style="height: 20px;"></div>
+
+    <div class="section-header" style="margin-bottom: 20px;">
+      <div class="section-tag">05 — Regra Nova</div>
+      <h2 class="section-title">Taxa de compromisso para no-show</h2>
+    </div>
+
+    <div style="display: flex; gap: 16px; align-items: center; flex-wrap: wrap;">
+      <div style="display: flex; gap: 12px; flex-shrink: 0; flex-wrap: wrap;">
+        <div style="background: var(--danger-light); border: 2px solid #FECACA; border-radius: 16px; padding: 20px 24px; text-align: center;">
+          <div style="font-size: 24px; margin-bottom: 4px;">🧪</div>
+          <div style="font-family: 'Playfair Display', serif; font-size: 32px; font-weight: 900; color: var(--danger);">R$ 100</div>
+          <div style="font-size: 10px; font-weight: 700; color: var(--danger); text-transform: uppercase; letter-spacing: 1px;">Recreio · Barra</div>
+        </div>
+        <div style="background: var(--danger-light); border: 2px solid #FECACA; border-radius: 16px; padding: 20px 24px; text-align: center;">
+          <div style="font-size: 24px; margin-bottom: 4px;">🧪</div>
+          <div style="font-family: 'Playfair Display', serif; font-size: 32px; font-weight: 900; color: var(--danger);">R$ 70</div>
+          <div style="font-size: 10px; font-weight: 700; color: var(--danger); text-transform: uppercase; letter-spacing: 1px;">Campo Grande</div>
+        </div>
+      </div>
+      <div style="flex: 1; min-width: 200px;">
+        <div style="font-weight: 700; font-size: 15px; margin-bottom: 6px;">Cobrar na segunda desmarcação</div>
+        <div style="font-size: 13px; color: var(--text-muted); line-height: 1.7;">Implementar como teste: na segunda vez que o lead desmarcar uma aula experimental, cobrar taxa de compromisso. R$ 100 no Recreio e Barra, R$ 70 em Campo Grande. Objetivo: reduzir o no-show e valorizar o agendamento.</div>
+      </div>
+    </div>
+
+  </div>
+  <div class="page-logo">LA MUSIC</div>
+  <div class="page-number">05</div>
+</div>
+
+<!-- ==================== PAGE 6: PROCESSOS E TREINAMENTO ==================== -->
+<div class="page">
+  <div class="top-line"></div>
+  <div class="page-inner">
+    <div class="section-header">
+      <div class="section-tag">06 — Processos e Treinamento</div>
+      <h2 class="section-title">Regras e boas práticas do atendimento</h2>
+      <p class="section-desc">O que foi alinhado na reunião sobre como a Andreza deve operar no dia a dia.</p>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 12px; margin-bottom: 24px;">
+      <div class="rule-item">
+        <div class="rule-icon" style="background: var(--primary-bg);">📝</div>
+        <div>
+          <div class="rule-title">Anotações completas em cada lead</div>
+          <div class="rule-desc">Incluir informações de preço, histórico de contato e observações relevantes. Tudo registrado no CRM.</div>
+        </div>
+      </div>
+      <div class="rule-item">
+        <div class="rule-icon" style="background: #FEF3C7;">👶</div>
+        <div>
+          <div class="rule-title">Observações detalhadas para o professor</div>
+          <div class="rule-desc">Para crianças: detalhar características, necessidades e preferências. O professor precisa estar preparado antes da aula experimental.</div>
+        </div>
+      </div>
+      <div class="rule-item">
+        <div class="rule-icon" style="background: var(--danger-light);">🚫</div>
+        <div>
+          <div class="rule-title">"Outro" não é permitido</div>
+          <div class="rule-desc">Motivos de falta, canal, curso — tudo deve ser específico. Nada de respostas genéricas. Se o motivo não existe na lista, criar um novo.</div>
+        </div>
+      </div>
+      <div class="rule-item">
+        <div class="rule-icon" style="background: var(--success-light);">👁️</div>
+        <div>
+          <div class="rule-title">Aprender observando Vitória, Cleiton, Kailane e Mila</div>
+          <div class="rule-desc">Andreza vai acompanhar o atendimento de Vitória, Cleiton, Kailane e a Mila como treinamento prático. Além de aprender, pode dar feedback construtivo sobre o processo.</div>
+        </div>
+      </div>
+      <div class="rule-item">
+        <div class="rule-icon" style="background: var(--blue-light);">📞</div>
+        <div>
+          <div class="rule-title">Mensagens da Vitória também no telefone da Andreza</div>
+          <div class="rule-desc">Hugo vai configurar para as conversas da Vitória também aparecerem no aparelho da Andreza, garantindo visibilidade total do funil.</div>
+        </div>
+      </div>
+      <div class="rule-item">
+        <div class="rule-icon" style="background: var(--primary-bg);">🏷️</div>
+        <div>
+          <div class="rule-title">Atribuição de conversas no sistema</div>
+          <div class="rule-desc">Hugo vai configurar a atribuição de conversas para evitar confusão entre Andreza e Vitória atendendo o mesmo lead.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="alert-box" style="background: linear-gradient(135deg, #F5F0FF, #EDE9FE); border: 2px solid var(--primary-lighter);">
+      <div class="alert-icon">🔄</div>
+      <div>
+        <div class="alert-title" style="color: var(--primary-dark);">Treinamento contínuo</div>
+        <div class="alert-text" style="color: var(--text-muted);">Andreza receberá treinamento progressivo sobre ferramentas e etiquetagem de leads. Rayan agenda reunião específica para treinamento do Meta Switch e do funil de atendimento.</div>
+      </div>
+    </div>
+
+  </div>
+  <div class="page-logo">LA MUSIC</div>
+  <div class="page-number">06</div>
+</div>
+
+<!-- ==================== PAGE 7: ITENS DE AÇÃO ==================== -->
+<div class="page">
+  <div class="top-line"></div>
+  <div class="page-inner">
+    <div class="section-header">
+      <div class="section-tag">07 — Itens de Ação</div>
+      <h2 class="section-title">Quem faz o quê<br>e até quando</h2>
+      <p class="section-desc">Todas as tarefas definidas na reunião, organizadas por responsável.</p>
+    </div>
+
+    <!-- Hugo -->
+    <div style="margin-bottom: 20px;">
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+        <div style="width: 36px; height: 36px; background: var(--blue-light); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px;">🛠️</div>
+        <div style="font-weight: 800; font-size: 16px;">Hugo</div>
+        <div style="font-size: 11px; color: var(--text-muted);">— Coordenador de Tecnologia</div>
+      </div>
+      <div class="action-grid">
+        <div class="action-item">
+          <div class="action-owner hugo">Hugo</div>
+          <div class="action-text">Integrar dados de campanha ao novo sistema de gestão e <strong>criar kanban para Andreza</strong></div>
+        </div>
+        <div class="action-item">
+          <div class="action-owner hugo">Hugo</div>
+          <div class="action-text">Criar ferramenta de acesso ao <strong>Meta Switch</strong> para Andreza monitorar mensagens de tráfego pago</div>
+        </div>
+        <div class="action-item">
+          <div class="action-owner hugo">Hugo</div>
+          <div class="action-text">Configurar envio de <strong>mensagens da Vitória</strong> também para telefone de Andreza</div>
+        </div>
+        <div class="action-item">
+          <div class="action-owner hugo">Hugo</div>
+          <div class="action-text"><strong>Atribuir conversas</strong> no sistema para evitar confusão entre Andreza e Vitória</div>
+        </div>
+        <div class="action-item">
+          <div class="action-owner hugo">Hugo</div>
+          <div class="action-text">Verificar com Mateus <strong>configuração de recesso</strong> para agendamento durante carnaval</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rayan -->
+    <div style="margin-bottom: 20px;">
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+        <div style="width: 36px; height: 36px; background: #FEF3C7; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px;">🎯</div>
+        <div style="font-weight: 800; font-size: 16px;">Rayan</div>
+      </div>
+      <div class="action-grid">
+        <div class="action-item">
+          <div class="action-owner rayan">Rayan</div>
+          <div class="action-text">Definir <strong>nomenclatura de canais</strong> (Instagram, Google) para métricas de tráfego pago — junto com Hugo</div>
+        </div>
+        <div class="action-item">
+          <div class="action-owner rayan">Rayan</div>
+          <div class="action-text">Agendar <strong>reunião com Andreza</strong> para treinamento do Meta Switch</div>
+        </div>
+        <div class="action-item">
+          <div class="action-owner rayan">Rayan</div>
+          <div class="action-text">Fornecer <strong>treinamento de atendimento</strong> e funil de leads para Andreza</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Luciano -->
+    <div style="margin-bottom: 20px;">
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+        <div style="width: 36px; height: 36px; background: var(--success-light); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px;">📱</div>
+        <div style="font-weight: 800; font-size: 16px;">Luciano</div>
+      </div>
+      <div class="action-grid">
+        <div class="action-item">
+          <div class="action-owner luciano">Luciano</div>
+          <div class="action-text">Fazer <strong>backup do WhatsApp da Mila</strong> antes de transferir para telefone de Andreza</div>
+        </div>
+        <div class="action-item">
+          <div class="action-owner luciano">Luciano</div>
+          <div class="action-text">Criar <strong>CRM Completo</strong> dentro do sistema LA Music Report</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Anne -->
+    <div>
+      <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 12px;">
+        <div style="width: 36px; height: 36px; background: #FCE7F3; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px;">👥</div>
+        <div style="font-weight: 800; font-size: 16px;">Anne</div>
+      </div>
+      <div class="action-grid">
+        <div class="action-item">
+          <div class="action-owner anne">Anne</div>
+          <div class="action-text">Adicionar Andreza aos <strong>grupos, canal e comunidade</strong> da empresa</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <div class="page-logo">LA MUSIC</div>
+  <div class="page-number">07</div>
+</div>
+
+<!-- ==================== PAGE 8: ENCERRAMENTO ==================== -->
+<div class="page">
+  <div class="top-line"></div>
+  <div class="page-inner">
+    <div class="section-header">
+      <div class="section-tag">08 — Resumo e Próximos Passos</div>
+      <h2 class="section-title">Tudo alinhado. Agora é execução.</h2>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-bottom: 28px;" class="summary-grid">
+      <div style="background: var(--primary-bg); border-radius: 16px; padding: 22px; text-align: center;">
+        <div style="font-size: 32px; margin-bottom: 8px;">🎯</div>
+        <div style="font-weight: 800; font-size: 28px; color: var(--primary-dark);">30%</div>
+        <div style="font-size: 12px; color: var(--text-muted);">Meta de conversão de visitas</div>
+      </div>
+      <div style="background: var(--success-light); border-radius: 16px; padding: 22px; text-align: center;">
+        <div style="font-size: 32px; margin-bottom: 8px;">💰</div>
+        <div style="font-weight: 800; font-size: 28px; color: var(--success);">R$ 150</div>
+        <div style="font-size: 12px; color: var(--text-muted);">por escola ao bater a meta</div>
+      </div>
+      <div style="background: var(--blue-light); border-radius: 16px; padding: 22px; text-align: center;">
+        <div style="font-size: 32px; margin-bottom: 8px;">⏱️</div>
+        <div style="font-weight: 800; font-size: 28px; color: var(--blue);">15 min</div>
+        <div style="font-size: 12px; color: var(--text-muted);">tempo máximo de resposta</div>
+      </div>
+      <div style="background: #FEF3C7; border-radius: 16px; padding: 22px; text-align: center;">
+        <div style="font-size: 32px; margin-bottom: 8px;">🏷️</div>
+        <div style="font-weight: 800; font-size: 28px; color: #92400E;">100%</div>
+        <div style="font-size: 12px; color: var(--text-muted);">dos leads tagueados no CRM</div>
+      </div>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 28px;">
+      <div style="font-weight: 800; font-size: 15px; margin-bottom: 4px;">📌 Próximos passos imediatos:</div>
+      <div class="next-item">
+        <div class="next-check" style="background: var(--blue-light);">1</div>
+        <div class="next-text"><strong>Hugo</strong> configura kanban, Meta Switch, atribuição de conversas e acesso WhatsApp</div>
+      </div>
+      <div class="next-item">
+        <div class="next-check" style="background: #FEF3C7;">2</div>
+        <div class="next-text"><strong>Luciano</strong> faz backup do WhatsApp da Mila antes da transferência</div>
+      </div>
+      <div class="next-item">
+        <div class="next-check" style="background: #FEF3C7;">3</div>
+        <div class="next-text"><strong>Rayan</strong> agenda treinamento de Meta Switch e funil com Andreza</div>
+      </div>
+      <div class="next-item">
+        <div class="next-check" style="background: #FCE7F3;">4</div>
+        <div class="next-text"><strong>Anne</strong> adiciona Andreza nos grupos e comunidade</div>
+      </div>
+      <div class="next-item">
+        <div class="next-check" style="background: var(--primary-bg);">5</div>
+        <div class="next-text"><strong>Rayan + Hugo</strong> definem nomenclatura de canais para métricas</div>
+      </div>
+      <div class="next-item">
+        <div class="next-check" style="background: var(--success-light);">6</div>
+        <div class="next-text"><strong>Andreza</strong> acompanha atendimento da Vitória como treinamento prático</div>
+      </div>
+    </div>
+
+    <div class="closing-card">
+      <div class="closing-emoji">🎶</div>
+      <div class="closing-text">
+        Time alinhado. Ferramentas definidas.<br>
+        Agora é executar e trazer resultado.
+      </div>
+      <div class="closing-sub">Grupo LA Music — Campo Grande · Recreio · Barra</div>
+    </div>
+
+    <div style="height: 24px"></div>
+    <div style="text-align: center; font-size: 12px; color: var(--text-muted);">
+      Ata de Reunião · 11/02/2026 · Time Comercial LA Music
+    </div>
+  </div>
+  <div class="page-logo">LA MUSIC</div>
+  <div class="page-number">08</div>
+</div>
+
+</body>
+</html>

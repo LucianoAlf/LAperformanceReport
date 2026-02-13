@@ -1,0 +1,1609 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Andreza — Assistente de Pré-atendimento | LA Music</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&family=Playfair+Display:wght@700;800;900&display=swap" rel="stylesheet">
+<style>
+  @page { margin: 0; size: A4; }
+  :root {
+    --primary: #6C2BD9;
+    --primary-light: #8B5CF6;
+    --primary-lighter: #C4B5FD;
+    --primary-dark: #4C1D95;
+    --primary-bg: #F5F0FF;
+    --accent: #F59E0B;
+    --accent-light: #FCD34D;
+    --success: #059669;
+    --success-light: #D1FAE5;
+    --danger: #DC2626;
+    --danger-light: #FEE2E2;
+    --blue: #2563EB;
+    --blue-light: #DBEAFE;
+    --bg: #FAFAF9;
+    --card: #FFFFFF;
+    --text: #1C1917;
+    --text-muted: #6B7280;
+    --border: #E5E7EB;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    background: white;
+    color: var(--text);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* PAGE SECTIONS */
+  .page {
+    width: 100%;
+    min-height: 100vh;
+    padding: 0;
+    page-break-after: always;
+    position: relative;
+    overflow: hidden;
+  }
+  .page:last-child { page-break-after: auto; }
+  .page-inner {
+    max-width: 100%;
+    padding: 48px 56px 72px;
+    position: relative;
+    z-index: 2;
+  }
+
+  /* ====== PAGE 1: HERO / COVER ====== */
+  .cover {
+    background: linear-gradient(155deg, #4C1D95 0%, #6D28D9 35%, #7C3AED 60%, #8B5CF6 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: white;
+    position: relative;
+  }
+  .cover-bg-pattern {
+    position: absolute;
+    inset: 0;
+    opacity: 0.07;
+    background-image: 
+      radial-gradient(circle at 20% 80%, white 1px, transparent 1px),
+      radial-gradient(circle at 80% 20%, white 1px, transparent 1px),
+      radial-gradient(circle at 50% 50%, white 1.5px, transparent 1.5px);
+    background-size: 60px 60px, 80px 80px, 100px 100px;
+  }
+  .cover-glow {
+    position: absolute;
+    width: 500px;
+    height: 500px;
+    border-radius: 50%;
+    filter: blur(120px);
+    opacity: 0.15;
+  }
+  .cover-glow-1 { background: #F59E0B; top: -100px; right: -100px; }
+  .cover-glow-2 { background: #8B5CF6; bottom: -150px; left: -100px; }
+  .cover-content { position: relative; z-index: 2; }
+  .cover-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.2);
+    padding: 10px 24px;
+    border-radius: 50px;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 36px;
+    backdrop-filter: blur(10px);
+  }
+  .cover-avatar {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #F59E0B, #FBBF24);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 64px;
+    margin: 0 auto 28px;
+    border: 5px solid rgba(255,255,255,0.25);
+    box-shadow: 0 16px 48px rgba(0,0,0,0.3);
+  }
+  .cover h1 {
+    font-family: 'Playfair Display', serif;
+    font-size: 56px;
+    font-weight: 900;
+    line-height: 1.1;
+    margin-bottom: 12px;
+    letter-spacing: -1px;
+  }
+  .cover-subtitle {
+    font-size: 22px;
+    font-weight: 600;
+    opacity: 0.9;
+    margin-bottom: 8px;
+  }
+  .cover-role {
+    font-size: 15px;
+    opacity: 0.6;
+    font-weight: 400;
+    margin-bottom: 48px;
+  }
+  .cover-info-row {
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+    flex-wrap: wrap;
+  }
+  .cover-info-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255,255,255,0.1);
+    border: 1px solid rgba(255,255,255,0.15);
+    padding: 12px 20px;
+    border-radius: 12px;
+    backdrop-filter: blur(10px);
+  }
+  .cover-info-item .icon { font-size: 20px; }
+  .cover-info-item .label { font-size: 11px; opacity: 0.6; text-transform: uppercase; letter-spacing: 1px; font-weight: 600; }
+  .cover-info-item .value { font-size: 14px; font-weight: 700; }
+  .cover-footer {
+    position: absolute;
+    bottom: 32px;
+    left: 0;
+    right: 0;
+    text-align: center;
+    font-size: 12px;
+    opacity: 0.4;
+    letter-spacing: 1px;
+    z-index: 2;
+  }
+
+  /* ====== SHARED SECTION STYLES ====== */
+  .section-header {
+    margin-bottom: 32px;
+  }
+  .section-tag {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 2.5px;
+    color: var(--primary);
+    background: var(--primary-bg);
+    padding: 6px 16px;
+    border-radius: 6px;
+    margin-bottom: 14px;
+  }
+  .section-title {
+    font-family: 'Playfair Display', serif;
+    font-size: 34px;
+    font-weight: 800;
+    color: var(--text);
+    line-height: 1.2;
+    margin-bottom: 8px;
+  }
+  .section-desc {
+    font-size: 15px;
+    color: var(--text-muted);
+    max-width: 520px;
+    line-height: 1.7;
+  }
+  .page-number {
+    position: absolute;
+    bottom: 28px;
+    right: 56px;
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+  .page-logo {
+    position: absolute;
+    bottom: 28px;
+    left: 56px;
+    font-size: 12px;
+    color: var(--text-muted);
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
+  .top-line {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 5px;
+    background: linear-gradient(90deg, var(--primary), var(--primary-light), var(--accent));
+  }
+
+  /* ====== PAGE 2: MISSÃO + PROBLEMA ====== */
+  .mission-box {
+    background: linear-gradient(135deg, #F5F0FF 0%, #EDE9FE 100%);
+    border: 2px solid var(--primary-lighter);
+    border-radius: 20px;
+    padding: 36px 40px;
+    margin-bottom: 32px;
+    position: relative;
+  }
+  .mission-box::before {
+    content: '"';
+    font-family: 'Playfair Display', serif;
+    font-size: 120px;
+    color: var(--primary-lighter);
+    position: absolute;
+    top: -10px;
+    left: 24px;
+    line-height: 1;
+  }
+  .mission-quote {
+    font-family: 'Playfair Display', serif;
+    font-size: 28px;
+    color: var(--primary-dark);
+    line-height: 1.4;
+    margin-bottom: 16px;
+    position: relative;
+    z-index: 1;
+    padding-left: 8px;
+  }
+  .mission-text {
+    font-size: 15px;
+    color: var(--text-muted);
+    line-height: 1.8;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* CHART / FUNNEL */
+  .funnel-section {
+    display: flex;
+    gap: 24px;
+    align-items: stretch;
+  }
+  .funnel-visual {
+    flex: 1;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  .funnel-title {
+    font-weight: 800;
+    font-size: 14px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--text-muted);
+    margin-bottom: 20px;
+    text-align: center;
+  }
+  .funnel-bars {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .funnel-bar-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .funnel-bar-label {
+    width: 100px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .funnel-bar-track {
+    flex: 1;
+    height: 32px;
+    background: #F3F4F6;
+    border-radius: 8px;
+    overflow: hidden;
+    position: relative;
+  }
+  .funnel-bar-fill {
+    height: 100%;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding-right: 10px;
+    font-size: 13px;
+    font-weight: 800;
+    color: white;
+    min-width: 50px;
+  }
+  .funnel-bar-fill.leads { background: linear-gradient(90deg, #6D28D9, #8B5CF6); width: 100%; }
+  .funnel-bar-fill.respond { background: linear-gradient(90deg, #7C3AED, #A78BFA); width: 65%; }
+  .funnel-bar-fill.visit { background: linear-gradient(90deg, #DC2626, #EF4444); width: 10%; }
+  .funnel-bar-fill.enroll { background: linear-gradient(90deg, #059669, #10B981); width: 8%; }
+
+  .stats-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    flex: 0 0 220px;
+  }
+  .stat-card {
+    border-radius: 14px;
+    padding: 20px;
+    text-align: center;
+    border: 1px solid var(--border);
+  }
+  .stat-card.red { background: var(--danger-light); border-color: #FECACA; }
+  .stat-card.green { background: var(--success-light); border-color: #A7F3D0; }
+  .stat-card.purple { background: var(--primary-bg); border-color: var(--primary-lighter); }
+  .stat-number {
+    font-size: 36px;
+    font-weight: 900;
+    line-height: 1.1;
+  }
+  .stat-card.red .stat-number { color: var(--danger); }
+  .stat-card.green .stat-number { color: var(--success); }
+  .stat-card.purple .stat-number { color: var(--primary); }
+  .stat-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+  .stat-sub {
+    font-size: 10px;
+    color: var(--text-muted);
+    opacity: 0.7;
+    margin-top: 2px;
+  }
+
+  .problem-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--danger-light);
+    color: var(--danger);
+    font-size: 12px;
+    font-weight: 700;
+    padding: 6px 14px;
+    border-radius: 8px;
+    margin-top: 16px;
+  }
+
+  /* ====== PAGE 3: FLUXO / ROADMAP ====== */
+  .roadmap {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    position: relative;
+    padding-left: 40px;
+  }
+  .roadmap::before {
+    content: '';
+    position: absolute;
+    left: 19px;
+    top: 24px;
+    bottom: 24px;
+    width: 3px;
+    background: linear-gradient(to bottom, var(--blue), var(--primary), var(--success));
+    border-radius: 2px;
+  }
+  .roadmap-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 24px;
+    position: relative;
+    padding: 12px 0;
+  }
+  .roadmap-dot {
+    position: absolute;
+    left: -40px;
+    top: 18px;
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    z-index: 2;
+    border: 3px solid white;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+  .roadmap-dot.lead { background: var(--blue-light); }
+  .roadmap-dot.bot { background: #DBEAFE; }
+  .roadmap-dot.fork { background: #FEF3C7; }
+  .roadmap-dot.andreza { background: var(--primary-bg); border-color: var(--primary-lighter); }
+  .roadmap-dot.consultor { background: var(--success-light); }
+  .roadmap-dot.win { background: linear-gradient(135deg, #FCD34D, #F59E0B); }
+  .roadmap-card {
+    flex: 1;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px 22px;
+    transition: all 0.2s;
+  }
+  .roadmap-card.highlight {
+    border: 2px solid var(--primary-light);
+    background: linear-gradient(135deg, #FAFAFE, #F5F0FF);
+    box-shadow: 0 4px 20px rgba(108,43,217,0.08);
+  }
+  .roadmap-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+  }
+  .roadmap-card-title {
+    font-weight: 800;
+    font-size: 15px;
+  }
+  .tag {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 50px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .tag-blue { background: var(--blue-light); color: var(--blue); }
+  .tag-purple { background: var(--primary-bg); color: var(--primary); }
+  .tag-green { background: var(--success-light); color: var(--success); }
+  .tag-amber { background: #FEF3C7; color: #92400E; }
+  .roadmap-card-desc {
+    font-size: 13px;
+    color: var(--text-muted);
+    line-height: 1.6;
+  }
+
+  .andreza-callout {
+    background: linear-gradient(135deg, #FEF3C7, #FFFBEB);
+    border: 1px solid #FDE68A;
+    border-radius: 14px;
+    padding: 20px 24px;
+    margin-top: 24px;
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+  }
+  .andreza-callout .icon { font-size: 24px; flex-shrink: 0; }
+  .andreza-callout .text { font-size: 14px; font-weight: 700; color: #92400E; line-height: 1.6; }
+
+  /* ====== PAGE 4: ATRIBUIÇÕES ====== */
+  .attr-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+  .attr-card {
+    background: var(--card);
+    border-radius: 16px;
+    padding: 24px;
+    border: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+  .attr-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    border-radius: 2px;
+  }
+  .attr-card:nth-child(1)::before { background: var(--danger); }
+  .attr-card:nth-child(2)::before { background: var(--primary); }
+  .attr-card:nth-child(3)::before { background: var(--accent); }
+  .attr-card:nth-child(4)::before { background: var(--success); }
+  .attr-card:nth-child(5)::before { background: var(--blue); }
+  .attr-card.full-width { grid-column: 1 / -1; }
+  .attr-icon { font-size: 28px; margin-bottom: 10px; }
+  .attr-title { font-weight: 800; font-size: 15px; margin-bottom: 6px; }
+  .attr-desc { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+
+  /* ====== PAGE 5: EQUIPE + CHECKLIST + METAS ====== */
+  .team-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 14px;
+    margin-bottom: 36px;
+  }
+  .team-card {
+    background: var(--card);
+    border-radius: 14px;
+    padding: 20px;
+    border: 1px solid var(--border);
+    text-align: center;
+  }
+  .team-card.highlight-card {
+    border: 2px solid var(--primary-light);
+    background: var(--primary-bg);
+  }
+  .team-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 24px;
+    margin: 0 auto 10px;
+  }
+  .team-name { font-weight: 800; font-size: 14px; }
+  .team-role { font-size: 11px; color: var(--text-muted); font-weight: 500; margin-top: 2px; }
+  .team-unit { font-size: 10px; color: var(--primary); font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; }
+
+  /* CHECKLIST */
+  .checklist-section {
+    display: flex;
+    gap: 24px;
+  }
+  .checklist-col {
+    flex: 1;
+  }
+  .checklist-title {
+    font-weight: 800;
+    font-size: 16px;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .checklist {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .check-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .check-box {
+    width: 22px;
+    height: 22px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .check-box.empty {
+    border: 2px solid var(--border);
+    background: white;
+  }
+  .check-box.filled {
+    background: var(--success);
+    color: white;
+    border: none;
+  }
+  .check-text { flex: 1; color: var(--text); font-weight: 500; }
+  .check-text .sub { display: block; font-size: 11px; color: var(--text-muted); font-weight: 400; margin-top: 2px; }
+
+  /* ====== PAGE 6: METAS + ENCERRAMENTO ====== */
+  .meta-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+  .meta-item {
+    background: var(--card);
+    border-radius: 14px;
+    padding: 18px 22px;
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .meta-icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+  .meta-icon.speed { background: var(--blue-light); }
+  .meta-icon.target { background: var(--primary-bg); }
+  .meta-icon.check { background: var(--success-light); }
+  .meta-icon.alert { background: var(--danger-light); }
+  .meta-info { flex: 1; }
+  .meta-title { font-weight: 700; font-size: 14px; }
+  .meta-desc { font-size: 12px; color: var(--text-muted); }
+  .meta-value {
+    font-weight: 900;
+    font-size: 14px;
+    color: var(--primary);
+    flex-shrink: 0;
+    text-align: right;
+    padding: 6px 14px;
+    background: var(--primary-bg);
+    border-radius: 8px;
+  }
+  .meta-value.red { color: var(--danger); background: var(--danger-light); }
+
+  /* SUCCESS CARD */
+  .success-box {
+    background: linear-gradient(135deg, #ECFDF5, #D1FAE5);
+    border: 2px solid #A7F3D0;
+    border-radius: 20px;
+    padding: 32px;
+    margin-bottom: 28px;
+  }
+  .success-box h3 {
+    font-family: 'Playfair Display', serif;
+    font-size: 22px;
+    color: #065F46;
+    margin-bottom: 18px;
+  }
+  .success-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  .success-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    font-size: 13px;
+    color: #065F46;
+    line-height: 1.5;
+    font-weight: 500;
+  }
+  .success-item .icon { font-size: 18px; flex-shrink: 0; }
+
+  /* CLOSING */
+  .closing-card {
+    background: linear-gradient(155deg, #4C1D95 0%, #6D28D9 50%, #7C3AED 100%);
+    border-radius: 20px;
+    padding: 40px;
+    text-align: center;
+    color: white;
+    position: relative;
+    overflow: hidden;
+  }
+  .closing-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    opacity: 0.06;
+    background-image: radial-gradient(circle, white 1px, transparent 1px);
+    background-size: 30px 30px;
+  }
+  .closing-content { position: relative; z-index: 1; }
+  .closing-emoji { font-size: 40px; margin-bottom: 16px; }
+  .closing-text {
+    font-family: 'Playfair Display', serif;
+    font-size: 24px;
+    font-weight: 800;
+    line-height: 1.4;
+    margin-bottom: 8px;
+  }
+  .closing-sub {
+    font-size: 14px;
+    opacity: 0.7;
+  }
+
+  /* DIVIDER */
+  .divider {
+    width: 60px;
+    height: 4px;
+    background: var(--primary-lighter);
+    border-radius: 2px;
+    margin: 24px 0;
+  }
+
+  /* ====== MOBILE RESPONSIVENESS ====== */
+  @media (max-width: 768px) {
+    /* Page padding */
+    .page-inner {
+      padding: 32px 20px 64px;
+    }
+    .page-number { right: 20px; bottom: 16px; }
+    .page-logo { left: 20px; bottom: 16px; }
+    .page { min-height: auto; overflow: visible; }
+
+    /* Cover */
+    .cover { padding: 40px 20px 60px; }
+    .cover h1 { font-size: 40px; }
+    .cover-subtitle { font-size: 18px; }
+    .cover-role { font-size: 13px; margin-bottom: 32px; }
+    .cover-avatar { width: 96px; height: 96px; font-size: 52px; }
+    .cover-info-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      width: 100%;
+      max-width: 400px;
+      margin: 0 auto;
+    }
+    .cover-info-item {
+      padding: 10px 14px;
+      flex-direction: column;
+      text-align: center;
+      gap: 4px;
+    }
+    .cover-info-item .value { font-size: 13px; }
+    .cover-info-item .label { font-size: 10px; }
+    .cover-footer { font-size: 10px; bottom: 16px; }
+    .cover-badge { font-size: 11px; padding: 8px 16px; letter-spacing: 1px; }
+
+    /* Section headers */
+    .section-title { font-size: 26px; }
+    .section-desc { font-size: 14px; }
+
+    /* Mission */
+    .mission-box { padding: 28px 24px; }
+    .mission-quote { font-size: 22px; }
+    .mission-box::before { font-size: 80px; left: 12px; }
+
+    /* Funnel - stack vertically */
+    .funnel-section {
+      flex-direction: column;
+      gap: 16px;
+    }
+    .stats-cards {
+      flex: none;
+      flex-direction: row;
+      gap: 10px;
+    }
+    .stat-card {
+      flex: 1;
+      padding: 16px 12px;
+    }
+    .stat-number { font-size: 28px; }
+    .stat-label { font-size: 11px; }
+
+    /* Funnel bars */
+    .funnel-visual { padding: 20px; }
+    .funnel-bar-label { width: 80px; font-size: 11px; }
+    .funnel-bar-fill { font-size: 11px; padding-right: 8px; }
+
+    /* Roadmap */
+    .roadmap { padding-left: 32px; }
+    .roadmap-dot {
+      left: -32px;
+      width: 34px;
+      height: 34px;
+      font-size: 16px;
+      border-radius: 10px;
+    }
+    .roadmap-card { padding: 14px 16px; }
+    .roadmap-card-title { font-size: 14px; }
+    .roadmap-card-desc { font-size: 12px; }
+    .tag { font-size: 9px; padding: 2px 8px; }
+    .andreza-callout { padding: 16px 18px; }
+    .andreza-callout .text { font-size: 13px; }
+
+    /* Atribuições - 1 column on mobile */
+    .attr-grid {
+      grid-template-columns: 1fr;
+      gap: 12px;
+    }
+    .attr-card { padding: 20px; }
+    .attr-card.full-width { grid-column: auto; }
+    .attr-icon { font-size: 24px; margin-bottom: 8px; }
+    .attr-title { font-size: 14px; }
+    .attr-desc { font-size: 12px; }
+
+    /* Team - 2 columns on mobile */
+    .team-grid {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+    .team-card { padding: 16px 12px; }
+    .team-avatar { width: 40px; height: 40px; font-size: 20px; margin-bottom: 8px; }
+    .team-name { font-size: 13px; }
+    .team-role { font-size: 10px; }
+    .team-unit { font-size: 9px; }
+
+    /* Checklist - stack vertically */
+    .checklist-section {
+      flex-direction: column;
+      gap: 20px;
+    }
+    .check-item { padding: 10px 14px; }
+    .check-text { font-size: 13px; }
+    .check-text .sub { font-size: 11px; }
+    .checklist-title { font-size: 15px; }
+
+    /* Metas */
+    .meta-item { padding: 14px 16px; gap: 12px; }
+    .meta-icon { width: 38px; height: 38px; font-size: 18px; }
+    .meta-title { font-size: 13px; }
+    .meta-desc { font-size: 11px; }
+    .meta-value { font-size: 12px; padding: 5px 10px; }
+
+    /* Success */
+    .success-box { padding: 24px 20px; }
+    .success-box h3 { font-size: 19px; }
+    .success-grid {
+      grid-template-columns: 1fr;
+      gap: 10px;
+    }
+    .success-item { font-size: 13px; }
+
+    /* Closing */
+    .closing-card { padding: 28px 20px; }
+    .closing-text { font-size: 20px; }
+    .closing-sub { font-size: 12px; }
+    .closing-emoji { font-size: 32px; }
+
+    /* Follow-up section mobile */
+    .followup-cols { flex-direction: column !important; gap: 12px !important; }
+    .followup-example { flex-direction: column !important; gap: 8px !important; }
+    .followup-example > div[style*="font-size: 20px"],
+    .followup-example > div[style*="font-size: 24px"] { text-align: center; }
+
+    /* KPI grid */
+    .kpi-grid { grid-template-columns: 1fr !important; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ==================== PAGE 1: COVER ==================== -->
+<div class="page cover">
+  <div class="cover-bg-pattern"></div>
+  <div class="cover-glow cover-glow-1"></div>
+  <div class="cover-glow cover-glow-2"></div>
+  <div class="cover-content">
+    <div class="cover-badge">🎵 Grupo LA Music · Documento Interno</div>
+    <div class="cover-avatar">👩🏾</div>
+    <h1>Andreza</h1>
+    <div class="cover-subtitle">Assistente de Pré-atendimento</div>
+    <div class="cover-role">Missão, Atribuições e Integração ao Time Comercial</div>
+    <div style="height: 40px"></div>
+    <div class="cover-info-row">
+      <div class="cover-info-item">
+        <div>
+          <div class="label">Reporta a</div>
+          <div class="value">Krissya</div>
+        </div>
+      </div>
+      <div class="cover-info-item">
+        <div>
+          <div class="label">Modelo</div>
+          <div class="value">Home Office 90%</div>
+        </div>
+      </div>
+      <div class="cover-info-item">
+        <div>
+          <div class="label">Canais</div>
+          <div class="value">WhatsApp · Ligação · DM</div>
+        </div>
+      </div>
+      <div class="cover-info-item">
+        <div>
+          <div class="label">Unidades</div>
+          <div class="value">CG · Recreio · Barra</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="cover-footer">CAMPO GRANDE · RECREIO · BARRA &nbsp;|&nbsp; FEVEREIRO 2026</div>
+</div>
+
+<!-- ==================== PAGE 2: MISSÃO + PROBLEMA ==================== -->
+<div class="page">
+  <div class="top-line"></div>
+  <div class="page-inner">
+    <div class="section-header">
+      <div class="section-tag">01 — Missão</div>
+      <h2 class="section-title">Por que a Andreza está aqui?</h2>
+    </div>
+
+    <div class="mission-box">
+      <div class="mission-quote">Garantir que nenhum lead esfrie.<br>Fazer mais gente chegar na escola.</div>
+      <div class="mission-text">
+        A Andreza é a ponte humana entre o primeiro contato do lead e a visita na escola. A nossa taxa de conversão de quem faz a aula experimental é excelente — mas o grande desafio é levar o lead até lá. É exatamente aí que ela entra: resgatando, aquecendo e conectando cada lead ao consultor certo.
+      </div>
+    </div>
+
+    <div class="funnel-section">
+      <div class="funnel-visual">
+        <div class="funnel-title">📊 Funil de Conversão Atual</div>
+        <div class="funnel-bars">
+          <div class="funnel-bar-row">
+            <div class="funnel-bar-label">Leads</div>
+            <div class="funnel-bar-track">
+              <div class="funnel-bar-fill leads">100%</div>
+            </div>
+          </div>
+          <div class="funnel-bar-row">
+            <div class="funnel-bar-label">Responderam</div>
+            <div class="funnel-bar-track">
+              <div class="funnel-bar-fill respond">~65%</div>
+            </div>
+          </div>
+          <div class="funnel-bar-row">
+            <div class="funnel-bar-label">Visita a escola</div>
+            <div class="funnel-bar-track">
+              <div class="funnel-bar-fill visit">~10%</div>
+            </div>
+          </div>
+          <div class="funnel-bar-row">
+            <div class="funnel-bar-label">Matricularam</div>
+            <div class="funnel-bar-track">
+              <div class="funnel-bar-fill enroll">~8%</div>
+            </div>
+          </div>
+        </div>
+        <div class="problem-badge">⚠️ O gargalo está entre "responderam" e "visita a escola"</div>
+      </div>
+
+      <div class="stats-cards">
+        <div class="stat-card red">
+          <div class="stat-number">~10%</div>
+          <div class="stat-label">Leads que chegam<br>na escola</div>
+          <div class="stat-sub">Nosso gargalo</div>
+        </div>
+        <div class="stat-card green">
+          <div class="stat-number">75%</div>
+          <div class="stat-label">Matricularam após<br>aula experimental</div>
+          <div class="stat-sub">Nossa fortaleza</div>
+        </div>
+        <div class="stat-card purple">
+          <div class="stat-number">🎯</div>
+          <div class="stat-label">Missão Andreza</div>
+          <div class="stat-sub">Aumentar de 10% para 30%</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="page-logo">LA MUSIC</div>
+  <div class="page-number">02</div>
+</div>
+
+<!-- ==================== PAGE 3: FLUXO / ROADMAP ==================== -->
+<div class="page">
+  <div class="top-line"></div>
+  <div class="page-inner">
+    <div class="section-header">
+      <div class="section-tag">02 — Jornada do Cliente</div>
+      <h2 class="section-title">Fluxo de Atendimento</h2>
+      <p class="section-desc">Onde cada pessoa atua — e onde a Andreza intervém.</p>
+    </div>
+
+    <div class="roadmap">
+      <!-- Step 1 -->
+      <div class="roadmap-step">
+        <div class="roadmap-dot lead">📱</div>
+        <div class="roadmap-card">
+          <div class="roadmap-card-header">
+            <div class="roadmap-card-title">Lead chega</div>
+            <span class="tag tag-amber">Topo de funil</span>
+          </div>
+          <div class="roadmap-card-desc">Cliente entra em contato via WhatsApp, Instagram ou formulário — tráfego pago ou orgânico.</div>
+        </div>
+      </div>
+
+      <!-- Step 2 -->
+      <div class="roadmap-step">
+        <div class="roadmap-dot bot">🤖</div>
+        <div class="roadmap-card">
+          <div class="roadmap-card-header">
+            <div class="roadmap-card-title">Mila atende</div>
+            <span class="tag tag-blue">SDR Bot</span>
+          </div>
+          <div class="roadmap-card-desc">Primeiro atendimento automatizado: identifica perfil (criança/adulto), instrumento, unidade e tenta agendar aula experimental gratuita.</div>
+        </div>
+      </div>
+
+      <!-- Step 3 -->
+      <div class="roadmap-step">
+        <div class="roadmap-dot fork">⚡</div>
+        <div class="roadmap-card">
+          <div class="roadmap-card-header">
+            <div class="roadmap-card-title">Mila conseguiu agendar?</div>
+          </div>
+          <div class="roadmap-card-desc">
+            <strong style="color: var(--success);">✅ Sim →</strong> Segue direto pro consultor.<br>
+            <strong style="color: var(--danger);">❌ Não →</strong> Cliente parou de responder, resistiu ao bot, só quer preço, ou ficou com dúvidas.
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 4 - ANDREZA -->
+      <div class="roadmap-step">
+        <div class="roadmap-dot andreza">👩🏾</div>
+        <div class="roadmap-card highlight">
+          <div class="roadmap-card-header">
+            <div class="roadmap-card-title">Andreza intervém</div>
+            <span class="tag tag-purple">Pré-atendimento</span>
+          </div>
+          <div class="roadmap-card-desc">Resgata o lead com atendimento humanizado. Retoma conversa no WhatsApp, liga se necessário, tira dúvidas, cria conexão. Objetivo: aquecer e conectar ao consultor.</div>
+        </div>
+      </div>
+
+      <!-- Step 5 -->
+      <div class="roadmap-step">
+        <div class="roadmap-dot consultor">🏫</div>
+        <div class="roadmap-card">
+          <div class="roadmap-card-header">
+            <div class="roadmap-card-title">Consultor recebe na unidade</div>
+            <span class="tag tag-green">Consultor</span>
+          </div>
+          <div class="roadmap-card-desc">Aula experimental ou visita. Se consultor estiver ocupado, Andreza agenda <strong>visita</strong> direto — cliente conhece a escola e sente a energia.</div>
+        </div>
+      </div>
+
+      <!-- Step 6 -->
+      <div class="roadmap-step">
+        <div class="roadmap-dot win">🎉</div>
+        <div class="roadmap-card" style="border-color: #FDE68A; background: #FFFBEB;">
+          <div class="roadmap-card-header">
+            <div class="roadmap-card-title" style="color: #92400E;">Matrícula!</div>
+          </div>
+          <div class="roadmap-card-desc" style="color: #92400E;">Cliente vira aluno da LA Music. 🎶</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="andreza-callout">
+      <div class="icon">💡</div>
+      <div class="text">A Andreza não substitui ninguém. Ela potencializa o time. Com ela, os consultores focam no que fazem de melhor: receber o cliente na escola e matricular.</div>
+    </div>
+  </div>
+  <div class="page-logo">LA MUSIC</div>
+  <div class="page-number">03</div>
+</div>
+
+<!-- ==================== PAGE 4: ATRIBUIÇÕES ==================== -->
+<div class="page">
+  <div class="top-line"></div>
+  <div class="page-inner">
+    <div class="section-header">
+      <div class="section-tag">03 — Atribuições</div>
+      <h2 class="section-title">O que a Andreza faz</h2>
+      <p class="section-desc">As responsabilidades do dia a dia no cargo.</p>
+    </div>
+
+    <div class="attr-grid">
+      <div class="attr-card">
+        <div class="attr-icon">🔍</div>
+        <div class="attr-title">Resgate de Leads</div>
+        <div class="attr-desc">Monitora diariamente no CRM e Emusys os leads que a Mila não converteu — abandonados, sem resposta, resistentes ao bot. Entra em contato o mais rápido possível.</div>
+      </div>
+      <div class="attr-card">
+        <div class="attr-icon">💬</div>
+        <div class="attr-title">Qualificação e Aquecimento</div>
+        <div class="attr-desc">Conversa de forma humanizada via WhatsApp, ligação e DM do Instagram. Entende o interesse, tira dúvidas sobre instrumentos, horários e estrutura.</div>
+      </div>
+      <div class="attr-card">
+        <div class="attr-icon">📅</div>
+        <div class="attr-title">Agendamento</div>
+        <div class="attr-desc">Conecta o lead ao consultor para agendar aula experimental. Se o consultor estiver ocupado, agenda uma visita diretamente. Faz follow-up pra garantir comparecimento.</div>
+      </div>
+      <div class="attr-card">
+        <div class="attr-icon">📊</div>
+        <div class="attr-title">Acompanhamento do Funil</div>
+        <div class="attr-desc">Acompanha cada lead no CRM. Nenhum lead pode ficar parado sem ação por mais de 24h. Reporta o panorama diário à Krissya.</div>
+      </div>
+      <div class="attr-card full-width">
+        <div class="attr-icon">🏫</div>
+        <div class="attr-title">Apoio Presencial (sob demanda)</div>
+        <div class="attr-desc">Vai às unidades para reuniões, feirões de matrícula e campanhas especiais. Cerca de 10% do tempo.</div>
+      </div>
+    </div>
+
+    <div style="height: 28px"></div>
+    <div class="divider"></div>
+    <div style="height: 20px"></div>
+
+    <div class="section-header" style="margin-bottom: 20px;">
+      <div class="section-tag">04 — Time Comercial</div>
+      <h2 class="section-title">Como a Andreza se conecta ao time</h2>
+    </div>
+
+    <div class="team-grid">
+      <div class="team-card">
+        <div class="team-avatar" style="background: var(--blue-light);">🤖</div>
+        <div class="team-name">Mila</div>
+        <div class="team-role">SDR Bot · 1º atendimento</div>
+        <div class="team-unit">Todas as unidades</div>
+      </div>
+      <div class="team-card highlight-card">
+        <div class="team-avatar" style="background: linear-gradient(135deg, #6D28D9, #8B5CF6); color: white;">👩🏾</div>
+        <div class="team-name">Andreza</div>
+        <div class="team-role">Assistente de Pré-atendimento</div>
+        <div class="team-unit">Ponte bot ↔ consultores</div>
+      </div>
+      <div class="team-card">
+        <div class="team-avatar" style="background: #FEF3C7;">👑</div>
+        <div class="team-name">Krissya</div>
+        <div class="team-role">Líder Comercial</div>
+        <div class="team-unit">Gestão do time</div>
+      </div>
+      <div class="team-card">
+        <div class="team-avatar" style="background: var(--success-light);">👩</div>
+        <div class="team-name">Vitória</div>
+        <div class="team-role">Consultora Comercial</div>
+        <div class="team-unit">Campo Grande</div>
+      </div>
+      <div class="team-card">
+        <div class="team-avatar" style="background: var(--success-light);">👨</div>
+        <div class="team-name">Cleiton</div>
+        <div class="team-role">Consultor + Gerente</div>
+        <div class="team-unit">Recreio</div>
+      </div>
+      <div class="team-card">
+        <div class="team-avatar" style="background: var(--success-light);">👩</div>
+        <div class="team-name">Kailane</div>
+        <div class="team-role">Consultora Comercial</div>
+        <div class="team-unit">Barra</div>
+      </div>
+    </div>
+  </div>
+  <div class="page-logo">LA MUSIC</div>
+  <div class="page-number">04</div>
+</div>
+
+<!-- ==================== PAGE 5: CHECKLIST + METAS ==================== -->
+<div class="page">
+  <div class="top-line"></div>
+  <div class="page-inner">
+    <div class="section-header">
+      <div class="section-tag">05 — Checklist de Onboarding</div>
+      <h2 class="section-title">Primeiros Passos da Andreza</h2>
+      <p class="section-desc">O que precisa acontecer na primeira semana.</p>
+    </div>
+
+    <div class="checklist-section">
+      <div class="checklist-col">
+        <div class="checklist-title">📋 Acessos e Ferramentas</div>
+        <div class="checklist">
+          <div class="check-item">
+            <div class="check-box empty"></div>
+            <div class="check-text">
+              Acesso ao CRM / Emusys
+              <span class="sub">Conseguir visualizar e gerenciar leads</span>
+            </div>
+          </div>
+          <div class="check-item">
+            <div class="check-box empty"></div>
+            <div class="check-text">
+              Acesso ao WhatsApp Business
+              <span class="sub">Canal principal de atendimento</span>
+            </div>
+          </div>
+          <div class="check-item">
+            <div class="check-box empty"></div>
+            <div class="check-text">
+              Acesso ao Instagram das unidades
+              <span class="sub">Para responder DMs de leads</span>
+            </div>
+          </div>
+          <div class="check-item">
+            <div class="check-box empty"></div>
+            <div class="check-text">
+              Acesso ao painel da Mila
+              <span class="sub">Ver leads que o bot não converteu</span>
+            </div>
+          </div>
+          <div class="check-item">
+            <div class="check-box empty"></div>
+            <div class="check-text">
+              Receber lista de leads frios/no-shows
+              <span class="sub">Pra começar o follow-up desde o dia 1</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="checklist-col">
+        <div class="checklist-title">📚 Treinamento</div>
+        <div class="checklist">
+          <div class="check-item">
+            <div class="check-box empty"></div>
+            <div class="check-text">
+              Ler o script da Mila completo
+              <span class="sub">Dominar cursos, faixas etárias, FAQ, diferenciais</span>
+            </div>
+          </div>
+          <div class="check-item">
+            <div class="check-box empty"></div>
+            <div class="check-text">
+              Conhecer as 3 unidades (visita)
+              <span class="sub">CG, Recreio e Barra — sentir a energia</span>
+            </div>
+          </div>
+          <div class="check-item">
+            <div class="check-box empty"></div>
+            <div class="check-text">
+              Reunião com Krissya
+              <span class="sub">Alinhar metas, expectativas e rotina</span>
+            </div>
+          </div>
+          <div class="check-item">
+            <div class="check-box empty"></div>
+            <div class="check-text">
+              Reunião com Vitória e Cleiton
+              <span class="sub">Entender a dinâmica das unidades prioritárias</span>
+            </div>
+          </div>
+          <div class="check-item">
+            <div class="check-box empty"></div>
+            <div class="check-text">
+              Entender a meta + bônus de follow-up
+              <span class="sub">Como funciona a conta 25+5=30</span>
+            </div>
+          </div>
+          <div class="check-item">
+            <div class="check-box empty"></div>
+            <div class="check-text">
+              Aprender o tagueamento dos 5 KPIs
+              <span class="sub">Canal, curso, faixa etária, preço, motivo de não comparecimento</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="height: 32px"></div>
+    <div class="divider"></div>
+    <div style="height: 20px"></div>
+
+    <div class="section-header" style="margin-bottom: 20px;">
+      <div class="section-tag">06 — Metas</div>
+      <h2 class="section-title">Indicadores de Sucesso</h2>
+    </div>
+
+    <div class="meta-list">
+      <div class="meta-item">
+        <div class="meta-icon speed">⚡</div>
+        <div class="meta-info">
+          <div class="meta-title">Tempo de Resposta ao Lead</div>
+          <div class="meta-desc">Após a Mila encaminhar</div>
+        </div>
+        <div class="meta-value">Máx. 15 min</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-icon target">📞</div>
+        <div class="meta-info">
+          <div class="meta-title">Leads Contatados por Dia</div>
+          <div class="meta-desc">Mínimo a definir com Krissya</div>
+        </div>
+        <div class="meta-value">Diário</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-icon target">📅</div>
+        <div class="meta-info">
+          <div class="meta-title">Taxa de Agendamento</div>
+          <div class="meta-desc">% de leads contatados que agendam visita ou aula</div>
+        </div>
+        <div class="meta-value">Semanal</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-icon check">✅</div>
+        <div class="meta-info">
+          <div class="meta-title">Taxa de Comparecimento</div>
+          <div class="meta-desc">% de agendados que realmente vão à escola</div>
+        </div>
+        <div class="meta-value">Semanal</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-icon alert">🚨</div>
+        <div class="meta-info">
+          <div class="meta-title">Leads Parados +24h</div>
+          <div class="meta-desc">Sem nenhuma ação há mais de 24 horas</div>
+        </div>
+        <div class="meta-value red">Zero</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-icon" style="background: var(--success-light);">🎯</div>
+        <div class="meta-info">
+          <div class="meta-title">Taxa de Visitas</div>
+          <div class="meta-desc">Meta: 30% dos leads novos visitam a escola</div>
+        </div>
+        <div class="meta-value" style="background: var(--success-light); color: var(--success);">Mensal</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-icon" style="background: var(--blue-light);">🏷️</div>
+        <div class="meta-info">
+          <div class="meta-title">KPIs Tagueados</div>
+          <div class="meta-desc">Canal, curso, faixa etária, preço e motivo — 100% preenchidos</div>
+        </div>
+        <div class="meta-value" style="background: var(--blue-light); color: var(--blue);">100%</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-icon" style="background: #FEF3C7;">♻️</div>
+        <div class="meta-info">
+          <div class="meta-title">Follow-ups de Frios</div>
+          <div class="meta-desc">Quantos leads antigos foram contatados para reativação</div>
+        </div>
+        <div class="meta-value" style="background: #FEF3C7; color: #92400E;">Semanal</div>
+      </div>
+    </div>
+  </div>
+  <div class="page-logo">LA MUSIC</div>
+  <div class="page-number">05</div>
+</div>
+
+<!-- ==================== PAGE 6: FOLLOW-UP + BÔNUS ==================== -->
+<div class="page">
+  <div class="top-line"></div>
+  <div class="page-inner">
+    <div class="section-header">
+      <div class="section-tag">07 — Meta + Follow-up</div>
+      <h2 class="section-title">Como funciona a meta<br>+ bônus de follow-up</h2>
+      <p class="section-desc">A Andreza trabalha em duas frentes: leads novos (quentes) e resgate de leads antigos (frios). As duas contam para a meta.</p>
+    </div>
+
+    <!-- Explicação visual da mecânica -->
+    <div class="followup-cols" style="display: flex; gap: 16px; margin-bottom: 24px;">
+      <div style="flex: 1; background: var(--primary-bg); border: 2px solid var(--primary-lighter); border-radius: 16px; padding: 24px; text-align: center;">
+        <div style="font-size: 32px; margin-bottom: 8px;">🔥</div>
+        <div style="font-weight: 800; font-size: 15px; color: var(--primary-dark); margin-bottom: 4px;">Leads Novos (Quentes)</div>
+        <div style="font-size: 13px; color: var(--text-muted); line-height: 1.6;">Leads que chegam via Mila, tráfego pago e orgânico. São a <strong>prioridade</strong> — já demonstraram interesse, a chance de conversão é maior.</div>
+      </div>
+      <div style="flex: 1; background: #FEF3C7; border: 2px solid #FDE68A; border-radius: 16px; padding: 24px; text-align: center;">
+        <div style="font-size: 32px; margin-bottom: 8px;">❄️</div>
+        <div style="font-weight: 800; font-size: 15px; color: #92400E; margin-bottom: 4px;">Leads Frios (Follow-up)</div>
+        <div style="font-size: 13px; color: var(--text-muted); line-height: 1.6;">Leads antigos que não converteram. A Andreza pode reativá-los e tentar levar à escola. Funciona como <strong>bônus</strong> na meta.</div>
+      </div>
+    </div>
+
+    <!-- Exemplo prático -->
+    <div style="background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 28px; margin-bottom: 24px;">
+      <div style="font-weight: 800; font-size: 16px; margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">📐 Exemplo prático — Como a conta funciona</div>
+      
+      <div class="followup-example" style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+        <div style="background: var(--primary-bg); border-radius: 12px; padding: 14px 20px; flex: 1; text-align: center;">
+          <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;">Leads novos recebidos</div>
+          <div style="font-size: 28px; font-weight: 900; color: var(--primary);">100</div>
+        </div>
+        <div style="font-size: 20px; color: var(--text-muted);">→</div>
+        <div style="background: var(--primary-bg); border-radius: 12px; padding: 14px 20px; flex: 1; text-align: center;">
+          <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px;">Visitas de leads novos</div>
+          <div style="font-size: 28px; font-weight: 900; color: var(--primary);">25</div>
+        </div>
+        <div style="font-size: 24px; font-weight: 900; color: var(--accent);">+</div>
+        <div style="background: #FEF3C7; border-radius: 12px; padding: 14px 20px; flex: 1; text-align: center;">
+          <div style="font-size: 11px; font-weight: 700; color: #92400E; text-transform: uppercase; letter-spacing: 1px;">Visitas de leads frios</div>
+          <div style="font-size: 28px; font-weight: 900; color: #92400E;">5</div>
+        </div>
+        <div style="font-size: 24px; font-weight: 900; color: var(--text-muted);">=</div>
+        <div style="background: var(--success-light); border-radius: 12px; padding: 14px 20px; flex: 1; text-align: center;">
+          <div style="font-size: 11px; font-weight: 700; color: var(--success); text-transform: uppercase; letter-spacing: 1px;">Total de visitas</div>
+          <div style="font-size: 28px; font-weight: 900; color: var(--success);">30 ✅</div>
+        </div>
+      </div>
+
+      <div style="background: var(--success-light); border: 1px solid #A7F3D0; border-radius: 10px; padding: 14px 18px; text-align: center; font-weight: 700; font-size: 15px; color: #065F46;">
+        🎯 Meta de 30% batida! — 25 novos + 5 frios = 30 visitas
+      </div>
+    </div>
+
+    <!-- Regras -->
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+      <div style="display: flex; align-items: flex-start; gap: 12px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px;">
+        <div style="font-size: 20px; flex-shrink: 0;">1️⃣</div>
+        <div>
+          <div style="font-weight: 700; font-size: 14px; margin-bottom: 2px;">Prioridade é sempre o lead quente</div>
+          <div style="font-size: 13px; color: var(--text-muted); line-height: 1.6;">Leads novos são mais fáceis de converter — eles já demonstraram interesse. Nunca deixe um lead quente esperando pra fazer follow-up de lead frio.</div>
+        </div>
+      </div>
+      <div style="display: flex; align-items: flex-start; gap: 12px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px;">
+        <div style="font-size: 20px; flex-shrink: 0;">2️⃣</div>
+        <div>
+          <div style="font-weight: 700; font-size: 14px; margin-bottom: 2px;">Follow-up de leads frios é o Plus</div>
+          <div style="font-size: 13px; color: var(--text-muted); line-height: 1.6;">Reativar leads antigos que esfriaram é um bônus. Cada visita vinda de follow-up soma diretamente na meta mensal.</div>
+        </div>
+      </div>
+      <div style="display: flex; align-items: flex-start; gap: 12px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px 20px;">
+        <div style="font-size: 20px; flex-shrink: 0;">3️⃣</div>
+        <div>
+          <div style="font-weight: 700; font-size: 14px; margin-bottom: 2px;">Sem limite para o bônus</div>
+          <div style="font-size: 13px; color: var(--text-muted); line-height: 1.6;">Não existe teto. Quanto mais leads frios ela conseguir resgatar e levar à escola, melhor para todo mundo.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Dica bônus -->
+    <div style="background: linear-gradient(135deg, #FEF3C7, #FFFBEB); border: 2px solid #FDE68A; border-radius: 16px; padding: 24px 28px; margin-top: 24px; display: flex; align-items: flex-start; gap: 14px;">
+      <div style="font-size: 28px; flex-shrink: 0;">💡</div>
+      <div>
+        <div style="font-weight: 800; font-size: 15px; color: #92400E; margin-bottom: 6px;">Dica de ouro para o follow-up</div>
+        <div style="font-size: 13px; color: #78350F; line-height: 1.7;">Priorize leads que <strong>marcaram a aula experimental e não foram</strong>. Essas pessoas já demonstraram interesse real — elas agendaram, escolheram instrumento, horário e unidade. Só faltou ir. São os leads frios com maior chance de reativação. Comece pelos mais recentes (janeiro, dezembro) e vá voltando no tempo. Uma ligação ou mensagem pode ser tudo que faltava.</div>
+      </div>
+    </div>
+
+  </div>
+  <div class="page-logo">LA MUSIC</div>
+  <div class="page-number">06</div>
+</div>
+
+<!-- ==================== PAGE 7: KPIs DE MONITORAMENTO ==================== -->
+<div class="page">
+  <div class="top-line"></div>
+  <div class="page-inner">
+    <div class="section-header">
+      <div class="section-tag">08 — KPIs de Monitoramento</div>
+      <h2 class="section-title">O que a Andreza precisa taguear</h2>
+      <p class="section-desc">Cada lead que passa pela Andreza precisa ter esses dados registrados. Sem isso, a gente não consegue otimizar.</p>
+    </div>
+
+    <div class="kpi-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-bottom: 24px;">
+
+      <!-- KPI 1: Canal -->
+      <div style="background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 22px; position: relative; overflow: hidden;">
+        <div style="position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: var(--primary); border-radius: 2px;"></div>
+        <div style="font-size: 28px; margin-bottom: 8px;">📡</div>
+        <div style="font-weight: 800; font-size: 15px; margin-bottom: 6px;">Canal de Origem</div>
+        <div style="font-size: 12px; color: var(--text-muted); line-height: 1.6;">De onde o lead veio? Tráfego pago, orgânico, Instagram, indicação? Essencial pra saber qual canal traz mais resultado por unidade.</div>
+        <div style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px;">
+          <span style="background: var(--primary-bg); color: var(--primary); font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 50px;">Tráfego pago</span>
+          <span style="background: var(--primary-bg); color: var(--primary); font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 50px;">Orgânico</span>
+          <span style="background: var(--primary-bg); color: var(--primary); font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 50px;">Instagram</span>
+          <span style="background: var(--primary-bg); color: var(--primary); font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 50px;">Indicação</span>
+        </div>
+      </div>
+
+      <!-- KPI 2: Curso -->
+      <div style="background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 22px; position: relative; overflow: hidden;">
+        <div style="position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: var(--accent); border-radius: 2px;"></div>
+        <div style="font-size: 28px; margin-bottom: 8px;">🎸</div>
+        <div style="font-weight: 800; font-size: 15px; margin-bottom: 6px;">Curso de Interesse</div>
+        <div style="font-size: 12px; color: var(--text-muted); line-height: 1.6;">Qual instrumento ou curso o lead quer? A Mila nem sempre consegue taguear. A Andreza precisa garantir esse dado no CRM.</div>
+        <div style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px;">
+          <span style="background: #FEF3C7; color: #92400E; font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 50px;">Violão</span>
+          <span style="background: #FEF3C7; color: #92400E; font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 50px;">Piano</span>
+          <span style="background: #FEF3C7; color: #92400E; font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 50px;">Canto</span>
+          <span style="background: #FEF3C7; color: #92400E; font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 50px;">Bateria</span>
+          <span style="background: #FEF3C7; color: #92400E; font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 50px;">...</span>
+        </div>
+      </div>
+
+      <!-- KPI 3: Faixa etária -->
+      <div style="background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 22px; position: relative; overflow: hidden;">
+        <div style="position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: var(--blue); border-radius: 2px;"></div>
+        <div style="font-size: 28px; margin-bottom: 8px;">👶🧑</div>
+        <div style="font-weight: 800; font-size: 15px; margin-bottom: 6px;">Faixa Etária</div>
+        <div style="font-size: 12px; color: var(--text-muted); line-height: 1.6;">Criança ou adolescente/adulto? Define se é LAMK — até 11 anos ou EMLA — 12+. Impacta diretamente no atendimento.</div>
+        <div style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px;">
+          <span style="background: var(--blue-light); color: var(--blue); font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 50px;">LAMK — até 11 anos</span>
+          <span style="background: var(--blue-light); color: var(--blue); font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 50px;">EMLA — 12+</span>
+        </div>
+      </div>
+
+      <!-- KPI 4: Sabe o preço? -->
+      <div style="background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 22px; position: relative; overflow: hidden;">
+        <div style="position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: var(--success); border-radius: 2px;"></div>
+        <div style="font-size: 28px; margin-bottom: 8px;">💰</div>
+        <div style="font-weight: 800; font-size: 15px; margin-bottom: 6px;">Sabe o Preço?</div>
+        <div style="font-size: 12px; color: var(--text-muted); line-height: 1.6;">O lead já chegou sabendo o valor ou não? Importante pra monitorar a taxa de conversão — quem já sabe e mesmo assim vai, converte diferente de quem descobre na hora.</div>
+        <div style="margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px;">
+          <span style="background: var(--success-light); color: var(--success); font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 50px;">Já sabia</span>
+          <span style="background: var(--success-light); color: var(--success); font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 50px;">Não sabia</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- KPI 5: Motivo não comparecimento - full width -->
+    <div style="background: var(--card); border: 1px solid var(--border); border-radius: 16px; padding: 22px; position: relative; overflow: hidden; margin-bottom: 24px;">
+      <div style="position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: var(--danger); border-radius: 2px;"></div>
+      <div style="display: flex; align-items: flex-start; gap: 16px;">
+        <div style="font-size: 28px; flex-shrink: 0;">🚫</div>
+        <div style="flex: 1;">
+          <div style="font-weight: 800; font-size: 15px; margin-bottom: 6px;">Motivo de Não Comparecimento</div>
+          <div style="font-size: 12px; color: var(--text-muted); line-height: 1.6; margin-bottom: 10px;">Quando o lead marca e não vai, a Andreza precisa registrar o porquê. Esse dado é ouro pra ajustar a abordagem e reduzir o no-show.</div>
+          <div style="display: flex; flex-wrap: wrap; gap: 6px;">
+            <span style="background: var(--danger-light); color: var(--danger); font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 50px;">Esqueceu</span>
+            <span style="background: var(--danger-light); color: var(--danger); font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 50px;">Horário não deu</span>
+            <span style="background: var(--danger-light); color: var(--danger); font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 50px;">Achou longe</span>
+            <span style="background: var(--danger-light); color: var(--danger); font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 50px;">Mudou de ideia</span>
+            <span style="background: var(--danger-light); color: var(--danger); font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 50px;">Achou caro</span>
+            <span style="background: var(--danger-light); color: var(--danger); font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 50px;">Outro</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Nota importante -->
+    <div style="background: linear-gradient(135deg, #F5F0FF, #EDE9FE); border: 2px solid var(--primary-lighter); border-radius: 16px; padding: 22px 26px; display: flex; align-items: flex-start; gap: 14px;">
+      <div style="font-size: 24px; flex-shrink: 0;">⚠️</div>
+      <div>
+        <div style="font-weight: 800; font-size: 14px; color: var(--primary-dark); margin-bottom: 4px;">Por que isso é tão importante?</div>
+        <div style="font-size: 13px; color: var(--text-muted); line-height: 1.7;">A LA Music é premium — o valor reflete a qualidade da estrutura, dos professores e da metodologia. Quando o lead conhece a escola pessoalmente, ele entende o diferencial. Por isso não passamos preço no primeiro contato: queremos que a experiência fale por si. Esses KPIs ajudam a gente a provar isso com dados.</div>
+      </div>
+    </div>
+
+  </div>
+  <div class="page-logo">LA MUSIC</div>
+  <div class="page-number">07</div>
+</div>
+
+<!-- ==================== PAGE 8: SUCESSO + ENCERRAMENTO ==================== -->
+<div class="page">
+  <div class="top-line"></div>
+  <div class="page-inner">
+    <div class="section-header">
+      <div class="section-tag">09 — Visão de Sucesso</div>
+      <h2 class="section-title">O que significa sucesso?</h2>
+    </div>
+
+    <div class="success-box">
+      <h3>✨ Quando a Andreza está entregando resultado:</h3>
+      <div class="success-grid">
+        <div class="success-item">
+          <div class="icon">🔥</div>
+          <div><strong>Leads não esfriam</strong> — tempo de resposta rápido e acompanhamento constante do funil</div>
+        </div>
+        <div class="success-item">
+          <div class="icon">🏫</div>
+          <div><strong>Mais gente na escola</strong> — aumento real da taxa de visitas e aulas experimentais agendadas</div>
+        </div>
+        <div class="success-item">
+          <div class="icon">🤝</div>
+          <div><strong>Leads aquecidos</strong> — consultores recebem leads qualificados e prontos pra fechar matrícula</div>
+        </div>
+        <div class="success-item">
+          <div class="icon">📊</div>
+          <div><strong>Transparência total</strong> — Krissya e os consultores sempre sabem o status de cada lead</div>
+        </div>
+        <div class="success-item">
+          <div class="icon">💪</div>
+          <div><strong>Vitória respira</strong> — Campo Grande consegue atender a demanda sem perder oportunidades</div>
+        </div>
+        <div class="success-item">
+          <div class="icon">⚡</div>
+          <div><strong>Cleiton foca</strong> — no Recreio, consegue equilibrar gerência e comercial com apoio no pré-atendimento</div>
+        </div>
+        <div class="success-item">
+          <div class="icon">🎯</div>
+          <div><strong>100% dos leads atendidos</strong> — nenhum lead fica sem contato. Recebeu 100, atendeu 100. Zero abandono.</div>
+        </div>
+        <div class="success-item">
+          <div class="icon">🏷️</div>
+          <div><strong>KPIs 100% tagueados</strong> — todo lead com canal, curso, faixa etária e status de preço preenchidos no CRM. Sem dado faltando.</div>
+        </div>
+        <div class="success-item">
+          <div class="icon">♻️</div>
+          <div><strong>Follow-up ativo nos frios</strong> — reativação constante de leads antigos, priorizando quem marcou e não foi. Sempre buscando o Plus.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="closing-card">
+      <div class="closing-content">
+        <div class="closing-emoji">🎶</div>
+        <div class="closing-text">
+          A Andreza potencializa o time.<br>
+          Mais leads aquecidos. Mais visitas. Mais matrículas.
+        </div>
+        <div class="closing-sub">Grupo LA Music — Campo Grande · Recreio · Barra</div>
+      </div>
+    </div>
+
+    <div style="height: 24px"></div>
+    <div style="text-align: center; font-size: 12px; color: var(--text-muted);">
+      Documento interno · Time Comercial · Fevereiro 2026
+    </div>
+  </div>
+  <div class="page-logo">LA MUSIC</div>
+  <div class="page-number">08</div>
+</div>
+
+</body>
+</html>

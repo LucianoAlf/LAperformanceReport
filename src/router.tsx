@@ -62,6 +62,7 @@ const AdministrativoPage = lazy(() => import('./components/App/Administrativo').
 const AlunosPage = lazy(() => import('./components/App/Alunos').then(m => ({ default: m.AlunosPage })));
 const SalasPage = lazy(() => import('./components/App/Salas').then(m => ({ default: m.SalasPage })));
 const ProjetosPage = lazy(() => import('./components/App/Projetos').then(m => ({ default: m.ProjetosPage })));
+const PreAtendimentoPage = lazy(() => import('./components/App/PreAtendimento').then(m => ({ default: m.PreAtendimentoPage })));
 
 // Metas
 const MetasPageNew = lazy(() => import('./components/App/Metas').then(m => ({ default: m.MetasPageNew })));
@@ -198,6 +199,10 @@ export const router = createBrowserRouter([
           {
             path: 'comercial',
             element: <Suspense fallback={<PageLoader />}><ComercialPage /></Suspense>,
+          },
+          {
+            path: 'pre-atendimento',
+            element: <Suspense fallback={<PageLoader />}><PreAtendimentoPage /></Suspense>,
           },
           {
             path: 'administrativo',

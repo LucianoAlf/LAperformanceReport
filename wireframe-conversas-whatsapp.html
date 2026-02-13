@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Wireframe — Painel Conversas WhatsApp | CRM Pré-Atendimento | LA Music</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'sans-serif'] }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Scrollbar customizada */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+    /* Animações */
+    @keyframes pulse-green { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .pulse-online { animation: pulse-green 2s ease-in-out infinite; }
+    @keyframes slide-in-right { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    .slide-in-right { animation: slide-in-right 0.3s ease-out; }
+    @keyframes slide-in-left { from { transform: translateX(-100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+    .slide-in-left { animation: slide-in-left 0.3s ease-out; }
+    @keyframes fade-in-up { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .fade-in-up { animation: fade-in-up 0.2s ease-out; }
+    @keyframes typing-dot { 0%, 60%, 100% { opacity: 0.3; } 30% { opacity: 1; } }
+    .typing-dot-1 { animation: typing-dot 1.4s infinite 0s; }
+    .typing-dot-2 { animation: typing-dot 1.4s infinite 0.2s; }
+    .typing-dot-3 { animation: typing-dot 1.4s infinite 0.4s; }
+
+    /* Inbox item selecionado */
+    .inbox-item.active { background: rgba(139, 92, 246, 0.1); border-left: 3px solid #8b5cf6; }
+    .inbox-item:not(.active) { border-left: 3px solid transparent; }
+
+    /* Tooltip */
+    [data-tooltip]:hover::after {
+      content: attr(data-tooltip);
+      position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+      background: #1e293b; color: #e2e8f0; padding: 4px 8px; border-radius: 6px;
+      font-size: 11px; white-space: nowrap; z-index: 50; border: 1px solid #334155;
+    }
+
+    /* Template dropdown */
+    .template-dropdown { display: none; }
+    .template-dropdown.show { display: block; }
+
+    /* Emoji picker placeholder */
+    .emoji-picker { display: none; }
+    .emoji-picker.show { display: grid; }
+  </style>
+</head>
+<body class="bg-slate-900 text-white font-sans h-screen overflow-hidden flex flex-col">
+
+  <!-- ============================================================ -->
+  <!-- HEADER DA PÁGINA (simula o layout do LA Report)              -->
+  <!-- ============================================================ -->
+  <header class="bg-slate-800 border-b border-slate-700 px-6 py-3 flex-shrink-0">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-4">
+        <div class="w-10 h-10 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-lg font-bold">Pré-Atendimento</h1>
+          <p class="text-xs text-slate-400">CRM da Andreza — Gestão de leads e conversas</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-3">
+        <!-- Seletor de unidade -->
+        <select class="bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-slate-200 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none">
+          <option>Todas as Unidades</option>
+          <option>Campo Grande</option>
+          <option>Recreio</option>
+          <option selected>Barra</option>
+        </select>
+        <div class="bg-violet-600 px-3 py-1.5 rounded-lg text-xs font-semibold">Fev/2026</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============================================================ -->
+  <!-- SISTEMA DE ABAS (8 abas — "Conversas" é a nova)             -->
+  <!-- ============================================================ -->
+  <div class="border-b border-slate-700 flex-shrink-0">
+    <div class="flex items-center gap-1 px-4 overflow-x-auto scrollbar-hide">
+      <button class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800/50 rounded-t-lg transition whitespace-nowrap">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zm10 0a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+        Dashboard
+      </button>
+      <button class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800/50 rounded-t-lg transition whitespace-nowrap">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7"/></svg>
+        Pipeline
+      </button>
+      <!-- ABA ATIVA: Conversas -->
+      <button class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium bg-slate-800 text-white border-b-2 border-violet-500 rounded-t-lg transition whitespace-nowrap">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+        Conversas
+        <!-- Badge de não lidas -->
+        <span class="bg-violet-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-[18px] text-center">5</span>
+      </button>
+      <button class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800/50 rounded-t-lg transition whitespace-nowrap">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+        Leads
+      </button>
+      <button class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800/50 rounded-t-lg transition whitespace-nowrap">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+        Agenda
+      </button>
+      <button class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800/50 rounded-t-lg transition whitespace-nowrap">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+        Metas
+      </button>
+      <button class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800/50 rounded-t-lg transition whitespace-nowrap">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+        Mila
+      </button>
+      <button class="flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800/50 rounded-t-lg transition whitespace-nowrap">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        Relatórios
+      </button>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- BANNER DE STATUS WHATSAPP (connection.update)                -->
+  <!-- ============================================================ -->
+  <div id="bannerConectado" class="bg-emerald-900/40 border-b border-emerald-800/50 px-4 py-1.5 flex items-center justify-between flex-shrink-0">
+    <div class="flex items-center gap-2">
+      <div class="w-2 h-2 rounded-full bg-emerald-400 pulse-online"></div>
+      <span class="text-xs text-emerald-300 font-medium">WhatsApp conectado</span>
+      <span class="text-xs text-emerald-500">• (21) 97305-4688 • Instância LA Music</span>
+    </div>
+    <button onclick="toggleBanner()" class="text-xs text-emerald-400 hover:text-emerald-300 transition">Simular desconexão ↓</button>
+  </div>
+  <div id="bannerDesconectado" class="bg-red-900/40 border-b border-red-800/50 px-4 py-2 items-center justify-between flex-shrink-0 hidden">
+    <div class="flex items-center gap-2">
+      <div class="w-2 h-2 rounded-full bg-red-400 animate-pulse"></div>
+      <span class="text-xs text-red-300 font-semibold">WhatsApp desconectado</span>
+      <span class="text-xs text-red-400">• Verifique a conexão da instância UAZAPI</span>
+    </div>
+    <div class="flex items-center gap-2">
+      <button class="text-xs bg-red-600 hover:bg-red-500 text-white px-3 py-1 rounded-lg transition font-medium">Reconectar</button>
+      <button onclick="toggleBanner()" class="text-xs text-red-400 hover:text-red-300 transition">Simular conexão ↑</button>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SPLIT PANEL: INBOX + CHAT + FICHA DO LEAD                   -->
+  <!-- ============================================================ -->
+  <div class="flex flex-1 overflow-hidden">
+
+    <!-- ========================================================== -->
+    <!-- COLUNA 1: INBOX (280px)                                    -->
+    <!-- ========================================================== -->
+    <div class="w-[300px] flex-shrink-0 border-r border-slate-700 flex flex-col bg-slate-850" style="background: #0d1424;">
+
+      <!-- Header do Inbox -->
+      <div class="p-3 border-b border-slate-700/50 space-y-2">
+        <!-- Busca -->
+        <div class="relative">
+          <svg class="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <input type="text" placeholder="Buscar conversa..." class="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none">
+        </div>
+        <!-- Filtros rápidos -->
+        <div class="flex gap-1">
+          <button class="px-2.5 py-1 text-[11px] font-semibold rounded-lg bg-violet-500/20 text-violet-300 border border-violet-500/30">Todas</button>
+          <button class="px-2.5 py-1 text-[11px] font-medium rounded-lg text-slate-400 hover:bg-slate-700/50 transition">Não lidas</button>
+          <button class="px-2.5 py-1 text-[11px] font-medium rounded-lg text-slate-400 hover:bg-slate-700/50 transition flex items-center gap-1">
+            <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+            Mila
+          </button>
+          <button class="px-2.5 py-1 text-[11px] font-medium rounded-lg text-slate-400 hover:bg-slate-700/50 transition">Minhas</button>
+        </div>
+      </div>
+
+      <!-- Lista de conversas -->
+      <div class="flex-1 overflow-y-auto">
+
+        <!-- Conversa 1: ATIVA (selecionada) — Lead quente, não lida -->
+        <div class="inbox-item active cursor-pointer px-3 py-3 hover:bg-slate-800/50 transition" onclick="selecionarConversa(1)">
+          <div class="flex gap-3">
+            <!-- Avatar com foto -->
+            <div class="relative flex-shrink-0">
+              <div class="w-11 h-11 rounded-full bg-gradient-to-br from-pink-400 to-rose-500 flex items-center justify-center text-white font-bold text-sm">MS</div>
+              <div class="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-400 rounded-full border-2 border-slate-900 pulse-online"></div>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-1.5">
+                  <span class="font-semibold text-sm text-white truncate">Maria Silva</span>
+                  <span class="text-[9px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 font-bold">🔥 Quente</span>
+                </div>
+                <span class="text-[10px] text-violet-400 font-medium">14:32</span>
+              </div>
+              <div class="flex items-center gap-1 mt-0.5">
+                <svg class="w-3 h-3 text-violet-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                <p class="text-xs text-slate-400 truncate">Oi, quero saber sobre aulas de piano...</p>
+              </div>
+              <div class="flex items-center justify-between mt-1">
+                <span class="text-[10px] text-slate-500">Piano · Barra</span>
+                <span class="bg-violet-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">2</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Conversa 2: Mila atendendo, não lida -->
+        <div class="inbox-item cursor-pointer px-3 py-3 hover:bg-slate-800/50 transition border-b border-slate-800/30" onclick="selecionarConversa(2)">
+          <div class="flex gap-3">
+            <div class="relative flex-shrink-0">
+              <div class="w-11 h-11 rounded-full bg-gradient-to-br from-blue-400 to-cyan-500 flex items-center justify-center text-white font-bold text-sm">JO</div>
+              <div class="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-400 rounded-full border-2 border-slate-900"></div>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-1.5">
+                  <span class="font-semibold text-sm text-white truncate">João Pedro</span>
+                  <span class="text-[9px] px-1.5 py-0.5 rounded-full bg-orange-500/20 text-orange-400 font-bold">🟡 Morno</span>
+                </div>
+                <span class="text-[10px] text-slate-500">14:15</span>
+              </div>
+              <div class="flex items-center gap-1 mt-0.5">
+                <svg class="w-3 h-3 text-cyan-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                <p class="text-xs text-slate-400 truncate">Mila: Qual horário seria melhor pra você?</p>
+              </div>
+              <div class="flex items-center justify-between mt-1">
+                <div class="flex items-center gap-1">
+                  <span class="text-[10px] text-slate-500">Guitarra · Recreio</span>
+                  <span class="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 font-medium">🤖 Mila</span>
+                </div>
+                <span class="bg-violet-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">1</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Conversa 3: Andreza atendendo, lida -->
+        <div class="inbox-item cursor-pointer px-3 py-3 hover:bg-slate-800/50 transition border-b border-slate-800/30" onclick="selecionarConversa(3)">
+          <div class="flex gap-3">
+            <div class="relative flex-shrink-0">
+              <div class="w-11 h-11 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center text-white font-bold text-sm">AC</div>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-1.5">
+                  <span class="font-medium text-sm text-slate-300 truncate">Ana Carolina</span>
+                  <span class="text-[9px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 font-bold">🔥 Quente</span>
+                </div>
+                <span class="text-[10px] text-slate-500">13:48</span>
+              </div>
+              <div class="flex items-center gap-1 mt-0.5">
+                <svg class="w-3 h-3 text-slate-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                <svg class="w-3 h-3 text-blue-400 flex-shrink-0 -ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                <p class="text-xs text-slate-500 truncate">Perfeito! Confirmada para sábado às 10h</p>
+              </div>
+              <div class="flex items-center justify-between mt-1">
+                <div class="flex items-center gap-1">
+                  <span class="text-[10px] text-slate-500">Canto · CG</span>
+                  <span class="text-[9px] px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-400 font-medium">👩 Andreza</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Conversa 4: Sem resposta há 2h -->
+        <div class="inbox-item cursor-pointer px-3 py-3 hover:bg-slate-800/50 transition border-b border-slate-800/30" onclick="selecionarConversa(4)">
+          <div class="flex gap-3">
+            <div class="relative flex-shrink-0">
+              <div class="w-11 h-11 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white font-bold text-sm">RL</div>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-1.5">
+                  <span class="font-medium text-sm text-slate-300 truncate">Rafael Lima</span>
+                  <span class="text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400 font-bold">❄️ Frio</span>
+                </div>
+                <span class="text-[10px] text-red-400 font-medium">2h</span>
+              </div>
+              <div class="flex items-center gap-1 mt-0.5">
+                <p class="text-xs text-slate-500 truncate">Sem resposta desde 12:15</p>
+              </div>
+              <div class="flex items-center justify-between mt-1">
+                <div class="flex items-center gap-1">
+                  <span class="text-[10px] text-slate-500">Bateria · Barra</span>
+                  <span class="text-[9px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 font-medium">⏰ +2h</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Conversa 5: Mila atendendo -->
+        <div class="inbox-item cursor-pointer px-3 py-3 hover:bg-slate-800/50 transition border-b border-slate-800/30" onclick="selecionarConversa(5)">
+          <div class="flex gap-3">
+            <div class="relative flex-shrink-0">
+              <div class="w-11 h-11 rounded-full bg-gradient-to-br from-purple-400 to-indigo-500 flex items-center justify-center text-white font-bold text-sm">LS</div>
+              <div class="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-emerald-400 rounded-full border-2 border-slate-900"></div>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-1.5">
+                  <span class="font-medium text-sm text-slate-300 truncate">Lucas Santos</span>
+                  <span class="text-[9px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 font-bold">🔥 Quente</span>
+                </div>
+                <span class="text-[10px] text-slate-500">13:22</span>
+              </div>
+              <div class="flex items-center gap-1 mt-0.5">
+                <svg class="w-3 h-3 text-cyan-400 flex-shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                <p class="text-xs text-slate-400 truncate">Mila: Temos aulas de violão a partir de...</p>
+              </div>
+              <div class="flex items-center justify-between mt-1">
+                <div class="flex items-center gap-1">
+                  <span class="text-[10px] text-slate-500">Violão · CG</span>
+                  <span class="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 font-medium">🤖 Mila</span>
+                </div>
+                <span class="bg-violet-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">1</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Conversa 6: Experimental agendada -->
+        <div class="inbox-item cursor-pointer px-3 py-3 hover:bg-slate-800/50 transition border-b border-slate-800/30" onclick="selecionarConversa(6)">
+          <div class="flex gap-3">
+            <div class="relative flex-shrink-0">
+              <div class="w-11 h-11 rounded-full bg-gradient-to-br from-rose-400 to-pink-500 flex items-center justify-center text-white font-bold text-sm">CF</div>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-1.5">
+                  <span class="font-medium text-sm text-slate-300 truncate">Camila Ferreira</span>
+                </div>
+                <span class="text-[10px] text-slate-500">12:05</span>
+              </div>
+              <div class="flex items-center gap-1 mt-0.5">
+                <svg class="w-3 h-3 text-slate-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                <svg class="w-3 h-3 text-blue-400 flex-shrink-0 -ml-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                <p class="text-xs text-slate-500 truncate">Lembrete enviado: experimental amanhã</p>
+              </div>
+              <div class="flex items-center justify-between mt-1">
+                <div class="flex items-center gap-1">
+                  <span class="text-[10px] text-slate-500">Teclado · Recreio</span>
+                  <span class="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-medium">📅 Agendada</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Conversa 7 -->
+        <div class="inbox-item cursor-pointer px-3 py-3 hover:bg-slate-800/50 transition border-b border-slate-800/30" onclick="selecionarConversa(7)">
+          <div class="flex gap-3">
+            <div class="relative flex-shrink-0">
+              <div class="w-11 h-11 rounded-full bg-gradient-to-br from-sky-400 to-blue-500 flex items-center justify-center text-white font-bold text-sm">PM</div>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between">
+                <span class="font-medium text-sm text-slate-300 truncate">Pedro Mendes</span>
+                <span class="text-[10px] text-slate-500">11:30</span>
+              </div>
+              <div class="flex items-center gap-1 mt-0.5">
+                <p class="text-xs text-slate-500 truncate">Obrigado pelas informações!</p>
+              </div>
+              <div class="flex items-center justify-between mt-1">
+                <span class="text-[10px] text-slate-500">Saxofone · Barra</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Conversa 8: Lead sem conversa iniciada -->
+        <div class="inbox-item cursor-pointer px-3 py-3 hover:bg-slate-800/50 transition border-b border-slate-800/30 opacity-60" onclick="selecionarConversa(8)">
+          <div class="flex gap-3">
+            <div class="relative flex-shrink-0">
+              <div class="w-11 h-11 rounded-full bg-slate-700 flex items-center justify-center text-slate-400 font-bold text-sm">TB</div>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-1.5">
+                  <span class="font-medium text-sm text-slate-400 truncate">Thiago Barbosa</span>
+                  <span class="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-700 text-slate-400 font-medium">Novo</span>
+                </div>
+                <span class="text-[10px] text-slate-600">Ontem</span>
+              </div>
+              <div class="flex items-center gap-1 mt-0.5">
+                <p class="text-xs text-slate-600 truncate italic">Nenhuma conversa iniciada</p>
+              </div>
+              <div class="flex items-center justify-between mt-1">
+                <span class="text-[10px] text-slate-600">Violão · CG</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Footer do Inbox: contagem -->
+      <div class="p-3 border-t border-slate-700/50 flex items-center justify-between">
+        <span class="text-[11px] text-slate-500">8 conversas · 5 não lidas</span>
+        <button class="text-[11px] text-violet-400 hover:text-violet-300 font-medium transition">Ver arquivadas</button>
+      </div>
+    </div>
+
+    <!-- ========================================================== -->
+    <!-- COLUNA 2: CHAT (flex-1)                                    -->
+    <!-- ========================================================== -->
+    <div class="flex-1 flex flex-col bg-slate-900 min-w-0">
+
+      <!-- Header do Chat -->
+      <div class="px-4 py-3 border-b border-slate-700 flex items-center justify-between flex-shrink-0 bg-slate-800/50">
+        <div class="flex items-center gap-3">
+          <div class="relative">
+            <div class="w-10 h-10 rounded-full bg-gradient-to-br from-pink-400 to-rose-500 flex items-center justify-center text-white font-bold text-sm">MS</div>
+            <div class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-400 rounded-full border-2 border-slate-800"></div>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 class="font-semibold text-white text-sm">Maria Silva</h3>
+              <span class="text-[10px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 font-medium">🤖 Mila atendendo</span>
+            </div>
+            <p class="text-[11px] text-slate-400">(21) 98765-4321 · Piano · Barra · Em Contato</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-2">
+          <!-- Botão Pausar Mila -->
+          <button id="btnPausarMila" onclick="toggleMila()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-amber-500/20 text-amber-400 border border-amber-500/30 hover:bg-amber-500/30 transition">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            Assumir conversa
+          </button>
+          <button id="btnRetornarMila" onclick="toggleMila()" class="items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/30 transition hidden">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            Devolver p/ Mila
+          </button>
+          <!-- Botão Ligar -->
+          <button class="relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 transition" data-tooltip="Ligar via WhatsApp">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
+            Ligar
+          </button>
+          <!-- Toggle ficha do lead -->
+          <button onclick="toggleFicha()" class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition" title="Mostrar/ocultar ficha do lead">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Área de mensagens -->
+      <div class="flex-1 overflow-y-auto px-4 py-4 space-y-3" id="chatArea" style="background: linear-gradient(180deg, #0f172a 0%, #0d1424 100%);">
+
+        <!-- Separador de data -->
+        <div class="flex items-center gap-3 py-2">
+          <div class="flex-1 h-px bg-slate-700/50"></div>
+          <span class="text-[10px] text-slate-500 font-medium bg-slate-800 px-3 py-1 rounded-full">Hoje, 13 de fevereiro</span>
+          <div class="flex-1 h-px bg-slate-700/50"></div>
+        </div>
+
+        <!-- Mensagem de sistema: Mila iniciou -->
+        <div class="flex justify-center fade-in-up">
+          <div class="bg-slate-800/60 border border-slate-700/30 rounded-lg px-4 py-1.5 max-w-md">
+            <p class="text-[11px] text-slate-400 text-center">
+              <span class="text-cyan-400 font-medium">🤖 Mila</span> iniciou o atendimento · 14:28
+            </p>
+          </div>
+        </div>
+
+        <!-- Bolha SAÍDA (Mila) -->
+        <div class="flex justify-end fade-in-up">
+          <div class="max-w-[70%]">
+            <div class="bg-violet-600/20 border border-violet-500/20 rounded-2xl rounded-tr-md px-4 py-2.5">
+              <p class="text-sm text-slate-200 leading-relaxed">Olá! 😊 Bem-vinda à LA Music School! Eu sou a Mila, assistente virtual da escola. Vi que você tem interesse em aulas de piano, é isso mesmo?</p>
+            </div>
+            <div class="flex items-center justify-end gap-1.5 mt-1 px-1">
+              <span class="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-400 font-medium">🤖 Mila</span>
+              <span class="text-[10px] text-slate-500">14:28</span>
+              <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+              <svg class="w-3.5 h-3.5 text-blue-400 -ml-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bolha ENTRADA (Lead) -->
+        <div class="flex justify-start fade-in-up">
+          <div class="max-w-[70%]">
+            <div class="bg-slate-800 border border-slate-700/50 rounded-2xl rounded-tl-md px-4 py-2.5">
+              <p class="text-sm text-slate-200 leading-relaxed">Oi! Sim, isso mesmo! Quero saber sobre aulas de piano pra minha filha de 8 anos</p>
+            </div>
+            <div class="flex items-center gap-1.5 mt-1 px-1">
+              <span class="text-[10px] text-slate-500">Maria · 14:30</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bolha SAÍDA (Mila) -->
+        <div class="flex justify-end fade-in-up">
+          <div class="max-w-[70%]">
+            <div class="bg-violet-600/20 border border-violet-500/20 rounded-2xl rounded-tr-md px-4 py-2.5">
+              <p class="text-sm text-slate-200 leading-relaxed">Que legal! 🎹 Temos o programa LAMK (LA Music Kids) que é perfeito pra crianças a partir de 6 anos. As aulas são super dinâmicas e divertidas! Sua filha já teve algum contato com música antes?</p>
+            </div>
+            <div class="flex items-center justify-end gap-1.5 mt-1 px-1">
+              <span class="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-400 font-medium">🤖 Mila</span>
+              <span class="text-[10px] text-slate-500">14:30</span>
+              <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+              <svg class="w-3.5 h-3.5 text-blue-400 -ml-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bolha ENTRADA (Lead) -->
+        <div class="flex justify-start fade-in-up">
+          <div class="max-w-[70%]">
+            <div class="bg-slate-800 border border-slate-700/50 rounded-2xl rounded-tl-md px-4 py-2.5">
+              <p class="text-sm text-slate-200 leading-relaxed">Não, seria a primeira vez dela. Quanto custa? E vocês têm aula experimental?</p>
+            </div>
+            <div class="flex items-center gap-1.5 mt-1 px-1">
+              <span class="text-[10px] text-slate-500">Maria · 14:32</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bolha SAÍDA (Mila) — com indicador de "lead perguntou preço" -->
+        <div class="flex justify-end fade-in-up">
+          <div class="max-w-[70%]">
+            <div class="bg-violet-600/20 border border-violet-500/20 rounded-2xl rounded-tr-md px-4 py-2.5">
+              <p class="text-sm text-slate-200 leading-relaxed">Sim, temos aula experimental gratuita! 🎉 Sobre valores, vou passar você para a Andreza que é nossa especialista e vai te dar todas as informações detalhadas, tá? Ela já vai te atender!</p>
+            </div>
+            <div class="flex items-center justify-end gap-1.5 mt-1 px-1">
+              <span class="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-400 font-medium">🤖 Mila</span>
+              <span class="text-[10px] text-slate-500">14:33</span>
+              <svg class="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+              <svg class="w-3.5 h-3.5 text-blue-400 -ml-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mensagem de sistema: Mila passou bastão -->
+        <div class="flex justify-center fade-in-up">
+          <div class="bg-amber-900/30 border border-amber-700/30 rounded-lg px-4 py-1.5 max-w-md">
+            <p class="text-[11px] text-amber-300 text-center">
+              🔔 <span class="font-medium">Mila passou o bastão</span> — Motivo: Lead perguntou sobre preço · 14:33
+            </p>
+          </div>
+        </div>
+
+        <!-- Indicador de "digitando" (simulação) -->
+        <div class="flex justify-start fade-in-up" id="typingIndicator" style="display: none;">
+          <div class="bg-slate-800 border border-slate-700/50 rounded-2xl rounded-tl-md px-4 py-3">
+            <div class="flex items-center gap-1">
+              <div class="w-2 h-2 bg-slate-400 rounded-full typing-dot-1"></div>
+              <div class="w-2 h-2 bg-slate-400 rounded-full typing-dot-2"></div>
+              <div class="w-2 h-2 bg-slate-400 rounded-full typing-dot-3"></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Barra de templates (acima do input) -->
+      <div id="templateBar" class="px-4 py-2 border-t border-slate-700/50 bg-slate-800/30 hidden">
+        <div class="flex items-center gap-2 mb-2">
+          <span class="text-[11px] text-slate-400 font-medium">Templates rápidos:</span>
+          <button onclick="toggleTemplates()" class="text-[11px] text-slate-500 hover:text-slate-300 ml-auto">✕ Fechar</button>
+        </div>
+        <div class="flex flex-wrap gap-1.5">
+          <button onclick="usarTemplate('confirm')" class="px-3 py-1.5 text-[11px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-lg hover:bg-emerald-500/20 transition font-medium">✅ Confirmação</button>
+          <button onclick="usarTemplate('lembrete')" class="px-3 py-1.5 text-[11px] bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-lg hover:bg-amber-500/20 transition font-medium">⏰ Lembrete 24h</button>
+          <button onclick="usarTemplate('reagendar')" class="px-3 py-1.5 text-[11px] bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-lg hover:bg-blue-500/20 transition font-medium">📅 Reagendar</button>
+          <button onclick="usarTemplate('pos')" class="px-3 py-1.5 text-[11px] bg-violet-500/10 text-violet-400 border border-violet-500/20 rounded-lg hover:bg-violet-500/20 transition font-medium">🎵 Pós-Experimental</button>
+          <button onclick="usarTemplate('frio')" class="px-3 py-1.5 text-[11px] bg-sky-500/10 text-sky-400 border border-sky-500/20 rounded-lg hover:bg-sky-500/20 transition font-medium">❄️ Follow-up Frio</button>
+          <button onclick="usarTemplate('boas')" class="px-3 py-1.5 text-[11px] bg-pink-500/10 text-pink-400 border border-pink-500/20 rounded-lg hover:bg-pink-500/20 transition font-medium">👋 Boas-vindas</button>
+          <button onclick="usarTemplate('sem')" class="px-3 py-1.5 text-[11px] bg-red-500/10 text-red-400 border border-red-500/20 rounded-lg hover:bg-red-500/20 transition font-medium">📵 Sem Resposta</button>
+        </div>
+      </div>
+
+      <!-- Input de mensagem -->
+      <div class="px-4 py-3 border-t border-slate-700 flex-shrink-0 bg-slate-800/30">
+        <div class="flex items-end gap-2">
+          <!-- Botões de mídia -->
+          <div class="flex items-center gap-1 pb-1">
+            <button class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition" title="Anexar arquivo">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+            </button>
+            <button class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition" title="Enviar imagem">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+            </button>
+            <button class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700 transition" title="Gravar áudio">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
+            </button>
+          </div>
+          <!-- Campo de texto -->
+          <div class="flex-1 relative">
+            <textarea id="chatInput" rows="1" placeholder="Digite sua mensagem..." class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none resize-none max-h-32" oninput="autoResize(this)"></textarea>
+          </div>
+          <!-- Botões de ação -->
+          <div class="flex items-center gap-1 pb-1">
+            <button onclick="toggleTemplates()" class="p-2 rounded-lg text-slate-400 hover:text-violet-400 hover:bg-slate-700 transition" title="Templates rápidos">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"/></svg>
+            </button>
+            <button onclick="enviarMensagem()" class="p-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white transition" title="Enviar">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ========================================================== -->
+    <!-- COLUNA 3: FICHA DO LEAD (320px, colapsável)                -->
+    <!-- ========================================================== -->
+    <div id="fichaLead" class="w-[320px] flex-shrink-0 border-l border-slate-700 flex flex-col overflow-y-auto slide-in-right" style="background: #0d1424;">
+
+      <!-- Header da ficha -->
+      <div class="p-4 border-b border-slate-700/50 text-center">
+        <div class="w-16 h-16 rounded-full bg-gradient-to-br from-pink-400 to-rose-500 flex items-center justify-center text-white font-bold text-xl mx-auto mb-3">MS</div>
+        <h3 class="font-bold text-white text-base">Maria Silva</h3>
+        <p class="text-xs text-slate-400 mt-0.5">(21) 98765-4321</p>
+        <div class="flex items-center justify-center gap-2 mt-2">
+          <span class="text-[10px] px-2 py-0.5 rounded-full bg-red-500/20 text-red-400 font-bold">🔥 Quente</span>
+          <span class="text-[10px] px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-400 font-medium">Em Contato</span>
+        </div>
+      </div>
+
+      <!-- Dados do lead -->
+      <div class="p-4 space-y-4">
+
+        <!-- Informações básicas -->
+        <div>
+          <h4 class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Informações</h4>
+          <div class="space-y-2">
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-slate-500">Curso</span>
+              <span class="text-xs text-white font-medium">Piano</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-slate-500">Unidade</span>
+              <span class="text-xs text-white font-medium">Barra</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-slate-500">Faixa Etária</span>
+              <span class="text-xs text-white font-medium">LAMK (8 anos)</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-slate-500">Canal</span>
+              <span class="text-xs text-white font-medium">Instagram</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-slate-500">Sabe o preço?</span>
+              <span class="text-xs text-amber-400 font-medium">Perguntou agora</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-slate-500">Primeiro contato</span>
+              <span class="text-xs text-white font-medium">13/02/2026</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- KPIs da conversa -->
+        <div>
+          <h4 class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">KPIs da Conversa</h4>
+          <div class="grid grid-cols-2 gap-2">
+            <div class="bg-slate-800/50 border border-slate-700/30 rounded-lg p-2.5 text-center">
+              <p class="text-lg font-bold text-white">5min</p>
+              <p class="text-[10px] text-slate-500">Tempo resposta</p>
+            </div>
+            <div class="bg-slate-800/50 border border-slate-700/30 rounded-lg p-2.5 text-center">
+              <p class="text-lg font-bold text-white">6</p>
+              <p class="text-[10px] text-slate-500">Msgs trocadas</p>
+            </div>
+            <div class="bg-slate-800/50 border border-slate-700/30 rounded-lg p-2.5 text-center">
+              <p class="text-lg font-bold text-white">0</p>
+              <p class="text-[10px] text-slate-500">Dias no pipeline</p>
+            </div>
+            <div class="bg-slate-800/50 border border-slate-700/30 rounded-lg p-2.5 text-center">
+              <p class="text-lg font-bold text-cyan-400">3</p>
+              <p class="text-[10px] text-slate-500">Msgs Mila</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Ações rápidas -->
+        <div>
+          <h4 class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Ações</h4>
+          <div class="space-y-1.5">
+            <button class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 hover:bg-emerald-500/20 transition">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+              Agendar Experimental
+            </button>
+            <button class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-blue-500/10 text-blue-400 border border-blue-500/20 hover:bg-blue-500/20 transition">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+              Mover Etapa
+            </button>
+            <button class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-violet-500/10 text-violet-400 border border-violet-500/20 hover:bg-violet-500/20 transition">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+              Matricular
+            </button>
+            <button class="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-slate-500/10 text-slate-400 border border-slate-500/20 hover:bg-slate-500/20 transition">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+              Arquivar
+            </button>
+          </div>
+        </div>
+
+        <!-- Timeline -->
+        <div>
+          <h4 class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Timeline</h4>
+          <div class="space-y-3">
+            <div class="flex gap-2">
+              <div class="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 flex-shrink-0"></div>
+              <div>
+                <p class="text-xs text-white">Mila passou bastão</p>
+                <p class="text-[10px] text-slate-500">Lead perguntou preço · 14:33</p>
+              </div>
+            </div>
+            <div class="flex gap-2">
+              <div class="w-1.5 h-1.5 rounded-full bg-cyan-400 mt-1.5 flex-shrink-0"></div>
+              <div>
+                <p class="text-xs text-white">Mila iniciou atendimento</p>
+                <p class="text-[10px] text-slate-500">3 mensagens trocadas · 14:28</p>
+              </div>
+            </div>
+            <div class="flex gap-2">
+              <div class="w-1.5 h-1.5 rounded-full bg-violet-400 mt-1.5 flex-shrink-0"></div>
+              <div>
+                <p class="text-xs text-white">Lead criado</p>
+                <p class="text-[10px] text-slate-500">Via Instagram · 14:25</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Observações -->
+        <div>
+          <h4 class="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Observações</h4>
+          <textarea rows="3" placeholder="Adicionar observação..." class="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none resize-none"></textarea>
+        </div>
+
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ============================================================ -->
+  <!-- SCRIPTS DE INTERAÇÃO                                         -->
+  <!-- ============================================================ -->
+  <script>
+    // Toggle banner conectado/desconectado
+    function toggleBanner() {
+      const c = document.getElementById('bannerConectado');
+      const d = document.getElementById('bannerDesconectado');
+      if (c.classList.contains('hidden')) {
+        c.classList.remove('hidden');
+        c.classList.add('flex');
+        d.classList.add('hidden');
+        d.classList.remove('flex');
+      } else {
+        c.classList.add('hidden');
+        c.classList.remove('flex');
+        d.classList.remove('hidden');
+        d.classList.add('flex');
+      }
+    }
+
+    // Toggle ficha do lead (colapsável)
+    let fichaVisivel = true;
+    function toggleFicha() {
+      const ficha = document.getElementById('fichaLead');
+      if (fichaVisivel) {
+        ficha.style.display = 'none';
+        fichaVisivel = false;
+      } else {
+        ficha.style.display = 'flex';
+        fichaVisivel = true;
+      }
+    }
+
+    // Toggle Mila (pausar/retomar)
+    let milaPausada = false;
+    function toggleMila() {
+      const btnPausar = document.getElementById('btnPausarMila');
+      const btnRetornar = document.getElementById('btnRetornarMila');
+      const chatArea = document.getElementById('chatArea');
+
+      if (!milaPausada) {
+        // Pausar Mila
+        btnPausar.style.display = 'none';
+        btnRetornar.style.display = 'flex';
+        milaPausada = true;
+
+        // Adicionar mensagem de sistema
+        const msgSistema = document.createElement('div');
+        msgSistema.className = 'flex justify-center fade-in-up';
+        msgSistema.innerHTML = `
+          <div class="bg-violet-900/30 border border-violet-700/30 rounded-lg px-4 py-1.5 max-w-md">
+            <p class="text-[11px] text-violet-300 text-center">
+              👩 <span class="font-medium">Andreza assumiu a conversa</span> — Mila pausada · ${new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}
+            </p>
+          </div>
+        `;
+        chatArea.appendChild(msgSistema);
+        chatArea.scrollTop = chatArea.scrollHeight;
+      } else {
+        // Retomar Mila
+        btnPausar.style.display = 'flex';
+        btnRetornar.style.display = 'none';
+        milaPausada = false;
+
+        const msgSistema = document.createElement('div');
+        msgSistema.className = 'flex justify-center fade-in-up';
+        msgSistema.innerHTML = `
+          <div class="bg-cyan-900/30 border border-cyan-700/30 rounded-lg px-4 py-1.5 max-w-md">
+            <p class="text-[11px] text-cyan-300 text-center">
+              🤖 <span class="font-medium">Mila retomou o atendimento</span> · ${new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'})}
+            </p>
+          </div>
+        `;
+        chatArea.appendChild(msgSistema);
+        chatArea.scrollTop = chatArea.scrollHeight;
+      }
+    }
+
+    // Toggle templates
+    function toggleTemplates() {
+      const bar = document.getElementById('templateBar');
+      bar.classList.toggle('hidden');
+    }
+
+    // Usar template
+    const templates = {
+      confirm: 'Olá {nome}! 😊 Confirmando sua aula experimental de {curso} no dia {data} às {hora} na unidade {unidade}. Estamos te esperando! 🎵',
+      lembrete: 'Oi {nome}! 👋 Passando pra lembrar que amanhã, {data}, você tem aula experimental de {curso} às {hora} na LA Music {unidade}. Tudo certo? 🎶',
+      reagendar: 'Oi {nome}! Vi que não conseguiu comparecer à experimental. Sem problemas! 😊 Vamos reagendar? Qual dia e horário ficam bons pra você?',
+      pos: 'Oi {nome}! 🎵 Como foi a experiência na aula experimental de {curso}? Esperamos que tenha gostado! Quer saber sobre nossos planos e começar as aulas?',
+      frio: 'Oi {nome}! 👋 Aqui é a Andreza da LA Music. Você demonstrou interesse em aulas de {curso} há um tempo. Ainda tem interesse? Temos novidades! 🎶',
+      boas: 'Bem-vindo(a) à família LA Music, {nome}! 🎉🎵 Estamos muito felizes com sua matrícula em {curso}! Sua primeira aula será no dia {data} às {hora}.',
+      sem: 'Oi {nome}, tudo bem? 😊 Tentei falar com você sobre as aulas de {curso} na LA Music. Quando puder, me responde aqui que te passo todas as informações! 🎵'
+    };
+
+    function usarTemplate(tipo) {
+      const input = document.getElementById('chatInput');
+      input.value = templates[tipo] || '';
+      input.focus();
+      autoResize(input);
+      toggleTemplates();
+    }
+
+    // Auto-resize textarea
+    function autoResize(el) {
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 128) + 'px';
+    }
+
+    // Enviar mensagem (simulação)
+    function enviarMensagem() {
+      const input = document.getElementById('chatInput');
+      const texto = input.value.trim();
+      if (!texto) return;
+
+      const chatArea = document.getElementById('chatArea');
+      const hora = new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+
+      // Criar bolha de saída
+      const bolha = document.createElement('div');
+      bolha.className = 'flex justify-end fade-in-up';
+      bolha.innerHTML = `
+        <div class="max-w-[70%]">
+          <div class="bg-violet-600/20 border border-violet-500/20 rounded-2xl rounded-tr-md px-4 py-2.5">
+            <p class="text-sm text-slate-200 leading-relaxed">${texto.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>
+          </div>
+          <div class="flex items-center justify-end gap-1.5 mt-1 px-1">
+            <span class="text-[9px] px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-400 font-medium">👩 Andreza</span>
+            <span class="text-[10px] text-slate-500">${hora}</span>
+            <svg class="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+          </div>
+        </div>
+      `;
+      chatArea.appendChild(bolha);
+
+      // Limpar input
+      input.value = '';
+      input.style.height = 'auto';
+      chatArea.scrollTop = chatArea.scrollHeight;
+
+      // Simular status "entregue" após 1s
+      setTimeout(() => {
+        const statusIcon = bolha.querySelector('svg');
+        if (statusIcon) {
+          statusIcon.classList.remove('text-slate-500');
+          statusIcon.classList.add('text-blue-400');
+        }
+      }, 1000);
+
+      // Simular resposta do lead após 3s
+      setTimeout(() => {
+        const resposta = document.createElement('div');
+        resposta.className = 'flex justify-start fade-in-up';
+        const horaResp = new Date().toLocaleTimeString('pt-BR', {hour:'2-digit', minute:'2-digit'});
+        resposta.innerHTML = `
+          <div class="max-w-[70%]">
+            <div class="bg-slate-800 border border-slate-700/50 rounded-2xl rounded-tl-md px-4 py-2.5">
+              <p class="text-sm text-slate-200 leading-relaxed">Que ótimo! Pode me passar mais detalhes? 😊</p>
+            </div>
+            <div class="flex items-center gap-1.5 mt-1 px-1">
+              <span class="text-[10px] text-slate-500">Maria · ${horaResp}</span>
+            </div>
+          </div>
+        `;
+        chatArea.appendChild(resposta);
+        chatArea.scrollTop = chatArea.scrollHeight;
+      }, 3000);
+    }
+
+    // Selecionar conversa no inbox (simulação visual)
+    function selecionarConversa(id) {
+      document.querySelectorAll('.inbox-item').forEach(item => item.classList.remove('active'));
+      const items = document.querySelectorAll('.inbox-item');
+      if (items[id - 1]) items[id - 1].classList.add('active');
+    }
+
+    // Enter para enviar
+    document.addEventListener('DOMContentLoaded', () => {
+      const input = document.getElementById('chatInput');
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault();
+          enviarMensagem();
+        }
+      });
+
+      // Scroll para o final do chat
+      const chatArea = document.getElementById('chatArea');
+      chatArea.scrollTop = chatArea.scrollHeight;
+    });
+  </script>
+
+</body>
+</html>

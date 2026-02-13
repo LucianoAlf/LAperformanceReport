@@ -9,6 +9,7 @@ import {
   BarChart3,
   Briefcase,
   ClipboardList,
+  Phone,
   Users,
   Shield,
   UserCog,
@@ -41,6 +42,7 @@ const prefetchMap: Record<string, () => Promise<any>> = {
   '/app/metas': () => import('@/components/App/Metas'),
   '/app/config': () => import('@/components/App/Config'),
   '/app/comercial': () => import('@/components/App/Comercial'),
+  '/app/pre-atendimento': () => import('@/components/App/PreAtendimento'),
   '/app/administrativo': () => import('@/components/App/Administrativo'),
   '/app/alunos': () => import('@/components/App/Alunos'),
   '/app/professores': () => import('@/components/App/Professores'),
@@ -63,6 +65,7 @@ const menuItems = [
 
 const operacional = [
   { path: '/app/comercial', label: 'Comercial', icon: Briefcase },
+  { path: '/app/pre-atendimento', label: 'Pré-Atendimento', icon: Phone },
   { path: '/app/administrativo', label: 'Administrativo', icon: ClipboardList },
   { path: '/app/alunos', label: 'Alunos', icon: Users },
   { path: '/app/professores', label: 'Professores', icon: GraduationCap },

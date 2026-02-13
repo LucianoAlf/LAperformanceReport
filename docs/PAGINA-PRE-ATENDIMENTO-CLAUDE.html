@@ -1,0 +1,3565 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LA Music Report — Pré-Atendimento</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════ RESET & VARS ═══════════════════════ */
+:root {
+  --sidebar-w: 220px;
+  --topbar-h: 64px;
+  --bg: #0d1117;
+  --bg-sidebar: #0d1117;
+  --bg-card: #161b22;
+  --bg-card-hover: #1c2333;
+  --bg-surface: #131820;
+  --bg-input: #0d1117;
+  --border: #21262d;
+  --border-light: #30363d;
+  --text: #e6edf3;
+  --text-secondary: #8b949e;
+  --text-muted: #484f58;
+  --purple: #7c3aed;
+  --purple-soft: rgba(124,58,237,0.15);
+  --purple-text: #a78bfa;
+  --cyan: #06b6d4;
+  --cyan-soft: rgba(6,182,212,0.12);
+  --green: #10b981;
+  --green-soft: rgba(16,185,129,0.12);
+  --amber: #f59e0b;
+  --amber-soft: rgba(245,158,11,0.12);
+  --red: #ef4444;
+  --red-soft: rgba(239,68,68,0.12);
+  --blue: #3b82f6;
+  --blue-soft: rgba(59,130,246,0.12);
+  --pink: #ec4899;
+  --pink-soft: rgba(236,72,153,0.12);
+  --orange: #f97316;
+  --orange-soft: rgba(249,115,22,0.15);
+  --teal: #14b8a6;
+  --teal-soft: rgba(20,184,166,0.12);
+  --radius: 10px;
+  --radius-sm: 6px;
+  --radius-lg: 14px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+  height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ═══════════════════════ SIDEBAR ═══════════════════════ */
+.sidebar {
+  position: fixed;
+  left: 0; top: 0; bottom: 0;
+  width: var(--sidebar-w);
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  z-index: 50;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.sidebar::-webkit-scrollbar { display: none; }
+
+.sidebar-logo {
+  padding: 20px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.sidebar-logo .logo-icon {
+  width: 36px; height: 36px;
+  background: linear-gradient(135deg, var(--purple), var(--pink));
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 14px; color: white;
+}
+.sidebar-logo .logo-text {
+  font-size: 14px; font-weight: 700; line-height: 1.2;
+}
+.sidebar-logo .logo-text span { color: var(--text-muted); font-size: 11px; font-weight: 400; display: block; }
+
+.sidebar-section { padding: 16px 12px 4px; }
+.sidebar-section-label {
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 1.2px; color: var(--text-muted); padding: 0 8px; margin-bottom: 6px;
+}
+
+.sidebar-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-radius: var(--radius-sm);
+  font-size: 13px; font-weight: 500; color: var(--text-secondary);
+  cursor: pointer; transition: all 0.15s; margin-bottom: 2px;
+  text-decoration: none;
+}
+.sidebar-item:hover { background: var(--bg-card); color: var(--text); }
+.sidebar-item.active {
+  background: var(--purple-soft); color: var(--purple-text);
+  font-weight: 600;
+}
+.sidebar-item .icon { font-size: 16px; width: 20px; text-align: center; }
+
+.sidebar-user {
+  margin-top: auto; padding: 16px;
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px;
+}
+.sidebar-user-avatar {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--purple), var(--cyan));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; color: white;
+}
+.sidebar-user-info { font-size: 12px; }
+.sidebar-user-info .name { font-weight: 600; }
+.sidebar-user-info .role { color: var(--text-muted); font-size: 11px; }
+
+/* ═══════════════════════ MAIN AREA ═══════════════════════ */
+.main {
+  margin-left: var(--sidebar-w);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ═══════════════════════ TOP BAR ═══════════════════════ */
+.topbar {
+  height: var(--topbar-h);
+  min-height: var(--topbar-h);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px;
+}
+.topbar-left { display: flex; align-items: center; gap: 12px; }
+.topbar-greeting { font-size: 15px; font-weight: 600; }
+.topbar-greeting span { color: var(--text-muted); font-size: 12px; font-weight: 400; display: block; }
+
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+
+.topbar-select {
+  background: var(--bg-card); border: 1px solid var(--border);
+  color: var(--text); padding: 7px 14px; border-radius: var(--radius-sm);
+  font-size: 12px; font-weight: 500; cursor: pointer;
+  appearance: none; -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238b949e' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center;
+  padding-right: 28px;
+}
+.topbar-select:focus { outline: none; border-color: var(--purple); }
+
+/* ═══════════════════════ PAGE HEADER ═══════════════════════ */
+.page-header {
+  padding: 20px 28px 0;
+}
+.page-title-row {
+  display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 16px;
+}
+.page-title { font-size: 22px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+.page-title .emoji { font-size: 24px; }
+.page-subtitle { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
+
+/* ═══════════════════════ SUB-TABS ═══════════════════════ */
+.subtabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 28px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.subtabs::-webkit-scrollbar { display: none; }
+
+.subtab {
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.subtab:hover { color: var(--text); }
+.subtab.active {
+  color: var(--purple-text);
+  border-bottom-color: var(--purple);
+  font-weight: 600;
+}
+.subtab .badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 100px;
+  background: var(--red);
+  color: white;
+  font-weight: 700;
+}
+
+/* ═══════════════════════ CONTENT AREA ═══════════════════════ */
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 28px 40px;
+  scroll-behavior: smooth;
+}
+.content::-webkit-scrollbar { width: 6px; }
+.content::-webkit-scrollbar-track { background: transparent; }
+.content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* ═══════════════════════ GRID LAYOUTS ═══════════════════════ */
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
+
+/* ═══════════════════════ STAT CARDS ═══════════════════════ */
+.stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+.stat-card:hover { border-color: var(--border-light); }
+.stat-card-accent {
+  position: absolute; top: 0; left: 0; width: 4px; height: 100%;
+}
+.stat-card .icon-circle {
+  width: 38px; height: 38px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; margin-bottom: 12px;
+}
+.stat-card .value {
+  font-size: 28px; font-weight: 800; line-height: 1; margin-bottom: 4px;
+}
+.stat-card .label {
+  font-size: 12px; color: var(--text-secondary); font-weight: 500;
+}
+.stat-card .sub {
+  font-size: 11px; color: var(--text-muted); margin-top: 2px;
+}
+
+/* ═══════════════════════ ALERT BANNERS ═══════════════════════ */
+.alert-banner {
+  padding: 14px 18px;
+  border-radius: var(--radius);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+.alert-banner .alert-icon {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; font-size: 14px;
+  flex-shrink: 0;
+}
+.alert-banner .alert-content { flex: 1; }
+.alert-banner .alert-title { font-weight: 600; margin-bottom: 1px; }
+.alert-banner .alert-desc { font-size: 12px; color: var(--text-secondary); }
+.alert-banner .alert-close { cursor: pointer; color: var(--text-muted); font-size: 18px; padding: 4px; }
+
+.alert-banner.success { background: var(--green-soft); border: 1px solid rgba(16,185,129,0.25); }
+.alert-banner.success .alert-icon { background: var(--green); color: white; }
+.alert-banner.warning { background: var(--amber-soft); border: 1px solid rgba(245,158,11,0.25); }
+.alert-banner.warning .alert-icon { background: var(--amber); color: white; }
+.alert-banner.danger { background: var(--red-soft); border: 1px solid rgba(239,68,68,0.25); }
+.alert-banner.danger .alert-icon { background: var(--red); color: white; }
+.alert-banner.info { background: var(--blue-soft); border: 1px solid rgba(59,130,246,0.25); }
+.alert-banner.info .alert-icon { background: var(--blue); color: white; }
+.alert-banner.purple-alert { background: var(--purple-soft); border: 1px solid rgba(124,58,237,0.25); }
+.alert-banner.purple-alert .alert-icon { background: var(--purple); color: white; }
+
+/* ═══════════════════════ SECTION TITLES ═══════════════════════ */
+.section-title {
+  font-size: 15px; font-weight: 700; margin: 24px 0 12px;
+  display: flex; align-items: center; gap: 8px;
+}
+.section-title:first-child { margin-top: 0; }
+.section-title .count {
+  font-size: 11px; background: var(--bg-card); border: 1px solid var(--border);
+  padding: 1px 8px; border-radius: 100px; color: var(--text-secondary); font-weight: 600;
+}
+
+/* ═══════════════════════ PANELS / BOXES ═══════════════════════ */
+.panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.panel-header {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 13px; font-weight: 600;
+}
+.panel-body { padding: 18px; }
+
+/* ═══════════════════════ PROGRESS BARS ═══════════════════════ */
+.progress-wrap { margin-bottom: 14px; }
+.progress-label {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 12px; margin-bottom: 5px;
+}
+.progress-label .name { color: var(--text-secondary); font-weight: 500; }
+.progress-label .val { font-weight: 700; font-size: 13px; }
+.progress-bar {
+  height: 8px; background: var(--bg); border-radius: 4px; overflow: hidden;
+}
+.progress-fill {
+  height: 100%; border-radius: 4px; transition: width 0.8s ease;
+}
+
+/* ═══════════════════════ KANBAN ═══════════════════════ */
+.kanban-scroll { overflow-x: auto; padding-bottom: 12px; }
+.kanban-board { display: flex; gap: 12px; min-width: max-content; }
+.kanban-col {
+  width: 220px; min-width: 220px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  max-height: calc(100vh - 280px);
+  display: flex; flex-direction: column;
+}
+.kanban-col-header {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 12px; font-weight: 700;
+  position: sticky; top: 0; background: var(--bg-surface); z-index: 1;
+}
+.kanban-col-header .count-badge {
+  background: var(--bg-card); border: 1px solid var(--border);
+  font-size: 10px; padding: 1px 7px; border-radius: 100px; font-weight: 700;
+}
+.kanban-col-body {
+  padding: 8px; overflow-y: auto; flex: 1;
+  scrollbar-width: thin;
+}
+.kanban-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  position: relative;
+}
+.kanban-card:hover {
+  border-color: var(--purple);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+.kanban-card .kc-name { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.kanban-card .kc-info {
+  font-size: 11px; color: var(--text-secondary);
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+}
+.kanban-card .kc-tag {
+  font-size: 10px; padding: 1px 6px; border-radius: 4px;
+  font-weight: 600; display: inline-flex; align-items: center; gap: 3px;
+}
+.kanban-card .kc-actions {
+  display: flex; gap: 4px; margin-top: 8px;
+}
+.kanban-card .kc-btn {
+  font-size: 14px; padding: 3px 6px; border-radius: 4px;
+  cursor: pointer; transition: background 0.15s;
+  background: none; border: none; color: var(--text-secondary);
+}
+.kanban-card .kc-btn:hover { background: var(--border); color: var(--text); }
+.kanban-card .kc-time {
+  font-size: 10px; color: var(--text-muted);
+  position: absolute; top: 10px; right: 10px;
+}
+.kanban-card .kc-time.urgent { color: var(--red); font-weight: 700; }
+
+/* ═══════════════════════ DATA TABLE ═══════════════════════ */
+.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.data-table th {
+  text-align: left; padding: 10px 14px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.5px; color: var(--text-muted);
+  position: sticky; top: 0; z-index: 1;
+}
+.data-table td {
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+  color: var(--text-secondary); vertical-align: middle;
+}
+.data-table tr { cursor: pointer; transition: background 0.1s; }
+.data-table tbody tr:hover td { background: var(--bg-card); }
+.data-table .tag {
+  font-size: 10px; padding: 2px 8px; border-radius: 100px;
+  font-weight: 600; display: inline-block;
+}
+
+/* ═══════════════════════ BUTTONS ═══════════════════════ */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: var(--radius-sm);
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  border: 1px solid var(--border); background: var(--bg-card);
+  color: var(--text); transition: all 0.15s;
+}
+.btn:hover { border-color: var(--border-light); background: var(--bg-card-hover); }
+.btn-primary { background: var(--purple); border-color: var(--purple); color: white; }
+.btn-primary:hover { background: #6d28d9; }
+.btn-sm { padding: 5px 10px; font-size: 11px; }
+.btn-green { background: var(--green); border-color: var(--green); color: white; }
+
+/* ═══════════════════════ FILTER BAR ═══════════════════════ */
+.filter-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.filter-bar .filter-select {
+  background: var(--bg-card); border: 1px solid var(--border);
+  color: var(--text-secondary); padding: 6px 12px; border-radius: var(--radius-sm);
+  font-size: 11px; font-weight: 500; cursor: pointer;
+}
+.filter-bar .search-input {
+  background: var(--bg-card); border: 1px solid var(--border);
+  color: var(--text); padding: 6px 12px; border-radius: var(--radius-sm);
+  font-size: 12px; flex: 1; min-width: 200px;
+}
+.filter-bar .search-input::placeholder { color: var(--text-muted); }
+.filter-bar .search-input:focus { outline: none; border-color: var(--purple); }
+
+/* ═══════════════════════ AGENDA ITEMS ═══════════════════════ */
+.agenda-item {
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.agenda-item:hover { border-color: var(--purple); }
+.agenda-item .time-col {
+  font-size: 14px; font-weight: 700; width: 50px;
+  color: var(--text); text-align: center;
+}
+.agenda-item .info-col { flex: 1; }
+.agenda-item .info-name { font-size: 13px; font-weight: 600; }
+.agenda-item .info-detail { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+.agenda-item .actions-col { display: flex; gap: 6px; }
+
+/* ═══════════════════════ WEEK CALENDAR ═══════════════════════ */
+.week-cal { display: flex; gap: 4px; }
+.week-day {
+  flex: 1; text-align: center;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 10px 6px; min-width: 70px;
+}
+.week-day.today { border-color: var(--purple); background: var(--purple-soft); }
+.week-day .day-name { font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
+.week-day .day-num { font-size: 16px; font-weight: 700; margin: 4px 0; }
+.week-day .day-badges { display: flex; gap: 3px; justify-content: center; flex-wrap: wrap; }
+.week-day .day-badge { font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 700; }
+
+/* ═══════════════════════ METAS THERMOMETER ═══════════════════════ */
+.meta-unit {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+.meta-unit .unit-name { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+.meta-unit .unit-sub { font-size: 11px; color: var(--text-muted); margin-bottom: 14px; }
+.meta-unit .thermo { margin-bottom: 12px; }
+.meta-unit .thermo-bar {
+  height: 12px; background: var(--bg); border-radius: 6px;
+  overflow: hidden; position: relative;
+}
+.meta-unit .thermo-fill {
+  height: 100%; border-radius: 6px;
+  transition: width 1s ease;
+}
+.meta-unit .thermo-labels {
+  display: flex; justify-content: space-between;
+  font-size: 11px; color: var(--text-muted); margin-top: 4px;
+}
+.meta-unit .stats-row {
+  display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px;
+}
+.meta-unit .stat-item { font-size: 12px; color: var(--text-secondary); }
+.meta-unit .stat-item strong { color: var(--text); }
+
+/* ═══════════════════════ REPORT CARDS ═══════════════════════ */
+.report-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex; align-items: flex-start; gap: 14px;
+}
+.report-card:hover { border-color: var(--purple); transform: translateY(-1px); }
+.report-card .rc-icon {
+  width: 42px; height: 42px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; flex-shrink: 0;
+}
+.report-card .rc-title { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+.report-card .rc-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+
+/* ═══════════════════════ DRAWER ═══════════════════════ */
+.drawer-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+  z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.2s;
+}
+.drawer-overlay.open { opacity: 1; pointer-events: auto; }
+
+.drawer {
+  position: fixed; top: 0; right: -480px; bottom: 0;
+  width: 480px; max-width: 90vw;
+  background: var(--bg); border-left: 1px solid var(--border);
+  z-index: 101; transition: right 0.3s ease;
+  display: flex; flex-direction: column;
+}
+.drawer.open { right: 0; }
+
+.drawer-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.drawer-header .back-btn {
+  background: none; border: none; color: var(--text-secondary);
+  cursor: pointer; font-size: 18px; padding: 4px;
+}
+.drawer-header .lead-name { font-size: 16px; font-weight: 700; }
+
+.drawer-body {
+  flex: 1; overflow-y: auto; padding: 20px;
+}
+.drawer-body::-webkit-scrollbar { width: 5px; }
+.drawer-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.drawer-section { margin-bottom: 20px; }
+.drawer-section-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.8px; color: var(--text-muted); margin-bottom: 10px;
+  padding-bottom: 6px; border-bottom: 1px solid var(--border);
+}
+
+.drawer-field {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 0; font-size: 13px;
+}
+.drawer-field .f-label { color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
+.drawer-field .f-value { font-weight: 600; }
+
+.drawer-actions {
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  display: flex; gap: 8px; flex-wrap: wrap;
+}
+
+/* Timeline */
+.timeline-item {
+  display: flex; gap: 12px; padding: 8px 0;
+  font-size: 12px; position: relative;
+}
+.timeline-item:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 11px; top: 28px; bottom: -8px;
+  width: 1px; background: var(--border);
+}
+.timeline-dot {
+  width: 22px; height: 22px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; flex-shrink: 0;
+  background: var(--bg-card); border: 1px solid var(--border);
+}
+.timeline-content { flex: 1; }
+.timeline-content .tl-text { color: var(--text-secondary); }
+.timeline-content .tl-time { color: var(--text-muted); font-size: 10px; margin-top: 2px; }
+
+/* ═══════════════════════ TOAST ═══════════════════════ */
+.toast {
+  position: fixed;
+  bottom: 24px; right: 24px;
+  background: var(--bg-card);
+  border: 1px solid var(--purple);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  z-index: 200;
+  display: flex; align-items: center; gap: 12px;
+  box-shadow: 0 8px 32px rgba(124,58,237,0.2);
+  transform: translateY(120%);
+  transition: transform 0.4s ease;
+  max-width: 380px;
+}
+.toast.show { transform: translateY(0); }
+.toast .toast-icon { font-size: 24px; }
+.toast .toast-text { font-size: 13px; }
+.toast .toast-text strong { display: block; font-size: 14px; }
+.toast .toast-close {
+  position: absolute; top: 8px; right: 10px;
+  background: none; border: none; color: var(--text-muted);
+  cursor: pointer; font-size: 14px;
+}
+
+/* ═══════════════════════ MISC ═══════════════════════ */
+.chart-placeholder {
+  height: 160px;
+  background: var(--bg-surface);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-muted); font-size: 12px;
+}
+
+.comma-sep > *:not(:last-child)::after { content: ' · '; color: var(--text-muted); }
+
+.obs-textarea {
+  width: 100%; background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); color: var(--text); padding: 10px 12px;
+  font-size: 12px; font-family: inherit; resize: vertical; min-height: 60px;
+}
+.obs-textarea:focus { outline: none; border-color: var(--purple); }
+
+.templates-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.template-chip {
+  padding: 5px 10px; font-size: 11px; font-weight: 600;
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: 100px; cursor: pointer; transition: all 0.15s;
+}
+.template-chip:hover { border-color: var(--purple); background: var(--purple-soft); color: var(--purple-text); }
+
+/* WhatsApp report preview */
+.whatsapp-preview {
+  background: #0b141a;
+  border: 1px solid #1f3a2d;
+  border-radius: var(--radius);
+  padding: 16px;
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #e9edef;
+  white-space: pre-line;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* Realtime dot animation */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.live-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: pulse-dot 1.5s infinite;
+  margin-right: 6px;
+}
+
+@keyframes slideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.animate-in { animation: slideIn 0.3s ease forwards; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════ SIDEBAR ═══════════════════════ -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">LA</div>
+    <div class="logo-text">music<br><span>report</span></div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Sistema</div>
+    <a class="sidebar-item" href="#"><span class="icon">📊</span> Dashboard</a>
+    <a class="sidebar-item" href="#"><span class="icon">📈</span> Analytics</a>
+    <a class="sidebar-item" href="#"><span class="icon">🎯</span> Metas</a>
+    <a class="sidebar-item" href="#"><span class="icon">⚙️</span> Configurações</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Operacional</div>
+    <a class="sidebar-item" href="#"><span class="icon">📋</span> Comercial</a>
+    <a class="sidebar-item active" href="#"><span class="icon">📞</span> Pré-Atendimento</a>
+    <a class="sidebar-item" href="#"><span class="icon">👥</span> Administrativo</a>
+    <a class="sidebar-item" href="#"><span class="icon">🎓</span> Alunos</a>
+    <a class="sidebar-item" href="#"><span class="icon">🎵</span> Professores</a>
+    <a class="sidebar-item" href="#"><span class="icon">📁</span> Projetos</a>
+    <a class="sidebar-item" href="#"><span class="icon">🏫</span> Salas</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Admin</div>
+    <a class="sidebar-item" href="#"><span class="icon">👤</span> Gerenciar Usuários</a>
+    <a class="sidebar-item" href="#"><span class="icon">🔒</span> Permissões</a>
+  </div>
+
+  <div class="sidebar-user">
+    <div class="sidebar-user-avatar">A</div>
+    <div class="sidebar-user-info">
+      <div class="name">Andreza</div>
+      <div class="role">Pré-Atendimento (todas)</div>
+    </div>
+  </div>
+</aside>
+
+<!-- ═══════════════════════ MAIN ═══════════════════════ -->
+<div class="main">
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-greeting">
+        Boa tarde, Andreza! 👋
+        <span>📅 sexta-feira, 13 de fevereiro de 2026</span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <select class="topbar-select" id="unitFilter">
+        <option>🏫 Todas</option>
+        <option>Campo Grande</option>
+        <option>Recreio</option>
+        <option>Barra</option>
+      </select>
+      <select class="topbar-select">
+        <option>📅 Fev/2026</option>
+        <option>Jan/2026</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- PAGE HEADER -->
+  <div class="page-header">
+    <div class="page-title-row">
+      <div>
+        <div class="page-title"><span class="emoji">📞</span> Pré-Atendimento</div>
+        <div class="page-subtitle">CRM da Andreza — Gestão de leads, experimentais, visitas e follow-ups</div>
+      </div>
+      <button class="btn btn-green" onclick="showToast()">📱 Gerar Relatório WhatsApp</button>
+    </div>
+  </div>
+
+  <!-- SUB-TABS -->
+  <div class="subtabs" id="subtabs">
+    <div class="subtab active" data-tab="dashboard">📊 Dashboard</div>
+    <div class="subtab" data-tab="pipeline">🔄 Pipeline</div>
+    <div class="subtab" data-tab="leads">📋 Leads <span class="badge">8</span></div>
+    <div class="subtab" data-tab="agenda">📅 Agenda</div>
+    <div class="subtab" data-tab="metas">📈 Metas</div>
+    <div class="subtab" data-tab="mila">🤖 Painel Mila</div>
+    <div class="subtab" data-tab="relatorios">📄 Relatórios</div>
+  </div>
+
+  <!-- ═══════════════════════ CONTENT ═══════════════════════ -->
+  <div class="content">
+
+    <!-- ══════════ TAB: DASHBOARD ══════════ -->
+    <div class="tab-content active" id="tab-dashboard">
+
+      <!-- Alerts -->
+      <div class="alert-banner purple-alert animate-in" style="animation-delay: 0s">
+        <div class="alert-icon">🆕</div>
+        <div class="alert-content">
+          <div class="alert-title"><span class="live-dot"></span>Novo lead da Mila — Maria Silva</div>
+          <div class="alert-desc">CG · Violão · há 3 min · ⏱️ Responda em até 15 min</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm btn-primary" onclick="openDrawer()">Ver lead</button>
+          <button class="btn btn-sm">📱 WhatsApp</button>
+        </div>
+      </div>
+
+      <div class="alert-banner warning animate-in" style="animation-delay: 0.05s">
+        <div class="alert-icon">⚠️</div>
+        <div class="alert-content">
+          <div class="alert-title">8 leads sem ação há +24h!</div>
+          <div class="alert-desc">Faça follow-up imediato para não perder a oportunidade</div>
+        </div>
+        <span class="alert-close">×</span>
+      </div>
+
+      <div class="alert-banner success animate-in" style="animation-delay: 0.1s">
+        <div class="alert-icon">🎓</div>
+        <div class="alert-content">
+          <div class="alert-title">2 matrículas hoje!</div>
+          <div class="alert-desc">Bom ritmo! Campo Grande e Barra</div>
+        </div>
+        <span class="alert-close">×</span>
+      </div>
+
+      <!-- KPI Cards -->
+      <div class="grid-5 animate-in" style="animation-delay: 0.15s; margin-bottom: 16px;">
+        <div class="stat-card">
+          <div class="stat-card-accent" style="background:var(--blue)"></div>
+          <div class="icon-circle" style="background:var(--blue-soft);color:var(--blue)">📥</div>
+          <div class="value">142</div>
+          <div class="label">Leads no Mês</div>
+          <div class="sub">+12 hoje</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-accent" style="background:var(--cyan)"></div>
+          <div class="icon-circle" style="background:var(--cyan-soft);color:var(--cyan)">📅</div>
+          <div class="value">38</div>
+          <div class="label">Agendadas</div>
+          <div class="sub">26.8% dos leads</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-accent" style="background:var(--green)"></div>
+          <div class="icon-circle" style="background:var(--green-soft);color:var(--green)">🏫</div>
+          <div class="value">14</div>
+          <div class="label">Visitaram</div>
+          <div class="sub">9.9% show-up</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-accent" style="background:var(--teal)"></div>
+          <div class="icon-circle" style="background:var(--teal-soft);color:var(--teal)">🎓</div>
+          <div class="value">11</div>
+          <div class="label">Matriculados</div>
+          <div class="sub">78.6% pós-visita</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-accent" style="background:var(--amber)"></div>
+          <div class="icon-circle" style="background:var(--amber-soft);color:var(--amber)">🏷️</div>
+          <div class="value" style="font-size:22px">87%</div>
+          <div class="label">Tags OK</div>
+          <div class="sub">Faltam 19 leads</div>
+        </div>
+      </div>
+
+      <!-- Meta + Funil -->
+      <div class="grid-2 animate-in" style="animation-delay: 0.2s; margin-bottom: 16px;">
+        <div class="panel">
+          <div class="panel-header">🎯 Meta 30% — Show-up Rate</div>
+          <div class="panel-body">
+            <div style="display:flex; align-items:baseline; gap:8px; margin-bottom:12px;">
+              <span style="font-size:36px; font-weight:800; color:var(--amber)">9.9%</span>
+              <span style="font-size:13px; color:var(--text-muted)">de 30%</span>
+            </div>
+            <div class="progress-bar" style="height:14px; margin-bottom:12px;">
+              <div class="progress-fill" style="width:33%; background: linear-gradient(90deg, var(--red), var(--amber));"></div>
+            </div>
+            <div style="display:flex; gap:20px; font-size:12px; color:var(--text-secondary);">
+              <span>🔥 Quentes: <strong style="color:var(--text)">14</strong></span>
+              <span>❄️ Frios: <strong style="color:var(--text)">0</strong></span>
+              <span>Faltam: <strong style="color:var(--amber)">20.1pp</strong></span>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">📊 Funil Visual</div>
+          <div class="panel-body">
+            <div class="progress-wrap">
+              <div class="progress-label"><span class="name">📥 Leads</span><span class="val">142</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:100%;background:var(--blue)"></div></div>
+            </div>
+            <div class="progress-wrap">
+              <div class="progress-label"><span class="name">📅 Agendadas</span><span class="val">38 (26.8%)</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:26.8%;background:var(--cyan)"></div></div>
+            </div>
+            <div class="progress-wrap">
+              <div class="progress-label"><span class="name">🏫 Visitaram</span><span class="val">14 (9.9%)</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:9.9%;background:var(--green)"></div></div>
+            </div>
+            <div class="progress-wrap" style="margin-bottom:0">
+              <div class="progress-label"><span class="name">🎓 Matriculados</span><span class="val">11 (7.7%)</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:7.7%;background:var(--teal)"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Alertas + Tags KPI -->
+      <div class="grid-2 animate-in" style="animation-delay: 0.25s; margin-bottom: 16px;">
+        <div class="panel">
+          <div class="panel-header">⚡ Alertas do Dia</div>
+          <div class="panel-body" style="font-size:13px;">
+            <div style="padding:6px 0; display:flex; align-items:center; gap:8px; border-bottom:1px solid var(--border);">
+              <span style="color:var(--red)">🔴</span> <span>8 leads sem ação há +24h</span>
+            </div>
+            <div style="padding:6px 0; display:flex; align-items:center; gap:8px; border-bottom:1px solid var(--border);">
+              <span style="color:var(--amber)">🟡</span> <span>3 experimentais amanhã — confirmar</span>
+            </div>
+            <div style="padding:6px 0; display:flex; align-items:center; gap:8px; border-bottom:1px solid var(--border);">
+              <span style="color:var(--green)">🟢</span> <span>2 matrículas hoje</span>
+            </div>
+            <div style="padding:6px 0; display:flex; align-items:center; gap:8px; border-bottom:1px solid var(--border);">
+              <span>⏱️</span> <span>Tempo médio resposta: <strong>12 min</strong></span>
+            </div>
+            <div style="padding:6px 0; display:flex; align-items:center; gap:8px;">
+              <span>📵</span> <span>5 tentativas sem resposta hoje</span>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">🏷️ KPIs Tagueados</div>
+          <div class="panel-body">
+            <div class="progress-wrap">
+              <div class="progress-label"><span class="name">📡 Canal</span><span class="val" style="color:var(--green)">97.2%</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:97.2%;background:var(--green)"></div></div>
+            </div>
+            <div class="progress-wrap">
+              <div class="progress-label"><span class="name">🎸 Curso</span><span class="val" style="color:var(--green)">91.5%</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:91.5%;background:var(--green)"></div></div>
+            </div>
+            <div class="progress-wrap">
+              <div class="progress-label"><span class="name">👶 Faixa Etária</span><span class="val" style="color:var(--amber)">88.0%</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:88%;background:var(--amber)"></div></div>
+            </div>
+            <div class="progress-wrap" style="margin-bottom:0">
+              <div class="progress-label"><span class="name">💰 Sabe Preço</span><span class="val" style="color:var(--red)">77.5%</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:77.5%;background:var(--red)"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Top Canais + Evolução -->
+      <div class="grid-2 animate-in" style="animation-delay: 0.3s;">
+        <div class="panel">
+          <div class="panel-header">📡 Top Canais de Origem</div>
+          <div class="panel-body">
+            <div class="progress-wrap">
+              <div class="progress-label"><span class="name">Instagram</span><span class="val">45%</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:45%;background:var(--pink)"></div></div>
+            </div>
+            <div class="progress-wrap">
+              <div class="progress-label"><span class="name">Google</span><span class="val">22%</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:22%;background:var(--blue)"></div></div>
+            </div>
+            <div class="progress-wrap">
+              <div class="progress-label"><span class="name">Indicação</span><span class="val">18%</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:18%;background:var(--green)"></div></div>
+            </div>
+            <div class="progress-wrap" style="margin-bottom:0">
+              <div class="progress-label"><span class="name">Tráfego Pago</span><span class="val">15%</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:15%;background:var(--orange)"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">📈 Evolução Diária</div>
+          <div class="panel-body">
+            <div class="chart-placeholder">📈 Gráfico Recharts · Leads/dia · Agendamentos/dia · Visitas/dia</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ TAB: PIPELINE ══════════ -->
+    <div class="tab-content" id="tab-pipeline">
+      <div class="filter-bar">
+        <input type="text" class="search-input" placeholder="🔍 Buscar lead..." style="max-width:250px">
+        <select class="filter-select"><option>Todas Unidades</option><option>CG</option><option>Recreio</option><option>Barra</option></select>
+        <select class="filter-select"><option>Temperatura</option><option>🔥 Quente</option><option>🟡 Morno</option><option>❄️ Frio</option></select>
+        <div style="flex:1"></div>
+        <button class="btn btn-sm">⚙️ Configurar Etapas</button>
+      </div>
+
+      <div class="kanban-scroll">
+        <div class="kanban-board">
+          <!-- Col: Novo Lead -->
+          <div class="kanban-col">
+            <div class="kanban-col-header" style="border-top:3px solid var(--blue)">
+              <span>🆕 Novo Lead</span><span class="count-badge">4</span>
+            </div>
+            <div class="kanban-col-body">
+              <div class="kanban-card" onclick="openDrawer()">
+                <span class="kc-time">2h</span>
+                <div class="kc-name">Maria Silva</div>
+                <div class="kc-info">🎸 Violão · CG</div>
+                <div style="display:flex;gap:4px;margin-top:6px">
+                  <span class="kc-tag" style="background:var(--red-soft);color:var(--red)">🔥 Quente</span>
+                  <span class="kc-tag" style="background:var(--amber-soft);color:var(--amber)">💰 Não</span>
+                </div>
+                <div class="kc-actions">
+                  <button class="kc-btn">📱</button>
+                  <button class="kc-btn">📞</button>
+                  <button class="kc-btn">📝</button>
+                </div>
+              </div>
+              <div class="kanban-card" onclick="openDrawer()">
+                <span class="kc-time">30min</span>
+                <div class="kc-name">Carlos Mendes</div>
+                <div class="kc-info">🎤 Canto · BAR</div>
+                <div style="display:flex;gap:4px;margin-top:6px">
+                  <span class="kc-tag" style="background:var(--red-soft);color:var(--red)">🔥 Quente</span>
+                </div>
+                <div class="kc-actions">
+                  <button class="kc-btn">📱</button>
+                  <button class="kc-btn">📞</button>
+                </div>
+              </div>
+              <div class="kanban-card" onclick="openDrawer()">
+                <span class="kc-time">5h</span>
+                <div class="kc-name">Fernanda Reis</div>
+                <div class="kc-info">🎹 Piano · REC</div>
+                <div style="display:flex;gap:4px;margin-top:6px">
+                  <span class="kc-tag" style="background:var(--amber-soft);color:var(--amber)">🟡 Morno</span>
+                </div>
+                <div class="kc-actions"><button class="kc-btn">📱</button><button class="kc-btn">📞</button></div>
+              </div>
+              <div class="kanban-card" onclick="openDrawer()">
+                <span class="kc-time">45min</span>
+                <div class="kc-name">Rafael Souza</div>
+                <div class="kc-info">🥁 Bateria · CG</div>
+                <div style="display:flex;gap:4px;margin-top:6px">
+                  <span class="kc-tag" style="background:var(--red-soft);color:var(--red)">🔥 Quente</span>
+                </div>
+                <div class="kc-actions"><button class="kc-btn">📱</button><button class="kc-btn">📞</button></div>
+              </div>
+            </div>
+          </div>
+          <!-- Col: Atendido pela Mila -->
+          <div class="kanban-col">
+            <div class="kanban-col-header" style="border-top:3px solid #8B5CF6">
+              <span>🤖 Mila</span><span class="count-badge">3</span>
+            </div>
+            <div class="kanban-col-body">
+              <div class="kanban-card" onclick="openDrawer()"><span class="kc-time urgent">1d 🔴</span><div class="kc-name">João Santos</div><div class="kc-info">🎹 Piano · REC</div><div style="display:flex;gap:4px;margin-top:6px"><span class="kc-tag" style="background:var(--amber-soft);color:var(--amber)">🟡 Morno</span><span class="kc-tag" style="background:var(--green-soft);color:var(--green)">💰 Sim</span></div><div class="kc-actions"><button class="kc-btn">📱</button><button class="kc-btn">📞</button></div></div>
+              <div class="kanban-card" onclick="openDrawer()"><span class="kc-time urgent">2d 🔴</span><div class="kc-name">Bruna Lima</div><div class="kc-info">🎸 Violão · CG</div><div style="display:flex;gap:4px;margin-top:6px"><span class="kc-tag" style="background:var(--blue-soft);color:var(--blue)">❄️ Frio</span></div><div class="kc-actions"><button class="kc-btn">📱</button></div></div>
+              <div class="kanban-card" onclick="openDrawer()"><span class="kc-time">6h</span><div class="kc-name">Patrícia Alves</div><div class="kc-info">🎤 Canto · BAR</div><div class="kc-actions"><button class="kc-btn">📱</button><button class="kc-btn">📞</button></div></div>
+            </div>
+          </div>
+          <!-- Col: Passado p/ Andreza -->
+          <div class="kanban-col">
+            <div class="kanban-col-header" style="border-top:3px solid var(--purple)">
+              <span>👩🏾 Andreza</span><span class="count-badge">5</span>
+            </div>
+            <div class="kanban-col-body">
+              <div class="kanban-card" onclick="openDrawer()"><span class="kc-time">3h</span><div class="kc-name">Pedro Oliveira</div><div class="kc-info">🥁 Bateria · BAR</div><div style="display:flex;gap:4px;margin-top:6px"><span class="kc-tag" style="background:var(--blue-soft);color:var(--blue)">❄️ Frio</span><span class="kc-tag" style="background:var(--amber-soft);color:var(--amber)">💰 Não</span></div><div class="kc-actions"><button class="kc-btn">📱</button><button class="kc-btn">📞</button></div></div>
+              <div class="kanban-card" onclick="openDrawer()"><span class="kc-time">1h</span><div class="kc-name">Thiago Nascimento</div><div class="kc-info">🎸 Violão · CG</div><div style="display:flex;gap:4px;margin-top:6px"><span class="kc-tag" style="background:var(--red-soft);color:var(--red)">🔥 Quente</span></div><div class="kc-actions"><button class="kc-btn">📱</button><button class="kc-btn">📞</button></div></div>
+              <div class="kanban-card" onclick="openDrawer()"><span class="kc-time">4h</span><div class="kc-name">Amanda Costa</div><div class="kc-info">🎹 Piano · REC</div><div class="kc-actions"><button class="kc-btn">📱</button><button class="kc-btn">📞</button></div></div>
+            </div>
+          </div>
+          <!-- Col: Em Contato -->
+          <div class="kanban-col">
+            <div class="kanban-col-header" style="border-top:3px solid var(--amber)">
+              <span>📞 Em Contato</span><span class="count-badge">6</span>
+            </div>
+            <div class="kanban-col-body">
+              <div class="kanban-card" onclick="openDrawer()"><span class="kc-time">5h</span><div class="kc-name">Ana Ferreira</div><div class="kc-info">🎤 Canto · CG · 📱2 📞1</div><div style="display:flex;gap:4px;margin-top:6px"><span class="kc-tag" style="background:var(--red-soft);color:var(--red)">🔥 Quente</span></div><div class="kc-actions"><button class="kc-btn">📱</button><button class="kc-btn">📞</button></div></div>
+              <div class="kanban-card" onclick="openDrawer()"><span class="kc-time urgent">1d 🔴</span><div class="kc-name">Fábio Lima</div><div class="kc-info">🎹 Piano · REC · 📱1 📞0</div><div class="kc-actions"><button class="kc-btn">📱</button><button class="kc-btn">📞</button></div></div>
+            </div>
+          </div>
+          <!-- Col: Exp. Agendada -->
+          <div class="kanban-col">
+            <div class="kanban-col-header" style="border-top:3px solid var(--cyan)">
+              <span>📅 Exp. Agendada</span><span class="count-badge">3</span>
+            </div>
+            <div class="kanban-col-body">
+              <div class="kanban-card" onclick="openDrawer()"><span class="kc-time" style="color:var(--cyan)">Amanhã 14h</span><div class="kc-name">Lucas Oliveira</div><div class="kc-info">🎸 Violão · REC</div><div class="kc-actions"><button class="kc-btn">✅</button><button class="kc-btn">📱</button></div></div>
+              <div class="kanban-card" onclick="openDrawer()"><span class="kc-time" style="color:var(--cyan)">Sáb 10h</span><div class="kc-name">Marcos Alves</div><div class="kc-info">🎹 Piano · CG</div><div class="kc-actions"><button class="kc-btn">✅</button><button class="kc-btn">📱</button></div></div>
+            </div>
+          </div>
+          <!-- Col: Visita Agendada -->
+          <div class="kanban-col">
+            <div class="kanban-col-header" style="border-top:3px solid #0EA5E9">
+              <span>🏫 Vis. Agendada</span><span class="count-badge">2</span>
+            </div>
+            <div class="kanban-col-body">
+              <div class="kanban-card" onclick="openDrawer()"><span class="kc-time" style="color:var(--cyan)">Sexta 15h</span><div class="kc-name">Rita Souza</div><div class="kc-info">🥁 Bateria · BAR</div><div class="kc-actions"><button class="kc-btn">✅</button><button class="kc-btn">📱</button></div></div>
+            </div>
+          </div>
+          <!-- Col: Realizada -->
+          <div class="kanban-col">
+            <div class="kanban-col-header" style="border-top:3px solid var(--green)">
+              <span>✅ Realizada</span><span class="count-badge">14</span>
+            </div>
+            <div class="kanban-col-body">
+              <div class="kanban-card" onclick="openDrawer()"><span class="kc-time" style="color:var(--green)">Ontem</span><div class="kc-name">Carla Dias</div><div class="kc-info">🎤 Canto · CG · Exp ✅</div></div>
+              <div class="kanban-card" onclick="openDrawer()"><span class="kc-time" style="color:var(--green)">12/02</span><div class="kc-name">Renata Gomes</div><div class="kc-info">🎸 Violão · REC · Vis ✅</div></div>
+            </div>
+          </div>
+          <!-- Col: Faltou -->
+          <div class="kanban-col">
+            <div class="kanban-col-header" style="border-top:3px solid var(--red)">
+              <span>❌ Faltou</span><span class="count-badge">3</span>
+            </div>
+            <div class="kanban-col-body">
+              <div class="kanban-card" onclick="openDrawer()"><div class="kc-name">Bruno Ferreira</div><div class="kc-info">🎹 Piano · BAR</div><div style="margin-top:4px;font-size:11px;color:var(--red)">Motivo: Chuva</div><div class="kc-actions"><button class="kc-btn">🔄</button><button class="kc-btn">📱</button></div></div>
+            </div>
+          </div>
+          <!-- Col: Matriculado -->
+          <div class="kanban-col" style="opacity:0.7">
+            <div class="kanban-col-header" style="border-top:3px solid #059669">
+              <span>🎓 Matriculado</span><span class="count-badge">11</span>
+            </div>
+            <div class="kanban-col-body">
+              <div style="padding:12px;font-size:11px;color:var(--text-muted);text-align:center">11 leads matriculados neste mês</div>
+            </div>
+          </div>
+          <!-- Col: Arquivado -->
+          <div class="kanban-col" style="opacity:0.5">
+            <div class="kanban-col-header" style="border-top:3px solid #6B7280">
+              <span>📦 Arquivado</span><span class="count-badge">45</span>
+            </div>
+            <div class="kanban-col-body">
+              <div style="padding:12px;font-size:11px;color:var(--text-muted);text-align:center">45 leads arquivados</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ TAB: LEADS ══════════ -->
+    <div class="tab-content" id="tab-leads">
+      <div class="filter-bar">
+        <input type="text" class="search-input" placeholder="🔍 Buscar nome ou telefone..." style="max-width:260px">
+        <select class="filter-select"><option>Unidade</option><option>CG</option><option>Recreio</option><option>Barra</option></select>
+        <select class="filter-select"><option>Etapa</option><option>Novo</option><option>Mila</option><option>Andreza</option><option>Contato</option><option>Agendada</option></select>
+        <select class="filter-select"><option>Canal</option><option>Instagram</option><option>Google</option><option>Indicação</option><option>Tráfego</option></select>
+        <select class="filter-select"><option>Curso</option><option>Violão</option><option>Piano</option><option>Canto</option><option>Bateria</option></select>
+        <select class="filter-select"><option>Faixa</option><option>LAMK</option><option>EMLA</option></select>
+        <select class="filter-select" style="border-color:var(--amber);color:var(--amber)"><option>🏷️ KPIs incompletos</option><option>Sem Canal</option><option>Sem Curso</option><option>Sem Faixa</option><option>Sem Preço</option></select>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <button class="btn btn-sm">+ Novo Lead</button>
+        <button class="btn btn-sm">📥 Importar</button>
+        <button class="btn btn-sm">📤 Exportar CSV</button>
+      </div>
+      <div class="panel">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width:30px"><input type="checkbox"></th>
+              <th>Nome</th>
+              <th>Unid.</th>
+              <th>Etapa</th>
+              <th>Curso</th>
+              <th>Canal</th>
+              <th>Faixa</th>
+              <th>💰</th>
+              <th>Tags</th>
+              <th>Tent.</th>
+              <th>Últ. Contato</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr onclick="openDrawer()">
+              <td><input type="checkbox"></td>
+              <td style="color:var(--text);font-weight:600">Maria Silva</td>
+              <td>CG</td>
+              <td><span class="tag" style="background:var(--amber-soft);color:var(--amber)">📞 Contato</span></td>
+              <td>🎸 Violão</td>
+              <td>Instagram</td>
+              <td>EMLA</td>
+              <td>❌</td>
+              <td><span class="tag" style="background:var(--red-soft);color:var(--red)">3/4</span></td>
+              <td>0</td>
+              <td style="font-size:11px">Hoje 14:30</td>
+            </tr>
+            <tr onclick="openDrawer()">
+              <td><input type="checkbox"></td>
+              <td style="color:var(--text);font-weight:600">João Santos</td>
+              <td>REC</td>
+              <td><span class="tag" style="background:var(--purple-soft);color:var(--purple-text)">🤖 Mila</span></td>
+              <td>🎹 Piano</td>
+              <td>Google</td>
+              <td>LAMK</td>
+              <td>✅</td>
+              <td><span class="tag" style="background:var(--green-soft);color:var(--green)">4/4</span></td>
+              <td>1</td>
+              <td style="font-size:11px">Ontem</td>
+            </tr>
+            <tr onclick="openDrawer()">
+              <td><input type="checkbox"></td>
+              <td style="color:var(--text);font-weight:600">Ana Costa</td>
+              <td>BAR</td>
+              <td><span class="tag" style="background:var(--cyan-soft);color:var(--cyan)">📅 Agendada</span></td>
+              <td>🎤 Canto</td>
+              <td>Indicação</td>
+              <td>EMLA</td>
+              <td>❌</td>
+              <td><span class="tag" style="background:var(--green-soft);color:var(--green)">4/4</span></td>
+              <td>0</td>
+              <td style="font-size:11px">12/02</td>
+            </tr>
+            <tr onclick="openDrawer()">
+              <td><input type="checkbox"></td>
+              <td style="color:var(--text);font-weight:600">Pedro Lima</td>
+              <td>CG</td>
+              <td><span class="tag" style="background:var(--red-soft);color:var(--red)">❌ Faltou</span></td>
+              <td>🥁 Bateria</td>
+              <td>Tráfego</td>
+              <td>—</td>
+              <td>—</td>
+              <td><span class="tag" style="background:var(--red-soft);color:var(--red)">2/4</span></td>
+              <td>3</td>
+              <td style="font-size:11px">11/02</td>
+            </tr>
+            <tr onclick="openDrawer()">
+              <td><input type="checkbox"></td>
+              <td style="color:var(--text);font-weight:600">Lucas Oliveira</td>
+              <td>REC</td>
+              <td><span class="tag" style="background:var(--cyan-soft);color:var(--cyan)">📅 Agendada</span></td>
+              <td>🎸 Violão</td>
+              <td>Instagram</td>
+              <td>EMLA</td>
+              <td>✅</td>
+              <td><span class="tag" style="background:var(--green-soft);color:var(--green)">4/4</span></td>
+              <td>0</td>
+              <td style="font-size:11px">Hoje 10:00</td>
+            </tr>
+            <tr onclick="openDrawer()">
+              <td><input type="checkbox"></td>
+              <td style="color:var(--text);font-weight:600">Rita Souza</td>
+              <td>BAR</td>
+              <td><span class="tag" style="background:var(--cyan-soft);color:var(--cyan)">🏫 Vis. Agend.</span></td>
+              <td>🥁 Bateria</td>
+              <td>Google</td>
+              <td>LAMK</td>
+              <td>❌</td>
+              <td><span class="tag" style="background:var(--red-soft);color:var(--red)">3/4</span></td>
+              <td>0</td>
+              <td style="font-size:11px">Hoje 09:30</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:12px;color:var(--text-muted)">
+        <span>Selecionados: 0 · <button class="btn btn-sm" style="margin-left:4px">📱 WhatsApp Lote</button> <button class="btn btn-sm">🏷️ Mover Etapa</button></span>
+        <span>1-20 de 142 · < 1 2 3 ... 8 ></span>
+      </div>
+    </div>
+
+    <!-- ══════════ TAB: AGENDA ══════════ -->
+    <div class="tab-content" id="tab-agenda">
+      <div style="display:flex;gap:8px;margin-bottom:16px;">
+        <button class="btn btn-sm btn-primary">Hoje</button>
+        <button class="btn btn-sm">Semana</button>
+        <button class="btn btn-sm">Mês</button>
+        <div style="flex:1"></div>
+        <button class="btn btn-sm">← Anterior</button>
+        <span style="padding:5px 12px;font-size:13px;font-weight:600">13/02/2026</span>
+        <button class="btn btn-sm">Próximo →</button>
+      </div>
+
+      <div class="section-title" style="color:var(--cyan)">📅 Experimentais Hoje <span class="count">2</span></div>
+      <div class="agenda-item" onclick="openDrawer()">
+        <div class="time-col">14:00</div>
+        <div class="info-col">
+          <div class="info-name">Lucas Oliveira</div>
+          <div class="info-detail">🎸 Violão · Recreio · Prof. Ricardo · Consultor: Cleiton</div>
+        </div>
+        <div class="actions-col">
+          <button class="btn btn-sm btn-green">✅ Confirmar</button>
+          <button class="btn btn-sm">📱</button>
+        </div>
+      </div>
+      <div class="agenda-item" onclick="openDrawer()">
+        <div class="time-col">16:00</div>
+        <div class="info-col">
+          <div class="info-name">Marcos Alves</div>
+          <div class="info-detail">🎹 Piano · Campo Grande · Prof. Fernanda · Consultor: Vitória</div>
+        </div>
+        <div class="actions-col">
+          <button class="btn btn-sm btn-green">✅ Confirmar</button>
+          <button class="btn btn-sm">📱</button>
+        </div>
+      </div>
+
+      <div class="section-title" style="color:#0EA5E9">🏫 Visitas Hoje <span class="count">1</span></div>
+      <div class="agenda-item" onclick="openDrawer()">
+        <div class="time-col">15:00</div>
+        <div class="info-col">
+          <div class="info-name">Rita Souza</div>
+          <div class="info-detail">🥁 Bateria · Barra · Consultor: Kailane</div>
+        </div>
+        <div class="actions-col">
+          <button class="btn btn-sm btn-green">✅ Confirmar</button>
+          <button class="btn btn-sm">📱</button>
+        </div>
+      </div>
+
+      <div class="section-title" style="color:var(--amber)">📞 Follow-ups Pendentes <span class="count">5</span></div>
+      <div class="agenda-item" onclick="openDrawer()">
+        <div class="time-col" style="font-size:12px;color:var(--red)">🔥</div>
+        <div class="info-col">
+          <div class="info-name">Pedro Lima</div>
+          <div class="info-detail">Faltou ontem · Reagendar · Tentativas: 2</div>
+        </div>
+        <div class="actions-col"><button class="btn btn-sm">📱 WhatsApp</button></div>
+      </div>
+      <div class="agenda-item" onclick="openDrawer()">
+        <div class="time-col" style="font-size:12px;color:var(--red)">🔥</div>
+        <div class="info-col">
+          <div class="info-name">Ana Ferreira</div>
+          <div class="info-detail">Sem resposta · 2ª tentativa · Tentativas: 1</div>
+        </div>
+        <div class="actions-col"><button class="btn btn-sm">📱 WhatsApp</button></div>
+      </div>
+      <div class="agenda-item" onclick="openDrawer()">
+        <div class="time-col" style="font-size:12px;color:var(--blue)">❄️</div>
+        <div class="info-col">
+          <div class="info-name">Carla Mendes</div>
+          <div class="info-detail">Lead frio · Reativar · Último contato: 20/01</div>
+        </div>
+        <div class="actions-col"><button class="btn btn-sm">📱 WhatsApp</button></div>
+      </div>
+
+      <div class="section-title">📅 Semana</div>
+      <div class="week-cal">
+        <div class="week-day"><div class="day-name">Seg</div><div class="day-num">10</div><div class="day-badges"><span class="day-badge" style="background:var(--cyan-soft);color:var(--cyan)">2 exp</span><span class="day-badge" style="background:var(--teal-soft);color:var(--teal)">1 vis</span></div></div>
+        <div class="week-day"><div class="day-name">Ter</div><div class="day-num">11</div><div class="day-badges"><span class="day-badge" style="background:var(--cyan-soft);color:var(--cyan)">1 exp</span></div></div>
+        <div class="week-day"><div class="day-name">Qua</div><div class="day-num">12</div><div class="day-badges"><span class="day-badge" style="background:var(--cyan-soft);color:var(--cyan)">3 exp</span></div></div>
+        <div class="week-day today"><div class="day-name">Qui</div><div class="day-num">13</div><div class="day-badges"><span class="day-badge" style="background:var(--cyan-soft);color:var(--cyan)">2 exp</span><span class="day-badge" style="background:var(--teal-soft);color:var(--teal)">1 vis</span></div></div>
+        <div class="week-day"><div class="day-name">Sex</div><div class="day-num">14</div><div class="day-badges"><span class="day-badge" style="background:var(--cyan-soft);color:var(--cyan)">2 exp</span></div></div>
+        <div class="week-day"><div class="day-name">Sáb</div><div class="day-num">15</div><div class="day-badges"><span class="day-badge" style="background:var(--cyan-soft);color:var(--cyan)">3 exp</span><span class="day-badge" style="background:var(--teal-soft);color:var(--teal)">1 vis</span></div></div>
+      </div>
+
+      <div class="section-title" style="color:var(--red)">⚠️ Leads sem Ação há +24h <span class="count">8</span></div>
+      <div class="agenda-item" onclick="openDrawer()">
+        <div class="time-col" style="font-size:11px;color:var(--red);font-weight:700">36h</div>
+        <div class="info-col">
+          <div class="info-name">João Santos</div>
+          <div class="info-detail">Mila → Andreza · REC · 🎹 Piano</div>
+        </div>
+        <div class="actions-col">
+          <button class="btn btn-sm">📱</button>
+          <button class="btn btn-sm">📞</button>
+          <button class="btn btn-sm">📝</button>
+        </div>
+      </div>
+      <div class="agenda-item" onclick="openDrawer()">
+        <div class="time-col" style="font-size:11px;color:var(--red);font-weight:700">48h</div>
+        <div class="info-col">
+          <div class="info-name">Bruna Lima</div>
+          <div class="info-detail">Mila → Andreza · CG · 🎸 Violão</div>
+        </div>
+        <div class="actions-col">
+          <button class="btn btn-sm">📱</button>
+          <button class="btn btn-sm">📞</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ TAB: METAS ══════════ -->
+    <div class="tab-content" id="tab-metas">
+      <div class="grid-3" style="margin-bottom:20px;">
+        <div class="meta-unit">
+          <div class="unit-name">🏫 Campo Grande</div>
+          <div class="unit-sub">Taxa compromisso: R$70</div>
+          <div class="thermo">
+            <div class="thermo-bar"><div class="thermo-fill" style="width:41.6%;background:linear-gradient(90deg,var(--red),var(--amber))"></div></div>
+            <div class="thermo-labels"><span>0%</span><span style="color:var(--amber);font-weight:700">12.5%</span><span>30%</span></div>
+          </div>
+          <div class="stats-row">
+            <div class="stat-item">Leads: <strong>48</strong></div>
+            <div class="stat-item">Visitas: <strong>6</strong></div>
+            <div class="stat-item">🔥 Quentes: <strong>5</strong></div>
+            <div class="stat-item">❄️ Frios: <strong>1</strong></div>
+          </div>
+          <div style="margin-top:8px;font-size:12px;color:var(--red)">Bônus: ❌ R$0</div>
+        </div>
+        <div class="meta-unit">
+          <div class="unit-name">🏫 Recreio</div>
+          <div class="unit-sub">Taxa compromisso: R$100</div>
+          <div class="thermo">
+            <div class="thermo-bar"><div class="thermo-fill" style="width:27.6%;background:linear-gradient(90deg,var(--red),var(--amber))"></div></div>
+            <div class="thermo-labels"><span>0%</span><span style="color:var(--red);font-weight:700">8.3%</span><span>30%</span></div>
+          </div>
+          <div class="stats-row">
+            <div class="stat-item">Leads: <strong>36</strong></div>
+            <div class="stat-item">Visitas: <strong>3</strong></div>
+            <div class="stat-item">🔥 Quentes: <strong>3</strong></div>
+            <div class="stat-item">❄️ Frios: <strong>0</strong></div>
+          </div>
+          <div style="margin-top:8px;font-size:12px;color:var(--red)">Bônus: ❌ R$0</div>
+        </div>
+        <div class="meta-unit">
+          <div class="unit-name">🏫 Barra</div>
+          <div class="unit-sub">Taxa compromisso: R$100</div>
+          <div class="thermo">
+            <div class="thermo-bar"><div class="thermo-fill" style="width:22.3%;background:linear-gradient(90deg,var(--red),var(--red))"></div></div>
+            <div class="thermo-labels"><span>0%</span><span style="color:var(--red);font-weight:700">6.7%</span><span>30%</span></div>
+          </div>
+          <div class="stats-row">
+            <div class="stat-item">Leads: <strong>30</strong></div>
+            <div class="stat-item">Visitas: <strong>2</strong></div>
+            <div class="stat-item">🔥 Quentes: <strong>2</strong></div>
+            <div class="stat-item">❄️ Frios: <strong>0</strong></div>
+          </div>
+          <div style="margin-top:8px;font-size:12px;color:var(--red)">Bônus: ❌ R$0</div>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-bottom:20px">
+        <div class="panel">
+          <div class="panel-header">📊 Evolução Semanal</div>
+          <div class="panel-body">
+            <div style="display:flex;gap:16px;font-size:13px;margin-bottom:12px">
+              <span>Sem 1: <strong>2.1%</strong></span>
+              <span style="color:var(--text-muted)">→</span>
+              <span>Sem 2: <strong>5.4%</strong></span>
+              <span style="color:var(--text-muted)">→</span>
+              <span style="color:var(--amber)">Sem 3: <strong>9.9%</strong></span>
+            </div>
+            <div class="chart-placeholder">📈 Gráfico de progressão semanal</div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">🏷️ KPIs de Tagueamento</div>
+          <div class="panel-body">
+            <div class="progress-wrap"><div class="progress-label"><span class="name">Canal</span><span class="val" style="color:var(--green)">138/142 — 97.2%</span></div><div class="progress-bar"><div class="progress-fill" style="width:97.2%;background:var(--green)"></div></div></div>
+            <div class="progress-wrap"><div class="progress-label"><span class="name">Curso</span><span class="val" style="color:var(--green)">130/142 — 91.5%</span></div><div class="progress-bar"><div class="progress-fill" style="width:91.5%;background:var(--green)"></div></div></div>
+            <div class="progress-wrap"><div class="progress-label"><span class="name">Faixa Etária</span><span class="val" style="color:var(--amber)">125/142 — 88.0%</span></div><div class="progress-bar"><div class="progress-fill" style="width:88%;background:var(--amber)"></div></div></div>
+            <div class="progress-wrap"><div class="progress-label"><span class="name">Sabe Preço</span><span class="val" style="color:var(--red)">110/142 — 77.5%</span></div><div class="progress-bar"><div class="progress-fill" style="width:77.5%;background:var(--red)"></div></div></div>
+            <div class="progress-wrap" style="margin-bottom:0"><div class="progress-label"><span class="name">Motivo Falta</span><span class="val" style="color:var(--amber)">12/14 — 85.7%</span></div><div class="progress-bar"><div class="progress-fill" style="width:85.7%;background:var(--amber)"></div></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-header">⏱️ Métricas de Velocidade</div>
+          <div class="panel-body" style="font-size:13px">
+            <div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between">
+              <span>Tempo médio resposta</span><span style="color:var(--green);font-weight:700">12 min ✅</span>
+            </div>
+            <div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between">
+              <span>Leads parados +24h</span><span style="color:var(--red);font-weight:700">8 🔴</span>
+            </div>
+            <div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between">
+              <span>Follow-ups frios/semana</span><span style="font-weight:700">12</span>
+            </div>
+            <div style="padding:6px 0;display:flex;justify-content:space-between">
+              <span>Tentativas s/ resposta (semana)</span><span style="font-weight:700">23</span>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">💰 Taxa de Compromisso (No-Show)</div>
+          <div class="panel-body">
+            <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">Leads com 2+ desmarcações:</div>
+            <div class="agenda-item" style="margin-bottom:6px" onclick="openDrawer()">
+              <div class="info-col"><div class="info-name">Pedro Lima · CG</div><div class="info-detail">2 desmarcações · R$70 · ☐ Não cobrada</div></div>
+              <button class="btn btn-sm">Ver</button>
+            </div>
+            <div class="agenda-item" style="margin-bottom:6px" onclick="openDrawer()">
+              <div class="info-col"><div class="info-name">Ana Costa · BAR</div><div class="info-detail">3 desmarcações · R$100 · ✅ Cobrada</div></div>
+              <button class="btn btn-sm">Ver</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ TAB: MILA ══════════ -->
+    <div class="tab-content" id="tab-mila">
+      <div class="grid-4" style="margin-bottom:20px">
+        <div class="stat-card"><div class="stat-card-accent" style="background:#8B5CF6"></div><div class="icon-circle" style="background:var(--purple-soft);color:var(--purple-text)">🤖</div><div class="value">142</div><div class="label">Atendidos pela Mila</div></div>
+        <div class="stat-card"><div class="stat-card-accent" style="background:var(--green)"></div><div class="icon-circle" style="background:var(--green-soft);color:var(--green)">✅</div><div class="value">38</div><div class="label">Agendou Direto</div><div class="sub">26.8%</div></div>
+        <div class="stat-card"><div class="stat-card-accent" style="background:var(--red)"></div><div class="icon-circle" style="background:var(--red-soft);color:var(--red)">❌</div><div class="value">89</div><div class="label">Não Agendou</div><div class="sub">62.7%</div></div>
+        <div class="stat-card"><div class="stat-card-accent" style="background:var(--purple)"></div><div class="icon-circle" style="background:var(--purple-soft);color:var(--purple-text)">👩🏾</div><div class="value">89</div><div class="label">Passados p/ Andreza</div><div class="sub">62.7%</div></div>
+      </div>
+
+      <div class="grid-2" style="margin-bottom:20px">
+        <div class="panel">
+          <div class="panel-header">📊 Motivos de Passagem de Bastão</div>
+          <div class="panel-body">
+            <div class="progress-wrap"><div class="progress-label"><span class="name">Não quis agendar</span><span class="val">35 (39.3%)</span></div><div class="progress-bar"><div class="progress-fill" style="width:39.3%;background:var(--red)"></div></div></div>
+            <div class="progress-wrap"><div class="progress-label"><span class="name">Insistiu em preço</span><span class="val">28 (31.5%)</span></div><div class="progress-bar"><div class="progress-fill" style="width:31.5%;background:var(--amber)"></div></div></div>
+            <div class="progress-wrap"><div class="progress-label"><span class="name">Parou de responder</span><span class="val">18 (20.2%)</span></div><div class="progress-bar"><div class="progress-fill" style="width:20.2%;background:var(--blue)"></div></div></div>
+            <div class="progress-wrap" style="margin-bottom:0"><div class="progress-label"><span class="name">Pediu humano</span><span class="val">8 (9.0%)</span></div><div class="progress-bar"><div class="progress-fill" style="width:9%;background:var(--purple)"></div></div></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">📈 Qualidade dos Dados da Mila</div>
+          <div class="panel-body">
+            <div class="progress-wrap"><div class="progress-label"><span class="name">Nome</span><span class="val" style="color:var(--green)">100%</span></div><div class="progress-bar"><div class="progress-fill" style="width:100%;background:var(--green)"></div></div></div>
+            <div class="progress-wrap"><div class="progress-label"><span class="name">Telefone</span><span class="val" style="color:var(--green)">100%</span></div><div class="progress-bar"><div class="progress-fill" style="width:100%;background:var(--green)"></div></div></div>
+            <div class="progress-wrap"><div class="progress-label"><span class="name">Unidade</span><span class="val" style="color:var(--green)">95%</span></div><div class="progress-bar"><div class="progress-fill" style="width:95%;background:var(--green)"></div></div></div>
+            <div class="progress-wrap"><div class="progress-label"><span class="name">Curso</span><span class="val" style="color:var(--amber)">69%</span></div><div class="progress-bar"><div class="progress-fill" style="width:69%;background:var(--amber)"></div></div></div>
+            <div class="progress-wrap" style="margin-bottom:0"><div class="progress-label"><span class="name">Faixa Etária</span><span class="val" style="color:var(--red)">32%</span></div><div class="progress-bar"><div class="progress-fill" style="width:32%;background:var(--red)"></div></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">📋 Últimas Passagens de Bastão</div>
+        <table class="data-table">
+          <thead><tr><th>Hora</th><th>Lead</th><th>Unid.</th><th>Motivo</th><th></th></tr></thead>
+          <tbody>
+            <tr onclick="openDrawer()"><td style="font-weight:600">14:30</td><td style="color:var(--text);font-weight:600">Maria Silva</td><td>CG</td><td><span class="tag" style="background:var(--amber-soft);color:var(--amber)">Insistiu preço</span></td><td><button class="btn btn-sm">Ver lead</button></td></tr>
+            <tr onclick="openDrawer()"><td style="font-weight:600">13:15</td><td style="color:var(--text);font-weight:600">João Santos</td><td>REC</td><td><span class="tag" style="background:var(--blue-soft);color:var(--blue)">Parou responder</span></td><td><button class="btn btn-sm">Ver lead</button></td></tr>
+            <tr onclick="openDrawer()"><td style="font-weight:600">11:40</td><td style="color:var(--text);font-weight:600">Ana Costa</td><td>BAR</td><td><span class="tag" style="background:var(--purple-soft);color:var(--purple-text)">Pediu humano</span></td><td><button class="btn btn-sm">Ver lead</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ══════════ TAB: RELATÓRIOS ══════════ -->
+    <div class="tab-content" id="tab-relatorios">
+      <div class="section-title">Escolha o tipo de relatório</div>
+      <div class="grid-2" style="margin-bottom:20px">
+        <div class="report-card" onclick="showReport('diario')">
+          <div class="rc-icon" style="background:var(--green-soft);color:var(--green)">📊</div>
+          <div><div class="rc-title">Relatório Diário</div><div class="rc-desc">Leads recebidos, contatos feitos, agendamentos, visitas e faltas do dia</div></div>
+        </div>
+        <div class="report-card" onclick="showReport('semanal')">
+          <div class="rc-icon" style="background:var(--cyan-soft);color:var(--cyan)">📅</div>
+          <div><div class="rc-title">Relatório Semanal</div><div class="rc-desc">Totais da semana, conversões por etapa do funil, leads parados</div></div>
+        </div>
+        <div class="report-card" onclick="showReport('mensal')">
+          <div class="rc-icon" style="background:var(--purple-soft);color:var(--purple-text)">📈</div>
+          <div><div class="rc-title">Relatório Mensal Completo</div><div class="rc-desc">Análise completa: funil, canais, cursos, motivos, meta 30%</div></div>
+        </div>
+        <div class="report-card" onclick="showReport('funil')">
+          <div class="rc-icon" style="background:var(--amber-soft);color:var(--amber)">🔄</div>
+          <div><div class="rc-title">Relatório de Funil</div><div class="rc-desc">Taxas de conversão entre cada etapa do pipeline</div></div>
+        </div>
+        <div class="report-card" onclick="showReport('bastao')">
+          <div class="rc-icon" style="background:var(--blue-soft);color:var(--blue)">🤝</div>
+          <div><div class="rc-title">Relatório de Passagem de Bastão</div><div class="rc-desc">Fluxo Mila → Andreza: motivos, tempos, qualificação</div></div>
+        </div>
+        <div class="report-card" onclick="showReport('frios')">
+          <div class="rc-icon" style="background:var(--pink-soft);color:var(--pink)">❄️</div>
+          <div><div class="rc-title">Relatório de Leads Frios</div><div class="rc-desc">Reativações, follow-ups e conversões de leads antigos</div></div>
+        </div>
+        <div class="report-card" onclick="showReport('tentativas')">
+          <div class="rc-icon" style="background:var(--orange-soft);color:var(--orange)">📞</div>
+          <div><div class="rc-title">Relatório de Tentativas de Contato</div><div class="rc-desc">Leads com múltiplas tentativas, taxa de resposta</div></div>
+        </div>
+      </div>
+
+      <div id="report-preview" style="display:none">
+        <div class="section-title">📱 Preview do Relatório</div>
+        <div class="panel">
+          <div class="panel-header">
+            <span>📊 Relatório Diário — Pré-Atendimento</span>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-sm" onclick="document.getElementById('report-preview').style.display='none'">← Voltar</button>
+              <button class="btn btn-sm">📋 Copiar</button>
+              <button class="btn btn-sm btn-green">📱 Enviar WhatsApp</button>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="whatsapp-preview">──────────────────
+📊 *RELATÓRIO DIÁRIO*
+👩🏾 *PRÉ-ATENDIMENTO*
+🏫 *TODAS AS UNIDADES*
+📅 13/fevereiro/2026
+👤 Andreza
+──────────────────
+
+📥 Leads novos: *12*
+📞 Leads contatados: *10*
+📵 Tentativas s/ resposta: *5*
+📅 Agendamentos: *4*
+   └ 3 experimentais + 1 visita
+✅ Compareceram: *2*
+❌ Faltaram: *1*
+   └ Motivo: Horário não deu
+🎓 Matrículas: *1*
+
+──────────────────
+🎯 Meta 30%: *9.9%* (acumulado)
+⏱️ Resp. média: *12 min*
+🔴 Parados +24h: *8*
+🏷️ Tags: *87% completo*
+──────────────────
+
+📊 *POR UNIDADE:*
+🏫 CG: 12.5% (6/48)
+🏫 REC: 8.3% (3/36)
+🏫 BAR: 6.7% (2/30)
+
+──────────────────
+💪 _Vamos acelerar!_</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end .content -->
+</div><!-- end .main -->
+
+<!-- ═══════════════════════ DRAWER ═══════════════════════ -->
+<div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-header">
+    <button class="back-btn" onclick="closeDrawer()">← Voltar</button>
+    <div class="lead-name">Maria Silva</div>
+    <span style="font-size:12px;color:var(--text-muted)">⋮</span>
+  </div>
+  <div class="drawer-body">
+    <!-- Quick Actions -->
+    <div style="display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap">
+      <button class="btn btn-sm btn-primary">📱 WhatsApp</button>
+      <button class="btn btn-sm">📞 Ligar</button>
+      <button class="btn btn-sm">📝 Nota</button>
+      <button class="btn btn-sm" style="border-color:var(--amber);color:var(--amber)">❓ Tent. s/ Resposta</button>
+    </div>
+
+    <!-- Dados -->
+    <div class="drawer-section">
+      <div class="drawer-section-title">Dados do Lead</div>
+      <div class="drawer-field"><span class="f-label">👤 Nome</span><span class="f-value">Maria Silva</span></div>
+      <div class="drawer-field"><span class="f-label">📱 Telefone</span><span class="f-value" style="color:var(--cyan)">(21) 99999-1234</span></div>
+      <div class="drawer-field"><span class="f-label">📧 Email</span><span class="f-value">maria@email.com</span></div>
+      <div class="drawer-field"><span class="f-label">🏫 Unidade</span><span class="f-value">Campo Grande</span></div>
+      <div class="drawer-field"><span class="f-label">🔄 Etapa</span><span class="f-value"><span class="tag" style="background:var(--amber-soft);color:var(--amber)">📞 Em Contato</span></span></div>
+      <div class="drawer-field"><span class="f-label">🌡️ Temperatura</span><span class="f-value" style="color:var(--red)">🔥 Quente</span></div>
+      <div class="drawer-field"><span class="f-label">👩🏾 Atendida por</span><span class="f-value">Andreza</span></div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="drawer-section">
+      <div class="drawer-section-title">KPIs (Tagueamento) · <span style="color:var(--red)">3/4</span></div>
+      <div class="drawer-field"><span class="f-label">📡 Canal</span><span class="f-value"><select class="topbar-select" style="font-size:11px;padding:3px 8px"><option>Instagram</option><option>Google</option><option>Indicação</option></select></span></div>
+      <div class="drawer-field"><span class="f-label">🎸 Curso</span><span class="f-value"><select class="topbar-select" style="font-size:11px;padding:3px 8px"><option>Violão</option><option>Piano</option><option>Canto</option><option>Bateria</option></select></span></div>
+      <div class="drawer-field"><span class="f-label">👶 Faixa Etária</span><span class="f-value"><select class="topbar-select" style="font-size:11px;padding:3px 8px"><option>EMLA (12+)</option><option>LAMK (até 11)</option></select></span></div>
+      <div class="drawer-field"><span class="f-label">💰 Sabe Preço</span><span class="f-value"><select class="topbar-select" style="font-size:11px;padding:3px 8px;border-color:var(--red);color:var(--red)"><option>— Selecionar</option><option>Sim</option><option>Não</option></select></span></div>
+    </div>
+
+    <!-- Agendamento -->
+    <div class="drawer-section">
+      <div class="drawer-section-title">Agendamento</div>
+      <div class="drawer-field"><span class="f-label">Tipo</span><span class="f-value"><select class="topbar-select" style="font-size:11px;padding:3px 8px"><option>Experimental</option><option>Visita</option></select></span></div>
+      <div class="drawer-field"><span class="f-label">📅 Data</span><span class="f-value">15/02 às 14:00</span></div>
+      <div class="drawer-field"><span class="f-label">👨‍🏫 Professor</span><span class="f-value">Ricardo (✅ disponível)</span></div>
+      <div class="drawer-field"><span class="f-label">👤 Consultor</span><span class="f-value">Vitória</span></div>
+      <div class="drawer-field"><span class="f-label">Desmarcações</span><span class="f-value">0</span></div>
+      <div class="drawer-field"><span class="f-label">Tentativas s/ resp.</span><span class="f-value">1</span></div>
+    </div>
+
+    <!-- Observações Andreza -->
+    <div class="drawer-section">
+      <div class="drawer-section-title">📝 Observações Andreza</div>
+      <textarea class="obs-textarea">Mãe interessada em violão para filho de 8 anos. Quer saber preço antes de ir. Explicar que a experimental é gratuita e sem compromisso.</textarea>
+    </div>
+
+    <!-- Observações Professor -->
+    <div class="drawer-section">
+      <div class="drawer-section-title">👨‍🏫 Notas para o Professor</div>
+      <textarea class="obs-textarea" placeholder="Ex: Criança tímida, primeira vez com instrumento, sugestão de abordagem...">Criança de 8 anos, tímida, nunca teve contato com instrumento. Mãe pediu paciência extra. Sugestão: começar com brincadeira musical.</textarea>
+    </div>
+
+    <!-- Resumo Mila -->
+    <div class="drawer-section">
+      <div class="drawer-section-title">🤖 Resumo da Mila</div>
+      <div class="drawer-field"><span class="f-label">Motivo passagem</span><span class="f-value" style="color:var(--amber)">Insistiu em saber preço</span></div>
+      <div class="drawer-field"><span class="f-label">Mensagens trocadas</span><span class="f-value">12</span></div>
+    </div>
+
+    <!-- Templates -->
+    <div class="drawer-section">
+      <div class="drawer-section-title">📱 Templates WhatsApp</div>
+      <div class="templates-grid">
+        <span class="template-chip">✅ Confirmação</span>
+        <span class="template-chip">⏰ Lembrete 24h</span>
+        <span class="template-chip">🔄 Reagendar</span>
+        <span class="template-chip">⭐ Pós-Experimental</span>
+        <span class="template-chip">❄️ Follow-up Frio</span>
+        <span class="template-chip">👋 Boas-vindas</span>
+        <span class="template-chip">📵 Tent. s/ Resposta</span>
+      </div>
+    </div>
+
+    <!-- Timeline -->
+    <div class="drawer-section">
+      <div class="drawer-section-title">📜 Timeline</div>
+      <div class="timeline-item">
+        <div class="timeline-dot" style="background:var(--green-soft);color:var(--green)">📱</div>
+        <div class="timeline-content"><div class="tl-text">WhatsApp enviado (confirmação experimental)</div><div class="tl-time">Hoje 14:30</div></div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-dot" style="background:var(--amber-soft);color:var(--amber)">❓</div>
+        <div class="timeline-content"><div class="tl-text" style="color:var(--amber)">Tentativa sem resposta (📞 ligação)</div><div class="tl-time">Hoje 14:15</div></div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-dot" style="background:var(--purple-soft);color:var(--purple-text)">🤖</div>
+        <div class="timeline-content"><div class="tl-text">Mila → Andreza (insistiu em saber preço)</div><div class="tl-time">Hoje 13:00</div></div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-dot" style="background:var(--purple-soft)">🤖</div>
+        <div class="timeline-content"><div class="tl-text">Mila: 1º contato via WhatsApp</div><div class="tl-time">Hoje 12:45</div></div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-dot" style="background:var(--blue-soft);color:var(--blue)">🆕</div>
+        <div class="timeline-content"><div class="tl-text">Lead criado (Instagram)</div><div class="tl-time">Hoje 12:40</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="drawer-actions">
+    <button class="btn btn-sm btn-primary">📅 Agendar Experimental</button>
+    <button class="btn btn-sm" style="border-color:var(--cyan);color:var(--cyan)">🏫 Agendar Visita</button>
+    <button class="btn btn-sm">🏷️ Mover Etapa</button>
+    <button class="btn btn-sm" style="border-color:var(--red);color:var(--red)">📦 Arquivar</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════ TOAST ═══════════════════════ -->
+<div class="toast" id="toast">
+  <button class="toast-close" onclick="hideToast()">×</button>
+  <span class="toast-icon">🆕</span>
+  <div class="toast-text">
+    <strong><span class="live-dot"></span>Novo lead da Mila!</strong>
+    Rafael Souza · CG · 🥁 Bateria · Agora
+  </div>
+  <button class="btn btn-sm btn-primary" onclick="openDrawer();hideToast();">Ver</button>
+</div>
+
+<!-- ═══════════════════════ JAVASCRIPT ═══════════════════════ -->
+<script>
+// Tab switching
+document.querySelectorAll('.subtab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.subtab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+    document.querySelector('.content').scrollTop = 0;
+  });
+});
+
+// Drawer
+function openDrawer() {
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawerOverlay').classList.add('open');
+}
+function closeDrawer() {
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('drawerOverlay').classList.remove('open');
+}
+
+// Toast notification
+function showToast() {
+  document.getElementById('toast').classList.add('show');
+  setTimeout(() => hideToast(), 8000);
+}
+function hideToast() {
+  document.getElementById('toast').classList.remove('show');
+}
+
+// Report preview
+function showReport(type) {
+  document.getElementById('report-preview').style.display = 'block';
+  document.getElementById('report-preview').scrollIntoView({ behavior: 'smooth' });
+}
+
+// Alert close
+document.querySelectorAll('.alert-close').forEach(btn => {
+  btn.addEventListener('click', () => {
+    btn.closest('.alert-banner').style.display = 'none';
+  });
+});
+
+// Auto toast after 3 seconds
+setTimeout(() => showToast(), 3000);
+</script>
+</body>
+</html><!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LA Music Report — Pré-Atendimento</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════ RESET & VARS ═══════════════════════ */
+:root {
+  --sidebar-w: 220px;
+  --topbar-h: 64px;
+  --bg: #0d1117;
+  --bg-sidebar: #0d1117;
+  --bg-card: #161b22;
+  --bg-card-hover: #1c2333;
+  --bg-surface: #131820;
+  --bg-input: #0d1117;
+  --border: #21262d;
+  --border-light: #30363d;
+  --text: #e6edf3;
+  --text-secondary: #8b949e;
+  --text-muted: #484f58;
+  --purple: #7c3aed;
+  --purple-soft: rgba(124,58,237,0.15);
+  --purple-text: #a78bfa;
+  --cyan: #06b6d4;
+  --cyan-soft: rgba(6,182,212,0.12);
+  --green: #10b981;
+  --green-soft: rgba(16,185,129,0.12);
+  --amber: #f59e0b;
+  --amber-soft: rgba(245,158,11,0.12);
+  --red: #ef4444;
+  --red-soft: rgba(239,68,68,0.12);
+  --blue: #3b82f6;
+  --blue-soft: rgba(59,130,246,0.12);
+  --pink: #ec4899;
+  --pink-soft: rgba(236,72,153,0.12);
+  --orange: #f97316;
+  --orange-soft: rgba(249,115,22,0.15);
+  --teal: #14b8a6;
+  --teal-soft: rgba(20,184,166,0.12);
+  --radius: 10px;
+  --radius-sm: 6px;
+  --radius-lg: 14px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+  height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ═══════════════════════ SIDEBAR ═══════════════════════ */
+.sidebar {
+  position: fixed;
+  left: 0; top: 0; bottom: 0;
+  width: var(--sidebar-w);
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  z-index: 50;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+.sidebar::-webkit-scrollbar { display: none; }
+
+.sidebar-logo {
+  padding: 20px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-bottom: 1px solid var(--border);
+}
+.sidebar-logo .logo-icon {
+  width: 36px; height: 36px;
+  background: linear-gradient(135deg, var(--purple), var(--pink));
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 14px; color: white;
+}
+.sidebar-logo .logo-text {
+  font-size: 14px; font-weight: 700; line-height: 1.2;
+}
+.sidebar-logo .logo-text span { color: var(--text-muted); font-size: 11px; font-weight: 400; display: block; }
+
+.sidebar-section { padding: 16px 12px 4px; }
+.sidebar-section-label {
+  font-size: 10px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 1.2px; color: var(--text-muted); padding: 0 8px; margin-bottom: 6px;
+}
+
+.sidebar-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-radius: var(--radius-sm);
+  font-size: 13px; font-weight: 500; color: var(--text-secondary);
+  cursor: pointer; transition: all 0.15s; margin-bottom: 2px;
+  text-decoration: none;
+}
+.sidebar-item:hover { background: var(--bg-card); color: var(--text); }
+.sidebar-item.active {
+  background: var(--purple-soft); color: var(--purple-text);
+  font-weight: 600;
+}
+.sidebar-item .icon { font-size: 16px; width: 20px; text-align: center; }
+
+.sidebar-user {
+  margin-top: auto; padding: 16px;
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px;
+}
+.sidebar-user-avatar {
+  width: 34px; height: 34px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--purple), var(--cyan));
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 700; color: white;
+}
+.sidebar-user-info { font-size: 12px; }
+.sidebar-user-info .name { font-weight: 600; }
+.sidebar-user-info .role { color: var(--text-muted); font-size: 11px; }
+
+/* ═══════════════════════ MAIN AREA ═══════════════════════ */
+.main {
+  margin-left: var(--sidebar-w);
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ═══════════════════════ TOP BAR ═══════════════════════ */
+.topbar {
+  height: var(--topbar-h);
+  min-height: var(--topbar-h);
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 28px;
+}
+.topbar-left { display: flex; align-items: center; gap: 12px; }
+.topbar-greeting { font-size: 15px; font-weight: 600; }
+.topbar-greeting span { color: var(--text-muted); font-size: 12px; font-weight: 400; display: block; }
+
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+
+.topbar-select {
+  background: var(--bg-card); border: 1px solid var(--border);
+  color: var(--text); padding: 7px 14px; border-radius: var(--radius-sm);
+  font-size: 12px; font-weight: 500; cursor: pointer;
+  appearance: none; -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%238b949e' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 10px center;
+  padding-right: 28px;
+}
+.topbar-select:focus { outline: none; border-color: var(--purple); }
+
+/* ═══════════════════════ PAGE HEADER ═══════════════════════ */
+.page-header {
+  padding: 20px 28px 0;
+}
+.page-title-row {
+  display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 16px;
+}
+.page-title { font-size: 22px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
+.page-title .emoji { font-size: 24px; }
+.page-subtitle { font-size: 13px; color: var(--text-secondary); margin-top: 2px; }
+
+/* ═══════════════════════ SUB-TABS ═══════════════════════ */
+.subtabs {
+  display: flex;
+  gap: 4px;
+  padding: 0 28px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.subtabs::-webkit-scrollbar { display: none; }
+
+.subtab {
+  padding: 10px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.subtab:hover { color: var(--text); }
+.subtab.active {
+  color: var(--purple-text);
+  border-bottom-color: var(--purple);
+  font-weight: 600;
+}
+.subtab .badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 100px;
+  background: var(--red);
+  color: white;
+  font-weight: 700;
+}
+
+/* ═══════════════════════ CONTENT AREA ═══════════════════════ */
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 28px 40px;
+  scroll-behavior: smooth;
+}
+.content::-webkit-scrollbar { width: 6px; }
+.content::-webkit-scrollbar-track { background: transparent; }
+.content::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.tab-content { display: none; }
+.tab-content.active { display: block; }
+
+/* ═══════════════════════ GRID LAYOUTS ═══════════════════════ */
+.grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
+
+/* ═══════════════════════ STAT CARDS ═══════════════════════ */
+.stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+.stat-card:hover { border-color: var(--border-light); }
+.stat-card-accent {
+  position: absolute; top: 0; left: 0; width: 4px; height: 100%;
+}
+.stat-card .icon-circle {
+  width: 38px; height: 38px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px; margin-bottom: 12px;
+}
+.stat-card .value {
+  font-size: 28px; font-weight: 800; line-height: 1; margin-bottom: 4px;
+}
+.stat-card .label {
+  font-size: 12px; color: var(--text-secondary); font-weight: 500;
+}
+.stat-card .sub {
+  font-size: 11px; color: var(--text-muted); margin-top: 2px;
+}
+
+/* ═══════════════════════ ALERT BANNERS ═══════════════════════ */
+.alert-banner {
+  padding: 14px 18px;
+  border-radius: var(--radius);
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 13px;
+}
+.alert-banner .alert-icon {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; font-size: 14px;
+  flex-shrink: 0;
+}
+.alert-banner .alert-content { flex: 1; }
+.alert-banner .alert-title { font-weight: 600; margin-bottom: 1px; }
+.alert-banner .alert-desc { font-size: 12px; color: var(--text-secondary); }
+.alert-banner .alert-close { cursor: pointer; color: var(--text-muted); font-size: 18px; padding: 4px; }
+
+.alert-banner.success { background: var(--green-soft); border: 1px solid rgba(16,185,129,0.25); }
+.alert-banner.success .alert-icon { background: var(--green); color: white; }
+.alert-banner.warning { background: var(--amber-soft); border: 1px solid rgba(245,158,11,0.25); }
+.alert-banner.warning .alert-icon { background: var(--amber); color: white; }
+.alert-banner.danger { background: var(--red-soft); border: 1px solid rgba(239,68,68,0.25); }
+.alert-banner.danger .alert-icon { background: var(--red); color: white; }
+.alert-banner.info { background: var(--blue-soft); border: 1px solid rgba(59,130,246,0.25); }
+.alert-banner.info .alert-icon { background: var(--blue); color: white; }
+.alert-banner.purple-alert { background: var(--purple-soft); border: 1px solid rgba(124,58,237,0.25); }
+.alert-banner.purple-alert .alert-icon { background: var(--purple); color: white; }
+
+/* ═══════════════════════ SECTION TITLES ═══════════════════════ */
+.section-title {
+  font-size: 15px; font-weight: 700; margin: 24px 0 12px;
+  display: flex; align-items: center; gap: 8px;
+}
+.section-title:first-child { margin-top: 0; }
+.section-title .count {
+  font-size: 11px; background: var(--bg-card); border: 1px solid var(--border);
+  padding: 1px 8px; border-radius: 100px; color: var(--text-secondary); font-weight: 600;
+}
+
+/* ═══════════════════════ PANELS / BOXES ═══════════════════════ */
+.panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.panel-header {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 13px; font-weight: 600;
+}
+.panel-body { padding: 18px; }
+
+/* ═══════════════════════ PROGRESS BARS ═══════════════════════ */
+.progress-wrap { margin-bottom: 14px; }
+.progress-label {
+  display: flex; justify-content: space-between; align-items: center;
+  font-size: 12px; margin-bottom: 5px;
+}
+.progress-label .name { color: var(--text-secondary); font-weight: 500; }
+.progress-label .val { font-weight: 700; font-size: 13px; }
+.progress-bar {
+  height: 8px; background: var(--bg); border-radius: 4px; overflow: hidden;
+}
+.progress-fill {
+  height: 100%; border-radius: 4px; transition: width 0.8s ease;
+}
+
+/* ═══════════════════════ KANBAN ═══════════════════════ */
+.kanban-scroll { overflow-x: auto; padding-bottom: 12px; }
+.kanban-board { display: flex; gap: 12px; min-width: max-content; }
+.kanban-col {
+  width: 220px; min-width: 220px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  max-height: calc(100vh - 280px);
+  display: flex; flex-direction: column;
+}
+.kanban-col-header {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  font-size: 12px; font-weight: 700;
+  position: sticky; top: 0; background: var(--bg-surface); z-index: 1;
+}
+.kanban-col-header .count-badge {
+  background: var(--bg-card); border: 1px solid var(--border);
+  font-size: 10px; padding: 1px 7px; border-radius: 100px; font-weight: 700;
+}
+.kanban-col-body {
+  padding: 8px; overflow-y: auto; flex: 1;
+  scrollbar-width: thin;
+}
+.kanban-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 12px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all 0.15s;
+  position: relative;
+}
+.kanban-card:hover {
+  border-color: var(--purple);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+.kanban-card .kc-name { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+.kanban-card .kc-info {
+  font-size: 11px; color: var(--text-secondary);
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+}
+.kanban-card .kc-tag {
+  font-size: 10px; padding: 1px 6px; border-radius: 4px;
+  font-weight: 600; display: inline-flex; align-items: center; gap: 3px;
+}
+.kanban-card .kc-actions {
+  display: flex; gap: 4px; margin-top: 8px;
+}
+.kanban-card .kc-btn {
+  font-size: 14px; padding: 3px 6px; border-radius: 4px;
+  cursor: pointer; transition: background 0.15s;
+  background: none; border: none; color: var(--text-secondary);
+}
+.kanban-card .kc-btn:hover { background: var(--border); color: var(--text); }
+.kanban-card .kc-time {
+  font-size: 10px; color: var(--text-muted);
+  position: absolute; top: 10px; right: 10px;
+}
+.kanban-card .kc-time.urgent { color: var(--red); font-weight: 700; }
+
+/* ═══════════════════════ DATA TABLE ═══════════════════════ */
+.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.data-table th {
+  text-align: left; padding: 10px 14px;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: 0.5px; color: var(--text-muted);
+  position: sticky; top: 0; z-index: 1;
+}
+.data-table td {
+  padding: 10px 14px; border-bottom: 1px solid var(--border);
+  color: var(--text-secondary); vertical-align: middle;
+}
+.data-table tr { cursor: pointer; transition: background 0.1s; }
+.data-table tbody tr:hover td { background: var(--bg-card); }
+.data-table .tag {
+  font-size: 10px; padding: 2px 8px; border-radius: 100px;
+  font-weight: 600; display: inline-block;
+}
+
+/* ═══════════════════════ BUTTONS ═══════════════════════ */
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 16px; border-radius: var(--radius-sm);
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  border: 1px solid var(--border); background: var(--bg-card);
+  color: var(--text); transition: all 0.15s;
+}
+.btn:hover { border-color: var(--border-light); background: var(--bg-card-hover); }
+.btn-primary { background: var(--purple); border-color: var(--purple); color: white; }
+.btn-primary:hover { background: #6d28d9; }
+.btn-sm { padding: 5px 10px; font-size: 11px; }
+.btn-green { background: var(--green); border-color: var(--green); color: white; }
+
+/* ═══════════════════════ FILTER BAR ═══════════════════════ */
+.filter-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.filter-bar .filter-select {
+  background: var(--bg-card); border: 1px solid var(--border);
+  color: var(--text-secondary); padding: 6px 12px; border-radius: var(--radius-sm);
+  font-size: 11px; font-weight: 500; cursor: pointer;
+}
+.filter-bar .search-input {
+  background: var(--bg-card); border: 1px solid var(--border);
+  color: var(--text); padding: 6px 12px; border-radius: var(--radius-sm);
+  font-size: 12px; flex: 1; min-width: 200px;
+}
+.filter-bar .search-input::placeholder { color: var(--text-muted); }
+.filter-bar .search-input:focus { outline: none; border-color: var(--purple); }
+
+/* ═══════════════════════ AGENDA ITEMS ═══════════════════════ */
+.agenda-item {
+  display: flex; align-items: center; gap: 14px;
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.agenda-item:hover { border-color: var(--purple); }
+.agenda-item .time-col {
+  font-size: 14px; font-weight: 700; width: 50px;
+  color: var(--text); text-align: center;
+}
+.agenda-item .info-col { flex: 1; }
+.agenda-item .info-name { font-size: 13px; font-weight: 600; }
+.agenda-item .info-detail { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+.agenda-item .actions-col { display: flex; gap: 6px; }
+
+/* ═══════════════════════ WEEK CALENDAR ═══════════════════════ */
+.week-cal { display: flex; gap: 4px; }
+.week-day {
+  flex: 1; text-align: center;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 10px 6px; min-width: 70px;
+}
+.week-day.today { border-color: var(--purple); background: var(--purple-soft); }
+.week-day .day-name { font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
+.week-day .day-num { font-size: 16px; font-weight: 700; margin: 4px 0; }
+.week-day .day-badges { display: flex; gap: 3px; justify-content: center; flex-wrap: wrap; }
+.week-day .day-badge { font-size: 9px; padding: 1px 5px; border-radius: 3px; font-weight: 700; }
+
+/* ═══════════════════════ METAS THERMOMETER ═══════════════════════ */
+.meta-unit {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+.meta-unit .unit-name { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+.meta-unit .unit-sub { font-size: 11px; color: var(--text-muted); margin-bottom: 14px; }
+.meta-unit .thermo { margin-bottom: 12px; }
+.meta-unit .thermo-bar {
+  height: 12px; background: var(--bg); border-radius: 6px;
+  overflow: hidden; position: relative;
+}
+.meta-unit .thermo-fill {
+  height: 100%; border-radius: 6px;
+  transition: width 1s ease;
+}
+.meta-unit .thermo-labels {
+  display: flex; justify-content: space-between;
+  font-size: 11px; color: var(--text-muted); margin-top: 4px;
+}
+.meta-unit .stats-row {
+  display: flex; gap: 16px; flex-wrap: wrap; margin-top: 8px;
+}
+.meta-unit .stat-item { font-size: 12px; color: var(--text-secondary); }
+.meta-unit .stat-item strong { color: var(--text); }
+
+/* ═══════════════════════ REPORT CARDS ═══════════════════════ */
+.report-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex; align-items: flex-start; gap: 14px;
+}
+.report-card:hover { border-color: var(--purple); transform: translateY(-1px); }
+.report-card .rc-icon {
+  width: 42px; height: 42px; border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; flex-shrink: 0;
+}
+.report-card .rc-title { font-size: 14px; font-weight: 600; margin-bottom: 3px; }
+.report-card .rc-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+
+/* ═══════════════════════ DRAWER ═══════════════════════ */
+.drawer-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+  z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.2s;
+}
+.drawer-overlay.open { opacity: 1; pointer-events: auto; }
+
+.drawer {
+  position: fixed; top: 0; right: -480px; bottom: 0;
+  width: 480px; max-width: 90vw;
+  background: var(--bg); border-left: 1px solid var(--border);
+  z-index: 101; transition: right 0.3s ease;
+  display: flex; flex-direction: column;
+}
+.drawer.open { right: 0; }
+
+.drawer-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+}
+.drawer-header .back-btn {
+  background: none; border: none; color: var(--text-secondary);
+  cursor: pointer; font-size: 18px; padding: 4px;
+}
+.drawer-header .lead-name { font-size: 16px; font-weight: 700; }
+
+.drawer-body {
+  flex: 1; overflow-y: auto; padding: 20px;
+}
+.drawer-body::-webkit-scrollbar { width: 5px; }
+.drawer-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+.drawer-section { margin-bottom: 20px; }
+.drawer-section-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.8px; color: var(--text-muted); margin-bottom: 10px;
+  padding-bottom: 6px; border-bottom: 1px solid var(--border);
+}
+
+.drawer-field {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 6px 0; font-size: 13px;
+}
+.drawer-field .f-label { color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
+.drawer-field .f-value { font-weight: 600; }
+
+.drawer-actions {
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+  display: flex; gap: 8px; flex-wrap: wrap;
+}
+
+/* Timeline */
+.timeline-item {
+  display: flex; gap: 12px; padding: 8px 0;
+  font-size: 12px; position: relative;
+}
+.timeline-item:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 11px; top: 28px; bottom: -8px;
+  width: 1px; background: var(--border);
+}
+.timeline-dot {
+  width: 22px; height: 22px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; flex-shrink: 0;
+  background: var(--bg-card); border: 1px solid var(--border);
+}
+.timeline-content { flex: 1; }
+.timeline-content .tl-text { color: var(--text-secondary); }
+.timeline-content .tl-time { color: var(--text-muted); font-size: 10px; margin-top: 2px; }
+
+/* ═══════════════════════ TOAST ═══════════════════════ */
+.toast {
+  position: fixed;
+  bottom: 24px; right: 24px;
+  background: var(--bg-card);
+  border: 1px solid var(--purple);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  z-index: 200;
+  display: flex; align-items: center; gap: 12px;
+  box-shadow: 0 8px 32px rgba(124,58,237,0.2);
+  transform: translateY(120%);
+  transition: transform 0.4s ease;
+  max-width: 380px;
+}
+.toast.show { transform: translateY(0); }
+.toast .toast-icon { font-size: 24px; }
+.toast .toast-text { font-size: 13px; }
+.toast .toast-text strong { display: block; font-size: 14px; }
+.toast .toast-close {
+  position: absolute; top: 8px; right: 10px;
+  background: none; border: none; color: var(--text-muted);
+  cursor: pointer; font-size: 14px;
+}
+
+/* ═══════════════════════ MISC ═══════════════════════ */
+.chart-placeholder {
+  height: 160px;
+  background: var(--bg-surface);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-muted); font-size: 12px;
+}
+
+.comma-sep > *:not(:last-child)::after { content: ' · '; color: var(--text-muted); }
+
+.obs-textarea {
+  width: 100%; background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); color: var(--text); padding: 10px 12px;
+  font-size: 12px; font-family: inherit; resize: vertical; min-height: 60px;
+}
+.obs-textarea:focus { outline: none; border-color: var(--purple); }
+
+.templates-grid { display: flex; flex-wrap: wrap; gap: 6px; }
+.template-chip {
+  padding: 5px 10px; font-size: 11px; font-weight: 600;
+  background: var(--bg-surface); border: 1px solid var(--border);
+  border-radius: 100px; cursor: pointer; transition: all 0.15s;
+}
+.template-chip:hover { border-color: var(--purple); background: var(--purple-soft); color: var(--purple-text); }
+
+/* WhatsApp report preview */
+.whatsapp-preview {
+  background: #0b141a;
+  border: 1px solid #1f3a2d;
+  border-radius: var(--radius);
+  padding: 16px;
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #e9edef;
+  white-space: pre-line;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* Realtime dot animation */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+.live-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: pulse-dot 1.5s infinite;
+  margin-right: 6px;
+}
+
+@keyframes slideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+.animate-in { animation: slideIn 0.3s ease forwards; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════ SIDEBAR ═══════════════════════ -->
+<aside class="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">LA</div>
+    <div class="logo-text">music<br><span>report</span></div>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Sistema</div>
+    <a class="sidebar-item" href="#"><span class="icon">📊</span> Dashboard</a>
+    <a class="sidebar-item" href="#"><span class="icon">📈</span> Analytics</a>
+    <a class="sidebar-item" href="#"><span class="icon">🎯</span> Metas</a>
+    <a class="sidebar-item" href="#"><span class="icon">⚙️</span> Configurações</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Operacional</div>
+    <a class="sidebar-item" href="#"><span class="icon">📋</span> Comercial</a>
+    <a class="sidebar-item active" href="#"><span class="icon">📞</span> Pré-Atendimento</a>
+    <a class="sidebar-item" href="#"><span class="icon">👥</span> Administrativo</a>
+    <a class="sidebar-item" href="#"><span class="icon">🎓</span> Alunos</a>
+    <a class="sidebar-item" href="#"><span class="icon">🎵</span> Professores</a>
+    <a class="sidebar-item" href="#"><span class="icon">📁</span> Projetos</a>
+    <a class="sidebar-item" href="#"><span class="icon">🏫</span> Salas</a>
+  </div>
+
+  <div class="sidebar-section">
+    <div class="sidebar-section-label">Admin</div>
+    <a class="sidebar-item" href="#"><span class="icon">👤</span> Gerenciar Usuários</a>
+    <a class="sidebar-item" href="#"><span class="icon">🔒</span> Permissões</a>
+  </div>
+
+  <div class="sidebar-user">
+    <div class="sidebar-user-avatar">A</div>
+    <div class="sidebar-user-info">
+      <div class="name">Andreza</div>
+      <div class="role">Pré-Atendimento (todas)</div>
+    </div>
+  </div>
+</aside>
+
+<!-- ═══════════════════════ MAIN ═══════════════════════ -->
+<div class="main">
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-greeting">
+        Boa tarde, Andreza! 👋
+        <span>📅 sexta-feira, 13 de fevereiro de 2026</span>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <select class="topbar-select" id="unitFilter">
+        <option>🏫 Todas</option>
+        <option>Campo Grande</option>
+        <option>Recreio</option>
+        <option>Barra</option>
+      </select>
+      <select class="topbar-select">
+        <option>📅 Fev/2026</option>
+        <option>Jan/2026</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- PAGE HEADER -->
+  <div class="page-header">
+    <div class="page-title-row">
+      <div>
+        <div class="page-title"><span class="emoji">📞</span> Pré-Atendimento</div>
+        <div class="page-subtitle">CRM da Andreza — Gestão de leads, experimentais, visitas e follow-ups</div>
+      </div>
+      <button class="btn btn-green" onclick="showToast()">📱 Gerar Relatório WhatsApp</button>
+    </div>
+  </div>
+
+  <!-- SUB-TABS -->
+  <div class="subtabs" id="subtabs">
+    <div class="subtab active" data-tab="dashboard">📊 Dashboard</div>
+    <div class="subtab" data-tab="pipeline">🔄 Pipeline</div>
+    <div class="subtab" data-tab="leads">📋 Leads <span class="badge">8</span></div>
+    <div class="subtab" data-tab="agenda">📅 Agenda</div>
+    <div class="subtab" data-tab="metas">📈 Metas</div>
+    <div class="subtab" data-tab="mila">🤖 Painel Mila</div>
+    <div class="subtab" data-tab="relatorios">📄 Relatórios</div>
+  </div>
+
+  <!-- ═══════════════════════ CONTENT ═══════════════════════ -->
+  <div class="content">
+
+    <!-- ══════════ TAB: DASHBOARD ══════════ -->
+    <div class="tab-content active" id="tab-dashboard">
+
+      <!-- Alerts -->
+      <div class="alert-banner purple-alert animate-in" style="animation-delay: 0s">
+        <div class="alert-icon">🆕</div>
+        <div class="alert-content">
+          <div class="alert-title"><span class="live-dot"></span>Novo lead da Mila — Maria Silva</div>
+          <div class="alert-desc">CG · Violão · há 3 min · ⏱️ Responda em até 15 min</div>
+        </div>
+        <div style="display:flex;gap:6px">
+          <button class="btn btn-sm btn-primary" onclick="openDrawer()">Ver lead</button>
+          <button class="btn btn-sm">📱 WhatsApp</button>
+        </div>
+      </div>
+
+      <div class="alert-banner warning animate-in" style="animation-delay: 0.05s">
+        <div class="alert-icon">⚠️</div>
+        <div class="alert-content">
+          <div class="alert-title">8 leads sem ação há +24h!</div>
+          <div class="alert-desc">Faça follow-up imediato para não perder a oportunidade</div>
+        </div>
+        <span class="alert-close">×</span>
+      </div>
+
+      <div class="alert-banner success animate-in" style="animation-delay: 0.1s">
+        <div class="alert-icon">🎓</div>
+        <div class="alert-content">
+          <div class="alert-title">2 matrículas hoje!</div>
+          <div class="alert-desc">Bom ritmo! Campo Grande e Barra</div>
+        </div>
+        <span class="alert-close">×</span>
+      </div>
+
+      <!-- KPI Cards -->
+      <div class="grid-5 animate-in" style="animation-delay: 0.15s; margin-bottom: 16px;">
+        <div class="stat-card">
+          <div class="stat-card-accent" style="background:var(--blue)"></div>
+          <div class="icon-circle" style="background:var(--blue-soft);color:var(--blue)">📥</div>
+          <div class="value">142</div>
+          <div class="label">Leads no Mês</div>
+          <div class="sub">+12 hoje</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-accent" style="background:var(--cyan)"></div>
+          <div class="icon-circle" style="background:var(--cyan-soft);color:var(--cyan)">📅</div>
+          <div class="value">38</div>
+          <div class="label">Agendadas</div>
+          <div class="sub">26.8% dos leads</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-accent" style="background:var(--green)"></div>
+          <div class="icon-circle" style="background:var(--green-soft);color:var(--green)">🏫</div>
+          <div class="value">14</div>
+          <div class="label">Visitaram</div>
+          <div class="sub">9.9% show-up</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-accent" style="background:var(--teal)"></div>
+          <div class="icon-circle" style="background:var(--teal-soft);color:var(--teal)">🎓</div>
+          <div class="value">11</div>
+          <div class="label">Matriculados</div>
+          <div class="sub">78.6% pós-visita</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-card-accent" style="background:var(--amber)"></div>
+          <div class="icon-circle" style="background:var(--amber-soft);color:var(--amber)">🏷️</div>
+          <div class="value" style="font-size:22px">87%</div>
+          <div class="label">Tags OK</div>
+          <div class="sub">Faltam 19 leads</div>
+        </div>
+      </div>
+
+      <!-- Meta + Funil -->
+      <div class="grid-2 animate-in" style="animation-delay: 0.2s; margin-bottom: 16px;">
+        <div class="panel">
+          <div class="panel-header">🎯 Meta 30% — Show-up Rate</div>
+          <div class="panel-body">
+            <div style="display:flex; align-items:baseline; gap:8px; margin-bottom:12px;">
+              <span style="font-size:36px; font-weight:800; color:var(--amber)">9.9%</span>
+              <span style="font-size:13px; color:var(--text-muted)">de 30%</span>
+            </div>
+            <div class="progress-bar" style="height:14px; margin-bottom:12px;">
+              <div class="progress-fill" style="width:33%; background: linear-gradient(90deg, var(--red), var(--amber));"></div>
+            </div>
+            <div style="display:flex; gap:20px; font-size:12px; color:var(--text-secondary);">
+              <span>🔥 Quentes: <strong style="color:var(--text)">14</strong></span>
+              <span>❄️ Frios: <strong style="color:var(--text)">0</strong></span>
+              <span>Faltam: <strong style="color:var(--amber)">20.1pp</strong></span>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">📊 Funil Visual</div>
+          <div class="panel-body">
+            <div class="progress-wrap">
+              <div class="progress-label"><span class="name">📥 Leads</span><span class="val">142</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:100%;background:var(--blue)"></div></div>
+            </div>
+            <div class="progress-wrap">
+              <div class="progress-label"><span class="name">📅 Agendadas</span><span class="val">38 (26.8%)</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:26.8%;background:var(--cyan)"></div></div>
+            </div>
+            <div class="progress-wrap">
+              <div class="progress-label"><span class="name">🏫 Visitaram</span><span class="val">14 (9.9%)</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:9.9%;background:var(--green)"></div></div>
+            </div>
+            <div class="progress-wrap" style="margin-bottom:0">
+              <div class="progress-label"><span class="name">🎓 Matriculados</span><span class="val">11 (7.7%)</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:7.7%;background:var(--teal)"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Alertas + Tags KPI -->
+      <div class="grid-2 animate-in" style="animation-delay: 0.25s; margin-bottom: 16px;">
+        <div class="panel">
+          <div class="panel-header">⚡ Alertas do Dia</div>
+          <div class="panel-body" style="font-size:13px;">
+            <div style="padding:6px 0; display:flex; align-items:center; gap:8px; border-bottom:1px solid var(--border);">
+              <span style="color:var(--red)">🔴</span> <span>8 leads sem ação há +24h</span>
+            </div>
+            <div style="padding:6px 0; display:flex; align-items:center; gap:8px; border-bottom:1px solid var(--border);">
+              <span style="color:var(--amber)">🟡</span> <span>3 experimentais amanhã — confirmar</span>
+            </div>
+            <div style="padding:6px 0; display:flex; align-items:center; gap:8px; border-bottom:1px solid var(--border);">
+              <span style="color:var(--green)">🟢</span> <span>2 matrículas hoje</span>
+            </div>
+            <div style="padding:6px 0; display:flex; align-items:center; gap:8px; border-bottom:1px solid var(--border);">
+              <span>⏱️</span> <span>Tempo médio resposta: <strong>12 min</strong></span>
+            </div>
+            <div style="padding:6px 0; display:flex; align-items:center; gap:8px;">
+              <span>📵</span> <span>5 tentativas sem resposta hoje</span>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">🏷️ KPIs Tagueados</div>
+          <div class="panel-body">
+            <div class="progress-wrap">
+              <div class="progress-label"><span class="name">📡 Canal</span><span class="val" style="color:var(--green)">97.2%</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:97.2%;background:var(--green)"></div></div>
+            </div>
+            <div class="progress-wrap">
+              <div class="progress-label"><span class="name">🎸 Curso</span><span class="val" style="color:var(--green)">91.5%</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:91.5%;background:var(--green)"></div></div>
+            </div>
+            <div class="progress-wrap">
+              <div class="progress-label"><span class="name">👶 Faixa Etária</span><span class="val" style="color:var(--amber)">88.0%</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:88%;background:var(--amber)"></div></div>
+            </div>
+            <div class="progress-wrap" style="margin-bottom:0">
+              <div class="progress-label"><span class="name">💰 Sabe Preço</span><span class="val" style="color:var(--red)">77.5%</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:77.5%;background:var(--red)"></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Top Canais + Evolução -->
+      <div class="grid-2 animate-in" style="animation-delay: 0.3s;">
+        <div class="panel">
+          <div class="panel-header">📡 Top Canais de Origem</div>
+          <div class="panel-body">
+            <div class="progress-wrap">
+              <div class="progress-label"><span class="name">Instagram</span><span class="val">45%</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:45%;background:var(--pink)"></div></div>
+            </div>
+            <div class="progress-wrap">
+              <div class="progress-label"><span class="name">Google</span><span class="val">22%</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:22%;background:var(--blue)"></div></div>
+            </div>
+            <div class="progress-wrap">
+              <div class="progress-label"><span class="name">Indicação</span><span class="val">18%</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:18%;background:var(--green)"></div></div>
+            </div>
+            <div class="progress-wrap" style="margin-bottom:0">
+              <div class="progress-label"><span class="name">Tráfego Pago</span><span class="val">15%</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:15%;background:var(--orange)"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">📈 Evolução Diária</div>
+          <div class="panel-body">
+            <div class="chart-placeholder">📈 Gráfico Recharts · Leads/dia · Agendamentos/dia · Visitas/dia</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ TAB: PIPELINE ══════════ -->
+    <div class="tab-content" id="tab-pipeline">
+      <div class="filter-bar">
+        <input type="text" class="search-input" placeholder="🔍 Buscar lead..." style="max-width:250px">
+        <select class="filter-select"><option>Todas Unidades</option><option>CG</option><option>Recreio</option><option>Barra</option></select>
+        <select class="filter-select"><option>Temperatura</option><option>🔥 Quente</option><option>🟡 Morno</option><option>❄️ Frio</option></select>
+        <div style="flex:1"></div>
+        <button class="btn btn-sm">⚙️ Configurar Etapas</button>
+      </div>
+
+      <div class="kanban-scroll">
+        <div class="kanban-board">
+          <!-- Col: Novo Lead -->
+          <div class="kanban-col">
+            <div class="kanban-col-header" style="border-top:3px solid var(--blue)">
+              <span>🆕 Novo Lead</span><span class="count-badge">4</span>
+            </div>
+            <div class="kanban-col-body">
+              <div class="kanban-card" onclick="openDrawer()">
+                <span class="kc-time">2h</span>
+                <div class="kc-name">Maria Silva</div>
+                <div class="kc-info">🎸 Violão · CG</div>
+                <div style="display:flex;gap:4px;margin-top:6px">
+                  <span class="kc-tag" style="background:var(--red-soft);color:var(--red)">🔥 Quente</span>
+                  <span class="kc-tag" style="background:var(--amber-soft);color:var(--amber)">💰 Não</span>
+                </div>
+                <div class="kc-actions">
+                  <button class="kc-btn">📱</button>
+                  <button class="kc-btn">📞</button>
+                  <button class="kc-btn">📝</button>
+                </div>
+              </div>
+              <div class="kanban-card" onclick="openDrawer()">
+                <span class="kc-time">30min</span>
+                <div class="kc-name">Carlos Mendes</div>
+                <div class="kc-info">🎤 Canto · BAR</div>
+                <div style="display:flex;gap:4px;margin-top:6px">
+                  <span class="kc-tag" style="background:var(--red-soft);color:var(--red)">🔥 Quente</span>
+                </div>
+                <div class="kc-actions">
+                  <button class="kc-btn">📱</button>
+                  <button class="kc-btn">📞</button>
+                </div>
+              </div>
+              <div class="kanban-card" onclick="openDrawer()">
+                <span class="kc-time">5h</span>
+                <div class="kc-name">Fernanda Reis</div>
+                <div class="kc-info">🎹 Piano · REC</div>
+                <div style="display:flex;gap:4px;margin-top:6px">
+                  <span class="kc-tag" style="background:var(--amber-soft);color:var(--amber)">🟡 Morno</span>
+                </div>
+                <div class="kc-actions"><button class="kc-btn">📱</button><button class="kc-btn">📞</button></div>
+              </div>
+              <div class="kanban-card" onclick="openDrawer()">
+                <span class="kc-time">45min</span>
+                <div class="kc-name">Rafael Souza</div>
+                <div class="kc-info">🥁 Bateria · CG</div>
+                <div style="display:flex;gap:4px;margin-top:6px">
+                  <span class="kc-tag" style="background:var(--red-soft);color:var(--red)">🔥 Quente</span>
+                </div>
+                <div class="kc-actions"><button class="kc-btn">📱</button><button class="kc-btn">📞</button></div>
+              </div>
+            </div>
+          </div>
+          <!-- Col: Atendido pela Mila -->
+          <div class="kanban-col">
+            <div class="kanban-col-header" style="border-top:3px solid #8B5CF6">
+              <span>🤖 Mila</span><span class="count-badge">3</span>
+            </div>
+            <div class="kanban-col-body">
+              <div class="kanban-card" onclick="openDrawer()"><span class="kc-time urgent">1d 🔴</span><div class="kc-name">João Santos</div><div class="kc-info">🎹 Piano · REC</div><div style="display:flex;gap:4px;margin-top:6px"><span class="kc-tag" style="background:var(--amber-soft);color:var(--amber)">🟡 Morno</span><span class="kc-tag" style="background:var(--green-soft);color:var(--green)">💰 Sim</span></div><div class="kc-actions"><button class="kc-btn">📱</button><button class="kc-btn">📞</button></div></div>
+              <div class="kanban-card" onclick="openDrawer()"><span class="kc-time urgent">2d 🔴</span><div class="kc-name">Bruna Lima</div><div class="kc-info">🎸 Violão · CG</div><div style="display:flex;gap:4px;margin-top:6px"><span class="kc-tag" style="background:var(--blue-soft);color:var(--blue)">❄️ Frio</span></div><div class="kc-actions"><button class="kc-btn">📱</button></div></div>
+              <div class="kanban-card" onclick="openDrawer()"><span class="kc-time">6h</span><div class="kc-name">Patrícia Alves</div><div class="kc-info">🎤 Canto · BAR</div><div class="kc-actions"><button class="kc-btn">📱</button><button class="kc-btn">📞</button></div></div>
+            </div>
+          </div>
+          <!-- Col: Passado p/ Andreza -->
+          <div class="kanban-col">
+            <div class="kanban-col-header" style="border-top:3px solid var(--purple)">
+              <span>👩🏾 Andreza</span><span class="count-badge">5</span>
+            </div>
+            <div class="kanban-col-body">
+              <div class="kanban-card" onclick="openDrawer()"><span class="kc-time">3h</span><div class="kc-name">Pedro Oliveira</div><div class="kc-info">🥁 Bateria · BAR</div><div style="display:flex;gap:4px;margin-top:6px"><span class="kc-tag" style="background:var(--blue-soft);color:var(--blue)">❄️ Frio</span><span class="kc-tag" style="background:var(--amber-soft);color:var(--amber)">💰 Não</span></div><div class="kc-actions"><button class="kc-btn">📱</button><button class="kc-btn">📞</button></div></div>
+              <div class="kanban-card" onclick="openDrawer()"><span class="kc-time">1h</span><div class="kc-name">Thiago Nascimento</div><div class="kc-info">🎸 Violão · CG</div><div style="display:flex;gap:4px;margin-top:6px"><span class="kc-tag" style="background:var(--red-soft);color:var(--red)">🔥 Quente</span></div><div class="kc-actions"><button class="kc-btn">📱</button><button class="kc-btn">📞</button></div></div>
+              <div class="kanban-card" onclick="openDrawer()"><span class="kc-time">4h</span><div class="kc-name">Amanda Costa</div><div class="kc-info">🎹 Piano · REC</div><div class="kc-actions"><button class="kc-btn">📱</button><button class="kc-btn">📞</button></div></div>
+            </div>
+          </div>
+          <!-- Col: Em Contato -->
+          <div class="kanban-col">
+            <div class="kanban-col-header" style="border-top:3px solid var(--amber)">
+              <span>📞 Em Contato</span><span class="count-badge">6</span>
+            </div>
+            <div class="kanban-col-body">
+              <div class="kanban-card" onclick="openDrawer()"><span class="kc-time">5h</span><div class="kc-name">Ana Ferreira</div><div class="kc-info">🎤 Canto · CG · 📱2 📞1</div><div style="display:flex;gap:4px;margin-top:6px"><span class="kc-tag" style="background:var(--red-soft);color:var(--red)">🔥 Quente</span></div><div class="kc-actions"><button class="kc-btn">📱</button><button class="kc-btn">📞</button></div></div>
+              <div class="kanban-card" onclick="openDrawer()"><span class="kc-time urgent">1d 🔴</span><div class="kc-name">Fábio Lima</div><div class="kc-info">🎹 Piano · REC · 📱1 📞0</div><div class="kc-actions"><button class="kc-btn">📱</button><button class="kc-btn">📞</button></div></div>
+            </div>
+          </div>
+          <!-- Col: Exp. Agendada -->
+          <div class="kanban-col">
+            <div class="kanban-col-header" style="border-top:3px solid var(--cyan)">
+              <span>📅 Exp. Agendada</span><span class="count-badge">3</span>
+            </div>
+            <div class="kanban-col-body">
+              <div class="kanban-card" onclick="openDrawer()"><span class="kc-time" style="color:var(--cyan)">Amanhã 14h</span><div class="kc-name">Lucas Oliveira</div><div class="kc-info">🎸 Violão · REC</div><div class="kc-actions"><button class="kc-btn">✅</button><button class="kc-btn">📱</button></div></div>
+              <div class="kanban-card" onclick="openDrawer()"><span class="kc-time" style="color:var(--cyan)">Sáb 10h</span><div class="kc-name">Marcos Alves</div><div class="kc-info">🎹 Piano · CG</div><div class="kc-actions"><button class="kc-btn">✅</button><button class="kc-btn">📱</button></div></div>
+            </div>
+          </div>
+          <!-- Col: Visita Agendada -->
+          <div class="kanban-col">
+            <div class="kanban-col-header" style="border-top:3px solid #0EA5E9">
+              <span>🏫 Vis. Agendada</span><span class="count-badge">2</span>
+            </div>
+            <div class="kanban-col-body">
+              <div class="kanban-card" onclick="openDrawer()"><span class="kc-time" style="color:var(--cyan)">Sexta 15h</span><div class="kc-name">Rita Souza</div><div class="kc-info">🥁 Bateria · BAR</div><div class="kc-actions"><button class="kc-btn">✅</button><button class="kc-btn">📱</button></div></div>
+            </div>
+          </div>
+          <!-- Col: Realizada -->
+          <div class="kanban-col">
+            <div class="kanban-col-header" style="border-top:3px solid var(--green)">
+              <span>✅ Realizada</span><span class="count-badge">14</span>
+            </div>
+            <div class="kanban-col-body">
+              <div class="kanban-card" onclick="openDrawer()"><span class="kc-time" style="color:var(--green)">Ontem</span><div class="kc-name">Carla Dias</div><div class="kc-info">🎤 Canto · CG · Exp ✅</div></div>
+              <div class="kanban-card" onclick="openDrawer()"><span class="kc-time" style="color:var(--green)">12/02</span><div class="kc-name">Renata Gomes</div><div class="kc-info">🎸 Violão · REC · Vis ✅</div></div>
+            </div>
+          </div>
+          <!-- Col: Faltou -->
+          <div class="kanban-col">
+            <div class="kanban-col-header" style="border-top:3px solid var(--red)">
+              <span>❌ Faltou</span><span class="count-badge">3</span>
+            </div>
+            <div class="kanban-col-body">
+              <div class="kanban-card" onclick="openDrawer()"><div class="kc-name">Bruno Ferreira</div><div class="kc-info">🎹 Piano · BAR</div><div style="margin-top:4px;font-size:11px;color:var(--red)">Motivo: Chuva</div><div class="kc-actions"><button class="kc-btn">🔄</button><button class="kc-btn">📱</button></div></div>
+            </div>
+          </div>
+          <!-- Col: Matriculado -->
+          <div class="kanban-col" style="opacity:0.7">
+            <div class="kanban-col-header" style="border-top:3px solid #059669">
+              <span>🎓 Matriculado</span><span class="count-badge">11</span>
+            </div>
+            <div class="kanban-col-body">
+              <div style="padding:12px;font-size:11px;color:var(--text-muted);text-align:center">11 leads matriculados neste mês</div>
+            </div>
+          </div>
+          <!-- Col: Arquivado -->
+          <div class="kanban-col" style="opacity:0.5">
+            <div class="kanban-col-header" style="border-top:3px solid #6B7280">
+              <span>📦 Arquivado</span><span class="count-badge">45</span>
+            </div>
+            <div class="kanban-col-body">
+              <div style="padding:12px;font-size:11px;color:var(--text-muted);text-align:center">45 leads arquivados</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ TAB: LEADS ══════════ -->
+    <div class="tab-content" id="tab-leads">
+      <div class="filter-bar">
+        <input type="text" class="search-input" placeholder="🔍 Buscar nome ou telefone..." style="max-width:260px">
+        <select class="filter-select"><option>Unidade</option><option>CG</option><option>Recreio</option><option>Barra</option></select>
+        <select class="filter-select"><option>Etapa</option><option>Novo</option><option>Mila</option><option>Andreza</option><option>Contato</option><option>Agendada</option></select>
+        <select class="filter-select"><option>Canal</option><option>Instagram</option><option>Google</option><option>Indicação</option><option>Tráfego</option></select>
+        <select class="filter-select"><option>Curso</option><option>Violão</option><option>Piano</option><option>Canto</option><option>Bateria</option></select>
+        <select class="filter-select"><option>Faixa</option><option>LAMK</option><option>EMLA</option></select>
+        <select class="filter-select" style="border-color:var(--amber);color:var(--amber)"><option>🏷️ KPIs incompletos</option><option>Sem Canal</option><option>Sem Curso</option><option>Sem Faixa</option><option>Sem Preço</option></select>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:12px">
+        <button class="btn btn-sm">+ Novo Lead</button>
+        <button class="btn btn-sm">📥 Importar</button>
+        <button class="btn btn-sm">📤 Exportar CSV</button>
+      </div>
+      <div class="panel">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th style="width:30px"><input type="checkbox"></th>
+              <th>Nome</th>
+              <th>Unid.</th>
+              <th>Etapa</th>
+              <th>Curso</th>
+              <th>Canal</th>
+              <th>Faixa</th>
+              <th>💰</th>
+              <th>Tags</th>
+              <th>Tent.</th>
+              <th>Últ. Contato</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr onclick="openDrawer()">
+              <td><input type="checkbox"></td>
+              <td style="color:var(--text);font-weight:600">Maria Silva</td>
+              <td>CG</td>
+              <td><span class="tag" style="background:var(--amber-soft);color:var(--amber)">📞 Contato</span></td>
+              <td>🎸 Violão</td>
+              <td>Instagram</td>
+              <td>EMLA</td>
+              <td>❌</td>
+              <td><span class="tag" style="background:var(--red-soft);color:var(--red)">3/4</span></td>
+              <td>0</td>
+              <td style="font-size:11px">Hoje 14:30</td>
+            </tr>
+            <tr onclick="openDrawer()">
+              <td><input type="checkbox"></td>
+              <td style="color:var(--text);font-weight:600">João Santos</td>
+              <td>REC</td>
+              <td><span class="tag" style="background:var(--purple-soft);color:var(--purple-text)">🤖 Mila</span></td>
+              <td>🎹 Piano</td>
+              <td>Google</td>
+              <td>LAMK</td>
+              <td>✅</td>
+              <td><span class="tag" style="background:var(--green-soft);color:var(--green)">4/4</span></td>
+              <td>1</td>
+              <td style="font-size:11px">Ontem</td>
+            </tr>
+            <tr onclick="openDrawer()">
+              <td><input type="checkbox"></td>
+              <td style="color:var(--text);font-weight:600">Ana Costa</td>
+              <td>BAR</td>
+              <td><span class="tag" style="background:var(--cyan-soft);color:var(--cyan)">📅 Agendada</span></td>
+              <td>🎤 Canto</td>
+              <td>Indicação</td>
+              <td>EMLA</td>
+              <td>❌</td>
+              <td><span class="tag" style="background:var(--green-soft);color:var(--green)">4/4</span></td>
+              <td>0</td>
+              <td style="font-size:11px">12/02</td>
+            </tr>
+            <tr onclick="openDrawer()">
+              <td><input type="checkbox"></td>
+              <td style="color:var(--text);font-weight:600">Pedro Lima</td>
+              <td>CG</td>
+              <td><span class="tag" style="background:var(--red-soft);color:var(--red)">❌ Faltou</span></td>
+              <td>🥁 Bateria</td>
+              <td>Tráfego</td>
+              <td>—</td>
+              <td>—</td>
+              <td><span class="tag" style="background:var(--red-soft);color:var(--red)">2/4</span></td>
+              <td>3</td>
+              <td style="font-size:11px">11/02</td>
+            </tr>
+            <tr onclick="openDrawer()">
+              <td><input type="checkbox"></td>
+              <td style="color:var(--text);font-weight:600">Lucas Oliveira</td>
+              <td>REC</td>
+              <td><span class="tag" style="background:var(--cyan-soft);color:var(--cyan)">📅 Agendada</span></td>
+              <td>🎸 Violão</td>
+              <td>Instagram</td>
+              <td>EMLA</td>
+              <td>✅</td>
+              <td><span class="tag" style="background:var(--green-soft);color:var(--green)">4/4</span></td>
+              <td>0</td>
+              <td style="font-size:11px">Hoje 10:00</td>
+            </tr>
+            <tr onclick="openDrawer()">
+              <td><input type="checkbox"></td>
+              <td style="color:var(--text);font-weight:600">Rita Souza</td>
+              <td>BAR</td>
+              <td><span class="tag" style="background:var(--cyan-soft);color:var(--cyan)">🏫 Vis. Agend.</span></td>
+              <td>🥁 Bateria</td>
+              <td>Google</td>
+              <td>LAMK</td>
+              <td>❌</td>
+              <td><span class="tag" style="background:var(--red-soft);color:var(--red)">3/4</span></td>
+              <td>0</td>
+              <td style="font-size:11px">Hoje 09:30</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:12px;color:var(--text-muted)">
+        <span>Selecionados: 0 · <button class="btn btn-sm" style="margin-left:4px">📱 WhatsApp Lote</button> <button class="btn btn-sm">🏷️ Mover Etapa</button></span>
+        <span>1-20 de 142 · < 1 2 3 ... 8 ></span>
+      </div>
+    </div>
+
+    <!-- ══════════ TAB: AGENDA ══════════ -->
+    <div class="tab-content" id="tab-agenda">
+      <div style="display:flex;gap:8px;margin-bottom:16px;">
+        <button class="btn btn-sm btn-primary">Hoje</button>
+        <button class="btn btn-sm">Semana</button>
+        <button class="btn btn-sm">Mês</button>
+        <div style="flex:1"></div>
+        <button class="btn btn-sm">← Anterior</button>
+        <span style="padding:5px 12px;font-size:13px;font-weight:600">13/02/2026</span>
+        <button class="btn btn-sm">Próximo →</button>
+      </div>
+
+      <div class="section-title" style="color:var(--cyan)">📅 Experimentais Hoje <span class="count">2</span></div>
+      <div class="agenda-item" onclick="openDrawer()">
+        <div class="time-col">14:00</div>
+        <div class="info-col">
+          <div class="info-name">Lucas Oliveira</div>
+          <div class="info-detail">🎸 Violão · Recreio · Prof. Ricardo · Consultor: Cleiton</div>
+        </div>
+        <div class="actions-col">
+          <button class="btn btn-sm btn-green">✅ Confirmar</button>
+          <button class="btn btn-sm">📱</button>
+        </div>
+      </div>
+      <div class="agenda-item" onclick="openDrawer()">
+        <div class="time-col">16:00</div>
+        <div class="info-col">
+          <div class="info-name">Marcos Alves</div>
+          <div class="info-detail">🎹 Piano · Campo Grande · Prof. Fernanda · Consultor: Vitória</div>
+        </div>
+        <div class="actions-col">
+          <button class="btn btn-sm btn-green">✅ Confirmar</button>
+          <button class="btn btn-sm">📱</button>
+        </div>
+      </div>
+
+      <div class="section-title" style="color:#0EA5E9">🏫 Visitas Hoje <span class="count">1</span></div>
+      <div class="agenda-item" onclick="openDrawer()">
+        <div class="time-col">15:00</div>
+        <div class="info-col">
+          <div class="info-name">Rita Souza</div>
+          <div class="info-detail">🥁 Bateria · Barra · Consultor: Kailane</div>
+        </div>
+        <div class="actions-col">
+          <button class="btn btn-sm btn-green">✅ Confirmar</button>
+          <button class="btn btn-sm">📱</button>
+        </div>
+      </div>
+
+      <div class="section-title" style="color:var(--amber)">📞 Follow-ups Pendentes <span class="count">5</span></div>
+      <div class="agenda-item" onclick="openDrawer()">
+        <div class="time-col" style="font-size:12px;color:var(--red)">🔥</div>
+        <div class="info-col">
+          <div class="info-name">Pedro Lima</div>
+          <div class="info-detail">Faltou ontem · Reagendar · Tentativas: 2</div>
+        </div>
+        <div class="actions-col"><button class="btn btn-sm">📱 WhatsApp</button></div>
+      </div>
+      <div class="agenda-item" onclick="openDrawer()">
+        <div class="time-col" style="font-size:12px;color:var(--red)">🔥</div>
+        <div class="info-col">
+          <div class="info-name">Ana Ferreira</div>
+          <div class="info-detail">Sem resposta · 2ª tentativa · Tentativas: 1</div>
+        </div>
+        <div class="actions-col"><button class="btn btn-sm">📱 WhatsApp</button></div>
+      </div>
+      <div class="agenda-item" onclick="openDrawer()">
+        <div class="time-col" style="font-size:12px;color:var(--blue)">❄️</div>
+        <div class="info-col">
+          <div class="info-name">Carla Mendes</div>
+          <div class="info-detail">Lead frio · Reativar · Último contato: 20/01</div>
+        </div>
+        <div class="actions-col"><button class="btn btn-sm">📱 WhatsApp</button></div>
+      </div>
+
+      <div class="section-title">📅 Semana</div>
+      <div class="week-cal">
+        <div class="week-day"><div class="day-name">Seg</div><div class="day-num">10</div><div class="day-badges"><span class="day-badge" style="background:var(--cyan-soft);color:var(--cyan)">2 exp</span><span class="day-badge" style="background:var(--teal-soft);color:var(--teal)">1 vis</span></div></div>
+        <div class="week-day"><div class="day-name">Ter</div><div class="day-num">11</div><div class="day-badges"><span class="day-badge" style="background:var(--cyan-soft);color:var(--cyan)">1 exp</span></div></div>
+        <div class="week-day"><div class="day-name">Qua</div><div class="day-num">12</div><div class="day-badges"><span class="day-badge" style="background:var(--cyan-soft);color:var(--cyan)">3 exp</span></div></div>
+        <div class="week-day today"><div class="day-name">Qui</div><div class="day-num">13</div><div class="day-badges"><span class="day-badge" style="background:var(--cyan-soft);color:var(--cyan)">2 exp</span><span class="day-badge" style="background:var(--teal-soft);color:var(--teal)">1 vis</span></div></div>
+        <div class="week-day"><div class="day-name">Sex</div><div class="day-num">14</div><div class="day-badges"><span class="day-badge" style="background:var(--cyan-soft);color:var(--cyan)">2 exp</span></div></div>
+        <div class="week-day"><div class="day-name">Sáb</div><div class="day-num">15</div><div class="day-badges"><span class="day-badge" style="background:var(--cyan-soft);color:var(--cyan)">3 exp</span><span class="day-badge" style="background:var(--teal-soft);color:var(--teal)">1 vis</span></div></div>
+      </div>
+
+      <div class="section-title" style="color:var(--red)">⚠️ Leads sem Ação há +24h <span class="count">8</span></div>
+      <div class="agenda-item" onclick="openDrawer()">
+        <div class="time-col" style="font-size:11px;color:var(--red);font-weight:700">36h</div>
+        <div class="info-col">
+          <div class="info-name">João Santos</div>
+          <div class="info-detail">Mila → Andreza · REC · 🎹 Piano</div>
+        </div>
+        <div class="actions-col">
+          <button class="btn btn-sm">📱</button>
+          <button class="btn btn-sm">📞</button>
+          <button class="btn btn-sm">📝</button>
+        </div>
+      </div>
+      <div class="agenda-item" onclick="openDrawer()">
+        <div class="time-col" style="font-size:11px;color:var(--red);font-weight:700">48h</div>
+        <div class="info-col">
+          <div class="info-name">Bruna Lima</div>
+          <div class="info-detail">Mila → Andreza · CG · 🎸 Violão</div>
+        </div>
+        <div class="actions-col">
+          <button class="btn btn-sm">📱</button>
+          <button class="btn btn-sm">📞</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ TAB: METAS ══════════ -->
+    <div class="tab-content" id="tab-metas">
+      <div class="grid-3" style="margin-bottom:20px;">
+        <div class="meta-unit">
+          <div class="unit-name">🏫 Campo Grande</div>
+          <div class="unit-sub">Taxa compromisso: R$70</div>
+          <div class="thermo">
+            <div class="thermo-bar"><div class="thermo-fill" style="width:41.6%;background:linear-gradient(90deg,var(--red),var(--amber))"></div></div>
+            <div class="thermo-labels"><span>0%</span><span style="color:var(--amber);font-weight:700">12.5%</span><span>30%</span></div>
+          </div>
+          <div class="stats-row">
+            <div class="stat-item">Leads: <strong>48</strong></div>
+            <div class="stat-item">Visitas: <strong>6</strong></div>
+            <div class="stat-item">🔥 Quentes: <strong>5</strong></div>
+            <div class="stat-item">❄️ Frios: <strong>1</strong></div>
+          </div>
+          <div style="margin-top:8px;font-size:12px;color:var(--red)">Bônus: ❌ R$0</div>
+        </div>
+        <div class="meta-unit">
+          <div class="unit-name">🏫 Recreio</div>
+          <div class="unit-sub">Taxa compromisso: R$100</div>
+          <div class="thermo">
+            <div class="thermo-bar"><div class="thermo-fill" style="width:27.6%;background:linear-gradient(90deg,var(--red),var(--amber))"></div></div>
+            <div class="thermo-labels"><span>0%</span><span style="color:var(--red);font-weight:700">8.3%</span><span>30%</span></div>
+          </div>
+          <div class="stats-row">
+            <div class="stat-item">Leads: <strong>36</strong></div>
+            <div class="stat-item">Visitas: <strong>3</strong></div>
+            <div class="stat-item">🔥 Quentes: <strong>3</strong></div>
+            <div class="stat-item">❄️ Frios: <strong>0</strong></div>
+          </div>
+          <div style="margin-top:8px;font-size:12px;color:var(--red)">Bônus: ❌ R$0</div>
+        </div>
+        <div class="meta-unit">
+          <div class="unit-name">🏫 Barra</div>
+          <div class="unit-sub">Taxa compromisso: R$100</div>
+          <div class="thermo">
+            <div class="thermo-bar"><div class="thermo-fill" style="width:22.3%;background:linear-gradient(90deg,var(--red),var(--red))"></div></div>
+            <div class="thermo-labels"><span>0%</span><span style="color:var(--red);font-weight:700">6.7%</span><span>30%</span></div>
+          </div>
+          <div class="stats-row">
+            <div class="stat-item">Leads: <strong>30</strong></div>
+            <div class="stat-item">Visitas: <strong>2</strong></div>
+            <div class="stat-item">🔥 Quentes: <strong>2</strong></div>
+            <div class="stat-item">❄️ Frios: <strong>0</strong></div>
+          </div>
+          <div style="margin-top:8px;font-size:12px;color:var(--red)">Bônus: ❌ R$0</div>
+        </div>
+      </div>
+
+      <div class="grid-2" style="margin-bottom:20px">
+        <div class="panel">
+          <div class="panel-header">📊 Evolução Semanal</div>
+          <div class="panel-body">
+            <div style="display:flex;gap:16px;font-size:13px;margin-bottom:12px">
+              <span>Sem 1: <strong>2.1%</strong></span>
+              <span style="color:var(--text-muted)">→</span>
+              <span>Sem 2: <strong>5.4%</strong></span>
+              <span style="color:var(--text-muted)">→</span>
+              <span style="color:var(--amber)">Sem 3: <strong>9.9%</strong></span>
+            </div>
+            <div class="chart-placeholder">📈 Gráfico de progressão semanal</div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">🏷️ KPIs de Tagueamento</div>
+          <div class="panel-body">
+            <div class="progress-wrap"><div class="progress-label"><span class="name">Canal</span><span class="val" style="color:var(--green)">138/142 — 97.2%</span></div><div class="progress-bar"><div class="progress-fill" style="width:97.2%;background:var(--green)"></div></div></div>
+            <div class="progress-wrap"><div class="progress-label"><span class="name">Curso</span><span class="val" style="color:var(--green)">130/142 — 91.5%</span></div><div class="progress-bar"><div class="progress-fill" style="width:91.5%;background:var(--green)"></div></div></div>
+            <div class="progress-wrap"><div class="progress-label"><span class="name">Faixa Etária</span><span class="val" style="color:var(--amber)">125/142 — 88.0%</span></div><div class="progress-bar"><div class="progress-fill" style="width:88%;background:var(--amber)"></div></div></div>
+            <div class="progress-wrap"><div class="progress-label"><span class="name">Sabe Preço</span><span class="val" style="color:var(--red)">110/142 — 77.5%</span></div><div class="progress-bar"><div class="progress-fill" style="width:77.5%;background:var(--red)"></div></div></div>
+            <div class="progress-wrap" style="margin-bottom:0"><div class="progress-label"><span class="name">Motivo Falta</span><span class="val" style="color:var(--amber)">12/14 — 85.7%</span></div><div class="progress-bar"><div class="progress-fill" style="width:85.7%;background:var(--amber)"></div></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="panel">
+          <div class="panel-header">⏱️ Métricas de Velocidade</div>
+          <div class="panel-body" style="font-size:13px">
+            <div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between">
+              <span>Tempo médio resposta</span><span style="color:var(--green);font-weight:700">12 min ✅</span>
+            </div>
+            <div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between">
+              <span>Leads parados +24h</span><span style="color:var(--red);font-weight:700">8 🔴</span>
+            </div>
+            <div style="padding:6px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between">
+              <span>Follow-ups frios/semana</span><span style="font-weight:700">12</span>
+            </div>
+            <div style="padding:6px 0;display:flex;justify-content:space-between">
+              <span>Tentativas s/ resposta (semana)</span><span style="font-weight:700">23</span>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">💰 Taxa de Compromisso (No-Show)</div>
+          <div class="panel-body">
+            <div style="font-size:12px;color:var(--text-secondary);margin-bottom:10px">Leads com 2+ desmarcações:</div>
+            <div class="agenda-item" style="margin-bottom:6px" onclick="openDrawer()">
+              <div class="info-col"><div class="info-name">Pedro Lima · CG</div><div class="info-detail">2 desmarcações · R$70 · ☐ Não cobrada</div></div>
+              <button class="btn btn-sm">Ver</button>
+            </div>
+            <div class="agenda-item" style="margin-bottom:6px" onclick="openDrawer()">
+              <div class="info-col"><div class="info-name">Ana Costa · BAR</div><div class="info-detail">3 desmarcações · R$100 · ✅ Cobrada</div></div>
+              <button class="btn btn-sm">Ver</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ TAB: MILA ══════════ -->
+    <div class="tab-content" id="tab-mila">
+      <div class="grid-4" style="margin-bottom:20px">
+        <div class="stat-card"><div class="stat-card-accent" style="background:#8B5CF6"></div><div class="icon-circle" style="background:var(--purple-soft);color:var(--purple-text)">🤖</div><div class="value">142</div><div class="label">Atendidos pela Mila</div></div>
+        <div class="stat-card"><div class="stat-card-accent" style="background:var(--green)"></div><div class="icon-circle" style="background:var(--green-soft);color:var(--green)">✅</div><div class="value">38</div><div class="label">Agendou Direto</div><div class="sub">26.8%</div></div>
+        <div class="stat-card"><div class="stat-card-accent" style="background:var(--red)"></div><div class="icon-circle" style="background:var(--red-soft);color:var(--red)">❌</div><div class="value">89</div><div class="label">Não Agendou</div><div class="sub">62.7%</div></div>
+        <div class="stat-card"><div class="stat-card-accent" style="background:var(--purple)"></div><div class="icon-circle" style="background:var(--purple-soft);color:var(--purple-text)">👩🏾</div><div class="value">89</div><div class="label">Passados p/ Andreza</div><div class="sub">62.7%</div></div>
+      </div>
+
+      <div class="grid-2" style="margin-bottom:20px">
+        <div class="panel">
+          <div class="panel-header">📊 Motivos de Passagem de Bastão</div>
+          <div class="panel-body">
+            <div class="progress-wrap"><div class="progress-label"><span class="name">Não quis agendar</span><span class="val">35 (39.3%)</span></div><div class="progress-bar"><div class="progress-fill" style="width:39.3%;background:var(--red)"></div></div></div>
+            <div class="progress-wrap"><div class="progress-label"><span class="name">Insistiu em preço</span><span class="val">28 (31.5%)</span></div><div class="progress-bar"><div class="progress-fill" style="width:31.5%;background:var(--amber)"></div></div></div>
+            <div class="progress-wrap"><div class="progress-label"><span class="name">Parou de responder</span><span class="val">18 (20.2%)</span></div><div class="progress-bar"><div class="progress-fill" style="width:20.2%;background:var(--blue)"></div></div></div>
+            <div class="progress-wrap" style="margin-bottom:0"><div class="progress-label"><span class="name">Pediu humano</span><span class="val">8 (9.0%)</span></div><div class="progress-bar"><div class="progress-fill" style="width:9%;background:var(--purple)"></div></div></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">📈 Qualidade dos Dados da Mila</div>
+          <div class="panel-body">
+            <div class="progress-wrap"><div class="progress-label"><span class="name">Nome</span><span class="val" style="color:var(--green)">100%</span></div><div class="progress-bar"><div class="progress-fill" style="width:100%;background:var(--green)"></div></div></div>
+            <div class="progress-wrap"><div class="progress-label"><span class="name">Telefone</span><span class="val" style="color:var(--green)">100%</span></div><div class="progress-bar"><div class="progress-fill" style="width:100%;background:var(--green)"></div></div></div>
+            <div class="progress-wrap"><div class="progress-label"><span class="name">Unidade</span><span class="val" style="color:var(--green)">95%</span></div><div class="progress-bar"><div class="progress-fill" style="width:95%;background:var(--green)"></div></div></div>
+            <div class="progress-wrap"><div class="progress-label"><span class="name">Curso</span><span class="val" style="color:var(--amber)">69%</span></div><div class="progress-bar"><div class="progress-fill" style="width:69%;background:var(--amber)"></div></div></div>
+            <div class="progress-wrap" style="margin-bottom:0"><div class="progress-label"><span class="name">Faixa Etária</span><span class="val" style="color:var(--red)">32%</span></div><div class="progress-bar"><div class="progress-fill" style="width:32%;background:var(--red)"></div></div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header">📋 Últimas Passagens de Bastão</div>
+        <table class="data-table">
+          <thead><tr><th>Hora</th><th>Lead</th><th>Unid.</th><th>Motivo</th><th></th></tr></thead>
+          <tbody>
+            <tr onclick="openDrawer()"><td style="font-weight:600">14:30</td><td style="color:var(--text);font-weight:600">Maria Silva</td><td>CG</td><td><span class="tag" style="background:var(--amber-soft);color:var(--amber)">Insistiu preço</span></td><td><button class="btn btn-sm">Ver lead</button></td></tr>
+            <tr onclick="openDrawer()"><td style="font-weight:600">13:15</td><td style="color:var(--text);font-weight:600">João Santos</td><td>REC</td><td><span class="tag" style="background:var(--blue-soft);color:var(--blue)">Parou responder</span></td><td><button class="btn btn-sm">Ver lead</button></td></tr>
+            <tr onclick="openDrawer()"><td style="font-weight:600">11:40</td><td style="color:var(--text);font-weight:600">Ana Costa</td><td>BAR</td><td><span class="tag" style="background:var(--purple-soft);color:var(--purple-text)">Pediu humano</span></td><td><button class="btn btn-sm">Ver lead</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ══════════ TAB: RELATÓRIOS ══════════ -->
+    <div class="tab-content" id="tab-relatorios">
+      <div class="section-title">Escolha o tipo de relatório</div>
+      <div class="grid-2" style="margin-bottom:20px">
+        <div class="report-card" onclick="showReport('diario')">
+          <div class="rc-icon" style="background:var(--green-soft);color:var(--green)">📊</div>
+          <div><div class="rc-title">Relatório Diário</div><div class="rc-desc">Leads recebidos, contatos feitos, agendamentos, visitas e faltas do dia</div></div>
+        </div>
+        <div class="report-card" onclick="showReport('semanal')">
+          <div class="rc-icon" style="background:var(--cyan-soft);color:var(--cyan)">📅</div>
+          <div><div class="rc-title">Relatório Semanal</div><div class="rc-desc">Totais da semana, conversões por etapa do funil, leads parados</div></div>
+        </div>
+        <div class="report-card" onclick="showReport('mensal')">
+          <div class="rc-icon" style="background:var(--purple-soft);color:var(--purple-text)">📈</div>
+          <div><div class="rc-title">Relatório Mensal Completo</div><div class="rc-desc">Análise completa: funil, canais, cursos, motivos, meta 30%</div></div>
+        </div>
+        <div class="report-card" onclick="showReport('funil')">
+          <div class="rc-icon" style="background:var(--amber-soft);color:var(--amber)">🔄</div>
+          <div><div class="rc-title">Relatório de Funil</div><div class="rc-desc">Taxas de conversão entre cada etapa do pipeline</div></div>
+        </div>
+        <div class="report-card" onclick="showReport('bastao')">
+          <div class="rc-icon" style="background:var(--blue-soft);color:var(--blue)">🤝</div>
+          <div><div class="rc-title">Relatório de Passagem de Bastão</div><div class="rc-desc">Fluxo Mila → Andreza: motivos, tempos, qualificação</div></div>
+        </div>
+        <div class="report-card" onclick="showReport('frios')">
+          <div class="rc-icon" style="background:var(--pink-soft);color:var(--pink)">❄️</div>
+          <div><div class="rc-title">Relatório de Leads Frios</div><div class="rc-desc">Reativações, follow-ups e conversões de leads antigos</div></div>
+        </div>
+        <div class="report-card" onclick="showReport('tentativas')">
+          <div class="rc-icon" style="background:var(--orange-soft);color:var(--orange)">📞</div>
+          <div><div class="rc-title">Relatório de Tentativas de Contato</div><div class="rc-desc">Leads com múltiplas tentativas, taxa de resposta</div></div>
+        </div>
+      </div>
+
+      <div id="report-preview" style="display:none">
+        <div class="section-title">📱 Preview do Relatório</div>
+        <div class="panel">
+          <div class="panel-header">
+            <span>📊 Relatório Diário — Pré-Atendimento</span>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-sm" onclick="document.getElementById('report-preview').style.display='none'">← Voltar</button>
+              <button class="btn btn-sm">📋 Copiar</button>
+              <button class="btn btn-sm btn-green">📱 Enviar WhatsApp</button>
+            </div>
+          </div>
+          <div class="panel-body">
+            <div class="whatsapp-preview">──────────────────
+📊 *RELATÓRIO DIÁRIO*
+👩🏾 *PRÉ-ATENDIMENTO*
+🏫 *TODAS AS UNIDADES*
+📅 13/fevereiro/2026
+👤 Andreza
+──────────────────
+
+📥 Leads novos: *12*
+📞 Leads contatados: *10*
+📵 Tentativas s/ resposta: *5*
+📅 Agendamentos: *4*
+   └ 3 experimentais + 1 visita
+✅ Compareceram: *2*
+❌ Faltaram: *1*
+   └ Motivo: Horário não deu
+🎓 Matrículas: *1*
+
+──────────────────
+🎯 Meta 30%: *9.9%* (acumulado)
+⏱️ Resp. média: *12 min*
+🔴 Parados +24h: *8*
+🏷️ Tags: *87% completo*
+──────────────────
+
+📊 *POR UNIDADE:*
+🏫 CG: 12.5% (6/48)
+🏫 REC: 8.3% (3/36)
+🏫 BAR: 6.7% (2/30)
+
+──────────────────
+💪 _Vamos acelerar!_</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- end .content -->
+</div><!-- end .main -->
+
+<!-- ═══════════════════════ DRAWER ═══════════════════════ -->
+<div class="drawer-overlay" id="drawerOverlay" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-header">
+    <button class="back-btn" onclick="closeDrawer()">← Voltar</button>
+    <div class="lead-name">Maria Silva</div>
+    <span style="font-size:12px;color:var(--text-muted)">⋮</span>
+  </div>
+  <div class="drawer-body">
+    <!-- Quick Actions -->
+    <div style="display:flex;gap:6px;margin-bottom:20px;flex-wrap:wrap">
+      <button class="btn btn-sm btn-primary">📱 WhatsApp</button>
+      <button class="btn btn-sm">📞 Ligar</button>
+      <button class="btn btn-sm">📝 Nota</button>
+      <button class="btn btn-sm" style="border-color:var(--amber);color:var(--amber)">❓ Tent. s/ Resposta</button>
+    </div>
+
+    <!-- Dados -->
+    <div class="drawer-section">
+      <div class="drawer-section-title">Dados do Lead</div>
+      <div class="drawer-field"><span class="f-label">👤 Nome</span><span class="f-value">Maria Silva</span></div>
+      <div class="drawer-field"><span class="f-label">📱 Telefone</span><span class="f-value" style="color:var(--cyan)">(21) 99999-1234</span></div>
+      <div class="drawer-field"><span class="f-label">📧 Email</span><span class="f-value">maria@email.com</span></div>
+      <div class="drawer-field"><span class="f-label">🏫 Unidade</span><span class="f-value">Campo Grande</span></div>
+      <div class="drawer-field"><span class="f-label">🔄 Etapa</span><span class="f-value"><span class="tag" style="background:var(--amber-soft);color:var(--amber)">📞 Em Contato</span></span></div>
+      <div class="drawer-field"><span class="f-label">🌡️ Temperatura</span><span class="f-value" style="color:var(--red)">🔥 Quente</span></div>
+      <div class="drawer-field"><span class="f-label">👩🏾 Atendida por</span><span class="f-value">Andreza</span></div>
+    </div>
+
+    <!-- KPIs -->
+    <div class="drawer-section">
+      <div class="drawer-section-title">KPIs (Tagueamento) · <span style="color:var(--red)">3/4</span></div>
+      <div class="drawer-field"><span class="f-label">📡 Canal</span><span class="f-value"><select class="topbar-select" style="font-size:11px;padding:3px 8px"><option>Instagram</option><option>Google</option><option>Indicação</option></select></span></div>
+      <div class="drawer-field"><span class="f-label">🎸 Curso</span><span class="f-value"><select class="topbar-select" style="font-size:11px;padding:3px 8px"><option>Violão</option><option>Piano</option><option>Canto</option><option>Bateria</option></select></span></div>
+      <div class="drawer-field"><span class="f-label">👶 Faixa Etária</span><span class="f-value"><select class="topbar-select" style="font-size:11px;padding:3px 8px"><option>EMLA (12+)</option><option>LAMK (até 11)</option></select></span></div>
+      <div class="drawer-field"><span class="f-label">💰 Sabe Preço</span><span class="f-value"><select class="topbar-select" style="font-size:11px;padding:3px 8px;border-color:var(--red);color:var(--red)"><option>— Selecionar</option><option>Sim</option><option>Não</option></select></span></div>
+    </div>
+
+    <!-- Agendamento -->
+    <div class="drawer-section">
+      <div class="drawer-section-title">Agendamento</div>
+      <div class="drawer-field"><span class="f-label">Tipo</span><span class="f-value"><select class="topbar-select" style="font-size:11px;padding:3px 8px"><option>Experimental</option><option>Visita</option></select></span></div>
+      <div class="drawer-field"><span class="f-label">📅 Data</span><span class="f-value">15/02 às 14:00</span></div>
+      <div class="drawer-field"><span class="f-label">👨‍🏫 Professor</span><span class="f-value">Ricardo (✅ disponível)</span></div>
+      <div class="drawer-field"><span class="f-label">👤 Consultor</span><span class="f-value">Vitória</span></div>
+      <div class="drawer-field"><span class="f-label">Desmarcações</span><span class="f-value">0</span></div>
+      <div class="drawer-field"><span class="f-label">Tentativas s/ resp.</span><span class="f-value">1</span></div>
+    </div>
+
+    <!-- Observações Andreza -->
+    <div class="drawer-section">
+      <div class="drawer-section-title">📝 Observações Andreza</div>
+      <textarea class="obs-textarea">Mãe interessada em violão para filho de 8 anos. Quer saber preço antes de ir. Explicar que a experimental é gratuita e sem compromisso.</textarea>
+    </div>
+
+    <!-- Observações Professor -->
+    <div class="drawer-section">
+      <div class="drawer-section-title">👨‍🏫 Notas para o Professor</div>
+      <textarea class="obs-textarea" placeholder="Ex: Criança tímida, primeira vez com instrumento, sugestão de abordagem...">Criança de 8 anos, tímida, nunca teve contato com instrumento. Mãe pediu paciência extra. Sugestão: começar com brincadeira musical.</textarea>
+    </div>
+
+    <!-- Resumo Mila -->
+    <div class="drawer-section">
+      <div class="drawer-section-title">🤖 Resumo da Mila</div>
+      <div class="drawer-field"><span class="f-label">Motivo passagem</span><span class="f-value" style="color:var(--amber)">Insistiu em saber preço</span></div>
+      <div class="drawer-field"><span class="f-label">Mensagens trocadas</span><span class="f-value">12</span></div>
+    </div>
+
+    <!-- Templates -->
+    <div class="drawer-section">
+      <div class="drawer-section-title">📱 Templates WhatsApp</div>
+      <div class="templates-grid">
+        <span class="template-chip">✅ Confirmação</span>
+        <span class="template-chip">⏰ Lembrete 24h</span>
+        <span class="template-chip">🔄 Reagendar</span>
+        <span class="template-chip">⭐ Pós-Experimental</span>
+        <span class="template-chip">❄️ Follow-up Frio</span>
+        <span class="template-chip">👋 Boas-vindas</span>
+        <span class="template-chip">📵 Tent. s/ Resposta</span>
+      </div>
+    </div>
+
+    <!-- Timeline -->
+    <div class="drawer-section">
+      <div class="drawer-section-title">📜 Timeline</div>
+      <div class="timeline-item">
+        <div class="timeline-dot" style="background:var(--green-soft);color:var(--green)">📱</div>
+        <div class="timeline-content"><div class="tl-text">WhatsApp enviado (confirmação experimental)</div><div class="tl-time">Hoje 14:30</div></div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-dot" style="background:var(--amber-soft);color:var(--amber)">❓</div>
+        <div class="timeline-content"><div class="tl-text" style="color:var(--amber)">Tentativa sem resposta (📞 ligação)</div><div class="tl-time">Hoje 14:15</div></div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-dot" style="background:var(--purple-soft);color:var(--purple-text)">🤖</div>
+        <div class="timeline-content"><div class="tl-text">Mila → Andreza (insistiu em saber preço)</div><div class="tl-time">Hoje 13:00</div></div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-dot" style="background:var(--purple-soft)">🤖</div>
+        <div class="timeline-content"><div class="tl-text">Mila: 1º contato via WhatsApp</div><div class="tl-time">Hoje 12:45</div></div>
+      </div>
+      <div class="timeline-item">
+        <div class="timeline-dot" style="background:var(--blue-soft);color:var(--blue)">🆕</div>
+        <div class="timeline-content"><div class="tl-text">Lead criado (Instagram)</div><div class="tl-time">Hoje 12:40</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="drawer-actions">
+    <button class="btn btn-sm btn-primary">📅 Agendar Experimental</button>
+    <button class="btn btn-sm" style="border-color:var(--cyan);color:var(--cyan)">🏫 Agendar Visita</button>
+    <button class="btn btn-sm">🏷️ Mover Etapa</button>
+    <button class="btn btn-sm" style="border-color:var(--red);color:var(--red)">📦 Arquivar</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════ TOAST ═══════════════════════ -->
+<div class="toast" id="toast">
+  <button class="toast-close" onclick="hideToast()">×</button>
+  <span class="toast-icon">🆕</span>
+  <div class="toast-text">
+    <strong><span class="live-dot"></span>Novo lead da Mila!</strong>
+    Rafael Souza · CG · 🥁 Bateria · Agora
+  </div>
+  <button class="btn btn-sm btn-primary" onclick="openDrawer();hideToast();">Ver</button>
+</div>
+
+<!-- ═══════════════════════ JAVASCRIPT ═══════════════════════ -->
+<script>
+// Tab switching
+document.querySelectorAll('.subtab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.subtab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('tab-' + tab.dataset.tab).classList.add('active');
+    document.querySelector('.content').scrollTop = 0;
+  });
+});
+
+// Drawer
+function openDrawer() {
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawerOverlay').classList.add('open');
+}
+function closeDrawer() {
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('drawerOverlay').classList.remove('open');
+}
+
+// Toast notification
+function showToast() {
+  document.getElementById('toast').classList.add('show');
+  setTimeout(() => hideToast(), 8000);
+}
+function hideToast() {
+  document.getElementById('toast').classList.remove('show');
+}
+
+// Report preview
+function showReport(type) {
+  document.getElementById('report-preview').style.display = 'block';
+  document.getElementById('report-preview').scrollIntoView({ behavior: 'smooth' });
+}
+
+// Alert close
+document.querySelectorAll('.alert-close').forEach(btn => {
+  btn.addEventListener('click', () => {
+    btn.closest('.alert-banner').style.display = 'none';
+  });
+});
+
+// Auto toast after 3 seconds
+setTimeout(() => showToast(), 3000);
+</script>
+</body>
+</html>
