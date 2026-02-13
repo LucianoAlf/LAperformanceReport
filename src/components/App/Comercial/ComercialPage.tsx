@@ -2039,6 +2039,7 @@ export function ComercialPage() {
         unidadeId={isAdmin ? (context?.unidadeSelecionada || 'todos') : (unidadeId || 'todos')}
         ano={competencia.filtro.ano}
         mes={competencia.filtro.mes}
+        resumoLeads={resumo}
       />
 
       {/* ═══════════════════════════════════════════════════════════════ */}

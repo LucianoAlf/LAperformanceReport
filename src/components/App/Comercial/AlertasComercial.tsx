@@ -32,20 +32,31 @@ interface Alerta {
   icone: React.ReactNode;
 }
 
+interface ResumoLeads {
+  leads: number;
+  experimentais: number;
+  visitas: number;
+  matriculas: number;
+  conversaoLeadExp: number;
+  conversaoLeadMat: number;
+  conversaoExpMat: number;
+}
+
 interface AlertasComercialProps {
   unidadeId: string;
   ano: number;
   mes: number;
+  resumoLeads?: ResumoLeads;
 }
 
-export function AlertasComercial({ unidadeId, ano, mes }: AlertasComercialProps) {
+export function AlertasComercial({ unidadeId, ano, mes, resumoLeads }: AlertasComercialProps) {
   const [alertas, setAlertas] = useState<Alerta[]>([]);
   const [loading, setLoading] = useState(true);
   const [alertasFechados, setAlertasFechados] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     carregarAlertas();
-  }, [unidadeId, ano, mes]);
+  }, [unidadeId, ano, mes, resumoLeads]);
 
   async function carregarAlertas() {
     setLoading(true);
@@ -53,86 +64,87 @@ export function AlertasComercial({ unidadeId, ano, mes }: AlertasComercialProps)
       const alertasGerados: Alerta[] = [];
       const unidadeUUID = getUnidadeUUID(unidadeId);
 
-      // 1. Buscar KPIs comerciais do mês
-      let kpisQuery = supabase
-        .from('vw_kpis_comercial_mensal')
-        .select('*')
-        .eq('ano', ano)
-        .eq('mes', mes);
+      // 1. KPIs comerciais do mês — usar resumoLeads (tabela leads) se disponível
+      // Isso garante que o alerta mostre o mesmo número da tabela de detalhamento
+      const totalLeads = resumoLeads?.leads ?? 0;
+      const totalMatriculas = resumoLeads?.matriculas ?? 0;
+      const taxaConversaoGeral = resumoLeads?.conversaoLeadMat ?? 0;
 
-      if (unidadeUUID) {
-        kpisQuery = kpisQuery.eq('unidade_id', unidadeUUID);
+      // Calcular dias do mês e ritmo
+      const hoje = new Date();
+      const diasPassados = hoje.getDate();
+      const diasNoMes = new Date(ano, mes, 0).getDate();
+      const diasRestantes = diasNoMes - diasPassados;
+      const ritmoAtual = diasPassados > 0 ? totalMatriculas / diasPassados : 0;
+
+      // Alertas de conquistas
+      if (totalMatriculas >= 10) {
+        alertasGerados.push({
+          id: 'matriculas-destaque',
+          tipo: 'fire',
+          titulo: `🔥 ${totalMatriculas} matrículas conquistadas!`,
+          descricao: 'Excelente trabalho, Hunter! Continue caçando!',
+          icone: <Zap className="w-5 h-5" />
+        });
+      } else if (totalMatriculas >= 5) {
+        alertasGerados.push({
+          id: 'matriculas-bom',
+          tipo: 'sucesso',
+          titulo: `🎯 ${totalMatriculas} matrículas no mês!`,
+          descricao: 'Bom ritmo! Vamos acelerar para bater a meta!',
+          icone: <Target className="w-5 h-5" />
+        });
+      } else if (totalMatriculas >= 1) {
+        alertasGerados.push({
+          id: 'matriculas-inicio',
+          tipo: 'info',
+          titulo: `📋 ${totalMatriculas} matrícula${totalMatriculas > 1 ? 's' : ''} no mês`,
+          descricao: 'Vamos acelerar para bater a meta!',
+          icone: <Target className="w-5 h-5" />
+        });
       }
 
-      const { data: kpis } = await kpisQuery;
-
-      if (kpis && kpis.length > 0) {
-        const totalLeads = kpis.reduce((acc, k) => acc + (k.total_leads || 0), 0);
-        const totalMatriculas = kpis.reduce((acc, k) => acc + (k.novas_matriculas || 0), 0);
-        const taxaConversaoGeral = kpis.reduce((acc, k) => acc + (k.taxa_conversao_geral || 0), 0) / kpis.length;
-
-        // Calcular dias do mês e ritmo
-        const hoje = new Date();
-        const diasPassados = hoje.getDate();
-        const diasNoMes = new Date(ano, mes, 0).getDate();
-        const diasRestantes = diasNoMes - diasPassados;
-        const ritmoAtual = totalMatriculas / diasPassados;
-
-        // Alertas de conquistas
-        if (totalMatriculas >= 10) {
-          alertasGerados.push({
-            id: 'matriculas-destaque',
-            tipo: 'fire',
-            titulo: `🔥 ${totalMatriculas} matrículas conquistadas!`,
-            descricao: 'Excelente trabalho, Hunter! Continue caçando!',
-            icone: <Zap className="w-5 h-5" />
-          });
-        } else if (totalMatriculas >= 5) {
-          alertasGerados.push({
-            id: 'matriculas-bom',
-            tipo: 'sucesso',
-            titulo: `🎯 ${totalMatriculas} matrículas no mês!`,
-            descricao: 'Bom ritmo! Vamos acelerar para bater a meta!',
-            icone: <Target className="w-5 h-5" />
-          });
-        }
-
-        // Taxa de conversão
-        if (taxaConversaoGeral >= 20) {
-          alertasGerados.push({
-            id: 'conversao-excelente',
-            tipo: 'sucesso',
-            titulo: `Taxa de conversão de ${taxaConversaoGeral.toFixed(1)}%!`,
-            descricao: 'Conversão acima de 20% é excelente!',
-            icone: <TrendingUp className="w-5 h-5" />
-          });
-        } else if (taxaConversaoGeral < 10 && totalLeads > 0) {
-          alertasGerados.push({
-            id: 'conversao-baixa',
-            tipo: 'atencao',
-            titulo: `Taxa de conversão de ${taxaConversaoGeral.toFixed(1)}%`,
-            descricao: 'Foco no follow-up e fechamento!',
-            icone: <TrendingDown className="w-5 h-5" />
-          });
-        }
-
-        // Alerta de ritmo
-        if (diasRestantes > 0 && diasRestantes <= 7) {
-          alertasGerados.push({
-            id: 'fim-mes',
-            tipo: 'atencao',
-            titulo: `⏰ Apenas ${diasRestantes} dias para fechar o mês!`,
-            descricao: `Ritmo atual: ${ritmoAtual.toFixed(1)} matrículas/dia`,
-            icone: <Bell className="w-5 h-5" />
-          });
-        }
+      // Taxa de conversão
+      if (taxaConversaoGeral >= 20) {
+        alertasGerados.push({
+          id: 'conversao-excelente',
+          tipo: 'sucesso',
+          titulo: `Taxa de conversão de ${taxaConversaoGeral.toFixed(1)}%!`,
+          descricao: 'Conversão acima de 20% é excelente!',
+          icone: <TrendingUp className="w-5 h-5" />
+        });
+      } else if (taxaConversaoGeral < 10 && totalLeads > 0) {
+        alertasGerados.push({
+          id: 'conversao-baixa',
+          tipo: 'atencao',
+          titulo: `Taxa de conversão de ${taxaConversaoGeral.toFixed(1)}%`,
+          descricao: 'Foco no follow-up e fechamento!',
+          icone: <TrendingDown className="w-5 h-5" />
+        });
       }
 
-      // 2. Buscar leads pendentes
+      // Alerta de ritmo
+      if (diasRestantes > 0 && diasRestantes <= 7) {
+        alertasGerados.push({
+          id: 'fim-mes',
+          tipo: 'atencao',
+          titulo: `⏰ Apenas ${diasRestantes} dias para fechar o mês!`,
+          descricao: `Ritmo atual: ${ritmoAtual.toFixed(1)} matrículas/dia`,
+          icone: <Bell className="w-5 h-5" />
+        });
+      }
+
+      // 2. Buscar leads pendentes (filtrado pelo mês selecionado)
+      const primeiroDia = `${ano}-${String(mes).padStart(2, '0')}-01`;
+      const ultimoDia = new Date(ano, mes, 0).getDate();
+      const ultimoDiaStr = `${ano}-${String(mes).padStart(2, '0')}-${ultimoDia}`;
+
       let leadsQuery = supabase
         .from('leads')
         .select('id, status, data_ultimo_contato')
-        .not('status', 'in', '("convertido","arquivado")');
+        .gte('data_contato', primeiroDia)
+        .lte('data_contato', ultimoDiaStr)
+        .in('status', ['novo', 'em_contato', 'agendado']);
 
       if (unidadeUUID) {
         leadsQuery = leadsQuery.eq('unidade_id', unidadeUUID);
@@ -171,7 +183,7 @@ export function AlertasComercial({ unidadeId, ano, mes }: AlertasComercialProps)
       }
 
       // 3. Buscar experimentais agendadas para hoje/amanhã
-      const hoje = new Date().toISOString().split('T')[0];
+      const hojeStr = hoje.toISOString().split('T')[0];
       const amanha = new Date();
       amanha.setDate(amanha.getDate() + 1);
       const amanhaStr = amanha.toISOString().split('T')[0];
@@ -181,7 +193,7 @@ export function AlertasComercial({ unidadeId, ano, mes }: AlertasComercialProps)
         .select('id, nome, data_experimental')
         .eq('experimental_agendada', true)
         .eq('experimental_realizada', false)
-        .gte('data_experimental', hoje)
+        .gte('data_experimental', hojeStr)
         .lte('data_experimental', amanhaStr);
 
       if (unidadeUUID) {
@@ -191,7 +203,7 @@ export function AlertasComercial({ unidadeId, ano, mes }: AlertasComercialProps)
       const { data: experimentais } = await expQuery;
 
       if (experimentais && experimentais.length > 0) {
-        const expHoje = experimentais.filter(e => e.data_experimental === hoje).length;
+        const expHoje = experimentais.filter(e => e.data_experimental === hojeStr).length;
         const expAmanha = experimentais.filter(e => e.data_experimental === amanhaStr).length;
 
         if (expHoje > 0) {
