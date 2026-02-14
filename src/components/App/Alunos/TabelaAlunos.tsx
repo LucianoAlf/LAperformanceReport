@@ -1064,6 +1064,7 @@ export function TabelaAlunos({
               <th className="px-4 py-3 font-medium">Escola</th>
               <th className="px-4 py-3 font-medium">Professor</th>
               <th className="px-4 py-3 font-medium">Curso</th>
+              <th className="px-4 py-3 font-medium">Mod.</th>
               <th className="px-4 py-3 font-medium">Dia</th>
               <th className="px-4 py-3 font-medium">Horário</th>
               <th className="px-4 py-3 font-medium">Turma</th>
@@ -1213,6 +1214,21 @@ export function TabelaAlunos({
                       placeholder="-"
                       formatarExibicao={() => aluno.curso_nome || '-'}
                       className="min-w-[100px]"
+                    />
+                  </td>
+
+                  {/* Modalidade - Edição inline */}
+                  <td className="px-2 py-2 text-center">
+                    <CelulaEditavel
+                      value={aluno.modalidade || 'turma'}
+                      onChange={async (valor) => salvarCampo(aluno.id, 'modalidade', valor)}
+                      tipo="select"
+                      opcoes={[
+                        { value: 'turma', label: 'T' },
+                        { value: 'individual', label: 'IND' },
+                      ]}
+                      placeholder="T"
+                      className="min-w-[50px] text-center"
                     />
                   </td>
 

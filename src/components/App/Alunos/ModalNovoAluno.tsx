@@ -76,6 +76,7 @@ export function ModalNovoAluno({
     unidade_id: dadosIniciais?.unidade_id || unidadeAtual,
     aluno_data_nascimento: null as Date | null,
     tipo_aluno: 'pagante',
+    modalidade: 'turma' as string,
     curso_id: dadosIniciais?.curso_id ?? null as number | null,
     canal_origem_id: dadosIniciais?.canal_origem_id ?? null as number | null,
     teve_experimental: !!dadosIniciais?.professor_experimental_id,
@@ -212,6 +213,7 @@ export function ModalNovoAluno({
           unidade_id: formData.unidade_id,
           classificacao,
           curso_id: formData.curso_id,
+          modalidade: formData.modalidade,
           professor_atual_id: formData.professor_fixo_id,
           valor_parcela: dispensaPagamento ? 0 : (formData.valor_parcela || 0),
           valor_passaporte: formData.valor_passaporte || 0,
@@ -249,6 +251,7 @@ export function ModalNovoAluno({
       unidade_id: unidadeAtual,
       aluno_data_nascimento: null,
       tipo_aluno: 'pagante',
+      modalidade: 'turma',
       curso_id: null,
       canal_origem_id: null,
       teve_experimental: false,
@@ -322,17 +325,8 @@ export function ModalNovoAluno({
                 <DatePickerNascimento
                   date={formData.aluno_data_nascimento || undefined}
                   onDateChange={(date) => setFormData({ ...formData, aluno_data_nascimento: date || null })}
-                  placeholder="Selecione..."
+                  placeholder="DD/MM/AAAA"
                 />
-                {formData.aluno_data_nascimento && (
-                  <p className="text-xs text-slate-400 mt-1">
-                    Idade: {Math.floor((new Date().getTime() - formData.aluno_data_nascimento.getTime()) / (365.25 * 24 * 60 * 60 * 1000))} anos
-                    {' → '}
-                    <span className={Math.floor((new Date().getTime() - formData.aluno_data_nascimento.getTime()) / (365.25 * 24 * 60 * 60 * 1000)) < 12 ? 'text-cyan-400' : 'text-violet-400'}>
-                      {Math.floor((new Date().getTime() - formData.aluno_data_nascimento.getTime()) / (365.25 * 24 * 60 * 60 * 1000)) < 12 ? 'LAMK' : 'EMLA'}
-                    </span>
-                  </p>
-                )}
               </div>
               <div>
                 <Label className="mb-2 block">Tipo Aluno</Label>
@@ -394,24 +388,41 @@ export function ModalNovoAluno({
               </div>
             </div>
 
-            <div>
-              <Label className="mb-2 block">Curso</Label>
-              <Select
-                value={formData.curso_id?.toString() || ''}
-                onValueChange={(value) => setFormData({ ...formData, curso_id: parseInt(value) || null })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={formData.professor_fixo_id ? "Selecione..." : "Selecione o professor primeiro"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {(cursosProfessor.length > 0 ? cursosProfessor : cursos).map((c) => (
-                    <SelectItem key={c.id} value={c.id.toString()}>{c.nome}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {formData.professor_fixo_id && cursosProfessor.length === 0 && (
-                <p className="text-xs text-amber-400 mt-1">Professor sem cursos vinculados — mostrando todos</p>
-              )}
+            <div className="grid grid-cols-3 gap-4">
+              <div className="col-span-2">
+                <Label className="mb-2 block">Curso</Label>
+                <Select
+                  value={formData.curso_id?.toString() || ''}
+                  onValueChange={(value) => setFormData({ ...formData, curso_id: parseInt(value) || null })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={formData.professor_fixo_id ? "Selecione..." : "Selecione o professor primeiro"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(cursosProfessor.length > 0 ? cursosProfessor : cursos).map((c) => (
+                      <SelectItem key={c.id} value={c.id.toString()}>{c.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {formData.professor_fixo_id && cursosProfessor.length === 0 && (
+                  <p className="text-xs text-amber-400 mt-1">Professor sem cursos vinculados — mostrando todos</p>
+                )}
+              </div>
+              <div>
+                <Label className="mb-2 block">Modalidade</Label>
+                <Select
+                  value={formData.modalidade}
+                  onValueChange={(value) => setFormData({ ...formData, modalidade: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="turma">Turma</SelectItem>
+                    <SelectItem value="individual">Individual</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <div>
               <Label className="mb-2 block">Canal de Origem</Label>
