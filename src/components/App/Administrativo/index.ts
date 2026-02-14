@@ -3,6 +3,7 @@ export { QuickInputCard } from './QuickInputCard';
 export { TabelaRenovacoes } from './TabelaRenovacoes';
 export { TabelaAvisosPrevios } from './TabelaAvisosPrevios';
 export { TabelaEvasoes } from './TabelaEvasoes';
+export { TabelaNaoRenovacoes } from './TabelaNaoRenovacoes';
 export { ModalRenovacao } from './ModalRenovacao';
 export { ModalNaoRenovacao } from './ModalNaoRenovacao';
 export { ModalAvisoPrevio } from './ModalAvisoPrevio';

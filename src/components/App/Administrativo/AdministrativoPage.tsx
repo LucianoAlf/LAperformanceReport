@@ -31,6 +31,7 @@ import { ModalAvisoPrevio } from './ModalAvisoPrevio';
 import { ModalEvasao } from './ModalEvasao';
 import { ModalTrancamento } from './ModalTrancamento';
 import { ModalRelatorio } from './ModalRelatorio';
+import { TabelaNaoRenovacoes } from './TabelaNaoRenovacoes';
 import { TabelaTrancamentos } from './TabelaTrancamentos';
 import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
 import { AlertasRetencao } from './AlertasRetencao';
@@ -93,10 +94,11 @@ export interface ResumoMes {
   ltv_meses: number;
 }
 
-type TabId = 'renovacoes' | 'avisos' | 'cancelamentos' | 'trancamentos';
+type TabId = 'renovacoes' | 'nao_renovacoes' | 'avisos' | 'cancelamentos' | 'trancamentos';
 
 const tabs: { id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: 'renovacoes', label: 'Renovações', icon: CheckCircle },
+  { id: 'nao_renovacoes', label: 'Não Renovação', icon: XCircle },
   { id: 'avisos', label: 'Avisos Prévios', icon: AlertTriangle },
   { id: 'cancelamentos', label: 'Cancelamentos', icon: DoorOpen },
   { id: 'trancamentos', label: 'Trancamentos', icon: PauseCircle },
@@ -1065,6 +1067,7 @@ export function AdministrativoPage() {
         <div className="flex gap-2 mb-4">
           {tabs.map(tab => {
             const count = tab.id === 'renovacoes' ? renovacoes.length 
+              : tab.id === 'nao_renovacoes' ? naoRenovacoes.length
               : tab.id === 'avisos' ? avisosPrevios.length 
               : tab.id === 'cancelamentos' ? evasoes.length
               : trancamentos.length;
@@ -1092,6 +1095,13 @@ export function AdministrativoPage() {
           {activeTab === 'renovacoes' && (
             <TabelaRenovacoes 
               data={renovacoes} 
+              onEdit={handleEdit}
+              onDelete={handleDeleteMovimentacao}
+            />
+          )}
+          {activeTab === 'nao_renovacoes' && (
+            <TabelaNaoRenovacoes 
+              data={naoRenovacoes} 
               onEdit={handleEdit}
               onDelete={handleDeleteMovimentacao}
             />
