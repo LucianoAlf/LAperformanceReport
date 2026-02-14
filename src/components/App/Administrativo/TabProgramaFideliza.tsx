@@ -228,6 +228,14 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026 }: TabProgr
   // Farmer atual (para visao individual)
   const farmerAtual = farmers?.find(f => f.unidade_id === unidadeSelecionada);
 
+  // Helper: meta da lojinha por unidade
+  const getMetaLojinha = (unidadeId?: string) => {
+    if (unidadeId === '2ec861f6-023f-4d7b-9927-3960ad8c2a92') return config?.metas.lojinha_campo_grande || 5000;
+    if (unidadeId === '95553e96-971b-4590-a6eb-0201d013c14d') return config?.metas.lojinha_recreio || 3000;
+    if (unidadeId === '368d47f5-2d88-4475-bc14-ba084a9a348e') return config?.metas.lojinha_barra || 3000;
+    return 5000;
+  };
+
   // Form de nova penalidade
   const [novaPenalidade, setNovaPenalidade] = useState({
     unidade_id: '',
@@ -1845,10 +1853,10 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026 }: TabProgr
 
         <MetricaCardFarmer
           titulo="Mestres da Lojinha"
-          meta={`Meta: R$ ${(config?.metas.lojinha_campo_grande || 5000).toLocaleString('pt-BR')}`}
+          meta={`Meta: R$ ${getMetaLojinha(farmerAtual.unidade_id).toLocaleString('pt-BR')}`}
           valor={`R$ ${farmerAtual.metricas.vendas_lojinha.toLocaleString('pt-BR')}`}
           pontos={config?.pontuacao.lojinha || 15}
-          bateu={false}
+          bateu={farmerAtual.metricas.vendas_lojinha >= getMetaLojinha(farmerAtual.unidade_id)}
           mensagem="Vendas da lojinha no trimestre"
           icon={<ShoppingBag className="w-5 h-5" />}
         />
