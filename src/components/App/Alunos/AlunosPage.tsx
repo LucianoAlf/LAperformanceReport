@@ -240,6 +240,7 @@ export function AlunosPage() {
   }
 
   async function carregarAlunos() {
+    // Query principal dos alunos
     let query = supabase
       .from('alunos')
       .select(`
@@ -254,26 +255,32 @@ export function AlunosPage() {
       `)
       .order('nome');
     
+    // Query de turmas implícitas (para enriquecer dados)
+    let turmasQuery = supabase
+      .from('vw_turmas_implicitas')
+      .select('id, unidade_id, professor_id, dia_semana, horario_inicio, total_alunos, nomes_alunos');
+
     // Filtrar por unidade apenas se não for consolidado
     if (unidadeAtual && unidadeAtual !== 'todos') {
       query = query.eq('unidade_id', unidadeAtual);
+      turmasQuery = turmasQuery.eq('unidade_id', unidadeAtual);
     }
     
-    const { data, error } = await query;
+    // Disparar alunos + turmas em paralelo
+    const [alunosResult, turmasResult] = await Promise.all([
+      query,
+      turmasQuery,
+    ]);
+
+    const { data, error } = alunosResult;
 
     if (!error && data) {
-      // Buscar informações de turmas
-      const turmasQuery = supabase
-        .from('vw_turmas_implicitas')
-        .select('*');
-      
-      const { data: turmasData } = await turmasQuery;
-      const turmasMap = new Map(turmasData?.map(t => [
+      const turmasMap = new Map(turmasResult.data?.map(t => [
         `${t.unidade_id}-${t.professor_id}-${t.dia_semana}-${t.horario_inicio}`,
         t
       ]) || []);
 
-      // Buscar apenas anotações PENDENTES por aluno (resolvido = false)
+      // Buscar anotações PENDENTES em paralelo (agora que temos os IDs)
       const alunoIds = data.map((a: any) => a.id);
       const { data: anotacoesData } = await supabase
         .from('anotacoes_alunos')
@@ -358,53 +365,53 @@ export function AlunosPage() {
   }
 
   async function carregarTurmas() {
-    // Carregar turmas implícitas
+    // Carregar turmas implícitas + explícitas em PARALELO
     let queryImplicitas = supabase
       .from('vw_turmas_implicitas')
       .select('*');
     
-    if (unidadeAtual && unidadeAtual !== 'todos') {
-      queryImplicitas = queryImplicitas.eq('unidade_id', unidadeAtual);
-    }
-    
-    const { data: turmasImplicitas } = await queryImplicitas;
-
-    // Carregar turmas explícitas
     let queryExplicitas = supabase
       .from('turmas_explicitas')
       .select(`
-        id,
-        tipo,
-        nome,
-        professor_id,
-        curso_id,
-        dia_semana,
-        horario_inicio,
-        sala_id,
-        unidade_id,
-        capacidade_maxima,
-        professores!inner(nome),
-        cursos(nome),
-        salas(nome),
-        unidades!inner(nome)
+        id, tipo, nome, professor_id, curso_id, dia_semana, horario_inicio,
+        sala_id, unidade_id, capacidade_maxima,
+        professores!inner(nome), cursos(nome), salas(nome), unidades!inner(nome)
       `)
       .eq('ativo', true);
     
     if (unidadeAtual && unidadeAtual !== 'todos') {
+      queryImplicitas = queryImplicitas.eq('unidade_id', unidadeAtual);
       queryExplicitas = queryExplicitas.eq('unidade_id', unidadeAtual);
     }
     
-    const { data: turmasExplicitasRaw } = await queryExplicitas;
+    // Disparar ambas em paralelo
+    const [implicitasResult, explicitasResult] = await Promise.all([
+      queryImplicitas,
+      queryExplicitas,
+    ]);
 
-    // Buscar alunos de cada turma explícita
+    const turmasImplicitas = implicitasResult.data;
+    const turmasExplicitasRaw = explicitasResult.data;
+
+    // Buscar TODOS os alunos de turmas explícitas em UMA ÚNICA query (elimina N+1)
     const turmasExplicitas: Turma[] = [];
-    if (turmasExplicitasRaw) {
-      for (const turma of turmasExplicitasRaw) {
-        const { data: alunosTurma } = await supabase
-          .from('turmas_alunos')
-          .select('aluno_id, alunos!inner(nome)')
-          .eq('turma_id', turma.id);
+    if (turmasExplicitasRaw && turmasExplicitasRaw.length > 0) {
+      const turmaIds = turmasExplicitasRaw.map(t => t.id);
+      const { data: todosAlunosTurmas } = await supabase
+        .from('turmas_alunos')
+        .select('turma_id, aluno_id, alunos!inner(nome)')
+        .in('turma_id', turmaIds);
 
+      // Agrupar alunos por turma_id
+      const alunosPorTurma = new Map<number, { aluno_id: number; nome: string }[]>();
+      todosAlunosTurmas?.forEach((at: any) => {
+        const lista = alunosPorTurma.get(at.turma_id) || [];
+        lista.push({ aluno_id: at.aluno_id, nome: at.alunos.nome });
+        alunosPorTurma.set(at.turma_id, lista);
+      });
+
+      for (const turma of turmasExplicitasRaw) {
+        const alunosDaTurma = alunosPorTurma.get(turma.id) || [];
         turmasExplicitas.push({
           id: turma.id,
           turma_explicita_id: turma.id,
@@ -422,9 +429,9 @@ export function AlunosPage() {
           sala_id: turma.sala_id,
           sala_nome: (turma.salas as any)?.nome,
           capacidade_maxima: turma.capacidade_maxima || 0,
-          total_alunos: alunosTurma?.length || 0,
-          nomes_alunos: alunosTurma?.map((a: any) => a.alunos.nome) || [],
-          ids_alunos: alunosTurma?.map((a: any) => a.aluno_id) || [],
+          total_alunos: alunosDaTurma.length,
+          nomes_alunos: alunosDaTurma.map(a => a.nome),
+          ids_alunos: alunosDaTurma.map(a => a.aluno_id),
         });
       }
     }
@@ -453,188 +460,127 @@ export function AlunosPage() {
   }
 
   async function carregarOpcoes() {
-    // Carregar professores ativos (via professores_unidades para filtrar por unidade)
-    let profs: {id: number, nome: string}[] = [];
-    
-    if (unidadeAtual && unidadeAtual !== 'todos') {
-      // Buscar professores ativos vinculados à unidade via professores_unidades
-      const { data: profUnidades } = await supabase
-        .from('professores_unidades')
-        .select('professor_id')
-        .eq('unidade_id', unidadeAtual);
-      
-      const profIds = profUnidades?.map(pu => pu.professor_id) || [];
-      
-      if (profIds.length > 0) {
-        const { data: profsData } = await supabase
-          .from('professores')
-          .select('id, nome')
-          .in('id', profIds)
-          .eq('ativo', true)
-          .order('nome');
-        
-        if (profsData) profs = profsData;
+    // Preparar query de professores (condicional por unidade)
+    const profsPromise = (async () => {
+      if (unidadeAtual && unidadeAtual !== 'todos') {
+        const { data: profUnidades } = await supabase
+          .from('professores_unidades')
+          .select('professor_id')
+          .eq('unidade_id', unidadeAtual);
+        const profIds = profUnidades?.map(pu => pu.professor_id) || [];
+        if (profIds.length > 0) {
+          const { data } = await supabase
+            .from('professores').select('id, nome')
+            .in('id', profIds).eq('ativo', true).order('nome');
+          return data || [];
+        }
+        return [];
       }
-    } else {
-      // Consolidado: buscar todos os professores ativos
-      const { data: todosProfs } = await supabase
-        .from('professores')
-        .select('id, nome')
-        .eq('ativo', true)
-        .order('nome');
-      
-      if (todosProfs) profs = todosProfs;
-    }
-    
+      const { data } = await supabase
+        .from('professores').select('id, nome').eq('ativo', true).order('nome');
+      return data || [];
+    })();
+
+    // Disparar TODAS as queries em paralelo
+    const [profs, cursosResult, tiposResult, salasResult, horariosResult] = await Promise.all([
+      profsPromise,
+      supabase.from('cursos').select('id, nome').eq('ativo', true).order('nome'),
+      supabase.from('tipos_matricula').select('id, nome').eq('ativo', true).order('id'),
+      supabase.from('salas').select('id, nome, capacidade_maxima')
+        .eq('unidade_id', unidadeAtual).eq('ativo', true).order('nome'),
+      supabase.from('horarios').select('id, nome, hora_inicio').eq('ativo', true).order('hora_inicio'),
+    ]);
+
     setProfessores(profs);
-
-    // Carregar cursos
-    const { data: cursosData } = await supabase
-      .from('cursos')
-      .select('id, nome')
-      .eq('ativo', true)
-      .order('nome');
-    if (cursosData) setCursos(cursosData);
-
-    // Carregar tipos de matrícula
-    const { data: tipos } = await supabase
-      .from('tipos_matricula')
-      .select('id, nome')
-      .eq('ativo', true)
-      .order('id');
-    if (tipos) setTiposMatricula(tipos);
-
-    // Carregar salas
-    const { data: salasData } = await supabase
-      .from('salas')
-      .select('id, nome, capacidade_maxima')
-      .eq('unidade_id', unidadeAtual)
-      .eq('ativo', true)
-      .order('nome');
-    if (salasData) setSalas(salasData);
-
-    // Carregar horários
-    const { data: horariosData } = await supabase
-      .from('horarios')
-      .select('id, nome, hora_inicio')
-      .eq('ativo', true)
-      .order('hora_inicio');
-    if (horariosData) setHorarios(horariosData);
+    if (cursosResult.data) setCursos(cursosResult.data);
+    if (tiposResult.data) setTiposMatricula(tiposResult.data);
+    if (salasResult.data) setSalas(salasResult.data);
+    if (horariosResult.data) setHorarios(horariosResult.data);
   }
 
   async function carregarKPIs() {
-    // Total de alunos ativos (inclui trancados, pois continuam pagando)
-    // Exclui registros de segundo curso — aluno com 2 cursos conta como 1 indivíduo
-    let queryAtivos = supabase
-      .from('alunos')
+    // Preparar queries (aplicar filtro de unidade a cada uma)
+    let qAtivos = supabase.from('alunos')
       .select('*', { count: 'exact', head: true })
       .in('status', ['ativo', 'trancado'])
       .or('is_segundo_curso.is.null,is_segundo_curso.eq.false');
-    
-    if (unidadeAtual && unidadeAtual !== 'todos') {
-      queryAtivos = queryAtivos.eq('unidade_id', unidadeAtual);
-    }
-    
-    const { count: totalAtivos } = await queryAtivos;
 
-    // Alunos pagantes (tipos que contam como pagante, inclui trancados)
-    // Exclui registros de segundo curso — aluno com 2 cursos conta como 1 pagante
-    let queryPagantes = supabase
-      .from('alunos')
+    let qPagantes = supabase.from('alunos')
       .select('id, tipos_matricula!inner(conta_como_pagante)')
       .in('status', ['ativo', 'trancado'])
       .eq('tipos_matricula.conta_como_pagante', true)
       .or('is_segundo_curso.is.null,is_segundo_curso.eq.false');
-    
-    if (unidadeAtual && unidadeAtual !== 'todos') {
-      queryPagantes = queryPagantes.eq('unidade_id', unidadeAtual);
-    }
-    
-    const { data: pagantesData } = await queryPagantes;
-    const totalPagantes = pagantesData?.length || 0;
 
-    // Bolsistas (inclui trancados)
-    // Exclui registros de segundo curso
-    let queryBolsistas = supabase
-      .from('alunos')
+    let qBolsistas = supabase.from('alunos')
       .select('id, tipos_matricula!inner(codigo)')
       .in('status', ['ativo', 'trancado'])
       .in('tipos_matricula.codigo', ['BOLSISTA_INT', 'BOLSISTA_PARC'])
       .or('is_segundo_curso.is.null,is_segundo_curso.eq.false');
-    
-    if (unidadeAtual && unidadeAtual !== 'todos') {
-      queryBolsistas = queryBolsistas.eq('unidade_id', unidadeAtual);
-    }
-    
-    const { data: bolsistasData } = await queryBolsistas;
-    const totalBolsistas = bolsistasData?.length || 0;
 
-    // Ticket médio (só pagantes) - IMPORTANTE: soma valores de alunos com múltiplos cursos
-    // Aluno com 2 cursos (R$400 + R$300) = ticket de R$700, não R$350
-    // Exclui alunos com status 'sem_parcela' — não devem afetar o ticket médio
-    let queryTicket = supabase
-      .from('alunos')
+    let qTicket = supabase.from('alunos')
       .select('nome, data_nascimento, unidade_id, valor_parcela, tipos_matricula!inner(entra_ticket_medio)')
       .eq('status', 'ativo')
       .eq('tipos_matricula.entra_ticket_medio', true)
       .not('valor_parcela', 'is', null)
       .neq('status_pagamento', 'sem_parcela');
-    
+
+    let qTurmas = supabase.from('vw_turmas_implicitas').select('total_alunos');
+
     if (unidadeAtual && unidadeAtual !== 'todos') {
-      queryTicket = queryTicket.eq('unidade_id', unidadeAtual);
+      qAtivos = qAtivos.eq('unidade_id', unidadeAtual);
+      qPagantes = qPagantes.eq('unidade_id', unidadeAtual);
+      qBolsistas = qBolsistas.eq('unidade_id', unidadeAtual);
+      qTicket = qTicket.eq('unidade_id', unidadeAtual);
+      qTurmas = qTurmas.eq('unidade_id', unidadeAtual);
     }
-    
-    const { data: ticketData } = await queryTicket;
-    
-    // Agrupar por aluno único (nome + data_nascimento + unidade) e somar valores
+
+    // Disparar TODAS as 6 queries em PARALELO (de ~6 roundtrips para 1)
+    const [ativosR, pagantesR, bolsistasR, ticketR, permR, turmasR] = await Promise.all([
+      qAtivos,
+      qPagantes,
+      qBolsistas,
+      qTicket,
+      supabase.rpc('get_tempo_permanencia', {
+        p_unidade_id: unidadeAtual && unidadeAtual !== 'todos' ? unidadeAtual : null,
+      }),
+      qTurmas,
+    ]);
+
+    const totalAtivos = ativosR.count || 0;
+    const totalPagantes = pagantesR.data?.length || 0;
+    const totalBolsistas = bolsistasR.data?.length || 0;
+
+    // Ticket médio — agrupar por aluno único e somar valores
     const alunosUnicos = new Map<string, number>();
-    ticketData?.forEach((a: any) => {
+    ticketR.data?.forEach((a: any) => {
       const chave = `${a.nome?.toLowerCase().trim()}-${a.data_nascimento || ''}-${a.unidade_id}`;
       const valorAtual = alunosUnicos.get(chave) || 0;
       alunosUnicos.set(chave, valorAtual + (a.valor_parcela || 0));
     });
-    
-    // Ticket médio = soma dos tickets de cada aluno único / número de alunos únicos
     const valoresUnicos = Array.from(alunosUnicos.values());
     const ticketMedio = valoresUnicos.length > 0
       ? valoresUnicos.reduce((sum, v) => sum + v, 0) / valoresUnicos.length
       : 0;
 
     // LTV médio — baseado em evasões (regra: ≥4 meses, excluir bolsistas/banda/2º curso)
-    const { data: permData } = await supabase.rpc('get_tempo_permanencia', {
-      p_unidade_id: unidadeAtual && unidadeAtual !== 'todos' ? unidadeAtual : null,
-    });
-    
     let ltvMedio = 0;
-    if (permData && permData.length > 0) {
-      const comDados = permData.filter((p: any) => Number(p.tempo_permanencia_medio) > 0);
+    if (permR.data && permR.data.length > 0) {
+      const comDados = permR.data.filter((p: any) => Number(p.tempo_permanencia_medio) > 0);
       if (comDados.length > 0) {
-        const mediaPermanencia = comDados.reduce((sum: number, p: any) => sum + Number(p.tempo_permanencia_medio), 0) / comDados.length;
-        ltvMedio = mediaPermanencia;
+        ltvMedio = comDados.reduce((sum: number, p: any) => sum + Number(p.tempo_permanencia_medio), 0) / comDados.length;
       }
     }
 
-    // Turmas e média de alunos por turma
-    let queryTurmas = supabase
-      .from('vw_turmas_implicitas')
-      .select('total_alunos');
-    
-    if (unidadeAtual && unidadeAtual !== 'todos') {
-      queryTurmas = queryTurmas.eq('unidade_id', unidadeAtual);
-    }
-    
-    const { data: turmasData } = await queryTurmas;
-    
+    // Turmas
+    const turmasData = turmasR.data;
     const totalTurmas = turmasData?.length || 0;
     const mediaAlunosTurma = turmasData && turmasData.length > 0
       ? turmasData.reduce((sum, t) => sum + (t.total_alunos || 0), 0) / turmasData.length
       : 0;
-    
-    // Turmas com apenas 1 aluno (sozinhos)
     const turmasSozinhos = turmasData?.filter(t => t.total_alunos === 1).length || 0;
 
     setKpis({
-      totalAtivos: totalAtivos || 0,
+      totalAtivos,
       totalPagantes,
       totalBolsistas,
       mediaAlunosTurma: Math.round(mediaAlunosTurma * 100) / 100,

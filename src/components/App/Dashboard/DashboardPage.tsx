@@ -338,29 +338,7 @@ export function DashboardPage() {
         // 3. Buscar turmas (implícitas e explícitas) para calcular total_alunos e total_turmas
         // 4. Filtrar por unidade e calcular KPIs
         
-        // Buscar professores ativos
-        const { data: professoresData } = await supabase
-          .from('professores')
-          .select('id, nome, ativo')
-          .eq('ativo', true);
-
-        // Buscar relacionamentos professor-unidade
-        const { data: profUnidadesData } = await supabase
-          .from('professores_unidades')
-          .select('professor_id, unidade_id');
-
-        // Buscar turmas implícitas (mesma fonte da página Professores)
-        const { data: turmasImplicitas } = await supabase
-          .from('vw_turmas_implicitas')
-          .select('professor_id, total_alunos');
-
-        // Buscar dados de performance (renovações, conversão)
-        const { data: performanceData } = await supabase
-          .from('professores_performance')
-          .select('*')
-          .eq('ano', ano);
-
-        // Buscar renovações reais do período (tabela renovacoes)
+        // Buscar dados de professores em PARALELO (5 queries → 1 roundtrip)
         const startDate = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
         const ultimoDia = new Date(ano, mesFim, 0).getDate();
         const endDate = `${ano}-${String(mesFim).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
@@ -372,7 +350,20 @@ export function DashboardPage() {
         if (unidade !== 'todos') {
           renovacoesQuery = renovacoesQuery.eq('unidade_id', unidade);
         }
-        const { data: renovacoesData } = await renovacoesQuery;
+
+        const [profsR, profUnidR, turmasR, perfR, renovR] = await Promise.all([
+          supabase.from('professores').select('id, nome, ativo').eq('ativo', true),
+          supabase.from('professores_unidades').select('professor_id, unidade_id'),
+          supabase.from('vw_turmas_implicitas').select('professor_id, total_alunos'),
+          supabase.from('professores_performance').select('*').eq('ano', ano),
+          renovacoesQuery,
+        ]);
+
+        const professoresData = profsR.data;
+        const profUnidadesData = profUnidR.data;
+        const turmasImplicitas = turmasR.data;
+        const performanceData = perfR.data;
+        const renovacoesData = renovR.data;
 
         // Calcular KPIs
         let totalProfs = 0;

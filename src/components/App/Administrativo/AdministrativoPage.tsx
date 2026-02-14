@@ -166,7 +166,7 @@ export function AdministrativoPage() {
       // Usar range de datas do filtro de competência
       const { startDate: start, endDate: end } = competenciaFiltro.range;
 
-      // Carregar movimentações do mês (por data)
+      // Carregar movimentações + avisos retroativos + professores + formas pgto em PARALELO
       let query = supabase
         .from('movimentacoes_admin')
         .select('*, unidades(codigo)')
@@ -174,15 +174,6 @@ export function AdministrativoPage() {
         .lte('data', endDate)
         .order('data', { ascending: false });
 
-      if (unidade !== 'todos') {
-        query = query.eq('unidade_id', unidade);
-      }
-
-      const { data: movData, error: movError } = await query;
-      if (movError) throw movError;
-
-      // Buscar avisos prévios cujo mes_saida está no range mas a data do aviso é anterior
-      // (ex: aviso em dez/2025 com saída em fev/2026 deve aparecer quando filtro = fev/2026)
       const mesSaidaStart = `${ano}-${String(mes).padStart(2, '0')}-01`;
       const mesSaidaEnd = `${ano}-${String(mes).padStart(2, '0')}-28`;
       let queryAvisos = supabase
@@ -195,10 +186,23 @@ export function AdministrativoPage() {
         .order('data', { ascending: false });
 
       if (unidade !== 'todos') {
+        query = query.eq('unidade_id', unidade);
         queryAvisos = queryAvisos.eq('unidade_id', unidade);
       }
 
-      const { data: avisosRetroativos } = await queryAvisos;
+      // 4 queries em paralelo (de 5 sequenciais para 1 roundtrip)
+      const [movResult, avisosResult, profsResult, fpResult] = await Promise.all([
+        query,
+        queryAvisos,
+        supabase.from('professores').select('id, nome').eq('ativo', true).order('nome'),
+        supabase.from('formas_pagamento').select('id, nome, sigla').order('nome'),
+      ]);
+
+      const { data: movData, error: movError } = movResult;
+      if (movError) throw movError;
+      const { data: avisosRetroativos } = avisosResult;
+      const profData = profsResult.data;
+      const fpData = fpResult.data;
 
       // Combinar resultados sem duplicatas
       const idsJaPresentes = new Set((movData || []).map(m => m.id));
@@ -207,7 +211,7 @@ export function AdministrativoPage() {
         ...(avisosRetroativos || []).filter(a => !idsJaPresentes.has(a.id)),
       ];
 
-      // Buscar classificação dos alunos separadamente
+      // Buscar classificação dos alunos (depende dos IDs das movimentações)
       const alunosIds = movCombinado.filter(m => m.aluno_id).map(m => m.aluno_id) || [];
       let alunosMap = new Map();
       
@@ -225,19 +229,6 @@ export function AdministrativoPage() {
         ...m,
         alunos: m.aluno_id ? alunosMap.get(m.aluno_id) : null
       }));
-
-      // Carregar professores
-      const { data: profData } = await supabase
-        .from('professores')
-        .select('id, nome')
-        .eq('ativo', true)
-        .order('nome');
-
-      // Carregar formas de pagamento
-      const { data: fpData } = await supabase
-        .from('formas_pagamento')
-        .select('id, nome, sigla')
-        .order('nome');
 
       // Verificar se é período atual ou histórico
       const hoje = new Date();
