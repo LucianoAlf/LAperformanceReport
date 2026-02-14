@@ -1399,7 +1399,7 @@ export function TabelaAlunos({
                   </td>
                 </tr>
                 
-                {/* Linhas expandidas para outros cursos (segundo curso) */}
+                {/* Linhas expandidas para outros cursos (segundo curso) — edição inline */}
                 {alunosExpandidos.has(aluno.id) && aluno.outros_cursos?.map((outroCurso, idx) => (
                   <tr 
                     key={`${aluno.id}-curso-${idx}`}
@@ -1427,34 +1427,120 @@ export function TabelaAlunos({
                     <td className="px-4 py-2">
                       {getBadgeEscola(outroCurso.classificacao)}
                     </td>
-                    <td className="px-4 py-2 text-slate-300 text-sm">
-                      {outroCurso.professor_nome || '-'}
+                    <td className="px-4 py-2">
+                      <CelulaEditavel
+                        value={outroCurso.professor_atual_id}
+                        onChange={async (valor) => salvarCampo(outroCurso.id, 'professor_atual_id', valor)}
+                        tipo="select"
+                        opcoes={professores.map(p => ({ value: p.id, label: p.nome }))}
+                        placeholder="-"
+                        formatarExibicao={() => outroCurso.professor_nome || '-'}
+                        className="min-w-[120px]"
+                      />
                     </td>
-                    <td className="px-4 py-2 text-slate-300 text-sm">
-                      {outroCurso.curso_nome || '-'}
+                    <td className="px-4 py-2">
+                      <CelulaEditavel
+                        value={outroCurso.curso_id}
+                        onChange={async (valor) => salvarCampo(outroCurso.id, 'curso_id', valor)}
+                        tipo="select"
+                        opcoes={cursos.map(c => ({ value: c.id, label: c.nome }))}
+                        placeholder="-"
+                        formatarExibicao={() => outroCurso.curso_nome || '-'}
+                        className="min-w-[100px]"
+                      />
                     </td>
-                    <td className="px-4 py-2 text-slate-300 text-sm">
-                      {outroCurso.dia_aula || '-'}
+                    <td className="px-2 py-2 text-center">
+                      <CelulaEditavel
+                        value={outroCurso.modalidade || 'turma'}
+                        onChange={async (valor) => salvarCampo(outroCurso.id, 'modalidade', valor)}
+                        tipo="select"
+                        opcoes={[
+                          { value: 'turma', label: 'T' },
+                          { value: 'individual', label: 'IND' },
+                        ]}
+                        placeholder="T"
+                        className="min-w-[50px] text-center"
+                      />
                     </td>
-                    <td className="px-4 py-2 text-slate-300 text-sm">
-                      {outroCurso.horario_aula?.substring(0, 5) || '-'}
+                    <td className="px-4 py-2">
+                      <CelulaEditavel
+                        value={outroCurso.dia_aula}
+                        onChange={async (valor) => salvarCampo(outroCurso.id, 'dia_aula', valor)}
+                        tipo="select"
+                        opcoes={DIAS_SEMANA.map(d => ({ value: d, label: d }))}
+                        placeholder="-"
+                        className="min-w-[90px]"
+                      />
+                    </td>
+                    <td className="px-4 py-2">
+                      <CelulaEditavel
+                        value={outroCurso.horario_aula?.substring(0, 5) || null}
+                        onChange={async (valor) => salvarCampo(outroCurso.id, 'horario_aula', valor)}
+                        tipo="select"
+                        opcoes={HORARIOS_LISTA.map(h => ({ value: h, label: h }))}
+                        placeholder="-"
+                        className="min-w-[70px]"
+                      />
                     </td>
                     <td className="px-4 py-2 text-slate-400 text-sm">-</td>
-                    <td className="px-4 py-2 text-emerald-400 text-sm font-medium">
-                      R$ {outroCurso.valor_parcela?.toLocaleString('pt-BR') || '0'}
+                    <td className="px-4 py-2">
+                      <CelulaEditavel
+                        value={outroCurso.valor_parcela}
+                        onChange={async (valor) => salvarCampo(outroCurso.id, 'valor_parcela', valor)}
+                        tipo="moeda"
+                        placeholder="-"
+                        className="min-w-[80px]"
+                      />
                     </td>
                     <td className="px-2 py-2">
-                      {outroCurso.status_pagamento === 'em_dia' ? (
-                        <span className="text-emerald-400" title="Em dia">✓</span>
-                      ) : outroCurso.status_pagamento === 'inadimplente' ? (
-                        <span className="text-red-400" title="Inadimplente">✗</span>
-                      ) : (
-                        <span className="text-slate-500">-</span>
-                      )}
+                      <CelulaEditavel
+                        value={outroCurso.status_pagamento || '-'}
+                        onChange={async (valor) => salvarCampo(outroCurso.id, 'status_pagamento', valor)}
+                        tipo="select"
+                        opcoes={[
+                          { value: '-', label: '- Não lançado' },
+                          { value: 'em_dia', label: '✓ Em dia' },
+                          { value: 'inadimplente', label: '✗ Inadimplente' },
+                          { value: 'parcial', label: '~ Parcial' },
+                        ]}
+                        placeholder="-"
+                        formatarExibicao={() => {
+                          switch (outroCurso.status_pagamento) {
+                            case 'inadimplente': return <span className="text-red-400 font-bold" title="Inadimplente">✗</span>;
+                            case 'parcial': return <span className="text-yellow-400 font-bold" title="Pagamento Parcial">~</span>;
+                            case 'em_dia': return <span className="text-emerald-400" title="Em dia">✓</span>;
+                            default: return <span className="text-slate-500" title="Não lançado">-</span>;
+                          }
+                        }}
+                        className="min-w-[40px]"
+                      />
                     </td>
-                    <td className="px-2 py-2 text-slate-400 text-sm">{outroCurso.dia_vencimento || 5}</td>
+                    <td className="px-2 py-2">
+                      <CelulaEditavel
+                        value={outroCurso.dia_vencimento?.toString() || '5'}
+                        onChange={async (valor) => salvarCampo(outroCurso.id, 'dia_vencimento', valor)}
+                        tipo="numero"
+                        placeholder="5"
+                        className="min-w-[40px] text-center"
+                      />
+                    </td>
                     <td className="px-4 py-2 text-slate-400 text-sm">-</td>
-                    <td className="px-2 py-2 text-slate-400 text-sm">{outroCurso.status || '-'}</td>
+                    <td className="px-2 py-2">
+                      <CelulaEditavel
+                        value={outroCurso.status}
+                        onChange={async (valor) => salvarCampo(outroCurso.id, 'status', valor)}
+                        tipo="select"
+                        opcoes={[
+                          { value: 'ativo', label: 'Ativo' },
+                          { value: 'trancado', label: 'Trancado' },
+                          { value: 'inativo', label: 'Inativo' },
+                          { value: 'cancelado', label: 'Cancelado' },
+                          { value: 'evadido', label: 'Evadido' },
+                        ]}
+                        placeholder="-"
+                        className="min-w-[70px]"
+                      />
+                    </td>
                     <td className="px-2 py-2"></td>
                   </tr>
                 ))}
