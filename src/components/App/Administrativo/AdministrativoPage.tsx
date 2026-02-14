@@ -214,7 +214,7 @@ export function AdministrativoPage() {
       if (alunosIds.length > 0) {
         const { data: alunosData } = await supabase
           .from('alunos')
-          .select('id, classificacao')
+          .select('id, classificacao, tipo_matricula_id, is_segundo_curso')
           .in('id', alunosIds);
         
         alunosMap = new Map(alunosData?.map(a => [a.id, a]) || []);
@@ -825,14 +825,28 @@ export function AdministrativoPage() {
                 <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Tempo Médio Permanência</p>
                 <p className="text-3xl font-bold text-cyan-400">
                   {(() => {
-                    const todos = [...naoRenovacoes, ...evasoes].filter(m => m.tempo_permanencia_meses);
-                    if (todos.length === 0) return '-';
-                    const media = todos.reduce((acc, m) => acc + (m.tempo_permanencia_meses || 0), 0) / todos.length;
-                    return media.toFixed(1);
+                    // Regra: excluir bolsistas (3=INT, 4=PARC, 5=BANDA), segundo curso, e ≤3 meses
+                    const todos = [...naoRenovacoes, ...evasoes].filter(m => {
+                      if (!m.tempo_permanencia_meses || m.tempo_permanencia_meses < 4) return false;
+                      const tipoMatricula = m.alunos?.tipo_matricula_id;
+                      if (tipoMatricula && [3, 4, 5].includes(tipoMatricula)) return false;
+                      if (m.alunos?.is_segundo_curso) return false;
+                      return true;
+                    });
+                    // Se tem evasões no período, calcular média delas
+                    if (todos.length > 0) {
+                      const media = todos.reduce((acc, m) => acc + (m.tempo_permanencia_meses || 0), 0) / todos.length;
+                      return media.toFixed(1);
+                    }
+                    // Fallback: usar valor da view (que já tem fallback do histórico)
+                    if (resumo?.ltv_meses && resumo.ltv_meses > 0) {
+                      return Number(resumo.ltv_meses).toFixed(1);
+                    }
+                    return '-';
                   })()}
                   <span className="text-lg font-normal text-slate-400"> meses</span>
                 </p>
-                <p className="text-xs text-slate-500 mt-1">média das evasões do período</p>
+                <p className="text-xs text-slate-500 mt-1">média das evasões ≥4 meses (excl. bolsistas)</p>
               </div>
             </div>
           </div>

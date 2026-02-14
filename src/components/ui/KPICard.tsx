@@ -84,7 +84,11 @@ function formatValue(value: number | string, format?: 'number' | 'currency' | 'p
       return `${value.toFixed(1)}%`;
     case 'number':
     default:
-      return value.toLocaleString('pt-BR');
+      // Se é inteiro, exibir sem casas decimais; se tem decimais, limitar a 1
+      if (Number.isInteger(value)) {
+        return value.toLocaleString('pt-BR');
+      }
+      return Number(value.toFixed(1)).toLocaleString('pt-BR');
   }
 }
 

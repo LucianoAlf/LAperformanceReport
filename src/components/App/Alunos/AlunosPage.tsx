@@ -600,22 +600,19 @@ export function AlunosPage() {
       ? valoresUnicos.reduce((sum, v) => sum + v, 0) / valoresUnicos.length
       : 0;
 
-    // LTV médio
-    let queryLtv = supabase
-      .from('alunos')
-      .select('tempo_permanencia_meses')
-      .eq('status', 'ativo')
-      .not('tempo_permanencia_meses', 'is', null);
+    // LTV médio — baseado em evasões (regra: ≥4 meses, excluir bolsistas/banda/2º curso)
+    const { data: permData } = await supabase.rpc('get_tempo_permanencia', {
+      p_unidade_id: unidadeAtual && unidadeAtual !== 'todos' ? unidadeAtual : null,
+    });
     
-    if (unidadeAtual && unidadeAtual !== 'todos') {
-      queryLtv = queryLtv.eq('unidade_id', unidadeAtual);
+    let ltvMedio = 0;
+    if (permData && permData.length > 0) {
+      const comDados = permData.filter((p: any) => Number(p.tempo_permanencia_medio) > 0);
+      if (comDados.length > 0) {
+        const mediaPermanencia = comDados.reduce((sum: number, p: any) => sum + Number(p.tempo_permanencia_medio), 0) / comDados.length;
+        ltvMedio = mediaPermanencia;
+      }
     }
-    
-    const { data: ltvData } = await queryLtv;
-    
-    const ltvMedio = ltvData && ltvData.length > 0
-      ? ltvData.reduce((sum, a) => sum + (a.tempo_permanencia_meses || 0), 0) / ltvData.length
-      : 0;
 
     // Turmas e média de alunos por turma
     let queryTurmas = supabase
@@ -642,7 +639,7 @@ export function AlunosPage() {
       totalBolsistas,
       mediaAlunosTurma: Math.round(mediaAlunosTurma * 100) / 100,
       ticketMedio: Math.round(ticketMedio),
-      ltvMedio: Math.round(ltvMedio),
+      ltvMedio: Math.round(ltvMedio * 10) / 10,
       totalTurmas,
       turmasSozinhos
     });

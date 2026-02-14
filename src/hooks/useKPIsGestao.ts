@@ -93,8 +93,14 @@ export function useKPIsGestao(
             ticket_medio: kpisData.reduce((acc, k) => acc + (k.ticket_medio || 0), 0) / kpisData.length,
             mrr: kpisData.reduce((acc, k) => acc + (k.mrr || 0), 0),
             arr: kpisData.reduce((acc, k) => acc + (k.arr || 0), 0),
-            tempo_permanencia_medio: kpisData.reduce((acc, k) => acc + (k.tempo_permanencia_medio || 0), 0) / kpisData.length,
-            ltv_medio: kpisData.reduce((acc, k) => acc + (k.ltv_medio || 0), 0) / kpisData.length,
+            tempo_permanencia_medio: (() => {
+              const comDados = kpisData.filter(k => (k.tempo_permanencia_medio || 0) > 0);
+              return comDados.length > 0 ? comDados.reduce((acc, k) => acc + (k.tempo_permanencia_medio || 0), 0) / comDados.length : 0;
+            })(),
+            ltv_medio: (() => {
+              const comDados = kpisData.filter(k => (k.ltv_medio || 0) > 0);
+              return comDados.length > 0 ? comDados.reduce((acc, k) => acc + (k.ltv_medio || 0), 0) / comDados.length : 0;
+            })(),
             inadimplencia_pct: kpisData.reduce((acc, k) => acc + (k.inadimplencia_pct || 0), 0) / kpisData.length,
             faturamento_previsto: kpisData.reduce((acc, k) => acc + (k.faturamento_previsto || 0), 0),
             faturamento_realizado: kpisData.reduce((acc, k) => acc + (k.faturamento_realizado || 0), 0),
