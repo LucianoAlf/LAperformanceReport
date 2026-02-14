@@ -21,7 +21,7 @@ import { DEFAULT_HEALTH_WEIGHTS, HealthWeightKey } from '@/components/App/Profes
 // Metas de referência para cada KPI
 export const METAS_REFERENCIA = {
   taxaCrescimento: { min: -10, max: 20 }, // -10% → 0 pontos, +20% → 100 pontos
-  mediaTurma: { min: 0, max: 3.0, meta: 3.0 }, // Meta configurável
+  mediaTurma: { min: 0, max: 2.0, meta: 2.0 }, // Meta ajustada para escola de música (aulas individuais são comuns)
   retencao: { min: 0, max: 100 }, // 0-100%
   conversao: { min: 0, max: 100 }, // 0-100%
   presenca: { min: 0, max: 100 }, // 0-100%
@@ -216,14 +216,15 @@ export function useHealthScore(
     });
     
     // 7. Professor 360° (se configurado e disponível)
-    if (weights.professor360 && weights.professor360 > 0) {
+    const w = weights as Record<string, number>;
+    if (w.professor360 && w.professor360 > 0) {
       const nota360 = kpis.nota360 ?? 100; // Default 100 se não avaliado
       detalhes.push({
         kpi: 'Professor 360°',
         valor: nota360,
         scoreNormalizado: nota360,
-        peso: weights.professor360 / 100,
-        contribuicao: nota360 * (weights.professor360 / 100)
+        peso: w.professor360 / 100,
+        contribuicao: nota360 * (w.professor360 / 100)
       });
     }
     
@@ -325,14 +326,15 @@ export function calcularHealthScore(
   });
   
   // 7. Professor 360° (se configurado e disponível)
-  if (weights.professor360 && weights.professor360 > 0) {
+  const w2 = weights as Record<string, number>;
+  if (w2.professor360 && w2.professor360 > 0) {
     const nota360 = kpis.nota360 ?? 100; // Default 100 se não avaliado
     detalhes.push({
       kpi: 'Professor 360°',
       valor: nota360,
       scoreNormalizado: nota360,
-      peso: weights.professor360 / 100,
-      contribuicao: nota360 * (weights.professor360 / 100)
+      peso: w2.professor360 / 100,
+      contribuicao: nota360 * (w2.professor360 / 100)
     });
   }
   

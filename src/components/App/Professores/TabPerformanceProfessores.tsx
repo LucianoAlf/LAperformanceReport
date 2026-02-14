@@ -352,11 +352,12 @@ export function TabPerformanceProfessores({ unidadeAtual }: Props) {
             carteiraAlunos: totalAlunos
           });
 
-          // Determinar status baseado no Health Score
+          // Determinar status baseado no Health Score (V2)
+          // Saudável (≥70) → excelente | Atenção (50-69) → atencao | Crítico (<50) → critico
           let status: 'critico' | 'atencao' | 'excelente' = 'excelente';
-          if (healthResult.status === 'critico' || taxaRetencao < 70 || mediaAlunosTurma < 1.3 || evasoesMes >= 3) {
+          if (healthResult.status === 'critico') {
             status = 'critico';
-          } else if (healthResult.status === 'atencao' || taxaRetencao < 95 || mediaAlunosTurma < 1.5 || evasoesMes >= 1 || taxaPresenca < 80) {
+          } else if (healthResult.status === 'atencao') {
             status = 'atencao';
           }
 
