@@ -453,29 +453,27 @@ export function AlunosPage() {
   }
 
   async function carregarOpcoes() {
-    // Carregar professores
-    // Como a tabela professores não tem unidade_id, precisamos filtrar pelos professores que têm alunos na unidade
+    // Carregar professores ativos (via professores_unidades para filtrar por unidade)
     let profs: {id: number, nome: string}[] = [];
     
     if (unidadeAtual && unidadeAtual !== 'todos') {
-      // Buscar professores que têm alunos ativos na unidade
-      const { data: professoresUnidade } = await supabase
-        .from('alunos')
-        .select('professor_atual_id, professores!professor_atual_id(id, nome)')
-        .eq('unidade_id', unidadeAtual)
-        .in('status', ['ativo', 'trancado'])
-        .not('professor_atual_id', 'is', null);
+      // Buscar professores ativos vinculados à unidade via professores_unidades
+      const { data: profUnidades } = await supabase
+        .from('professores_unidades')
+        .select('professor_id')
+        .eq('unidade_id', unidadeAtual);
       
-      if (professoresUnidade) {
-        // Extrair professores únicos
-        const professoresMap = new Map<number, {id: number, nome: string}>();
-        professoresUnidade.forEach(a => {
-          const prof = a.professores as any;
-          if (prof && prof.id && prof.nome) {
-            professoresMap.set(prof.id, { id: prof.id, nome: prof.nome });
-          }
-        });
-        profs = Array.from(professoresMap.values()).sort((a, b) => a.nome.localeCompare(b.nome));
+      const profIds = profUnidades?.map(pu => pu.professor_id) || [];
+      
+      if (profIds.length > 0) {
+        const { data: profsData } = await supabase
+          .from('professores')
+          .select('id, nome')
+          .in('id', profIds)
+          .eq('ativo', true)
+          .order('nome');
+        
+        if (profsData) profs = profsData;
       }
     } else {
       // Consolidado: buscar todos os professores ativos
