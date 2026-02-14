@@ -60,7 +60,7 @@ export function ModalTrancamento({ open, onOpenChange, onSave, editingItem, prof
           aluno_nome: editingItem.aluno_nome,
           professor_id: editingItem.professor_id?.toString() || '',
           motivo_trancamento_id: (editingItem as any).motivo_trancamento_id?.toString() || '',
-          observacoes: editingItem.motivo || '',
+          observacoes: editingItem.observacoes || '',
           previsao_retorno: editingItem.previsao_retorno ? new Date(editingItem.previsao_retorno) : null,
         });
       } else {

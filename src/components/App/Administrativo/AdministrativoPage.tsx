@@ -19,6 +19,7 @@ import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { PageFilterBar } from '@/components/ui/page-filter-bar';
 import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
 import { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
+import { useToast } from '@/hooks/useToast';
 
 import { QuickInputCard } from './QuickInputCard';
 import { TabelaRenovacoes } from './TabelaRenovacoes';
@@ -142,6 +143,8 @@ export function AdministrativoPage() {
   const [itemParaExcluir, setItemParaExcluir] = useState<{ id: number; nome: string } | null>(null);
   const [excluindo, setExcluindo] = useState(false);
 
+  const { success: toastSuccess, info: toastInfo, error: toastError } = useToast();
+
   // Extrair ano e mês do filtro de competência
   const ano = competenciaFiltro.filtro.ano;
   const mes = competenciaFiltro.filtro.mes;
@@ -161,7 +164,7 @@ export function AdministrativoPage() {
       // Usar range de datas do filtro de competência
       const { startDate: start, endDate: end } = competenciaFiltro.range;
 
-      // Carregar movimentações do mês
+      // Carregar movimentações do mês (por data)
       let query = supabase
         .from('movimentacoes_admin')
         .select('*, unidades(codigo)')
@@ -176,8 +179,34 @@ export function AdministrativoPage() {
       const { data: movData, error: movError } = await query;
       if (movError) throw movError;
 
+      // Buscar avisos prévios cujo mes_saida está no range mas a data do aviso é anterior
+      // (ex: aviso em dez/2025 com saída em fev/2026 deve aparecer quando filtro = fev/2026)
+      const mesSaidaStart = `${ano}-${String(mes).padStart(2, '0')}-01`;
+      const mesSaidaEnd = `${ano}-${String(mes).padStart(2, '0')}-28`;
+      let queryAvisos = supabase
+        .from('movimentacoes_admin')
+        .select('*, unidades(codigo)')
+        .eq('tipo', 'aviso_previo')
+        .gte('mes_saida', mesSaidaStart)
+        .lte('mes_saida', mesSaidaEnd)
+        .lt('data', startDate)
+        .order('data', { ascending: false });
+
+      if (unidade !== 'todos') {
+        queryAvisos = queryAvisos.eq('unidade_id', unidade);
+      }
+
+      const { data: avisosRetroativos } = await queryAvisos;
+
+      // Combinar resultados sem duplicatas
+      const idsJaPresentes = new Set((movData || []).map(m => m.id));
+      const movCombinado = [
+        ...(movData || []),
+        ...(avisosRetroativos || []).filter(a => !idsJaPresentes.has(a.id)),
+      ];
+
       // Buscar classificação dos alunos separadamente
-      const alunosIds = movData?.filter(m => m.aluno_id).map(m => m.aluno_id) || [];
+      const alunosIds = movCombinado.filter(m => m.aluno_id).map(m => m.aluno_id) || [];
       let alunosMap = new Map();
       
       if (alunosIds.length > 0) {
@@ -190,10 +219,10 @@ export function AdministrativoPage() {
       }
 
       // Enriquecer movimentações com classificação dos alunos
-      const movDataComAlunos = movData?.map(m => ({
+      const movDataComAlunos = movCombinado.map(m => ({
         ...m,
         alunos: m.aluno_id ? alunosMap.get(m.aluno_id) : null
-      })) || [];
+      }));
 
       // Carregar professores
       const { data: profData } = await supabase
@@ -407,11 +436,24 @@ export function AdministrativoPage() {
         }
       }
 
+      // Verificar se a data está fora do range do filtro atual
+      const dataMovimentacao = data.data;
+      if (dataMovimentacao && (dataMovimentacao < startDate || dataMovimentacao > endDate)) {
+        const isAvisoPrevio = data.tipo === 'aviso_previo';
+        toastInfo(
+          'Registro salvo com sucesso!',
+          isAvisoPrevio
+            ? `O aviso prévio foi salvo com data ${dataMovimentacao}. Ele aparecerá no mês de saída selecionado.`
+            : `A data ${dataMovimentacao} está fora do mês selecionado no filtro. Mude o filtro de competência para visualizar este registro.`
+        );
+      }
+
       await loadData();
       setEditingItem(null);
       return true;
     } catch (error) {
       console.error('Erro ao salvar:', error);
+      toastError('Erro ao salvar', 'Ocorreu um erro ao salvar o registro. Tente novamente.');
       return false;
     }
   }

@@ -71,7 +71,7 @@ export function ModalEvasao({ open, onOpenChange, onSave, editingItem, professor
           aluno_nome: editingItem.aluno_nome,
           professor_id: editingItem.professor_id?.toString() || '',
           motivo_saida_id: (editingItem as any).motivo_saida_id?.toString() || '',
-          observacoes: editingItem.motivo || '',
+          observacoes: editingItem.observacoes || '',
           tempo_permanencia_meses: editingItem.tempo_permanencia_meses?.toString() || '',
           valor_parcela_evasao: editingItem.valor_parcela_evasao?.toString() || '',
         });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -54,14 +54,16 @@ export function ModalAvisoPrevio({ open, onOpenChange, onSave, editingItem, prof
     loadMotivos();
   }, []);
 
-  // Gerar opções de mês de saída (próximos 6 meses)
-  const mesesSaida = Array.from({ length: 6 }, (_, i) => {
-    const d = new Date();
-    d.setMonth(d.getMonth() + i + 1);
-    const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
-    const label = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
-    return { value, label: label.charAt(0).toUpperCase() + label.slice(1) };
-  });
+  // Gerar opções de mês de saída (6 meses a partir do mês seguinte à data do aviso)
+  const mesesSaida = useMemo(() => {
+    const baseDate = formData.data || new Date();
+    return Array.from({ length: 6 }, (_, i) => {
+      const d = new Date(baseDate.getFullYear(), baseDate.getMonth() + i + 1, 1);
+      const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+      const label = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+      return { value, label: label.charAt(0).toUpperCase() + label.slice(1) };
+    });
+  }, [formData.data]);
 
   useEffect(() => {
     if (open) {
@@ -73,7 +75,7 @@ export function ModalAvisoPrevio({ open, onOpenChange, onSave, editingItem, prof
           valor_parcela: editingItem.valor_parcela_novo?.toString() || editingItem.valor_parcela_anterior?.toString() || '',
           professor_id: editingItem.professor_id?.toString() || '',
           motivo_saida_id: (editingItem as any).motivo_saida_id?.toString() || '',
-          observacoes: editingItem.motivo || '',
+          observacoes: editingItem.observacoes || '',
         });
       } else {
         const [ano, mes] = competencia.split('-');
@@ -136,7 +138,12 @@ export function ModalAvisoPrevio({ open, onOpenChange, onSave, editingItem, prof
               <Label className="text-slate-300">Data do Aviso</Label>
               <DatePicker
                 date={formData.data}
-                onDateChange={(date) => date && setFormData({ ...formData, data: date })}
+                onDateChange={(date) => {
+                  if (!date) return;
+                  const proximoMes = new Date(date.getFullYear(), date.getMonth() + 1, 1);
+                  const novoMesSaida = `${proximoMes.getFullYear()}-${String(proximoMes.getMonth() + 1).padStart(2, '0')}-01`;
+                  setFormData({ ...formData, data: date, mes_saida: novoMesSaida });
+                }}
               />
             </div>
             <div>
