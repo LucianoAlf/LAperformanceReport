@@ -6,7 +6,7 @@ import { format } from 'date-fns';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import { ptBR } from 'date-fns/locale';
 import { 
-  Users, DollarSign, BarChart3, Clock, Layers, AlertTriangle,
+  Users, DollarSign, BarChart3, Clock, Layers, AlertTriangle, BookOpen,
   Plus, Search, RotateCcw, Edit2, Trash2, Check, X, History,
   Calendar, Upload
 } from 'lucide-react';
@@ -91,6 +91,7 @@ export interface Turma {
 
 export interface KPIsAlunos {
   totalAtivos: number;
+  totalMatriculasAtivas: number;
   totalPagantes: number;
   totalBolsistas: number;
   mediaAlunosTurma: number;
@@ -143,6 +144,7 @@ export function AlunosPage() {
   const [turmas, setTurmas] = useState<Turma[]>([]);
   const [kpis, setKpis] = useState<KPIsAlunos>({
     totalAtivos: 0,
+    totalMatriculasAtivas: 0,
     totalPagantes: 0,
     totalBolsistas: 0,
     mediaAlunosTurma: 0,
@@ -230,18 +232,10 @@ export function AlunosPage() {
 
   async function carregarDados() {
     setLoading(true);
-    await Promise.all([
-      carregarAlunos(),
-      carregarTurmas(),
-      carregarOpcoes(),
-      carregarKPIs()
-    ]);
-    setLoading(false);
-  }
 
-  async function carregarAlunos() {
+    // ── FASE 1: disparar TUDO em paralelo ──
     // Query principal dos alunos
-    let query = supabase
+    let qAlunos = supabase
       .from('alunos')
       .select(`
         id, nome, classificacao, idade_atual, professor_atual_id, curso_id, modalidade,
@@ -250,48 +244,55 @@ export function AlunosPage() {
         is_segundo_curso, data_nascimento,
         professores:professor_atual_id(nome),
         cursos:curso_id(nome),
-        tipos_matricula:tipo_matricula_id(nome),
+        tipos_matricula:tipo_matricula_id(nome, conta_como_pagante, entra_ticket_medio, codigo),
         unidades:unidade_id(codigo)
       `)
       .order('nome');
-    
-    // Query de turmas implícitas (para enriquecer dados)
-    let turmasQuery = supabase
-      .from('vw_turmas_implicitas')
-      .select('id, unidade_id, professor_id, dia_semana, horario_inicio, total_alunos, nomes_alunos');
 
-    // Filtrar por unidade apenas se não for consolidado
+    // Turmas implícitas (usada por alunos + turmas + KPIs — buscar UMA VEZ)
+    let qTurmasView = supabase
+      .from('vw_turmas_implicitas')
+      .select('*');
+
     if (unidadeAtual && unidadeAtual !== 'todos') {
-      query = query.eq('unidade_id', unidadeAtual);
-      turmasQuery = turmasQuery.eq('unidade_id', unidadeAtual);
+      qAlunos = qAlunos.eq('unidade_id', unidadeAtual);
+      qTurmasView = qTurmasView.eq('unidade_id', unidadeAtual);
     }
-    
-    // Disparar alunos + turmas em paralelo
-    const [alunosResult, turmasResult] = await Promise.all([
-      query,
-      turmasQuery,
+
+    // Disparar tudo em paralelo: alunos, turmas view, anotações, turmas explícitas, opções, LTV
+    const [alunosR, turmasViewR, anotacoesR, ...outrosResults] = await Promise.all([
+      qAlunos,
+      qTurmasView,
+      // Anotações pendentes — são poucas, buscar TODAS sem .in() de 1000 IDs
+      supabase.from('anotacoes_alunos')
+        .select('aluno_id, texto, categoria, created_at')
+        .eq('resolvido', false)
+        .order('created_at', { ascending: false }),
+      // Turmas explícitas
+      carregarTurmasExplicitas(),
+      // Opções (selects)
+      carregarOpcoes(),
+      // LTV — única query de KPI que não dá pra calcular no JS
+      supabase.rpc('get_tempo_permanencia', {
+        p_unidade_id: unidadeAtual && unidadeAtual !== 'todos' ? unidadeAtual : null,
+      }),
     ]);
 
-    const { data, error } = alunosResult;
+    const turmasViewData = turmasViewR.data || [];
+    const permData = outrosResults[2]?.data;
 
-    if (!error && data) {
-      const turmasMap = new Map(turmasResult.data?.map(t => [
+    // ── FASE 2: processar alunos ──
+    const { data: alunosRaw, error } = alunosR;
+
+    if (!error && alunosRaw) {
+      const turmasMap = new Map(turmasViewData.map((t: any) => [
         `${t.unidade_id}-${t.professor_id}-${t.dia_semana}-${t.horario_inicio}`,
         t
-      ]) || []);
+      ]));
 
-      // Buscar anotações PENDENTES em paralelo (agora que temos os IDs)
-      const alunoIds = data.map((a: any) => a.id);
-      const { data: anotacoesData } = await supabase
-        .from('anotacoes_alunos')
-        .select('aluno_id, texto, categoria, created_at')
-        .in('aluno_id', alunoIds)
-        .eq('resolvido', false)
-        .order('created_at', { ascending: false });
-      
-      // Criar mapa de anotações PENDENTES por aluno (contagem + últimas anotações)
+      // Mapa de anotações pendentes
       const anotacoesMap = new Map<number, { total: number; ultimas: { texto: string; categoria: string }[] }>();
-      anotacoesData?.forEach(a => {
+      anotacoesR.data?.forEach(a => {
         const atual = anotacoesMap.get(a.aluno_id) || { total: 0, ultimas: [] };
         atual.total += 1;
         if (atual.ultimas.length < 3) {
@@ -300,9 +301,9 @@ export function AlunosPage() {
         anotacoesMap.set(a.aluno_id, atual);
       });
 
-      const alunosFormatados = data.map((a: any) => {
+      const alunosFormatados = alunosRaw.map((a: any) => {
         const turmaKey = `${a.unidade_id}-${a.professor_atual_id}-${a.dia_aula}-${a.horario_aula}`;
-        const turmaInfo = turmasMap.get(turmaKey);
+        const turmaInfo = turmasMap.get(turmaKey) as any;
         
         return {
           ...a,
@@ -319,7 +320,6 @@ export function AlunosPage() {
       });
 
       // Agrupar alunos com mesmo nome e data_nascimento (segundo curso)
-      // Chave: nome + data_nascimento + unidade_id
       const alunosAgrupados = new Map<string, Aluno[]>();
       alunosFormatados.forEach((aluno: Aluno) => {
         const chave = `${aluno.nome?.toLowerCase().trim()}-${aluno.data_nascimento || ''}-${aluno.unidade_id}`;
@@ -328,26 +328,19 @@ export function AlunosPage() {
         alunosAgrupados.set(chave, grupo);
       });
 
-      // Processar grupos: aluno principal + outros_cursos
       const alunosComSegundoCurso: Aluno[] = [];
       alunosAgrupados.forEach((grupo) => {
         if (grupo.length === 1) {
-          // Aluno sem segundo curso
           alunosComSegundoCurso.push(grupo[0]);
         } else {
-          // Aluno com múltiplos cursos - ordenar por is_segundo_curso (principal primeiro)
           const ordenado = grupo.sort((a, b) => {
             if (a.is_segundo_curso && !b.is_segundo_curso) return 1;
             if (!a.is_segundo_curso && b.is_segundo_curso) return -1;
             return 0;
           });
-          
           const principal = ordenado[0];
           const outrosCursos = ordenado.slice(1);
-          
-          // Calcular valor total (soma de todos os cursos)
           const valorTotal = grupo.reduce((acc, a) => acc + (a.valor_parcela || 0), 0);
-          
           alunosComSegundoCurso.push({
             ...principal,
             outros_cursos: outrosCursos,
@@ -357,19 +350,95 @@ export function AlunosPage() {
         }
       });
 
-      // Ordenar por nome
       alunosComSegundoCurso.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
-      
       setAlunos(alunosComSegundoCurso);
+
+      // ── FASE 3: calcular KPIs no JS (elimina 5 queries) ──
+      // IDs de tipos: 3=BOLSISTA_INT, 4=BOLSISTA_PARC
+      const ativosETrancados = alunosRaw.filter((a: any) =>
+        (a.status === 'ativo' || a.status === 'trancado')
+      );
+      const naoSegundoCurso = ativosETrancados.filter((a: any) =>
+        !a.is_segundo_curso
+      );
+
+      const totalAtivos = naoSegundoCurso.length;
+      const totalMatriculasAtivas = ativosETrancados.length; // inclui segundo curso + banda
+      const totalPagantes = naoSegundoCurso.filter((a: any) =>
+        a.tipos_matricula?.conta_como_pagante === true
+      ).length;
+      const totalBolsistas = naoSegundoCurso.filter((a: any) => {
+        const codigo = a.tipos_matricula?.codigo;
+        return codigo === 'BOLSISTA_INT' || codigo === 'BOLSISTA_PARC';
+      }).length;
+
+      // Ticket médio — agrupar por aluno único e somar valores
+      const alunosTicket = ativosETrancados.filter((a: any) =>
+        a.status === 'ativo' &&
+        a.tipos_matricula?.entra_ticket_medio === true &&
+        a.valor_parcela != null &&
+        a.status_pagamento !== 'sem_parcela'
+      );
+      const alunosUnicosTicket = new Map<string, number>();
+      alunosTicket.forEach((a: any) => {
+        const chave = `${a.nome?.toLowerCase().trim()}-${a.data_nascimento || ''}-${a.unidade_id}`;
+        alunosUnicosTicket.set(chave, (alunosUnicosTicket.get(chave) || 0) + (a.valor_parcela || 0));
+      });
+      const valoresUnicos = Array.from(alunosUnicosTicket.values());
+      const ticketMedio = valoresUnicos.length > 0
+        ? valoresUnicos.reduce((sum, v) => sum + v, 0) / valoresUnicos.length
+        : 0;
+
+      // LTV
+      let ltvMedio = 0;
+      if (permData && permData.length > 0) {
+        const comDados = permData.filter((p: any) => Number(p.tempo_permanencia_medio) > 0);
+        if (comDados.length > 0) {
+          ltvMedio = comDados.reduce((sum: number, p: any) => sum + Number(p.tempo_permanencia_medio), 0) / comDados.length;
+        }
+      }
+
+      // Turmas (da view já carregada)
+      const totalTurmas = turmasViewData.length;
+      const mediaAlunosTurma = totalTurmas > 0
+        ? turmasViewData.reduce((sum: number, t: any) => sum + (t.total_alunos || 0), 0) / totalTurmas
+        : 0;
+      const turmasSozinhos = turmasViewData.filter((t: any) => t.total_alunos === 1).length;
+
+      setKpis({
+        totalAtivos,
+        totalMatriculasAtivas,
+        totalPagantes,
+        totalBolsistas,
+        mediaAlunosTurma: Math.round(mediaAlunosTurma * 100) / 100,
+        ticketMedio: Math.round(ticketMedio),
+        ltvMedio: Math.round(ltvMedio * 10) / 10,
+        totalTurmas,
+        turmasSozinhos
+      });
     }
+
+    // ── FASE 4: processar turmas (view já carregada + explícitas já carregadas) ──
+    const turmasExplicitas = outrosResults[0] as Turma[];
+    const turmasImplicitasMarcadas = turmasViewData.map((t: any) => ({
+      ...t,
+      tipo: 'implicita' as const,
+    }));
+    const idsExplicitasJaVinculadas = new Set(
+      turmasImplicitasMarcadas
+        .filter((t: any) => t.turma_explicita_id)
+        .map((t: any) => t.turma_explicita_id)
+    );
+    const turmasExplicitasFiltradas = turmasExplicitas.filter(
+      t => !idsExplicitasJaVinculadas.has(t.turma_explicita_id)
+    );
+    setTurmas([...turmasImplicitasMarcadas, ...turmasExplicitasFiltradas]);
+
+    setLoading(false);
   }
 
-  async function carregarTurmas() {
-    // Carregar turmas implícitas + explícitas em PARALELO
-    let queryImplicitas = supabase
-      .from('vw_turmas_implicitas')
-      .select('*');
-    
+  // Busca turmas explícitas e retorna Turma[] (chamada em paralelo por carregarDados)
+  async function carregarTurmasExplicitas(): Promise<Turma[]> {
     let queryExplicitas = supabase
       .from('turmas_explicitas')
       .select(`
@@ -380,21 +449,12 @@ export function AlunosPage() {
       .eq('ativo', true);
     
     if (unidadeAtual && unidadeAtual !== 'todos') {
-      queryImplicitas = queryImplicitas.eq('unidade_id', unidadeAtual);
       queryExplicitas = queryExplicitas.eq('unidade_id', unidadeAtual);
     }
     
-    // Disparar ambas em paralelo
-    const [implicitasResult, explicitasResult] = await Promise.all([
-      queryImplicitas,
-      queryExplicitas,
-    ]);
+    const { data: turmasExplicitasRaw } = await queryExplicitas;
 
-    const turmasImplicitas = implicitasResult.data;
-    const turmasExplicitasRaw = explicitasResult.data;
-
-    // Buscar TODOS os alunos de turmas explícitas em UMA ÚNICA query (elimina N+1)
-    const turmasExplicitas: Turma[] = [];
+    const resultado: Turma[] = [];
     if (turmasExplicitasRaw && turmasExplicitasRaw.length > 0) {
       const turmaIds = turmasExplicitasRaw.map(t => t.id);
       const { data: todosAlunosTurmas } = await supabase
@@ -402,7 +462,6 @@ export function AlunosPage() {
         .select('turma_id, aluno_id, alunos!inner(nome)')
         .in('turma_id', turmaIds);
 
-      // Agrupar alunos por turma_id
       const alunosPorTurma = new Map<number, { aluno_id: number; nome: string }[]>();
       todosAlunosTurmas?.forEach((at: any) => {
         const lista = alunosPorTurma.get(at.turma_id) || [];
@@ -412,7 +471,7 @@ export function AlunosPage() {
 
       for (const turma of turmasExplicitasRaw) {
         const alunosDaTurma = alunosPorTurma.get(turma.id) || [];
-        turmasExplicitas.push({
+        resultado.push({
           id: turma.id,
           turma_explicita_id: turma.id,
           tipo: 'explicita',
@@ -435,28 +494,7 @@ export function AlunosPage() {
         });
       }
     }
-
-    // Marcar turmas implícitas (agora já trazem sala_id/sala_nome/turma_explicita_id da view)
-    const turmasImplicitasMarcadas = (turmasImplicitas || []).map(t => ({
-      ...t,
-      tipo: 'implicita' as const,
-    }));
-
-    // IDs de turmas explícitas já vinculadas via view implícita (evitar duplicação)
-    const idsExplicitasJaVinculadas = new Set(
-      turmasImplicitasMarcadas
-        .filter(t => t.turma_explicita_id)
-        .map(t => t.turma_explicita_id)
-    );
-
-    // Filtrar turmas explícitas que NÃO já aparecem nas implícitas (ex: bandas sem alunos implícitos)
-    const turmasExplicitasFiltradas = turmasExplicitas.filter(
-      t => !idsExplicitasJaVinculadas.has(t.turma_explicita_id)
-    );
-
-    // Combinar turmas implícitas e explícitas (sem duplicação)
-    const todasTurmas = [...turmasImplicitasMarcadas, ...turmasExplicitasFiltradas];
-    setTurmas(todasTurmas);
+    return resultado;
   }
 
   async function carregarOpcoes() {
@@ -496,99 +534,6 @@ export function AlunosPage() {
     if (tiposResult.data) setTiposMatricula(tiposResult.data);
     if (salasResult.data) setSalas(salasResult.data);
     if (horariosResult.data) setHorarios(horariosResult.data);
-  }
-
-  async function carregarKPIs() {
-    // Preparar queries (aplicar filtro de unidade a cada uma)
-    let qAtivos = supabase.from('alunos')
-      .select('*', { count: 'exact', head: true })
-      .in('status', ['ativo', 'trancado'])
-      .or('is_segundo_curso.is.null,is_segundo_curso.eq.false');
-
-    let qPagantes = supabase.from('alunos')
-      .select('id, tipos_matricula!inner(conta_como_pagante)')
-      .in('status', ['ativo', 'trancado'])
-      .eq('tipos_matricula.conta_como_pagante', true)
-      .or('is_segundo_curso.is.null,is_segundo_curso.eq.false');
-
-    let qBolsistas = supabase.from('alunos')
-      .select('id, tipos_matricula!inner(codigo)')
-      .in('status', ['ativo', 'trancado'])
-      .in('tipos_matricula.codigo', ['BOLSISTA_INT', 'BOLSISTA_PARC'])
-      .or('is_segundo_curso.is.null,is_segundo_curso.eq.false');
-
-    let qTicket = supabase.from('alunos')
-      .select('nome, data_nascimento, unidade_id, valor_parcela, tipos_matricula!inner(entra_ticket_medio)')
-      .eq('status', 'ativo')
-      .eq('tipos_matricula.entra_ticket_medio', true)
-      .not('valor_parcela', 'is', null)
-      .neq('status_pagamento', 'sem_parcela');
-
-    let qTurmas = supabase.from('vw_turmas_implicitas').select('total_alunos');
-
-    if (unidadeAtual && unidadeAtual !== 'todos') {
-      qAtivos = qAtivos.eq('unidade_id', unidadeAtual);
-      qPagantes = qPagantes.eq('unidade_id', unidadeAtual);
-      qBolsistas = qBolsistas.eq('unidade_id', unidadeAtual);
-      qTicket = qTicket.eq('unidade_id', unidadeAtual);
-      qTurmas = qTurmas.eq('unidade_id', unidadeAtual);
-    }
-
-    // Disparar TODAS as 6 queries em PARALELO (de ~6 roundtrips para 1)
-    const [ativosR, pagantesR, bolsistasR, ticketR, permR, turmasR] = await Promise.all([
-      qAtivos,
-      qPagantes,
-      qBolsistas,
-      qTicket,
-      supabase.rpc('get_tempo_permanencia', {
-        p_unidade_id: unidadeAtual && unidadeAtual !== 'todos' ? unidadeAtual : null,
-      }),
-      qTurmas,
-    ]);
-
-    const totalAtivos = ativosR.count || 0;
-    const totalPagantes = pagantesR.data?.length || 0;
-    const totalBolsistas = bolsistasR.data?.length || 0;
-
-    // Ticket médio — agrupar por aluno único e somar valores
-    const alunosUnicos = new Map<string, number>();
-    ticketR.data?.forEach((a: any) => {
-      const chave = `${a.nome?.toLowerCase().trim()}-${a.data_nascimento || ''}-${a.unidade_id}`;
-      const valorAtual = alunosUnicos.get(chave) || 0;
-      alunosUnicos.set(chave, valorAtual + (a.valor_parcela || 0));
-    });
-    const valoresUnicos = Array.from(alunosUnicos.values());
-    const ticketMedio = valoresUnicos.length > 0
-      ? valoresUnicos.reduce((sum, v) => sum + v, 0) / valoresUnicos.length
-      : 0;
-
-    // LTV médio — baseado em evasões (regra: ≥4 meses, excluir bolsistas/banda/2º curso)
-    let ltvMedio = 0;
-    if (permR.data && permR.data.length > 0) {
-      const comDados = permR.data.filter((p: any) => Number(p.tempo_permanencia_medio) > 0);
-      if (comDados.length > 0) {
-        ltvMedio = comDados.reduce((sum: number, p: any) => sum + Number(p.tempo_permanencia_medio), 0) / comDados.length;
-      }
-    }
-
-    // Turmas
-    const turmasData = turmasR.data;
-    const totalTurmas = turmasData?.length || 0;
-    const mediaAlunosTurma = turmasData && turmasData.length > 0
-      ? turmasData.reduce((sum, t) => sum + (t.total_alunos || 0), 0) / turmasData.length
-      : 0;
-    const turmasSozinhos = turmasData?.filter(t => t.total_alunos === 1).length || 0;
-
-    setKpis({
-      totalAtivos,
-      totalPagantes,
-      totalBolsistas,
-      mediaAlunosTurma: Math.round(mediaAlunosTurma * 100) / 100,
-      ticketMedio: Math.round(ticketMedio),
-      ltvMedio: Math.round(ltvMedio * 10) / 10,
-      totalTurmas,
-      turmasSozinhos
-    });
   }
 
   // Filtrar alunos
@@ -1058,13 +1003,20 @@ export function AlunosPage() {
       </div>
 
       {/* KPI Cards */}
-      <section data-tour="alunos-kpis" className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
+      <section data-tour="alunos-kpis" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
+        <KPICard
+          title="Matrículas Ativas"
+          value={kpis.totalMatriculasAtivas}
+          subvalue={`${kpis.totalMatriculasAtivas - kpis.totalAtivos} 2º curso`}
+          icon={BookOpen}
+          variant="emerald"
+        />
         <KPICard
           title="Alunos Ativos"
           value={kpis.totalAtivos}
           subvalue="na unidade"
           icon={Users}
-          variant="emerald"
+          variant="cyan"
         />
         <KPICard
           title="Pagantes"
@@ -1093,13 +1045,6 @@ export function AlunosPage() {
           subvalue="meses"
           icon={Clock}
           variant="green"
-        />
-        <KPICard
-          title="Turmas"
-          value={kpis.totalTurmas}
-          subvalue="ativas"
-          icon={Layers}
-          variant="cyan"
         />
         <div className={`bg-red-900/30 border border-red-500/50 rounded-xl p-4 ${kpis.turmasSozinhos > 0 ? 'animate-pulse' : ''}`}>
           <div className="flex items-center justify-between mb-2">
@@ -1140,6 +1085,7 @@ export function AlunosPage() {
             tiposMatricula={tiposMatricula}
             salas={salas}
             horarios={horarios}
+            totalTurmas={kpis.totalTurmas}
             onNovoAluno={() => setModalNovoAluno(true)}
             onRecarregar={carregarDados}
             verificarTurmaAoSalvar={verificarTurmaAoSalvar}

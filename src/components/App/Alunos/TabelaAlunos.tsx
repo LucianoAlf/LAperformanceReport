@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical, Play, MessageSquarePlus, MessageCircle, CheckCircle2, Circle, FileEdit, ChevronDown, ChevronRight, Music2 } from 'lucide-react';
+import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical, Play, MessageSquarePlus, MessageCircle, CheckCircle2, Circle, FileEdit, ChevronDown, ChevronRight, Music2, Layers } from 'lucide-react';
 import { CelulaEditavel } from '@/components/ui/CelulaEditavel';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
@@ -37,6 +37,7 @@ interface TabelaAlunosProps {
   tiposMatricula: {id: number, nome: string}[];
   salas: {id: number, nome: string, capacidade_maxima: number}[];
   horarios: {id: number, nome: string, hora_inicio: string}[];
+  totalTurmas?: number;
   onNovoAluno: () => void;
   onRecarregar: () => void;
   verificarTurmaAoSalvar: (aluno: Aluno) => Promise<boolean>;
@@ -57,6 +58,7 @@ export function TabelaAlunos({
   tiposMatricula,
   salas,
   horarios,
+  totalTurmas,
   onNovoAluno,
   onRecarregar,
   verificarTurmaAoSalvar,
@@ -768,8 +770,15 @@ export function TabelaAlunos({
     <>
       {/* Filtros */}
       <div data-tour="filtros-alunos" className="p-4 bg-slate-800/50 border-b border-slate-700">
-        {/* Resumo de Turmas */}
+        {/* Alunos Ativos + Resumo de Turmas */}
         <div className="mb-3 flex items-center gap-3 text-sm">
+          {totalTurmas !== undefined && (
+            <span className="flex items-center gap-1.5 bg-cyan-500/15 text-cyan-400 border border-cyan-500/30 px-3 py-1 rounded-lg text-xs font-semibold">
+              <Layers className="w-3.5 h-3.5" />
+              {totalTurmas} turmas ativas
+            </span>
+          )}
+          <span className="text-slate-600">|</span>
           <span className="text-slate-400">Turmas:</span>
           <div className="flex items-center gap-2">
             <button 
