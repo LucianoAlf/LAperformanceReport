@@ -102,6 +102,8 @@ export interface KPIsAlunos {
   ltvMedio: number;
   totalTurmas: number;
   turmasSozinhos: number;
+  matriculasSegundoCurso?: number;
+  matriculasBanda?: number;
 }
 
 export interface Filtros {
@@ -369,6 +371,14 @@ export function AlunosPage() {
 
       const totalAtivos = naoSegundoCurso.length;
       const totalMatriculasAtivas = ativosETrancados.length; // inclui segundo curso + banda
+      
+      // Separar banda de segundo curso
+      const matriculasBanda = ativosETrancados.filter((a: any) =>
+        a.cursos?.nome?.toLowerCase().includes('banda')
+      ).length;
+      const matriculasSegundoCurso = ativosETrancados.filter((a: any) =>
+        a.is_segundo_curso && !a.cursos?.nome?.toLowerCase().includes('banda')
+      ).length;
       const totalPagantes = naoSegundoCurso.filter((a: any) =>
         a.tipos_matricula?.conta_como_pagante === true
       ).length;
@@ -413,6 +423,8 @@ export function AlunosPage() {
       setKpis({
         totalAtivos,
         totalMatriculasAtivas,
+        matriculasSegundoCurso,
+        matriculasBanda,
         totalPagantes,
         totalBolsistas,
         mediaAlunosTurma: Math.round(mediaAlunosTurma * 100) / 100,
@@ -1012,7 +1024,7 @@ export function AlunosPage() {
         <KPICard
           title="Matrículas Ativas"
           value={kpis.totalMatriculasAtivas}
-          subvalue={`${kpis.totalMatriculasAtivas - kpis.totalAtivos} 2º curso`}
+          subvalue={`${kpis.matriculasSegundoCurso || 0} 2º curso | ${kpis.matriculasBanda || 0} banda`}
           icon={BookOpen}
           variant="emerald"
         />
