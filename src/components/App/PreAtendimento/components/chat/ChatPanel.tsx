@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Phone, Pause, Play, Send, FileText, Loader2, ChevronUp, ChevronDown,
   Paperclip, ImageIcon, Mic, File as FileIcon, X, Search, Square, Trash2, Settings, MessageSquare, Smile,
+  Clock, CalendarClock, Check,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -85,6 +86,72 @@ export function ChatPanel({
   const inputImagemRef = useRef<HTMLInputElement>(null);
   const inputDocumentoRef = useRef<HTMLInputElement>(null);
   const inputAudioRef = useRef<HTMLInputElement>(null);
+
+  // --- Agendamento de mensagens ---
+  const [agendarAberto, setAgendarAberto] = useState(false);
+  const [agendarData, setAgendarData] = useState('');
+  const [agendarHora, setAgendarHora] = useState('');
+  const [salvandoAgendamento, setSalvandoAgendamento] = useState(false);
+  const [msgsAgendadas, setMsgsAgendadas] = useState<any[]>([]);
+  const [mostrarAgendadas, setMostrarAgendadas] = useState(false);
+
+  // Buscar mensagens agendadas pendentes desta conversa
+  useEffect(() => {
+    if (!conversa?.id) return;
+    supabase
+      .from('crm_mensagens_agendadas')
+      .select('*')
+      .eq('conversa_id', conversa.id)
+      .eq('status', 'pendente')
+      .order('agendada_para', { ascending: true })
+      .then(({ data }) => setMsgsAgendadas(data || []));
+  }, [conversa?.id]);
+
+  // Agendar mensagem
+  const handleAgendarMensagem = useCallback(async () => {
+    const msg = texto.trim();
+    if (!msg || !agendarData || !agendarHora) return;
+
+    setSalvandoAgendamento(true);
+    try {
+      const agendadaPara = new Date(`${agendarData}T${agendarHora}:00`).toISOString();
+
+      const { data, error } = await supabase
+        .from('crm_mensagens_agendadas')
+        .insert({
+          conversa_id: conversa.id,
+          lead_id: lead.id,
+          conteudo: msg,
+          tipo: 'texto',
+          agendada_para: agendadaPara,
+          criado_por: 'andreza',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setMsgsAgendadas(prev => [...prev, data]);
+      setTexto('');
+      setAgendarAberto(false);
+      setAgendarData('');
+      setAgendarHora('');
+      if (textareaRef.current) textareaRef.current.style.height = 'auto';
+    } catch (err) {
+      console.error('[ChatPanel] Erro ao agendar mensagem:', err);
+    } finally {
+      setSalvandoAgendamento(false);
+    }
+  }, [texto, agendarData, agendarHora, conversa.id, lead.id]);
+
+  // Cancelar mensagem agendada
+  const handleCancelarAgendada = useCallback(async (id: number) => {
+    await supabase
+      .from('crm_mensagens_agendadas')
+      .update({ status: 'cancelada' })
+      .eq('id', id);
+    setMsgsAgendadas(prev => prev.filter(m => m.id !== id));
+  }, []);
 
   // --- Gravação de áudio ---
   const [gravando, setGravando] = useState(false);
@@ -1178,13 +1245,89 @@ export function ChatPanel({
                   {enviando ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
                 </button>
               ) : texto.trim() ? (
-                <button
-                  onClick={handleEnviar}
-                  disabled={enviando}
-                  className="p-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white transition"
-                >
-                  {enviando ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-                </button>
+                <div className="flex items-end gap-1 relative">
+                  {/* Botão agendar */}
+                  <Tooltip content="Agendar envio" side="top">
+                    <button
+                      onClick={() => {
+                        if (!agendarData) {
+                          const amanha = new Date();
+                          amanha.setDate(amanha.getDate() + 1);
+                          setAgendarData(amanha.toISOString().split('T')[0]);
+                          setAgendarHora('09:00');
+                        }
+                        setAgendarAberto(!agendarAberto);
+                      }}
+                      className={cn(
+                        "p-2.5 rounded-xl transition",
+                        agendarAberto
+                          ? "text-cyan-400 bg-cyan-500/10"
+                          : "text-slate-400 hover:text-cyan-400 hover:bg-cyan-500/10"
+                      )}
+                    >
+                      <CalendarClock className="w-5 h-5" />
+                    </button>
+                  </Tooltip>
+
+                  {/* Popover de agendamento */}
+                  {agendarAberto && (
+                    <div className="absolute bottom-full right-0 mb-2 bg-slate-800 border border-slate-700 rounded-xl shadow-xl p-4 min-w-[260px] z-20 animate-in fade-in slide-in-from-bottom-2 duration-150">
+                      <div className="flex items-center gap-2 mb-3">
+                        <CalendarClock className="w-4 h-4 text-cyan-400" />
+                        <span className="text-sm font-medium text-white">Agendar mensagem</span>
+                      </div>
+                      <div className="space-y-2">
+                        <div>
+                          <label className="text-[10px] text-slate-400 uppercase tracking-wider">Data</label>
+                          <input
+                            type="date"
+                            value={agendarData}
+                            onChange={(e) => setAgendarData(e.target.value)}
+                            min={new Date().toISOString().split('T')[0]}
+                            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-slate-200 focus:ring-1 focus:ring-cyan-500 outline-none mt-1"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-400 uppercase tracking-wider">Horário</label>
+                          <input
+                            type="time"
+                            value={agendarHora}
+                            onChange={(e) => setAgendarHora(e.target.value)}
+                            className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-1.5 text-sm text-slate-200 focus:ring-1 focus:ring-cyan-500 outline-none mt-1"
+                          />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 mt-3">
+                        <button
+                          onClick={() => setAgendarAberto(false)}
+                          className="flex-1 px-3 py-1.5 text-xs text-slate-400 hover:text-white bg-slate-700 hover:bg-slate-600 rounded-lg transition"
+                        >
+                          Cancelar
+                        </button>
+                        <button
+                          onClick={handleAgendarMensagem}
+                          disabled={salvandoAgendamento || !agendarData || !agendarHora}
+                          className="flex-1 px-3 py-1.5 text-xs text-white bg-cyan-600 hover:bg-cyan-500 rounded-lg transition disabled:opacity-50 flex items-center justify-center gap-1"
+                        >
+                          {salvandoAgendamento ? <Loader2 className="w-3 h-3 animate-spin" /> : <Clock className="w-3 h-3" />}
+                          Agendar
+                        </button>
+                      </div>
+                      <p className="text-[10px] text-slate-500 mt-2 text-center">
+                        Mensagem será enviada automaticamente
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Botão enviar */}
+                  <button
+                    onClick={handleEnviar}
+                    disabled={enviando}
+                    className="p-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white transition"
+                  >
+                    {enviando ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                  </button>
+                </div>
               ) : (
                 <Tooltip content="Gravar áudio" side="top">
                   <button
@@ -1197,6 +1340,39 @@ export function ChatPanel({
               )}
             </div>
           </div>
+
+          {/* Banner de mensagens agendadas */}
+          {msgsAgendadas.length > 0 && (
+            <div className="mt-2">
+              <button
+                onClick={() => setMostrarAgendadas(!mostrarAgendadas)}
+                className="flex items-center gap-1.5 text-[10px] text-cyan-400 hover:text-cyan-300 transition"
+              >
+                <CalendarClock className="w-3 h-3" />
+                {msgsAgendadas.length} mensagem(ns) agendada(s)
+                <ChevronDown className={cn("w-3 h-3 transition-transform", mostrarAgendadas && "rotate-180")} />
+              </button>
+              {mostrarAgendadas && (
+                <div className="mt-1.5 space-y-1">
+                  {msgsAgendadas.map(m => (
+                    <div key={m.id} className="flex items-center gap-2 bg-cyan-500/5 border border-cyan-500/20 rounded-lg px-3 py-1.5">
+                      <Clock className="w-3 h-3 text-cyan-400 flex-shrink-0" />
+                      <span className="text-[11px] text-slate-300 truncate flex-1">{m.conteudo}</span>
+                      <span className="text-[10px] text-cyan-400 flex-shrink-0">
+                        {new Date(m.agendada_para).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      <button
+                        onClick={() => handleCancelarAgendada(m.id)}
+                        className="p-0.5 rounded text-slate-500 hover:text-red-400 transition flex-shrink-0"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 

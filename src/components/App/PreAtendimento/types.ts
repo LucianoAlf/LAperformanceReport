@@ -13,6 +13,26 @@ export interface PipelineEtapa {
   ativo: boolean;
 }
 
+// Etiquetas do CRM
+export interface EtiquetaCRM {
+  id: number;
+  nome: string;
+  cor: string;
+  icone: string | null;
+  descricao: string | null;
+  ordem: number;
+  ativo: boolean;
+}
+
+export interface LeadEtiqueta {
+  id: number;
+  lead_id: number;
+  etiqueta_id: number;
+  adicionada_por: string | null;
+  created_at: string;
+  crm_etiquetas?: EtiquetaCRM | null;
+}
+
 // Motivo de não comparecimento (lookup)
 export interface MotivoNaoComparecimento {
   id: number;

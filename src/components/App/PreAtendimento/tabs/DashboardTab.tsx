@@ -1,11 +1,17 @@
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Inbox, CalendarDays, Building2, GraduationCap, Tag,
   AlertTriangle, Bell, TrendingUp, Target, Zap,
-  MessageSquare, PhoneCall, Clock, Ban
+  MessageSquare, PhoneCall, Clock, Ban, Send
 } from 'lucide-react';
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip,
+  ResponsiveContainer, Legend,
+} from 'recharts';
 import { KPICard } from '@/components/ui/KPICard';
 import { FunnelChart } from '@/components/ui/FunnelChart';
 import { DistributionChart } from '@/components/ui/DistributionChart';
+import { supabase } from '@/lib/supabase';
 import { useLeadsCRM } from '../hooks/useLeadsCRM';
 import type { LeadCRM } from '../types';
 
@@ -17,6 +23,80 @@ interface DashboardTabProps {
 
 export function DashboardTab({ unidadeId, ano, mes }: DashboardTabProps) {
   const { leads, kpis, funil, loading, error } = useLeadsCRM({ unidadeId, ano, mes });
+
+  // ── Métricas de mensagens (crm_mensagens) ───────────────────────────────
+  const [metricasMsgs, setMetricasMsgs] = useState<{
+    totalMsgs: number;
+    msgsHoje: number;
+    mediaMsgsDia: number;
+    tempoRespostaReal: string;
+  }>({ totalMsgs: 0, msgsHoje: 0, mediaMsgsDia: 0, tempoRespostaReal: '--' });
+
+  useEffect(() => {
+    const inicioMes = `${ano}-${String(mes).padStart(2, '0')}-01`;
+    const fimMes = mes === 12
+      ? `${ano + 1}-01-01`
+      : `${ano}-${String(mes + 1).padStart(2, '0')}-01`;
+    const hoje = new Date().toISOString().split('T')[0];
+
+    // Total de mensagens enviadas (saída) no mês
+    supabase.from('crm_mensagens')
+      .select('id, created_at, direcao', { count: 'exact' })
+      .eq('direcao', 'saida')
+      .gte('created_at', inicioMes)
+      .lt('created_at', fimMes)
+      .then(({ count }) => {
+        const total = count || 0;
+        const diasPassados = Math.max(1, new Date().getDate());
+        const msgsHojePromise = supabase.from('crm_mensagens')
+          .select('id', { count: 'exact', head: true })
+          .eq('direcao', 'saida')
+          .gte('created_at', hoje)
+          .lt('created_at', hoje + 'T23:59:59');
+
+        msgsHojePromise.then(({ count: countHoje }) => {
+          setMetricasMsgs(prev => ({
+            ...prev,
+            totalMsgs: total,
+            msgsHoje: countHoje || 0,
+            mediaMsgsDia: Math.round(total / diasPassados),
+          }));
+        });
+      });
+
+    // Tempo médio de resposta real (diferença entre msg entrada e próxima saída)
+    supabase.rpc('calcular_tempo_medio_resposta_crm', {
+      p_inicio: inicioMes,
+      p_fim: fimMes,
+    }).then(({ data }) => {
+      if (data && data > 0) {
+        const min = Math.round(data);
+        setMetricasMsgs(prev => ({
+          ...prev,
+          tempoRespostaReal: min < 60 ? `${min}min` : `${Math.round(min / 60)}h`,
+        }));
+      }
+    });
+  }, [ano, mes]);
+
+  // ── Dados de evolução diária ─────────────────────────────────────────────
+  const evolucaoDiaria = useMemo(() => {
+    if (!leads.length) return [];
+    const diasNoMes = new Date(ano, mes, 0).getDate();
+    const dados: { dia: string; leads: number; agendados: number; matriculas: number }[] = [];
+
+    for (let d = 1; d <= diasNoMes; d++) {
+      const diaStr = `${ano}-${String(mes).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      const diaLabel = String(d).padStart(2, '0');
+
+      const leadsNoDia = leads.filter(l => l.data_contato === diaStr).length;
+      const agendadosNoDia = leads.filter(l => l.data_experimental === diaStr).length;
+      const matriculasNoDia = leads.filter(l => l.data_conversao === diaStr).length;
+
+      dados.push({ dia: diaLabel, leads: leadsNoDia, agendados: agendadosNoDia, matriculas: matriculasNoDia });
+    }
+    return dados;
+  }, [leads, ano, mes]);
 
   if (loading) {
     return (
@@ -90,6 +170,38 @@ export function DashboardTab({ unidadeId, ano, mes }: DashboardTabProps) {
           value={`${kpis.taxaTags.toFixed(0)}%`}
           subvalue={`Faltam ${kpis.tagsPendentes} leads`}
           variant={kpis.taxaTags >= 90 ? 'emerald' : kpis.taxaTags >= 70 ? 'amber' : 'rose'}
+        />
+      </div>
+
+      {/* KPIs de Mensagens */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <KPICard
+          icon={Send}
+          label="Msgs Enviadas"
+          value={metricasMsgs.totalMsgs}
+          subvalue={`+${metricasMsgs.msgsHoje} hoje`}
+          variant="violet"
+        />
+        <KPICard
+          icon={MessageSquare}
+          label="Média/Dia"
+          value={metricasMsgs.mediaMsgsDia}
+          subvalue="msgs enviadas"
+          variant="cyan"
+        />
+        <KPICard
+          icon={Clock}
+          label="Tempo Resposta"
+          value={metricasMsgs.tempoRespostaReal}
+          subvalue="média real"
+          variant={metricasMsgs.tempoRespostaReal === '--' ? 'default' : 'emerald'}
+        />
+        <KPICard
+          icon={PhoneCall}
+          label="Sem Resposta"
+          value={leads.filter(l => l.qtd_tentativas_sem_resposta > 0).length}
+          subvalue="leads sem retorno"
+          variant="rose"
         />
       </div>
 
@@ -207,15 +319,47 @@ export function DashboardTab({ unidadeId, ano, mes }: DashboardTabProps) {
           <EstadoVazio titulo="Sem dados" mensagem="Nenhum lead com canal registrado." />
         )}
 
-        {/* Placeholder para gráfico de evolução diária */}
+        {/* Gráfico de Evolução Diária */}
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-5">
           <div className="flex items-center gap-2 mb-4">
             <TrendingUp className="w-5 h-5 text-cyan-400" />
             <h3 className="text-sm font-semibold text-white">Evolução Diária</h3>
           </div>
-          <div className="h-40 flex items-center justify-center border border-dashed border-slate-700 rounded-xl">
-            <p className="text-slate-500 text-xs">📈 Gráfico Recharts · Leads/dia · Agendamentos/dia · Visitas/dia</p>
-          </div>
+          {evolucaoDiaria.length > 0 ? (
+            <ResponsiveContainer width="100%" height={180}>
+              <AreaChart data={evolucaoDiaria} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="gradLeads" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="gradAgend" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="gradMatric" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#22c55e" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#22c55e" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                <XAxis dataKey="dia" tick={{ fill: '#64748b', fontSize: 10 }} tickLine={false} axisLine={false} />
+                <YAxis tick={{ fill: '#64748b', fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} />
+                <RechartsTooltip
+                  contentStyle={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 8, fontSize: 12 }}
+                  labelStyle={{ color: '#94a3b8' }}
+                />
+                <Legend wrapperStyle={{ fontSize: 10, color: '#94a3b8' }} />
+                <Area type="monotone" dataKey="leads" name="Leads" stroke="#06b6d4" fill="url(#gradLeads)" strokeWidth={2} />
+                <Area type="monotone" dataKey="agendados" name="Agendados" stroke="#8b5cf6" fill="url(#gradAgend)" strokeWidth={2} />
+                <Area type="monotone" dataKey="matriculas" name="Matrículas" stroke="#22c55e" fill="url(#gradMatric)" strokeWidth={2} />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-40 flex items-center justify-center border border-dashed border-slate-700 rounded-xl">
+              <p className="text-slate-500 text-xs">Sem dados para o período</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -233,7 +377,7 @@ interface AlertaBannerData {
   variante: 'purple' | 'warning' | 'success';
 }
 
-function AlertaBanner(props: { alerta: AlertaBannerData; index: number }) {
+function AlertaBanner(props: { key?: React.Key; alerta: AlertaBannerData; index: number }) {
   const { alerta, index } = props;
   const variantStyles = {
     purple: 'bg-violet-500/10 border-violet-500/30 text-violet-200',
@@ -270,7 +414,7 @@ function AlertaItem({ icone, texto }: { icone: string; texto: string }) {
   );
 }
 
-function BarraProgresso(props: { label: string; icone: string; valor: number; total: number }) {
+function BarraProgresso(props: { key?: React.Key; label: string; icone: string; valor: number; total: number }) {
   const { label, icone, valor, total } = props;
   const pct = total > 0 ? (valor / total) * 100 : 0;
   const cor = pct >= 90 ? 'bg-emerald-500' : pct >= 70 ? 'bg-amber-500' : 'bg-rose-500';

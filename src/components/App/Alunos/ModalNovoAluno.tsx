@@ -11,6 +11,17 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
 
+export interface DadosIniciaisMatricula {
+  aluno_nome?: string;
+  unidade_id?: string;
+  curso_id?: number | null;
+  canal_origem_id?: number | null;
+  professor_experimental_id?: number | null;
+  telefone?: string;
+  email?: string;
+  lead_id?: number;
+}
+
 interface ModalNovoAlunoProps {
   onClose: () => void;
   onSalvar: () => void;
@@ -20,6 +31,7 @@ interface ModalNovoAlunoProps {
   salas: {id: number, nome: string, capacidade_maxima: number}[];
   horarios: {id: number, nome: string, hora_inicio: string}[];
   unidadeAtual: string;
+  dadosIniciais?: DadosIniciaisMatricula;
 }
 
 const DIAS_SEMANA = [
@@ -49,7 +61,8 @@ export function ModalNovoAluno({
   tiposMatricula,
   salas,
   horarios,
-  unidadeAtual
+  unidadeAtual,
+  dadosIniciais,
 }: ModalNovoAlunoProps) {
   const { isAdmin } = useAuth();
   const [saving, setSaving] = useState(false);
@@ -59,14 +72,14 @@ export function ModalNovoAluno({
   
   const [formData, setFormData] = useState({
     data: new Date(),
-    aluno_nome: '',
-    unidade_id: unidadeAtual,
+    aluno_nome: dadosIniciais?.aluno_nome || '',
+    unidade_id: dadosIniciais?.unidade_id || unidadeAtual,
     aluno_data_nascimento: null as Date | null,
     tipo_aluno: 'pagante',
-    curso_id: null as number | null,
-    canal_origem_id: null as number | null,
-    teve_experimental: false,
-    professor_experimental_id: null as number | null,
+    curso_id: dadosIniciais?.curso_id ?? null as number | null,
+    canal_origem_id: dadosIniciais?.canal_origem_id ?? null as number | null,
+    teve_experimental: !!dadosIniciais?.professor_experimental_id,
+    professor_experimental_id: dadosIniciais?.professor_experimental_id ?? null as number | null,
     professor_fixo_id: null as number | null,
     valor_passaporte: null as number | null,
     forma_pagamento_passaporte: '',

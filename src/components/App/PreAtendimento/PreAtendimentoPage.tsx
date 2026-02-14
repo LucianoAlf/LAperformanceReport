@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useOutletContext, useNavigate } from 'react-router-dom';
+import { useOutletContext } from 'react-router-dom';
 import {
   LayoutDashboard,
   KanbanSquare,
@@ -26,6 +26,7 @@ import { ModalAgendar } from './components/ModalAgendar';
 import { ModalMoverEtapa } from './components/ModalMoverEtapa';
 import { ModalArquivar } from './components/ModalArquivar';
 import { ModalConfigurarEtapas } from './components/ModalConfigurarEtapas';
+import { ModalMatricular } from './components/ModalMatricular';
 import { useLeadsCRM } from './hooks/useLeadsCRM';
 import type { CRMTabId, LeadCRM } from './types';
 
@@ -60,6 +61,7 @@ export function PreAtendimentoPage() {
   const [modalArquivarAberto, setModalArquivarAberto] = useState(false);
   const [leadParaModal, setLeadParaModal] = useState<LeadCRM | null>(null);
   const [modalConfigurarEtapasAberto, setModalConfigurarEtapasAberto] = useState(false);
+  const [modalMatricularAberto, setModalMatricularAberto] = useState(false);
 
   // Contexto do layout (filtro de unidade e competência)
   const context = useOutletContext<OutletContextType>();
@@ -94,16 +96,9 @@ export function PreAtendimentoPage() {
     setModalArquivarAberto(true);
   };
 
-  const navigate = useNavigate();
   const handleMatricular = (lead: LeadCRM) => {
-    const params = new URLSearchParams();
-    if (lead.nome) params.set('nome', lead.nome);
-    if (lead.telefone) params.set('telefone', lead.telefone);
-    if (lead.email) params.set('email', lead.email);
-    if (lead.unidade_id) params.set('unidade_id', lead.unidade_id);
-    if (lead.curso_interesse_id) params.set('curso_id', String(lead.curso_interesse_id));
-    if (lead.id) params.set('lead_id', String(lead.id));
-    navigate(`/app/entrada/matricula?${params.toString()}`);
+    setLeadParaModal(lead);
+    setModalMatricularAberto(true);
   };
 
   return (
@@ -253,6 +248,14 @@ export function PreAtendimentoPage() {
         onFechar={() => setModalConfigurarEtapasAberto(false)}
         etapas={etapas}
         onSalvar={refetch}
+      />
+
+      {/* Modal Matricular (inline, sem navegar) */}
+      <ModalMatricular
+        aberto={modalMatricularAberto}
+        onClose={() => setModalMatricularAberto(false)}
+        onSalvo={refetch}
+        lead={leadParaModal}
       />
 
       {/* Drawer lateral do lead */}
