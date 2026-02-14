@@ -69,8 +69,8 @@ const operacional = [
   { path: '/app/administrativo', label: 'Administrativo', icon: ClipboardList },
   { path: '/app/alunos', label: 'Alunos', icon: Users },
   { path: '/app/professores', label: 'Professores', icon: GraduationCap },
-  { path: '/app/projetos', label: 'Projetos', icon: FolderKanban },
   { path: '/app/salas', label: 'Salas', icon: Building2 },
+  { path: '/app/projetos', label: 'Projetos', icon: FolderKanban },
 ];
 
 export function AppSidebar() {
