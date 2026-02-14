@@ -411,14 +411,26 @@ export function AlunosPage() {
       }
     }
 
-    // Marcar turmas implícitas
+    // Marcar turmas implícitas (agora já trazem sala_id/sala_nome/turma_explicita_id da view)
     const turmasImplicitasMarcadas = (turmasImplicitas || []).map(t => ({
       ...t,
       tipo: 'implicita' as const,
     }));
 
-    // Combinar turmas implícitas e explícitas
-    const todasTurmas = [...turmasImplicitasMarcadas, ...turmasExplicitas];
+    // IDs de turmas explícitas já vinculadas via view implícita (evitar duplicação)
+    const idsExplicitasJaVinculadas = new Set(
+      turmasImplicitasMarcadas
+        .filter(t => t.turma_explicita_id)
+        .map(t => t.turma_explicita_id)
+    );
+
+    // Filtrar turmas explícitas que NÃO já aparecem nas implícitas (ex: bandas sem alunos implícitos)
+    const turmasExplicitasFiltradas = turmasExplicitas.filter(
+      t => !idsExplicitasJaVinculadas.has(t.turma_explicita_id)
+    );
+
+    // Combinar turmas implícitas e explícitas (sem duplicação)
+    const todasTurmas = [...turmasImplicitasMarcadas, ...turmasExplicitasFiltradas];
     setTurmas(todasTurmas);
   }
 
@@ -834,17 +846,23 @@ export function AlunosPage() {
       try {
         const salaSelecionada = salasDisponiveis.find(s => s.id === salaIdSelecionada);
         
-        // Verificar se já existe turma explícita
-        const { data: turmaExistente } = await supabase
-          .from('turmas_explicitas')
-          .select('id')
-          .eq('unidade_id', turmaDetalheAbrir.unidade_id)
-          .eq('professor_id', turmaDetalheAbrir.professor_id)
-          .eq('dia_semana', turmaDetalheAbrir.dia_semana)
-          .eq('horario_inicio', turmaDetalheAbrir.horario_inicio)
-          .maybeSingle();
+        // Usar turma_explicita_id da view se disponível, senão buscar por match
+        let turmaExplicitaId = turmaDetalheAbrir.turma_explicita_id || null;
 
-        if (turmaExistente) {
+        if (!turmaExplicitaId) {
+          const { data: turmaExistente } = await supabase
+            .from('turmas_explicitas')
+            .select('id')
+            .eq('unidade_id', turmaDetalheAbrir.unidade_id)
+            .eq('professor_id', turmaDetalheAbrir.professor_id)
+            .eq('dia_semana', turmaDetalheAbrir.dia_semana)
+            .eq('horario_inicio', turmaDetalheAbrir.horario_inicio)
+            .maybeSingle();
+          
+          turmaExplicitaId = turmaExistente?.id || null;
+        }
+
+        if (turmaExplicitaId) {
           // Atualizar turma existente
           const { error } = await supabase
             .from('turmas_explicitas')
@@ -853,7 +871,7 @@ export function AlunosPage() {
               capacidade_maxima: salaSelecionada?.capacidade_maxima || 4,
               updated_at: new Date().toISOString()
             })
-            .eq('id', turmaExistente.id);
+            .eq('id', turmaExplicitaId);
 
           if (error) throw error;
         } else {

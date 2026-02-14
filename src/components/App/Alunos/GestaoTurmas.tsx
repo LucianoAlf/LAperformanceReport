@@ -115,17 +115,23 @@ export function GestaoTurmas({ turmas, professores, salas, onRecarregar, onEdita
     try {
       const salaSelecionada = salasDisponiveis.find(s => s.id === salaIdSelecionada);
       
-      // Verificar se já existe turma explícita
-      const { data: turmaExistente } = await supabase
-        .from('turmas_explicitas')
-        .select('id')
-        .eq('unidade_id', turmaDetalhe.unidade_id)
-        .eq('professor_id', turmaDetalhe.professor_id)
-        .eq('dia_semana', turmaDetalhe.dia_semana)
-        .eq('horario_inicio', turmaDetalhe.horario_inicio)
-        .single();
+      // Usar turma_explicita_id da view se disponível, senão buscar por match
+      let turmaExplicitaId = turmaDetalhe.turma_explicita_id || null;
 
-      if (turmaExistente) {
+      if (!turmaExplicitaId) {
+        const { data: turmaExistente } = await supabase
+          .from('turmas_explicitas')
+          .select('id')
+          .eq('unidade_id', turmaDetalhe.unidade_id)
+          .eq('professor_id', turmaDetalhe.professor_id)
+          .eq('dia_semana', turmaDetalhe.dia_semana)
+          .eq('horario_inicio', turmaDetalhe.horario_inicio)
+          .maybeSingle();
+        
+        turmaExplicitaId = turmaExistente?.id || null;
+      }
+
+      if (turmaExplicitaId) {
         // Atualizar turma existente
         const { error } = await supabase
           .from('turmas_explicitas')
@@ -134,7 +140,7 @@ export function GestaoTurmas({ turmas, professores, salas, onRecarregar, onEdita
             capacidade_maxima: salaSelecionada?.capacidade_maxima || 4,
             updated_at: new Date().toISOString()
           })
-          .eq('id', turmaExistente.id);
+          .eq('id', turmaExplicitaId);
 
         if (error) throw error;
       } else {
