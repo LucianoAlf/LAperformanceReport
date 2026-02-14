@@ -1092,7 +1092,7 @@ export function ModalFichaAluno({
                     <SelectValue placeholder="Selecione o curso..." />
                   </SelectTrigger>
                   <SelectContent className="z-[200]">
-                    {cursos.filter(c => c.id !== formData.curso_id).map((c) => (
+                    {cursos.map((c) => (
                       <SelectItem key={c.id} value={c.id.toString()}>{c.nome}</SelectItem>
                     ))}
                   </SelectContent>
