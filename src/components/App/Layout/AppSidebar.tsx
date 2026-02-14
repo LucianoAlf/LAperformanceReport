@@ -14,7 +14,6 @@ import {
   Shield,
   UserCog,
   GraduationCap,
-  Layers,
   Wrench,
   ChevronLeft,
   ChevronRight,
@@ -22,7 +21,8 @@ import {
   FolderKanban,
   Pencil,
   Key,
-  Camera
+  Camera,
+  TrendingUp
 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { Tooltip } from '../../ui/Tooltip';
@@ -64,8 +64,8 @@ const menuItems = [
 ];
 
 const operacional = [
-  { path: '/app/comercial', label: 'Comercial', icon: Briefcase },
   { path: '/app/pre-atendimento', label: 'Pré-Atendimento', icon: Phone },
+  { path: '/app/comercial', label: 'Comercial', icon: Briefcase },
   { path: '/app/administrativo', label: 'Administrativo', icon: ClipboardList },
   { path: '/app/alunos', label: 'Alunos', icon: Users },
   { path: '/app/professores', label: 'Professores', icon: GraduationCap },
@@ -145,7 +145,7 @@ export function AppSidebar() {
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
         {!isCollapsed && (
           <div className="text-xs text-slate-500 uppercase tracking-wider mb-3 px-3 flex items-center gap-2">
-            <Layers className="w-3 h-3" /> Sistema
+            <TrendingUp className="w-3 h-3" /> Estratégico
           </div>
         )}
         {menuItems.map((item) => {
