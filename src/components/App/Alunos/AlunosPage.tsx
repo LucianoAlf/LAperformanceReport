@@ -524,10 +524,12 @@ export function AlunosPage() {
 
   async function carregarKPIs() {
     // Total de alunos ativos (inclui trancados, pois continuam pagando)
+    // Exclui registros de segundo curso — aluno com 2 cursos conta como 1 indivíduo
     let queryAtivos = supabase
       .from('alunos')
       .select('*', { count: 'exact', head: true })
-      .in('status', ['ativo', 'trancado']);
+      .in('status', ['ativo', 'trancado'])
+      .or('is_segundo_curso.is.null,is_segundo_curso.eq.false');
     
     if (unidadeAtual && unidadeAtual !== 'todos') {
       queryAtivos = queryAtivos.eq('unidade_id', unidadeAtual);
@@ -536,11 +538,13 @@ export function AlunosPage() {
     const { count: totalAtivos } = await queryAtivos;
 
     // Alunos pagantes (tipos que contam como pagante, inclui trancados)
+    // Exclui registros de segundo curso — aluno com 2 cursos conta como 1 pagante
     let queryPagantes = supabase
       .from('alunos')
       .select('id, tipos_matricula!inner(conta_como_pagante)')
       .in('status', ['ativo', 'trancado'])
-      .eq('tipos_matricula.conta_como_pagante', true);
+      .eq('tipos_matricula.conta_como_pagante', true)
+      .or('is_segundo_curso.is.null,is_segundo_curso.eq.false');
     
     if (unidadeAtual && unidadeAtual !== 'todos') {
       queryPagantes = queryPagantes.eq('unidade_id', unidadeAtual);
@@ -550,11 +554,13 @@ export function AlunosPage() {
     const totalPagantes = pagantesData?.length || 0;
 
     // Bolsistas (inclui trancados)
+    // Exclui registros de segundo curso
     let queryBolsistas = supabase
       .from('alunos')
       .select('id, tipos_matricula!inner(codigo)')
       .in('status', ['ativo', 'trancado'])
-      .in('tipos_matricula.codigo', ['BOLSISTA_INT', 'BOLSISTA_PARC']);
+      .in('tipos_matricula.codigo', ['BOLSISTA_INT', 'BOLSISTA_PARC'])
+      .or('is_segundo_curso.is.null,is_segundo_curso.eq.false');
     
     if (unidadeAtual && unidadeAtual !== 'todos') {
       queryBolsistas = queryBolsistas.eq('unidade_id', unidadeAtual);
