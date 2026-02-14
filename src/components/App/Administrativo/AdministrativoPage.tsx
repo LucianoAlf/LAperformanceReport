@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
+import { PageFilterBar } from '@/components/ui/page-filter-bar';
 import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
 import { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
 
@@ -542,32 +543,30 @@ export function AdministrativoPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header actions */}
-      <div className="flex items-center justify-end">
-        <div className="flex items-center gap-4">
-          {mainTab === 'lancamentos' && (
-            <>
-              <CompetenciaFilter
-                filtro={competenciaFiltro.filtro}
-                range={competenciaFiltro.range}
-                anosDisponiveis={competenciaFiltro.anosDisponiveis}
-                onTipoChange={competenciaFiltro.setTipo}
-                onAnoChange={competenciaFiltro.setAno}
-                onMesChange={competenciaFiltro.setMes}
-                onTrimestreChange={competenciaFiltro.setTrimestre}
-                onSemestreChange={competenciaFiltro.setSemestre}
-              />
-              <button
-                onClick={() => setModalRelatorio(true)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-cyan-500/20"
-              >
-                <FileText className="w-4 h-4" />
-                Gerar Relatório WhatsApp
-              </button>
-            </>
-          )}
-        </div>
-      </div>
+      {/* Linha de filtros / ações */}
+      <PageFilterBar className="gap-4">
+        {mainTab === 'lancamentos' && (
+          <>
+            <CompetenciaFilter
+              filtro={competenciaFiltro.filtro}
+              range={competenciaFiltro.range}
+              anosDisponiveis={competenciaFiltro.anosDisponiveis}
+              onTipoChange={competenciaFiltro.setTipo}
+              onAnoChange={competenciaFiltro.setAno}
+              onMesChange={competenciaFiltro.setMes}
+              onTrimestreChange={competenciaFiltro.setTrimestre}
+              onSemestreChange={competenciaFiltro.setSemestre}
+            />
+            <button
+              onClick={() => setModalRelatorio(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-cyan-500/20"
+            >
+              <FileText className="w-4 h-4" />
+              Gerar Relatório WhatsApp
+            </button>
+          </>
+        )}
+      </PageFilterBar>
 
       {/* Tabs Principais */}
       <PageTabs

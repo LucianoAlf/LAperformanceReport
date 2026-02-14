@@ -35,6 +35,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
+import { PageFilterBar } from '@/components/ui/page-filter-bar';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -2009,28 +2010,26 @@ export function ComercialPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-end">
-        <div className="flex items-center gap-4">
-          <CompetenciaFilter
-            filtro={competencia.filtro}
-            range={competencia.range}
-            anosDisponiveis={competencia.anosDisponiveis}
-            onTipoChange={competencia.setTipo}
-            onAnoChange={competencia.setAno}
-            onMesChange={competencia.setMes}
-            onTrimestreChange={competencia.setTrimestre}
-            onSemestreChange={competencia.setSemestre}
-          />
-          <button
-            onClick={() => setRelatorioOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-cyan-500/20"
-          >
-            <Copy className="w-4 h-4" />
-            Gerar Relatório WhatsApp
-          </button>
-        </div>
-      </div>
+      {/* Linha de filtros / ações */}
+      <PageFilterBar className="gap-4">
+        <CompetenciaFilter
+          filtro={competencia.filtro}
+          range={competencia.range}
+          anosDisponiveis={competencia.anosDisponiveis}
+          onTipoChange={competencia.setTipo}
+          onAnoChange={competencia.setAno}
+          onMesChange={competencia.setMes}
+          onTrimestreChange={competencia.setTrimestre}
+          onSemestreChange={competencia.setSemestre}
+        />
+        <button
+          onClick={() => setRelatorioOpen(true)}
+          className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-cyan-500/20"
+        >
+          <Copy className="w-4 h-4" />
+          Gerar Relatório WhatsApp
+        </button>
+      </PageFilterBar>
 
       {/* ABAS PRINCIPAIS */}
       <PageTabs

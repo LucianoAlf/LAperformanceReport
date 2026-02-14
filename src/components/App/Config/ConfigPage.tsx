@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOutletContext } from 'react-router-dom';
 import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
+import { PageFilterBar } from '@/components/ui/page-filter-bar';
 import { PageTour, TourHelpButton } from '@/components/Onboarding';
 import { configTourSteps } from '@/components/Onboarding/tours';
 import { Checkbox } from '@/components/ui/checkbox';
