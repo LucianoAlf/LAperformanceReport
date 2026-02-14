@@ -80,15 +80,16 @@ function InboxItem({ conversa, ativa, onClick }: { conversa: ConversaCRM; ativa:
   const isMila = conversa.atribuido_a === 'mila';
   const isAndreza = conversa.atribuido_a === 'andreza';
   const semConversa = !conversa.ultima_mensagem_at;
+  const isAluno = !!(lead?.aluno_id || lead?.converteu);
 
   return (
     <div
       onClick={onClick}
       className={cn(
-        'cursor-pointer px-3 py-3 hover:bg-slate-800/50 transition-all duration-200 border-b border-slate-800/30',
+        'cursor-pointer px-3 py-3 rounded-xl transition-all duration-200 border',
         ativa
-          ? 'bg-violet-500/10 border-l-[3px] border-l-violet-500'
-          : 'border-l-[3px] border-l-transparent hover:border-l-slate-600',
+          ? 'bg-violet-500/10 border-violet-500/40'
+          : 'bg-slate-800/30 border-slate-700/30 hover:bg-slate-800/60 hover:border-slate-600/40',
         semConversa && 'opacity-60'
       )}
     >
@@ -113,27 +114,42 @@ function InboxItem({ conversa, ativa, onClick }: { conversa: ConversaCRM; ativa:
         </div>
 
         <div className="flex-1 min-w-0">
-          {/* Nome + temperatura + hora */}
+          {/* Nome + badge tipo + temperatura + hora */}
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 min-w-0">
               <span className={cn(
                 'font-semibold text-sm truncate',
                 ativa ? 'text-white' : conversa.nao_lidas > 0 ? 'text-white' : 'text-slate-300'
               )}>
                 {nome}
               </span>
+              <span className={cn(
+                'text-[8px] px-1.5 py-0.5 rounded font-bold uppercase flex-shrink-0',
+                isAluno
+                  ? 'bg-blue-500/20 text-blue-400'
+                  : 'bg-emerald-500/20 text-emerald-400'
+              )}>
+                {isAluno ? 'Aluno' : 'Lead'}
+              </span>
               {temp && (
-                <span className={cn('text-[9px] px-1.5 py-0.5 rounded-full font-bold', temp.classes)}>
+                <span className={cn('text-[9px] px-1.5 py-0.5 rounded-full font-bold flex-shrink-0', temp.classes)}>
                   {temp.emoji} {temp.label}
                 </span>
               )}
             </div>
-            <span className={cn(
-              'text-[10px] flex-shrink-0',
-              conversa.nao_lidas > 0 ? 'text-violet-400 font-medium' : 'text-slate-500'
-            )}>
-              {formatarHora(conversa.ultima_mensagem_at)}
-            </span>
+            <div className="flex items-center gap-1.5 flex-shrink-0 ml-1">
+              <span className={cn(
+                'text-[10px]',
+                conversa.nao_lidas > 0 ? 'text-violet-400 font-medium' : 'text-slate-500'
+              )}>
+                {formatarHora(conversa.ultima_mensagem_at)}
+              </span>
+              {conversa.nao_lidas > 0 && (
+                <span className="bg-violet-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
+                  {conversa.nao_lidas}
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Preview da mensagem */}
@@ -151,28 +167,26 @@ function InboxItem({ conversa, ativa, onClick }: { conversa: ConversaCRM; ativa:
             </p>
           </div>
 
-          {/* Curso + Unidade + Badge atribuição + Não lidas */}
-          <div className="flex items-center justify-between mt-1">
-            <div className="flex items-center gap-1">
-              {(curso || unidade) && (
-                <span className="text-[10px] text-slate-500">
-                  {[curso, unidade].filter(Boolean).join(' · ')}
-                </span>
-              )}
-              {isMila && (
-                <span className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 font-medium">
-                  🤖 Mila
-                </span>
-              )}
-              {isAndreza && (
-                <span className="text-[9px] px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-400 font-medium">
-                  👩 Andreza
-                </span>
-              )}
-            </div>
-            {conversa.nao_lidas > 0 && (
-              <span className="bg-violet-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
-                {conversa.nao_lidas}
+          {/* Tags como pills coloridas (estilo Musicless) */}
+          <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+            {unidade && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-400 font-medium">
+                {unidade}
+              </span>
+            )}
+            {curso && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-400 font-medium">
+                {curso}
+              </span>
+            )}
+            {isMila && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-400 font-medium">
+                Mila
+              </span>
+            )}
+            {isAndreza && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-400 font-medium">
+                Andreza
               </span>
             )}
           </div>
@@ -230,7 +244,7 @@ export function InboxList({
       </div>
 
       {/* Lista de conversas */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1.5">
         {loading ? (
           <div className="space-y-0">
             {Array.from({ length: 6 }).map((_, i) => (

@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   CalendarDays, ArrowRightLeft, FileText, Archive,
-  Loader2, ChevronLeft, ChevronRight, Pencil, Check, X, Plus, Tag,
+  Loader2, ChevronLeft, ChevronRight, Check, X, Plus, Tag,
   Bot, UserCheck, ArrowRight, GraduationCap, Eye, Music, ChevronDown,
-  MessageSquare, Clock,
+  MessageSquare, Clock, Mail, Phone, AtSign, StickyNote,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -41,6 +41,9 @@ export function LeadSidebar({
   const [historico, setHistorico] = useState<LeadHistorico[]>([]);
   const [loadingHistorico, setLoadingHistorico] = useState(true);
   const [timelineExpandida, setTimelineExpandida] = useState(false);
+  const [editandoNome, setEditandoNome] = useState(false);
+  const [nomeTemp, setNomeTemp] = useState('');
+  const nomeInputRef = useRef<HTMLInputElement>(null);
 
   // Estado local para refletir edições inline imediatamente
   const [overrides, setOverrides] = useState<Record<string, any>>({});
@@ -270,7 +273,36 @@ export function LeadSidebar({
         <div className={`w-16 h-16 rounded-full bg-gradient-to-br from-violet-400 to-purple-500 flex items-center justify-center text-white font-bold text-xl mx-auto mb-3 ${conversa.foto_perfil_url ? 'hidden' : ''}`}>
           {getIniciais(lead.nome)}
         </div>
-        <h3 className="font-bold text-white text-base">{lead.nome || 'Lead'}</h3>
+        {editandoNome ? (
+          <input
+            ref={nomeInputRef}
+            type="text"
+            value={nomeTemp}
+            onChange={(e) => setNomeTemp(e.target.value)}
+            onBlur={() => {
+              if (nomeTemp.trim() && nomeTemp.trim() !== lead.nome) {
+                salvarCampo('nome', nomeTemp.trim(), { nomeOverride: nomeTemp.trim() });
+              }
+              setEditandoNome(false);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                (e.target as HTMLInputElement).blur();
+              } else if (e.key === 'Escape') {
+                setEditandoNome(false);
+              }
+            }}
+            autoFocus
+            className="font-bold text-white text-base bg-transparent border-b border-violet-500 outline-none text-center w-full px-2"
+          />
+        ) : (
+          <h3
+            className="font-bold text-white text-base cursor-pointer hover:text-violet-300 transition-colors"
+            onClick={() => { setNomeTemp(overrides.nomeOverride ?? (lead.nome || '')); setEditandoNome(true); }}
+          >
+            {overrides.nomeOverride ?? (lead.nome || 'Lead')}
+          </h3>
+        )}
         <p className="text-xs text-slate-400 mt-0.5">{lead.telefone || ''}</p>
         <div className="flex items-center justify-center gap-2 mt-2">
           {lead.temperatura && (
@@ -287,11 +319,38 @@ export function LeadSidebar({
         </div>
       </div>
 
-      {/* Dados do lead */}
-      <div className="p-4 space-y-4">
-        {/* Informações básicas */}
-        <div>
-          <h4 className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Informações</h4>
+      {/* Cards semânticos */}
+      <div className="p-3 space-y-3">
+
+        {/* Card 1: DETALHES DO CONTATO */}
+        <SidebarCard icon={Phone} title="DETALHES DO CONTATO">
+          <div className="space-y-2.5">
+            {lead.email && (
+              <DetailRow icon={Mail} label="Email" value={lead.email} />
+            )}
+            <DetailRow icon={Phone} label="Telefone" value={lead.telefone || lead.whatsapp || '-'} />
+            <DetailRow icon={CalendarDays} label="Contato" value={formatarData(lead.data_contato)} />
+            <div className="flex items-center gap-2.5">
+              <AtSign className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <EditableSelect
+                  label="Canal"
+                  valor={canalNome || '-'}
+                  opcoes={canais.map(c => ({ value: String(c.id), label: c.nome }))}
+                  valorAtual={canalId ? String(canalId) : ''}
+                  salvando={salvando === 'canal_origem_id'}
+                  onSalvar={(val) => {
+                    const nome = canais.find(c => String(c.id) === val)?.nome || null;
+                    salvarCampo('canal_origem_id', val ? Number(val) : null, { canalNome: nome });
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        </SidebarCard>
+
+        {/* Card 2: INFORMAÇÕES (editáveis) */}
+        <SidebarCard icon={FileText} title="INFORMAÇÕES">
           <div className="space-y-2">
             <EditableSelect
               label="Curso"
@@ -317,17 +376,6 @@ export function LeadSidebar({
               onSalvar={(val) => salvarCampo('faixa_etaria', val || null)}
             />
             <EditableSelect
-              label="Canal"
-              valor={canalNome || '-'}
-              opcoes={canais.map(c => ({ value: String(c.id), label: c.nome }))}
-              valorAtual={canalId ? String(canalId) : ''}
-              salvando={salvando === 'canal_origem_id'}
-              onSalvar={(val) => {
-                const nome = canais.find(c => String(c.id) === val)?.nome || null;
-                salvarCampo('canal_origem_id', val ? Number(val) : null, { canalNome: nome });
-              }}
-            />
-            <EditableSelect
               label="Sabe o preço?"
               valor={sabiaPreco === true ? 'Sim' : sabiaPreco === false ? 'Não' : '-'}
               opcoes={[
@@ -338,16 +386,14 @@ export function LeadSidebar({
               salvando={salvando === 'sabia_preco'}
               onSalvar={(val) => salvarCampo('sabia_preco', val === 'true' ? true : val === 'false' ? false : null)}
             />
-            <InfoRow label="Primeiro contato" value={formatarData(lead.data_contato)} />
           </div>
-        </div>
+        </SidebarCard>
 
-        {/* Etiquetas */}
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <h4 className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-              <Tag className="w-3 h-3" /> Etiquetas
-            </h4>
+        {/* Card 3: ETIQUETAS */}
+        <SidebarCard
+          icon={Tag}
+          title="ETIQUETAS"
+          action={
             <button
               onClick={() => setMostrarEtiquetas(!mostrarEtiquetas)}
               className="p-1 rounded-md text-slate-500 hover:text-violet-400 hover:bg-violet-500/10 transition"
@@ -355,8 +401,8 @@ export function LeadSidebar({
             >
               <Plus className="w-3.5 h-3.5" />
             </button>
-          </div>
-
+          }
+        >
           {/* Pills das etiquetas ativas */}
           <div className="flex flex-wrap gap-1.5">
             {etiquetasLead.length === 0 && !mostrarEtiquetas && (
@@ -381,7 +427,7 @@ export function LeadSidebar({
 
           {/* Painel para adicionar etiquetas */}
           {mostrarEtiquetas && (
-            <div className="mt-2 p-2 rounded-xl bg-slate-800/80 border border-slate-700/50 space-y-1">
+            <div className="mt-2 p-2 rounded-xl bg-slate-900/60 border border-slate-700/40 space-y-1">
               {etiquetasCatalogo.map(e => {
                 const ativa = etiquetasLead.includes(e.id);
                 return (
@@ -409,22 +455,20 @@ export function LeadSidebar({
               })}
             </div>
           )}
-        </div>
+        </SidebarCard>
 
-        {/* KPIs da conversa */}
-        <div>
-          <h4 className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">KPIs da Conversa</h4>
+        {/* Card 4: KPIs DA CONVERSA */}
+        <SidebarCard icon={MessageSquare} title="KPIs DA CONVERSA">
           <div className="grid grid-cols-2 gap-2">
             <KpiCard valor={tempoResposta} label="Tempo resposta" />
             <KpiCard valor={String(mensagensCount)} label="Msgs trocadas" />
             <KpiCard valor={String(diasPipeline)} label="Dias no pipeline" />
             <KpiCard valor={String(lead.qtd_mensagens_mila || 0)} label="Msgs Mila" destaque />
           </div>
-        </div>
+        </SidebarCard>
 
-        {/* Ações rápidas */}
-        <div>
-          <h4 className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Ações</h4>
+        {/* Card 5: AÇÕES */}
+        <SidebarCard icon={ArrowRightLeft} title="AÇÕES">
           <div className="space-y-1.5">
             <AcaoButton
               icon={CalendarDays}
@@ -451,16 +495,18 @@ export function LeadSidebar({
               onClick={() => onArquivar?.(lead)}
             />
           </div>
-        </div>
+        </SidebarCard>
 
-        {/* Timeline Unificada */}
-        <div>
-          <h4 className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">
-            Timeline
-            {historico.length > 0 && (
-              <span className="ml-1.5 text-slate-500 font-normal">({historico.length})</span>
-            )}
-          </h4>
+        {/* Card 6: TIMELINE */}
+        <SidebarCard
+          icon={Clock}
+          title="ATIVIDADES RECENTES"
+          action={
+            historico.length > 0 ? (
+              <span className="text-[10px] text-slate-500">{historico.length}</span>
+            ) : null
+          }
+        >
           {loadingHistorico ? (
             <div className="flex items-center justify-center py-4">
               <Loader2 className="w-4 h-4 text-violet-400 animate-spin" />
@@ -473,7 +519,7 @@ export function LeadSidebar({
               <div className="absolute left-[9px] top-2 bottom-2 w-px bg-slate-700/60" />
 
               <div className="space-y-0">
-                {(timelineExpandida ? historico : historico.slice(0, 5)).map((h, idx) => {
+                {(timelineExpandida ? historico : historico.slice(0, 5)).map((h) => {
                   const { icon: IconComp, cor, bgCor } = getTimelineIconConfig(h.tipo);
                   return (
                     <div key={h.id} className="flex gap-2.5 py-1.5 group relative">
@@ -500,26 +546,43 @@ export function LeadSidebar({
               {historico.length > 5 && (
                 <button
                   onClick={() => setTimelineExpandida(!timelineExpandida)}
-                  className="flex items-center gap-1 mt-1 ml-6 text-[10px] text-violet-400 hover:text-violet-300 transition-colors"
+                  className="flex items-center gap-1 mt-2 mx-auto text-[10px] text-violet-400 hover:text-violet-300 transition-colors font-medium"
                 >
                   <ChevronDown className={`w-3 h-3 transition-transform ${timelineExpandida ? 'rotate-180' : ''}`} />
-                  {timelineExpandida ? 'Ver menos' : `Ver mais ${historico.length - 5} eventos`}
+                  {timelineExpandida ? 'Ver menos' : `VER TUDO (+${historico.length - 5})`}
                 </button>
               )}
             </div>
           )}
-        </div>
+        </SidebarCard>
 
-        {/* Observações */}
-        <div>
-          <h4 className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-2">Observações</h4>
+        {/* Card 7: NOTAS RÁPIDAS */}
+        <SidebarCard icon={StickyNote} title="NOTAS RÁPIDAS">
+          {lead.observacoes ? (
+            <p className="text-xs text-slate-300 whitespace-pre-wrap">{lead.observacoes}</p>
+          ) : (
+            <p className="text-[11px] text-slate-500 italic">Nenhuma nota registrada para este contato.</p>
+          )}
+          <button
+            onClick={() => {
+              // Focar no textarea ao clicar
+              const el = document.getElementById(`nota-lead-${lead.id}`);
+              if (el) el.focus();
+            }}
+            className="flex items-center gap-1.5 mt-2 text-[11px] text-slate-400 hover:text-violet-400 transition-colors font-medium border border-slate-700/50 rounded-lg px-3 py-1.5 w-full justify-center hover:border-violet-500/30"
+          >
+            <Plus className="w-3 h-3" />
+            ADICIONAR NOTA
+          </button>
           <textarea
-            rows={3}
+            id={`nota-lead-${lead.id}`}
+            rows={2}
             defaultValue={lead.observacoes || ''}
-            placeholder="Adicionar observação..."
-            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none resize-none"
+            placeholder="Escreva uma nota..."
+            className="w-full mt-2 bg-slate-900/60 border border-slate-700/40 rounded-lg px-3 py-2 text-xs text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none resize-none"
           />
-        </div>
+        </SidebarCard>
+
       </div>
 
       </div>
@@ -529,6 +592,49 @@ export function LeadSidebar({
 }
 
 // Sub-componentes
+
+function SidebarCard({
+  icon: Icon,
+  title,
+  action,
+  children,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="bg-slate-800/40 border border-slate-700/40 rounded-2xl p-3.5">
+      <div className="flex items-center justify-between mb-3">
+        <h4 className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+          <Icon className="w-3.5 h-3.5" />
+          {title}
+        </h4>
+        {action}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function DetailRow({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <Icon className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" />
+      <span className="text-[11px] text-slate-500 flex-shrink-0">{label}</span>
+      <span className="text-xs text-slate-200 ml-auto text-right truncate">{value}</span>
+    </div>
+  );
+}
 
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
@@ -601,16 +707,12 @@ function EditableSelect({
       <button
         onClick={() => { selecionouRef.current = false; setEditando(true); }}
         disabled={salvando}
-        className="flex items-center gap-1 text-xs text-white font-medium hover:text-violet-400 transition group"
-        title={`Editar ${label}`}
+        className="flex items-center gap-1 text-xs text-white font-medium hover:text-violet-400 transition"
       >
         {salvando ? (
           <Loader2 className="w-3 h-3 animate-spin text-violet-400" />
         ) : (
-          <>
-            <span>{valor}</span>
-            <Pencil className="w-3 h-3 text-slate-600 opacity-0 group-hover:opacity-100 transition-opacity" />
-          </>
+          <span>{valor}</span>
         )}
       </button>
     </div>
