@@ -571,12 +571,14 @@ export function AlunosPage() {
 
     // Ticket médio (só pagantes) - IMPORTANTE: soma valores de alunos com múltiplos cursos
     // Aluno com 2 cursos (R$400 + R$300) = ticket de R$700, não R$350
+    // Exclui alunos com status 'sem_parcela' — não devem afetar o ticket médio
     let queryTicket = supabase
       .from('alunos')
       .select('nome, data_nascimento, unidade_id, valor_parcela, tipos_matricula!inner(entra_ticket_medio)')
       .eq('status', 'ativo')
       .eq('tipos_matricula.entra_ticket_medio', true)
-      .not('valor_parcela', 'is', null);
+      .not('valor_parcela', 'is', null)
+      .neq('status_pagamento', 'sem_parcela');
     
     if (unidadeAtual && unidadeAtual !== 'todos') {
       queryTicket = queryTicket.eq('unidade_id', unidadeAtual);

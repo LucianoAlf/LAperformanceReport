@@ -853,6 +853,7 @@ export function TabelaAlunos({
               <SelectItem value="em_dia">Em dia</SelectItem>
               <SelectItem value="inadimplente">Inadimplente</SelectItem>
               <SelectItem value="parcial">Parcial</SelectItem>
+              <SelectItem value="sem_parcela">Sem Parcela</SelectItem>
             </SelectContent>
           </Select>
 
@@ -1286,6 +1287,7 @@ export function TabelaAlunos({
                         { value: 'em_dia', label: '✓ Em dia' },
                         { value: 'inadimplente', label: '✗ Inadimplente' },
                         { value: 'parcial', label: '~ Parcial' },
+                        { value: 'sem_parcela', label: '○ Sem Parcela' },
                       ]}
                       placeholder="-"
                       formatarExibicao={() => {
@@ -1293,6 +1295,7 @@ export function TabelaAlunos({
                           case 'inadimplente': return <span className="text-red-400 font-bold" title="Inadimplente">✗</span>;
                           case 'parcial': return <span className="text-yellow-400 font-bold" title="Pagamento Parcial">~</span>;
                           case 'em_dia': return <span className="text-emerald-400" title="Em dia">✓</span>;
+                          case 'sem_parcela': return <span className="text-blue-400" title="Sem Parcela">○</span>;
                           default: return <span className="text-slate-500" title="Não lançado">-</span>;
                         }
                       }}
@@ -1502,6 +1505,7 @@ export function TabelaAlunos({
                           { value: 'em_dia', label: '✓ Em dia' },
                           { value: 'inadimplente', label: '✗ Inadimplente' },
                           { value: 'parcial', label: '~ Parcial' },
+                          { value: 'sem_parcela', label: '○ Sem Parcela' },
                         ]}
                         placeholder="-"
                         formatarExibicao={() => {
@@ -1509,6 +1513,7 @@ export function TabelaAlunos({
                             case 'inadimplente': return <span className="text-red-400 font-bold" title="Inadimplente">✗</span>;
                             case 'parcial': return <span className="text-yellow-400 font-bold" title="Pagamento Parcial">~</span>;
                             case 'em_dia': return <span className="text-emerald-400" title="Em dia">✓</span>;
+                            case 'sem_parcela': return <span className="text-blue-400" title="Sem Parcela">○</span>;
                             default: return <span className="text-slate-500" title="Não lançado">-</span>;
                           }
                         }}

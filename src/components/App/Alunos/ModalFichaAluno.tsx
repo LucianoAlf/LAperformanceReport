@@ -887,6 +887,7 @@ export function ModalFichaAluno({
                       <SelectItem value="em_dia">✓ Em dia</SelectItem>
                       <SelectItem value="inadimplente">✗ Inadimplente</SelectItem>
                       <SelectItem value="parcial">~ Parcial</SelectItem>
+                      <SelectItem value="sem_parcela">○ Sem Parcela</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
