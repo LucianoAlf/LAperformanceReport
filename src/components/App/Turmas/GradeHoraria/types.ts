@@ -20,6 +20,7 @@ export interface TurmaGrade {
   num_alunos: number;
   alunos?: number[];
   ativo: boolean;
+  turma_explicita_id?: number | null;
 }
 
 export interface FiltrosGrade {

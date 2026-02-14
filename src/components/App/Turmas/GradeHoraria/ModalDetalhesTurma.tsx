@@ -66,20 +66,31 @@ export function ModalDetalhesTurma({ turma, aberto, onClose, onEditar, onSalaVin
 
     setSalvando(true);
     try {
-      // Verificar se já existe uma turma explícita para este horário
-      const { data: turmaExistente } = await supabase
-        .from('turmas_explicitas')
-        .select('id')
-        .eq('unidade_id', turma.unidade_id)
-        .eq('professor_id', turma.professor_id)
-        .eq('dia_semana', turma.dia_semana)
-        .eq('horario_inicio', turma.horario_inicio)
-        .maybeSingle();
-
       const salaId = parseInt(salaIdSelecionada);
       const salaSelecionada = salas.find(s => s.id === salaId);
 
-      if (turmaExistente) {
+      // Usar turma_explicita_id da view se disponível, senão buscar por match
+      let turmaExplicitaId = turma.turma_explicita_id || null;
+
+      if (!turmaExplicitaId) {
+        // Buscar com horario no formato HH:MM:SS (banco usa TIME)
+        const horarioCompleto = turma.horario_inicio.length === 5 
+          ? turma.horario_inicio + ':00' 
+          : turma.horario_inicio;
+
+        const { data: turmaExistente } = await supabase
+          .from('turmas_explicitas')
+          .select('id')
+          .eq('unidade_id', turma.unidade_id)
+          .eq('professor_id', turma.professor_id)
+          .eq('dia_semana', turma.dia_semana)
+          .eq('horario_inicio', horarioCompleto)
+          .maybeSingle();
+
+        turmaExplicitaId = turmaExistente?.id || null;
+      }
+
+      if (turmaExplicitaId) {
         // Atualizar turma existente
         const { error } = await supabase
           .from('turmas_explicitas')
@@ -88,11 +99,15 @@ export function ModalDetalhesTurma({ turma, aberto, onClose, onEditar, onSalaVin
             capacidade_maxima: salaSelecionada?.capacidade_maxima || 4,
             updated_at: new Date().toISOString()
           })
-          .eq('id', turmaExistente.id);
+          .eq('id', turmaExplicitaId);
 
         if (error) throw error;
       } else {
         // Criar nova turma explícita
+        const horarioCompleto = turma.horario_inicio.length === 5 
+          ? turma.horario_inicio + ':00' 
+          : turma.horario_inicio;
+
         const { error } = await supabase
           .from('turmas_explicitas')
           .insert({
@@ -101,7 +116,7 @@ export function ModalDetalhesTurma({ turma, aberto, onClose, onEditar, onSalaVin
             professor_id: turma.professor_id,
             curso_id: turma.curso_id,
             dia_semana: turma.dia_semana,
-            horario_inicio: turma.horario_inicio,
+            horario_inicio: horarioCompleto,
             sala_id: salaId,
             unidade_id: turma.unidade_id,
             capacidade_maxima: salaSelecionada?.capacidade_maxima || 4,

@@ -131,6 +131,7 @@ export function GradeHoraria({
       if (professoresData) setProfessores(professoresData);
 
       // Carregar turmas usando a view vw_turmas_implicitas
+      // A view já faz LEFT JOIN com turmas_explicitas para trazer sala_id/sala_nome/turma_explicita_id
       let turmasQuery = supabase
         .from('vw_turmas_implicitas')
         .select('*');
@@ -141,53 +142,28 @@ export function GradeHoraria({
 
       const { data: turmasData, error } = await turmasQuery;
 
-      // Carregar turmas explícitas (com sala vinculada)
-      let turmasExplicitasQuery = supabase
-        .from('turmas_explicitas')
-        .select('*, sala:salas(id, nome, capacidade_maxima)')
-        .eq('ativo', true);
-
-      if (filtros.unidadeId && filtros.unidadeId !== 'todos') {
-        turmasExplicitasQuery = turmasExplicitasQuery.eq('unidade_id', filtros.unidadeId);
-      }
-
-      const { data: turmasExplicitas } = await turmasExplicitasQuery;
-
-      // Criar mapa de turmas explícitas para lookup rápido
-      const mapaTurmasExplicitas = new Map<string, any>();
-      if (turmasExplicitas) {
-        turmasExplicitas.forEach((te: any) => {
-          const chave = `${te.unidade_id}-${te.professor_id}-${te.dia_semana}-${te.horario_inicio}`;
-          mapaTurmasExplicitas.set(chave, te);
-        });
-      }
-
       if (error) {
         console.error('Erro ao carregar turmas:', error);
       } else if (turmasData) {
         const turmasFormatadas: TurmaGrade[] = turmasData.map((t: any, index: number) => {
-          // Verificar se existe turma explícita com sala vinculada
-          const horarioFormatado = t.horario_inicio?.substring(0, 5) + ':00';
-          const chave = `${t.unidade_id}-${t.professor_id}-${t.dia_semana}-${horarioFormatado}`;
-          const turmaExplicita = mapaTurmasExplicitas.get(chave);
-
           return {
-            id: turmaExplicita?.id || index + 1,
+            id: t.turma_explicita_id || index + 1,
+            turma_explicita_id: t.turma_explicita_id || null,
             nome: `${t.professor_nome} - ${t.curso_nome}`,
             unidade_id: t.unidade_id,
             unidade_nome: t.unidade_nome || '',
             professor_id: t.professor_id,
             professor_nome: t.professor_nome || '',
-            sala_id: turmaExplicita?.sala_id || null,
-            sala_nome: turmaExplicita?.sala?.nome || 'Não vinculada',
-            sala_capacidade: turmaExplicita?.sala?.capacidade_maxima || 4,
+            sala_id: t.sala_id || null,
+            sala_nome: t.sala_nome || 'Não vinculada',
+            sala_capacidade: t.capacidade_maxima || 4,
             curso_id: t.curso_id,
             curso_nome: t.curso_nome || '',
             dia_semana: t.dia_semana,
             horario_inicio: t.horario_inicio?.substring(0, 5) || '',
             horario_fim: calcularHorarioFim(t.horario_inicio?.substring(0, 5) || '08:00', 60),
             duracao_minutos: 60,
-            capacidade_maxima: turmaExplicita?.capacidade_maxima || 4,
+            capacidade_maxima: t.capacidade_maxima || 4,
             num_alunos: t.total_alunos || 0,
             alunos: t.ids_alunos || [],
             ativo: true
