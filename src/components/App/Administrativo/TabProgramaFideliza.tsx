@@ -2241,7 +2241,7 @@ function MetricaCardFarmer({
       <div className="w-full bg-slate-700 rounded-full h-3">
         <div 
           className={cn("h-3 rounded-full", bateu ? 'bg-emerald-500' : 'bg-red-500')} 
-          style={{ width: bateu ? '100%' : '50%' }}
+          style={{ width: bateu ? '100%' : '0%' }}
         />
       </div>
       <p className={cn(
