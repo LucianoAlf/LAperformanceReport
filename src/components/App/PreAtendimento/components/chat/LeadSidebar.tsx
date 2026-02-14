@@ -428,7 +428,7 @@ export function LeadSidebar({
           <div className="space-y-1.5">
             <AcaoButton
               icon={CalendarDays}
-              label="Agendar Experimental"
+              label="Agendar Experimental / Visita"
               cor="emerald"
               onClick={() => onAgendar?.(lead)}
             />
