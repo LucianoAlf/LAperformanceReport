@@ -55,6 +55,7 @@ interface DashboardData {
 
 interface DadosGestao {
   alunos_ativos: number;
+  alunos_pagantes: number;
   matriculas_mes: number;
   evasoes_mes: number;
   ticket_medio: number;
@@ -244,6 +245,7 @@ export function DashboardPage() {
           setDadosGestao({
             // Alunos: usar MÉDIA (snapshot mensal) — total_alunos_ativos inclui ativo + trancado
             alunos_ativos: mesesUnicos > 0 ? Math.round(consolidado.total_alunos_ativos_sum / mesesUnicos) : 0,
+            alunos_pagantes: mesesUnicos > 0 ? Math.round(consolidado.total_alunos_pagantes_sum / mesesUnicos) : 0,
             // Matrículas/Evasões: usar SOMA (eventos acumulam)
             matriculas_mes: consolidado.novas_matriculas,
             evasoes_mes: consolidado.evasoes,
@@ -645,7 +647,7 @@ export function DashboardPage() {
             dataTour="card-alunos"
             icon={Users}
             label="Pagantes"
-            value={dadosGestao?.alunos_ativos || totais.alunosPagantes}
+            value={dadosGestao?.alunos_pagantes || totais.alunosPagantes}
             target={metas.alunos_pagantes}
             format="number"
             variant="cyan"

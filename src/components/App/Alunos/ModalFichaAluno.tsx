@@ -76,6 +76,13 @@ const TIPOS_ALUNO = [
   { value: 'nao_pagante', label: 'Não Pagante' },
 ];
 
+// Mapeamento tipo_aluno → tipo_matricula_id para sincronização automática
+// IDs: 1=Regular, 2=Segundo Curso, 3=Bolsista Integral, 4=Bolsista Parcial, 5=Banda
+const TIPO_ALUNO_PARA_MATRICULA: Record<string, number> = {
+  'bolsista_integral': 3,
+  'bolsista_parcial': 4,
+};
+
 export function ModalFichaAluno({
   aluno,
   onClose,
@@ -765,7 +772,17 @@ export function ModalFichaAluno({
                   <Label className="mb-2 block">Tipo de Aluno</Label>
                   <Select
                     value={formData.tipo_aluno}
-                    onValueChange={(value) => setFormData({ ...formData, tipo_aluno: value })}
+                    onValueChange={(value) => {
+                      const updates: any = { tipo_aluno: value };
+                      // Sincronizar tipo_matricula_id quando muda para bolsista
+                      if (TIPO_ALUNO_PARA_MATRICULA[value]) {
+                        updates.tipo_matricula_id = TIPO_ALUNO_PARA_MATRICULA[value];
+                      } else if (value === 'pagante' && formData.tipo_matricula_id && [3, 4].includes(formData.tipo_matricula_id)) {
+                        // Se voltou para pagante e tipo_matricula era bolsista, restaurar para Regular
+                        updates.tipo_matricula_id = formData.is_segundo_curso ? 2 : 1;
+                      }
+                      setFormData({ ...formData, ...updates });
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue />

@@ -235,6 +235,17 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
           query = query.eq('unidade_id', unidade);
         }
 
+        // Buscar nome da unidade para filtrar tabelas que usam nome em vez de ID
+        let nomeUnidade = '';
+        if (unidade !== 'todos') {
+          const { data: unidadeData } = await supabase
+            .from('unidades')
+            .select('nome')
+            .eq('id', unidade)
+            .single();
+          nomeUnidade = unidadeData?.nome || '';
+        }
+
         // Buscar totais de experimentais/matrículas por unidade (dados do CSV - só para histórico)
         let totaisQuery = supabase
           .from('experimentais_mensal_unidade')
@@ -248,39 +259,35 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
         }
 
         // Buscar dados de performance anual (conversão e retenção)
-        const performanceQuery = supabase
+        let performanceQuery = supabase
           .from('professores_performance')
           .select('*')
           .eq('ano', ano);
+        if (unidade !== 'todos' && nomeUnidade) {
+          performanceQuery = performanceQuery.eq('unidade', nomeUnidade);
+        }
 
         // Buscar dados de qualidade (presença, ticket, carteira atual)
-        const qualidadeQuery = supabase
+        // Nota: vw_kpis_professor_completo não tem unidade_id, filtro será aplicado após fetch via profIdsNaUnidade
+        let qualidadeQuery = supabase
           .from('vw_kpis_professor_completo')
           .select('*');
 
         // Buscar dados de evasões por professor
-        const evasoesQuery = supabase
+        let evasoesQuery = supabase
           .from('vw_evasoes_professores')
           .select('*');
+        if (unidade !== 'todos' && nomeUnidade) {
+          evasoesQuery = evasoesQuery.eq('unidade', nomeUnidade);
+        }
 
         // Buscar MRR Perdido do período de DUAS fontes:
-        // 1. Tabela evasoes (dados históricos importados via CSV)
+        // 1. Tabela evasoes_v2 (fonte unificada)
         // 2. Tabela movimentacoes_admin (lançamentos das Farmers no dia-a-dia)
         const startDate = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
         // Calcular último dia do mês corretamente
         const ultimoDiaMes = new Date(ano, mesFinal, 0).getDate();
         const endDate = `${ano}-${String(mesFinal).padStart(2, '0')}-${String(ultimoDiaMes).padStart(2, '0')}`;
-        
-        // Buscar nome da unidade para filtrar (se necessário)
-        let nomeUnidade = '';
-        if (unidade !== 'todos') {
-          const { data: unidadeData } = await supabase
-            .from('unidades')
-            .select('nome')
-            .eq('id', unidade)
-            .single();
-          nomeUnidade = unidadeData?.nome || '';
-        }
         
         // Query 1: Tabela evasoes_v2 (fonte unificada)
         let evasoesMRRQuery = supabase
@@ -306,9 +313,12 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
         }
 
         // Buscar turmas implícitas para calcular média alunos/turma (mesma fonte da página Professores)
-        const turmasImplicitasQuery = supabase
+        let turmasImplicitasQuery = supabase
           .from('vw_turmas_implicitas')
-          .select('professor_id, total_alunos');
+          .select('professor_id, total_alunos, unidade_id');
+        if (unidade !== 'todos') {
+          turmasImplicitasQuery = turmasImplicitasQuery.eq('unidade_id', unidade);
+        }
 
         // ========== QUERIES PARA TOTAIS REAIS (fonte de verdade) ==========
         // Total Professores: via professores + professores_unidades
@@ -353,7 +363,7 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
         const professores = professoresResult.data || [];
         const totaisUnidade = totaisResult.data || [];
         const performanceData = performanceResult.data || [];
-        const qualidadeData = qualidadeResult.data || [];
+        const qualidadeDataRaw = qualidadeResult.data || [];
         const evasoesData = evasoesResult.data || [];
         const turmasImplicitas = turmasImplicitasResult.data || [];
 
@@ -365,6 +375,11 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
 
         // Filtrar professores por unidade (via professores_unidades)
         const profIdsNaUnidade = new Set(profUnidades.map((pu: any) => pu.professor_id));
+
+        // Filtrar qualidadeData pelos professores da unidade (view não tem unidade_id)
+        const qualidadeData = unidade === 'todos'
+          ? qualidadeDataRaw
+          : qualidadeDataRaw.filter((q: any) => profIdsNaUnidade.has(q.professor_id));
         const professoresFiltrados = unidade === 'todos' 
           ? professoresReais 
           : professoresReais.filter((p: any) => profIdsNaUnidade.has(p.id));

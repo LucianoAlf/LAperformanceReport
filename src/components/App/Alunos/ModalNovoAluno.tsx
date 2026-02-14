@@ -53,6 +53,13 @@ const TIPOS_ALUNO = [
 // Tipos que dispensam forma de pagamento e valores obrigatórios
 const TIPOS_SEM_PAGAMENTO = ['bolsista_integral', 'nao_pagante'];
 
+// Mapeamento tipo_aluno → tipo_matricula_id para sincronização automática
+// IDs: 1=Regular, 2=Segundo Curso, 3=Bolsista Integral, 4=Bolsista Parcial, 5=Banda
+const TIPO_ALUNO_PARA_MATRICULA: Record<string, number> = {
+  'bolsista_integral': 3,
+  'bolsista_parcial': 4,
+};
+
 export function ModalNovoAluno({
   onClose,
   onSalvar,
@@ -200,10 +207,11 @@ export function ModalNovoAluno({
       const classificacao = idade < 12 ? 'LAMK' : 'EMLA';
 
       // Determinar tipo_matricula_id baseado em tipo_aluno
+      // IDs: 1=Regular, 2=Segundo Curso, 3=Bolsista Integral, 4=Bolsista Parcial, 5=Banda
       let tipo_matricula_id = 1; // Regular por padrão
-      if (formData.tipo_aluno === 'bolsista_integral') tipo_matricula_id = 2;
-      else if (formData.tipo_aluno === 'bolsista_parcial') tipo_matricula_id = 3;
-      else if (formData.tipo_aluno === 'nao_pagante') tipo_matricula_id = 4;
+      if (formData.tipo_aluno === 'bolsista_integral') tipo_matricula_id = 3;
+      else if (formData.tipo_aluno === 'bolsista_parcial') tipo_matricula_id = 4;
+      else if (formData.tipo_aluno === 'nao_pagante') tipo_matricula_id = 3;
 
       const { error } = await supabase
         .from('alunos')
@@ -332,7 +340,16 @@ export function ModalNovoAluno({
                 <Label className="mb-2 block">Tipo Aluno</Label>
                 <Select
                   value={formData.tipo_aluno}
-                  onValueChange={(value) => setFormData({ ...formData, tipo_aluno: value })}
+                  onValueChange={(value) => {
+                    const updates: any = { tipo_aluno: value };
+                    // Sincronizar tipo_matricula_id quando muda para bolsista
+                    if (TIPO_ALUNO_PARA_MATRICULA[value]) {
+                      updates.tipo_matricula_id = TIPO_ALUNO_PARA_MATRICULA[value];
+                    } else if (value === 'pagante' && formData.tipo_matricula_id && [3, 4].includes(formData.tipo_matricula_id)) {
+                      updates.tipo_matricula_id = 1; // Regular
+                    }
+                    setFormData({ ...formData, ...updates });
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Selecione..." />
