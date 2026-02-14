@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { BarChart3, TrendingUp, TrendingDown } from 'lucide-react';
+import { useSetPageTitle } from '@/contexts/PageTitleContext';
+import { BarChart3, TrendingUp, TrendingDown, History } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 // Importar os componentes embedded (sem sidebar interna)
@@ -16,18 +17,18 @@ const tabs = [
 ];
 
 export function Apresentacoes2025Page() {
+  useSetPageTitle({
+    titulo: 'Apresentações 2025',
+    subtitulo: 'Histórico de dashboards e análises de 2025',
+    icone: History,
+    iconeCor: 'text-slate-400',
+    iconeWrapperCor: 'bg-slate-700/50',
+  });
+
   const [activeTab, setActiveTab] = useState<TabId>('gestao');
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white">Apresentações 2025</h1>
-          <p className="text-slate-400 text-sm mt-1">Histórico de dashboards e análises de 2025</p>
-        </div>
-      </div>
-
       {/* Sistema de Abas */}
       <div className="animate-in fade-in slide-in-from-top-4 duration-500">
         {/* Desktop Tabs */}

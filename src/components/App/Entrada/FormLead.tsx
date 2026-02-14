@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -59,6 +60,11 @@ interface Professor {
 }
 
 export function FormLead() {
+  useSetPageTitle({
+    titulo: 'Novo Lead',
+    subtitulo: 'Cadastrar novo contato comercial',
+  });
+
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [unidades, setUnidades] = useState<Unidade[]>([]);
@@ -142,10 +148,6 @@ export function FormLead() {
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <div>
-          <h1 className="text-2xl font-bold text-white">Novo Lead</h1>
-          <p className="text-gray-400">Cadastrar novo contato comercial</p>
-        </div>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">

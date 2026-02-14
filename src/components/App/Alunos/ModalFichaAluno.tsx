@@ -135,6 +135,9 @@ export function ModalFichaAluno({
   // Valor original da parcela (para detectar mudanças)
   const [valorParcelaOriginal, setValorParcelaOriginal] = useState<number | null>(null);
   
+  // Outros cursos do mesmo aluno (registros com mesmo nome + data_nascimento + unidade)
+  const [outrosCursos, setOutrosCursos] = useState<AlunoCompleto[]>([]);
+
   // Estado para modal de segundo curso
   const [modalSegundoCurso, setModalSegundoCurso] = useState(false);
   const [segundoCursoData, setSegundoCursoData] = useState({
@@ -209,6 +212,28 @@ export function ModalFichaAluno({
       setMovimentacoes(movRes.data || []);
       setRenovacoes(renRes.data || []);
       setAnotacoes(anotRes.data || []);
+
+      // Buscar outros cursos do mesmo aluno (registros com mesmo nome + data_nascimento + unidade)
+      if (alunoData.nome && alunoData.unidade_id) {
+        let queryOutros = supabase
+          .from('alunos')
+          .select('*, cursos:curso_id(nome), professores:professor_atual_id(nome)')
+          .eq('nome', alunoData.nome)
+          .eq('unidade_id', alunoData.unidade_id)
+          .neq('id', aluno.id)
+          .in('status', ['ativo', 'trancado']);
+
+        if (alunoData.data_nascimento) {
+          queryOutros = queryOutros.eq('data_nascimento', alunoData.data_nascimento);
+        }
+
+        const { data: outrosData } = await queryOutros;
+        setOutrosCursos((outrosData || []).map((o: any) => ({
+          ...o,
+          curso_nome: o.cursos?.nome || null,
+          professor_nome: o.professores?.nome || null,
+        })));
+      }
 
       // Preencher form
       setDadosCompletos(alunoData);
@@ -380,7 +405,7 @@ export function ModalFichaAluno({
         status: 'ativo',
         tipo_aluno: formData.tipo_aluno,
         tipo_matricula_id: formData.tipo_matricula_id,
-        valor_parcela: segundoCursoData.valor_parcela || formData.valor_parcela,
+        valor_parcela: segundoCursoData.valor_parcela !== null ? segundoCursoData.valor_parcela : formData.valor_parcela,
         forma_pagamento_id: formData.forma_pagamento_id,
         dia_vencimento: formData.dia_vencimento,
         data_matricula: dataHoje,
@@ -408,6 +433,8 @@ export function ModalFichaAluno({
         horario_aula: '',
         valor_parcela: null,
       });
+      // Recarregar dados para atualizar a lista de outros cursos na aba Acadêmica
+      carregarDadosCompletos();
       onSalvar();
     } catch (error: any) {
       console.error('Erro ao criar segundo curso:', error);
@@ -664,6 +691,50 @@ export function ModalFichaAluno({
                   </div>
                 </div>
               </div>
+
+              {/* Outros cursos do aluno */}
+              {outrosCursos.length > 0 && (
+                <div className="border-t border-slate-700 pt-4">
+                  <Label className="mb-3 block text-slate-400 flex items-center gap-2">
+                    <Users className="w-4 h-4" />
+                    Outros Cursos ({outrosCursos.length})
+                  </Label>
+                  <div className="space-y-2">
+                    {outrosCursos.map((outro) => (
+                      <div key={outro.id} className="flex items-center justify-between p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
+                        <div className="flex-1 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                          <div>
+                            <span className="text-slate-400">Curso: </span>
+                            <span className="text-white font-medium">{outro.curso_nome || '-'}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400">Professor: </span>
+                            <span className="text-white">{outro.professor_nome || '-'}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400">Dia: </span>
+                            <span className="text-white">{outro.dia_aula || '-'}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400">Horário: </span>
+                            <span className="text-white">{outro.horario_aula?.substring(0, 5) || '-'}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400">Valor: </span>
+                            <span className="text-white">{outro.valor_parcela != null ? `R$ ${outro.valor_parcela.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '-'}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400">Status: </span>
+                            <span className={`font-medium ${outro.status === 'ativo' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                              {outro.status === 'ativo' ? 'Ativo' : outro.status === 'trancado' ? 'Trancado' : outro.status}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="border-t border-slate-700 pt-4 flex items-center justify-between">
                 <label className="flex items-center gap-2 cursor-pointer">
@@ -1086,8 +1157,10 @@ export function ModalFichaAluno({
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">R$</span>
                   <Input
                     type="number"
-                    value={segundoCursoData.valor_parcela || ''}
-                    onChange={(e) => setSegundoCursoData({ ...segundoCursoData, valor_parcela: e.target.value ? parseFloat(e.target.value) : null })}
+                    min={0}
+                    step="0.01"
+                    value={segundoCursoData.valor_parcela !== null ? segundoCursoData.valor_parcela : ''}
+                    onChange={(e) => setSegundoCursoData({ ...segundoCursoData, valor_parcela: e.target.value !== '' ? parseFloat(e.target.value) : null })}
                     className="pl-10"
                     placeholder={formData.valor_parcela?.toString() || '0,00'}
                   />

@@ -5,6 +5,7 @@ import { AppHeader } from './AppHeader';
 import { useUnidadeFiltro } from '../../../hooks/useUnidadeFiltro';
 import { useCompetenciaFiltro } from '../../../hooks/useCompetenciaFiltro';
 import { OnboardingChecklist } from '@/components/Onboarding/OnboardingChecklist';
+import { PageTitleProvider } from '@/contexts/PageTitleContext';
 
 export function AppLayout() {
   const { unidadeSelecionada, setUnidadeSelecionada, filtroAtivo } = useUnidadeFiltro();
@@ -36,27 +37,29 @@ export function AppLayout() {
   }, []);
 
   return (
-    <div className="flex min-h-screen bg-slate-950">
-      <AppSidebar data-tour="sidebar" />
-      <div 
-        className="flex-1 transition-all duration-300"
-        style={{ 
-          marginLeft: isSidebarCollapsed ? '96px' : '256px' // 24 (w-24) ou 64 (w-64) em pixels
-        }}
-      >
-        <AppHeader 
-          unidadeSelecionada={unidadeSelecionada} 
-          onUnidadeChange={setUnidadeSelecionada}
-          periodoLabel={competencia.range.label}
-        />
-        <main className="p-6">
-          <Outlet context={{ filtroAtivo, unidadeSelecionada, competencia }} />
-        </main>
+    <PageTitleProvider>
+      <div className="flex min-h-screen bg-slate-950">
+        <AppSidebar data-tour="sidebar" />
+        <div 
+          className="flex-1 transition-all duration-300"
+          style={{ 
+            marginLeft: isSidebarCollapsed ? '96px' : '256px'
+          }}
+        >
+          <AppHeader 
+            unidadeSelecionada={unidadeSelecionada} 
+            onUnidadeChange={setUnidadeSelecionada}
+            periodoLabel={competencia.range.label}
+          />
+          <main className="p-6">
+            <Outlet context={{ filtroAtivo, unidadeSelecionada, competencia }} />
+          </main>
+        </div>
+        
+        {/* Modal de Onboarding - aparece no primeiro acesso */}
+        <OnboardingChecklist />
       </div>
-      
-      {/* Modal de Onboarding - aparece no primeiro acesso */}
-      <OnboardingChecklist />
-    </div>
+    </PageTitleProvider>
   );
 }
 

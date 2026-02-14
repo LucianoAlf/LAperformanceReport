@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { 
@@ -40,6 +41,11 @@ interface ResumoGeral {
 }
 
 export function RelatorioDiario() {
+  useSetPageTitle({
+    titulo: 'Relatório Diário',
+    subtitulo: 'Fechamento e snapshot dos números',
+  });
+
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -242,10 +248,7 @@ export function RelatorioDiario() {
         <button onClick={() => navigate('/app/entrada')} className="p-2 text-gray-400 hover:text-white transition-colors">
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold text-white">Relatório Diário</h1>
-          <p className="text-gray-400">Fechamento e snapshot dos números</p>
-        </div>
+        <div className="flex-1" />
         <div className="flex items-center gap-2">
           <Calendar className="w-5 h-5 text-gray-400" />
           <input

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { useOutletContext } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { format } from 'date-fns';
@@ -10,6 +11,7 @@ import {
   Calendar, Upload
 } from 'lucide-react';
 import { KPICard } from '@/components/ui/KPICard';
+import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TabelaAlunos } from './TabelaAlunos';
 import { GestaoTurmas } from './GestaoTurmas';
@@ -114,7 +116,23 @@ export interface Filtros {
 
 type TabAtiva = 'lista' | 'turmas' | 'grade' | 'distribuicao' | 'importar';
 
+const alunosTabs: PageTab<TabAtiva>[] = [
+  { id: 'lista', label: 'Lista de Alunos', shortLabel: 'Lista', icon: Users },
+  { id: 'turmas', label: 'Gestão de Turmas', shortLabel: 'Turmas', icon: Calendar },
+  { id: 'grade', label: 'Grade Horária', shortLabel: 'Grade', icon: Clock },
+  { id: 'distribuicao', label: 'Distribuição', shortLabel: 'Distrib.', icon: BarChart3 },
+  { id: 'importar', label: 'Importar Alunos', shortLabel: 'Importar', icon: Upload, disabled: true, disabledTitle: 'Em breve — funcionalidade em desenvolvimento' },
+];
+
 export function AlunosPage() {
+  useSetPageTitle({
+    titulo: 'Gestão de Alunos',
+    subtitulo: 'Controle completo de alunos, turmas e horários',
+    icone: Users,
+    iconeCor: 'text-white',
+    iconeWrapperCor: 'bg-gradient-to-br from-purple-500 to-pink-500',
+  });
+
   const context = useOutletContext<{ filtroAtivo: boolean; unidadeSelecionada: UnidadeId }>();
   const unidadeAtual = context?.unidadeSelecionada || 'todos';
   const toast = useToast();
@@ -636,7 +654,11 @@ export function AlunosPage() {
       resultado = resultado.filter(a => a.professor_atual_id === parseInt(filtros.professor_id));
     }
     if (filtros.curso_id) {
-      resultado = resultado.filter(a => a.curso_id === parseInt(filtros.curso_id));
+      const cursoIdFiltro = parseInt(filtros.curso_id);
+      resultado = resultado.filter(a => 
+        a.curso_id === cursoIdFiltro || 
+        (a.cursos_ids && a.cursos_ids.includes(cursoIdFiltro))
+      );
     }
     if (filtros.dia_aula) {
       resultado = resultado.filter(a => a.dia_aula === filtros.dia_aula);
@@ -1067,16 +1089,8 @@ export function AlunosPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <header className="flex items-center gap-4">
-        <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center">
-          <Users className="w-5 h-5 text-white" />
-        </div>
-        <div className="flex-1">
-          <h1 className="text-xl font-bold text-white">Gestão de Alunos</h1>
-          <p className="text-sm text-slate-400">Controle completo de alunos, turmas e horários</p>
-        </div>
-        
+      {/* Header actions */}
+      <div className="flex items-center justify-end gap-4">
         {/* Badge de Alerta - Alunos sem lançamento de pagamento */}
         {alertaPagamentos.mostrar && (
           <button
@@ -1092,7 +1106,7 @@ export function AlunosPage() {
             </span>
           </button>
         )}
-      </header>
+      </div>
 
       {/* KPI Cards */}
       <section data-tour="alunos-kpis" className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4">
@@ -1155,64 +1169,16 @@ export function AlunosPage() {
         </div>
       </section>
 
-      {/* Tabs e Conteúdo */}
+      {/* Abas */}
+      <PageTabs
+        tabs={alunosTabs}
+        activeTab={tabAtiva}
+        onTabChange={setTabAtiva}
+        data-tour="alunos-tabs"
+      />
+
+      {/* Conteúdo das Tabs */}
       <section className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
-        {/* Tabs + Novo Aluno */}
-        <div className="flex items-center justify-between border-b border-slate-700">
-          {/* Tabs de navegação */}
-          <div data-tour="alunos-tabs" className="flex items-center gap-2 pb-1">
-            <button
-              onClick={() => setTabAtiva('lista')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
-                tabAtiva === 'lista'
-                  ? 'bg-slate-800 text-white border-b-2 border-purple-500'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-              }`}
-            >
-              <Users className="w-4 h-4" /> Lista de Alunos
-            </button>
-            <button
-              onClick={() => setTabAtiva('turmas')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
-                tabAtiva === 'turmas'
-                  ? 'bg-slate-800 text-white border-b-2 border-purple-500'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-              }`}
-            >
-              <Calendar className="w-4 h-4" /> Gestão de Turmas
-            </button>
-            <button
-              onClick={() => setTabAtiva('grade')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
-                tabAtiva === 'grade'
-                  ? 'bg-slate-800 text-white border-b-2 border-purple-500'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-              }`}
-            >
-              <Clock className="w-4 h-4" /> Grade Horária
-            </button>
-            <button
-              onClick={() => setTabAtiva('distribuicao')}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
-                tabAtiva === 'distribuicao'
-                  ? 'bg-slate-800 text-white border-b-2 border-purple-500'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-              }`}
-            >
-              <BarChart3 className="w-4 h-4" /> Distribuição
-            </button>
-            <button
-              disabled
-              title="Em breve — funcionalidade em desenvolvimento"
-              className="flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium text-slate-600 cursor-not-allowed opacity-50"
-            >
-              <Upload className="w-4 h-4" /> Importar Alunos
-            </button>
-          </div>
-
-        </div>
-
-        {/* Conteúdo das Tabs */}
         {tabAtiva === 'lista' && (
           <TabelaAlunos
             alunos={alunosComTurma}

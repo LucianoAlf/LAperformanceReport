@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { useOutletContext } from 'react-router-dom';
 import { 
   FolderKanban, 
@@ -11,6 +12,7 @@ import {
   Settings,
   Plus
 } from 'lucide-react';
+import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { PageTour, TourHelpButton } from '@/components/Onboarding';
 import { projetosTourSteps } from '@/components/Onboarding/tours';
 import { Button } from '../../ui/button';
@@ -26,24 +28,25 @@ import { useProjetos } from '../../../hooks/useProjetos';
 
 type TabId = 'dashboard' | 'lista' | 'kanban' | 'calendario' | 'timeline' | 'pessoa' | 'configuracoes';
 
-interface Tab {
-  id: TabId;
-  label: string;
-  icon: React.ElementType;
-  count?: number;
-}
-
-const baseTabs: Omit<Tab, 'count'>[] = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { id: 'lista', label: 'Lista', icon: List },
-  { id: 'kanban', label: 'Kanban', icon: Columns3 },
-  { id: 'calendario', label: 'Calendário', icon: Calendar },
-  { id: 'timeline', label: 'Timeline', icon: GitBranch },
-  { id: 'pessoa', label: 'Por Pessoa', icon: Users },
-  { id: 'configuracoes', label: 'Configurações', icon: Settings },
+const baseTabs: PageTab<TabId>[] = [
+  { id: 'dashboard', label: 'Dashboard', shortLabel: 'Dash', icon: LayoutDashboard },
+  { id: 'lista', label: 'Lista', shortLabel: 'Lista', icon: List },
+  { id: 'kanban', label: 'Kanban', shortLabel: 'Kanban', icon: Columns3 },
+  { id: 'calendario', label: 'Calendário', shortLabel: 'Cal.', icon: Calendar },
+  { id: 'timeline', label: 'Timeline', shortLabel: 'Timeline', icon: GitBranch },
+  { id: 'pessoa', label: 'Por Pessoa', shortLabel: 'Pessoa', icon: Users },
+  { id: 'configuracoes', label: 'Configurações', shortLabel: 'Config', icon: Settings },
 ];
 
 export function ProjetosPage() {
+  useSetPageTitle({
+    titulo: 'Gestão de Projetos',
+    subtitulo: 'Gerencie todos os projetos pedagógicos da escola',
+    icone: FolderKanban,
+    iconeCor: 'text-violet-400',
+    iconeWrapperCor: 'bg-gradient-to-br from-violet-500/20 to-purple-500/20',
+  });
+
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
   const [isModalNovoProjetoOpen, setIsModalNovoProjetoOpen] = useState(false);
   const context = useOutletContext<{ unidadeSelecionada: string }>();
@@ -54,7 +57,7 @@ export function ProjetosPage() {
   const totalProjetos = projetos.length;
 
   // Tabs com contagem dinâmica
-  const tabs: Tab[] = baseTabs.map(tab => ({
+  const tabs: PageTab<TabId>[] = baseTabs.map(tab => ({
     ...tab,
     count: tab.id === 'lista' ? totalProjetos : undefined,
   }));
@@ -82,18 +85,8 @@ export function ProjetosPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="p-3 rounded-xl bg-gradient-to-br from-violet-500/20 to-purple-500/20 border border-violet-500/30">
-            <FolderKanban className="w-6 h-6 text-violet-400" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-white">Gestão de Projetos</h1>
-            <p className="text-slate-400 text-sm">Gerencie todos os projetos pedagógicos da escola</p>
-          </div>
-        </div>
-
+      {/* Header actions */}
+      <div className="flex items-center justify-end">
         <div className="flex items-center gap-3">
           {/* Botão Novo Projeto */}
           <Button
@@ -108,42 +101,11 @@ export function ProjetosPage() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-slate-800">
-        <nav className="flex gap-1 -mb-px overflow-x-auto pb-px">
-          {tabs.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`
-                  flex items-center gap-2 px-4 py-3 text-sm font-medium rounded-t-lg transition-all whitespace-nowrap
-                  ${isActive 
-                    ? 'bg-slate-800/50 text-violet-400 border-b-2 border-violet-500' 
-                    : 'text-slate-400 hover:text-white hover:bg-slate-800/30'
-                  }
-                `}
-              >
-                <Icon className="w-4 h-4" />
-                {tab.label}
-                {tab.count !== undefined && (
-                  <span className={`
-                    px-2 py-0.5 text-xs rounded-full
-                    ${isActive 
-                      ? 'bg-violet-500/20 text-violet-400' 
-                      : 'bg-slate-700 text-slate-400'
-                    }
-                  `}>
-                    {tab.count}
-                  </span>
-                )}
-              </button>
-            );
-          })}
-        </nav>
-      </div>
+      <PageTabs
+        tabs={tabs}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
 
       {/* Conteúdo da Tab */}
       <div className="min-h-[calc(100vh-280px)]">

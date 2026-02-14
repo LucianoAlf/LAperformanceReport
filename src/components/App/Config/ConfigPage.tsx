@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react';
+import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { Settings, Save, Plus, Trash2, RefreshCw, Building2, Users, Tag, Megaphone, Clock, Music, Edit2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOutletContext } from 'react-router-dom';
+import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { PageTour, TourHelpButton } from '@/components/Onboarding';
 import { configTourSteps } from '@/components/Onboarding/tours';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -57,6 +59,14 @@ interface Curso {
 type TabId = 'unidades' | 'canais' | 'motivos' | 'tipos' | 'cursos';
 
 export function ConfigPage() {
+  useSetPageTitle({
+    titulo: 'Configurações',
+    subtitulo: 'Gerencie unidades, canais e categorias do sistema',
+    icone: Settings,
+    iconeCor: 'text-slate-400',
+    iconeWrapperCor: 'bg-slate-700/50',
+  });
+
   const { isAdmin } = useAuth();
   const { filtroAtivo } = useOutletContext<{ filtroAtivo: string | null }>();
   
@@ -497,12 +507,12 @@ export function ConfigPage() {
     }
   }
 
-  const tabs = [
-    { id: 'unidades' as const, label: 'Unidades', icon: Building2 },
-    { id: 'canais' as const, label: 'Canais de Origem', icon: Megaphone },
-    { id: 'motivos' as const, label: 'Motivos de Saída', icon: Tag },
-    { id: 'tipos' as const, label: 'Tipos de Saída', icon: Tag },
-    { id: 'cursos' as const, label: 'Cursos', icon: Music },
+  const configTabs: PageTab<TabId>[] = [
+    { id: 'unidades', label: 'Unidades', shortLabel: 'Unid.', icon: Building2 },
+    { id: 'canais', label: 'Canais de Origem', shortLabel: 'Canais', icon: Megaphone },
+    { id: 'motivos', label: 'Motivos de Saída', shortLabel: 'Motivos', icon: Tag },
+    { id: 'tipos', label: 'Tipos de Saída', shortLabel: 'Tipos', icon: Tag },
+    { id: 'cursos', label: 'Cursos', shortLabel: 'Cursos', icon: Music },
   ];
 
   if (loading) {
@@ -515,43 +525,17 @@ export function ConfigPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Settings className="text-slate-400" />
-            Configurações
-          </h1>
-          <p className="text-slate-400 text-sm mt-1">
-            Gerencie unidades, canais e categorias do sistema
-          </p>
-        </div>
-        <button
-          onClick={fetchDados}
-          className="p-2 text-slate-400 hover:text-white transition-colors"
-          title="Recarregar"
-        >
-          <RefreshCw size={20} />
-        </button>
-      </div>
+      {/* Header actions */}
+      {/* Linha de filtros (espaçador para alinhamento) */}
+      <PageFilterBar />
 
       {/* Tabs */}
-      <div data-tour="config-tabs" className="flex items-center gap-2 border-b border-slate-700 pb-1">
-        {tabs.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
-              activeTab === tab.id
-                ? 'bg-slate-800 text-white border-b-2 border-purple-500'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-            }`}
-          >
-            <tab.icon className="w-4 h-4" />
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <PageTabs
+        tabs={configTabs}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+        data-tour="config-tabs"
+      />
 
       {/* Conteúdo das Tabs */}
       <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">

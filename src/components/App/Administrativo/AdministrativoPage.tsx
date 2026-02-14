@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { useOutletContext } from 'react-router-dom';
 import { 
   Users, DollarSign, BookOpen, GraduationCap, UserPlus,
@@ -14,6 +15,7 @@ import { KPICard } from '@/components/ui/KPICard';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
+import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
 import { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
 
@@ -99,6 +101,14 @@ const tabs: { id: TabId; label: string; icon: React.ComponentType<{ className?: 
 ];
 
 export function AdministrativoPage() {
+  useSetPageTitle({
+    titulo: 'Administrativo',
+    subtitulo: 'Gestão de Renovações, Avisos e Cancelamentos',
+    icone: FileText,
+    iconeCor: 'text-violet-400',
+    iconeWrapperCor: 'bg-violet-500/20',
+  });
+
   const context = useOutletContext<{ filtroAtivo: boolean; unidadeSelecionada: UnidadeId }>();
   const unidade = context?.unidadeSelecionada || 'todos';
   
@@ -532,15 +542,8 @@ export function AdministrativoPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-            <FileText className="w-7 h-7 text-violet-400" />
-            Administrativo
-          </h1>
-          <p className="text-slate-400 mt-1">Gestão de Renovações, Avisos e Cancelamentos</p>
-        </div>
+      {/* Header actions */}
+      <div className="flex items-center justify-end">
         <div className="flex items-center gap-4">
           {mainTab === 'lancamentos' && (
             <>
@@ -567,56 +570,16 @@ export function AdministrativoPage() {
       </div>
 
       {/* Tabs Principais */}
-      <div className="flex gap-2 border-b border-slate-700 pb-2">
-        <button
-          onClick={() => setMainTab('lancamentos')}
-          className={cn(
-            "flex items-center gap-2 px-5 py-2.5 rounded-t-xl text-sm font-medium transition-all",
-            mainTab === 'lancamentos'
-              ? "bg-gradient-to-r from-purple-500 to-violet-500 text-white shadow-lg shadow-purple-500/20"
-              : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white"
-          )}
-        >
-          <CheckCircle className="w-4 h-4" />
-          Lançamentos
-        </button>
-        <button
-          onClick={() => setMainTab('fideliza')}
-          className={cn(
-            "flex items-center gap-2 px-5 py-2.5 rounded-t-xl text-sm font-medium transition-all",
-            mainTab === 'fideliza'
-              ? "bg-gradient-to-r from-yellow-500 to-orange-500 text-white shadow-lg shadow-yellow-500/20"
-              : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white"
-          )}
-        >
-          <Trophy className="w-4 h-4" />
-          Programa Fideliza+ LA
-        </button>
-        <button
-          onClick={() => setMainTab('lojinha')}
-          className={cn(
-            "flex items-center gap-2 px-5 py-2.5 rounded-t-xl text-sm font-medium transition-all",
-            mainTab === 'lojinha'
-              ? "bg-gradient-to-r from-sky-500 to-cyan-500 text-white shadow-lg shadow-sky-500/20"
-              : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white"
-          )}
-        >
-          <ShoppingBag className="w-4 h-4" />
-          Lojinha
-        </button>
-        <button
-          onClick={() => setMainTab('farmer')}
-          className={cn(
-            "flex items-center gap-2 px-5 py-2.5 rounded-t-xl text-sm font-medium transition-all",
-            mainTab === 'farmer'
-              ? "bg-gradient-to-r from-violet-500 to-purple-500 text-white shadow-lg shadow-violet-500/20"
-              : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white"
-          )}
-        >
-          <ClipboardList className="w-4 h-4" />
-          Painel Farmer
-        </button>
-      </div>
+      <PageTabs
+        tabs={[
+          { id: 'lancamentos' as const, label: 'Lançamentos', shortLabel: 'Lanç.', icon: CheckCircle, activeGradient: 'from-purple-500 to-violet-500', activeShadow: 'shadow-purple-500/20' },
+          { id: 'fideliza' as const, label: 'Programa Fideliza+ LA', shortLabel: 'Fideliza+', icon: Trophy, activeGradient: 'from-yellow-500 to-orange-500', activeShadow: 'shadow-yellow-500/20' },
+          { id: 'lojinha' as const, label: 'Lojinha', shortLabel: 'Lojinha', icon: ShoppingBag, activeGradient: 'from-sky-500 to-cyan-500', activeShadow: 'shadow-sky-500/20' },
+          { id: 'farmer' as const, label: 'Painel Farmer', shortLabel: 'Farmer', icon: ClipboardList, activeGradient: 'from-violet-500 to-purple-500', activeShadow: 'shadow-violet-500/20' },
+        ]}
+        activeTab={mainTab}
+        onTabChange={setMainTab}
+      />
 
       {/* Conteúdo baseado na tab principal */}
       {mainTab === 'fideliza' ? (

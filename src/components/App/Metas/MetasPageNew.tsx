@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { useOutletContext } from 'react-router-dom';
 import { 
   Target, RefreshCw, Users, TrendingUp, TrendingDown, DollarSign, 
@@ -123,6 +124,14 @@ const PERIODOS: Record<FiltroPeriodo, PeriodoConfig> = {
 type AbaAtiva = 'gestao' | 'comercial' | 'professores' | 'simulador' | 'simulador-turma';
 
 export function MetasPageNew() {
+  useSetPageTitle({
+    titulo: 'Gestão de Metas',
+    subtitulo: 'Defina metas mensais para acompanhar o progresso dos KPIs',
+    icone: Target,
+    iconeCor: 'text-amber-400',
+    iconeWrapperCor: 'bg-amber-500/20',
+  });
+
   // Pegar filtros do contexto do Outlet (vem do AppLayout)
   const context = useOutletContext<OutletContextType>();
   // Usar unidadeSelecionada diretamente (mesmo que o Simulador usa)
@@ -339,19 +348,6 @@ export function MetasPageNew() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-            <Target className="text-amber-400" />
-            Gestão de Metas
-          </h1>
-          <p className="text-slate-400 text-sm mt-1">
-            Defina metas mensais para acompanhar o progresso dos KPIs
-          </p>
-        </div>
-      </div>
-
       {/* Filtros: Período + Ano + Info da Unidade */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div className="flex items-center gap-4">

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -38,6 +39,11 @@ interface Aluno {
 }
 
 export function FormRenovacao() {
+  useSetPageTitle({
+    titulo: 'Registrar Renovação',
+    subtitulo: 'Renovar contrato de aluno',
+  });
+
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [searchingAluno, setSearchingAluno] = useState(false);
@@ -144,10 +150,6 @@ export function FormRenovacao() {
         <button onClick={() => navigate('/app/entrada')} className="p-2 text-gray-400 hover:text-white transition-colors">
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <div>
-          <h1 className="text-2xl font-bold text-white">Registrar Renovação</h1>
-          <p className="text-gray-400">Renovar contrato de aluno</p>
-        </div>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">

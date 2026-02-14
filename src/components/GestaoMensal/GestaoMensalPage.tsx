@@ -1,11 +1,12 @@
 import { useState } from 'react';
+import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { useOutletContext } from 'react-router-dom';
 import { BarChart3, TrendingUp, Users } from 'lucide-react';
-import { cn } from '@/lib/utils';
 import { TabGestao } from './TabGestao';
 import { TabComercialNew } from './TabComercialNew';
 import { TabProfessoresNew } from './TabProfessoresNew';
 import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
+import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { PageTour } from '@/components/Onboarding/PageTour';
 import { TourHelpButton } from '@/components/Onboarding/TourHelpButton';
 import { analyticsTourSteps } from '@/components/Onboarding/tours';
@@ -17,10 +18,10 @@ interface OutletContextType {
   competencia: ReturnType<typeof import('@/hooks/useCompetenciaFiltro').useCompetenciaFiltro>;
 }
 
-const tabs = [
-  { id: 'gestao' as const, label: 'Gestão', shortLabel: 'Gestão', icon: BarChart3 },
-  { id: 'comercial' as const, label: 'Comercial', shortLabel: 'Comercial', icon: TrendingUp },
-  { id: 'professores' as const, label: 'Professores', shortLabel: 'Profs', icon: Users },
+const tabs: PageTab<TabId>[] = [
+  { id: 'gestao', label: 'Gestão', shortLabel: 'Gestão', icon: BarChart3 },
+  { id: 'comercial', label: 'Comercial', shortLabel: 'Comercial', icon: TrendingUp },
+  { id: 'professores', label: 'Professores', shortLabel: 'Profs', icon: Users },
 ];
 
 interface GestaoMensalPageProps {
@@ -28,6 +29,14 @@ interface GestaoMensalPageProps {
 }
 
 export function GestaoMensalPage({ mesReferencia }: GestaoMensalPageProps) {
+  useSetPageTitle({
+    titulo: 'Analytics',
+    subtitulo: 'Análise detalhada de gestão, comercial e professores',
+    icone: BarChart3,
+    iconeCor: 'text-violet-400',
+    iconeWrapperCor: 'bg-violet-500/20',
+  });
+
   const [activeTab, setActiveTab] = useState<TabId>('gestao');
   
   // Pegar filtros do contexto do Outlet (vem do AppLayout)
@@ -54,75 +63,29 @@ export function GestaoMensalPage({ mesReferencia }: GestaoMensalPageProps) {
 
   return (
     <div className="space-y-6">
-      {/* Sistema de Abas com Filtro de Competência */}
-      <div className="animate-in fade-in slide-in-from-top-4 duration-500">
-        {/* Desktop Tabs */}
-        <div className="hidden lg:block border-b border-slate-700">
-          <div className="flex items-center justify-between gap-4 px-4">
-            {/* Abas à esquerda */}
-            <div data-tour="analytics-abas" className="flex items-center gap-2 pb-1 overflow-x-auto scrollbar-hide">
-              {tabs.map(tab => (
-                <button
-                  key={tab.id}
-                  onClick={() => handleTabChange(tab.id)}
-                  className={cn(
-                    "flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition whitespace-nowrap",
-                    activeTab === tab.id
-                      ? "bg-slate-800 text-white border-b-2 border-purple-500"
-                      : "text-slate-400 hover:text-white hover:bg-slate-800/50"
-                  )}
-                >
-                  <tab.icon className="w-4 h-4" />
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Filtro de Competência à direita */}
-            {competenciaFiltro && competenciaRange && setTipo && setAno && setMes && setTrimestre && setSemestre && (
-              <div data-tour="analytics-filtro-periodo" className="flex-shrink-0">
-                <CompetenciaFilter
-                  filtro={competenciaFiltro}
-                  range={competenciaRange}
-                  anosDisponiveis={anosDisponiveis}
-                  onTipoChange={setTipo}
-                  onAnoChange={setAno}
-                  onMesChange={setMes}
-                  onTrimestreChange={setTrimestre}
-                  onSemestreChange={setSemestre}
-                />
-              </div>
-            )}
-          </div>
+      {/* Filtro de Competência */}
+      {competenciaFiltro && competenciaRange && setTipo && setAno && setMes && setTrimestre && setSemestre && (
+        <div data-tour="analytics-filtro-periodo" className="flex justify-end">
+          <CompetenciaFilter
+            filtro={competenciaFiltro}
+            range={competenciaRange}
+            anosDisponiveis={anosDisponiveis}
+            onTipoChange={setTipo}
+            onAnoChange={setAno}
+            onMesChange={setMes}
+            onTrimestreChange={setTrimestre}
+            onSemestreChange={setSemestre}
+          />
         </div>
+      )}
 
-        {/* Mobile Tabs (Cockpit Premium Style) */}
-        <div className="lg:hidden mb-6">
-          <div className="relative flex bg-[#0f172a] p-1 rounded-xl border border-slate-800/50 shadow-inner overflow-hidden">
-            <div
-              className="absolute top-1.5 bottom-1.5 transition-all duration-500 cubic-bezier(0.4, 0, 0.2, 1) bg-slate-800/80 rounded-lg border border-slate-700/30 shadow-lg"
-              style={{
-                width: `calc(${100 / tabs.length}% - 10px)`,
-                left: `calc(${(tabs.findIndex(t => t.id === activeTab) * 100) / tabs.length}% + 5px)`,
-              }}
-            />
-            {tabs.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => handleTabChange(tab.id)}
-                className={cn(
-                  "relative z-10 flex-1 py-3 font-black uppercase tracking-widest transition-all duration-300 whitespace-nowrap text-[11px]",
-                  activeTab === tab.id
-                    ? "text-violet-400 scale-[1.02]"
-                    : "text-slate-500 hover:text-slate-200"
-                )}
-              >
-                {tab.shortLabel}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+      {/* Abas */}
+      <PageTabs
+        tabs={tabs}
+        activeTab={activeTab}
+        onTabChange={handleTabChange}
+        data-tour="analytics-abas"
+      />
 
       {/* Conteúdo da Aba Ativa */}
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { useOutletContext } from 'react-router-dom';
 import { 
   Smartphone, 
@@ -33,6 +34,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -165,6 +167,14 @@ const TIPOS_ALUNO = [
 const TIPOS_SEM_PAGAMENTO = ['bolsista_integral', 'nao_pagante'];
 
 export function ComercialPage() {
+  useSetPageTitle({
+    titulo: 'Comercial',
+    subtitulo: 'Lançamento diário de leads, experimentais, visitas e matrículas',
+    icone: TrendingUp,
+    iconeCor: 'text-emerald-400',
+    iconeWrapperCor: 'bg-emerald-500/20',
+  });
+
   const { usuario, isAdmin, unidadeId } = useAuth();
   const context = useOutletContext<{ filtroAtivo: string | null; unidadeSelecionada: string | null }>();
   const filtroAtivo = context?.filtroAtivo;
@@ -2000,14 +2010,7 @@ export function ComercialPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-            <TrendingUp className="w-7 h-7 text-emerald-400" />
-            Comercial
-          </h1>
-          <p className="text-slate-400 mt-1">Lançamento diário de leads, experimentais, visitas e matrículas</p>
-        </div>
+      <div className="flex items-center justify-end">
         <div className="flex items-center gap-4">
           <CompetenciaFilter
             filtro={competencia.filtro}
@@ -2029,35 +2032,15 @@ export function ComercialPage() {
         </div>
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════════ */}
       {/* ABAS PRINCIPAIS */}
-      {/* ═══════════════════════════════════════════════════════════════ */}
-      <div className="flex gap-2 border-b border-slate-700 pb-2">
-        <button
-          onClick={() => setAbaPrincipal('lancamentos')}
-          className={cn(
-            "flex items-center gap-2 px-5 py-2.5 rounded-t-xl text-sm font-medium transition-all",
-            abaPrincipal === 'lancamentos' 
-              ? "bg-gradient-to-r from-cyan-500 to-blue-500 text-white shadow-lg shadow-cyan-500/20" 
-              : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white"
-          )}
-        >
-          <Zap className="w-4 h-4" />
-          Lançamentos
-        </button>
-        <button
-          onClick={() => setAbaPrincipal('programa')}
-          className={cn(
-            "flex items-center gap-2 px-5 py-2.5 rounded-t-xl text-sm font-medium transition-all",
-            abaPrincipal === 'programa' 
-              ? "bg-gradient-to-r from-yellow-500 to-orange-500 text-white shadow-lg shadow-yellow-500/20" 
-              : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white"
-          )}
-        >
-          <Trophy className="w-4 h-4" />
-          Programa Matriculador+ LA
-        </button>
-      </div>
+      <PageTabs
+        tabs={[
+          { id: 'lancamentos' as const, label: 'Lançamentos', shortLabel: 'Lanç.', icon: Zap, activeGradient: 'from-cyan-500 to-blue-500', activeShadow: 'shadow-cyan-500/20' },
+          { id: 'programa' as const, label: 'Programa Matriculador+ LA', shortLabel: 'Matriculador+', icon: Trophy, activeGradient: 'from-yellow-500 to-orange-500', activeShadow: 'shadow-yellow-500/20' },
+        ]}
+        activeTab={abaPrincipal}
+        onTabChange={setAbaPrincipal}
+      />
 
       {/* ═══════════════════════════════════════════════════════════════ */}
       {/* CONTEÚDO DA ABA PROGRAMA */}

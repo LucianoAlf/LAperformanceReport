@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Calendar, MapPin, Building2 } from 'lucide-react';
-import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import { useAuth } from '../../../contexts/AuthContext';
+import { usePageTitle } from '../../../contexts/PageTitleContext';
 import { supabase } from '../../../lib/supabase';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
@@ -14,18 +13,13 @@ interface Unidade {
 interface AppHeaderProps {
   unidadeSelecionada: string | null;
   onUnidadeChange: (unidadeId: string | null) => void;
-  periodoLabel?: string; // Label do período selecionado (ex: "Jan/2026", "Q1 2026")
+  periodoLabel?: string;
 }
 
 export function AppHeader({ unidadeSelecionada, onUnidadeChange, periodoLabel }: AppHeaderProps) {
   const { usuario, isAdmin, loading } = useAuth();
+  const { pageTitle } = usePageTitle();
   const [unidades, setUnidades] = useState<Unidade[]>([]);
-  const hoje = new Date();
-
-  // Debug: verificar estado do admin
-  useEffect(() => {
-    console.log('[AppHeader] loading:', loading, 'isAdmin:', isAdmin, 'usuario:', usuario?.perfil, 'unidades carregadas:', unidades.length);
-  }, [loading, isAdmin, usuario, unidades]);
 
   // Carregar unidades quando usuario for admin
   useEffect(() => {
@@ -35,35 +29,34 @@ export function AppHeader({ unidadeSelecionada, onUnidadeChange, periodoLabel }:
   }, [loading, isAdmin]);
 
   const carregarUnidades = async () => {
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('unidades')
       .select('id, nome')
       .eq('ativo', true)
       .order('nome');
-    
-    console.log('[AppHeader] Unidades carregadas:', data, 'erro:', error);
     if (data) setUnidades(data);
   };
 
-  const getSaudacao = () => {
-    const hora = hoje.getHours();
-    if (hora < 12) return 'Bom dia';
-    if (hora < 18) return 'Boa tarde';
-    return 'Boa noite';
-  };
+  const Icone = pageTitle?.icone;
 
   return (
-    <header className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur-sm border-b border-slate-800 px-6 py-4">
+    <header className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur-sm border-b border-slate-800 px-6 py-3">
       <div className="flex items-center justify-between">
-        {/* Saudação */}
-        <div>
-          <h1 className="text-xl font-bold text-white">
-            {getSaudacao()}, {usuario?.nome?.split(' ')[0] || 'Usuário'}! 👋
-          </h1>
-          <p className="text-sm text-gray-500 flex items-center gap-2">
-            <Calendar className="w-4 h-4" />
-            {format(hoje, "EEEE, d 'de' MMMM 'de' yyyy", { locale: ptBR })}
-          </p>
+        {/* Título da página */}
+        <div className="flex items-center gap-3">
+          {Icone && (
+            <div className={`p-2 rounded-xl ${pageTitle?.iconeWrapperCor || 'bg-slate-700/50'}`}>
+              <Icone className={`w-5 h-5 ${pageTitle?.iconeCor || 'text-slate-400'}`} />
+            </div>
+          )}
+          <div>
+            <h1 className="text-xl font-bold text-white">
+              {pageTitle?.titulo || 'LA Report'}
+            </h1>
+            {pageTitle?.subtitulo && (
+              <p className="text-sm text-slate-400">{pageTitle.subtitulo}</p>
+            )}
+          </div>
         </div>
 
         {/* Controles */}
@@ -90,7 +83,6 @@ export function AppHeader({ unidadeSelecionada, onUnidadeChange, periodoLabel }:
               </Select>
             </div>
           ) : (
-            /* Usuário de unidade - mostra unidade fixa */
             <div className="flex items-center gap-2 bg-slate-800/50 rounded-xl px-3 py-2">
               <Building2 className="w-4 h-4 text-cyan-400" />
               <span className="text-sm text-white">{usuario?.unidade_nome || 'Unidade'}</span>

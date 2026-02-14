@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { useOutletContext } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { format, differenceInMonths } from 'date-fns';
@@ -10,6 +11,7 @@ import {
   ChevronDown, Filter, Music, BarChart3, Table, LayoutGrid, MapPin, Clock,
   Calendar, Target, Settings
 } from 'lucide-react';
+import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { PageTour, TourHelpButton } from '@/components/Onboarding';
 import { professoresTourSteps } from '@/components/Onboarding/tours';
 import { KPICard } from '@/components/ui/KPICard';
@@ -39,7 +41,24 @@ import type {
 
 type AbaAtiva = 'cadastro' | 'performance' | 'carteira' | 'agenda' | '360' | 'configuracoes';
 
+const professoresTabs: PageTab<AbaAtiva>[] = [
+  { id: 'cadastro', label: 'Cadastro', shortLabel: 'Cadastro', icon: Users },
+  { id: 'performance', label: 'Performance', shortLabel: 'Perf.', icon: Target },
+  { id: 'carteira', label: 'Carteira', shortLabel: 'Carteira', icon: Users },
+  { id: 'agenda', label: 'Agenda', shortLabel: 'Agenda', icon: Calendar },
+  { id: '360', label: '360°', shortLabel: '360°', icon: BarChart3 },
+  { id: 'configuracoes', label: 'Configurações', shortLabel: 'Config', icon: Settings },
+];
+
 export function ProfessoresPage() {
+  useSetPageTitle({
+    titulo: 'Gestão de Professores',
+    subtitulo: 'Cadastro, turmas e performance da equipe pedagógica',
+    icone: GraduationCap,
+    iconeCor: 'text-violet-400',
+    iconeWrapperCor: 'bg-violet-500/20',
+  });
+
   const context = useOutletContext<{ filtroAtivo: boolean; unidadeSelecionada: UnidadeId }>();
   const unidadeAtual = context?.unidadeSelecionada || 'todos';
   const toast = useToast();
@@ -526,88 +545,13 @@ export function ProfessoresPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-            <GraduationCap className="w-7 h-7 text-violet-400" />
-            Gestão de Professores
-          </h1>
-          <p className="text-slate-400 text-sm mt-1">
-            Cadastro, turmas e performance da equipe pedagógica
-          </p>
-        </div>
-      </div>
-
       {/* Abas */}
-      <div data-tour="professores-abas" className="flex items-center gap-2 border-b border-slate-700 pb-1">
-        <button
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
-            abaAtiva === 'cadastro'
-              ? 'bg-slate-800 text-white border-b-2 border-purple-500'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-          }`}
-          onClick={() => setAbaAtiva('cadastro')}
-        >
-          <Users className="w-4 h-4" />
-          Cadastro
-        </button>
-        <button
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
-            abaAtiva === 'performance'
-              ? 'bg-slate-800 text-white border-b-2 border-purple-500'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-          }`}
-          onClick={() => setAbaAtiva('performance')}
-        >
-          <Target className="w-4 h-4" />
-          Performance
-        </button>
-        <button
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
-            abaAtiva === 'carteira'
-              ? 'bg-slate-800 text-white border-b-2 border-purple-500'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-          }`}
-          onClick={() => setAbaAtiva('carteira')}
-        >
-          <Users className="w-4 h-4" />
-          Carteira
-        </button>
-        <button
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
-            abaAtiva === 'agenda'
-              ? 'bg-slate-800 text-white border-b-2 border-purple-500'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-          }`}
-          onClick={() => setAbaAtiva('agenda')}
-        >
-          <Calendar className="w-4 h-4" />
-          Agenda
-        </button>
-        <button
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
-            abaAtiva === '360'
-              ? 'bg-slate-800 text-white border-b-2 border-purple-500'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-          }`}
-          onClick={() => setAbaAtiva('360')}
-        >
-          <BarChart3 className="w-4 h-4" />
-          360°
-        </button>
-        <button
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
-            abaAtiva === 'configuracoes'
-              ? 'bg-slate-800 text-white border-b-2 border-purple-500'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-          }`}
-          onClick={() => setAbaAtiva('configuracoes')}
-        >
-          <Settings className="w-4 h-4" />
-          Configurações
-        </button>
-      </div>
+      <PageTabs
+        tabs={professoresTabs}
+        activeTab={abaAtiva}
+        onTabChange={setAbaAtiva}
+        data-tour="professores-abas"
+      />
 
       {/* Conteúdo da aba Performance */}
       {abaAtiva === 'performance' && (

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -75,6 +76,11 @@ interface Professor {
 }
 
 export function FormMatricula() {
+  useSetPageTitle({
+    titulo: 'Nova Matrícula',
+    subtitulo: 'Converter lead em aluno ou cadastrar nova matrícula',
+  });
+
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const leadIdParam = searchParams.get('lead');
@@ -263,10 +269,6 @@ export function FormMatricula() {
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
-        <div>
-          <h1 className="text-2xl font-bold text-white">Nova Matrícula</h1>
-          <p className="text-gray-400">Converter lead em aluno ou cadastrar nova matrícula</p>
-        </div>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">

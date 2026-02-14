@@ -1,4 +1,5 @@
 import React from 'react';
+import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { Link } from 'react-router-dom';
 import { 
   Phone, 
@@ -77,12 +78,16 @@ const menuGestao = [
 ];
 
 export function EntradaMenu() {
+  useSetPageTitle({
+    titulo: 'Entrada de Dados',
+    subtitulo: 'Selecione o tipo de registro que deseja fazer',
+    icone: FileText,
+    iconeCor: 'text-slate-400',
+    iconeWrapperCor: 'bg-slate-700/50',
+  });
+
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-white mb-2">Entrada de Dados</h1>
-        <p className="text-gray-400">Selecione o tipo de registro que deseja fazer</p>
-      </div>
 
       {/* Comercial */}
       <section>

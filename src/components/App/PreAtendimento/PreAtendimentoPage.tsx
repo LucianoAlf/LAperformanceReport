@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { useOutletContext } from 'react-router-dom';
 import {
   LayoutDashboard,
@@ -11,7 +12,7 @@ import {
   Phone,
   MessageSquare,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { DashboardTab } from './tabs/DashboardTab';
 import { PipelineTab } from './tabs/PipelineTab';
 import { LeadsTab } from './tabs/LeadsTab';
@@ -31,15 +32,15 @@ import { useLeadsCRM } from './hooks/useLeadsCRM';
 import type { CRMTabId, LeadCRM } from './types';
 
 // Definição das 8 abas
-const crmTabs = [
-  { id: 'dashboard' as const, label: 'Dashboard', shortLabel: 'Dash', icon: LayoutDashboard },
-  { id: 'pipeline' as const, label: 'Pipeline', shortLabel: 'Pipeline', icon: KanbanSquare },
-  { id: 'conversas' as const, label: 'Conversas', shortLabel: 'Chat', icon: MessageSquare },
-  { id: 'leads' as const, label: 'Leads', shortLabel: 'Leads', icon: ClipboardList },
-  { id: 'agenda' as const, label: 'Agenda', shortLabel: 'Agenda', icon: CalendarDays },
-  { id: 'metas' as const, label: 'Metas', shortLabel: 'Metas', icon: TrendingUp },
-  { id: 'mila' as const, label: 'Painel Mila', shortLabel: 'Mila', icon: Bot },
-  { id: 'relatorios' as const, label: 'Relatórios', shortLabel: 'Relat.', icon: FileText },
+const crmTabs: PageTab<CRMTabId>[] = [
+  { id: 'dashboard', label: 'Dashboard', shortLabel: 'Dash', icon: LayoutDashboard },
+  { id: 'pipeline', label: 'Pipeline', shortLabel: 'Pipeline', icon: KanbanSquare },
+  { id: 'conversas', label: 'Conversas', shortLabel: 'Chat', icon: MessageSquare },
+  { id: 'leads', label: 'Leads', shortLabel: 'Leads', icon: ClipboardList },
+  { id: 'agenda', label: 'Agenda', shortLabel: 'Agenda', icon: CalendarDays },
+  { id: 'metas', label: 'Metas', shortLabel: 'Metas', icon: TrendingUp },
+  { id: 'mila', label: 'Painel Mila', shortLabel: 'Mila', icon: Bot },
+  { id: 'relatorios', label: 'Relatórios', shortLabel: 'Relat.', icon: FileText },
 ];
 
 interface OutletContextType {
@@ -52,6 +53,14 @@ interface OutletContextType {
 }
 
 export function PreAtendimentoPage() {
+  useSetPageTitle({
+    titulo: 'Pré-Atendimento',
+    subtitulo: 'CRM da Andreza — Gestão de leads, experimentais, visitas e follow-ups',
+    icone: Phone,
+    iconeCor: 'text-violet-400',
+    iconeWrapperCor: 'bg-violet-500/20',
+  });
+
   const [activeTab, setActiveTab] = useState<CRMTabId>('dashboard');
   const [leadSelecionado, setLeadSelecionado] = useState<LeadCRM | null>(null);
   const [drawerAberto, setDrawerAberto] = useState(false);
@@ -103,64 +112,12 @@ export function PreAtendimentoPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header da página */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-violet-500/20">
-              <Phone className="w-6 h-6 text-violet-400" />
-            </div>
-            Pré-Atendimento
-          </h1>
-          <p className="text-slate-400 text-sm mt-1">
-            CRM da Andreza — Gestão de leads, experimentais, visitas e follow-ups
-          </p>
-        </div>
-      </div>
-
       {/* Sistema de Abas */}
-      <div className="animate-in fade-in slide-in-from-top-4 duration-500">
-        {/* Desktop Tabs */}
-        <div className="hidden lg:block border-b border-slate-700">
-          <div className="flex items-center gap-2 pb-1 overflow-x-auto scrollbar-hide px-1">
-            {crmTabs.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={cn(
-                  "flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition whitespace-nowrap",
-                  activeTab === tab.id
-                    ? "bg-slate-800 text-white border-b-2 border-violet-500"
-                    : "text-slate-400 hover:text-white hover:bg-slate-800/50"
-                )}
-              >
-                <tab.icon className="w-4 h-4" />
-                {tab.label}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Mobile Tabs */}
-        <div className="lg:hidden mb-6">
-          <div className="relative flex bg-[#0f172a] p-1 rounded-xl border border-slate-800/50 shadow-inner overflow-x-auto scrollbar-hide">
-            {crmTabs.map(tab => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={cn(
-                  "relative z-10 flex-shrink-0 px-3 py-3 font-bold uppercase tracking-wider transition-all duration-300 whitespace-nowrap text-[10px]",
-                  activeTab === tab.id
-                    ? "text-violet-400 bg-slate-800/80 rounded-lg border border-slate-700/30"
-                    : "text-slate-500 hover:text-slate-200"
-                )}
-              >
-                {tab.shortLabel}
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+      <PageTabs
+        tabs={crmTabs}
+        activeTab={activeTab}
+        onTabChange={setActiveTab}
+      />
 
       {/* Conteúdo da Aba Ativa */}
       <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">

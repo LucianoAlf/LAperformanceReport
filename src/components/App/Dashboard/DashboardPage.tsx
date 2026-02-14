@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { useOutletContext } from 'react-router-dom';
 import { 
   Users, 
@@ -97,6 +98,14 @@ interface ResumoUnidade {
 }
 
 export function DashboardPage() {
+  useSetPageTitle({
+    titulo: 'Dashboard',
+    subtitulo: 'Visão consolidada de gestão, comercial e professores',
+    icone: BarChart3,
+    iconeCor: 'text-cyan-400',
+    iconeWrapperCor: 'bg-cyan-500/20',
+  });
+
   const [dados, setDados] = useState<DashboardData[]>([]);
   const [alertas, setAlertas] = useState<Alerta[]>([]);
   const [loading, setLoading] = useState(true);

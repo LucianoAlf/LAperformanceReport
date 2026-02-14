@@ -1,4 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useSetPageTitle } from '@/contexts/PageTitleContext';
+import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { useOutletContext } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
@@ -71,7 +73,20 @@ function getTipoConfig(tipo: string | null) {
 
 type TabAtiva = 'salas' | 'inventario';
 
+const salasTabs: PageTab<TabAtiva>[] = [
+  { id: 'salas', label: 'Salas', shortLabel: 'Salas', icon: DoorOpen },
+  { id: 'inventario', label: 'Inventário', shortLabel: 'Invent.', icon: Package },
+];
+
 export function SalasPage() {
+  useSetPageTitle({
+    titulo: 'Gestão de Salas',
+    subtitulo: 'Configure espaços físicos e recursos da escola',
+    icone: Building2,
+    iconeCor: 'text-white',
+    iconeWrapperCor: 'bg-gradient-to-br from-purple-500 to-pink-500',
+  });
+
   const context = useOutletContext<{ filtroAtivo: boolean; unidadeSelecionada: UnidadeId }>();
   const unidadeAtual = context?.unidadeSelecionada || 'todos';
   
@@ -351,42 +366,13 @@ export function SalasPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <header className="flex items-center gap-4">
-        <div className="w-10 h-10 bg-gradient-to-br from-purple-500 to-pink-500 rounded-xl flex items-center justify-center">
-          <Building2 className="w-5 h-5 text-white" />
-        </div>
-        <div>
-          <h1 className="text-2xl font-bold text-white">Gestão de Salas</h1>
-          <p className="text-sm text-slate-400">Configure espaços físicos e recursos da escola</p>
-        </div>
-      </header>
-
-      {/* Sistema de Abas */}
-      <div data-tour="salas-abas" className="flex items-center gap-2 border-b border-slate-700 pb-1">
-        <button
-          onClick={() => setTabAtiva('salas')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
-            tabAtiva === 'salas'
-              ? 'bg-slate-800 text-white border-b-2 border-purple-500'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-          }`}
-        >
-          <DoorOpen className="w-4 h-4" />
-          Salas
-        </button>
-        <button
-          onClick={() => setTabAtiva('inventario')}
-          className={`flex items-center gap-2 px-4 py-2.5 rounded-t-lg text-sm font-medium transition ${
-            tabAtiva === 'inventario'
-              ? 'bg-slate-800 text-white border-b-2 border-purple-500'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-          }`}
-        >
-          <Package className="w-4 h-4" />
-          Inventário
-        </button>
-      </div>
+      {/* Abas */}
+      <PageTabs
+        tabs={salasTabs}
+        activeTab={tabAtiva}
+        onTabChange={setTabAtiva}
+        data-tour="salas-abas"
+      />
 
       {/* Conteúdo da Aba de Salas */}
       {tabAtiva === 'salas' && (
