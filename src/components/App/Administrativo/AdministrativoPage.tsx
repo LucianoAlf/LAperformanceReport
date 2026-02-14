@@ -867,13 +867,13 @@ export function AdministrativoPage() {
                     return acc;
                   }, {} as Record<string, number>);
                   
-                  const sorted = Object.entries(porMotivo).sort((a, b) => b[1] - a[1]);
+                  const sorted = Object.entries(porMotivo).sort((a, b) => (b[1] as number) - (a[1] as number));
                   const total = todosMotivos.length;
                   
                   return (
                     <div className="space-y-3">
                       {sorted.slice(0, 7).map(([motivo, count], index) => {
-                        const percent = (count / total) * 100;
+                        const percent = ((count as number) / total) * 100;
                         const colors = [
                           'from-rose-500 to-pink-500',
                           'from-amber-500 to-orange-500',
