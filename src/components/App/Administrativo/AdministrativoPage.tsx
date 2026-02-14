@@ -643,6 +643,15 @@ export function AdministrativoPage() {
         unidadeId={unidade} 
         ano={ano} 
         mes={mes}
+        churnRate={resumo?.alunos_ativos ? ((naoRenovacoes.length + evasoes.length) / resumo.alunos_ativos * 100) : 0}
+        taxaRenovacao={(() => {
+          const totalVenc = renovacoes.length + naoRenovacoes.length;
+          return totalVenc > 0 ? (renovacoes.length / totalVenc) * 100 : undefined;
+        })()}
+        totalRenovacoes={renovacoes.length}
+        totalVencimentos={renovacoes.length + naoRenovacoes.length}
+        totalEvasoes={naoRenovacoes.length + evasoes.length}
+        alunosAtivos={resumo?.alunos_ativos || 0}
       />
 
       {/* Resumo do Mês - KPIs */}
