@@ -324,47 +324,43 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
     if (!relatorioTexto) return;
 
     try {
-      // Método 1: execCommand com textarea visível (mais compatível com IDEs)
-      const textarea = document.createElement('textarea');
-      textarea.value = relatorioTexto;
-      textarea.style.position = 'absolute';
-      textarea.style.left = '0';
-      textarea.style.top = '0';
-      textarea.style.opacity = '0';
-      textarea.style.pointerEvents = 'none';
-      textarea.setAttribute('readonly', '');
-      document.body.appendChild(textarea);
-      
-      // Forçar foco e seleção
-      textarea.focus();
-      textarea.select();
-      textarea.setSelectionRange(0, relatorioTexto.length);
-      
-      let success = false;
-      try {
-        success = document.execCommand('copy');
-      } catch (e) {
-        console.error('execCommand falhou:', e);
-      }
-      
-      document.body.removeChild(textarea);
-      
-      if (success) {
-        setCopiado(true);
-        setTimeout(() => setCopiado(false), 2000);
-        return;
-      }
-      
-      // Método 2: Clipboard API
-      if (navigator.clipboard && navigator.clipboard.writeText) {
+      // Tentar Clipboard API primeiro (método moderno)
+      if (navigator.clipboard && window.isSecureContext) {
         await navigator.clipboard.writeText(relatorioTexto);
         setCopiado(true);
         setTimeout(() => setCopiado(false), 2000);
         return;
       }
       
+      // Fallback: execCommand com textarea
+      const textarea = document.createElement('textarea');
+      textarea.value = relatorioTexto;
+      textarea.style.position = 'fixed';
+      textarea.style.left = '-9999px';
+      textarea.style.top = '0';
+      textarea.setAttribute('readonly', '');
+      document.body.appendChild(textarea);
+      
+      textarea.focus();
+      textarea.select();
+      
+      const success = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      
+      if (success) {
+        setCopiado(true);
+        setTimeout(() => setCopiado(false), 2000);
+      } else {
+        throw new Error('execCommand falhou');
+      }
     } catch (error) {
       console.error('Erro ao copiar:', error);
+      // Fallback final: selecionar o texto do textarea visível
+      const textareaEl = document.querySelector('textarea[value="' + CSS.escape(relatorioTexto.substring(0, 50)) + '"], textarea');
+      if (textareaEl) {
+        (textareaEl as HTMLTextAreaElement).select();
+        alert('Texto selecionado. Use Ctrl+C para copiar.');
+      }
     }
   };
 

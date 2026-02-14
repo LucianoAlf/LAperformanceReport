@@ -137,6 +137,10 @@ export function ModalFichaAluno({
     canal_origem_id: null as number | null,
     professor_experimental_id: null as number | null,
     agente_comercial: '',
+    // Responsável
+    responsavel_nome: '',
+    responsavel_telefone: '',
+    responsavel_parentesco: '',
   });
   
   // Valor original da parcela (para detectar mudanças)
@@ -270,6 +274,9 @@ export function ModalFichaAluno({
         canal_origem_id: alunoData.canal_origem_id,
         professor_experimental_id: alunoData.professor_experimental_id,
         agente_comercial: alunoData.agente_comercial || '',
+        responsavel_nome: alunoData.responsavel_nome || '',
+        responsavel_telefone: alunoData.responsavel_telefone || '',
+        responsavel_parentesco: alunoData.responsavel_parentesco || '',
       });
 
     } catch (error) {
@@ -320,6 +327,9 @@ export function ModalFichaAluno({
           canal_origem_id: formData.canal_origem_id,
           professor_experimental_id: formData.professor_experimental_id,
           agente_comercial: formData.agente_comercial || null,
+          responsavel_nome: formData.responsavel_nome?.trim() || null,
+          responsavel_telefone: formData.responsavel_telefone?.trim() || null,
+          responsavel_parentesco: formData.responsavel_parentesco || null,
           updated_at: new Date().toISOString(),
           updated_by: user?.email || 'sistema',
         })
@@ -549,6 +559,47 @@ export function ModalFichaAluno({
                     </span>
                     <span className="text-xs text-slate-500">(calculado)</span>
                   </div>
+                </div>
+              </div>
+
+              <div className="border-t border-slate-700 pt-4">
+                <Label className="mb-3 block text-slate-400">👤 Responsável <span className="text-xs font-normal text-slate-500">(opcional)</span></Label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2 sm:col-span-1">
+                    <Label className="mb-1 block text-sm">Nome do Responsável</Label>
+                    <Input
+                      value={formData.responsavel_nome}
+                      onChange={(e) => setFormData({ ...formData, responsavel_nome: e.target.value })}
+                      placeholder="Nome completo"
+                    />
+                  </div>
+                  <div className="col-span-2 sm:col-span-1">
+                    <Label className="mb-1 block text-sm">Telefone/WhatsApp</Label>
+                    <Input
+                      value={formData.responsavel_telefone}
+                      onChange={(e) => setFormData({ ...formData, responsavel_telefone: e.target.value })}
+                      placeholder="(21) 99999-9999"
+                    />
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <Label className="mb-1 block text-sm">Parentesco</Label>
+                  <Select
+                    value={formData.responsavel_parentesco}
+                    onValueChange={(value) => setFormData({ ...formData, responsavel_parentesco: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="mae">Mãe</SelectItem>
+                      <SelectItem value="pai">Pai</SelectItem>
+                      <SelectItem value="avo">Avó/Avô</SelectItem>
+                      <SelectItem value="tio">Tio/Tia</SelectItem>
+                      <SelectItem value="tutor">Tutor Legal</SelectItem>
+                      <SelectItem value="outro">Outro</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 

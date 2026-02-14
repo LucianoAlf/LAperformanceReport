@@ -1,0 +1,1522 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wireframe — Sucesso do Aluno | LA Music Report</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+
+  :root {
+    /* === LA MUSIC REPORT DESIGN TOKENS === */
+    --bg-primary: #0f172a;       /* slate-900 */
+    --bg-secondary: #1e293b;     /* slate-800 */
+    --bg-card: #1e293b;
+    --bg-card-hover: #334155;    /* slate-700 */
+    --bg-input: #0f172a;
+    --border: #334155;           /* slate-700 */
+    --border-light: #475569;     /* slate-600 */
+
+    --text-primary: #f1f5f9;     /* slate-100 */
+    --text-secondary: #94a3b8;   /* slate-400 */
+    --text-muted: #64748b;       /* slate-500 */
+
+    --violet-500: #8b5cf6;
+    --violet-600: #7c3aed;
+    --violet-700: #6d28d9;
+    --violet-900: #4c1d95;
+
+    --emerald-400: #34d399;
+    --emerald-500: #10b981;
+    --emerald-600: #059669;
+    --emerald-900: #064e3b;
+
+    --amber-400: #fbbf24;
+    --amber-500: #f59e0b;
+    --amber-600: #d97706;
+    --amber-900: #78350f;
+
+    --red-400: #f87171;
+    --red-500: #ef4444;
+    --red-600: #dc2626;
+    --red-900: #7f1d1d;
+
+    --cyan-400: #22d3ee;
+    --pink-400: #f472b6;
+    --pink-500: #ec4899;
+
+    --teal-500: #14b8a6;
+    --teal-600: #0d9488;
+
+    --radius: 12px;
+    --radius-sm: 8px;
+    --radius-lg: 16px;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.5;
+  }
+
+  /* === SECTION HEADERS === */
+  .section-divider {
+    text-align: center;
+    padding: 40px 20px;
+    background: linear-gradient(135deg, var(--violet-900), var(--bg-primary));
+    border-bottom: 2px solid var(--violet-600);
+    margin-bottom: 0;
+  }
+  .section-divider h1 {
+    font-size: 28px;
+    font-weight: 800;
+    color: var(--violet-400, #a78bfa);
+    letter-spacing: -0.5px;
+  }
+  .section-divider p {
+    color: var(--text-secondary);
+    font-size: 14px;
+    margin-top: 6px;
+  }
+
+  /* === LAYOUT === */
+  .page-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+
+  .page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 24px;
+  }
+  .page-header h2 {
+    font-size: 22px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .page-header .subtitle {
+    font-size: 13px;
+    color: var(--text-secondary);
+  }
+
+  /* === SUB-TABS === */
+  .sub-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+  }
+  .sub-tab {
+    padding: 10px 20px;
+    border-radius: var(--radius);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--bg-secondary);
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s;
+  }
+  .sub-tab:hover { background: var(--bg-card-hover); }
+  .sub-tab.active {
+    background: linear-gradient(135deg, var(--emerald-500), var(--teal-600));
+    color: white;
+    border-color: transparent;
+    font-weight: 600;
+  }
+
+  /* === ALERT CARDS (TOP) === */
+  .alert-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .alert-card {
+    padding: 20px;
+    border-radius: var(--radius);
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .alert-card.critical {
+    background: linear-gradient(135deg, var(--red-900), #1e293b);
+    border: 1px solid var(--red-600);
+  }
+  .alert-card.warning {
+    background: linear-gradient(135deg, var(--amber-900), #1e293b);
+    border: 1px solid var(--amber-600);
+  }
+  .alert-card.success {
+    background: linear-gradient(135deg, var(--emerald-900), #1e293b);
+    border: 1px solid var(--emerald-600);
+  }
+  .alert-dot {
+    width: 16px; height: 16px; border-radius: 50%; flex-shrink: 0;
+  }
+  .alert-dot.red { background: var(--red-500); }
+  .alert-dot.amber { background: var(--amber-500); }
+  .alert-dot.green { background: var(--emerald-500); }
+  .alert-card .count { font-size: 17px; font-weight: 700; }
+  .alert-card .label { font-size: 13px; color: var(--text-secondary); }
+
+  /* === METRICS ROW === */
+  .metrics-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .metric-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    text-align: center;
+  }
+  .metric-card .trophy { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+  .metric-card .name { font-size: 15px; font-weight: 700; }
+  .metric-card .value { font-size: 14px; color: var(--emerald-400); margin-top: 2px; }
+
+  /* === GAUGE === */
+  .gauge-card {
+    background: var(--bg-card);
+    border: 2px solid var(--amber-500);
+    border-radius: var(--radius-lg);
+    padding: 30px;
+    text-align: center;
+    position: relative;
+  }
+  .gauge-card .gauge-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .gauge-svg { width: 160px; height: 100px; }
+  .gauge-score {
+    font-size: 36px;
+    font-weight: 800;
+    margin-top: -10px;
+  }
+  .gauge-label {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  /* === TABLE === */
+  .table-section {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-bottom: 24px;
+  }
+  .table-filters {
+    padding: 16px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--border);
+  }
+  .filter-select, .filter-input {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 8px 14px;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: inherit;
+  }
+  .filter-input { min-width: 200px; }
+  .btn-generate {
+    margin-left: auto;
+    padding: 10px 20px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: white;
+  }
+  .btn-generate.pink { background: linear-gradient(135deg, var(--pink-500), var(--violet-600)); }
+  .btn-generate.green { background: var(--emerald-500); }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  th {
+    text-align: left;
+    padding: 12px 16px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 14px 16px;
+    font-size: 14px;
+    border-bottom: 1px solid rgba(51,65,85,0.5);
+    vertical-align: middle;
+  }
+  tr:hover { background: rgba(51,65,85,0.3); }
+
+  .avatar {
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: white;
+    flex-shrink: 0;
+  }
+  .avatar.green { background: var(--emerald-600); }
+  .avatar.amber { background: var(--amber-600); }
+  .avatar.red { background: var(--red-600); }
+  .avatar.violet { background: var(--violet-600); }
+  .avatar.pink { background: var(--pink-500); }
+
+  .health-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    font-size: 14px;
+    font-weight: 800;
+    color: white;
+  }
+  .health-badge.high { background: var(--emerald-500); }
+  .health-badge.mid { background: var(--amber-500); }
+  .health-badge.low { background: var(--red-500); }
+
+  .status-badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    display: inline-block;
+  }
+  .status-badge.saudavel { background: rgba(16,185,129,0.2); color: var(--emerald-400); border: 1px solid var(--emerald-600); }
+  .status-badge.atencao { background: rgba(245,158,11,0.2); color: var(--amber-400); border: 1px solid var(--amber-600); }
+  .status-badge.critico { background: rgba(239,68,68,0.2); color: var(--red-400); border: 1px solid var(--red-600); }
+
+  .fase-badge {
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .fase-badge.onboarding { background: rgba(139,92,246,0.2); color: #a78bfa; }
+  .fase-badge.consolidacao { background: rgba(244,114,182,0.2); color: var(--pink-400); }
+  .fase-badge.encantamento { background: rgba(251,191,36,0.2); color: var(--amber-400); }
+  .fase-badge.renovacao { background: rgba(16,185,129,0.2); color: var(--emerald-400); }
+
+  .feedback-heart { font-size: 18px; }
+
+  .link-ver {
+    color: var(--violet-500);
+    text-decoration: none;
+    font-weight: 600;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .link-ver:hover { text-decoration: underline; }
+
+  .cell-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .cell-info .aluno-name { font-weight: 600; font-size: 14px; }
+  .cell-info .aluno-curso { font-size: 12px; color: var(--text-secondary); }
+
+  .pag-em-dia { color: var(--emerald-400); font-weight: 600; font-size: 13px; }
+  .pag-atrasado { color: var(--red-400); font-weight: 600; font-size: 13px; }
+  .presenca-ok { color: var(--emerald-400); }
+  .presenca-warn { color: var(--amber-400); }
+  .presenca-na { color: var(--text-muted); }
+
+  /* === ALERTAS ATIVOS === */
+  .alertas-section {
+    background: var(--bg-card);
+    border: 1px solid var(--red-600);
+    border-radius: var(--radius);
+    margin-bottom: 24px;
+  }
+  .alertas-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .alertas-header h3 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 16px;
+  }
+  .alertas-header .count-badge {
+    background: var(--red-500);
+    color: white;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .alerta-item {
+    display: flex;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid rgba(51,65,85,0.4);
+    gap: 16px;
+  }
+  .alerta-item:last-child { border-bottom: none; }
+  .alerta-sev {
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+  .alerta-sev.medio { background: var(--amber-600); color: white; }
+  .alerta-sev.alto { background: var(--red-600); color: white; }
+  .alerta-tipo { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+  .alerta-desc { flex: 1; }
+  .alerta-desc .title { font-weight: 600; font-size: 14px; }
+  .alerta-desc .detail { font-size: 13px; color: var(--text-secondary); }
+  .alerta-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+  }
+  .alerta-actions .icon-btn {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px;
+  }
+  .btn-resolver {
+    padding: 8px 16px;
+    border-radius: 8px;
+    background: var(--emerald-500);
+    color: white;
+    border: none;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* === KANBAN === */
+  .kanban-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 20px;
+  }
+  .kanban-header h3 { font-size: 18px; font-weight: 700; }
+  .kanban-header .total {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    padding: 8px 16px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 700;
+  }
+  .kanban-board {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .kanban-col {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    min-height: 400px;
+  }
+  .kanban-col-header {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .kanban-col-header .col-title {
+    font-size: 13px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .kanban-col-header .col-count {
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    font-weight: 700;
+    color: white;
+  }
+  .kanban-col-header .col-sub { font-size: 11px; color: var(--text-muted); }
+
+  .col-onboarding .col-title { color: #a78bfa; }
+  .col-onboarding .col-count { background: var(--violet-600); }
+  .col-consolidacao .col-title { color: var(--pink-400); }
+  .col-consolidacao .col-count { background: var(--pink-500); }
+  .col-encantamento .col-title { color: var(--amber-400); }
+  .col-encantamento .col-count { background: var(--amber-500); }
+  .col-renovacao .col-title { color: var(--emerald-400); }
+  .col-renovacao .col-count { background: var(--emerald-500); }
+
+  .kanban-cards { padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+  .kanban-card {
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 14px;
+  }
+  .kanban-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .kanban-card-header .card-name { font-weight: 600; font-size: 13px; }
+  .kanban-card-header .card-icons { display: flex; gap: 6px; align-items: center; }
+  .kanban-card .card-curso { font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; }
+  .kanban-card .card-tags { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
+  .kanban-card .card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 8px;
+  }
+  .pag-badge {
+    padding: 2px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .pag-badge.em-dia { background: rgba(16,185,129,0.15); color: var(--emerald-400); }
+  .pag-badge.atrasado { background: rgba(239,68,68,0.15); color: var(--red-400); }
+
+  /* === MODAL / CARD INDIVIDUAL === */
+  .modal-overlay {
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    max-width: 700px;
+    margin: 24px auto;
+    overflow: hidden;
+  }
+  .modal-header {
+    padding: 24px;
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+  }
+  .modal-avatar {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    background: var(--violet-600);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    font-weight: 700;
+    color: white;
+    flex-shrink: 0;
+  }
+  .modal-info { flex: 1; }
+  .modal-info .modal-name { font-size: 20px; font-weight: 700; }
+  .modal-info .modal-detail { font-size: 13px; color: var(--text-secondary); }
+
+  .modal-metrics {
+    display: grid;
+    grid-template-columns: auto repeat(6, 1fr);
+    gap: 12px;
+    padding: 0 24px 24px;
+    align-items: center;
+  }
+  .modal-metric {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px;
+    text-align: center;
+  }
+  .modal-metric .m-value { font-size: 18px; font-weight: 800; }
+  .modal-metric .m-label { font-size: 11px; color: var(--text-muted); }
+  .modal-metric .m-value.green { color: var(--emerald-400); }
+  .modal-metric .m-value.amber { color: var(--amber-400); }
+
+  .modal-gauge {
+    background: var(--bg-secondary);
+    border: 2px solid var(--emerald-500);
+    border-radius: var(--radius);
+    padding: 16px;
+    text-align: center;
+  }
+  .modal-gauge .gauge-mini-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+  }
+  .modal-gauge .gauge-value {
+    font-size: 32px;
+    font-weight: 800;
+    color: var(--emerald-400);
+  }
+  .modal-gauge .gauge-status {
+    font-size: 10px;
+    color: var(--emerald-400);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .btn-relatorio {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: calc(100% - 48px);
+    margin: 0 24px 8px;
+    padding: 14px;
+    border-radius: var(--radius-sm);
+    background: var(--teal-500);
+    color: white;
+    border: none;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .btn-relatorio-sub {
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-muted);
+    margin-bottom: 20px;
+  }
+
+  .modal-section {
+    padding: 16px 24px;
+    border-top: 1px solid var(--border);
+  }
+  .modal-section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .modal-section-header h4 {
+    font-size: 14px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .modal-section-header .add-link {
+    color: var(--violet-500);
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+  }
+  .empty-state {
+    font-size: 13px;
+    color: var(--text-muted);
+    padding: 8px 0;
+  }
+
+  .ia-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin: 16px 24px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .ia-card .ia-icon {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--violet-600), var(--pink-500));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    flex-shrink: 0;
+  }
+  .ia-card .ia-text { flex: 1; margin-left: 14px; }
+  .ia-card .ia-title { font-weight: 700; font-size: 14px; }
+  .ia-card .ia-sub { font-size: 12px; color: var(--text-secondary); }
+  .btn-gerar-plano {
+    padding: 10px 20px;
+    border-radius: var(--radius-sm);
+    background: linear-gradient(135deg, var(--violet-600), var(--pink-500));
+    color: white;
+    border: none;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: inherit;
+  }
+
+  /* === MOBILE PAGES (Feedback + Presença) === */
+  .mobile-frame {
+    max-width: 390px;
+    margin: 24px auto;
+    border: 2px solid var(--border);
+    border-radius: 24px;
+    overflow: hidden;
+    background: var(--bg-primary);
+  }
+  .mobile-header {
+    padding: 24px 20px 16px;
+    text-align: center;
+    background: linear-gradient(180deg, var(--bg-secondary), var(--bg-primary));
+  }
+  .mobile-header .logo { font-size: 18px; font-weight: 800; color: var(--emerald-400); }
+  .mobile-header .page-title { font-size: 16px; font-weight: 700; margin-top: 4px; }
+  .mobile-header .prof-name { font-size: 15px; font-weight: 600; margin-top: 12px; }
+  .mobile-header .prof-detail { font-size: 13px; color: var(--text-secondary); }
+  .mobile-header .instruction {
+    margin-top: 16px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+
+  .progress-bar-container {
+    padding: 0 20px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .progress-bar {
+    flex: 1;
+    height: 8px;
+    background: var(--bg-secondary);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .progress-bar .fill {
+    height: 100%;
+    border-radius: 4px;
+    background: linear-gradient(90deg, var(--emerald-500), var(--teal-500));
+    transition: width 0.3s;
+  }
+  .progress-text { font-size: 13px; font-weight: 700; color: var(--text-secondary); white-space: nowrap; }
+
+  .mobile-card {
+    margin: 0 16px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+  }
+  .mobile-card.answered { border-color: var(--emerald-500); }
+  .mobile-card .student-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+  }
+  .mobile-card .student-name { font-weight: 600; font-size: 15px; }
+  .mobile-card .student-check { font-size: 18px; }
+  .mobile-card .student-detail { font-size: 13px; color: var(--text-secondary); margin-bottom: 14px; }
+
+  .hearts-row {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+  }
+  .heart-btn {
+    flex: 1;
+    padding: 14px 8px;
+    border-radius: var(--radius-sm);
+    border: 2px solid var(--border);
+    background: var(--bg-primary);
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .heart-btn:hover { transform: scale(1.05); }
+  .heart-btn.selected { border-width: 3px; transform: scale(1.05); }
+  .heart-btn.selected.green { border-color: var(--emerald-500); background: rgba(16,185,129,0.1); }
+  .heart-btn.selected.amber { border-color: var(--amber-500); background: rgba(245,158,11,0.1); }
+  .heart-btn.selected.red { border-color: var(--red-500); background: rgba(239,68,68,0.1); }
+  .heart-btn .heart-emoji { font-size: 28px; display: block; margin-bottom: 4px; }
+  .heart-btn .heart-label { font-size: 11px; font-weight: 600; color: var(--text-secondary); }
+
+  .obs-input {
+    margin-top: 12px;
+    width: 100%;
+    background: var(--bg-primary);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-family: inherit;
+    resize: none;
+  }
+  .obs-input::placeholder { color: var(--text-muted); }
+
+  .mobile-submit {
+    margin: 20px 16px 24px;
+    width: calc(100% - 32px);
+    padding: 16px;
+    border-radius: var(--radius);
+    background: var(--emerald-500);
+    color: white;
+    border: none;
+    font-size: 16px;
+    font-weight: 700;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: center;
+  }
+  .mobile-submit .sub-count { font-size: 13px; font-weight: 500; opacity: 0.8; }
+
+  /* === PRESENÇA BUTTONS === */
+  .presenca-row {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+  }
+  .presenca-btn {
+    flex: 1;
+    padding: 14px 8px;
+    border-radius: var(--radius-sm);
+    border: 2px solid var(--border);
+    background: var(--bg-primary);
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .presenca-btn:hover { transform: scale(1.05); }
+  .presenca-btn.selected.presente { border-color: var(--emerald-500); background: rgba(16,185,129,0.1); }
+  .presenca-btn.selected.ausente { border-color: var(--red-500); background: rgba(239,68,68,0.1); }
+  .presenca-btn.selected.remarcou { border-color: var(--amber-500); background: rgba(245,158,11,0.1); }
+  .presenca-btn .p-emoji { font-size: 24px; display: block; margin-bottom: 4px; }
+  .presenca-btn .p-label { font-size: 11px; font-weight: 600; color: var(--text-secondary); }
+
+  .mobile-footer {
+    text-align: center;
+    padding: 0 16px 20px;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+</style>
+</head>
+<body>
+
+<!-- ============================================= -->
+<!-- SEÇÃO 1: DASHBOARD SUCESSO DO CLIENTE         -->
+<!-- ============================================= -->
+<div class="section-divider">
+  <h1>FASE 2 — Dashboard Sucesso do Cliente</h1>
+  <p>Sub-aba dentro de Alunos • Espelha Professores > Performance</p>
+</div>
+
+<div class="page-container">
+
+  <!-- Page Header -->
+  <div class="page-header">
+    <div>
+      <h2>👩‍🎓 Gestão de Alunos <span style="color:var(--text-muted);font-size:14px;font-weight:400">Controle completo de alunos, turmas e horários</span></h2>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <div class="filter-select" style="font-weight:600">📍 Campo Grande</div>
+      <div class="filter-select" style="font-weight:600">📅 Fev/2026</div>
+    </div>
+  </div>
+
+  <!-- Sub-tabs de Alunos -->
+  <div class="sub-tabs">
+    <div class="sub-tab">👥 Lista de Alunos</div>
+    <div class="sub-tab">📋 Gestão de Turmas</div>
+    <div class="sub-tab">⏰ Grade Horária</div>
+    <div class="sub-tab">📊 Distribuição</div>
+    <div class="sub-tab">📥 Importar Alunos</div>
+    <div class="sub-tab active">💚 Sucesso do Cliente</div>
+  </div>
+
+  <!-- Alertas de Performance -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <h3 style="font-size:16px;display:flex;align-items:center;gap:8px">⚠️ Alertas de Saúde dos Alunos</h3>
+    <span style="font-size:12px;color:var(--text-muted)">Atualizado 15:47</span>
+  </div>
+
+  <div class="alert-row">
+    <div class="alert-card critical">
+      <div class="alert-dot red"></div>
+      <div>
+        <div class="count" style="color:var(--red-400)">12 alunos críticos</div>
+        <div class="label">Health Score abaixo de 40</div>
+      </div>
+    </div>
+    <div class="alert-card warning">
+      <div class="alert-dot amber"></div>
+      <div>
+        <div class="count" style="color:var(--amber-400)">87 alunos atenção</div>
+        <div class="label">Health Score entre 40-69</div>
+      </div>
+    </div>
+    <div class="alert-card success">
+      <div class="alert-dot green"></div>
+      <div>
+        <div class="count" style="color:var(--emerald-400)">364 alunos saudáveis</div>
+        <div class="label">Health Score acima de 70</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tops + Gauge -->
+  <div class="metrics-row">
+    <div class="metric-card">
+      <div class="trophy">🏆 Top Presença</div>
+      <div class="name">Ágatha Da Silva</div>
+      <div class="value">100% presença</div>
+    </div>
+    <div class="metric-card">
+      <div class="trophy">🏆 Top Veterano</div>
+      <div class="name">Alexandre Ayres</div>
+      <div class="value">5 anos de casa</div>
+    </div>
+    <div class="gauge-card">
+      <div class="gauge-title">❤️ HEALTH SCORE</div>
+      <div class="gauge-score" style="color:var(--amber-400)">68.4</div>
+      <div class="gauge-label">MÉDIA GERAL</div>
+    </div>
+    <div class="metric-card">
+      <div class="trophy">🏆 Top Engajamento</div>
+      <div class="name">Ailla Goulart</div>
+      <div class="value">Score 95/100</div>
+    </div>
+  </div>
+
+  <!-- Filtros + Tabela -->
+  <div class="table-section">
+    <div class="table-filters">
+      <select class="filter-select">
+        <option>Todos os status</option>
+        <option>Saudáveis</option>
+        <option>Atenção</option>
+        <option>Críticos</option>
+      </select>
+      <input class="filter-input" placeholder="🔍 Buscar aluno..." />
+      <select class="filter-select"><option>Professor</option></select>
+      <select class="filter-select"><option>Curso</option></select>
+      <select class="filter-select"><option>Fase</option></select>
+      <button class="btn-generate pink">📋 Enviar Feedback Professores</button>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Aluno</th>
+          <th>❤️ Health</th>
+          <th>Fase</th>
+          <th>Presença</th>
+          <th>Pagamento</th>
+          <th>Tempo</th>
+          <th>💚 Feedback</th>
+          <th>Status</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>
+            <div class="cell-row">
+              <div class="avatar green">AC</div>
+              <div class="cell-info">
+                <div class="aluno-name">Adriana Christine da Silva</div>
+                <div class="aluno-curso">Guitarra • Matheus Sterque</div>
+              </div>
+            </div>
+          </td>
+          <td><span class="health-badge high">82</span></td>
+          <td><span class="fase-badge consolidacao">Consolidação</span></td>
+          <td class="presenca-ok">85%</td>
+          <td class="pag-em-dia">Em dia</td>
+          <td>7m</td>
+          <td><span class="feedback-heart">💚</span></td>
+          <td><span class="status-badge saudavel">Saudável</span></td>
+          <td><a class="link-ver">Ver</a></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="cell-row">
+              <div class="avatar amber">AM</div>
+              <div class="cell-info">
+                <div class="aluno-name">Adriana Mesquita dos Santos</div>
+                <div class="aluno-curso">Teclado • Renan Amorim</div>
+              </div>
+            </div>
+          </td>
+          <td><span class="health-badge mid">54</span></td>
+          <td><span class="fase-badge onboarding">Onboarding</span></td>
+          <td class="presenca-warn">62%</td>
+          <td class="pag-atrasado">Atrasado</td>
+          <td>4m</td>
+          <td><span class="feedback-heart">💛</span></td>
+          <td><span class="status-badge atencao">Atenção</span></td>
+          <td><a class="link-ver">Ver</a></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="cell-row">
+              <div class="avatar red">AV</div>
+              <div class="cell-info">
+                <div class="aluno-name">Adriana Vitor Pim</div>
+                <div class="aluno-curso">Teclado • Kaio Felipe</div>
+              </div>
+            </div>
+          </td>
+          <td><span class="health-badge low">28</span></td>
+          <td><span class="fase-badge onboarding">Onboarding</span></td>
+          <td class="presenca-na">—</td>
+          <td class="pag-atrasado">Inadimplente</td>
+          <td>10m</td>
+          <td><span class="feedback-heart">❤️</span></td>
+          <td><span class="status-badge critico">Crítico</span></td>
+          <td><a class="link-ver">Ver</a></td>
+        </tr>
+        <tr>
+          <td>
+            <div class="cell-row">
+              <div class="avatar violet">AS</div>
+              <div class="cell-info">
+                <div class="aluno-name">Ágatha Da Silva De Souza</div>
+                <div class="aluno-curso">Piano • Ramon Pina</div>
+              </div>
+            </div>
+          </td>
+          <td><span class="health-badge high">91</span></td>
+          <td><span class="fase-badge renovacao">Renovação</span></td>
+          <td class="presenca-ok">100%</td>
+          <td class="pag-em-dia">Em dia</td>
+          <td>3a</td>
+          <td><span class="feedback-heart">💚</span></td>
+          <td><span class="status-badge saudavel">Saudável</span></td>
+          <td><a class="link-ver">Ver</a></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Alertas Ativos -->
+  <div class="alertas-section">
+    <div class="alertas-header">
+      <h3>⚠️ Alertas Ativos <span class="count-badge">12</span></h3>
+      <a class="link-ver">Ver todos ›</a>
+    </div>
+    <div class="alerta-item">
+      <span class="alerta-sev alto">ALTO</span>
+      <span class="alerta-tipo">🚨 Risco</span>
+      <div class="alerta-desc">
+        <div class="title">Atenção Necessária: Adriana Vitor Pim</div>
+        <div class="detail">Pagamento inadimplente + feedback negativo. Score: 28/100.</div>
+      </div>
+      <div class="alerta-actions">
+        <button class="icon-btn">📞</button>
+        <button class="icon-btn">💬</button>
+        <button class="btn-resolver">✅ Resolver</button>
+      </div>
+    </div>
+    <div class="alerta-item">
+      <span class="alerta-sev medio">MÉDIO</span>
+      <span class="alerta-tipo">💳 Pagamento</span>
+      <div class="alerta-desc">
+        <div class="title">Atenção: Adriana Mesquita dos Santos</div>
+        <div class="detail">Pagamento atrasado há 2 meses. Score: 54/100.</div>
+      </div>
+      <div class="alerta-actions">
+        <button class="icon-btn">📞</button>
+        <button class="icon-btn">💬</button>
+        <button class="btn-resolver">✅ Resolver</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================= -->
+<!-- SEÇÃO 2: KANBAN JORNADA DO ALUNO              -->
+<!-- ============================================= -->
+<div class="section-divider">
+  <h1>FASE 4 — Jornada do Aluno (Kanban)</h1>
+  <p>Pipeline read-only • Fase calculada por tempo de casa • Reutilizar componente do Pré-Atendimento</p>
+</div>
+
+<div class="page-container">
+  <div class="kanban-header">
+    <h3>Jornada do Aluno</h3>
+    <div class="total">👥 TOTAL: 463 ALUNOS</div>
+  </div>
+
+  <div class="kanban-board">
+    <!-- ONBOARDING -->
+    <div class="kanban-col">
+      <div class="kanban-col-header col-onboarding">
+        <div>
+          <div class="col-title">🎒 ONBOARDING</div>
+          <div class="col-sub">0-3 meses</div>
+        </div>
+        <div class="col-count">84</div>
+      </div>
+      <div class="kanban-cards">
+        <div class="kanban-card">
+          <div class="kanban-card-header">
+            <span class="card-name">Adriana Christine</span>
+            <div class="card-icons">💚 ⋮</div>
+          </div>
+          <div class="card-curso">🎸 Guitarra</div>
+          <div class="card-tags">
+            <span class="fase-badge onboarding">Iniciante</span>
+          </div>
+          <div class="card-footer">
+            <span style="font-size:12px;color:var(--text-muted)">2m</span>
+            <span class="pag-badge em-dia">EM DIA</span>
+          </div>
+        </div>
+        <div class="kanban-card">
+          <div class="kanban-card-header">
+            <span class="card-name">Adriana Mesquita</span>
+            <div class="card-icons">💛 ⋮</div>
+          </div>
+          <div class="card-curso">🎹 Teclado</div>
+          <div class="card-tags">
+            <span class="fase-badge onboarding">Iniciante</span>
+          </div>
+          <div class="card-footer">
+            <span style="font-size:12px;color:var(--text-muted)">1m</span>
+            <span class="pag-badge atrasado">ATRASADO</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONSOLIDAÇÃO -->
+    <div class="kanban-col">
+      <div class="kanban-col-header col-consolidacao">
+        <div>
+          <div class="col-title">❤️ CONSOLIDAÇÃO</div>
+          <div class="col-sub">3-6 meses</div>
+        </div>
+        <div class="col-count">120</div>
+      </div>
+      <div class="kanban-cards">
+        <div class="kanban-card">
+          <div class="kanban-card-header">
+            <span class="card-name">João Pedro Silva</span>
+            <div class="card-icons">💚 ⋮</div>
+          </div>
+          <div class="card-curso">🎸 Violão</div>
+          <div class="card-footer">
+            <span style="font-size:12px;color:var(--text-muted)">5m</span>
+            <span class="pag-badge em-dia">EM DIA</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ENCANTAMENTO -->
+    <div class="kanban-col">
+      <div class="kanban-col-header col-encantamento">
+        <div>
+          <div class="col-title">⭐ ENCANTAMENTO</div>
+          <div class="col-sub">6-9 meses</div>
+        </div>
+        <div class="col-count">95</div>
+      </div>
+      <div class="kanban-cards">
+        <div class="kanban-card">
+          <div class="kanban-card-header">
+            <span class="card-name">Maria Souza</span>
+            <div class="card-icons">💚 ⋮</div>
+          </div>
+          <div class="card-curso">🎤 Canto</div>
+          <div class="card-footer">
+            <span style="font-size:12px;color:var(--text-muted)">8m</span>
+            <span class="pag-badge em-dia">EM DIA</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- RENOVAÇÃO -->
+    <div class="kanban-col">
+      <div class="kanban-col-header col-renovacao">
+        <div>
+          <div class="col-title">🔄 RENOVAÇÃO</div>
+          <div class="col-sub">9+ meses</div>
+        </div>
+        <div class="col-count">164</div>
+      </div>
+      <div class="kanban-cards">
+        <div class="kanban-card">
+          <div class="kanban-card-header">
+            <span class="card-name">Ágatha Da Silva</span>
+            <div class="card-icons">💚 ⋮</div>
+          </div>
+          <div class="card-curso">🎹 Piano</div>
+          <div class="card-footer">
+            <span style="font-size:12px;color:var(--text-muted)">3a</span>
+            <span class="pag-badge em-dia">EM DIA</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================= -->
+<!-- SEÇÃO 3: CARD INDIVIDUAL DO ALUNO (MODAL)     -->
+<!-- ============================================= -->
+<div class="section-divider">
+  <h1>FASE 3 — Card Individual do Aluno</h1>
+  <p>Modal ao clicar "Ver" • Espelha card do professor • Relatório + IA + Metas + Ações</p>
+</div>
+
+<div class="page-container">
+  <div class="modal-overlay">
+    <!-- Header -->
+    <div class="modal-header">
+      <div class="modal-avatar">AC</div>
+      <div class="modal-info">
+        <div class="modal-name">Adriana Christine da Silva</div>
+        <div class="modal-detail">Guitarra • Matheus Sterque • EMLA CG</div>
+      </div>
+      <span class="status-badge saudavel" style="margin-top:4px">✅ Saudável</span>
+    </div>
+
+    <!-- Métricas -->
+    <div style="padding:0 24px 4px;font-size:13px;color:var(--text-muted)">📊 Métricas Atuais (fev/2026)</div>
+    <div class="modal-metrics">
+      <div class="modal-gauge">
+        <div class="gauge-mini-title">❤️ HEALTH SCORE</div>
+        <div class="gauge-value">82</div>
+        <div class="gauge-status">SAUDÁVEL</div>
+      </div>
+      <div class="modal-metric">
+        <div class="m-value">85%</div>
+        <div class="m-label">Presença</div>
+      </div>
+      <div class="modal-metric">
+        <div class="m-value green">Em dia</div>
+        <div class="m-label">Pagamento</div>
+      </div>
+      <div class="modal-metric">
+        <div class="m-value">7m</div>
+        <div class="m-label">Tempo Casa</div>
+      </div>
+      <div class="modal-metric">
+        <div class="m-value" style="color:var(--pink-400)">Consolid.</div>
+        <div class="m-label">Fase</div>
+      </div>
+      <div class="modal-metric">
+        <div class="m-value">💚</div>
+        <div class="m-label">Feedback</div>
+      </div>
+      <div class="modal-metric">
+        <div class="m-value">R$ 447</div>
+        <div class="m-label">Parcela</div>
+      </div>
+    </div>
+
+    <!-- Gerar Relatório -->
+    <button class="btn-relatorio">📋 Gerar Relatório Individual</button>
+    <div class="btn-relatorio-sub">Relatório completo com análise e sugestões</div>
+
+    <!-- Metas Ativas -->
+    <div class="modal-section">
+      <div class="modal-section-header">
+        <h4>⚙️ Metas Ativas</h4>
+        <a class="add-link">+ Nova Meta</a>
+      </div>
+      <div class="empty-state">Nenhuma meta ativa</div>
+    </div>
+
+    <!-- Histórico de Ações -->
+    <div class="modal-section">
+      <div class="modal-section-header">
+        <h4>📅 Histórico de Ações</h4>
+        <a class="add-link">+ Nova Ação</a>
+      </div>
+      <div class="empty-state">Nenhuma ação registrada</div>
+    </div>
+
+    <!-- Plano de Ação Inteligente -->
+    <div class="ia-card">
+      <div class="ia-icon">🧠</div>
+      <div class="ia-text">
+        <div class="ia-title">Plano de Ação Inteligente ✨</div>
+        <div class="ia-sub">Análise estratégica personalizada com IA</div>
+      </div>
+      <button class="btn-gerar-plano">✨ Gerar Plano</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================= -->
+<!-- SEÇÃO 4: MICRO-FORMULÁRIO FEEDBACK PROFESSOR  -->
+<!-- ============================================= -->
+<div class="section-divider">
+  <h1>FASE 5 — Micro-Formulário Feedback (Mobile)</h1>
+  <p>Página pública /feedback/:token • Professor abre no celular • Coraçõezinhos</p>
+</div>
+
+<div class="page-container">
+  <div class="mobile-frame">
+    <div class="mobile-header">
+      <div class="logo">🎵 LA Music</div>
+      <div class="page-title">Feedback dos Alunos</div>
+      <div class="prof-name">Prof. Isaque Mendes</div>
+      <div class="prof-detail">Fevereiro/2026 • Barra</div>
+      <div class="instruction">
+        Como seus alunos estão?<br>
+        Toque no coração para avaliar cada aluno.
+      </div>
+    </div>
+
+    <div class="progress-bar-container">
+      <div class="progress-bar">
+        <div class="fill" style="width:25%"></div>
+      </div>
+      <div class="progress-text">3/12</div>
+    </div>
+
+    <!-- Card respondido -->
+    <div class="mobile-card answered">
+      <div class="student-header">
+        <span class="student-name">Adriana Christine da Silva</span>
+        <span class="student-check">✅</span>
+      </div>
+      <div class="student-detail">🎸 Guitarra • Sáb 09:00</div>
+      <div class="hearts-row">
+        <div class="heart-btn selected green">
+          <span class="heart-emoji">💚</span>
+          <span class="heart-label">Bem</span>
+        </div>
+        <div class="heart-btn">
+          <span class="heart-emoji">💛</span>
+          <span class="heart-label">Atenção</span>
+        </div>
+        <div class="heart-btn">
+          <span class="heart-emoji">❤️</span>
+          <span class="heart-label">Risco</span>
+        </div>
+      </div>
+      <textarea class="obs-input" rows="2" placeholder="💬 Observação (opcional)">Ótima aluna, sempre presente e engajada</textarea>
+    </div>
+
+    <!-- Card pendente -->
+    <div class="mobile-card">
+      <div class="student-header">
+        <span class="student-name">João Pedro Silva</span>
+      </div>
+      <div class="student-detail">🎸 Guitarra • Sáb 10:00</div>
+      <div class="hearts-row">
+        <div class="heart-btn">
+          <span class="heart-emoji">💚</span>
+          <span class="heart-label">Bem</span>
+        </div>
+        <div class="heart-btn">
+          <span class="heart-emoji">💛</span>
+          <span class="heart-label">Atenção</span>
+        </div>
+        <div class="heart-btn">
+          <span class="heart-emoji">❤️</span>
+          <span class="heart-label">Risco</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card com atenção selecionado -->
+    <div class="mobile-card answered">
+      <div class="student-header">
+        <span class="student-name">Maria Fernanda Costa</span>
+        <span class="student-check">✅</span>
+      </div>
+      <div class="student-detail">🎸 Guitarra • Sáb 11:00</div>
+      <div class="hearts-row">
+        <div class="heart-btn">
+          <span class="heart-emoji">💚</span>
+          <span class="heart-label">Bem</span>
+        </div>
+        <div class="heart-btn selected amber">
+          <span class="heart-emoji">💛</span>
+          <span class="heart-label">Atenção</span>
+        </div>
+        <div class="heart-btn">
+          <span class="heart-emoji">❤️</span>
+          <span class="heart-label">Risco</span>
+        </div>
+      </div>
+      <textarea class="obs-input" rows="2" placeholder="💬 Observação (opcional)">Faltou 2 aulas seguidas</textarea>
+    </div>
+
+    <button class="mobile-submit">
+      ✅ Enviar Feedback<br>
+      <span class="sub-count">(3/12 avaliados)</span>
+    </button>
+
+    <div class="mobile-footer">Obrigado, Prof. Isaque! 🎶</div>
+  </div>
+</div>
+
+<!-- ============================================= -->
+<!-- SEÇÃO 5: MINI-FORMULÁRIO PRESENÇA (MOBILE)    -->
+<!-- ============================================= -->
+<div class="section-divider">
+  <h1>FASE 7 — Presença via WhatsApp (Mobile)</h1>
+  <p>Página pública /presenca/:token • Disparado automaticamente por cron • Professor confirma presença</p>
+</div>
+
+<div class="page-container">
+  <div class="mobile-frame">
+    <div class="mobile-header">
+      <div class="logo">🎵 LA Music</div>
+      <div class="page-title">📋 Presença</div>
+      <div class="prof-name">Prof. Isaque Mendes</div>
+      <div class="prof-detail">14/02/2026 • Sábado • Barra</div>
+      <div class="instruction" style="margin-top:12px">
+        Confirme a presença dos alunos<br>
+        da turma das <strong>09:00 — Guitarra</strong>
+      </div>
+    </div>
+
+    <div class="progress-bar-container">
+      <div class="progress-bar">
+        <div class="fill" style="width:33%"></div>
+      </div>
+      <div class="progress-text">1/3</div>
+    </div>
+
+    <!-- Aluno presente -->
+    <div class="mobile-card answered" style="border-color:var(--emerald-500)">
+      <div class="student-header">
+        <span class="student-name">Adriana Christine da Silva</span>
+        <span class="student-check">✅</span>
+      </div>
+      <div class="student-detail">🎸 Guitarra • Sáb 09:00</div>
+      <div class="presenca-row">
+        <div class="presenca-btn selected presente">
+          <span class="p-emoji">✅</span>
+          <span class="p-label">Presente</span>
+        </div>
+        <div class="presenca-btn">
+          <span class="p-emoji">❌</span>
+          <span class="p-label">Ausente</span>
+        </div>
+        <div class="presenca-btn">
+          <span class="p-emoji">🔄</span>
+          <span class="p-label">Remarcou</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Aluno pendente -->
+    <div class="mobile-card">
+      <div class="student-header">
+        <span class="student-name">João Pedro Silva</span>
+      </div>
+      <div class="student-detail">🎸 Guitarra • Sáb 09:00</div>
+      <div class="presenca-row">
+        <div class="presenca-btn">
+          <span class="p-emoji">✅</span>
+          <span class="p-label">Presente</span>
+        </div>
+        <div class="presenca-btn">
+          <span class="p-emoji">❌</span>
+          <span class="p-label">Ausente</span>
+        </div>
+        <div class="presenca-btn">
+          <span class="p-emoji">🔄</span>
+          <span class="p-label">Remarcou</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Aluno ausente -->
+    <div class="mobile-card answered" style="border-color:var(--red-500)">
+      <div class="student-header">
+        <span class="student-name">Pedro Henrique Santos</span>
+        <span class="student-check" style="color:var(--red-400)">❌</span>
+      </div>
+      <div class="student-detail">🎸 Guitarra • Sáb 09:00</div>
+      <div class="presenca-row">
+        <div class="presenca-btn">
+          <span class="p-emoji">✅</span>
+          <span class="p-label">Presente</span>
+        </div>
+        <div class="presenca-btn selected ausente">
+          <span class="p-emoji">❌</span>
+          <span class="p-label">Ausente</span>
+        </div>
+        <div class="presenca-btn">
+          <span class="p-emoji">🔄</span>
+          <span class="p-label">Remarcou</span>
+        </div>
+      </div>
+    </div>
+
+    <button class="mobile-submit">
+      ✅ Confirmar Presença<br>
+      <span class="sub-count">(1/3 confirmados)</span>
+    </button>
+
+    <div class="mobile-footer">Boa aula, Prof. Isaque! 🎶</div>
+  </div>
+</div>
+
+<!-- Spacing at bottom -->
+<div style="height:60px"></div>
+
+</body>
+</html>
