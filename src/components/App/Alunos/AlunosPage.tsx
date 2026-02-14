@@ -372,12 +372,13 @@ export function AlunosPage() {
       const totalAtivos = naoSegundoCurso.length;
       const totalMatriculasAtivas = ativosETrancados.length; // inclui segundo curso + banda
       
-      // Separar banda de segundo curso
+      // Separar banda de segundo curso (3 cursos = banda: GarageBand, Minha Banda Para Sempre, Power Kids)
+      const cursosBanda = ['garageband', 'minha banda para sempre', 'power kids'];
       const matriculasBanda = ativosETrancados.filter((a: any) =>
-        a.cursos?.nome?.toLowerCase().includes('banda')
+        cursosBanda.some(nome => a.cursos?.nome?.toLowerCase().includes(nome))
       ).length;
       const matriculasSegundoCurso = ativosETrancados.filter((a: any) =>
-        a.is_segundo_curso && !a.cursos?.nome?.toLowerCase().includes('banda')
+        a.is_segundo_curso && !cursosBanda.some(nome => a.cursos?.nome?.toLowerCase().includes(nome))
       ).length;
       const totalPagantes = naoSegundoCurso.filter((a: any) =>
         a.tipos_matricula?.conta_como_pagante === true
