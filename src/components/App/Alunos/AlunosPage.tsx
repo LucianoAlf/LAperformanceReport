@@ -8,7 +8,7 @@ import { ptBR } from 'date-fns/locale';
 import { 
   Users, DollarSign, BarChart3, Clock, Layers, AlertTriangle, BookOpen,
   Plus, Search, RotateCcw, Edit2, Trash2, Check, X, History,
-  Calendar, Upload
+  Calendar, Upload, Heart
 } from 'lucide-react';
 import { KPICard } from '@/components/ui/KPICard';
 import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
@@ -22,6 +22,7 @@ import { ModalNovaTurma } from './ModalNovaTurma';
 import { ModalAdicionarAlunoTurma } from './ModalAdicionarAlunoTurma';
 import { AlertaTurma } from './AlertaTurma';
 import { GradeHoraria } from '../Turmas/GradeHoraria';
+import { TabSucessoAluno } from './SucessoCliente';
 import { ToastContainer } from '@/components/ui/toast';
 import { useToast } from '@/hooks/useToast';
 import { PageTour, TourHelpButton } from '@/components/Onboarding';
@@ -120,13 +121,14 @@ export interface Filtros {
   status_pagamento: string;
 }
 
-type TabAtiva = 'lista' | 'turmas' | 'grade' | 'distribuicao' | 'importar';
+type TabAtiva = 'lista' | 'turmas' | 'grade' | 'distribuicao' | 'importar' | 'sucesso';
 
 const alunosTabs: PageTab<TabAtiva>[] = [
   { id: 'lista', label: 'Lista de Alunos', shortLabel: 'Lista', icon: Users },
   { id: 'turmas', label: 'Gestão de Turmas', shortLabel: 'Turmas', icon: Calendar },
   { id: 'grade', label: 'Grade Horária', shortLabel: 'Grade', icon: Clock },
   { id: 'distribuicao', label: 'Distribuição', shortLabel: 'Distrib.', icon: BarChart3 },
+  { id: 'sucesso', label: 'Sucesso do Cliente', shortLabel: 'Sucesso', icon: Heart },
   { id: 'importar', label: 'Importar Alunos', shortLabel: 'Importar', icon: Upload, disabled: true, disabledTitle: 'Em breve — funcionalidade em desenvolvimento' },
 ];
 
@@ -1090,8 +1092,11 @@ export function AlunosPage() {
       />
 
       {/* Conteúdo das Tabs */}
-      <section className="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden">
-        {tabAtiva === 'lista' && (
+      {tabAtiva === 'sucesso' ? (
+        <TabSucessoAluno unidadeAtual={unidadeAtual} />
+      ) : (
+        <section className="bg-slate-800/50 border border-slate-700/50 rounded-xl overflow-hidden">
+          {tabAtiva === 'lista' && (
           <TabelaAlunos
             alunos={alunosComTurma}
             todosAlunos={alunos}
@@ -1165,6 +1170,7 @@ export function AlunosPage() {
           <ImportarAlunos onRecarregar={carregarDados} />
         )}
       </section>
+      )}
 
       {/* Modal Novo Aluno */}
       {modalNovoAluno && (

@@ -1131,7 +1131,7 @@ export function TabelaAlunos({
       )}
 
       {/* Tabela */}
-      <div data-tour="tabela-alunos" className="overflow-x-auto">
+      <div data-tour="tabela-alunos" className="overflow-x-auto bg-slate-800/50">
         <table className="w-full text-sm">
           <thead className="bg-slate-700/50">
             <tr className="text-left text-slate-400 text-xs uppercase">
@@ -1159,16 +1159,10 @@ export function TabelaAlunos({
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-700/50">
-            {alunosPaginados.map((aluno, index) => {
-              const isSozinho = aluno.total_alunos_turma === 1;
-              
-              return (
-                <React.Fragment key={aluno.id}>
+            {alunosPaginados.map((aluno, index) => (
+              <React.Fragment key={aluno.id}>
                 <tr
-                  className={`
-                    transition hover:bg-slate-700/30
-                    ${isSozinho ? 'bg-red-900/10' : ''}
-                  `}
+                  className="transition hover:bg-slate-700/30"
                 >
                   {/* Checkbox de seleção */}
                   <td className="px-2 py-3">
@@ -1677,8 +1671,7 @@ export function TabelaAlunos({
                   </tr>
                 ))}
                 </React.Fragment>
-              );
-            })}
+            ))}
           </tbody>
         </table>
       </div>

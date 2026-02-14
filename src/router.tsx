@@ -81,6 +81,9 @@ const AppLegacy = lazy(() => import('../App'));
 const ComercialDashboard = lazy(() => import('./components/Comercial').then(m => ({ default: m.ComercialDashboard })));
 const RetencaoDashboard = lazy(() => import('./components/Retencao').then(m => ({ default: m.RetencaoDashboard })));
 
+// Páginas públicas (sem autenticação)
+const FeedbackProfessorPage = lazy(() => import('./components/App/Feedback').then(m => ({ default: m.FeedbackProfessorPage })));
+
 // Placeholder para páginas ainda não implementadas
 function PlaceholderPage({ title }: { title: string }) {
   return (
@@ -264,6 +267,12 @@ export const router = createBrowserRouter([
         element: <RetencaoApresentacao />,
       },
     ],
+  },
+
+  // Página pública de feedback do professor (sem autenticação)
+  {
+    path: '/feedback/:token',
+    element: <Suspense fallback={<PageLoader />}><FeedbackProfessorPage /></Suspense>,
   },
 
   // Redirect para login se rota não existir
