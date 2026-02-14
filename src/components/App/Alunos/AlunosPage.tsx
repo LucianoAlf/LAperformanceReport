@@ -65,6 +65,9 @@ export interface Aluno {
   valor_total?: number; // Soma de todos os valores de parcela
   // Health Score - percepção do professor
   health_score?: 'verde' | 'amarelo' | 'vermelho' | null;
+  // Forma de pagamento
+  forma_pagamento_id?: number | null;
+  forma_pagamento_nome?: string | null;
 }
 
 export interface Turma {
@@ -241,11 +244,12 @@ export function AlunosPage() {
         id, nome, classificacao, idade_atual, professor_atual_id, curso_id, modalidade,
         dia_aula, horario_aula, valor_parcela, tempo_permanencia_meses,
         status, status_pagamento, dia_vencimento, tipo_matricula_id, unidade_id, data_matricula,
-        is_segundo_curso, data_nascimento,
+        is_segundo_curso, data_nascimento, forma_pagamento_id,
         professores:professor_atual_id(nome),
         cursos:curso_id(nome),
         tipos_matricula:tipo_matricula_id(nome, conta_como_pagante, entra_ticket_medio, codigo),
-        unidades:unidade_id(codigo)
+        unidades:unidade_id(codigo),
+        formas_pagamento:forma_pagamento_id(nome)
       `)
       .order('nome');
 
@@ -311,6 +315,7 @@ export function AlunosPage() {
           curso_nome: a.cursos?.nome || '',
           tipo_matricula_nome: a.tipos_matricula?.nome || '',
           unidade_codigo: a.unidades?.codigo || '',
+          forma_pagamento_nome: a.formas_pagamento?.nome || null,
           total_alunos_turma: turmaInfo?.total_alunos || 1,
           turma_id: turmaInfo?.id,
           nomes_alunos_turma: turmaInfo?.nomes_alunos || [],

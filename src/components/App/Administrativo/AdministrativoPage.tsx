@@ -92,6 +92,9 @@ export interface ResumoMes {
   faturamento: number;
   churn_rate: number;
   ltv_meses: number;
+  mrr_perdido: number;
+  novos_segundo_curso: number;
+  novos_bolsistas: number;
 }
 
 type TabId = 'renovacoes' | 'nao_renovacoes' | 'avisos' | 'cancelamentos' | 'trancamentos';
@@ -190,12 +193,22 @@ export function AdministrativoPage() {
         queryAvisos = queryAvisos.eq('unidade_id', unidade);
       }
 
-      // 4 queries em paralelo (de 5 sequenciais para 1 roundtrip)
-      const [movResult, avisosResult, profsResult, fpResult] = await Promise.all([
+      // 5 queries em paralelo — inclui view de retenção para KPIs consistentes com Analytics
+      let retencaoQuery = supabase
+        .from('vw_kpis_retencao_mensal')
+        .select('*')
+        .eq('ano', ano)
+        .eq('mes', mes);
+      if (unidade !== 'todos') {
+        retencaoQuery = retencaoQuery.eq('unidade_id', unidade);
+      }
+
+      const [movResult, avisosResult, profsResult, fpResult, retencaoResult] = await Promise.all([
         query,
         queryAvisos,
         supabase.from('professores').select('id, nome').eq('ativo', true).order('nome'),
         supabase.from('formas_pagamento').select('id, nome, sigla').order('nome'),
+        retencaoQuery,
       ]);
 
       const { data: movData, error: movError } = movResult;
@@ -203,6 +216,7 @@ export function AdministrativoPage() {
       const { data: avisosRetroativos } = avisosResult;
       const profData = profsResult.data;
       const fpData = fpResult.data;
+      const retencaoData = retencaoResult.data;
 
       // Combinar resultados sem duplicatas
       const idsJaPresentes = new Set((movData || []).map(m => m.id));
@@ -335,10 +349,10 @@ export function AdministrativoPage() {
       setProfessores(profData || []);
       setFormasPagamento(fpData || []);
 
-      // Buscar novos alunos do mês
+      // Buscar novos alunos do mês — apenas novos INDIVÍDUOS (excluir 2º curso e bolsistas)
       let novosAlunosQuery = supabase
         .from('alunos')
-        .select('id', { count: 'exact', head: true })
+        .select('id, is_segundo_curso, tipo_matricula_id')
         .gte('data_matricula', startDate)
         .lte('data_matricula', endDate);
 
@@ -346,23 +360,48 @@ export function AdministrativoPage() {
         novosAlunosQuery = novosAlunosQuery.eq('unidade_id', unidade);
       }
 
-      const { count: novosAlunosCount } = await novosAlunosQuery;
+      const { data: novosAlunosData } = await novosAlunosQuery;
+      const todosNovos = novosAlunosData || [];
+      // Filtrar: apenas novos indivíduos pagantes (sem 2º curso, sem bolsistas)
+      // tipos_matricula bolsistas: BOLSISTA_INT(3), BOLSISTA_PARC(4), BANDA(5)
+      const novosAlunos = todosNovos.filter(a => 
+        !a.is_segundo_curso && 
+        a.tipo_matricula_id && ![3, 4, 5].includes(a.tipo_matricula_id)
+      );
+      const novosSegundoCurso = todosNovos.filter(a => a.is_segundo_curso).length;
+      const novosBolsistas = todosNovos.filter(a => 
+        a.tipo_matricula_id && [3, 4, 5].includes(a.tipo_matricula_id)
+      ).length;
 
-      // Montar resumo
+      // Consolidar dados de retenção da view (fonte de verdade = mesma do Analytics)
+      const retConsolidado = retencaoData?.reduce((acc: any, r: any) => ({
+        total_evasoes: (acc.total_evasoes || 0) + (r.total_evasoes || 0),
+        evasoes_interrompidas: (acc.evasoes_interrompidas || 0) + (r.evasoes_interrompidas || 0),
+        nao_renovacoes: (acc.nao_renovacoes || 0) + (r.nao_renovacoes || 0),
+        avisos_previos: (acc.avisos_previos || 0) + (r.avisos_previos || 0),
+        mrr_perdido: (acc.mrr_perdido || 0) + (Number(r.mrr_perdido) || 0),
+        renovacoes_previstas: (acc.renovacoes_previstas || 0) + (r.renovacoes_previstas || 0),
+        renovacoes_realizadas: (acc.renovacoes_realizadas || 0) + (r.renovacoes_realizadas || 0),
+        renovacoes_pendentes: (acc.renovacoes_pendentes || 0) + (r.renovacoes_pendentes || 0),
+      }), {}) || {};
+
+      // Montar resumo — KPIs de retenção vêm da view (consistente com Analytics)
       setResumo({
         ...kpis,
-        // Calcular campos que vêm das movimentações e queries adicionais
         alunos_trancados: trancamentos.length,
-        alunos_novos: novosAlunosCount || 0,
+        alunos_novos: novosAlunos.length,
+        novos_segundo_curso: novosSegundoCurso,
+        novos_bolsistas: novosBolsistas,
         matriculas_ativas: matriculasAtivas,
-        renovacoes_previstas: 25, // TODO: Calcular baseado em alunos que completam aniversário
-        renovacoes_realizadas: renovacoes.length,
-        renovacoes_pendentes: 25 - renovacoes.length,
-        nao_renovacoes: naoRenovacoes.length,
-        avisos_previos: avisosPrevios.length,
-        evasoes_total: evasoes.length,
-        evasoes_interrompido: evasoes.filter(e => e.tipo_evasao === 'interrompido').length,
-        evasoes_nao_renovou: evasoes.filter(e => e.tipo_evasao === 'nao_renovou').length,
+        renovacoes_previstas: retConsolidado.renovacoes_previstas || renovacoes.length + naoRenovacoes.length,
+        renovacoes_realizadas: retConsolidado.renovacoes_realizadas || renovacoes.length,
+        renovacoes_pendentes: retConsolidado.renovacoes_pendentes || 0,
+        nao_renovacoes: retConsolidado.nao_renovacoes || naoRenovacoes.length,
+        avisos_previos: retConsolidado.avisos_previos || avisosPrevios.length,
+        evasoes_total: retConsolidado.total_evasoes || (evasoes.length + naoRenovacoes.length),
+        evasoes_interrompido: retConsolidado.evasoes_interrompidas || evasoes.length,
+        evasoes_nao_renovou: retConsolidado.nao_renovacoes || naoRenovacoes.length,
+        mrr_perdido: retConsolidado.mrr_perdido || 0,
       });
 
     } catch (error) {
@@ -636,14 +675,14 @@ export function AdministrativoPage() {
         unidadeId={unidade} 
         ano={ano} 
         mes={mes}
-        churnRate={resumo?.alunos_ativos ? ((naoRenovacoes.length + evasoes.length) / resumo.alunos_ativos * 100) : 0}
+        churnRate={resumo?.alunos_ativos ? ((resumo.evasoes_total || 0) / resumo.alunos_ativos * 100) : 0}
         taxaRenovacao={(() => {
-          const totalVenc = renovacoes.length + naoRenovacoes.length;
-          return totalVenc > 0 ? (renovacoes.length / totalVenc) * 100 : undefined;
+          const totalVenc = (resumo?.renovacoes_realizadas || 0) + (resumo?.nao_renovacoes || 0);
+          return totalVenc > 0 ? ((resumo?.renovacoes_realizadas || 0) / totalVenc) * 100 : undefined;
         })()}
-        totalRenovacoes={renovacoes.length}
-        totalVencimentos={renovacoes.length + naoRenovacoes.length}
-        totalEvasoes={naoRenovacoes.length + evasoes.length}
+        totalRenovacoes={resumo?.renovacoes_realizadas || 0}
+        totalVencimentos={(resumo?.renovacoes_realizadas || 0) + (resumo?.nao_renovacoes || 0)}
+        totalEvasoes={resumo?.evasoes_total || 0}
         alunosAtivos={resumo?.alunos_ativos || 0}
       />
 
@@ -699,6 +738,10 @@ export function AdministrativoPage() {
             icon={UserPlus}
             label="Novos no Mês"
             value={resumo?.alunos_novos || 0}
+            subvalue={[
+              resumo?.novos_bolsistas ? `${resumo.novos_bolsistas} bolsista${resumo.novos_bolsistas > 1 ? 's' : ''}` : '',
+              resumo?.novos_segundo_curso ? `${resumo.novos_segundo_curso} 2º curso` : '',
+            ].filter(Boolean).join(' | ') || 'novos alunos pagantes'}
             variant="green"
           />
         </div>
@@ -790,13 +833,13 @@ export function AdministrativoPage() {
                 <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Taxa de Renovação</p>
                 <p className="text-3xl font-bold text-emerald-400">
                   {(() => {
-                    const totalVencimentos = renovacoes.length + naoRenovacoes.length;
+                    const totalVencimentos = (resumo?.renovacoes_realizadas || 0) + (resumo?.nao_renovacoes || 0);
                     if (totalVencimentos === 0) return '0.0';
-                    return ((renovacoes.length / totalVencimentos) * 100).toFixed(1);
+                    return (((resumo?.renovacoes_realizadas || 0) / totalVencimentos) * 100).toFixed(1);
                   })()}%
                 </p>
                 <p className="text-xs text-slate-500 mt-1">
-                  {renovacoes.length} de {renovacoes.length + naoRenovacoes.length} vencimentos
+                  {resumo?.renovacoes_realizadas || 0} de {(resumo?.renovacoes_realizadas || 0) + (resumo?.nao_renovacoes || 0)} vencimentos
                 </p>
               </div>
               
@@ -804,10 +847,10 @@ export function AdministrativoPage() {
               <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
                 <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Churn Rate</p>
                 <p className="text-3xl font-bold text-rose-400">
-                  {resumo?.alunos_ativos ? ((naoRenovacoes.length + evasoes.length) / resumo.alunos_ativos * 100).toFixed(1) : '0.0'}%
+                  {resumo?.alunos_ativos ? ((resumo.evasoes_total || 0) / resumo.alunos_ativos * 100).toFixed(1) : '0.0'}%
                 </p>
                 <p className="text-xs text-slate-500 mt-1">
-                  {naoRenovacoes.length + evasoes.length} evasões / {resumo?.alunos_ativos || 0} base
+                  {resumo?.evasoes_total || 0} evasões / {resumo?.alunos_ativos || 0} base
                 </p>
               </div>
               
@@ -815,26 +858,9 @@ export function AdministrativoPage() {
               <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50">
                 <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Tempo Médio Permanência</p>
                 <p className="text-3xl font-bold text-cyan-400">
-                  {(() => {
-                    // Regra: excluir bolsistas (3=INT, 4=PARC, 5=BANDA), segundo curso, e ≤3 meses
-                    const todos = [...naoRenovacoes, ...evasoes].filter(m => {
-                      if (!m.tempo_permanencia_meses || m.tempo_permanencia_meses < 4) return false;
-                      const tipoMatricula = m.alunos?.tipo_matricula_id;
-                      if (tipoMatricula && [3, 4, 5].includes(tipoMatricula)) return false;
-                      if (m.alunos?.is_segundo_curso) return false;
-                      return true;
-                    });
-                    // Se tem evasões no período, calcular média delas
-                    if (todos.length > 0) {
-                      const media = todos.reduce((acc, m) => acc + (m.tempo_permanencia_meses || 0), 0) / todos.length;
-                      return media.toFixed(1);
-                    }
-                    // Fallback: usar valor da view (que já tem fallback do histórico)
-                    if (resumo?.ltv_meses && resumo.ltv_meses > 0) {
-                      return Number(resumo.ltv_meses).toFixed(1);
-                    }
-                    return '-';
-                  })()}
+                  {resumo?.ltv_meses && resumo.ltv_meses > 0
+                    ? Number(resumo.ltv_meses).toFixed(1)
+                    : '-'}
                   <span className="text-lg font-normal text-slate-400"> meses</span>
                 </p>
                 <p className="text-xs text-slate-500 mt-1">média das evasões ≥4 meses (excl. bolsistas)</p>
@@ -1010,12 +1036,19 @@ export function AdministrativoPage() {
                 <p className="text-xs text-rose-400 uppercase tracking-wider mb-1">MRR Perdido (Evasões)</p>
                 <p className="text-3xl font-bold text-rose-400">
                   R$ {(() => {
+                    // Usar MRR perdido da view de retenção (mesma fonte do Analytics)
+                    const mrrView = resumo?.mrr_perdido || 0;
+                    if (mrrView > 0) return Number(mrrView).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+                    // Fallback: calcular das movimentações
                     const total = [...naoRenovacoes, ...evasoes].reduce((acc, m) => acc + (m.valor_parcela_evasao || 0), 0);
                     return total.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
                   })()}
                 </p>
                 <p className="text-xs text-rose-300/70 mt-1">
-                  {naoRenovacoes.length + evasoes.length} × R$ {(() => {
+                  {resumo?.evasoes_total || 0} × R$ {(() => {
+                    const mrrView = resumo?.mrr_perdido || 0;
+                    const totalEv = resumo?.evasoes_total || 0;
+                    if (mrrView > 0 && totalEv > 0) return (mrrView / totalEv).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
                     const todos = [...naoRenovacoes, ...evasoes].filter(m => m.valor_parcela_evasao);
                     if (todos.length === 0) return '0,00';
                     const media = todos.reduce((acc, m) => acc + (m.valor_parcela_evasao || 0), 0) / todos.length;
@@ -1029,21 +1062,22 @@ export function AdministrativoPage() {
                 <p className="text-xs text-emerald-400 uppercase tracking-wider mb-1">LTV Médio (Evasões)</p>
                 <p className="text-3xl font-bold text-emerald-400">
                   R$ {(() => {
-                    const todos = [...naoRenovacoes, ...evasoes].filter(m => m.tempo_permanencia_meses && m.valor_parcela_evasao);
-                    if (todos.length === 0) return '0,00';
-                    const tempoMedio = todos.reduce((acc, m) => acc + (m.tempo_permanencia_meses || 0), 0) / todos.length;
+                    // Usar tempo de permanência global (da view) × ticket médio das evasões do mês
+                    const tempoGlobal = resumo?.ltv_meses ? Number(resumo.ltv_meses) : 0;
+                    const todos = [...naoRenovacoes, ...evasoes].filter(m => m.valor_parcela_evasao);
+                    if (tempoGlobal === 0 || todos.length === 0) return '0,00';
                     const ticketMedio = todos.reduce((acc, m) => acc + (m.valor_parcela_evasao || 0), 0) / todos.length;
-                    const ltv = tempoMedio * ticketMedio;
+                    const ltv = tempoGlobal * ticketMedio;
                     return ltv.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
                   })()}
                 </p>
                 <p className="text-xs text-emerald-300/70 mt-1">
                   {(() => {
-                    const todos = [...naoRenovacoes, ...evasoes].filter(m => m.tempo_permanencia_meses && m.valor_parcela_evasao);
-                    if (todos.length === 0) return '- meses × R$ -';
-                    const tempoMedio = todos.reduce((acc, m) => acc + (m.tempo_permanencia_meses || 0), 0) / todos.length;
+                    const tempoGlobal = resumo?.ltv_meses ? Number(resumo.ltv_meses) : 0;
+                    const todos = [...naoRenovacoes, ...evasoes].filter(m => m.valor_parcela_evasao);
+                    if (tempoGlobal === 0 || todos.length === 0) return '- meses × R$ -';
                     const ticketMedio = todos.reduce((acc, m) => acc + (m.valor_parcela_evasao || 0), 0) / todos.length;
-                    return `${tempoMedio.toFixed(1)}m × R$ ${ticketMedio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+                    return `${tempoGlobal.toFixed(1)}m × R$ ${ticketMedio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
                   })()}
                 </p>
               </div>

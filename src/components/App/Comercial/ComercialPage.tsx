@@ -1010,10 +1010,11 @@ export function ComercialPage() {
       // A trigger calcular_campos_aluno() calcula automaticamente: idade_atual e classificacao (EMLA/LAMK)
       if (modalOpen === 'matricula' && formData.aluno_nome) {
         // Determinar tipo_matricula_id baseado em tipo_aluno
+        // IDs: 1=Regular, 2=Segundo Curso, 3=Bolsista Integral, 4=Bolsista Parcial, 5=Banda
         let tipo_matricula_id = 1; // Regular por padrão
-        if (formData.tipo_aluno === 'bolsista_integral') tipo_matricula_id = 2;
-        else if (formData.tipo_aluno === 'bolsista_parcial') tipo_matricula_id = 3;
-        else if (formData.tipo_aluno === 'nao_pagante') tipo_matricula_id = 4;
+        if (formData.tipo_aluno === 'bolsista_integral') tipo_matricula_id = 3;
+        else if (formData.tipo_aluno === 'bolsista_parcial') tipo_matricula_id = 4;
+        else if (formData.tipo_aluno === 'nao_pagante') tipo_matricula_id = 3;
 
         // Calcular datas de contrato automaticamente (12 meses)
         const dataMatricula = formData.data.toISOString().split('T')[0];

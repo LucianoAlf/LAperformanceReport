@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical, Play, MessageSquarePlus, MessageCircle, CheckCircle2, Circle, FileEdit, ChevronDown, ChevronRight, Music2, Layers } from 'lucide-react';
+import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical, Play, MessageSquarePlus, MessageCircle, CheckCircle2, Circle, FileEdit, ChevronDown, ChevronRight, Music2, Layers, CreditCard, FileText, Banknote, QrCode, Link2 } from 'lucide-react';
 import { CelulaEditavel } from '@/components/ui/CelulaEditavel';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
@@ -107,7 +107,45 @@ export function TabelaAlunos({
   const [filtrosExpandidos, setFiltrosExpandidos] = useState(false);
   const [alunoFicha, setAlunoFicha] = useState<Aluno | null>(null);
   const [alunosExpandidos, setAlunosExpandidos] = useState<Set<number>>(new Set());
+  const [alertaInadimplenciaDismissed, setAlertaInadimplenciaDismissed] = useState(false);
   const itensPorPagina = 30;
+
+  // Contagem de inadimplentes (usa todosAlunos para não depender de filtros)
+  const inadimplenciaInfo = useMemo(() => {
+    const diaAtual = new Date().getDate();
+    const fonte = todosAlunos || alunos;
+    const ativos = fonte.filter(a => a.status === 'ativo' || a.status === 'trancado');
+    const inadimplentes = ativos.filter(a => a.status_pagamento === 'inadimplente');
+    const pendentes = ativos.filter(a => 
+      (a.status_pagamento === 'em_dia' || !a.status_pagamento) && 
+      (a.dia_vencimento || 5) <= diaAtual &&
+      a.tipo_matricula_id !== 3 && a.tipo_matricula_id !== 4 && a.tipo_matricula_id !== 5
+    );
+    const valorInadimplente = inadimplentes.reduce((acc, a) => acc + (a.valor_parcela || 0), 0);
+    const diasVencimento = [...new Set<number>(ativos.map(a => a.dia_vencimento || 5))].sort((a, b) => a - b);
+    const vencimentoPassou = diasVencimento.some((d: number) => d <= diaAtual);
+    
+    return {
+      total: inadimplentes.length,
+      pendentes: pendentes.length,
+      valor: valorInadimplente,
+      vencimentoPassou,
+      diasVencimento,
+      diaAtual,
+    };
+  }, [todosAlunos, alunos]);
+
+  // Ícone da forma de pagamento
+  const getFormaPagamentoIcon = (formaPagamentoId?: number | null, formaPagamentoNome?: string | null) => {
+    switch (formaPagamentoId) {
+      case 1: return <CreditCard className="w-3 h-3" />;   // Crédito Recorrente
+      case 2: return <FileText className="w-3 h-3" />;      // Cheque
+      case 3: return <QrCode className="w-3 h-3" />;        // Pix
+      case 4: return <Banknote className="w-3 h-3" />;      // Dinheiro
+      case 5: return <Link2 className="w-3 h-3" />;         // Link
+      default: return null;
+    }
+  };
 
   // Toggle expansão de aluno com segundo curso
   const toggleExpandirAluno = (alunoId: number) => {
@@ -1027,6 +1065,40 @@ export function TabelaAlunos({
         )}
       </div>
 
+      {/* Alerta de Inadimplência — Banner fino esticado */}
+      {inadimplenciaInfo.vencimentoPassou && (inadimplenciaInfo.total > 0 || inadimplenciaInfo.pendentes > 0) && !alertaInadimplenciaDismissed && (
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-red-500/15 border border-red-500/30 rounded-xl text-sm">
+          <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0" />
+          <span className="text-red-300 flex-1">
+            <strong className="text-red-200">
+              {inadimplenciaInfo.total > 0 
+                ? `${inadimplenciaInfo.total} aluno${inadimplenciaInfo.total !== 1 ? 's' : ''} inadimplente${inadimplenciaInfo.total !== 1 ? 's' : ''}`
+                : `${inadimplenciaInfo.pendentes} aluno${inadimplenciaInfo.pendentes !== 1 ? 's' : ''} pendente${inadimplenciaInfo.pendentes !== 1 ? 's' : ''} de verificação`
+              }
+            </strong>
+            {inadimplenciaInfo.total > 0 && (
+              <> — R$ {inadimplenciaInfo.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} em parcelas não pagas</>
+            )}
+            {inadimplenciaInfo.pendentes > 0 && inadimplenciaInfo.total > 0 && (
+              <> • {inadimplenciaInfo.pendentes} ainda como "em dia" precisam ser verificados</>
+            )}
+          </span>
+          <button
+            onClick={() => setFiltros({ ...filtros, status_pagamento: 'inadimplente' })}
+            className="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 rounded-lg text-red-200 text-xs font-medium transition-colors whitespace-nowrap"
+          >
+            Filtrar Inadimplentes
+          </button>
+          <button
+            onClick={() => setAlertaInadimplenciaDismissed(true)}
+            className="p-1 hover:bg-red-500/20 rounded transition-colors"
+            title="Dispensar alerta"
+          >
+            <X className="w-4 h-4 text-red-400" />
+          </button>
+        </div>
+      )}
+
       {/* Botões de Ação em Massa */}
       {alunosSelecionados.size > 0 && (
         <div className="fixed bottom-8 left-1/2 transform -translate-x-1/2 z-50 bg-slate-800 border border-slate-600 rounded-lg shadow-2xl px-6 py-4 flex items-center gap-4">
@@ -1274,42 +1346,65 @@ export function TabelaAlunos({
                     }
                   </td>
 
-                  {/* Parcela - Edição inline */}
+                  {/* Parcela - Edição inline com cor baseada no status de pagamento */}
                   <td className="px-4 py-2">
-                    <CelulaEditavel
-                      value={aluno.valor_parcela}
-                      onChange={async (valor) => salvarCampo(aluno.id, 'valor_parcela', valor)}
-                      tipo="moeda"
-                      placeholder="-"
-                      className="min-w-[80px]"
-                    />
+                    <div className={`rounded-md ${
+                      aluno.status_pagamento === 'inadimplente' ? 'text-red-400' :
+                      aluno.status_pagamento === 'em_dia' ? 'text-emerald-400' :
+                      aluno.status_pagamento === 'parcial' ? 'text-yellow-400' :
+                      ''
+                    }`}>
+                      <CelulaEditavel
+                        value={aluno.valor_parcela}
+                        onChange={async (valor) => salvarCampo(aluno.id, 'valor_parcela', valor)}
+                        tipo="moeda"
+                        placeholder="-"
+                        className="min-w-[80px]"
+                      />
+                    </div>
                   </td>
 
-                  {/* Status Pagamento - Edição inline */}
+                  {/* Status Pagamento - Edição inline com ícone de forma de pagamento */}
                   <td className="px-2 py-2">
-                    <CelulaEditavel
-                      value={aluno.status_pagamento || '-'}
-                      onChange={async (valor) => salvarCampo(aluno.id, 'status_pagamento', valor)}
-                      tipo="select"
-                      opcoes={[
-                        { value: '-', label: '- Não lançado' },
-                        { value: 'em_dia', label: '✓ Em dia' },
-                        { value: 'inadimplente', label: '✗ Inadimplente' },
-                        { value: 'parcial', label: '~ Parcial' },
-                        { value: 'sem_parcela', label: '○ Sem Parcela' },
-                      ]}
-                      placeholder="-"
-                      formatarExibicao={() => {
-                        switch (aluno.status_pagamento) {
-                          case 'inadimplente': return <span className="text-red-400 font-bold" title="Inadimplente">✗</span>;
-                          case 'parcial': return <span className="text-yellow-400 font-bold" title="Pagamento Parcial">~</span>;
-                          case 'em_dia': return <span className="text-emerald-400" title="Em dia">✓</span>;
-                          case 'sem_parcela': return <span className="text-blue-400" title="Sem Parcela">○</span>;
-                          default: return <span className="text-slate-500" title="Não lançado">-</span>;
-                        }
-                      }}
-                      className="min-w-[40px]"
-                    />
+                    <div className="flex items-center gap-1">
+                      <CelulaEditavel
+                        value={aluno.status_pagamento || '-'}
+                        onChange={async (valor) => salvarCampo(aluno.id, 'status_pagamento', valor)}
+                        tipo="select"
+                        opcoes={[
+                          { value: '-', label: '- Não lançado' },
+                          { value: 'em_dia', label: '✓ Em dia' },
+                          { value: 'inadimplente', label: '✗ Inadimplente' },
+                          { value: 'parcial', label: '~ Parcial' },
+                          { value: 'sem_parcela', label: '○ Sem Parcela' },
+                        ]}
+                        placeholder="-"
+                        formatarExibicao={() => {
+                          const icon = getFormaPagamentoIcon(aluno.forma_pagamento_id, aluno.forma_pagamento_nome);
+                          const formaNome = aluno.forma_pagamento_nome || 'Não informada';
+                          switch (aluno.status_pagamento) {
+                            case 'inadimplente': return (
+                              <Tooltip content={`Inadimplente • ${formaNome}`}>
+                                <span className="flex items-center gap-1 text-red-400 font-bold">✗{icon && <span className="text-red-400/60">{icon}</span>}</span>
+                              </Tooltip>
+                            );
+                            case 'parcial': return (
+                              <Tooltip content={`Pagamento Parcial • ${formaNome}`}>
+                                <span className="flex items-center gap-1 text-yellow-400 font-bold">~{icon && <span className="text-yellow-400/60">{icon}</span>}</span>
+                              </Tooltip>
+                            );
+                            case 'em_dia': return (
+                              <Tooltip content={`Em dia • ${formaNome}`}>
+                                <span className="flex items-center gap-1 text-emerald-400">✓{icon && <span className="text-emerald-400/60">{icon}</span>}</span>
+                              </Tooltip>
+                            );
+                            case 'sem_parcela': return <span className="text-blue-400" title="Sem Parcela">○</span>;
+                            default: return <span className="text-slate-500" title="Não lançado">-</span>;
+                          }
+                        }}
+                        className="min-w-[40px]"
+                      />
+                    </div>
                   </td>
 
                   {/* Dia Vencimento - Edição inline */}
@@ -1496,38 +1591,61 @@ export function TabelaAlunos({
                     </td>
                     <td className="px-4 py-2 text-slate-400 text-sm">-</td>
                     <td className="px-4 py-2">
-                      <CelulaEditavel
-                        value={outroCurso.valor_parcela}
-                        onChange={async (valor) => salvarCampo(outroCurso.id, 'valor_parcela', valor)}
-                        tipo="moeda"
-                        placeholder="-"
-                        className="min-w-[80px]"
-                      />
+                      <div className={`rounded-md ${
+                        outroCurso.status_pagamento === 'inadimplente' ? 'text-red-400' :
+                        outroCurso.status_pagamento === 'em_dia' ? 'text-emerald-400' :
+                        outroCurso.status_pagamento === 'parcial' ? 'text-yellow-400' :
+                        ''
+                      }`}>
+                        <CelulaEditavel
+                          value={outroCurso.valor_parcela}
+                          onChange={async (valor) => salvarCampo(outroCurso.id, 'valor_parcela', valor)}
+                          tipo="moeda"
+                          placeholder="-"
+                          className="min-w-[80px]"
+                        />
+                      </div>
                     </td>
                     <td className="px-2 py-2">
-                      <CelulaEditavel
-                        value={outroCurso.status_pagamento || '-'}
-                        onChange={async (valor) => salvarCampo(outroCurso.id, 'status_pagamento', valor)}
-                        tipo="select"
-                        opcoes={[
-                          { value: '-', label: '- Não lançado' },
-                          { value: 'em_dia', label: '✓ Em dia' },
-                          { value: 'inadimplente', label: '✗ Inadimplente' },
-                          { value: 'parcial', label: '~ Parcial' },
-                          { value: 'sem_parcela', label: '○ Sem Parcela' },
-                        ]}
-                        placeholder="-"
-                        formatarExibicao={() => {
-                          switch (outroCurso.status_pagamento) {
-                            case 'inadimplente': return <span className="text-red-400 font-bold" title="Inadimplente">✗</span>;
-                            case 'parcial': return <span className="text-yellow-400 font-bold" title="Pagamento Parcial">~</span>;
-                            case 'em_dia': return <span className="text-emerald-400" title="Em dia">✓</span>;
-                            case 'sem_parcela': return <span className="text-blue-400" title="Sem Parcela">○</span>;
-                            default: return <span className="text-slate-500" title="Não lançado">-</span>;
-                          }
-                        }}
-                        className="min-w-[40px]"
-                      />
+                      <div className="flex items-center gap-1">
+                        <CelulaEditavel
+                          value={outroCurso.status_pagamento || '-'}
+                          onChange={async (valor) => salvarCampo(outroCurso.id, 'status_pagamento', valor)}
+                          tipo="select"
+                          opcoes={[
+                            { value: '-', label: '- Não lançado' },
+                            { value: 'em_dia', label: '✓ Em dia' },
+                            { value: 'inadimplente', label: '✗ Inadimplente' },
+                            { value: 'parcial', label: '~ Parcial' },
+                            { value: 'sem_parcela', label: '○ Sem Parcela' },
+                          ]}
+                          placeholder="-"
+                          formatarExibicao={() => {
+                            const icon = getFormaPagamentoIcon(outroCurso.forma_pagamento_id, outroCurso.forma_pagamento_nome);
+                            const formaNome = outroCurso.forma_pagamento_nome || 'Não informada';
+                            switch (outroCurso.status_pagamento) {
+                              case 'inadimplente': return (
+                                <Tooltip content={`Inadimplente • ${formaNome}`}>
+                                  <span className="flex items-center gap-1 text-red-400 font-bold">✗{icon && <span className="text-red-400/60">{icon}</span>}</span>
+                                </Tooltip>
+                              );
+                              case 'parcial': return (
+                                <Tooltip content={`Pagamento Parcial • ${formaNome}`}>
+                                  <span className="flex items-center gap-1 text-yellow-400 font-bold">~{icon && <span className="text-yellow-400/60">{icon}</span>}</span>
+                                </Tooltip>
+                              );
+                              case 'em_dia': return (
+                                <Tooltip content={`Em dia • ${formaNome}`}>
+                                  <span className="flex items-center gap-1 text-emerald-400">✓{icon && <span className="text-emerald-400/60">{icon}</span>}</span>
+                                </Tooltip>
+                              );
+                              case 'sem_parcela': return <span className="text-blue-400" title="Sem Parcela">○</span>;
+                              default: return <span className="text-slate-500" title="Não lançado">-</span>;
+                            }
+                          }}
+                          className="min-w-[40px]"
+                        />
+                      </div>
                     </td>
                     <td className="px-2 py-2">
                       <CelulaEditavel
