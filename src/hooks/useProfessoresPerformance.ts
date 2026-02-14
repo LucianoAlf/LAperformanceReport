@@ -30,7 +30,7 @@ export interface TotaisPerformance {
   totalProfessores: number;
 }
 
-export function useProfessoresPerformance(ano: number = 2025, unidade?: string) {
+export function useProfessoresPerformance(ano: number = new Date().getFullYear(), unidade?: string) {
   const [professores, setProfessores] = useState<ProfessorPerformance[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

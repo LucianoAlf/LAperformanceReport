@@ -64,10 +64,12 @@ export function useKPIsRetencao(
     setError(null);
 
     try {
-      // Tentar buscar da view primeiro
+      // Tentar buscar da view primeiro (filtrar por ano/mes)
       let query = supabase
         .from('vw_kpis_retencao_mensal')
-        .select('*');
+        .select('*')
+        .eq('ano', currentYear)
+        .eq('mes', currentMonth);
 
       if (unidadeId !== 'todos') {
         query = query.eq('unidade_id', unidadeId);

@@ -143,10 +143,13 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           if (gestaoError) throw gestaoError;
           gestaoData = data || [];
 
-          // Buscar dados de retenção
+          // Buscar dados de retenção (filtrar por ano e range de meses)
           let retencaoQuery = supabase
             .from('vw_kpis_retencao_mensal')
-            .select('*');
+            .select('*')
+            .eq('ano', ano)
+            .gte('mes', mesInicio)
+            .lte('mes', mesFinal);
 
           if (unidade !== 'todos') {
             retencaoQuery = retencaoQuery.eq('unidade_id', unidade);

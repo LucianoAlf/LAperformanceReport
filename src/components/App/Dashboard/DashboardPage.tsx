@@ -358,6 +358,20 @@ export function DashboardPage() {
           .select('*')
           .eq('ano', ano);
 
+        // Buscar renovações reais do período (tabela renovacoes)
+        const startDate = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
+        const ultimoDia = new Date(ano, mesFim, 0).getDate();
+        const endDate = `${ano}-${String(mesFim).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
+        let renovacoesQuery = supabase
+          .from('renovacoes')
+          .select('status, unidade_id')
+          .gte('data_renovacao', startDate)
+          .lte('data_renovacao', endDate);
+        if (unidade !== 'todos') {
+          renovacoesQuery = renovacoesQuery.eq('unidade_id', unidade);
+        }
+        const { data: renovacoesData } = await renovacoesQuery;
+
         // Calcular KPIs
         let totalProfs = 0;
         let mediaAlunosProf = 0;
@@ -408,12 +422,15 @@ export function DashboardPage() {
           mediaAlunosTurma = totalTurmas > 0 ? Math.round((totalAlunos / totalTurmas) * 10) / 10 : 0;
         }
 
-        // Taxa de renovação vem de professores_performance
-        if (performanceData && performanceData.length > 0) {
-          // Filtrar por unidade se necessário
+        // Taxa de renovação: priorizar dados reais da tabela renovacoes
+        if (renovacoesData && renovacoesData.length > 0) {
+          const totalRenovacoes = renovacoesData.filter((r: any) => r.status === 'renovado').length;
+          const totalContratos = renovacoesData.length;
+          taxaRenovacao = totalContratos > 0 ? (totalRenovacoes / totalContratos) * 100 : 0;
+        } else if (performanceData && performanceData.length > 0) {
+          // Fallback: professores_performance (dados históricos)
           let perfFiltrada = performanceData;
           if (unidade !== 'todos') {
-            // professores_performance tem campo 'unidade' (nome), precisamos mapear
             const unidadeNome = unidade === '2ec861f6-023f-4d7b-9927-3960ad8c2a92' ? 'Campo Grande' 
               : unidade === '95553e96-971b-4590-a6eb-0201d013c14d' ? 'Recreio'
               : unidade === '368d47f5-2d88-4475-bc14-ba084a9a348e' ? 'Barra' : null;
@@ -627,8 +644,8 @@ export function DashboardPage() {
           <KPICard
             dataTour="card-alunos"
             icon={Users}
-            label="Alunos Ativos"
-            value={dadosGestao?.alunos_ativos || totais.alunosAtivos}
+            label="Pagantes"
+            value={dadosGestao?.alunos_ativos || totais.alunosPagantes}
             target={metas.alunos_pagantes}
             format="number"
             variant="cyan"
