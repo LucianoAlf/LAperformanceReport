@@ -454,7 +454,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             churn_rate_sum: acc.churn_rate_sum + (Number(item.churn_rate) || 0),
             total_evasoes: acc.total_evasoes + (item.total_evasoes || 0),
             novas_matriculas: acc.novas_matriculas + (item.novas_matriculas || 0),
-            reajuste_pct_sum: acc.reajuste_pct_sum + (Number(item.reajuste_pct) || 0),
+            reajuste_pct_sum: acc.reajuste_pct_sum + (Number(item.reajuste_medio || item.reajuste_pct) || 0),
             count: acc.count + 1,
           }), {
             total_alunos_ativos_sum: 0, total_alunos_pagantes_sum: 0, total_bolsistas_integrais_sum: 0,
@@ -635,7 +635,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             tempo_permanencia: g.count > 0 ? g.tempo_permanencia_medio_sum / g.count : 0,
             nps_evasoes: 0, // TODO: buscar de outra fonte
             renovacoes_pendentes: r.renovacoes_pendentes,
-            total_evasoes: r.total_evasoes,
+            total_evasoes: r.evasoes_interrompidas + r.nao_renovacoes,
             
             // Distribuições (gráficos)
             matriculas_por_curso: Array.from(cursoMatMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
@@ -1140,7 +1140,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               />
             )}
             {evolucao.length > 0 ? (
-              <div data-tour="analytics-grafico">
+              <div data-tour="analytics-grafico" className={unidade !== 'todos' ? 'lg:col-span-2' : ''}>
               <EvolutionChart
                 data={evolucao}
                 title="Evolução Mensal"
@@ -1149,7 +1149,6 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
                   { dataKey: 'matriculas', color: '#10b981', name: 'Matrículas' },
                   { dataKey: 'evasoes', color: '#ef4444', name: 'Evasões' },
                 ]}
-                className={unidade !== 'todos' ? 'lg:col-span-2' : ''}
               />
               </div>
             ) : (

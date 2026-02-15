@@ -1326,9 +1326,11 @@ export function ComercialPage() {
 
     // Calcular tickets médios
     const matriculas = registrosSemana?.filter(r => ['matriculado','convertido'].includes(r.status)) || [];
-    const totalPassaporte = matriculas.reduce((acc, r) => acc + (r.valor_passaporte || 0), 0);
-    const totalParcela = matriculas.reduce((acc, r) => acc + (r.valor_parcela || 0), 0);
-    const ticketMedioPassaporte = matriculasSemana > 0 ? totalPassaporte / matriculasSemana : 0;
+    // Regra de negócio: matrículas com passaporte zerado (ex: re-matrícula) não entram no ticket médio
+    const matriculasComPassaporteSemana = matriculas.filter(m => (m.valor_passaporte || 0) > 0);
+    const totalPassaporte = matriculasComPassaporteSemana.reduce((acc, m) => acc + (m.valor_passaporte || 0), 0);
+    const totalParcela = matriculas.reduce((acc, m) => acc + (m.valor_parcela || 0), 0);
+    const ticketMedioPassaporte = matriculasComPassaporteSemana.length > 0 ? totalPassaporte / matriculasComPassaporteSemana.length : 0;
     const ticketMedioParcela = matriculasSemana > 0 ? totalParcela / matriculasSemana : 0;
     
     let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
@@ -1453,9 +1455,11 @@ export function ComercialPage() {
     });
 
     // Calcular totais financeiros
-    const totalPassaporte = matriculasDetalhadas?.reduce((acc, m) => acc + (m.valor_passaporte || 0), 0) || 0;
+    // Regra de negócio: matrículas com passaporte zerado (ex: re-matrícula) não entram no ticket médio
+    const matriculasComPassaporteMes = matriculasDetalhadas?.filter(m => (m.valor_passaporte || 0) > 0) || [];
+    const totalPassaporte = matriculasComPassaporteMes.reduce((acc, m) => acc + (m.valor_passaporte || 0), 0);
     const totalParcela = matriculasDetalhadas?.reduce((acc, m) => acc + (m.valor_parcela || 0), 0) || 0;
-    const ticketMedioPass = matriculasMes > 0 ? totalPassaporte / matriculasMes : 0;
+    const ticketMedioPass = matriculasComPassaporteMes.length > 0 ? totalPassaporte / matriculasComPassaporteMes.length : 0;
     const ticketMedioPar = matriculasMes > 0 ? totalParcela / matriculasMes : 0;
 
     // Contar matrículas por tipo
@@ -1610,9 +1614,11 @@ export function ComercialPage() {
     const lamkCount = matriculasMes.filter(m => m.idade != null ? m.idade <= 11 : m.tipo_matricula === 'LAMK').length;
     const emlaCount = matriculasMes.filter(m => m.idade != null ? m.idade > 11 : m.tipo_matricula === 'EMLA').length;
     
-    const totalPassaporte = matriculasMes.reduce((acc, m) => acc + (m.valor_passaporte || 0), 0);
+    // Regra de negócio: matrículas com passaporte zerado (ex: re-matrícula) não entram no ticket médio
+    const matriculasComPassaporte = matriculasMes.filter(m => (m.valor_passaporte || 0) > 0);
+    const totalPassaporte = matriculasComPassaporte.reduce((acc, m) => acc + (m.valor_passaporte || 0), 0);
     const totalParcela = matriculasMes.reduce((acc, m) => acc + (m.valor_parcela || 0), 0);
-    const ticketMedioPass = totalMatriculas > 0 ? totalPassaporte / totalMatriculas : 0;
+    const ticketMedioPass = matriculasComPassaporte.length > 0 ? totalPassaporte / matriculasComPassaporte.length : 0;
     const ticketMedioPar = totalMatriculas > 0 ? totalParcela / totalMatriculas : 0;
 
     // Agrupar por canal
@@ -3065,10 +3071,19 @@ export function ComercialPage() {
               <div className="text-center">
                 <p className="text-slate-400 text-xs mb-1">Ticket Médio Pass.</p>
                 <p className="text-xl font-bold text-emerald-400">
-                  R$ {matriculasMes.length > 0 
-                    ? (matriculasMes.reduce((acc, m) => acc + (m.valor_passaporte || 0), 0) / matriculasMes.length).toLocaleString('pt-BR', { minimumFractionDigits: 2 })
-                    : '0,00'}
+                  R$ {(() => {
+                    // Regra de negócio: matrículas com passaporte zerado (ex: re-matrícula) não entram no ticket médio
+                    const matriculasComPassaporte = matriculasMes.filter(m => (m.valor_passaporte || 0) > 0);
+                    return matriculasComPassaporte.length > 0 
+                      ? (matriculasComPassaporte.reduce((acc, m) => acc + (m.valor_passaporte || 0), 0) / matriculasComPassaporte.length).toLocaleString('pt-BR', { minimumFractionDigits: 2 })
+                      : '0,00';
+                  })()}
                 </p>
+                {matriculasMes.filter(m => (m.valor_passaporte || 0) === 0).length > 0 && (
+                  <p className="text-xs text-slate-500 mt-1">
+                    {matriculasMes.filter(m => (m.valor_passaporte || 0) === 0).length} com valor zerado
+                  </p>
+                )}
               </div>
               <div className="text-center">
                 <p className="text-slate-400 text-xs mb-1">Ticket Médio Parc.</p>

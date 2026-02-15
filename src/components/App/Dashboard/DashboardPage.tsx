@@ -416,7 +416,7 @@ export function DashboardPage() {
         const [profsR, profUnidR, turmasR, perfR, renovR] = await Promise.all([
           supabase.from('professores').select('id, nome, ativo').eq('ativo', true),
           supabase.from('professores_unidades').select('professor_id, unidade_id'),
-          supabase.from('vw_turmas_implicitas').select('professor_id, total_alunos'),
+          supabase.from('vw_turmas_implicitas').select('professor_id, total_alunos, unidade_id'),
           supabase.from('professores_performance').select('*').eq('ano', ano),
           renovacoesQuery,
         ]);
@@ -444,10 +444,15 @@ export function DashboardPage() {
             });
           }
 
-          // Calcular turmas e alunos por professor (das turmas implícitas)
+          // Filtrar turmas por unidade ANTES de calcular
+          const turmasFiltradas = unidade !== 'todos' 
+            ? turmasImplicitas?.filter((t: any) => t.unidade_id === unidade) 
+            : turmasImplicitas;
+
+          // Calcular turmas e alunos por professor (das turmas implícitas FILTRADAS)
           const turmasPorProfessor = new Map<number, number>();
           const alunosPorProfessor = new Map<number, number>();
-          turmasImplicitas?.forEach((t: any) => {
+          turmasFiltradas?.forEach((t: any) => {
             const profId = t.professor_id;
             turmasPorProfessor.set(profId, (turmasPorProfessor.get(profId) || 0) + 1);
             alunosPorProfessor.set(profId, (alunosPorProfessor.get(profId) || 0) + (t.total_alunos || 0));
