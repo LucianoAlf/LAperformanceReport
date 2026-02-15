@@ -6,3 +6,5 @@ export { useFarmersUnidade } from './useFarmersUnidade';
 export { useChecklists } from './useChecklists';
 export { useChecklistDetail } from './useChecklistDetail';
 export { useDashboardStats } from './useDashboardStats';
+export { useSucessoAlunoAlertas } from './useSucessoAlunoAlertas';
+export { useFeedbackPendente } from './useFeedbackPendente';

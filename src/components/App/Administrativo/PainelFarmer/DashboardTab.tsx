@@ -22,7 +22,8 @@ import {
   Pencil,
   Trash2,
   X,
-  Save
+  Save,
+  Heart
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -30,7 +31,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { toast } from 'sonner';
 import { sendWhatsAppMessage, formatPhoneNumber } from '@/services/whatsapp';
 import { gerarMensagemAniversario, gerarMensagemBoasVindas } from '@/services/mensagemGenerativa';
-import { useColaboradorAtual, useRotinas, useAlertas, useTarefas, useFarmersUnidade, useDashboardStats } from './hooks';
+import { useColaboradorAtual, useRotinas, useAlertas, useTarefas, useFarmersUnidade, useDashboardStats, useSucessoAlunoAlertas, useFeedbackPendente } from './hooks';
 import type { AlertaRenovacao, AlertaInadimplente, AlertaAniversariante, AlertaNovoMatriculado } from './types';
 
 interface DashboardTabProps {
@@ -65,6 +66,10 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
   );
   const { checklistAlertas, stats, loading: loadingStats } = useDashboardStats(unidadeId);
   
+  // Hooks do Sucesso do Aluno (FASE 6)
+  const { alunosCriticos, totalCriticos, loading: loadingCriticos } = useSucessoAlunoAlertas(unidadeId);
+  const { professoresPendentes, totalPendentes, loading: loadingFeedbackPendente } = useFeedbackPendente(unidadeId);
+  
   // Verificar se está no consolidado
   const isConsolidado = unidadeId === 'todos';
 
@@ -83,7 +88,7 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
     });
   };
 
-  const loading = loadingColaborador || loadingFarmers || loadingRotinas || loadingAlertas || loadingTarefas || loadingStats;
+  const loading = loadingColaborador || loadingFarmers || loadingRotinas || loadingAlertas || loadingTarefas || loadingStats || loadingCriticos || loadingFeedbackPendente;
 
   // Formatar data atual
   const hoje = new Date();
@@ -209,6 +214,77 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
         <div className="bg-slate-800/50 border border-slate-700/30 rounded-xl p-4 text-center">
           <div className="text-2xl font-bold text-cyan-400">{stats.taxaSucessoContatos}%</div>
           <div className="text-xs text-slate-500 mt-1">Taxa Sucesso Contatos</div>
+        </div>
+      </div>
+
+      {/* === SEÇÃO FULL-WIDTH: Alertas Sucesso do Aluno (FASE 6) === */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* Card: Alunos Críticos */}
+        <div 
+          className={cn(
+            "bg-slate-800/50 border rounded-xl p-4 cursor-pointer transition-all hover:scale-[1.02]",
+            totalCriticos > 0 ? "border-rose-500/30 bg-rose-500/5" : "border-slate-700/30"
+          )}
+          onClick={() => window.location.href = '/app/alunos?tab=sucesso&filtro=critico'}
+        >
+          <div className="flex items-center gap-3">
+            <div className={cn(
+              "w-10 h-10 rounded-lg flex items-center justify-center",
+              totalCriticos > 0 ? "bg-rose-500/20" : "bg-slate-700/50"
+            )}>
+              <Heart className={cn("w-5 h-5", totalCriticos > 0 ? "text-rose-400" : "text-slate-400")} />
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <span className={cn(
+                  "text-xl font-bold",
+                  totalCriticos > 0 ? "text-rose-400" : "text-slate-400"
+                )}>
+                  {totalCriticos}
+                </span>
+                {totalCriticos > 0 && (
+                  <span className="text-xs text-rose-400/70">⚠️ Críticos</span>
+                )}
+              </div>
+              <p className="text-xs text-slate-500">
+                {totalCriticos === 1 ? 'aluno com saúde crítica' : 'alunos com saúde crítica'}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Card: Feedback Pendente */}
+        <div 
+          className={cn(
+            "bg-slate-800/50 border rounded-xl p-4 cursor-pointer transition-all hover:scale-[1.02]",
+            totalPendentes > 0 ? "border-amber-500/30 bg-amber-500/5" : "border-slate-700/30"
+          )}
+          onClick={() => window.location.href = '/app/alunos?tab=sucesso&modal=enviar-feedback'}
+        >
+          <div className="flex items-center gap-3">
+            <div className={cn(
+              "w-10 h-10 rounded-lg flex items-center justify-center",
+              totalPendentes > 0 ? "bg-amber-500/20" : "bg-slate-700/50"
+            )}>
+              <ClipboardList className={cn("w-5 h-5", totalPendentes > 0 ? "text-amber-400" : "text-slate-400")} />
+            </div>
+            <div className="flex-1">
+              <div className="flex items-center gap-2">
+                <span className={cn(
+                  "text-xl font-bold",
+                  totalPendentes > 0 ? "text-amber-400" : "text-slate-400"
+                )}>
+                  {totalPendentes}
+                </span>
+                {totalPendentes > 0 && (
+                  <span className="text-xs text-amber-400/70">📋 Pendente</span>
+                )}
+              </div>
+              <p className="text-xs text-slate-500">
+                {totalPendentes === 1 ? 'professor sem feedback este mês' : 'professores sem feedback este mês'}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 

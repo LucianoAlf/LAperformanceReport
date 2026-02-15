@@ -81,7 +81,7 @@ serve(async (req) => {
         .eq('id', sessao.id);
     }
 
-    // Buscar alunos do professor
+    // Buscar alunos do professor NA UNIDADE ESPECÍFICA
     const { data: alunos, error: alunosError } = await supabase
       .from('alunos')
       .select(`
@@ -92,6 +92,7 @@ serve(async (req) => {
         horario_aula
       `)
       .eq('professor_atual_id', sessao.professor_id)
+      .eq('unidade_id', sessao.unidade_id)
       .eq('status', 'ativo')
       .order('nome');
 
