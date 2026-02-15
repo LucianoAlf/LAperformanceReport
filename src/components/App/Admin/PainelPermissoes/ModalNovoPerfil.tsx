@@ -221,7 +221,7 @@ export function ModalNovoPerfil({ open, onOpenChange, perfis, onSuccess }: Modal
                 <SelectValue placeholder="Nenhum (começar vazio)" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="">Nenhum (começar vazio)</SelectItem>
+                <SelectItem value="_empty_">Nenhum (começar vazio)</SelectItem>
                 {perfis.map(p => (
                   <SelectItem key={p.id} value={p.id}>
                     <span className="flex items-center gap-2">

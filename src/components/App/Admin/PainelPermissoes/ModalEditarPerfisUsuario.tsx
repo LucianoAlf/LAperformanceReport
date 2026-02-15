@@ -42,7 +42,7 @@ export function ModalEditarPerfisUsuario({
   const [saving, setSaving] = useState(false);
   
   const [novoPerfilId, setNovoPerfilId] = useState<string>('');
-  const [novaUnidadeId, setNovaUnidadeId] = useState<string>('');
+  const [novaUnidadeId, setNovaUnidadeId] = useState<string>('_todas_');
 
   useEffect(() => {
     if (open && usuario) {
@@ -127,7 +127,7 @@ export function ModalEditarPerfisUsuario({
         .insert({
           usuario_id: usuario.id,
           perfil_id: novoPerfilId,
-          unidade_id: novaUnidadeId || null,
+          unidade_id: novaUnidadeId === '_todas_' ? null : novaUnidadeId,
         })
         .select(`
           id,
@@ -160,7 +160,7 @@ export function ModalEditarPerfisUsuario({
 
       // Limpar seleção
       setNovoPerfilId('');
-      setNovaUnidadeId('');
+      setNovaUnidadeId('_todas_');
 
       // Registrar na auditoria
       const perfil = perfis.find(p => p.id === novoPerfilId);
@@ -172,7 +172,7 @@ export function ModalEditarPerfisUsuario({
         detalhes: {
           perfil_id: novoPerfilId,
           perfil_nome: perfil?.nome,
-          unidade_id: novaUnidadeId || null,
+          unidade_id: novaUnidadeId === '_todas_' ? null : novaUnidadeId,
         },
       });
     } catch (error) {
@@ -184,7 +184,7 @@ export function ModalEditarPerfisUsuario({
 
   // Filtrar perfis que ainda não foram atribuídos
   const perfisDisponiveis = perfis.filter(p => 
-    !perfisAtribuidos.some(pa => pa.perfil_id === p.id && pa.unidade_id === (novaUnidadeId || null))
+    !perfisAtribuidos.some(pa => pa.perfil_id === p.id && pa.unidade_id === (novaUnidadeId === '_todas_' ? null : novaUnidadeId))
   );
 
   return (
@@ -302,7 +302,7 @@ export function ModalEditarPerfisUsuario({
                       <SelectValue placeholder="Todas" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Todas</SelectItem>
+                      <SelectItem value="_todas_">Todas</SelectItem>
                       {unidades.map(u => (
                         <SelectItem key={u.id} value={u.id}>
                           {u.nome}

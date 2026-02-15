@@ -165,7 +165,7 @@ export function ModalAtribuirPerfil({ open, onOpenChange, perfis, onSuccess }: M
                   <SelectValue placeholder="Todas as unidades" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">Todas as unidades</SelectItem>
+                  <SelectItem value="_todas_">Todas as unidades</SelectItem>
                   {unidades.map(u => (
                     <SelectItem key={u.id} value={u.id}>
                       {u.nome}
