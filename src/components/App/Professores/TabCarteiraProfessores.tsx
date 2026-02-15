@@ -123,12 +123,11 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
 
       const { data: alunosData } = await queryAlunos;
 
-      // Buscar turmas por professor
+      // Buscar turmas da view vw_turmas_implicitas (mesma fonte da aba Performance)
+      // Isso garante consistência entre Carteira e Performance
       let queryTurmas = supabase
-        .from('alunos')
-        .select('professor_atual_id, dia_aula, horario_aula')
-        .eq('status', 'ativo')
-        .not('professor_atual_id', 'is', null);
+        .from('vw_turmas_implicitas')
+        .select('professor_id, total_alunos, unidade_id');
 
       if (unidadeAtual !== 'todos') {
         queryTurmas = queryTurmas.eq('unidade_id', unidadeAtual);
@@ -161,15 +160,14 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
         }
       });
 
-      // Calcular turmas únicas por professor (dia + horário)
-      const turmasPorProfessor = new Map<number, Set<string>>();
+      // Calcular turmas e alunos por professor (mesma lógica da aba Performance)
+      const turmasPorProfessor = new Map<number, number>();
+      const alunosPorProfessorTurma = new Map<number, number>();
       (turmasData || []).forEach((t: any) => {
-        if (t.professor_atual_id && t.dia_aula && t.horario_aula) {
-          const key = `${t.dia_aula}-${t.horario_aula}`;
-          if (!turmasPorProfessor.has(t.professor_atual_id)) {
-            turmasPorProfessor.set(t.professor_atual_id, new Set());
-          }
-          turmasPorProfessor.get(t.professor_atual_id)!.add(key);
+        const profId = t.professor_id;
+        if (profId) {
+          turmasPorProfessor.set(profId, (turmasPorProfessor.get(profId) || 0) + 1);
+          alunosPorProfessorTurma.set(profId, (alunosPorProfessorTurma.get(profId) || 0) + (t.total_alunos || 0));
         }
       });
 
@@ -187,7 +185,7 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
       // Montar carteiras
       const carteirasCalculadas: CarteiraProfessor[] = professoresData.map((prof: any) => {
         const alunos = alunosPorProfessor.get(prof.id) || [];
-        const turmas = turmasPorProfessor.get(prof.id)?.size || 0;
+        const turmas = turmasPorProfessor.get(prof.id) || 0;
         
         const totalAlunos = alunos.length;
         const alunosLamk = alunos.filter((a: any) => a.classificacao === 'LAMK').length;

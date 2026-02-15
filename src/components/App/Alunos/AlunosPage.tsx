@@ -105,6 +105,7 @@ export interface KPIsAlunos {
   turmasSozinhos: number;
   matriculasSegundoCurso?: number;
   matriculasBanda?: number;
+  matriculasCoral?: number;
 }
 
 export interface Filtros {
@@ -374,13 +375,23 @@ export function AlunosPage() {
       const totalAtivos = naoSegundoCurso.length;
       const totalMatriculasAtivas = ativosETrancados.length; // inclui segundo curso + banda
       
-      // Separar banda de segundo curso (3 cursos = banda: GarageBand, Minha Banda Para Sempre, Power Kids)
-      const cursosBanda = ['garageband', 'minha banda para sempre', 'power kids'];
+      // Separar banda, coral e segundo curso
+      const cursosBanda = ['minha banda para sempre', 'power kids'];
+      const cursosCoral = ['canto coral'];
+      
       const matriculasBanda = ativosETrancados.filter((a: any) =>
         cursosBanda.some(nome => a.cursos?.nome?.toLowerCase().includes(nome))
       ).length;
+      
+      const matriculasCoral = ativosETrancados.filter((a: any) =>
+        cursosCoral.some(nome => a.cursos?.nome?.toLowerCase().includes(nome))
+      ).length;
+      
+      // Segundo curso = is_segundo_curso true, excluindo banda e coral
       const matriculasSegundoCurso = ativosETrancados.filter((a: any) =>
-        a.is_segundo_curso && !cursosBanda.some(nome => a.cursos?.nome?.toLowerCase().includes(nome))
+        a.is_segundo_curso && 
+        !cursosBanda.some(nome => a.cursos?.nome?.toLowerCase().includes(nome)) &&
+        !cursosCoral.some(nome => a.cursos?.nome?.toLowerCase().includes(nome))
       ).length;
       const totalPagantes = naoSegundoCurso.filter((a: any) =>
         a.tipos_matricula?.conta_como_pagante === true
@@ -390,13 +401,16 @@ export function AlunosPage() {
         return codigo === 'BOLSISTA_INT' || codigo === 'BOLSISTA_PARC';
       }).length;
 
-      // Ticket médio — agrupar por aluno único e somar valores
+      // Ticket médio — TODOS os alunos pagantes (ativos + trancados)
+      // Regra: soma de todas as parcelas / total de alunos pagantes
+      // Aluno pagante = tipo_matricula.entra_ticket_medio === true
+      // Inclui inadimplentes, em_dia, em_aberto — todos que vão pagar
       const alunosTicket = ativosETrancados.filter((a: any) =>
-        a.status === 'ativo' &&
         a.tipos_matricula?.entra_ticket_medio === true &&
         a.valor_parcela != null &&
-        a.status_pagamento !== 'sem_parcela'
+        a.valor_parcela > 0
       );
+      // Agrupar por aluno único (nome + data_nascimento + unidade) e somar valores de todos os cursos
       const alunosUnicosTicket = new Map<string, number>();
       alunosTicket.forEach((a: any) => {
         const chave = `${a.nome?.toLowerCase().trim()}-${a.data_nascimento || ''}-${a.unidade_id}`;
@@ -428,6 +442,7 @@ export function AlunosPage() {
         totalMatriculasAtivas,
         matriculasSegundoCurso,
         matriculasBanda,
+        matriculasCoral,
         totalPagantes,
         totalBolsistas,
         mediaAlunosTurma: Math.round(mediaAlunosTurma * 100) / 100,
@@ -626,7 +641,10 @@ export function AlunosPage() {
 
     // Filtro por status de pagamento
     if (filtros.status_pagamento) {
-      resultado = resultado.filter(a => (a.status_pagamento || 'em_dia') === filtros.status_pagamento);
+      resultado = resultado.filter(a => {
+        const statusAluno = a.status_pagamento || '-'; // null/vazio = "Em aberto" (traço)
+        return statusAluno === filtros.status_pagamento;
+      });
     }
 
     return resultado;
@@ -1027,7 +1045,7 @@ export function AlunosPage() {
         <KPICard
           title="Matrículas Ativas"
           value={kpis.totalMatriculasAtivas}
-          subvalue={`${kpis.matriculasSegundoCurso || 0} 2º curso | ${kpis.matriculasBanda || 0} banda`}
+          subvalue={`${kpis.matriculasSegundoCurso || 0} 2º curso | ${kpis.matriculasBanda || 0} banda | ${kpis.matriculasCoral || 0} coral`}
           icon={BookOpen}
           variant="emerald"
         />

@@ -111,22 +111,46 @@ export function TabelaAlunos({
   const itensPorPagina = 30;
 
   // Contagem de inadimplentes (usa todosAlunos para não depender de filtros)
+  // Conta ALUNOS únicos, mas soma VALOR de todos os cursos (incluindo segundo curso)
   const inadimplenciaInfo = useMemo(() => {
     const diaAtual = new Date().getDate();
     const fonte = todosAlunos || alunos;
     const ativos = fonte.filter(a => a.status === 'ativo' || a.status === 'trancado');
-    const inadimplentes = ativos.filter(a => a.status_pagamento === 'inadimplente');
+    
+    // Contar alunos inadimplentes (únicos) e somar valor de todos os cursos
+    let totalAlunosInadimplentes = 0;
+    let valorInadimplente = 0;
+    
+    ativos.forEach(a => {
+      // Verificar se o aluno (ou algum curso dele) é inadimplente
+      const principalInadimplente = a.status_pagamento === 'inadimplente';
+      const outrosCursosInadimplentes = a.outros_cursos?.filter(oc => oc.status_pagamento === 'inadimplente') || [];
+      
+      if (principalInadimplente || outrosCursosInadimplentes.length > 0) {
+        // Conta como 1 aluno (não importa quantos cursos)
+        totalAlunosInadimplentes++;
+        
+        // Soma valor do curso principal se inadimplente
+        if (principalInadimplente) {
+          valorInadimplente += a.valor_parcela || 0;
+        }
+        // Soma valor dos outros cursos inadimplentes
+        outrosCursosInadimplentes.forEach(oc => {
+          valorInadimplente += oc.valor_parcela || 0;
+        });
+      }
+    });
+    
     const pendentes = ativos.filter(a => 
       (a.status_pagamento === 'em_dia' || !a.status_pagamento) && 
       (a.dia_vencimento || 5) <= diaAtual &&
       a.tipo_matricula_id !== 3 && a.tipo_matricula_id !== 4 && a.tipo_matricula_id !== 5
     );
-    const valorInadimplente = inadimplentes.reduce((acc, a) => acc + (a.valor_parcela || 0), 0);
     const diasVencimento = [...new Set<number>(ativos.map(a => a.dia_vencimento || 5))].sort((a, b) => a - b);
     const vencimentoPassou = diasVencimento.some((d: number) => d <= diaAtual);
     
     return {
-      total: inadimplentes.length,
+      total: totalAlunosInadimplentes,
       pendentes: pendentes.length,
       valor: valorInadimplente,
       vencimentoPassou,
@@ -662,7 +686,7 @@ export function TabelaAlunos({
       setConfirmacaoReset('');
       onRecarregar();
       
-      alert(`✅ Reset concluído!\n\n• ${snapshotData?.length || 0} registros salvos no histórico\n• ${alunosAtivos?.length || 0} alunos resetados para "Não lançado"`);
+      alert(`✅ Reset concluído!\n\n• ${snapshotData?.length || 0} registros salvos no histórico\n• ${alunosAtivos?.length || 0} alunos resetados para "Em aberto"`);
     } catch (error) {
       console.error('Erro ao resetar mês:', error);
       alert('Erro ao resetar mês. Tente novamente.');
@@ -896,7 +920,7 @@ export function TabelaAlunos({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Pagamento</SelectItem>
-              <SelectItem value="-">Não lançado</SelectItem>
+              <SelectItem value="-">Em aberto</SelectItem>
               <SelectItem value="em_dia">Em dia</SelectItem>
               <SelectItem value="inadimplente">Inadimplente</SelectItem>
               <SelectItem value="parcial">Parcial</SelectItem>
@@ -1366,7 +1390,7 @@ export function TabelaAlunos({
                         onChange={async (valor) => salvarCampo(aluno.id, 'status_pagamento', valor)}
                         tipo="select"
                         opcoes={[
-                          { value: '-', label: '- Não lançado' },
+                          { value: '-', label: '- Em aberto' },
                           { value: 'em_dia', label: '✓ Em dia' },
                           { value: 'inadimplente', label: '✗ Inadimplente' },
                           { value: 'parcial', label: '~ Parcial' },
@@ -1393,7 +1417,7 @@ export function TabelaAlunos({
                               </Tooltip>
                             );
                             case 'sem_parcela': return <span className="text-blue-400" title="Sem Parcela">○</span>;
-                            default: return <span className="text-slate-500" title="Não lançado">-</span>;
+                            default: return <span className="text-slate-500" title="Em aberto">- Em aberto</span>;
                           }
                         }}
                         className="min-w-[40px]"
@@ -1607,7 +1631,7 @@ export function TabelaAlunos({
                           onChange={async (valor) => salvarCampo(outroCurso.id, 'status_pagamento', valor)}
                           tipo="select"
                           opcoes={[
-                            { value: '-', label: '- Não lançado' },
+                            { value: '-', label: '- Em aberto' },
                             { value: 'em_dia', label: '✓ Em dia' },
                             { value: 'inadimplente', label: '✗ Inadimplente' },
                             { value: 'parcial', label: '~ Parcial' },
@@ -1634,7 +1658,7 @@ export function TabelaAlunos({
                                 </Tooltip>
                               );
                               case 'sem_parcela': return <span className="text-blue-400" title="Sem Parcela">○</span>;
-                              default: return <span className="text-slate-500" title="Não lançado">-</span>;
+                              default: return <span className="text-slate-500" title="Em aberto">- Em aberto</span>;
                             }
                           }}
                           className="min-w-[40px]"
@@ -2106,7 +2130,7 @@ export function TabelaAlunos({
               </p>
               <ul className="list-disc list-inside text-sm text-slate-400 space-y-1">
                 <li>Salvar um snapshot do status atual no histórico</li>
-                <li>Resetar <strong className="text-white">TODOS</strong> os alunos para "Não lançado"</li>
+                <li>Resetar <strong className="text-white">TODOS</strong> os alunos para "Em aberto"</li>
               </ul>
               <p className="text-red-400 font-medium text-sm">
                 ⚠️ Esta ação não pode ser desfeita!
