@@ -235,6 +235,98 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               renovacoes_pendentes: 0, // Não disponível no histórico
               taxa_renovacao: historicoData.length > 0 ? historicoData.reduce((acc, d) => acc + (Number(d.taxa_renovacao) || 0), 0) / historicoData.length : 0,
             }];
+          } else {
+            // FALLBACK: dados_mensais não tem dados, calcular das tabelas base
+            // Buscar alunos ativos/pagantes
+            let alunosQuery = supabase
+              .from('alunos')
+              .select('id, status, tipo_matricula_id, is_segundo_curso, valor_parcela, tipos_matricula(codigo, conta_como_pagante)')
+              .in('status', ['ativo', 'trancado']);
+
+            if (unidade !== 'todos') {
+              alunosQuery = alunosQuery.eq('unidade_id', unidade);
+            }
+
+            // Buscar matrículas do período
+            let matriculasQuery = supabase
+              .from('alunos')
+              .select('id')
+              .gte('data_matricula', startDate)
+              .lte('data_matricula', endDate);
+
+            if (unidade !== 'todos') {
+              matriculasQuery = matriculasQuery.eq('unidade_id', unidade);
+            }
+
+            // Buscar renovações do período
+            let renovacoesQuery = supabase
+              .from('renovacoes')
+              .select('id, status, percentual_reajuste')
+              .gte('data_renovacao', startDate)
+              .lte('data_renovacao', endDate);
+
+            if (unidade !== 'todos') {
+              renovacoesQuery = renovacoesQuery.eq('unidade_id', unidade);
+            }
+
+            const [alunosRes, matriculasRes, renovacoesRes] = await Promise.all([
+              alunosQuery,
+              matriculasQuery,
+              renovacoesQuery
+            ]);
+
+            const alunosData = alunosRes.data || [];
+            const totalAtivos = alunosData.filter((a: any) => !a.is_segundo_curso).length;
+            const pagantes = alunosData.filter((a: any) => 
+              (a.tipos_matricula as any)?.conta_como_pagante && !a.is_segundo_curso
+            );
+            const totalPagantes = pagantes.length;
+            const ticketMedio = pagantes.length > 0 
+              ? pagantes.reduce((sum: number, a: any) => sum + (Number(a.valor_parcela) || 0), 0) / pagantes.length 
+              : 0;
+            const faturamento = pagantes.reduce((sum: number, a: any) => sum + (Number(a.valor_parcela) || 0), 0);
+            const novasMatriculas = matriculasRes.data?.length || 0;
+            const totalEvasoes = (evasoesHistorico?.length || 0);
+            
+            const renovacoesData = renovacoesRes.data || [];
+            const renovacoesRealizadas = renovacoesData.filter((r: any) => r.status === 'renovado').length;
+            const taxaRenovacao = renovacoesData.length > 0 ? (renovacoesRealizadas / renovacoesData.length) * 100 : 0;
+
+            gestaoData = [{
+              unidade_id: unidade !== 'todos' ? unidade : null,
+              unidade_nome: 'N/A',
+              ano: ano,
+              mes: mesInicio,
+              total_alunos_ativos: totalAtivos,
+              total_alunos_pagantes: totalPagantes,
+              total_bolsistas_integrais: 0,
+              total_bolsistas_parciais: 0,
+              total_banda: 0,
+              ticket_medio: Math.round(ticketMedio),
+              mrr: faturamento,
+              arr: faturamento * 12,
+              tempo_permanencia_medio: 0,
+              ltv_medio: 0,
+              inadimplencia_pct: 0,
+              faturamento_previsto: faturamento,
+              faturamento_realizado: faturamento,
+              churn_rate: totalPagantes > 0 ? (totalEvasoes / totalPagantes) * 100 : 0,
+              total_evasoes: totalEvasoes,
+              novas_matriculas: novasMatriculas,
+              reajuste_pct: 0,
+            }];
+
+            retencaoData = [{
+              unidade_id: unidade !== 'todos' ? unidade : null,
+              total_evasoes: totalEvasoes,
+              evasoes_interrompidas: cancelamentos,
+              avisos_previos: 0,
+              mrr_perdido: mrrPerdidoTotal,
+              renovacoes_realizadas: renovacoesRealizadas,
+              nao_renovacoes: naoRenovacoes,
+              renovacoes_pendentes: 0,
+              taxa_renovacao: taxaRenovacao,
+            }];
           }
         }
 

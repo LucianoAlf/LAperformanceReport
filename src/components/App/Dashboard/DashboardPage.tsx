@@ -202,7 +202,7 @@ export function DashboardPage() {
           const { data } = await gestaoQuery;
           gestaoData = data || [];
         } else {
-          // PERÍODO HISTÓRICO: usar dados_mensais com range de meses
+          // PERÍODO HISTÓRICO: tentar dados_mensais primeiro, senão calcular das tabelas base
           let historicoQuery = supabase
             .from('dados_mensais')
             .select('*')
@@ -225,6 +225,68 @@ export function DashboardPage() {
               ano: d.ano,
               mes: d.mes,
             }));
+          } else {
+            // FALLBACK: calcular KPIs diretamente das tabelas base
+            // Buscar alunos ativos/pagantes
+            let alunosQuery = supabase
+              .from('alunos')
+              .select('id, status, tipo_matricula_id, is_segundo_curso, valor_parcela, tipos_matricula(codigo, conta_como_pagante)')
+              .in('status', ['ativo', 'trancado']);
+
+            if (unidade !== 'todos') {
+              alunosQuery = alunosQuery.eq('unidade_id', unidade);
+            }
+
+            // Buscar matrículas do período
+            let matriculasQuery = supabase
+              .from('alunos')
+              .select('id')
+              .gte('data_matricula', `${ano}-${String(mesInicio).padStart(2, '0')}-01`)
+              .lt('data_matricula', `${ano}-${String(mesFim + 1).padStart(2, '0')}-01`);
+
+            if (unidade !== 'todos') {
+              matriculasQuery = matriculasQuery.eq('unidade_id', unidade);
+            }
+
+            // Buscar evasões do período via vw_kpis_retencao_mensal
+            let evasoesQuery = supabase
+              .from('vw_kpis_retencao_mensal')
+              .select('total_evasoes')
+              .eq('ano', ano)
+              .gte('mes', mesInicio)
+              .lte('mes', mesFim);
+
+            if (unidade !== 'todos') {
+              evasoesQuery = evasoesQuery.eq('unidade_id', unidade);
+            }
+
+            const [alunosRes, matriculasRes, evasoesRes] = await Promise.all([
+              alunosQuery,
+              matriculasQuery,
+              evasoesQuery
+            ]);
+
+            const alunosData = alunosRes.data || [];
+            const totalAtivos = alunosData.filter((a: any) => !a.is_segundo_curso).length;
+            const pagantes = alunosData.filter((a: any) => 
+              (a.tipos_matricula as any)?.conta_como_pagante && !a.is_segundo_curso
+            );
+            const totalPagantes = pagantes.length;
+            const ticketMedio = pagantes.length > 0 
+              ? pagantes.reduce((sum: number, a: any) => sum + (Number(a.valor_parcela) || 0), 0) / pagantes.length 
+              : 0;
+            const novasMatriculas = matriculasRes.data?.length || 0;
+            const totalEvasoes = (evasoesRes.data || []).reduce((sum: number, e: any) => sum + (e.total_evasoes || 0), 0);
+
+            gestaoData = [{
+              total_alunos_ativos: totalAtivos,
+              total_alunos_pagantes: totalPagantes,
+              novas_matriculas: novasMatriculas,
+              total_evasoes: totalEvasoes,
+              ticket_medio: Math.round(ticketMedio),
+              ano: ano,
+              mes: mesInicio,
+            }];
           }
         }
         

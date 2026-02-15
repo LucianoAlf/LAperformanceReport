@@ -267,7 +267,7 @@ export function AdministrativoPage() {
         const { data } = await kpisQuery;
         kpisData = data || [];
       } else {
-        // PERÍODO HISTÓRICO: usar dados_mensais
+        // PERÍODO HISTÓRICO: tentar dados_mensais primeiro, senão calcular das tabelas base
         let historicoQuery = supabase
           .from('dados_mensais')
           .select('*')
@@ -292,6 +292,49 @@ export function AdministrativoPage() {
             churn_rate: Number(d.churn_rate) || 0,
             tempo_permanencia_medio: Number(d.tempo_permanencia) || 0,
           }));
+        } else {
+          // FALLBACK: calcular KPIs diretamente das tabelas base
+          // Buscar alunos ativos/pagantes/bolsistas do período
+          let alunosQuery = supabase
+            .from('alunos')
+            .select('id, status, tipo_matricula_id, is_segundo_curso, valor_parcela, tipos_matricula(codigo, conta_como_pagante)')
+            .in('status', ['ativo', 'trancado']);
+
+          if (unidade !== 'todos') {
+            alunosQuery = alunosQuery.eq('unidade_id', unidade);
+          }
+
+          const { data: alunosData } = await alunosQuery;
+          
+          if (alunosData && alunosData.length > 0) {
+            const totalAtivos = alunosData.filter((a: any) => !a.is_segundo_curso).length;
+            const pagantes = alunosData.filter((a: any) => 
+              (a.tipos_matricula as any)?.conta_como_pagante && !a.is_segundo_curso
+            );
+            const totalPagantes = pagantes.length;
+            const bolsistasInt = alunosData.filter((a: any) => 
+              (a.tipos_matricula as any)?.codigo === 'BOLSISTA_INT' && !a.is_segundo_curso
+            ).length;
+            const bolsistasParciais = alunosData.filter((a: any) => 
+              (a.tipos_matricula as any)?.codigo === 'BOLSISTA_PARC' && !a.is_segundo_curso
+            ).length;
+            const ticketMedio = pagantes.length > 0 
+              ? pagantes.reduce((sum: number, a: any) => sum + (Number(a.valor_parcela) || 0), 0) / pagantes.length 
+              : 0;
+            const faturamento = pagantes.reduce((sum: number, a: any) => sum + (Number(a.valor_parcela) || 0), 0);
+
+            kpisData = [{
+              unidade_id: unidade !== 'todos' ? unidade : null,
+              total_alunos_ativos: totalAtivos,
+              total_alunos_pagantes: totalPagantes,
+              total_bolsistas_integrais: bolsistasInt,
+              total_bolsistas_parciais: bolsistasParciais,
+              ticket_medio: Math.round(ticketMedio),
+              faturamento_previsto: faturamento,
+              churn_rate: 0,
+              tempo_permanencia_medio: 0,
+            }];
+          }
         }
       }
 
@@ -798,7 +841,7 @@ export function AdministrativoPage() {
           <QuickInputCard
             icon={LogOut}
             title="Cancelamento"
-            count={resumo?.evasoes_total || 0}
+            count={resumo?.evasoes_interrompido || evasoes.length}
             variant="rose"
             onClick={() => { setEditingItem(null); setModalEvasao(true); }}
           />

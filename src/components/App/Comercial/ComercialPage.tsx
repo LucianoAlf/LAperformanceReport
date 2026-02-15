@@ -99,8 +99,8 @@ interface ResumoMes {
   experimentais: number;
   visitas: number;
   matriculas: number;
-  leadsPorCanal: { canal: string; quantidade: number }[];
-  leadsPorCurso: { curso: string; quantidade: number }[];
+  matriculasPorCanal: { canal: string; quantidade: number }[];
+  matriculasPorCurso: { curso: string; quantidade: number }[];
   conversaoLeadExp: number;
   conversaoLeadMat: number;
   conversaoExpMat: number;
@@ -215,8 +215,8 @@ export function ComercialPage() {
     experimentais: 0,
     visitas: 0,
     matriculas: 0,
-    leadsPorCanal: [],
-    leadsPorCurso: [],
+    matriculasPorCanal: [],
+    matriculasPorCurso: [],
     conversaoLeadExp: 0,
     conversaoLeadMat: 0,
     conversaoExpMat: 0,
@@ -429,28 +429,29 @@ export function ComercialPage() {
       const registros = data || [];
 
       // Calcular resumo
-      const leads = registros.filter(r => ['novo','agendado'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0);
+      // Leads = TODOS os registros (cada lead conta, independente do status atual)
+      const leads = registros.reduce((acc, r) => acc + r.quantidade, 0);
       const experimentais = registros.filter(r => r.status?.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0);
       const visitas = registros.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0);
       const matriculas = registros.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0);
 
-      // Leads por canal
+      // Matrículas por canal (convertidos)
       const canalMap = new Map<string, number>();
-      registros.filter(r => ['novo','agendado'].includes(r.status)).forEach(r => {
+      registros.filter(r => ['matriculado','convertido'].includes(r.status)).forEach(r => {
         const canal = (r.canais_origem as any)?.nome || 'Não informado';
         canalMap.set(canal, (canalMap.get(canal) || 0) + r.quantidade);
       });
-      const leadsPorCanal = Array.from(canalMap.entries())
+      const matriculasPorCanal = Array.from(canalMap.entries())
         .map(([canal, quantidade]) => ({ canal, quantidade }))
         .sort((a, b) => b.quantidade - a.quantidade);
 
-      // Leads por curso
+      // Matrículas por curso (convertidos)
       const cursoMap = new Map<string, number>();
-      registros.filter(r => ['novo','agendado'].includes(r.status)).forEach(r => {
+      registros.filter(r => ['matriculado','convertido'].includes(r.status)).forEach(r => {
         const curso = (r.cursos as any)?.nome || 'Não informado';
         cursoMap.set(curso, (cursoMap.get(curso) || 0) + r.quantidade);
       });
-      const leadsPorCurso = Array.from(cursoMap.entries())
+      const matriculasPorCurso = Array.from(cursoMap.entries())
         .map(([curso, quantidade]) => ({ curso, quantidade }))
         .sort((a, b) => b.quantidade - a.quantidade);
 
@@ -459,13 +460,71 @@ export function ComercialPage() {
       const conversaoLeadMat = leads > 0 ? (matriculas / leads) * 100 : 0;
       const conversaoExpMat = experimentais > 0 ? (matriculas / experimentais) * 100 : 0;
 
+      // Se não houver registros em leads, tentar buscar de dados_comerciais (histórico)
+      if (registros.length === 0) {
+        // Extrair ano e mês do range
+        const dataInicio = new Date(startDate);
+        const anoFiltro = dataInicio.getFullYear();
+        const mesFiltro = dataInicio.getMonth() + 1;
+        
+        // Buscar dados históricos de dados_comerciais
+        let historicoQuery = supabase
+          .from('dados_comerciais')
+          .select('*')
+          .eq('competencia', `${anoFiltro}-${String(mesFiltro).padStart(2, '0')}-01`);
+
+        // Filtrar por unidade
+        if (isAdmin && context?.unidadeSelecionada && context.unidadeSelecionada !== 'todos') {
+          // Buscar nome da unidade para filtrar
+          const { data: unidadeData } = await supabase
+            .from('unidades')
+            .select('nome')
+            .eq('id', context.unidadeSelecionada)
+            .single();
+          if (unidadeData) {
+            historicoQuery = historicoQuery.ilike('unidade', unidadeData.nome);
+          }
+        } else if (!isAdmin && usuario?.unidade_id) {
+          const { data: unidadeData } = await supabase
+            .from('unidades')
+            .select('nome')
+            .eq('id', usuario.unidade_id)
+            .single();
+          if (unidadeData) {
+            historicoQuery = historicoQuery.ilike('unidade', unidadeData.nome);
+          }
+        }
+
+        const { data: historicoData } = await historicoQuery;
+        
+        if (historicoData && historicoData.length > 0) {
+          // Consolidar dados históricos
+          const totalLeads = historicoData.reduce((sum, d) => sum + (d.total_leads || 0), 0);
+          const totalExp = historicoData.reduce((sum, d) => sum + (d.aulas_experimentais || 0), 0);
+          const totalMat = historicoData.reduce((sum, d) => sum + (d.novas_matriculas_total || 0), 0);
+          
+          setResumo({
+            leads: totalLeads,
+            experimentais: totalExp,
+            visitas: 0,
+            matriculas: totalMat,
+            leadsPorCanal: [],
+            leadsPorCurso: [],
+            conversaoLeadExp: totalLeads > 0 ? (totalExp / totalLeads) * 100 : 0,
+            conversaoLeadMat: totalLeads > 0 ? (totalMat / totalLeads) * 100 : 0,
+            conversaoExpMat: totalExp > 0 ? (totalMat / totalExp) * 100 : 0,
+          });
+          return;
+        }
+      }
+
       setResumo({
         leads,
         experimentais,
         visitas,
         matriculas,
-        leadsPorCanal,
-        leadsPorCurso,
+        matriculasPorCanal,
+        matriculasPorCurso,
         conversaoLeadExp,
         conversaoLeadMat,
         conversaoExpMat,
@@ -516,9 +575,9 @@ export function ComercialPage() {
       
       setMatriculasMes(matriculasDoMes);
 
-      // Leads do mês (com nomes dos relacionamentos)
+      // Leads do mês (TODOS os leads, incluindo experimentais e convertidos)
+      // Cada lead aparece aqui independente do status atual
       const leadsDoMes = registros
-        .filter(r => ['novo','agendado'].includes(r.status))
         .map(l => ({
           ...l,
           canal_nome: (l.canais_origem as any)?.nome || '',
@@ -572,7 +631,7 @@ export function ComercialPage() {
     } finally {
       setLoading(false);
     }
-  }, [usuario?.unidade_id, usuario?.perfil, isAdmin, context?.unidadeSelecionada, competencia.range]);
+  }, [usuario?.unidade_id, usuario?.perfil, isAdmin, context?.unidadeSelecionada, competencia.range, filtroAtivo]);
 
   useEffect(() => {
     loadData();
@@ -2007,7 +2066,9 @@ export function ComercialPage() {
     day: 'numeric', 
     month: 'long' 
   });
-  const mesAtual = new Date().toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  // Usar o mês/ano do filtro de competência, não a data atual
+  const mesAtual = new Date(competencia.filtro.ano, competencia.filtro.mes - 1, 1)
+    .toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
 
   return (
     <div className="space-y-6">
@@ -2292,25 +2353,25 @@ export function ComercialPage() {
             </div>
           </div>
 
-          {/* Leads Atendidos por Canal e por Curso */}
+          {/* Matrículas por Canal e por Curso */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Leads Atendidos por Canal */}
+            {/* Matrículas por Canal */}
             <div>
               <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
                 <Smartphone className="w-4 h-4" />
-                Leads Atendidos por Canal
+                Matrículas por Canal
               </h3>
-              <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/30">
-                {resumo.leadsPorCanal.length > 0 ? (
+              <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/30 max-h-48 overflow-y-auto scrollbar-thin">
+                {resumo.matriculasPorCanal.length > 0 ? (
                   <div className="space-y-3">
-                    {resumo.leadsPorCanal.slice(0, 5).map((c, i) => (
+                    {resumo.matriculasPorCanal.map((c, i) => (
                       <div key={i} className="flex items-center justify-between">
                         <span className="text-slate-300 text-sm">{c.canal}</span>
                         <div className="flex items-center gap-3">
                           <div className="w-20 bg-slate-700/50 rounded-full h-2">
                             <div 
-                              className="bg-blue-500 h-2 rounded-full"
-                              style={{ width: `${(c.quantidade / resumo.leads) * 100}%` }}
+                              className="bg-emerald-500 h-2 rounded-full"
+                              style={{ width: `${resumo.matriculas > 0 ? (c.quantidade / resumo.matriculas) * 100 : 0}%` }}
                             />
                           </div>
                           <span className="text-white font-semibold w-8 text-right">{c.quantidade}</span>
@@ -2319,28 +2380,28 @@ export function ComercialPage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-slate-500 text-sm text-center py-4">Nenhum lead atendido registrado ainda</p>
+                  <p className="text-slate-500 text-sm text-center py-4">Nenhuma matrícula registrada ainda</p>
                 )}
               </div>
             </div>
 
-            {/* Leads Atendidos por Curso */}
+            {/* Matrículas por Curso */}
             <div>
               <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
                 <Guitar className="w-4 h-4" />
-                Leads Atendidos por Curso
+                Matrículas por Curso
               </h3>
-              <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/30">
-                {resumo.leadsPorCurso.length > 0 ? (
+              <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/30 max-h-48 overflow-y-auto scrollbar-thin">
+                {resumo.matriculasPorCurso.length > 0 ? (
                   <div className="space-y-3">
-                    {resumo.leadsPorCurso.slice(0, 5).map((c, i) => (
+                    {resumo.matriculasPorCurso.map((c, i) => (
                       <div key={i} className="flex items-center justify-between">
                         <span className="text-slate-300 text-sm">{c.curso}</span>
                         <div className="flex items-center gap-3">
                           <div className="w-20 bg-slate-700/50 rounded-full h-2">
                             <div 
                               className="bg-purple-500 h-2 rounded-full"
-                              style={{ width: `${(c.quantidade / resumo.leads) * 100}%` }}
+                              style={{ width: `${resumo.matriculas > 0 ? (c.quantidade / resumo.matriculas) * 100 : 0}%` }}
                             />
                           </div>
                           <span className="text-white font-semibold w-8 text-right">{c.quantidade}</span>
@@ -2349,7 +2410,7 @@ export function ComercialPage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-slate-500 text-sm text-center py-4">Nenhum lead atendido registrado ainda</p>
+                  <p className="text-slate-500 text-sm text-center py-4">Nenhuma matrícula registrada ainda</p>
                 )}
               </div>
             </div>

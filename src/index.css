@@ -5,7 +5,7 @@
 /* Scrollbar sutil para dark mode */
 .scrollbar-thin {
   scrollbar-width: thin;
-  scrollbar-color: rgb(51 65 85) transparent;
+  scrollbar-color: rgb(30 41 59) transparent;
 }
 
 .scrollbar-thin::-webkit-scrollbar {
@@ -18,12 +18,12 @@
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb {
-  background: rgb(51 65 85);
+  background: rgb(30 41 59);
   border-radius: 3px;
 }
 
 .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-  background: rgb(71 85 105);
+  background: rgb(51 65 85);
 }
 
 /* Estilos customizados para react-day-picker v9 - Dark Mode Premium */

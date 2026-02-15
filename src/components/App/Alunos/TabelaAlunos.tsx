@@ -168,6 +168,7 @@ export function TabelaAlunos({
       case 4: return <Banknote className="w-3 h-3" />;      // Dinheiro
       case 5: return <Link2 className="w-3 h-3" />;         // Link
       case 6: return <Receipt className="w-3 h-3" />;       // Boleto
+      case 7: return <CreditCard className="w-3 h-3" />;   // Cartão de Débito
       default: return null;
     }
   };

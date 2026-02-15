@@ -1,0 +1,278 @@
+nome,data_nascimento,data_matricula,curso,professor,mensalidade,valor_pago_jan,forma_pagamento,situacao_pgto_jan,vencimento_jan,data_pgto_jan,status_jan,dia_semana,horario,fonte
+Agatha Carias da Silva Pereira,18/11/2014,19/08/2024,Teclado,Isaque Silva,385.00,477.00,Pix,pago,05/01/2026,05/01/2026,ativo,Sexta-feira,14:00,cadastro+pgto
+Alana Vasconcelos de Araujo,21/11/2016,23/11/2024,Canto,Daiana Anjos,465.00,465.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,21/01/2026,ativo,Sábado,11:00,cadastro+pgto
+Alberto José dos Santos,20/07/1951,08/08/2025,Teclado,Larissa Santos,467.00,467.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Terça-feira,10:00,cadastro+pgto
+Alexandre Ferreira,19/06/1973,18/07/2025,Violão,Leo Castro,365.00,365.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Quinta-feira,09:00,cadastro+pgto
+Alexandre Herd Giglio,10/09/2010,11/10/2024,Bateria,Peterson Biancamano,375.00,375.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sábado,09:00,cadastro+pgto
+Alice Carias da Silva Pereira,29/11/2018,09/01/2026,Bateria,Gabriel Araújo,385.00,,,sem_parcela,,,ativo,Terça-feira,16:00,cadastro_only
+Alice Cordeiro Mafra,12/08/2018,30/09/2025,Teclado,Larissa Santos,477.00,477.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Segunda-feira,16:00,cadastro+pgto
+Alicia Reina,23/10/2015,13/06/2025,Teclado,Vanessa Sousa,385.00,385.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Quinta-feira,17:00,cadastro+pgto
+Aline Borges Becker Oliveira,23/03/1982,30/09/2025,Canto,Leo Castro,365.00,373.88,Cobrança Automática / Cartão de Crédito,pago,15/01/2026,28/01/2026,ativo,Quinta-feira,14:00,cadastro+pgto
+Ana Paula dos Santos Souza,06/12/1980,04/12/2024,Teclado,Leo Castro,402.00,365.00,Cobrança Automática / Boleto,pago,05/01/2026,05/01/2026,ativo,Terça-feira,19:00,cadastro+pgto
+Ana Paula Oliveira Cazarotti,04/12/1980,07/05/2025,Canto,Daiana Anjos,370.00,370.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Quarta-feira,15:00,cadastro+pgto
+Ana Vitória de Lima,14/12/2005,27/06/2025,Canto,Matheus Silva,480.00,480.00,Pix,pago,05/01/2026,06/01/2026,ativo,"Sexta-feira,Sexta-feira","18:00,19:00",cadastro+pgto
+Ana Vitória de Lima,14/12/2005,27/06/2025,Minha Banda Para Sempre,Lohana Araújo,0.00,,,sem_parcela,,,ativo,,,cadastro_only
+Anna Luisa Peres Alves,21/05/2012,16/05/2025,Violão,Pedro Glória,447.00,447.00,Cobrança Automática / Cartão de Crédito,pago,16/01/2026,16/01/2026,ativo,Sexta-feira,16:00,cadastro+pgto
+Antonella Lara Grei Cardozo De Morais,07/08/2020,17/06/2025,Teclado,Larissa Santos,447.00,447.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Terça-feira,16:00,cadastro+pgto
+Antonio Dias Santos,15/12/2016,14/01/2026,Guitarra,Willer Machado,470.00,,,sem_parcela,,,ativo,Quarta-feira,15:00,cadastro_only
+Antônio Henrique Segall de Noronha,10/05/2016,30/10/2024,Guitarra,Isaque Silva,437.00,437.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sexta-feira,15:00,cadastro+pgto
+Arthur Brito de Souza,19/02/2009,05/06/2024,Violão,Matheus Silva,437.00,437.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Quarta-feira,15:00,cadastro+pgto
+Arthur Engelke Ludogero,19/06/2020,14/12/2022,Musicalização Infantil,Matheus Silva,437.00,437.00,Cartão de Crédito,pago,08/01/2026,08/01/2026,ativo,Quarta-feira,16:00,cadastro+pgto
+Arthur Giovanni Monte Caporali,03/12/2014,17/09/2025,Bateria,Matheus Silva,350.00,350.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Terça-feira,19:00,cadastro+pgto
+Arthur Moreno Godinho,13/07/2020,17/01/2022,Bateria,Willian Silva,402.00,365.00,Cobrança Automática / Cartão de Crédito,pago,08/01/2026,08/01/2026,ativo,Sábado,13:00,cadastro+pgto
+Arthur Pedro Palmerini Lomba,20/12/2014,03/02/2025,Teclado,Mariana Souza,375.00,457.28,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,14/01/2026,ativo,Sábado,08:00,cadastro+pgto
+Arthur Titus Rego Von Bertrand,16/12/2017,24/06/2022,Bateria,Peterson Biancamano,387.00,394.87,Pix,pago,08/01/2026,12/01/2026,ativo,Sábado,11:00,cadastro+pgto
+Athos Ferreira,06/11/2013,23/01/2026,Bateria,Matheus Silva,385.00,,,sem_parcela,,,ativo,Sexta-feira,10:00,cadastro_only
+Beatriz Correa Paula dos Reis Barata,05/11/2015,23/08/2024,Canto Coral,Daiana Anjos,497.00,,,sem_parcela,,,ativo,"Sexta-feira,Sábado","11:00,15:00",cadastro_only
+Beatriz Correa Paula dos Reis Barata,05/11/2015,23/08/2024,Piano,Matheus Silva,0.00,497.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,,,cadastro+pgto
+Beatriz Dolavale Assed,20/02/2023,31/10/2025,Musicalização para Bebês,Gabriel Araújo,350.00,350.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Quinta-feira,17:00,cadastro+pgto
+Bella Moreno Godinho,13/01/2024,26/11/2025,Musicalização para Bebês,Vanessa Sousa,365.00,365.00,Cobrança Automática / Cartão de Crédito,pago,08/01/2026,08/01/2026,ativo,Sábado,13:00,cadastro+pgto
+Benício Carvalho,04/03/2017,01/02/2024,Bateria,Willian Silva,402.00,365.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Terça-feira,10:00,cadastro+pgto
+Benício Rosa Rodrigues,08/11/2018,05/02/2024,Musicalização Infantil,Matheus Silva,437.00,395.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Terça-feira,16:00,cadastro+pgto
+Benjamin Medeiros Paganini Agostinho,03/09/2022,07/03/2024,Musicalização Infantil,Willian Silva,487.00,487.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sábado,09:00,cadastro+pgto
+Bento Cordeiro Sobrinho,22/06/2020,08/12/2023,Teclado,Matheus Silva,425.00,425.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Terça-feira,14:00,cadastro+pgto
+Bento Lapa Cazarim,29/01/2015,20/09/2025,Violão,Pedro Glória,365.00,365.00,Cheque 850032/B001/AG0287/CC42.549-4/Clara de Souza Dan,pago,05/01/2026,10/01/2026,ativo,Sexta-feira,17:00,cadastro+pgto
+Bento Rebuli Paulo Gomes,26/04/2019,28/07/2025,Bateria,Matheus Silva,447.00,447.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Quinta-feira,10:00,cadastro+pgto
+Bernardo Becker Oliveira,07/01/2016,26/02/2024,Bateria,Gabriel Araújo,400.00,409.73,Pix,pago,15/01/2026,28/01/2026,ativo,Terça-feira,11:00,cadastro+pgto
+Bernardo Berriel,09/05/2021,09/11/2023,Musicalização Infantil,Gabriel Araújo,482.00,492.12,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,08/01/2026,ativo,Segunda-feira,16:00,cadastro+pgto
+Bernardo de Medeiros Lacorte Soares,19/10/2015,31/01/2025,Teclado,Leo Castro,467.00,420.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Terça-feira,11:00,cadastro+pgto
+Bernardo Dumont de Pinho Paiva,10/08/2018,04/02/2026,Bateria,Gabriel Araújo,400.00,,,sem_parcela,,,ativo,Sábado,10:00,cadastro_only
+Bernardo Leal de Meirelles Bolzani,12/07/2022,28/11/2025,Musicalização Infantil,Gabriel Araújo,350.00,350.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Segunda-feira,17:00,cadastro+pgto
+Bernardo Reis de Carvalho,29/11/2009,23/05/2025,Guitarra,Leo Castro,0.00,428.00,Cobrança Automática / Cartão de Crédito,pago,08/01/2026,08/01/2026,ativo,"Sábado,Sábado","10:00,15:00",cadastro+pgto
+Bernardo Reis de Carvalho,29/11/2009,23/05/2025,Minha Banda Para Sempre,Willian Silva,428.00,,,sem_parcela,,,ativo,,,cadastro_only
+Billy Paulo Vangu,28/02/1988,09/11/2024,Piano,Isaque Silva,365.00,,,sem_parcela,,,ativo,Sexta-feira,09:00,cadastro_only
+Billy Paulo Vangu Junior,03/04/2016,25/04/2024,Power Kids,Willian Silva,391.00,,,sem_parcela,,,ativo,"Sábado,Sábado","13:00,14:00",cadastro_only
+Billy Paulo Vangu Junior,03/04/2016,25/04/2024,Teclado,Isaque Silva,0.00,391.00,Cobrança Automática / Cartão de Crédito,pago,08/01/2026,08/01/2026,ativo,,,cadastro+pgto
+Bruno Ricardo da Silva,03/03/1982,16/01/2026,Guitarra,Matheus Silva,470.00,,,sem_parcela,,,ativo,Quinta-feira,19:00,cadastro_only
+Caê Leal Santos,25/11/2020,04/08/2025,Guitarra,Matheus Reis,412.00,412.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sábado,10:00,cadastro+pgto
+Caique Feijó de Lima Vieira,29/01/2020,04/08/2025,Musicalização Infantil,Gabriel Araújo,467.00,467.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Segunda-feira,13:00,cadastro+pgto
+Carlos Jorge Aud,18/05/1974,30/11/2024,Violão,Willian Silva,365.00,365.00,Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Segunda-feira,19:00,cadastro+pgto
+Carlos Vitor Pinheiro da Silva,28/02/1966,31/07/2025,Violão,Leo Castro,365.00,365.00,Cobrança Automática / Boleto,pago,05/01/2026,05/01/2026,ativo,Quinta-feira,19:00,cadastro+pgto
+Cecília suhett de Oliveira,15/01/2017,26/02/2024,Teclado,Mariana Souza,482.00,492.28,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,09/01/2026,ativo,Sábado,10:00,cadastro+pgto
+Clara Agostinho Roizman,17/07/2009,30/08/2025,Canto,Daiana Anjos,487.00,487.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Quarta-feira,16:00,cadastro+pgto
+Clara de Souza Dantas Lapa,14/04/1983,19/09/2025,Piano,Isaque Silva,365.00,365.00,Cheque 850032/B001/AG0287/CC42.549-4/Clara de Souza Dan,pago,05/01/2026,10/01/2026,ativo,Sexta-feira,13:00,cadastro+pgto
+Clara Paes Leme Ghanem,03/03/2012,10/12/2025,Guitarra,Matheus Silva,497.00,497.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Quarta-feira,19:00,cadastro+pgto
+Clarice Braga Soares de Mello,05/11/2014,11/11/2025,Canto,Gabriel Silva,350.00,350.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,"Quinta-feira,Quinta-feira","19:00,18:00",cadastro+pgto
+Clarice Braga Soares de Mello,05/11/2014,11/11/2025,Teclado,Leo Castro,0.00,350.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,,,cadastro+pgto
+Clarice Massae Castro Fukamati,06/07/2023,13/02/2026,Musicalização para Bebês,Gabriel Araújo,385.00,,,sem_parcela,,,ativo,Quarta-feira,17:00,cadastro_only
+Clarice Rangel Tourinho,20/07/2019,12/09/2024,Teclado,Matheus Silva,497.00,497.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Quinta-feira,18:00,cadastro+pgto
+Clarissa Menezes de Carvalho,29/09/2017,15/06/2024,Teclado,Isaque Silva,365.00,365.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,06/01/2026,ativo,Sexta-feira,18:00,cadastro+pgto
+Daniel Freire de Souza,21/09/2014,23/09/2023,Bateria,Peterson Biancamano,590.00,590.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sábado,12:00,cadastro+pgto
+Daniel Pires de Lima,26/06/2019,28/02/2025,Violão,Isaque Silva,395.00,395.00,Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sábado,09:00,cadastro+pgto
+Daniel Sampaio Senna Lattari,22/08/2020,08/07/2024,Musicalização Infantil,Gabriel Araújo,460.00,460.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sexta-feira,19:00,cadastro+pgto
+Dante Custódio de Almeida Marques,31/07/2012,08/01/2026,Teclado,Pedro Glória,497.00,,,sem_parcela,,,ativo,Sexta-feira,10:00,cadastro_only
+Davi Barreto Lima,03/11/2019,12/01/2024,Bateria,Willian Silva,370.00,370.00,Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Segunda-feira,10:00,cadastro+pgto
+Davi Lima Quintarelli,07/04/2017,27/03/2024,Bateria,Gabriel Araújo,487.00,497.23,Cartão de Crédito,pago,20/01/2026,23/01/2026,ativo,Sábado,14:00,cadastro+pgto
+Davi Pedro Palmerini,18/07/2020,09/01/2026,Bateria,Isaque Silva,385.00,,,sem_parcela,,,ativo,Sábado,08:00,cadastro_only
+Eduardo Chagas Mendonça,27/05/2022,26/08/2025,Musicalização Infantil,Gabriel Araújo,450.00,450.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Segunda-feira,10:00,cadastro+pgto
+Elena Vangu,29/05/2023,31/01/2026,Musicalização para Bebês,Vanessa Sousa,365.00,,,sem_parcela,,,ativo,Sábado,13:00,cadastro_only
+Elizaveta Bogatyreva,02/01/2022,19/01/2026,Musicalização Infantil,Larissa Santos,325.00,,,sem_parcela,,,ativo,"Segunda-feira,Sexta-feira","19:00,18:00",cadastro_only
+Enzo Ferrari,27/08/2014,26/04/2025,Bateria,Peterson Biancamano,457.00,457.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sábado,13:00,cadastro+pgto
+Enzo Gabriel Pacheco de Almeida,04/04/2015,30/04/2025,Piano,Larissa Santos,417.00,417.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Segunda-feira,18:00,cadastro+pgto
+Esther Araújo Marques França,24/02/2017,24/04/2024,Canto,Lohana Araújo,460.00,460.00,Cobrança Automática / Cartão de Crédito,pago,08/01/2026,06/01/2026,ativo,"Sexta-feira,Sábado","19:00,15:00",cadastro+pgto
+Esther Araújo Marques França,24/02/2017,24/04/2024,Canto Coral,Daiana Anjos,0.00,460.00,Cobrança Automática / Cartão de Crédito,pago,08/01/2026,06/01/2026,ativo,,,cadastro+pgto
+Eva do Espírito Santo Esteves,13/06/2015,27/11/2023,Teclado,Matheus Silva,447.00,447.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sexta-feira,09:00,cadastro+pgto
+Felipe Alves Fontinele,14/04/1993,11/07/2025,Bateria,Leo Castro,233.00,233.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,"Terça-feira,Terça-feira","14:00,15:00",cadastro+pgto
+Felipe Alves Fontinele,14/04/1993,11/07/2025,Piano,Willian Silva,467.00,467.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,,,cadastro+pgto
+Felipe Cassiano de Almeira Imperial,11/03/2019,06/02/2026,Bateria,Gabriel Silva,497.00,,,sem_parcela,,,ativo,Sexta-feira,17:00,cadastro_only
+Filippe Carnetti Fernandes,18/11/2019,19/06/2023,Musicalização Infantil,Gabriel Araújo,450.00,460.00,Pix,pago,05/01/2026,12/01/2026,ativo,Sábado,09:00,cadastro+pgto
+Flávia do Espírito Santo da Silva Telles,01/05/1990,23/10/2024,Canto,Lohana Araújo,402.00,402.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sexta-feira,18:00,cadastro+pgto
+Flor Gianni Botelho Egas Cocco Cordovil de Macedo,20/06/2020,30/10/2024,Musicalização Infantil,Mariana Souza,375.00,375.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sábado,12:00,cadastro+pgto
+Francisco Thomé Godoi,13/10/2020,26/10/2024,Bateria,Gabriel Araújo,437.00,372.42,Pix,pago,05/01/2026,06/01/2026,ativo,Quinta-feira,10:00,cadastro+pgto
+Frederico Dias de Oliveira,27/06/2011,23/01/2026,Guitarra,Matheus Silva,420.00,,,sem_parcela,,,ativo,Sexta-feira,18:00,cadastro_only
+Gabriel Araújo Salles dos Reis,28/09/2020,31/01/2026,Musicalização Infantil,Matheus Silva,460.00,,,sem_parcela,,,ativo,Quinta-feira,11:00,cadastro_only
+Gabriel Maia Tavares Darmont,11/05/2011,11/03/2023,Bateria,Willian Silva,429.00,429.00,Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Segunda-feira,14:00,cadastro+pgto
+Gabriela da Costa,13/07/2016,11/08/2025,Teclado,Felipe Gevezier,467.00,467.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Quinta-feira,18:00,cadastro+pgto
+Gabriela Dornas,27/05/2011,21/06/2025,Teclado,Isaque Silva,447.00,447.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sexta-feira,16:00,cadastro+pgto
+Gabriela Ferreira Noritomi,01/10/2014,22/03/2025,Canto,Daiana Anjos,467.00,467.00,Cheque 850092/B001/AG1855/CC77082/AnaCarlaSilvaFerreira,pago,05/01/2026,10/01/2026,ativo,Sábado,09:00,cadastro+pgto
+Gael Silveira Gonzalez Martinez,07/12/2018,27/05/2022,Bateria,Peterson Biancamano,445.00,445.00,Cobrança Automática / Cartão de Crédito,pago,08/01/2026,08/01/2026,ativo,Sábado,10:00,cadastro+pgto
+Giovani Breda Silva,25/10/2015,22/11/2025,Bateria,Matheus Reis,457.00,468.27,Pix,pago,05/01/2026,19/01/2026,ativo,Sábado,15:00,cadastro+pgto
+Glauce Passos de Souza Maues,10/04/1970,18/07/2025,Canto,Gabriel Silva,365.00,365.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Quinta-feira,09:00,cadastro+pgto
+Guilherme Dolavale Assed,27/05/2020,09/10/2024,Bateria,Matheus Reis,350.00,350.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Quinta-feira,17:00,cadastro+pgto
+Heitor Lucas Nogueira dos Santos Soares,03/02/2022,23/11/2024,Musicalização para Bebês,Gabriel Araújo,470.00,470.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sábado,11:00,cadastro+pgto
+Helena Menezes de Carvalho,21/09/2019,15/06/2024,Musicalização Infantil,Gabriel Araújo,365.00,365.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sexta-feira,18:00,cadastro+pgto
+Hellena Pitrez Florentino,09/12/2019,03/08/2024,Teclado,Matheus Silva,497.00,497.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sexta-feira,16:00,cadastro+pgto
+Isabela Cavalcanti Hammerschlag Reis,08/03/2010,09/02/2026,Piano,Isaque Silva,480.00,,,sem_parcela,,,ativo,Quinta-feira,16:00,cadastro_only
+Isabela Leal de Meirelles Bolzani,12/07/2022,28/11/2025,Musicalização Infantil,Gabriel Araújo,350.00,350.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,06/01/2026,ativo,Segunda-feira,17:00,cadastro+pgto
+Isabella Florenzano,23/06/2007,30/08/2025,Canto,Daiana Anjos,385.00,385.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,06/01/2026,ativo,Sábado,14:00,cadastro+pgto
+Isabella Lopes Correa,21/02/2021,01/07/2025,Musicalização Infantil,Matheus Silva,375.00,383.37,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,12/01/2026,ativo,Quinta-feira,16:00,cadastro+pgto
+Isabella Villar Koialainski,09/08/2015,09/01/2026,Canto,Daiana Anjos,460.00,,,sem_parcela,,,ativo,Quarta-feira,18:00,cadastro_only
+Isadora Florenzano Carvalho,29/11/2015,23/09/2025,Canto,Daiana Anjos,440.00,440.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,06/01/2026,ativo,"Quarta-feira,Sábado","18:00,14:00",cadastro+pgto
+Isadora Florenzano Carvalho,29/11/2015,23/09/2025,Power Kids,Willian Silva,0.00,,,sem_parcela,,,ativo,,,cadastro_only
+Isis Petrucio Abrantes,07/03/2017,29/03/2025,Canto,Gabriel Silva,447.00,447.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,"Sexta-feira,Sábado","09:00,15:00",cadastro+pgto
+Isis Petrucio Abrantes,07/03/2017,29/03/2025,Canto Coral,Daiana Anjos,0.00,447.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,,,cadastro+pgto
+Ivan Moacyr Weiss Junior,03/08/1984,31/08/2024,Violão,Leo Castro,395.00,395.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,06/01/2026,ativo,Quarta-feira,19:00,cadastro+pgto
+Jefferson Cândido de Souza,03/12/1988,18/07/2025,Piano,Leo Castro,380.00,380.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,06/01/2026,ativo,Terça-feira,19:00,cadastro+pgto
+Jeremias Ou Yuan Ma,10/08/2016,21/08/2025,Teclado,Isaque Silva,385.00,385.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sábado,14:00,cadastro+pgto
+João Ferreira,27/07/2016,23/01/2026,Violino,Joel Filho,385.00,,,sem_parcela,,,ativo,Quarta-feira,19:00,cadastro_only
+João Gabriel Candido,08/11/2010,17/04/2024,Guitarra,Matheus Silva,487.00,487.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Terça-feira,15:00,cadastro+pgto
+João Pedro Proença Magalhães,01/11/2015,14/02/2025,Canto,Lohana Araújo,497.00,497.00,Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sexta-feira,19:00,cadastro+pgto
+João Vitor Pinheiro Martins,04/07/2005,31/10/2025,Teclado,Isaque Silva,497.00,497.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Segunda-feira,16:00,cadastro+pgto
+João Vitor Souza da Costa,25/05/2016,27/01/2025,Piano,Willian Silva,420.00,380.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Terça-feira,11:00,cadastro+pgto
+Joaquim Candido Querido Ferraz Soares,25/04/2015,30/05/2025,Canto,Leo Castro,447.00,458.62,Cobrança Automática / Cartão de Crédito,pago,08/01/2026,26/01/2026,ativo,Sábado,08:00,cadastro+pgto
+Joaquim Toshio de Barros Lima Hara,23/08/2021,06/01/2024,Musicalização para Bebês,Gabriel Araújo,403.00,365.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sábado,11:00,cadastro+pgto
+Joseph Díaz Jabor,16/08/2021,31/08/2025,Musicalização Infantil,Willian Silva,467.00,467.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Terça-feira,17:00,cadastro+pgto
+Juan do Nascimento Cruz Rebello,06/10/2004,12/06/2023,Teclado,Isaque Silva,400.00,400.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,06/01/2026,ativo,Sábado,10:00,cadastro+pgto
+Julia dos Santos Nadaes,28/08/2015,18/09/2025,Canto,Gabriel Silva,365.00,365.00,Dinheiro,pago,05/01/2026,11/12/2025,ativo,Quinta-feira,19:00,cadastro+pgto
+Júlia Segal de Noronha,23/11/2014,07/06/2025,Teclado,Isaque Silva,380.00,380.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Segunda-feira,17:00,cadastro+pgto
+Júlia Silva Vilardo,22/01/2014,01/07/2023,Canto,Daiana Anjos,375.00,375.01,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,06/01/2026,ativo,"Sábado,Sábado","09:00,10:00",cadastro+pgto
+Júlia Silva Vilardo,22/01/2014,01/07/2023,Violão,Leo Castro,0.00,375.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,,,cadastro+pgto
+Juliana de Oliveira almeida,04/03/2013,02/02/2023,Canto,Matheus Silva,407.00,407.00,Cartão de Crédito,pago,05/01/2026,06/01/2026,ativo,"Quinta-feira,Quinta-feira","14:00,15:00",cadastro+pgto
+Juliana de Oliveira almeida,04/03/2013,02/02/2023,Piano,Gabriel Silva,428.00,428.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,,,cadastro+pgto
+Juliana Mei Jin Ma,05/01/2015,21/08/2025,Teclado,Isaque Silva,385.00,385.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sábado,14:00,cadastro+pgto
+Juliana Monteiro Pereira,04/01/2014,29/11/2024,Bateria,Matheus Silva,402.00,402.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Terça-feira,17:00,cadastro+pgto
+Katia  Regina Goulart Trindade,25/12/1957,15/01/2025,Canto,Daiana Anjos,447.00,447.00,Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sábado,10:00,cadastro+pgto
+Lana Lopes Pinheiro,06/05/1988,14/08/2025,Canto,Gabriel Silva,375.00,383.37,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,12/01/2026,ativo,Quinta-feira,16:00,cadastro+pgto
+Laura Akemi Castro Fukamati,19/05/2020,13/02/2026,Musicalização Infantil,Matheus Silva,385.00,,,sem_parcela,,,ativo,Quarta-feira,17:00,cadastro_only
+Laura Santos da Silva Garret,01/06/2016,27/01/2026,Teclado,Isaque Silva,360.00,,,sem_parcela,,,ativo,Sábado,11:00,cadastro_only
+Levi Barbosa Rodrigues,25/01/2018,20/09/2025,Piano,Vanessa Sousa,365.00,365.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sexta-feira,16:00,cadastro+pgto
+Liv Ribeiro Oliveira,28/08/2021,19/12/2025,Musicalização Infantil,Gabriel Araújo,437.00,437.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Quinta-feira,11:00,cadastro+pgto
+Lívia Becker Oliveira,18/04/2014,18/03/2025,Piano,Leo Castro,365.00,373.88,Pix,pago,15/01/2026,28/01/2026,ativo,Terça-feira,15:00,cadastro+pgto
+Lorenzo Tavares Bernardino de Lima,20/10/2017,16/09/2025,Bateria,Gabriel Araújo,350.00,357.82,Cobrança Automática / Cartão de Crédito,pago,08/01/2026,15/01/2026,ativo,"Segunda-feira,Quinta-feira","15:00,15:00",cadastro+pgto
+Luan Colucci Dias,23/01/2017,21/03/2024,Bateria,Gabriel Araújo,460.00,460.00,Cobrança Automática / Cartão de Crédito,pago,08/01/2026,08/01/2026,ativo,Sábado,14:00,cadastro+pgto
+Lucas Antunes,05/03/2016,10/01/2024,Bateria,Matheus Reis,447.00,395.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sábado,11:00,cadastro+pgto
+Lucas Bianchi,01/04/2020,08/02/2024,Musicalização Infantil,Gabriel Araújo,531.00,482.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Terça-feira,19:00,cadastro+pgto
+Lucas Brivio do Nascimento,30/07/2020,16/08/2024,Bateria,Willian Silva,395.00,395.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sábado,10:00,cadastro+pgto
+Lucas Cai Zheng,11/01/2024,15/01/2026,Musicalização Infantil,Gabriel Araújo,417.00,,,sem_parcela,,,ativo,Quinta-feira,16:00,cadastro_only
+Lucas Cardoso Neiva,21/09/2011,19/10/2021,Violão,Matheus Silva,425.00,425.00,Boleto,pago,10/01/2026,12/01/2026,ativo,Quarta-feira,18:00,cadastro+pgto
+Lucas Cordeiro Sobrinho,31/08/2011,08/12/2023,Piano,Isaque Silva,425.00,425.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Segunda-feira,15:00,cadastro+pgto
+Lucas de Barros Rodolpho dos Santos,26/02/2011,27/11/2024,Minha Banda Para Sempre,Willian Silva,450.00,,,sem_parcela,,,ativo,"Terça-feira,Sábado","15:00,15:00",cadastro_only
+Lucas de Barros Rodolpho dos Santos,26/02/2011,27/11/2024,Piano,Larissa Santos,0.00,450.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,,,cadastro+pgto
+Lucas Pires Dias Mello,01/03/2018,27/01/2026,Musicalização Infantil,Pedro Glória,460.00,,,sem_parcela,,,ativo,Sexta-feira,09:00,cadastro_only
+Lucas Reis Pinna de Andrade,06/08/2021,12/12/2024,Musicalização Infantil,Gabriel Araújo,408.00,370.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Quinta-feira,15:00,cadastro+pgto
+Lucca Martinelli Torres,08/02/2015,31/01/2026,Violão,Pedro Glória,385.00,,,sem_parcela,,,ativo,Sexta-feira,15:00,cadastro_only
+Ludmilla Lage Gonçalves,06/12/1979,28/01/2025,Bateria,Gabriel Araújo,380.00,380.00,Cartão de Crédito,pago,05/01/2026,06/01/2026,ativo,Quinta-feira,13:00,cadastro+pgto
+Luis Carlos Gomes,15/06/1969,11/05/2023,Violão,Leo Castro,402.00,402.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sábado,11:00,cadastro+pgto
+Luísa Schlinz Paz,06/07/2018,26/08/2025,Bateria,Matheus Silva,497.00,497.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Quinta-feira,10:00,cadastro+pgto
+Lyanna de Faro Alves,05/03/2020,23/01/2025,Teclado,Gabriel Araújo,468.00,420.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Terça-feira,10:00,cadastro+pgto
+Manu Ramos Medeiros,02/02/2017,22/08/2023,Teclado,Willer Machado,497.00,497.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Quarta-feira,18:00,cadastro+pgto
+Marcela Gianni Botelho Egas,19/02/1978,30/10/2024,Violão,Leo Castro,375.00,375.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,06/01/2026,ativo,Sábado,12:00,cadastro+pgto
+Marcelo Oliveira Brum Cardoso,07/08/2015,06/09/2024,Teclado,Gabriel Araújo,437.00,437.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Quarta-feira,18:00,cadastro+pgto
+Marcelo Santos Calvo,16/04/1974,31/01/2026,Violão,Isaque Silva,385.00,,,sem_parcela,,,ativo,Sábado,15:00,cadastro_only
+Marcelo Ximenes Apoliano,25/07/1972,24/01/2022,Bateria,Willer Machado,404.00,377.00,Cobrança Automática / Cartão de Crédito,pago,08/01/2026,08/01/2026,ativo,Quarta-feira,14:00,cadastro+pgto
+Maria Clara Brivio do Nascimento,03/02/2018,16/08/2024,Bateria,Gabriel Araújo,395.00,395.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,06/01/2026,ativo,Sábado,10:00,cadastro+pgto
+Maria Clara Miranda Rodrigues,24/02/2009,31/03/2025,Canto,Isaque Silva,253.00,253.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,"Segunda-feira,Segunda-feira","14:00,15:00",cadastro+pgto
+Maria Clara Miranda Rodrigues,24/02/2009,31/03/2025,Teclado,Larissa Santos,447.00,447.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,,,cadastro+pgto
+Maria Eduarda Candido,17/06/2015,17/11/2022,Bateria,Gabriel Silva,497.00,497.00,Cobrança Automática / Cartão de Crédito,pago,08/01/2026,08/01/2026,ativo,Quinta-feira,17:00,cadastro+pgto
+Maria Eduarda Porciuncula Koeche de Magalhães,10/10/2010,31/07/2025,Guitarra,Leo Castro,467.00,467.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Quarta-feira,14:00,cadastro+pgto
+Maria Fernanda Lima Soares de Moura,22/12/2015,28/11/2025,Teclado,Willian Silva,447.00,447.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Terça-feira,16:00,cadastro+pgto
+Maria Fernanda Sellos Correa Peres,06/04/2012,15/02/2026,Canto,Lohana Araújo,482.00,482.00,Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,"Sexta-feira,Sábado","17:00,15:00",cadastro+pgto
+Maria Fernanda Sellos Correa Peres,06/04/2012,15/02/2026,Minha Banda Para Sempre,Willian Silva,0.00,,,sem_parcela,,,ativo,,,cadastro_only
+Maria Flor Silveira,13/12/2015,08/04/2024,Violão,Isaque Silva,437.00,437.00,Cobrança Automática / Cartão de Crédito,pago,07/01/2026,07/01/2026,ativo,Sexta-feira,19:00,cadastro+pgto
+Maria Helena Barbosa Furtado de Mendonça,14/07/2017,22/01/2026,Teclado,Isaque Silva,460.00,,,sem_parcela,,,ativo,Segunda-feira,10:00,cadastro_only
+Maria Lúcia Vicente Lopes,02/11/1951,27/01/2026,Canto,Gabriel Silva,390.00,,,sem_parcela,,,ativo,Quinta-feira,10:00,cadastro_only
+Mariana Herd Giglio,19/05/2015,02/08/2025,Canto,Daiana Anjos,350.00,350.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,"Sábado,Sábado","09:00,11:00",cadastro+pgto
+Mariana Herd Giglio,19/05/2015,02/08/2025,Teclado,Mariana Souza,375.00,375.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,06/01/2026,ativo,,,cadastro+pgto
+Marina Holanda Cardoso,30/10/2023,11/12/2024,Musicalização para Bebês,Gabriel Araújo,463.00,420.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sábado,15:00,cadastro+pgto
+Marina Vasconcellos Tourinho Garcia,04/07/2018,03/02/2023,Teclado,Gabriel Araújo,395.00,395.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sábado,12:00,cadastro+pgto
+Martina Gomes Ferreira,03/07/2011,17/02/2025,Teclado,Leo Castro,467.00,467.00,Cheque 850370/B001/AG4819CC108235/NataliadaSilveiraGom.,pago,05/01/2026,10/01/2026,ativo,Quarta-feira,15:00,cadastro+pgto
+Mateus Kosinov Paulino,20/05/2015,23/05/2025,Canto,Willian Silva,465.00,465.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,"Sábado,Sábado,Sábado","13:00,14:00,15:00",cadastro+pgto
+Mateus Kosinov Paulino,20/05/2015,23/05/2025,Canto Coral,Daiana Anjos,0.00,465.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,,,cadastro+pgto
+Mateus Kosinov Paulino,20/05/2015,23/05/2025,Power Kids,Daiana Anjos,377.00,,,sem_parcela,,,ativo,,,cadastro_only
+Matheus Moura,25/05/2016,31/10/2025,Bateria,Gabriel Silva,460.00,460.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sexta-feira,10:00,cadastro+pgto
+Mauricio Cabral Liberato de Matos Junior,02/04/2012,23/05/2025,Bateria,Gabriel Araújo,460.00,460.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,"Terça-feira,Sábado","17:00,15:00",cadastro+pgto
+Mauricio Cabral Liberato de Matos Junior,02/04/2012,23/05/2025,Minha Banda Para Sempre,Willian Silva,0.00,,,sem_parcela,,,ativo,,,cadastro_only
+Maya Kelly Ximenes Apoliano,28/05/2015,07/12/2021,Canto,Matheus Silva,404.00,404.00,Cobrança Automática / Cartão de Crédito,pago,08/01/2026,12/01/2026,ativo,Quarta-feira,14:00,cadastro+pgto
+Mel Gianni Botelho Egas Cocco Cordovil de Macedo,17/09/2018,30/10/2024,Teclado,Gabriel Araújo,375.00,375.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sábado,12:00,cadastro+pgto
+Melissa Milesi Barth,06/04/2016,31/01/2025,Canto,Leo Castro,662.00,600.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Terça-feira,17:00,cadastro+pgto
+Miguel Brivio do Nascimento,17/12/2015,16/08/2024,Teclado,Mariana Souza,395.00,395.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,06/01/2026,ativo,Sábado,10:00,cadastro+pgto
+Miguel Cardozo,24/09/2015,21/11/2025,Bateria,Matheus Reis,450.00,450.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Quinta-feira,18:00,cadastro+pgto
+Miguel Hayashi Dupret,27/11/2019,14/10/2025,Musicalização Infantil,Willian Silva,497.00,497.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Segunda-feira,10:00,cadastro+pgto
+Miguel Reis Pinna Mateus Leite,26/08/2019,27/05/2024,Musicalização Infantil,Mariana Souza,415.00,415.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sábado,11:00,cadastro+pgto
+Miguel Ribeiro,24/05/2022,12/01/2026,Musicalização Infantil,Vanessa Sousa,450.00,,,sem_parcela,,,ativo,Sábado,14:00,cadastro_only
+Miguel Souza da Costa,07/11/2019,27/01/2025,Teclado,Larissa Santos,420.00,380.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Terça-feira,11:00,cadastro+pgto
+Miguel Sperandio Kevorkian,22/04/2021,01/08/2024,Musicalização Preparatória para Instrumento,Gabriel Araújo,437.00,437.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sexta-feira,19:00,cadastro+pgto
+Mirella Cordeiro Sobrinho,05/11/2015,08/12/2023,Bateria,Gabriel Araújo,425.00,425.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,06/01/2026,ativo,Terça-feira,14:00,cadastro+pgto
+Natan Pereira Calvo Demidoff,13/07/2015,15/02/2026,Bateria,Peterson Biancamano,385.00,457.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,06/01/2026,ativo,"Sábado,Sábado","15:00,14:00",cadastro+pgto
+Natan Pereira Calvo Demidoff,13/07/2015,15/02/2026,Power Kids,Peterson Biancamano,0.00,,,sem_parcela,,,ativo,,,cadastro_only
+Nicolas Mendes de Morais,18/05/2016,26/11/2024,Teclado,Larissa Santos,385.00,470.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Segunda-feira,17:00,cadastro+pgto
+Nicolle Mendes de Morais,10/11/2010,08/01/2026,Guitarra,Willian Silva,385.00,,,sem_parcela,,,ativo,Segunda-feira,17:00,cadastro_only
+Nina Aragão Velloso,07/08/2009,09/05/2025,Contrabaixo,Matheus Reis,447.00,447.00,Cobrança Automática / Cartão de Crédito,pago,08/01/2026,08/01/2026,ativo,Sábado,09:00,cadastro+pgto
+Noah do Nascimento Barros Peres,11/06/2015,04/06/2025,Bateria,Willer Machado,350.00,350.00,Cobrança Automática / Cartão de Crédito,pago,08/01/2026,08/01/2026,ativo,Quarta-feira,16:00,cadastro+pgto
+Patrick Menezes Cruz,28/12/1998,05/10/2024,Cavaquinho,Leo Castro,437.00,437.00,Cobrança Automática / Cartão de Crédito,pago,08/01/2026,08/01/2026,ativo,Sábado,11:00,cadastro+pgto
+Paula Kelly Ximenes Apoliano,31/07/1979,11/06/2025,Canto,Daiana Anjos,377.00,377.00,Cartão de Crédito,pago,08/01/2026,08/01/2026,ativo,Quarta-feira,14:00,cadastro+pgto
+Paula Tavares da Silva Samão,24/12/1994,28/11/2025,Bateria,Willian Silva,430.00,430.00,Cobrança Automática / Cartão de Crédito,pago,08/01/2026,08/01/2026,ativo,Sábado,12:00,cadastro+pgto
+Paulo César Benzi Filho,28/02/1976,30/10/2025,Piano,Leo Castro,437.00,446.18,Pix,pago,05/01/2026,08/01/2026,ativo,Quinta-feira,15:00,cadastro+pgto
+Paulo Roberto Lopes Filho,12/02/1970,18/05/2023,Bateria,Matheus Reis,518.00,518.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Quinta-feira,19:00,cadastro+pgto
+Pedro Bastos da Costa,27/01/2005,17/10/2025,Canto,Lohana Araújo,497.00,497.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sexta-feira,16:00,cadastro+pgto
+Pedro Cindra Feijó,28/06/2020,11/06/2025,Musicalização Infantil,Gabriel Araújo,447.00,447.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Segunda-feira,09:00,cadastro+pgto
+Pedro de Figueiredo Vieira,31/05/2008,30/04/2025,Guitarra,Leo Castro,447.00,447.00,Cobrança Automática / Cartão de Crédito,pago,08/01/2026,08/01/2026,ativo,Quinta-feira,17:00,cadastro+pgto
+Pedro do Nascimento Cruz Rebello,25/10/2017,12/06/2023,Bateria,Gabriel Araújo,400.00,400.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Terça-feira,18:00,cadastro+pgto
+Pedro Henrique Moreno Godinho,14/01/2016,17/01/2022,Bateria,Peterson Biancamano,402.00,365.00,Cobrança Automática / Cartão de Crédito,pago,08/01/2026,08/01/2026,ativo,Sábado,13:00,cadastro+pgto
+Pedro José Dos santos Nadaes,12/03/2018,18/09/2025,Bateria,Gabriel Araújo,365.00,365.00,Dinheiro,pago,05/01/2026,11/12/2025,ativo,Quarta-feira,19:00,cadastro+pgto
+Pedro Marinho,11/10/2014,01/10/2025,Bateria,Isaque Silva,497.00,508.26,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,13/01/2026,ativo,Segunda-feira,18:00,cadastro+pgto
+Pedro Oliveira Cazarotti,20/08/2018,07/05/2025,Bateria,Gabriel Araújo,370.00,370.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,06/01/2026,ativo,Quarta-feira,15:00,cadastro+pgto
+Pedro Vasconcellos Tourinho Garcia,17/03/2015,03/02/2023,Bateria,Peterson Biancamano,395.00,395.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sábado,12:00,cadastro+pgto
+Pérola Madeira Maturano,18/01/2013,12/12/2024,Canto,Lohana Araújo,375.00,350.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,17/12/2025,ativo,"Sexta-feira,Sexta-feira","14:00,15:00",cadastro+pgto
+Pérola Madeira Maturano,18/01/2013,12/12/2024,Teclado,Matheus Silva,0.00,350.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,17/12/2025,ativo,,,cadastro+pgto
+Pietro Matola Abreu,26/02/2011,04/08/2025,Contrabaixo,Gabriel Araújo,401.50,401.50,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,"Quinta-feira,Sábado","19:00,15:00",cadastro+pgto
+Pietro Matola Abreu,26/02/2011,04/08/2025,Minha Banda Para Sempre,Willian Silva,0.00,,,sem_parcela,,,ativo,,,cadastro_only
+Rafael Dias de Lima,10/10/1976,28/02/2025,Violão,Leo Castro,395.00,395.00,Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sábado,09:00,cadastro+pgto
+Rafael Kelly Ximenes Apoliano,28/05/2015,07/12/2021,Bateria,Gabriel Araújo,404.00,404.00,Cobrança Automática / Cartão de Crédito,pago,08/01/2026,12/01/2026,ativo,Quarta-feira,14:00,cadastro+pgto
+Rafael Mello dos Santos,13/09/2005,03/08/2025,Teclado,Isaque Silva,0.00,,,sem_parcela,,,ativo,Sexta-feira,11:00,cadastro_only
+Rafael Moura Fernandes,20/06/2000,15/07/2022,Guitarra,Matheus Silva,500.00,500.00,Cobrança Automática / Cartão de Crédito,pago,08/01/2026,08/01/2026,ativo,Terça-feira,18:00,cadastro+pgto
+Rafael Placido,30/04/1986,01/02/2022,Violão,Leo Castro,490.00,490.00,Cartão de Crédito,pago,08/01/2026,08/01/2026,ativo,Quarta-feira,18:00,cadastro+pgto
+Raissa Arcoverde Borborema Mendes Dytz,08/02/1994,26/06/2025,Piano,Larissa Santos,497.00,497.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,06/01/2026,ativo,Segunda-feira,14:00,cadastro+pgto
+Raquel de Cássia Silva de Carvalho,11/07/1994,10/04/2024,Bateria,Willer Machado,487.00,487.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Quarta-feira,19:00,cadastro+pgto
+Raquel Vicente Lopes,13/03/1986,23/01/2026,Canto,Lohana Araújo,390.00,,,sem_parcela,,,ativo,Sexta-feira,14:00,cadastro_only
+Rogério Nascimento de Carvalho,07/11/1972,18/03/2023,Guitarra,Leo Castro,428.00,428.00,Cobrança Automática / Cartão de Crédito,pago,08/01/2026,08/01/2026,ativo,Sábado,10:00,cadastro+pgto
+Sandra Maria Gomes Carvalho,08/02/1961,16/10/2025,Piano,Leo Castro,437.00,437.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Quarta-feira,11:00,cadastro+pgto
+Sara Gomes dos Santos,26/04/1999,05/02/2025,Canto,Daiana Anjos,340.00,440.00,Pix,pago,05/01/2026,06/01/2026,ativo,Sábado,10:00,cadastro+pgto
+Saulo Reina da Rocha,12/04/2017,13/06/2025,Bateria,Matheus Silva,385.00,385.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Quinta-feira,17:00,cadastro+pgto
+Sergio Paulo Fogaça de Carvalho,04/08/1987,13/12/2024,Violão,Willian Silva,403.00,365.00,Cartão de Crédito,pago,05/01/2026,13/12/2024,ativo,Segunda-feira,19:00,cadastro+pgto
+Sophia Galhanone,04/12/2019,10/01/2024,Teclado,Vanessa Sousa,530.00,481.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sexta-feira,19:00,cadastro+pgto
+Stefano Luigi de Almeida Agostini,30/10/2010,06/03/2024,Bateria,Matheus Silva,420.00,420.00,Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Sexta-feira,15:00,cadastro+pgto
+Stella Sá de Farias gomes,22/01/2016,13/06/2024,Canto,Daiana Anjos,402.00,402.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,"Sábado,Sábado","12:00,11:00",cadastro+pgto
+Stella Sá de Farias gomes,22/01/2016,13/06/2024,Teclado,Daiana Anjos,0.00,402.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,,,cadastro+pgto
+Thainá Moreira,31/07/1992,11/11/2025,Canto,Gabriel Silva,460.00,460.00,Cobrança Automática / Cartão de Crédito,pago,08/01/2026,08/01/2026,ativo,Quinta-feira,09:00,cadastro+pgto
+Thalita Araujo Costa,21/09/2015,30/11/2024,Canto,Daiana Anjos,482.00,437.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,"Sábado,Sábado","11:00,15:00",cadastro+pgto
+Thalita Araujo Costa,21/09/2015,30/11/2024,Canto Coral,Daiana Anjos,377.00,437.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,,,cadastro+pgto
+Theo do Nascimento Barros Peres,14/02/2018,04/06/2025,Bateria,Leo Castro,350.00,350.00,Cobrança Automática / Cartão de Crédito,pago,08/01/2026,08/01/2026,ativo,Quarta-feira,16:00,cadastro+pgto
+Théo Dos Santos Machado Weiss,10/12/2013,28/07/2023,Bateria,Gabriel Araújo,395.00,395.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Quinta-feira,18:00,cadastro+pgto
+Theo Martinelli Torres,15/09/2017,31/01/2026,Bateria,Gabriel Araújo,385.00,,,sem_parcela,,,ativo,Sexta-feira,15:00,cadastro_only
+Thiago Costa Carvalho Garret,09/01/1984,27/01/2026,Teclado,Isaque Silva,360.00,,,sem_parcela,,,ativo,Sábado,11:00,cadastro_only
+Thoth dos Anjos de Oliveira,21/06/2023,05/02/2024,Musicalização para Bebês,Gabriel Araújo,470.00,426.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Quinta-feira,16:00,cadastro+pgto
+Tito Lapa Cazarim,11/06/2017,20/09/2025,Teclado,Isaque Silva,365.00,365.00,Cheque 850032/B001/AG0287/CC42.549-4/Clara de Souza Dan,pago,05/01/2026,10/01/2026,ativo,Sexta-feira,17:00,cadastro+pgto
+Valentina Natividade de Sá Macedo,15/02/2016,04/03/2024,Canto,Isaque Silva,350.00,350.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,"Sábado,Sábado","11:00,12:00",cadastro+pgto
+Valentina Natividade de Sá Macedo,15/02/2016,04/03/2024,Teclado,Daiana Anjos,0.00,350.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,,,cadastro+pgto
+Vinicius Cunha Oliveira,17/08/1987,03/12/2024,Bateria,Gabriel Araújo,365.00,373.88,Cobrança Automática / Cartão de Crédito,pago,15/01/2026,28/01/2026,ativo,Terça-feira,11:00,cadastro+pgto
+Vitor Hugo Carvalho de Castro,16/02/2017,18/03/2023,Bateria,Peterson Biancamano,492.00,492.00,Cobrança Automática / Cartão de Crédito,pago,08/01/2026,08/01/2026,ativo,Sábado,11:00,cadastro+pgto
+Vitoria da Luz,21/11/2000,04/12/2023,Canto,Daiana Anjos,482.00,437.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Quarta-feira,19:00,cadastro+pgto
+Vivian Dangelo,30/01/1985,31/07/2025,Teclado,Mariana Souza,365.00,365.00,Cobrança Automática / Boleto,pago,05/01/2026,05/01/2026,ativo,Sábado,13:00,cadastro+pgto
+Wanessa Monte Caporali,11/03/1985,17/09/2025,Piano,Larissa Santos,350.00,350.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,ativo,Terça-feira,19:00,cadastro+pgto
+William Gaspar da Silva Oliveira,02/09/1993,08/12/2025,Bateria,Willian Silva,437.00,437.00,Cobrança Automática / Cartão de Crédito,pago,21/01/2026,21/01/2026,ativo,Segunda-feira,18:00,cadastro+pgto
+Álvaro Andrade Pinheiro Pires,,,Musicalização para Bebês,Gabriel Antony,457.00,,Cartão de Crédito,nao_pagou,,,evadido_jan,,,pgto_dez
+Anna Lívia F Martins,,,Canto,Willian,385.00,,Cartão de Crédito,nao_pagou,,,evadido_jan,,,pgto_dez
+Arthur Bezerra Martorelli,,,Guitarra,Matheus Lana,497.00,,Pix,nao_pagou,,,evadido_jan,,,pgto_dez
+Arthur dos Santos Paes,,,Teclado,Matheus Lana,384.00,,Cartão de Crédito,nao_pagou,,,evadido_jan,,,pgto_dez
+Camila Santos Renha de Oliveira,,,Canto,,350.00,350.00,Cheque SA-000333/B341/AG9348/CC01936-6/Jeanne Kel San,pago,08/01/2026,10/01/2026,aviso_previo_fev,,,pgto_dez+pgto_jan
+Cidimar Cândido Neto,,,Bateria,Gabriel Antony,497.00,,Pix,nao_pagou,,,evadido_jan,,,pgto_dez
+Daniel Lemanski Bordallo,,,Bateria,,385.00,385.00,Cartão de Crédito,pago,05/01/2026,05/01/2026,aviso_previo_fev,,,pgto_dez+pgto_jan
+Helena Abreu Paixão,,,Canto,,456.39,447.00,Cartão de Crédito,pago,05/01/2026,05/01/2026,aviso_previo_fev,,,pgto_dez+pgto_jan
+Helena Abreu Paixão,,,Piano,,255.25,250.00,Cartão de Crédito,pago,05/01/2026,05/01/2026,aviso_previo_fev,,,pgto_dez+pgto_jan
+Islan Morais,,,Guitarra,,365.00,365.00,Cobrança Automática / Boleto,pago,05/01/2026,05/01/2026,aviso_previo_fev,,,pgto_dez+pgto_jan
+João Vitor F Martins,,,Canto,Lohana,385.00,,Cartão de Crédito,nao_pagou,,,evadido_jan,,,pgto_dez
+Liz de Azevedo Pacheco,,,Canto,,403.29,395.00,Cartão de Crédito,pago,05/01/2026,05/01/2026,aviso_previo_fev,,,pgto_dez+pgto_jan
+Loisi Carla Monteiro Pereira,,,Bateria,,365.00,365.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,05/01/2026,verificar,,,pgto_dez+pgto_jan
+Lucas dos Santos Paes,,,Teclado,Matheus Lana,384.00,,Cartão de Crédito,nao_pagou,,,evadido_jan,,,pgto_dez
+Lucas Marques Scaldaferri,,,Guitarra,,365.00,365.00,Cartão de Crédito,pago,05/01/2026,05/01/2026,verificar,,,pgto_dez+pgto_jan
+Lucas Matos de Azevedo Fontes,,,Musicalização Infantil,,399.00,399.00,Cartão de Crédito,pago,05/01/2026,05/01/2026,aviso_previo_fev,,,pgto_dez+pgto_jan
+Lucas Roberto Teixeira De Carvalho,,,Bateria,Gabriel Antony,467.00,,Cartão de Crédito,nao_pagou,,,evadido_jan,,,pgto_dez
+Maitê Ventura Mori,,,Musicalização Infantil,Gabriel Antony,380.00,,Cartão de Crédito,nao_pagou,,,evadido_jan,,,pgto_dez
+Manuela Guedes Monteiro de Freitas,,,Guitarra,Matheus Lana,437.00,,Cartão de Crédito,nao_pagou,,,evadido_jan,,,pgto_dez
+Marcela dos Santos Leite,,,Canto,Gabriel Leão,467.00,,Pix,nao_pagou,,,evadido_jan,,,pgto_dez
+Maria Isabela Desideri,,,Teclado,Gabriel Antony,447.00,,Cartão de Crédito,nao_pagou,,,evadido_jan,,,pgto_dez
+Mateus Bernardes Galvão,,,Musicalização para Bebês,,420.00,420.00,Cartão de Crédito,pago,05/01/2026,05/01/2026,verificar,,,pgto_dez+pgto_jan
+Miguel Araujo de Lima Batista Lobato,,,Musicalização Infantil,Matheus Lana,447.00,,Cartão de Crédito,nao_pagou,,,evadido_jan,,,pgto_dez
+Noah Cândido Cotrin Fontes,,,Musicalização Infantil,Gabriel Antony,437.00,,Cartão de Crédito,nao_pagou,,,evadido_jan,,,pgto_dez
+Olívia Pontes,,,Musicalização Infantil,Gabriel Antony,590.00,,Cartão de Crédito,nao_pagou,,,evadido_jan,,,pgto_dez
+Pedro Henrique Madeira Maturano,,,Bateria,,350.00,350.00,Cobrança Automática / Cartão de Crédito,pago,05/01/2026,17/12/2025,verificar,,,pgto_dez+pgto_jan
+Pedro Telles La Terra,,,Musicalização para Bebês,Felipe,447.00,,Cartão de Crédito,nao_pagou,,,evadido_jan,,,pgto_dez
+Rodrigo de Souza Lima Hara,,,Violão,,365.00,365.00,Cartão de Crédito,pago,05/01/2026,05/01/2026,verificar,,,pgto_dez+pgto_jan
+Rodrigo Hidemi Fonseca Mori,,,Piano,Leo Castro,380.00,,Cartão de Crédito,nao_pagou,,,evadido_jan,,,pgto_dez
+Samara Severo Souza,,,Bateria,,399.00,399.00,Cartão de Crédito,pago,05/01/2026,05/01/2026,aviso_previo_fev,,,pgto_dez+pgto_jan
+Tâmara Perez Lemanski Bordallo,,,Canto,,392.83,385.00,Cartão de Crédito,pago,05/01/2026,05/01/2026,aviso_previo_fev,,,pgto_dez+pgto_jan
+Theo Marinho Cobas,,,Musicalização Infantil,,457.00,457.00,Cartão de Crédito,pago,05/01/2026,05/01/2026,verificar,,,pgto_dez+pgto_jan
+Vicente Graça Vianna,,,Canto,Lohana,460.00,,Cartão de Crédito,nao_pagou,,,evadido_jan,,,pgto_dez
+Victor de Azevedo Pacheco,,,Bateria,,403.29,395.00,Cartão de Crédito,pago,05/01/2026,05/01/2026,aviso_previo_fev,,,pgto_dez+pgto_jan
+Cassyo L P Silva,,,Piano,,365.00,365.00,Boleto,pago,19/01/2026,19/01/2026,verificar,,,pgto_jan_only
