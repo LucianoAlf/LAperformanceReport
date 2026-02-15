@@ -315,7 +315,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPermissoes(new Set());
   };
 
-  const isAdmin = usuario?.perfil === 'admin';
+  const isAdmin = usuario?.perfil === 'admin' || perfis.some(p => p.perfil_nome.toLowerCase() === 'admin');
   const unidadeId = usuario?.unidade_id ?? null;
 
   const canViewConsolidated = () => isAdmin;
