@@ -404,11 +404,13 @@ export function DashboardPage() {
         const startDate = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
         const ultimoDia = new Date(ano, mesFim, 0).getDate();
         const endDate = `${ano}-${String(mesFim).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`;
+        // Buscar renovações e não renovações de movimentacoes_admin (fonte de verdade)
         let renovacoesQuery = supabase
-          .from('renovacoes')
-          .select('status, unidade_id')
-          .gte('data_renovacao', startDate)
-          .lte('data_renovacao', endDate);
+          .from('movimentacoes_admin')
+          .select('tipo, unidade_id')
+          .in('tipo', ['renovacao', 'nao_renovacao'])
+          .gte('data', startDate)
+          .lte('data', endDate);
         if (unidade !== 'todos') {
           renovacoesQuery = renovacoesQuery.eq('unidade_id', unidade);
         }
@@ -482,10 +484,10 @@ export function DashboardPage() {
           mediaAlunosTurma = totalTurmas > 0 ? Math.round((totalAlunos / totalTurmas) * 10) / 10 : 0;
         }
 
-        // Taxa de renovação: priorizar dados reais da tabela renovacoes
+        // Taxa de renovação: usar movimentacoes_admin (fonte de verdade)
         if (renovacoesData && renovacoesData.length > 0) {
-          const totalRenovacoes = renovacoesData.filter((r: any) => r.status === 'renovado').length;
-          const totalContratos = renovacoesData.length;
+          const totalRenovacoes = renovacoesData.filter((r: any) => r.tipo === 'renovacao').length;
+          const totalContratos = renovacoesData.length; // renovacao + nao_renovacao
           taxaRenovacao = totalContratos > 0 ? (totalRenovacoes / totalContratos) * 100 : 0;
         } else if (performanceData && performanceData.length > 0) {
           // Fallback: professores_performance (dados históricos)

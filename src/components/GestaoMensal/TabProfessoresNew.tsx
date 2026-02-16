@@ -15,13 +15,12 @@ interface TabProfessoresProps {
   unidade: string;
 }
 
-type SubTabId = 'visao_geral' | 'conversao' | 'retencao' | 'qualidade';
+type SubTabId = 'visao_geral' | 'conversao' | 'retencao';
 
 const subTabs = [
   { id: 'visao_geral' as const, label: 'Visão Geral', icon: Users },
   { id: 'conversao' as const, label: 'Conversão', icon: Target },
   { id: 'retencao' as const, label: 'Retenção', icon: UserCheck },
-  { id: 'qualidade' as const, label: 'Qualidade', icon: Star },
 ];
 
 interface ProfessorKPI {
@@ -290,9 +289,11 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
         const endDate = `${ano}-${String(mesFinal).padStart(2, '0')}-${String(ultimoDiaMes).padStart(2, '0')}`;
         
         // Query 1: Tabela evasoes_v2 (fonte unificada)
+        // CORREÇÃO: Excluir Aviso Prévio (tipo_saida_id = 3) - só contar Cancelamento (1) e Não Renovação (2)
         let evasoesMRRQuery = supabase
           .from('evasoes_v2')
           .select('professor_id, unidade_id, valor_parcela')
+          .in('tipo_saida_id', [1, 2]) // Só Cancelamento e Não Renovação
           .gte('data_evasao', startDate)
           .lte('data_evasao', endDate);
         
@@ -335,9 +336,10 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
         }
 
         // Total Alunos: via tabela alunos (inclui trancados — consistente com aba Alunos e Dashboard)
+        // CORREÇÃO: Incluir is_segundo_curso para cálculo correto do ticket médio
         let alunosTotalQuery = supabase
           .from('alunos')
-          .select('id, professor_atual_id, unidade_id, valor_parcela, percentual_presenca', { count: 'exact' })
+          .select('id, professor_atual_id, unidade_id, valor_parcela, percentual_presenca, is_segundo_curso', { count: 'exact' })
           .in('status', ['ativo', 'trancado']);
         if (unidade !== 'todos') {
           alunosTotalQuery = alunosTotalQuery.eq('unidade_id', unidade);
@@ -631,8 +633,12 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
         const profsComPresenca = professoresKPIs.filter(p => p.media_presenca > 0);
         const presencaMedia = profsComPresenca.length > 0 ? profsComPresenca.reduce((acc, p) => acc + p.media_presenca, 0) / profsComPresenca.length : 0;
         
-        const profsComTicket = professoresKPIs.filter(p => p.ticket_medio > 0);
-        const ticketMedioGeral = profsComTicket.length > 0 ? profsComTicket.reduce((acc, p) => acc + p.ticket_medio, 0) / profsComTicket.length : 0;
+        // CORREÇÃO: Ticket Médio Geral = SUM(valor_parcela de TODOS pagantes) / COUNT(alunos únicos pagantes)
+        // Segundo curso contribui pro faturamento mas não conta como pessoa separada no denominador
+        const alunosPagantes = alunosReais.filter((a: any) => (a.valor_parcela || 0) > 0);
+        const faturamentoTotal = alunosPagantes.reduce((acc: number, a: any) => acc + (Number(a.valor_parcela) || 0), 0);
+        const alunosUnicosPagantes = alunosPagantes.filter((a: any) => !a.is_segundo_curso).length;
+        const ticketMedioGeral = alunosUnicosPagantes > 0 ? faturamentoTotal / alunosUnicosPagantes : 0;
         
         const profsComTurma = professoresKPIs.filter(p => p.media_alunos_turma > 0);
         const mediaAlunosTurmaGeral = profsComTurma.length > 0 ? profsComTurma.reduce((acc, p) => acc + p.media_alunos_turma, 0) / profsComTurma.length : 0;
@@ -763,7 +769,7 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
       {/* Sub-aba: Visão Geral */}
       {activeSubTab === 'visao_geral' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <KPICard
               icon={Users}
               label="Total Professores"
@@ -801,9 +807,16 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
               comparativoMesAnterior={dadosMesAnterior && dadosMesAnterior.ticket_medio_geral > 0 ? { valor: dadosMesAnterior.ticket_medio_geral, label: dadosMesAnterior.label } : undefined}
               comparativoAnoAnterior={dadosAnoAnterior && dadosAnoAnterior.ticket_medio_geral > 0 ? { valor: dadosAnoAnterior.ticket_medio_geral, label: dadosAnoAnterior.label } : undefined}
             />
+            <KPICard
+              icon={Clock}
+              label="Presença Média"
+              value={`${dados.presenca_media.toFixed(1)}%`}
+              subvalue={`${(100 - dados.presenca_media).toFixed(1)}% faltas`}
+              variant="emerald"
+            />
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <RankingTableCollapsible
               data={dados.professores
                 .sort((a, b) => b.carteira_alunos - a.carteira_alunos)
@@ -829,6 +842,24 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
               topCount={3}
               valorFormatter={(value) => formatCurrency(Number(value))}
             />
+            {dados.professores.some(p => p.media_alunos_turma > 0) && (
+              <RankingTableCollapsible
+                data={dados.professores
+                  .filter(p => p.media_alunos_turma > 0)
+                  .sort((a, b) => b.media_alunos_turma - a.media_alunos_turma)
+                  .map(p => ({
+                    id: p.id,
+                    nome: p.nome,
+                    valor: p.media_alunos_turma,
+                    subvalor: `${p.carteira_alunos} alunos`
+                  }))}
+                title="Ranking - Média Alunos/Turma"
+                valorLabel="Média"
+                topCount={3}
+                variant="cyan"
+                valorFormatter={(value) => Number(value).toFixed(1)}
+              />
+            )}
           </div>
         </div>
       )}
@@ -939,54 +970,6 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
         </div>
       )}
 
-      {/* Sub-aba: Qualidade */}
-      {activeSubTab === 'qualidade' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <KPICard
-              icon={Clock}
-              label="Presença Média"
-              value={`${dados.presenca_media.toFixed(1)}%`}
-              subvalue={`${(100 - dados.presenca_media).toFixed(1)}% taxa de faltas`}
-              variant="emerald"
-            />
-            <KPICard
-              icon={Users}
-              label="Média Alunos/Turma"
-              value={dados.media_alunos_turma_geral.toFixed(1)}
-              subvalue="Pilar financeiro da escola"
-              variant="cyan"
-            />
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-
-            {dados.professores.some(p => p.media_alunos_turma > 0) ? (
-              <RankingTableCollapsible
-                data={dados.professores
-                  .filter(p => p.media_alunos_turma > 0)
-                  .sort((a, b) => b.media_alunos_turma - a.media_alunos_turma)
-                  .map(p => ({
-                    id: p.id,
-                    nome: p.nome,
-                    valor: p.media_alunos_turma,
-                    subvalor: `${p.carteira_alunos} alunos`
-                  }))}
-                title="Ranking Média Alunos por Turma"
-                valorLabel="Média"
-                topCount={3}
-                variant="cyan"
-                valorFormatter={(value) => Number(value).toFixed(1)}
-              />
-            ) : (
-              <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 text-center">
-                <p className="text-slate-400">Dados de média de alunos por turma não disponíveis</p>
-                <p className="text-sm text-slate-500 mt-2">Aguardando integração com Emusys</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -108,12 +108,13 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
       }
 
       // Buscar alunos ativos agrupados por professor
+      // CORREÇÃO: Incluir is_segundo_curso e tipos_matricula para cálculo correto de pagantes
       let queryAlunos = supabase
         .from('alunos')
         .select(`
           id, nome, classificacao, valor_parcela, tempo_permanencia_meses,
-          professor_atual_id, unidade_id, curso_id,
-          unidades(nome), cursos(nome)
+          professor_atual_id, unidade_id, curso_id, is_segundo_curso,
+          unidades(nome), cursos(nome), tipos_matricula(conta_como_pagante)
         `)
         .eq('status', 'ativo');
 
@@ -173,12 +174,16 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
 
       // Agrupar alunos por professor
       const alunosPorProfessor = new Map<number, any[]>();
+      // Guardar alunos SEM professor para incluir nos KPIs totais
+      const alunosSemProfessor: any[] = [];
       (alunosData || []).forEach((a: any) => {
         if (a.professor_atual_id) {
           if (!alunosPorProfessor.has(a.professor_atual_id)) {
             alunosPorProfessor.set(a.professor_atual_id, []);
           }
           alunosPorProfessor.get(a.professor_atual_id)!.push(a);
+        } else {
+          alunosSemProfessor.push(a);
         }
       });
 
@@ -190,8 +195,15 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
         const totalAlunos = alunos.length;
         const alunosLamk = alunos.filter((a: any) => a.classificacao === 'LAMK').length;
         const alunosEmla = alunos.filter((a: any) => a.classificacao === 'EMLA').length;
-        const mrrTotal = alunos.reduce((acc: number, a: any) => acc + (Number(a.valor_parcela) || 0), 0);
-        const ticketMedio = totalAlunos > 0 ? mrrTotal / totalAlunos : 0;
+        
+        // CORREÇÃO: Usar mesma lógica do Analytics (TabGestao.tsx)
+        // MRR = soma das parcelas de TODOS os alunos com valor > 0 (incluindo segundo curso)
+        const todosPagantes = alunos.filter((a: any) => (Number(a.valor_parcela) || 0) > 0);
+        const mrrTotal = todosPagantes.reduce((acc: number, a: any) => acc + (Number(a.valor_parcela) || 0), 0);
+        // Pagantes únicos = valor > 0 E is_segundo_curso = false (para denominador do ticket)
+        const pagantesUnicos = todosPagantes.filter((a: any) => !a.is_segundo_curso);
+        // Ticket médio = MRR / pagantes únicos
+        const ticketMedio = pagantesUnicos.length > 0 ? mrrTotal / pagantesUnicos.length : 0;
         const tempoMedio = totalAlunos > 0 
           ? alunos.reduce((acc: number, a: any) => acc + (a.tempo_permanencia_meses || 0), 0) / totalAlunos 
           : 0;
@@ -347,16 +359,27 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
     return resultado;
   }, [carteiras, filtroBusca, filtroCurso, ordenacao, direcao]);
 
-  // KPIs consolidados
+  // KPIs consolidados - usando mesma lógica do Analytics (TabGestao.tsx)
+  // MRR = soma de TODOS os pagantes (incluindo segundo curso)
+  // Pagantes = COUNT de pagantes únicos (sem segundo curso)
+  // Ticket = MRR / Pagantes
   const kpis = useMemo(() => {
     const dados = carteirasFiltradas;
     const totalProfs = dados.length;
     const totalAlunos = dados.reduce((acc, c) => acc + c.total_alunos, 0);
     const mrrTotal = dados.reduce((acc, c) => acc + c.mrr_total, 0);
-    const ticketMedio = totalAlunos > 0 ? mrrTotal / totalAlunos : 0;
+    // Pagantes únicos = derivado de MRR / ticket_medio por professor
+    const totalPagantes = dados.reduce((acc, c) => {
+      if (c.ticket_medio > 0) {
+        return acc + Math.round(c.mrr_total / c.ticket_medio);
+      }
+      return acc;
+    }, 0);
+    // Ticket médio = MRR total / pagantes únicos totais
+    const ticketMedio = totalPagantes > 0 ? mrrTotal / totalPagantes : 0;
     const mediaAlunos = totalProfs > 0 ? totalAlunos / totalProfs : 0;
 
-    return { totalProfs, totalAlunos, mrrTotal, ticketMedio, mediaAlunos };
+    return { totalProfs, totalAlunos, totalPagantes, mrrTotal, ticketMedio, mediaAlunos };
   }, [carteirasFiltradas]);
 
   // Cor do indicador de média/turma
@@ -397,7 +420,7 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
   return (
     <div className="space-y-6">
       {/* KPIs Consolidados */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
         <KPICard
           icon={Users}
           label="Professores"
@@ -411,6 +434,13 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
           value={kpis.totalAlunos}
           subvalue="na carteira"
           variant="emerald"
+        />
+        <KPICard
+          icon={GraduationCap}
+          label="Alunos Pagantes"
+          value={kpis.totalPagantes}
+          subvalue="com mensalidade"
+          variant="cyan"
         />
         <KPICard
           icon={Wallet}
@@ -509,9 +539,17 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
               </div>
 
               {/* Avatar */}
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm">
-                {getIniciais(carteira.nome)}
-              </div>
+              {carteira.foto_url ? (
+                <img 
+                  src={carteira.foto_url} 
+                  alt={carteira.nome}
+                  className="w-10 h-10 rounded-full object-cover"
+                />
+              ) : (
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center text-white font-semibold text-sm">
+                  {getIniciais(carteira.nome)}
+                </div>
+              )}
 
               {/* Nome e Cursos */}
               <div className="flex-1 min-w-0">
