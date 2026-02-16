@@ -529,9 +529,10 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           horarioMap.set(hora, (horarioMap.get(hora) || 0) + 1);
         });
 
-        // Matrículas por Faixa Etária (LA Kids vs LA 12+)
-        const matriculasLaKids = matriculas.filter(m => m.idade_atual !== null && m.idade_atual <= 11).length;
-        const matriculasLaAdultos = matriculas.filter(m => m.idade_atual !== null && m.idade_atual >= 12).length;
+        // Matrículas por Faixa Etária (LA Kids vs LA 12+) - usar leads convertidos, mesma lógica do Funil
+        const leadsConvertidosFaixa = leads.filter(l => ['matriculado', 'convertido'].includes(l.status));
+        const matriculasLaKids = leadsConvertidosFaixa.filter(l => l.idade !== null && l.idade <= 11).reduce((acc, l) => acc + (l.quantidade || 1), 0);
+        const matriculasLaAdultos = leadsConvertidosFaixa.filter(l => l.idade !== null && l.idade > 11).reduce((acc, l) => acc + (l.quantidade || 1), 0);
 
         // Motivos de Não Matrícula (experimentais que não converteram)
         const motivosNaoMatMap = new Map<string, number>();
@@ -540,22 +541,15 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           motivosNaoMatMap.set(motivo, (motivosNaoMatMap.get(motivo) || 0) + (l.quantidade || 1));
         });
 
-        // Faturamento - usar dados_mensais para passaporte (dados históricos) ou calcular de matrículas
-        const dadosMensais = dadosMensaisData || [];
-        const faturamentoPassaportesHistorico = dadosMensais.reduce((acc, dm) => acc + (Number(dm.faturamento_passaporte) || 0), 0);
-        const ticketMedioPassaporteHistorico = dadosMensais.length > 0 
-          ? dadosMensais.reduce((acc, dm) => acc + (Number(dm.ticket_medio_passaporte) || 0), 0) / dadosMensais.length 
-          : 0;
+        // Faturamento - calcular de leads convertidos (mesma lógica do Funil/ComercialPage)
+        const leadsConvertidos = leads.filter(l => ['matriculado', 'convertido'].includes(l.status));
         
-        // Calcular de matrículas como fallback
-        const faturamentoPassaportesMatriculas = matriculas.reduce((acc, m) => acc + (Number(m.valor_passaporte) || 0), 0);
-        const faturamentoParcelas = matriculas.reduce((acc, m) => acc + (Number(m.valor_parcela) || 0), 0);
-        const ticketMedioPassaporteMatriculas = matriculas.length > 0 ? faturamentoPassaportesMatriculas / matriculas.length : 0;
-        const ticketMedioParcela = matriculas.length > 0 ? faturamentoParcelas / matriculas.length : 0;
-        
-        // Usar dados históricos se disponíveis, senão calcular de matrículas
-        const faturamentoPassaportes = faturamentoPassaportesHistorico > 0 ? faturamentoPassaportesHistorico : faturamentoPassaportesMatriculas;
-        const ticketMedioPassaporte = ticketMedioPassaporteHistorico > 0 ? ticketMedioPassaporteHistorico : ticketMedioPassaporteMatriculas;
+        // Regra de negócio: matrículas com passaporte zerado (ex: re-matrícula) não entram no ticket médio
+        const leadsComPassaporte = leadsConvertidos.filter(l => (Number(l.valor_passaporte) || 0) > 0);
+        const faturamentoPassaportes = leadsComPassaporte.reduce((acc, l) => acc + (Number(l.valor_passaporte) || 0), 0);
+        const faturamentoParcelas = leadsConvertidos.reduce((acc, l) => acc + (Number(l.valor_parcela) || 0), 0);
+        const ticketMedioPassaporte = leadsComPassaporte.length > 0 ? faturamentoPassaportes / leadsComPassaporte.length : 0;
+        const ticketMedioParcela = leadsConvertidos.length > 0 ? faturamentoParcelas / leadsConvertidos.length : 0;
 
         setDados({
           // Leads
