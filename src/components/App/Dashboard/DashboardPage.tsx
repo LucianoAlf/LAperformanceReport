@@ -319,12 +319,10 @@ export function DashboardPage() {
         }
 
         // ===== DADOS COMERCIAIS =====
-        // USAR MESMA FONTE da aba Comercial (TabComercialNew.tsx): vw_kpis_comercial_historico
-        // Esta view tem dados consolidados por mês/ano
-        // Para mês atual, pode não ter dados ainda - usar dados_comerciais como fallback
+        // CORREÇÃO: Usar tabela leads diretamente (mesma fonte do TabComercialNew.tsx)
+        // Para histórico, usar vw_kpis_comercial_historico
+        // Para mês atual, buscar da tabela leads em tempo real
 
-        let comercialData: any[] = [];
-        
         if (isHistorico) {
           // Período histórico: usar vw_kpis_comercial_historico com range de meses
           let comercialQuery = supabase
@@ -338,59 +336,73 @@ export function DashboardPage() {
             comercialQuery = comercialQuery.eq('unidade_id', unidade);
           }
 
-          const { data } = await comercialQuery;
-          comercialData = data || [];
-        } else {
-          // Mês atual: usar dados_comerciais (se existir) ou deixar vazio
-          const competenciaStr = `${ano}-${String(mes).padStart(2, '0')}-01`;
-          let comercialQuery = supabase
-            .from('dados_comerciais')
-            .select('*')
-            .eq('competencia', competenciaStr);
-
-          const { data } = await comercialQuery;
+          const { data: comercialData } = await comercialQuery;
           
-          if (data && data.length > 0) {
-            const unidadeMap: Record<string, string> = {
-              '2ec861f6-023f-4d7b-9927-3960ad8c2a92': 'Campo Grande',
-              '95553e96-971b-4590-a6eb-0201d013c14d': 'Recreio',
-              '368d47f5-2d88-4475-bc14-ba084a9a348e': 'Barra'
-            };
-            comercialData = unidade !== 'todos' 
-              ? data.filter((d: any) => d.unidade === unidadeMap[unidade])
-              : data;
-          }
-        }
+          if (comercialData && comercialData.length > 0) {
+            const leads = comercialData.reduce((acc: number, d: any) => acc + (d.total_leads || 0), 0);
+            const experimentais = comercialData.reduce((acc: number, d: any) => 
+              acc + (d.experimentais_realizadas || d.aulas_experimentais || 0), 0);
+            const matriculas = comercialData.reduce((acc: number, d: any) => 
+              acc + (d.novas_matriculas || d.novas_matriculas_total || 0), 0);
+            const taxaConversao = experimentais > 0 ? (matriculas / experimentais) * 100 : 0;
 
-        if (comercialData.length > 0) {
-          // Campos diferentes dependendo da fonte
-          const leads = comercialData.reduce((acc: number, d: any) => acc + (d.total_leads || 0), 0);
-          const experimentais = comercialData.reduce((acc: number, d: any) => 
-            acc + (d.experimentais_realizadas || d.aulas_experimentais || 0), 0);
-          const matriculas = comercialData.reduce((acc: number, d: any) => 
-            acc + (d.novas_matriculas || d.novas_matriculas_total || 0), 0);
-          const taxaConversao = experimentais > 0 ? (matriculas / experimentais) * 100 : 0;
-          const ticketPassaporteTotal = comercialData.reduce((acc: number, d: any) => 
-            acc + parseFloat(d.ticket_medio_passaporte || 0), 0);
-          const ticketPassaporte = comercialData.length > 0 ? ticketPassaporteTotal / comercialData.length : 0;
+            setDadosComercial({
+              leads_mes: leads,
+              experimentais_realizadas: experimentais,
+              taxa_conversao: taxaConversao,
+              ticket_passaporte: 0
+            });
+
+            setFunilComercial([
+              { etapa: 'Leads', valor: leads, cor: '#3b82f6' },
+              { etapa: 'Experimentais', valor: experimentais, cor: '#8b5cf6' },
+              { etapa: 'Matrículas', valor: matriculas, cor: '#10b981' }
+            ]);
+          } else {
+            setDadosComercial(null);
+            setFunilComercial([]);
+          }
+        } else {
+          // Mês atual: buscar da tabela leads em tempo real (mesma lógica do TabComercialNew.tsx)
+          const startDate = `${ano}-${String(mes).padStart(2, '0')}-01`;
+          const endDate = `${ano}-${String(mes).padStart(2, '0')}-${new Date(ano, mes, 0).getDate()}`;
+          
+          let leadsQuery = supabase
+            .from('leads')
+            .select('id, status, quantidade, data_contato')
+            .gte('data_contato', startDate)
+            .lte('data_contato', endDate);
+
+          if (unidade !== 'todos') {
+            leadsQuery = leadsQuery.eq('unidade_id', unidade);
+          }
+
+          const { data: leadsData } = await leadsQuery;
+          const leads = leadsData || [];
+
+          // Contagens usando mesma lógica do TabComercialNew.tsx
+          const totalLeads = leads.length;
+          // REGRA DE NEGÓCIO: Exp/Visita = realizada + visita_escola (não inclui agendada/faltou)
+          const expTotal = leads.filter((l: any) => 
+            ['experimental_realizada', 'compareceu', 'visita_escola'].includes(l.status)
+          ).reduce((acc: number, l: any) => acc + (l.quantidade || 1), 0);
+          const novasMatriculas = leads.filter((l: any) => 
+            ['matriculado', 'convertido'].includes(l.status)
+          ).reduce((acc: number, l: any) => acc + (l.quantidade || 1), 0);
+          const taxaConversao = expTotal > 0 ? (novasMatriculas / expTotal) * 100 : 0;
 
           setDadosComercial({
-            leads_mes: leads,
-            experimentais_realizadas: experimentais,
+            leads_mes: totalLeads,
+            experimentais_realizadas: expTotal,
             taxa_conversao: taxaConversao,
-            ticket_passaporte: ticketPassaporte
+            ticket_passaporte: 0
           });
 
-          // Funil comercial
           setFunilComercial([
-            { etapa: 'Leads', valor: leads, cor: '#3b82f6' },
-            { etapa: 'Experimentais', valor: experimentais, cor: '#8b5cf6' },
-            { etapa: 'Matrículas', valor: matriculas, cor: '#10b981' }
+            { etapa: 'Leads', valor: totalLeads, cor: '#3b82f6' },
+            { etapa: 'Exp/Visita', valor: expTotal, cor: '#8b5cf6' },
+            { etapa: 'Matrículas', valor: novasMatriculas, cor: '#10b981' }
           ]);
-        } else {
-          // Sem dados comerciais para o período
-          setDadosComercial(null);
-          setFunilComercial([]);
         }
 
         // ===== DADOS DE PROFESSORES =====

@@ -455,7 +455,8 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
         const totalLeads = leads.filter(l => ['novo','agendado'].includes(l.status)).reduce((acc, l) => acc + (l.quantidade || 1), 0);
         const leadsArquivados = leads.filter(l => l.arquivado === true).reduce((acc, l) => acc + (l.quantidade || 1), 0);
         const expMarcadas = leads.filter(l => l.status === 'experimental_agendada').reduce((acc, l) => acc + (l.quantidade || 1), 0);
-        const expRealizadas = leads.filter(l => ['experimental_realizada','compareceu'].includes(l.status)).reduce((acc, l) => acc + (l.quantidade || 1), 0);
+        // REGRA DE NEGÓCIO: Exp/Visita = realizada + visita_escola (não inclui agendada/faltou)
+        const expRealizadas = leads.filter(l => ['experimental_realizada','compareceu','visita_escola'].includes(l.status)).reduce((acc, l) => acc + (l.quantidade || 1), 0);
         const faltaram = leads.filter(l => l.status === 'experimental_faltou').reduce((acc, l) => acc + (l.quantidade || 1), 0);
         const novasMatriculas = leads.filter(l => ['matriculado','convertido'].includes(l.status)).reduce((acc, l) => acc + (l.quantidade || 1), 0) || matriculas.length;
 
