@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts';
 import { cn } from '@/lib/utils';
 
@@ -13,6 +14,7 @@ interface DistributionChartProps {
   className?: string;
   showLegend?: boolean;
   showPercentage?: boolean;
+  footer?: ReactNode;
 }
 
 const COLORS = ['#06b6d4', '#8b5cf6', '#f59e0b', '#10b981', '#ef4444', '#ec4899', '#6366f1', '#14b8a6'];
@@ -22,7 +24,8 @@ export function DistributionChart({
   title, 
   className,
   showLegend = true,
-  showPercentage = true 
+  showPercentage = true,
+  footer
 }: DistributionChartProps) {
   const total = data.reduce((acc, item) => acc + item.value, 0);
 
@@ -118,6 +121,11 @@ export function DistributionChart({
           </PieChart>
         </ResponsiveContainer>
       </div>
+      {footer && (
+        <div className="mt-2 border-t border-slate-700/50 pt-3 text-sm text-slate-300">
+          {footer}
+        </div>
+      )}
     </div>
   );
 }

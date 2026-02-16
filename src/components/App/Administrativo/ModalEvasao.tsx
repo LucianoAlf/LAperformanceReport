@@ -16,6 +16,12 @@ interface MotivoSaida {
   nome: string;
 }
 
+interface TipoSaida {
+  id: number;
+  nome: string;
+  codigo: string;
+}
+
 interface ModalEvasaoProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -26,7 +32,8 @@ interface ModalEvasaoProps {
   unidadeId?: string | null;
 }
 
-const tiposCancelamento = [
+// Tipos de cancelamento fixos (subtipos de Interrompido)
+const subtiposInterrompido = [
   { value: 'interrompido', label: 'Interrompido' },
   { value: 'interrompido_2_curso', label: 'Interrompido 2º Curso' },
   { value: 'interrompido_bolsista', label: 'Interrompido Bolsista' },
@@ -36,6 +43,7 @@ const tiposCancelamento = [
 export function ModalEvasao({ open, onOpenChange, onSave, editingItem, professores, competencia, unidadeId }: ModalEvasaoProps) {
   const [loading, setLoading] = useState(false);
   const [motivosSaida, setMotivosSaida] = useState<MotivoSaida[]>([]);
+  const [tiposSaida, setTiposSaida] = useState<TipoSaida[]>([]);
   const [formData, setFormData] = useState({
     data: new Date(),
     tipo_evasao: 'interrompido',
@@ -48,18 +56,26 @@ export function ModalEvasao({ open, onOpenChange, onSave, editingItem, professor
     valor_parcela_evasao: '',
   });
 
-  // Carregar motivos de saída
+  // Carregar motivos de saída e tipos de saída
   useEffect(() => {
-    async function loadMotivos() {
-      const { data } = await supabase
-        .from('motivos_saida')
-        .select('id, nome')
-        .eq('ativo', true)
-        .order('ordem')
-        .order('nome');
-      setMotivosSaida(data || []);
+    async function loadData() {
+      const [motivosRes, tiposRes] = await Promise.all([
+        supabase
+          .from('motivos_saida')
+          .select('id, nome')
+          .eq('ativo', true)
+          .order('ordem')
+          .order('nome'),
+        supabase
+          .from('tipos_saida')
+          .select('id, nome, codigo')
+          .eq('ativo', true)
+          .order('id')
+      ]);
+      setMotivosSaida(motivosRes.data || []);
+      setTiposSaida(tiposRes.data || []);
     }
-    loadMotivos();
+    loadData();
   }, []);
 
   useEffect(() => {
@@ -141,7 +157,7 @@ export function ModalEvasao({ open, onOpenChange, onSave, editingItem, professor
               />
             </div>
             <div>
-              <Label className="text-slate-300">Tipo de Cancelamento</Label>
+              <Label className="text-slate-300">Tipo de Saída</Label>
               <Select
                 value={formData.tipo_evasao}
                 onValueChange={(value) => setFormData({ ...formData, tipo_evasao: value })}
@@ -150,9 +166,16 @@ export function ModalEvasao({ open, onOpenChange, onSave, editingItem, professor
                   <SelectValue placeholder="Selecione..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {tiposCancelamento.map((tipo) => (
+                  {/* Subtipos de Interrompido (fixos) */}
+                  {subtiposInterrompido.map((tipo) => (
                     <SelectItem key={tipo.value} value={tipo.value}>
                       {tipo.label}
+                    </SelectItem>
+                  ))}
+                  {/* Transferência do banco (tipo_saida_id = 4) */}
+                  {tiposSaida.filter(t => t.codigo === 'TRANSFERENCIA').map((tipo) => (
+                    <SelectItem key={tipo.codigo.toLowerCase()} value={tipo.codigo.toLowerCase()}>
+                      {tipo.nome}
                     </SelectItem>
                   ))}
                 </SelectContent>

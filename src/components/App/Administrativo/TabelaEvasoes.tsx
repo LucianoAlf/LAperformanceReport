@@ -15,6 +15,7 @@ const tipoCancelamentoLabels: Record<string, { label: string; color: string }> =
   interrompido_2_curso: { label: 'Interrompido 2º Curso', color: 'bg-violet-500/20 text-violet-400' },
   interrompido_bolsista: { label: 'Interrompido Bolsista', color: 'bg-cyan-500/20 text-cyan-400' },
   interrompido_banda: { label: 'Interrompido Banda', color: 'bg-indigo-500/20 text-indigo-400' },
+  transferencia: { label: 'Transferência', color: 'bg-amber-500/20 text-amber-400' },
 };
 
 export function TabelaEvasoes({ data, onEdit, onDelete }: TabelaEvasoesProps) {

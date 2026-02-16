@@ -499,35 +499,39 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           expCanalMap.set(canal, (expCanalMap.get(canal) || 0) + (l.quantidade || 1));
         });
 
-        // Matrículas por Curso
+        // CORREÇÃO: Usar leads convertidos (não alunos.data_matricula) para gráficos de matrículas
+        // Isso garante consistência com o funil comercial (5 matrículas, não 36)
+        const leadsMatriculados = leads.filter(l => ['matriculado', 'convertido'].includes(l.status));
+
+        // Matrículas por Curso (via leads convertidos)
         const cursoMatMap = new Map<string, number>();
-        matriculas.forEach(m => {
-          const curso = (m.cursos as any)?.nome || 'Não informado';
-          cursoMatMap.set(curso, (cursoMatMap.get(curso) || 0) + 1);
+        leadsMatriculados.forEach(l => {
+          const curso = (l as any).cursos?.nome || 'Não informado';
+          cursoMatMap.set(curso, (cursoMatMap.get(curso) || 0) + (l.quantidade || 1));
         });
 
-        // Matrículas por Canal
+        // Matrículas por Canal (via leads convertidos)
         const canalMatMap = new Map<string, number>();
-        matriculas.forEach(m => {
-          const canal = (m.canais_origem as any)?.nome || 'Outros';
-          canalMatMap.set(canal, (canalMatMap.get(canal) || 0) + 1);
+        leadsMatriculados.forEach(l => {
+          const canal = (l as any).canais_origem?.nome || 'Outros';
+          canalMatMap.set(canal, (canalMatMap.get(canal) || 0) + (l.quantidade || 1));
         });
 
-        // Matrículas por Professor
+        // Matrículas por Professor (via leads convertidos - professor da experimental)
         const profMatMap = new Map<string, { id: number; count: number }>();
-        matriculas.forEach(m => {
-          const prof = (m.professores as any)?.nome || 'Sem Professor';
-          const profId = m.professor_atual_id || 0;
+        leadsMatriculados.forEach(l => {
+          const prof = (l as any).professores?.nome || 'Sem Professor';
+          const profId = l.professor_id || 0;
           const current = profMatMap.get(prof) || { id: profId, count: 0 };
-          current.count += 1;
+          current.count += (l.quantidade || 1);
           profMatMap.set(prof, current);
         });
 
-        // Matrículas por Horário
+        // Matrículas por Horário (via leads convertidos)
         const horarioMap = new Map<string, number>();
-        matriculas.forEach(m => {
-          const hora = m.horario_aula ? (parseInt(m.horario_aula.split(':')[0]) < 12 ? 'Manhã' : parseInt(m.horario_aula.split(':')[0]) < 18 ? 'Tarde' : 'Noite') : 'Não informado';
-          horarioMap.set(hora, (horarioMap.get(hora) || 0) + 1);
+        leadsMatriculados.forEach(l => {
+          const hora = l.horario_preferido ? (parseInt(l.horario_preferido.split(':')[0]) < 12 ? 'Manhã' : parseInt(l.horario_preferido.split(':')[0]) < 18 ? 'Tarde' : 'Noite') : 'Não informado';
+          horarioMap.set(hora, (horarioMap.get(hora) || 0) + (l.quantidade || 1));
         });
 
         // Matrículas por Faixa Etária (LA Kids vs LA 12+) - usar leads convertidos, mesma lógica do Funil

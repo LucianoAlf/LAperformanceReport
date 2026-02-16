@@ -507,22 +507,27 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             setMesFechado(true);
           }
 
-          // Buscar matrículas por curso e professor (suporta range de meses)
+          // Buscar matrículas via LEADS CONVERTIDOS (mesma fonte do funil comercial)
           const startDate = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
           const ultimoDia = new Date(ano, mesFinal, 0).getDate();
           const endDate = `${ano}-${String(mesFinal).padStart(2, '0')}-${ultimoDia}`;
 
-          let matriculasQuery = supabase
-            .from('alunos')
-            .select('cursos(nome), professores:professor_experimental_id(nome), unidade_id, idade_atual')
-            .gte('data_matricula', startDate)
-            .lte('data_matricula', endDate);
+          let leadsMatQuery = supabase
+            .from('leads')
+            .select(`
+              id, status, quantidade,
+              cursos(nome),
+              professores:professor_experimental_id(id, nome)
+            `)
+            .gte('data_contato', startDate)
+            .lte('data_contato', endDate)
+            .in('status', ['matriculado', 'convertido']);
 
           if (unidade !== 'todos') {
-            matriculasQuery = matriculasQuery.eq('unidade_id', unidade);
+            leadsMatQuery = leadsMatQuery.eq('unidade_id', unidade);
           }
 
-          const { data: matriculasData } = await matriculasQuery;
+          const { data: leadsMatData } = await leadsMatQuery;
 
           // Buscar distribuição LA Kids vs LA (12+) dos alunos ativos
           let alunosAtivosQuery = supabase
@@ -540,23 +545,32 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           const totalLaKids = alunosAtivosData?.filter(a => a.idade_atual !== null && a.idade_atual <= 11).length || 0;
           const totalLaAdultos = alunosAtivosData?.filter(a => a.idade_atual !== null && a.idade_atual >= 12).length || 0;
 
+          // Matrículas por Curso e Professor (via leads convertidos)
           const cursoMatMap = new Map<string, number>();
           const profMatMap = new Map<string, { id: number; count: number }>();
-          matriculasData?.forEach(m => {
-            const curso = (m.cursos as any)?.nome || 'Não informado';
-            cursoMatMap.set(curso, (cursoMatMap.get(curso) || 0) + 1);
-            const prof = (m.professores as any)?.nome || 'Sem Professor';
-            const current = profMatMap.get(prof) || { id: 0, count: 0 };
-            current.count += 1;
+          leadsMatData?.forEach((l: any) => {
+            const curso = l.cursos?.nome || 'Não informado';
+            cursoMatMap.set(curso, (cursoMatMap.get(curso) || 0) + (l.quantidade || 1));
+            const prof = l.professores?.nome || 'Sem Professor';
+            const profId = l.professores?.id || 0;
+            const current = profMatMap.get(prof) || { id: profId, count: 0 };
+            current.count += (l.quantidade || 1);
             profMatMap.set(prof, current);
           });
 
-          // Buscar evasões por curso e professor - query simplificada
+          // Buscar evasões com JOIN para curso (via aluno) e professor
+          // REGRA DE NEGÓCIO: Evasões = Cancelamentos (tipo 1) + Não Renovações (tipo 2)
+          // Aviso Prévio (tipo 3) NÃO conta como evasão (aluno ainda está ativo)
           let evasoesQuery = supabase
             .from('evasoes_v2')
-            .select('curso_id, professor_id, motivo_saida_id, tipo_saida_id, unidade_id')
+            .select(`
+              id, aluno_id, professor_id, motivo_saida_id, tipo_saida_id, unidade_id,
+              alunos!left(curso_id, cursos!left(nome)),
+              professores!left(nome)
+            `)
             .gte('data_evasao', startDate)
-            .lte('data_evasao', endDate);
+            .lte('data_evasao', endDate)
+            .in('tipo_saida_id', [1, 2]); // Apenas cancelamentos e não renovações
 
           if (unidade !== 'todos') {
             evasoesQuery = evasoesQuery.eq('unidade_id', unidade);
@@ -569,12 +583,14 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           const motivosNaoRenovMap = new Map<string, number>();
           const motivosCancelMap = new Map<string, number>();
           evasoesData?.forEach((e: any) => {
-            const curso = `Curso ${e.curso_id || 'N/A'}`;
-            cursoEvasaoMap.set(curso, (cursoEvasaoMap.get(curso) || 0) + 1);
-            const prof = `Professor ${e.professor_id || 'N/A'}`;
-            const current = profEvasaoMap.get(prof) || { id: e.professor_id || 0, count: 0 };
+            // Curso via aluno → cursos
+            const cursoNome = e.alunos?.cursos?.nome || 'Não informado';
+            cursoEvasaoMap.set(cursoNome, (cursoEvasaoMap.get(cursoNome) || 0) + 1);
+            // Professor com nome real
+            const profNome = e.professores?.nome || 'Sem Professor';
+            const current = profEvasaoMap.get(profNome) || { id: e.professor_id || 0, count: 0 };
             current.count += 1;
-            profEvasaoMap.set(prof, current);
+            profEvasaoMap.set(profNome, current);
             const motivo = `Motivo ${e.motivo_saida_id || 'N/A'}`;
             // tipo_saida_id: 1=interrompido, 2=não renovou, 3=aviso prévio
             if (e.tipo_saida_id === 2) {
@@ -1194,6 +1210,14 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               <DistributionChart
                 data={dados.evasoes_por_curso}
                 title="Evasões por Curso"
+                footer={(
+                  <>
+                    <span className="font-medium text-white">{dados.evasoes}</span> evasões no período
+                    {dados.evasoes_por_curso.some(c => c.name === 'Não informado') && (
+                      <span className="ml-2 text-yellow-400">• {dados.evasoes_por_curso.find(c => c.name === 'Não informado')?.value || 0} sem curso vinculado</span>
+                    )}
+                  </>
+                )}
               />
             ) : (
               <EstadoVazio
