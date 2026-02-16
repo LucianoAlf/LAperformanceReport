@@ -2534,6 +2534,7 @@ export function ComercialPage() {
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">#</th>
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Data</th>
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Nome</th>
+                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Telefone</th>
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Canal</th>
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Curso</th>
                     {isAdmin && <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Unidade</th>}
@@ -2561,6 +2562,15 @@ export function ComercialPage() {
                           onChange={async (valor) => lead.id && salvarCampoMatricula(lead.id, 'nome', valor)}
                           tipo="texto"
                           textClassName="text-white font-medium"
+                          placeholder="-"
+                        />
+                      </td>
+                      <td className="py-3 px-2 border-r border-slate-700/30">
+                        <CelulaEditavelInline
+                          value={(lead as any).telefone}
+                          onChange={async (valor) => lead.id && salvarCampoMatricula(lead.id, 'telefone', valor)}
+                          tipo="texto"
+                          textClassName="text-emerald-400"
                           placeholder="-"
                         />
                       </td>
@@ -2626,6 +2636,7 @@ export function ComercialPage() {
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">#</th>
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Data</th>
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Nome</th>
+                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Telefone</th>
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Status</th>
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Canal</th>
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Curso</th>
@@ -2659,17 +2670,46 @@ export function ComercialPage() {
                         />
                       </td>
                       <td className="py-3 px-2 border-r border-slate-700/30">
-                        <span className={cn(
-                          "px-2 py-0.5 rounded text-xs font-medium",
-                          exp.status === 'experimental_agendada' ? 'bg-amber-500/20 text-amber-400' :
-                          exp.status === 'experimental_realizada' ? 'bg-emerald-500/20 text-emerald-400' :
-                          exp.status === 'experimental_nao_compareceu' ? 'bg-red-500/20 text-red-400' :
-                          'bg-slate-500/20 text-slate-400'
-                        )}>
-                          {exp.status === 'experimental_agendada' ? 'Agendada' :
-                           exp.status === 'experimental_realizada' ? 'Realizada' :
-                           exp.status === 'experimental_nao_compareceu' ? 'Não compareceu' : exp.status}
-                        </span>
+                        <CelulaEditavelInline
+                          value={(exp as any).telefone}
+                          onChange={async (valor) => exp.id && salvarCampoMatricula(exp.id, 'telefone', valor)}
+                          tipo="texto"
+                          textClassName="text-emerald-400"
+                          placeholder="-"
+                        />
+                      </td>
+                      <td className="py-3 px-2 border-r border-slate-700/30">
+                        <CelulaEditavelInline
+                          value={exp.status}
+                          onChange={async (valor) => exp.id && salvarCampoMatricula(exp.id, 'status', valor)}
+                          tipo="select"
+                          opcoes={[
+                            { value: 'experimental_agendada', label: 'Agendada' },
+                            { value: 'experimental_realizada', label: 'Realizada' },
+                            { value: 'experimental_faltou', label: 'Faltou' },
+                            { value: 'compareceu', label: 'Compareceu' },
+                            { value: 'matriculado', label: 'Matriculado' },
+                            { value: 'convertido', label: 'Convertido' },
+                          ]}
+                          placeholder="-"
+                          formatarExibicao={() => (
+                            <span className={cn(
+                              "px-2 py-0.5 rounded text-xs font-medium",
+                              exp.status === 'experimental_agendada' ? 'bg-amber-500/20 text-amber-400' :
+                              exp.status === 'experimental_realizada' || exp.status === 'compareceu' ? 'bg-emerald-500/20 text-emerald-400' :
+                              exp.status === 'experimental_faltou' ? 'bg-red-500/20 text-red-400' :
+                              exp.status === 'matriculado' || exp.status === 'convertido' ? 'bg-violet-500/20 text-violet-400' :
+                              'bg-slate-500/20 text-slate-400'
+                            )}>
+                              {exp.status === 'experimental_agendada' ? 'Agendada' :
+                               exp.status === 'experimental_realizada' ? 'Realizada' :
+                               exp.status === 'experimental_faltou' ? 'Faltou' :
+                               exp.status === 'compareceu' ? 'Compareceu' :
+                               exp.status === 'matriculado' ? 'Matriculado' :
+                               exp.status === 'convertido' ? 'Convertido' : exp.status}
+                            </span>
+                          )}
+                        />
                       </td>
                       <td className="py-3 px-2 border-r border-slate-700/30">
                         <CelulaEditavelInline
@@ -2742,6 +2782,8 @@ export function ComercialPage() {
                   <tr className="text-left text-slate-400 border-b border-slate-700">
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">#</th>
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Data</th>
+                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Nome</th>
+                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Telefone</th>
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Canal</th>
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Curso</th>
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Qtd</th>
@@ -2762,6 +2804,24 @@ export function ComercialPage() {
                           onChange={async (valor) => visita.id && salvarCampoMatricula(visita.id, 'data_contato', valor)}
                           tipo="data"
                           textClassName="text-slate-300"
+                        />
+                      </td>
+                      <td className="py-3 px-2 border-r border-slate-700/30">
+                        <CelulaEditavelInline
+                          value={(visita as any).nome}
+                          onChange={async (valor) => visita.id && salvarCampoMatricula(visita.id, 'nome', valor)}
+                          tipo="texto"
+                          textClassName="text-white font-medium"
+                          placeholder="-"
+                        />
+                      </td>
+                      <td className="py-3 px-2 border-r border-slate-700/30">
+                        <CelulaEditavelInline
+                          value={(visita as any).telefone}
+                          onChange={async (valor) => visita.id && salvarCampoMatricula(visita.id, 'telefone', valor)}
+                          tipo="texto"
+                          textClassName="text-emerald-400"
+                          placeholder="-"
                         />
                       </td>
                       <td className="py-3 px-2 border-r border-slate-700/30">
@@ -2849,6 +2909,7 @@ export function ComercialPage() {
                   <th className="pb-3 px-2 font-medium border-r border-slate-700/30">#</th>
                   <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Data</th>
                   <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Aluno(a)</th>
+                  <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Telefone</th>
                   <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Idade</th>
                   <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Curso</th>
                   <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Canal</th>
@@ -2885,6 +2946,17 @@ export function ComercialPage() {
                         onChange={async (valor) => mat.id && salvarCampoMatricula(mat.id, 'nome', valor)}
                         tipo="texto"
                         textClassName="text-white font-medium"
+                        placeholder="-"
+                      />
+                    </td>
+                    
+                    {/* Telefone - Edição inline */}
+                    <td className="py-3 px-2 border-r border-slate-700/30">
+                      <CelulaEditavelInline
+                        value={(mat as any).telefone}
+                        onChange={async (valor) => mat.id && salvarCampoMatricula(mat.id, 'telefone', valor)}
+                        tipo="texto"
+                        textClassName="text-emerald-400"
                         placeholder="-"
                       />
                     </td>

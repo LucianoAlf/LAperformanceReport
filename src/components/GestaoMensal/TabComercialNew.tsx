@@ -452,7 +452,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
         const matriculas = matriculasData || [];
 
         // Processar Leads
-        const totalLeads = leads.filter(l => ['novo','agendado'].includes(l.status)).reduce((acc, l) => acc + (l.quantidade || 1), 0);
+        const totalLeads = leads.reduce((acc, l) => acc + (l.quantidade || 1), 0);
         const leadsArquivados = leads.filter(l => l.arquivado === true).reduce((acc, l) => acc + (l.quantidade || 1), 0);
         const expMarcadas = leads.filter(l => l.status === 'experimental_agendada').reduce((acc, l) => acc + (l.quantidade || 1), 0);
         // REGRA DE NEGÓCIO: Exp/Visita = realizada + visita_escola (não inclui agendada/faltou)
@@ -462,14 +462,14 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
 
         // Leads por Canal
         const canaisMap = new Map<string, number>();
-        leads.filter(l => ['novo','agendado'].includes(l.status)).forEach(l => {
+        leads.forEach(l => {
           const canal = (l.canais_origem as any)?.nome || 'Outros';
           canaisMap.set(canal, (canaisMap.get(canal) || 0) + (l.quantidade || 1));
         });
 
         // Leads por Curso
         const cursosLeadMap = new Map<string, number>();
-        leads.filter(l => ['novo','agendado'].includes(l.status)).forEach(l => {
+        leads.forEach(l => {
           const curso = (l.cursos as any)?.nome || 'Não informado';
           cursosLeadMap.set(curso, (cursosLeadMap.get(curso) || 0) + (l.quantidade || 1));
         });
@@ -481,20 +481,35 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           motivosArqMap.set(motivo, (motivosArqMap.get(motivo) || 0) + (l.quantidade || 1));
         });
 
-        // Experimentais por Professor
+        // Experimentais por Professor - conta APENAS experimentais realizadas (não convertidos)
+        // Regra: experimental_realizada = pessoa veio e fez aula experimental
+        // Convertidos/matriculados são contados no gráfico de matrículas, não aqui
         const expProfMap = new Map<string, { id: number; total: number; convertidas: number }>();
-        leads.filter(l => ['experimental_realizada','compareceu','matriculado','convertido'].includes(l.status)).forEach(l => {
+        
+        // Contar apenas experimentais realizadas (status = experimental_realizada)
+        // NÃO incluir visita_escola (é visita, não experimental)
+        // NÃO incluir convertido/matriculado (são matrículas, não experimentais)
+        leads.filter(l => l.status === 'experimental_realizada').forEach(l => {
           const prof = (l.professores as any)?.nome || 'Sem Professor';
           const profId = l.professor_experimental_id || 0;
           const current = expProfMap.get(prof) || { id: profId, total: 0, convertidas: 0 };
           current.total += l.quantidade || 1;
-          if (['matriculado','convertido'].includes(l.status)) current.convertidas += l.quantidade || 1;
           expProfMap.set(prof, current);
         });
+        
+        // Calcular conversões: matrículas que passaram por experimental (têm professor_experimental_id)
+        leads.filter(l => ['matriculado','convertido'].includes(l.status) && l.professor_experimental_id).forEach(l => {
+          const prof = (l.professores as any)?.nome || 'Sem Professor';
+          const profId = l.professor_experimental_id || 0;
+          const current = expProfMap.get(prof);
+          if (current) {
+            current.convertidas += l.quantidade || 1;
+          }
+        });
 
-        // Experimentais por Canal (origem das pessoas que fizeram experimentais)
+        // Exp/Visitas por Canal (origem das pessoas que fizeram experimental ou visita na escola)
         const expCanalMap = new Map<string, number>();
-        leads.filter(l => ['experimental_realizada','compareceu'].includes(l.status)).forEach(l => {
+        leads.filter(l => ['experimental_realizada', 'compareceu', 'visita_escola'].includes(l.status)).forEach(l => {
           const canal = (l.canais_origem as any)?.nome || 'Outros';
           expCanalMap.set(canal, (expCanalMap.get(canal) || 0) + (l.quantidade || 1));
         });
@@ -802,7 +817,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             <FunnelChart
               steps={[
                 { label: 'Leads', value: dados.total_leads, color: '#06b6d4' },
-                { label: 'Experimentais', value: dados.experimentais_realizadas, color: '#8b5cf6' },
+                { label: 'Experimentais/Visitas', value: dados.experimentais_realizadas, color: '#8b5cf6' },
                 { label: 'Matrículas', value: dados.novas_matriculas, color: '#10b981' },
               ]}
               title="Funil de Conversão"
@@ -810,7 +825,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             {dados.experimentais_por_canal.length > 0 ? (
               <DistributionChart
                 data={dados.experimentais_por_canal}
-                title="Experimentais por Canal"
+                title="Experimentais/Visitas por Canal"
               />
             ) : (
               <EstadoVazio

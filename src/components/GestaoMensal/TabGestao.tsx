@@ -566,7 +566,8 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             .select(`
               id, aluno_id, professor_id, motivo_saida_id, tipo_saida_id, unidade_id,
               alunos!left(curso_id, cursos!left(nome)),
-              professores!left(nome)
+              professores!left(nome),
+              motivos_saida!left(nome)
             `)
             .gte('data_evasao', startDate)
             .lte('data_evasao', endDate)
@@ -591,8 +592,8 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             const current = profEvasaoMap.get(profNome) || { id: e.professor_id || 0, count: 0 };
             current.count += 1;
             profEvasaoMap.set(profNome, current);
-            const motivo = `Motivo ${e.motivo_saida_id || 'N/A'}`;
-            // tipo_saida_id: 1=interrompido, 2=não renovou, 3=aviso prévio
+            const motivo = e.motivos_saida?.nome || 'Não informado';
+            // tipo_saida_id: 1=interrompido, 2=não renovou
             if (e.tipo_saida_id === 2) {
               motivosNaoRenovMap.set(motivo, (motivosNaoRenovMap.get(motivo) || 0) + 1);
             } else {
@@ -641,7 +642,9 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             churn_rate: g.count > 0 ? g.churn_rate_sum / g.count : 0,
             renovacoes: r.renovacoes_realizadas,
             nao_renovacoes: r.nao_renovacoes,
-            renovacoes_pct: r.count > 0 ? r.taxa_renovacao / r.count : 0,
+            renovacoes_pct: (r.renovacoes_realizadas + r.nao_renovacoes) > 0
+              ? (r.renovacoes_realizadas / (r.renovacoes_realizadas + r.nao_renovacoes)) * 100
+              : 0,
             cancelamentos: r.evasoes_interrompidas,
             cancelamento_pct: mediaAlunos > 0 ? (r.evasoes_interrompidas / mediaAlunos) * 100 : 0,
             aviso_previo: r.avisos_previos,

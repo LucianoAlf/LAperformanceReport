@@ -603,8 +603,24 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
           }
         });
         
-        // Converter Map para array
-        const professoresKPIs: ProfessorKPI[] = Array.from(professoresMap.values());
+        // Converter Map para array e normalizar taxas para evitar inconsistências
+        // (ex.: taxa herdada de fonte anual com base diferente do período filtrado)
+        const professoresKPIs: ProfessorKPI[] = Array.from(professoresMap.values()).map((p) => {
+          const taxaConversaoCalculada = p.experimentais > 0
+            ? (p.matriculas / p.experimentais) * 100
+            : 0;
+
+          const totalRenovacoesProfessor = p.renovacoes + p.nao_renovacoes;
+          const taxaRenovacaoCalculada = totalRenovacoesProfessor > 0
+            ? (p.renovacoes / totalRenovacoesProfessor) * 100
+            : 0;
+
+          return {
+            ...p,
+            taxa_conversao: taxaConversaoCalculada,
+            taxa_renovacao: taxaRenovacaoCalculada,
+          };
+        });
 
         // Calcular totais e médias
         // USAR TOTAIS REAIS (fonte de verdade: professores_unidades + alunos)
@@ -645,8 +661,13 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
 
         // Rankings
         const rankingMatriculadores = professoresKPIs
-          .filter(p => p.experimentais > 0 || p.matriculas > 0)
-          .sort((a, b) => b.taxa_conversao - a.taxa_conversao)
+          // Ranking de matriculadores = quem mais matricula
+          .filter(p => p.matriculas > 0)
+          .sort((a, b) => {
+            if (b.matriculas !== a.matriculas) return b.matriculas - a.matriculas;
+            if (b.taxa_conversao !== a.taxa_conversao) return b.taxa_conversao - a.taxa_conversao;
+            return b.experimentais - a.experimentais;
+          })
           .slice(0, 10)
           .map(p => ({
             id: p.id,

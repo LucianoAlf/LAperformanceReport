@@ -42,7 +42,7 @@ export function DistributionChart({
         <div className="bg-slate-800 border border-slate-700 rounded-lg p-3 shadow-xl">
           <p className="text-white font-medium">{data.name}</p>
           <p className="text-slate-300 text-sm">
-            Valor: <span className="text-white font-bold">{data.value}</span>
+            Qtd.: <span className="text-white font-bold">{data.value}</span>
           </p>
           {showPercentage && (
             <p className="text-slate-400 text-xs">
