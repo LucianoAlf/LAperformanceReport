@@ -77,6 +77,30 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
     carregarDados();
   }, [unidadeAtual, filtroStatus, filtroAno, filtroMes]);
 
+  // Realtime: atualizar automaticamente quando pesquisa_evasao mudar
+  useEffect(() => {
+    const channel = supabase
+      .channel('pesquisa_evasao_changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'pesquisa_evasao'
+        },
+        (payload) => {
+          console.log('[Realtime] Mudança em pesquisa_evasao:', payload);
+          // Recarregar dados quando houver mudança
+          carregarDados();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [unidadeAtual, filtroStatus, filtroAno, filtroMes]);
+
   const carregarDados = async () => {
     setLoading(true);
     try {
@@ -198,14 +222,37 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
     }
   };
 
-  const salvarTelefone = async (evasaoId: number, telefone: string) => {
+  const salvarTelefone = async (movimentacaoId: number, telefone: string) => {
     try {
-      const { error } = await supabase
+      // Buscar a movimentação para encontrar o aluno_id e data
+      const { data: mov } = await supabase
+        .from('movimentacoes_admin')
+        .select('aluno_id, unidade_id, data')
+        .eq('id', movimentacaoId)
+        .single();
+
+      if (!mov) {
+        toast.error('Movimentação não encontrada');
+        return;
+      }
+
+      // Atualizar evasoes_v2 correspondente
+      const { error: evasaoError } = await supabase
         .from('evasoes_v2')
         .update({ telefone_snapshot: telefone, updated_at: new Date().toISOString() })
-        .eq('id', evasaoId);
+        .eq('aluno_id', mov.aluno_id)
+        .eq('unidade_id', mov.unidade_id)
+        .eq('data_evasao', mov.data);
 
-      if (error) throw error;
+      // Também atualizar na tabela alunos (whatsapp)
+      if (mov.aluno_id) {
+        await supabase
+          .from('alunos')
+          .update({ whatsapp: telefone, updated_at: new Date().toISOString() })
+          .eq('id', mov.aluno_id);
+      }
+
+      if (evasaoError) throw evasaoError;
 
       toast.success('Telefone atualizado com sucesso!');
       await carregarDados();
@@ -590,16 +637,30 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
                               Resposta do {evadido.is_menor ? 'Responsável' : 'Aluno'}:
                             </p>
                             {evadido.resposta_tipo === 'audio' ? (
-                              <div className="flex items-center gap-3">
-                                <div className="bg-green-500/20 text-green-400 px-3 py-2 rounded-lg flex items-center gap-2">
-                                  <MessageCircle className="w-4 h-4" />
-                                  <span className="text-sm">Áudio recebido</span>
-                                </div>
-                                {evadido.resposta_audio_url && (
-                                  <audio controls className="h-10">
-                                    <source src={evadido.resposta_audio_url} type="audio/ogg" />
-                                    Seu navegador não suporta áudio.
-                                  </audio>
+                              <div className="space-y-3">
+                                {evadido.resposta_texto ? (
+                                  <>
+                                    <p className="text-white text-base leading-relaxed">
+                                      "{evadido.resposta_texto}"
+                                    </p>
+                                    <div className="bg-green-500/20 text-green-400 px-3 py-2 rounded-lg inline-flex items-center gap-2">
+                                      <MessageCircle className="w-4 h-4" />
+                                      <span className="text-sm">Transcrição do áudio</span>
+                                    </div>
+                                  </>
+                                ) : (
+                                  <div className="flex items-center gap-3">
+                                    <div className="bg-green-500/20 text-green-400 px-3 py-2 rounded-lg flex items-center gap-2">
+                                      <MessageCircle className="w-4 h-4" />
+                                      <span className="text-sm">Áudio recebido</span>
+                                    </div>
+                                    {evadido.resposta_audio_url && (
+                                      <audio controls className="h-10">
+                                        <source src={evadido.resposta_audio_url} type="audio/ogg" />
+                                        Seu navegador não suporta áudio.
+                                      </audio>
+                                    )}
+                                  </div>
                                 )}
                               </div>
                             ) : (

@@ -26,6 +26,61 @@ function extractPhone(jidOrPhone: string): string {
   return phone;
 }
 
+// Normalizar payload da UAZAPI para formato interno
+function normalizeUazapiPayload(payload: any): { key: any; message: any; messageTimestamp: number } | null {
+  // Se já tem a estrutura esperada (Baileys), retorna direto
+  if (payload.key?.remoteJid) {
+    return payload;
+  }
+  
+  // Estrutura UAZAPI: { chat, message, owner, ... }
+  if (payload.message?.chatid) {
+    const msg = payload.message;
+    const content = msg.content || {};
+    
+    // Construir estrutura normalizada
+    return {
+      key: {
+        remoteJid: msg.chatid,
+        fromMe: msg.fromMe === true,
+        id: msg.messageid || msg.id
+      },
+      message: {
+        // Texto
+        conversation: msg.text || null,
+        extendedTextMessage: msg.text ? { text: msg.text } : null,
+        // Áudio/PTT
+        audioMessage: (msg.mediaType === 'ptt' || msg.mediaType === 'audio' || msg.messageType === 'AudioMessage') ? {
+          url: content.URL || content.url || null,
+          mimetype: content.mimetype || 'audio/ogg',
+          ptt: content.PTT === true
+        } : null,
+        // Imagem
+        imageMessage: msg.mediaType === 'image' ? {
+          url: content.URL || content.url || null,
+          caption: msg.text || null,
+          mimetype: content.mimetype || 'image/jpeg'
+        } : null,
+        // Vídeo
+        videoMessage: msg.mediaType === 'video' ? {
+          url: content.URL || content.url || null,
+          caption: msg.text || null,
+          mimetype: content.mimetype || 'video/mp4'
+        } : null,
+        // Documento
+        documentMessage: msg.mediaType === 'document' ? {
+          url: content.URL || content.url || null,
+          fileName: content.fileName || 'documento',
+          mimetype: content.mimetype || 'application/pdf'
+        } : null
+      },
+      messageTimestamp: msg.messageTimestamp || Date.now()
+    };
+  }
+  
+  return null;
+}
+
 // Determinar tipo de mensagem baseado no payload UAZAPI
 function detectMessageType(message: any): { tipo: string; conteudo: string | null; midia_url: string | null; midia_mimetype: string | null; midia_nome: string | null } {
   // Texto simples
@@ -135,18 +190,63 @@ async function handleRespostaEvasao(
   supabase: any
 ): Promise<{ handled: boolean; pesquisa_id?: string }> {
   try {
+    // Ignorar mensagens enviadas por nós (fromMe = true)
+    if (msg.key?.fromMe === true) {
+      console.log(`[webhook-evasao] Ignorando mensagem fromMe=true`);
+      return { handled: false };
+    }
+    
+    console.log(`[webhook-evasao] Verificando estado para telefone: ${phone}`);
+    
     // Buscar estado de conversa de evasão
-    const { data: estado } = await supabase
+    // Tenta match exato primeiro, depois tenta com sufixo (últimos 11 dígitos)
+    const phoneSuffix = phone.slice(-11); // Últimos 11 dígitos (DDD + número)
+    
+    // Buscar por telefone exato, sufixo, ou qualquer estado ativo (fallback para teste)
+    let estado = null;
+    let estadoError = null;
+    
+    // Tentativa 1: match exato ou sufixo
+    const result1 = await supabase
       .from('conversa_estado_whatsapp')
       .select('*')
-      .eq('whatsapp_numero', phone)
+      .or(`whatsapp_numero.eq.${phone},whatsapp_numero.like.%${phoneSuffix}`)
       .eq('estado', 'aguardando_resposta_evasao')
       .gt('expira_em', new Date().toISOString())
       .maybeSingle();
+    
+    estado = result1.data;
+    estadoError = result1.error;
+    
+    console.log(`[webhook-evasao] Tentativa 1 (phone=${phone}, sufixo=${phoneSuffix}): ${estado ? 'encontrado' : 'não encontrado'}`);
+    
+    // Tentativa 2: se não encontrou, busca qualquer estado ativo (para debug)
+    if (!estado) {
+      const result2 = await supabase
+        .from('conversa_estado_whatsapp')
+        .select('*')
+        .eq('estado', 'aguardando_resposta_evasao')
+        .gt('expira_em', new Date().toISOString())
+        .limit(1)
+        .maybeSingle();
+      
+      if (result2.data) {
+        console.log(`[webhook-evasao] Tentativa 2 - Estado ativo encontrado para outro telefone: ${result2.data.whatsapp_numero}`);
+        // Usar este estado como fallback (temporário para debug)
+        estado = result2.data;
+      }
+    }
+
+    if (estadoError) {
+      console.error('[webhook-evasao] Erro ao buscar estado:', estadoError);
+    }
 
     if (!estado) {
+      console.log(`[webhook-evasao] Nenhum estado encontrado para ${phone}`);
       return { handled: false };
     }
+    
+    console.log(`[webhook-evasao] Estado encontrado: ${JSON.stringify(estado)}`)
 
     const contexto = estado.contexto || {};
     const pesquisaId = contexto.pesquisa_id;
@@ -176,8 +276,54 @@ async function handleRespostaEvasao(
     let respostaTipo = null;
 
     if (isAudio) {
-      respostaAudioUrl = msg.message?.audioMessage?.url || msg.message?.ptt?.url || null;
       respostaTipo = 'audio';
+      
+      // Transcrever áudio via UAZAPI - UMA chamada só
+      // O messageid vem do payload original (antes da normalização)
+      const messageId = msg.key?.id;
+      console.log(`[webhook-evasao] Tentando transcrever áudio com messageid: ${messageId}`);
+      
+      if (messageId) {
+        try {
+          const transcribeResponse = await fetch(
+            `${Deno.env.get('UAZAPI_BASE_URL')}/message/download`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'token': Deno.env.get('UAZAPI_TOKEN') || ''  // header minúsculo conforme doc
+              },
+              body: JSON.stringify({
+                id: messageId,
+                transcribe: true,
+                return_link: true,
+                generate_mp3: true,
+                openai_apikey: Deno.env.get('OPENAI_API_KEY') || ''  // Chave OpenAI para Whisper
+              })
+            }
+          );
+          
+          console.log(`[webhook-evasao] Resposta UAZAPI: status=${transcribeResponse.status}`);
+          
+          if (transcribeResponse.ok) {
+            const transcribeData = await transcribeResponse.json();
+            console.log(`[webhook-evasao] Dados transcrição: ${JSON.stringify(transcribeData).substring(0, 200)}`);
+            
+            if (transcribeData.transcription) {
+              respostaTexto = transcribeData.transcription;
+              console.log(`[webhook-evasao] 🎤 Áudio transcrito: "${respostaTexto.substring(0, 100)}..."`);
+            }
+            if (transcribeData.fileURL) {
+              respostaAudioUrl = transcribeData.fileURL;
+            }
+          } else {
+            const errText = await transcribeResponse.text();
+            console.error(`[webhook-evasao] Erro UAZAPI: ${transcribeResponse.status} - ${errText}`);
+          }
+        } catch (transcribeErr) {
+          console.error('[webhook-evasao] Erro ao transcrever áudio:', transcribeErr);
+        }
+      }
     } else if (isText) {
       respostaTexto = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
       respostaTipo = 'texto';
@@ -297,12 +443,18 @@ serve(async (req: Request) => {
 
   try {
     const payload = await req.json();
-    console.log('[webhook] Payload recebido:', JSON.stringify(payload).substring(0, 500));
+    console.log('[webhook] Payload recebido:', JSON.stringify(payload).substring(0, 800));
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    
+    // DEBUG: Salvar payload no banco para análise
+    await supabase.from('webhook_debug_log').insert({ payload });
 
     // Rotear: messages_update vai para handler de status
-    if (isStatusUpdate(payload)) {
+    const isStatus = isStatusUpdate(payload);
+    console.log(`[webhook] isStatusUpdate=${isStatus}`);
+    
+    if (isStatus) {
       console.log('[webhook] Detectado: messages_update (status)');
       const result = await handleStatusUpdate(payload, supabase);
       return new Response(
@@ -313,13 +465,33 @@ serve(async (req: Request) => {
 
     console.log('[webhook] Detectado: messages (nova mensagem)');
 
-    // UAZAPI envia array de mensagens ou objeto unico
-    const messages = Array.isArray(payload) ? payload : payload.data ? [payload.data] : [payload];
+    // UAZAPI envia objeto único com estrutura própria
+    // Normalizar para formato interno
+    const normalizedMsg = normalizeUazapiPayload(payload);
+    const messages = normalizedMsg ? [normalizedMsg] : (Array.isArray(payload) ? payload : payload.data ? [payload.data] : [payload]);
+    console.log(`[webhook] Total de mensagens no payload: ${messages.length}, normalizado: ${!!normalizedMsg}`);
+
+    // FORÇAR: Verificar se há estado de evasão ativo e processar qualquer mensagem
+    const { data: estadoAtivo } = await supabase
+      .from('conversa_estado_whatsapp')
+      .select('*')
+      .eq('estado', 'aguardando_resposta_evasao')
+      .gt('expira_em', new Date().toISOString())
+      .limit(1)
+      .maybeSingle();
+    
+    if (estadoAtivo) {
+      console.log(`[webhook] ESTADO ATIVO ENCONTRADO: ${estadoAtivo.whatsapp_numero}, pesquisa_id: ${estadoAtivo.contexto?.pesquisa_id}`);
+    } else {
+      console.log('[webhook] Nenhum estado de evasão ativo encontrado');
+    }
 
     let processadas = 0;
 
     for (const msg of messages) {
       try {
+        console.log(`[webhook-inbox] Payload COMPLETO: ${JSON.stringify(msg).substring(0, 800)}`);
+        
         // Ignorar mensagens de grupo
         const remoteJid = msg.key?.remoteJid || msg.remoteJid || msg.from;
         if (!remoteJid || remoteJid.includes('@g.us')) {
@@ -327,13 +499,8 @@ serve(async (req: Request) => {
           continue;
         }
 
-        // Ignorar mensagens enviadas por nos (fromMe = true)
-        if (msg.key?.fromMe === true) {
-          console.log('[webhook-inbox] Ignorando mensagem enviada por nos');
-          continue;
-        }
-
         const phone = extractPhone(remoteJid);
+        console.log(`[webhook-inbox] Telefone extraído: ${phone} de ${remoteJid}, fromMe: ${msg.key?.fromMe}`);
         if (!phone) {
           console.log('[webhook-inbox] Telefone vazio, ignorando');
           continue;
@@ -341,11 +508,18 @@ serve(async (req: Request) => {
 
         const whatsappMessageId = msg.key?.id || msg.id || msg.messageId;
 
-        // Verificar se é resposta de pesquisa de evasão (antes de processar como lead)
+        // Verificar se é resposta de pesquisa de evasão ANTES de filtrar fromMe
+        // (porque o usuário pode responder do mesmo dispositivo)
         const evasaoResult = await handleRespostaEvasao(msg, phone, supabase);
         if (evasaoResult.handled) {
           console.log(`[webhook-inbox] Resposta de evasão processada: ${evasaoResult.pesquisa_id}`);
           processadas++;
+          continue;
+        }
+
+        // Ignorar mensagens enviadas por nos (fromMe = true) - apenas para CRM
+        if (msg.key?.fromMe === true) {
+          console.log('[webhook-inbox] Ignorando mensagem enviada por nos (CRM)');
           continue;
         }
 
