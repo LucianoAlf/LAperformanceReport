@@ -6,7 +6,7 @@ import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import {
   AlertTriangle, Heart, Search, MessageSquare,
   Loader2, RefreshCw, ChevronLeft, ChevronRight,
-  Table2, Kanban
+  Table2, Kanban, FileQuestion
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,6 +15,7 @@ import { useToast } from '@/hooks/useToast';
 import { ModalDetalhesSucessoAluno } from './ModalDetalhesSucessoAluno';
 import { JornadaAlunoKanban } from './JornadaAlunoKanban';
 import { ModalEnviarFeedback } from './ModalEnviarFeedback';
+import { PesquisaEvasaoTab } from './PesquisaEvasaoTab';
 
 interface AlunoSucesso {
   id: number;
@@ -63,7 +64,7 @@ export function TabSucessoAluno({ unidadeAtual }: Props) {
   const [recalculando, setRecalculando] = useState(false);
   const [modalAluno, setModalAluno] = useState<{ open: boolean; aluno: AlunoSucesso | null }>({ open: false, aluno: null });
   const [modalFeedback, setModalFeedback] = useState(false);
-  const [subAba, setSubAba] = useState<'tabela' | 'jornada'>('tabela');
+  const [subAba, setSubAba] = useState<'tabela' | 'jornada' | 'pesquisa'>('tabela');
   const [paginaAtual, setPaginaAtual] = useState(1);
   const itensPorPagina = 30;
 
@@ -370,7 +371,7 @@ export function TabSucessoAluno({ unidadeAtual }: Props) {
         </div>
       </div>
 
-      {/* Subabas: Tabela / Jornada */}
+      {/* Subabas: Tabela / Jornada / Pesquisa */}
       <div className="flex items-center gap-1 bg-slate-800/30 rounded-xl p-1 w-fit">
         <button
           onClick={() => setSubAba('tabela')}
@@ -393,6 +394,17 @@ export function TabSucessoAluno({ unidadeAtual }: Props) {
         >
           <Kanban className="w-4 h-4" />
           Jornada
+        </button>
+        <button
+          onClick={() => setSubAba('pesquisa')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            subAba === 'pesquisa'
+              ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30'
+              : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+          }`}
+        >
+          <FileQuestion className="w-4 h-4" />
+          Pesquisa Evasão
         </button>
       </div>
 
@@ -625,6 +637,11 @@ export function TabSucessoAluno({ unidadeAtual }: Props) {
         </div>
       </div>
         </>
+      )}
+
+      {/* Conteúdo da Subaba PESQUISA EVASÃO */}
+      {subAba === 'pesquisa' && (
+        <PesquisaEvasaoTab unidadeAtual={unidadeAtual} />
       )}
 
       {/* Conteúdo da Subaba JORNADA */}

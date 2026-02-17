@@ -1,0 +1,866 @@
+competencia,nome,data_nascimento,data_matricula,curso,curso_id,professor,professor_id,valor_pago,is_segundo_curso,tipo_registro,status_pagamento,responsavel_nome,telefone,dia_aula,horario_aula
+2026-01,Agatha de Sá Dellatorre,05/04/2018,17/02/2024,Teclado,16,Renan Guimarães,34,411.95,não,pagante,pago,Aluimar Dellatorre Pereira de Souza Filho,(21) 96494-0834,Quarta-feira,15:00
+2026-01,Agatha Sampaio Mendes dos Santos,01/08/2009,31/03/2025,Canto,6,Leticia Palmeira,18,385.0,não,pagante,pago,Cristiane Sampaio Mendes,(21) 99331-3658,Segunda-feira,16:00
+2026-01,Alex Mendes Silva de Souza,28/03/2007,15/05/2023,Contrabaixo,21,Ramon Morais,33,451.0,não,pagante,pago,,(21) 98772-5817,Quarta-feira,19:00
+2026-01,Alex Mendes Silva de Souza,28/03/2007,07/02/2024,Garage Band,38,Ramon Morais,33,0.0,sim,bonus_gratuito,sem_fatura,,(21) 98772-5817,Quarta-feira,20:00
+2026-01,Alice dos Santos Seabra,03/02/2016,27/03/2025,Canto,6,Vinicius Nascimento,38,385.0,não,pagante,pago,Pamela Seabra,(91) 99138-9336,Quinta-feira,20:00
+2026-01,Alice dos Santos Seabra,03/02/2016,23/06/2025,Power Kids,25,Lohana Araújo,20,0.0,sim,bonus_gratuito,sem_fatura,Pamela Seabra,(91) 99138-9336,Quinta-feira,19:00
+2026-01,Alice dos Santos Seabra,03/02/2016,28/03/2025,Teclado,16,Lucas Guimarães,21,385.0,sim,segundo_curso_pago,pago,Pamela Seabra,(91) 99138-9336,Terça-feira,20:00
+2026-01,Alice Marzullo Monteiro Mendes,23/07/2012,12/12/2024,Canto,6,Larissa Santos,16,360.0,não,pagante,pago,Bruno Monteiro Mendes,(21) 99462-6552,Sexta-feira,19:00
+2026-01,Alice Mattos Jordão,16/01/2021,11/07/2022,Musicalização Para Bebês,2,Leticia Palmeira,18,0.0,não,pagante,sem_fatura,Renata Jacob da Silva Mattos,(21) 98343-7721,Sábado,08:00
+2026-01,Alice Mattos Jordão,16/01/2021,23/11/2024,Musicalização Preparatória,4,Marcos Filho,23,375.0,sim,segundo_curso_pago,pago,Renata Jacob da Silva Mattos,(21) 98343-7721,Sábado,08:00
+2026-01,Alisson Silva Leite,04/05/1996,04/07/2025,Bateria,27,Rafael (Akeem),32,405.0,não,pagante,pago,,(21) 98577-1370,Quinta-feira,14:00
+2026-01,Amanda Aiko Gomes Togashi,14/04/2009,16/09/2025,Bateria,27,Vicente Neto,37,385.0,não,pagante,pago,Flávia Gomes Togashi,(21) 99547-2619,Terça-feira,20:00
+2026-01,Amanda Aiko Gomes Togashi,14/04/2009,11/12/2025,Canto,6,Lohana Araújo,20,385.0,sim,segundo_curso_pago,pago,Flávia Gomes Togashi,(21) 99547-2619,Terça-feira,19:00
+2026-01,Amanda Ozório de Barros,07/12/2011,04/08/2025,Canto,6,Matheus Lourenço,25,385.0,não,pagante,pago,Eline Holanda Cavalcanti Garcia de Barros,(21) 96779-1360,Segunda-feira,15:00
+2026-01,André de Mello Gomes,04/06/1955,17/01/2026,Canto,6,Matheus Oliveira,27,400.0,não,pagante,pago,,(21) 98116-0333,Quinta-feira,15:00
+2026-01,Anna Luisa Cruz Gondim,03/06/2011,13/11/2025,Teclado,16,Larissa Santos,16,410.0,não,pagante,pago,Fabiula Cristina Cruz,(21) 97958-6557,Quinta-feira,15:00
+2026-01,Arthur Bezerra Siqueira,28/09/2015,31/10/2025,Teclado,16,Caio Araujo,2,0.0,não,pagante,sem_fatura,Fábio Siqueira,(21) 98231-0413,Sexta-feira,14:00
+2026-01,Arthur Carvalho Lima,06/01/2013,12/05/2023,Garage Band,38,Rafael (Akeem),32,0.0,não,pagante,sem_fatura,Jovina Maria de Carvalho,(21) 99171-1160,Quarta-feira,19:00
+2026-01,Arthur Carvalho Lima,06/01/2013,18/06/2022,Guitarra,14,Lucas Guimarães,21,469.26,sim,segundo_curso_pago,pago,Jovina Maria de Carvalho,(21) 99171-1160,Quarta-feira,20:00
+2026-01,Arthur Darzi Ferreira,06/05/2020,22/05/2025,Bateria,27,Isaque Silva,10,395.0,não,pagante,pago,Débora Fonseca Darzi Migliorelli Ferreira,(21) 98222-9030,Quinta-feira,11:00
+2026-01,Arthur Darzi Ferreira,06/05/2020,12/02/2026,Teclado,16,Willian Silva,41,0.0,sim,segundo_curso_pago,sem_fatura,Débora Fonseca Darzi Migliorelli Ferreira,(21) 98222-9030,Terça-feira,11:00
+2026-01,Arthur de Carvalho Rodrigues Frota Almeida,04/01/2016,18/08/2025,Musicalização Preparatória,4,Matheus Lourenço,25,395.0,não,pagante,pago,Vivian de Carvalho Rodrigues Frota Almeida,(21) 99565-7529,Segunda-feira,18:00
+2026-01,Arthur Galvão Barbosa,04/12/2006,11/06/2024,Bateria,27,Ramon Morais,33,451.0,não,pagante,pago,,(21) 99594-4259,Terça-feira,19:00
+2026-01,Arthur Galvão Barbosa,04/12/2006,22/05/2023,Canto,6,Matheus Oliveira,27,0.0,sim,segundo_curso_pago,sem_fatura,,(21) 99594-4259,Terça-feira,19:00
+2026-01,Arthur Galvão Barbosa,04/12/2006,07/11/2023,Contrabaixo,21,Matheus Oliveira,27,0.0,sim,segundo_curso_pago,sem_fatura,,(21) 99594-4259,Terça-feira,19:00
+2026-01,Arthur Galvão Barbosa,04/12/2006,21/11/2023,Garage Band,38,Vicente Neto,37,0.0,sim,bonus_gratuito,sem_fatura,,(21) 99594-4259,Terça-feira,19:00
+2026-01,Arthur Quinteiro Artacho,19/05/2017,18/08/2022,Teclado,16,Vinicius Nascimento,38,0.0,não,pagante,sem_fatura,Rafael dos Santos Artacho,99-9999,Quinta-feira,14:00
+2026-01,Arthur Rodriguez Machado,29/08/2019,03/06/2024,Musicalização Preparatória,4,Joel Filho,13,385.0,não,pagante,pago,Débora Rodriguez Barbosa,(21) 99975-6711,Sexta-feira,17:00
+2026-01,Arthur Vale de Oliveira,10/04/2014,21/10/2023,Canto,6,Lohana Araújo,20,421.23,não,pagante,pago,Jeferson Ferreira de Oliveira,(21) 99110-1242,Sábado,11:00
+2026-01,Arthur Vargas Caldas,11/07/2018,18/04/2024,Bateria,27,Ramon Morais,33,401.5,não,pagante,pago,Ricardo Alvarez Caldas,(21) 99585-7312,Quarta-feira,14:00
+2026-01,Arthur Vieira Dantas Pollig,10/06/2015,07/03/2023,Guitarra,14,Lucas Guimarães,21,605.0,não,pagante,pago,Carlos Frederico Dantas Pollig,(21) 99851-0710,Terça-feira,19:00
+2026-01,Arthur Vieira Dantas Pollig,10/06/2015,12/11/2021,Power Kids,25,Lucas Guimarães,21,0.0,sim,bonus_gratuito,sem_fatura,Carlos Frederico Dantas Pollig,(21) 99851-0710,Terça-feira,20:00
+2026-01,Artur Carollo Barbuto,28/06/2011,08/12/2025,Guitarra,14,Israel Silva,11,420.0,não,pagante,pago,Roberta Carollo Salgado,(21) 98564-4416,Segunda-feira,19:00
+2026-01,Aurora Drummond e Bragança,15/03/2024,08/08/2025,Musicalização Para Bebês,2,Leticia Palmeira,18,370.0,não,pagante,pago,Ana Beatriz de Oliveira Leite e Bragança,(21) 97140-9841,Quinta-feira,17:00
+2026-01,Bárbara Victoria Moreno Ruiz,26/01/2006,20/02/2024,Bateria,27,Rafael (Akeem),32,385.0,não,pagante,pago,,(27) 99640-9892,Quarta-feira,14:00
+2026-01,Bárbara Victoria Moreno Ruiz,26/01/2006,07/05/2024,Garage Band,38,Matheus Oliveira,27,0.0,sim,bonus_gratuito,sem_fatura,,(27) 99640-9892,Quinta-feira,19:00
+2026-01,Beatriz dos Santos Monteiro,15/01/2011,09/07/2024,Guitarra,14,Israel Silva,11,405.0,não,pagante,pago,Andréa Abreu dos Santos,(21) 97220-8847,Segunda-feira,16:00
+2026-01,Beatriz Rabelo Cheker,23/08/2017,19/08/2021,Bateria,27,Rafael (Akeem),32,496.1,não,pagante,pago,Daniella Cristina Rabelo da Silva Cheker,(21) 98799-6524,Quarta-feira,18:00
+2026-01,Beatriz Souto Machado,05/04/2012,23/06/2018,Teclado,16,Rafael (Akeem),32,445.5,não,pagante,pago,Kelling Cabral Souto,(21) 99664-5789,Sábado,09:00
+2026-01,Beatriz Souto Machado,05/04/2012,14/03/2020,Violão,10,Rafael (Akeem),32,333.0,sim,segundo_curso_pago,pago,Kelling Cabral Souto,(21) 99664-5789,Sábado,12:00
+2026-01,Benício Cardoso Moreira,07/07/2018,30/08/2025,Guitarra,14,Israel Silva,11,385.0,não,pagante,pago,Jaqueline Martins Cardoso,(21) 99625-5998,Sábado,09:00
+2026-01,Benício Lima de Almeida,22/02/2022,17/01/2026,Musicalização Preparatória,4,Leticia Palmeira,18,400.0,não,pagante,pago,Bárbara de Lima C. Almeida,(21) 96740-8342,Sábado,10:00
+2026-01,Benjamin de Jesus Pimentel,03/07/2019,05/12/2025,Bateria,27,Vicente Neto,37,405.0,não,pagante,pago,Camila Jesus de Oliveira,(21) 98108-6422,Quarta-feira,19:00
+2026-01,Benjamin Felipe Roca Ribeiro,14/06/2018,30/06/2025,Bateria,27,Rafael (Akeem),32,385.0,não,pagante,pago,Arlette Roca,(21) 96541-4908,Sábado,12:00
+2026-01,Benjamin Lehrer Braz,23/11/2021,25/09/2025,Musicalização Preparatória,4,Leticia Palmeira,18,375.0,não,pagante,pago,Fernanda Lehrer Turbae Amaral Braz,(21) 99998-5695,Segunda-feira,11:00
+2026-01,Bento Vieira Sindeaux,27/02/2022,05/04/2025,Musicalização Preparatória,4,Leticia Palmeira,18,460.0,não,pagante,pago,Rodrigo Bernardes Sindeaux,(11) 97174-3052,Sábado,11:00
+2026-01,Bernardo da Silva Menezes,09/03/2019,31/07/2024,Bateria,27,Rafael (Akeem),32,412.5,não,pagante,pago,Pâmela Soares da Silva Menezes,(21) 96437-4772,Quarta-feira,10:00
+2026-01,Bernardo Guerra da Costa,08/03/2010,23/08/2025,Teclado,16,Willer Machado,40,395.0,não,pagante,pago,Vanessa Guerra da Silva,(21) 97382-7724,Sexta-feira,15:00
+2026-01,Bernardo Lioi Santos,30/05/2020,18/01/2025,Musicalização Preparatória,4,Leticia Palmeira,18,350.0,não,pagante,pago,Aline Lioi,(21) 98867-0511,Quarta-feira,10:00
+2026-01,Bernardo Martinelli,06/09/2023,25/02/2025,Musicalização Para Bebês,2,Leticia Palmeira,18,400.0,não,pagante,pago,Hélide Martinelli,(21) 98707-7899,Quinta-feira,17:00
+2026-01,Bernardo Neumann da Cunha,13/07/2018,17/01/2025,Musicalização Preparatória,4,Larissa Santos,16,385.0,não,pagante,pago,Bruno Aires da Cunha,(21) 98875-9662,Sexta-feira,11:00
+2026-01,Bernardo Pereira Magalhães,01/03/2016,14/08/2025,Teclado,16,Larissa Santos,16,395.0,não,pagante,pago,Natália Magalhães,(21) 99109-1617,Sexta-feira,09:00
+2026-01,Betina Gerstel,28/12/2012,30/09/2025,Canto,6,Leticia Palmeira,18,385.0,não,pagante,pago,Roberto Toledo El Alam,(21) 98834-0113,Quinta-feira,18:00
+2026-01,Bianca Petrolongo Pinto Abreu,28/11/1983,09/07/2021,Canto,6,Lohana Araújo,20,337.05,não,pagante,pago,,(21) 98134-3337,Quinta,15:00
+2026-01,Bianca Petrolongo Pinto Abreu,28/11/1983,07/11/2023,Garage Band,38,Ramon Morais,33,0.0,sim,segundo_curso_pago,sem_fatura,,(21) 98134-3337,Terça-feira,12:00
+2026-01,Bianca Petrolongo Pinto Abreu,28/11/1983,06/02/2024,Teclado,16,Lohana Araújo,20,384.8,sim,segundo_curso_pago,pago,,(21) 98134-3337,Quinta-feira,15:00
+2026-01,Breno Ferreira Florião,03/01/2009,25/10/2024,Bateria,27,Rafael (Akeem),32,442.75,não,pagante,pago,Alexandre Mateus Florião,(21) 98194-2844,Sexta-feira,14:00
+2026-01,Bruna Silva De Sá Vale,03/12/2011,24/01/2020,Teclado,16,Alexandre Santo,43,423.5,não,pagante,pago,Yelena Teles Silva Correa De Sá,(21) 99675-5977,Segunda-feira,16:00
+2026-01,Caetano Leao Barradas,16/07/2016,16/06/2021,Bateria,27,Ramon Morais,33,418.0,não,pagante,pago,Daniel Barradas Frazao,(21) 98315-3835,Segunda-feira,18:00
+2026-01,Caetano Leao Barradas,16/07/2016,18/06/2022,Power Kids,25,Rafael (Akeem),32,0.0,sim,bonus_gratuito,sem_fatura,Daniel Barradas Frazao,(21) 98315-3835,Segunda-feira,18:00
+2026-01,Caio Gabriel da Silva Neto,07/02/2022,26/04/2023,Musicalização Preparatória,4,Leticia Palmeira,18,388.8,não,pagante,pago,Maria Alice da Silva Neto,24925015162,Sábado,11:00
+2026-01,Caio Lioi Santos,24/04/2023,18/01/2025,Musicalização Para Bebês,2,Leticia Palmeira,18,350.0,não,pagante,pago,Aline Lioi,(21) 98867-0511,Quarta-feira,09:00
+2026-01,Caio Villela Meireles,10/08/2014,20/08/2021,Bateria,27,Rafael (Akeem),32,395.0,não,pagante,pago,Ingrid Villela Mendes,(21) 99244-0991,Terça-feira,18:00
+2026-01,Caio Vinicius Vieira de Castro,01/10/2003,29/06/2024,Canto,6,Matheus Oliveira,27,324.0,não,pagante,pago,,(21) 97135-0576,Quinta-feira,16:00
+2026-01,Caio Vinicius Vieira de Castro,01/10/2003,26/10/2024,Contrabaixo,21,Matheus Oliveira,27,362.88,sim,segundo_curso_pago,pago,,(21) 97135-0576,Quinta-feira,17:00
+2026-01,Caio Vinicius Vieira de Castro,01/10/2003,29/06/2024,Garage Band,38,Willer Machado,40,0.0,sim,bonus_gratuito,sem_fatura,,(21) 97135-0576,Terça-feira,17:00
+2026-01,Caio Vinicius Vieira de Castro,01/10/2003,29/06/2024,Teclado,16,Willer Machado,40,324.0,sim,segundo_curso_pago,pago,,(21) 97135-0576,Quinta-feira,19:00
+2026-01,Calebe de Moura Oliveira Ramos,11/02/2014,11/11/2020,Bateria,27,Rafael (Akeem),32,413.8,não,pagante,pago,Juliana de Moura Oliveira Ramos.,(21) 96415-2564,Quarta-feira,19:00
+2026-01,Calebe de Moura Oliveira Ramos,11/02/2014,03/05/2023,Garage Band,38,Rafael (Akeem),32,0.0,sim,bonus_gratuito,sem_fatura,Juliana de Moura Oliveira Ramos.,(21) 96415-2564,Quarta-feira,20:00
+2026-01,Catarina Bahia Teodoro,08/03/2021,30/04/2024,Musicalização Preparatória,4,Leticia Palmeira,18,360.0,não,pagante,pago,Éder Antonio Teodoro Filho,(21) 98294-8282,Sábado,08:00
+2026-01,Catarina Carvalho Bastos,23/05/2018,05/05/2023,Canto,6,Alexandre Santo,43,400.0,não,pagante,pago,Luiz Henrique Lucas Bastos,(21) 97046-2781,Terça-feira,17:00
+2026-01,Catarina Carvalho Bastos,23/05/2018,17/01/2026,Musicalização Preparatória,4,Lohana Araújo,20,0.0,sim,segundo_curso_pago,sem_fatura,Luiz Henrique Lucas Bastos,(21) 97046-2781,Terça-feira,17:00
+2026-01,Catarina Petrolongo Pinto Abreu,22/01/2019,27/05/2021,Bateria,27,Rafael (Akeem),32,399.0,não,pagante,pago,Diego Abreu dos Santos Flores da Silva,(21) 97966-3065,Sexta-feira,09:00
+2026-01,Catarina Soriani Arrosti,04/02/2022,28/01/2026,Musicalização Preparatória,4,Larissa Santos,16,300.0,não,pagante,pago,Rafaela Soriani,(41) 99665-4944,Quinta-feira,10:00
+2026-01,Clara Beatriz F de Carvalho,27/01/2014,06/09/2024,Teclado,16,Willer Machado,40,407.0,não,pagante,pago,Clara Regina,(21) 99957-0096,Sexta-feira,16:00
+2026-01,Clara Beatriz F de Carvalho,27/01/2014,09/08/2024,Violino,12,Joel Filho,13,435.05,sim,segundo_curso_pago,pago,Clara Regina,(21) 99957-0096,Sexta-feira,17:00
+2026-01,Clara de Sá Silva Santos,30/03/2014,28/07/2023,Teclado,16,Renan Guimarães,34,428.76,não,pagante,pago,Robson Wander,(21) 98113-0642,Quarta-feira,18:00
+2026-01,Clara Marina Jorge da Silva,30/06/2010,11/09/2024,Canto,6,Matheus Oliveira,27,385.0,não,pagante,pago,Magnolia Jorge da Silva,(21) 98034-0174,Quinta-feira,16:00
+2026-01,Clara Martins Moura Marendaz,04/10/2014,18/09/2023,Power Kids,25,Renan Guimarães,34,0.0,não,pagante,sem_fatura,Lélia Flávia Marendaz,(21) 98883-8862,Quarta-feira,18:00
+2026-01,Clara Martins Moura Marendaz,04/10/2014,03/02/2024,Teclado,16,Lucas Guimarães,21,461.72,sim,segundo_curso_pago,pago,Lélia Flávia Marendaz,(21) 98883-8862,Quarta-feira,18:00
+2026-01,Claudio Luiz de Carvalho Mascarenhas Neto,21/05/2013,10/01/2026,Cavaquinho,35,Willian Silva,41,300.0,não,pagante,pago,Claudio Mascarenhas,(21) 98333-5952,Sexta-feira,17:00
+2026-01,Daniel Bezerra Siqueira,01/12/2017,31/10/2025,Bateria,27,Willian Silva,41,0.0,não,pagante,sem_fatura,Fábio Siqueira,(21) 99197-0108,Sexta-feira,14:00
+2026-01,Daniel Cardoso Poggio Contardo,26/11/2012,17/06/2025,Garage Band,38,Lucas Guimarães,21,0.0,não,pagante,sem_fatura,Carla Ferreira Cardoso,(21) 98503-9758,Terça-feira,14:00
+2026-01,Daniel Cardoso Poggio Contardo,26/11/2012,10/12/2024,Guitarra,14,Rafael (Akeem),32,385.0,sim,segundo_curso_pago,pago,Carla Ferreira Cardoso,(21) 98503-9758,Terça-feira,14:00
+2026-01,Daniel Castor Kuhlmann Silva,05/04/2011,30/10/2020,Bateria,27,Rafael (Akeem),32,423.5,não,pagante,pago,Angela Kuhlmann Silva,(21) 99761-3431,Segunda-feira,14:00
+2026-01,Daniel Coelho Faria,22/03/1978,27/03/2025,Violão,10,Lucas Guimarães,21,385.0,não,pagante,pago,,(21) 99639-3033,Segunda-feira,18:00
+2026-01,Daniel Duque Vianna,25/07/2013,28/06/2024,Ukulêlê,8,Israel Silva,11,385.0,não,pagante,pago,Leonardo Silva Vianna,(21) 98103-1504,Segunda-feira,20:00
+2026-01,Daniel Eustáquio de Jesus,09/08/2013,10/07/2023,Bateria,27,Israel Silva,11,189.5,não,pagante,pago,Ana Lucia Eustáquio de Jesus,(21) 98076-1113,Sexta-feira,19:00
+2026-01,Daniel Eustáquio de Jesus,09/08/2013,17/05/2025,Garage Band,38,Rafael (Akeem),32,0.0,sim,bonus_gratuito,sem_fatura,Ana Lucia Eustáquio de Jesus,(21) 98076-1113,Sábado,15:00
+2026-01,Daniel Mendes Saramago,10/10/2016,20/02/2025,Bateria,27,Rafael (Akeem),32,427.04,não,pagante,pago,Tatiana Mendes,(21) 99532-6422,Segunda-feira,13:00
+2026-01,Daniel Rodriguez Machado,29/09/2017,06/03/2024,Bateria,27,Rafael (Akeem),32,380.0,não,pagante,pago,Débora Rodriguez Barbosa,(21) 99975-6711,Sexta-feira,17:00
+2026-01,Daniel sterblitch,02/04/2014,19/03/2024,Bateria,27,Rafael (Akeem),32,411.95,não,pagante,pago,Silvia Helena,(21) 99915-0066,Segunda-feira,17:00
+2026-01,Daniel Teixeira Campos,31/05/2020,24/06/2024,Bateria,27,Rafael (Akeem),32,401.25,não,pagante,pago,Diego Rocha Campos Teixeira,(21) 96902-4000,Quinta-feira,19:00
+2026-01,Danielle Medeiros Da Silva Machado,10/04/1982,27/04/2024,Teclado IND,15,Ramon Morais,33,463.26,não,pagante,pago,,(21) 99662-9389,Sábado,08:00
+2026-01,Davi do Nascimento Alexandre da Gama Mello,06/01/2021,16/03/2024,Musicalização Preparatória,4,Leticia Palmeira,18,459.0,não,pagante,pago,Erick ferreira da gama mello,(21) 96519-7171,Sábado,09:00
+2026-01,Davi dos Santos amaral,28/10/2009,31/05/2024,Violino,12,Joel Filho,13,397.85,não,pagante,pago,Monique correa dos Santos Amaral,(21) 99941-6682,Segunda-feira,17:00
+2026-01,Davi dos Santos Veras,03/04/2009,28/07/2025,Bateria,27,Rafael (Akeem),32,420.0,não,pagante,pago,Ana Lucia dos Santos Pereira,(21) 97892-5846,Terça-feira,14:00
+2026-01,Davi Farias dos Santos,25/09/2015,27/11/2025,Violino,12,Vinicius Nascimento,38,405.0,não,pagante,pago,Rodrigo da SIlva Santos,(21) 99611-0203,Quinta-feira,19:00
+2026-01,Davi Jorge da Silva,13/01/2016,05/06/2024,Guitarra,14,Lucas Guimarães,21,385.0,não,pagante,pago,Magnolia Jorge da Silva,(21) 98034-0174,Quinta-feira,16:00
+2026-01,Davi Lima Queiroz,15/04/2013,16/10/2018,Canto,6,Alexandre Junior,43,0.0,não,pagante,sem_fatura,Erika Lima de Souza,(21) 98150-0103,Quarta,17:00
+2026-01,Davi Lima Queiroz,15/04/2013,03/08/2023,Teclado,16,Alexandre Santo,43,0.0,sim,segundo_curso_pago,sem_fatura,Erika Lima de Souza,(21) 98150-0103,Quarta-feira,17:00
+2026-01,Davi Lucas de Castro Lourenço,25/03/2015,06/08/2025,Teclado,16,Renan Guimarães,34,395.0,não,pagante,pago,Renata Camila de Castro,(21) 97504-4673,Quarta-feira,19:00
+2026-01,Davi Piragine Silva,11/10/2013,12/06/2024,Canto,6,Lohana Araújo,20,461.72,não,pagante,pago,Rodrigo Lemos Silva,(21) 99048-6010,Quinta-feira,19:00
+2026-01,Davi Piragine Silva,11/10/2013,29/11/2021,Garage Band,38,Ramon Morais,33,0.0,sim,bonus_gratuito,sem_fatura,Rodrigo Lemos Silva,(21) 99048-6010,Quinta-feira,19:00
+2026-01,David Kayat A. Mansour,21/10/2012,30/11/2022,Guitarra,14,Willian Silva,41,0.0,não,pagante,sem_fatura,Julio Algaze Mansour,(21) 98106-8556,Sexta-feira,16:00
+2026-01,David Kayat A. Mansour,21/10/2012,28/11/2025,Violão,10,Willian Silva,41,0.0,sim,segundo_curso_pago,sem_fatura,Julio Algaze Mansour,(21) 98106-8556,Sexta-feira,16:00
+2026-01,Débora Rodriguez Barbosa,11/12/1983,21/03/2025,Bateria,27,Rafael (Akeem),32,0.0,não,pagante,sem_fatura,,(21) 99975-6711,Quarta-feira,11:00
+2026-01,Débora Rodriguez Barbosa,11/12/1983,06/03/2024,Teclado,16,Alexandre Santo,43,388.5,sim,segundo_curso_pago,pago,,(21) 99975-6711,Quarta-feira,11:00
+2026-01,Diogo Ribeiro Galhardo,27/09/1982,25/10/2021,Bateria,27,Ramon Morais,33,459.77,não,pagante,pago,,(21) 99433-3559,Segunda-feira,16:00
+2026-01,Diogo Ribeiro Galhardo,27/09/1982,07/11/2023,Garage Band,38,Rafael (Akeem),32,0.0,sim,bonus_gratuito,sem_fatura,,(21) 99433-3559,Terça-feira,12:00
+2026-01,Dom Szsentes Boyd,10/01/2022,30/01/2025,Musicalização Preparatória,4,Leticia Palmeira,18,0.0,não,pagante,sem_fatura,André Luiz Pamplona Boyd,(21) 98128-6001,Segunda-feira,11:00
+2026-01,Dylan Januzi,06/09/2019,31/01/2025,Violão,10,Lucas Guimarães,21,385.0,não,pagante,pago,Suanni Januzi,(21) 99732-8977,Sexta-feira,10:00
+2026-01,Elena Picanço Santos,20/09/2013,13/09/2024,Canto,6,Matheus Oliveira,27,414.75,não,pagante,pago,Fabiana Picanço,(21) 98833-5004,Terça-feira,20:00
+2026-01,Elena Ribeiro Lopes Zoletti,09/02/2014,07/03/2024,Teclado,16,Renan Guimarães,34,434.5,não,pagante,pago,Gustavo Oliveira Zoletti,(21) 99705-5445,Quarta-feira,18:00
+2026-01,Elis Tineli Gomes Cotta,04/04/2012,23/09/2024,Bateria,27,Vicente Neto,37,410.4,não,pagante,pago,Ariane Tineli Gomes Cotta,(21) 99804-3487,Segunda-feira,20:00
+2026-01,Elis Tineli Gomes Cotta,04/04/2012,25/06/2025,Garage Band,38,Renan Guimarães,34,0.0,sim,bonus_gratuito,sem_fatura,Ariane Tineli Gomes Cotta,(21) 99804-3487,Quarta-feira,16:00
+2026-01,Enrico Florenzano,27/02/2021,12/08/2024,Bateria,27,Rafael (Akeem),32,442.4,não,pagante,pago,Sharlene Florenzano,(21) 98364-6393,Quarta-feira,17:00
+2026-01,Enzo Amigo Alvarez,15/09/2014,26/08/2023,Guitarra,14,Lucas Guimarães,21,388.8,não,pagante,pago,Rodrigo Alvarez de Sá,(21) 98151-0047,Sábado,14:00
+2026-01,Enzo Amigo Alvarez,15/09/2014,31/03/2022,Power Kids,25,Lucas Guimarães,21,0.0,sim,bonus_gratuito,sem_fatura,Rodrigo Alvarez de Sá,(21) 98151-0047,Sábado,14:00
+2026-01,Enzo de Castro Freitas,14/04/1975,07/11/2023,Garage Band,38,Lucas Guimarães,21,0.0,não,pagante,sem_fatura,,(21) 96485-2544,Terça-feira,13:00
+2026-01,Enzo de Castro Freitas,14/04/1975,08/08/2023,Guitarra,14,Ramon Morais,33,405.35,sim,segundo_curso_pago,pago,,(21) 96485-2544,Terça-feira,12:00
+2026-01,Enzo Dorileo Ewald,17/10/2018,28/11/2025,Bateria,27,Rafael (Akeem),32,420.0,não,pagante,pago,Fabiana Dorileo Ewald,(21) 98196-6878,Quarta-feira,15:00
+2026-01,Enzo Langer Peres,28/04/2015,13/05/2022,Bateria,27,Caio Araujo,2,483.0,não,pagante,pago,Juliana da Conceição Langer,(21) 99699-8474,Sexta-feira,18:00
+2026-01,Enzo Teixeira Menezes de Lima,30/10/2017,09/08/2025,Bateria,27,Alexandre Santo,43,375.0,não,pagante,pago,Candice Oliveira Teixeira Menezes de lima,(21) 99331-8138,Sábado,12:00
+2026-01,Enzo Teixeira Menezes de Lima,30/10/2017,31/01/2022,Musicalização Preparatória,4,Rafael (Akeem),32,0.0,sim,segundo_curso_pago,sem_fatura,Candice Oliveira Teixeira Menezes de lima,(21) 99331-8138,Sábado,12:00
+2026-01,Erik Edson Chalegre Erdmann,02/09/2011,10/03/2025,Bateria,27,Ramon Morais,33,395.0,não,pagante,pago,Valéria Ramos Chalegre,(21) 98899-8887,Quarta-feira,15:00
+2026-01,Estevão Lehrer Braz,12/04/2020,25/09/2025,Guitarra,14,Lucas Guimarães,21,375.0,não,pagante,pago,Fernanda Lehrer Turbae Amaral Braz,(21) 99998-5695,Sexta-feira,09:00
+2026-01,Fabiana Moriel Castela de Souza,15/05/2013,15/09/2025,Guitarra,14,Willer Machado,40,395.0,não,pagante,pago,Antonio Carlos Castela de Souza,(21) 99604-0187,Terça-feira,15:00
+2026-01,Fabio Pilar Moreira,04/06/2009,17/06/2022,Bateria,27,Ramon Morais,33,488.75,não,pagante,pago,Fábio Coelho Moreira,(21) 96530-9124,Quarta-feira,18:00
+2026-01,Fabio Pilar Moreira,04/06/2009,12/05/2023,Canto,6,Ramon Morais,33,0.0,sim,segundo_curso_pago,sem_fatura,Fábio Coelho Moreira,(21) 96530-9124,Quarta-feira,20:00
+2026-01,Fabio Pilar Moreira,04/06/2009,10/08/2024,Garage Band,38,Vicente Neto,37,0.0,sim,bonus_gratuito,sem_fatura,Fábio Coelho Moreira,(21) 96530-9124,Quarta-feira,18:00
+2026-01,Felipe de Moura Vieira,22/11/2019,29/02/2024,Musicalização Preparatória,4,Willian Fumaça,42,385.0,não,pagante,pago,Bianca golçalves de Moura,(21) 99861-3434,Terça-feira,16:00
+2026-01,Felipe Melo Castor,07/11/2015,20/08/2025,Teclado,16,Isaque Silva,10,395.0,não,pagante,pago,Karla Patricia Henrique Melo,(21) 99106-2832,Terça-feira,18:00
+2026-01,Fernanda Lehrer Turbae Amaral Braz,06/05/1990,26/09/2025,Teclado,16,Joel Filho,13,0.0,não,pagante,sem_fatura,,(21) 99998-5695,Sexta-feira,15:00
+2026-01,Fernanda Maria da Silva,02/05/1999,11/11/2025,Canto,6,Matheus Oliveira,27,405.0,não,pagante,pago,,(21) 99223-5766,Terça-feira,15:00
+2026-01,Fernanda Moriel Castela de Souza,07/02/2007,15/09/2025,Canto,6,Matheus Oliveira,27,395.0,não,pagante,pago,,(21) 99604-0187,Terça-feira,16:00
+2026-01,Flavio Ricardo Leal Vieira,11/07/1976,16/06/2025,Guitarra,14,Israel Silva,11,385.0,não,pagante,pago,,(21) 99765-0886,Segunda-feira,17:00
+2026-01,Francesco de Souza Novello,03/06/2019,30/06/2024,Bateria,27,Willian Silva,41,385.0,não,pagante,pago,MAGBYS M DE SOUZA NOVELLO,(21) 99948-4452,Sexta-feira,10:00
+2026-01,Francisco Cardoso Aride,18/07/2018,27/02/2019,Guitarra,14,Marcos Filho,23,400.0,não,pagante,pago,Saulo Medeiros Aride,(21) 99159-7859,Sábado,09:00
+2026-01,Francisco Cardoso Aride,18/07/2018,05/04/2025,Musicalização Para Bebês,2,Israel Silva,11,0.0,sim,segundo_curso_pago,sem_fatura,Saulo Medeiros Aride,(21) 99159-7859,Sábado,09:00
+2026-01,Franklin Marchine Cunha,20/06/2013,18/03/2024,Power Kids,25,Isaque Silva,10,0.0,não,pagante,sem_fatura,Deborah Marchine da Silva,(21) 98253-9331,Terça-feira,19:00
+2026-01,Franklin Marchine Cunha,20/06/2013,04/08/2025,Teclado,16,Lucas Guimarães,21,0.0,sim,segundo_curso_pago,sem_fatura,Deborah Marchine da Silva,(21) 98253-9331,Terça-feira,20:00
+2026-01,Gabriel De Paula,17/07/2017,17/05/2025,Teclado,16,Matheus Silva,26,385.0,não,pagante,pago,Eduardo Pereira De Paula,(21) 99920-1017,Sábado,12:00
+2026-01,Gabriel Medeiros Gonçalves Bittencourt,12/05/2018,19/01/2022,Bateria,27,Rafael (Akeem),32,451.0,não,pagante,pago,Lívia Teixeira Lopes de Medeiros,(21) 98148-7872,Sexta-feira,11:00
+2026-01,Gabriel Miele Nunes,27/10/2010,30/09/2024,Canto,6,Alexandre Santo,43,423.5,não,pagante,pago,Daniele Miele,(21) 97206-6649,Quarta-feira,18:00
+2026-01,Gabriel Vidal França de Carvalho,26/01/2022,31/07/2024,Musicalização Preparatória,4,Leticia Palmeira,18,423.75,não,pagante,pago,Adriana Vidal França de Carvalho,(21) 99607-2254,Sábado,11:00
+2026-01,Gabriel Wandeck Campos Brito,09/03/2007,02/08/2024,Bateria,27,Vicente Neto,37,0.0,não,pagante,inadimplente,,(21) 99151-0046,Segunda-feira,19:00
+2026-01,Gabriela da Silva Machado,02/08/2012,19/09/2023,Teclado,16,Lohana Araújo,20,363.2,não,pagante,pago,Uilson Luis Moreira Machado,(21) 99667-7450,Terça-feira,14:00
+2026-01,Gabriela Garcia de Carvalho,12/09/2014,09/03/2021,Bateria,27,Caio Araujo,2,0.0,não,pagante,sem_fatura,Analice Ferreira Garcia,(21) 99452-1142,Sexta-feira,17:00
+2026-01,Gabriela Garcia de Carvalho,12/09/2014,26/09/2025,Teclado,16,Caio Araujo,2,395.0,sim,segundo_curso_pago,pago,Analice Ferreira Garcia,(21) 99452-1142,Sexta,17:00
+2026-01,Gael Rodrigues Martins,10/06/2019,05/07/2022,Bateria,27,Rafael (Akeem),32,463.25,não,pagante,pago,Sthefany Rodrigues,(21) 99712-4633,Terça-feira,16:00
+2026-01,Gael Sant'Anna de Oliveira Lemos,06/05/2023,31/01/2026,Musicalização Para Bebês,2,Joel Filho,13,300.0,não,pagante,pago,Thais S. de Oliveira Lemos,(21) 96404-4010,Segunda-feira,19:00
+2026-01,Geovana vitória jorge da silva,14/12/2012,11/09/2024,Cavaquinho,35,Willian Silva,41,385.0,não,pagante,pago,Magnolia Jorge da Silva,(21) 98034-0174,Quinta-feira,16:00
+2026-01,Geovana vitória jorge da silva,14/12/2012,11/09/2024,Cavaquinho,35,Willian Silva,41,0.0,sim,segundo_curso_pago,sem_fatura,Magnolia Jorge da Silva,(21) 98034-0174,Quinta,16:00
+2026-01,Giovanna Alves da Silva Mendonça,15/10/2009,17/01/2019,Canto,6,Alexandre Junior,43,436.42,não,pagante,pago,Valéria Alves da Silva Mendonça,(21) 98463-6215,Quarta,20:00
+2026-01,Giovanna Alves da Silva Mendonça,15/10/2009,11/07/2019,Garage Band,38,Ramon Morais,33,0.0,sim,segundo_curso_pago,sem_fatura,Valéria Alves da Silva Mendonça,(21) 98463-6215,Quarta-feira,18:00
+2026-01,Giovanna Alves da Silva Mendonça,15/10/2009,06/06/2022,Garage Band,38,Ramon Morais,33,0.0,sim,segundo_curso_pago,sem_fatura,Valéria Alves da Silva Mendonça,(21) 98463-6215,Quarta,18:00
+2026-01,Giovanna Alves da Silva Mendonça,15/10/2009,09/10/2020,Teclado,16,Alexandre Santo,43,0.0,sim,segundo_curso_pago,sem_fatura,Valéria Alves da Silva Mendonça,(21) 98463-6215,Quarta-feira,20:00
+2026-01,Giovanna Azevedo Chipitelli,12/11/2018,25/07/2024,Canto,6,Lohana Araújo,20,394.2,não,pagante,pago,Camila Martins de Azevedo,(21) 96451-2085,Terça-feira,18:00
+2026-01,Giovanna Dabés Moreira de Carvalho Al Alam da Fonseca,28/12/2013,24/03/2025,Canto,6,Leticia Palmeira,18,385.0,não,pagante,pago,Marcela Dabés Moreira de Carvalho,(21) 98184-2727,Segunda-feira,18:00
+2026-01,Giovanna Gonçalves Frias Ribeiro,29/12/2009,12/05/2023,Canto,6,Matheus Oliveira,27,0.0,não,pagante,inadimplente,Pablo Marcelo Frias Ribeiro,(21) 96019-1408,Quarta-feira,19:00
+2026-01,Giovanna Gonçalves Frias Ribeiro,29/12/2009,31/03/2023,Garage Band,38,Ramon Morais,33,0.0,sim,segundo_curso_pago,sem_fatura,Pablo Marcelo Frias Ribeiro,(21) 96019-1408,Quarta-feira,20:00
+2026-01,Giovanna Gonçalves Frias Ribeiro,29/12/2009,15/08/2024,Guitarra,14,Leticia Palmeira,18,0.0,sim,segundo_curso_pago,sem_fatura,Pablo Marcelo Frias Ribeiro,(21) 96019-1408,Quarta-feira,19:00
+2026-01,Giovanna Marsico da Silva,21/04/2013,08/11/2025,Guitarra,14,Lucas Guimarães,21,385.0,não,pagante,pago,Paula dos Santos Marsico Pereira da Silva,(21) 98166-4435,Sábado,15:00
+2026-01,Giovanna Sant Anna de Lima Nicolela,22/05/2017,25/07/2024,Canto,6,Leticia Palmeira,18,397.85,não,pagante,pago,Cristiane Sant Anna de Lima Nicolela,(21) 98181-6791,Quarta-feira,14:00
+2026-01,Grace Couto de Andrade,20/01/1977,30/06/2022,Contrabaixo,21,Ramon Morais,33,467.5,não,pagante,pago,,(21) 97134-5259,Terça-feira,11:00
+2026-01,Grace Couto de Andrade,20/01/1977,11/03/2024,Garage Band,38,Ramon Morais,33,0.0,sim,bonus_gratuito,sem_fatura,,(21) 97134-5259,Terça-feira,12:00
+2026-01,Guilherme de Farias Varjão,08/01/2013,12/03/2025,Guitarra,14,Lucas Guimarães,21,385.0,não,pagante,pago,Luiz Felipe Carneiro Varjão,(21) 99838-5682,Terça-feira,14:00
+2026-01,Guilherme Duque Vianna,29/08/2018,28/06/2024,Bateria,27,Rafael (Akeem),32,385.0,não,pagante,pago,Leonardo Silva Vianna,(21) 98103-1504,Segunda-feira,20:00
+2026-01,Guilherme Ferreira Muniz dos Santos,27/05/2019,26/08/2021,Bateria,27,Marcos Filho,23,476.0,não,pagante,pago,Rodrigo Muniz dos Santos,(21) 99300-8968,Quinta-feira,14:00
+2026-01,Guilherme Ferreira Muniz dos Santos,27/05/2019,20/02/2020,Musicalização Para Bebês,2,Willian Silva,41,0.0,sim,segundo_curso_pago,sem_fatura,Rodrigo Muniz dos Santos,(21) 99300-8968,Quinta-feira,14:00
+2026-01,Gustavo Kuabara Schreiber,27/09/2022,13/01/2026,Musicalização Preparatória,4,Leticia Palmeira,18,400.0,não,pagante,pago,Guilherme Giacomelli Schreiber,99725-4148,Quarta-feira,11:00
+2026-01,Heitor Cañas Garofo,12/04/2018,19/11/2022,Bateria,27,Willer Machado,40,0.0,não,pagante,sem_fatura,Talita de Carvalho Cañas Garofo,(16) 98807-7688,Quinta-feira,15:00
+2026-01,Heitor de Souza Lima da Silva,21/12/2007,29/08/2024,Canto,6,Matheus Oliveira,27,385.0,não,pagante,pago,,(21) 98989-9554,Terça-feira,18:00
+2026-01,Heitor de Souza Lima da Silva,21/12/2007,29/08/2024,Guitarra,14,Willian Silva,41,0.0,sim,segundo_curso_pago,sem_fatura,,(21) 98989-9554,Terça-feira,18:00
+2026-01,Heitor Gael Serra Araújo,05/09/2011,14/08/2025,Guitarra,14,Valdo Delfino,36,395.0,não,pagante,pago,Marcia Alexandra da silva serra,(21) 97301-0014,Quinta-feira,15:00
+2026-01,Heitor Vieira Motta,16/07/2023,16/01/2026,Musicalização Preparatória,4,Matheus Lourenço,25,400.0,não,pagante,pago,Humberto Motta,(21) 96451-9449,Segunda-feira,17:00
+2026-01,Helena cardoso Roxo,18/04/2017,31/01/2025,Teclado,16,Willian Silva,41,385.0,não,pagante,pago,Ursula da Rocha Cardoso,(21) 96412-1859,Sexta-feira,11:00
+2026-01,Helena de Souza Lima da Silva,05/03/2014,29/08/2024,Canto,6,Matheus Oliveira,27,385.0,não,pagante,pago,Wellington Lima da Silva,(21) 98898-2710,Terça-feira,20:00
+2026-01,Helena Moreira Ferrari,30/05/2018,10/01/2026,Canto,6,Leticia Palmeira,18,300.0,não,pagante,pago,Antonio Carlos Guimarães Ferrari,(21) 97235-1894,Quarta-feira,17:00
+2026-01,Helena Neis Zavallo,14/08/2012,22/01/2025,Power Kids,25,Ramon Morais,33,0.0,não,pagante,sem_fatura,Kellye Helena Marinelli Neis,(21) 96738-9695,Sexta-feira,17:00
+2026-01,Helena Neis Zavallo,14/08/2012,17/05/2025,Teclado,16,Ramon Morais,33,385.0,sim,segundo_curso_pago,pago,Kellye Helena Marinelli Neis,(21) 96738-9695,Terça-feira,20:00
+2026-01,Heloísa de Andrade Leôncio,31/03/2014,17/04/2025,Canto,6,Leticia Palmeira,18,390.0,não,pagante,pago,Sulamita de Andrade Leôncio,(21) 97948-2773,Segunda-feira,10:00
+2026-01,Henrique Dang Silva,20/07/2017,15/03/2024,Bateria,27,Vicente Neto,37,423.5,não,pagante,pago,Lúcia Lai,(21) 99801-4266,Terça-feira,18:00
+2026-01,Henrique de Andrade Leôncio,23/02/2019,17/04/2025,Bateria,27,Israel Silva,11,390.0,não,pagante,pago,Sulamita de Andrade Leôncio,(21) 97948-2773,Segunda-feira,11:00
+2026-01,Henrique Pereira Caldas Pinto de Souza,10/05/2015,18/08/2021,Bateria,27,Ramon Morais,33,491.59,não,pagante,pago,Sandro Celso de Souza,(21) 98733-1707,Terça-feira,10:00
+2026-01,Henrique Pereira Caldas Pinto de Souza,10/05/2015,10/08/2024,Power Kids,25,Lucas Guimarães,21,0.0,sim,bonus_gratuito,sem_fatura,Sandro Celso de Souza,(21) 98733-1707,Sábado,12:00
+2026-01,Hugo Marsico da Silva,25/07/2015,08/11/2025,Guitarra,14,Lucas Guimarães,21,385.0,não,pagante,pago,Paula dos Santos Marsico Pereira da Silva,(21) 98166-4435,Sábado,15:00
+2026-01,Hugo Penedo Amorim,03/08/2015,05/03/2020,Musicalização Preparatória,4,Ramon Morais,33,0.0,não,pagante,sem_fatura,Amanda Da Silva Penedo,(21) 99914-3430,Terça-feira,10:00
+2026-01,Hugo Penedo Amorim,03/08/2015,30/01/2025,Power Kids,25,Vinicius Nascimento,38,0.0,sim,segundo_curso_pago,sem_fatura,Amanda Da Silva Penedo,(21) 99914-3430,Terça-feira,09:00
+2026-01,Hugo Penedo Amorim,03/08/2015,14/02/2022,Teclado,16,Isaque Silva,10,375.0,sim,segundo_curso_pago,pago,Amanda Da Silva Penedo,(21) 99914-3430,Terça,10:00
+2026-01,Hugo Penedo Amorim,03/08/2015,15/09/2025,Violino,12,Isaque Silva,10,375.0,sim,segundo_curso_pago,pago,Amanda Da Silva Penedo,(21) 99914-3430,Terça-feira,10:00
+2026-01,Inaê Antunes Coelho de Sá,17/07/2014,27/01/2023,Canto,6,Alexandre Santo,43,368.5,não,pagante,pago,Karen da Gloria Antunes,(21) 98054-6666,Segunda-feira,18:00
+2026-01,Inaê Antunes Coelho de Sá,17/07/2014,17/05/2022,Power Kids,25,Ramon Morais,33,0.0,sim,bonus_gratuito,sem_fatura,Karen da Gloria Antunes,(21) 98054-6666,Sexta-feira,20:00
+2026-01,Inaê Antunes Coelho de Sá,17/07/2014,24/01/2022,Teclado,16,Joel Filho,13,335.5,sim,segundo_curso_pago,pago,Karen da Gloria Antunes,(21) 98054-6666,Sexta-feira,19:00
+2026-01,Isabel Ohana Nunes de Carvalho,21/12/2014,09/12/2025,Canto,6,Larissa Santos,16,394.2,não,pagante,pago,Silvia Ohana Marques Coelho de Carvalho,(21) 98751-9154,Quinta-feira,18:00
+2026-01,Isabel Ohana Nunes de Carvalho,21/12/2014,25/06/2025,Power Kids,25,Lucas Guimarães,21,0.0,sim,bonus_gratuito,sem_fatura,Silvia Ohana Marques Coelho de Carvalho,(21) 98751-9154,Sábado,12:00
+2026-01,Isabel Ohana Nunes de Carvalho,21/12/2014,31/10/2024,Violão,10,Lucas Guimarães,21,0.0,sim,segundo_curso_pago,sem_fatura,Silvia Ohana Marques Coelho de Carvalho,(21) 98751-9154,Quinta-feira,18:00
+2026-01,Isabela Ferreira Moura,23/07/2014,15/05/2024,Canto,6,Lohana Araújo,20,365.15,não,pagante,pago,Thiago Nunes moura Lacerda,(21) 96415-4186,Sábado,11:00
+2026-01,Isabela Ferreira Moura,23/07/2014,09/12/2023,Power Kids,25,Lohana Araújo,20,0.0,sim,bonus_gratuito,sem_fatura,Thiago Nunes moura Lacerda,(21) 96415-4186,Sábado,12:00
+2026-01,Isabella Boscardini Moreira,03/10/2020,21/08/2021,Musicalização Preparatória,4,Leticia Palmeira,18,518.65,não,pagante,pago,Vinícius Barcelos Moreira,(21) 99207-8159,Sábado,08:00
+2026-01,Isabella de Souza Durço,09/02/2016,30/04/2025,Canto,6,Leticia Palmeira,18,410.0,não,pagante,pago,Roberta Monteiro de Souza Durço,(21) 98128-5785,Quarta-feira,15:00
+2026-01,Ísis Mayumi Fujiwara Lima,02/03/2017,15/03/2023,Canto,6,Ramon Morais,33,0.0,não,pagante,sem_fatura,Dominique Lima Pereira Fujiwara,(21) 99799-3708,Terça-feira,19:00
+2026-01,Ísis Mayumi Fujiwara Lima,02/03/2017,15/05/2024,Power Kids,25,Ramon Morais,33,0.0,sim,bonus_gratuito,sem_fatura,Dominique Lima Pereira Fujiwara,(21) 99799-3708,Quinta-feira,20:00
+2026-01,Ísis Mayumi Fujiwara Lima,02/03/2017,15/03/2023,Teclado,16,Lohana Araújo,20,434.5,sim,segundo_curso_pago,pago,Dominique Lima Pereira Fujiwara,(21) 99799-3708,Terça-feira,20:00
+2026-01,Jan Sidarta stehmann de Aguiar (Ian),12/05/2004,31/01/2025,Bateria,27,Willer Machado,40,400.0,não,pagante,pago,,(21) 97284-2375,Terça-feira,17:00
+2026-01,Joachim Krull Carrez,11/10/2019,09/07/2022,Teclado,16,Isaque Silva,10,420.0,não,pagante,pago,Ricardo Celso de Magalhães Loureiro Carrez Gonçalves,(21) 99938-6888,Terça-feira,13:00
+2026-01,João Dal Bello Migani,03/01/2015,30/10/2020,Bateria,27,Pedro Glória,30,508.2,não,pagante,pago,Renata Dal Bello,(21) 99855-5065,Quinta-feira,17:00
+2026-01,João Dal Bello Migani,03/01/2015,02/05/2018,Musicalização Preparatória,4,Rafael (Akeem),32,0.0,sim,segundo_curso_pago,sem_fatura,Renata Dal Bello,(21) 99855-5065,Quinta-feira,17:00
+2026-01,João Francisco Quintella de Macedo Mayer,27/05/2017,11/08/2023,Bateria,27,Rafael (Akeem),32,444.96,não,pagante,pago,Illen Silva Quintella de Macedo Mayer,(21) 97407-5632,Quarta-feira,16:00
+2026-01,João Guilherme Couto Vargas Luiz,28/08/2017,17/04/2025,Teclado,16,Larissa Santos,16,400.0,não,pagante,pago,Agnaldo Vargas Luiz,(48) 99935-8661,Quinta-feira,11:00
+2026-01,Joao Miguel de Araújo Jardim Tupinamba Borges,23/10/2013,27/07/2022,Teclado,16,Kaio Cabral,15,476.0,não,pagante,pago,Camila Jardim Tupinamba Borges,+55 (21) 99779-6143,Segunda-feira,16:00
+2026-01,João Pedro Brizzi de Almeida,10/05/2021,29/04/2025,Musicalização Preparatória,4,Leticia Palmeira,18,385.0,não,pagante,pago,Clissia Corrêa Brizzi de Almeida,(21) 97288-6575,Quarta-feira,11:00
+2026-01,João Pedro Cerveira Soares,11/11/2009,20/05/2021,Garage Band,38,Ramon Morais,33,0.0,não,pagante,sem_fatura,Danielle Cerveira M. Soares,(21) 99631-9444,Quarta-feira,17:00
+2026-01,João Pedro Cerveira Soares,11/11/2009,06/06/2022,Teclado,16,Renan Guimarães,34,379.5,sim,segundo_curso_pago,pago,Danielle Cerveira M. Soares,(21) 99631-9444,Quarta-feira,18:00
+2026-01,João Pedro Fontenelle,25/04/2019,31/07/2024,Bateria,27,Israel Silva,11,408.75,não,pagante,pago,Willy Fontenelle,(21) 97155-9194,Sábado,12:00
+2026-01,João Piragine Silva,02/07/2011,12/06/2024,Garage Band,38,Valdo Delfino,36,0.0,não,pagante,sem_fatura,Rodrigo Lemos Silva,(21) 97512-4601,Quinta-feira,19:00
+2026-01,João Piragine Silva,02/07/2011,29/11/2021,Guitarra,14,Ramon Morais,33,461.72,sim,segundo_curso_pago,pago,Rodrigo Lemos Silva,(21) 97512-4601,Quinta-feira,19:00
+2026-01,João Ribeiro Miranda do valle Magalhães,03/09/2019,26/02/2025,Bateria,27,Rafael (Akeem),32,0.0,não,pagante,inadimplente,Thaís Miranda do valle e silva Magalhães,(21) 97166-0013,Quarta-feira,10:00
+2026-01,Josué Salazar Nogueira Galheiro Poças,23/09/2013,01/03/2019,Teclado,16,Ramon Morais,33,470.4,não,pagante,pago,Bernardo Galheiro Poças,(21) 98507-6632,Terça-feira,15:00
+2026-01,Júlia Adum de Paiva Herbst,30/10/2018,28/11/2025,Canto,6,Larissa Santos,16,410.0,não,pagante,pago,Maria Clara Adum de Paiva,(21) 98566-2020,Quarta-feira,19:00
+2026-01,Julia Alves Arantes,06/05/2010,15/09/2025,Canto,6,Leticia Palmeira,18,395.0,não,pagante,pago,Aline Alves Arantes,(21) 97238-3914,Segunda-feira,14:00
+2026-01,Julia Christina Mury Messias,11/12/2014,29/02/2024,Canto,6,Ramon Morais,33,0.0,não,pagante,sem_fatura,Sergio Messias da Rosa,(21) 99649-7306,Sexta-feira,19:00
+2026-01,Julia Christina Mury Messias,11/12/2014,11/11/2024,Power Kids,25,Joel Filho,13,0.0,sim,bonus_gratuito,sem_fatura,Sergio Messias da Rosa,(21) 99649-7306,Sexta-feira,20:00
+2026-01,Julia Christina Mury Messias,11/12/2014,29/02/2024,Teclado,16,Leticia Palmeira,18,388.5,sim,segundo_curso_pago,pago,Sergio Messias da Rosa,(21) 99649-7306,Sexta-feira,19:00
+2026-01,Júlia Heil da Fonseca,03/02/2014,12/09/2025,Canto,6,Lohana Araújo,20,442.75,não,pagante,pago,Fabiana Aparecida Heil da Fonseca,(21) 98989-6810,Quinta-feira,16:00
+2026-01,Júlia Heil da Fonseca,03/02/2014,28/08/2024,Garage Band,38,Rafael (Akeem),32,0.0,sim,bonus_gratuito,sem_fatura,Fabiana Aparecida Heil da Fonseca,(21) 98989-6810,Terça-feira,17:00
+2026-01,Júlia Lopes de Medeiros,20/01/2018,30/10/2021,Musicalização Preparatória,4,Larissa Santos,16,0.0,não,pagante,sem_fatura,Kívia Julliana Gomes Lopes Jorge dos Santos,(21) 97901-6047,Sexta-feira,18:00
+2026-01,Júlia Lopes de Medeiros,20/01/2018,06/01/2026,Teclado,16,Willian Silva,41,450.0,sim,segundo_curso_pago,pago,Kívia Julliana Gomes Lopes Jorge dos Santos,(21) 97901-6047,Sexta-feira,18:00
+2026-01,Júlia Paraguassu Eizerik Machado,31/07/2011,28/11/2025,Guitarra,14,Lucas Guimarães,21,420.0,não,pagante,pago,Liana Paraguassu,(21) 99533-2928,Quarta-feira,15:00
+2026-01,Júlia Queiroz de Carvalho,13/04/2016,25/06/2025,Canto,6,Alexandre Santo,43,430.0,não,pagante,pago,Liliane Queiroz,(21) 98090-4664,Segunda-feira,18:00
+2026-01,Júlia Queiroz de Carvalho,13/04/2016,06/02/2025,Power Kids,25,Lucas Guimarães,21,0.0,sim,bonus_gratuito,sem_fatura,Liliane Queiroz,(21) 98090-4664,Terça-feira,20:00
+2026-01,Júlia Salarini Gama,03/03/2016,30/06/2025,Canto,6,Matheus Mendes,46,445.2,não,pagante,pago,Caroline Salarini dos Santos Gama,(21) 99567-4802,Quarta-feira,14:00
+2026-01,Júlia Salarini Gama,03/03/2016,29/07/2025,Power Kids,25,Alexandre Santo,43,0.0,sim,segundo_curso_pago,sem_fatura,Caroline Salarini dos Santos Gama,(21) 99567-4802,Quarta-feira,15:00
+2026-01,Júlia Salarini Gama,03/03/2016,18/06/2022,Teclado,16,Marcos Filho,23,385.0,sim,segundo_curso_pago,pago,Caroline Salarini dos Santos Gama,(21) 99567-4802,Terça-feira,18:00
+2026-01,Júlia Salarini Gama,03/03/2016,23/10/2024,Violão,10,Alexandre Santo,43,0.0,sim,segundo_curso_pago,sem_fatura,Caroline Salarini dos Santos Gama,(21) 99567-4802,Quarta-feira,14:00
+2026-01,Kaique da silva Batista,18/07/2017,30/09/2025,Teclado,16,Rafael (Akeem),32,395.0,não,pagante,pago,Renata da Silva Batista,,Segunda-feira,19:00
+2026-01,Killian Paschuini Brito,11/03/2018,02/03/2023,Bateria,27,Rafael (Akeem),32,360.75,não,pagante,pago,Jéssica Paschuini,(21) 99468-7941,Quarta-feira,18:00
+2026-01,Lara Carvalho Rocha,19/11/2019,31/01/2026,Teclado,16,Willian Silva,41,400.0,não,pagante,pago,Kelly Carvalho,(21) 98682-1972,Quinta-feira,10:00
+2026-01,Lara Dias de Souza,29/12/2013,08/07/2025,Teclado,16,Kaio Cabral,15,405.0,não,pagante,pago,Diego Rocha de Souza,(21) 96909-7224,Segunda-feira,17:00
+2026-01,Lara Pereira Faria,27/01/2018,16/01/2025,Teclado,16,Kaio Cabral,15,400.0,não,pagante,pago,Renata Moreira Pereira,(21) 98039-7773,Segunda-feira,18:00
+2026-01,Larissa Bezerra Silva de Oliveira,14/02/2020,27/07/2024,Musicalização Preparatória,4,Lohana Araújo,20,405.0,não,pagante,pago,Bianca Bezerra da Silva,(21) 98886-7629,Terça-feira,18:00
+2026-01,Laura Almada Teixeira Neto,26/12/2011,06/09/2024,Garage Band,38,Larissa Santos,16,0.0,não,pagante,sem_fatura,Fabiana de Almada Ferreira,(21) 98201-2193,Quarta-feira,17:00
+2026-01,Laura Almada Teixeira Neto,26/12/2011,02/09/2024,Guitarra,14,Ramon Morais,33,414.7,sim,segundo_curso_pago,pago,Fabiana de Almada Ferreira,(21) 98201-2193,Quarta-feira,18:00
+2026-01,Laura Damasceno Estevez,12/05/2015,28/02/2025,Teclado,16,Larissa Santos,16,385.0,não,pagante,pago,Leonardo Clemente Estevez,(21) 99923-0134,Sexta-feira,16:00
+2026-01,Laura Picanço Santos,26/08/2008,25/06/2025,Canto,6,Matheus Oliveira,27,408.1,não,pagante,pago,Fabiana Picanço,(21) 98833-5004,Terça-feira,19:00
+2026-01,Laura Picanço Santos,26/08/2008,23/01/2025,Garage Band,38,Renan Guimarães,34,0.0,sim,bonus_gratuito,sem_fatura,Fabiana Picanço,(21) 98833-5004,Quarta-feira,16:00
+2026-01,Lavinia Barreto Miranda,06/04/2009,18/11/2022,Bateria,27,Rafael (Akeem),32,474.32,não,pagante,pago,Priscila alves motta barreto de oliveira,(21) 96445-9649,Quinta-feira,20:00
+2026-01,Leandro Zerbone,23/03/1981,15/01/2026,Canto,6,Matheus Oliveira,27,400.0,não,pagante,pago,,(21) 98139-9061,Quinta-feira,18:00
+2026-01,Leandro Zerbone,23/03/1981,15/01/2026,Violão,10,Willer Machado,40,0.0,sim,segundo_curso_pago,sem_fatura,,(21) 98139-9061,Quinta-feira,19:00
+2026-01,Letícia Ferreira Vasconcelos,17/03/2018,08/02/2025,Canto,6,Larissa Santos,16,0.0,não,pagante,sem_fatura,Julianne Maria Ferreira Vasconcelos,(21) 99811-4245,Sexta-feira,14:00
+2026-01,Letícia Ferreira Vasconcelos,17/03/2018,08/02/2025,Teclado,16,Larissa Santos,16,432.42,sim,segundo_curso_pago,pago,Julianne Maria Ferreira Vasconcelos,(21) 99811-4245,Quinta-feira,17:00
+2026-01,Levi Freire da Silva Sousa,09/05/2016,19/07/2022,Bateria,27,Rafael (Akeem),32,395.0,não,pagante,pago,Francisco Paulo Ferreira de Sousa,(21) 98135-5218,Sexta-feira,13:00
+2026-01,Liah Lemos Schettino,22/07/2008,28/04/2025,Violino,12,Vinicius Nascimento,38,400.0,não,pagante,pago,Daniela Schettino Vieira,(21) 99588-9730,Quinta-feira,17:00
+2026-01,Lígia de Freitas Gonçalves,08/11/1953,31/01/2024,Bateria,27,Rafael (Akeem),32,385.0,não,pagante,pago,,(21) 99967-3189,Quarta-feira,12:00
+2026-01,Lis Alencar Rodrigues De Azevedo,26/03/2014,24/11/2020,Bateria,27,Ramon Morais,33,450.5,não,pagante,pago,Joana Alencar Rodrigues De Azevedo,(21) 99449-5702,Sexta-feira,16:00
+2026-01,Lis Alencar Rodrigues De Azevedo,26/03/2014,04/05/2023,Power Kids,25,Rafael (Akeem),32,0.0,sim,bonus_gratuito,sem_fatura,Joana Alencar Rodrigues De Azevedo,(21) 99449-5702,Terça-feira,20:00
+2026-01,Lis Diolinda da Cruz,06/11/2021,29/01/2026,Musicalização Preparatória,4,Leticia Palmeira,18,300.0,não,pagante,pago,Elisa Diolinda da Cruz,(21) 97565-3300,Sábado,10:00
+2026-01,Lohan Marques Boente,29/02/2020,16/11/2021,Musicalização Preparatória,4,Leticia Palmeira,18,453.6,não,pagante,pago,Luciana Ribeiro Marques,(21) 99948-1985,Quarta-feira,18:00
+2026-01,Lorenzo Donni Borges,26/05/2014,18/01/2025,Teclado,16,Renan Guimarães,34,390.0,não,pagante,pago,Lorena Lara Felix Donni,(21) 98111-3573,Quarta-feira,13:00
+2026-01,Luca Pessurno Rodrigues Torres,16/04/2011,04/11/2024,Canto,6,Israel Silva,11,0.0,não,pagante,sem_fatura,Cárita Pessurno Rodrigues Torres,(21) 99520-3020,Sábado,14:00
+2026-01,Luca Pessurno Rodrigues Torres,16/04/2011,11/12/2025,Garage Band,38,Matheus Oliveira,27,0.0,sim,bonus_gratuito,sem_fatura,Cárita Pessurno Rodrigues Torres,(21) 99520-3020,Sábado,15:00
+2026-01,Luca Pessurno Rodrigues Torres,16/04/2011,31/07/2024,Guitarra,14,Israel Silva,11,385.0,sim,segundo_curso_pago,pago,Cárita Pessurno Rodrigues Torres,(21) 99520-3020,Quinta-feira,17:00
+2026-01,Lucas Bezerra Siqueira,18/01/2010,31/10/2025,Violão,10,Lucas Guimarães,21,0.0,não,pagante,sem_fatura,Fábio Siqueira,(21) 99197-0108,Sexta-feira,14:00
+2026-01,Lucas Cseko e Silva,27/01/2014,25/02/2021,Bateria,27,Rafael (Akeem),32,445.5,não,pagante,pago,Adalberto Silva Junior,(21) 98235-8650,Terça-feira,19:00
+2026-01,Lucas Cseko e Silva,27/01/2014,27/06/2022,Power Kids,25,Lucas Guimarães,21,0.0,sim,bonus_gratuito,sem_fatura,Adalberto Silva Junior,(21) 98235-8650,Terça-feira,20:00
+2026-01,Lucas Freire da Silva Sousa,03/09/2019,30/08/2025,Teclado,16,Willian Silva,41,375.0,não,pagante,pago,Francisco Paulo Ferreira de Sousa,(21) 98135-5218,Sexta-feira,13:00
+2026-01,Lucas Medeiros de Albuquerque,09/02/2018,22/06/2021,Musicalização Para Bebês,2,Marcos Filho,23,0.0,não,pagante,sem_fatura,Ana Paula de Medeiros da Silva Vasconcellos,(21) 99476-7756,Quinta-feira,18:00
+2026-01,Lucas Medeiros de Albuquerque,09/02/2018,30/05/2025,Teclado,16,Willer Machado,40,385.0,sim,segundo_curso_pago,pago,Ana Paula de Medeiros da Silva Vasconcellos,(21) 99476-7756,Quinta-feira,18:00
+2026-01,Luis Miguel da Silva Neto,15/10/2012,24/03/2023,Bateria,27,Rafael (Akeem),32,445.5,não,pagante,pago,Maria Alice da Silva Neto,,Quinta-feira,16:00
+2026-01,Luis Rodrigo Casares Villegas,20/06/2021,30/01/2026,Musicalização Preparatória,4,Larissa Santos,16,300.0,não,pagante,pago,Bárbara Alejandra Villegas,(21) 96818-0577,Quinta-feira,14:00
+2026-01,Luísa da Silva Fraga,17/05/2013,01/08/2025,Teclado,16,Kaio Cabral,15,420.0,não,pagante,pago,Monique Da Silva Fraga,(21) 99567-8455,Segunda-feira,15:00
+2026-01,Luisa medeiros de Albuquerque,22/10/2016,22/06/2021,Canto,6,Ramon Morais,33,385.0,não,pagante,pago,Ana Paula de Medeiros da Silva Vasconcellos,(21) 99476-7756,Quinta-feira,18:00
+2026-01,Luisa medeiros de Albuquerque,22/10/2016,22/08/2025,Musicalização Preparatória,4,Matheus Lourenço,25,0.0,sim,segundo_curso_pago,sem_fatura,Ana Paula de Medeiros da Silva Vasconcellos,(21) 99476-7756,Terça-feira,09:00
+2026-01,Luisa medeiros de Albuquerque,22/10/2016,30/05/2025,Power Kids,25,Lohana Araújo,20,0.0,sim,bonus_gratuito,sem_fatura,Ana Paula de Medeiros da Silva Vasconcellos,(21) 99476-7756,Quinta-feira,18:00
+2026-01,Luísa Serpa Ribeiro Fleischhauer,29/03/2007,30/01/2025,Violão,10,Lucas Guimarães,21,385.0,não,pagante,pago,,(21) 98551-5122,Quarta-feira,11:00
+2026-01,Luiz Felipe de Castro Teixeira,12/08/2010,16/09/2024,Canto,6,Alexandre Santo,43,405.0,não,pagante,pago,Lícia Bernacchi de Castro,(21) 96459-5060,Segunda-feira,15:00
+2026-01,Luiz Henrique Ribeiro Gomes,08/10/2016,13/06/2024,Canto,6,Larissa Santos,16,0.0,não,pagante,sem_fatura,Paula Gomes,(21) 96473-3441,Quarta-feira,16:00
+2026-01,Luiza Faria Frazão de Souza,03/03/2017,23/09/2020,Power Kids,25,Vinicius Nascimento,38,0.0,não,pagante,sem_fatura,Diogo Frazão de Souza,(21) 99675-7024,Quinta-feira,16:00
+2026-01,Luiza Faria Frazão de Souza,03/03/2017,29/07/2025,Teclado,16,Ramon Morais,33,382.36,sim,segundo_curso_pago,pago,Diogo Frazão de Souza,(21) 99675-7024,Terça-feira,18:00
+2026-01,Luiza Quintas de Oliveira Ramos Morais,13/06/2023,21/03/2025,Musicalização Para Bebês,2,Larissa Santos,16,370.0,não,pagante,pago,Juliana Quintas de Oliveira Ramos Morais,,Sexta-feira,10:00
+2026-01,Maitê Gomes Pereira,20/10/2017,11/12/2025,Teclado,16,Willer Machado,40,385.0,não,pagante,pago,Flávia Gomes Togashi,(21) 99547-2619,Sexta-feira,19:00
+2026-01,Malu Picerno Franco Molinaro Amaral,16/02/2019,09/08/2025,Canto,6,Lohana Araújo,20,395.0,não,pagante,pago,Luciana Rosa,(21) 98216-2829,Terça-feira,18:00
+2026-01,Manoela Aurilio Matos,24/01/2023,10/01/2026,Musicalização Preparatória,4,Leticia Palmeira,18,0.0,não,pagante,sem_fatura,Letízia Aurilio Matos,(21) 99604-5037,Sábado,11:00
+2026-01,Manuela Araujo Rodrigues,10/01/2012,15/03/2025,Canto,6,Leticia Palmeira,18,405.0,não,pagante,pago,Alessandra Araujo de A Rodrigues,(21) 96432-7607,Segunda-feira,15:00
+2026-01,Manuela Chermont de Miranda Petersen,03/09/2012,04/06/2021,Power Kids,25,Ramon Morais,33,0.0,não,pagante,sem_fatura,Maria Elisa Chermont de Miranda Petersen,(21) 99309-9391,Quarta-feira,16:00
+2026-01,Manuela Chermont de Miranda Petersen,03/09/2012,25/02/2021,Violão,10,Ramon Morais,33,456.5,sim,segundo_curso_pago,pago,Maria Elisa Chermont de Miranda Petersen,(21) 99309-9391,Sexta-feira,20:00
+2026-01,Manuela correia Lopes de Oliveira,02/02/2013,31/03/2025,Guitarra,14,Lucas Guimarães,21,410.0,não,pagante,pago,Monike correia Lopes de Oliveira,(21) 98874-5059,Sexta-feira,20:00
+2026-01,Manuela de Moura Vieira,25/07/2017,29/02/2024,Bateria,27,Willer Machado,40,385.0,não,pagante,pago,Bianca golçalves de Moura,(21) 99861-3434,Terça-feira,16:00
+2026-01,Manuela Laidens Bittencourt,14/06/2011,09/01/2026,Violão,10,Willer Machado,40,300.0,não,pagante,pago,Letícia Laidens Rosa,(21) 97970-3816,Terça-feira,14:00
+2026-01,Manuela Souza Soares,31/03/2010,27/09/2025,Garage Band,38,Renan Guimarães,34,0.0,não,pagante,sem_fatura,Waldyr Soares Ferreira Filho,(21) 98006-2354,Sexta-feira,16:00
+2026-01,Manuela Souza Soares,31/03/2010,22/05/2025,Guitarra,14,Lucas Guimarães,21,420.0,sim,segundo_curso_pago,pago,Waldyr Soares Ferreira Filho,(21) 98006-2354,Quarta-feira,16:00
+2026-01,Manuella Weber Riedel,27/04/2013,30/08/2025,Guitarra,14,Lucas Guimarães,21,395.0,não,pagante,pago,Alexandra Weber da Silva,(21) 99558-7402,Sexta-feira,18:00
+2026-01,Marcela de Araújo Guimarães Dutra,17/11/2011,30/09/2025,Canto,6,Leticia Palmeira,18,395.0,não,pagante,pago,Marcia de Araújo Guimarães Dutra,(21) 96853-3753,Quinta-feira,20:00
+2026-01,Marcelo Costa de Souza lira,20/07/1979,29/11/2025,Violão,10,Lucas Guimarães,21,385.0,não,pagante,pago,,(21) 98752-7509,Sexta-feira,19:00
+2026-01,Marco Antônio Barreto Sundin,13/12/1984,28/08/2024,Teclado,16,Kaio Cabral,15,410.4,não,pagante,pago,,(21) 96457-6261,Segunda-feira,20:00
+2026-01,Marcos Monteiro Leal Simões,03/07/2015,19/07/2025,Musicalização Preparatória,4,Matheus Silva,26,405.0,não,pagante,pago,Pammela Monteiro de Freitas leal,(21) 97015-4545,Sábado,11:00
+2026-01,Maria Clara Cunha dos Santos,01/10/2012,02/02/2022,Power Kids,25,Vinicius Nascimento,38,0.0,não,pagante,sem_fatura,Marco Antônio de Macedo dos Santos,(21) 96801-2124,Quinta-feira,10:00
+2026-01,Maria Clara Cunha dos Santos,01/10/2012,18/06/2022,Teclado,16,Ramon Morais,33,347.75,sim,segundo_curso_pago,pago,Marco Antônio de Macedo dos Santos,(21) 96801-2124,Quinta-feira,10:00
+2026-01,María Clara Monteiro de Carvalho,13/01/2016,07/08/2023,Canto,6,Larissa Santos,16,335.5,não,pagante,pago,Rachel M Batista de Carvalho,(21) 98252-2871,Quarta-feira,19:00
+2026-01,María Clara Monteiro de Carvalho,13/01/2016,27/01/2023,Teclado,16,Larissa Santos,16,374.0,sim,segundo_curso_pago,pago,Rachel M Batista de Carvalho,(21) 98252-2871,Quarta-feira,20:00
+2026-01,Maria Clara Monteiro Delgado de Oliveira,01/02/2018,24/02/2022,Canto,6,Alexandre Santo,43,422.65,não,pagante,pago,Alexander Delgado de Oliveira,(21) 98830-3007,Segunda-feira,13:00
+2026-01,Maria Clara Wandeck Lima,03/10/2019,27/05/2025,Teclado,16,Vinicius Nascimento,38,410.0,não,pagante,pago,Thiago Carvalho dos Santos Lima,(21) 99618-5898,Quinta-feira,18:00
+2026-01,Maria Edith Madeira Coimbra,03/05/2022,31/10/2023,Musicalização Preparatória,4,Leticia Palmeira,18,498.96,não,pagante,pago,Caroline Cristina Madeira Coimbra,(21) 99155-0140,Segunda-feira,11:00
+2026-01,Maria Eduarda Cardoso Moreira,05/07/2016,30/08/2025,Canto,6,Lohana Araújo,20,385.0,não,pagante,pago,Jaqueline Martins Cardoso,(21) 99625-5998,Sábado,09:00
+2026-01,Maria Eduarda Gadelha Albergarias,06/11/2016,30/08/2025,Canto,6,Lohana Araújo,20,0.0,não,pagante,sem_fatura,Ana Paula Gadelha Guimaraes Albergarias,(21) 98166-8172,Quinta-feira,18:00
+2026-01,Maria Eduarda Oliveira Costa,02/07/2007,11/12/2021,Bateria,27,Rafael (Akeem),32,411.95,não,pagante,pago,,(21) 96536-3768,Sábado,14:00
+2026-01,Maria Eduarda Oliveira Costa,02/07/2007,25/06/2022,Garage Band,38,Ramon Morais,33,0.0,sim,bonus_gratuito,sem_fatura,,(21) 96536-3768,Quarta-feira,18:00
+2026-01,Maria Eduarda Quinteiro Artacho,26/06/2014,18/08/2022,Teclado,16,Willer Machado,40,0.0,não,pagante,sem_fatura,Rafael dos Santos Artacho,(21) 96436-3335,Quinta-feira,14:00
+2026-01,Maria Eduarda Santiago de Aguiar,18/12/2013,12/12/2025,Guitarra,14,Willian Silva,41,410.0,não,pagante,pago,Aline da Silva Santiago de Aguiar,(21) 98883-0533,Sexta-feira,18:00
+2026-01,Maria Esther Hadassa,25/11/2019,14/11/2024,Teclado,16,Larissa Santos,16,385.0,não,pagante,pago,Demilse Pimentel,(21) 97035-9929,Quinta-feira,19:00
+2026-01,Maria Flor Arrigoni Carneiro,24/08/2011,28/11/2024,Contrabaixo,21,Lucas Guimarães,21,385.0,não,pagante,pago,Flavia Arrigoni,(21) 96014-4112,Quarta-feira,17:00
+2026-01,Maria Flor Arrigoni Carneiro,24/08/2011,25/06/2025,Garage Band,38,Renan Guimarães,34,0.0,sim,bonus_gratuito,sem_fatura,Flavia Arrigoni,(21) 96014-4112,Quarta-feira,16:00
+2026-01,Maria Helena Brizzi de Almeida,17/05/2018,29/04/2025,Teclado,16,Rafael (Akeem),32,385.0,não,pagante,pago,Clissia Corrêa Brizzi de Almeida,(21) 97288-6575,Quarta-feira,11:00
+2026-01,Maria Júlia Lagdem Fernandes,14/07/2018,01/08/2022,Canto,6,Leticia Palmeira,18,478.55,não,pagante,pago,Marcelle Mendes Lagdem Fernandes,+55 (21) 99969-5289,Quinta-feira,19:00
+2026-01,Maria Júlia nascimento Nóbrega,07/04/2017,24/04/2024,Canto,6,Matheus Lourenço,25,0.0,não,pagante,sem_fatura,Kátia nascimento Nóbrega da silva,(21) 97148-7362,Segunda-feira,19:00
+2026-01,Maria Luiza Ferreira Moura,10/05/2016,14/05/2024,Bateria,27,Rafael (Akeem),32,365.15,não,pagante,pago,Jéssica de Jesus dos Santos Ferreira moura,(21) 96415-4186,Sábado,11:00
+2026-01,Maria Luiza Figueiredo Cantalice,08/11/2016,30/07/2025,Canto,6,Lohana Araújo,20,404.03,não,pagante,pago,Daniele Santos Figueiredo,(21) 99675-4466,Quinta-feira,18:00
+2026-01,Maria Petzold Antonioli Coutinho,24/10/2016,30/07/2025,Teclado,16,Larissa Santos,16,410.0,não,pagante,pago,Lidya Petzold Fernandes,(21) 98048-8703,Quarta-feira,20:00
+2026-01,Maria Rita Damasceno Estevez,13/02/2020,28/02/2025,Bateria,27,Willer Machado,40,385.0,não,pagante,pago,Leonardo Clemente Estevez,(21) 99923-0134,Sexta-feira,16:00
+2026-01,Maria Sousa P. dos Santos,06/06/1999,05/08/2025,Contrabaixo,21,Willer Machado,40,0.0,não,pagante,sem_fatura,,(21) 98207-6184,Terça-feira,11:00
+2026-01,Mariana Albuquerque Oliveira,08/05/2010,15/10/2024,Violino,12,Joel Filho,13,388.5,não,pagante,pago,Fernanda Ferreira Albuquerque Oliveira,(21) 98080-7015,Sexta-feira,18:00
+2026-01,Marília Andressa Sandeo,06/09/1997,27/10/2025,Canto,6,Alexandre Santo,43,410.0,não,pagante,pago,,(21) 97226-8597,Segunda-feira,19:00
+2026-01,Matheus Carvalho Freitas,10/06/1991,08/08/2025,Guitarra,14,Lucas Guimarães,21,395.0,não,pagante,pago,,(21) 97460-7794,Sexta-feira,13:00
+2026-01,Matheus da Mota Gomes,04/10/2017,09/08/2025,Teclado,16,Joel Filho,13,375.0,não,pagante,pago,Eliana Soares da Mota Gomes,(21) 98123-1098,Sexta-feira,10:00
+2026-01,Mathias Barreto Caetano,02/09/2016,02/10/2025,Teclado,16,Alexandre Santo,43,420.0,não,pagante,pago,Maicon Fernando I  Caetano,(21) 99299-9430,Segunda-feira,10:00
+2026-01,Maysa Telles Reis Gonçalves,18/01/2013,25/06/2025,Canto,6,Rafael (Akeem),32,340.0,não,pagante,pago,Tatiane Telles Reis,(21) 96440-1863,Terça-feira,15:00
+2026-01,Maysa Telles Reis Gonçalves,18/01/2013,03/05/2023,Garage Band,38,Ramon Morais,33,0.0,sim,segundo_curso_pago,sem_fatura,Tatiane Telles Reis,(21) 96440-1863,Quarta-feira,20:00
+2026-01,Maysa Telles Reis Gonçalves,18/01/2013,09/04/2024,Power Kids,25,Ramon Morais,33,0.0,sim,bonus_gratuito,sem_fatura,Tatiane Telles Reis,(21) 96440-1863,Terça-feira,16:00
+2026-01,Maysa Telles Reis Gonçalves,18/01/2013,16/02/2023,Violão,10,Lohana Araújo,20,304.95,sim,segundo_curso_pago,pago,Tatiane Telles Reis,(21) 96440-1863,Terça-feira,20:00
+2026-01,Miguel Antunes Tostes,15/06/2011,15/02/2023,Bateria,27,Ramon Morais,33,434.5,não,pagante,pago,Cesar Martins Tostes,(21) 98606-2425,Sábado,10:00
+2026-01,Miguel Antunes Tostes,15/06/2011,12/05/2023,Garage Band,38,Rafael (Akeem),32,0.0,sim,bonus_gratuito,sem_fatura,Cesar Martins Tostes,(21) 98606-2425,Quarta-feira,20:00
+2026-01,Miguel Bolais de Salles,29/01/2016,31/05/2024,Bateria,27,Ramon Morais,33,386.9,não,pagante,pago,Roberta Salles,(21) 97984-7505,Segunda-feira,10:00
+2026-01,Miguel Bolais de Salles,29/01/2016,22/08/2025,Guitarra,14,Israel Silva,11,365.0,sim,segundo_curso_pago,pago,Roberta Salles,(21) 97984-7505,Terça-feira,09:00
+2026-01,Miguel Bolais de Salles,29/01/2016,27/09/2025,Power Kids,25,Rafael (Akeem),32,0.0,sim,bonus_gratuito,sem_fatura,Roberta Salles,(21) 97984-7505,Segunda-feira,09:00
+2026-01,Miguel Couto de Andrade,27/11/2011,30/06/2022,Garage Band,38,Willian Silva,41,0.0,não,pagante,sem_fatura,Grace Couto de Andrade,(21) 97134-5259,Sexta-feira,15:00
+2026-01,Miguel Couto de Andrade,27/11/2011,17/06/2025,Teclado,16,Willian Silva,41,453.5,sim,segundo_curso_pago,pago,Grace Couto de Andrade,(21) 97134-5259,Terça-feira,17:00
+2026-01,Miguel da Silva Fraga,30/12/2018,16/09/2025,Bateria,27,Willer Machado,40,385.0,não,pagante,pago,Bruno Sandre Fraga,,Sexta-feira,14:00
+2026-01,Miguel Holanda Cavalcanti Martins,23/02/2013,04/08/2025,Bateria,27,Vicente Neto,37,385.0,não,pagante,pago,Eline Holanda Cavalcanti Garcia de Barros,(55) 51963-1440,Segunda-feira,15:00
+2026-01,Miguel Jorge da Silva,20/12/2007,05/06/2024,Bateria,27,Rafael (Akeem),32,385.0,não,pagante,pago,,(21) 98034-0174,Quinta-feira,18:00
+2026-01,Miguel Masson Rocha Mendes,10/04/2015,13/08/2024,Teclado,16,Willian Fumaça,42,467.5,não,pagante,pago,Antonio Marcos Rocha Mendes,(21) 97020-0520,Terça-feira,15:00
+2026-01,Miguel Menezes Merçon dos Santos,20/05/2010,02/06/2025,Guitarra,14,Israel Silva,11,400.0,não,pagante,pago,Cintia Menezes,(21) 99720-0510,Sábado,10:00
+2026-01,Miguel Rodrigues Furtado,25/10/2023,24/01/2026,Musicalização Preparatória,4,Leticia Palmeira,18,400.0,não,pagante,pago,Izadora Adais Rodrigues Pereira,(38) 98422-9505,Segunda-feira,09:00
+2026-01,Milena Melo Lima Correa,09/11/2016,16/08/2022,Teclado,16,Alexandre Santo,43,464.4,não,pagante,pago,Barbara Melo Lima,(21) 99689-7770,Quarta-feira,15:00
+2026-01,Natan Lança Moreira,23/04/2018,26/08/2025,Bateria,27,Willer Machado,40,395.0,não,pagante,pago,Rosane Soares da Silva Lança,(21) 98207-7804,Terça-feira,11:00
+2026-01,Natan Sá Justino,05/10/2013,24/01/2025,Teclado,16,Joel Filho,13,385.0,não,pagante,pago,Renata Sá Dias,(21) 98132-6651,Sexta-feira,14:00
+2026-01,Natan Vitor Santos,13/03/1990,14/08/2025,Bateria,27,Vicente Neto,37,0.0,não,pagante,sem_fatura,,(21) 95901-1810,Quarta-feira,20:00
+2026-01,Nathan Leggett de Moura,13/05/2014,30/01/2020,Bateria,27,Isaque Silva,10,434.5,não,pagante,pago,Melissa Lyynn Leggett de Moura,(21) 99860-8054,Quinta-feira,17:00
+2026-01,Nathan Leggett de Moura,13/05/2014,18/05/2021,Teclado,16,Rafael (Akeem),32,0.0,sim,segundo_curso_pago,sem_fatura,Melissa Lyynn Leggett de Moura,(21) 99860-8054,Quinta-feira,17:00
+2026-01,Nicolas Couto de Andrade,27/11/2011,30/06/2022,Bateria,27,Caio Araujo,2,453.6,não,pagante,pago,Grace Couto de Andrade,(21) 97134-5259,Sexta-feira,15:00
+2026-01,Nicolas Couto de Andrade,27/11/2011,17/06/2025,Garage Band,38,Caio Araujo,2,0.0,sim,bonus_gratuito,sem_fatura,Grace Couto de Andrade,(21) 97134-5259,Terça-feira,17:00
+2026-01,Nicolas de Farias Varjão,10/10/2014,12/03/2025,Teclado,16,Isaque Silva,10,385.0,não,pagante,pago,Luiz Felipe Carneiro Varjão,(21) 99838-5682,Terça-feira,14:00
+2026-01,Nicole Takeda Takenawa,16/04/2010,11/06/2025,Guitarra,14,Marcos Filho,23,420.0,não,pagante,pago,Hissayuki Takenawa Junior,(21) 96909-9999,Quinta-feira,17:00
+2026-01,Noah Carpenter Degan,08/04/2019,28/10/2023,Ukulêlê,8,Ramon Morais,33,445.17,não,pagante,pago,Paulo Roberto D. Da Silva,(21) 99992-2307,Sábado,10:00
+2026-01,Noah Ciccarelli Artacho Pincelli,18/11/2017,18/08/2022,Guitarra,14,Israel Silva,11,0.0,não,pagante,sem_fatura,Rafael dos Santos Artacho,(21) 96473-3441,Segunda-feira,18:00
+2026-01,Noah Teixeira Menezes de Lima,26/07/2019,31/01/2022,Guitarra,14,Lucas Guimarães,21,375.0,não,pagante,pago,Candice Oliveira Teixeira Menezes de lima,(21) 99331-8138,Sábado,11:00
+2026-01,Noah Teixeira Menezes de Lima,26/07/2019,09/08/2025,Musicalização Preparatória,4,Marcos Filho,23,0.0,sim,segundo_curso_pago,sem_fatura,Candice Oliveira Teixeira Menezes de lima,(21) 99331-8138,Sábado,11:00
+2026-01,Olivia Carvalho Rocha,28/10/2022,31/01/2026,Musicalização Preparatória,4,Larissa Santos,16,400.0,não,pagante,pago,Kelly Carvalho,(21) 98682-1972,Quinta-feira,10:00
+2026-01,Olivia Freire Rodrigues Oliveira,20/02/2016,08/08/2023,Bateria,27,Rafael (Akeem),32,300.0,não,pagante,pago,Adriana Freire Rodrigues,(21) 97616-7046,Quinta-feira,15:00
+2026-01,Olivia Freire Rodrigues Oliveira,20/02/2016,11/04/2024,Canto,6,Lohana Araújo,20,0.0,sim,segundo_curso_pago,sem_fatura,Adriana Freire Rodrigues,(21) 97616-7046,Quinta-feira,15:00
+2026-01,Otto Dorileo Ewald,28/06/2016,28/11/2025,Bateria,27,Rafael (Akeem),32,420.0,não,pagante,pago,Fabiana Dorileo Ewald,(21) 98196-6878,Quarta-feira,15:00
+2026-01,Otto Santiago Mendes,23/07/2020,09/01/2024,Teclado,16,Joel Filho,13,423.5,não,pagante,pago,Ana Paula Brito Santiago,(21) 97913-9903,Sexta-feira,09:00
+2026-01,Pedro Cesquim Medeiros de Castro e Azevedo,29/04/2015,07/04/2025,Teclado,16,Kaio Cabral,15,395.0,não,pagante,pago,Adriana Cesquim de Costa,(21) 99867-7952,Segunda-feira,19:00
+2026-01,Pedro da Mota Gomes,03/06/2015,09/08/2025,Teclado,16,Rafael (Akeem),32,375.0,não,pagante,pago,Eliana Soares da Mota Gomes,(21) 98123-1098,Sexta-feira,10:00
+2026-01,Pedro da Silva Machado,09/09/2015,15/08/2023,Ukulêlê,8,Ramon Morais,33,378.23,não,pagante,pago,Uilson Luis Moreira Machado,(21) 99667-7450,Terça-feira,14:00
+2026-01,Pedro de Castro Bressane Albuquerque do Carmo,24/05/2016,31/05/2022,Bateria,27,Willian Silva,41,423.5,não,pagante,pago,Marcello Pequeno de Albuquerque do Carmo,(21) 99758-4845,Sexta-feira,09:00
+2026-01,Pedro Faria Frazão de Souza,02/03/2014,23/09/2020,Teclado,16,Joel Filho,13,396.82,não,pagante,pago,Diogo Frazão de Souza,(21) 97160-0761,Segunda-feira,18:00
+2026-01,Pedro Gabriel de Melo Alexandre,31/01/2003,26/10/2024,Canto,6,Matheus Oliveira,27,385.0,não,pagante,pago,,(21) 97520-1614,Quinta-feira,17:00
+2026-01,Pedro Gabriel de Melo Alexandre,31/01/2003,01/04/2024,Garage Band,38,Willer Machado,40,0.0,sim,bonus_gratuito,sem_fatura,,(21) 97520-1614,Quinta-feira,18:00
+2026-01,Pedro Gabriel de Melo Alexandre,31/01/2003,28/03/2024,Guitarra,14,Matheus Oliveira,27,385.0,sim,segundo_curso_pago,pago,,(21) 97520-1614,Quinta-feira,19:00
+2026-01,Pedro Henrique Almeida Capitanio,02/07/2011,30/04/2025,Bateria,27,Rafael (Akeem),32,420.0,não,pagante,pago,Ana Claudia Lopes Almeida,(21) 97622-4715,Sexta-feira,15:00
+2026-01,Pedro Quintas de Oliveira Ramos Morais,20/09/2018,25/06/2020,Bateria,27,Willian Silva,41,407.0,não,pagante,pago,Juliana Quintas de Oliveira Ramos Morais,(21) 98558-9181,Sexta-feira,10:00
+2026-01,Philippe de Goulart Rodrigues,18/03/2009,28/07/2025,Guitarra,14,Alexandre Junior,43,400.0,não,pagante,pago,Luciana Goulart Rodrigues,(21) 99167-6364,Terça-feira,20:00
+2026-01,Pietra Sucena Novaes Calvo Bueno,16/06/2019,28/07/2022,Canto,6,Leticia Palmeira,18,427.9,não,pagante,pago,Daniele Cristine Novaes Sucena de Almeida,+55 (21) 99227-6556,Quinta-feira,19:00
+2026-01,Rafael Marques G dos Santos,20/11/2012,16/09/2024,Bateria,27,Vicente Neto,37,431.2,não,pagante,pago,Roberta De Almeida Marques,(21) 99937-1803,Segunda-feira,16:00
+2026-01,Rafael Souto Machado,16/09/2014,25/08/2018,Bateria,27,Matheus Silva,26,377.4,não,pagante,pago,Kelling Cabral Souto,(21) 99664-5789,Sábado,09:00
+2026-01,Rafael Villeth de Holanda,27/11/2015,11/01/2025,Bateria,27,Rafael (Akeem),32,400.0,não,pagante,pago,Alessandra Villeth,(21) 99979-7643,Sexta-feira,18:00
+2026-01,Rafaela Magalhães Garcia eiras,19/04/2016,14/01/2026,Canto,6,Alexandre Santo,43,400.0,não,pagante,pago,Rafael Garcia Madalen eiras,(21) 96458-0458,Segunda-feira,20:00
+2026-01,Ramires Moraes do Nascimento,22/11/2014,06/05/2025,Musicalização Preparatória,4,Larissa Santos,16,420.0,não,pagante,pago,Valéria Moraes do Nascimento,(21) 98665-9132,Quarta-feira,18:00
+2026-01,Ricardo Alfonso Moreno Ruiz,11/12/2012,20/02/2024,Garage Band,38,Renan Guimarães,34,0.0,não,pagante,sem_fatura,Bárbara Beatriz Ruiz de Moreno,(27) 99808-6877,Quarta-feira,14:00
+2026-01,Ricardo Alfonso Moreno Ruiz,11/12/2012,07/05/2024,Teclado,16,Matheus Oliveira,27,385.0,sim,segundo_curso_pago,pago,Bárbara Beatriz Ruiz de Moreno,(27) 99808-6877,Quinta-feira,19:00
+2026-01,Roberta Rodrigues Lins Rodolfo,05/10/2005,09/06/2025,Canto,6,Larissa Santos,16,420.0,não,pagante,pago,,(21) 98402-2005,Quarta-feira,15:00
+2026-01,Roberto Toledo El Alam,02/07/1979,30/09/2025,Violão,10,Valdo Delfino,36,385.0,não,pagante,pago,,(21) 98834-0113,Quinta-feira,18:00
+2026-01,Rodrigo Pereira Brum,13/07/1979,10/03/2021,Violão,10,Lucas Guimarães,21,420.0,não,pagante,pago,,(21) 99129-3363,Quarta-feira,18:00
+2026-01,Rúbia Pimentel Duarte,01/06/2019,24/06/2021,Musicalização Para Bebês,2,Joel Filho,13,0.0,não,pagante,sem_fatura,Thaiza Pimentel,(21) 96478-6028,Sexta-feira,10:00
+2026-01,Rúbia Pimentel Duarte,01/06/2019,23/10/2024,Teclado,16,Marcos Filho,23,408.88,sim,segundo_curso_pago,pago,Thaiza Pimentel,(21) 96478-6028,Sexta-feira,10:00
+2026-01,Samuel Nunes Victorino,30/01/2019,11/08/2025,Teclado,16,Matheus Silva,26,0.0,não,pagante,inadimplente,Daiane Mendes Nunes victorino,(21) 98521-6525,Sábado,08:00
+2026-01,Samuel Silveira Noronha,06/04/2020,12/08/2025,Bateria,27,Willian Silva,41,395.0,não,pagante,pago,Ana Paula Silveira Noronha,(21) 98104-5207,Quinta-feira,15:00
+2026-01,Saulo Medeiros Aride,21/09/1985,05/04/2025,Guitarra,14,Lucas Guimarães,21,400.0,não,pagante,pago,,(21) 99159-7859,Sábado,09:00
+2026-01,Sérgio Mauro da Silva Maia,12/04/1977,14/11/2025,Violão,10,Valdo Delfino,36,405.0,não,pagante,pago,,(21) 99617-8144,Quinta-feira,20:00
+2026-01,Silvia Ohana Marques Coelho de Carvalho,26/05/1984,19/07/2025,Canto,6,Matheus Oliveira,27,370.0,não,pagante,pago,,(21) 98751-9154,Terça-feira,13:00
+2026-01,Silvia Ohana Marques Coelho de Carvalho,26/05/1984,20/02/2025,Garage Band,38,Ramon Morais,33,0.0,sim,bonus_gratuito,sem_fatura,,(21) 98751-9154,Terça-feira,12:00
+2026-01,Sofia de Avellar Muchuli e Silva,17/05/2015,23/01/2025,Teclado,16,Willer Machado,40,370.0,não,pagante,pago,William Corrêa de Oliveira e Silva,(21) 99327-8723,Sexta-feira,19:00
+2026-01,Sofia Gonçalves Copello Moraes,20/04/2013,08/09/2022,Canto,6,Lohana Araújo,20,508.2,não,pagante,pago,Fabiane Gonçalves Copello Moraes,(21) 98181-6048,Quinta-feira,19:00
+2026-01,Sofia Lima de Castro,06/04/2009,31/10/2019,Canto,6,Israel Silva,11,385.0,não,pagante,pago,Renata Lima Rocha,(21) 99971-1062,Terça-feira,16:00
+2026-01,Sofia Lima de Castro,06/04/2009,11/11/2024,Garage Band,38,Ramon Morais,33,0.0,sim,segundo_curso_pago,sem_fatura,Renata Lima Rocha,(21) 99971-1062,Sábado,15:00
+2026-01,Sofia Lima de Castro,06/04/2009,08/01/2024,Canto,6,Lohana Araújo,20,0.0,sim,segundo_curso_pago,sem_fatura,Renata Lima Rocha,(21) 99971-1062,Terça,16:00
+2026-01,Sofia Lima de Castro,06/04/2009,11/04/2024,Violão,10,Lohana Araújo,20,0.0,sim,segundo_curso_pago,sem_fatura,Renata Lima Rocha,(21) 99971-1062,Terça-feira,16:00
+2026-01,Sophia Correa Motta,22/05/2013,17/06/2025,Canto,6,Alexandre Santo,43,402.5,não,pagante,pago,Ana Carolina de Almeida Motta,(21) 97140-5090,Segunda-feira,17:00
+2026-01,Sophia Correa Motta,22/05/2013,23/10/2024,Garage Band,38,Rafael (Akeem),32,0.0,sim,bonus_gratuito,sem_fatura,Ana Carolina de Almeida Motta,(21) 97140-5090,Segunda-feira,17:00
+2026-01,Sophie Medeiros Rodrigues,20/09/2018,26/10/2020,Canto IND,5,Matheus Lourenço,25,463.26,não,pagante,pago,Danielle Medeiros Da Silva Machado,(21) 99662-9389,Sábado,08:00
+2026-01,Sophie Medeiros Rodrigues,20/09/2018,13/05/2021,Musicalização Preparatória,4,Lohana Araújo,20,0.0,sim,segundo_curso_pago,sem_fatura,Danielle Medeiros Da Silva Machado,(21) 99662-9389,Sábado,08:00
+2026-01,Sophie Szsentes Boyd,30/08/2018,27/01/2023,Canto,6,Alexandre Santo,43,368.5,não,pagante,pago,André Luiz Pamplona Boyd,(21) 97988-8003,Quarta-feira,16:00
+2026-01,Tammy Missae dos Reis Nagashima Lira,07/07/1981,29/11/2025,Violão,10,Lucas Guimarães,21,385.0,não,pagante,pago,,(21) 97632-4663,Sexta-feira,19:00
+2026-01,Théo Arruda de Oliveira,12/11/2018,18/07/2025,Guitarra,14,Lucas Guimarães,21,420.0,não,pagante,pago,Mariana Moura Sampaio de Arruda,(21) 98804-8630,Sábado,11:00
+2026-01,Theo Campello Bastos,21/10/2015,04/08/2025,Teclado,16,Kaio Cabral,15,395.0,não,pagante,pago,Renata Campello Brito,(21) 99946-0234,Segunda-feira,19:00
+2026-01,Theo de Souza Galdino,03/09/2015,16/01/2025,Bateria,27,Willian Silva,41,395.0,não,pagante,pago,Monique Graciele F de Souza,(21) 99792-8246,Quinta-feira,09:00
+2026-01,Theo de Souza Galdino,03/09/2015,29/07/2025,Power Kids,25,Ramon Morais,33,0.0,sim,bonus_gratuito,sem_fatura,Monique Graciele F de Souza,(21) 99792-8246,Terça-feira,18:00
+2026-01,Theo Modesti da Cunha Belém,12/07/2019,08/08/2025,Bateria,27,Vicente Neto,37,395.0,não,pagante,pago,PAULA MODESTI DA CUNHA,(21) 99515-8649,Segunda-feira,17:00
+2026-01,Thomás Giorelli de Carvalho,20/08/2014,20/02/2025,Teclado IND,15,Willer Machado,40,500.0,não,pagante,pago,Luciana Schnoor Giorelli,(21) 99636-8786,Quinta-feira,20:00
+2026-01,Thomas Medeiros Rodrigues,26/03/2020,26/10/2020,Musicalização Para Bebês,2,Matheus Lourenço,25,0.0,não,pagante,sem_fatura,Danielle Medeiros Da Silva Machado,(21) 99662-9389,Sábado,08:00
+2026-01,Thomas Medeiros Rodrigues,26/03/2020,13/05/2021,Musicalização Preparatória IND,3,Rafael (Akeem),32,463.26,sim,segundo_curso_pago,pago,Danielle Medeiros Da Silva Machado,(21) 99662-9389,Sábado,08:00
+2026-01,Valentim da Silva Bond,25/01/2020,25/08/2025,Bateria,27,Matheus Silva,26,395.0,não,pagante,pago,Marcelo de Oliveira da Silva,(21) 99205-1961,Sábado,10:00
+2026-01,Valentina Cortes Santanna,30/05/2014,04/05/2023,Canto,6,Ramon Morais,33,418.0,não,pagante,pago,Paula Moreira Cortes,(21) 99961-3359,Segunda-feira,18:00
+2026-01,Valentina Cortes Santanna,30/05/2014,29/01/2022,Power Kids,25,Ramon Morais,33,0.0,sim,bonus_gratuito,sem_fatura,Paula Moreira Cortes,(21) 99961-3359,Terça-feira,20:00
+2026-01,Valentina Legget de Moura,17/08/2023,28/01/2026,Musicalização Para Bebês,2,Leticia Palmeira,18,400.0,não,pagante,pago,Melissa Lyynn Leggett de Moura,,Quinta-feira,17:00
+2026-01,Valentina Mendes Rodrigues Aleixo,29/05/2015,02/06/2025,Canto,6,Matheus Lourenço,25,402.8,não,pagante,pago,Giulliany Mendes Rodrigues,(21) 96444-1961,Segunda-feira,10:00
+2026-01,Valentina Mendes Rodrigues Aleixo,29/05/2015,16/04/2024,Teclado,16,Matheus Lourenço,25,370.0,sim,segundo_curso_pago,pago,Giulliany Mendes Rodrigues,(21) 96444-1961,Segunda-feira,11:00
+2026-01,Vaner Paranhos,30/05/1982,27/08/2025,Canto,6,Leticia Palmeira,18,395.0,não,pagante,pago,,(21) 96493-6878,Segunda-feira,19:00
+2026-01,Vicente Boêta Alves,12/11/2020,14/12/2024,Musicalização Preparatória,4,Leticia Palmeira,18,385.0,não,pagante,pago,Daniela da Silva Boêta,(21) 96443-9327,Sábado,09:00
+2026-01,Vicente Pereira Costard,19/04/2020,23/05/2025,Musicalização Preparatória,4,Leticia Palmeira,18,385.0,não,pagante,pago,Debora Gomes Neto Costard,(21) 99995-2013,Quarta-feira,16:00
+2026-01,Victor Alexandre Mendes Soares,17/07/2013,11/11/2020,Garage Band,38,Rafael (Akeem),32,0.0,não,pagante,sem_fatura,Gisele de Almenida Mendes Soares,(21) 99166-9528,Quarta-feira,19:00
+2026-01,Victor Alexandre Mendes Soares,17/07/2013,03/05/2023,Teclado,16,Alexandre Santo,43,418.88,sim,segundo_curso_pago,pago,Gisele de Almenida Mendes Soares,(21) 99166-9528,Quarta-feira,20:00
+2026-01,Victor Henrique de Sá Santos,15/07/1996,06/05/2025,Canto IND,5,Matheus Oliveira,27,500.0,não,pagante,pago,,(11) 96301-8033,Quinta-feira,14:00
+2026-01,Victor Henrique de Sá Santos,15/07/1996,06/05/2025,Teclado IND,15,Willer Machado,40,500.0,sim,segundo_curso_pago,pago,,(11) 96301-8033,Terça-feira,13:00
+2026-01,Vinícius Palmieri Schmid,28/01/2012,02/06/2025,Bateria,27,Rafael (Akeem),32,390.0,não,pagante,pago,Rachel Palmieri,(21) 97349-0071,Terça-feira,15:00
+2026-01,Vitor Palmieri Schmid,27/08/2016,02/06/2025,Violão,10,Lucas Guimarães,21,390.0,não,pagante,pago,Rachel Palmieri,(21) 97349-0071,Terça-feira,15:00
+2026-01,Vitória da Silva Nobre,30/03/2017,20/02/2025,Canto IND,5,Leticia Palmeira,18,663.5,não,pagante,pago,Rafael Pereira Nobre,(21) 98080-9434,Quinta-feira,15:00
+2026-01,Yuri Amador Maia,19/01/2017,21/03/2025,Teclado,16,Joel Filho,13,410.0,não,pagante,pago,Claudineia Amador,(21) 97024-6217,Sexta-feira,11:00
+2026-01,Yuri Barros Jardim,22/06/2015,29/11/2024,Bateria,27,Vicente Neto,37,365.0,não,pagante,pago,Marta Nascimento Barros,(21) 96735-1215,Segunda-feira,18:00
+2026-01,Yuri de Souza Ribeiro,26/11/2009,10/06/2021,Garage Band,38,Ramon Morais,33,0.0,não,pagante,sem_fatura,Hemilly Góes De Souza Ribeiro,(21) 97383-5830,Quarta-feira,17:00
+2026-01,Yuri de Souza Ribeiro,26/11/2009,06/06/2022,Teclado,16,Renan Guimarães,34,488.75,sim,segundo_curso_pago,pago,Hemilly Góes De Souza Ribeiro,(21) 97383-5830,Quarta-feira,18:00
+2026-02,Agatha de Sá Dellatorre,05/04/2018,17/02/2024,Teclado,16,Renan Guimarães,34,0.0,não,pagante,sem_fatura,Aluimar Dellatorre Pereira de Souza Filho,(21) 96494-0834,Quarta-feira,15:00
+2026-02,Agatha Sampaio Mendes dos Santos,01/08/2009,31/03/2025,Canto,6,Leticia Palmeira,18,385.0,não,pagante,pago,Cristiane Sampaio Mendes,(21) 99331-3658,Segunda-feira,16:00
+2026-02,Alex Mendes Silva de Souza,28/03/2007,15/05/2023,Contrabaixo,21,Ramon Morais,33,451.0,não,pagante,pago,,(21) 98772-5817,Quarta-feira,19:00
+2026-02,Alex Mendes Silva de Souza,28/03/2007,07/02/2024,Garage Band,38,Ramon Morais,33,0.0,sim,bonus_gratuito,sem_fatura,,(21) 98772-5817,Quarta-feira,20:00
+2026-02,Alice dos Santos Seabra,03/02/2016,27/03/2025,Canto,6,Vinicius Nascimento,38,385.0,não,pagante,pago,Pamela Seabra,(91) 99138-9336,Quinta-feira,20:00
+2026-02,Alice dos Santos Seabra,03/02/2016,23/06/2025,Power Kids,25,Lohana Araújo,20,0.0,sim,bonus_gratuito,sem_fatura,Pamela Seabra,(91) 99138-9336,Quinta-feira,19:00
+2026-02,Alice dos Santos Seabra,03/02/2016,28/03/2025,Teclado,16,Lucas Guimarães,21,385.0,sim,segundo_curso_pago,pago,Pamela Seabra,(91) 99138-9336,Terça-feira,20:00
+2026-02,Alice Marzullo Monteiro Mendes,23/07/2012,12/12/2024,Canto,6,Larissa Santos,16,0.0,não,pagante,sem_fatura,Bruno Monteiro Mendes,(21) 99462-6552,Sexta-feira,19:00
+2026-02,Alice Mattos Jordão,16/01/2021,11/07/2022,Musicalização Para Bebês,2,Leticia Palmeira,18,0.0,não,pagante,sem_fatura,Renata Jacob da Silva Mattos,(21) 98343-7721,Sábado,08:00
+2026-02,Alice Mattos Jordão,16/01/2021,23/11/2024,Musicalização Preparatória,4,Marcos Filho,23,0.0,sim,segundo_curso_pago,sem_fatura,Renata Jacob da Silva Mattos,(21) 98343-7721,Sábado,08:00
+2026-02,Alisson Silva Leite,04/05/1996,04/07/2025,Bateria,27,Rafael (Akeem),32,405.0,não,pagante,pago,,(21) 98577-1370,Quinta-feira,14:00
+2026-02,Amanda Aiko Gomes Togashi,14/04/2009,16/09/2025,Bateria,27,Vicente Neto,37,385.0,não,pagante,pago,Flávia Gomes Togashi,(21) 99547-2619,Terça-feira,20:00
+2026-02,Amanda Aiko Gomes Togashi,14/04/2009,11/12/2025,Canto,6,Lohana Araújo,20,385.0,sim,segundo_curso_pago,pago,Flávia Gomes Togashi,(21) 99547-2619,Terça-feira,19:00
+2026-02,Amanda Ozório de Barros,07/12/2011,04/08/2025,Canto,6,Matheus Lourenço,25,385.0,não,pagante,pago,Eline Holanda Cavalcanti Garcia de Barros,(21) 96779-1360,Segunda-feira,15:00
+2026-02,André de Mello Gomes,04/06/1955,17/01/2026,Canto,6,Matheus Oliveira,27,430.0,não,pagante,pago,,(21) 98116-0333,Quinta-feira,15:00
+2026-02,Anna Luisa Cruz Gondim,03/06/2011,13/11/2025,Teclado,16,Larissa Santos,16,410.0,não,pagante,pago,Fabiula Cristina Cruz,(21) 97958-6557,Quinta-feira,15:00
+2026-02,Arthur Bezerra Siqueira,28/09/2015,31/10/2025,Teclado,16,Caio Araujo,2,0.0,não,pagante,inadimplente,Fábio Siqueira,(21) 98231-0413,Sexta-feira,14:00
+2026-02,Arthur Carvalho Lima,06/01/2013,12/05/2023,Garage Band,38,Rafael (Akeem),32,0.0,não,pagante,sem_fatura,Jovina Maria de Carvalho,(21) 99171-1160,Quarta-feira,19:00
+2026-02,Arthur Carvalho Lima,06/01/2013,18/06/2022,Guitarra,14,Lucas Guimarães,21,469.26,sim,segundo_curso_pago,pago,Jovina Maria de Carvalho,(21) 99171-1160,Quarta-feira,20:00
+2026-02,Arthur Darzi Ferreira,06/05/2020,22/05/2025,Bateria,27,Isaque Silva,10,395.0,não,pagante,pago,Débora Fonseca Darzi Migliorelli Ferreira,(21) 98222-9030,Quinta-feira,11:00
+2026-02,Arthur Darzi Ferreira,06/05/2020,12/02/2026,Teclado,16,Willian Silva,41,0.0,sim,segundo_curso_pago,sem_fatura,Débora Fonseca Darzi Migliorelli Ferreira,(21) 98222-9030,Terça-feira,11:00
+2026-02,Arthur de Carvalho Rodrigues Frota Almeida,04/01/2016,18/08/2025,Musicalização Preparatória,4,Matheus Lourenço,25,395.0,não,pagante,pago,Vivian de Carvalho Rodrigues Frota Almeida,(21) 99565-7529,Segunda-feira,18:00
+2026-02,Arthur Galvão Barbosa,04/12/2006,11/06/2024,Bateria,27,Ramon Morais,33,451.0,não,pagante,pago,,(21) 99594-4259,Terça-feira,19:00
+2026-02,Arthur Galvão Barbosa,04/12/2006,22/05/2023,Canto,6,Matheus Oliveira,27,0.0,sim,segundo_curso_pago,sem_fatura,,(21) 99594-4259,Terça-feira,19:00
+2026-02,Arthur Galvão Barbosa,04/12/2006,07/11/2023,Contrabaixo,21,Matheus Oliveira,27,0.0,sim,segundo_curso_pago,sem_fatura,,(21) 99594-4259,Terça-feira,19:00
+2026-02,Arthur Galvão Barbosa,04/12/2006,21/11/2023,Garage Band,38,Vicente Neto,37,0.0,sim,bonus_gratuito,sem_fatura,,(21) 99594-4259,Terça-feira,19:00
+2026-02,Arthur Quinteiro Artacho,19/05/2017,18/08/2022,Teclado,16,Vinicius Nascimento,38,0.0,não,pagante,sem_fatura,Rafael dos Santos Artacho,99-9999,Quinta-feira,14:00
+2026-02,Arthur Rodriguez Machado,29/08/2019,03/06/2024,Musicalização Preparatória,4,Joel Filho,13,385.0,não,pagante,pago,Débora Rodriguez Barbosa,(21) 99975-6711,Sexta-feira,17:00
+2026-02,Arthur Vale de Oliveira,10/04/2014,21/10/2023,Canto,6,Lohana Araújo,20,421.23,não,pagante,pago,Jeferson Ferreira de Oliveira,(21) 99110-1242,Sábado,11:00
+2026-02,Arthur Vargas Caldas,11/07/2018,18/04/2024,Bateria,27,Ramon Morais,33,411.62,não,pagante,pago,Ricardo Alvarez Caldas,(21) 99585-7312,Quarta-feira,14:00
+2026-02,Arthur Vieira Dantas Pollig,10/06/2015,07/03/2023,Guitarra,14,Lucas Guimarães,21,605.0,não,pagante,pago,Carlos Frederico Dantas Pollig,(21) 99851-0710,Terça-feira,19:00
+2026-02,Arthur Vieira Dantas Pollig,10/06/2015,12/11/2021,Power Kids,25,Lucas Guimarães,21,0.0,sim,bonus_gratuito,sem_fatura,Carlos Frederico Dantas Pollig,(21) 99851-0710,Terça-feira,20:00
+2026-02,Artur Carollo Barbuto,28/06/2011,08/12/2025,Guitarra,14,Israel Silva,11,420.0,não,pagante,pago,Roberta Carollo Salgado,(21) 98564-4416,Segunda-feira,19:00
+2026-02,Aurora Drummond e Bragança,15/03/2024,08/08/2025,Musicalização Para Bebês,2,Leticia Palmeira,18,370.0,não,pagante,pago,Ana Beatriz de Oliveira Leite e Bragança,(21) 97140-9841,Quinta-feira,17:00
+2026-02,Bárbara Victoria Moreno Ruiz,26/01/2006,20/02/2024,Bateria,27,Rafael (Akeem),32,385.0,não,pagante,pago,,(27) 99640-9892,Quarta-feira,14:00
+2026-02,Bárbara Victoria Moreno Ruiz,26/01/2006,07/05/2024,Garage Band,38,Matheus Oliveira,27,0.0,sim,bonus_gratuito,sem_fatura,,(27) 99640-9892,Quinta-feira,19:00
+2026-02,Beatriz dos Santos Monteiro,15/01/2011,09/07/2024,Guitarra,14,Israel Silva,11,405.0,não,pagante,pago,Andréa Abreu dos Santos,(21) 97220-8847,Segunda-feira,16:00
+2026-02,Beatriz Rabelo Cheker,23/08/2017,19/08/2021,Bateria,27,Rafael (Akeem),32,496.1,não,pagante,pago,Daniella Cristina Rabelo da Silva Cheker,(21) 98799-6524,Quarta-feira,18:00
+2026-02,Beatriz Souto Machado,05/04/2012,23/06/2018,Teclado,16,Rafael (Akeem),32,445.5,não,pagante,pago,Kelling Cabral Souto,(21) 99664-5789,Sábado,09:00
+2026-02,Beatriz Souto Machado,05/04/2012,14/03/2020,Violão,10,Rafael (Akeem),32,333.0,sim,segundo_curso_pago,pago,Kelling Cabral Souto,(21) 99664-5789,Sábado,12:00
+2026-02,Benício Cardoso Moreira,07/07/2018,30/08/2025,Guitarra,14,Israel Silva,11,385.0,não,pagante,pago,Jaqueline Martins Cardoso,(21) 99625-5998,Sábado,09:00
+2026-02,Benício Lima de Almeida,22/02/2022,17/01/2026,Musicalização Preparatória,4,Leticia Palmeira,18,430.0,não,pagante,pago,Bárbara de Lima C. Almeida,(21) 96740-8342,Sábado,10:00
+2026-02,Benjamin de Jesus Pimentel,03/07/2019,05/12/2025,Bateria,27,Vicente Neto,37,405.0,não,pagante,pago,Camila Jesus de Oliveira,(21) 98108-6422,Quarta-feira,19:00
+2026-02,Benjamin Felipe Roca Ribeiro,14/06/2018,30/06/2025,Bateria,27,Rafael (Akeem),32,385.0,não,pagante,pago,Arlette Roca,(21) 96541-4908,Sábado,12:00
+2026-02,Benjamin Lehrer Braz,23/11/2021,25/09/2025,Musicalização Preparatória,4,Leticia Palmeira,18,375.0,não,pagante,pago,Fernanda Lehrer Turbae Amaral Braz,(21) 99998-5695,Segunda-feira,11:00
+2026-02,Bento Vieira Sindeaux,27/02/2022,05/04/2025,Musicalização Preparatória,4,Leticia Palmeira,18,460.0,não,pagante,pago,Rodrigo Bernardes Sindeaux,(11) 97174-3052,Sábado,11:00
+2026-02,Bernardo da Silva Menezes,09/03/2019,31/07/2024,Bateria,27,Rafael (Akeem),32,412.5,não,pagante,pago,Pâmela Soares da Silva Menezes,(21) 96437-4772,Quarta-feira,10:00
+2026-02,Bernardo Guerra da Costa,08/03/2010,23/08/2025,Teclado,16,Willer Machado,40,395.0,não,pagante,pago,Vanessa Guerra da Silva,(21) 97382-7724,Sexta-feira,15:00
+2026-02,Bernardo Lioi Santos,30/05/2020,18/01/2025,Musicalização Preparatória,4,Leticia Palmeira,18,392.0,não,pagante,pago,Aline Lioi,(21) 98867-0511,Quarta-feira,10:00
+2026-02,Bernardo Martinelli,06/09/2023,25/02/2025,Musicalização Para Bebês,2,Leticia Palmeira,18,400.0,não,pagante,pago,Hélide Martinelli,(21) 98707-7899,Quinta-feira,17:00
+2026-02,Bernardo Neumann da Cunha,13/07/2018,17/01/2025,Musicalização Preparatória,4,Larissa Santos,16,442.75,não,pagante,pago,Bruno Aires da Cunha,(21) 98875-9662,Sexta-feira,11:00
+2026-02,Bernardo Pereira Magalhães,01/03/2016,14/08/2025,Teclado,16,Larissa Santos,16,395.0,não,pagante,pago,Natália Magalhães,(21) 99109-1617,Sexta-feira,09:00
+2026-02,Betina Gerstel,28/12/2012,30/09/2025,Canto,6,Leticia Palmeira,18,385.0,não,pagante,pago,Roberto Toledo El Alam,(21) 98834-0113,Quinta-feira,18:00
+2026-02,Bianca Petrolongo Pinto Abreu,28/11/1983,09/07/2021,Canto,6,Lohana Araújo,20,355.0,não,pagante,pago,,(21) 98134-3337,Quinta,15:00
+2026-02,Bianca Petrolongo Pinto Abreu,28/11/1983,07/11/2023,Garage Band,38,Ramon Morais,33,0.0,sim,segundo_curso_pago,sem_fatura,,(21) 98134-3337,Terça-feira,12:00
+2026-02,Bianca Petrolongo Pinto Abreu,28/11/1983,06/02/2024,Teclado,16,Lohana Araújo,20,384.8,sim,segundo_curso_pago,pago,,(21) 98134-3337,Quinta-feira,15:00
+2026-02,Breno Ferreira Florião,03/01/2009,25/10/2024,Bateria,27,Rafael (Akeem),32,442.75,não,pagante,pago,Alexandre Mateus Florião,(21) 98194-2844,Sexta-feira,14:00
+2026-02,Bruna Silva De Sá Vale,03/12/2011,24/01/2020,Teclado,16,Alexandre Santo,43,423.5,não,pagante,pago,Yelena Teles Silva Correa De Sá,(21) 99675-5977,Segunda-feira,16:00
+2026-02,Caetano Leao Barradas,16/07/2016,16/06/2021,Bateria,27,Ramon Morais,33,418.0,não,pagante,pago,Daniel Barradas Frazao,(21) 98315-3835,Segunda-feira,18:00
+2026-02,Caetano Leao Barradas,16/07/2016,18/06/2022,Power Kids,25,Rafael (Akeem),32,0.0,sim,bonus_gratuito,sem_fatura,Daniel Barradas Frazao,(21) 98315-3835,Segunda-feira,18:00
+2026-02,Caio Gabriel da Silva Neto,07/02/2022,26/04/2023,Musicalização Preparatória,4,Leticia Palmeira,18,388.8,não,pagante,pago,Maria Alice da Silva Neto,24925015162,Sábado,11:00
+2026-02,Caio Lioi Santos,24/04/2023,18/01/2025,Musicalização Para Bebês,2,Leticia Palmeira,18,392.0,não,pagante,pago,Aline Lioi,(21) 98867-0511,Quarta-feira,09:00
+2026-02,Caio Villela Meireles,10/08/2014,20/08/2021,Bateria,27,Rafael (Akeem),32,395.0,não,pagante,pago,Ingrid Villela Mendes,(21) 99244-0991,Terça-feira,18:00
+2026-02,Caio Vinicius Vieira de Castro,01/10/2003,29/06/2024,Canto,6,Matheus Oliveira,27,362.88,não,pagante,pago,,(21) 97135-0576,Quinta-feira,16:00
+2026-02,Caio Vinicius Vieira de Castro,01/10/2003,26/10/2024,Contrabaixo,21,Matheus Oliveira,27,362.88,sim,segundo_curso_pago,pago,,(21) 97135-0576,Quinta-feira,17:00
+2026-02,Caio Vinicius Vieira de Castro,01/10/2003,29/06/2024,Garage Band,38,Willer Machado,40,0.0,sim,bonus_gratuito,sem_fatura,,(21) 97135-0576,Terça-feira,17:00
+2026-02,Caio Vinicius Vieira de Castro,01/10/2003,29/06/2024,Teclado,16,Willer Machado,40,362.88,sim,segundo_curso_pago,pago,,(21) 97135-0576,Quinta-feira,19:00
+2026-02,Calebe de Moura Oliveira Ramos,11/02/2014,11/11/2020,Bateria,27,Rafael (Akeem),32,413.8,não,pagante,pago,Juliana de Moura Oliveira Ramos.,(21) 96415-2564,Quarta-feira,19:00
+2026-02,Calebe de Moura Oliveira Ramos,11/02/2014,03/05/2023,Garage Band,38,Rafael (Akeem),32,0.0,sim,bonus_gratuito,sem_fatura,Juliana de Moura Oliveira Ramos.,(21) 96415-2564,Quarta-feira,20:00
+2026-02,Catarina Bahia Teodoro,08/03/2021,30/04/2024,Musicalização Preparatória,4,Leticia Palmeira,18,360.0,não,pagante,pago,Éder Antonio Teodoro Filho,(21) 98294-8282,Sábado,08:00
+2026-02,Catarina Carvalho Bastos,23/05/2018,05/05/2023,Canto,6,Alexandre Santo,43,430.0,não,pagante,pago,Luiz Henrique Lucas Bastos,(21) 97046-2781,Terça-feira,17:00
+2026-02,Catarina Carvalho Bastos,23/05/2018,17/01/2026,Musicalização Preparatória,4,Lohana Araújo,20,0.0,sim,segundo_curso_pago,sem_fatura,Luiz Henrique Lucas Bastos,(21) 97046-2781,Terça-feira,17:00
+2026-02,Catarina Petrolongo Pinto Abreu,22/01/2019,27/05/2021,Bateria,27,Rafael (Akeem),32,399.0,não,pagante,pago,Diego Abreu dos Santos Flores da Silva,(21) 97966-3065,Sexta-feira,09:00
+2026-02,Catarina Soriani Arrosti,04/02/2022,28/01/2026,Musicalização Preparatória,4,Larissa Santos,16,405.0,não,pagante,pago,Rafaela Soriani,(41) 99665-4944,Quinta-feira,10:00
+2026-02,Clara Beatriz F de Carvalho,27/01/2014,06/09/2024,Teclado,16,Willer Machado,40,407.0,não,pagante,pago,Clara Regina,(21) 99957-0096,Sexta-feira,16:00
+2026-02,Clara Beatriz F de Carvalho,27/01/2014,09/08/2024,Violino,12,Joel Filho,13,435.05,sim,segundo_curso_pago,pago,Clara Regina,(21) 99957-0096,Sexta-feira,17:00
+2026-02,Clara de Sá Silva Santos,30/03/2014,28/07/2023,Teclado,16,Renan Guimarães,34,428.76,não,pagante,pago,Robson Wander,(21) 98113-0642,Quarta-feira,18:00
+2026-02,Clara Marina Jorge da Silva,30/06/2010,11/09/2024,Canto,6,Matheus Oliveira,27,385.0,não,pagante,pago,Magnolia Jorge da Silva,(21) 98034-0174,Quinta-feira,16:00
+2026-02,Clara Martins Moura Marendaz,04/10/2014,18/09/2023,Power Kids,25,Renan Guimarães,34,0.0,não,pagante,sem_fatura,Lélia Flávia Marendaz,(21) 98883-8862,Quarta-feira,18:00
+2026-02,Clara Martins Moura Marendaz,04/10/2014,03/02/2024,Teclado,16,Lucas Guimarães,21,461.72,sim,segundo_curso_pago,pago,Lélia Flávia Marendaz,(21) 98883-8862,Quarta-feira,18:00
+2026-02,Claudio Luiz de Carvalho Mascarenhas Neto,21/05/2013,10/01/2026,Cavaquinho,35,Willian Silva,41,430.0,não,pagante,pago,Claudio Mascarenhas,(21) 98333-5952,Sexta-feira,17:00
+2026-02,Daniel Bezerra Siqueira,01/12/2017,31/10/2025,Bateria,27,Willian Silva,41,0.0,não,pagante,inadimplente,Fábio Siqueira,(21) 99197-0108,Sexta-feira,14:00
+2026-02,Daniel Cardoso Poggio Contardo,26/11/2012,17/06/2025,Garage Band,38,Lucas Guimarães,21,0.0,não,pagante,sem_fatura,Carla Ferreira Cardoso,(21) 98503-9758,Terça-feira,14:00
+2026-02,Daniel Cardoso Poggio Contardo,26/11/2012,10/12/2024,Guitarra,14,Rafael (Akeem),32,427.35,sim,segundo_curso_pago,pago,Carla Ferreira Cardoso,(21) 98503-9758,Terça-feira,14:00
+2026-02,Daniel Castor Kuhlmann Silva,05/04/2011,30/10/2020,Bateria,27,Rafael (Akeem),32,423.5,não,pagante,pago,Angela Kuhlmann Silva,(21) 99761-3431,Segunda-feira,14:00
+2026-02,Daniel Coelho Faria,22/03/1978,27/03/2025,Violão,10,Lucas Guimarães,21,385.0,não,pagante,pago,,(21) 99639-3033,Segunda-feira,18:00
+2026-02,Daniel Duque Vianna,25/07/2013,28/06/2024,Ukulêlê,8,Israel Silva,11,385.0,não,pagante,pago,Leonardo Silva Vianna,(21) 98103-1504,Segunda-feira,20:00
+2026-02,Daniel Eustáquio de Jesus,09/08/2013,10/07/2023,Bateria,27,Israel Silva,11,192.5,não,pagante,pago,Ana Lucia Eustáquio de Jesus,(21) 98076-1113,Sexta-feira,19:00
+2026-02,Daniel Eustáquio de Jesus,09/08/2013,17/05/2025,Garage Band,38,Rafael (Akeem),32,0.0,sim,bonus_gratuito,sem_fatura,Ana Lucia Eustáquio de Jesus,(21) 98076-1113,Sábado,15:00
+2026-02,Daniel Mendes Saramago,10/10/2016,20/02/2025,Bateria,27,Rafael (Akeem),32,415.0,não,pagante,pago,Tatiana Mendes,(21) 99532-6422,Segunda-feira,13:00
+2026-02,Daniel Rodriguez Machado,29/09/2017,06/03/2024,Bateria,27,Rafael (Akeem),32,0.0,não,pagante,sem_fatura,Débora Rodriguez Barbosa,(21) 99975-6711,Sexta-feira,17:00
+2026-02,Daniel sterblitch,02/04/2014,19/03/2024,Bateria,27,Rafael (Akeem),32,411.95,não,pagante,pago,Silvia Helena,(21) 99915-0066,Segunda-feira,17:00
+2026-02,Daniel Teixeira Campos,31/05/2020,24/06/2024,Bateria,27,Rafael (Akeem),32,401.25,não,pagante,pago,Diego Rocha Campos Teixeira,(21) 96902-4000,Quinta-feira,19:00
+2026-02,Danielle Medeiros Da Silva Machado,10/04/1982,27/04/2024,Teclado IND,15,Ramon Morais,33,463.26,não,pagante,pago,,(21) 99662-9389,Sábado,08:00
+2026-02,Davi do Nascimento Alexandre da Gama Mello,06/01/2021,16/03/2024,Musicalização Preparatória,4,Leticia Palmeira,18,459.0,não,pagante,pago,Erick ferreira da gama mello,(21) 96519-7171,Sábado,09:00
+2026-02,Davi dos Santos amaral,28/10/2009,31/05/2024,Violino,12,Joel Filho,13,397.85,não,pagante,pago,Monique correa dos Santos Amaral,(21) 99941-6682,Segunda-feira,17:00
+2026-02,Davi dos Santos Veras,03/04/2009,28/07/2025,Bateria,27,Rafael (Akeem),32,420.0,não,pagante,pago,Ana Lucia dos Santos Pereira,(21) 97892-5846,Terça-feira,14:00
+2026-02,Davi Farias dos Santos,25/09/2015,27/11/2025,Violino,12,Vinicius Nascimento,38,405.0,não,pagante,pago,Rodrigo da SIlva Santos,(21) 99611-0203,Quinta-feira,19:00
+2026-02,Davi Jorge da Silva,13/01/2016,05/06/2024,Guitarra,14,Lucas Guimarães,21,385.0,não,pagante,pago,Magnolia Jorge da Silva,(21) 98034-0174,Quinta-feira,16:00
+2026-02,Davi Lima Queiroz,15/04/2013,16/10/2018,Canto,6,Alexandre Junior,43,0.0,não,pagante,sem_fatura,Erika Lima de Souza,(21) 98150-0103,Quarta,17:00
+2026-02,Davi Lima Queiroz,15/04/2013,03/08/2023,Teclado,16,Alexandre Santo,43,0.0,sim,segundo_curso_pago,sem_fatura,Erika Lima de Souza,(21) 98150-0103,Quarta-feira,17:00
+2026-02,Davi Lucas de Castro Lourenço,25/03/2015,06/08/2025,Teclado,16,Renan Guimarães,34,0.0,não,pagante,sem_fatura,Renata Camila de Castro,(21) 97504-4673,Quarta-feira,19:00
+2026-02,Davi Piragine Silva,11/10/2013,12/06/2024,Canto,6,Lohana Araújo,20,461.72,não,pagante,pago,Rodrigo Lemos Silva,(21) 99048-6010,Quinta-feira,19:00
+2026-02,Davi Piragine Silva,11/10/2013,29/11/2021,Garage Band,38,Ramon Morais,33,0.0,sim,bonus_gratuito,sem_fatura,Rodrigo Lemos Silva,(21) 99048-6010,Quinta-feira,19:00
+2026-02,David Kayat A. Mansour,21/10/2012,30/11/2022,Guitarra,14,Willian Silva,41,395.0,não,pagante,pago,Julio Algaze Mansour,(21) 98106-8556,Sexta-feira,16:00
+2026-02,David Kayat A. Mansour,21/10/2012,28/11/2025,Violão,10,Willian Silva,41,0.0,sim,segundo_curso_pago,sem_fatura,Julio Algaze Mansour,(21) 98106-8556,Sexta-feira,16:00
+2026-02,Débora Rodriguez Barbosa,11/12/1983,21/03/2025,Bateria,27,Rafael (Akeem),32,0.0,não,pagante,sem_fatura,,(21) 99975-6711,Quarta-feira,11:00
+2026-02,Débora Rodriguez Barbosa,11/12/1983,06/03/2024,Teclado,16,Alexandre Santo,43,388.5,sim,segundo_curso_pago,pago,,(21) 99975-6711,Quarta-feira,11:00
+2026-02,Diogo Ribeiro Galhardo,27/09/1982,25/10/2021,Bateria,27,Ramon Morais,33,459.77,não,pagante,pago,,(21) 99433-3559,Segunda-feira,16:00
+2026-02,Diogo Ribeiro Galhardo,27/09/1982,07/11/2023,Garage Band,38,Rafael (Akeem),32,0.0,sim,bonus_gratuito,sem_fatura,,(21) 99433-3559,Terça-feira,12:00
+2026-02,Dylan Januzi,06/09/2019,31/01/2025,Violão,10,Lucas Guimarães,21,0.0,não,pagante,sem_fatura,Suanni Januzi,(21) 99732-8977,Sexta-feira,10:00
+2026-02,Elena Picanço Santos,20/09/2013,13/09/2024,Canto,6,Matheus Oliveira,27,414.75,não,pagante,pago,Fabiana Picanço,(21) 98833-5004,Terça-feira,20:00
+2026-02,Elena Ribeiro Lopes Zoletti,09/02/2014,07/03/2024,Teclado,16,Renan Guimarães,34,434.5,não,pagante,pago,Gustavo Oliveira Zoletti,(21) 99705-5445,Quarta-feira,18:00
+2026-02,Elis Tineli Gomes Cotta,04/04/2012,23/09/2024,Bateria,27,Vicente Neto,37,410.4,não,pagante,pago,Ariane Tineli Gomes Cotta,(21) 99804-3487,Segunda-feira,20:00
+2026-02,Elis Tineli Gomes Cotta,04/04/2012,25/06/2025,Garage Band,38,Renan Guimarães,34,0.0,sim,bonus_gratuito,sem_fatura,Ariane Tineli Gomes Cotta,(21) 99804-3487,Quarta-feira,16:00
+2026-02,Enrico Florenzano,27/02/2021,12/08/2024,Bateria,27,Rafael (Akeem),32,0.0,não,pagante,sem_fatura,Sharlene Florenzano,(21) 98364-6393,Quarta-feira,17:00
+2026-02,Enzo Amigo Alvarez,15/09/2014,26/08/2023,Guitarra,14,Lucas Guimarães,21,388.8,não,pagante,pago,Rodrigo Alvarez de Sá,(21) 98151-0047,Sábado,14:00
+2026-02,Enzo Amigo Alvarez,15/09/2014,31/03/2022,Power Kids,25,Lucas Guimarães,21,0.0,sim,bonus_gratuito,sem_fatura,Rodrigo Alvarez de Sá,(21) 98151-0047,Sábado,14:00
+2026-02,Enzo de Castro Freitas,14/04/1975,07/11/2023,Garage Band,38,Lucas Guimarães,21,0.0,não,pagante,sem_fatura,,(21) 96485-2544,Terça-feira,13:00
+2026-02,Enzo de Castro Freitas,14/04/1975,08/08/2023,Guitarra,14,Ramon Morais,33,405.35,sim,segundo_curso_pago,pago,,(21) 96485-2544,Terça-feira,12:00
+2026-02,Enzo Dorileo Ewald,17/10/2018,28/11/2025,Bateria,27,Rafael (Akeem),32,420.0,não,pagante,pago,Fabiana Dorileo Ewald,(21) 98196-6878,Quarta-feira,15:00
+2026-02,Enzo Langer Peres,28/04/2015,13/05/2022,Bateria,27,Caio Araujo,2,483.0,não,pagante,pago,Juliana da Conceição Langer,(21) 99699-8474,Sexta-feira,18:00
+2026-02,Enzo Teixeira Menezes de Lima,30/10/2017,09/08/2025,Bateria,27,Alexandre Santo,43,375.0,não,pagante,pago,Candice Oliveira Teixeira Menezes de lima,(21) 99331-8138,Sábado,12:00
+2026-02,Enzo Teixeira Menezes de Lima,30/10/2017,31/01/2022,Musicalização Preparatória,4,Rafael (Akeem),32,0.0,sim,segundo_curso_pago,sem_fatura,Candice Oliveira Teixeira Menezes de lima,(21) 99331-8138,Sábado,12:00
+2026-02,Erik Edson Chalegre Erdmann,02/09/2011,10/03/2025,Bateria,27,Ramon Morais,33,0.0,não,pagante,sem_fatura,Valéria Ramos Chalegre,(21) 98899-8887,Quarta-feira,15:00
+2026-02,Estevão Lehrer Braz,12/04/2020,25/09/2025,Guitarra,14,Lucas Guimarães,21,375.0,não,pagante,pago,Fernanda Lehrer Turbae Amaral Braz,(21) 99998-5695,Sexta-feira,09:00
+2026-02,Fabiana Moriel Castela de Souza,15/05/2013,15/09/2025,Guitarra,14,Willer Machado,40,395.0,não,pagante,pago,Antonio Carlos Castela de Souza,(21) 99604-0187,Terça-feira,15:00
+2026-02,Fabio Pilar Moreira,04/06/2009,17/06/2022,Bateria,27,Ramon Morais,33,488.75,não,pagante,pago,Fábio Coelho Moreira,(21) 96530-9124,Quarta-feira,18:00
+2026-02,Fabio Pilar Moreira,04/06/2009,12/05/2023,Canto,6,Ramon Morais,33,0.0,sim,segundo_curso_pago,sem_fatura,Fábio Coelho Moreira,(21) 96530-9124,Quarta-feira,20:00
+2026-02,Fabio Pilar Moreira,04/06/2009,10/08/2024,Garage Band,38,Vicente Neto,37,0.0,sim,bonus_gratuito,sem_fatura,Fábio Coelho Moreira,(21) 96530-9124,Quarta-feira,18:00
+2026-02,Felipe de Moura Vieira,22/11/2019,29/02/2024,Musicalização Preparatória,4,Willian Fumaça,42,385.0,não,pagante,pago,Bianca golçalves de Moura,(21) 99861-3434,Terça-feira,16:00
+2026-02,Felipe Melo Castor,07/11/2015,20/08/2025,Teclado,16,Isaque Silva,10,395.0,não,pagante,pago,Karla Patricia Henrique Melo,(21) 99106-2832,Terça-feira,18:00
+2026-02,Fernanda Maria da Silva,02/05/1999,11/11/2025,Canto,6,Matheus Oliveira,27,405.0,não,pagante,pago,,(21) 99223-5766,Terça-feira,15:00
+2026-02,Fernanda Moriel Castela de Souza,07/02/2007,15/09/2025,Canto,6,Matheus Oliveira,27,395.0,não,pagante,pago,,(21) 99604-0187,Terça-feira,16:00
+2026-02,Flavio Ricardo Leal Vieira,11/07/1976,16/06/2025,Guitarra,14,Israel Silva,11,385.0,não,pagante,pago,,(21) 99765-0886,Segunda-feira,17:00
+2026-02,Francesco de Souza Novello,03/06/2019,30/06/2024,Bateria,27,Willian Silva,41,385.0,não,pagante,pago,MAGBYS M DE SOUZA NOVELLO,(21) 99948-4452,Sexta-feira,10:00
+2026-02,Francisco Cardoso Aride,18/07/2018,27/02/2019,Guitarra,14,Marcos Filho,23,400.0,não,pagante,pago,Saulo Medeiros Aride,(21) 99159-7859,Sábado,09:00
+2026-02,Francisco Cardoso Aride,18/07/2018,05/04/2025,Musicalização Para Bebês,2,Israel Silva,11,0.0,sim,segundo_curso_pago,sem_fatura,Saulo Medeiros Aride,(21) 99159-7859,Sábado,09:00
+2026-02,Gabriel De Paula,17/07/2017,17/05/2025,Teclado,16,Matheus Silva,26,385.0,não,pagante,pago,Eduardo Pereira De Paula,(21) 99920-1017,Sábado,12:00
+2026-02,Gabriel Medeiros Gonçalves Bittencourt,12/05/2018,19/01/2022,Bateria,27,Rafael (Akeem),32,496.1,não,pagante,pago,Lívia Teixeira Lopes de Medeiros,(21) 98148-7872,Sexta-feira,11:00
+2026-02,Gabriel Miele Nunes,27/10/2010,30/09/2024,Canto,6,Alexandre Santo,43,423.5,não,pagante,pago,Daniele Miele,(21) 97206-6649,Quarta-feira,18:00
+2026-02,Gabriel Vidal França de Carvalho,26/01/2022,31/07/2024,Musicalização Preparatória,4,Leticia Palmeira,18,423.75,não,pagante,pago,Adriana Vidal França de Carvalho,(21) 99607-2254,Sábado,11:00
+2026-02,Gabriel Wandeck Campos Brito,09/03/2007,02/08/2024,Bateria,27,Vicente Neto,37,0.0,não,pagante,inadimplente,,(21) 99151-0046,Segunda-feira,19:00
+2026-02,Gabriela da Silva Machado,02/08/2012,19/09/2023,Teclado,16,Lohana Araújo,20,363.2,não,pagante,pago,Uilson Luis Moreira Machado,(21) 99667-7450,Terça-feira,14:00
+2026-02,Gabriela Garcia de Carvalho,12/09/2014,09/03/2021,Bateria,27,Caio Araujo,2,0.0,não,pagante,sem_fatura,Analice Ferreira Garcia,(21) 99452-1142,Sexta-feira,17:00
+2026-02,Gabriela Garcia de Carvalho,12/09/2014,26/09/2025,Teclado,16,Caio Araujo,2,395.0,sim,segundo_curso_pago,pago,Analice Ferreira Garcia,(21) 99452-1142,Sexta,17:00
+2026-02,Gael Rodrigues Martins,10/06/2019,05/07/2022,Bateria,27,Rafael (Akeem),32,463.25,não,pagante,pago,Sthefany Rodrigues,(21) 99712-4633,Terça-feira,16:00
+2026-02,Gael Sant'Anna de Oliveira Lemos,06/05/2023,31/01/2026,Musicalização Para Bebês,2,Joel Filho,13,405.0,não,pagante,pago,Thais S. de Oliveira Lemos,(21) 96404-4010,Segunda-feira,19:00
+2026-02,Geovana vitória jorge da silva,14/12/2012,11/09/2024,Cavaquinho,35,Willian Silva,41,385.0,não,pagante,pago,Magnolia Jorge da Silva,(21) 98034-0174,Quinta-feira,16:00
+2026-02,Geovana vitória jorge da silva,14/12/2012,11/09/2024,Cavaquinho,35,Willian Silva,41,0.0,sim,segundo_curso_pago,sem_fatura,Magnolia Jorge da Silva,(21) 98034-0174,Quinta,16:00
+2026-02,Giovanna Alves da Silva Mendonça,15/10/2009,17/01/2019,Canto,6,Alexandre Junior,43,436.42,não,pagante,pago,Valéria Alves da Silva Mendonça,(21) 98463-6215,Quarta,20:00
+2026-02,Giovanna Alves da Silva Mendonça,15/10/2009,11/07/2019,Garage Band,38,Ramon Morais,33,0.0,sim,segundo_curso_pago,sem_fatura,Valéria Alves da Silva Mendonça,(21) 98463-6215,Quarta-feira,18:00
+2026-02,Giovanna Alves da Silva Mendonça,15/10/2009,06/06/2022,Garage Band,38,Ramon Morais,33,0.0,sim,segundo_curso_pago,sem_fatura,Valéria Alves da Silva Mendonça,(21) 98463-6215,Quarta,18:00
+2026-02,Giovanna Alves da Silva Mendonça,15/10/2009,09/10/2020,Teclado,16,Alexandre Santo,43,0.0,sim,segundo_curso_pago,sem_fatura,Valéria Alves da Silva Mendonça,(21) 98463-6215,Quarta-feira,20:00
+2026-02,Giovanna Azevedo Chipitelli,12/11/2018,25/07/2024,Canto,6,Lohana Araújo,20,394.2,não,pagante,pago,Camila Martins de Azevedo,(21) 96451-2085,Terça-feira,18:00
+2026-02,Giovanna Dabés Moreira de Carvalho Al Alam da Fonseca,28/12/2013,24/03/2025,Canto,6,Leticia Palmeira,18,385.0,não,pagante,pago,Marcela Dabés Moreira de Carvalho,(21) 98184-2727,Segunda-feira,18:00
+2026-02,Giovanna Gonçalves Frias Ribeiro,29/12/2009,12/05/2023,Canto,6,Matheus Oliveira,27,0.0,não,pagante,inadimplente,Pablo Marcelo Frias Ribeiro,(21) 96019-1408,Quarta-feira,19:00
+2026-02,Giovanna Gonçalves Frias Ribeiro,29/12/2009,31/03/2023,Garage Band,38,Ramon Morais,33,0.0,sim,segundo_curso_pago,sem_fatura,Pablo Marcelo Frias Ribeiro,(21) 96019-1408,Quarta-feira,20:00
+2026-02,Giovanna Gonçalves Frias Ribeiro,29/12/2009,15/08/2024,Guitarra,14,Leticia Palmeira,18,0.0,sim,segundo_curso_pago,sem_fatura,Pablo Marcelo Frias Ribeiro,(21) 96019-1408,Quarta-feira,19:00
+2026-02,Giovanna Marsico da Silva,21/04/2013,08/11/2025,Guitarra,14,Lucas Guimarães,21,385.0,não,pagante,pago,Paula dos Santos Marsico Pereira da Silva,(21) 98166-4435,Sábado,15:00
+2026-02,Giovanna Sant Anna de Lima Nicolela,22/05/2017,25/07/2024,Canto,6,Leticia Palmeira,18,397.85,não,pagante,pago,Cristiane Sant Anna de Lima Nicolela,(21) 98181-6791,Quarta-feira,14:00
+2026-02,Grace Couto de Andrade,20/01/1977,30/06/2022,Contrabaixo,21,Ramon Morais,33,467.5,não,pagante,pago,,(21) 97134-5259,Terça-feira,11:00
+2026-02,Grace Couto de Andrade,20/01/1977,11/03/2024,Garage Band,38,Ramon Morais,33,0.0,sim,bonus_gratuito,sem_fatura,,(21) 97134-5259,Terça-feira,12:00
+2026-02,Guilherme de Farias Varjão,08/01/2013,12/03/2025,Guitarra,14,Lucas Guimarães,21,385.0,não,pagante,pago,Luiz Felipe Carneiro Varjão,(21) 99838-5682,Terça-feira,14:00
+2026-02,Guilherme Duque Vianna,29/08/2018,28/06/2024,Bateria,27,Rafael (Akeem),32,385.0,não,pagante,pago,Leonardo Silva Vianna,(21) 98103-1504,Segunda-feira,20:00
+2026-02,Guilherme Ferreira Muniz dos Santos,27/05/2019,26/08/2021,Bateria,27,Marcos Filho,23,476.0,não,pagante,pago,Rodrigo Muniz dos Santos,(21) 99300-8968,Quinta-feira,14:00
+2026-02,Guilherme Ferreira Muniz dos Santos,27/05/2019,20/02/2020,Musicalização Para Bebês,2,Willian Silva,41,0.0,sim,segundo_curso_pago,sem_fatura,Rodrigo Muniz dos Santos,(21) 99300-8968,Quinta-feira,14:00
+2026-02,Gustavo Kuabara Schreiber,27/09/2022,13/01/2026,Musicalização Preparatória,4,Leticia Palmeira,18,430.0,não,pagante,pago,Guilherme Giacomelli Schreiber,99725-4148,Quarta-feira,11:00
+2026-02,Heitor de Souza Lima da Silva,21/12/2007,29/08/2024,Canto,6,Matheus Oliveira,27,385.0,não,pagante,pago,,(21) 98989-9554,Terça-feira,18:00
+2026-02,Heitor de Souza Lima da Silva,21/12/2007,29/08/2024,Guitarra,14,Willian Silva,41,0.0,sim,segundo_curso_pago,sem_fatura,,(21) 98989-9554,Terça-feira,18:00
+2026-02,Heitor Gael Serra Araújo,05/09/2011,14/08/2025,Guitarra,14,Valdo Delfino,36,395.0,não,pagante,pago,Marcia Alexandra da silva serra,(21) 97301-0014,Quinta-feira,15:00
+2026-02,Heitor Vieira Motta,16/07/2023,16/01/2026,Musicalização Preparatória,4,Matheus Lourenço,25,410.0,não,pagante,pago,Humberto Motta,(21) 96451-9449,Segunda-feira,17:00
+2026-02,Helena cardoso Roxo,18/04/2017,31/01/2025,Teclado,16,Willian Silva,41,423.5,não,pagante,pago,Ursula da Rocha Cardoso,(21) 96412-1859,Sexta-feira,11:00
+2026-02,Helena de Souza Lima da Silva,05/03/2014,29/08/2024,Canto,6,Matheus Oliveira,27,385.0,não,pagante,pago,Wellington Lima da Silva,(21) 98898-2710,Terça-feira,20:00
+2026-02,Helena Moreira Ferrari,30/05/2018,10/01/2026,Canto,6,Leticia Palmeira,18,430.0,não,pagante,pago,Antonio Carlos Guimarães Ferrari,(21) 97235-1894,Quarta-feira,17:00
+2026-02,Helena Neis Zavallo,14/08/2012,22/01/2025,Power Kids,25,Ramon Morais,33,0.0,não,pagante,sem_fatura,Kellye Helena Marinelli Neis,(21) 96738-9695,Sexta-feira,17:00
+2026-02,Helena Neis Zavallo,14/08/2012,17/05/2025,Teclado,16,Ramon Morais,33,385.0,sim,segundo_curso_pago,pago,Kellye Helena Marinelli Neis,(21) 96738-9695,Terça-feira,20:00
+2026-02,Heloísa de Andrade Leôncio,31/03/2014,17/04/2025,Canto,6,Leticia Palmeira,18,0.0,não,pagante,inadimplente,Sulamita de Andrade Leôncio,(21) 97948-2773,Segunda-feira,10:00
+2026-02,Henrique Dang Silva,20/07/2017,15/03/2024,Bateria,27,Vicente Neto,37,423.5,não,pagante,pago,Lúcia Lai,(21) 99801-4266,Terça-feira,18:00
+2026-02,Henrique de Andrade Leôncio,23/02/2019,17/04/2025,Bateria,27,Israel Silva,11,0.0,não,pagante,inadimplente,Sulamita de Andrade Leôncio,(21) 97948-2773,Segunda-feira,11:00
+2026-02,Henrique Pereira Caldas Pinto de Souza,10/05/2015,18/08/2021,Bateria,27,Ramon Morais,33,491.59,não,pagante,pago,Sandro Celso de Souza,(21) 98733-1707,Terça-feira,10:00
+2026-02,Henrique Pereira Caldas Pinto de Souza,10/05/2015,10/08/2024,Power Kids,25,Lucas Guimarães,21,0.0,sim,bonus_gratuito,sem_fatura,Sandro Celso de Souza,(21) 98733-1707,Sábado,12:00
+2026-02,Hugo Marsico da Silva,25/07/2015,08/11/2025,Guitarra,14,Lucas Guimarães,21,385.0,não,pagante,pago,Paula dos Santos Marsico Pereira da Silva,(21) 98166-4435,Sábado,15:00
+2026-02,Hugo Penedo Amorim,03/08/2015,05/03/2020,Musicalização Preparatória,4,Ramon Morais,33,0.0,não,pagante,sem_fatura,Amanda Da Silva Penedo,(21) 99914-3430,Terça-feira,10:00
+2026-02,Hugo Penedo Amorim,03/08/2015,30/01/2025,Power Kids,25,Vinicius Nascimento,38,0.0,sim,segundo_curso_pago,sem_fatura,Amanda Da Silva Penedo,(21) 99914-3430,Terça-feira,09:00
+2026-02,Hugo Penedo Amorim,03/08/2015,14/02/2022,Teclado,16,Isaque Silva,10,420.0,sim,segundo_curso_pago,pago,Amanda Da Silva Penedo,(21) 99914-3430,Terça,10:00
+2026-02,Hugo Penedo Amorim,03/08/2015,15/09/2025,Violino,12,Isaque Silva,10,375.0,sim,segundo_curso_pago,pago,Amanda Da Silva Penedo,(21) 99914-3430,Terça-feira,10:00
+2026-02,Inaê Antunes Coelho de Sá,17/07/2014,27/01/2023,Canto,6,Alexandre Santo,43,368.5,não,pagante,pago,Karen da Gloria Antunes,(21) 98054-6666,Segunda-feira,18:00
+2026-02,Inaê Antunes Coelho de Sá,17/07/2014,17/05/2022,Power Kids,25,Ramon Morais,33,0.0,sim,bonus_gratuito,sem_fatura,Karen da Gloria Antunes,(21) 98054-6666,Sexta-feira,20:00
+2026-02,Inaê Antunes Coelho de Sá,17/07/2014,24/01/2022,Teclado,16,Joel Filho,13,335.5,sim,segundo_curso_pago,pago,Karen da Gloria Antunes,(21) 98054-6666,Sexta-feira,19:00
+2026-02,Isabel Ohana Nunes de Carvalho,21/12/2014,09/12/2025,Canto,6,Larissa Santos,16,394.2,não,pagante,pago,Silvia Ohana Marques Coelho de Carvalho,(21) 98751-9154,Quinta-feira,18:00
+2026-02,Isabel Ohana Nunes de Carvalho,21/12/2014,25/06/2025,Power Kids,25,Lucas Guimarães,21,0.0,sim,bonus_gratuito,sem_fatura,Silvia Ohana Marques Coelho de Carvalho,(21) 98751-9154,Sábado,12:00
+2026-02,Isabel Ohana Nunes de Carvalho,21/12/2014,31/10/2024,Violão,10,Lucas Guimarães,21,0.0,sim,segundo_curso_pago,sem_fatura,Silvia Ohana Marques Coelho de Carvalho,(21) 98751-9154,Quinta-feira,18:00
+2026-02,Isabela Ferreira Moura,23/07/2014,15/05/2024,Canto,6,Lohana Araújo,20,365.15,não,pagante,pago,Thiago Nunes moura Lacerda,(21) 96415-4186,Sábado,11:00
+2026-02,Isabela Ferreira Moura,23/07/2014,09/12/2023,Power Kids,25,Lohana Araújo,20,0.0,sim,bonus_gratuito,sem_fatura,Thiago Nunes moura Lacerda,(21) 96415-4186,Sábado,12:00
+2026-02,Isabella Boscardini Moreira,03/10/2020,21/08/2021,Musicalização Preparatória,4,Leticia Palmeira,18,518.65,não,pagante,pago,Vinícius Barcelos Moreira,(21) 99207-8159,Sábado,08:00
+2026-02,Isabella de Souza Durço,09/02/2016,30/04/2025,Canto,6,Leticia Palmeira,18,410.0,não,pagante,pago,Roberta Monteiro de Souza Durço,(21) 98128-5785,Quarta-feira,15:00
+2026-02,Isabella Guinody Santiago,12/10/2019,02/02/2026,Bateria,27,Caio Araujo,2,400.0,não,pagante,pago,Flávia Santiago de Oliveira,(21) 98262-5231,Sexta-feira,19:00
+2026-02,Ísis Mayumi Fujiwara Lima,02/03/2017,15/03/2023,Canto,6,Ramon Morais,33,0.0,não,pagante,sem_fatura,Dominique Lima Pereira Fujiwara,(21) 99799-3708,Terça-feira,19:00
+2026-02,Ísis Mayumi Fujiwara Lima,02/03/2017,15/05/2024,Power Kids,25,Ramon Morais,33,0.0,sim,bonus_gratuito,sem_fatura,Dominique Lima Pereira Fujiwara,(21) 99799-3708,Quinta-feira,20:00
+2026-02,Ísis Mayumi Fujiwara Lima,02/03/2017,15/03/2023,Teclado,16,Lohana Araújo,20,434.5,sim,segundo_curso_pago,pago,Dominique Lima Pereira Fujiwara,(21) 99799-3708,Terça-feira,20:00
+2026-02,Jan Sidarta stehmann de Aguiar (Ian),12/05/2004,31/01/2025,Bateria,27,Willer Machado,40,448.0,não,pagante,pago,,(21) 97284-2375,Terça-feira,17:00
+2026-02,Joachim Krull Carrez,11/10/2019,09/07/2022,Teclado,16,Isaque Silva,10,370.0,não,pagante,pago,Ricardo Celso de Magalhães Loureiro Carrez Gonçalves,(21) 99938-6888,Terça-feira,13:00
+2026-02,João Dal Bello Migani,03/01/2015,30/10/2020,Bateria,27,Pedro Glória,30,508.2,não,pagante,pago,Renata Dal Bello,(21) 99855-5065,Quinta-feira,17:00
+2026-02,João Dal Bello Migani,03/01/2015,02/05/2018,Musicalização Preparatória,4,Rafael (Akeem),32,0.0,sim,segundo_curso_pago,sem_fatura,Renata Dal Bello,(21) 99855-5065,Quinta-feira,17:00
+2026-02,João Francisco Quintella de Macedo Mayer,27/05/2017,11/08/2023,Bateria,27,Rafael (Akeem),32,444.96,não,pagante,pago,Illen Silva Quintella de Macedo Mayer,(21) 97407-5632,Quarta-feira,16:00
+2026-02,João Guilherme Couto Vargas Luiz,28/08/2017,17/04/2025,Teclado,16,Larissa Santos,16,400.0,não,pagante,pago,Agnaldo Vargas Luiz,(48) 99935-8661,Quinta-feira,11:00
+2026-02,Joao Miguel de Araújo Jardim Tupinamba Borges,23/10/2013,27/07/2022,Teclado,16,Kaio Cabral,15,476.0,não,pagante,pago,Camila Jardim Tupinamba Borges,+55 (21) 99779-6143,Segunda-feira,16:00
+2026-02,João Pedro Brizzi de Almeida,10/05/2021,29/04/2025,Musicalização Preparatória,4,Leticia Palmeira,18,385.0,não,pagante,pago,Clissia Corrêa Brizzi de Almeida,(21) 97288-6575,Quarta-feira,11:00
+2026-02,João Pedro Cerveira Soares,11/11/2009,20/05/2021,Garage Band,38,Ramon Morais,33,0.0,não,pagante,sem_fatura,Danielle Cerveira M. Soares,(21) 99631-9444,Quarta-feira,17:00
+2026-02,João Pedro Cerveira Soares,11/11/2009,06/06/2022,Teclado,16,Renan Guimarães,34,379.5,sim,segundo_curso_pago,pago,Danielle Cerveira M. Soares,(21) 99631-9444,Quarta-feira,18:00
+2026-02,João Pedro Fontenelle,25/04/2019,31/07/2024,Bateria,27,Israel Silva,11,408.75,não,pagante,pago,Willy Fontenelle,(21) 97155-9194,Sábado,12:00
+2026-02,João Piragine Silva,02/07/2011,12/06/2024,Garage Band,38,Valdo Delfino,36,0.0,não,pagante,sem_fatura,Rodrigo Lemos Silva,(21) 97512-4601,Quinta-feira,19:00
+2026-02,João Piragine Silva,02/07/2011,29/11/2021,Guitarra,14,Ramon Morais,33,461.72,sim,segundo_curso_pago,pago,Rodrigo Lemos Silva,(21) 97512-4601,Quinta-feira,19:00
+2026-02,João Ribeiro Miranda do valle Magalhães,03/09/2019,26/02/2025,Bateria,27,Rafael (Akeem),32,0.0,não,pagante,inadimplente,Thaís Miranda do valle e silva Magalhães,(21) 97166-0013,Quarta-feira,10:00
+2026-02,Josué Salazar Nogueira Galheiro Poças,23/09/2013,01/03/2019,Teclado,16,Ramon Morais,33,470.4,não,pagante,pago,Bernardo Galheiro Poças,(21) 98507-6632,Terça-feira,15:00
+2026-02,Júlia Adum de Paiva Herbst,30/10/2018,28/11/2025,Canto,6,Larissa Santos,16,410.0,não,pagante,pago,Maria Clara Adum de Paiva,(21) 98566-2020,Quarta-feira,19:00
+2026-02,Julia Alves Arantes,06/05/2010,15/09/2025,Canto,6,Leticia Palmeira,18,395.0,não,pagante,pago,Aline Alves Arantes,(21) 97238-3914,Segunda-feira,14:00
+2026-02,Julia Christina Mury Messias,11/12/2014,29/02/2024,Canto,6,Ramon Morais,33,0.0,não,pagante,sem_fatura,Sergio Messias da Rosa,(21) 99649-7306,Sexta-feira,19:00
+2026-02,Julia Christina Mury Messias,11/12/2014,11/11/2024,Power Kids,25,Joel Filho,13,0.0,sim,bonus_gratuito,sem_fatura,Sergio Messias da Rosa,(21) 99649-7306,Sexta-feira,20:00
+2026-02,Julia Christina Mury Messias,11/12/2014,29/02/2024,Teclado,16,Leticia Palmeira,18,388.5,sim,segundo_curso_pago,pago,Sergio Messias da Rosa,(21) 99649-7306,Sexta-feira,19:00
+2026-02,Júlia Heil da Fonseca,03/02/2014,12/09/2025,Canto,6,Lohana Araújo,20,442.75,não,pagante,pago,Fabiana Aparecida Heil da Fonseca,(21) 98989-6810,Quinta-feira,16:00
+2026-02,Júlia Heil da Fonseca,03/02/2014,28/08/2024,Garage Band,38,Rafael (Akeem),32,0.0,sim,bonus_gratuito,sem_fatura,Fabiana Aparecida Heil da Fonseca,(21) 98989-6810,Terça-feira,17:00
+2026-02,Júlia Lopes de Medeiros,20/01/2018,30/10/2021,Musicalização Preparatória,4,Larissa Santos,16,0.0,não,pagante,sem_fatura,Kívia Julliana Gomes Lopes Jorge dos Santos,(21) 97901-6047,Sexta-feira,18:00
+2026-02,Júlia Lopes de Medeiros,20/01/2018,06/01/2026,Teclado,16,Willian Silva,41,430.0,sim,segundo_curso_pago,pago,Kívia Julliana Gomes Lopes Jorge dos Santos,(21) 97901-6047,Sexta-feira,18:00
+2026-02,Júlia Paraguassu Eizerik Machado,31/07/2011,28/11/2025,Guitarra,14,Lucas Guimarães,21,420.0,não,pagante,pago,Liana Paraguassu,(21) 99533-2928,Quarta-feira,15:00
+2026-02,Júlia Queiroz de Carvalho,13/04/2016,25/06/2025,Canto,6,Alexandre Santo,43,468.7,não,pagante,pago,Liliane Queiroz,(21) 98090-4664,Segunda-feira,18:00
+2026-02,Júlia Queiroz de Carvalho,13/04/2016,06/02/2025,Power Kids,25,Lucas Guimarães,21,0.0,sim,bonus_gratuito,sem_fatura,Liliane Queiroz,(21) 98090-4664,Terça-feira,20:00
+2026-02,Júlia Salarini Gama,03/03/2016,30/06/2025,Canto,6,Matheus Mendes,46,445.2,não,pagante,pago,Caroline Salarini dos Santos Gama,(21) 99567-4802,Quarta-feira,14:00
+2026-02,Júlia Salarini Gama,03/03/2016,29/07/2025,Power Kids,25,Alexandre Santo,43,0.0,sim,segundo_curso_pago,sem_fatura,Caroline Salarini dos Santos Gama,(21) 99567-4802,Quarta-feira,15:00
+2026-02,Júlia Salarini Gama,03/03/2016,18/06/2022,Teclado,16,Marcos Filho,23,385.0,sim,segundo_curso_pago,pago,Caroline Salarini dos Santos Gama,(21) 99567-4802,Terça-feira,18:00
+2026-02,Júlia Salarini Gama,03/03/2016,23/10/2024,Violão,10,Alexandre Santo,43,0.0,sim,segundo_curso_pago,sem_fatura,Caroline Salarini dos Santos Gama,(21) 99567-4802,Quarta-feira,14:00
+2026-02,Kaique da silva Batista,18/07/2017,30/09/2025,Teclado,16,Rafael (Akeem),32,395.0,não,pagante,pago,Renata da Silva Batista,,Segunda-feira,19:00
+2026-02,Killian Paschuini Brito,11/03/2018,02/03/2023,Bateria,27,Rafael (Akeem),32,360.75,não,pagante,pago,Jéssica Paschuini,(21) 99468-7941,Quarta-feira,18:00
+2026-02,Lara Carvalho Rocha,19/11/2019,31/01/2026,Teclado,16,Willian Silva,41,400.0,não,pagante,pago,Kelly Carvalho,(21) 98682-1972,Quinta-feira,10:00
+2026-02,Lara Dias de Souza,29/12/2013,08/07/2025,Teclado,16,Kaio Cabral,15,405.0,não,pagante,pago,Diego Rocha de Souza,(21) 96909-7224,Segunda-feira,17:00
+2026-02,Lara Pereira Faria,27/01/2018,16/01/2025,Teclado,16,Kaio Cabral,15,452.0,não,pagante,pago,Renata Moreira Pereira,(21) 98039-7773,Segunda-feira,18:00
+2026-02,Larissa Bezerra Silva de Oliveira,14/02/2020,27/07/2024,Musicalização Preparatória,4,Lohana Araújo,20,405.0,não,pagante,pago,Bianca Bezerra da Silva,(21) 98886-7629,Terça-feira,18:00
+2026-02,Laura Almada Teixeira Neto,26/12/2011,06/09/2024,Garage Band,38,Larissa Santos,16,0.0,não,pagante,sem_fatura,Fabiana de Almada Ferreira,(21) 98201-2193,Quarta-feira,17:00
+2026-02,Laura Almada Teixeira Neto,26/12/2011,02/09/2024,Guitarra,14,Ramon Morais,33,414.7,sim,segundo_curso_pago,pago,Fabiana de Almada Ferreira,(21) 98201-2193,Quarta-feira,18:00
+2026-02,Laura Damasceno Estevez,12/05/2015,28/02/2025,Teclado,16,Larissa Santos,16,385.0,não,pagante,pago,Leonardo Clemente Estevez,(21) 99923-0134,Sexta-feira,16:00
+2026-02,Laura Picanço Santos,26/08/2008,25/06/2025,Canto,6,Matheus Oliveira,27,385.0,não,pagante,pago,Fabiana Picanço,(21) 98833-5004,Terça-feira,19:00
+2026-02,Laura Picanço Santos,26/08/2008,23/01/2025,Garage Band,38,Renan Guimarães,34,0.0,sim,bonus_gratuito,sem_fatura,Fabiana Picanço,(21) 98833-5004,Quarta-feira,16:00
+2026-02,Lavinia Barreto Miranda,06/04/2009,18/11/2022,Bateria,27,Rafael (Akeem),32,474.32,não,pagante,pago,Priscila alves motta barreto de oliveira,(21) 96445-9649,Quinta-feira,20:00
+2026-02,Leandro Zerbone,23/03/1981,15/01/2026,Canto,6,Matheus Oliveira,27,400.0,não,pagante,pago,,(21) 98139-9061,Quinta-feira,18:00
+2026-02,Leandro Zerbone,23/03/1981,15/01/2026,Violão,10,Willer Machado,40,400.0,sim,segundo_curso_pago,pago,,(21) 98139-9061,Quinta-feira,19:00
+2026-02,Leticia Bacci de Oliveira,15/04/2013,06/02/2026,Guitarra,14,Willian Silva,41,400.0,não,pagante,pago,Ricardo Romeiro de Oliveira,(21) 99834-5641,Sexta-feira,18:00
+2026-02,Letícia Ferreira Vasconcelos,17/03/2018,08/02/2025,Canto,6,Larissa Santos,16,0.0,não,pagante,sem_fatura,Julianne Maria Ferreira Vasconcelos,(21) 99811-4245,Sexta-feira,14:00
+2026-02,Letícia Ferreira Vasconcelos,17/03/2018,08/02/2025,Teclado,16,Larissa Santos,16,0.0,sim,segundo_curso_pago,sem_fatura,Julianne Maria Ferreira Vasconcelos,(21) 99811-4245,Quinta-feira,17:00
+2026-02,Levi Freire da Silva Sousa,09/05/2016,19/07/2022,Bateria,27,Rafael (Akeem),32,395.0,não,pagante,pago,Francisco Paulo Ferreira de Sousa,(21) 98135-5218,Sexta-feira,13:00
+2026-02,Liah Lemos Schettino,22/07/2008,28/04/2025,Violino,12,Vinicius Nascimento,38,0.0,não,pagante,sem_fatura,Daniela Schettino Vieira,(21) 99588-9730,Quinta-feira,17:00
+2026-02,Lígia de Freitas Gonçalves,08/11/1953,31/01/2024,Bateria,27,Rafael (Akeem),32,431.2,não,pagante,pago,,(21) 99967-3189,Quarta-feira,12:00
+2026-02,Lis Alencar Rodrigues De Azevedo,26/03/2014,24/11/2020,Bateria,27,Ramon Morais,33,450.5,não,pagante,pago,Joana Alencar Rodrigues De Azevedo,(21) 99449-5702,Sexta-feira,16:00
+2026-02,Lis Alencar Rodrigues De Azevedo,26/03/2014,04/05/2023,Power Kids,25,Rafael (Akeem),32,0.0,sim,bonus_gratuito,sem_fatura,Joana Alencar Rodrigues De Azevedo,(21) 99449-5702,Terça-feira,20:00
+2026-02,Lis Diolinda da Cruz,06/11/2021,29/01/2026,Musicalização Preparatória,4,Leticia Palmeira,18,385.0,não,pagante,pago,Elisa Diolinda da Cruz,(21) 97565-3300,Sábado,10:00
+2026-02,Lohan Marques Boente,29/02/2020,16/11/2021,Musicalização Preparatória,4,Leticia Palmeira,18,453.6,não,pagante,pago,Luciana Ribeiro Marques,(21) 99948-1985,Quarta-feira,18:00
+2026-02,Lorenzo Donni Borges,26/05/2014,18/01/2025,Teclado,16,Renan Guimarães,34,413.4,não,pagante,pago,Lorena Lara Felix Donni,(21) 98111-3573,Quarta-feira,13:00
+2026-02,Lorenzo dos Santos da Silva Palmeira,29/04/2019,10/02/2026,Bateria,27,Rafael (Akeem),32,0.0,não,pagante,sem_fatura,Leticia de Almeida Palmeira,(21) 99781-6538,Sábado,15:00
+2026-02,Luca Pessurno Rodrigues Torres,16/04/2011,04/11/2024,Canto,6,Israel Silva,11,385.0,não,pagante,pago,Cárita Pessurno Rodrigues Torres,(21) 99520-3020,Sábado,14:00
+2026-02,Luca Pessurno Rodrigues Torres,16/04/2011,11/12/2025,Garage Band,38,Matheus Oliveira,27,0.0,sim,bonus_gratuito,sem_fatura,Cárita Pessurno Rodrigues Torres,(21) 99520-3020,Sábado,15:00
+2026-02,Luca Pessurno Rodrigues Torres,16/04/2011,31/07/2024,Guitarra,14,Israel Silva,11,385.0,sim,segundo_curso_pago,pago,Cárita Pessurno Rodrigues Torres,(21) 99520-3020,Quinta-feira,17:00
+2026-02,Lucas Bezerra Siqueira,18/01/2010,31/10/2025,Violão,10,Lucas Guimarães,21,0.0,não,pagante,inadimplente,Fábio Siqueira,(21) 99197-0108,Sexta-feira,14:00
+2026-02,Lucas Cseko e Silva,27/01/2014,25/02/2021,Bateria,27,Rafael (Akeem),32,445.5,não,pagante,pago,Adalberto Silva Junior,(21) 98235-8650,Terça-feira,19:00
+2026-02,Lucas Cseko e Silva,27/01/2014,27/06/2022,Power Kids,25,Lucas Guimarães,21,0.0,sim,bonus_gratuito,sem_fatura,Adalberto Silva Junior,(21) 98235-8650,Terça-feira,20:00
+2026-02,Lucas Freire da Silva Sousa,03/09/2019,30/08/2025,Teclado,16,Willian Silva,41,375.0,não,pagante,pago,Francisco Paulo Ferreira de Sousa,(21) 98135-5218,Sexta-feira,13:00
+2026-02,Lucas Medeiros de Albuquerque,09/02/2018,22/06/2021,Musicalização Para Bebês,2,Marcos Filho,23,0.0,não,pagante,sem_fatura,Ana Paula de Medeiros da Silva Vasconcellos,(21) 99476-7756,Quinta-feira,18:00
+2026-02,Lucas Medeiros de Albuquerque,09/02/2018,30/05/2025,Teclado,16,Willer Machado,40,385.0,sim,segundo_curso_pago,pago,Ana Paula de Medeiros da Silva Vasconcellos,(21) 99476-7756,Quinta-feira,18:00
+2026-02,Luciana Lai Fon Dang,12/04/1986,05/02/2026,Bateria,27,Rafael (Akeem),32,400.0,não,pagante,pago,,(21) 99603-8610,Sexta-feira,20:00
+2026-02,Luis Miguel da Silva Neto,15/10/2012,24/03/2023,Bateria,27,Rafael (Akeem),32,445.5,não,pagante,pago,Maria Alice da Silva Neto,,Quinta-feira,16:00
+2026-02,Luis Rodrigo Casares Villegas,20/06/2021,30/01/2026,Musicalização Preparatória,4,Larissa Santos,16,405.0,não,pagante,pago,Bárbara Alejandra Villegas,(21) 96818-0577,Quinta-feira,14:00
+2026-02,Luísa da Silva Fraga,17/05/2013,01/08/2025,Teclado,16,Kaio Cabral,15,420.0,não,pagante,pago,Monique Da Silva Fraga,(21) 99567-8455,Segunda-feira,15:00
+2026-02,Luisa medeiros de Albuquerque,22/10/2016,22/06/2021,Canto,6,Ramon Morais,33,385.0,não,pagante,pago,Ana Paula de Medeiros da Silva Vasconcellos,(21) 99476-7756,Quinta-feira,18:00
+2026-02,Luisa medeiros de Albuquerque,22/10/2016,22/08/2025,Musicalização Preparatória,4,Matheus Lourenço,25,0.0,sim,segundo_curso_pago,sem_fatura,Ana Paula de Medeiros da Silva Vasconcellos,(21) 99476-7756,Terça-feira,09:00
+2026-02,Luisa medeiros de Albuquerque,22/10/2016,30/05/2025,Power Kids,25,Lohana Araújo,20,0.0,sim,bonus_gratuito,sem_fatura,Ana Paula de Medeiros da Silva Vasconcellos,(21) 99476-7756,Quinta-feira,18:00
+2026-02,Luísa Serpa Ribeiro Fleischhauer,29/03/2007,30/01/2025,Violão,10,Lucas Guimarães,21,423.5,não,pagante,pago,,(21) 98551-5122,Quarta-feira,11:00
+2026-02,Luiz Felipe de Castro Teixeira,12/08/2010,16/09/2024,Canto,6,Alexandre Santo,43,405.0,não,pagante,pago,Lícia Bernacchi de Castro,(21) 96459-5060,Segunda-feira,15:00
+2026-02,Luiz Henrique Ribeiro Gomes,08/10/2016,13/06/2024,Canto,6,Larissa Santos,16,0.0,não,pagante,sem_fatura,Paula Gomes,(21) 96473-3441,Quarta-feira,16:00
+2026-02,Luiza Faria Frazão de Souza,03/03/2017,23/09/2020,Power Kids,25,Vinicius Nascimento,38,0.0,não,pagante,sem_fatura,Diogo Frazão de Souza,(21) 99675-7024,Quinta-feira,16:00
+2026-02,Luiza Faria Frazão de Souza,03/03/2017,29/07/2025,Teclado,16,Ramon Morais,33,382.36,sim,segundo_curso_pago,pago,Diogo Frazão de Souza,(21) 99675-7024,Terça-feira,18:00
+2026-02,Luiza Quintas de Oliveira Ramos Morais,13/06/2023,21/03/2025,Musicalização Para Bebês,2,Larissa Santos,16,370.0,não,pagante,pago,Juliana Quintas de Oliveira Ramos Morais,,Sexta-feira,10:00
+2026-02,Maitê Gomes Pereira,20/10/2017,11/12/2025,Teclado,16,Willer Machado,40,385.0,não,pagante,pago,Flávia Gomes Togashi,(21) 99547-2619,Sexta-feira,19:00
+2026-02,Malu Picerno Franco Molinaro Amaral,16/02/2019,09/08/2025,Canto,6,Lohana Araújo,20,395.0,não,pagante,pago,Luciana Rosa,(21) 98216-2829,Terça-feira,18:00
+2026-02,Manoela Aurilio Matos,24/01/2023,10/01/2026,Musicalização Preparatória,4,Leticia Palmeira,18,430.0,não,pagante,pago,Letízia Aurilio Matos,(21) 99604-5037,Sábado,11:00
+2026-02,Manuela Araujo Rodrigues,10/01/2012,15/03/2025,Canto,6,Leticia Palmeira,18,405.0,não,pagante,pago,Alessandra Araujo de A Rodrigues,(21) 96432-7607,Segunda-feira,15:00
+2026-02,Manuela Chermont de Miranda Petersen,03/09/2012,04/06/2021,Power Kids,25,Ramon Morais,33,0.0,não,pagante,sem_fatura,Maria Elisa Chermont de Miranda Petersen,(21) 99309-9391,Quarta-feira,16:00
+2026-02,Manuela Chermont de Miranda Petersen,03/09/2012,25/02/2021,Violão,10,Ramon Morais,33,456.5,sim,segundo_curso_pago,pago,Maria Elisa Chermont de Miranda Petersen,(21) 99309-9391,Sexta-feira,20:00
+2026-02,Manuela correia Lopes de Oliveira,02/02/2013,31/03/2025,Guitarra,14,Lucas Guimarães,21,410.0,não,pagante,pago,Monike correia Lopes de Oliveira,(21) 98874-5059,Sexta-feira,20:00
+2026-02,Manuela de Moura Vieira,25/07/2017,29/02/2024,Bateria,27,Willer Machado,40,385.0,não,pagante,pago,Bianca golçalves de Moura,(21) 99861-3434,Terça-feira,16:00
+2026-02,Manuela Laidens Bittencourt,14/06/2011,09/01/2026,Violão,10,Willer Machado,40,440.0,não,pagante,pago,Letícia Laidens Rosa,(21) 97970-3816,Terça-feira,14:00
+2026-02,Manuela Souza Soares,31/03/2010,27/09/2025,Garage Band,38,Renan Guimarães,34,0.0,não,pagante,sem_fatura,Waldyr Soares Ferreira Filho,(21) 98006-2354,Sexta-feira,16:00
+2026-02,Manuela Souza Soares,31/03/2010,22/05/2025,Guitarra,14,Lucas Guimarães,21,420.0,sim,segundo_curso_pago,pago,Waldyr Soares Ferreira Filho,(21) 98006-2354,Quarta-feira,16:00
+2026-02,Manuella Weber Riedel,27/04/2013,30/08/2025,Guitarra,14,Lucas Guimarães,21,395.0,não,pagante,pago,Alexandra Weber da Silva,(21) 99558-7402,Sexta-feira,18:00
+2026-02,Marcela de Araújo Guimarães Dutra,17/11/2011,30/09/2025,Canto,6,Leticia Palmeira,18,395.0,não,pagante,pago,Marcia de Araújo Guimarães Dutra,(21) 96853-3753,Quinta-feira,20:00
+2026-02,Marcelo Costa de Souza lira,20/07/1979,29/11/2025,Violão,10,Lucas Guimarães,21,385.0,não,pagante,pago,,(21) 98752-7509,Sexta-feira,19:00
+2026-02,Márcio Sant'Anna,23/02/1975,29/01/2024,Guitarra,14,Willer Machado,40,380.0,não,pagante,pago,,(21) 99985-4501,Sexta-feira,18:00
+2026-02,Marco Antônio Barreto Sundin,13/12/1984,28/08/2024,Teclado,16,Kaio Cabral,15,0.0,não,pagante,inadimplente,,(21) 96457-6261,Segunda-feira,20:00
+2026-02,Marcos Monteiro Leal Simões,03/07/2015,19/07/2025,Musicalização Preparatória,4,Matheus Silva,26,405.0,não,pagante,pago,Pammela Monteiro de Freitas leal,(21) 97015-4545,Sábado,11:00
+2026-02,Maria Clara Cunha dos Santos,01/10/2012,02/02/2022,Power Kids,25,Vinicius Nascimento,38,0.0,não,pagante,sem_fatura,Marco Antônio de Macedo dos Santos,(21) 96801-2124,Quinta-feira,10:00
+2026-02,Maria Clara Cunha dos Santos,01/10/2012,18/06/2022,Teclado,16,Ramon Morais,33,0.0,sim,segundo_curso_pago,inadimplente,Marco Antônio de Macedo dos Santos,(21) 96801-2124,Quinta-feira,10:00
+2026-02,María Clara Monteiro de Carvalho,13/01/2016,07/08/2023,Canto,6,Larissa Santos,16,375.76,não,pagante,pago,Rachel M Batista de Carvalho,(21) 98252-2871,Quarta-feira,19:00
+2026-02,María Clara Monteiro de Carvalho,13/01/2016,27/01/2023,Teclado,16,Larissa Santos,16,374.0,sim,segundo_curso_pago,pago,Rachel M Batista de Carvalho,(21) 98252-2871,Quarta-feira,20:00
+2026-02,Maria Clara Monteiro Delgado de Oliveira,01/02/2018,24/02/2022,Canto,6,Alexandre Santo,43,422.65,não,pagante,pago,Alexander Delgado de Oliveira,(21) 98830-3007,Segunda-feira,13:00
+2026-02,Maria Clara Wandeck Lima,03/10/2019,27/05/2025,Teclado,16,Vinicius Nascimento,38,410.0,não,pagante,pago,Thiago Carvalho dos Santos Lima,(21) 99618-5898,Quinta-feira,18:00
+2026-02,Maria Edith Madeira Coimbra,03/05/2022,31/10/2023,Musicalização Preparatória,4,Leticia Palmeira,18,498.96,não,pagante,pago,Caroline Cristina Madeira Coimbra,(21) 99155-0140,Segunda-feira,11:00
+2026-02,Maria Eduarda Cardoso Moreira,05/07/2016,30/08/2025,Canto,6,Lohana Araújo,20,385.0,não,pagante,pago,Jaqueline Martins Cardoso,(21) 99625-5998,Sábado,09:00
+2026-02,Maria Eduarda Gadelha Albergarias,06/11/2016,30/08/2025,Canto,6,Lohana Araújo,20,365.0,não,pagante,pago,Ana Paula Gadelha Guimaraes Albergarias,(21) 98166-8172,Quinta-feira,18:00
+2026-02,Maria Eduarda Oliveira Costa,02/07/2007,11/12/2021,Bateria,27,Rafael (Akeem),32,0.0,não,pagante,sem_fatura,,(21) 96536-3768,Sábado,14:00
+2026-02,Maria Eduarda Oliveira Costa,02/07/2007,25/06/2022,Garage Band,38,Ramon Morais,33,0.0,sim,bonus_gratuito,sem_fatura,,(21) 96536-3768,Quarta-feira,18:00
+2026-02,Maria Eduarda Quinteiro Artacho,26/06/2014,18/08/2022,Teclado,16,Willer Machado,40,0.0,não,pagante,sem_fatura,Rafael dos Santos Artacho,(21) 96436-3335,Quinta-feira,14:00
+2026-02,Maria Eduarda Santiago de Aguiar,18/12/2013,12/12/2025,Guitarra,14,Willian Silva,41,410.0,não,pagante,pago,Aline da Silva Santiago de Aguiar,(21) 98883-0533,Sexta-feira,18:00
+2026-02,Maria Eduarda Silva Rothier,14/11/2019,06/02/2026,Canto,6,Larissa Santos,16,400.0,não,pagante,pago,Andrea Silva da Conceição,(21) 96545-6042,Quinta-feira,17:00
+2026-02,Maria Esther Hadassa,25/11/2019,14/11/2024,Teclado,16,Larissa Santos,16,385.0,não,pagante,pago,Demilse Pimentel,(21) 97035-9929,Quinta-feira,19:00
+2026-02,Maria Flor Arrigoni Carneiro,24/08/2011,28/11/2024,Contrabaixo,21,Lucas Guimarães,21,431.2,não,pagante,pago,Flavia Arrigoni,(21) 96014-4112,Quarta-feira,17:00
+2026-02,Maria Flor Arrigoni Carneiro,24/08/2011,25/06/2025,Garage Band,38,Renan Guimarães,34,0.0,sim,bonus_gratuito,sem_fatura,Flavia Arrigoni,(21) 96014-4112,Quarta-feira,16:00
+2026-02,Maria Helena Brizzi de Almeida,17/05/2018,29/04/2025,Teclado,16,Rafael (Akeem),32,385.0,não,pagante,pago,Clissia Corrêa Brizzi de Almeida,(21) 97288-6575,Quarta-feira,11:00
+2026-02,Maria Júlia Lagdem Fernandes,14/07/2018,01/08/2022,Canto,6,Leticia Palmeira,18,478.55,não,pagante,pago,Marcelle Mendes Lagdem Fernandes,+55 (21) 99969-5289,Quinta-feira,19:00
+2026-02,Maria Luiza Ferreira Moura,10/05/2016,14/05/2024,Bateria,27,Rafael (Akeem),32,365.15,não,pagante,pago,Jéssica de Jesus dos Santos Ferreira moura,(21) 96415-4186,Sábado,11:00
+2026-02,Maria Luiza Figueiredo Cantalice,08/11/2016,30/07/2025,Canto,6,Lohana Araújo,20,395.0,não,pagante,pago,Daniele Santos Figueiredo,(21) 99675-4466,Quinta-feira,18:00
+2026-02,Maria Petzold Antonioli Coutinho,24/10/2016,30/07/2025,Teclado,16,Larissa Santos,16,410.0,não,pagante,pago,Lidya Petzold Fernandes,(21) 98048-8703,Quarta-feira,20:00
+2026-02,Maria Rita Damasceno Estevez,13/02/2020,28/02/2025,Bateria,27,Willer Machado,40,385.0,não,pagante,pago,Leonardo Clemente Estevez,(21) 99923-0134,Sexta-feira,16:00
+2026-02,Mariana Albuquerque Oliveira,08/05/2010,15/10/2024,Violino,12,Joel Filho,13,388.5,não,pagante,pago,Fernanda Ferreira Albuquerque Oliveira,(21) 98080-7015,Sexta-feira,18:00
+2026-02,Marília Andressa Sandeo,06/09/1997,27/10/2025,Canto,6,Alexandre Santo,43,410.0,não,pagante,pago,,(21) 97226-8597,Segunda-feira,19:00
+2026-02,Matheus Alves Tiburcio,27/02/2007,06/02/2026,Guitarra,14,Lucas Guimarães,21,400.0,não,pagante,pago,,(21) 99621-1898,Segunda-feira,17:00
+2026-02,Matheus Carvalho Freitas,10/06/1991,08/08/2025,Guitarra,14,Lucas Guimarães,21,395.0,não,pagante,pago,,(21) 97460-7794,Sexta-feira,13:00
+2026-02,Matheus da Mota Gomes,04/10/2017,09/08/2025,Teclado,16,Joel Filho,13,375.0,não,pagante,pago,Eliana Soares da Mota Gomes,(21) 98123-1098,Sexta-feira,10:00
+2026-02,Mathias Barreto Caetano,02/09/2016,02/10/2025,Teclado,16,Alexandre Santo,43,0.0,não,pagante,inadimplente,Maicon Fernando I  Caetano,(21) 99299-9430,Segunda-feira,10:00
+2026-02,Matteo Olguin Gomes,13/12/2023,12/02/2026,Musicalização Para Bebês,2,Leticia Palmeira,18,400.0,não,pagante,pago,Cynthia Olguin de Matos Costa Silva,(21) 99718-9018,Quinta-feira,17:00
+2026-02,Maysa Telles Reis Gonçalves,18/01/2013,25/06/2025,Canto,6,Rafael (Akeem),32,340.0,não,pagante,pago,Tatiane Telles Reis,(21) 96440-1863,Terça-feira,15:00
+2026-02,Maysa Telles Reis Gonçalves,18/01/2013,03/05/2023,Garage Band,38,Ramon Morais,33,0.0,sim,segundo_curso_pago,sem_fatura,Tatiane Telles Reis,(21) 96440-1863,Quarta-feira,20:00
+2026-02,Maysa Telles Reis Gonçalves,18/01/2013,09/04/2024,Power Kids,25,Ramon Morais,33,0.0,sim,bonus_gratuito,sem_fatura,Tatiane Telles Reis,(21) 96440-1863,Terça-feira,16:00
+2026-02,Maysa Telles Reis Gonçalves,18/01/2013,16/02/2023,Violão,10,Lohana Araújo,20,304.95,sim,segundo_curso_pago,pago,Tatiane Telles Reis,(21) 96440-1863,Terça-feira,20:00
+2026-02,Miguel Antunes Tostes,15/06/2011,15/02/2023,Bateria,27,Ramon Morais,33,434.5,não,pagante,pago,Cesar Martins Tostes,(21) 98606-2425,Sábado,10:00
+2026-02,Miguel Antunes Tostes,15/06/2011,12/05/2023,Garage Band,38,Rafael (Akeem),32,0.0,sim,bonus_gratuito,sem_fatura,Cesar Martins Tostes,(21) 98606-2425,Quarta-feira,20:00
+2026-02,Miguel Bolais de Salles,29/01/2016,31/05/2024,Bateria,27,Ramon Morais,33,386.9,não,pagante,pago,Roberta Salles,(21) 97984-7505,Segunda-feira,10:00
+2026-02,Miguel Bolais de Salles,29/01/2016,22/08/2025,Guitarra,14,Israel Silva,11,365.0,sim,segundo_curso_pago,pago,Roberta Salles,(21) 97984-7505,Terça-feira,09:00
+2026-02,Miguel Bolais de Salles,29/01/2016,27/09/2025,Power Kids,25,Rafael (Akeem),32,0.0,sim,bonus_gratuito,sem_fatura,Roberta Salles,(21) 97984-7505,Segunda-feira,09:00
+2026-02,Miguel Couto de Andrade,27/11/2011,30/06/2022,Garage Band,38,Willian Silva,41,0.0,não,pagante,sem_fatura,Grace Couto de Andrade,(21) 97134-5259,Sexta-feira,15:00
+2026-02,Miguel Couto de Andrade,27/11/2011,17/06/2025,Teclado,16,Willian Silva,41,453.5,sim,segundo_curso_pago,pago,Grace Couto de Andrade,(21) 97134-5259,Terça-feira,17:00
+2026-02,Miguel da Silva Fraga,30/12/2018,16/09/2025,Bateria,27,Willer Machado,40,385.0,não,pagante,pago,Bruno Sandre Fraga,,Sexta-feira,14:00
+2026-02,Miguel Holanda Cavalcanti Martins,23/02/2013,04/08/2025,Bateria,27,Vicente Neto,37,385.0,não,pagante,pago,Eline Holanda Cavalcanti Garcia de Barros,(55) 51963-1440,Segunda-feira,15:00
+2026-02,Miguel Jorge da Silva,20/12/2007,05/06/2024,Bateria,27,Rafael (Akeem),32,385.0,não,pagante,pago,,(21) 98034-0174,Quinta-feira,18:00
+2026-02,Miguel Masson Rocha Mendes,10/04/2015,13/08/2024,Teclado,16,Willian Fumaça,42,477.32,não,pagante,pago,Antonio Marcos Rocha Mendes,(21) 97020-0520,Terça-feira,15:00
+2026-02,Miguel Menezes Merçon dos Santos,20/05/2010,02/06/2025,Guitarra,14,Israel Silva,11,400.0,não,pagante,pago,Cintia Menezes,(21) 99720-0510,Sábado,10:00
+2026-02,Miguel Rodrigues Furtado,25/10/2023,24/01/2026,Musicalização Preparatória,4,Leticia Palmeira,18,415.0,não,pagante,pago,Izadora Adais Rodrigues Pereira,(38) 98422-9505,Segunda-feira,09:00
+2026-02,Milena Melo Lima Correa,09/11/2016,16/08/2022,Teclado,16,Alexandre Santo,43,464.4,não,pagante,pago,Barbara Melo Lima,(21) 99689-7770,Quarta-feira,15:00
+2026-02,Natan Lança Moreira,23/04/2018,26/08/2025,Bateria,27,Willer Machado,40,395.0,não,pagante,pago,Rosane Soares da Silva Lança,(21) 98207-7804,Terça-feira,11:00
+2026-02,Natan Sá Justino,05/10/2013,24/01/2025,Teclado,16,Joel Filho,13,385.0,não,pagante,pago,Renata Sá Dias,(21) 98132-6651,Sexta-feira,14:00
+2026-02,Nathan Leggett de Moura,13/05/2014,30/01/2020,Bateria,27,Isaque Silva,10,477.95,não,pagante,pago,Melissa Lyynn Leggett de Moura,(21) 99860-8054,Quinta-feira,17:00
+2026-02,Nathan Leggett de Moura,13/05/2014,18/05/2021,Teclado,16,Rafael (Akeem),32,0.0,sim,segundo_curso_pago,sem_fatura,Melissa Lyynn Leggett de Moura,(21) 99860-8054,Quinta-feira,17:00
+2026-02,Nicolas Couto de Andrade,27/11/2011,30/06/2022,Bateria,27,Caio Araujo,2,453.6,não,pagante,pago,Grace Couto de Andrade,(21) 97134-5259,Sexta-feira,15:00
+2026-02,Nicolas Couto de Andrade,27/11/2011,17/06/2025,Garage Band,38,Caio Araujo,2,0.0,sim,bonus_gratuito,sem_fatura,Grace Couto de Andrade,(21) 97134-5259,Terça-feira,17:00
+2026-02,Nicolas de Farias Varjão,10/10/2014,12/03/2025,Teclado,16,Isaque Silva,10,385.0,não,pagante,pago,Luiz Felipe Carneiro Varjão,(21) 99838-5682,Terça-feira,14:00
+2026-02,Nicole Takeda Takenawa,16/04/2010,11/06/2025,Guitarra,14,Marcos Filho,23,420.0,não,pagante,pago,Hissayuki Takenawa Junior,(21) 96909-9999,Quinta-feira,17:00
+2026-02,Noah Carpenter Degan,08/04/2019,28/10/2023,Ukulêlê,8,Ramon Morais,33,445.17,não,pagante,pago,Paulo Roberto D. Da Silva,(21) 99992-2307,Sábado,10:00
+2026-02,Noah Ciccarelli Artacho Pincelli,18/11/2017,18/08/2022,Guitarra,14,Israel Silva,11,0.0,não,pagante,sem_fatura,Rafael dos Santos Artacho,(21) 96473-3441,Segunda-feira,18:00
+2026-02,Noah Teixeira Menezes de Lima,26/07/2019,31/01/2022,Guitarra,14,Lucas Guimarães,21,375.0,não,pagante,pago,Candice Oliveira Teixeira Menezes de lima,(21) 99331-8138,Sábado,11:00
+2026-02,Noah Teixeira Menezes de Lima,26/07/2019,09/08/2025,Musicalização Preparatória,4,Marcos Filho,23,0.0,sim,segundo_curso_pago,sem_fatura,Candice Oliveira Teixeira Menezes de lima,(21) 99331-8138,Sábado,11:00
+2026-02,Olivia Carvalho Rocha,28/10/2022,31/01/2026,Musicalização Preparatória,4,Larissa Santos,16,400.0,não,pagante,pago,Kelly Carvalho,(21) 98682-1972,Quinta-feira,10:00
+2026-02,Olivia Freire Rodrigues Oliveira,20/02/2016,08/08/2023,Bateria,27,Rafael (Akeem),32,300.0,não,pagante,pago,Adriana Freire Rodrigues,(21) 97616-7046,Quinta-feira,15:00
+2026-02,Olivia Freire Rodrigues Oliveira,20/02/2016,11/04/2024,Canto,6,Lohana Araújo,20,0.0,sim,segundo_curso_pago,sem_fatura,Adriana Freire Rodrigues,(21) 97616-7046,Quinta-feira,15:00
+2026-02,Otto Dorileo Ewald,28/06/2016,28/11/2025,Bateria,27,Rafael (Akeem),32,420.0,não,pagante,pago,Fabiana Dorileo Ewald,(21) 98196-6878,Quarta-feira,15:00
+2026-02,Otto Santiago Mendes,23/07/2020,09/01/2024,Teclado,16,Joel Filho,13,0.0,não,pagante,sem_fatura,Ana Paula Brito Santiago,(21) 97913-9903,Sexta-feira,09:00
+2026-02,Pedro Cesquim Medeiros de Castro e Azevedo,29/04/2015,07/04/2025,Teclado,16,Kaio Cabral,15,395.0,não,pagante,pago,Adriana Cesquim de Costa,(21) 99867-7952,Segunda-feira,19:00
+2026-02,Pedro da Mota Gomes,03/06/2015,09/08/2025,Teclado,16,Rafael (Akeem),32,375.0,não,pagante,pago,Eliana Soares da Mota Gomes,(21) 98123-1098,Sexta-feira,10:00
+2026-02,Pedro da Silva Machado,09/09/2015,15/08/2023,Ukulêlê,8,Ramon Morais,33,378.23,não,pagante,pago,Uilson Luis Moreira Machado,(21) 99667-7450,Terça-feira,14:00
+2026-02,Pedro de Castro Bressane Albuquerque do Carmo,24/05/2016,31/05/2022,Bateria,27,Willian Silva,41,423.5,não,pagante,pago,Marcello Pequeno de Albuquerque do Carmo,(21) 99758-4845,Sexta-feira,09:00
+2026-02,Pedro Faria Frazão de Souza,02/03/2014,23/09/2020,Teclado,16,Joel Filho,13,396.82,não,pagante,pago,Diogo Frazão de Souza,(21) 97160-0761,Segunda-feira,18:00
+2026-02,Pedro Gabriel de Melo Alexandre,31/01/2003,26/10/2024,Canto,6,Matheus Oliveira,27,385.0,não,pagante,pago,,(21) 97520-1614,Quinta-feira,17:00
+2026-02,Pedro Gabriel de Melo Alexandre,31/01/2003,01/04/2024,Garage Band,38,Willer Machado,40,0.0,sim,bonus_gratuito,sem_fatura,,(21) 97520-1614,Quinta-feira,18:00
+2026-02,Pedro Gabriel de Melo Alexandre,31/01/2003,28/03/2024,Guitarra,14,Matheus Oliveira,27,385.0,sim,segundo_curso_pago,pago,,(21) 97520-1614,Quinta-feira,19:00
+2026-02,Pedro Henrique Almeida Capitanio,02/07/2011,30/04/2025,Bateria,27,Rafael (Akeem),32,420.0,não,pagante,pago,Ana Claudia Lopes Almeida,(21) 97622-4715,Sexta-feira,15:00
+2026-02,Pedro Quintas de Oliveira Ramos Morais,20/09/2018,25/06/2020,Bateria,27,Willian Silva,41,407.0,não,pagante,pago,Juliana Quintas de Oliveira Ramos Morais,(21) 98558-9181,Sexta-feira,10:00
+2026-02,Philippe de Goulart Rodrigues,18/03/2009,28/07/2025,Guitarra,14,Alexandre Junior,43,400.0,não,pagante,pago,Luciana Goulart Rodrigues,(21) 99167-6364,Terça-feira,20:00
+2026-02,Pietra Sucena Novaes Calvo Bueno,16/06/2019,28/07/2022,Canto,6,Leticia Palmeira,18,427.9,não,pagante,pago,Daniele Cristine Novaes Sucena de Almeida,+55 (21) 99227-6556,Quinta-feira,19:00
+2026-02,Rafael Marques G dos Santos,20/11/2012,16/09/2024,Bateria,27,Vicente Neto,37,431.2,não,pagante,pago,Roberta De Almeida Marques,(21) 99937-1803,Segunda-feira,16:00
+2026-02,Rafael Souto Machado,16/09/2014,25/08/2018,Bateria,27,Matheus Silva,26,377.4,não,pagante,pago,Kelling Cabral Souto,(21) 99664-5789,Sábado,09:00
+2026-02,Rafael Villeth de Holanda,27/11/2015,11/01/2025,Bateria,27,Rafael (Akeem),32,0.0,não,pagante,sem_fatura,Alessandra Villeth,(21) 99979-7643,Sexta-feira,18:00
+2026-02,Rafaela Magalhães Garcia eiras,19/04/2016,14/01/2026,Canto,6,Alexandre Santo,43,410.0,não,pagante,pago,Rafael Garcia Madalen eiras,(21) 96458-0458,Segunda-feira,20:00
+2026-02,Ramires Moraes do Nascimento,22/11/2014,06/05/2025,Musicalização Preparatória,4,Larissa Santos,16,420.0,não,pagante,pago,Valéria Moraes do Nascimento,(21) 98665-9132,Quarta-feira,18:00
+2026-02,Ricardo Alfonso Moreno Ruiz,11/12/2012,20/02/2024,Garage Band,38,Renan Guimarães,34,0.0,não,pagante,sem_fatura,Bárbara Beatriz Ruiz de Moreno,(27) 99808-6877,Quarta-feira,14:00
+2026-02,Ricardo Alfonso Moreno Ruiz,11/12/2012,07/05/2024,Teclado,16,Matheus Oliveira,27,385.0,sim,segundo_curso_pago,pago,Bárbara Beatriz Ruiz de Moreno,(27) 99808-6877,Quinta-feira,19:00
+2026-02,Roberta Rodrigues Lins Rodolfo,05/10/2005,09/06/2025,Canto,6,Larissa Santos,16,420.0,não,pagante,pago,,(21) 98402-2005,Quarta-feira,15:00
+2026-02,Roberto Toledo El Alam,02/07/1979,30/09/2025,Violão,10,Valdo Delfino,36,385.0,não,pagante,pago,,(21) 98834-0113,Quinta-feira,18:00
+2026-02,Rodrigo Pereira Brum,13/07/1979,10/03/2021,Violão,10,Lucas Guimarães,21,420.0,não,pagante,pago,,(21) 99129-3363,Quarta-feira,18:00
+2026-02,Rúbia Pimentel Duarte,01/06/2019,24/06/2021,Musicalização Para Bebês,2,Joel Filho,13,0.0,não,pagante,sem_fatura,Thaiza Pimentel,(21) 96478-6028,Sexta-feira,10:00
+2026-02,Rúbia Pimentel Duarte,01/06/2019,23/10/2024,Teclado,16,Marcos Filho,23,408.88,sim,segundo_curso_pago,pago,Thaiza Pimentel,(21) 96478-6028,Sexta-feira,10:00
+2026-02,Samuel Nunes Victorino,30/01/2019,11/08/2025,Teclado,16,Matheus Silva,26,0.0,não,pagante,inadimplente,Daiane Mendes Nunes victorino,(21) 98521-6525,Sábado,08:00
+2026-02,Samuel Silveira Noronha,06/04/2020,12/08/2025,Bateria,27,Willian Silva,41,0.0,não,pagante,inadimplente,Ana Paula Silveira Noronha,(21) 98104-5207,Quinta-feira,15:00
+2026-02,Saulo Medeiros Aride,21/09/1985,05/04/2025,Guitarra,14,Lucas Guimarães,21,400.0,não,pagante,pago,,(21) 99159-7859,Sábado,09:00
+2026-02,Sérgio Mauro da Silva Maia,12/04/1977,14/11/2025,Violão,10,Valdo Delfino,36,405.0,não,pagante,pago,,(21) 99617-8144,Quinta-feira,20:00
+2026-02,Silvia Ohana Marques Coelho de Carvalho,26/05/1984,19/07/2025,Canto,6,Matheus Oliveira,27,370.0,não,pagante,pago,,(21) 98751-9154,Terça-feira,13:00
+2026-02,Silvia Ohana Marques Coelho de Carvalho,26/05/1984,20/02/2025,Garage Band,38,Ramon Morais,33,0.0,sim,bonus_gratuito,sem_fatura,,(21) 98751-9154,Terça-feira,12:00
+2026-02,Sofia de Avellar Muchuli e Silva,17/05/2015,23/01/2025,Teclado,16,Willer Machado,40,0.0,não,pagante,sem_fatura,William Corrêa de Oliveira e Silva,(21) 99327-8723,Sexta-feira,19:00
+2026-02,Sofia Fernández Rêgo,20/04/2015,07/02/2026,Canto,6,Lohana Araújo,20,340.0,não,pagante,pago,Luiz Felipe Bezerra Rêgo,(21) 99972-7126,Quinta-feira,19:00
+2026-02,Sofia Gonçalves Copello Moraes,20/04/2013,08/09/2022,Canto,6,Lohana Araújo,20,508.2,não,pagante,pago,Fabiane Gonçalves Copello Moraes,(21) 98181-6048,Quinta-feira,19:00
+2026-02,Sofia Lima de Castro,06/04/2009,31/10/2019,Canto,6,Israel Silva,11,385.0,não,pagante,pago,Renata Lima Rocha,(21) 99971-1062,Terça-feira,16:00
+2026-02,Sofia Lima de Castro,06/04/2009,11/11/2024,Garage Band,38,Ramon Morais,33,0.0,sim,segundo_curso_pago,sem_fatura,Renata Lima Rocha,(21) 99971-1062,Sábado,15:00
+2026-02,Sofia Lima de Castro,06/04/2009,08/01/2024,Canto,6,Lohana Araújo,20,0.0,sim,segundo_curso_pago,sem_fatura,Renata Lima Rocha,(21) 99971-1062,Terça,16:00
+2026-02,Sofia Lima de Castro,06/04/2009,11/04/2024,Violão,10,Lohana Araújo,20,0.0,sim,segundo_curso_pago,sem_fatura,Renata Lima Rocha,(21) 99971-1062,Terça-feira,16:00
+2026-02,Sophia Correa Motta,22/05/2013,17/06/2025,Canto,6,Alexandre Santo,43,0.0,não,pagante,sem_fatura,Ana Carolina de Almeida Motta,(21) 97140-5090,Segunda-feira,17:00
+2026-02,Sophia Correa Motta,22/05/2013,23/10/2024,Garage Band,38,Rafael (Akeem),32,0.0,sim,bonus_gratuito,sem_fatura,Ana Carolina de Almeida Motta,(21) 97140-5090,Segunda-feira,17:00
+2026-02,Sophie Medeiros Rodrigues,20/09/2018,26/10/2020,Canto IND,5,Matheus Lourenço,25,463.26,não,pagante,pago,Danielle Medeiros Da Silva Machado,(21) 99662-9389,Sábado,08:00
+2026-02,Sophie Medeiros Rodrigues,20/09/2018,13/05/2021,Musicalização Preparatória,4,Lohana Araújo,20,0.0,sim,segundo_curso_pago,sem_fatura,Danielle Medeiros Da Silva Machado,(21) 99662-9389,Sábado,08:00
+2026-02,Sophie Szsentes Boyd,30/08/2018,27/01/2023,Canto,6,Alexandre Santo,43,368.5,não,pagante,pago,André Luiz Pamplona Boyd,(21) 97988-8003,Quarta-feira,16:00
+2026-02,Tammy Missae dos Reis Nagashima Lira,07/07/1981,29/11/2025,Violão,10,Lucas Guimarães,21,385.0,não,pagante,pago,,(21) 97632-4663,Sexta-feira,19:00
+2026-02,Théo Arruda de Oliveira,12/11/2018,18/07/2025,Guitarra,14,Lucas Guimarães,21,420.0,não,pagante,pago,Mariana Moura Sampaio de Arruda,(21) 98804-8630,Sábado,11:00
+2026-02,Theo Campello Bastos,21/10/2015,04/08/2025,Teclado,16,Kaio Cabral,15,395.0,não,pagante,pago,Renata Campello Brito,(21) 99946-0234,Segunda-feira,19:00
+2026-02,Theo de Souza Galdino,03/09/2015,16/01/2025,Bateria,27,Willian Silva,41,434.5,não,pagante,pago,Monique Graciele F de Souza,(21) 99792-8246,Quinta-feira,09:00
+2026-02,Theo de Souza Galdino,03/09/2015,29/07/2025,Power Kids,25,Ramon Morais,33,0.0,sim,bonus_gratuito,sem_fatura,Monique Graciele F de Souza,(21) 99792-8246,Terça-feira,18:00
+2026-02,Theo Modesti da Cunha Belém,12/07/2019,08/08/2025,Bateria,27,Vicente Neto,37,395.0,não,pagante,pago,PAULA MODESTI DA CUNHA,(21) 99515-8649,Segunda-feira,17:00
+2026-02,Thomás Giorelli de Carvalho,20/08/2014,20/02/2025,Teclado IND,15,Willer Machado,40,500.0,não,pagante,pago,Luciana Schnoor Giorelli,(21) 99636-8786,Quinta-feira,20:00
+2026-02,Thomas Medeiros Rodrigues,26/03/2020,26/10/2020,Musicalização Para Bebês,2,Matheus Lourenço,25,0.0,não,pagante,sem_fatura,Danielle Medeiros Da Silva Machado,(21) 99662-9389,Sábado,08:00
+2026-02,Thomas Medeiros Rodrigues,26/03/2020,13/05/2021,Musicalização Preparatória IND,3,Rafael (Akeem),32,463.26,sim,segundo_curso_pago,pago,Danielle Medeiros Da Silva Machado,(21) 99662-9389,Sábado,08:00
+2026-02,Valentim da Silva Bond,25/01/2020,25/08/2025,Bateria,27,Matheus Silva,26,0.0,não,pagante,inadimplente,Marcelo de Oliveira da Silva,(21) 99205-1961,Sábado,10:00
+2026-02,Valentina Cortes Santanna,30/05/2014,04/05/2023,Canto,6,Ramon Morais,33,418.0,não,pagante,pago,Paula Moreira Cortes,(21) 99961-3359,Segunda-feira,18:00
+2026-02,Valentina Cortes Santanna,30/05/2014,29/01/2022,Power Kids,25,Ramon Morais,33,0.0,sim,bonus_gratuito,sem_fatura,Paula Moreira Cortes,(21) 99961-3359,Terça-feira,20:00
+2026-02,Valentina Legget de Moura,17/08/2023,28/01/2026,Musicalização Para Bebês,2,Leticia Palmeira,18,395.0,não,pagante,pago,Melissa Lyynn Leggett de Moura,,Quinta-feira,17:00
+2026-02,Valentina Mendes Rodrigues Aleixo,29/05/2015,02/06/2025,Canto,6,Matheus Lourenço,25,402.82,não,pagante,pago,Giulliany Mendes Rodrigues,(21) 96444-1961,Segunda-feira,10:00
+2026-02,Valentina Mendes Rodrigues Aleixo,29/05/2015,16/04/2024,Teclado,16,Matheus Lourenço,25,370.0,sim,segundo_curso_pago,pago,Giulliany Mendes Rodrigues,(21) 96444-1961,Segunda-feira,11:00
+2026-02,Vaner Paranhos,30/05/1982,27/08/2025,Canto,6,Leticia Palmeira,18,395.0,não,pagante,pago,,(21) 96493-6878,Segunda-feira,19:00
+2026-02,Vicente Boêta Alves,12/11/2020,14/12/2024,Musicalização Preparatória,4,Leticia Palmeira,18,0.0,não,pagante,sem_fatura,Daniela da Silva Boêta,(21) 96443-9327,Sábado,09:00
+2026-02,Vicente Pereira Costard,19/04/2020,23/05/2025,Musicalização Preparatória,4,Leticia Palmeira,18,385.0,não,pagante,pago,Debora Gomes Neto Costard,(21) 99995-2013,Quarta-feira,16:00
+2026-02,Victor Alexandre Mendes Soares,17/07/2013,11/11/2020,Garage Band,38,Rafael (Akeem),32,0.0,não,pagante,sem_fatura,Gisele de Almenida Mendes Soares,(21) 99166-9528,Quarta-feira,19:00
+2026-02,Victor Alexandre Mendes Soares,17/07/2013,03/05/2023,Teclado,16,Alexandre Santo,43,418.88,sim,segundo_curso_pago,pago,Gisele de Almenida Mendes Soares,(21) 99166-9528,Quarta-feira,20:00
+2026-02,Victor Henrique de Sá Santos,15/07/1996,06/05/2025,Canto IND,5,Matheus Oliveira,27,500.0,não,pagante,pago,,(11) 96301-8033,Quinta-feira,14:00
+2026-02,Victor Henrique de Sá Santos,15/07/1996,06/05/2025,Teclado IND,15,Willer Machado,40,500.0,sim,segundo_curso_pago,pago,,(11) 96301-8033,Terça-feira,13:00
+2026-02,Vinícius Palmieri Schmid,28/01/2012,02/06/2025,Bateria,27,Rafael (Akeem),32,390.0,não,pagante,pago,Rachel Palmieri,(21) 97349-0071,Terça-feira,15:00
+2026-02,Vitor Palmieri Schmid,27/08/2016,02/06/2025,Violão,10,Lucas Guimarães,21,390.0,não,pagante,pago,Rachel Palmieri,(21) 97349-0071,Terça-feira,15:00
+2026-02,Vitória da Silva Nobre,30/03/2017,20/02/2025,Canto IND,5,Leticia Palmeira,18,650.0,não,pagante,pago,Rafael Pereira Nobre,(21) 98080-9434,Quinta-feira,15:00
+2026-02,Yuri Amador Maia,19/01/2017,21/03/2025,Teclado,16,Joel Filho,13,410.0,não,pagante,pago,Claudineia Amador,(21) 97024-6217,Sexta-feira,11:00
+2026-02,Yuri Barros Jardim,22/06/2015,29/11/2024,Bateria,27,Vicente Neto,37,408.8,não,pagante,pago,Marta Nascimento Barros,(21) 96735-1215,Segunda-feira,18:00
+2026-02,Yuri de Souza Ribeiro,26/11/2009,10/06/2021,Garage Band,38,Ramon Morais,33,0.0,não,pagante,sem_fatura,Hemilly Góes De Souza Ribeiro,(21) 97383-5830,Quarta-feira,17:00
+2026-02,Yuri de Souza Ribeiro,26/11/2009,06/06/2022,Teclado,16,Renan Guimarães,34,0.0,sim,segundo_curso_pago,inadimplente,Hemilly Góes De Souza Ribeiro,(21) 97383-5830,Quarta-feira,18:00

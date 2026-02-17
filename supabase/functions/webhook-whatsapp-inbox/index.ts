@@ -127,7 +127,95 @@ function detectMessageType(message: any): { tipo: string; conteudo: string | nul
   };
 }
 
-// ========== STATUS UPDATE HANDLER ==========
+// ========== HANDLER RESPOSTA EVASÃO ==========
+// Verifica se é resposta de pesquisa de evasão e processa
+async function handleRespostaEvasao(
+  msg: any,
+  phone: string,
+  supabase: any
+): Promise<{ handled: boolean; pesquisa_id?: string }> {
+  try {
+    // Buscar estado de conversa de evasão
+    const { data: estado } = await supabase
+      .from('conversa_estado_whatsapp')
+      .select('*')
+      .eq('whatsapp_numero', phone)
+      .eq('estado', 'aguardando_resposta_evasao')
+      .gt('expira_em', new Date().toISOString())
+      .maybeSingle();
+
+    if (!estado) {
+      return { handled: false };
+    }
+
+    const contexto = estado.contexto || {};
+    const pesquisaId = contexto.pesquisa_id;
+
+    if (!pesquisaId) {
+      return { handled: false };
+    }
+
+    // Verificar se a pesquisa ainda está em 'enviado' (não respondida)
+    const { data: pesquisa } = await supabase
+      .from('pesquisa_evasao')
+      .select('id, status')
+      .eq('id', pesquisaId)
+      .eq('status', 'enviado')
+      .maybeSingle();
+
+    if (!pesquisa) {
+      return { handled: false };
+    }
+
+    // Detectar tipo de mensagem
+    const isAudio = msg.message?.audioMessage || msg.message?.ptt || msg.type === 'audio';
+    const isText = msg.message?.conversation || msg.message?.extendedTextMessage?.text;
+
+    let respostaTexto = null;
+    let respostaAudioUrl = null;
+    let respostaTipo = null;
+
+    if (isAudio) {
+      respostaAudioUrl = msg.message?.audioMessage?.url || msg.message?.ptt?.url || null;
+      respostaTipo = 'audio';
+    } else if (isText) {
+      respostaTexto = msg.message?.conversation || msg.message?.extendedTextMessage?.text || '';
+      respostaTipo = 'texto';
+    } else {
+      // Tipo não suportado para pesquisa
+      return { handled: false };
+    }
+
+    // Atualizar pesquisa com a resposta
+    await supabase
+      .from('pesquisa_evasao')
+      .update({
+        status: 'respondido',
+        resposta_texto: respostaTexto,
+        resposta_audio_url: respostaAudioUrl,
+        resposta_tipo: respostaTipo,
+        respondido_em: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', pesquisaId);
+
+    // Limpar estado da conversa
+    await supabase
+      .from('conversa_estado_whatsapp')
+      .update({
+        estado: 'respondido',
+        updated_at: new Date().toISOString()
+      })
+      .eq('whatsapp_numero', phone);
+
+    console.log(`[webhook-evasao] ✅ Resposta registrada: pesquisa ${pesquisaId} (${respostaTipo})`);
+
+    return { handled: true, pesquisa_id: pesquisaId };
+  } catch (err) {
+    console.error('[webhook-evasao] Erro:', err);
+    return { handled: false };
+  }
+}
 // Mapear status UAZAPI para nosso enum
 function mapStatus(uazapiStatus: string | number): string | null {
   const statusMap: Record<string, string> = {
@@ -252,6 +340,14 @@ serve(async (req: Request) => {
         }
 
         const whatsappMessageId = msg.key?.id || msg.id || msg.messageId;
+
+        // Verificar se é resposta de pesquisa de evasão (antes de processar como lead)
+        const evasaoResult = await handleRespostaEvasao(msg, phone, supabase);
+        if (evasaoResult.handled) {
+          console.log(`[webhook-inbox] Resposta de evasão processada: ${evasaoResult.pesquisa_id}`);
+          processadas++;
+          continue;
+        }
 
         // Verificar se mensagem ja existe (evitar duplicatas)
         if (whatsappMessageId) {
