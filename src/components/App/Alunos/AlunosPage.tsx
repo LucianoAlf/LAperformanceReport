@@ -250,11 +250,11 @@ export function AlunosPage() {
         dia_aula, horario_aula, valor_parcela, tempo_permanencia_meses,
         status, status_pagamento, dia_vencimento, tipo_matricula_id, unidade_id, data_matricula,
         is_segundo_curso, data_nascimento, forma_pagamento_id,
-        professores:professor_atual_id(nome),
-        cursos:curso_id(nome),
-        tipos_matricula:tipo_matricula_id(nome, conta_como_pagante, entra_ticket_medio, codigo),
-        unidades:unidade_id(codigo),
-        formas_pagamento:forma_pagamento_id(nome)
+        professores:professor_atual_id!left(nome),
+        cursos:curso_id!left(nome),
+        tipos_matricula:tipo_matricula_id!left(nome, conta_como_pagante, entra_ticket_medio, codigo),
+        unidades:unidade_id!inner(codigo),
+        formas_pagamento:forma_pagamento_id!left(nome)
       `)
       .order('nome');
 
