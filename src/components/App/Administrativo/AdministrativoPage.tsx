@@ -3,6 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { useOutletContext } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { useToast } from '@/hooks/useToast';
 import { 
   Users, DollarSign, BookOpen, GraduationCap, UserPlus,
   FileText, Calendar, Plus, Pause, RefreshCw, XCircle, AlertTriangle, LogOut,
@@ -19,8 +21,6 @@ import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { PageFilterBar } from '@/components/ui/page-filter-bar';
 import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
 import { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
-import { useToast } from '@/hooks/useToast';
-
 import { QuickInputCard } from './QuickInputCard';
 import { TabelaRenovacoes } from './TabelaRenovacoes';
 import { TabelaAvisosPrevios } from './TabelaAvisosPrevios';
@@ -116,8 +116,14 @@ export function AdministrativoPage() {
     iconeWrapperCor: 'bg-violet-500/20',
   });
 
-  const context = useOutletContext<{ filtroAtivo: boolean; unidadeSelecionada: UnidadeId }>();
-  const unidade = context?.unidadeSelecionada || 'todos';
+  const { isAdmin, unidadeId } = useAuth();
+  const context = useOutletContext<{ filtroAtivo: string | null; unidadeSelecionada: string | null }>();
+  
+  // Para usuários de unidade: usar unidadeId direto do auth (mais confiável que contexto)
+  // Para admin: usar filtroAtivo do contexto, fallback para 'todos'
+  const unidade = isAdmin 
+    ? (context?.filtroAtivo ?? 'todos')
+    : unidadeId; // pode ser null inicialmente, mas evita fallback para 'todos'
   
   // Hook de filtro de competência (período)
   const competenciaFiltro = useCompetenciaFiltro();
@@ -158,12 +164,17 @@ export function AdministrativoPage() {
   // Competência formatada para os modais (YYYY-MM)
   const competencia = `${ano}-${String(mes).padStart(2, '0')}`;
 
-  // Carregar dados
+  // Carregar dados - executa quando unidade ou período mudar
   useEffect(() => {
     loadData();
   }, [startDate, endDate, unidade]);
 
   async function loadData() {
+    // Aguardar auth carregar para usuários de unidade
+    if (!isAdmin && !unidadeId) {
+      return; // Ainda carregando, não executar queries
+    }
+    
     setLoading(true);
     try {
       // Usar range de datas do filtro de competência

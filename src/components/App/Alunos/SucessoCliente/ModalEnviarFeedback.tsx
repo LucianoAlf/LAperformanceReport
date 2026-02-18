@@ -91,19 +91,37 @@ export function ModalEnviarFeedback({ open, onClose, unidadeAtual }: ModalEnviar
   const carregarDados = async () => {
     setLoading(true);
     try {
-      // Buscar professores com contagem de alunos
-      let queryProf = supabase
+      // Buscar professores ativos
+      const { data: profsData, error: profsError } = await supabase
         .from('professores')
-        .select('id, nome, apelido, telefone, unidade_id')
+        .select('id, nome, apelido, telefone')
         .eq('ativo', true)
         .order('nome');
 
-      if (unidadeAtual !== 'todos') {
-        queryProf = queryProf.eq('unidade_id', unidadeAtual);
-      }
-
-      const { data: profsData, error: profsError } = await queryProf;
       if (profsError) throw profsError;
+
+      // Buscar relacionamentos de professores com unidades
+      const { data: profUnidadesData } = await supabase
+        .from('professores_unidades')
+        .select('professor_id, unidade_id');
+
+      // Criar mapa de professor -> unidades
+      const profUnidadesMap = new Map<number, string[]>();
+      (profUnidadesData || []).forEach(pu => {
+        if (!profUnidadesMap.has(pu.professor_id)) {
+          profUnidadesMap.set(pu.professor_id, []);
+        }
+        profUnidadesMap.get(pu.professor_id)!.push(pu.unidade_id);
+      });
+
+      // Filtrar professores por unidade se necessário
+      let professoresFiltrados = (profsData || []);
+      if (unidadeAtual !== 'todos') {
+        professoresFiltrados = professoresFiltrados.filter(p => {
+          const unidades = profUnidadesMap.get(p.id) || [];
+          return unidades.includes(unidadeAtual);
+        });
+      }
 
       // Contar alunos por professor
       const { data: alunosCount } = await supabase
@@ -118,9 +136,10 @@ export function ModalEnviarFeedback({ open, onClose, unidadeAtual }: ModalEnviar
         }
       });
 
-      const professoresComAlunos: Professor[] = (profsData || [])
+      const professoresComAlunos: Professor[] = professoresFiltrados
         .map(p => ({
           ...p,
+          unidade_id: (profUnidadesMap.get(p.id) || [unidadeAtual])[0] || unidadeAtual,
           total_alunos: countMap.get(p.id) || 0,
         }))
         .filter(p => p.total_alunos > 0);

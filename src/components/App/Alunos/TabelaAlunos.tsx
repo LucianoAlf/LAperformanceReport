@@ -1609,7 +1609,13 @@ export function TabelaAlunos({
                         className="min-w-[70px]"
                       />
                     </td>
-                    <td className="px-4 py-2 text-slate-400 text-sm">-</td>
+                    {/* Turma - Não editável */}
+                    <td className="px-4 py-2">
+                      {outroCurso.dia_aula && outroCurso.horario_aula
+                        ? getBadgeTurma(outroCurso.total_alunos_turma || 1, { ...aluno, ...outroCurso, total_alunos_turma: outroCurso.total_alunos_turma || 1 })
+                        : <span className="bg-slate-500/20 text-slate-400 px-2 py-1 rounded text-xs">-</span>
+                      }
+                    </td>
                     <td className="px-4 py-2">
                       <div className={`rounded-md ${
                         outroCurso.status_pagamento === 'inadimplente' ? 'text-red-400' :

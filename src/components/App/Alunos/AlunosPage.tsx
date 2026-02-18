@@ -349,7 +349,18 @@ export function AlunosPage() {
             return 0;
           });
           const principal = ordenado[0];
-          const outrosCursos = ordenado.slice(1);
+          const outrosCursos = ordenado.slice(1).map(oc => {
+            // Calcular turma para cada segundo curso
+            const turma = turmasViewData.find((t: any) =>
+              t.professor_id === oc.professor_atual_id &&
+              t.dia_semana === oc.dia_aula &&
+              t.horario_inicio === oc.horario_aula
+            );
+            return {
+              ...oc,
+              total_alunos_turma: turma?.total_alunos || 1
+            };
+          });
           const valorTotal = grupo.reduce((acc, a) => acc + (a.valor_parcela || 0), 0);
           alunosComSegundoCurso.push({
             ...principal,
