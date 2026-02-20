@@ -2368,7 +2368,7 @@ export function ComercialPage() {
                 Matrículas por Canal
               </h3>
               <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/30 max-h-48 overflow-y-auto scrollbar-thin">
-                {resumo.matriculasPorCanal.length > 0 ? (
+                {(resumo.matriculasPorCanal || []).length > 0 ? (
                   <div className="space-y-3">
                     {resumo.matriculasPorCanal.map((c, i) => (
                       <div key={i} className="flex items-center justify-between">
@@ -2398,7 +2398,7 @@ export function ComercialPage() {
                 Matrículas por Curso
               </h3>
               <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/30 max-h-48 overflow-y-auto scrollbar-thin">
-                {resumo.matriculasPorCurso.length > 0 ? (
+                {(resumo.matriculasPorCurso || []).length > 0 ? (
                   <div className="space-y-3">
                     {resumo.matriculasPorCurso.map((c, i) => (
                       <div key={i} className="flex items-center justify-between">
