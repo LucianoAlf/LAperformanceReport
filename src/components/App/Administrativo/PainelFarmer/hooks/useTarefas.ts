@@ -1,8 +1,14 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import type { FarmerTarefa, CreateTarefaInput } from '../types';
+import type { FarmerTarefa, CreateTarefaInput, Colaborador } from '../types';
 
-export function useTarefas(colaboradorId: number | null, unidadeId: string) {
+interface UseTarefasOptions {
+  colaboradorId: number | null;
+  unidadeId: string;
+  colaborador?: Colaborador | null;
+}
+
+export function useTarefas({ colaboradorId, unidadeId, colaborador }: UseTarefasOptions) {
   const [tarefas, setTarefas] = useState<FarmerTarefa[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -13,10 +19,17 @@ export function useTarefas(colaboradorId: number | null, unidadeId: string) {
     try {
       setLoading(true);
       
+      const isAdmin = colaborador?.tipo === 'admin';
+      console.log('[useTarefas] isAdmin:', isAdmin, 'colaborador:', colaborador?.tipo);
+      
       let query = supabase
         .from('farmer_tarefas')
-        .select('*, alunos(nome), colaboradores(nome, apelido)')
-        .eq('colaborador_id', colaboradorId);
+        .select('*, alunos(nome), colaboradores(nome, apelido)');
+      
+      // Se não for admin, filtrar apenas tarefas atribuídas ao colaborador logado
+      if (!isAdmin) {
+        query = query.eq('colaborador_id', colaboradorId);
+      }
 
       // Filtrar por unidade quando não for "todos"
       if (unidadeId && unidadeId !== 'todos') {
@@ -30,6 +43,8 @@ export function useTarefas(colaboradorId: number | null, unidadeId: string) {
         .order('created_at', { ascending: false });
 
       if (fetchError) throw fetchError;
+      console.log('[useTarefas] Total tarefas carregadas:', data?.length);
+      console.log('[useTarefas] Tarefas:', data?.map(t => ({ id: t.id, descricao: t.descricao, colaborador_id: t.colaborador_id })));
       setTarefas(data || []);
     } catch (err) {
       console.error('Erro ao buscar tarefas:', err);
@@ -37,7 +52,7 @@ export function useTarefas(colaboradorId: number | null, unidadeId: string) {
     } finally {
       setLoading(false);
     }
-  }, [colaboradorId, unidadeId]);
+  }, [colaboradorId, unidadeId, colaborador]);
 
   useEffect(() => {
     if (colaboradorId) {
@@ -46,14 +61,14 @@ export function useTarefas(colaboradorId: number | null, unidadeId: string) {
   }, [colaboradorId, fetchTarefas]);
 
   // Criar nova tarefa
-  const criarTarefa = async (input: CreateTarefaInput) => {
+  const criarTarefa = async (input: CreateTarefaInput, atribuirParaId?: number) => {
     if (!colaboradorId) return;
 
     try {
       const { error: insertError } = await supabase
         .from('farmer_tarefas')
         .insert({
-          colaborador_id: colaboradorId,
+          colaborador_id: atribuirParaId || colaboradorId,
           unidade_id: unidadeId,
           ...input
         });
@@ -134,6 +149,8 @@ export function useTarefas(colaboradorId: number | null, unidadeId: string) {
     const hoje = new Date().toISOString().split('T')[0];
     return t.data_prazo < hoje;
   });
+  // Tarefas pendentes sem prazo definido
+  const tarefasSemPrazo = tarefasPendentes.filter(t => !t.data_prazo);
 
   return {
     tarefas,
@@ -141,6 +158,7 @@ export function useTarefas(colaboradorId: number | null, unidadeId: string) {
     tarefasConcluidas,
     tarefasHoje,
     tarefasAtrasadas,
+    tarefasSemPrazo,
     loading,
     error,
     refresh: fetchTarefas,

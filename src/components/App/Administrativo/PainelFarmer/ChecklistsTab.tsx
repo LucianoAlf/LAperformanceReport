@@ -86,13 +86,26 @@ export function ChecklistsTab({ unidadeId }: ChecklistsTabProps) {
     async function fetchDadosUnidade() {
       if (!unidadeId || unidadeId === 'todos') return;
 
-      // Colaboradores
-      const { data: colabs } = await supabase
-        .from('usuarios')
+      // Colaboradores - com lógica de permissões
+      // Admin vê todos, usuário de unidade vê só da sua unidade
+      const isAdmin = colaborador?.tipo === 'admin';
+      
+      let query = supabase
+        .from('colaboradores')
         .select('id, nome, apelido')
-        .eq('ativo', true)
-        .or(`unidade_id.eq.${unidadeId},perfil.eq.admin`)
-        .order('nome');
+        .eq('ativo', true);
+      
+      if (isAdmin) {
+        // Admin vê todos os colaboradores ativos
+        query = query.order('nome');
+      } else {
+        // Usuário de unidade vê apenas colaboradores da sua unidade + admins
+        query = query
+          .or(`unidade_id.eq.${unidadeId},tipo.eq.admin`)
+          .order('nome');
+      }
+      
+      const { data: colabs } = await query;
       if (colabs) setColaboradoresUnidade(colabs);
 
       // Cursos distintos via alunos ativos
@@ -130,7 +143,7 @@ export function ChecklistsTab({ unidadeId }: ChecklistsTabProps) {
       }
     }
     fetchDadosUnidade();
-  }, [unidadeId]);
+  }, [unidadeId, colaborador]);
 
   // Task Builder state
   const [tarefas, setTarefas] = useState<TaskBuilderItem[]>([

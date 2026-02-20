@@ -60,6 +60,7 @@ export interface Aluno {
   // Campos para segundo curso
   is_segundo_curso?: boolean;
   data_nascimento?: string;
+  telefone?: string;
   // Campos calculados para agrupamento
   cursos_ids?: number[]; // IDs de todos os cursos do aluno
   outros_cursos?: Aluno[]; // Outros registros do mesmo aluno (segundo curso)
@@ -249,7 +250,7 @@ export function AlunosPage() {
         id, nome, classificacao, idade_atual, professor_atual_id, curso_id, modalidade,
         dia_aula, horario_aula, valor_parcela, tempo_permanencia_meses,
         status, status_pagamento, dia_vencimento, tipo_matricula_id, unidade_id, data_matricula,
-        is_segundo_curso, data_nascimento, forma_pagamento_id,
+        is_segundo_curso, data_nascimento, forma_pagamento_id, telefone,
         professores:professor_atual_id!left(nome),
         cursos:curso_id!left(nome),
         tipos_matricula:tipo_matricula_id!left(nome, conta_como_pagante, entra_ticket_medio, codigo),

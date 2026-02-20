@@ -1169,6 +1169,7 @@ export function TabelaAlunos({
               </th>
               <th className="px-4 py-3 font-medium">#</th>
               <th className="px-4 py-3 font-medium text-left">Nome</th>
+              <th className="px-4 py-3 font-medium">Telefone</th>
               <th className="px-4 py-3 font-medium">Escola</th>
               <th className="px-4 py-3 font-medium">Professor</th>
               <th className="px-4 py-3 font-medium">Curso</th>
@@ -1279,6 +1280,11 @@ export function TabelaAlunos({
                       )}
                       {getBadgesAluno(aluno)}
                     </div>
+                  </td>
+
+                  {/* Telefone */}
+                  <td className="px-4 py-3 text-slate-300 text-sm">
+                    {aluno.telefone || '-'}
                   </td>
 
                   {/* Escola - Não editável */}

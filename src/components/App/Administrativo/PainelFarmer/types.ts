@@ -214,6 +214,7 @@ export interface CreateChecklistInput {
   departamento?: 'administrativo' | 'comercial' | 'pedagogico' | 'geral';
   tipo_vinculo?: 'nenhum' | 'todos_alunos' | 'por_curso' | 'por_professor' | 'manual';
   filtro_vinculo?: Record<string, unknown>;
+  vinculo_filtro_ids?: number[];
   data_inicio?: string;
   data_prazo?: string;
   prioridade?: 'alta' | 'media' | 'baixa';

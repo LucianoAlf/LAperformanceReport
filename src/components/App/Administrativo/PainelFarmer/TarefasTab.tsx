@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Plus, 
   Pencil, 
@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { DatePicker } from '@/components/ui/date-picker';
 import { useColaboradorAtual, useTarefas } from './hooks';
 import type { FarmerTarefa, CreateTarefaInput } from './types';
+import { supabase } from '@/lib/supabase';
 
 interface TarefasTabProps {
   unidadeId: string;
@@ -35,7 +36,11 @@ export function TarefasTab({ unidadeId }: TarefasTabProps) {
     criarTarefa, 
     marcarConcluida, 
     excluirTarefa 
-  } = useTarefas(colaborador?.id || null, unidadeId);
+  } = useTarefas({
+    colaboradorId: colaborador?.id || null,
+    unidadeId,
+    colaborador
+  });
 
   const [modalAberto, setModalAberto] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -49,12 +54,44 @@ export function TarefasTab({ unidadeId }: TarefasTabProps) {
   const [dataPrazo, setDataPrazo] = useState<Date | undefined>(undefined);
   const [prioridade, setPrioridade] = useState<'alta' | 'media' | 'baixa'>('media');
   const [observacoes, setObservacoes] = useState('');
+  const [colaboradorAtribuidoId, setColaboradorAtribuidoId] = useState<string>('');
+  const [colaboradoresUnidade, setColaboradoresUnidade] = useState<{ id: number; nome: string; apelido: string | null }[]>([]);
+
+  // Buscar colaboradores da unidade para atribuição
+  useEffect(() => {
+    async function fetchColaboradores() {
+      const unidadeParaBuscar = unidadeId && unidadeId !== 'todos' ? unidadeId : colaborador?.unidade_id;
+      if (!unidadeParaBuscar || !colaborador) return;
+
+      const isAdmin = colaborador?.tipo === 'admin';
+      let query = supabase
+        .from('colaboradores')
+        .select('id, nome, apelido')
+        .eq('ativo', true);
+
+      if (isAdmin) {
+        query = query.order('nome');
+      } else {
+        query = query
+          .or(`unidade_id.eq.${unidadeParaBuscar},tipo.eq.admin`)
+          .order('nome');
+      }
+
+      const { data: colabs } = await query;
+      if (colabs) {
+        setColaboradoresUnidade(colabs);
+        setColaboradorAtribuidoId(colaborador.id.toString());
+      }
+    }
+    fetchColaboradores();
+  }, [unidadeId, colaborador]);
 
   const abrirModal = () => {
     setDescricao('');
     setDataPrazo(undefined);
     setPrioridade('media');
     setObservacoes('');
+    setColaboradorAtribuidoId(colaborador?.id?.toString() || '');
     setModalAberto(true);
   };
 
@@ -77,7 +114,7 @@ export function TarefasTab({ unidadeId }: TarefasTabProps) {
         input.data_prazo = dataPrazo.toISOString().split('T')[0];
       }
 
-      await criarTarefa(input);
+      await criarTarefa(input, colaboradorAtribuidoId ? parseInt(colaboradorAtribuidoId) : undefined);
       fecharModal();
     } catch (err) {
       console.error('Erro ao salvar tarefa:', err);
@@ -268,6 +305,25 @@ export function TarefasTab({ unidadeId }: TarefasTabProps) {
                   <SelectItem value="alta">🔴 Alta</SelectItem>
                   <SelectItem value="media">🟡 Média</SelectItem>
                   <SelectItem value="baixa">🔵 Baixa</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Atribuir para */}
+            <div>
+              <label className="text-sm font-medium text-slate-300 mb-2 block">
+                Atribuir para
+              </label>
+              <Select value={colaboradorAtribuidoId} onValueChange={setColaboradorAtribuidoId}>
+                <SelectTrigger className="bg-slate-800 border-slate-700">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  {colaboradoresUnidade.map(c => (
+                    <SelectItem key={c.id} value={c.id.toString()}>
+                      {c.apelido || c.nome} {c.id === colaborador?.id ? '(Eu)' : ''}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { 
   Calendar, 
   DollarSign, 
@@ -23,16 +23,29 @@ import {
   Trash2,
   X,
   Save,
-  Heart
+  Heart,
+  Plus,
+  GripVertical,
+  ChevronRight,
+  Rocket,
+  Users,
+  Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import { DatePicker } from '@/components/ui/date-picker';
 import { toast } from 'sonner';
 import { sendWhatsAppMessage, formatPhoneNumber } from '@/services/whatsapp';
 import { gerarMensagemAniversario, gerarMensagemBoasVindas } from '@/services/mensagemGenerativa';
 import { useColaboradorAtual, useRotinas, useAlertas, useTarefas, useFarmersUnidade, useDashboardStats, useSucessoAlunoAlertas, useFeedbackPendente } from './hooks';
 import type { AlertaRenovacao, AlertaInadimplente, AlertaAniversariante, AlertaNovoMatriculado } from './types';
+import { supabase } from '@/lib/supabase';
 
 interface DashboardTabProps {
   unidadeId: string;
@@ -60,10 +73,22 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
     resumo,
     loading: loadingAlertas 
   } = useAlertas(unidadeId);
-  const { tarefasHoje, tarefasAtrasadas, loading: loadingTarefas } = useTarefas(
-    colaborador?.id || null,
-    unidadeId
-  );
+  const { 
+    tarefas, 
+    tarefasPendentes, 
+    tarefasConcluidas,
+    tarefasHoje,
+    tarefasAtrasadas,
+    tarefasSemPrazo,
+    loading: loadingTarefas, 
+    criarTarefa, 
+    marcarConcluida: marcarTarefaConcluida, 
+    excluirTarefa 
+  } = useTarefas({
+    colaboradorId: colaborador?.id || null,
+    unidadeId,
+    colaborador
+  });
   const { checklistAlertas, stats, loading: loadingStats } = useDashboardStats(unidadeId);
   
   // Hooks do Sucesso do Aluno (FASE 6)
@@ -75,6 +100,93 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
 
   // Estados de expansão dos alertas
   const [expandedAlerts, setExpandedAlerts] = useState<Set<string>>(new Set());
+
+  // Estado do modal de NOVA TAREFA (completo, igual ao TarefasTab)
+  const [modalNovaTarefaAberto, setModalNovaTarefaAberto] = useState(false);
+  const [descricaoTarefa, setDescricaoTarefa] = useState('');
+  const [dataPrazoTarefa, setDataPrazoTarefa] = useState<Date | undefined>(undefined);
+  const [prioridadeTarefa, setPrioridadeTarefa] = useState<'alta' | 'media' | 'baixa'>('media');
+  const [observacoesTarefa, setObservacoesTarefa] = useState('');
+  const [colaboradorAtribuidoId, setColaboradorAtribuidoId] = useState<string>('');
+  const [colaboradoresUnidade, setColaboradoresUnidade] = useState<{ id: number; nome: string; apelido: string | null }[]>([]);
+  const [salvandoTarefa, setSalvandoTarefa] = useState(false);
+
+  // Buscar colaboradores da unidade para atribuição
+  useEffect(() => {
+    async function fetchColaboradores() {
+      const unidadeParaBuscar = unidadeId && unidadeId !== 'todos' ? unidadeId : colaborador?.unidade_id;
+      if (!unidadeParaBuscar || !colaborador) return;
+
+      const isAdmin = colaborador?.tipo === 'admin';
+      let query = supabase
+        .from('colaboradores')
+        .select('id, nome, apelido')
+        .eq('ativo', true);
+
+      if (isAdmin) {
+        query = query.order('nome');
+      } else {
+        query = query
+          .or(`unidade_id.eq.${unidadeParaBuscar},tipo.eq.admin`)
+          .order('nome');
+      }
+
+      const { data: colabs } = await query;
+      if (colabs) {
+        setColaboradoresUnidade(colabs);
+        // Definir o colaborador logado como padrão
+        setColaboradorAtribuidoId(colaborador.id.toString());
+      }
+    }
+    fetchColaboradores();
+  }, [unidadeId, colaborador]);
+
+  // Handler para criar tarefa completa
+  const handleCriarTarefa = async () => {
+    if (!descricaoTarefa.trim()) {
+      toast.error('Digite uma descrição para a tarefa');
+      return;
+    }
+    
+    setSalvandoTarefa(true);
+    try {
+      const input: any = {
+        descricao: descricaoTarefa.trim(),
+        prioridade: prioridadeTarefa,
+        observacoes: observacoesTarefa.trim() || undefined,
+      };
+      
+      if (dataPrazoTarefa) {
+        input.data_prazo = dataPrazoTarefa.toISOString().split('T')[0];
+      }
+
+      const { error } = await supabase
+        .from('farmer_tarefas')
+        .insert({
+          ...input,
+          colaborador_id: colaboradorAtribuidoId ? parseInt(colaboradorAtribuidoId) : colaborador?.id,
+          unidade_id: unidadeId !== 'todos' ? unidadeId : colaborador?.unidade_id,
+        });
+      
+      if (error) throw error;
+      
+      toast.success('Tarefa criada com sucesso!');
+      setModalNovaTarefaAberto(false);
+      // Resetar campos
+      setDescricaoTarefa('');
+      setDataPrazoTarefa(undefined);
+      setPrioridadeTarefa('media');
+      setObservacoesTarefa('');
+      setColaboradorAtribuidoId(colaborador?.id?.toString() || '');
+      // Recarregar tarefas
+      window.location.reload();
+    } catch (err) {
+      console.error('Erro ao criar tarefa:', err);
+      toast.error('Erro ao criar tarefa');
+    } finally {
+      setSalvandoTarefa(false);
+    }
+  };
 
   const toggleAlert = (alertId: string) => {
     setExpandedAlerts(prev => {
@@ -473,16 +585,21 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
         </div>
 
         {/* Card: Tarefas Urgentes */}
-        {(tarefasHoje.length > 0 || tarefasAtrasadas.length > 0) && (
+        {(tarefasHoje.length > 0 || tarefasAtrasadas.length > 0 || tarefasSemPrazo.length > 0) && (
           <div className="bg-slate-800/50 rounded-xl border border-slate-700/50 overflow-hidden">
             <div className="px-5 py-4 border-b border-slate-700/50 flex items-center justify-between">
               <h3 className="font-semibold text-white flex items-center gap-2">
                 📝 Tarefas Urgentes
                 <span className="bg-amber-500 text-white text-xs px-2 py-0.5 rounded-full">
-                  {tarefasHoje.length + tarefasAtrasadas.length}
+                  {tarefasHoje.length + tarefasAtrasadas.length + tarefasSemPrazo.length}
                 </span>
               </h3>
-              <Button variant="ghost" size="sm" className="text-violet-400 hover:text-violet-300">
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="text-violet-400 hover:text-violet-300"
+                onClick={() => setModalNovaTarefaAberto(true)}
+              >
                 + Nova
               </Button>
             </div>
@@ -493,6 +610,7 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
                   key={tarefa.id} 
                   tarefa={tarefa} 
                   variant="atrasada"
+                  onToggle={() => marcarTarefaConcluida(tarefa.id, !tarefa.concluida)}
                 />
               ))}
               {tarefasHoje.map(tarefa => (
@@ -500,6 +618,15 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
                   key={tarefa.id} 
                   tarefa={tarefa} 
                   variant="hoje"
+                  onToggle={() => marcarTarefaConcluida(tarefa.id, !tarefa.concluida)}
+                />
+              ))}
+              {tarefasSemPrazo.map(tarefa => (
+                <TarefaItem 
+                  key={tarefa.id} 
+                  tarefa={tarefa} 
+                  variant="sem_prazo"
+                  onToggle={() => marcarTarefaConcluida(tarefa.id, !tarefa.concluida)}
                 />
               ))}
             </div>
@@ -625,6 +752,106 @@ export function DashboardTab({ unidadeId, onOpenRotinaModal }: DashboardTabProps
         )}
       </div>
     </div>
+
+    {/* Modal: Nova Tarefa Rápida (completo) */}
+    <Dialog open={modalNovaTarefaAberto} onOpenChange={setModalNovaTarefaAberto}>
+      <DialogContent className="bg-slate-900 border-slate-700 max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-white">Nova Tarefa</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-4">
+          {/* Descrição */}
+          <div>
+            <label className="text-sm font-medium text-slate-300 mb-2 block">
+              Descrição
+            </label>
+            <Input
+              value={descricaoTarefa}
+              onChange={(e) => setDescricaoTarefa(e.target.value)}
+              placeholder="Ex: Ligar para João sobre renovação"
+              className="bg-slate-800 border-slate-700"
+            />
+          </div>
+
+          {/* Data Prazo */}
+          <div>
+            <label className="text-sm font-medium text-slate-300 mb-2 block">
+              Prazo (opcional)
+            </label>
+            <DatePicker
+              date={dataPrazoTarefa}
+              onDateChange={setDataPrazoTarefa}
+            />
+          </div>
+
+          {/* Prioridade */}
+          <div>
+            <label className="text-sm font-medium text-slate-300 mb-2 block">
+              Prioridade
+            </label>
+            <Select value={prioridadeTarefa} onValueChange={(v: any) => setPrioridadeTarefa(v)}>
+              <SelectTrigger className="bg-slate-800 border-slate-700">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-slate-800 border-slate-700">
+                <SelectItem value="alta">🔴 Alta</SelectItem>
+                <SelectItem value="media">🟡 Média</SelectItem>
+                <SelectItem value="baixa">🔵 Baixa</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Atribuir para */}
+          <div>
+            <label className="text-sm font-medium text-slate-300 mb-2 block">
+              Atribuir para
+            </label>
+            <Select value={colaboradorAtribuidoId} onValueChange={setColaboradorAtribuidoId}>
+              <SelectTrigger className="bg-slate-800 border-slate-700">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent className="bg-slate-800 border-slate-700">
+                {colaboradoresUnidade.map(c => (
+                  <SelectItem key={c.id} value={c.id.toString()}>
+                    {c.apelido || c.nome} {c.id === colaborador?.id ? '(Eu)' : ''}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Observações */}
+          <div>
+            <label className="text-sm font-medium text-slate-300 mb-2 block">
+              Observações (opcional)
+            </label>
+            <Textarea
+              value={observacoesTarefa}
+              onChange={(e) => setObservacoesTarefa(e.target.value)}
+              placeholder="Detalhes adicionais..."
+              className="bg-slate-800 border-slate-700 min-h-[80px]"
+            />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="ghost" onClick={() => setModalNovaTarefaAberto(false)}>
+            Cancelar
+          </Button>
+          <Button 
+            onClick={handleCriarTarefa} 
+            disabled={!descricaoTarefa.trim() || salvandoTarefa}
+            className="bg-gradient-to-r from-violet-600 to-purple-600"
+          >
+            {salvandoTarefa ? 'Salvando...' : 'Criar'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    {/* Remover o NovoChecklistModal do Dashboard */}
+    {/* O modal de checklist completo fica apenas na aba Checklists */}
     </div>
   );
 }
@@ -1032,30 +1259,61 @@ interface TarefaItemProps {
     descricao: string;
     prioridade: string;
     data_prazo?: string;
+    concluida: boolean;
     alunos?: { nome: string };
     colaboradores?: { nome: string; apelido: string | null };
   };
-  variant: 'hoje' | 'atrasada';
+  variant: 'hoje' | 'atrasada' | 'sem_prazo';
+  onToggle: () => void;
 }
 
-function TarefaItem({ tarefa, variant }: TarefaItemProps) {
+function TarefaItem({ tarefa, variant, onToggle }: TarefaItemProps) {
+  const variantStyles = {
+    atrasada: 'border-rose-500/30 bg-rose-500/5',
+    hoje: 'border-amber-500/30 bg-amber-500/5',
+    sem_prazo: 'border-slate-500/30 bg-slate-500/5'
+  };
+
+  const badgeStyles = {
+    atrasada: 'bg-rose-500/20 text-rose-400',
+    hoje: 'bg-amber-500/20 text-amber-400',
+    sem_prazo: 'bg-slate-500/20 text-slate-400'
+  };
+
+  const badgeLabels = {
+    atrasada: '🔴 Atrasada',
+    hoje: '🟡 Hoje',
+    sem_prazo: '⚪ Sem prazo'
+  };
+
   return (
     <div className={cn(
       'flex items-center gap-3 p-3 rounded-lg border',
-      variant === 'atrasada' 
-        ? 'border-rose-500/30 bg-rose-500/5' 
-        : 'border-amber-500/30 bg-amber-500/5'
+      variantStyles[variant]
     )}>
-      <div className="w-5 h-5 rounded-full border-2 border-slate-500" />
+      <div 
+        className={cn(
+          'w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all cursor-pointer flex-shrink-0',
+          tarefa.concluida 
+            ? 'border-emerald-500 bg-emerald-500' 
+            : 'border-slate-500 hover:border-slate-400'
+        )}
+        onClick={onToggle}
+      >
+        {tarefa.concluida && <CheckCircle2 className="w-3 h-3 text-white" />}
+      </div>
       
-      <div className="flex-1">
-        <p className="text-sm font-medium text-white">{tarefa.descricao}</p>
+      <div className="flex-1 cursor-pointer" onClick={onToggle}>
+        <p className={cn(
+          'text-sm font-medium transition-all',
+          tarefa.concluida ? 'text-slate-400 line-through' : 'text-white'
+        )}>{tarefa.descricao}</p>
         <div className="flex items-center gap-2 mt-1">
           <span className={cn(
             'text-xs px-2 py-0.5 rounded-full',
-            variant === 'atrasada' ? 'bg-rose-500/20 text-rose-400' : 'bg-amber-500/20 text-amber-400'
+            badgeStyles[variant]
           )}>
-            {variant === 'atrasada' ? '🔴 Atrasada' : '🟡 Hoje'}
+            {badgeLabels[variant]}
           </span>
           {tarefa.colaboradores && (
             <span className="text-xs text-slate-400">
