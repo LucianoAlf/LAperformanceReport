@@ -277,6 +277,48 @@ export function AdministrativoPage() {
 
         const { data } = await kpisQuery;
         kpisData = data || [];
+
+        // FALLBACK: view pode retornar vazio para unidades sem leads no mês
+        // (a view usa leads para calcular ano/mes, então unidades sem leads ficam invisíveis)
+        if (kpisData.length === 0 && unidade !== 'todos') {
+          let alunosQuery = supabase
+            .from('alunos')
+            .select('id, status, tipo_matricula_id, is_segundo_curso, valor_parcela, tipos_matricula(codigo, conta_como_pagante)')
+            .in('status', ['ativo', 'trancado'])
+            .eq('unidade_id', unidade);
+
+          const { data: alunosData } = await alunosQuery;
+
+          if (alunosData && alunosData.length > 0) {
+            const totalAtivos = alunosData.filter((a: any) => !a.is_segundo_curso).length;
+            const pagantes = alunosData.filter((a: any) =>
+              (a.tipos_matricula as any)?.conta_como_pagante && !a.is_segundo_curso
+            );
+            const totalPagantes = pagantes.length;
+            const bolsistasInt = alunosData.filter((a: any) =>
+              (a.tipos_matricula as any)?.codigo === 'BOLSISTA_INT' && !a.is_segundo_curso
+            ).length;
+            const bolsistasParciais = alunosData.filter((a: any) =>
+              (a.tipos_matricula as any)?.codigo === 'BOLSISTA_PARC' && !a.is_segundo_curso
+            ).length;
+            const ticketMedio = pagantes.length > 0
+              ? pagantes.reduce((sum: number, a: any) => sum + (Number(a.valor_parcela) || 0), 0) / pagantes.length
+              : 0;
+            const faturamento = pagantes.reduce((sum: number, a: any) => sum + (Number(a.valor_parcela) || 0), 0);
+
+            kpisData = [{
+              unidade_id: unidade,
+              total_alunos_ativos: totalAtivos,
+              total_alunos_pagantes: totalPagantes,
+              total_bolsistas_integrais: bolsistasInt,
+              total_bolsistas_parciais: bolsistasParciais,
+              ticket_medio: Math.round(ticketMedio),
+              faturamento_previsto: faturamento,
+              churn_rate: 0,
+              tempo_permanencia_medio: 0,
+            }];
+          }
+        }
       } else {
         // PERÍODO HISTÓRICO: tentar dados_mensais primeiro, senão calcular das tabelas base
         let historicoQuery = supabase

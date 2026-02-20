@@ -400,7 +400,6 @@ export function ComercialPage() {
       
       // Usar range de datas do filtro de competência
       const { startDate, endDate } = competencia.range;
-
       // Query base - buscar também cursos e unidades
       let query = supabase
         .from('leads')
@@ -410,34 +409,17 @@ export function ComercialPage() {
         .order('data_contato', { ascending: false });
 
       // Aplicar filtro de unidade
-      const timestamp = new Date().toISOString();
-      console.log(`[${timestamp}] [DEBUG] Filtro de unidade - isAdmin:`, isAdmin);
-      console.log(`[${timestamp}] [DEBUG] context.unidadeSelecionada:`, context?.unidadeSelecionada);
-      console.log(`[${timestamp}] [DEBUG] context.unidadeSelecionada tipo:`, typeof context?.unidadeSelecionada);
-      console.log(`[${timestamp}] [DEBUG] usuario.unidade_id:`, usuario?.unidade_id);
-      
       if (isAdmin) {
         // Admin: usa unidade selecionada no filtro (se não for "todos")
         if (context?.unidadeSelecionada && context.unidadeSelecionada !== 'todos') {
-          console.log(`[${timestamp}] [DEBUG] Aplicando filtro admin - unidade_id:`, context.unidadeSelecionada);
-          console.log(`[${timestamp}] [DEBUG] Tipo do unidade_id:`, typeof context.unidadeSelecionada);
           query = query.eq('unidade_id', context.unidadeSelecionada);
-        } else {
-          console.log(`[${timestamp}] [DEBUG] Admin sem filtro específico - pegando todas as unidades`);
-          console.log(`[${timestamp}] [DEBUG] Motivo - context.unidadeSelecionada:`, context?.unidadeSelecionada);
         }
       } else {
         // Usuário de unidade: sempre filtra pela sua unidade
         if (usuario?.unidade_id) {
-          console.log(`[${timestamp}] [DEBUG] Aplicando filtro usuário - unidade_id:`, usuario.unidade_id);
           query = query.eq('unidade_id', usuario.unidade_id);
-        } else {
-          console.log(`[${timestamp}] [DEBUG] Usuário sem unidade_id definida`);
         }
       }
-
-      // Log da query para debug
-      console.log(`[${timestamp}] [DEBUG] Query SQL gerada:`, query);
 
       const { data, error } = await query;
 
@@ -445,19 +427,9 @@ export function ComercialPage() {
 
       const registros = data || [];
 
-      // Debug: mostrar quantidade de registros e distribuição por unidade
-      console.log(`[${timestamp}] [DEBUG] Total de registros encontrados:`, registros.length);
-      const distribuicaoPorUnidade = registros.reduce((acc, r) => {
-        const unidade = (r.unidades as any)?.codigo || 'Sem unidade';
-        acc[unidade] = (acc[unidade] || 0) + r.quantidade;
-        return acc;
-      }, {} as Record<string, number>);
-      console.log(`[${timestamp}] [DEBUG] Distribuição por unidade:`, distribuicaoPorUnidade);
-
       // Calcular resumo
       // Leads = TODOS os registros (cada lead conta, independente do status atual)
       const leads = registros.reduce((acc, r) => acc + r.quantidade, 0);
-      console.log(`[${timestamp}] [DEBUG] Total de leads calculado:`, leads);
       const experimentais = registros.filter(r => r.status?.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0);
       const visitas = registros.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0);
       const matriculas = registros.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0);
@@ -489,10 +461,10 @@ export function ComercialPage() {
 
       // Se não houver registros em leads, tentar buscar de dados_comerciais (histórico)
       if (registros.length === 0) {
-        // Extrair ano e mês do range
-        const dataInicio = new Date(startDate);
-        const anoFiltro = dataInicio.getFullYear();
-        const mesFiltro = dataInicio.getMonth() + 1;
+        // Extrair ano e mês do range diretamente da string para evitar bug de timezone
+        const [anoFiltroStr, mesFiltroStr] = startDate.split('-');
+        const anoFiltro = parseInt(anoFiltroStr);
+        const mesFiltro = parseInt(mesFiltroStr);
         
         // Buscar dados históricos de dados_comerciais
         let historicoQuery = supabase
@@ -512,6 +484,7 @@ export function ComercialPage() {
             historicoQuery = historicoQuery.ilike('unidade', unidadeData.nome);
           }
         } else if (!isAdmin && usuario?.unidade_id) {
+          // Buscar nome da unidade para filtrar
           const { data: unidadeData } = await supabase
             .from('unidades')
             .select('nome')
@@ -543,7 +516,6 @@ export function ComercialPage() {
           });
           
           // IMPORTANTE: Também limpar leadsMes quando usar dados históricos
-          console.log(`[${timestamp}] [DEBUG] Dados históricos encontrados - limpando setLeadsMes`);
           setLeadsMes([]);
           setMatriculasMes([]);
           setExperimentaisMes([]);
@@ -552,7 +524,6 @@ export function ComercialPage() {
         }
       }
 
-      console.log(`[${timestamp}] [DEBUG] Atualizando setResumo com leads:`, leads);
       setResumo({
         leads,
         experimentais,
@@ -618,7 +589,6 @@ export function ComercialPage() {
           canal_nome: (l.canais_origem as any)?.nome || '',
           curso_nome: (l.cursos as any)?.nome || '',
         }));
-      console.log(`[${timestamp}] [DEBUG] Atualizando setLeadsMes com ${leadsDoMes.length} leads`);
       setLeadsMes(leadsDoMes);
 
       // Experimentais do mês (com nomes dos relacionamentos)
