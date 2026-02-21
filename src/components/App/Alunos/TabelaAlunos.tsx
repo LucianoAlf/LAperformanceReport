@@ -1284,7 +1284,7 @@ export function TabelaAlunos({
 
                   {/* Telefone */}
                   <td className="px-4 py-3 text-slate-300 text-sm">
-                    {aluno.telefone || '-'}
+                    {aluno.responsavel_telefone || aluno.telefone || '-'}
                   </td>
 
                   {/* Escola - Não editável */}
