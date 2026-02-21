@@ -261,6 +261,12 @@ export function TabelaAlunos({
         case 'dia_vencimento':
           updated.dia_vencimento = valor ? Number(valor) : 5;
           break;
+        case 'telefone':
+          updated.telefone = valor as string;
+          break;
+        case 'responsavel_telefone':
+          updated.responsavel_telefone = valor as string;
+          break;
       }
       return updated;
     }));
@@ -297,6 +303,12 @@ export function TabelaAlunos({
         break;
       case 'dia_vencimento':
         updateData.dia_vencimento = valor ? Number(valor) : 5;
+        break;
+      case 'telefone':
+        updateData.telefone = valor || null;
+        break;
+      case 'responsavel_telefone':
+        updateData.responsavel_telefone = valor || null;
         break;
     }
 
@@ -1282,9 +1294,14 @@ export function TabelaAlunos({
                     </div>
                   </td>
 
-                  {/* Telefone */}
-                  <td className="px-4 py-3 text-slate-300 text-sm">
-                    {aluno.responsavel_telefone || aluno.telefone || '-'}
+                  {/* Telefone - Edição inline */}
+                  <td className="px-4 py-2">
+                    <CelulaEditavel
+                      value={aluno.responsavel_telefone || aluno.telefone}
+                      onChange={async (valor) => salvarCampo(aluno.id, aluno.responsavel_telefone ? 'responsavel_telefone' : 'telefone', valor)}
+                      placeholder="-"
+                      className="min-w-[120px]"
+                    />
                   </td>
 
                   {/* Escola - Não editável */}
