@@ -742,9 +742,41 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
         }
 
         const { data: financeiroData } = await financeiroQuery;
-        
+
         console.log('🔍 Dados financeiros brutos:', financeiroData?.length, 'registros');
         console.log('🔍 Primeiros 3 registros:', financeiroData?.slice(0, 3));
+
+        // Buscar dados em tempo real do mês atual para complementar dados_mensais
+        const currentDate = new Date();
+        const currentYear = currentDate.getFullYear();
+        const currentMonth = currentDate.getMonth() + 1;
+
+        let gestaoAtualQuery = supabase
+          .from('vw_kpis_gestao_mensal')
+          .select('unidade_id, inadimplencia_pct, churn_rate, ticket_medio, faturamento_previsto, faturamento_realizado')
+          .eq('ano', currentYear)
+          .eq('mes', currentMonth);
+
+        if (unidade !== 'todos') {
+          gestaoAtualQuery = gestaoAtualQuery.eq('unidade_id', unidade);
+        }
+
+        const { data: gestaoAtualData } = await gestaoAtualQuery;
+
+        // Substituir dados do mês atual em financeiroData com valores em tempo real
+        if (financeiroData && gestaoAtualData && gestaoAtualData.length > 0) {
+          gestaoAtualData.forEach((gestao: any) => {
+            const idx = financeiroData.findIndex((f: any) =>
+              f.ano === currentYear && f.mes === currentMonth && f.unidade_id === gestao.unidade_id
+            );
+            if (idx >= 0) {
+              financeiroData[idx].inadimplencia = Number(gestao.inadimplencia_pct) || 0;
+              financeiroData[idx].churn_rate = Number(gestao.churn_rate) || 0;
+              financeiroData[idx].ticket_medio = Number(gestao.ticket_medio) || 0;
+              financeiroData[idx].faturamento_estimado = Number(gestao.faturamento_previsto) || 0;
+            }
+          });
+        }
 
         // Buscar nomes das unidades para o gráfico de receita por unidade
         const { data: unidadesData } = await supabase.from('unidades').select('id, nome');

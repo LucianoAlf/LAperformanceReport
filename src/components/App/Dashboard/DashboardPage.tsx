@@ -345,12 +345,14 @@ export function DashboardPage() {
             const matriculas = comercialData.reduce((acc: number, d: any) => 
               acc + (d.novas_matriculas || d.novas_matriculas_total || 0), 0);
             const taxaConversao = experimentais > 0 ? (matriculas / experimentais) * 100 : 0;
+            const ticketPassaporte = comercialData.reduce((acc: number, d: any) =>
+              acc + (Number(d.ticket_medio_passaporte) || 0), 0) / comercialData.length;
 
             setDadosComercial({
               leads_mes: leads,
               experimentais_realizadas: experimentais,
               taxa_conversao: taxaConversao,
-              ticket_passaporte: 0
+              ticket_passaporte: Math.round(ticketPassaporte)
             });
 
             setFunilComercial([
@@ -391,11 +393,28 @@ export function DashboardPage() {
           ).reduce((acc: number, l: any) => acc + (l.quantidade || 1), 0);
           const taxaConversao = expTotal > 0 ? (novasMatriculas / expTotal) * 100 : 0;
 
+          // Buscar ticket médio passaporte dos alunos matriculados no mês
+          let passaporteQuery = supabase
+            .from('alunos')
+            .select('valor_passaporte')
+            .gte('data_matricula', startDate)
+            .lte('data_matricula', endDate)
+            .gt('valor_passaporte', 0);
+
+          if (unidade !== 'todos') {
+            passaporteQuery = passaporteQuery.eq('unidade_id', unidade);
+          }
+
+          const { data: passaporteData } = await passaporteQuery;
+          const ticketPassaporte = passaporteData && passaporteData.length > 0
+            ? passaporteData.reduce((sum: number, a: any) => sum + Number(a.valor_passaporte), 0) / passaporteData.length
+            : 0;
+
           setDadosComercial({
             leads_mes: totalLeads,
             experimentais_realizadas: expTotal,
             taxa_conversao: taxaConversao,
-            ticket_passaporte: 0
+            ticket_passaporte: Math.round(ticketPassaporte)
           });
 
           setFunilComercial([
