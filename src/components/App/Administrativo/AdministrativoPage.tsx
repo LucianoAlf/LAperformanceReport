@@ -1199,7 +1199,7 @@ export function AdministrativoPage() {
             </div>
             <div>
               <h2 className="text-lg font-bold text-white">Detalhamento do Mês</h2>
-              <p className="text-sm text-emerald-400">{renovacoes.length + avisosPrevios.length + evasoes.length + naoRenovacoes.length + trancamentos.length + alunosNovos.length} movimentações</p>
+              <p className="text-sm text-emerald-400">{renovacoes.length + avisosPrevios.length + evasoes.length + naoRenovacoes.length + trancamentos.length + alunosNovos.filter(a => !a.is_segundo_curso && !(a.tipo_matricula_id && [3, 4, 5].includes(a.tipo_matricula_id))).length} movimentações</p>
             </div>
           </div>
         </div>
@@ -1212,7 +1212,7 @@ export function AdministrativoPage() {
               : tab.id === 'nao_renovacoes' ? naoRenovacoes.length
               : tab.id === 'avisos' ? avisosPrevios.length
               : tab.id === 'cancelamentos' ? evasoes.length
-              : tab.id === 'alunos_novos' ? alunosNovos.length
+              : tab.id === 'alunos_novos' ? alunosNovos.filter(a => !a.is_segundo_curso && !(a.tipo_matricula_id && [3, 4, 5].includes(a.tipo_matricula_id))).length
               : trancamentos.length;
             const Icon = tab.icon;
             return (
