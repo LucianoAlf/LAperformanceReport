@@ -33,6 +33,7 @@ import { ModalTrancamento } from './ModalTrancamento';
 import { ModalRelatorio } from './ModalRelatorio';
 import { TabelaNaoRenovacoes } from './TabelaNaoRenovacoes';
 import { TabelaTrancamentos } from './TabelaTrancamentos';
+import { TabelaAlunosNovos } from './TabelaAlunosNovos';
 import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
 import { AlertasRetencao } from './AlertasRetencao';
 import { PlanoAcaoRetencao } from './PlanoAcaoRetencao';
@@ -97,7 +98,7 @@ export interface ResumoMes {
   novos_bolsistas: number;
 }
 
-type TabId = 'renovacoes' | 'nao_renovacoes' | 'avisos' | 'cancelamentos' | 'trancamentos';
+type TabId = 'renovacoes' | 'nao_renovacoes' | 'avisos' | 'cancelamentos' | 'trancamentos' | 'alunos_novos';
 
 const tabs: { id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: 'renovacoes', label: 'Renovações', icon: CheckCircle },
@@ -105,6 +106,7 @@ const tabs: { id: TabId; label: string; icon: React.ComponentType<{ className?: 
   { id: 'avisos', label: 'Avisos Prévios', icon: AlertTriangle },
   { id: 'cancelamentos', label: 'Cancelamentos', icon: DoorOpen },
   { id: 'trancamentos', label: 'Trancamentos', icon: PauseCircle },
+  { id: 'alunos_novos', label: 'Alunos Novos', icon: UserPlus },
 ];
 
 export function AdministrativoPage() {
@@ -138,6 +140,7 @@ export function AdministrativoPage() {
   const [movimentacoes, setMovimentacoes] = useState<MovimentacaoAdmin[]>([]);
   const [professores, setProfessores] = useState<{ id: number; nome: string }[]>([]);
   const [formasPagamento, setFormasPagamento] = useState<{ id: number; nome: string; sigla: string }[]>([]);
+  const [alunosNovos, setAlunosNovos] = useState<any[]>([]);
   
   // Modais
   const [modalRenovacao, setModalRenovacao] = useState(false);
@@ -448,9 +451,10 @@ export function AdministrativoPage() {
       // Buscar novos alunos do mês — apenas novos INDIVÍDUOS (excluir 2º curso e bolsistas)
       let novosAlunosQuery = supabase
         .from('alunos')
-        .select('id, is_segundo_curso, tipo_matricula_id')
+        .select('id, nome, data_matricula, unidade_id, valor_parcela, is_segundo_curso, tipo_matricula_id, agente_comercial, cursos(nome), professores:professor_atual_id(nome), tipos_matricula(codigo, conta_como_pagante), formas_pagamento:forma_pagamento_id(nome, sigla), unidades(codigo)')
         .gte('data_matricula', startDate)
-        .lte('data_matricula', endDate);
+        .lte('data_matricula', endDate)
+        .order('data_matricula', { ascending: false });
 
       if (unidade !== 'todos') {
         novosAlunosQuery = novosAlunosQuery.eq('unidade_id', unidade);
@@ -458,6 +462,7 @@ export function AdministrativoPage() {
 
       const { data: novosAlunosData } = await novosAlunosQuery;
       const todosNovos = novosAlunosData || [];
+      setAlunosNovos(todosNovos);
       // Filtrar: apenas novos indivíduos pagantes (sem 2º curso, sem bolsistas)
       // tipos_matricula bolsistas: BOLSISTA_INT(3), BOLSISTA_PARC(4), BANDA(5)
       const novosAlunos = todosNovos.filter(a => 
@@ -1194,7 +1199,7 @@ export function AdministrativoPage() {
             </div>
             <div>
               <h2 className="text-lg font-bold text-white">Detalhamento do Mês</h2>
-              <p className="text-sm text-emerald-400">{renovacoes.length + avisosPrevios.length + evasoes.length + naoRenovacoes.length + trancamentos.length} movimentações</p>
+              <p className="text-sm text-emerald-400">{renovacoes.length + avisosPrevios.length + evasoes.length + naoRenovacoes.length + trancamentos.length + alunosNovos.length} movimentações</p>
             </div>
           </div>
         </div>
@@ -1203,10 +1208,11 @@ export function AdministrativoPage() {
         {/* Tabs */}
         <div className="flex gap-2 mb-4">
           {tabs.map(tab => {
-            const count = tab.id === 'renovacoes' ? renovacoes.length 
+            const count = tab.id === 'renovacoes' ? renovacoes.length
               : tab.id === 'nao_renovacoes' ? naoRenovacoes.length
-              : tab.id === 'avisos' ? avisosPrevios.length 
+              : tab.id === 'avisos' ? avisosPrevios.length
               : tab.id === 'cancelamentos' ? evasoes.length
+              : tab.id === 'alunos_novos' ? alunosNovos.length
               : trancamentos.length;
             const Icon = tab.icon;
             return (
@@ -1282,6 +1288,9 @@ export function AdministrativoPage() {
                 }
               }}
             />
+          )}
+          {activeTab === 'alunos_novos' && (
+            <TabelaAlunosNovos data={alunosNovos} />
           )}
         </div>
         </div>
