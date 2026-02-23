@@ -741,12 +741,20 @@ export function ComercialPage() {
         .eq('id', matriculaId);
 
       if (error) throw error;
-      loadData();
+
+      // Atualizar apenas o registro alterado localmente (sem recarregar tudo)
+      const patchRow = (row: any) =>
+        row.id === matriculaId ? { ...row, [campo]: valor } : row;
+
+      setMatriculasMes(prev => prev.map(patchRow));
+      setLeadsMes(prev => prev.map(patchRow));
+      setExperimentaisMes(prev => prev.map(patchRow));
+      setVisitasMes(prev => prev.map(patchRow));
     } catch (error) {
       console.error('Erro ao atualizar:', error);
       toast.error('Erro ao atualizar');
     }
-  }, [loadData]);
+  }, []);
 
   const confirmDelete = async () => {
     if (!deleteId) return;
