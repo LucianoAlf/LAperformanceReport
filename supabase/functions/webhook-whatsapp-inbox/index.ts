@@ -6,6 +6,7 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { getUazapiCredentials } from '../_shared/uazapi.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -285,20 +286,25 @@ async function handleRespostaEvasao(
       
       if (messageId) {
         try {
+          // Resolver credenciais da caixa que recebeu esta mensagem
+          const creds = await getUazapiCredentials(supabase, {
+            caixaId: caixaIdFromUrl ?? undefined,
+            funcao: 'agente',
+          });
           const transcribeResponse = await fetch(
-            `${Deno.env.get('UAZAPI_BASE_URL')}/message/download`,
+            `${creds.baseUrl}/message/download`,
             {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
-                'token': Deno.env.get('UAZAPI_TOKEN') || ''  // header minúsculo conforme doc
+                'token': creds.token,
               },
               body: JSON.stringify({
                 id: messageId,
                 transcribe: true,
                 return_link: true,
                 generate_mp3: true,
-                openai_apikey: Deno.env.get('OPENAI_API_KEY') || ''  // Chave OpenAI para Whisper
+                openai_apikey: Deno.env.get('OPENAI_API_KEY') || ''
               })
             }
           );
@@ -442,8 +448,13 @@ serve(async (req: Request) => {
   }
 
   try {
+    // Capturar caixa_id do query param (?caixa_id=1)
+    const url = new URL(req.url);
+    const caixaIdParam = url.searchParams.get('caixa_id');
+    const caixaIdFromUrl = caixaIdParam ? parseInt(caixaIdParam) : null;
+
     const payload = await req.json();
-    console.log('[webhook] Payload recebido:', JSON.stringify(payload).substring(0, 800));
+    console.log(`[webhook] Payload recebido (caixa_id=${caixaIdFromUrl}):`, JSON.stringify(payload).substring(0, 800));
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     
@@ -569,6 +580,7 @@ serve(async (req: Request) => {
               status: 'aberta',
               atribuido_a: 'mila',
               whatsapp_jid: phone,
+              caixa_id: caixaIdFromUrl,
             })
             .select('id, atribuido_a')
             .single();

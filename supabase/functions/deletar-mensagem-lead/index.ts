@@ -5,11 +5,10 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { getUazapiCredentials } from '../_shared/uazapi.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const UAZAPI_URL = Deno.env.get('UAZAPI_BASE_URL')!;
-const UAZAPI_TOKEN = Deno.env.get('UAZAPI_TOKEN')!;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -37,7 +36,7 @@ serve(async (req: Request) => {
     // 1. Buscar mensagem para pegar o whatsapp_message_id
     const { data: mensagem, error: msgError } = await supabase
       .from('crm_mensagens')
-      .select('id, whatsapp_message_id, direcao, status_entrega')
+      .select('id, whatsapp_message_id, direcao, status_entrega, conversa_id')
       .eq('id', mensagem_id)
       .single();
 
@@ -69,19 +68,22 @@ serve(async (req: Request) => {
       );
     }
 
-    // 2. Chamar UAZAPI /message/delete
-    let baseUrl = UAZAPI_URL;
-    if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
-      baseUrl = 'https://' + baseUrl;
-    }
+    // 2. Buscar conversa para resolver credenciais UAZAPI
+    const { data: conversa } = await supabase
+      .from('crm_conversas')
+      .select('caixa_id, unidade_id')
+      .eq('id', mensagem.conversa_id)
+      .single();
 
-    console.log(`[deletar-mensagem-lead] Deletando mensagem ${mensagem.whatsapp_message_id}...`);
+    const creds = await getUazapiCredentials(supabase, { funcao: 'agente', caixaId: conversa?.caixa_id ?? undefined, unidadeId: conversa?.unidade_id ?? undefined });
 
-    const uazapiResponse = await fetch(`${baseUrl}/message/delete`, {
+    console.log(`[deletar-mensagem-lead] Deletando mensagem ${mensagem.whatsapp_message_id} (caixa: ${creds.caixaNome})...`);
+
+    const uazapiResponse = await fetch(`${creds.baseUrl}/message/delete`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'token': UAZAPI_TOKEN,
+        'token': creds.token,
       },
       body: JSON.stringify({
         id: mensagem.whatsapp_message_id,

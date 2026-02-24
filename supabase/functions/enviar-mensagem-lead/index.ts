@@ -5,11 +5,10 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { getUazapiCredentials } from '../_shared/uazapi.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const UAZAPI_URL = Deno.env.get('UAZAPI_BASE_URL')!;
-const UAZAPI_TOKEN = Deno.env.get('UAZAPI_TOKEN')!;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -62,10 +61,10 @@ serve(async (req: Request) => {
     // Criar cliente Supabase com service role (para bypass RLS)
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // 1. Buscar telefone do lead e whatsapp_jid da conversa
+    // 1. Buscar telefone do lead, whatsapp_jid e caixa_id da conversa
     const { data: conversa, error: conversaError } = await supabase
       .from('crm_conversas')
-      .select('whatsapp_jid, lead:lead_id(telefone, whatsapp, nome)')
+      .select('whatsapp_jid, caixa_id, unidade_id, lead:lead_id(telefone, whatsapp, nome)')
       .eq('id', conversa_id)
       .single();
 
@@ -120,11 +119,13 @@ serve(async (req: Request) => {
 
     console.log(`[enviar-mensagem-lead] Mensagem ${mensagem.id} inserida. Enviando para ${numero}...`);
 
-    // 3. Enviar via UAZAPI com delay de 2 segundos (mostra "digitando...")
-    let baseUrl = UAZAPI_URL;
-    if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
-      baseUrl = 'https://' + baseUrl;
-    }
+    // 3. Resolver credenciais UAZAPI da caixa correta
+    const creds = await getUazapiCredentials(supabase, {
+      funcao: 'agente',
+      caixaId: conversa.caixa_id ?? undefined,
+      unidadeId: conversa.unidade_id ?? undefined,
+    });
+    console.log(`[enviar-mensagem-lead] Usando caixa: ${creds.caixaNome} (ID: ${creds.caixaId})`);
 
     // Montar payload e endpoint baseado no tipo
     let endpoint = '/send/text';
@@ -181,11 +182,11 @@ serve(async (req: Request) => {
 
     console.log(`[enviar-mensagem-lead] Endpoint: ${endpoint}, tipo: ${tipo}, body:`, JSON.stringify(uazapiBody).substring(0, 500));
 
-    const uazapiResponse = await fetch(`${baseUrl}${endpoint}`, {
+    const uazapiResponse = await fetch(`${creds.baseUrl}${endpoint}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'token': UAZAPI_TOKEN,
+        'token': creds.token,
       },
       body: JSON.stringify(uazapiBody),
     });

@@ -3,9 +3,8 @@
 // Integração com UAZAPI
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
-
-const UAZAPI_URL = Deno.env.get('UAZAPI_BASE_URL') || 'https://lamusic.uazapi.com';
-const UAZAPI_TOKEN = Deno.env.get('UAZAPI_TOKEN')!;
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { getUazapiCredentials } from '../_shared/uazapi.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -124,27 +123,21 @@ function montarMensagem(dados: NotificacaoPayload): string {
 /**
  * Envia mensagem via UAZAPI
  */
-async function enviarWhatsApp(telefone: string, mensagem: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  if (!UAZAPI_TOKEN) {
-    return { success: false, error: 'Token UAZAPI não configurado' };
-  }
-
+async function enviarWhatsApp(
+  telefone: string,
+  mensagem: string,
+  creds: { baseUrl: string; token: string }
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const formattedPhone = formatPhoneNumber(telefone);
-  
-  // Garantir que a URL tem o protocolo https://
-  let baseUrl = UAZAPI_URL;
-  if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
-    baseUrl = 'https://' + baseUrl;
-  }
 
   console.log(`[professor-360-whatsapp] Enviando para: ${formattedPhone}`);
 
   try {
-    const response = await fetch(`${baseUrl}/send/text`, {
+    const response = await fetch(`${creds.baseUrl}/send/text`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'token': UAZAPI_TOKEN,
+        'token': creds.token,
       },
       body: JSON.stringify({
         number: formattedPhone,
@@ -164,9 +157,9 @@ async function enviarWhatsApp(telefone: string, mensagem: string): Promise<{ suc
       };
     } else {
       console.error(`[professor-360-whatsapp] ❌ Erro UAZAPI:`, data);
-      return { 
-        success: false, 
-        error: data.error || data.message || 'Erro ao enviar mensagem' 
+      return {
+        success: false,
+        error: (typeof data.error === 'string' ? data.error : null) || data.message || JSON.stringify(data)
       };
     }
   } catch (error) {
@@ -202,14 +195,20 @@ serve(async (req) => {
       );
     }
 
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    );
+    const creds = await getUazapiCredentials(supabase, { funcao: 'sistema' });
+
     // Montar e enviar mensagem
     const mensagem = montarMensagem(payload);
-    const resultado = await enviarWhatsApp(payload.professorWhatsApp, mensagem);
+    const resultado = await enviarWhatsApp(payload.professorWhatsApp, mensagem, creds);
 
     return new Response(
       JSON.stringify(resultado),
       { 
-        status: resultado.success ? 200 : 500, 
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       }
     );
@@ -218,7 +217,7 @@ serve(async (req) => {
     console.error('[professor-360-whatsapp] Erro:', error);
     return new Response(
       JSON.stringify({ success: false, error: 'Erro interno do servidor' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });

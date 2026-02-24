@@ -4,9 +4,8 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { getUazapiCredentials } from '../_shared/uazapi.ts';
 
-const UAZAPI_URL = Deno.env.get('UAZAPI_BASE_URL') || 'https://lamusic.uazapi.com';
-const UAZAPI_TOKEN = Deno.env.get('UAZAPI_TOKEN')!;
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
@@ -124,26 +123,21 @@ function montarMensagem(dados: {
 /**
  * Envia mensagem via UAZAPI
  */
-async function enviarWhatsApp(telefone: string, mensagem: string): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  if (!UAZAPI_TOKEN) {
-    return { success: false, error: 'Token UAZAPI não configurado' };
-  }
-
+async function enviarWhatsApp(
+  telefone: string,
+  mensagem: string,
+  creds: { baseUrl: string; token: string }
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const formattedPhone = formatPhoneNumber(telefone);
-  
-  let baseUrl = UAZAPI_URL;
-  if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
-    baseUrl = 'https://' + baseUrl;
-  }
 
   console.log(`[lojinha-relatorio-professor] Enviando para: ${formattedPhone}`);
 
   try {
-    const response = await fetch(`${baseUrl}/send/text`, {
+    const response = await fetch(`${creds.baseUrl}/send/text`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'token': UAZAPI_TOKEN,
+        'token': creds.token,
       },
       body: JSON.stringify({
         number: formattedPhone,
@@ -196,6 +190,7 @@ serve(async (req) => {
 
     // Criar cliente Supabase
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+    const creds = await getUazapiCredentials(supabase, { funcao: 'sistema' });
 
     // Buscar dados do professor
     const { data: professor, error: profError } = await supabase
@@ -274,7 +269,7 @@ serve(async (req) => {
     });
 
     // Enviar WhatsApp
-    const resultado = await enviarWhatsApp(professor.telefone_whatsapp, mensagem);
+    const resultado = await enviarWhatsApp(professor.telefone_whatsapp, mensagem, creds);
 
     return new Response(
       JSON.stringify({

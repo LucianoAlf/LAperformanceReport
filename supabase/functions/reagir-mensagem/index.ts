@@ -5,11 +5,10 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { getUazapiCredentials } from '../_shared/uazapi.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const UAZAPI_URL = Deno.env.get('UAZAPI_BASE_URL')!;
-const UAZAPI_TOKEN = Deno.env.get('UAZAPI_TOKEN')!;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -62,10 +61,10 @@ serve(async (req: Request) => {
       );
     }
 
-    // Buscar o JID da conversa
+    // Buscar o JID da conversa + dados para resolver credenciais
     const { data: conversa } = await supabase
       .from('crm_conversas')
-      .select('whatsapp_jid')
+      .select('whatsapp_jid, caixa_id, unidade_id')
       .eq('id', mensagem.conversa_id)
       .single();
 
@@ -76,19 +75,16 @@ serve(async (req: Request) => {
       );
     }
 
-    // 2. Chamar UAZAPI /message/react
-    let baseUrl = UAZAPI_URL;
-    if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
-      baseUrl = 'https://' + baseUrl;
-    }
+    // 2. Resolver credenciais UAZAPI via caixa da conversa
+    const creds = await getUazapiCredentials(supabase, { funcao: 'agente', caixaId: conversa?.caixa_id ?? undefined, unidadeId: conversa?.unidade_id ?? undefined });
 
-    console.log(`[reagir-mensagem] Reagindo com "${emoji}" na msg ${mensagem.whatsapp_message_id}`);
+    console.log(`[reagir-mensagem] Reagindo com "${emoji}" na msg ${mensagem.whatsapp_message_id} (caixa: ${creds.caixaNome})`);
 
-    const uazapiResponse = await fetch(`${baseUrl}/message/react`, {
+    const uazapiResponse = await fetch(`${creds.baseUrl}/message/react`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'token': UAZAPI_TOKEN,
+        'token': creds.token,
       },
       body: JSON.stringify({
         number: conversa.whatsapp_jid,

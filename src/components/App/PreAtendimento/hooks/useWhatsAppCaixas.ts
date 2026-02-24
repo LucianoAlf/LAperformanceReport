@@ -15,7 +15,7 @@ export function useWhatsAppCaixas({ unidadeId }: UseWhatsAppCaixasParams = {}) {
     try {
       let query = supabase
         .from('whatsapp_caixas')
-        .select('id, nome, numero, unidade_id, uazapi_url, uazapi_token, ativo, webhook_url, created_at')
+        .select('id, nome, numero, unidade_id, uazapi_url, uazapi_token, ativo, webhook_url, funcao, created_at')
         .eq('ativo', true)
         .order('nome');
 

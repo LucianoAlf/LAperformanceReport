@@ -4,11 +4,10 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { getUazapiCredentials } from '../_shared/uazapi.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const UAZAPI_URL = Deno.env.get('UAZAPI_BASE_URL')!;
-const UAZAPI_TOKEN = Deno.env.get('UAZAPI_TOKEN')!;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -31,30 +30,35 @@ serve(async (req: Request) => {
       );
     }
 
-    let baseUrl = UAZAPI_URL;
-    if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
-      baseUrl = 'https://' + baseUrl;
-    }
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // Buscar conversa para resolver credenciais UAZAPI
+    const { data: conversa } = await supabase
+      .from('crm_conversas')
+      .select('caixa_id, unidade_id')
+      .eq('id', conversa_id)
+      .single();
+
+    const creds = await getUazapiCredentials(supabase, { funcao: 'agente', caixaId: conversa?.caixa_id ?? undefined, unidadeId: conversa?.unidade_id ?? undefined });
 
     // Buscar foto de perfil via UAZAPI
     const numero = whatsapp_jid.replace('@s.whatsapp.net', '');
-    const response = await fetch(`${baseUrl}/misc/getProfilePicUrl`, {
+    const response = await fetch(`${creds.baseUrl}/misc/getProfilePicUrl`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'token': UAZAPI_TOKEN,
+        'token': creds.token,
       },
       body: JSON.stringify({ number: numero }),
     });
 
     const data = await response.json();
-    console.log('[buscar-foto-perfil] Resposta UAZAPI:', JSON.stringify(data).substring(0, 200));
+    console.log(`[buscar-foto-perfil] Resposta UAZAPI (caixa: ${creds.caixaNome}):`, JSON.stringify(data).substring(0, 200));
 
     const fotoUrl = data?.profilePictureUrl || data?.url || data?.imgUrl || data?.profilePicUrl || null;
 
     if (fotoUrl) {
       // Cachear no banco
-      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
       await supabase
         .from('crm_conversas')
         .update({ foto_perfil_url: fotoUrl })

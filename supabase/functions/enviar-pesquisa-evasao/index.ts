@@ -3,6 +3,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
+import { getUazapiCredentials } from '../_shared/uazapi.ts';
 
 interface EnviarPesquisaRequest {
   evasao_id: number;
@@ -25,6 +26,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
+    const creds = await getUazapiCredentials(supabase, { funcao: 'sistema' });
 
     const body: EnviarPesquisaRequest = await req.json();
     const { evasao_id, operador = 'sistema' } = body;
@@ -267,12 +269,12 @@ serve(async (req) => {
 
     // Enviar mensagem via UAZAPI
     const uazapiResponse = await fetch(
-      `${Deno.env.get('UAZAPI_BASE_URL')}/send/text`,
+      `${creds.baseUrl}/send/text`,
       {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Token': Deno.env.get('UAZAPI_TOKEN') || ''
+          'token': creds.token,
         },
         body: JSON.stringify({
           number: telefone,

@@ -276,3 +276,20 @@ export interface CursoCRM {
   id: number;
   nome: string;
 }
+
+// Caixa WhatsApp (UAZAPI)
+export type FuncaoCaixa = 'agente' | 'sistema' | 'ambos';
+
+export interface WhatsAppCaixa {
+  id: number;
+  nome: string;
+  numero: string | null;
+  uazapi_url: string;
+  uazapi_token: string;
+  unidade_id: string | null;
+  webhook_url: string | null;
+  ativo: boolean;
+  funcao: FuncaoCaixa;
+  created_at: string;
+  updated_at: string;
+}

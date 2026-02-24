@@ -1,11 +1,14 @@
 // Edge Function: whatsapp-status
 // Verifica status da conexao UAZAPI e envia mensagens de teste
+// Agora resolve credenciais da tabela whatsapp_caixas via caixa_id
 // @ts-nocheck
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { getUazapiCredentials } from '../_shared/uazapi.ts';
 
-const UAZAPI_URL = Deno.env.get('UAZAPI_BASE_URL')!;
-const UAZAPI_TOKEN = Deno.env.get('UAZAPI_TOKEN')!;
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -22,40 +25,29 @@ function formatPhoneNumber(phone: string): string {
 
 // Detectar se esta conectado baseado no formato real da UAZAPI
 function isConnected(data: any): boolean {
-  // Formato 1: { status: { checked_instance: { connection_status: 'connected' } } }
   if (data?.status?.checked_instance?.connection_status === 'connected') return true;
-  // Formato 2: { status: 'connected' }
   if (data?.status === 'connected') return true;
-  // Formato 3: { connected: true }
   if (data?.connected === true) return true;
-  // Formato 4: { state: 'CONNECTED' }
   if (data?.state === 'CONNECTED') return true;
-  // Formato 5: { server_status: 'running' } com instancia saudavel
   if (data?.status?.server_status === 'running' && data?.status?.checked_instance?.is_healthy === true) return true;
   return false;
 }
 
-// Extrair telefone da resposta
 function extractPhone(data: any): string | undefined {
   return data?.phone || data?.number || data?.wid?.user || data?.me?.user || data?.status?.checked_instance?.name;
 }
 
-// Extrair nome da instancia
 function extractInstance(data: any): string | undefined {
   return data?.instanceName || data?.instance || data?.status?.checked_instance?.name;
 }
 
-async function checkStatus() {
+async function checkStatus(baseUrl: string, token: string) {
   try {
-    let baseUrl = UAZAPI_URL;
-    if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
-      baseUrl = 'https://' + baseUrl;
-    }
     console.log('[whatsapp-status] Verificando status em:', baseUrl);
 
     const response = await fetch(`${baseUrl}/status`, {
       method: 'GET',
-      headers: { 'token': UAZAPI_TOKEN },
+      headers: { 'token': token },
     });
 
     const data = await response.json();
@@ -78,18 +70,14 @@ async function checkStatus() {
   }
 }
 
-async function sendTestMessage(phone: string) {
+async function sendTestMessage(phone: string, baseUrl: string, token: string) {
   try {
     const formattedPhone = formatPhoneNumber(phone);
-    let baseUrl = UAZAPI_URL;
-    if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
-      baseUrl = 'https://' + baseUrl;
-    }
     console.log('[whatsapp-status] Enviando teste para:', formattedPhone);
 
     const response = await fetch(`${baseUrl}/send/text`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'token': UAZAPI_TOKEN },
+      headers: { 'Content-Type': 'application/json', 'token': token },
       body: JSON.stringify({
         number: formattedPhone,
         text: '✅ *Teste de Integracao LA Music Report*\n\nWhatsApp conectado com sucesso!\n\n_Esta e uma mensagem automatica de teste._',
@@ -118,12 +106,20 @@ serve(async (req) => {
   }
 
   try {
-    const { action, phone } = await req.json();
+    const { action, phone, caixa_id } = await req.json();
+
+    // Resolver credenciais da caixa
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const creds = await getUazapiCredentials(supabase, {
+      caixaId: caixa_id ?? undefined,
+    });
+    console.log(`[whatsapp-status] Usando caixa: ${creds.caixaNome} (ID: ${creds.caixaId})`);
+
     let result;
 
     switch (action) {
       case 'status':
-        result = await checkStatus();
+        result = await checkStatus(creds.baseUrl, creds.token);
         break;
       case 'test':
         if (!phone) {
@@ -132,7 +128,7 @@ serve(async (req) => {
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
           );
         }
-        result = await sendTestMessage(phone);
+        result = await sendTestMessage(phone, creds.baseUrl, creds.token);
         break;
       default:
         return new Response(
@@ -142,7 +138,7 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ success: true, ...result, timestamp: new Date().toISOString() }),
+      JSON.stringify({ success: true, ...result, caixa: creds.caixaNome, timestamp: new Date().toISOString() }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {

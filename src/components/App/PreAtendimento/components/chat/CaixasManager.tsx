@@ -1,11 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Trash2, TestTube, Save, Loader2, CheckCircle2, XCircle,
-  Wifi, WifiOff, Phone, Globe, Key, Tag, Building2, Copy, RefreshCw,
+  Wifi, WifiOff, Phone, Globe, Key, Tag, Building2, Copy, RefreshCw, Zap,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
-import type { WhatsAppCaixa } from '../../types';
+import type { WhatsAppCaixa, FuncaoCaixa } from '../../types';
 
 interface UnidadeOption {
   id: string;
@@ -22,6 +22,7 @@ interface CaixaForm {
   unidade_id: string;
   webhook_url: string;
   ativo: boolean;
+  funcao: FuncaoCaixa;
 }
 
 interface TestResult {
@@ -39,6 +40,7 @@ const emptyCaixa: CaixaForm = {
   unidade_id: '',
   webhook_url: '',
   ativo: true,
+  funcao: 'agente',
 };
 
 export function CaixasManager() {
@@ -172,6 +174,7 @@ export function CaixasManager() {
         unidade_id: editando.unidade_id || null,
         webhook_url: editando.webhook_url,
         ativo: editando.ativo,
+        funcao: editando.funcao,
       };
 
       if (editando.id) {
@@ -346,6 +349,25 @@ export function CaixasManager() {
               </select>
             </div>
 
+            {/* Função */}
+            <div>
+              <label className="text-xs text-slate-400 mb-1 flex items-center gap-1">
+                <Zap className="w-3 h-3" /> Função da Caixa *
+              </label>
+              <select
+                value={editando.funcao}
+                onChange={e => setEditando({ ...editando, funcao: e.target.value as FuncaoCaixa })}
+                className="w-full px-3 py-2 bg-slate-900/60 border border-slate-700/50 rounded-lg text-sm text-white focus:border-violet-500/50 focus:outline-none"
+              >
+                <option value="agente">Agente (CRM — Mila + Andreza)</option>
+                <option value="sistema">Sistema (Relatórios e Alertas)</option>
+                <option value="ambos">Ambos (Caixa única)</option>
+              </select>
+              <p className="text-[10px] text-slate-500 mt-1">
+                Agente: mensagens de leads. Sistema: relatórios, notificações, alertas.
+              </p>
+            </div>
+
             {/* Ativo */}
             <div className="flex items-end">
               <label className="flex items-center gap-2 cursor-pointer">
@@ -470,6 +492,16 @@ export function CaixasManager() {
                           {unidade.codigo}
                         </span>
                       )}
+                      {caixa.funcao && (
+                        <span className={cn(
+                          'text-[9px] px-1.5 py-0.5 rounded font-medium',
+                          caixa.funcao === 'agente' && 'bg-emerald-500/15 text-emerald-400',
+                          caixa.funcao === 'sistema' && 'bg-blue-500/15 text-blue-400',
+                          caixa.funcao === 'ambos' && 'bg-amber-500/15 text-amber-400',
+                        )}>
+                          {caixa.funcao === 'agente' ? 'Agente' : caixa.funcao === 'sistema' ? 'Sistema' : 'Ambos'}
+                        </span>
+                      )}
                       {test.status === 'success' && (
                         <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 flex items-center gap-1">
                           <Wifi className="w-3 h-3" /> Conectado
@@ -525,6 +557,7 @@ export function CaixasManager() {
                           unidade_id: caixa.unidade_id || '',
                           webhook_url: caixa.webhook_url || '',
                           ativo: caixa.ativo,
+                          funcao: caixa.funcao || 'agente',
                         });
                         setNewTestResult({ status: 'idle' });
                       }}

@@ -4,11 +4,10 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { getUazapiCredentials, type UazapiCredentials } from '../_shared/uazapi.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const UAZAPI_URL = Deno.env.get('UAZAPI_BASE_URL')!;
-const UAZAPI_TOKEN = Deno.env.get('UAZAPI_TOKEN')!;
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
@@ -75,7 +74,7 @@ function getPhoneNumber(destinatario: any): string | null {
   }
 }
 
-async function sendWhatsApp(phone: string, message: string): Promise<boolean> {
+async function sendWhatsApp(phone: string, message: string, creds: UazapiCredentials): Promise<boolean> {
   try {
     // Formatar número (remover caracteres não numéricos, adicionar 55 se necessário)
     let formattedPhone = phone.replace(/\D/g, '');
@@ -83,19 +82,13 @@ async function sendWhatsApp(phone: string, message: string): Promise<boolean> {
       formattedPhone = '55' + formattedPhone;
     }
 
-    // Garantir que a URL tem o protocolo https://
-    let baseUrl = UAZAPI_URL;
-    if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
-      baseUrl = 'https://' + baseUrl;
-    }
+    console.log('[sendWhatsApp] Enviando para:', formattedPhone, 'via', creds.baseUrl);
 
-    console.log('[sendWhatsApp] Enviando para:', formattedPhone, 'via', baseUrl);
-    
-    const response = await fetch(`${baseUrl}/send/text`, {
+    const response = await fetch(`${creds.baseUrl}/send/text`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'token': UAZAPI_TOKEN,
+        'token': creds.token,
       },
       body: JSON.stringify({
         number: formattedPhone,
@@ -141,7 +134,7 @@ async function logNotificacao(params: {
 // 1. TAREFAS ATRASADAS
 // ============================================
 
-async function checkTarefasAtrasadas() {
+async function checkTarefasAtrasadas(creds: UazapiCredentials) {
   const config = await getConfig('tarefa_atrasada');
   console.log('[checkTarefasAtrasadas] Config:', config);
   if (!config?.ativo) return { skipped: true, reason: 'Config desativada' };
@@ -194,7 +187,7 @@ async function checkTarefasAtrasadas() {
 
     mensagem += `_Acesse o sistema para mais detalhes._`;
 
-    const success = await sendWhatsApp(phone, mensagem);
+    const success = await sendWhatsApp(phone, mensagem, creds);
 
     await logNotificacao({
       configId: config.id,
@@ -217,7 +210,7 @@ async function checkTarefasAtrasadas() {
 // 2. TAREFAS VENCENDO
 // ============================================
 
-async function checkTarefasVencendo() {
+async function checkTarefasVencendo(creds: UazapiCredentials) {
   const config = await getConfig('tarefa_vencendo');
   if (!config?.ativo) return { skipped: true, reason: 'Config desativada' };
 
@@ -264,7 +257,7 @@ async function checkTarefasVencendo() {
 
     mensagem += `_Acesse o sistema para gerenciar._`;
 
-    const success = await sendWhatsApp(phone, mensagem);
+    const success = await sendWhatsApp(phone, mensagem, creds);
 
     await logNotificacao({
       configId: config.id,
@@ -286,7 +279,7 @@ async function checkTarefasVencendo() {
 // 3. PROJETOS PARADOS
 // ============================================
 
-async function checkProjetosParados() {
+async function checkProjetosParados(creds: UazapiCredentials) {
   const config = await getConfig('projeto_parado');
   if (!config?.ativo) return { skipped: true, reason: 'Config desativada' };
 
@@ -344,7 +337,7 @@ async function checkProjetosParados() {
 
     mensagem += `_Considere atualizar ou pausar estes projetos._`;
 
-    const success = await sendWhatsApp(phone, mensagem);
+    const success = await sendWhatsApp(phone, mensagem, creds);
 
     await logNotificacao({
       configId: config.id,
@@ -366,7 +359,7 @@ async function checkProjetosParados() {
 // 4. RESUMO SEMANAL
 // ============================================
 
-async function enviarResumoSemanal() {
+async function enviarResumoSemanal(creds: UazapiCredentials) {
   const config = await getConfig('resumo_semanal');
   if (!config?.ativo) return { skipped: true, reason: 'Config desativada' };
 
@@ -436,7 +429,7 @@ async function enviarResumoSemanal() {
     }
     mensagem += `\n_Boa semana! 🚀_`;
 
-    const success = await sendWhatsApp(phone, mensagem);
+    const success = await sendWhatsApp(phone, mensagem, creds);
 
     await logNotificacao({
       configId: config.id,
@@ -464,29 +457,30 @@ serve(async (req) => {
   }
 
   try {
+    const creds = await getUazapiCredentials(supabase, { funcao: 'sistema' });
     const { action } = await req.json();
 
     let result;
 
     switch (action) {
       case 'tarefa_atrasada':
-        result = await checkTarefasAtrasadas();
+        result = await checkTarefasAtrasadas(creds);
         break;
       case 'tarefa_vencendo':
-        result = await checkTarefasVencendo();
+        result = await checkTarefasVencendo(creds);
         break;
       case 'projeto_parado':
-        result = await checkProjetosParados();
+        result = await checkProjetosParados(creds);
         break;
       case 'resumo_semanal':
-        result = await enviarResumoSemanal();
+        result = await enviarResumoSemanal(creds);
         break;
       case 'all':
         // Executa todos (exceto resumo semanal)
         result = {
-          tarefa_atrasada: await checkTarefasAtrasadas(),
-          tarefa_vencendo: await checkTarefasVencendo(),
-          projeto_parado: await checkProjetosParados(),
+          tarefa_atrasada: await checkTarefasAtrasadas(creds),
+          tarefa_vencendo: await checkTarefasVencendo(creds),
+          projeto_parado: await checkProjetosParados(creds),
         };
         break;
       default:

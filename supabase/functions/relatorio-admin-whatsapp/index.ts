@@ -3,25 +3,8 @@
 // Integração com UAZAPI
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
-
-const UAZAPI_URL = Deno.env.get('UAZAPI_BASE_URL') || 'https://lamusic.uazapi.com';
-const UAZAPI_TOKEN = Deno.env.get('UAZAPI_TOKEN')!;
-
-// Mapeamento de unidades para JIDs dos grupos
-const GRUPOS_FARMERS: Record<string, { jid: string; nome: string }> = {
-  '2ec861f6-023f-4d7b-9927-3960ad8c2a92': {
-    jid: '5521965832009-1600979279@g.us',
-    nome: 'RELATÓRIOS DIÁRIOS CG (Campo Grande)'
-  },
-  '368d47f5-2d88-4475-bc14-ba084a9a348e': {
-    jid: '5521965832009-1625319907@g.us',
-    nome: 'RELATÓRIOS DIÁRIOS BR (Barra)'
-  },
-  '95553e96-971b-4590-a6eb-0201d013c14d': {
-    jid: '5521992426581-1581033423@g.us',
-    nome: 'RELATÓRIOS DIÁRIOS RC (Recreio)'
-  },
-};
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { getUazapiCredentials } from '../_shared/uazapi.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -39,26 +22,18 @@ interface RelatorioPayload {
  * Envia mensagem via UAZAPI para um grupo
  */
 async function enviarWhatsAppGrupo(
-  grupoJid: string, 
-  mensagem: string
+  grupoJid: string,
+  mensagem: string,
+  creds: { baseUrl: string; token: string }
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  if (!UAZAPI_TOKEN) {
-    return { success: false, error: 'Token UAZAPI não configurado' };
-  }
-
-  let baseUrl = UAZAPI_URL;
-  if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
-    baseUrl = 'https://' + baseUrl;
-  }
-
   console.log(`[relatorio-admin-whatsapp] Enviando para grupo: ${grupoJid}`);
 
   try {
-    const response = await fetch(`${baseUrl}/send/text`, {
+    const response = await fetch(`${creds.baseUrl}/send/text`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'token': UAZAPI_TOKEN,
+        'token': creds.token,
       },
       body: JSON.stringify({
         number: grupoJid,
@@ -76,9 +51,9 @@ async function enviarWhatsAppGrupo(
       return { success: true, messageId };
     } else {
       console.error(`[relatorio-admin-whatsapp] ❌ Erro UAZAPI:`, data);
-      return { 
-        success: false, 
-        error: data.error || data.message || 'Erro ao enviar mensagem' 
+      return {
+        success: false,
+        error: (typeof data.error === 'string' ? data.error : null) || data.message || JSON.stringify(data)
       };
     }
   } catch (error) {
@@ -97,6 +72,12 @@ serve(async (req) => {
   }
 
   try {
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    );
+    const creds = await getUazapiCredentials(supabase, { funcao: 'sistema' });
+
     const payload: RelatorioPayload = await req.json();
 
     // Validar payload
@@ -107,21 +88,31 @@ serve(async (req) => {
       );
     }
 
-    // Determinar para quais grupos enviar
-    const gruposParaEnviar: { jid: string; nome: string }[] = [];
+    // Buscar destinatários do banco
+    let destQuery = supabase
+      .from('whatsapp_destinatarios_relatorio')
+      .select('jid, nome, unidade_id')
+      .eq('tipo', 'relatorio_admin')
+      .eq('ativo', true);
 
-    if (payload.unidade === 'todos' || !payload.unidade) {
-      // Consolidado: enviar para todos os grupos
-      Object.values(GRUPOS_FARMERS).forEach(grupo => {
-        gruposParaEnviar.push(grupo);
-      });
-    } else if (GRUPOS_FARMERS[payload.unidade]) {
-      // Unidade específica
-      gruposParaEnviar.push(GRUPOS_FARMERS[payload.unidade]);
-    } else {
+    if (payload.unidade && payload.unidade !== 'todos') {
+      destQuery = destQuery.eq('unidade_id', payload.unidade);
+    }
+
+    const { data: gruposParaEnviar, error: destError } = await destQuery;
+
+    if (destError) {
+      console.error('[relatorio-admin-whatsapp] Erro ao buscar destinatários:', destError.message);
       return new Response(
-        JSON.stringify({ success: false, error: 'Unidade não encontrada' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ success: false, error: 'Erro ao buscar destinatários' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (!gruposParaEnviar || gruposParaEnviar.length === 0) {
+      return new Response(
+        JSON.stringify({ success: false, error: 'Nenhum destinatário configurado para este relatório' }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -131,7 +122,7 @@ serve(async (req) => {
     const resultados: { grupo: string; success: boolean; messageId?: string; error?: string }[] = [];
     
     for (const grupo of gruposParaEnviar) {
-      const resultado = await enviarWhatsAppGrupo(grupo.jid, payload.texto);
+      const resultado = await enviarWhatsAppGrupo(grupo.jid, payload.texto, creds);
       resultados.push({
         grupo: grupo.nome,
         ...resultado
@@ -147,15 +138,21 @@ serve(async (req) => {
     const todosEnviados = resultados.every(r => r.success);
     const algumEnviado = resultados.some(r => r.success);
 
+    // Extrair erro dos resultados para exibir no frontend
+    const erroMsg = !todosEnviados
+      ? resultados.filter(r => !r.success).map(r => r.error).join('; ')
+      : undefined;
+
     return new Response(
       JSON.stringify({
         success: todosEnviados,
         partial: !todosEnviados && algumEnviado,
+        error: erroMsg,
         resultados,
         messageId: resultados.find(r => r.success)?.messageId,
       }),
       { 
-        status: todosEnviados ? 200 : (algumEnviado ? 207 : 500), 
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       }
     );
@@ -164,7 +161,7 @@ serve(async (req) => {
     console.error('[relatorio-admin-whatsapp] Erro:', error);
     return new Response(
       JSON.stringify({ success: false, error: 'Erro interno do servidor' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });

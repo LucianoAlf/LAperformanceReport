@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSetPageTitle } from '@/contexts/PageTitleContext';
-import { Settings, Save, Plus, Trash2, RefreshCw, Building2, Users, Tag, Megaphone, Clock, Music, Edit2 } from 'lucide-react';
+import { Settings, Save, Plus, Trash2, RefreshCw, Building2, Users, Tag, Megaphone, Clock, Music, Edit2, Phone } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOutletContext } from 'react-router-dom';
@@ -8,6 +8,8 @@ import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { PageFilterBar } from '@/components/ui/page-filter-bar';
 import { PageTour, TourHelpButton } from '@/components/Onboarding';
 import { configTourSteps } from '@/components/Onboarding/tours';
+import { CaixasManager } from '@/components/App/PreAtendimento/components/chat/CaixasManager';
+import { DestinatariosRelatorioManager } from './DestinatariosRelatorioManager';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -57,7 +59,7 @@ interface Curso {
   capacidade_maxima: number | null;
 }
 
-type TabId = 'unidades' | 'canais' | 'motivos' | 'tipos' | 'cursos';
+type TabId = 'unidades' | 'canais' | 'motivos' | 'tipos' | 'cursos' | 'whatsapp';
 
 export function ConfigPage() {
   useSetPageTitle({
@@ -514,6 +516,7 @@ export function ConfigPage() {
     { id: 'motivos', label: 'Motivos de Saída', shortLabel: 'Motivos', icon: Tag },
     { id: 'tipos', label: 'Tipos de Saída', shortLabel: 'Tipos', icon: Tag },
     { id: 'cursos', label: 'Cursos', shortLabel: 'Cursos', icon: Music },
+    { id: 'whatsapp', label: 'WhatsApp', shortLabel: 'WhatsApp', icon: Phone },
   ];
 
   if (loading) {
@@ -869,7 +872,7 @@ export function ConfigPage() {
               {cursos.map(c => {
                 // Se há filtro ativo, usar o status da unidade; senão, usar o status global
                 const ativoNaUnidade = filtroAtivo ? (cursosUnidade[c.id] ?? false) : c.ativo;
-                
+
                 return (
                   <div key={c.id} className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg border-b border-slate-700/30">
                     <div className="flex-1">
@@ -919,6 +922,16 @@ export function ConfigPage() {
               })}
             </div>
           </div>
+        )}
+
+        {/* Tab WhatsApp */}
+        {activeTab === 'whatsapp' && (
+          <>
+            <CaixasManager />
+            <div className="mt-6 pt-6 border-t border-slate-700/50">
+              <DestinatariosRelatorioManager />
+            </div>
+          </>
         )}
       </div>
 
