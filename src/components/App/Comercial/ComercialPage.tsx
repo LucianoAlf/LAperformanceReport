@@ -26,8 +26,10 @@ import {
   RotateCcw,
   Send,
   GraduationCap,
-  Trophy
+  Trophy,
+  CheckSquare
 } from 'lucide-react';
+import { TarefasRapidasTab } from '@/components/shared/TarefasRapidas';
 import { PageTour, TourHelpButton } from '@/components/Onboarding';
 import { comercialTourSteps } from '@/components/Onboarding/tours';
 import { supabase } from '@/lib/supabase';
@@ -190,7 +192,7 @@ export function ComercialPage() {
     : unidadeId;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [abaPrincipal, setAbaPrincipal] = useState<'lancamentos' | 'programa'>('lancamentos');
+  const [abaPrincipal, setAbaPrincipal] = useState<'lancamentos' | 'programa' | 'tarefas'>('lancamentos');
   const [modalOpen, setModalOpen] = useState<'lead' | 'experimental' | 'visita' | 'matricula' | null>(null);
   const [relatorioOpen, setRelatorioOpen] = useState(false);
   const [tipoRelatorio, setTipoRelatorio] = useState<'diario' | 'semanal' | 'mensal' | 'matriculas' | 'comparativo_mensal' | 'comparativo_anual' | null>(null);
@@ -2118,6 +2120,7 @@ export function ComercialPage() {
         tabs={[
           { id: 'lancamentos' as const, label: 'Lançamentos', shortLabel: 'Lanç.', icon: Zap, activeGradient: 'from-cyan-500 to-blue-500', activeShadow: 'shadow-cyan-500/20' },
           { id: 'programa' as const, label: 'Programa Matriculador+ LA', shortLabel: 'Matriculador+', icon: Trophy, activeGradient: 'from-yellow-500 to-orange-500', activeShadow: 'shadow-yellow-500/20' },
+          { id: 'tarefas' as const, label: 'Tarefas Rápidas', shortLabel: 'Tarefas', icon: CheckSquare, activeGradient: 'from-emerald-500 to-teal-500', activeShadow: 'shadow-emerald-500/20' },
         ]}
         activeTab={abaPrincipal}
         onTabChange={setAbaPrincipal}
@@ -2127,9 +2130,21 @@ export function ComercialPage() {
       {/* CONTEÚDO DA ABA PROGRAMA */}
       {/* ═══════════════════════════════════════════════════════════════ */}
       {abaPrincipal === 'programa' && (
-        <TabProgramaMatriculador 
+        <TabProgramaMatriculador
           unidadeId={isAdmin ? (context?.unidadeSelecionada || 'todos') : unidadeId}
           ano={competencia.filtro.ano}
+        />
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {/* CONTEÚDO DA ABA TAREFAS RÁPIDAS */}
+      {/* ═══════════════════════════════════════════════════════════════ */}
+      {abaPrincipal === 'tarefas' && (
+        <TarefasRapidasTab
+          contexto="comercial"
+          unidadeId={isAdmin ? (context?.unidadeSelecionada || 'todos') : (unidadeId || 'todos')}
+          isAdmin={isAdmin}
+          accentGradient="from-emerald-600 to-teal-600"
         />
       )}
 

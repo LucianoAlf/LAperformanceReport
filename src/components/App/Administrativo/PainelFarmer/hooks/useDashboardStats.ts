@@ -65,6 +65,7 @@ export function useDashboardStats(unidadeId: string) {
       let tarefasQuery = supabase
         .from('farmer_tarefas')
         .select('id', { count: 'exact', head: true })
+        .eq('contexto', 'farmer')
         .eq('concluida', false);
 
       if (unidadeFilter) {

@@ -11,6 +11,7 @@ import {
   FileText,
   Phone,
   MessageSquare,
+  CheckSquare,
 } from 'lucide-react';
 import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { DashboardTab } from './tabs/DashboardTab';
@@ -28,6 +29,7 @@ import { ModalMoverEtapa } from './components/ModalMoverEtapa';
 import { ModalArquivar } from './components/ModalArquivar';
 import { ModalConfigurarEtapas } from './components/ModalConfigurarEtapas';
 import { ModalMatricular } from './components/ModalMatricular';
+import { TarefasRapidasTab } from '@/components/shared/TarefasRapidas';
 import { useLeadsCRM } from './hooks/useLeadsCRM';
 import type { CRMTabId, LeadCRM } from './types';
 
@@ -41,6 +43,7 @@ const crmTabs: PageTab<CRMTabId>[] = [
   { id: 'metas', label: 'Metas', shortLabel: 'Metas', icon: TrendingUp },
   { id: 'mila', label: 'Painel Mila', shortLabel: 'Mila', icon: Bot },
   { id: 'relatorios', label: 'Relatórios', shortLabel: 'Relat.', icon: FileText },
+  { id: 'tarefas', label: 'Tarefas Rápidas', shortLabel: 'Tarefas', icon: CheckSquare },
 ];
 
 interface OutletContextType {
@@ -161,6 +164,13 @@ export function PreAtendimentoPage() {
         )}
         {activeTab === 'relatorios' && (
           <RelatoriosTab unidadeId={unidadeId} ano={ano} mes={mes} />
+        )}
+        {activeTab === 'tarefas' && (
+          <TarefasRapidasTab
+            contexto="pre_atendimento"
+            unidadeId={unidadeId}
+            accentGradient="from-violet-600 to-purple-600"
+          />
         )}
       </div>
 
