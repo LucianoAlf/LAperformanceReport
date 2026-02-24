@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Plus,
   Trash2,
   CheckCircle2,
   Calendar,
 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
@@ -42,8 +43,22 @@ export function TarefasRapidasTab({
     contexto,
     colaboradorId: colaborador?.id || null,
     unidadeId,
+    colaboradorUnidadeId: colaborador?.unidade_id,
     isAdmin,
   });
+
+  // Unidades para o seletor de admin
+  const [unidades, setUnidades] = useState<{ id: string; nome: string }[]>([]);
+  const mostrarSeletorUnidade = isAdmin && unidadeId === 'todos';
+
+  useEffect(() => {
+    if (!mostrarSeletorUnidade) return;
+    supabase
+      .from('unidades')
+      .select('id, nome')
+      .order('nome')
+      .then(({ data }) => { if (data) setUnidades(data); });
+  }, [mostrarSeletorUnidade]);
 
   const [modalAberto, setModalAberto] = useState(false);
   const [salvando, setSalvando] = useState(false);
@@ -57,12 +72,14 @@ export function TarefasRapidasTab({
   const [dataPrazo, setDataPrazo] = useState<Date | undefined>(undefined);
   const [prioridade, setPrioridade] = useState<'alta' | 'media' | 'baixa'>('media');
   const [observacoes, setObservacoes] = useState('');
+  const [unidadeModal, setUnidadeModal] = useState('');
 
   const abrirModal = () => {
     setDescricao('');
     setDataPrazo(undefined);
     setPrioridade('media');
     setObservacoes('');
+    setUnidadeModal('');
     setModalAberto(true);
   };
 
@@ -72,15 +89,19 @@ export function TarefasRapidasTab({
 
   const salvar = async () => {
     if (!descricao.trim()) return;
+    if (mostrarSeletorUnidade && !unidadeModal) return;
 
     setSalvando(true);
     try {
-      await criarTarefa({
-        descricao: descricao.trim(),
-        prioridade,
-        observacoes: observacoes.trim() || undefined,
-        data_prazo: dataPrazo ? dataPrazo.toISOString().split('T')[0] : undefined,
-      });
+      await criarTarefa(
+        {
+          descricao: descricao.trim(),
+          prioridade,
+          observacoes: observacoes.trim() || undefined,
+          data_prazo: dataPrazo ? dataPrazo.toISOString().split('T')[0] : undefined,
+        },
+        mostrarSeletorUnidade ? unidadeModal : undefined,
+      );
       fecharModal();
     } catch (err) {
       console.error('Erro ao salvar tarefa:', err);
@@ -238,6 +259,25 @@ export function TarefasRapidasTab({
           </DialogHeader>
 
           <div className="space-y-4 py-4">
+            {/* Unidade (admin com filtro "todos") */}
+            {mostrarSeletorUnidade && (
+              <div>
+                <label className="text-sm font-medium text-slate-300 mb-2 block">
+                  Unidade
+                </label>
+                <Select value={unidadeModal} onValueChange={setUnidadeModal}>
+                  <SelectTrigger className="bg-slate-800 border-slate-700">
+                    <SelectValue placeholder="Selecione a unidade" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-slate-700">
+                    {unidades.map(u => (
+                      <SelectItem key={u.id} value={u.id}>{u.nome}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             {/* Descrição */}
             <div>
               <label className="text-sm font-medium text-slate-300 mb-2 block">
@@ -296,7 +336,7 @@ export function TarefasRapidasTab({
             </Button>
             <Button
               onClick={salvar}
-              disabled={!descricao.trim() || salvando}
+              disabled={!descricao.trim() || salvando || (mostrarSeletorUnidade && !unidadeModal)}
               className={cn('bg-gradient-to-r', accentGradient)}
             >
               {salvando ? 'Salvando...' : 'Criar'}

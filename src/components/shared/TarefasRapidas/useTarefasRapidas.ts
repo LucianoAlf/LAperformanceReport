@@ -6,10 +6,11 @@ interface UseTarefasRapidasOptions {
   contexto: TarefaContexto;
   colaboradorId: number | null;
   unidadeId: string;
+  colaboradorUnidadeId?: string;
   isAdmin?: boolean;
 }
 
-export function useTarefasRapidas({ contexto, colaboradorId, unidadeId, isAdmin }: UseTarefasRapidasOptions) {
+export function useTarefasRapidas({ contexto, colaboradorId, unidadeId, colaboradorUnidadeId, isAdmin }: UseTarefasRapidasOptions) {
   const [tarefas, setTarefas] = useState<TarefaRapida[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -54,15 +55,19 @@ export function useTarefasRapidas({ contexto, colaboradorId, unidadeId, isAdmin 
   }, [colaboradorId, fetchTarefas]);
 
   // Criar nova tarefa
-  const criarTarefa = async (input: CreateTarefaRapidaInput) => {
+  const criarTarefa = async (input: CreateTarefaRapidaInput, unidadeIdOverride?: string) => {
     if (!colaboradorId) return;
+
+    // Resolver unidade: override do modal > filtro global > unidade do colaborador
+    const unidadeParaSalvar = unidadeIdOverride || (unidadeId !== 'todos' ? unidadeId : colaboradorUnidadeId);
+    if (!unidadeParaSalvar) return;
 
     try {
       const { error: insertError } = await supabase
         .from('farmer_tarefas')
         .insert({
           colaborador_id: colaboradorId,
-          unidade_id: unidadeId === 'todos' ? 'campo-grande' : unidadeId,
+          unidade_id: unidadeParaSalvar,
           contexto,
           ...input,
         });
