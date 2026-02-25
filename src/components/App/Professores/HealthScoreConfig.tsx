@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { 
   HeartPulse, ChevronUp, ChevronDown, Save, RotateCcw,
   Users, RefreshCw, Target, Calendar, DoorOpen, TrendingUp
@@ -64,6 +64,14 @@ export const HealthScoreConfig: React.FC<HealthScoreConfigProps> = ({
   const [isExpanded, setIsExpanded] = useState(true);
   const [weights, setWeights] = useState(initialWeights || DEFAULT_HEALTH_WEIGHTS);
   const [hasChanges, setHasChanges] = useState(false);
+
+  // Sync when prop changes (e.g. after DB load completes)
+  useEffect(() => {
+    if (initialWeights) {
+      setWeights(initialWeights);
+      setHasChanges(false);
+    }
+  }, [initialWeights]);
 
   const totalWeight = Object.values(weights).reduce((sum: number, val: number) => sum + val, 0);
 

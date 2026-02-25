@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog';
 import { JornadaProfessor } from './JornadaProfessor';
 import { calcularHealthScore } from '@/hooks/useHealthScore';
+import { DEFAULT_HEALTH_WEIGHTS } from './HealthScoreConfig';
 
 interface ProfessorPerformance {
   id: number;
@@ -75,9 +76,10 @@ interface Props {
   competencia: string;
   onNovaMeta: (professorId: number) => void;
   onNovaAcao: (professorId: number) => void;
+  healthWeights?: typeof DEFAULT_HEALTH_WEIGHTS;
 }
 
-export function ModalDetalhesProfessorPerformance({ open, onClose, professor, competencia, onNovaMeta, onNovaAcao }: Props) {
+export function ModalDetalhesProfessorPerformance({ open, onClose, professor, competencia, onNovaMeta, onNovaAcao, healthWeights }: Props) {
   const [metas, setMetas] = useState<Meta[]>([]);
   const [acoes, setAcoes] = useState<Acao[]>([]);
   const [evasoes, setEvasoes] = useState<Evasao[]>([]);
@@ -167,7 +169,7 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
       taxaCrescimentoAjustada: 0, // TODO: buscar da view quando disponível
       taxaEvasao: professor.total_alunos > 0 ? (professor.evasoes_mes / professor.total_alunos) * 100 : 0,
       carteiraAlunos: professor.total_alunos
-    });
+    }, healthWeights);
 
     const payload = {
       professor: {
@@ -275,7 +277,7 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
             taxaCrescimentoAjustada: 0,
             taxaEvasao: professor.total_alunos > 0 ? (professor.evasoes_mes / professor.total_alunos) * 100 : 0,
             carteiraAlunos: professor.total_alunos
-          });
+          }, healthWeights);
 
       const { data: responseIA, error: errorIA } = await supabase.functions.invoke(
         'gemini-relatorio-professor-individual',
@@ -387,8 +389,8 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
       taxaCrescimentoAjustada: 0,
       taxaEvasao: professor.total_alunos > 0 ? (professor.evasoes_mes / professor.total_alunos) * 100 : 0,
       carteiraAlunos: professor.total_alunos
-    });
-  }, [professor]);
+    }, healthWeights);
+  }, [professor, healthWeights]);
 
   if (!professor) return null;
 

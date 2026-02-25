@@ -20,6 +20,7 @@ import { ModalNovaAcao } from './ModalNovaAcao';
 import { ModalRelatorioCoordenacao } from './ModalRelatorioCoordenacao';
 import { PlanoAcaoEquipe } from './PlanoAcaoEquipe';
 import { calcularHealthScore } from '@/hooks/useHealthScore';
+import { DEFAULT_HEALTH_WEIGHTS } from './HealthScoreConfig';
 import { HealthScoreCard } from './HealthScoreCard';
 
 interface ProfessorPerformance {
@@ -51,9 +52,10 @@ interface AlertaPerformance {
 
 interface Props {
   unidadeAtual: UnidadeId;
+  healthWeights?: typeof DEFAULT_HEALTH_WEIGHTS;
 }
 
-export function TabPerformanceProfessores({ unidadeAtual }: Props) {
+export function TabPerformanceProfessores({ unidadeAtual, healthWeights }: Props) {
   const toast = useToast();
   
   // Hook de competência (Mês/Trim/Sem/Ano)
@@ -350,7 +352,7 @@ export function TabPerformanceProfessores({ unidadeAtual }: Props) {
             taxaCrescimentoAjustada: 0, // TODO: buscar da view vw_taxa_crescimento_professor
             taxaEvasao: totalAlunos > 0 ? (evasoesMes / totalAlunos) * 100 : 0,
             carteiraAlunos: totalAlunos
-          });
+          }, healthWeights);
 
           // Determinar status baseado no Health Score (V2)
           // Saudável (≥70) → excelente | Atenção (50-69) → atencao | Crítico (<50) → critico
@@ -944,6 +946,7 @@ export function TabPerformanceProfessores({ unidadeAtual }: Props) {
           setModalDetalhes({ open: false, professor: null });
           setModalAcao({ open: true, professorId: profId });
         }}
+        healthWeights={healthWeights}
       />
 
       <ModalNovaMeta

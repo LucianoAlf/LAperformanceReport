@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ModalCarteiraProfessor } from './ModalCarteiraProfessor';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { calcularHealthScore } from '@/hooks/useHealthScore';
+import { DEFAULT_HEALTH_WEIGHTS } from './HealthScoreConfig';
 
 // Interface para carteira do professor
 interface CarteiraProfessor {
@@ -51,12 +52,13 @@ interface AlunoCarteira {
 
 interface Props {
   unidadeAtual: UnidadeId;
+  healthWeights?: typeof DEFAULT_HEALTH_WEIGHTS;
 }
 
 type OrdenacaoTipo = 'alunos' | 'mrr' | 'ticket' | 'media_turma';
 type OrdenacaoDirecao = 'asc' | 'desc';
 
-export function TabCarteiraProfessores({ unidadeAtual }: Props) {
+export function TabCarteiraProfessores({ unidadeAtual, healthWeights }: Props) {
   const [carteiras, setCarteiras] = useState<CarteiraProfessor[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtroBusca, setFiltroBusca] = useState('');
@@ -233,7 +235,7 @@ export function TabCarteiraProfessores({ unidadeAtual }: Props) {
           taxaCrescimentoAjustada: 0,
           taxaEvasao: totalAlunos > 0 ? (evasoesMes / totalAlunos) * 100 : 0,
           carteiraAlunos: totalAlunos
-        });
+        }, healthWeights);
 
         return {
           id: prof.id,

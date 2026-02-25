@@ -34,6 +34,7 @@ import { TabCarteiraProfessores } from './TabCarteiraProfessores';
 import { Tab360Professores } from './Tab360Professores';
 import { HealthScoreConfig } from './HealthScoreConfig';
 import { FatorDemandaCursos } from './FatorDemandaCursos';
+import { useHealthScoreConfig } from '@/hooks/useHealthScoreConfig';
 import type { 
   Professor, Unidade, Curso, KPIsProfessores, 
   FiltrosProfessores, ProfessorFormData
@@ -62,6 +63,7 @@ export function ProfessoresPage() {
   const context = useOutletContext<{ filtroAtivo: boolean; unidadeSelecionada: UnidadeId }>();
   const unidadeAtual = context?.unidadeSelecionada || 'todos';
   const toast = useToast();
+  const { weights: healthWeights, saveWeights } = useHealthScoreConfig(unidadeAtual);
 
   // Estado da aba ativa (com persistência no localStorage)
   const [abaAtiva, setAbaAtiva] = useState<AbaAtiva>(() => {
@@ -612,12 +614,12 @@ export function ProfessoresPage() {
 
       {/* Conteúdo da aba Performance */}
       {abaAtiva === 'performance' && (
-        <TabPerformanceProfessores unidadeAtual={unidadeAtual} />
+        <TabPerformanceProfessores unidadeAtual={unidadeAtual} healthWeights={healthWeights} />
       )}
 
       {/* Conteúdo da aba Carteira */}
       {abaAtiva === 'carteira' && (
-        <TabCarteiraProfessores unidadeAtual={unidadeAtual} />
+        <TabCarteiraProfessores unidadeAtual={unidadeAtual} healthWeights={healthWeights} />
       )}
 
       {/* Conteúdo da aba Agenda */}
@@ -645,10 +647,15 @@ export function ProfessoresPage() {
             </div>
           </div>
           
-          <HealthScoreConfig 
-            onSave={(weights) => {
-              console.log('Pesos salvos:', weights);
-              toast.success('Configuração salva!', 'Os pesos do Health Score foram atualizados');
+          <HealthScoreConfig
+            weights={healthWeights}
+            onSave={async (weights) => {
+              const ok = await saveWeights(weights);
+              if (ok) {
+                toast.success('Configuração salva!', 'Os pesos do Health Score foram atualizados');
+              } else {
+                toast.error('Erro ao salvar', 'Não foi possível salvar a configuração');
+              }
             }}
           />
 
