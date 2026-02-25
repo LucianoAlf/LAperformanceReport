@@ -421,7 +421,7 @@ export function ModalFichaAluno({
         data_nascimento: dadosCompletos?.data_nascimento,
         status: 'ativo',
         tipo_aluno: formData.tipo_aluno,
-        tipo_matricula_id: formData.tipo_matricula_id,
+        tipo_matricula_id: 2, // Segundo curso sempre usa tipo "Segundo Curso"
         valor_parcela: segundoCursoData.valor_parcela !== null ? segundoCursoData.valor_parcela : formData.valor_parcela,
         forma_pagamento_id: formData.forma_pagamento_id,
         dia_vencimento: formData.dia_vencimento,

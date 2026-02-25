@@ -614,7 +614,13 @@ export function AlunosPage() {
       resultado = resultado.filter(a => a.status === filtros.status);
     }
     if (filtros.tipo_matricula_id) {
-      resultado = resultado.filter(a => a.tipo_matricula_id === parseInt(filtros.tipo_matricula_id));
+      const tipoId = parseInt(filtros.tipo_matricula_id);
+      if (tipoId === 2) {
+        // Segundo curso: verificar tipo_matricula_id nos registros agrupados em outros_cursos
+        resultado = resultado.filter(a => a.outros_cursos?.some(oc => oc.tipo_matricula_id === 2));
+      } else {
+        resultado = resultado.filter(a => a.tipo_matricula_id === tipoId);
+      }
     }
     if (filtros.classificacao) {
       resultado = resultado.filter(a => a.classificacao === filtros.classificacao);
