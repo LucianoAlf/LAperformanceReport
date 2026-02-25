@@ -163,12 +163,13 @@ export function useKPIsRetencao(
       const startDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`;
       const endDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-31`;
 
-      // Buscar evasões - query simplificada
+      // Buscar evasões de movimentacoes_admin
       let evasoesQuery = supabase
-        .from('evasoes_v2')
+        .from('movimentacoes_admin')
         .select('*')
-        .gte('data_evasao', startDate)
-        .lte('data_evasao', endDate);
+        .in('tipo', ['evasao', 'nao_renovacao', 'aviso_previo'])
+        .gte('data', startDate)
+        .lte('data', endDate);
 
       if (unidadeId !== 'todos') {
         evasoesQuery = evasoesQuery.eq('unidade_id', unidadeId);

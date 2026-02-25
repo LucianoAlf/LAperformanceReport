@@ -46,6 +46,7 @@ serve(async (req) => {
         aluno_id,
         unidade_id,
         aluno_nome,
+        telefone_snapshot,
         data,
         motivo_saida_id,
         tipo,
@@ -64,28 +65,13 @@ serve(async (req) => {
       );
     }
 
-    // Buscar evasao_v2 correspondente para pegar telefone_snapshot
-    let evasaoV2 = null;
-    try {
-      const result = await supabase
-        .from('evasoes_v2')
-        .select('id, telefone_snapshot')
-        .eq('aluno_id', movimentacao.aluno_id)
-        .eq('unidade_id', movimentacao.unidade_id)
-        .eq('data_evasao', movimentacao.data)
-        .maybeSingle();
-      evasaoV2 = result.data;
-    } catch (e) {
-      console.log('evasaoV2 não encontrada, usando fallback');
-    }
-
-    // Criar objeto evasao compatível com o resto do código
+    // Criar objeto evasao a partir de movimentacoes_admin (fonte única)
     const evasao = {
-      id: evasaoV2?.id || movimentacao.id,
+      id: movimentacao.id,
       aluno_id: movimentacao.aluno_id,
       unidade_id: movimentacao.unidade_id,
       aluno_nome: movimentacao.aluno_nome,
-      telefone_snapshot: evasaoV2?.telefone_snapshot,
+      telefone_snapshot: movimentacao.telefone_snapshot,
       data_evasao: movimentacao.data,
       motivo_saida_id: movimentacao.motivo_saida_id,
       professor_id: movimentacao.professor_id,
@@ -185,9 +171,8 @@ serve(async (req) => {
       );
     }
 
-    // Criar ou atualizar registro de pesquisa
-    // IMPORTANTE: evasao_id deve ser o ID de evasoes_v2, não de movimentacoes_admin
-    const evasaoIdParaPesquisa = evasaoV2?.id || evasao_id;
+    // Criar ou atualizar registro de pesquisa (evasao_id = movimentacoes_admin.id)
+    const evasaoIdParaPesquisa = evasao_id;
     
     const { data: pesquisa, error: pesquisaError } = await supabase
       .from('pesquisa_evasao')

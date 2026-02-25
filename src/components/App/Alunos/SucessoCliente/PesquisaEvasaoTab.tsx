@@ -236,13 +236,11 @@ export function PesquisaEvasaoTab({ unidadeAtual }: Props) {
         return;
       }
 
-      // Atualizar evasoes_v2 correspondente
+      // Atualizar telefone_snapshot em movimentacoes_admin
       const { error: evasaoError } = await supabase
-        .from('evasoes_v2')
+        .from('movimentacoes_admin')
         .update({ telefone_snapshot: telefone, updated_at: new Date().toISOString() })
-        .eq('aluno_id', mov.aluno_id)
-        .eq('unidade_id', mov.unidade_id)
-        .eq('data_evasao', mov.data);
+        .eq('id', movimentacaoId);
 
       // Também atualizar na tabela alunos (whatsapp)
       if (mov.aluno_id) {

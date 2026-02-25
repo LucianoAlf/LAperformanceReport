@@ -151,10 +151,11 @@ export function useMetas(
 
       // Evasões
       let evasoesQuery = supabase
-        .from('evasoes_v2')
+        .from('movimentacoes_admin')
         .select('*', { count: 'exact', head: true })
-        .gte('data_evasao', startDate)
-        .lte('data_evasao', endDate);
+        .in('tipo', ['evasao', 'nao_renovacao', 'aviso_previo'])
+        .gte('data', startDate)
+        .lte('data', endDate);
 
       if (unidadeId !== 'todos') {
         evasoesQuery = evasoesQuery.eq('unidade_id', unidadeId);

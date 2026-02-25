@@ -136,11 +136,12 @@ export function SnapshotDiario() {
 
       // Evasões do mês
       const { data: evasoesData } = await sb
-        .from('evasoes_v2')
-        .select('tipo_saida_id')
+        .from('movimentacoes_admin')
+        .select('tipo')
+        .in('tipo', ['evasao', 'nao_renovacao', 'aviso_previo'])
         .eq('unidade_id', selectedUnidade)
-        .gte('data_evasao', inicioMes)
-        .lte('data_evasao', fimMes);
+        .gte('data', inicioMes)
+        .lte('data', fimMes);
 
       // Renovações do mês
       const { data: renovacoesData } = await sb
@@ -173,7 +174,7 @@ export function SnapshotDiario() {
 
       if (evasoesData) {
         evasoesData.forEach((e: any) => {
-          if (e.tipo_saida_id === 3) resumo.avisos_previos += 1;
+          if (e.tipo === 'aviso_previo') resumo.avisos_previos += 1;
           else resumo.evasoes += 1;
         });
       }

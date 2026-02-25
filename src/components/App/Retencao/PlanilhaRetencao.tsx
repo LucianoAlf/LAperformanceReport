@@ -34,7 +34,7 @@ interface RetencaoRow {
   isNew?: boolean;
   isDirty?: boolean;
   expanded?: boolean;
-  tabela?: 'evasoes_v2' | 'renovacoes';
+  tabela?: 'movimentacoes_admin' | 'renovacoes';
 }
 
 interface Option {
@@ -98,13 +98,14 @@ export function PlanilhaRetencao() {
 
       // Buscar evasões
       let evasoesQuery = sb
-        .from('evasoes_v2')
+        .from('movimentacoes_admin')
         .select(`
-          id, unidade_id, data_evasao, aluno_id, professor_id, valor_parcela,
-          tipo_saida_id, motivo_saida_id, situacao_pagamento, data_prevista_saida, observacoes,
+          id, unidade_id, data, aluno_id, aluno_nome, professor_id, valor_parcela_evasao, valor_parcela_anterior,
+          tipo, tipo_evasao, motivo_saida_id, situacao_pagamento, data_prevista_saida, observacoes,
           alunos(nome)
         `)
-        .order('data_evasao', { ascending: false });
+        .in('tipo', ['evasao', 'nao_renovacao', 'aviso_previo'])
+        .order('data', { ascending: false });
 
       if (usuario?.perfil !== 'admin' && usuario?.unidade_id) {
         evasoesQuery = evasoesQuery.eq('unidade_id', usuario.unidade_id);
@@ -131,19 +132,16 @@ export function PlanilhaRetencao() {
       // Processar evasões
       if (evasoesRes.data) {
         evasoesRes.data.forEach((e: any) => {
-          let tipo: RetencaoRow['tipo'] = 'evasao';
-          if (e.tipo_saida_id === 3) tipo = 'aviso_previo';
-
           allRows.push({
             id: e.id,
-            tipo,
+            tipo: e.tipo,
             unidade_id: e.unidade_id,
-            data: e.data_evasao,
+            data: e.data,
             aluno_id: e.aluno_id,
-            aluno_nome: e.alunos?.nome,
+            aluno_nome: e.aluno_nome || e.alunos?.nome,
             professor_id: e.professor_id,
-            valor_parcela: e.valor_parcela,
-            tipo_saida_id: e.tipo_saida_id,
+            valor_parcela: e.valor_parcela_evasao || e.valor_parcela_anterior,
+            tipo_saida_id: e.tipo === 'evasao' ? 1 : e.tipo === 'nao_renovacao' ? 2 : 3,
             motivo_saida_id: e.motivo_saida_id,
             situacao_pagamento: e.situacao_pagamento,
             data_prevista_saida: e.data_prevista_saida,
@@ -151,7 +149,7 @@ export function PlanilhaRetencao() {
             isNew: false,
             isDirty: false,
             expanded: false,
-            tabela: 'evasoes_v2',
+            tabela: 'movimentacoes_admin',
           });
         });
       }
@@ -217,7 +215,7 @@ export function PlanilhaRetencao() {
       isNew: true,
       isDirty: true,
       expanded: false,
-      tabela: 'evasoes_v2',
+      tabela: 'movimentacoes_admin',
     };
 
     setRows(prev => [newRow, ...prev]);
@@ -237,15 +235,15 @@ export function PlanilhaRetencao() {
       if (field === 'tipo') {
         const tipo = value as string;
         if (tipo === 'evasao_interrompido') {
-          newRows[index].tabela = 'evasoes_v2';
+          newRows[index].tabela = 'movimentacoes_admin';
           newRows[index].tipo_saida_id = 1;
           newRows[index].tipo = 'evasao';
         } else if (tipo === 'evasao_nao_renovou') {
-          newRows[index].tabela = 'evasoes_v2';
+          newRows[index].tabela = 'movimentacoes_admin';
           newRows[index].tipo_saida_id = 2;
           newRows[index].tipo = 'evasao';
         } else if (tipo === 'aviso_previo') {
-          newRows[index].tabela = 'evasoes_v2';
+          newRows[index].tabela = 'movimentacoes_admin';
           newRows[index].tipo_saida_id = 3;
           newRows[index].tipo = 'aviso_previo';
           newRows[index].expanded = true;
@@ -304,14 +302,16 @@ export function PlanilhaRetencao() {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const sb = supabase as any;
 
-      if (row.tabela === 'evasoes_v2') {
+      if (row.tabela === 'movimentacoes_admin') {
         const dataToSave = {
           unidade_id: row.unidade_id,
-          data_evasao: row.data,
+          data: row.data,
           aluno_id: row.aluno_id,
+          aluno_nome: row.aluno_nome,
           professor_id: row.professor_id,
-          valor_parcela: row.valor_parcela,
-          tipo_saida_id: row.tipo_saida_id,
+          valor_parcela_evasao: row.valor_parcela,
+          tipo: row.tipo,
+          tipo_evasao: row.tipo === 'evasao' ? 'interrompido' : row.tipo === 'nao_renovacao' ? 'nao_renovou' : null,
           motivo_saida_id: row.motivo_saida_id,
           situacao_pagamento: row.situacao_pagamento,
           data_prevista_saida: row.data_prevista_saida,
@@ -321,7 +321,7 @@ export function PlanilhaRetencao() {
 
         if (row.isNew) {
           const { data, error } = await sb
-            .from('evasoes_v2')
+            .from('movimentacoes_admin')
             .insert({ ...dataToSave, created_by: usuario?.id })
             .select()
             .single();
@@ -335,7 +335,7 @@ export function PlanilhaRetencao() {
           });
         } else {
           const { error } = await sb
-            .from('evasoes_v2')
+            .from('movimentacoes_admin')
             .update(dataToSave)
             .eq('id', row.id);
 
@@ -559,7 +559,7 @@ export function PlanilhaRetencao() {
                           value={row.motivo_saida_id || row.motivo_nao_renovacao_id}
                           options={motivosSaida}
                           onChange={(v) => {
-                            if (row.tabela === 'evasoes_v2') {
+                            if (row.tabela === 'movimentacoes_admin') {
                               updateCell(index, 'motivo_saida_id', v);
                             } else {
                               updateCell(index, 'motivo_nao_renovacao_id', v);

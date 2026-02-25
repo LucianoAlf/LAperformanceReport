@@ -280,35 +280,19 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
           evasoesQuery = evasoesQuery.eq('unidade', nomeUnidade);
         }
 
-        // Buscar MRR Perdido do período de DUAS fontes:
-        // 1. Tabela evasoes_v2 (fonte unificada)
-        // 2. Tabela movimentacoes_admin (lançamentos das Farmers no dia-a-dia)
+        // Buscar MRR Perdido do período de movimentacoes_admin (fonte única)
         const startDate = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
-        // Calcular último dia do mês corretamente
         const ultimoDiaMes = new Date(ano, mesFinal, 0).getDate();
         const endDate = `${ano}-${String(mesFinal).padStart(2, '0')}-${String(ultimoDiaMes).padStart(2, '0')}`;
-        
-        // Query 1: Tabela evasoes_v2 (fonte unificada)
-        // CORREÇÃO: Excluir Aviso Prévio (tipo_saida_id = 3) - só contar Cancelamento (1) e Não Renovação (2)
-        let evasoesMRRQuery = supabase
-          .from('evasoes_v2')
-          .select('professor_id, unidade_id, valor_parcela')
-          .in('tipo_saida_id', [1, 2]) // Só Cancelamento e Não Renovação
-          .gte('data_evasao', startDate)
-          .lte('data_evasao', endDate);
-        
-        if (unidade !== 'todos') {
-          evasoesMRRQuery = evasoesMRRQuery.eq('unidade_id', unidade);
-        }
-        
-        // Query 2: Tabela movimentacoes_admin (lançamentos das Farmers)
+
+        // Query: movimentacoes_admin - só Cancelamento e Não Renovação
         let movimentacoesQuery = supabase
           .from('movimentacoes_admin')
-          .select('professor_id, unidade_id, valor_parcela_evasao, tipo')
+          .select('professor_id, unidade_id, valor_parcela_evasao, valor_parcela_anterior, tipo')
           .in('tipo', ['evasao', 'nao_renovacao'])
           .gte('data', startDate)
           .lte('data', endDate);
-        
+
         if (unidade !== 'todos') {
           movimentacoesQuery = movimentacoesQuery.eq('unidade_id', unidade);
         }
@@ -345,13 +329,12 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
           alunosTotalQuery = alunosTotalQuery.eq('unidade_id', unidade);
         }
 
-        const [professoresResult, totaisResult, performanceResult, qualidadeResult, evasoesResult, evasoesMRRResult, movimentacoesResult, turmasImplicitasResult, professoresReaisResult, profUnidadesResult, alunosTotalResult] = await Promise.all([
-          query, 
-          totaisQuery, 
+        const [professoresResult, totaisResult, performanceResult, qualidadeResult, evasoesResult, movimentacoesResult, turmasImplicitasResult, professoresReaisResult, profUnidadesResult, alunosTotalResult] = await Promise.all([
+          query,
+          totaisQuery,
           performanceQuery,
           qualidadeQuery,
           evasoesQuery,
-          evasoesMRRQuery,
           movimentacoesQuery,
           turmasImplicitasQuery,
           professoresReaisQuery,
@@ -435,33 +418,15 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
           evasoesMap.set(key, e);
         });
 
-        // Processar MRR Perdido de DUAS fontes:
-        // 1. Tabela evasoes_v2 (fonte unificada)
-        // 2. Tabela movimentacoes_admin (lançamentos das Farmers)
-        const evasoesMRRData = evasoesMRRResult.data || [];
+        // Processar MRR Perdido de movimentacoes_admin (fonte única)
         const movimentacoesData = movimentacoesResult.data || [];
         const mrrPerdidoPorProfessor = new Map<string, number>();
-        let mrrPerdidoTotalDireto = 0; // Soma direta de todas as evasões
-        
-        // Fonte 1: Tabela evasoes_v2 (fonte unificada)
-        evasoesMRRData.forEach((e: any) => {
-          const parcela = Number(e.valor_parcela) || 0;
-          mrrPerdidoTotalDireto += parcela;
-          
-          if (e.professor_id) {
-            const profKey = `ID_${e.professor_id}`;
-            const mrrAtual = mrrPerdidoPorProfessor.get(profKey) || 0;
-            mrrPerdidoPorProfessor.set(profKey, mrrAtual + parcela);
-          }
-        });
-        
-        // Fonte 2: Tabela movimentacoes_admin (lançamentos das Farmers)
+        let mrrPerdidoTotalDireto = 0;
+
         movimentacoesData.forEach((m: any) => {
-          const parcela = Number(m.valor_parcela_evasao) || 0;
+          const parcela = Number(m.valor_parcela_evasao || m.valor_parcela_anterior) || 0;
           mrrPerdidoTotalDireto += parcela;
-          
-          // Para movimentacoes_admin, temos professor_id, não nome
-          // O MRR por professor será atribuído via ID depois
+
           if (m.professor_id) {
             const profKey = `ID_${m.professor_id}`;
             const mrrAtual = mrrPerdidoPorProfessor.get(profKey) || 0;

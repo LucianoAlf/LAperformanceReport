@@ -174,16 +174,17 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           const { data: historicoData, error: historicoError } = await historicoQuery;
           if (historicoError) throw historicoError;
 
-          // Buscar dados de evasões detalhados da tabela evasoes_v2 (fonte unificada)
+          // Buscar dados de evasões detalhados de movimentacoes_admin
           const startDate = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
           const ultimoDia = new Date(ano, mesFinal, 0).getDate();
           const endDate = `${ano}-${String(mesFinal).padStart(2, '0')}-${ultimoDia}`;
 
           let evasoesQuery = supabase
-            .from('evasoes_v2')
-            .select('tipo_saida_id, valor_parcela, data_evasao, unidade_id')
-            .gte('data_evasao', startDate)
-            .lte('data_evasao', endDate);
+            .from('movimentacoes_admin')
+            .select('tipo, valor_parcela_evasao, valor_parcela_anterior, data, unidade_id')
+            .in('tipo', ['evasao', 'nao_renovacao', 'aviso_previo'])
+            .gte('data', startDate)
+            .lte('data', endDate);
 
           if (unidade !== 'todos') {
             evasoesQuery = evasoesQuery.eq('unidade_id', unidade);
@@ -191,10 +192,10 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
 
           const { data: evasoesHistorico } = await evasoesQuery;
 
-          // Consolidar dados de evasões por tipo (tipo_saida_id: 1=Interrompido, 2=Aviso Prévio, 3=Transferência)
-          const cancelamentos = evasoesHistorico?.filter(e => e.tipo_saida_id === 1).length || 0;
-          const naoRenovacoes = evasoesHistorico?.filter(e => e.tipo_saida_id === 2).length || 0;
-          const mrrPerdidoTotal = evasoesHistorico?.reduce((acc, e) => acc + (Number(e.valor_parcela) || 0), 0) || 0;
+          // Consolidar dados de evasões por tipo
+          const cancelamentos = evasoesHistorico?.filter(e => e.tipo === 'evasao').length || 0;
+          const naoRenovacoes = evasoesHistorico?.filter(e => e.tipo === 'nao_renovacao').length || 0;
+          const mrrPerdidoTotal = evasoesHistorico?.reduce((acc, e) => acc + (Number(e.valor_parcela_evasao || e.valor_parcela_anterior) || 0), 0) || 0;
 
           // Transformar dados históricos para o formato esperado
           if (historicoData && historicoData.length > 0) {
@@ -559,19 +560,19 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           });
 
           // Buscar evasões com JOIN para curso (via aluno) e professor
-          // REGRA DE NEGÓCIO: Evasões = Cancelamentos (tipo 1) + Não Renovações (tipo 2)
-          // Aviso Prévio (tipo 3) NÃO conta como evasão (aluno ainda está ativo)
+          // REGRA DE NEGÓCIO: Evasões = Cancelamentos + Não Renovações
+          // Aviso Prévio NÃO conta como evasão (aluno ainda está ativo)
           let evasoesQuery = supabase
-            .from('evasoes_v2')
+            .from('movimentacoes_admin')
             .select(`
-              id, aluno_id, professor_id, motivo_saida_id, tipo_saida_id, unidade_id,
+              id, aluno_id, professor_id, motivo_saida_id, tipo, unidade_id,
               alunos!left(curso_id, cursos!left(nome)),
               professores!left(nome),
               motivos_saida!left(nome)
             `)
-            .gte('data_evasao', startDate)
-            .lte('data_evasao', endDate)
-            .in('tipo_saida_id', [1, 2]); // Apenas cancelamentos e não renovações
+            .gte('data', startDate)
+            .lte('data', endDate)
+            .in('tipo', ['evasao', 'nao_renovacao']); // Apenas cancelamentos e não renovações
 
           if (unidade !== 'todos') {
             evasoesQuery = evasoesQuery.eq('unidade_id', unidade);

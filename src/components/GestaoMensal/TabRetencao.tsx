@@ -70,10 +70,11 @@ export function TabRetencao({ ano, mes, unidade }: TabRetencaoProps) {
 
         // Buscar evasões do mês - query simplificada
         let evasoesQuery = supabase
-          .from('evasoes_v2')
-          .select('id, data_evasao, aluno_id, motivo_saida_id, tipo_saida_id, valor_parcela, professor_id, unidade_id')
-          .gte('data_evasao', startDate)
-          .lte('data_evasao', endDate);
+          .from('movimentacoes_admin')
+          .select('id, data, aluno_id, motivo_saida_id, tipo, tipo_evasao, valor_parcela_evasao, valor_parcela_anterior, professor_id, unidade_id')
+          .in('tipo', ['evasao', 'nao_renovacao', 'aviso_previo'])
+          .gte('data', startDate)
+          .lte('data', endDate);
 
         // Buscar renovações do mês
         let renovacoesQuery = supabase
