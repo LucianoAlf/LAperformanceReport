@@ -241,7 +241,13 @@ export const HealthScoreConfig: React.FC<HealthScoreConfigProps> = ({
 
           {/* Botões de Ação */}
           {!readOnly && (
-            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-700/50">
+            <div className="flex items-center justify-between pt-4 border-t border-slate-700/50">
+              {totalWeight !== 100 && hasChanges ? (
+                <span className="text-xs text-rose-400 font-medium">
+                  O total dos pesos precisa ser exatamente 100% (atual: {totalWeight}%)
+                </span>
+              ) : <span />}
+              <div className="flex items-center gap-3">
               <Button
                 variant="outline"
                 size="sm"
@@ -262,6 +268,7 @@ export const HealthScoreConfig: React.FC<HealthScoreConfigProps> = ({
                   Salvar Configuração
                 </Button>
               )}
+              </div>
             </div>
           )}
         </div>
