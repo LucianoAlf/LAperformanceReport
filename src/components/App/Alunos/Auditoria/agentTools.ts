@@ -71,7 +71,7 @@ export const AGENT_TOOLS_SCHEMA = [
         type: 'function' as const,
         function: {
             name: 'get_resumo_unidade',
-            description: 'Retorna um resumo geral da unidade: total de alunos ativos, total de alunos por status, soma do valor das parcelas (faturamento bruto estimado), e ticket médio calculado em tempo real a partir da tabela de alunos.',
+            description: 'Retorna um resumo de auditoria da unidade em tempo real: total de alunos ativos, total de alunos por status, soma das parcelas, e ticket médio "cru" (raw) calculado. Atenção: este valor de ticket e faturamento difere propositalmente do Dashboard comercial, pois reflete o retrato atual de contratos cadastrados. Use para auditar e reportar a verdadeira média de mensalidades ativas (excluindo bolsas totais 100%).',
             parameters: {
                 type: 'object',
                 properties: {
