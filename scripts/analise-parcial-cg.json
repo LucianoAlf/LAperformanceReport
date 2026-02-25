@@ -1,0 +1,33 @@
+{
+  "analise": "Alunos faltantes identificados - Campo Grande",
+  "data": "2026-02-18",
+  "resumo": {
+    "total_csv": 100,
+    "total_base": 477,
+    "faltantes_detectados": 427,
+    "nota": "Numero alto devido a dados incompletos na comparacao"
+  },
+  "segundos_cursos_possiveis": [
+    {
+      "aluno": "Alexandre Ayres Filho",
+      "cursos_csv": ["Teclado/Piano", "Power Kids"],
+      "acao": "Verificar se Power Kids existe na base"
+    },
+    {
+      "aluno": "Antonia Scudio Guidi da Rocha",
+      "cursos_csv": ["Guitarra", "Power Kids"],
+      "acao": "Verificar segundo curso"
+    },
+    {
+      "aluno": "Anderson Cherem de Mello",
+      "cursos_csv": ["Canto", "Minha Banda Para Sempre"],
+      "acao": "Verificar segundo curso"
+    },
+    {
+      "aluno": "Barbara Ribeiro Alves",
+      "cursos_csv": ["Guitarra", "Minha Banda Para Sempre"],
+      "acao": "Verificar segundo curso"
+    }
+  ],
+  "proximo_passo": "Gerar analise completa com todos os dados da base para identificar alunos realmente faltantes"
+}

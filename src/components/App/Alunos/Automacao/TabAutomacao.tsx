@@ -25,6 +25,7 @@ const acaoStyles: Record<string, { bg: string; text: string; label: string }> = 
   status_ativo: { bg: 'bg-emerald-500/20', text: 'text-emerald-400', label: 'Renovado' },
   status_trancado: { bg: 'bg-amber-500/20', text: 'text-amber-400', label: 'Trancado' },
   status_evadido: { bg: 'bg-rose-500/20', text: 'text-rose-400', label: 'Evadido' },
+  segundo_curso: { bg: 'bg-violet-500/20', text: 'text-violet-400', label: '2º Curso' },
 };
 
 const eventoLabels: Record<string, string> = {

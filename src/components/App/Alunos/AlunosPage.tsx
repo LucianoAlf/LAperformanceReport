@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { format } from 'date-fns';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import { ptBR } from 'date-fns/locale';
-import { 
+import {
   Users, DollarSign, BarChart3, Clock, Layers, AlertTriangle, BookOpen,
   Plus, Search, RotateCcw, Edit2, Trash2, Check, X, History,
   Calendar, Upload, Heart, Zap
@@ -149,7 +149,7 @@ export function AlunosPage() {
   const context = useOutletContext<{ filtroAtivo: boolean; unidadeSelecionada: UnidadeId }>();
   const unidadeAtual = context?.unidadeSelecionada || 'todos';
   const toast = useToast();
-  
+
   // Estados principais
   const [tabAtiva, setTabAtiva] = useState<TabAtiva>('lista');
   const [alunos, setAlunos] = useState<Aluno[]>([]);
@@ -165,7 +165,7 @@ export function AlunosPage() {
     totalTurmas: 0,
     turmasSozinhos: 0
   });
-  
+
   // Estados de filtros
   const [filtros, setFiltros] = useState<Filtros>({
     nome: '',
@@ -180,14 +180,14 @@ export function AlunosPage() {
     tempo_permanencia: '',
     status_pagamento: ''
   });
-  
+
   // Estados de opções para selects
-  const [professores, setProfessores] = useState<{id: number, nome: string}[]>([]);
-  const [cursos, setCursos] = useState<{id: number, nome: string}[]>([]);
-  const [tiposMatricula, setTiposMatricula] = useState<{id: number, nome: string}[]>([]);
-  const [salas, setSalas] = useState<{id: number, nome: string, capacidade_maxima: number}[]>([]);
-  const [horarios, setHorarios] = useState<{id: number, nome: string, hora_inicio: string}[]>([]);
-  
+  const [professores, setProfessores] = useState<{ id: number, nome: string }[]>([]);
+  const [cursos, setCursos] = useState<{ id: number, nome: string }[]>([]);
+  const [tiposMatricula, setTiposMatricula] = useState<{ id: number, nome: string }[]>([]);
+  const [salas, setSalas] = useState<{ id: number, nome: string, capacidade_maxima: number }[]>([]);
+  const [horarios, setHorarios] = useState<{ id: number, nome: string, hora_inicio: string }[]>([]);
+
   // Estados de UI
   const [loading, setLoading] = useState(true);
   const [modalNovoAluno, setModalNovoAluno] = useState(false);
@@ -197,12 +197,12 @@ export function AlunosPage() {
     const hoje = new Date();
     const diaAtual = hoje.getDate();
     const mostrarAlerta = diaAtual >= 15;
-    
-    const alunosSemLancamento = alunos.filter(a => 
-      a.status === 'Ativo' && 
+
+    const alunosSemLancamento = alunos.filter(a =>
+      a.status === 'Ativo' &&
       (!a.status_pagamento || a.status_pagamento === '-' || a.status_pagamento === null)
     );
-    
+
     return {
       mostrar: mostrarAlerta && alunosSemLancamento.length > 0,
       quantidade: alunosSemLancamento.length,
@@ -212,9 +212,9 @@ export function AlunosPage() {
   const [modalNovaTurma, setModalNovaTurma] = useState(false);
   const [turmaParaEditar, setTurmaParaEditar] = useState<Turma | null>(null);
   const [turmaParaAdicionarAluno, setTurmaParaAdicionarAluno] = useState<Turma | null>(null);
-  const [alertaTurma, setAlertaTurma] = useState<{show: boolean, aluno?: Aluno, turmaExistente?: Turma} | null>(null);
+  const [alertaTurma, setAlertaTurma] = useState<{ show: boolean, aluno?: Aluno, turmaExistente?: Turma } | null>(null);
   const [turmaDetalheAbrir, setTurmaDetalheAbrir] = useState<Turma | null>(null);
-  
+
   // Carregar dados iniciais
   useEffect(() => {
     carregarDados();
@@ -317,7 +317,7 @@ export function AlunosPage() {
       const alunosFormatados = alunosRaw.map((a: any) => {
         const turmaKey = `${a.unidade_id}-${a.professor_atual_id}-${a.dia_aula}-${a.horario_aula}`;
         const turmaInfo = turmasMap.get(turmaKey) as any;
-        
+
         return {
           ...a,
           professor_nome: a.professores?.nome || '',
@@ -389,22 +389,22 @@ export function AlunosPage() {
 
       const totalAtivos = naoSegundoCurso.length;
       const totalMatriculasAtivas = ativosETrancados.length; // inclui segundo curso + banda
-      
+
       // Separar banda, coral e segundo curso
       const cursosBanda = ['minha banda para sempre', 'power kids'];
       const cursosCoral = ['canto coral'];
-      
+
       const matriculasBanda = ativosETrancados.filter((a: any) =>
         cursosBanda.some(nome => a.cursos?.nome?.toLowerCase().includes(nome))
       ).length;
-      
+
       const matriculasCoral = ativosETrancados.filter((a: any) =>
         cursosCoral.some(nome => a.cursos?.nome?.toLowerCase().includes(nome))
       ).length;
-      
+
       // Segundo curso = is_segundo_curso true, excluindo banda e coral
       const matriculasSegundoCurso = ativosETrancados.filter((a: any) =>
-        a.is_segundo_curso && 
+        a.is_segundo_curso &&
         !cursosBanda.some(nome => a.cursos?.nome?.toLowerCase().includes(nome)) &&
         !cursosCoral.some(nome => a.cursos?.nome?.toLowerCase().includes(nome))
       ).length;
@@ -497,11 +497,11 @@ export function AlunosPage() {
         professores!inner(nome), cursos(nome), salas(nome), unidades!inner(nome)
       `)
       .eq('ativo', true);
-    
+
     if (unidadeAtual && unidadeAtual !== 'todos') {
       queryExplicitas = queryExplicitas.eq('unidade_id', unidadeAtual);
     }
-    
+
     const { data: turmasExplicitasRaw } = await queryExplicitas;
 
     const resultado: Turma[] = [];
@@ -599,8 +599,8 @@ export function AlunosPage() {
     }
     if (filtros.curso_id) {
       const cursoIdFiltro = parseInt(filtros.curso_id);
-      resultado = resultado.filter(a => 
-        a.curso_id === cursoIdFiltro || 
+      resultado = resultado.filter(a =>
+        a.curso_id === cursoIdFiltro ||
         (a.cursos_ids && a.cursos_ids.includes(cursoIdFiltro))
       );
     }
@@ -629,13 +629,13 @@ export function AlunosPage() {
     // Filtro por tamanho da turma
     if (filtros.turma_size) {
       resultado = resultado.filter(a => {
-        const turma = turmas.find(t => 
+        const turma = turmas.find(t =>
           t.professor_id === a.professor_atual_id &&
           t.dia_semana === a.dia_aula &&
           t.horario_inicio === a.horario_aula
         );
         const totalNaTurma = turma?.total_alunos || 1;
-        
+
         if (filtros.turma_size === '1') return totalNaTurma === 1;
         if (filtros.turma_size === '2') return totalNaTurma === 2;
         if (filtros.turma_size === '3+') return totalNaTurma >= 3;
@@ -674,7 +674,7 @@ export function AlunosPage() {
   // Adicionar contagem de alunos na turma para cada aluno
   const alunosComTurma = useMemo(() => {
     return alunosFiltrados.map(aluno => {
-      const turma = turmas.find(t => 
+      const turma = turmas.find(t =>
         t.professor_id === aluno.professor_atual_id &&
         t.dia_semana === aluno.dia_aula &&
         t.horario_inicio === aluno.horario_aula
@@ -744,7 +744,7 @@ export function AlunosPage() {
 
   // Verificar se já existe aluno na turma ao salvar
   async function verificarTurmaAoSalvar(aluno: Aluno): Promise<boolean> {
-    const turmaExistente = turmas.find(t => 
+    const turmaExistente = turmas.find(t =>
       t.professor_id === aluno.professor_atual_id &&
       t.dia_semana === aluno.dia_aula &&
       t.horario_inicio === aluno.horario_aula
@@ -764,7 +764,7 @@ export function AlunosPage() {
   // Abrir modal de detalhes da turma
   function handleAbrirModalTurma(professor_id: number, dia: string, horario: string) {
     // Buscar a turma na lista de turmas já carregadas
-    const turmaEncontrada = turmas.find(t => 
+    const turmaEncontrada = turmas.find(t =>
       t.professor_id === professor_id &&
       t.dia_semana === dia &&
       t.horario_inicio === horario
@@ -781,7 +781,7 @@ export function AlunosPage() {
   // Componente Modal de Detalhes da Turma
   function ModalDetalhesTurmaGlobal() {
     const [modoEdicaoSala, setModoEdicaoSala] = useState(false);
-    const [salasDisponiveis, setSalasDisponiveis] = useState<{id: number, nome: string, capacidade_maxima: number}[]>([]);
+    const [salasDisponiveis, setSalasDisponiveis] = useState<{ id: number, nome: string, capacidade_maxima: number }[]>([]);
     const [salaIdSelecionada, setSalaIdSelecionada] = useState<number | null>(turmaDetalheAbrir?.sala_id || null);
     const [salvando, setSalvando] = useState(false);
     const [carregandoSalas, setCarregandoSalas] = useState(false);
@@ -794,7 +794,7 @@ export function AlunosPage() {
 
     async function carregarSalasModal() {
       if (!turmaDetalheAbrir?.unidade_id) return;
-      
+
       setCarregandoSalas(true);
       try {
         const { data, error } = await supabase
@@ -820,7 +820,7 @@ export function AlunosPage() {
       setSalvando(true);
       try {
         const salaSelecionada = salasDisponiveis.find(s => s.id === salaIdSelecionada);
-        
+
         // Usar turma_explicita_id da view se disponível, senão buscar por match
         let turmaExplicitaId = turmaDetalheAbrir.turma_explicita_id || null;
 
@@ -833,7 +833,7 @@ export function AlunosPage() {
             .eq('dia_semana', turmaDetalheAbrir.dia_semana)
             .eq('horario_inicio', turmaDetalheAbrir.horario_inicio)
             .maybeSingle();
-          
+
           turmaExplicitaId = turmaExistente?.id || null;
         }
 
@@ -925,7 +925,7 @@ export function AlunosPage() {
                   </button>
                 )}
               </div>
-              
+
               {!modoEdicaoSala ? (
                 <div className="text-slate-300">
                   {turmaDetalheAbrir.sala_nome || (
@@ -982,18 +982,17 @@ export function AlunosPage() {
 
             <div className="flex items-center justify-between mb-4">
               <span className="text-sm text-slate-400">Capacidade:</span>
-              <span className={`px-2 py-0.5 rounded text-xs ${
-                turmaDetalheAbrir.total_alunos === 1
-                  ? 'bg-red-500/30 text-red-400 animate-pulse'
-                  : turmaDetalheAbrir.total_alunos === 2
+              <span className={`px-2 py-0.5 rounded text-xs ${turmaDetalheAbrir.total_alunos === 1
+                ? 'bg-red-500/30 text-red-400 animate-pulse'
+                : turmaDetalheAbrir.total_alunos === 2
                   ? 'bg-yellow-500/20 text-yellow-400'
                   : 'bg-emerald-500/20 text-emerald-400'
-              }`}>
+                }`}>
                 {turmaDetalheAbrir.total_alunos === 1 && <AlertTriangle className="w-3 h-3 inline mr-1" />}
                 {turmaDetalheAbrir.total_alunos}/{turmaDetalheAbrir.capacidade_maxima || 4} {turmaDetalheAbrir.total_alunos === 1 ? 'aluno' : 'alunos'}
               </span>
             </div>
-            
+
             <h3 className="text-sm font-semibold text-slate-400 uppercase mb-3">Alunos na Turma</h3>
             <div className="space-y-2">
               {turmaDetalheAbrir.nomes_alunos && turmaDetalheAbrir.nomes_alunos.length > 0 ? (
@@ -1013,8 +1012,8 @@ export function AlunosPage() {
                 <p className="text-slate-500 text-center py-4">Nenhum aluno nesta turma</p>
               )}
             </div>
-            
-            <button 
+
+            <button
               onClick={() => {
                 handleAdicionarAlunoTurma(turmaDetalheAbrir);
                 setTurmaDetalheAbrir(null);
@@ -1114,7 +1113,7 @@ export function AlunosPage() {
           </div>
           <p className="text-3xl font-bold text-red-400">{kpis.turmasSozinhos}</p>
           <p className="text-xs text-red-300 mt-1">
-            {kpis.totalTurmas > 0 
+            {kpis.totalTurmas > 0
               ? `${Math.round((kpis.turmasSozinhos / kpis.totalTurmas) * 100)}% das turmas com 1 aluno`
               : 'turmas com 1 aluno'
             }
@@ -1138,79 +1137,79 @@ export function AlunosPage() {
       ) : (
         <section className="bg-slate-800/50 border border-slate-700/50 rounded-xl overflow-hidden">
           {tabAtiva === 'lista' && (
-          <TabelaAlunos
-            alunos={alunosComTurma}
-            todosAlunos={alunos}
-            filtros={filtros}
-            setFiltros={setFiltros}
-            limparFiltros={limparFiltros}
-            professores={professores}
-            cursos={cursos}
-            tiposMatricula={tiposMatricula}
-            salas={salas}
-            horarios={horarios}
-            totalTurmas={kpis.totalTurmas}
-            onNovoAluno={() => setModalNovoAluno(true)}
-            onRecarregar={carregarDados}
-            verificarTurmaAoSalvar={verificarTurmaAoSalvar}
-            onAbrirModalTurma={handleAbrirModalTurma}
-          />
-        )}
+            <TabelaAlunos
+              alunos={alunosComTurma}
+              todosAlunos={alunos}
+              filtros={filtros}
+              setFiltros={setFiltros}
+              limparFiltros={limparFiltros}
+              professores={professores}
+              cursos={cursos}
+              tiposMatricula={tiposMatricula}
+              salas={salas}
+              horarios={horarios}
+              totalTurmas={kpis.totalTurmas}
+              onNovoAluno={() => setModalNovoAluno(true)}
+              onRecarregar={carregarDados}
+              verificarTurmaAoSalvar={verificarTurmaAoSalvar}
+              onAbrirModalTurma={handleAbrirModalTurma}
+            />
+          )}
 
-        {tabAtiva === 'turmas' && (
-          <GestaoTurmas
-            turmas={turmas}
-            professores={professores}
-            salas={salas}
-            onRecarregar={carregarDados}
-            onEditarTurma={handleEditarTurma}
-            onExcluirTurma={handleExcluirTurma}
-            onAdicionarAlunoTurma={handleAdicionarAlunoTurma}
-            onNovaTurma={() => setModalNovaTurma(true)}
-          />
-        )}
+          {tabAtiva === 'turmas' && (
+            <GestaoTurmas
+              turmas={turmas}
+              professores={professores}
+              salas={salas}
+              onRecarregar={carregarDados}
+              onEditarTurma={handleEditarTurma}
+              onExcluirTurma={handleExcluirTurma}
+              onAdicionarAlunoTurma={handleAdicionarAlunoTurma}
+              onNovaTurma={() => setModalNovaTurma(true)}
+            />
+          )}
 
-        {tabAtiva === 'grade' && (
-          <GradeHoraria 
-            unidadeId={unidadeAtual === 'todos' ? undefined : unidadeAtual}
-            onEditarTurma={(turmaGrade) => {
-              // Converter TurmaGrade para Turma
-              const turma: Turma = {
-                id: turmaGrade.id,
-                unidade_id: turmaGrade.unidade_id,
-                unidade_nome: turmaGrade.unidade_nome,
-                professor_id: turmaGrade.professor_id,
-                professor_nome: turmaGrade.professor_nome,
-                curso_id: turmaGrade.curso_id || undefined,
-                curso_nome: turmaGrade.curso_nome,
-                dia_semana: turmaGrade.dia_semana,
-                horario_inicio: turmaGrade.horario_inicio,
-                sala_id: turmaGrade.sala_id || undefined,
-                sala_nome: turmaGrade.sala_nome,
-                capacidade_maxima: turmaGrade.capacidade_maxima,
-                total_alunos: turmaGrade.num_alunos,
-                nomes_alunos: [],
-                ids_alunos: turmaGrade.alunos || [],
-                tipo: 'explicita',
-              };
-              handleEditarTurma(turma);
-            }}
-          />
-        )}
+          {tabAtiva === 'grade' && (
+            <GradeHoraria
+              unidadeId={unidadeAtual === 'todos' ? undefined : unidadeAtual}
+              onEditarTurma={(turmaGrade) => {
+                // Converter TurmaGrade para Turma
+                const turma: Turma = {
+                  id: turmaGrade.id,
+                  unidade_id: turmaGrade.unidade_id,
+                  unidade_nome: turmaGrade.unidade_nome,
+                  professor_id: turmaGrade.professor_id,
+                  professor_nome: turmaGrade.professor_nome,
+                  curso_id: turmaGrade.curso_id || undefined,
+                  curso_nome: turmaGrade.curso_nome,
+                  dia_semana: turmaGrade.dia_semana,
+                  horario_inicio: turmaGrade.horario_inicio,
+                  sala_id: turmaGrade.sala_id || undefined,
+                  sala_nome: turmaGrade.sala_nome,
+                  capacidade_maxima: turmaGrade.capacidade_maxima,
+                  total_alunos: turmaGrade.num_alunos,
+                  nomes_alunos: [],
+                  ids_alunos: turmaGrade.alunos || [],
+                  tipo: 'explicita',
+                };
+                handleEditarTurma(turma);
+              }}
+            />
+          )}
 
-        {tabAtiva === 'distribuicao' && (
-          <DistribuicaoAlunos
-            alunos={alunos}
-            turmas={turmas}
-            professores={professores}
-            cursos={cursos}
-          />
-        )}
+          {tabAtiva === 'distribuicao' && (
+            <DistribuicaoAlunos
+              alunos={alunos}
+              turmas={turmas}
+              professores={professores}
+              cursos={cursos}
+            />
+          )}
 
-        {tabAtiva === 'importar' && (
-          <ImportarAlunos onRecarregar={carregarDados} />
-        )}
-      </section>
+          {tabAtiva === 'importar' && (
+            <ImportarAlunos onRecarregar={carregarDados} />
+          )}
+        </section>
       )}
 
       {/* Modal Novo Aluno */}

@@ -1,0 +1,3698 @@
+[
+  {
+    "id": 3,
+    "nome": "Adriana Christine da Silva",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-06-17"
+  },
+  {
+    "id": 4,
+    "nome": "Adriana Mesquita dos Santos Vilas Boas",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-10-02"
+  },
+  {
+    "id": 5,
+    "nome": "Adriana Vitor Pim",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-03-15"
+  },
+  {
+    "id": 6,
+    "nome": "Ágatha Da Silva De Souza",
+    "curso": "Piano",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-01-18"
+  },
+  {
+    "id": 7,
+    "nome": "Águedha Silva Furtado",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-09-06"
+  },
+  {
+    "id": 8,
+    "nome": "Ailla Goulart Caldeira",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-08-19"
+  },
+  {
+    "id": 1375,
+    "nome": "Alan Samico do Nascimento",
+    "curso": "Minha Banda Para Sempre",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-05-18"
+  },
+  {
+    "id": 1384,
+    "nome": "Alcione Vieira Bastos de Melo",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-02-19"
+  },
+  {
+    "id": 9,
+    "nome": "Alexandre Ayres Filho",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2021-01-30"
+  },
+  {
+    "id": 1376,
+    "nome": "Alexandre Ayres Filho",
+    "curso": "Power Kids",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-19"
+  },
+  {
+    "id": 1377,
+    "nome": "Alexandre de Sousa Serra",
+    "curso": "Violão",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-02-22"
+  },
+  {
+    "id": 10,
+    "nome": "Alexandre Ribeiro de Oliveira",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-01-25"
+  },
+  {
+    "id": 11,
+    "nome": "Alexandre Wallace Bispo Oliveira",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-11-30"
+  },
+  {
+    "id": 12,
+    "nome": "Alice Cardoso de Farias",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2022-08-25"
+  },
+  {
+    "id": 13,
+    "nome": "Alice Castro Figueiredo",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-06-30"
+  },
+  {
+    "id": 14,
+    "nome": "Alice dos Anjos Nogueira",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-01-31"
+  },
+  {
+    "id": 985,
+    "nome": "Alice Marques Migone Maestri",
+    "curso": null,
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-09"
+  },
+  {
+    "id": 15,
+    "nome": "Alice Rodrigues de Santana",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-01-30"
+  },
+  {
+    "id": 928,
+    "nome": "Alice Roza Baltar",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-31"
+  },
+  {
+    "id": 16,
+    "nome": "Alice Sales da Cunha Mattos",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2019-03-22"
+  },
+  {
+    "id": 17,
+    "nome": "Alice Serra de Souza Rangel Soares",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-02-11"
+  },
+  {
+    "id": 19,
+    "nome": "Alicia Castro Santiago Gonzaga",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-08-05"
+  },
+  {
+    "id": 929,
+    "nome": "Amanda de Souza Rogemonte",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-31"
+  },
+  {
+    "id": 992,
+    "nome": "Amanda Sales Borges dos Reis",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-15"
+  },
+  {
+    "id": 20,
+    "nome": "Ana Beatriz Da Conceição Pereira",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-08-07"
+  },
+  {
+    "id": 21,
+    "nome": "Ana Clara Lima Santos Pinto",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-05-28"
+  },
+  {
+    "id": 931,
+    "nome": "Ana Clara Teixeira Nogueira",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-02-03"
+  },
+  {
+    "id": 1378,
+    "nome": "Ana Julia de Oliveira Gomes",
+    "curso": "Minha Banda Para Sempre",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-01-26"
+  },
+  {
+    "id": 22,
+    "nome": "Ana Mel Henrique da Silva",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-01-28"
+  },
+  {
+    "id": 23,
+    "nome": "Ana Victoria Padiglione Rosa",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-02-22"
+  },
+  {
+    "id": 24,
+    "nome": "Anderson Cherem de Mello",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-01-24"
+  },
+  {
+    "id": 1411,
+    "nome": "Anderson Cherem de Mello",
+    "curso": "Minha Banda Para Sempre",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 1379,
+    "nome": "André Luis de Souza Rangel",
+    "curso": "Contrabaixo",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-01-25"
+  },
+  {
+    "id": 1409,
+    "nome": "André Luis de Souza Rangel",
+    "curso": "Minha Banda Para Sempre",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-23"
+  },
+  {
+    "id": 25,
+    "nome": "André Luiz Rodrigues Marques",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-11-19"
+  },
+  {
+    "id": 26,
+    "nome": "André Vitor Soares da Silva",
+    "curso": "Violino",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-02-06"
+  },
+  {
+    "id": 993,
+    "nome": "Andréa Sales Borges dos Reis",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-29"
+  },
+  {
+    "id": 27,
+    "nome": "Andressa Dávila de Canha Pontes",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-09-20"
+  },
+  {
+    "id": 1380,
+    "nome": "Anna Clara de Souza Iorio Sales",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-07-12"
+  },
+  {
+    "id": 29,
+    "nome": "Anna Clara Ferreira Brito",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-07-24"
+  },
+  {
+    "id": 30,
+    "nome": "Anna Klara de Abreu Coutinho",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-07-03"
+  },
+  {
+    "id": 32,
+    "nome": "Anthony de Andrade Vasques",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-07-30"
+  },
+  {
+    "id": 33,
+    "nome": "Antonia Scudio Guidi da Rocha",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2022-04-06"
+  },
+  {
+    "id": 1437,
+    "nome": "Antonia Scudio Guidi da Rocha",
+    "curso": "Power Kids",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 34,
+    "nome": "Antonia Simone Lima Alves",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-06-17"
+  },
+  {
+    "id": 35,
+    "nome": "Antônio Carlos Romero Andrade",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-08-29"
+  },
+  {
+    "id": 36,
+    "nome": "Antônio José da Silva Delgado",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-07-31"
+  },
+  {
+    "id": 37,
+    "nome": "Antonio Thales da Silva Maria",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-09-17"
+  },
+  {
+    "id": 38,
+    "nome": "Antônio Villa Barros",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-11-14"
+  },
+  {
+    "id": 1316,
+    "nome": "Antônio Villa Barros",
+    "curso": "Guitarra",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-17"
+  },
+  {
+    "id": 39,
+    "nome": "Arthur Da Hora Marinho",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-10-11"
+  },
+  {
+    "id": 40,
+    "nome": "Arthur De Jesus Lindo Braga",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-10-18"
+  },
+  {
+    "id": 41,
+    "nome": "Arthur Ennes Sarto Amorim",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-06-26"
+  },
+  {
+    "id": 42,
+    "nome": "Arthur Felipe de Mattos",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2021-06-30"
+  },
+  {
+    "id": 43,
+    "nome": "Arthur Gabriel de Lima Cardoso",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-04-24"
+  },
+  {
+    "id": 44,
+    "nome": "Arthur Lee Cardozo Dias",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-12-13"
+  },
+  {
+    "id": 995,
+    "nome": "Arthur Martins de Oliveira",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-19"
+  },
+  {
+    "id": 45,
+    "nome": "Arthur Rocha de Almeida",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-01-24"
+  },
+  {
+    "id": 46,
+    "nome": "Arthur Serpa Arcoverde",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-03-20"
+  },
+  {
+    "id": 47,
+    "nome": "Arthur Souza Del Bosco",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-03-09"
+  },
+  {
+    "id": 1381,
+    "nome": "Aumir Barros Correia",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-09-20"
+  },
+  {
+    "id": 996,
+    "nome": "Aurora Paixão da Costa Buarque",
+    "curso": null,
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-24"
+  },
+  {
+    "id": 48,
+    "nome": "Ayres Nishio Da Silva Junior",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-02-20"
+  },
+  {
+    "id": 49,
+    "nome": "Barbara Ribeiro Alves",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-04-25"
+  },
+  {
+    "id": 1413,
+    "nome": "Barbara Ribeiro Alves",
+    "curso": "Minha Banda Para Sempre",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 52,
+    "nome": "Beatriz Cardoso Schmitz",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-06-05"
+  },
+  {
+    "id": 1020,
+    "nome": "Beatriz Rodrigues de Sá",
+    "curso": "Musicalização para Bebês",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-22"
+  },
+  {
+    "id": 53,
+    "nome": "Beatriz Souza",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-11-04"
+  },
+  {
+    "id": 1021,
+    "nome": "Bella da Silva Lins",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-27"
+  },
+  {
+    "id": 54,
+    "nome": "Benício Benjamim de Jesus Filgueiras",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2022-05-10"
+  },
+  {
+    "id": 1444,
+    "nome": "Benício Benjamim de Jesus Filgueiras",
+    "curso": "Power Kids",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 55,
+    "nome": "Benício de Souza Amaral Costa",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-03-07"
+  },
+  {
+    "id": 56,
+    "nome": "Benjamim Soares Vieira",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-08-02"
+  },
+  {
+    "id": 57,
+    "nome": "Benjamin da Silva Barbosa",
+    "curso": "Piano",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-05-28"
+  },
+  {
+    "id": 58,
+    "nome": "Bento Cabral do Nascimento",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-02-04"
+  },
+  {
+    "id": 59,
+    "nome": "Bernardo Ferreira Bittencourt",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-03-21"
+  },
+  {
+    "id": 60,
+    "nome": "Bernardo Xavier Veras Mascarenhas de Castro",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-04-27"
+  },
+  {
+    "id": 951,
+    "nome": "Brenda Pereira Dias",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-02-11"
+  },
+  {
+    "id": 1406,
+    "nome": "Bruna Amaral de Carvalho",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-03-30"
+  },
+  {
+    "id": 61,
+    "nome": "Bruna Amaral de Carvalho",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-03-30"
+  },
+  {
+    "id": 1382,
+    "nome": "Bruna Pereira Monteiro Carregosa",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2019-01-19"
+  },
+  {
+    "id": 1022,
+    "nome": "Camille Bazet marinho",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-23"
+  },
+  {
+    "id": 1066,
+    "nome": "Carlos Eduardo Garcia do Nascimento",
+    "curso": "Contrabaixo",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-01-24"
+  },
+  {
+    "id": 1067,
+    "nome": "Carlos Eduardo Garcia do Nascimento",
+    "curso": "Canto Coral",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-14"
+  },
+  {
+    "id": 1410,
+    "nome": "Carlos Eduardo Garcia do Nascimento",
+    "curso": "Minha Banda Para Sempre",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-23"
+  },
+  {
+    "id": 64,
+    "nome": "Carlos Mamede Tiburcio",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-11-24"
+  },
+  {
+    "id": 1383,
+    "nome": "Caroline Salvaterra Camara de Miranda",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-02-28"
+  },
+  {
+    "id": 1023,
+    "nome": "Cássia Santos",
+    "curso": "Violão",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-17"
+  },
+  {
+    "id": 949,
+    "nome": "Cassyo L P Silva",
+    "curso": "Piano",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-19"
+  },
+  {
+    "id": 65,
+    "nome": "Catarina Marx Feitosa",
+    "curso": "Violino",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-01-25"
+  },
+  {
+    "id": 66,
+    "nome": "Catia dos Santos Machado",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-08-01"
+  },
+  {
+    "id": 1024,
+    "nome": "Cauan Gabriel Couto Monteiro",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-31"
+  },
+  {
+    "id": 68,
+    "nome": "Clara da Costa Corval",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-12-15"
+  },
+  {
+    "id": 1432,
+    "nome": "Clara da Costa Corval",
+    "curso": "Minha Banda Para Sempre",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 1448,
+    "nome": "Clara Pereira Domingos",
+    "curso": "Power Kids",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 70,
+    "nome": "Clarisse Maria Vignerom Lira",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-07-11"
+  },
+  {
+    "id": 71,
+    "nome": "Claudia Alves da Fonseca",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-05-17"
+  },
+  {
+    "id": 72,
+    "nome": "Claudio do Nascimento",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-08-01"
+  },
+  {
+    "id": 73,
+    "nome": "Claudio Roberto da Silva Lopes Cabral",
+    "curso": "Violino",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-08-12"
+  },
+  {
+    "id": 74,
+    "nome": "Conrado de Jesus dos Santos Silva",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-05-23"
+  },
+  {
+    "id": 75,
+    "nome": "Cristiano Vianna",
+    "curso": "Piano",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-01-31"
+  },
+  {
+    "id": 77,
+    "nome": "Daniel Da Hora Marinho",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-10-11"
+  },
+  {
+    "id": 78,
+    "nome": "Daniel Oliveira dos Santos",
+    "curso": "Violão",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-02-20"
+  },
+  {
+    "id": 79,
+    "nome": "Daniel Teixeira de Mello",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-01-30"
+  },
+  {
+    "id": 80,
+    "nome": "Daniel Valeriano Motta",
+    "curso": "Piano",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-07-18"
+  },
+  {
+    "id": 81,
+    "nome": "Daniel Victor Coutinho de Andrade Santos",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-12-02"
+  },
+  {
+    "id": 82,
+    "nome": "Daniel Victor de Oliveira Malafaia",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-03-12"
+  },
+  {
+    "id": 83,
+    "nome": "Daniela Beiriz Moura",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2022-12-06"
+  },
+  {
+    "id": 1318,
+    "nome": "Daniela Beiriz Moura",
+    "curso": "Canto",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-17"
+  },
+  {
+    "id": 84,
+    "nome": "Danilo Melo Pavão",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2022-01-17"
+  },
+  {
+    "id": 1385,
+    "nome": "Davi Arthur Rangel Monteiro",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-11-25"
+  },
+  {
+    "id": 85,
+    "nome": "Davi Borges da Silva Nascimento",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2018-05-03"
+  },
+  {
+    "id": 86,
+    "nome": "Davi Branco Rodrigues",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-01-18"
+  },
+  {
+    "id": 87,
+    "nome": "Davi de Matos Lopes Carvalho",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-09-13"
+  },
+  {
+    "id": 88,
+    "nome": "Davi Gabriel de Souza Apolinário",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-02-25"
+  },
+  {
+    "id": 1386,
+    "nome": "Davi Gonçalves Oliveira",
+    "curso": "Violino",
+    "is_segundo_curso": false,
+    "data_matricula": "2022-11-30"
+  },
+  {
+    "id": 89,
+    "nome": "Davi Guilherme De Souza Chaves Ribeiro",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2021-03-06"
+  },
+  {
+    "id": 1321,
+    "nome": "Davi Guilherme De Souza Chaves Ribeiro",
+    "curso": "Harmonia",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-18"
+  },
+  {
+    "id": 1319,
+    "nome": "Davi Guilherme De Souza Chaves Ribeiro",
+    "curso": "Canto",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-17"
+  },
+  {
+    "id": 1320,
+    "nome": "Davi Guilherme De Souza Chaves Ribeiro",
+    "curso": "Teclado",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-17"
+  },
+  {
+    "id": 90,
+    "nome": "Davi Lucas de Souza Araújo de Andrade",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-11-12"
+  },
+  {
+    "id": 91,
+    "nome": "Davi Lucas Gabry Losik",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-10-14"
+  },
+  {
+    "id": 92,
+    "nome": "Davi Lucca de Carvalho Gomes",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-11-12"
+  },
+  {
+    "id": 93,
+    "nome": "Davi Paulo Vieira",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-01-18"
+  },
+  {
+    "id": 94,
+    "nome": "Davi Rosendo Chaves Vieira",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-10-31"
+  },
+  {
+    "id": 95,
+    "nome": "Davi Tomaz Silva",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-02-02"
+  },
+  {
+    "id": 1421,
+    "nome": "Davi Tomaz Silva",
+    "curso": "Minha Banda Para Sempre",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 96,
+    "nome": "David Lucca Neves do Carmo",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-04-12"
+  },
+  {
+    "id": 97,
+    "nome": "Edio Gino da Silva Junior",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-10-11"
+  },
+  {
+    "id": 98,
+    "nome": "Eduardo da Silva Barreto",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-01-24"
+  },
+  {
+    "id": 99,
+    "nome": "Eduardo França Tristão Batista",
+    "curso": "Contrabaixo",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-01-27"
+  },
+  {
+    "id": 1416,
+    "nome": "Eduardo França Tristão Batista",
+    "curso": "Minha Banda Para Sempre",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 1417,
+    "nome": "Eduardo França Tristão Batista",
+    "curso": "Minha Banda Para Sempre",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 100,
+    "nome": "Eduardo Knupp Gomes",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-02-26"
+  },
+  {
+    "id": 101,
+    "nome": "Elisa Juliace Rodrigues",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-08-31"
+  },
+  {
+    "id": 102,
+    "nome": "Elisa Knupp Gomes",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-02-08"
+  },
+  {
+    "id": 1387,
+    "nome": "Elisa Marques Blunk",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-06-18"
+  },
+  {
+    "id": 1388,
+    "nome": "Elisete Davila Alves",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-08-28"
+  },
+  {
+    "id": 103,
+    "nome": "Emanuel Davi Costa Marcelino",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-03-22"
+  },
+  {
+    "id": 104,
+    "nome": "Emanuela de Paula da Silva",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-03-30"
+  },
+  {
+    "id": 105,
+    "nome": "Emanuele Lemos de Oliveira",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-08-06"
+  },
+  {
+    "id": 106,
+    "nome": "Emilly Souza de Oliveira",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-01-30"
+  },
+  {
+    "id": 108,
+    "nome": "Enzo Lopes Mauro",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-08-15"
+  },
+  {
+    "id": 109,
+    "nome": "Erica Batista de Castro",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-06-30"
+  },
+  {
+    "id": 110,
+    "nome": "Erika Brito de Sousa",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-11-01"
+  },
+  {
+    "id": 111,
+    "nome": "Ester de Souza Rosa",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-08-30"
+  },
+  {
+    "id": 112,
+    "nome": "Ester Santos do Amaral",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-09-29"
+  },
+  {
+    "id": 113,
+    "nome": "Ester Soares Gomes Christianes",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-06-06"
+  },
+  {
+    "id": 1425,
+    "nome": "Ester Soares Gomes Christianes",
+    "curso": "Minha Banda Para Sempre",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 1426,
+    "nome": "Ester Soares Gomes Christianes",
+    "curso": "Minha Banda Para Sempre",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 950,
+    "nome": "Eurivaldo Cunha",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-02-10"
+  },
+  {
+    "id": 114,
+    "nome": "Evandro Andrade da Silva",
+    "curso": "Contrabaixo",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-01-25"
+  },
+  {
+    "id": 115,
+    "nome": "Fabiana Mendonça Puime Paiva",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-11-24"
+  },
+  {
+    "id": 117,
+    "nome": "Fabrício Ravi Ramos Medeiros",
+    "curso": "Violão",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-06-25"
+  },
+  {
+    "id": 118,
+    "nome": "Felipe  Marques Gevezier",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-09-29"
+  },
+  {
+    "id": 1322,
+    "nome": "Felipe  Marques Gevezier",
+    "curso": "Teclado",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-18"
+  },
+  {
+    "id": 119,
+    "nome": "Felipe Robalinho de Melo",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-11-19"
+  },
+  {
+    "id": 120,
+    "nome": "Flávio Esteves Ferreira",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-02-26"
+  },
+  {
+    "id": 121,
+    "nome": "Francis Araújo Linhares Lira de Melo",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-11-30"
+  },
+  {
+    "id": 122,
+    "nome": "Francisco Carlos de Oliveira Sales",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-11-25"
+  },
+  {
+    "id": 123,
+    "nome": "Francisco José Sgarbi Moreira Alves",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-04-06"
+  },
+  {
+    "id": 124,
+    "nome": "Gabriel Abreu da Cruz Carvalho",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-04-30"
+  },
+  {
+    "id": 125,
+    "nome": "Gabriel dos Santos Santana Cavalcanti",
+    "curso": "Violino",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-11-28"
+  },
+  {
+    "id": 1389,
+    "nome": "Gabriel dos Santos Tramontini",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-12-03"
+  },
+  {
+    "id": 126,
+    "nome": "Gabriel Gomes Chaves",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2019-03-30"
+  },
+  {
+    "id": 1441,
+    "nome": "Gabriel Gomes Chaves",
+    "curso": "Power Kids",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 127,
+    "nome": "Gabriel Jeronimo Barbosa",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-08-30"
+  },
+  {
+    "id": 128,
+    "nome": "Gabriel Lucas Silva Sales",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-10-30"
+  },
+  {
+    "id": 129,
+    "nome": "Gabriel Mello Leal Rabelo de Oliveira",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-04-05"
+  },
+  {
+    "id": 1315,
+    "nome": "Gabriel Mello Leal Rabelo de Oliveira",
+    "curso": "Teclado",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-17"
+  },
+  {
+    "id": 130,
+    "nome": "Gabriel Negreiros Carvalho",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-11-07"
+  },
+  {
+    "id": 1348,
+    "nome": "Gabriel Negreiros Carvalho",
+    "curso": "Violão",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-18"
+  },
+  {
+    "id": 930,
+    "nome": "Gabriel Teixeira Nogueira",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-02-03"
+  },
+  {
+    "id": 1405,
+    "nome": "Gabriel Vencesllau da Hora Rosa",
+    "curso": null,
+    "is_segundo_curso": false,
+    "data_matricula": "2025-04-01"
+  },
+  {
+    "id": 132,
+    "nome": "Gabriel Walace lima de Souza",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-09-18"
+  },
+  {
+    "id": 134,
+    "nome": "Gabriela Nascimento Brum",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2022-04-13"
+  },
+  {
+    "id": 135,
+    "nome": "Gael de Oliveira Ferreira",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-08-26"
+  },
+  {
+    "id": 136,
+    "nome": "Gael Zine Nascimento Paes Leme",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-03-01"
+  },
+  {
+    "id": 1025,
+    "nome": "Gean da Silva Souza",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-31"
+  },
+  {
+    "id": 137,
+    "nome": "Georgie Jefferson de Mello Basílio da Silva",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-02-13"
+  },
+  {
+    "id": 138,
+    "nome": "Geovanna Farias Rodrigues Alves",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-02-02"
+  },
+  {
+    "id": 1422,
+    "nome": "Geovanna Farias Rodrigues Alves",
+    "curso": "Minha Banda Para Sempre",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 1026,
+    "nome": "Giane Apoliana Albino de Oliveira",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-14"
+  },
+  {
+    "id": 139,
+    "nome": "Giovana da Cruz Stancato",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-04-29"
+  },
+  {
+    "id": 140,
+    "nome": "Giovana de Oliveira Salgueiro",
+    "curso": "Ukulelê",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-11-14"
+  },
+  {
+    "id": 141,
+    "nome": "Giovanna Branco rodrigues",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-01-18"
+  },
+  {
+    "id": 142,
+    "nome": "Giovanna Neves Coelho Guerra da Silva",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-10-02"
+  },
+  {
+    "id": 143,
+    "nome": "Giulia de Souza Pereira",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-12-06"
+  },
+  {
+    "id": 145,
+    "nome": "Guilherme  Lauria  Muniz",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-02-27"
+  },
+  {
+    "id": 1419,
+    "nome": "Guilherme  Lauria  Muniz",
+    "curso": "Minha Banda Para Sempre",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 1418,
+    "nome": "Guilherme  Lauria  Muniz",
+    "curso": "Minha Banda Para Sempre",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 146,
+    "nome": "Guilherme Castro Figueiredo",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-06-30"
+  },
+  {
+    "id": 147,
+    "nome": "Guilherme de Oliveira Malafaia",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-03-12"
+  },
+  {
+    "id": 148,
+    "nome": "Guilherme Dias da Silva",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-09-14"
+  },
+  {
+    "id": 149,
+    "nome": "Guilherme Gama Clavelario Nunes",
+    "curso": "Piano",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-02-29"
+  },
+  {
+    "id": 150,
+    "nome": "Guilherme Martins Santos",
+    "curso": "Violino",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-03-21"
+  },
+  {
+    "id": 151,
+    "nome": "Guilherme Mendes Guidi Da Rocha",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-08-21"
+  },
+  {
+    "id": 152,
+    "nome": "Gustavo Chagas Lima",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-01-23"
+  },
+  {
+    "id": 154,
+    "nome": "Gustavo de Almeida Correa Peres",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-01-05"
+  },
+  {
+    "id": 1428,
+    "nome": "Gustavo de Almeida Correa Peres",
+    "curso": "Minha Banda Para Sempre",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 155,
+    "nome": "Gustavo Wood Lisboa",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-07-31"
+  },
+  {
+    "id": 156,
+    "nome": "Heitor Alves da Rocha",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-05-14"
+  },
+  {
+    "id": 157,
+    "nome": "Heitor Cariuz Gino",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-12-16"
+  },
+  {
+    "id": 1390,
+    "nome": "Heitor Carvalho Honório",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-08-29"
+  },
+  {
+    "id": 158,
+    "nome": "Heitor de Freitas Delou",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-11-14"
+  },
+  {
+    "id": 159,
+    "nome": "Heitor de Freitas Soares Amaral",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-02-21"
+  },
+  {
+    "id": 1027,
+    "nome": "Heitor Dias Berriel Abreu",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-08"
+  },
+  {
+    "id": 161,
+    "nome": "Heitor Fernandes Teixeira de Farias",
+    "curso": "Violino",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-04-02"
+  },
+  {
+    "id": 162,
+    "nome": "Heitor Gomes Rocha",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-04-14"
+  },
+  {
+    "id": 1028,
+    "nome": "Heitor Lima Coutinho Xavier",
+    "curso": "Violino",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-17"
+  },
+  {
+    "id": 163,
+    "nome": "Heitor Pereira Ramos",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-10-26"
+  },
+  {
+    "id": 164,
+    "nome": "Heitor Silva Braga",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-06-16"
+  },
+  {
+    "id": 165,
+    "nome": "Heitor Thadeu Caciano",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-01-28"
+  },
+  {
+    "id": 166,
+    "nome": "Heloisa Nogueira Delgado Constantino da Silva",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-09-25"
+  },
+  {
+    "id": 167,
+    "nome": "Henrique Tomaz Silva",
+    "curso": "Contrabaixo",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-02-02"
+  },
+  {
+    "id": 168,
+    "nome": "Hugo Leonardo Ramos Guimarães",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-09-02"
+  },
+  {
+    "id": 169,
+    "nome": "Hugo Sena da Cruz",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-09-02"
+  },
+  {
+    "id": 170,
+    "nome": "Íris Brito de Souza",
+    "curso": "Contrabaixo",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-01-31"
+  },
+  {
+    "id": 171,
+    "nome": "Isaac Gomes Francisco Ribeiro",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-11-05"
+  },
+  {
+    "id": 172,
+    "nome": "Isabela de Fatima Rocha Gomes",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-09-13"
+  },
+  {
+    "id": 173,
+    "nome": "Isabela Paixão Figueiredo",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-06-24"
+  },
+  {
+    "id": 174,
+    "nome": "Isabela Serra de Souza Rangel Soares",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2022-05-28"
+  },
+  {
+    "id": 175,
+    "nome": "Isabella Christina Pereira dos Santos",
+    "curso": "Violão",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-02-26"
+  },
+  {
+    "id": 176,
+    "nome": "Isabella Cruz Rustichelli",
+    "curso": "Violino",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-10-11"
+  },
+  {
+    "id": 177,
+    "nome": "Isabella da Silva Batista",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2022-11-30"
+  },
+  {
+    "id": 178,
+    "nome": "Isabella Pereira Freitas de Almeida",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-08-20"
+  },
+  {
+    "id": 179,
+    "nome": "Isabelle da Costa Lima",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-01-24"
+  },
+  {
+    "id": 1414,
+    "nome": "Isabelle da Costa Lima",
+    "curso": "Minha Banda Para Sempre",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 180,
+    "nome": "Isaque dos Santos Lico",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-01-11"
+  },
+  {
+    "id": 181,
+    "nome": "Israel Gonçalves Monteiro",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-02-02"
+  },
+  {
+    "id": 1324,
+    "nome": "Israel Gonçalves Monteiro",
+    "curso": "Home Studio",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-18"
+  },
+  {
+    "id": 1323,
+    "nome": "Israel Gonçalves Monteiro",
+    "curso": "Canto",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-18"
+  },
+  {
+    "id": 1391,
+    "nome": "Italo Roque Machado Castilho Corval",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2018-05-18"
+  },
+  {
+    "id": 1030,
+    "nome": "Ivy Correia Arena Salvador da Silva",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-23"
+  },
+  {
+    "id": 1031,
+    "nome": "Jaqueline Rosendo da Silva",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-10"
+  },
+  {
+    "id": 183,
+    "nome": "Jean Lucas de Santana Dias Brum Ribeiro",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-10-18"
+  },
+  {
+    "id": 184,
+    "nome": "Jean Marcel Silva da Costa Jacques",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-08-13"
+  },
+  {
+    "id": 185,
+    "nome": "Jefte Wesley Vilar Custódio",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-01-31"
+  },
+  {
+    "id": 1392,
+    "nome": "Jhonatan Samuel Vicente Silveira",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-08-01"
+  },
+  {
+    "id": 186,
+    "nome": "Joanna Carolina Teixeira Sampaio dos Santos Souto",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-08-21"
+  },
+  {
+    "id": 187,
+    "nome": "João Bernardes de Castro",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-11-27"
+  },
+  {
+    "id": 188,
+    "nome": "João Gabriel Oliveira Narciso",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2021-05-27"
+  },
+  {
+    "id": 189,
+    "nome": "João Lucas Henrique da Silva",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2022-12-08"
+  },
+  {
+    "id": 190,
+    "nome": "João Machado Martins",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-07-31"
+  },
+  {
+    "id": 191,
+    "nome": "João Miguel da Cunha Alves Ferreira",
+    "curso": "Violino",
+    "is_segundo_curso": false,
+    "data_matricula": "2020-11-27"
+  },
+  {
+    "id": 192,
+    "nome": "João Paulo Costa do Carmo",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-08-06"
+  },
+  {
+    "id": 1325,
+    "nome": "João Paulo Costa do Carmo",
+    "curso": "Canto",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-18"
+  },
+  {
+    "id": 1314,
+    "nome": "João Pedro França Azevedo",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-02-17"
+  },
+  {
+    "id": 193,
+    "nome": "João Pedro Machado rosa",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-05-13"
+  },
+  {
+    "id": 1065,
+    "nome": "João Pedro Mesquita Vilas Boas",
+    "curso": null,
+    "is_segundo_curso": false,
+    "data_matricula": "2019-01-22"
+  },
+  {
+    "id": 194,
+    "nome": "Joao Pedro Moreira de Oliva",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-09-11"
+  },
+  {
+    "id": 196,
+    "nome": "João Vitor Da Silva De Oliveira",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-01-15"
+  },
+  {
+    "id": 197,
+    "nome": "Joaquim do Espirito Santo Teixeira",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-08-16"
+  },
+  {
+    "id": 1032,
+    "nome": "Joaquim Isaac da Cunha Cal",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-29"
+  },
+  {
+    "id": 198,
+    "nome": "Jonatas Viana Carvalho",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-09-29"
+  },
+  {
+    "id": 199,
+    "nome": "Jonathan Carlos Souza Junior",
+    "curso": "Contrabaixo",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-07-09"
+  },
+  {
+    "id": 200,
+    "nome": "Jonathan de Lima Santos",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-08-10"
+  },
+  {
+    "id": 201,
+    "nome": "Jorge Leon Sant' Anna Siqueira Simas da Silva",
+    "curso": "Musicalização para Bebês",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-08-12"
+  },
+  {
+    "id": 203,
+    "nome": "José Demétrio de Oliveira Accioly Cordeiro",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-09-27"
+  },
+  {
+    "id": 1033,
+    "nome": "Juan Pablo Santiago Bonicenha",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-19"
+  },
+  {
+    "id": 204,
+    "nome": "Julia Cabral do Nascimento",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-02-04"
+  },
+  {
+    "id": 205,
+    "nome": "Julia da Costa de Oliveira",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2021-11-06"
+  },
+  {
+    "id": 1430,
+    "nome": "Julia da Costa de Oliveira",
+    "curso": "Minha Banda Para Sempre",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 1431,
+    "nome": "Julia da Costa de Oliveira",
+    "curso": "Minha Banda Para Sempre",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 1442,
+    "nome": "Julia da Costa de Oliveira",
+    "curso": "Power Kids",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 206,
+    "nome": "Júlia Lençone Plaza",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-05-16"
+  },
+  {
+    "id": 207,
+    "nome": "Julia Pessoa Valadares Luz Pereira",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-02-13"
+  },
+  {
+    "id": 208,
+    "nome": "Julia Silva de Freitas",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2022-09-16"
+  },
+  {
+    "id": 209,
+    "nome": "Julia Xavier da Silva Souza Campelo",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2018-05-18"
+  },
+  {
+    "id": 210,
+    "nome": "Juliana Carrati Fagundes",
+    "curso": "Violino",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-01-25"
+  },
+  {
+    "id": 211,
+    "nome": "Juliana Fonseca Fortes",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-09-10"
+  },
+  {
+    "id": 212,
+    "nome": "Júlio César da Silva Vidal",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-04-01"
+  },
+  {
+    "id": 213,
+    "nome": "Jullya Victoria Gomes da Silva",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-08-30"
+  },
+  {
+    "id": 1034,
+    "nome": "Kamille Heringer de Moura Santos",
+    "curso": "Violão",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-31"
+  },
+  {
+    "id": 214,
+    "nome": "Kamilly Azevedo da Silva",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-11-14"
+  },
+  {
+    "id": 1326,
+    "nome": "Kamilly Azevedo da Silva",
+    "curso": "Guitarra",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-18"
+  },
+  {
+    "id": 1429,
+    "nome": "Kamilly Azevedo da Silva",
+    "curso": "Minha Banda Para Sempre",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 215,
+    "nome": "Karina Alexandra da Silva Fontes",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-01-17"
+  },
+  {
+    "id": 1035,
+    "nome": "Kauã Rocha Barreto",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-27"
+  },
+  {
+    "id": 1036,
+    "nome": "Kayque Vinicius Da Costa Mallet de Oliveira",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-08"
+  },
+  {
+    "id": 217,
+    "nome": "Klaus Magno Viana Silva",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-10-29"
+  },
+  {
+    "id": 219,
+    "nome": "Larissa Mendes Paiva",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-11-12"
+  },
+  {
+    "id": 220,
+    "nome": "Laura Andrade da Silveira",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-02-06"
+  },
+  {
+    "id": 221,
+    "nome": "Laura Bustamante França",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2022-04-28"
+  },
+  {
+    "id": 1037,
+    "nome": "Laura de Aguiar Pombo",
+    "curso": "Violino",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-31"
+  },
+  {
+    "id": 223,
+    "nome": "Laura Leal Mesquita",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-03-25"
+  },
+  {
+    "id": 224,
+    "nome": "Laura Peres de Souza",
+    "curso": "Piano",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-01-24"
+  },
+  {
+    "id": 225,
+    "nome": "Laura Riggo Targueta Barboza",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-02-18"
+  },
+  {
+    "id": 226,
+    "nome": "Laura Turques Tavares",
+    "curso": "Musicalização para Bebês",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-06-21"
+  },
+  {
+    "id": 227,
+    "nome": "Lavínia Lyrio Ferreira",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-04-30"
+  },
+  {
+    "id": 228,
+    "nome": "Lavynea dos Anjos Silva Guimarães",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-08-26"
+  },
+  {
+    "id": 1393,
+    "nome": "Leamsi Guedes de Sant'anna",
+    "curso": "Power Kids",
+    "is_segundo_curso": false,
+    "data_matricula": "2018-05-04"
+  },
+  {
+    "id": 229,
+    "nome": "Leandro Vasconcelos dos Santos",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-08-29"
+  },
+  {
+    "id": 230,
+    "nome": "Leona Patrícia da Cruz Martins",
+    "curso": "Violino",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-09-29"
+  },
+  {
+    "id": 1394,
+    "nome": "Leonardo Batista Lima Costa",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-03-12"
+  },
+  {
+    "id": 1038,
+    "nome": "Leonardo Borges Sales dos Reis",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-15"
+  },
+  {
+    "id": 1395,
+    "nome": "Leticia Fernandes Turques",
+    "curso": "Minha Banda Para Sempre",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-01-18"
+  },
+  {
+    "id": 231,
+    "nome": "Letícia Neves Coelho Guerra da Silva",
+    "curso": "Violino",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-09-18"
+  },
+  {
+    "id": 232,
+    "nome": "Letícia Passos de Souza",
+    "curso": "Violão",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-11-29"
+  },
+  {
+    "id": 233,
+    "nome": "Levi de Freitas Simões",
+    "curso": "Musicalização para Bebês",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-09-11"
+  },
+  {
+    "id": 234,
+    "nome": "Levi Jorge Leite Oliveira",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-07-08"
+  },
+  {
+    "id": 235,
+    "nome": "Lidiane Maria Barbosa Lima Dias",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-08-01"
+  },
+  {
+    "id": 236,
+    "nome": "Lilian de Souza",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-01-29"
+  },
+  {
+    "id": 1039,
+    "nome": "Lis Dal Mora Mello",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-19"
+  },
+  {
+    "id": 1040,
+    "nome": "Lis Dal Mora Mello",
+    "curso": "Violão",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-01-19"
+  },
+  {
+    "id": 1063,
+    "nome": "Liz Azevedo Frossard",
+    "curso": "Musicalização para Bebês",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-10-21"
+  },
+  {
+    "id": 237,
+    "nome": "Lohana Leopoldo de Araujo",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-05-24"
+  },
+  {
+    "id": 238,
+    "nome": "Lorena Barreto Campos Dias",
+    "curso": "Violão",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-09-29"
+  },
+  {
+    "id": 239,
+    "nome": "Lorena Dos Santos Villas",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-11-14"
+  },
+  {
+    "id": 240,
+    "nome": "Lorenzo Felipe Nicolau da Silva",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-10-23"
+  },
+  {
+    "id": 241,
+    "nome": "Lorenzo Rodrigues Trovisco",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-09-30"
+  },
+  {
+    "id": 242,
+    "nome": "Lorrane da Silva Azevedo",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-03-21"
+  },
+  {
+    "id": 243,
+    "nome": "Luan Gomes de Faria",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-04-22"
+  },
+  {
+    "id": 244,
+    "nome": "Luana Ferreira de Souza",
+    "curso": "Violão",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-04-29"
+  },
+  {
+    "id": 245,
+    "nome": "Lucas Azevedo de Barros",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-08-24"
+  },
+  {
+    "id": 247,
+    "nome": "Lucas dos Santos Basilio",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-02-27"
+  },
+  {
+    "id": 1396,
+    "nome": "Lucas Keyne Pereira",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-11-26"
+  },
+  {
+    "id": 250,
+    "nome": "Lucas Souza dos Santos",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-08-13"
+  },
+  {
+    "id": 251,
+    "nome": "Lucca da Silva  Batista",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2022-11-30"
+  },
+  {
+    "id": 252,
+    "nome": "Lucca Gabriel de Almeida Bispo",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-11-29"
+  },
+  {
+    "id": 253,
+    "nome": "Luci Machado Viegas",
+    "curso": "Violão",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-11-12"
+  },
+  {
+    "id": 254,
+    "nome": "Luciano Carvalho Christianes",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-12-18"
+  },
+  {
+    "id": 945,
+    "nome": "Luciano da Silva Bernardino",
+    "curso": "Violão",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-02-09"
+  },
+  {
+    "id": 255,
+    "nome": "Luciano Peres de Souza",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-01-05"
+  },
+  {
+    "id": 256,
+    "nome": "Luciene de Almeida Correa de  Souza",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-07-05"
+  },
+  {
+    "id": 257,
+    "nome": "Luis Lyan da Silveira Ribeiro Miranda",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-12-06"
+  },
+  {
+    "id": 258,
+    "nome": "Luís Rafael Sousa dos Santos",
+    "curso": "Violão",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-04-14"
+  },
+  {
+    "id": 259,
+    "nome": "Luisa Celano Laurentino Silva",
+    "curso": "Contrabaixo",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-08-20"
+  },
+  {
+    "id": 940,
+    "nome": "Luísa Oliveira de Andrade Assunção",
+    "curso": "Musicalização para Bebês",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-02-06"
+  },
+  {
+    "id": 260,
+    "nome": "Luisa Xavier Cesar",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-05-03"
+  },
+  {
+    "id": 261,
+    "nome": "Luiz Eduardo Passos Cunha",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-10-05"
+  },
+  {
+    "id": 262,
+    "nome": "Luiz Eduardo Philippsen",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2021-02-02"
+  },
+  {
+    "id": 1423,
+    "nome": "Luiz Fernando dos Santos Machado de Almeida",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-07-30"
+  },
+  {
+    "id": 1424,
+    "nome": "Luiz Fernando dos Santos Machado de Almeida",
+    "curso": "Minha Banda Para Sempre",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 264,
+    "nome": "Luiza Pereira dos Santos",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-05-13"
+  },
+  {
+    "id": 265,
+    "nome": "Luiza Pimentel Oliveira Barbosa",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-02-23"
+  },
+  {
+    "id": 266,
+    "nome": "Maicon Viana Mário",
+    "curso": "Piano",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-03-29"
+  },
+  {
+    "id": 1397,
+    "nome": "Maite de Oliveira Gomes",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-02-02"
+  },
+  {
+    "id": 267,
+    "nome": "Manuela Ariston Romao",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-03-17"
+  },
+  {
+    "id": 268,
+    "nome": "Manuela Lima Dias",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-08-01"
+  },
+  {
+    "id": 269,
+    "nome": "Manuela Lourenço Ribeiro",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-05-22"
+  },
+  {
+    "id": 270,
+    "nome": "Manuela Piveta Schulz",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-11-30"
+  },
+  {
+    "id": 271,
+    "nome": "Manuela Ribeiro de Carvalho",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-04-24"
+  },
+  {
+    "id": 933,
+    "nome": "Marcela Formaggini",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-02-05"
+  },
+  {
+    "id": 273,
+    "nome": "Marcela Oliveira da Trindade",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-10-26"
+  },
+  {
+    "id": 1061,
+    "nome": "Marcela Ribeiro dos Santos Formaggini",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-02-05"
+  },
+  {
+    "id": 275,
+    "nome": "Marcelino Jorge Batista",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-01-17"
+  },
+  {
+    "id": 276,
+    "nome": "Marcello Fernandes Junior",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-01-25"
+  },
+  {
+    "id": 1328,
+    "nome": "Marcello Fernandes Junior",
+    "curso": "Contrabaixo",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-18"
+  },
+  {
+    "id": 1327,
+    "nome": "Marcello Fernandes Junior",
+    "curso": "Bateria",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-18"
+  },
+  {
+    "id": 277,
+    "nome": "Marcelo da Silva Galvão",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-10-30"
+  },
+  {
+    "id": 280,
+    "nome": "Marco Aurelio Pacheco Duarte",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-03-01"
+  },
+  {
+    "id": 281,
+    "nome": "Maria Alice Ferreira Suzano",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-11-01"
+  },
+  {
+    "id": 282,
+    "nome": "Maria Antônia Santos",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-10-30"
+  },
+  {
+    "id": 283,
+    "nome": "Maria Aurora Ferreira Costa Jordão da Silva dos Anjos",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-06-12"
+  },
+  {
+    "id": 284,
+    "nome": "Maria Eduarda Costa da Fonseca",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-04-11"
+  },
+  {
+    "id": 1450,
+    "nome": "Maria Eduarda de Lima Bomfim Pedro",
+    "curso": "Minha Banda Para Sempre",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 285,
+    "nome": "Maria Eduarda Novo Novaes",
+    "curso": "Home Studio",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-01-31"
+  },
+  {
+    "id": 1398,
+    "nome": "Maria Eduarda Pery Natividade",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-04-12"
+  },
+  {
+    "id": 286,
+    "nome": "Maria Eduarda Souto de Lima",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-02-21"
+  },
+  {
+    "id": 287,
+    "nome": "Maria Eduarda Tonassi do Vale",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-05-27"
+  },
+  {
+    "id": 288,
+    "nome": "Maria Fernanda Frambach da Costa",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-12-07"
+  },
+  {
+    "id": 289,
+    "nome": "Maria Fernanda Francisco Barros",
+    "curso": "Violão",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-09-04"
+  },
+  {
+    "id": 290,
+    "nome": "Maria Flor de Carvalho Fernandes",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-06-28"
+  },
+  {
+    "id": 291,
+    "nome": "Maria Flor Gomes Fazio",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2018-09-22"
+  },
+  {
+    "id": 292,
+    "nome": "Maria Flor Silva Da Conceiçao",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-01-03"
+  },
+  {
+    "id": 1041,
+    "nome": "Maria Laura Kalile da Silva",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-08"
+  },
+  {
+    "id": 294,
+    "nome": "Maria Luísa de Souza Ignacio",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-11-19"
+  },
+  {
+    "id": 295,
+    "nome": "Maria Luisa Silva da Conceição",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-01-03"
+  },
+  {
+    "id": 1042,
+    "nome": "Maria Luísa Uebe do Nascimento",
+    "curso": "Ukulelê",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-21"
+  },
+  {
+    "id": 297,
+    "nome": "Maria Luiza Gomes Nascimento",
+    "curso": "Piano",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-05-27"
+  },
+  {
+    "id": 298,
+    "nome": "Maria Luiza Hilária Durão",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-08-16"
+  },
+  {
+    "id": 299,
+    "nome": "Maria Luiza Nogueira Leal",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2019-02-19"
+  },
+  {
+    "id": 943,
+    "nome": "Maria Luiza Soares Maia",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-02-09"
+  },
+  {
+    "id": 300,
+    "nome": "Maria Miranda Pereira",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2022-10-18"
+  },
+  {
+    "id": 1438,
+    "nome": "Maria Miranda Pereira",
+    "curso": "Power Kids",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 301,
+    "nome": "Maria Rita Porfirio da Conceição",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-01-03"
+  },
+  {
+    "id": 302,
+    "nome": "Mariana Guedes da Penha",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-11-04"
+  },
+  {
+    "id": 303,
+    "nome": "Marina de Albuquerque Bulhões Silva",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-04-12"
+  },
+  {
+    "id": 1445,
+    "nome": "Marina de Albuquerque Bulhões Silva",
+    "curso": "Power Kids",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 305,
+    "nome": "Maristela Abreu Gonçalves",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-10-20"
+  },
+  {
+    "id": 1044,
+    "nome": "Mateus de Miranda Monteiro Balbino",
+    "curso": "Piano",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-09"
+  },
+  {
+    "id": 306,
+    "nome": "Mateus Santiago Tonassi do Vale",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-05-27"
+  },
+  {
+    "id": 307,
+    "nome": "Matheus de Albuquerque de Sousa",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-11-27"
+  },
+  {
+    "id": 309,
+    "nome": "Matheus Felipe Correia Ferreira dos Santos",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-04-17"
+  },
+  {
+    "id": 310,
+    "nome": "Matheus Keyne Pereira Souza",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-05-14"
+  },
+  {
+    "id": 1045,
+    "nome": "Maurício Adriano P de Souza",
+    "curso": "Violão",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-26"
+  },
+  {
+    "id": 1046,
+    "nome": "Mauro dos Santos de Carvalho",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-31"
+  },
+  {
+    "id": 312,
+    "nome": "Mel Bastos Oliveira",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-08-07"
+  },
+  {
+    "id": 313,
+    "nome": "Meline Guinâncio Printes",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-09-02"
+  },
+  {
+    "id": 314,
+    "nome": "Melissa Gorni Dutra",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-04-30"
+  },
+  {
+    "id": 315,
+    "nome": "Michele Oliveira Ramalho",
+    "curso": "Violino",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-07-31"
+  },
+  {
+    "id": 316,
+    "nome": "Miguel Abreu Melo",
+    "curso": "Musicalização para Bebês",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-03-24"
+  },
+  {
+    "id": 317,
+    "nome": "Miguel Alves da Rocha",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-05-14"
+  },
+  {
+    "id": 318,
+    "nome": "Miguel Bittencourt Costa",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2018-05-12"
+  },
+  {
+    "id": 1436,
+    "nome": "Miguel Bittencourt Costa",
+    "curso": "Power Kids",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 1329,
+    "nome": "Miguel Bittencourt Costa",
+    "curso": "Harmonia",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-18"
+  },
+  {
+    "id": 319,
+    "nome": "Miguel Bustamante França",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2022-04-28"
+  },
+  {
+    "id": 1064,
+    "nome": "Miguel Gomes Biancamano",
+    "curso": "Contrabaixo",
+    "is_segundo_curso": false,
+    "data_matricula": "2018-08-08"
+  },
+  {
+    "id": 320,
+    "nome": "Miguel Gomes Biancamano",
+    "curso": "Harmonia",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-09-12"
+  },
+  {
+    "id": 321,
+    "nome": "Miguel Gonçalves da Silva",
+    "curso": "Violão",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-07-29"
+  },
+  {
+    "id": 322,
+    "nome": "Miguel Lucas Moraes Silveira",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-05-17"
+  },
+  {
+    "id": 324,
+    "nome": "Miguel Silva Roca",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2021-06-28"
+  },
+  {
+    "id": 325,
+    "nome": "Miguel Teixeira Sampaio dos Santos Souto",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-08-21"
+  },
+  {
+    "id": 326,
+    "nome": "Millene Chris Pimentel de Matos",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-08-06"
+  },
+  {
+    "id": 327,
+    "nome": "Murilo  Martellote de Assis",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2021-05-15"
+  },
+  {
+    "id": 328,
+    "nome": "Murilo Oliveira da Hora Dantas",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-10-22"
+  },
+  {
+    "id": 329,
+    "nome": "Natalia Jorge Vieira",
+    "curso": "Piano",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-05-17"
+  },
+  {
+    "id": 330,
+    "nome": "Nathan William Dos Santos Onório",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-07-29"
+  },
+  {
+    "id": 331,
+    "nome": "Neemias Francisco dos Santos",
+    "curso": "Violino",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-02-13"
+  },
+  {
+    "id": 332,
+    "nome": "Nico Manuci Bastos Sena",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-10-25"
+  },
+  {
+    "id": 333,
+    "nome": "Nicolas Faria dos Santos",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-02-02"
+  },
+  {
+    "id": 334,
+    "nome": "Nicolas Silva do Bonfim",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-08-28"
+  },
+  {
+    "id": 335,
+    "nome": "Nikolas Carolina Damasceno",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-09-30"
+  },
+  {
+    "id": 336,
+    "nome": "Nilson Ribeiro do Couto",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-11-07"
+  },
+  {
+    "id": 337,
+    "nome": "Olavo Pereira Wood",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-09-28"
+  },
+  {
+    "id": 1048,
+    "nome": "Olívia de Rezende Samico",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-21"
+  },
+  {
+    "id": 338,
+    "nome": "Olivia Rocha Venturi",
+    "curso": "Ukulelê",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-10-14"
+  },
+  {
+    "id": 339,
+    "nome": "Olivia Ventura Martins",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-11-29"
+  },
+  {
+    "id": 340,
+    "nome": "Orion Dias de Oliveira",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2021-05-10"
+  },
+  {
+    "id": 341,
+    "nome": "Pablo Henrique Costa de Oliveira",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-05-24"
+  },
+  {
+    "id": 342,
+    "nome": "Paloma Barreto Campos Dias",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-11-14"
+  },
+  {
+    "id": 343,
+    "nome": "Patric Silva de Oliveira",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-11-18"
+  },
+  {
+    "id": 344,
+    "nome": "Paulo Gabriel chelinho de Andrade",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-11-27"
+  },
+  {
+    "id": 1049,
+    "nome": "Paulo Leandro Costa felizardo",
+    "curso": "Cavaquinho",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-28"
+  },
+  {
+    "id": 346,
+    "nome": "Pedro Alexandre Lopes Santiago Girardi",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-01-30"
+  },
+  {
+    "id": 1050,
+    "nome": "Pedro Aloisio Fausto de Souza",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-31"
+  },
+  {
+    "id": 347,
+    "nome": "Pedro Alves Pereira",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-01-16"
+  },
+  {
+    "id": 1440,
+    "nome": "Pedro Alves Pereira",
+    "curso": "Power Kids",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 1330,
+    "nome": "Pedro Alves Pereira",
+    "curso": "Guitarra",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-18"
+  },
+  {
+    "id": 1051,
+    "nome": "Pedro Arouca Lucas Marçal",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-24"
+  },
+  {
+    "id": 349,
+    "nome": "Pedro de Oliveira Vargas",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2022-05-25"
+  },
+  {
+    "id": 350,
+    "nome": "Pedro Faria de Oliveira",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-05-29"
+  },
+  {
+    "id": 351,
+    "nome": "Pedro Gabriel da França Rocha Pinto",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2018-07-26"
+  },
+  {
+    "id": 1331,
+    "nome": "Pedro Gabriel da França Rocha Pinto",
+    "curso": "Guitarra",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-18"
+  },
+  {
+    "id": 1435,
+    "nome": "Pedro Gabriel da França Rocha Pinto",
+    "curso": "Power Kids",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 352,
+    "nome": "Pedro Gusmão Morgado",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2018-05-15"
+  },
+  {
+    "id": 353,
+    "nome": "Pedro Henrique Argeu Costa da Silva",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-06-05"
+  },
+  {
+    "id": 1399,
+    "nome": "Pedro Henrique Celestino",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-09-29"
+  },
+  {
+    "id": 1404,
+    "nome": "Pedro Lucas da Silva Brandão",
+    "curso": "Minha Banda Para Sempre",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-01-25"
+  },
+  {
+    "id": 354,
+    "nome": "Pedro Martellote de Assis",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2021-05-15"
+  },
+  {
+    "id": 355,
+    "nome": "Pedro Siqueira Guimarães",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2019-10-19"
+  },
+  {
+    "id": 356,
+    "nome": "Pérola Reis da Cunha Silva Santos",
+    "curso": "Violino",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-03-22"
+  },
+  {
+    "id": 357,
+    "nome": "Pietro Bahia de Oliveira",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-02-08"
+  },
+  {
+    "id": 1052,
+    "nome": "Plínio da Silva Bezerra Neto",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-19"
+  },
+  {
+    "id": 1361,
+    "nome": "Plínio da Silva Bezerra Neto",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-19"
+  },
+  {
+    "id": 358,
+    "nome": "Priscila Amaro da Silva",
+    "curso": "Contrabaixo",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-01-25"
+  },
+  {
+    "id": 1415,
+    "nome": "Priscila Amaro da Silva",
+    "curso": "Minha Banda Para Sempre",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 359,
+    "nome": "Raffael Pietro Coutinho Agostinho",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-05-28"
+  },
+  {
+    "id": 360,
+    "nome": "Raul Fonseca Silva",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-05-17"
+  },
+  {
+    "id": 361,
+    "nome": "Raul Luis Castro Costa Pereira",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2022-12-06"
+  },
+  {
+    "id": 362,
+    "nome": "Raul Rodrigues Aguiar",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-05-19"
+  },
+  {
+    "id": 1400,
+    "nome": "Rayane Bianca Stoianof Leite",
+    "curso": "Violão",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-06-01"
+  },
+  {
+    "id": 363,
+    "nome": "Rebeca dos Santos Gregório Pinto",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2021-03-06"
+  },
+  {
+    "id": 364,
+    "nome": "Rebeca Valério da Silva de Paulo",
+    "curso": "Piano",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-11-13"
+  },
+  {
+    "id": 366,
+    "nome": "Renato Vitorino Pandolpho",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-05-09"
+  },
+  {
+    "id": 367,
+    "nome": "Rhajan Rodrigues Amorim",
+    "curso": "Cavaquinho",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-07-18"
+  },
+  {
+    "id": 368,
+    "nome": "Ricardo Nunes Hacar",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2022-06-14"
+  },
+  {
+    "id": 1053,
+    "nome": "Robson Dias Pereira",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-30"
+  },
+  {
+    "id": 369,
+    "nome": "Rodrigo Wanderley da Silva",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-01-27"
+  },
+  {
+    "id": 370,
+    "nome": "Ronald Oliveira Rodrigues Fernandes",
+    "curso": "Violão",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-05-19"
+  },
+  {
+    "id": 371,
+    "nome": "Ruan Luis de Oliveira Martellote",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-11-28"
+  },
+  {
+    "id": 1054,
+    "nome": "Ryan Fagundes Coimbra",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-19"
+  },
+  {
+    "id": 372,
+    "nome": "Ryan Oliveira Narciso",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2021-05-27"
+  },
+  {
+    "id": 1055,
+    "nome": "Samuel Souza Coelho",
+    "curso": "Contrabaixo",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-31"
+  },
+  {
+    "id": 374,
+    "nome": "Sandro Ribeiro da Silva",
+    "curso": "Violão",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-05-22"
+  },
+  {
+    "id": 375,
+    "nome": "Sara Racca Alves de Freitas Damasceno",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-08-22"
+  },
+  {
+    "id": 376,
+    "nome": "Sarah Mendes Gomes",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-09-09"
+  },
+  {
+    "id": 1446,
+    "nome": "Saulo Oliveira de Souza",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 377,
+    "nome": "Senair José da Silva Pinto",
+    "curso": "Violão",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-08-16"
+  },
+  {
+    "id": 1401,
+    "nome": "Sergio Tarsia de Almeida Junior",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-05-31"
+  },
+  {
+    "id": 378,
+    "nome": "Sirley Jorge Martins Dantas",
+    "curso": "Violão",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-09-20"
+  },
+  {
+    "id": 379,
+    "nome": "Sofia Alves Vedoi",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-03-18"
+  },
+  {
+    "id": 380,
+    "nome": "Sofia Borges Aquino da Silva",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-04-28"
+  },
+  {
+    "id": 381,
+    "nome": "Sofia Cardoso de Lima",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-12-06"
+  },
+  {
+    "id": 382,
+    "nome": "Sofia Ellen Soares da Silva",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-02-06"
+  },
+  {
+    "id": 1056,
+    "nome": "Sofia Fausto de Souza",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-31"
+  },
+  {
+    "id": 383,
+    "nome": "Sofia Vitor Pim",
+    "curso": "Violão",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-03-15"
+  },
+  {
+    "id": 946,
+    "nome": "Sophia Alves",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-02-09"
+  },
+  {
+    "id": 384,
+    "nome": "Sophia Maciel Magalhaes",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-11-14"
+  },
+  {
+    "id": 385,
+    "nome": "Sophia Mallet Molnar Silveira Torres",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2022-07-22"
+  },
+  {
+    "id": 386,
+    "nome": "Sophia Reis Martins Garcia de Lima",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-06-21"
+  },
+  {
+    "id": 1057,
+    "nome": "Soraia da Silveira Duarte",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-07"
+  },
+  {
+    "id": 388,
+    "nome": "Talyta Modesto Ferreira",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-02-20"
+  },
+  {
+    "id": 389,
+    "nome": "Tarcilio Araújo Brito",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-08-02"
+  },
+  {
+    "id": 390,
+    "nome": "Téo Brito de Souza",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-10-31"
+  },
+  {
+    "id": 1062,
+    "nome": "Teodora Queiroz Peixoto",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-02-14"
+  },
+  {
+    "id": 1332,
+    "nome": "Teodora Queiroz Peixoto",
+    "curso": "Violão",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-18"
+  },
+  {
+    "id": 1402,
+    "nome": "Thais Galdino Cavalcante",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-01-28"
+  },
+  {
+    "id": 1058,
+    "nome": "Thallyson Victor silva de Aguiar",
+    "curso": "Cavaquinho",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-19"
+  },
+  {
+    "id": 1333,
+    "nome": "Thallyson Victor silva de Aguiar",
+    "curso": "Canto",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-18"
+  },
+  {
+    "id": 392,
+    "nome": "Théo D'Avila Gonçalves",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2022-08-27"
+  },
+  {
+    "id": 393,
+    "nome": "Théo de Souza Alves",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-10-30"
+  },
+  {
+    "id": 394,
+    "nome": "Theo de Souza Pereira",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-11-30"
+  },
+  {
+    "id": 396,
+    "nome": "Thiago Sandes",
+    "curso": "Guitarra",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-11-18"
+  },
+  {
+    "id": 1334,
+    "nome": "Thiago Sandes",
+    "curso": "Canto",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-18"
+  },
+  {
+    "id": 397,
+    "nome": "Thuanny de Souza Chaves Ribeiro",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-05-20"
+  },
+  {
+    "id": 398,
+    "nome": "Tito  de Oliveira Ferreira",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-08-26"
+  },
+  {
+    "id": 399,
+    "nome": "Valdemir De Vargas Junior",
+    "curso": "Home Studio",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-09-19"
+  },
+  {
+    "id": 400,
+    "nome": "Valentim Lima de Oliveira",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-04-24"
+  },
+  {
+    "id": 401,
+    "nome": "Valentina Garcia da Silva",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-01-31"
+  },
+  {
+    "id": 402,
+    "nome": "Valentina Rodrigues dos Santos",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-04-09"
+  },
+  {
+    "id": 403,
+    "nome": "Valentina Santiago Santos Poubel de Araújo",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-08-02"
+  },
+  {
+    "id": 404,
+    "nome": "Veronica Nascimento da Silva",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-08-01"
+  },
+  {
+    "id": 405,
+    "nome": "Vicente Dias Botelho",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-01-27"
+  },
+  {
+    "id": 1439,
+    "nome": "Vicente Dias Botelho",
+    "curso": "Power Kids",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 406,
+    "nome": "Victor Caputo Cerillo Andrade",
+    "curso": "Home Studio",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-06-24"
+  },
+  {
+    "id": 407,
+    "nome": "Vinícius Cantarino Vieira",
+    "curso": "Musicalização Infantil",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-11-29"
+  },
+  {
+    "id": 408,
+    "nome": "Vinícius de Andrade Teixeira",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-02-08"
+  },
+  {
+    "id": 409,
+    "nome": "Vinícius de Souza de Oliveira",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-10-23"
+  },
+  {
+    "id": 410,
+    "nome": "Vinícius Lopa Mendes Rezende de Macedo",
+    "curso": "Contrabaixo",
+    "is_segundo_curso": false,
+    "data_matricula": "2018-05-14"
+  },
+  {
+    "id": 1434,
+    "nome": "Vinícius Lopa Mendes Rezende de Macedo",
+    "curso": "Power Kids",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 1433,
+    "nome": "Vinícius Lopa Mendes Rezende de Macedo",
+    "curso": "Power Kids",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-24"
+  },
+  {
+    "id": 411,
+    "nome": "Violeta de Freitas Germano Leal",
+    "curso": "Teclado",
+    "is_segundo_curso": false,
+    "data_matricula": "2022-08-03"
+  },
+  {
+    "id": 412,
+    "nome": "Vitoria Vivia dos Santos Costa",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2023-09-04"
+  },
+  {
+    "id": 1335,
+    "nome": "Vitoria Vivia dos Santos Costa",
+    "curso": "Piano",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-18"
+  },
+  {
+    "id": 413,
+    "nome": "Wagner Amaral Mesquita Pereira",
+    "curso": "Piano",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-03-21"
+  },
+  {
+    "id": 414,
+    "nome": "Wagner Siqueira de Almeida",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-11-29"
+  },
+  {
+    "id": 415,
+    "nome": "Willer Arruda Machado",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-11-03"
+  },
+  {
+    "id": 1336,
+    "nome": "Willer Arruda Machado",
+    "curso": "Bateria",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-18"
+  },
+  {
+    "id": 1059,
+    "nome": "William Souza Rosa",
+    "curso": "Piano",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-12"
+  },
+  {
+    "id": 416,
+    "nome": "Wylla Cristina Carvalho de Almeida",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-07-04"
+  },
+  {
+    "id": 417,
+    "nome": "Yan Andrade Barreto",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-11-28"
+  },
+  {
+    "id": 418,
+    "nome": "Yasmin P. Ignez Moraes",
+    "curso": "Canto",
+    "is_segundo_curso": false,
+    "data_matricula": "2025-10-24"
+  },
+  {
+    "id": 419,
+    "nome": "Yuri Gabriel dos Santos Rodrigues",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2021-07-03"
+  },
+  {
+    "id": 1337,
+    "nome": "Yuri Gabriel dos Santos Rodrigues",
+    "curso": "Canto",
+    "is_segundo_curso": true,
+    "data_matricula": "2026-02-18"
+  },
+  {
+    "id": 420,
+    "nome": "Yuri Maia Gonçalves Dias",
+    "curso": "Violão",
+    "is_segundo_curso": false,
+    "data_matricula": "2024-03-19"
+  },
+  {
+    "id": 1060,
+    "nome": "Zaion Ferraz Simões",
+    "curso": "Bateria",
+    "is_segundo_curso": false,
+    "data_matricula": "2026-01-21"
+  }
+]

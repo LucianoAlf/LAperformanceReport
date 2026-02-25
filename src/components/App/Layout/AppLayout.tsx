@@ -6,11 +6,12 @@ import { useUnidadeFiltro } from '../../../hooks/useUnidadeFiltro';
 import { useCompetenciaFiltro } from '../../../hooks/useCompetenciaFiltro';
 import { OnboardingChecklist } from '@/components/Onboarding/OnboardingChecklist';
 import { PageTitleProvider } from '@/contexts/PageTitleContext';
+import { AdminToolsHub } from '@/components/App/AdminTools/AdminToolsHub';
 
 export function AppLayout() {
   const { unidadeSelecionada, setUnidadeSelecionada, filtroAtivo } = useUnidadeFiltro();
   const competencia = useCompetenciaFiltro();
-  
+
   // Monitorar estado da sidebar (colapsada ou expandida)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
     const saved = localStorage.getItem('sidebar-collapsed');
@@ -26,10 +27,10 @@ export function AppLayout() {
 
     // Verificar a cada 100ms se houve mudança (fallback para navegadores que não suportam storage event)
     const interval = setInterval(handleStorageChange, 100);
-    
+
     // Também escutar evento de storage
     window.addEventListener('storage', handleStorageChange);
-    
+
     return () => {
       clearInterval(interval);
       window.removeEventListener('storage', handleStorageChange);
@@ -40,14 +41,14 @@ export function AppLayout() {
     <PageTitleProvider>
       <div className="flex min-h-screen bg-slate-950">
         <AppSidebar data-tour="sidebar" />
-        <div 
+        <div
           className="flex-1 transition-all duration-300"
-          style={{ 
+          style={{
             marginLeft: isSidebarCollapsed ? '96px' : '256px'
           }}
         >
-          <AppHeader 
-            unidadeSelecionada={unidadeSelecionada} 
+          <AppHeader
+            unidadeSelecionada={unidadeSelecionada}
             onUnidadeChange={setUnidadeSelecionada}
             periodoLabel={competencia.range.label}
           />
@@ -55,9 +56,12 @@ export function AppLayout() {
             <Outlet context={{ filtroAtivo, unidadeSelecionada, competencia }} />
           </main>
         </div>
-        
+
         {/* Modal de Onboarding - aparece no primeiro acesso */}
         <OnboardingChecklist />
+
+        {/* Hub de Ferramentas Admin - global, admin-only */}
+        <AdminToolsHub />
       </div>
     </PageTitleProvider>
   );

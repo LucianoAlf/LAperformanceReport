@@ -1,0 +1,33 @@
+{
+  "mcpServers": {
+    "supabase": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@supabase/mcp-server-supabase@latest",
+        "--access-token",
+        "sbp_8937dfaada449c74acff8e9f8f81dc2aa3cee99b"
+      ]
+    },
+    "n8n": {
+      "command": "npx",
+      "args": ["-y", "n8n-mcp"],
+      "env": {
+        "MCP_MODE": "stdio",
+        "LOG_LEVEL": "error",
+        "DISABLE_CONSOLE_OUTPUT": "true",
+        "N8N_API_URL": "https://workla.latecnology.com.br",
+        "N8N_API_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NjA2YjVhMS1hMmQxLTQyOTUtOTllMi05ZjM3OTkzOWUxODIiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzY2MTgwMjMwfQ.rd8nGWj7TcU2KfUSovNq-mJGHVqRmj_QJK6uCAfH-uM"
+      }
+    },
+    "nocodb": {
+      "command": "npx",
+      "args": [
+        "mcp-remote",
+        "https://nocola.latecnology.com.br/mcp/nc1vw1ku9p0gf4cb",
+        "--header",
+        "xc-mcp-token: hIE-DOA6BO9L1vZktZPS3wS-Ymmr2u-E"
+      ]
+    }
+  }
+}

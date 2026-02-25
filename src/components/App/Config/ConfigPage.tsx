@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useSetPageTitle } from '@/contexts/PageTitleContext';
-import { Settings, Save, Plus, Trash2, RefreshCw, Building2, Users, Tag, Megaphone, Clock, Music, Edit2, Phone } from 'lucide-react';
+import { Settings, Save, Plus, Trash2, RefreshCw, Building2, Users, Tag, Megaphone, Clock, Music, Edit2, Phone, Cpu } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { useOutletContext } from 'react-router-dom';
@@ -10,13 +10,14 @@ import { PageTour, TourHelpButton } from '@/components/Onboarding';
 import { configTourSteps } from '@/components/Onboarding/tours';
 import { CaixasManager } from '@/components/App/PreAtendimento/components/chat/CaixasManager';
 import { DestinatariosRelatorioManager } from './DestinatariosRelatorioManager';
+import { ConfigIA } from '@/components/App/Alunos/Auditoria/ConfigIA';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { TimePicker24h } from '@/components/ui/time-picker-24h';
-import { 
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle 
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle
 } from '@/components/ui/alert-dialog';
 
 interface HorarioFuncionamento {
@@ -59,7 +60,7 @@ interface Curso {
   capacidade_maxima: number | null;
 }
 
-type TabId = 'unidades' | 'canais' | 'motivos' | 'tipos' | 'cursos' | 'whatsapp';
+type TabId = 'unidades' | 'canais' | 'motivos' | 'tipos' | 'cursos' | 'whatsapp' | 'ia';
 
 export function ConfigPage() {
   useSetPageTitle({
@@ -72,9 +73,9 @@ export function ConfigPage() {
 
   const { isAdmin } = useAuth();
   const { filtroAtivo } = useOutletContext<{ filtroAtivo: string | null }>();
-  
+
   console.log('🔍 [ConfigPage] Renderizou com filtroAtivo:', filtroAtivo);
-  
+
   const [activeTab, setActiveTab] = useState<TabId>('unidades');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -95,13 +96,13 @@ export function ConfigPage() {
   const [newMotivo, setNewMotivo] = useState('');
   const [newTipo, setNewTipo] = useState('');
   const [newCurso, setNewCurso] = useState('');
-  
+
   // Estados para controle dos AlertDialogs de exclusão
   const [canalParaExcluir, setCanalParaExcluir] = useState<number | null>(null);
   const [motivoParaExcluir, setMotivoParaExcluir] = useState<number | null>(null);
   const [tipoParaExcluir, setTipoParaExcluir] = useState<number | null>(null);
   const [cursoParaExcluir, setCursoParaExcluir] = useState<number | null>(null);
-  
+
   // Estado para modal de edição de curso
   const [cursoParaEditar, setCursoParaEditar] = useState<Curso | null>(null);
   const [capacidadeEditando, setCapacidadeEditando] = useState<number | null>(null);
@@ -136,15 +137,15 @@ export function ConfigPage() {
         .from('unidades_cursos')
         .select('curso_id, ativo')
         .eq('unidade_id', unidadeId);
-      
+
       if (error) throw error;
-      
+
       // Converter para Record<curso_id, ativo>
       const cursosMap: Record<number, boolean> = {};
       data?.forEach(uc => {
         cursosMap[uc.curso_id] = uc.ativo;
       });
-      
+
       setCursosUnidade(cursosMap);
     } catch (err) {
       console.error('Erro ao carregar cursos da unidade:', err);
@@ -217,14 +218,14 @@ export function ConfigPage() {
 
   // Handler para horário de funcionamento
   function handleHorarioChange(
-    unidadeId: string, 
-    periodo: 'segunda_sexta' | 'sabado' | 'domingo', 
-    campo: 'inicio' | 'fim' | 'fechado', 
+    unidadeId: string,
+    periodo: 'segunda_sexta' | 'sabado' | 'domingo',
+    campo: 'inicio' | 'fim' | 'fechado',
     valor: string | boolean
   ) {
     const updateFn = (prev: Unidade[]) => prev.map(u => {
       if (u.id !== unidadeId) return u;
-      
+
       const horarioAtual = u.horario_funcionamento || {
         segunda_sexta: { inicio: '08:00', fim: '21:00' },
         sabado: { inicio: '08:00', fim: '16:00' },
@@ -242,7 +243,7 @@ export function ConfigPage() {
         }
       };
     });
-    
+
     setUnidades(updateFn);
     setUnidadesFiltradas(updateFn);
     setEditedUnidades(prev => new Set(prev).add(unidadeId));
@@ -273,20 +274,20 @@ export function ConfigPage() {
 
   async function confirmarExclusaoCanal() {
     if (!canalParaExcluir) return;
-    
+
     try {
       const { error } = await supabase
         .from('canais_origem')
         .delete()
         .eq('id', canalParaExcluir);
-      
+
       if (error) {
         console.error('Erro ao excluir canal:', error);
         alert(`Erro ao excluir canal: ${error.message}\n\nPode haver dados vinculados a este canal.`);
         setCanalParaExcluir(null);
         return;
       }
-      
+
       // Sucesso: atualizar lista local
       setCanais(prev => prev.filter(c => c.id !== canalParaExcluir));
       setCanalParaExcluir(null);
@@ -313,20 +314,20 @@ export function ConfigPage() {
 
   async function confirmarExclusaoMotivo() {
     if (!motivoParaExcluir) return;
-    
+
     try {
       const { error } = await supabase
         .from('motivos_saida')
         .delete()
         .eq('id', motivoParaExcluir);
-      
+
       if (error) {
         console.error('Erro ao excluir motivo:', error);
         alert(`Erro ao excluir motivo: ${error.message}\n\nPode haver dados vinculados a este motivo.`);
         setMotivoParaExcluir(null);
         return;
       }
-      
+
       // Sucesso: atualizar lista local
       setMotivosSaida(prev => prev.filter(m => m.id !== motivoParaExcluir));
       setMotivoParaExcluir(null);
@@ -353,20 +354,20 @@ export function ConfigPage() {
 
   async function confirmarExclusaoTipo() {
     if (!tipoParaExcluir) return;
-    
+
     try {
       const { error } = await supabase
         .from('tipos_saida')
         .delete()
         .eq('id', tipoParaExcluir);
-      
+
       if (error) {
         console.error('Erro ao excluir tipo:', error);
         alert(`Erro ao excluir tipo: ${error.message}\n\nPode haver dados vinculados a este tipo.`);
         setTipoParaExcluir(null);
         return;
       }
-      
+
       // Sucesso: atualizar lista local
       setTiposSaida(prev => prev.filter(t => t.id !== tipoParaExcluir));
       setTipoParaExcluir(null);
@@ -408,10 +409,10 @@ export function ConfigPage() {
 
   async function toggleCursoUnidade(cursoId: number, ativoAtual: boolean) {
     if (!filtroAtivo) return;
-    
+
     try {
       const novoEstado = !ativoAtual;
-      
+
       // Verificar se já existe o relacionamento
       const { data: existente } = await supabase
         .from('unidades_cursos')
@@ -419,7 +420,7 @@ export function ConfigPage() {
         .eq('unidade_id', filtroAtivo)
         .eq('curso_id', cursoId)
         .single();
-      
+
       if (existente) {
         // Atualizar existente
         await supabase
@@ -437,7 +438,7 @@ export function ConfigPage() {
             ativo: novoEstado
           });
       }
-      
+
       // Atualizar estado local
       setCursosUnidade(prev => ({
         ...prev,
@@ -457,24 +458,24 @@ export function ConfigPage() {
 
   async function salvarEdicaoCurso() {
     if (!cursoParaEditar) return;
-    
+
     try {
       const { error } = await supabase
         .from('cursos')
-        .update({ 
-          capacidade_maxima: semLimite ? null : capacidadeEditando 
+        .update({
+          capacidade_maxima: semLimite ? null : capacidadeEditando
         })
         .eq('id', cursoParaEditar.id);
-      
+
       if (error) throw error;
-      
+
       // Atualizar lista local
-      setCursos(prev => prev.map(c => 
-        c.id === cursoParaEditar.id 
+      setCursos(prev => prev.map(c =>
+        c.id === cursoParaEditar.id
           ? { ...c, capacidade_maxima: semLimite ? null : capacidadeEditando }
           : c
       ));
-      
+
       setCursoParaEditar(null);
       setCapacidadeEditando(null);
       setSemLimite(false);
@@ -486,20 +487,20 @@ export function ConfigPage() {
 
   async function confirmarExclusaoCurso() {
     if (!cursoParaExcluir) return;
-    
+
     try {
       const { error } = await supabase
         .from('cursos')
         .delete()
         .eq('id', cursoParaExcluir);
-      
+
       if (error) {
         console.error('Erro ao excluir curso:', error);
         alert(`Erro ao excluir curso: ${error.message}\n\nPode haver dados vinculados a este curso.`);
         setCursoParaExcluir(null);
         return;
       }
-      
+
       // Sucesso: atualizar lista local
       setCursos(prev => prev.filter(c => c.id !== cursoParaExcluir));
       setCursoParaExcluir(null);
@@ -517,6 +518,7 @@ export function ConfigPage() {
     { id: 'tipos', label: 'Tipos de Saída', shortLabel: 'Tipos', icon: Tag },
     { id: 'cursos', label: 'Cursos', shortLabel: 'Cursos', icon: Music },
     { id: 'whatsapp', label: 'WhatsApp', shortLabel: 'WhatsApp', icon: Phone },
+    { id: 'ia', label: 'Inteligência Artificial', shortLabel: 'IA', icon: Cpu },
   ];
 
   if (loading) {
@@ -543,6 +545,20 @@ export function ConfigPage() {
 
       {/* Conteúdo das Tabs */}
       <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
+        {/* Tab Inteligência Artificial */}
+        {activeTab === 'ia' && (
+          <div data-tour="config-ia" className="space-y-4 max-w-2xl">
+            <h3 className="text-lg font-bold text-white mb-4">Configurações de Inteligência Artificial</h3>
+            <p className="text-sm text-slate-400 mb-6">
+              Configure as credenciais e modelos de IA utilizados pelos componentes no sistema (como o chat da Auditoria).
+            </p>
+            {/* Componente original importado */}
+            <div className="bg-slate-900 border border-slate-700 p-4 rounded-xl">
+              <ConfigIA collapsed={false} onToggle={() => { }} />
+            </div>
+          </div>
+        )}
+
         {/* Tab Unidades */}
         {activeTab === 'unidades' && (
           <div data-tour="config-unidades" className="space-y-4">
@@ -566,144 +582,143 @@ export function ConfigPage() {
                 </div>
               ) : (
                 unidadesFiltradas.map(u => {
-                const horario = u.horario_funcionamento || {
-                  segunda_sexta: { inicio: '08:00', fim: '21:00' },
-                  sabado: { inicio: '08:00', fim: '16:00' },
-                  domingo: { fechado: true }
-                };
-                
-                return (
-                  <div key={u.id} className={`p-4 rounded-xl ${
-                    editedUnidades.has(u.id) ? 'bg-amber-500/10 border border-amber-500/30' : 'bg-slate-900/50 border border-slate-700/50'
-                  }`}>
-                    {/* Dados básicos da unidade */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                      <div>
-                        <label className="text-xs text-slate-400 uppercase mb-1 block">Nome</label>
-                        <input
-                          type="text"
-                          value={u.nome}
-                          onChange={(e) => handleUnidadeChange(u.id, 'nome', e.target.value)}
-                          placeholder="Nome"
-                          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-slate-400 uppercase mb-1 block">Endereço</label>
-                        <input
-                          type="text"
-                          value={u.endereco || ''}
-                          onChange={(e) => handleUnidadeChange(u.id, 'endereco', e.target.value)}
-                          placeholder="Endereço"
-                          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-300 text-sm"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-xs text-slate-400 uppercase mb-1 block">Telefone</label>
-                        <input
-                          type="text"
-                          value={u.telefone || ''}
-                          onChange={(e) => handleUnidadeChange(u.id, 'telefone', e.target.value)}
-                          placeholder="Telefone"
-                          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-300 text-sm"
-                        />
-                      </div>
-                    </div>
+                  const horario = u.horario_funcionamento || {
+                    segunda_sexta: { inicio: '08:00', fim: '21:00' },
+                    sabado: { inicio: '08:00', fim: '16:00' },
+                    domingo: { fechado: true }
+                  };
 
-                    {/* Equipe Comercial e Retenção */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 pb-4 border-b border-slate-700/50">
-                      <div>
-                        <label className="text-xs text-slate-400 uppercase mb-1 block">🎯 Hunter (Comercial)</label>
-                        <input
-                          type="text"
-                          value={u.hunter_nome || ''}
-                          onChange={(e) => handleUnidadeChange(u.id, 'hunter_nome', e.target.value)}
-                          placeholder="Nome do Hunter"
-                          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-300 text-sm"
-                        />
-                        <p className="text-xs text-slate-500 mt-1">Aparecerá nos relatórios comerciais</p>
-                      </div>
-                      <div>
-                        <label className="text-xs text-slate-400 uppercase mb-1 block">🌱 Farmers (Retenção)</label>
-                        <input
-                          type="text"
-                          value={u.farmers_nomes?.join(', ') || ''}
-                          onChange={(e) => {
-                            const farmers = e.target.value.split(',').map(n => n.trim()).filter(n => n);
-                            handleUnidadeChange(u.id, 'farmers_nomes', farmers);
-                          }}
-                          placeholder="Ex: Gabriela, Jhonatan"
-                          className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-300 text-sm"
-                        />
-                        <p className="text-xs text-slate-500 mt-1">Separe os nomes por vírgula</p>
-                      </div>
-                    </div>
-
-                    {/* Horário de Funcionamento */}
-                    <div className="border-t border-slate-700/50 pt-4">
-                      <div className="flex items-center gap-2 mb-3">
-                        <Clock size={16} className="text-violet-400" />
-                        <span className="text-sm font-medium text-white">Horário de Funcionamento</span>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {/* Segunda a Sexta */}
-                        <div className="bg-slate-800/50 rounded-lg p-3">
-                          <span className="text-xs text-slate-400 uppercase block mb-2">Segunda a Sexta</span>
-                          <div className="flex items-center gap-2">
-                            <TimePicker24h
-                              value={horario.segunda_sexta?.inicio || '08:00'}
-                              onChange={(value) => handleHorarioChange(u.id, 'segunda_sexta', 'inicio', value)}
-                              placeholder="Início"
-                              className="flex-1"
-                            />
-                            <span className="text-slate-500">às</span>
-                            <TimePicker24h
-                              value={horario.segunda_sexta?.fim || '21:00'}
-                              onChange={(value) => handleHorarioChange(u.id, 'segunda_sexta', 'fim', value)}
-                              placeholder="Fim"
-                              className="flex-1"
-                            />
-                          </div>
+                  return (
+                    <div key={u.id} className={`p-4 rounded-xl ${editedUnidades.has(u.id) ? 'bg-amber-500/10 border border-amber-500/30' : 'bg-slate-900/50 border border-slate-700/50'
+                      }`}>
+                      {/* Dados básicos da unidade */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                        <div>
+                          <label className="text-xs text-slate-400 uppercase mb-1 block">Nome</label>
+                          <input
+                            type="text"
+                            value={u.nome}
+                            onChange={(e) => handleUnidadeChange(u.id, 'nome', e.target.value)}
+                            placeholder="Nome"
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm"
+                          />
                         </div>
-
-                        {/* Sábado */}
-                        <div className="bg-slate-800/50 rounded-lg p-3">
-                          <span className="text-xs text-slate-400 uppercase block mb-2">Sábado</span>
-                          <div className="flex items-center gap-2">
-                            <TimePicker24h
-                              value={horario.sabado?.inicio || '08:00'}
-                              onChange={(value) => handleHorarioChange(u.id, 'sabado', 'inicio', value)}
-                              placeholder="Início"
-                              className="flex-1"
-                            />
-                            <span className="text-slate-500">às</span>
-                            <TimePicker24h
-                              value={horario.sabado?.fim || '16:00'}
-                              onChange={(value) => handleHorarioChange(u.id, 'sabado', 'fim', value)}
-                              placeholder="Fim"
-                              className="flex-1"
-                            />
-                          </div>
+                        <div>
+                          <label className="text-xs text-slate-400 uppercase mb-1 block">Endereço</label>
+                          <input
+                            type="text"
+                            value={u.endereco || ''}
+                            onChange={(e) => handleUnidadeChange(u.id, 'endereco', e.target.value)}
+                            placeholder="Endereço"
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-300 text-sm"
+                          />
                         </div>
+                        <div>
+                          <label className="text-xs text-slate-400 uppercase mb-1 block">Telefone</label>
+                          <input
+                            type="text"
+                            value={u.telefone || ''}
+                            onChange={(e) => handleUnidadeChange(u.id, 'telefone', e.target.value)}
+                            placeholder="Telefone"
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-300 text-sm"
+                          />
+                        </div>
+                      </div>
 
-                        {/* Domingo */}
-                        <div className="bg-slate-800/50 rounded-lg p-3">
-                          <span className="text-xs text-slate-400 uppercase block mb-2">Domingo</span>
-                          <div className="flex items-center gap-2">
-                            <label className="flex items-center gap-2 cursor-pointer">
-                              <Checkbox
-                                checked={horario.domingo?.fechado !== false}
-                                onCheckedChange={(checked) => handleHorarioChange(u.id, 'domingo', 'fechado', checked as boolean)}
+                      {/* Equipe Comercial e Retenção */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 pb-4 border-b border-slate-700/50">
+                        <div>
+                          <label className="text-xs text-slate-400 uppercase mb-1 block">🎯 Hunter (Comercial)</label>
+                          <input
+                            type="text"
+                            value={u.hunter_nome || ''}
+                            onChange={(e) => handleUnidadeChange(u.id, 'hunter_nome', e.target.value)}
+                            placeholder="Nome do Hunter"
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-300 text-sm"
+                          />
+                          <p className="text-xs text-slate-500 mt-1">Aparecerá nos relatórios comerciais</p>
+                        </div>
+                        <div>
+                          <label className="text-xs text-slate-400 uppercase mb-1 block">🌱 Farmers (Retenção)</label>
+                          <input
+                            type="text"
+                            value={u.farmers_nomes?.join(', ') || ''}
+                            onChange={(e) => {
+                              const farmers = e.target.value.split(',').map(n => n.trim()).filter(n => n);
+                              handleUnidadeChange(u.id, 'farmers_nomes', farmers);
+                            }}
+                            placeholder="Ex: Gabriela, Jhonatan"
+                            className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-slate-300 text-sm"
+                          />
+                          <p className="text-xs text-slate-500 mt-1">Separe os nomes por vírgula</p>
+                        </div>
+                      </div>
+
+                      {/* Horário de Funcionamento */}
+                      <div className="border-t border-slate-700/50 pt-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <Clock size={16} className="text-violet-400" />
+                          <span className="text-sm font-medium text-white">Horário de Funcionamento</span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          {/* Segunda a Sexta */}
+                          <div className="bg-slate-800/50 rounded-lg p-3">
+                            <span className="text-xs text-slate-400 uppercase block mb-2">Segunda a Sexta</span>
+                            <div className="flex items-center gap-2">
+                              <TimePicker24h
+                                value={horario.segunda_sexta?.inicio || '08:00'}
+                                onChange={(value) => handleHorarioChange(u.id, 'segunda_sexta', 'inicio', value)}
+                                placeholder="Início"
+                                className="flex-1"
                               />
-                              <span className="text-sm text-slate-300">Fechado</span>
-                            </label>
+                              <span className="text-slate-500">às</span>
+                              <TimePicker24h
+                                value={horario.segunda_sexta?.fim || '21:00'}
+                                onChange={(value) => handleHorarioChange(u.id, 'segunda_sexta', 'fim', value)}
+                                placeholder="Fim"
+                                className="flex-1"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Sábado */}
+                          <div className="bg-slate-800/50 rounded-lg p-3">
+                            <span className="text-xs text-slate-400 uppercase block mb-2">Sábado</span>
+                            <div className="flex items-center gap-2">
+                              <TimePicker24h
+                                value={horario.sabado?.inicio || '08:00'}
+                                onChange={(value) => handleHorarioChange(u.id, 'sabado', 'inicio', value)}
+                                placeholder="Início"
+                                className="flex-1"
+                              />
+                              <span className="text-slate-500">às</span>
+                              <TimePicker24h
+                                value={horario.sabado?.fim || '16:00'}
+                                onChange={(value) => handleHorarioChange(u.id, 'sabado', 'fim', value)}
+                                placeholder="Fim"
+                                className="flex-1"
+                              />
+                            </div>
+                          </div>
+
+                          {/* Domingo */}
+                          <div className="bg-slate-800/50 rounded-lg p-3">
+                            <span className="text-xs text-slate-400 uppercase block mb-2">Domingo</span>
+                            <div className="flex items-center gap-2">
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <Checkbox
+                                  checked={horario.domingo?.fechado !== false}
+                                  onCheckedChange={(checked) => handleHorarioChange(u.id, 'domingo', 'fechado', checked as boolean)}
+                                />
+                                <span className="text-sm text-slate-300">Fechado</span>
+                              </label>
+                            </div>
                           </div>
                         </div>
                       </div>
                     </div>
-                  </div>
-                );
-              })
+                  );
+                })
               )}
             </div>
           </div>
@@ -739,9 +754,8 @@ export function ConfigPage() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => toggleCanal(c.id, c.ativo)}
-                      className={`px-3 py-1 rounded text-xs ${
-                        c.ativo ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700 text-slate-400'
-                      }`}
+                      className={`px-3 py-1 rounded text-xs ${c.ativo ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700 text-slate-400'
+                        }`}
                     >
                       {c.ativo ? 'Ativo' : 'Inativo'}
                     </button>
@@ -893,31 +907,30 @@ export function ConfigPage() {
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => toggleCurso(c.id, ativoNaUnidade)}
-                        className={`px-3 py-1 rounded text-xs ${
-                          ativoNaUnidade ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700 text-slate-400'
-                        }`}
+                        className={`px-3 py-1 rounded text-xs ${ativoNaUnidade ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700 text-slate-400'
+                          }`}
                       >
                         {ativoNaUnidade ? 'Ativo' : 'Inativo'}
                       </button>
-                    {isAdmin && (
-                      <>
-                        <button
-                          onClick={() => abrirModalEditarCurso(c)}
-                          className="p-1 text-slate-500 hover:text-violet-400"
-                          title="Editar capacidade"
-                        >
-                          <Edit2 size={16} />
-                        </button>
-                        <button
-                          onClick={() => setCursoParaExcluir(c.id)}
-                          className="p-1 text-slate-500 hover:text-rose-400"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </>
-                    )}
+                      {isAdmin && (
+                        <>
+                          <button
+                            onClick={() => abrirModalEditarCurso(c)}
+                            className="p-1 text-slate-500 hover:text-violet-400"
+                            title="Editar capacidade"
+                          >
+                            <Edit2 size={16} />
+                          </button>
+                          <button
+                            onClick={() => setCursoParaExcluir(c.id)}
+                            className="p-1 text-slate-500 hover:text-rose-400"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
-                </div>
                 );
               })}
             </div>
@@ -953,7 +966,7 @@ export function ConfigPage() {
             <AlertDialogCancel onClick={() => setCanalParaExcluir(null)}>
               Cancelar
             </AlertDialogCancel>
-            <AlertDialogAction 
+            <AlertDialogAction
               onClick={confirmarExclusaoCanal}
               className="bg-rose-600 hover:bg-rose-700"
             >
@@ -981,7 +994,7 @@ export function ConfigPage() {
             <AlertDialogCancel onClick={() => setMotivoParaExcluir(null)}>
               Cancelar
             </AlertDialogCancel>
-            <AlertDialogAction 
+            <AlertDialogAction
               onClick={confirmarExclusaoMotivo}
               className="bg-rose-600 hover:bg-rose-700"
             >
@@ -1009,7 +1022,7 @@ export function ConfigPage() {
             <AlertDialogCancel onClick={() => setTipoParaExcluir(null)}>
               Cancelar
             </AlertDialogCancel>
-            <AlertDialogAction 
+            <AlertDialogAction
               onClick={confirmarExclusaoTipo}
               className="bg-rose-600 hover:bg-rose-700"
             >
@@ -1028,7 +1041,7 @@ export function ConfigPage() {
               Configure a capacidade máxima de alunos por turma para este curso.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          
+
           <div className="space-y-4 py-4">
             <div>
               <Label className="text-sm text-slate-300">Curso</Label>
@@ -1036,7 +1049,7 @@ export function ConfigPage() {
                 {cursoParaEditar?.nome}
               </div>
             </div>
-            
+
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Checkbox
@@ -1051,7 +1064,7 @@ export function ConfigPage() {
                   Sem limite de capacidade
                 </Label>
               </div>
-              
+
               {!semLimite && (
                 <div>
                   <Label htmlFor="capacidade" className="text-sm text-slate-300">
@@ -1074,12 +1087,12 @@ export function ConfigPage() {
               )}
             </div>
           </div>
-          
+
           <AlertDialogFooter>
             <AlertDialogCancel onClick={() => setCursoParaEditar(null)} className="bg-slate-700 hover:bg-slate-600">
               Cancelar
             </AlertDialogCancel>
-            <AlertDialogAction 
+            <AlertDialogAction
               onClick={salvarEdicaoCurso}
               className="bg-violet-600 hover:bg-violet-700"
               disabled={!semLimite && (!capacidadeEditando || capacidadeEditando < 1)}
@@ -1108,7 +1121,7 @@ export function ConfigPage() {
             <AlertDialogCancel onClick={() => setCursoParaExcluir(null)}>
               Cancelar
             </AlertDialogCancel>
-            <AlertDialogAction 
+            <AlertDialogAction
               onClick={confirmarExclusaoCurso}
               className="bg-rose-600 hover:bg-rose-700"
             >
