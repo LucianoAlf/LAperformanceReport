@@ -486,7 +486,13 @@ export function AdministrativoPage() {
         renovacoes_pendentes: (acc.renovacoes_pendentes || 0) + (r.renovacoes_pendentes || 0),
       }), {}) || {};
 
-      // Montar resumo — KPIs de retenção vêm da view (consistente com Analytics)
+      // Montar resumo — combinar view + movimentacoes_admin para dados completos
+      // A view só conta registros da tabela `renovacoes` (que só tem renovados).
+      // Não renovações vêm de movimentacoes_admin, então usamos Math.max para pegar o maior.
+      const naoRenovacoesCount = Math.max(retConsolidado.nao_renovacoes || 0, naoRenovacoes.length);
+      const renovacoesRealizadasCount = retConsolidado.renovacoes_realizadas || renovacoes.length;
+      const renovacoesPendentesCount = retConsolidado.renovacoes_pendentes || 0;
+
       setResumo({
         ...kpis,
         alunos_trancados: trancamentos.length,
@@ -494,14 +500,14 @@ export function AdministrativoPage() {
         novos_segundo_curso: novosSegundoCurso,
         novos_bolsistas: novosBolsistas,
         matriculas_ativas: matriculasAtivas,
-        renovacoes_previstas: retConsolidado.renovacoes_previstas || renovacoes.length + naoRenovacoes.length,
-        renovacoes_realizadas: retConsolidado.renovacoes_realizadas || renovacoes.length,
-        renovacoes_pendentes: retConsolidado.renovacoes_pendentes || 0,
-        nao_renovacoes: retConsolidado.nao_renovacoes || naoRenovacoes.length,
+        renovacoes_previstas: renovacoesRealizadasCount + naoRenovacoesCount + renovacoesPendentesCount,
+        renovacoes_realizadas: renovacoesRealizadasCount,
+        renovacoes_pendentes: renovacoesPendentesCount,
+        nao_renovacoes: naoRenovacoesCount,
         avisos_previos: retConsolidado.avisos_previos || avisosPrevios.length,
         evasoes_total: retConsolidado.total_evasoes || (evasoes.length + naoRenovacoes.length),
         evasoes_interrompido: retConsolidado.evasoes_interrompidas || evasoes.length,
-        evasoes_nao_renovou: retConsolidado.nao_renovacoes || naoRenovacoes.length,
+        evasoes_nao_renovou: naoRenovacoesCount,
         mrr_perdido: retConsolidado.mrr_perdido || 0,
       });
 
