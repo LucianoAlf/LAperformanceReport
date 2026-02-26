@@ -59,6 +59,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
 import { ComboboxNome, SugestaoLead } from '@/components/ui/combobox-nome';
+import { ComboboxTelefone } from '@/components/ui/combobox-telefone';
 import { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
 import { CelulaEditavelInline } from '@/components/ui/CelulaEditavelInline';
 import { AlertasComercial } from './AlertasComercial';
@@ -3296,16 +3297,28 @@ export function ComercialPage() {
                         />
                       </td>
                       <td className="py-2 px-2">
-                        <Input
-                          type="text"
+                        <ComboboxTelefone
                           value={linha.telefone || ''}
-                          onChange={(e) => {
-                            const masked = maskPhone(e.target.value);
-                            updateLinhaLead(linha.id, 'telefone', masked);
+                          onChange={(masked) => updateLinhaLead(linha.id, 'telefone', masked)}
+                          onSelectSugestao={(sugestao) => {
+                            setLoteLeads(prev => prev.map(l =>
+                              l.id === linha.id
+                                ? {
+                                    ...l,
+                                    aluno_nome: sugestao.nome,
+                                    telefone: sugestao.telefone
+                                      ? maskPhone(sugestao.telefone.replace(/^55/, ''))
+                                      : l.telefone,
+                                    canal_origem_id: sugestao.canal_origem_id || l.canal_origem_id,
+                                    curso_id: sugestao.curso_id || l.curso_id,
+                                  }
+                                : l
+                            ));
                           }}
                           onBlur={() => checkLeadByPhone(linha.telefone, linha.id)}
+                          sugestoes={sugestoesLeads}
+                          maskPhone={maskPhone}
                           placeholder="(21) 99999-9999"
-                          className="h-8 text-xs"
                         />
                       </td>
                       <td className="py-2 px-2">
