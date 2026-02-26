@@ -12,6 +12,7 @@ import {
   Phone,
   MessageSquare,
   CheckSquare,
+  Zap,
 } from 'lucide-react';
 import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { DashboardTab } from './tabs/DashboardTab';
@@ -22,6 +23,7 @@ import { MetasTab } from './tabs/MetasTab';
 import { MilaTab } from './tabs/MilaTab';
 import { RelatoriosTab } from './tabs/RelatoriosTab';
 import { ConversasTab } from './tabs/ConversasTab';
+import { TabAutomacaoLeads } from './tabs/TabAutomacaoLeads';
 import { LeadDrawer } from './components/LeadDrawer';
 import { ModalNovoLead } from './components/ModalNovoLead';
 import { ModalAgendar } from './components/ModalAgendar';
@@ -44,6 +46,7 @@ const crmTabs: PageTab<CRMTabId>[] = [
   { id: 'mila', label: 'Painel Mila', shortLabel: 'Mila', icon: Bot },
   { id: 'relatorios', label: 'Relatórios', shortLabel: 'Relat.', icon: FileText },
   { id: 'tarefas', label: 'Tarefas Rápidas', shortLabel: 'Tarefas', icon: CheckSquare },
+  { id: 'automacao', label: 'Automacao', shortLabel: 'Automacao', icon: Zap },
 ];
 
 interface OutletContextType {
@@ -171,6 +174,9 @@ export function PreAtendimentoPage() {
             unidadeId={unidadeId}
             accentGradient="from-violet-600 to-purple-600"
           />
+        )}
+        {activeTab === 'automacao' && (
+          <TabAutomacaoLeads unidadeAtual={unidadeId} />
         )}
       </div>
 
