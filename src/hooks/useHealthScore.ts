@@ -157,7 +157,7 @@ export function useHealthScore(
     });
     
     // 2. Média/Turma (20%)
-    const mediaTurma = kpis.mediaTurma || 2.0; // Default 2.0 se não tiver dados
+    const mediaTurma = kpis.mediaTurma ?? 2.0; // Default 2.0 apenas se null/undefined
     const scoreMT = calcularPontosMediaTurma(mediaTurma, METAS_REFERENCIA.mediaTurma.meta);
     detalhes.push({
       kpi: 'Média/Turma',
@@ -166,9 +166,9 @@ export function useHealthScore(
       peso: weights.mediaTurma / 100,
       contribuicao: scoreMT * (weights.mediaTurma / 100)
     });
-    
-    // 3. Retenção (25%) - Default 100% se não houver dados
-    const retencao = kpis.retencao || 100;
+
+    // 3. Retenção (25%) - Default 100% apenas se null/undefined
+    const retencao = kpis.retencao ?? 100;
     const scoreRet = retencao; // Já é 0-100
     detalhes.push({
       kpi: 'Retenção',
@@ -177,9 +177,9 @@ export function useHealthScore(
       peso: weights.retencao / 100,
       contribuicao: scoreRet * (weights.retencao / 100)
     });
-    
+
     // 4. Conversão (15%)
-    const conversao = kpis.conversao || 0;
+    const conversao = kpis.conversao ?? 0;
     const scoreConv = Math.min(100, conversao); // Já é 0-100
     detalhes.push({
       kpi: 'Conversão',
@@ -188,9 +188,9 @@ export function useHealthScore(
       peso: weights.conversao / 100,
       contribuicao: scoreConv * (weights.conversao / 100)
     });
-    
+
     // 5. Presença (15%)
-    const presenca = kpis.presenca || 75; // Default 75% se não tiver dados
+    const presenca = kpis.presenca ?? 75; // Default 75% apenas se null/undefined
     const scorePres = presenca; // Já é 0-100
     detalhes.push({
       kpi: 'Presença',
@@ -268,7 +268,7 @@ export function calcularHealthScore(
   });
   
   // 2. Média/Turma (20%)
-  const mediaTurma = kpis.mediaTurma || 2.0;
+  const mediaTurma = kpis.mediaTurma ?? 2.0;
   const scoreMT = calcularPontosMediaTurma(mediaTurma, METAS_REFERENCIA.mediaTurma.meta);
   detalhes.push({
     kpi: 'Média/Turma',
@@ -277,9 +277,9 @@ export function calcularHealthScore(
     peso: weights.mediaTurma / 100,
     contribuicao: scoreMT * (weights.mediaTurma / 100)
   });
-  
-  // 3. Retenção (25%) - Default 100% se não houver dados
-  const retencao = kpis.retencao || 100;
+
+  // 3. Retenção (25%) - Default 100% apenas se null/undefined
+  const retencao = kpis.retencao ?? 100;
   const scoreRet = retencao;
   detalhes.push({
     kpi: 'Retenção',
@@ -288,9 +288,9 @@ export function calcularHealthScore(
     peso: weights.retencao / 100,
     contribuicao: scoreRet * (weights.retencao / 100)
   });
-  
+
   // 4. Conversão (15%)
-  const conversao = kpis.conversao || 0;
+  const conversao = kpis.conversao ?? 0;
   const scoreConv = Math.min(100, conversao);
   detalhes.push({
     kpi: 'Conversão',
@@ -299,9 +299,9 @@ export function calcularHealthScore(
     peso: weights.conversao / 100,
     contribuicao: scoreConv * (weights.conversao / 100)
   });
-  
+
   // 5. Presença (15%)
-  const presenca = kpis.presenca || 75;
+  const presenca = kpis.presenca ?? 75;
   const scorePres = presenca;
   detalhes.push({
     kpi: 'Presença',
