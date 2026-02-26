@@ -1016,8 +1016,8 @@ export function ComercialPage() {
           ? {
               ...l,
               aluno_nome: existing.nome || l.aluno_nome,
-              canal_origem_id: existing.canal_origem_id || l.canal_origem_id,
-              curso_id: existing.curso_interesse_id || l.curso_id,
+              canal_origem_id: existing.canal_origem_id ?? l.canal_origem_id,
+              curso_id: existing.curso_interesse_id ?? l.curso_id,
             }
           : l
       ));
@@ -3296,8 +3296,8 @@ export function ComercialPage() {
                                     ...l,
                                     aluno_nome: sugestao.nome,
                                     telefone: sugestao.telefone ? maskPhone(sugestao.telefone.replace(/^55/, '')) : l.telefone,
-                                    canal_origem_id: sugestao.canal_origem_id || l.canal_origem_id,
-                                    curso_id: sugestao.curso_id || l.curso_id,
+                                    canal_origem_id: sugestao.canal_origem_id ?? l.canal_origem_id,
+                                    curso_id: sugestao.curso_id ?? l.curso_id,
                                   }
                                 : l
                             ));
@@ -3319,8 +3319,8 @@ export function ComercialPage() {
                                     telefone: sugestao.telefone
                                       ? maskPhone(sugestao.telefone.replace(/^55/, ''))
                                       : l.telefone,
-                                    canal_origem_id: sugestao.canal_origem_id || l.canal_origem_id,
-                                    curso_id: sugestao.curso_id || l.curso_id,
+                                    canal_origem_id: sugestao.canal_origem_id ?? l.canal_origem_id,
+                                    curso_id: sugestao.curso_id ?? l.curso_id,
                                   }
                                 : l
                             ));
