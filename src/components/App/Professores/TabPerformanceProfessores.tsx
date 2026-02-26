@@ -22,6 +22,7 @@ import { PlanoAcaoEquipe } from './PlanoAcaoEquipe';
 import { calcularHealthScore } from '@/hooks/useHealthScore';
 import { DEFAULT_HEALTH_WEIGHTS } from './HealthScoreConfig';
 import { HealthScoreCard } from './HealthScoreCard';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 interface ProfessorPerformance {
   id: number;
@@ -41,6 +42,7 @@ interface ProfessorPerformance {
   tendencia_media?: 'subindo' | 'estavel' | 'caindo';
   health_score: number;
   health_status: 'critico' | 'atencao' | 'saudavel';
+  health_detalhes: { kpi: string; valor: number; scoreNormalizado: number; peso: number; contribuicao: number }[];
   fator_demanda_ponderado: number; // Fator de demanda ponderado pela composição da carteira
 }
 
@@ -384,6 +386,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights }: Props
             tendencia_media: tendencia,
             health_score: healthResult.score,
             health_status: healthResult.status,
+            health_detalhes: healthResult.detalhes,
             fator_demanda_ponderado: Math.round(fatorDemandaPonderado * 100) / 100
           };
         })
@@ -794,15 +797,52 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights }: Props
                     </td>
                     {/* Health Score */}
                     <td className="text-center px-4 py-3">
-                      <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl border ${
-                        professor.health_status === 'saudavel' 
-                          ? 'bg-emerald-900/30 border-emerald-700 text-emerald-400' 
-                          : professor.health_status === 'atencao'
-                          ? 'bg-amber-900/30 border-amber-700 text-amber-400'
-                          : 'bg-rose-900/30 border-rose-700 text-rose-400'
-                      }`}>
-                        <span className="text-sm font-black">{Math.round(professor.health_score)}</span>
-                      </div>
+                      <Tooltip
+                        side="top"
+                        content={
+                          <div className="min-w-[260px] text-xs" onClick={(e) => e.stopPropagation()}>
+                            <p className="font-bold text-slate-200 mb-2">Composição do Health Score</p>
+                            <table className="w-full">
+                              <thead>
+                                <tr className="text-slate-400 border-b border-slate-600">
+                                  <th className="text-left pb-1">KPI</th>
+                                  <th className="text-right pb-1">Valor</th>
+                                  <th className="text-right pb-1">Pts</th>
+                                  <th className="text-right pb-1">Peso</th>
+                                  <th className="text-right pb-1">Contrib.</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {professor.health_detalhes.map((d) => (
+                                  <tr key={d.kpi} className="border-b border-slate-700/50">
+                                    <td className="py-0.5 text-slate-300">{d.kpi}</td>
+                                    <td className="py-0.5 text-right text-slate-400">{d.valor.toFixed(1)}</td>
+                                    <td className="py-0.5 text-right text-white">{d.scoreNormalizado.toFixed(1)}</td>
+                                    <td className="py-0.5 text-right text-slate-400">{Math.round(d.peso * 100)}%</td>
+                                    <td className="py-0.5 text-right text-white font-medium">{d.contribuicao.toFixed(1)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                              <tfoot>
+                                <tr className="border-t border-slate-500">
+                                  <td colSpan={4} className="pt-1 font-bold text-slate-200">Total</td>
+                                  <td className="pt-1 text-right font-black text-white">{Math.round(professor.health_score)}</td>
+                                </tr>
+                              </tfoot>
+                            </table>
+                          </div>
+                        }
+                      >
+                        <div className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl border cursor-help ${
+                          professor.health_status === 'saudavel'
+                            ? 'bg-emerald-900/30 border-emerald-700 text-emerald-400'
+                            : professor.health_status === 'atencao'
+                            ? 'bg-amber-900/30 border-amber-700 text-amber-400'
+                            : 'bg-rose-900/30 border-rose-700 text-rose-400'
+                        }`}>
+                          <span className="text-sm font-black">{Math.round(professor.health_score)}</span>
+                        </div>
+                      </Tooltip>
                     </td>
                     {/* Fator de Demanda Ponderado */}
                     <td className="text-center px-4 py-3">
