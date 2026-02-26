@@ -21,6 +21,7 @@ import {
 export interface SugestaoLead {
   id: number;
   nome: string;
+  telefone?: string;
   tipo: 'lead' | 'experimental_realizada' | 'experimental_agendada' | 'experimental_faltou';
   canal_origem_id: number | null;
   curso_id: number | null;

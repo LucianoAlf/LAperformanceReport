@@ -270,6 +270,7 @@ export function ComercialPage() {
   interface LoteLinha {
     id: string;
     aluno_nome?: string;
+    telefone?: string;
     canal_origem_id: number | null;
     curso_id: number | null;
     quantidade: number;
@@ -280,7 +281,7 @@ export function ComercialPage() {
   
   const [loteData, setLoteData] = useState(new Date());
   const [loteLeads, setLoteLeads] = useState<LoteLinha[]>([
-    { id: crypto.randomUUID(), aluno_nome: '', canal_origem_id: null, curso_id: null, quantidade: 1 }
+    { id: crypto.randomUUID(), aluno_nome: '', telefone: '', canal_origem_id: null, curso_id: null, quantidade: 1 }
   ]);
   const [loteExperimentais, setLoteExperimentais] = useState<LoteLinha[]>([
     { id: crypto.randomUUID(), aluno_nome: '', canal_origem_id: null, curso_id: null, quantidade: 1, status_experimental: 'experimental_agendada', professor_id: null, sabia_preco: null }
@@ -654,7 +655,7 @@ export function ComercialPage() {
       
       const { data, error } = await supabase
         .from('leads')
-        .select('id, nome, status, canal_origem_id, curso_interesse_id, professor_experimental_id, data_contato')
+        .select('id, nome, telefone, status, canal_origem_id, curso_interesse_id, professor_experimental_id, data_contato')
         .eq('unidade_id', unidadeParaSalvar)
         .gte('data_contato', startDate)
         .lte('data_contato', endDate)
@@ -668,6 +669,7 @@ export function ComercialPage() {
       const sugestoes: SugestaoLead[] = (data || []).map(item => ({
         id: item.id,
         nome: item.nome || '',
+        telefone: item.telefone || undefined,
         tipo: item.status as SugestaoLead['tipo'],
         canal_origem_id: item.canal_origem_id,
         curso_id: item.curso_interesse_id,
@@ -813,7 +815,7 @@ export function ComercialPage() {
     });
     // Reset lotes
     setLoteData(new Date());
-    setLoteLeads([{ id: crypto.randomUUID(), aluno_nome: '', canal_origem_id: null, curso_id: null, quantidade: 1 }]);
+    setLoteLeads([{ id: crypto.randomUUID(), aluno_nome: '', telefone: '', canal_origem_id: null, curso_id: null, quantidade: 1 }]);
     setLoteExperimentais([{ id: crypto.randomUUID(), aluno_nome: '', canal_origem_id: null, curso_id: null, quantidade: 1, status_experimental: 'experimental_agendada', professor_id: null }]);
     setLoteVisitas([{ id: crypto.randomUUID(), aluno_nome: '', canal_origem_id: null, curso_id: null, quantidade: 1 }]);
   };
@@ -848,6 +850,7 @@ export function ComercialPage() {
         data_contato: dataLancamento,
         status: 'novo',
         nome: linha.aluno_nome?.trim(),
+        telefone: linha.telefone ? normalizePhone(linha.telefone) : null,
         canal_origem_id: linha.canal_origem_id,
         curso_interesse_id: linha.curso_id,
         quantidade: 1, // Sempre 1 por lead atendido
@@ -966,7 +969,7 @@ export function ComercialPage() {
 
   // Funções auxiliares para manipular linhas do lote
   const addLinhaLead = () => {
-    setLoteLeads([...loteLeads, { id: crypto.randomUUID(), aluno_nome: '', canal_origem_id: null, curso_id: null, quantidade: 1 }]);
+    setLoteLeads([...loteLeads, { id: crypto.randomUUID(), aluno_nome: '', telefone: '', canal_origem_id: null, curso_id: null, quantidade: 1 }]);
   };
 
   const removeLinhaLead = (id: string) => {
@@ -977,6 +980,48 @@ export function ComercialPage() {
 
   const updateLinhaLead = (id: string, field: keyof LoteLinha, value: any) => {
     setLoteLeads(loteLeads.map(l => l.id === id ? { ...l, [field]: value } : l));
+  };
+
+  const maskPhone = (value: string): string => {
+    const digits = value.replace(/\D/g, '');
+    if (digits.length <= 2) return digits.length ? `(${digits}` : '';
+    if (digits.length <= 7) return `(${digits.slice(0, 2)}) ${digits.slice(2)}`;
+    return `(${digits.slice(0, 2)}) ${digits.slice(2, 7)}-${digits.slice(7, 11)}`;
+  };
+
+  const normalizePhone = (tel: string): string | null => {
+    const digits = tel.replace(/\D/g, '');
+    if (digits.length < 10) return null;
+    return digits.length <= 11 ? '55' + digits : digits;
+  };
+
+  const checkLeadByPhone = async (telefone: string | undefined, linhaId: string) => {
+    if (!telefone || !unidadeParaSalvar) return;
+    const digits = telefone.replace(/\D/g, '');
+    if (digits.length < 10) return;
+    const normalized = digits.length <= 11 ? '55' + digits : digits;
+
+    const { data } = await supabase
+      .from('leads')
+      .select('id, nome, canal_origem_id, curso_interesse_id, telefone')
+      .eq('telefone', normalized)
+      .eq('unidade_id', unidadeParaSalvar)
+      .limit(1);
+
+    if (data && data.length > 0) {
+      const existing = data[0];
+      setLoteLeads(prev => prev.map(l =>
+        l.id === linhaId
+          ? {
+              ...l,
+              aluno_nome: existing.nome || l.aluno_nome,
+              canal_origem_id: existing.canal_origem_id || l.canal_origem_id,
+              curso_id: existing.curso_interesse_id || l.curso_id,
+            }
+          : l
+      ));
+      toast.info(`Lead encontrado: ${existing.nome}`);
+    }
   };
 
   const addLinhaExperimental = () => {
@@ -3220,6 +3265,7 @@ export function ComercialPage() {
                 <thead className="bg-slate-800/50">
                   <tr className="text-slate-400 text-xs uppercase">
                     <th className="py-2 px-2 text-left">Nome</th>
+                    <th className="py-2 px-2 text-left w-36">Telefone</th>
                     <th className="py-2 px-2 text-left w-32">Canal</th>
                     <th className="py-2 px-2 text-left w-32">Curso</th>
                     <th className="py-2 px-2 w-10"></th>
@@ -3229,11 +3275,36 @@ export function ComercialPage() {
                   {loteLeads.map((linha) => (
                     <tr key={linha.id} className="border-t border-slate-700/50">
                       <td className="py-2 px-2">
+                        <ComboboxNome
+                          value={linha.aluno_nome || ''}
+                          onChange={(nome) => updateLinhaLead(linha.id, 'aluno_nome', nome)}
+                          onSelectSugestao={(sugestao) => {
+                            setLoteLeads(prev => prev.map(l =>
+                              l.id === linha.id
+                                ? {
+                                    ...l,
+                                    aluno_nome: sugestao.nome,
+                                    telefone: sugestao.telefone ? maskPhone(sugestao.telefone.replace(/^55/, '')) : l.telefone,
+                                    canal_origem_id: sugestao.canal_origem_id || l.canal_origem_id,
+                                    curso_id: sugestao.curso_id || l.curso_id,
+                                  }
+                                : l
+                            ));
+                          }}
+                          sugestoes={sugestoesLeads}
+                          placeholder="Nome do lead..."
+                        />
+                      </td>
+                      <td className="py-2 px-2">
                         <Input
                           type="text"
-                          value={linha.aluno_nome || ''}
-                          onChange={(e) => updateLinhaLead(linha.id, 'aluno_nome', e.target.value)}
-                          placeholder="Nome do lead..."
+                          value={linha.telefone || ''}
+                          onChange={(e) => {
+                            const masked = maskPhone(e.target.value);
+                            updateLinhaLead(linha.id, 'telefone', masked);
+                          }}
+                          onBlur={() => checkLeadByPhone(linha.telefone, linha.id)}
+                          placeholder="(21) 99999-9999"
                           className="h-8 text-xs"
                         />
                       </td>
