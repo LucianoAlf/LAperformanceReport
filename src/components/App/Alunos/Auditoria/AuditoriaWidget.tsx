@@ -9,6 +9,7 @@ import { getOpenAIConfig, analisarComIA } from './useOpenAIAnalysis';
 import { type RelatorioAuditoria, executarAuditoria } from './useAuditoriaEmusys';
 import { parseEmusysFiles, type ParseResult } from './parseEmusysFile';
 import { chatComIA, type ChatMessage, type Role } from './useAgentChat';
+import type { AgentContext } from './agentTools';
 
 interface Unidade {
     id: string;
@@ -21,7 +22,14 @@ interface AuditoriaWidgetProps {
 
 // O Chat do Agente atuará também como Auditoria se arquivos forem anexados
 export function AuditoriaWidget({ onClose }: AuditoriaWidgetProps) {
-    const { isAdmin } = useAuth();
+    const { isAdmin, usuario } = useAuth();
+
+    // Contexto de permissão para as tools do agente
+    const agentCtx: AgentContext = {
+        isAdmin,
+        unidadeId: usuario?.unidade_id ?? null,
+        unidadeNome: usuario?.unidade_nome ?? null,
+    };
 
     const [fullscreen, setFullscreen] = useState(false);
     const [unidades, setUnidades] = useState<Unidade[]>([]);
@@ -32,7 +40,7 @@ export function AuditoriaWidget({ onClose }: AuditoriaWidgetProps) {
         {
             id: 'welcome_1',
             role: 'assistant',
-            content: 'Olá! Sou a **Inteligência Artificial da LA Music** 🎵\n\nPosso ajudar você com:\n- 📊 **Métricas**: ticket médio, faturamento, evasão, churn\n- 🔍 **Buscar alunos** pelo nome no sistema\n- 📋 **Auditoria**: anexe arquivos do Emusys para comparar com o banco\n\nPergunta o que quiser!',
+            content: 'Olá! Sou a **Inteligência Artificial da LA Music** 🎵\n\nPosso ajudar você com:\n- 📊 **Métricas**: ticket médio, faturamento, evasão, churn\n- 🔍 **Buscar alunos** pelo nome no sistema\n- 📈 **Leads & CRM**: leads de hoje, funil de conversão, buscar leads\n- 🗄️ **Consultar qualquer dado** do banco: turmas, professores, evasões, loja, etc.\n- 📋 **Auditoria**: anexe arquivos do Emusys para comparar com o banco\n\nPergunta o que quiser!',
         }
     ]);
     const [inputText, setInputText] = useState('');
@@ -62,8 +70,6 @@ export function AuditoriaWidget({ onClose }: AuditoriaWidgetProps) {
                 });
         }
     }, []);
-
-    if (!isAdmin) return null;
 
     // --- Funções de Drag and Drop ---
     const handleDrag = (e: React.DragEvent) => {
@@ -216,23 +222,49 @@ DETALHES DA ANÁLISE (LISTAS): (Priorize responder sobre isso se for pedido)
                 search_aluno: 'Procurando aluno no sistema...',
                 get_resumo_unidade: 'Calculando resumo da unidade...',
                 get_movimentacoes: 'Verificando movimentações...',
+                search_leads: 'Buscando leads no CRM...',
+                get_leads_hoje: 'Verificando leads de hoje...',
+                get_funil_leads: 'Calculando funil de conversão...',
+                consultar_banco: 'Consultando banco de dados...',
+                listar_tabelas: 'Listando tabelas disponíveis...',
             };
 
             // System prompt dinâmico que avisa sobre dias atuais e auditorias
             const dataHoje = new Date().toLocaleDateString('pt-BR');
 
+            // Construir regra de permissão dinâmica
+            const permissaoPrompt = agentCtx.isAdmin
+                ? 'Você tem acesso ADMIN — pode consultar dados de TODAS as unidades.'
+                : `REGRA DE PERMISSÃO: O usuário atual pertence à unidade "${agentCtx.unidadeNome || 'desconhecida'}" (unidade_id: ${agentCtx.unidadeId}). Você DEVE retornar APENAS dados desta unidade. Se o usuário perguntar sobre outras unidades, informe educadamente que ele só tem acesso aos dados da sua unidade. Ao usar consultar_banco, SEMPRE inclua WHERE unidade_id = '${agentCtx.unidadeId}' nas queries.`;
+
             const iaResponseString = await chatComIA([{
                 role: 'system',
-                content: `Você é a Inteligência Artificial assistente da LA Music, uma rede de escolas de música. 
+                content: `Você é a Inteligência Artificial assistente da LA Music, uma rede de escolas de música.
 Hoje é dia ${dataHoje}.
 Você SEMPRE responde em Português do Brasil (PT-BR).
-Você tem acesso a ferramentas que consultam o banco de dados da empresa em tempo real. Use-as sempre que o usuário perguntar sobre dados, métricas, alunos, faturamento, ticket médio, evasão, etc.
+
+${permissaoPrompt}
+
+Você tem acesso a ferramentas que consultam o banco de dados da empresa em tempo real. Use-as sempre que o usuário perguntar sobre dados, métricas, alunos, faturamento, ticket médio, evasão, leads, CRM, professores, turmas, etc.
+
+FERRAMENTAS DISPONÍVEIS:
+- get_unidades: listar unidades
+- get_dados_mensais: métricas mensais (alunos, matrículas, evasões, ticket médio, faturamento)
+- search_aluno: buscar alunos por nome
+- get_resumo_unidade: resumo de auditoria da unidade
+- get_movimentacoes: movimentações de alunos (evasão, renovação, trancamento)
+- search_leads: buscar leads/contatos comerciais por nome, status, período, unidade
+- get_leads_hoje: leads que chegaram hoje
+- get_funil_leads: estatísticas do funil/pipeline de leads
+- consultar_banco: consulta SQL genérica para qualquer tabela (apenas SELECT)
+- listar_tabelas: listar tabelas e views disponíveis
+
 ATENÇÃO SOBRE O TICKET MÉDIO E FATURAMENTO: Os valores que você calcula na ferramenta get_resumo_unidade são valores "crus" (raw) mensurando a média real das parcelas ativas. Eles PODEM e DEVEM divergir propositalmente dos relatórios do Dashboard (pois o card tem regras de descontos de bolsas). O seu papel é reportar o valor que você encontrou servindo como uma dupla-checagem de auditoria para o usuário.
 NUNCA invente dados. Se não souber, use as ferramentas disponíveis para buscar.
 Responda de forma clara, profissional e objetiva, usando tabelas markdown e listas quando apropriado.
 Você NÃO pode alterar nenhum dado — apenas consultar e analisar.
 Se o usuário anexar arquivos, analise as divergências entre Emusys (CRM) e o banco de dados interno.`
-            }, ...historyToSend], (progress) => {
+            }, ...historyToSend], agentCtx, (progress) => {
                 if (progress.status === 'calling') {
                     setLoadingMsg(TOOL_LABELS[progress.toolName] || `Executando ${progress.toolName}...`);
                 }
@@ -312,21 +344,25 @@ Se o usuário anexar arquivos, analise as divergências entre Emusys (CRM) e o b
                     </button>
                 </div>
 
-                {/* Toolbar Secundária (Unidade) */}
+                {/* Toolbar Secundária (Unidade) — Admin pode selecionar, outros veem sua unidade fixa */}
                 <div className="px-3 py-2 bg-slate-900 border-b border-slate-800/80 flex items-center justify-between">
                     <div className="flex items-center gap-1.5 text-xs text-slate-400">
                         <Database className="w-3.5 h-3.5" />
-                        Auditar Unidade:
+                        {isAdmin ? 'Auditar Unidade:' : 'Unidade:'}
                     </div>
-                    <select
-                        value={unidadeSelecionada}
-                        onChange={(e) => setUnidadeSelecionada(e.target.value)}
-                        className="bg-slate-800 border-transparent text-xs py-1 px-2 rounded-md outline-none focus:ring-1 ring-violet-500 text-slate-300 max-w-[140px]"
-                    >
-                        {unidades.map(u => (
-                            <option key={u.id} value={u.id}>{u.nome}</option>
-                        ))}
-                    </select>
+                    {isAdmin ? (
+                        <select
+                            value={unidadeSelecionada}
+                            onChange={(e) => setUnidadeSelecionada(e.target.value)}
+                            className="bg-slate-800 border-transparent text-xs py-1 px-2 rounded-md outline-none focus:ring-1 ring-violet-500 text-slate-300 max-w-[140px]"
+                        >
+                            {unidades.map(u => (
+                                <option key={u.id} value={u.id}>{u.nome}</option>
+                            ))}
+                        </select>
+                    ) : (
+                        <span className="text-xs text-slate-300 font-medium">{agentCtx.unidadeNome || 'Carregando...'}</span>
+                    )}
                 </div>
 
                 {/* --- CORPO DO CHAT --- */}

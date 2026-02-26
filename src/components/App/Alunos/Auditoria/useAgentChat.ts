@@ -1,5 +1,5 @@
 import { getOpenAIConfig, type OpenAIConfig } from './useOpenAIAnalysis';
-import { AGENT_TOOLS_SCHEMA, executeTool } from './agentTools';
+import { AGENT_TOOLS_SCHEMA, executeTool, type AgentContext } from './agentTools';
 
 export type Role = 'user' | 'assistant' | 'system' | 'tool';
 
@@ -35,6 +35,7 @@ export interface ToolCallProgress {
  */
 export async function chatComIA(
     messages: { role: string; content: string; tool_call_id?: string }[],
+    agentCtx: AgentContext,
     onToolProgress?: (progress: ToolCallProgress) => void,
 ): Promise<string> {
     const config = getOpenAIConfig();
@@ -93,8 +94,8 @@ export async function chatComIA(
             // Notificar progresso
             onToolProgress?.({ toolName, status: 'calling' });
 
-            // Executar a ferramenta localmente (SOMENTE LEITURA)
-            const toolResult = await executeTool(toolName, toolArgs);
+            // Executar a ferramenta localmente (SOMENTE LEITURA, com contexto de permissão)
+            const toolResult = await executeTool(toolName, toolArgs, agentCtx);
 
             onToolProgress?.({ toolName, status: 'done' });
 

@@ -20,14 +20,12 @@ interface ToolItem {
 const tools: ToolItem[] = [
     {
         id: 'auditoria',
-        label: 'Auditoria Emusys',
-        icon: <ClipboardCheck className="w-5 h-5" />,
+        label: 'Assistente IA',
+        icon: <Bot className="w-5 h-5" />,
         cor: 'text-purple-400',
         corBg: 'bg-purple-500/20 border-purple-500/30 hover:bg-purple-500/30',
-        descricao: 'Comparar dados do Emusys com o banco',
+        descricao: 'Consultar dados, leads, métricas e mais',
     },
-    // Futuros tools podem ser adicionados aqui:
-    // { id: 'sync', label: 'Sync Status', icon: <RefreshCw />, ... },
 ];
 
 export function AdminToolsHub() {
@@ -48,8 +46,6 @@ export function AdminToolsHub() {
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, [expanded]);
-
-    if (!isAdmin) return null;
 
     const handleToolClick = (toolId: ActiveTool) => {
         setActiveTool(toolId);
@@ -105,7 +101,7 @@ export function AdminToolsHub() {
                         : 'bg-gradient-to-br from-violet-600 via-purple-600 to-indigo-700 border border-violet-400/30 shadow-purple-500/30 hover:shadow-purple-500/50 hover:scale-110'
                     }
         `}
-                title="Ferramentas Admin"
+                title="Assistente IA"
             >
                 {/* Glow effect */}
                 {!expanded && (
@@ -143,8 +139,8 @@ export function AdminToolsHub() {
             opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap shadow-xl border border-slate-700
             pointer-events-none backdrop-blur-sm">
                         <span className="flex items-center gap-1.5">
-                            <Shield className="w-3 h-3 text-purple-400" />
-                            Ferramentas Admin
+                            <Bot className="w-3 h-3 text-purple-400" />
+                            Assistente IA
                         </span>
                     </span>
                 )}
