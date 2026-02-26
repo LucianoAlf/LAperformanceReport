@@ -1123,9 +1123,13 @@ export function ComercialPage() {
         registro.professor_experimental_id = formData.professor_id;
       }
 
-      const { data: leadData, error } = await supabase.from('leads').insert(registro).select().single();
+      // Bolsistas não passam pelo funil comercial — não inserir em leads
+      const isBolsista = modalOpen === 'matricula' && TIPOS_SEM_PAGAMENTO.includes(formData.tipo_aluno);
 
-      if (error) throw error;
+      if (!isBolsista) {
+        const { data: leadData, error } = await supabase.from('leads').insert(registro).select().single();
+        if (error) throw error;
+      }
 
       // Se for matrícula, criar também o registro na tabela alunos
       // A trigger calcular_campos_aluno() calcula automaticamente: idade_atual e classificacao (EMLA/LAMK)
@@ -1391,9 +1395,11 @@ export function ComercialPage() {
     // Regra de negócio: matrículas com passaporte zerado (ex: re-matrícula) não entram no ticket médio
     const matriculasComPassaporteSemana = matriculas.filter(m => (m.valor_passaporte || 0) > 0);
     const totalPassaporte = matriculasComPassaporteSemana.reduce((acc, m) => acc + (m.valor_passaporte || 0), 0);
-    const totalParcela = matriculas.reduce((acc, m) => acc + (m.valor_parcela || 0), 0);
+    // Regra de negócio: bolsistas não entram no ticket médio da parcela
+    const matriculasPagantesSemana = matriculas.filter(m => !TIPOS_SEM_PAGAMENTO.includes(m.tipo_aluno));
+    const totalParcela = matriculasPagantesSemana.reduce((acc, m) => acc + (m.valor_parcela || 0), 0);
     const ticketMedioPassaporte = matriculasComPassaporteSemana.length > 0 ? totalPassaporte / matriculasComPassaporteSemana.length : 0;
-    const ticketMedioParcela = matriculasSemana > 0 ? totalParcela / matriculasSemana : 0;
+    const ticketMedioParcela = matriculasPagantesSemana.length > 0 ? totalParcela / matriculasPagantesSemana.length : 0;
     
     let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
     texto += `📆 *RELATÓRIO SEMANAL*\n`;
@@ -1520,9 +1526,11 @@ export function ComercialPage() {
     // Regra de negócio: matrículas com passaporte zerado (ex: re-matrícula) não entram no ticket médio
     const matriculasComPassaporteMes = matriculasDetalhadas?.filter(m => (m.valor_passaporte || 0) > 0) || [];
     const totalPassaporte = matriculasComPassaporteMes.reduce((acc, m) => acc + (m.valor_passaporte || 0), 0);
-    const totalParcela = matriculasDetalhadas?.reduce((acc, m) => acc + (m.valor_parcela || 0), 0) || 0;
+    // Regra de negócio: bolsistas não entram no ticket médio da parcela
+    const matriculasPagantesMes = matriculasDetalhadas?.filter(m => !TIPOS_SEM_PAGAMENTO.includes(m.tipo_aluno)) || [];
+    const totalParcela = matriculasPagantesMes.reduce((acc, m) => acc + (m.valor_parcela || 0), 0);
     const ticketMedioPass = matriculasComPassaporteMes.length > 0 ? totalPassaporte / matriculasComPassaporteMes.length : 0;
-    const ticketMedioPar = matriculasMes > 0 ? totalParcela / matriculasMes : 0;
+    const ticketMedioPar = matriculasPagantesMes.length > 0 ? totalParcela / matriculasPagantesMes.length : 0;
 
     // Contar matrículas por tipo
     const lamkCount = matriculasDetalhadas?.filter(m => m.idade != null ? m.idade <= 11 : m.tipo_matricula === 'LAMK').length || 0;
@@ -1679,9 +1687,11 @@ export function ComercialPage() {
     // Regra de negócio: matrículas com passaporte zerado (ex: re-matrícula) não entram no ticket médio
     const matriculasComPassaporte = matriculasMes.filter(m => (m.valor_passaporte || 0) > 0);
     const totalPassaporte = matriculasComPassaporte.reduce((acc, m) => acc + (m.valor_passaporte || 0), 0);
-    const totalParcela = matriculasMes.reduce((acc, m) => acc + (m.valor_parcela || 0), 0);
+    // Regra de negócio: bolsistas não entram no ticket médio da parcela
+    const matriculasPagantes = matriculasMes.filter(m => !TIPOS_SEM_PAGAMENTO.includes(m.tipo_aluno));
+    const totalParcela = matriculasPagantes.reduce((acc, m) => acc + (m.valor_parcela || 0), 0);
     const ticketMedioPass = matriculasComPassaporte.length > 0 ? totalPassaporte / matriculasComPassaporte.length : 0;
-    const ticketMedioPar = totalMatriculas > 0 ? totalParcela / totalMatriculas : 0;
+    const ticketMedioPar = matriculasPagantes.length > 0 ? totalParcela / matriculasPagantes.length : 0;
 
     // Agrupar por canal
     const matriculasPorCanal: { [key: string]: number } = {};
