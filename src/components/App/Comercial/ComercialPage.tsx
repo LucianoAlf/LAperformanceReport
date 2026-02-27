@@ -828,12 +828,23 @@ export function ComercialPage() {
       return;
     }
 
-    // Validar que cada lead tem nome preenchido
-    const linhasValidas = loteLeads.filter(l => l.aluno_nome && l.aluno_nome.trim().length > 0);
-    if (linhasValidas.length === 0) {
+    // Validar que cada lead tem nome e telefone preenchidos
+    const linhasComNome = loteLeads.filter(l => l.aluno_nome && l.aluno_nome.trim().length > 0);
+    if (linhasComNome.length === 0) {
       toast.error('Preencha o nome de pelo menos um lead');
       return;
     }
+
+    // Verificar se há leads com nome mas sem telefone válido
+    const linhasSemTelefone = linhasComNome.filter(l =>
+      !l.telefone || l.telefone.replace(/\D/g, '').length < 10
+    );
+    if (linhasSemTelefone.length > 0) {
+      toast.error(`${linhasSemTelefone.length} lead(s) sem telefone válido. Preencha o telefone de todos os leads.`);
+      return;
+    }
+
+    const linhasValidas = linhasComNome;
 
     // Verificar se há linhas sem nome
     const linhasSemNome = loteLeads.filter(l => !l.aluno_nome || l.aluno_nome.trim().length === 0);
