@@ -532,7 +532,10 @@ async function toolSearchLeads(
 }
 
 async function toolGetLeadsHoje(args: { unidade_nome?: string }, ctx: AgentContext): Promise<string> {
-    const hoje = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    // Usar horário de Brasília (UTC-3) para determinar "hoje"
+    const agora = new Date();
+    const brOffset = agora.getTime() - (3 * 60 * 60 * 1000);
+    const hoje = new Date(brOffset).toISOString().split('T')[0];
 
     let query = supabase
         .from('leads')
@@ -552,7 +555,7 @@ async function toolGetLeadsHoje(args: { unidade_nome?: string }, ctx: AgentConte
             etapa_pipeline:etapa_pipeline_id(nome),
             unidade:unidade_id(nome)
         `)
-        .gte('created_at', `${hoje}T00:00:00`)
+        .eq('data_contato', hoje)
         .order('created_at', { ascending: false });
 
     // Filtro de permissão
