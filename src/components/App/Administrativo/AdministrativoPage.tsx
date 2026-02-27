@@ -490,7 +490,7 @@ export function AdministrativoPage() {
       // A view só conta registros da tabela `renovacoes` (que só tem renovados).
       // Não renovações vêm de movimentacoes_admin, então usamos Math.max para pegar o maior.
       const naoRenovacoesCount = Math.max(retConsolidado.nao_renovacoes || 0, naoRenovacoes.length);
-      const renovacoesRealizadasCount = retConsolidado.renovacoes_realizadas || renovacoes.length;
+      const renovacoesRealizadasCount = Math.max(retConsolidado.renovacoes_realizadas || 0, renovacoes.length);
       const renovacoesPendentesCount = retConsolidado.renovacoes_pendentes || 0;
 
       setResumo({
