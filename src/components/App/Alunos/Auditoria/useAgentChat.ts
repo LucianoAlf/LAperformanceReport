@@ -1,4 +1,4 @@
-import { getOpenAIConfig, type OpenAIConfig } from './useOpenAIAnalysis';
+import { getOpenAIConfig, loadOpenAIConfigFromDB, type OpenAIConfig } from './useOpenAIAnalysis';
 import { AGENT_TOOLS_SCHEMA, executeTool, type AgentContext } from './agentTools';
 
 export type Role = 'user' | 'assistant' | 'system' | 'tool';
@@ -38,7 +38,10 @@ export async function chatComIA(
     agentCtx: AgentContext,
     onToolProgress?: (progress: ToolCallProgress) => void,
 ): Promise<string> {
-    const config = getOpenAIConfig();
+    let config = getOpenAIConfig();
+    if (!config.apiKey) {
+        config = await loadOpenAIConfigFromDB();
+    }
     if (!config.apiKey) {
         throw new Error('Chave da API da OpenAI não configurada. Vá em Configurações > Inteligência Artificial.');
     }

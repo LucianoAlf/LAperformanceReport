@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Settings, Eye, EyeOff, CheckCircle, XCircle, Loader2 } from 'lucide-react';
 import {
-    getOpenAIConfig, saveOpenAIConfig, validarApiKey,
+    getOpenAIConfig, saveOpenAIConfig, validarApiKey, loadOpenAIConfigFromDB, saveOpenAIConfigToDB,
     MODELOS_DISPONIVEIS, type OpenAIConfig
 } from './useOpenAIAnalysis';
 
@@ -15,11 +15,24 @@ export function ConfigIA({ collapsed = true, onToggle }: ConfigIAProps) {
     const [showKey, setShowKey] = useState(false);
     const [validando, setValidando] = useState(false);
     const [keyValida, setKeyValida] = useState<boolean | null>(null);
+    const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+
+    // Carregar config do banco de dados ao montar
+    useEffect(() => {
+        loadOpenAIConfigFromDB().then(dbConfig => {
+            if (dbConfig.apiKey) setConfig(dbConfig);
+        });
+    }, []);
 
     const handleSave = (newConfig: OpenAIConfig) => {
         setConfig(newConfig);
-        saveOpenAIConfig(newConfig);
+        saveOpenAIConfig(newConfig); // localStorage imediato
         setKeyValida(null);
+        // Debounce para salvar no DB (evita query a cada keystroke)
+        clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => {
+            saveOpenAIConfigToDB(newConfig);
+        }, 500);
     };
 
     const handleValidar = async () => {
@@ -110,7 +123,7 @@ export function ConfigIA({ collapsed = true, onToggle }: ConfigIAProps) {
                     </div>
 
                     <p className="text-[10px] text-slate-500 leading-relaxed">
-                        A chave fica salva apenas no seu navegador (localStorage). Não é enviada para nenhum servidor além da OpenAI.
+                        A chave fica salva no banco de dados (acessível por todos os usuários autenticados).
                     </p>
                 </div>
             )}

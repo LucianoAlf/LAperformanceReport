@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { getOpenAIConfig, analisarComIA } from './useOpenAIAnalysis';
+import { getOpenAIConfig, loadOpenAIConfigFromDB, analisarComIA } from './useOpenAIAnalysis';
 import { type RelatorioAuditoria, executarAuditoria } from './useAuditoriaEmusys';
 import { parseEmusysFiles, type ParseResult } from './parseEmusysFile';
 import { chatComIA, type ChatMessage, type Role } from './useAgentChat';
@@ -127,7 +127,11 @@ export function AuditoriaWidget({ onClose }: AuditoriaWidgetProps) {
             return;
         }
 
-        const config = getOpenAIConfig();
+        let config = getOpenAIConfig();
+        if (!config.apiKey) {
+            // Tentar carregar do banco de dados caso localStorage esteja vazio
+            config = await loadOpenAIConfigFromDB();
+        }
         if (!config.apiKey) {
             addMessage('assistant', '⚠️ AVISO: A API Key da OpenAI não está configurada.\nPor favor, vá a **Configurações > Inteligência Artificial** e configure antes de falar comigo.');
             return;

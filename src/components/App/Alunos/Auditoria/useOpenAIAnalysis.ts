@@ -1,3 +1,5 @@
+import { supabase } from '@/lib/supabase';
+
 export interface OpenAIConfig {
     apiKey: string;
     model: string;
@@ -22,6 +24,32 @@ export function getOpenAIConfig(): OpenAIConfig {
 
 export function saveOpenAIConfig(config: OpenAIConfig) {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+}
+
+/** Carrega config do banco de dados (fonte principal) e atualiza localStorage como cache */
+export async function loadOpenAIConfigFromDB(): Promise<OpenAIConfig> {
+    try {
+        const { data } = await supabase
+            .from('assistente_ia_config')
+            .select('openai_api_key, openai_model')
+            .single();
+        if (data?.openai_api_key) {
+            const config: OpenAIConfig = { apiKey: data.openai_api_key, model: data.openai_model };
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(config));
+            return config;
+        }
+    } catch { }
+    return getOpenAIConfig();
+}
+
+/** Salva config no banco de dados + localStorage */
+export async function saveOpenAIConfigToDB(config: OpenAIConfig): Promise<void> {
+    saveOpenAIConfig(config);
+    await supabase.from('assistente_ia_config').update({
+        openai_api_key: config.apiKey,
+        openai_model: config.model,
+        updated_at: new Date().toISOString(),
+    }).eq('id', 1);
 }
 
 export async function validarApiKey(apiKey: string): Promise<boolean> {
