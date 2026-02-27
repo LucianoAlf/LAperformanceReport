@@ -3,6 +3,8 @@ import {
     X, FileSpreadsheet, Upload, Loader2, Send, Minimize2, Maximize2, Cpu,
     Bot, Trash2, ArrowLeft, Paperclip, AlertCircle, Database
 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { getOpenAIConfig, loadOpenAIConfigFromDB, analisarComIA } from './useOpenAIAnalysis';
@@ -388,16 +390,30 @@ Se o usuário anexar arquivos, analise as divergências entre Emusys (CRM) e o b
                                 <div className={`px-4 py-2.5 rounded-2xl max-w-[85%] ${isUser
                                     ? 'bg-violet-600 text-white rounded-br-sm shadow-md'
                                     : 'bg-slate-800 text-slate-200 rounded-bl-sm border border-slate-700/60 shadow-sm'
-                                    } text-sm whitespace-pre-wrap leading-relaxed`}
+                                    } text-sm leading-relaxed`}
                                 >
-                                    {/* Markdown simplificado - se quiser usar react-markdown, importe depois */}
-                                    <div dangerouslySetInnerHTML={{
-                                        __html: msg.content
-                                            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                                            .replace(/##\s(.*?)\n/g, '<h2 class="text-md font-bold mt-2 mb-1">$1</h2>')
-                                            .replace(/###\s(.*?)\n/g, '<h3 class="text-sm font-bold mt-1 text-violet-300">$1</h3>')
-                                            .replace(/\n\n/g, '<br/><br/>')
-                                    }} />
+                                    {isUser ? (
+                                        <span className="whitespace-pre-wrap">{msg.content}</span>
+                                    ) : (
+                                        <ReactMarkdown
+                                            remarkPlugins={[remarkGfm]}
+                                            components={{
+                                                table: ({ children }) => <div className="overflow-x-auto my-2"><table className="text-xs border-collapse w-full">{children}</table></div>,
+                                                th: ({ children }) => <th className="border border-slate-600 px-2 py-1 bg-slate-700/50 text-left font-semibold text-slate-300">{children}</th>,
+                                                td: ({ children }) => <td className="border border-slate-700 px-2 py-1">{children}</td>,
+                                                strong: ({ children }) => <strong className="font-bold">{children}</strong>,
+                                                h2: ({ children }) => <h2 className="text-md font-bold mt-3 mb-1">{children}</h2>,
+                                                h3: ({ children }) => <h3 className="text-sm font-bold mt-2 mb-1 text-violet-300">{children}</h3>,
+                                                ul: ({ children }) => <ul className="list-disc pl-4 my-1">{children}</ul>,
+                                                ol: ({ children }) => <ol className="list-decimal pl-4 my-1">{children}</ol>,
+                                                li: ({ children }) => <li className="mb-0.5">{children}</li>,
+                                                p: ({ children }) => <p className="mb-1.5 last:mb-0">{children}</p>,
+                                                code: ({ children }) => <code className="bg-slate-900 px-1 py-0.5 rounded text-xs text-violet-300">{children}</code>,
+                                            }}
+                                        >
+                                            {msg.content}
+                                        </ReactMarkdown>
+                                    )}
 
                                     {/* Mostra Anexos enviados na mensagem */}
                                     {msg.attachments && msg.attachments.length > 0 && (
