@@ -212,8 +212,8 @@ export function useKPIsRetencao(
       const transferencias = evasoes.filter((e: any) => e.tipo_saida_id === 3).length;
       const mrrPerdido = evasoes.reduce((acc: number, e: any) => acc + (e.valor_parcela || 0), 0);
 
-      const renovacoesRealizadas = renovacoes.filter(r => r.status === 'realizada').length;
-      const naoRenovacoes = renovacoes.filter(r => r.status === 'nao_renovada').length;
+      const renovacoesRealizadas = renovacoes.filter(r => r.status === 'renovado').length;
+      const naoRenovacoes = renovacoes.filter(r => r.status === 'nao_renovou').length;
       const renovacoesPendentes = renovacoes.filter(r => r.status === 'pendente').length;
       const renovacoesAtrasadas = renovacoes.filter(r => r.status === 'pendente' && new Date(r.data_vencimento) < new Date()).length;
 

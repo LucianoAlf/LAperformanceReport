@@ -146,8 +146,8 @@ export function TabRetencao({ ano, mes, unidade }: TabRetencaoProps) {
 
         // Calcular totais de renovações
         const renovacoesData = renovacoesRes.data || [];
-        const renovadas = renovacoesData.filter(r => r.status === 'realizada').length;
-        const naoRenovadas = renovacoesData.filter(r => r.status === 'nao_renovada').length;
+        const renovadas = renovacoesData.filter(r => r.status === 'renovado').length;
+        const naoRenovadas = renovacoesData.filter(r => r.status === 'nao_renovou').length;
         const pendentes = renovacoesData.filter(r => r.status === 'pendente').length;
         const atrasadas = renovacoesData.filter(r => {
           if (r.status !== 'pendente') return false;

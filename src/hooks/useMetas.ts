@@ -141,7 +141,7 @@ export function useMetas(
         .select('*', { count: 'exact', head: true })
         .gte('data_vencimento', startDate)
         .lte('data_vencimento', endDate)
-        .eq('status', 'realizada');
+        .eq('status', 'renovado');
 
       if (unidadeId !== 'todos') {
         renovacoesQuery = renovacoesQuery.eq('unidade_id', unidadeId);

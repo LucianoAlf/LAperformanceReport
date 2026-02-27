@@ -123,7 +123,7 @@ export function FormRenovacao() {
         duracao_contrato_meses: data.duracao_contrato,
         motivo_reajuste: data.motivo_reajuste || null,
         observacoes: data.observacoes || null,
-        status: 'confirmada',
+        status: 'renovado',
       });
 
       await supabase.from('movimentacoes').insert({
