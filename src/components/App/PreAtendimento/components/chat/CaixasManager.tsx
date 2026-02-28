@@ -162,6 +162,11 @@ export function CaixasManager() {
       return;
     }
 
+    if (editando.funcao === 'agente' && !editando.unidade_id) {
+      setErro('Caixas com função Agente devem ter uma unidade vinculada');
+      return;
+    }
+
     setSaving(true);
     setErro(null);
 
@@ -332,23 +337,6 @@ export function CaixasManager() {
               />
             </div>
 
-            {/* Unidade */}
-            <div>
-              <label className="text-xs text-slate-400 mb-1 flex items-center gap-1">
-                <Building2 className="w-3 h-3" /> Unidade
-              </label>
-              <select
-                value={editando.unidade_id}
-                onChange={e => setEditando({ ...editando, unidade_id: e.target.value })}
-                className="w-full px-3 py-2 bg-slate-900/60 border border-slate-700/50 rounded-lg text-sm text-white focus:border-violet-500/50 focus:outline-none"
-              >
-                <option value="">Nenhuma (todas)</option>
-                {unidades.map(u => (
-                  <option key={u.id} value={u.id}>{u.nome} ({u.codigo})</option>
-                ))}
-              </select>
-            </div>
-
             {/* Função */}
             <div>
               <label className="text-xs text-slate-400 mb-1 flex items-center gap-1">
@@ -356,7 +344,14 @@ export function CaixasManager() {
               </label>
               <select
                 value={editando.funcao}
-                onChange={e => setEditando({ ...editando, funcao: e.target.value as FuncaoCaixa })}
+                onChange={e => {
+                  const novaFuncao = e.target.value as FuncaoCaixa;
+                  setEditando({
+                    ...editando,
+                    funcao: novaFuncao,
+                    unidade_id: novaFuncao === 'sistema' ? '' : editando.unidade_id,
+                  });
+                }}
                 className="w-full px-3 py-2 bg-slate-900/60 border border-slate-700/50 rounded-lg text-sm text-white focus:border-violet-500/50 focus:outline-none"
               >
                 <option value="agente">Agente (CRM — Mila + Andreza)</option>
@@ -367,6 +362,30 @@ export function CaixasManager() {
                 Agente: mensagens de leads. Sistema: relatórios, notificações, alertas.
               </p>
             </div>
+
+            {/* Unidade (obrigatória para agente, oculta para sistema) */}
+            {editando.funcao !== 'sistema' && (
+              <div>
+                <label className="text-xs text-slate-400 mb-1 flex items-center gap-1">
+                  <Building2 className="w-3 h-3" /> Unidade {editando.funcao === 'agente' && <span className="text-red-400">*</span>}
+                </label>
+                <select
+                  value={editando.unidade_id}
+                  onChange={e => setEditando({ ...editando, unidade_id: e.target.value })}
+                  className="w-full px-3 py-2 bg-slate-900/60 border border-slate-700/50 rounded-lg text-sm text-white focus:border-violet-500/50 focus:outline-none"
+                >
+                  <option value="">{editando.funcao === 'agente' ? 'Selecione a unidade...' : 'Nenhuma (todas)'}</option>
+                  {unidades.map(u => (
+                    <option key={u.id} value={u.id}>{u.nome} ({u.codigo})</option>
+                  ))}
+                </select>
+                {editando.funcao === 'agente' && (
+                  <p className="text-[10px] text-amber-400/70 mt-1">
+                    Leads criados automaticamente serão vinculados a esta unidade.
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Ativo */}
             <div className="flex items-end">
