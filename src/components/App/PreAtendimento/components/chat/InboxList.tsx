@@ -1,4 +1,4 @@
-import { Search, Monitor, User, Loader2, MessageSquare, Inbox } from 'lucide-react';
+import { Search, Monitor, User, Loader2, MessageSquare, Inbox, Smartphone } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { ConversaCRM, FiltroInbox, LeadCRM } from '../../types';
 
@@ -77,6 +77,7 @@ function InboxItem({ conversa, ativa, onClick }: { conversa: ConversaCRM; ativa:
   const temp = getTemperaturaTag(lead?.temperatura || null);
   const curso = lead?.cursos?.nome || '';
   const unidade = lead?.unidades?.codigo || lead?.unidades?.nome || '';
+  const caixaNome = conversa.caixa?.nome || null;
   const isMila = conversa.atribuido_a === 'mila';
   const isAndreza = conversa.atribuido_a === 'andreza';
   const semConversa = !conversa.ultima_mensagem_at;
@@ -187,6 +188,12 @@ function InboxItem({ conversa, ativa, onClick }: { conversa: ConversaCRM; ativa:
             {isAndreza && (
               <span className="text-[9px] px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-400 font-medium">
                 Andreza
+              </span>
+            )}
+            {caixaNome && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-sky-500/15 text-sky-400 font-medium flex items-center gap-0.5">
+                <Smartphone className="w-2.5 h-2.5" />
+                {caixaNome}
               </span>
             )}
           </div>

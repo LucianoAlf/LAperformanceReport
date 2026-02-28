@@ -36,7 +36,8 @@ export function useConversas({ unidadeId, filtro = 'todas', busca }: UseConversa
             cursos:curso_interesse_id(nome),
             unidades:unidade_id(nome, codigo),
             crm_pipeline_etapas:etapa_pipeline_id(id, nome, slug, cor, icone, ordem)
-          )
+          ),
+          caixa:caixa_id(id, nome, numero)
         `)
         .order('ultima_mensagem_at', { ascending: false, nullsFirst: false });
 

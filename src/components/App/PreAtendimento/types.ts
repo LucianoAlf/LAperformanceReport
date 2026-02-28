@@ -168,6 +168,7 @@ export interface ConversaCRM {
   id: string;
   lead_id: number;
   unidade_id: string | null;
+  caixa_id: number | null;
   status: 'aberta' | 'pausada' | 'encerrada' | 'aguardando';
   atribuido_a: 'mila' | 'andreza' | 'nao_atribuido';
   whatsapp_jid: string | null;
@@ -182,6 +183,7 @@ export interface ConversaCRM {
   updated_at: string;
   // Joins
   lead?: LeadCRM | null;
+  caixa?: { id: number; nome: string; numero: string | null } | null;
 }
 
 // Mensagem WhatsApp
@@ -222,6 +224,7 @@ export interface WhatsAppConnectionStatus {
   connected: boolean;
   phone?: string;
   instanceName?: string;
+  caixaNome?: string;
   error?: string;
 }
 

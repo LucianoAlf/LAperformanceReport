@@ -794,6 +794,9 @@ export function ChatPanel({
             </div>
             <p className="text-[11px] text-slate-400">
               {lead.telefone || ''} · {lead.cursos?.nome || ''} · {lead.unidades?.codigo || ''} · {etapaNome}
+              {conversa.caixa?.nome && (
+                <span className="text-sky-400"> · via {conversa.caixa.nome}</span>
+              )}
             </p>
           </div>
         </div>
