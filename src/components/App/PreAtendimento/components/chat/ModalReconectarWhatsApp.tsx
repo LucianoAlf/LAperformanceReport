@@ -7,6 +7,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
 import type { WhatsAppCaixa } from '../../types';
 
 type Estado = 'idle' | 'iniciando' | 'aguardando_scan' | 'conectado' | 'erro' | 'expirado';
@@ -52,6 +53,9 @@ export function ModalReconectarWhatsApp({ open, onOpenChange, caixa, onReconecta
         if (data?.connected) {
           limparIntervals();
           setEstado('conectado');
+          if (data.webhookConfigured === false) {
+            toast.warning('Webhook nao configurado automaticamente. Configure manualmente na UAZAPI.');
+          }
           onReconectado?.();
           setTimeout(() => onOpenChange(false), 2000);
         } else if (data?.qrcode) {
@@ -83,6 +87,9 @@ export function ModalReconectarWhatsApp({ open, onOpenChange, caixa, onReconecta
 
       if (data.connected) {
         setEstado('conectado');
+        if (data.webhookConfigured === false) {
+          toast.warning('Webhook nao configurado automaticamente. Configure manualmente na UAZAPI.');
+        }
         onReconectado?.();
         setTimeout(() => onOpenChange(false), 2000);
         return;
