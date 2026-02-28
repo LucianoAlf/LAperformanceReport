@@ -127,20 +127,15 @@ export function CaixasManager() {
         result = await resp.json();
       }
 
-      const connected = result?.connected ||
-        result?.status?.checked_instance?.connection_status === 'connected' ||
-        result?.status === 'connected';
+      const connected = result?.connected === true;
 
-      const phone = result?.phone ||
-        result?.status?.checked_instance?.name ||
-        result?.number;
+      const phone = result?.phone || result?.number;
 
-      const instanceName = result?.instanceName ||
-        result?.status?.checked_instance?.name;
+      const instanceName = result?.instanceName;
 
       const testResult: TestResult = connected
-        ? { status: 'success', message: 'Conectado!', phone, instanceName }
-        : { status: 'error', message: result?.error || 'Desconectado' };
+        ? { status: 'success', message: phone ? `Conectado (${phone})` : 'Conectado', phone, instanceName }
+        : { status: 'error', message: 'Sem número conectado' };
 
       if (caixaId) {
         setTestResults(prev => ({ ...prev, [caixaId]: testResult }));
