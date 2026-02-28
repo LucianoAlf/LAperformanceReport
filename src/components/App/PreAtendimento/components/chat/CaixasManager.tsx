@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Trash2, TestTube, Save, Loader2, CheckCircle2, XCircle,
-  Wifi, WifiOff, Phone, Globe, Key, Tag, Building2, Copy, RefreshCw, Zap,
+  Wifi, WifiOff, Phone, Globe, Key, Tag, Building2, Copy, RefreshCw, Zap, QrCode,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import type { WhatsAppCaixa, FuncaoCaixa } from '../../types';
+import { ModalReconectarWhatsApp } from './ModalReconectarWhatsApp';
 
 interface UnidadeOption {
   id: string;
@@ -53,6 +54,7 @@ export function CaixasManager() {
   const [newTestResult, setNewTestResult] = useState<TestResult>({ status: 'idle' });
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
+  const [caixaReconectar, setCaixaReconectar] = useState<WhatsAppCaixa | null>(null);
 
   const fetchCaixas = useCallback(async () => {
     setLoading(true);
@@ -559,6 +561,13 @@ export function CaixasManager() {
                       )}
                     </button>
                     <button
+                      onClick={() => setCaixaReconectar(caixa)}
+                      className="p-2 hover:bg-emerald-500/10 rounded-lg transition-colors"
+                      title="Reconectar WhatsApp (QR Code)"
+                    >
+                      <QrCode className="w-4 h-4 text-emerald-400" />
+                    </button>
+                    <button
                       onClick={() => copiarWebhook(gerarWebhookUrl(caixa.id))}
                       className="p-2 hover:bg-slate-700/50 rounded-lg transition-colors"
                       title="Copiar URL do webhook"
@@ -599,6 +608,17 @@ export function CaixasManager() {
           })}
         </div>
       )}
+
+      <ModalReconectarWhatsApp
+        open={!!caixaReconectar}
+        onOpenChange={(open) => { if (!open) setCaixaReconectar(null); }}
+        caixa={caixaReconectar}
+        onReconectado={() => {
+          if (caixaReconectar) {
+            handleTestarConexao(caixaReconectar.id, caixaReconectar.uazapi_url, caixaReconectar.uazapi_token);
+          }
+        }}
+      />
     </div>
   );
 }
