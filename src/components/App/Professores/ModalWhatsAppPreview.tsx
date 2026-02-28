@@ -149,15 +149,13 @@ Em caso de dúvidas, procure a coordenação.`;
     return limpo;
   };
 
-  // Enviar via Edge Function (API WhatsApp) com fallback para WhatsApp Web
+  // Enviar via Edge Function (API WhatsApp)
   const handleEnviarWhatsApp = async () => {
     if (!professorWhatsApp) return;
-    
+
     setEnviando(true);
-    
+
     try {
-      console.log('[WhatsApp 360°] Enviando notificação para:', professorWhatsApp);
-      
       const { data: resultado, error } = await supabase.functions.invoke('professor-360-whatsapp', {
         body: {
           professorNome,
@@ -173,21 +171,26 @@ Em caso de dúvidas, procure a coordenação.`;
           atrasoGrave,
         },
       });
-      
+
       if (error) {
-        console.error('[WhatsApp 360°] ❌ Erro ao chamar Edge Function:', error);
-        toast.error(`Erro ao enviar: ${error.message || 'Falha na Edge Function'}. Tente novamente.`);
+        console.error('[WhatsApp 360°] Erro ao chamar Edge Function:', error);
+        const msg = error.message?.includes('401') || error.message?.includes('Unauthorized')
+          ? 'Sessão expirada. Recarregue a página e tente novamente.'
+          : `Erro ao enviar: ${error.message || 'Falha na conexão com o servidor'}`;
+        toast.error(msg);
       } else if (resultado?.success) {
-        console.log('[WhatsApp 360°] ✅ Mensagem enviada com sucesso! ID:', resultado.messageId);
-        toast.success(`✅ Mensagem enviada para ${professorNome.split(' ')[0]} via WhatsApp!`);
+        toast.success(`Mensagem enviada para ${professorNome.split(' ')[0]} via WhatsApp!`);
         onOpenChange(false);
       } else {
-        console.error('[WhatsApp 360°] ❌ Erro ao enviar:', resultado?.error);
-        toast.error(`Erro ao enviar: ${resultado?.error || 'Falha no envio'}. Tente novamente.`);
+        console.error('[WhatsApp 360°] Falha no envio:', resultado?.error);
+        toast.error(resultado?.error || 'Falha ao enviar mensagem. Tente novamente.');
       }
     } catch (err) {
-      console.error('[WhatsApp 360°] ❌ Erro inesperado:', err);
-      toast.error('Erro de conexão com UAZAPI. Verifique sua internet e tente novamente.');
+      console.error('[WhatsApp 360°] Erro inesperado:', err);
+      const isNetworkError = err instanceof TypeError && err.message?.includes('fetch');
+      toast.error(isNetworkError
+        ? 'Sem conexão com o servidor. Verifique sua internet.'
+        : 'Erro inesperado ao enviar. Tente novamente.');
     } finally {
       setEnviando(false);
     }

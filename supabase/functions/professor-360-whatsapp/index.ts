@@ -46,6 +46,20 @@ function formatPhoneNumber(phone: string): string {
 }
 
 /**
+ * Valida formato mínimo do número de telefone
+ */
+function validarTelefone(phone: string): { valido: boolean; motivo?: string } {
+  const cleaned = phone.replace(/\D/g, '');
+  if (cleaned.length < 10) {
+    return { valido: false, motivo: `Número muito curto (${cleaned.length} dígitos, mín. 10)` };
+  }
+  if (cleaned.length > 15) {
+    return { valido: false, motivo: `Número muito longo (${cleaned.length} dígitos, máx. 15)` };
+  }
+  return { valido: true };
+}
+
+/**
  * Gera texto de tempo de atraso
  */
 function getAtrasoTexto(minutosAtraso?: number | null): string {
@@ -57,13 +71,12 @@ function getAtrasoTexto(minutosAtraso?: number | null): string {
  * Gera texto de tolerância/atraso grave
  */
 function getToleranciaTexto(dados: NotificacaoPayload): string {
-  // Se atraso grave, mostrar mensagem específica
   if (dados.atrasoGrave) {
     return `\n❌ *Atraso acima de 10 minutos!* Pontuação descontada: -${dados.toleranciaInfo?.pontos_descontados || 0} pts (sem tolerância)\n`;
   }
-  
+
   if (!dados.toleranciaInfo) return '';
-  
+
   if (dados.toleranciaInfo.tolerancia_esgotada) {
     return `\n❌ *Tolerância esgotada!* Pontuação descontada: -${dados.toleranciaInfo.pontos_descontados} pts\n`;
   } else if (dados.toleranciaInfo.ultima_tolerancia) {
@@ -79,8 +92,7 @@ function getToleranciaTexto(dados: NotificacaoPayload): string {
 function montarMensagem(dados: NotificacaoPayload): string {
   const primeiroNome = dados.professorNome.split(' ')[0];
   const dataFormatada = dados.dataOcorrencia.split('-').reverse().join('/');
-  
-  // Mensagem diferenciada para bônus
+
   if (dados.tipoCategoria === 'bonus') {
     let mensagem = `🎉 *LA Music - Reconhecimento 360°*\n\n`;
     mensagem += `Olá, ${primeiroNome}! 🌟\n\n`;
@@ -89,18 +101,17 @@ function montarMensagem(dados: NotificacaoPayload): string {
     mensagem += `📅 *Data:* ${dataFormatada}\n`;
     mensagem += `🏢 *Unidade:* ${dados.unidadeNome}\n`;
     mensagem += `👤 *Registrado por:* ${dados.registradoPor}`;
-    
+
     if (dados.descricao) {
       mensagem += `\n\n💬 *Mensagem:*\n${dados.descricao}`;
     }
-    
+
     mensagem += `\n\nContinue assim! Seu engajamento faz a diferença na LA Music! 💪🎵`;
     mensagem += `\n\n---\nDúvidas? Fale com a coordenação.`;
-    
+
     return mensagem;
   }
-  
-  // Mensagem padrão para penalidades
+
   let mensagem = `🔔 *LA Music - Avaliação 360°*\n\n`;
   mensagem += `Olá, ${primeiroNome}!\n\n`;
   mensagem += `Uma ocorrência foi registrada em seu perfil:\n\n`;
@@ -110,18 +121,18 @@ function montarMensagem(dados: NotificacaoPayload): string {
   mensagem += `🏢 *Unidade:* ${dados.unidadeNome}\n`;
   mensagem += `👤 *Registrado por:* ${dados.registradoPor}`;
   mensagem += getToleranciaTexto(dados);
-  
+
   if (dados.descricao) {
     mensagem += `\n📝 *Observação:* ${dados.descricao}\n`;
   }
-  
+
   mensagem += `\n---\nEm caso de dúvidas, procure a coordenação.`;
-  
+
   return mensagem;
 }
 
 /**
- * Envia mensagem via UAZAPI
+ * Envia mensagem via UAZAPI com timeout
  */
 async function enviarWhatsApp(
   telefone: string,
@@ -133,6 +144,9 @@ async function enviarWhatsApp(
   console.log(`[professor-360-whatsapp] Enviando para: ${formattedPhone}`);
 
   try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
+
     const response = await fetch(`${creds.baseUrl}/send/text`, {
       method: 'POST',
       headers: {
@@ -145,78 +159,120 @@ async function enviarWhatsApp(
         delay: 0,
         readchat: true,
       }),
+      signal: controller.signal,
     });
+
+    clearTimeout(timeoutId);
 
     const data = await response.json();
 
     if (response.ok && !data.error) {
-      console.log(`[professor-360-whatsapp] ✅ Mensagem enviada! ID: ${data.id || data.messageid || data.key?.id}`);
-      return { 
-        success: true, 
-        messageId: data.id || data.messageid || data.key?.id 
+      console.log(`[professor-360-whatsapp] Mensagem enviada! ID: ${data.id || data.messageid || data.key?.id}`);
+      return {
+        success: true,
+        messageId: data.id || data.messageid || data.key?.id
       };
     } else {
-      console.error(`[professor-360-whatsapp] ❌ Erro UAZAPI:`, data);
-      return {
-        success: false,
-        error: (typeof data.error === 'string' ? data.error : null) || data.message || JSON.stringify(data)
-      };
+      const errorMsg = (typeof data.error === 'string' ? data.error : null) || data.message || JSON.stringify(data);
+      console.error(`[professor-360-whatsapp] Erro UAZAPI (${response.status}):`, errorMsg);
+      return { success: false, error: `UAZAPI: ${errorMsg}` };
     }
   } catch (error) {
-    console.error(`[professor-360-whatsapp] ❌ Erro de conexão:`, error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Erro de conexão' 
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      console.error(`[professor-360-whatsapp] Timeout ao enviar para ${formattedPhone}`);
+      return { success: false, error: 'Timeout: UAZAPI não respondeu em 10s' };
+    }
+    console.error(`[professor-360-whatsapp] Erro de conexão:`, error);
+    return {
+      success: false,
+      error: `Conexão: ${error instanceof Error ? error.message : 'Erro desconhecido'}`
     };
   }
 }
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
 
+  // 1. Parse do body
+  let payload: NotificacaoPayload;
   try {
-    const payload: NotificacaoPayload = await req.json();
+    payload = await req.json();
+  } catch {
+    return new Response(
+      JSON.stringify({ success: false, error: 'Body inválido: esperado JSON' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
 
-    // Validar payload
-    if (!payload.professorWhatsApp) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Número de WhatsApp não informado' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+  // 2. Log resumido para debug
+  console.log(`[professor-360-whatsapp] Recebido: professor=${payload.professorNome || '?'}, tipo=${payload.tipoOcorrencia || '?'}, categoria=${payload.tipoCategoria || 'penalidade'}, unidade=${payload.unidadeNome || '?'}`);
 
-    if (!payload.professorNome || !payload.tipoOcorrencia) {
-      return new Response(
-        JSON.stringify({ success: false, error: 'Dados incompletos' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+  // 3. Validar campos obrigatórios
+  if (!payload.professorWhatsApp) {
+    return new Response(
+      JSON.stringify({ success: false, error: 'Número de WhatsApp do professor não informado' }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
 
+  if (!payload.professorNome || !payload.tipoOcorrencia) {
+    const faltando = [];
+    if (!payload.professorNome) faltando.push('professorNome');
+    if (!payload.tipoOcorrencia) faltando.push('tipoOcorrencia');
+    return new Response(
+      JSON.stringify({ success: false, error: `Campos obrigatórios faltando: ${faltando.join(', ')}` }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // 4. Validar formato do telefone
+  const telefoneCheck = validarTelefone(payload.professorWhatsApp);
+  if (!telefoneCheck.valido) {
+    console.error(`[professor-360-whatsapp] Telefone inválido: ${payload.professorWhatsApp} - ${telefoneCheck.motivo}`);
+    return new Response(
+      JSON.stringify({ success: false, error: `Telefone inválido: ${telefoneCheck.motivo}` }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+
+  // 5. Buscar credenciais UAZAPI
+  let creds;
+  try {
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
-    const creds = await getUazapiCredentials(supabase, { funcao: 'sistema' });
+    creds = await getUazapiCredentials(supabase, { funcao: 'sistema' });
+  } catch (error) {
+    console.error('[professor-360-whatsapp] Erro ao buscar credenciais UAZAPI:', error);
+    return new Response(
+      JSON.stringify({ success: false, error: 'WhatsApp não configurado: nenhuma caixa UAZAPI ativa encontrada' }),
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
 
-    // Montar e enviar mensagem
+  // 6. Montar e enviar mensagem
+  try {
     const mensagem = montarMensagem(payload);
     const resultado = await enviarWhatsApp(payload.professorWhatsApp, mensagem, creds);
 
+    if (resultado.success) {
+      console.log(`[professor-360-whatsapp] Sucesso: ${payload.professorNome} (${payload.tipoOcorrencia})`);
+    } else {
+      console.error(`[professor-360-whatsapp] Falha ao enviar para ${payload.professorNome}: ${resultado.error}`);
+    }
+
     return new Response(
       JSON.stringify(resultado),
-      { 
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
-
   } catch (error) {
-    console.error('[professor-360-whatsapp] Erro:', error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error(`[professor-360-whatsapp] Erro inesperado ao enviar para ${payload.professorNome}:`, errorMsg);
     return new Response(
-      JSON.stringify({ success: false, error: 'Erro interno do servidor' }),
+      JSON.stringify({ success: false, error: `Erro interno: ${errorMsg}` }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
