@@ -407,6 +407,7 @@ export function LeadsTab({ unidadeId, ano, mes, onLeadClick, onNovoLead, onAgend
                 <th className="text-left p-3 text-slate-400 font-medium cursor-pointer hover:text-white" onClick={() => toggleOrdenacao('nome')}>
                   <span className="flex items-center gap-1">Nome <ArrowUpDown className="w-3 h-3" /></span>
                 </th>
+                <th className="text-left p-3 text-slate-400 font-medium">Telefone</th>
                 <th className="text-left p-3 text-slate-400 font-medium">Unid</th>
                 <th className="text-left p-3 text-slate-400 font-medium cursor-pointer hover:text-white" onClick={() => toggleOrdenacao('etapa')}>
                   <span className="flex items-center gap-1">Etapa <ArrowUpDown className="w-3 h-3" /></span>
@@ -449,6 +450,9 @@ export function LeadsTab({ unidadeId, ano, mes, onLeadClick, onNovoLead, onAgend
                     </td>
                     <td className="p-3">
                       <span className="text-white font-medium text-xs">{lead.nome || 'Sem nome'}</span>
+                    </td>
+                    <td className="p-3">
+                      <span className="text-xs text-slate-300">{lead.telefone || '—'}</span>
                     </td>
                     <td className="p-3">
                       <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-700/50 text-slate-300">
