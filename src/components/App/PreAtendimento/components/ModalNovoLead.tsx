@@ -16,8 +16,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Loader2 } from 'lucide-react';
+import { Plus, Loader2, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useCheckLeadDuplicado, type LeadDuplicado } from '@/hooks/useCheckLeadDuplicado';
 import type { PipelineEtapa } from '../types';
 
 interface ModalNovoLeadProps {
@@ -31,6 +32,7 @@ interface ModalNovoLeadProps {
 
 export function ModalNovoLead({ aberto, onClose, onSalvo, etapas, canais, cursos }: ModalNovoLeadProps) {
   const [salvando, setSalvando] = useState(false);
+  const [mostrarAlertaDuplicata, setMostrarAlertaDuplicata] = useState(false);
 
   // Campos do formulário
   const [nome, setNome] = useState('');
@@ -43,6 +45,8 @@ export function ModalNovoLead({ aberto, onClose, onSalvo, etapas, canais, cursos
   const [sabiaPreco, setSabiaPreco] = useState('');
   const [observacoes, setObservacoes] = useState('');
 
+  const { duplicados, verificando, verificar, limparDuplicados } = useCheckLeadDuplicado();
+
   const limpar = () => {
     setNome('');
     setTelefone('');
@@ -53,6 +57,8 @@ export function ModalNovoLead({ aberto, onClose, onSalvo, etapas, canais, cursos
     setFaixaEtaria('');
     setSabiaPreco('');
     setObservacoes('');
+    setMostrarAlertaDuplicata(false);
+    limparDuplicados();
   };
 
   const handleClose = () => {
@@ -60,9 +66,7 @@ export function ModalNovoLead({ aberto, onClose, onSalvo, etapas, canais, cursos
     onClose();
   };
 
-  const handleSalvar = async () => {
-    if (!nome.trim() || !unidadeId) return;
-
+  const inserirLead = async () => {
     setSalvando(true);
     try {
       const { error } = await supabase.from('leads').insert({
@@ -94,6 +98,43 @@ export function ModalNovoLead({ aberto, onClose, onSalvo, etapas, canais, cursos
     }
   };
 
+  const handleSalvar = async () => {
+    if (!nome.trim() || !unidadeId) return;
+
+    // Se já viu o alerta e clicou "Criar mesmo assim", inserir direto
+    if (mostrarAlertaDuplicata) {
+      await inserirLead();
+      return;
+    }
+
+    // Verificar duplicatas antes de inserir
+    const encontrados = await verificar(nome, telefone, unidadeId);
+    if (encontrados.length > 0) {
+      setMostrarAlertaDuplicata(true);
+      return;
+    }
+
+    await inserirLead();
+  };
+
+  const formatarStatus = (status: string) => {
+    const mapa: Record<string, string> = {
+      novo: 'Novo',
+      em_contato: 'Em Contato',
+      experimental_agendada: 'Exp. Agendada',
+      experimental_realizada: 'Exp. Realizada',
+      experimental_faltou: 'Exp. Faltou',
+      convertido: 'Convertido',
+      matriculado: 'Matriculado',
+      arquivado: 'Arquivado',
+    };
+    return mapa[status] || status;
+  };
+
+  const formatarData = (dataStr: string) => {
+    return new Date(dataStr).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+  };
+
   return (
     <Dialog open={aberto} onOpenChange={v => !v && handleClose()}>
       <DialogContent className="sm:max-w-lg">
@@ -110,6 +151,33 @@ export function ModalNovoLead({ aberto, onClose, onSalvo, etapas, canais, cursos
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          {/* Alerta de duplicata */}
+          {mostrarAlertaDuplicata && duplicados.length > 0 && (
+            <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 space-y-2">
+              <div className="flex items-center gap-2 text-amber-400 text-sm font-medium">
+                <AlertTriangle className="w-4 h-4" />
+                Lead possivelmente duplicado
+              </div>
+              <div className="space-y-1.5">
+                {duplicados.map((d: LeadDuplicado) => (
+                  <div key={d.id} className="flex items-center justify-between text-xs bg-slate-800/50 rounded px-2 py-1.5">
+                    <div>
+                      <span className="text-white font-medium">{d.nome}</span>
+                      {d.telefone && <span className="text-slate-400 ml-2">{d.telefone}</span>}
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-400">
+                      <span>{formatarStatus(d.status)}</span>
+                      <span>{formatarData(d.created_at)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-amber-400/80">
+                Deseja criar mesmo assim?
+              </p>
+            </div>
+          )}
+
           {/* Nome + Telefone */}
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -117,7 +185,7 @@ export function ModalNovoLead({ aberto, onClose, onSalvo, etapas, canais, cursos
               <Input
                 placeholder="Nome do lead"
                 value={nome}
-                onChange={e => setNome(e.target.value)}
+                onChange={e => { setNome(e.target.value); setMostrarAlertaDuplicata(false); }}
                 className="bg-slate-800/50 border-slate-700"
               />
             </div>
@@ -126,7 +194,7 @@ export function ModalNovoLead({ aberto, onClose, onSalvo, etapas, canais, cursos
               <Input
                 placeholder="(21) 99999-9999"
                 value={telefone}
-                onChange={e => setTelefone(e.target.value)}
+                onChange={e => { setTelefone(e.target.value); setMostrarAlertaDuplicata(false); }}
                 className="bg-slate-800/50 border-slate-700"
               />
             </div>
@@ -145,7 +213,7 @@ export function ModalNovoLead({ aberto, onClose, onSalvo, etapas, canais, cursos
             </div>
             <div>
               <label className="text-xs text-slate-400 mb-1 block">Unidade *</label>
-              <Select value={unidadeId} onValueChange={setUnidadeId}>
+              <Select value={unidadeId} onValueChange={v => { setUnidadeId(v); setMostrarAlertaDuplicata(false); }}>
                 <SelectTrigger className="bg-slate-800/50 border-slate-700">
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
@@ -161,7 +229,7 @@ export function ModalNovoLead({ aberto, onClose, onSalvo, etapas, canais, cursos
           {/* KPIs: Canal + Curso */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-slate-400 mb-1 block">📡 Canal de Origem</label>
+              <label className="text-xs text-slate-400 mb-1 block">Canal de Origem</label>
               <Select value={canalOrigemId} onValueChange={setCanalOrigemId}>
                 <SelectTrigger className="bg-slate-800/50 border-slate-700">
                   <SelectValue placeholder="Selecione" />
@@ -174,7 +242,7 @@ export function ModalNovoLead({ aberto, onClose, onSalvo, etapas, canais, cursos
               </Select>
             </div>
             <div>
-              <label className="text-xs text-slate-400 mb-1 block">🎸 Curso de Interesse</label>
+              <label className="text-xs text-slate-400 mb-1 block">Curso de Interesse</label>
               <Select value={cursoInteresseId} onValueChange={setCursoInteresseId}>
                 <SelectTrigger className="bg-slate-800/50 border-slate-700">
                   <SelectValue placeholder="Selecione" />
@@ -191,13 +259,13 @@ export function ModalNovoLead({ aberto, onClose, onSalvo, etapas, canais, cursos
           {/* KPIs: Faixa Etária + Sabe Preço */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-slate-400 mb-1 block">👶 Faixa Etária</label>
+              <label className="text-xs text-slate-400 mb-1 block">Faixa Etaria</label>
               <Select value={faixaEtaria} onValueChange={setFaixaEtaria}>
                 <SelectTrigger className="bg-slate-800/50 border-slate-700">
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="0-3">0-3 anos (Bebê)</SelectItem>
+                  <SelectItem value="0-3">0-3 anos (Bebe)</SelectItem>
                   <SelectItem value="4-6">4-6 anos (LAMK)</SelectItem>
                   <SelectItem value="7-11">7-11 anos (LAMK)</SelectItem>
                   <SelectItem value="12-17">12-17 anos (EMLA)</SelectItem>
@@ -206,14 +274,14 @@ export function ModalNovoLead({ aberto, onClose, onSalvo, etapas, canais, cursos
               </Select>
             </div>
             <div>
-              <label className="text-xs text-slate-400 mb-1 block">💰 Sabe o Preço?</label>
+              <label className="text-xs text-slate-400 mb-1 block">Sabe o Preco?</label>
               <Select value={sabiaPreco} onValueChange={setSabiaPreco}>
                 <SelectTrigger className="bg-slate-800/50 border-slate-700">
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="sim">Sim</SelectItem>
-                  <SelectItem value="nao">Não</SelectItem>
+                  <SelectItem value="nao">Nao</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -221,7 +289,7 @@ export function ModalNovoLead({ aberto, onClose, onSalvo, etapas, canais, cursos
 
           {/* Observações */}
           <div>
-            <label className="text-xs text-slate-400 mb-1 block">Observações</label>
+            <label className="text-xs text-slate-400 mb-1 block">Observacoes</label>
             <textarea
               placeholder="Notas sobre o lead..."
               value={observacoes}
@@ -233,16 +301,20 @@ export function ModalNovoLead({ aberto, onClose, onSalvo, etapas, canais, cursos
         </div>
 
         <DialogFooter className="gap-2 sm:gap-2">
-          <Button variant="outline" onClick={handleClose} disabled={salvando}>
+          <Button variant="outline" onClick={handleClose} disabled={salvando || verificando}>
             Cancelar
           </Button>
           <Button
             onClick={handleSalvar}
-            disabled={!nome.trim() || !unidadeId || salvando}
-            className="bg-violet-600 hover:bg-violet-700"
+            disabled={!nome.trim() || !unidadeId || salvando || verificando}
+            className={mostrarAlertaDuplicata ? 'bg-amber-600 hover:bg-amber-700' : 'bg-violet-600 hover:bg-violet-700'}
           >
-            {salvando ? (
+            {verificando ? (
+              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Verificando...</>
+            ) : salvando ? (
               <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Salvando...</>
+            ) : mostrarAlertaDuplicata ? (
+              <><AlertTriangle className="w-4 h-4 mr-2" /> Criar mesmo assim</>
             ) : (
               <><Plus className="w-4 h-4 mr-2" /> Criar Lead</>
             )}

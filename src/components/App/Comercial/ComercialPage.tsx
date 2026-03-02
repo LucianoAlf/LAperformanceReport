@@ -61,6 +61,7 @@ import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
 import { ComboboxNome, SugestaoLead } from '@/components/ui/combobox-nome';
 import { ComboboxTelefone } from '@/components/ui/combobox-telefone';
 import { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
+import { verificarDuplicadosEmLote } from '@/hooks/useCheckLeadDuplicado';
 import { CelulaEditavelInline } from '@/components/ui/CelulaEditavelInline';
 import { AlertasComercial } from './AlertasComercial';
 import { PlanoAcaoComercial } from './PlanoAcaoComercial';
@@ -193,6 +194,7 @@ export function ComercialPage() {
     : unidadeId;
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [confirmouDuplicataLote, setConfirmouDuplicataLote] = useState(false);
   const [abaPrincipal, setAbaPrincipal] = useState<'lancamentos' | 'programa' | 'tarefas'>('lancamentos');
   const [modalOpen, setModalOpen] = useState<'lead' | 'experimental' | 'visita' | 'matricula' | null>(null);
   const [relatorioOpen, setRelatorioOpen] = useState(false);
@@ -852,10 +854,26 @@ export function ComercialPage() {
       toast.warning(`${linhasSemNome.length} linha(s) sem nome serão ignoradas`);
     }
 
+    // Verificar duplicatas por telefone antes de salvar
+    const telefonesNormalizados = linhasValidas
+      .map(l => l.telefone ? normalizePhone(l.telefone) : null)
+      .filter((t): t is string => !!t);
+
+    if (telefonesNormalizados.length > 0 && !confirmouDuplicataLote) {
+      const duplicatas = await verificarDuplicadosEmLote(telefonesNormalizados, unidadeParaSalvar);
+      if (duplicatas.size > 0) {
+        const nomes = Array.from(duplicatas.values()).map(d => d.nome).join(', ');
+        toast.warning(`${duplicatas.size} lead(s) com telefone duplicado: ${nomes}. Clique em salvar novamente para confirmar.`, { duration: 6000 });
+        setConfirmouDuplicataLote(true);
+        return;
+      }
+    }
+
     setSaving(true);
+    setConfirmouDuplicataLote(false);
     try {
       const dataLancamento = loteData.toISOString().split('T')[0];
-      
+
       // Cada lead atendido é 1 registro (quantidade sempre 1)
       const registros = linhasValidas.map(linha => ({
         unidade_id: unidadeParaSalvar,

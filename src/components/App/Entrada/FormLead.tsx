@@ -5,19 +5,21 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { 
-  ArrowLeft, 
-  Save, 
-  Phone, 
-  Mail, 
-  User, 
+import {
+  ArrowLeft,
+  Save,
+  Phone,
+  Mail,
+  User,
   Calendar,
   Music,
   MapPin,
-  MessageSquare
+  MessageSquare,
+  AlertTriangle
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { useCursosUnidade } from '../../../hooks/useCursosUnidade';
+import { useCheckLeadDuplicado, type LeadDuplicado } from '@/hooks/useCheckLeadDuplicado';
 
 // Schema de validação
 const leadSchema = z.object({
@@ -85,7 +87,9 @@ export function FormLead() {
 
   const experimentalAgendada = watch('experimental_agendada');
   const unidadeIdSelecionada = watch('unidade_id');
-  
+  const [mostrarAlertaDuplicata, setMostrarAlertaDuplicata] = useState(false);
+  const { duplicados, verificando, verificar, limparDuplicados } = useCheckLeadDuplicado();
+
   // Buscar cursos da unidade selecionada
   const { cursos } = useCursosUnidade(unidadeIdSelecionada);
 
@@ -106,7 +110,7 @@ export function FormLead() {
     loadData();
   }, []);
 
-  const onSubmit = async (data: LeadFormData) => {
+  const inserirLead = async (data: LeadFormData) => {
     setLoading(true);
     try {
       const { error } = await supabase.from('leads').insert({
@@ -136,6 +140,34 @@ export function FormLead() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const onSubmit = async (data: LeadFormData) => {
+    // Se já viu o alerta e confirmou, inserir direto
+    if (mostrarAlertaDuplicata) {
+      setMostrarAlertaDuplicata(false);
+      limparDuplicados();
+      await inserirLead(data);
+      return;
+    }
+
+    // Verificar duplicatas antes de inserir
+    const encontrados = await verificar(data.nome, data.telefone || null, data.unidade_id);
+    if (encontrados.length > 0) {
+      setMostrarAlertaDuplicata(true);
+      return;
+    }
+
+    await inserirLead(data);
+  };
+
+  const formatarStatus = (status: string) => {
+    const mapa: Record<string, string> = {
+      novo: 'Novo', em_contato: 'Em Contato', experimental_agendada: 'Exp. Agendada',
+      experimental_realizada: 'Exp. Realizada', experimental_faltou: 'Exp. Faltou',
+      convertido: 'Convertido', matriculado: 'Matriculado', arquivado: 'Arquivado',
+    };
+    return mapa[status] || status;
   };
 
   return (
@@ -369,6 +401,30 @@ export function FormLead() {
           />
         </section>
 
+        {/* Alerta de duplicata */}
+        {mostrarAlertaDuplicata && duplicados.length > 0 && (
+          <div className="rounded-2xl border border-amber-500/50 bg-amber-500/10 p-4 space-y-3">
+            <div className="flex items-center gap-2 text-amber-400 font-medium">
+              <AlertTriangle className="w-5 h-5" />
+              Lead possivelmente duplicado
+            </div>
+            <div className="space-y-2">
+              {duplicados.map((d: LeadDuplicado) => (
+                <div key={d.id} className="flex items-center justify-between text-sm bg-slate-800/50 rounded-lg px-3 py-2">
+                  <div>
+                    <span className="text-white font-medium">{d.nome}</span>
+                    {d.telefone && <span className="text-slate-400 ml-2">{d.telefone}</span>}
+                  </div>
+                  <span className="text-slate-400 text-xs">{formatarStatus(d.status)}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-sm text-amber-400/80">
+              Deseja criar o lead mesmo assim?
+            </p>
+          </div>
+        )}
+
         {/* Botões */}
         <div className="flex justify-end gap-4">
           <button
@@ -380,11 +436,20 @@ export function FormLead() {
           </button>
           <button
             type="submit"
-            disabled={loading}
-            className="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-medium rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50"
+            disabled={loading || verificando}
+            className={`flex items-center gap-2 px-6 py-3 text-white font-medium rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50 ${
+              mostrarAlertaDuplicata
+                ? 'bg-gradient-to-r from-amber-500 to-amber-600'
+                : 'bg-gradient-to-r from-cyan-500 to-blue-600'
+            }`}
           >
-            <Save className="w-5 h-5" />
-            {loading ? 'Salvando...' : 'Salvar Lead'}
+            {verificando ? (
+              <><Save className="w-5 h-5 animate-spin" /> Verificando...</>
+            ) : mostrarAlertaDuplicata ? (
+              <><AlertTriangle className="w-5 h-5" /> Criar mesmo assim</>
+            ) : (
+              <><Save className="w-5 h-5" /> {loading ? 'Salvando...' : 'Salvar Lead'}</>
+            )}
           </button>
         </div>
       </form>
