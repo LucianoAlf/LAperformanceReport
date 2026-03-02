@@ -27,7 +27,8 @@ import {
   Send,
   GraduationCap,
   Trophy,
-  CheckSquare
+  CheckSquare,
+  Search
 } from 'lucide-react';
 import { TarefasRapidasTab } from '@/components/shared/TarefasRapidas';
 import { PageTour, TourHelpButton } from '@/components/Onboarding';
@@ -264,6 +265,7 @@ export function ComercialPage() {
   
   // Aba selecionada no detalhamento
   const [abaDetalhamento, setAbaDetalhamento] = useState<'leads' | 'experimental' | 'visita' | 'matricula'>('matricula');
+  const [buscaFunil, setBuscaFunil] = useState('');
   
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingData, setEditingData] = useState<Partial<LeadDiario>>({});
@@ -2636,12 +2638,34 @@ export function ComercialPage() {
           </div>
         </div>
 
+        {/* Campo de busca */}
+        <div className="px-6 py-3 border-b border-slate-700/50">
+          <div className="relative max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <Input
+              placeholder="Buscar nome ou telefone..."
+              value={buscaFunil}
+              onChange={e => setBuscaFunil(e.target.value)}
+              className="pl-9 bg-slate-800/50 border-slate-700 h-9 text-sm"
+            />
+          </div>
+        </div>
+
         {/* ══════════════════════════════════════════════════════════════ */}
         {/* TABELA DE LEADS ATENDIDOS */}
         {/* ══════════════════════════════════════════════════════════════ */}
-        {abaDetalhamento === 'leads' && (
+        {abaDetalhamento === 'leads' && (() => {
+          const leadsFiltrados = buscaFunil
+            ? leadsMes.filter(l => {
+                const termo = buscaFunil.toLowerCase();
+                const nome = (l.nome || '').toLowerCase();
+                const tel = ((l as any).telefone || '').toLowerCase();
+                return nome.includes(termo) || tel.includes(termo);
+              })
+            : leadsMes;
+          return (
           <div className="p-4 overflow-x-auto">
-            {leadsMes.length > 0 ? (
+            {leadsFiltrados.length > 0 ? (
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-slate-400 border-b border-slate-700">
@@ -2656,9 +2680,9 @@ export function ComercialPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {leadsMes.map((lead, index) => (
-                    <tr 
-                      key={lead.id} 
+                  {leadsFiltrados.map((lead, index) => (
+                    <tr
+                      key={lead.id}
                       className="border-b border-slate-700/50 hover:bg-slate-700/20 transition-colors"
                     >
                       <td className="py-3 px-2 text-slate-500 font-medium border-r border-slate-700/30">{index + 1}</td>
@@ -2731,19 +2755,29 @@ export function ComercialPage() {
             ) : (
               <div className="text-center py-12">
                 <Smartphone className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-                <p className="text-slate-400">Nenhum lead atendido registrado ainda</p>
-                <p className="text-slate-500 text-sm mt-1">Clique no card "Leads Atendidos" acima para adicionar</p>
+                <p className="text-slate-400">
+                  {buscaFunil ? 'Nenhum lead encontrado para esta busca' : 'Nenhum lead atendido registrado ainda'}
+                </p>
+                {!buscaFunil && <p className="text-slate-500 text-sm mt-1">Clique no card "Leads Atendidos" acima para adicionar</p>}
               </div>
             )}
           </div>
-        )}
+          );
+        })()}
 
         {/* ══════════════════════════════════════════════════════════════ */}
         {/* TABELA DE EXPERIMENTAIS */}
         {/* ══════════════════════════════════════════════════════════════ */}
-        {abaDetalhamento === 'experimental' && (
+        {abaDetalhamento === 'experimental' && (() => {
+          const expFiltradas = buscaFunil
+            ? experimentaisMes.filter(l => {
+                const termo = buscaFunil.toLowerCase();
+                return (l.nome || '').toLowerCase().includes(termo);
+              })
+            : experimentaisMes;
+          return (
           <div className="p-4 overflow-x-auto">
-            {experimentaisMes.length > 0 ? (
+            {expFiltradas.length > 0 ? (
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-slate-400 border-b border-slate-700">
@@ -2760,7 +2794,7 @@ export function ComercialPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {experimentaisMes.map((exp, index) => (
+                  {expFiltradas.map((exp, index) => (
                     <tr 
                       key={exp.id} 
                       className="border-b border-slate-700/50 hover:bg-slate-700/20 transition-colors"
@@ -2878,19 +2912,29 @@ export function ComercialPage() {
             ) : (
               <div className="text-center py-12">
                 <Guitar className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-                <p className="text-slate-400">Nenhuma experimental registrada ainda</p>
-                <p className="text-slate-500 text-sm mt-1">Clique no card "Experimental" acima para adicionar</p>
+                <p className="text-slate-400">
+                  {buscaFunil ? 'Nenhuma experimental encontrada para esta busca' : 'Nenhuma experimental registrada ainda'}
+                </p>
+                {!buscaFunil && <p className="text-slate-500 text-sm mt-1">Clique no card "Experimental" acima para adicionar</p>}
               </div>
             )}
           </div>
-        )}
+          );
+        })()}
 
         {/* ══════════════════════════════════════════════════════════════ */}
         {/* TABELA DE VISITAS */}
         {/* ══════════════════════════════════════════════════════════════ */}
-        {abaDetalhamento === 'visita' && (
+        {abaDetalhamento === 'visita' && (() => {
+          const visitasFiltradas = buscaFunil
+            ? visitasMes.filter(l => {
+                const termo = buscaFunil.toLowerCase();
+                return (l.nome || '').toLowerCase().includes(termo);
+              })
+            : visitasMes;
+          return (
           <div className="p-4 overflow-x-auto">
-            {visitasMes.length > 0 ? (
+            {visitasFiltradas.length > 0 ? (
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-slate-400 border-b border-slate-700">
@@ -2906,7 +2950,7 @@ export function ComercialPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {visitasMes.map((visita, index) => (
+                  {visitasFiltradas.map((visita, index) => (
                     <tr 
                       key={visita.id} 
                       className="border-b border-slate-700/50 hover:bg-slate-700/20 transition-colors"
@@ -2989,17 +3033,29 @@ export function ComercialPage() {
             ) : (
               <div className="text-center py-12">
                 <Building2 className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-                <p className="text-slate-400">Nenhuma visita registrada ainda</p>
-                <p className="text-slate-500 text-sm mt-1">Clique no card "Visita" acima para adicionar</p>
+                <p className="text-slate-400">
+                  {buscaFunil ? 'Nenhuma visita encontrada para esta busca' : 'Nenhuma visita registrada ainda'}
+                </p>
+                {!buscaFunil && <p className="text-slate-500 text-sm mt-1">Clique no card "Visita" acima para adicionar</p>}
               </div>
             )}
           </div>
-        )}
+          );
+        })()}
 
         {/* ══════════════════════════════════════════════════════════════ */}
         {/* TABELA DE MATRÍCULAS (original - mantida intacta) */}
         {/* ══════════════════════════════════════════════════════════════ */}
-        {abaDetalhamento === 'matricula' && (
+        {abaDetalhamento === 'matricula' && (() => {
+          const matriculasFiltradas = buscaFunil
+            ? matriculasMes.filter(l => {
+                const termo = buscaFunil.toLowerCase();
+                const nome = ((l as any).aluno_nome || (l as any).nome || '').toLowerCase();
+                const tel = ((l as any).telefone || '').toLowerCase();
+                return nome.includes(termo) || tel.includes(termo);
+              })
+            : matriculasMes;
+          return (
           <>
             {/* Header específico de matrículas */}
             <div className="bg-emerald-500/10 border-b border-emerald-500/20 px-6 py-3">
@@ -3036,7 +3092,7 @@ export function ComercialPage() {
                 </tr>
               </thead>
               <tbody>
-                {matriculasMes.map((mat, index) => (
+                {matriculasFiltradas.map((mat, index) => (
                   <tr 
                     key={mat.id} 
                     className="border-b border-slate-700/50 hover:bg-slate-700/20 transition-colors"
@@ -3283,7 +3339,8 @@ export function ComercialPage() {
           </div>
         )}
         </>
-        )}
+          );
+        })()}
       </section>
 
       {/* Modal de Lead Atendido */}
