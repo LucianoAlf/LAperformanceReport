@@ -16,6 +16,7 @@ import { ModalDetalhesSucessoAluno } from './ModalDetalhesSucessoAluno';
 import { JornadaAlunoKanban } from './JornadaAlunoKanban';
 import { ModalEnviarFeedback } from './ModalEnviarFeedback';
 import { PesquisaEvasaoTab } from './PesquisaEvasaoTab';
+import { useWidgetOverlapSentinel } from '@/contexts/WidgetVisibilityContext';
 
 interface AlunoSucesso {
   id: number;
@@ -55,7 +56,8 @@ interface Props {
 
 export function TabSucessoAluno({ unidadeAtual }: Props) {
   const toast = useToast();
-  
+  const sentinelRef = useWidgetOverlapSentinel();
+
   const [alunos, setAlunos] = useState<AlunoSucesso[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtroStatus, setFiltroStatus] = useState<string>('todos');
@@ -607,7 +609,7 @@ export function TabSucessoAluno({ unidadeAtual }: Props) {
           </table>
         </div>
         {/* Paginação */}
-        <div className="p-4 border-t border-slate-700 flex items-center justify-between">
+        <div ref={sentinelRef} className="p-4 border-t border-slate-700 flex items-center justify-between">
           <p className="text-sm text-slate-400">
             Mostrando {((paginaAtual - 1) * itensPorPagina) + 1}-{Math.min(paginaAtual * itensPorPagina, alunosFiltrados.length)} de {alunosFiltrados.length} alunos
           </p>

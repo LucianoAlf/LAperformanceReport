@@ -4,6 +4,7 @@ import {
     Cpu, Shield, ChevronUp
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWidgetsHidden } from '@/contexts/WidgetVisibilityContext';
 import { AuditoriaWidget } from '@/components/App/Alunos/Auditoria/AuditoriaWidget';
 
 type ActiveTool = null | 'auditoria';
@@ -30,6 +31,7 @@ const tools: ToolItem[] = [
 
 export function AdminToolsHub() {
     const { isAdmin } = useAuth();
+    const widgetsHidden = useWidgetsHidden();
     const [expanded, setExpanded] = useState(false);
     const [activeTool, setActiveTool] = useState<ActiveTool>(null);
     const [hoveredTool, setHoveredTool] = useState<ActiveTool>(null);
@@ -58,11 +60,11 @@ export function AdminToolsHub() {
 
     // Se uma tool está ativa, renderiza ela
     if (activeTool === 'auditoria') {
-        return <AuditoriaWidget onClose={handleCloseTool} />;
+        return <AuditoriaWidget onClose={handleCloseTool} widgetsHidden={widgetsHidden} />;
     }
 
     return (
-        <div ref={hubRef} className="fixed bottom-6 right-[5.5rem] md:right-24 z-[55] flex flex-col items-end gap-3">
+        <div ref={hubRef} className={`fixed bottom-6 right-[5.5rem] md:right-24 z-[55] flex flex-col items-end gap-3 transition-all duration-300 ease-in-out ${widgetsHidden ? 'translate-y-24 opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'}`}>
             {/* Speed dial — ferramentas expandidas */}
             {expanded && (
                 <div className="flex flex-col gap-2 animate-in slide-in-from-bottom-2 duration-200">

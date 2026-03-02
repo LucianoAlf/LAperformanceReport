@@ -24,6 +24,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { useWidgetOverlapSentinel } from '@/contexts/WidgetVisibilityContext';
 import type { Aluno, Filtros } from './AlunosPage';
 
 interface TabelaAlunosProps {
@@ -66,7 +67,8 @@ export function TabelaAlunos({
 }: TabelaAlunosProps) {
   const { usuario } = useAuth();
   const isAdmin = usuario?.perfil === 'admin' && usuario?.unidade_id === null;
-  
+  const sentinelRef = useWidgetOverlapSentinel();
+
   // Estado local para permitir edição otimista
   const [alunosLocal, setAlunosLocal] = useState<Aluno[]>(alunosProp);
   
@@ -1732,7 +1734,7 @@ export function TabelaAlunos({
       </div>
 
       {/* Paginação */}
-      <div className="p-4 border-t border-slate-700 flex items-center justify-between">
+      <div ref={sentinelRef} className="p-4 border-t border-slate-700 flex items-center justify-between">
         <p className="text-sm text-slate-400">
           Mostrando {((paginaAtual - 1) * itensPorPagina) + 1}-{Math.min(paginaAtual * itensPorPagina, alunos.length)} de {alunos.length} alunos
         </p>

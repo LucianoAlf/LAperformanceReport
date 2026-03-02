@@ -20,10 +20,11 @@ interface Unidade {
 
 interface AuditoriaWidgetProps {
     onClose: () => void;
+    widgetsHidden?: boolean;
 }
 
 // O Chat do Agente atuará também como Auditoria se arquivos forem anexados
-export function AuditoriaWidget({ onClose }: AuditoriaWidgetProps) {
+export function AuditoriaWidget({ onClose, widgetsHidden = false }: AuditoriaWidgetProps) {
     const { isAdmin, usuario } = useAuth();
 
     // Contexto de permissão para as tools do agente
@@ -305,7 +306,7 @@ Se o usuário anexar arquivos, analise as divergências entre Emusys (CRM) e o b
 
     const panelClasses = fullscreen
         ? 'fixed inset-4 z-[60]'
-        : 'fixed bottom-24 right-[5.5rem] md:right-24 z-[60] w-[450px] md:w-[500px] h-[600px] max-h-[85vh]';
+        : `fixed bottom-24 right-[5.5rem] md:right-24 z-[60] w-[450px] md:w-[500px] h-[600px] max-h-[85vh] transition-all duration-300 ease-in-out ${widgetsHidden ? 'translate-y-24 opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'}`;
 
     return (
         <>

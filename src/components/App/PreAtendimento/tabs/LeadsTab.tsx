@@ -19,6 +19,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useWidgetOverlapSentinel } from '@/contexts/WidgetVisibilityContext';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
@@ -66,6 +67,7 @@ const ITENS_POR_PAGINA = 20;
 
 export function LeadsTab({ unidadeId, ano, mes, onLeadClick, onNovoLead, onAgendar, onMoverEtapa, onArquivar, canais: canaisExternos, cursos: cursosExternos, refetch: refetchExterno }: LeadsTabProps) {
   const { leads, etapas, canais: canaisHook, cursos: cursosHook, loading, refetch: refetchHook } = useLeadsCRM({ unidadeId, ano, mes });
+  const sentinelRef = useWidgetOverlapSentinel();
   const canaisDisponiveis = canaisExternos || canaisHook;
   const cursosDisponiveis = cursosExternos || cursosHook;
   const refetch = refetchExterno || refetchHook;
@@ -613,7 +615,7 @@ export function LeadsTab({ unidadeId, ano, mes, onLeadClick, onNovoLead, onAgend
         </div>
 
         {/* Footer: Seleção + Paginação */}
-        <div className="flex items-center justify-between px-4 py-3 border-t border-slate-700/50 bg-slate-800/30">
+        <div ref={sentinelRef} className="flex items-center justify-between px-4 py-3 border-t border-slate-700/50 bg-slate-800/30">
           <div className="flex items-center gap-4">
             <span className="text-xs text-slate-500">
               Selecionados: <strong className="text-white">{selecionados.size}</strong>

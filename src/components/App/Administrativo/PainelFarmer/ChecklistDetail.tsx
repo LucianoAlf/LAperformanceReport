@@ -24,6 +24,7 @@ import {
   Send,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useWidgetOverlapSentinel } from '@/contexts/WidgetVisibilityContext';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import { sendWhatsAppMessage, formatPhoneNumber } from '@/services/whatsapp';
@@ -96,6 +97,7 @@ export function ChecklistDetail({ checklistId, unidadeId, onVoltar }: ChecklistD
     professoresUnidade,
     refetch,
   } = useChecklistDetail(checklistId, unidadeId);
+  const sentinelRef = useWidgetOverlapSentinel();
 
   const [activeSubTab, setActiveSubTab] = useState<DetailSubTab>('tarefas');
   const [modalNovoItemAberto, setModalNovoItemAberto] = useState(false);
@@ -1405,7 +1407,7 @@ function CarteiraSubTab({ contatos, onAtualizarContato, cursosUnidade, professor
 
       {/* Paginação (wireframe L451-461) */}
       {totalPaginas > 1 && (
-        <div className="flex items-center justify-between">
+        <div ref={sentinelRef} className="flex items-center justify-between">
           <span className="text-xs text-slate-500">Mostrando {paginados.length} de {filtrados.length}</span>
           <div className="flex items-center gap-1">
             <button

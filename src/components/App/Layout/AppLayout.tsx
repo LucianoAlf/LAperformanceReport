@@ -6,6 +6,7 @@ import { useUnidadeFiltro } from '../../../hooks/useUnidadeFiltro';
 import { useCompetenciaFiltro } from '../../../hooks/useCompetenciaFiltro';
 import { OnboardingChecklist } from '@/components/Onboarding/OnboardingChecklist';
 import { PageTitleProvider } from '@/contexts/PageTitleContext';
+import { WidgetVisibilityProvider } from '@/contexts/WidgetVisibilityContext';
 import { AdminToolsHub } from '@/components/App/AdminTools/AdminToolsHub';
 
 export function AppLayout() {
@@ -39,6 +40,7 @@ export function AppLayout() {
 
   return (
     <PageTitleProvider>
+    <WidgetVisibilityProvider>
       <div className="flex min-h-screen bg-slate-950">
         <AppSidebar data-tour="sidebar" />
         <div
@@ -63,6 +65,7 @@ export function AppLayout() {
         {/* Hub de Ferramentas Admin - global, admin-only */}
         <AdminToolsHub />
       </div>
+    </WidgetVisibilityProvider>
     </PageTitleProvider>
   );
 }
