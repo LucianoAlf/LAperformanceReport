@@ -628,8 +628,7 @@ function VideoSlot({
   }
 
   if (video) {
-    // Extrair nome do arquivo do storage_path (ex: "32/4_experimental.mp4" → "4_experimental.mp4")
-    const nomeArquivo = video.storage_path.split('/').pop() || '';
+    const nomeArquivo = video.nome_original || video.storage_path.split('/').pop() || '';
 
     return (
       <div

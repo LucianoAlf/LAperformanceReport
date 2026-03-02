@@ -118,6 +118,7 @@ export interface ProfessorVideo {
   tipo: 'experimental' | 'matricula';
   storage_path: string;
   url: string;
+  nome_original?: string;
   created_at: string;
   updated_at: string;
   curso_nome?: string;

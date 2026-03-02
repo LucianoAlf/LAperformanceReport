@@ -91,6 +91,7 @@ export function useProfessorVideos(professorId: number | null) {
           tipo,
           storage_path: storagePath,
           url,
+          nome_original: file.name,
           updated_at: new Date().toISOString(),
         }, {
           onConflict: 'professor_id,curso_id,tipo',
