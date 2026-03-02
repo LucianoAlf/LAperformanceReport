@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { User, Calendar, Building2, Music, Save, Loader2, Phone, Clock } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { User, Calendar, Building2, Music, Save, Loader2, Phone, Clock, Video, Upload, Trash2, Play } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -8,7 +9,8 @@ import { DatePickerNascimento } from '@/components/ui/date-picker-nascimento';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ImageCropUpload } from '@/components/ui/ImageCropUpload';
 import { uploadImageToStorage } from '@/lib/uploadImage';
-import type { Professor, Unidade, Curso, ProfessorFormData, DisponibilidadeSemanal } from './types';
+import { useProfessorVideos } from '@/hooks/useProfessorVideos';
+import type { Professor, Unidade, Curso, ProfessorFormData, DisponibilidadeSemanal, ProfessorVideo } from './types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface ModalProfessorProps {
@@ -31,6 +33,11 @@ export function ModalProfessor({
   modo
 }: ModalProfessorProps) {
   const [loading, setLoading] = useState(false);
+  const { videos, uploading, uploadVideo, deleteVideo } = useProfessorVideos(
+    modo === 'editar' && professor ? professor.id : null
+  );
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pendingUpload, setPendingUpload] = useState<{ cursoId: number; tipo: 'experimental' | 'matricula' } | null>(null);
   const [formData, setFormData] = useState<ProfessorFormData>({
     nome: '',
     data_admissao: null,
@@ -225,6 +232,28 @@ export function ModalProfessor({
         }
       };
     });
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !pendingUpload) return;
+
+    await uploadVideo(file, pendingUpload.cursoId, pendingUpload.tipo);
+    setPendingUpload(null);
+
+    // Limpar input para permitir re-upload do mesmo arquivo
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const iniciarUpload = (cursoId: number, tipo: 'experimental' | 'matricula') => {
+    setPendingUpload({ cursoId, tipo });
+    fileInputRef.current?.click();
+  };
+
+  const getVideoParaCurso = (cursoId: number, tipo: 'experimental' | 'matricula'): ProfessorVideo | undefined => {
+    return videos.find(v => v.curso_id === cursoId && v.tipo === tipo);
   };
 
   const toggleCurso = (cursoId: number) => {
@@ -467,6 +496,61 @@ export function ModalProfessor({
             {errors.cursos && <span className="text-xs text-red-400 mt-1 block">{errors.cursos}</span>}
           </div>
 
+          {/* Vídeos por Curso (apenas no modo editar) */}
+          {modo === 'editar' && formData.cursos_ids.length > 0 && (
+            <div>
+              <Label className="flex items-center gap-2 mb-3">
+                <Video className="w-4 h-4 text-rose-400" />
+                Videos por Curso
+              </Label>
+
+              {/* Input de arquivo oculto */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="video/mp4"
+                className="hidden"
+                onChange={handleFileSelect}
+              />
+
+              <div className="space-y-3">
+                {formData.cursos_ids.map(cursoId => {
+                  const curso = cursos.find(c => c.id === cursoId);
+                  if (!curso) return null;
+
+                  const videoExp = getVideoParaCurso(cursoId, 'experimental');
+                  const videoMat = getVideoParaCurso(cursoId, 'matricula');
+
+                  return (
+                    <div key={cursoId} className="bg-slate-800/50 border border-slate-700 rounded-xl p-4">
+                      <p className="text-sm font-medium text-white mb-3">{curso.nome}</p>
+                      <div className="grid grid-cols-2 gap-3">
+                        {/* Slot Experimental */}
+                        <VideoSlot
+                          label="Experimental"
+                          video={videoExp}
+                          uploading={uploading && pendingUpload?.cursoId === cursoId && pendingUpload?.tipo === 'experimental'}
+                          onUpload={() => iniciarUpload(cursoId, 'experimental')}
+                          onDrop={(file) => { setPendingUpload({ cursoId, tipo: 'experimental' }); uploadVideo(file, cursoId, 'experimental').then(() => setPendingUpload(null)); }}
+                          onDelete={() => videoExp && deleteVideo(videoExp)}
+                        />
+                        {/* Slot Matrícula */}
+                        <VideoSlot
+                          label="Matrícula"
+                          video={videoMat}
+                          uploading={uploading && pendingUpload?.cursoId === cursoId && pendingUpload?.tipo === 'matricula'}
+                          onUpload={() => iniciarUpload(cursoId, 'matricula')}
+                          onDrop={(file) => { setPendingUpload({ cursoId, tipo: 'matricula' }); uploadVideo(file, cursoId, 'matricula').then(() => setPendingUpload(null)); }}
+                          onDelete={() => videoMat && deleteVideo(videoMat)}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Botões */}
           <div className="flex justify-end gap-3 pt-4 border-t border-slate-700">
             <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>
@@ -489,5 +573,171 @@ export function ModalProfessor({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// Componente interno para slot de vídeo (experimental ou matrícula)
+function VideoSlot({
+  label,
+  video,
+  uploading,
+  onUpload,
+  onDrop,
+  onDelete,
+}: {
+  label: string;
+  video?: ProfessorVideo;
+  uploading: boolean;
+  onUpload: () => void;
+  onDrop: (file: File) => void;
+  onDelete: () => void;
+}) {
+  const [showPreview, setShowPreview] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOver(false);
+
+    const file = e.dataTransfer.files?.[0];
+    if (file && file.type.startsWith('video/')) {
+      onDrop(file);
+    }
+  };
+
+  if (uploading) {
+    return (
+      <div className="border border-slate-600 rounded-lg p-3 flex flex-col items-center justify-center gap-2 min-h-[100px]">
+        <Loader2 className="w-5 h-5 animate-spin text-violet-400" />
+        <span className="text-xs text-slate-400">Enviando {label}...</span>
+      </div>
+    );
+  }
+
+  if (video) {
+    // Extrair nome do arquivo do storage_path (ex: "32/4_experimental.mp4" → "4_experimental.mp4")
+    const nomeArquivo = video.storage_path.split('/').pop() || '';
+
+    return (
+      <div
+        className={`border rounded-lg p-3 space-y-2 transition-colors ${
+          dragOver
+            ? 'border-violet-500 bg-violet-500/10'
+            : 'border-slate-600'
+        }`}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
+      >
+        <span className="text-xs font-medium text-slate-300">{label}</span>
+
+        {/* Preview do vídeo — thumbnail ou player */}
+        <div className="relative group">
+          <video
+            src={video.url}
+            preload="metadata"
+            controls={showPreview}
+            className="w-full rounded-lg bg-black"
+            style={{ maxHeight: showPreview ? '200px' : '80px', objectFit: 'cover' }}
+            onEnded={() => setShowPreview(false)}
+          />
+          {!showPreview && (
+            <button
+              type="button"
+              onClick={() => setShowPreview(true)}
+              className="absolute inset-0 flex items-center justify-center bg-black/40 rounded-lg hover:bg-black/30 transition-colors"
+            >
+              <Play className="w-6 h-6 text-white drop-shadow" />
+            </button>
+          )}
+        </div>
+
+        {/* Nome do arquivo */}
+        <p className="text-[10px] text-slate-500 truncate" title={nomeArquivo}>
+          {nomeArquivo}
+        </p>
+
+        {/* Ações */}
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="flex-1 text-xs h-7"
+            onClick={onUpload}
+          >
+            <Upload className="w-3 h-3 mr-1" />
+            Substituir
+          </Button>
+
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-xs h-7 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+              >
+                <Trash2 className="w-3 h-3" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Excluir vídeo</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Tem certeza que deseja excluir o vídeo de {label.toLowerCase()}? Esta ação não pode ser desfeita.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={onDelete}
+                  className="bg-red-600 hover:bg-red-700"
+                >
+                  Excluir
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      </div>
+    );
+  }
+
+  // Slot vazio — clique ou arraste para upload
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={onUpload}
+      onKeyDown={(e) => e.key === 'Enter' && onUpload()}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+      className={`border-2 border-dashed rounded-lg p-3 flex flex-col items-center justify-center gap-2 min-h-[100px] transition-all cursor-pointer ${
+        dragOver
+          ? 'border-violet-500 bg-violet-500/10'
+          : 'border-slate-600 hover:border-violet-500/50 hover:bg-violet-500/5'
+      }`}
+    >
+      <Upload className={`w-5 h-5 ${dragOver ? 'text-violet-400' : 'text-slate-500'}`} />
+      <span className={`text-xs ${dragOver ? 'text-violet-300' : 'text-slate-400'}`}>
+        {dragOver ? 'Solte aqui' : label}
+      </span>
+      {!dragOver && <span className="text-[10px] text-slate-500">Clique ou arraste .mp4</span>}
+    </div>
   );
 }

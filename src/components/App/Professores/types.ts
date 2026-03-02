@@ -111,4 +111,16 @@ export interface ProfessorFormData {
   disponibilidade_por_unidade: Record<string, DisponibilidadeSemanal>;
 }
 
+export interface ProfessorVideo {
+  id: number;
+  professor_id: number;
+  curso_id: number;
+  tipo: 'experimental' | 'matricula';
+  storage_path: string;
+  url: string;
+  created_at: string;
+  updated_at: string;
+  curso_nome?: string;
+}
+
 export type TabAtivaProfessores = 'todos' | 'por-unidade' | 'por-curso';
