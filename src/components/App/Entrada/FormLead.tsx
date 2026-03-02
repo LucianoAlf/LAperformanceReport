@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
@@ -15,11 +15,23 @@ import {
   Music,
   MapPin,
   MessageSquare,
-  AlertTriangle
+  AlertTriangle,
+  Search,
+  Loader2,
+  ExternalLink,
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { useCursosUnidade } from '../../../hooks/useCursosUnidade';
 import { useCheckLeadDuplicado, type LeadDuplicado } from '@/hooks/useCheckLeadDuplicado';
+
+interface LeadBusca {
+  id: number;
+  nome: string | null;
+  telefone: string | null;
+  status: string;
+  unidade_nome: string | null;
+  created_at: string;
+}
 
 // Schema de validação
 const leadSchema = z.object({
@@ -72,6 +84,61 @@ export function FormLead() {
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [canais, setCanais] = useState<CanalOrigem[]>([]);
   const [professores, setProfessores] = useState<Professor[]>([]);
+
+  // Busca de leads existentes
+  const [termoBusca, setTermoBusca] = useState('');
+  const [resultadosBusca, setResultadosBusca] = useState<LeadBusca[]>([]);
+  const [buscando, setBuscando] = useState(false);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const buscarLeads = useCallback(async (termo: string) => {
+    if (termo.length < 2) {
+      setResultadosBusca([]);
+      return;
+    }
+
+    setBuscando(true);
+    try {
+      const isPhone = /^\d/.test(termo.replace(/\D/g, ''));
+      const digits = termo.replace(/\D/g, '');
+
+      let query = supabase
+        .from('leads')
+        .select('id, nome, telefone, status, created_at, unidades:unidade_id(nome)')
+        .eq('arquivado', false)
+        .order('created_at', { ascending: false })
+        .limit(8);
+
+      if (isPhone && digits.length >= 2) {
+        query = query.like('telefone', `%${digits}%`);
+      } else {
+        query = query.ilike('nome', `%${termo}%`);
+      }
+
+      const { data } = await query;
+
+      const resultados: LeadBusca[] = (data || []).map((l: any) => ({
+        id: l.id,
+        nome: l.nome,
+        telefone: l.telefone,
+        status: l.status,
+        unidade_nome: l.unidades?.nome || null,
+        created_at: l.created_at,
+      }));
+
+      setResultadosBusca(resultados);
+    } catch {
+      setResultadosBusca([]);
+    } finally {
+      setBuscando(false);
+    }
+  }, []);
+
+  const handleBuscaChange = (valor: string) => {
+    setTermoBusca(valor);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => buscarLeads(valor), 300);
+  };
 
   const {
     register,
@@ -181,6 +248,51 @@ export function FormLead() {
           <ArrowLeft className="w-5 h-5" />
         </button>
       </div>
+
+      {/* Busca de leads existentes */}
+      <section className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-4 mb-6">
+        <label className="block text-sm text-gray-400 mb-2">Buscar lead existente por nome ou telefone</label>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            type="text"
+            placeholder="Buscar nome ou telefone..."
+            value={termoBusca}
+            onChange={e => handleBuscaChange(e.target.value)}
+            className="w-full bg-slate-900/50 border border-slate-700 rounded-xl pl-10 pr-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50"
+          />
+          {buscando && (
+            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 animate-spin" />
+          )}
+        </div>
+
+        {resultadosBusca.length > 0 && (
+          <div className="mt-2 space-y-1 max-h-60 overflow-y-auto">
+            {resultadosBusca.map(lead => (
+              <button
+                key={lead.id}
+                type="button"
+                onClick={() => navigate(`/app/pre-atendimento?lead=${lead.id}`)}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-slate-900/50 hover:bg-slate-700/50 transition-colors text-left group"
+              >
+                <div className="min-w-0 flex-1">
+                  <span className="text-sm text-white font-medium truncate block">{lead.nome}</span>
+                  <span className="text-xs text-slate-400">
+                    {lead.telefone && <>{lead.telefone} · </>}
+                    {lead.unidade_nome && <>{lead.unidade_nome} · </>}
+                    {formatarStatus(lead.status)}
+                  </span>
+                </div>
+                <ExternalLink className="w-3.5 h-3.5 text-slate-500 group-hover:text-cyan-400 shrink-0 ml-2" />
+              </button>
+            ))}
+          </div>
+        )}
+
+        {termoBusca.length >= 2 && !buscando && resultadosBusca.length === 0 && (
+          <p className="text-xs text-slate-500 mt-2">Nenhum lead encontrado. Preencha o formulário abaixo para criar um novo.</p>
+        )}
+      </section>
 
       <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
         {/* Dados do Contato */}
