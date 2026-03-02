@@ -886,6 +886,7 @@ export function ComercialPage() {
         canal_origem_id: linha.canal_origem_id,
         curso_interesse_id: linha.curso_id,
         quantidade: 1, // Sempre 1 por lead atendido
+        etapa_pipeline_id: 1, // Novo Lead
       }));
 
       const { error } = await supabase.from('leads').insert(registros);
@@ -939,6 +940,7 @@ export function ComercialPage() {
         quantidade: 1, // Sempre 1 por experimental
         professor_experimental_id: linha.professor_id,
         sabia_preco: linha.sabia_preco,
+        etapa_pipeline_id: 5, // Experimental Agendada
       }));
 
       const { error } = await supabase.from('leads').insert(registros);
@@ -982,6 +984,7 @@ export function ComercialPage() {
         canal_origem_id: linha.canal_origem_id,
         curso_interesse_id: linha.curso_id,
         quantidade: 1,
+        etapa_pipeline_id: 6, // Visita Agendada
       }));
 
       const { error } = await supabase.from('leads').insert(registros);
@@ -1119,6 +1122,15 @@ export function ComercialPage() {
         tipo = formData.status_experimental;
       }
 
+      // Mapear etapa do pipeline conforme tipo de registro
+      const etapaMap: Record<string, number> = {
+        'novo': 1,
+        'experimental_agendada': 5,
+        'experimental_realizada': 7,
+        'visita_escola': 6,
+        'convertido': 10,
+      };
+
       const registro: Partial<LeadDiario> = {
         unidade_id: unidadeFinal,
         data_contato: dataLancamento,
@@ -1127,6 +1139,7 @@ export function ComercialPage() {
         curso_interesse_id: formData.curso_id,
         quantidade: formData.quantidade,
         observacoes: null,
+        etapa_pipeline_id: etapaMap[tipo === 'matricula' ? 'convertido' : (tipo || 'novo')] || 1,
       };
 
       // Campos extras para matrícula

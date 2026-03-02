@@ -196,6 +196,7 @@ export function FormLead() {
         professor_experimental_id: data.professor_experimental_id || null,
         observacoes: data.observacoes || null,
         status: data.experimental_agendada ? 'agendado' : 'novo',
+        etapa_pipeline_id: data.experimental_agendada ? 5 : 1,
       });
 
       if (error) throw error;
