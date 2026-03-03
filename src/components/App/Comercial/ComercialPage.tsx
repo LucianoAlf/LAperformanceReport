@@ -961,6 +961,7 @@ export function ComercialPage() {
         data_contato: dataLancamento,
         status: linha.status_experimental || 'experimental_agendada',
         nome: linha.aluno_nome?.trim(),
+        telefone: linha.telefone ? normalizePhone(linha.telefone) : null,
         canal_origem_id: linha.canal_origem_id,
         curso_interesse_id: linha.curso_id,
         quantidade: 1, // Sempre 1 por experimental
@@ -1007,6 +1008,7 @@ export function ComercialPage() {
         data_contato: dataLancamento,
         status: 'visita_escola',
         nome: linha.aluno_nome || null,
+        telefone: linha.telefone ? normalizePhone(linha.telefone) : null,
         canal_origem_id: linha.canal_origem_id,
         curso_interesse_id: linha.curso_id,
         quantidade: 1,
