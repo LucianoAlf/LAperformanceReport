@@ -954,30 +954,69 @@ export function ComercialPage() {
     setSaving(true);
     try {
       const dataLancamento = loteData.toISOString().split('T')[0];
-      
-      // Cada experimental é 1 registro (quantidade sempre 1)
-      const registros = linhasValidas.map(linha => ({
-        unidade_id: unidadeParaSalvar,
-        data_contato: dataLancamento,
-        status: linha.status_experimental || 'experimental_agendada',
-        nome: linha.aluno_nome?.trim(),
-        telefone: linha.telefone ? normalizePhone(linha.telefone) : null,
-        canal_origem_id: linha.canal_origem_id,
-        curso_interesse_id: linha.curso_id,
-        quantidade: 1, // Sempre 1 por experimental
-        professor_experimental_id: linha.professor_id,
-        sabia_preco: linha.sabia_preco,
-        etapa_pipeline_id: 5, // Experimental Agendada
-      }));
 
-      const { error } = await supabase.from('leads').insert(registros);
-      if (error) throw error;
+      // Verificar duplicatas por telefone
+      const telefonesNorm = linhasValidas
+        .map(l => l.telefone ? normalizePhone(l.telefone) : null)
+        .filter((t): t is string => !!t);
 
-      toast.success(`${linhasValidas.length} experimental(is) registrada(s)!`);
+      const duplicatas = telefonesNorm.length > 0
+        ? await verificarDuplicadosEmLote(telefonesNorm, unidadeParaSalvar!)
+        : new Map();
+
+      const novos: Record<string, any>[] = [];
+      const updates: { id: number; data: Record<string, any> }[] = [];
+
+      for (const linha of linhasValidas) {
+        const telNorm = linha.telefone ? normalizePhone(linha.telefone) : null;
+        const existente = telNorm ? duplicatas.get(telNorm) : null;
+
+        if (existente) {
+          updates.push({
+            id: existente.id,
+            data: {
+              status: linha.status_experimental || 'experimental_agendada',
+              nome: linha.aluno_nome?.trim() || existente.nome,
+              canal_origem_id: linha.canal_origem_id,
+              curso_interesse_id: linha.curso_id,
+              professor_experimental_id: linha.professor_id,
+              sabia_preco: linha.sabia_preco,
+              etapa_pipeline_id: 5,
+              data_contato: dataLancamento,
+            },
+          });
+        } else {
+          novos.push({
+            unidade_id: unidadeParaSalvar,
+            data_contato: dataLancamento,
+            status: linha.status_experimental || 'experimental_agendada',
+            nome: linha.aluno_nome?.trim(),
+            telefone: telNorm,
+            canal_origem_id: linha.canal_origem_id,
+            curso_interesse_id: linha.curso_id,
+            quantidade: 1,
+            professor_experimental_id: linha.professor_id,
+            sabia_preco: linha.sabia_preco,
+            etapa_pipeline_id: 5,
+          });
+        }
+      }
+
+      if (novos.length > 0) {
+        const { error } = await supabase.from('leads').insert(novos);
+        if (error) throw error;
+      }
+      for (const up of updates) {
+        const { error } = await supabase.from('leads').update(up.data).eq('id', up.id);
+        if (error) throw error;
+      }
+
+      const total = novos.length + updates.length;
+      toast.success(`${total} experimental(is) registrada(s)!${updates.length > 0 ? ` (${updates.length} lead(s) atualizado(s))` : ''}`);
       setModalOpen(null);
       resetForm();
       loadData();
-      loadSugestoesLeads(); // Recarregar sugestões após salvar
+      loadSugestoesLeads();
     } catch (error) {
       console.error('Erro ao salvar experimentais:', error);
       const errMsg = (error as any)?.message || (error as any)?.code || 'Erro desconhecido';
@@ -1002,23 +1041,61 @@ export function ComercialPage() {
     setSaving(true);
     try {
       const dataLancamento = loteData.toISOString().split('T')[0];
-      
-      const registros = loteVisitas.map(linha => ({
-        unidade_id: unidadeParaSalvar,
-        data_contato: dataLancamento,
-        status: 'visita_escola',
-        nome: linha.aluno_nome || null,
-        telefone: linha.telefone ? normalizePhone(linha.telefone) : null,
-        canal_origem_id: linha.canal_origem_id,
-        curso_interesse_id: linha.curso_id,
-        quantidade: 1,
-        etapa_pipeline_id: 6, // Visita Agendada
-      }));
 
-      const { error } = await supabase.from('leads').insert(registros);
-      if (error) throw error;
+      // Verificar duplicatas por telefone
+      const telefonesNorm = loteVisitas
+        .map(l => l.telefone ? normalizePhone(l.telefone) : null)
+        .filter((t): t is string => !!t);
 
-      toast.success(`${loteVisitas.length} visita${loteVisitas.length !== 1 ? 's' : ''} registrada${loteVisitas.length !== 1 ? 's' : ''}!`);
+      const duplicatas = telefonesNorm.length > 0
+        ? await verificarDuplicadosEmLote(telefonesNorm, unidadeParaSalvar!)
+        : new Map();
+
+      const novos: Record<string, any>[] = [];
+      const updates: { id: number; data: Record<string, any> }[] = [];
+
+      for (const linha of loteVisitas) {
+        const telNorm = linha.telefone ? normalizePhone(linha.telefone) : null;
+        const existente = telNorm ? duplicatas.get(telNorm) : null;
+
+        if (existente) {
+          updates.push({
+            id: existente.id,
+            data: {
+              status: 'visita_escola',
+              nome: linha.aluno_nome?.trim() || existente.nome,
+              canal_origem_id: linha.canal_origem_id,
+              curso_interesse_id: linha.curso_id,
+              etapa_pipeline_id: 6,
+              data_contato: dataLancamento,
+            },
+          });
+        } else {
+          novos.push({
+            unidade_id: unidadeParaSalvar,
+            data_contato: dataLancamento,
+            status: 'visita_escola',
+            nome: linha.aluno_nome || null,
+            telefone: telNorm,
+            canal_origem_id: linha.canal_origem_id,
+            curso_interesse_id: linha.curso_id,
+            quantidade: 1,
+            etapa_pipeline_id: 6,
+          });
+        }
+      }
+
+      if (novos.length > 0) {
+        const { error } = await supabase.from('leads').insert(novos);
+        if (error) throw error;
+      }
+      for (const up of updates) {
+        const { error } = await supabase.from('leads').update(up.data).eq('id', up.id);
+        if (error) throw error;
+      }
+
+      const total = novos.length + updates.length;
+      toast.success(`${total} visita${total !== 1 ? 's' : ''} registrada${total !== 1 ? 's' : ''}!${updates.length > 0 ? ` (${updates.length} lead(s) atualizado(s))` : ''}`);
       setModalOpen(null);
       resetForm();
       loadData();
