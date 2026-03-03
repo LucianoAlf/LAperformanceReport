@@ -3170,7 +3170,7 @@ export function ComercialPage() {
                       <td className="py-3 px-2 border-r border-slate-700/30">
                         <CelulaEditavelInline
                           value={visita.curso_id}
-                          onChange={async (valor) => visita.id && salvarCampoMatricula(visita.id, 'curso_id', valor ? Number(valor) : null)}
+                          onChange={async (valor) => visita.id && salvarCampoMatricula(visita.id, 'curso_interesse_id', valor ? Number(valor) : null)}
                           tipo="select"
                           opcoes={cursos.map(c => ({ value: c.value, label: c.label }))}
                           placeholder="-"
