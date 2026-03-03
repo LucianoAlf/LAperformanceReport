@@ -763,9 +763,31 @@ export function ComercialPage() {
       setLeadsMes(prev => prev.map(patchRow));
       setExperimentaisMes(prev => prev.map(patchRow));
       setVisitasMes(prev => prev.map(patchRow));
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao atualizar:', error);
-      toast.error('Erro ao atualizar');
+      if (error?.code === '23505' && campo === 'telefone') {
+        // Normalizar telefone (mesma lógica do DB) para buscar lead existente
+        const digits = String(valor).replace(/\D/g, '');
+        const telNorm = (digits.length === 10 || digits.length === 11) ? '55' + digits : digits;
+
+        const { data: existente } = await supabase
+          .from('leads')
+          .select('id, nome, status, crm_pipeline_etapas(nome)')
+          .eq('telefone', telNorm)
+          .eq('arquivado', false)
+          .neq('id', matriculaId)
+          .maybeSingle();
+
+        if (existente) {
+          const etapa = (existente.crm_pipeline_etapas as any)?.nome || existente.status;
+          const nome = existente.nome || 'Sem nome';
+          toast.error(`Telefone já cadastrado no lead "${nome}" (etapa: ${etapa})`);
+        } else {
+          toast.error('Este telefone já está cadastrado para outro lead nesta unidade');
+        }
+      } else {
+        toast.error('Erro ao atualizar');
+      }
     }
   }, []);
 
