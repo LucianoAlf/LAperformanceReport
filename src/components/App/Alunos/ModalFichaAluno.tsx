@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { X, Loader2, Save, User, GraduationCap, DollarSign, TrendingUp, History, AlertCircle, Plus, Users } from 'lucide-react';
+import { X, Loader2, Save, User, GraduationCap, DollarSign, TrendingUp, History, AlertCircle, Plus, Users, Pencil } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -21,6 +21,7 @@ interface ModalFichaAlunoProps {
   professores: { id: number; nome: string }[];
   cursos: { id: number; nome: string }[];
   tiposMatricula: { id: number; nome: string }[];
+  onAbrirOutroCurso?: (aluno: Aluno) => void;
 }
 
 interface AlunoCompleto extends Aluno {
@@ -90,6 +91,7 @@ export function ModalFichaAluno({
   professores,
   cursos,
   tiposMatricula,
+  onAbrirOutroCurso,
 }: ModalFichaAlunoProps) {
   const { user } = useAuth();
   const [saving, setSaving] = useState(false);
@@ -788,6 +790,17 @@ export function ModalFichaAluno({
                             </span>
                           </div>
                         </div>
+                        {onAbrirOutroCurso && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => onAbrirOutroCurso(outro as Aluno)}
+                            className="ml-2 text-purple-400 hover:text-purple-300 hover:bg-purple-500/10"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Button>
+                        )}
                       </div>
                     ))}
                   </div>

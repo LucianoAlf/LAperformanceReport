@@ -2206,6 +2206,7 @@ export function TabelaAlunos({
           professores={professores}
           cursos={cursos}
           tiposMatricula={tiposMatricula}
+          onAbrirOutroCurso={(outroAluno) => setAlunoFicha(outroAluno)}
         />
       )}
     </>
