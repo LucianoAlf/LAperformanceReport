@@ -293,10 +293,10 @@ export function ComercialPage() {
     { id: genId(), aluno_nome: '', telefone: '', canal_origem_id: null, curso_id: null, quantidade: 1 }
   ]);
   const [loteExperimentais, setLoteExperimentais] = useState<LoteLinha[]>([
-    { id: genId(), aluno_nome: '', canal_origem_id: null, curso_id: null, quantidade: 1, status_experimental: 'experimental_agendada', professor_id: null, sabia_preco: null }
+    { id: genId(), aluno_nome: '', telefone: '', canal_origem_id: null, curso_id: null, quantidade: 1, status_experimental: 'experimental_agendada', professor_id: null, sabia_preco: null }
   ]);
   const [loteVisitas, setLoteVisitas] = useState<LoteLinha[]>([
-    { id: genId(), aluno_nome: '', canal_origem_id: null, curso_id: null, quantidade: 1 }
+    { id: genId(), aluno_nome: '', telefone: '', canal_origem_id: null, curso_id: null, quantidade: 1 }
   ]);
   
   // Sugestões de leads para autocomplete
@@ -312,6 +312,7 @@ export function ComercialPage() {
     status_experimental: 'experimental_agendada',
     professor_id: null as number | null,
     aluno_nome: '',
+    aluno_telefone: '',
     aluno_data_nascimento: null as Date | null,
     tipo_matricula: 'EMLA',
     tipo_aluno: 'pagante',
@@ -822,6 +823,7 @@ export function ComercialPage() {
       status_experimental: 'experimental_agendada',
       professor_id: null,
       aluno_nome: '',
+      aluno_telefone: '',
       aluno_data_nascimento: null,
       tipo_matricula: 'EMLA',
       tipo_aluno: 'pagante',
@@ -847,8 +849,8 @@ export function ComercialPage() {
     // Reset lotes
     setLoteData(new Date());
     setLoteLeads([{ id: genId(), aluno_nome: '', telefone: '', canal_origem_id: null, curso_id: null, quantidade: 1 }]);
-    setLoteExperimentais([{ id: genId(), aluno_nome: '', canal_origem_id: null, curso_id: null, quantidade: 1, status_experimental: 'experimental_agendada', professor_id: null }]);
-    setLoteVisitas([{ id: genId(), aluno_nome: '', canal_origem_id: null, curso_id: null, quantidade: 1 }]);
+    setLoteExperimentais([{ id: genId(), aluno_nome: '', telefone: '', canal_origem_id: null, curso_id: null, quantidade: 1, status_experimental: 'experimental_agendada', professor_id: null, sabia_preco: null }]);
+    setLoteVisitas([{ id: genId(), aluno_nome: '', telefone: '', canal_origem_id: null, curso_id: null, quantidade: 1 }]);
   };
 
   // Salvar lote de leads atendidos
@@ -1056,7 +1058,7 @@ export function ComercialPage() {
     return digits.length <= 11 ? '55' + digits : digits;
   };
 
-  const checkLeadByPhone = async (telefone: string | undefined, linhaId: string) => {
+  const checkLeadByPhone = async (telefone: string | undefined, linhaId: string, tipo: 'lead' | 'experimental' | 'visita' | 'matricula' = 'lead') => {
     if (!telefone || !unidadeParaSalvar) return;
     const digits = telefone.replace(/\D/g, '');
     if (digits.length < 10) return;
@@ -1071,22 +1073,32 @@ export function ComercialPage() {
 
     if (data && data.length > 0) {
       const existing = data[0];
-      setLoteLeads(prev => prev.map(l =>
-        l.id === linhaId
-          ? {
-              ...l,
-              aluno_nome: existing.nome || l.aluno_nome,
-              canal_origem_id: existing.canal_origem_id ?? l.canal_origem_id,
-              curso_id: existing.curso_interesse_id ?? l.curso_id,
-            }
-          : l
-      ));
+      const updates = {
+        aluno_nome: existing.nome || '',
+        canal_origem_id: existing.canal_origem_id,
+        curso_id: existing.curso_interesse_id,
+      };
+
+      if (tipo === 'lead') {
+        setLoteLeads(prev => prev.map(l => l.id === linhaId ? { ...l, ...updates } : l));
+      } else if (tipo === 'experimental') {
+        setLoteExperimentais(prev => prev.map(l => l.id === linhaId ? { ...l, ...updates } : l));
+      } else if (tipo === 'visita') {
+        setLoteVisitas(prev => prev.map(l => l.id === linhaId ? { ...l, ...updates } : l));
+      } else if (tipo === 'matricula') {
+        setFormData(prev => ({
+          ...prev,
+          aluno_nome: existing.nome || prev.aluno_nome,
+          canal_origem_id: existing.canal_origem_id ?? prev.canal_origem_id,
+          curso_id: existing.curso_interesse_id ?? prev.curso_id,
+        }));
+      }
       toast.info(`Lead encontrado: ${existing.nome}`);
     }
   };
 
   const addLinhaExperimental = () => {
-    setLoteExperimentais([...loteExperimentais, { id: genId(), aluno_nome: '', canal_origem_id: null, curso_id: null, quantidade: 1, status_experimental: 'experimental_agendada', professor_id: null, sabia_preco: null }]);
+    setLoteExperimentais([...loteExperimentais, { id: genId(), aluno_nome: '', telefone: '', canal_origem_id: null, curso_id: null, quantidade: 1, status_experimental: 'experimental_agendada', professor_id: null, sabia_preco: null }]);
   };
 
   const removeLinhaExperimental = (id: string) => {
@@ -1100,7 +1112,7 @@ export function ComercialPage() {
   };
 
   const addLinhaVisita = () => {
-    setLoteVisitas([...loteVisitas, { id: genId(), aluno_nome: '', canal_origem_id: null, curso_id: null, quantidade: 1 }]);
+    setLoteVisitas([...loteVisitas, { id: genId(), aluno_nome: '', telefone: '', canal_origem_id: null, curso_id: null, quantidade: 1 }]);
   };
 
   const removeLinhaVisita = (id: string) => {
@@ -3596,6 +3608,7 @@ export function ComercialPage() {
                 <thead className="bg-slate-800/50">
                   <tr className="text-slate-400 text-xs uppercase">
                     <th className="py-2 px-1 text-left">Nome</th>
+                    <th className="py-2 px-1 text-left w-36">Telefone</th>
                     <th className="py-2 px-1 text-left w-24">Status</th>
                     <th className="py-2 px-1 text-left w-24">Canal</th>
                     <th className="py-2 px-1 text-left w-24">Curso</th>
@@ -3612,20 +3625,43 @@ export function ComercialPage() {
                           value={linha.aluno_nome || ''}
                           onChange={(nome) => updateLinhaExperimental(linha.id, 'aluno_nome', nome)}
                           onSelectSugestao={(sugestao) => {
-                            // Auto-preencher todos os campos de uma vez quando selecionar um lead existente
-                            setLoteExperimentais(prev => prev.map(l => 
-                              l.id === linha.id 
-                                ? { 
-                                    ...l, 
+                            setLoteExperimentais(prev => prev.map(l =>
+                              l.id === linha.id
+                                ? {
+                                    ...l,
                                     aluno_nome: sugestao.nome,
+                                    telefone: sugestao.telefone ? maskPhone(sugestao.telefone.replace(/^55/, '')) : l.telefone,
                                     canal_origem_id: sugestao.canal_origem_id || l.canal_origem_id,
                                     curso_id: sugestao.curso_id || l.curso_id,
-                                  } 
+                                  }
                                 : l
                             ));
                           }}
                           sugestoes={sugestoesLeads.filter(s => ['novo','agendado','lead'].includes(s.tipo))}
                           placeholder="Nome do aluno..."
+                        />
+                      </td>
+                      <td className="py-2 px-1">
+                        <ComboboxTelefone
+                          value={linha.telefone || ''}
+                          onChange={(masked) => updateLinhaExperimental(linha.id, 'telefone', masked)}
+                          onSelectSugestao={(sugestao) => {
+                            setLoteExperimentais(prev => prev.map(l =>
+                              l.id === linha.id
+                                ? {
+                                    ...l,
+                                    aluno_nome: sugestao.nome,
+                                    telefone: sugestao.telefone ? maskPhone(sugestao.telefone.replace(/^55/, '')) : l.telefone,
+                                    canal_origem_id: sugestao.canal_origem_id ?? l.canal_origem_id,
+                                    curso_id: sugestao.curso_id ?? l.curso_id,
+                                  }
+                                : l
+                            ));
+                          }}
+                          onBlur={() => checkLeadByPhone(linha.telefone, linha.id, 'experimental')}
+                          sugestoes={sugestoesLeads.filter(s => ['novo','agendado','lead'].includes(s.tipo))}
+                          maskPhone={maskPhone}
+                          placeholder="(21) 99999-9999"
                         />
                       </td>
                       <td className="py-2 px-1">
@@ -3761,6 +3797,7 @@ export function ComercialPage() {
                 <thead className="bg-slate-800/50">
                   <tr className="text-slate-400 text-xs uppercase">
                     <th className="py-2 px-2 text-left">Nome</th>
+                    <th className="py-2 px-2 text-left w-36">Telefone</th>
                     <th className="py-2 px-2 text-left w-32">Canal</th>
                     <th className="py-2 px-2 text-left w-32">Curso</th>
                     <th className="py-2 px-2 w-10"></th>
@@ -3770,12 +3807,47 @@ export function ComercialPage() {
                   {loteVisitas.map((linha) => (
                     <tr key={linha.id} className="border-t border-slate-700/50">
                       <td className="py-2 px-2">
-                        <Input
-                          type="text"
+                        <ComboboxNome
                           value={linha.aluno_nome || ''}
-                          onChange={(e) => updateLinhaVisita(linha.id, 'aluno_nome', e.target.value)}
+                          onChange={(nome) => updateLinhaVisita(linha.id, 'aluno_nome', nome)}
+                          onSelectSugestao={(sugestao) => {
+                            setLoteVisitas(prev => prev.map(l =>
+                              l.id === linha.id
+                                ? {
+                                    ...l,
+                                    aluno_nome: sugestao.nome,
+                                    telefone: sugestao.telefone ? maskPhone(sugestao.telefone.replace(/^55/, '')) : l.telefone,
+                                    canal_origem_id: sugestao.canal_origem_id || l.canal_origem_id,
+                                    curso_id: sugestao.curso_id || l.curso_id,
+                                  }
+                                : l
+                            ));
+                          }}
+                          sugestoes={sugestoesLeads}
                           placeholder="Nome do visitante..."
-                          className="h-8 text-xs"
+                        />
+                      </td>
+                      <td className="py-2 px-2">
+                        <ComboboxTelefone
+                          value={linha.telefone || ''}
+                          onChange={(masked) => updateLinhaVisita(linha.id, 'telefone', masked)}
+                          onSelectSugestao={(sugestao) => {
+                            setLoteVisitas(prev => prev.map(l =>
+                              l.id === linha.id
+                                ? {
+                                    ...l,
+                                    aluno_nome: sugestao.nome,
+                                    telefone: sugestao.telefone ? maskPhone(sugestao.telefone.replace(/^55/, '')) : l.telefone,
+                                    canal_origem_id: sugestao.canal_origem_id ?? l.canal_origem_id,
+                                    curso_id: sugestao.curso_id ?? l.curso_id,
+                                  }
+                                : l
+                            ));
+                          }}
+                          onBlur={() => checkLeadByPhone(linha.telefone, linha.id, 'visita')}
+                          sugestoes={sugestoesLeads}
+                          maskPhone={maskPhone}
+                          placeholder="(21) 99999-9999"
                         />
                       </td>
                       <td className="py-2 px-2">
@@ -3871,13 +3943,12 @@ export function ComercialPage() {
                 value={formData.aluno_nome}
                 onChange={(nome) => setFormData({ ...formData, aluno_nome: nome })}
                 onSelectSugestao={(sugestao) => {
-                  // Auto-preencher canal e curso quando selecionar um lead/experimental existente
                   setFormData(prev => ({
                     ...prev,
                     aluno_nome: sugestao.nome,
+                    aluno_telefone: sugestao.telefone ? maskPhone(sugestao.telefone.replace(/^55/, '')) : prev.aluno_telefone,
                     canal_origem_id: sugestao.canal_origem_id || prev.canal_origem_id,
                     curso_id: sugestao.curso_id || prev.curso_id,
-                    // Se veio de experimental, marcar que teve experimental
                     teve_experimental: sugestao.tipo.startsWith('experimental') ? true : prev.teve_experimental,
                     professor_experimental_id: sugestao.professor_id || prev.professor_experimental_id,
                   }));
@@ -3888,6 +3959,31 @@ export function ComercialPage() {
               <p className="text-xs text-slate-500 mt-1">
                 Sugestões do funil ou digite um nome novo (ex-aluno)
               </p>
+            </div>
+            <div>
+              <Label className="mb-2 block">Telefone</Label>
+              <ComboboxTelefone
+                value={formData.aluno_telefone}
+                onChange={(masked) => setFormData(prev => ({ ...prev, aluno_telefone: masked }))}
+                onSelectSugestao={(sugestao) => {
+                  setFormData(prev => ({
+                    ...prev,
+                    aluno_nome: sugestao.nome,
+                    aluno_telefone: sugestao.telefone ? maskPhone(sugestao.telefone.replace(/^55/, '')) : prev.aluno_telefone,
+                    canal_origem_id: sugestao.canal_origem_id ?? prev.canal_origem_id,
+                    curso_id: sugestao.curso_id ?? prev.curso_id,
+                    teve_experimental: sugestao.tipo.startsWith('experimental') ? true : prev.teve_experimental,
+                    professor_experimental_id: sugestao.professor_id || prev.professor_experimental_id,
+                  }));
+                }}
+                onBlur={() => {
+                  if (!formData.aluno_telefone) return;
+                  checkLeadByPhone(formData.aluno_telefone, '', 'matricula');
+                }}
+                sugestoes={sugestoesLeads}
+                maskPhone={maskPhone}
+                placeholder="(21) 99999-9999"
+              />
             </div>
             {/* Campo Unidade - visível apenas para admin */}
             {isAdmin && (
