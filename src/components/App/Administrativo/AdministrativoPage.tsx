@@ -346,7 +346,7 @@ export function AdministrativoPage() {
           // Transformar dados históricos para o formato esperado
           kpisData = data.map((d: any) => ({
             unidade_id: d.unidade_id,
-            total_alunos_ativos: d.alunos_pagantes || 0,
+            total_alunos_ativos: d.alunos_ativos || d.alunos_pagantes || 0,
             total_alunos_pagantes: d.alunos_pagantes || 0,
             total_bolsistas_integrais: 0,
             total_bolsistas_parciais: 0,
@@ -354,6 +354,10 @@ export function AdministrativoPage() {
             faturamento_previsto: Number(d.faturamento_estimado) || 0,
             churn_rate: Number(d.churn_rate) || 0,
             tempo_permanencia_medio: Number(d.tempo_permanencia) || 0,
+            // Snapshot de matrículas do dados_mensais (campos novos)
+            _matriculas_ativas: d.matriculas_ativas,
+            _matriculas_banda: d.matriculas_banda,
+            _matriculas_2_curso: d.matriculas_2_curso,
           }));
         } else {
           // FALLBACK: calcular KPIs diretamente das tabelas base
@@ -401,23 +405,38 @@ export function AdministrativoPage() {
         }
       }
 
-      // Buscar matrículas ativas, banda e 2º curso do banco ANTES de consolidar KPIs
-      let matriculasQuery = supabase
-        .from('alunos')
-        .select('id, is_segundo_curso, curso_id, cursos(nome)')
-        .eq('status', 'ativo');
+      // Buscar matrículas ativas, banda e 2º curso
+      // Para período histórico com snapshot disponível, usar dados do dados_mensais
+      const snapshotMatriculas = !isPeriodoAtual && kpisData?.length > 0 && kpisData[0]._matriculas_ativas != null;
 
-      if (unidade !== 'todos') {
-        matriculasQuery = matriculasQuery.eq('unidade_id', unidade);
+      let matriculasAtivas = 0;
+      let matriculasBanda = 0;
+      let matriculas2Curso = 0;
+
+      if (snapshotMatriculas) {
+        // Usar snapshot histórico do dados_mensais
+        matriculasAtivas = kpisData.reduce((acc: number, k: any) => acc + (k._matriculas_ativas || 0), 0);
+        matriculasBanda = kpisData.reduce((acc: number, k: any) => acc + (k._matriculas_banda || 0), 0);
+        matriculas2Curso = kpisData.reduce((acc: number, k: any) => acc + (k._matriculas_2_curso || 0), 0);
+      } else {
+        // Query ao vivo (período atual ou sem snapshot)
+        let matriculasQuery = supabase
+          .from('alunos')
+          .select('id, is_segundo_curso, curso_id, cursos(nome)')
+          .eq('status', 'ativo');
+
+        if (unidade !== 'todos') {
+          matriculasQuery = matriculasQuery.eq('unidade_id', unidade);
+        }
+
+        const { data: matriculasData } = await matriculasQuery;
+
+        matriculasAtivas = matriculasData?.length || 0;
+        matriculasBanda = matriculasData?.filter((m: any) =>
+          m.cursos?.nome?.toLowerCase().includes('banda')
+        ).length || 0;
+        matriculas2Curso = matriculasData?.filter((m: any) => m.is_segundo_curso).length || 0;
       }
-
-      const { data: matriculasData } = await matriculasQuery;
-
-      const matriculasAtivas = matriculasData?.length || 0;
-      const matriculasBanda = matriculasData?.filter((m: any) => 
-        m.cursos?.nome?.toLowerCase().includes('banda')
-      ).length || 0;
-      const matriculas2Curso = matriculasData?.filter((m: any) => m.is_segundo_curso).length || 0;
 
       // Consolidar KPIs
       const kpis = kpisData?.reduce((acc, k) => ({

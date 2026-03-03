@@ -287,15 +287,16 @@ export function ComercialPage() {
     sabia_preco?: boolean | null;
   }
   
+  const genId = () => typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
   const [loteData, setLoteData] = useState(new Date());
   const [loteLeads, setLoteLeads] = useState<LoteLinha[]>([
-    { id: crypto.randomUUID(), aluno_nome: '', telefone: '', canal_origem_id: null, curso_id: null, quantidade: 1 }
+    { id: genId(), aluno_nome: '', telefone: '', canal_origem_id: null, curso_id: null, quantidade: 1 }
   ]);
   const [loteExperimentais, setLoteExperimentais] = useState<LoteLinha[]>([
-    { id: crypto.randomUUID(), aluno_nome: '', canal_origem_id: null, curso_id: null, quantidade: 1, status_experimental: 'experimental_agendada', professor_id: null, sabia_preco: null }
+    { id: genId(), aluno_nome: '', canal_origem_id: null, curso_id: null, quantidade: 1, status_experimental: 'experimental_agendada', professor_id: null, sabia_preco: null }
   ]);
   const [loteVisitas, setLoteVisitas] = useState<LoteLinha[]>([
-    { id: crypto.randomUUID(), aluno_nome: '', canal_origem_id: null, curso_id: null, quantidade: 1 }
+    { id: genId(), aluno_nome: '', canal_origem_id: null, curso_id: null, quantidade: 1 }
   ]);
   
   // Sugestões de leads para autocomplete
@@ -823,9 +824,9 @@ export function ComercialPage() {
     });
     // Reset lotes
     setLoteData(new Date());
-    setLoteLeads([{ id: crypto.randomUUID(), aluno_nome: '', telefone: '', canal_origem_id: null, curso_id: null, quantidade: 1 }]);
-    setLoteExperimentais([{ id: crypto.randomUUID(), aluno_nome: '', canal_origem_id: null, curso_id: null, quantidade: 1, status_experimental: 'experimental_agendada', professor_id: null }]);
-    setLoteVisitas([{ id: crypto.randomUUID(), aluno_nome: '', canal_origem_id: null, curso_id: null, quantidade: 1 }]);
+    setLoteLeads([{ id: genId(), aluno_nome: '', telefone: '', canal_origem_id: null, curso_id: null, quantidade: 1 }]);
+    setLoteExperimentais([{ id: genId(), aluno_nome: '', canal_origem_id: null, curso_id: null, quantidade: 1, status_experimental: 'experimental_agendada', professor_id: null }]);
+    setLoteVisitas([{ id: genId(), aluno_nome: '', canal_origem_id: null, curso_id: null, quantidade: 1 }]);
   };
 
   // Salvar lote de leads atendidos
@@ -1007,7 +1008,7 @@ export function ComercialPage() {
 
   // Funções auxiliares para manipular linhas do lote
   const addLinhaLead = () => {
-    setLoteLeads([...loteLeads, { id: crypto.randomUUID(), aluno_nome: '', telefone: '', canal_origem_id: null, curso_id: null, quantidade: 1 }]);
+    setLoteLeads([...loteLeads, { id: genId(), aluno_nome: '', telefone: '', canal_origem_id: null, curso_id: null, quantidade: 1 }]);
   };
 
   const removeLinhaLead = (id: string) => {
@@ -1063,7 +1064,7 @@ export function ComercialPage() {
   };
 
   const addLinhaExperimental = () => {
-    setLoteExperimentais([...loteExperimentais, { id: crypto.randomUUID(), aluno_nome: '', canal_origem_id: null, curso_id: null, quantidade: 1, status_experimental: 'experimental_agendada', professor_id: null, sabia_preco: null }]);
+    setLoteExperimentais([...loteExperimentais, { id: genId(), aluno_nome: '', canal_origem_id: null, curso_id: null, quantidade: 1, status_experimental: 'experimental_agendada', professor_id: null, sabia_preco: null }]);
   };
 
   const removeLinhaExperimental = (id: string) => {
@@ -1077,7 +1078,7 @@ export function ComercialPage() {
   };
 
   const addLinhaVisita = () => {
-    setLoteVisitas([...loteVisitas, { id: crypto.randomUUID(), aluno_nome: '', canal_origem_id: null, curso_id: null, quantidade: 1 }]);
+    setLoteVisitas([...loteVisitas, { id: genId(), aluno_nome: '', canal_origem_id: null, curso_id: null, quantidade: 1 }]);
   };
 
   const removeLinhaVisita = (id: string) => {

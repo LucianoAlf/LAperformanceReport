@@ -20,7 +20,11 @@ export interface Database {
           unidade_id: string
           ano: number
           mes: number
+          alunos_ativos: number
           alunos_pagantes: number
+          matriculas_ativas: number
+          matriculas_banda: number
+          matriculas_2_curso: number
           novas_matriculas: number
           evasoes: number
           churn_rate: number
