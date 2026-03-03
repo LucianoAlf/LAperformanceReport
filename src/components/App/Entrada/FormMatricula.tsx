@@ -242,10 +242,11 @@ export function FormMatricula() {
       if (data.lead_id) {
         await supabase
           .from('leads')
-          .update({ 
+          .update({
             status: 'matriculado',
             data_matricula: data.data_matricula,
             aluno_id: aluno.id,
+            curso_interesse_id: data.curso_id || null,
           })
           .eq('id', data.lead_id);
       }
