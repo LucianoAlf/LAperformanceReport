@@ -31,6 +31,7 @@ export function TabelaRenovacoes({ data, onEdit, onDelete }: TabelaRenovacoesPro
             <th className="py-3 px-4 text-left">#</th>
             <th className="py-3 px-4 text-left">Data</th>
             <th className="py-3 px-4 text-left">Aluno</th>
+            <th className="py-3 px-4 text-left">Curso</th>
             <th className="py-3 px-4 text-left">Escola</th>
             <th className="py-3 px-4 text-right">Anterior</th>
             <th className="py-3 px-4 text-right">Novo</th>
@@ -43,7 +44,7 @@ export function TabelaRenovacoes({ data, onEdit, onDelete }: TabelaRenovacoesPro
         <tbody>
           {data.length === 0 ? (
             <tr>
-              <td colSpan={10} className="py-8 text-center text-slate-500">
+              <td colSpan={11} className="py-8 text-center text-slate-500">
                 Nenhuma renovação registrada neste período
               </td>
             </tr>
@@ -59,6 +60,7 @@ export function TabelaRenovacoes({ data, onEdit, onDelete }: TabelaRenovacoesPro
                     {new Date(item.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
                   </td>
                   <td className="py-3 px-4 text-white font-medium">{item.aluno_nome}</td>
+                  <td className="py-3 px-4 text-slate-300 text-sm">{item.curso_nome || '-'}</td>
                   <td className="py-3 px-4">
                     <div className="flex items-center gap-1.5">
                       <span className={`px-2 py-1 rounded text-xs font-medium ${
@@ -120,13 +122,13 @@ export function TabelaRenovacoes({ data, onEdit, onDelete }: TabelaRenovacoesPro
         {data.length > 0 && (
           <tfoot className="bg-slate-800/50">
             <tr className="border-t border-slate-600">
-              <td colSpan={5} className="py-3 px-4 text-right text-slate-400 font-medium">
+              <td colSpan={6} className="py-3 px-4 text-right text-slate-400 font-medium">
                 Totais: {data.length} renovações
               </td>
               <td className="py-3 px-4 text-center text-emerald-400 font-bold">
                 +{reajusteMedio.toFixed(1)}%
               </td>
-              <td colSpan={3} className="py-3 px-4 text-slate-400">Reajuste médio</td>
+              <td colSpan={4} className="py-3 px-4 text-slate-400">Reajuste médio</td>
             </tr>
           </tfoot>
         )}

@@ -58,6 +58,8 @@ export interface MovimentacaoAdmin {
   forma_pagamento_id?: number | null;
   forma_pagamento_nome?: string;
   agente_comercial?: string | null;
+  curso_id?: number | null;
+  curso_nome?: string;
   motivo?: string | null;
   mes_saida?: string | null;
   tipo_evasao?: string | null;
@@ -140,6 +142,7 @@ export function AdministrativoPage() {
   const [movimentacoes, setMovimentacoes] = useState<MovimentacaoAdmin[]>([]);
   const [professores, setProfessores] = useState<{ id: number; nome: string }[]>([]);
   const [formasPagamento, setFormasPagamento] = useState<{ id: number; nome: string; sigla: string }[]>([]);
+  const [cursos, setCursos] = useState<{ id: number; nome: string }[]>([]);
   const [alunosNovos, setAlunosNovos] = useState<any[]>([]);
   
   // Modais
@@ -217,11 +220,12 @@ export function AdministrativoPage() {
         retencaoQuery = retencaoQuery.eq('unidade_id', unidade);
       }
 
-      const [movResult, avisosResult, profsResult, fpResult, retencaoResult] = await Promise.all([
+      const [movResult, avisosResult, profsResult, fpResult, cursosResult, retencaoResult] = await Promise.all([
         query,
         queryAvisos,
         supabase.from('professores').select('id, nome').eq('ativo', true).order('nome'),
         supabase.from('formas_pagamento').select('id, nome, sigla').order('nome'),
+        supabase.from('cursos').select('id, nome').order('nome'),
         retencaoQuery,
       ]);
 
@@ -230,6 +234,7 @@ export function AdministrativoPage() {
       const { data: avisosRetroativos } = avisosResult;
       const profData = profsResult.data;
       const fpData = fpResult.data;
+      const cursosData = cursosResult.data;
       const retencaoData = retencaoResult.data;
 
       // Combinar resultados sem duplicatas
@@ -252,10 +257,12 @@ export function AdministrativoPage() {
         alunosMap = new Map(alunosData?.map(a => [a.id, a]) || []);
       }
 
-      // Enriquecer movimentações com classificação dos alunos
+      // Enriquecer movimentações com classificação dos alunos e nome do curso
+      const cursosMap = new Map((cursosData || []).map(c => [c.id, c.nome]));
       const movDataComAlunos = movCombinado.map(m => ({
         ...m,
-        alunos: m.aluno_id ? alunosMap.get(m.aluno_id) : null
+        alunos: m.aluno_id ? alunosMap.get(m.aluno_id) : null,
+        curso_nome: m.curso_id ? cursosMap.get(m.curso_id) || null : null,
       }));
 
       // Verificar se é período atual ou histórico
@@ -447,6 +454,7 @@ export function AdministrativoPage() {
       setMovimentacoes(movimentacoesEnriquecidas);
       setProfessores(profData || []);
       setFormasPagamento(fpData || []);
+      setCursos(cursosData || []);
 
       // Buscar novos alunos do mês — apenas novos INDIVÍDUOS (excluir 2º curso e bolsistas)
       let novosAlunosQuery = supabase
@@ -1309,6 +1317,7 @@ export function AdministrativoPage() {
         onSave={handleSaveMovimentacao}
         editingItem={editingItem}
         formasPagamento={formasPagamento}
+        cursos={cursos}
         competencia={competencia}
         unidadeId={unidade === 'todos' ? null : unidade}
       />

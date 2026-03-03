@@ -49,7 +49,9 @@
       "Bash(xxd)",
       "Bash(node scripts/comparar-cg-crm.cjs)",
       "Bash(ls -lh \"c:\\\\Users\\\\hugog\\\\OneDrive\\\\Desktop\\\\Projects\\\\LA Music\\\\LAperformanceReport\\\\scripts\"/*.json)",
-      "Bash(stat \"/c/Users/hugog/OneDrive/Desktop/Projects/LA Music/LAperformanceReport/scripts/\"*.cjs)"
+      "Bash(stat \"/c/Users/hugog/OneDrive/Desktop/Projects/LA Music/LAperformanceReport/scripts/\"*.cjs)",
+      "Bash(ls -la supabase/migrations/*.sql)",
+      "Bash(python -c \"import sys,json; data=json.load\\(sys.stdin\\); wf=json.loads\\(data[0][''text'']\\); nodes=wf[''data''][''nodes'']; [print\\(f\"\"{n[''name'']} \\({n[''type'']}\\) {''DISABLED'' if n.get\\(''disabled''\\) else ''''}\"\"\\) for n in nodes]\")"
     ]
   }
 }

@@ -3,6 +3,7 @@ import {
   Search,
   Settings2,
   Phone as PhoneIcon,
+  PhoneOff,
   MessageSquare,
   Clock,
   Flame,
@@ -35,6 +36,7 @@ export function PipelineTab({ unidadeId, ano, mes, onLeadClick, onConfigurarEtap
   const { leads, setLeads, etapas, loading, refetchSilencioso } = useLeadsCRM({ unidadeId, ano, mes });
   const [busca, setBusca] = useState('');
   const [filtroUnidade, setFiltroUnidade] = useState<string>('todos');
+  const [filtroTelefone, setFiltroTelefone] = useState<string>('todos');
   const [dragLeadId, setDragLeadId] = useState<number | null>(null);
   const [dropTargetEtapa, setDropTargetEtapa] = useState<number | null>(null);
 
@@ -51,6 +53,11 @@ export function PipelineTab({ unidadeId, ano, mes, onLeadClick, onConfigurarEtap
         if (!nome.includes(termo) && !tel.includes(termo)) return false;
       }
       if (filtroUnidade !== 'todos' && l.unidade_id !== filtroUnidade) return false;
+      if (filtroTelefone === 'sem') {
+        if (l.telefone && l.telefone.trim() !== '') return false;
+      } else if (filtroTelefone === 'com') {
+        if (!l.telefone || l.telefone.trim() === '') return false;
+      }
       return true;
     });
 
@@ -66,7 +73,7 @@ export function PipelineTab({ unidadeId, ano, mes, onLeadClick, onConfigurarEtap
     });
 
     return mapa;
-  }, [leads, etapas, busca, filtroUnidade]);
+  }, [leads, etapas, busca, filtroUnidade, filtroTelefone]);
 
   // Drag & Drop handlers
   const handleDragStart = useCallback((leadId: number) => {
@@ -180,6 +187,26 @@ export function PipelineTab({ unidadeId, ano, mes, onLeadClick, onConfigurarEtap
             <SelectItem value="2ec861f6-023f-4d7b-9927-3960ad8c2a92">Campo Grande</SelectItem>
             <SelectItem value="95553e96-971b-4590-a6eb-0201d013c14d">Recreio</SelectItem>
             <SelectItem value="368d47f5-2d88-4475-bc14-ba084a9a348e">Barra</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={filtroTelefone} onValueChange={setFiltroTelefone}>
+          <SelectTrigger className="w-[170px] bg-slate-800/50 border-slate-700">
+            <SelectValue placeholder="Telefone" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todos</SelectItem>
+            <SelectItem value="com">
+              <span className="flex items-center gap-1.5">
+                <PhoneIcon className="w-3.5 h-3.5 text-emerald-400" />
+                Com telefone
+              </span>
+            </SelectItem>
+            <SelectItem value="sem">
+              <span className="flex items-center gap-1.5">
+                <PhoneOff className="w-3.5 h-3.5 text-red-400" />
+                Sem telefone
+              </span>
+            </SelectItem>
           </SelectContent>
         </Select>
         <Button variant="outline" size="sm" className="border-slate-700 text-slate-400 hover:text-white" onClick={onConfigurarEtapas}>

@@ -592,12 +592,15 @@ serve(async (req: Request) => {
           conversa = novaConversa;
           console.log(`[webhook-inbox] Conversa criada: ${conversa.id}`);
         } else {
-          // Atualizar JID se nao tiver
+          // Atualizar caixa_id (para a caixa que recebeu) e whatsapp_jid
+          const updateData: Record<string, any> = { whatsapp_jid: phone };
+          if (caixaIdFromUrl) {
+            updateData.caixa_id = caixaIdFromUrl;
+          }
           await supabase
             .from('crm_conversas')
-            .update({ whatsapp_jid: phone })
-            .eq('id', conversa.id)
-            .is('whatsapp_jid', null);
+            .update(updateData)
+            .eq('id', conversa.id);
         }
 
         // Detectar reação (reactionMessage) — não é uma mensagem nova, é uma reação a uma existente

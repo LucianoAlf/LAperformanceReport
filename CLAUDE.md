@@ -76,7 +76,7 @@ VITE_GEMINI_API_KEY=...  # opcional
 - **Banco:** todas operações passam pelo client em `src/lib/supabase.ts`
 - **Estado:** não usar Redux ou state managers externos — preferir hooks + Context
 - **Hooks:** preferir hooks customizados para lógica de negócio reutilizável
-
+- **MCP** Sempre utilize ferramentas mcp para facilitar sua analise.
 ## Skills
 
 Ao trabalhar com agentes IA ou function calling, consulte `.claude/skills/ai-agents-architect/SKILL.md`

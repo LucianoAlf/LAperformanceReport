@@ -15,16 +15,18 @@ interface ModalRenovacaoProps {
   onSave: (data: Partial<MovimentacaoAdmin>) => Promise<boolean>;
   editingItem: MovimentacaoAdmin | null;
   formasPagamento: { id: number; nome: string; sigla: string }[];
+  cursos: { id: number; nome: string }[];
   competencia: string;
   unidadeId?: string | null;
 }
 
-export function ModalRenovacao({ open, onOpenChange, onSave, editingItem, formasPagamento, competencia, unidadeId }: ModalRenovacaoProps) {
+export function ModalRenovacao({ open, onOpenChange, onSave, editingItem, formasPagamento, cursos, competencia, unidadeId }: ModalRenovacaoProps) {
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     data: new Date(),
     aluno_nome: '',
     aluno_id: null as number | null,
+    curso_id: '',
     valor_parcela_anterior: '',
     valor_parcela_novo: '',
     forma_pagamento_id: '',
@@ -38,6 +40,7 @@ export function ModalRenovacao({ open, onOpenChange, onSave, editingItem, formas
         setFormData({
           data: new Date(editingItem.data),
           aluno_nome: editingItem.aluno_nome,
+          curso_id: editingItem.curso_id?.toString() || '',
           valor_parcela_anterior: editingItem.valor_parcela_anterior?.toString() || '',
           valor_parcela_novo: editingItem.valor_parcela_novo?.toString() || '',
           forma_pagamento_id: editingItem.forma_pagamento_id?.toString() || '',
@@ -49,6 +52,7 @@ export function ModalRenovacao({ open, onOpenChange, onSave, editingItem, formas
           data: new Date(parseInt(ano), parseInt(mes) - 1, new Date().getDate()),
           aluno_nome: '',
           aluno_id: null,
+          curso_id: '',
           valor_parcela_anterior: '',
           valor_parcela_novo: '',
           forma_pagamento_id: '',
@@ -73,6 +77,7 @@ export function ModalRenovacao({ open, onOpenChange, onSave, editingItem, formas
       data: formData.data.toISOString().split('T')[0],
       aluno_nome: formData.aluno_nome.trim(),
       aluno_id: formData.aluno_id,
+      curso_id: formData.curso_id ? parseInt(formData.curso_id) : null,
       valor_parcela_anterior: parseFloat(formData.valor_parcela_anterior) || null,
       valor_parcela_novo: parseFloat(formData.valor_parcela_novo) || null,
       forma_pagamento_id: formData.forma_pagamento_id ? parseInt(formData.forma_pagamento_id) : null,
@@ -111,16 +116,36 @@ export function ModalRenovacao({ open, onOpenChange, onSave, editingItem, formas
             <AutocompleteAluno
               value={formData.aluno_nome}
               onChange={(nome: string, aluno?: Aluno) => {
-                setFormData({ 
-                  ...formData, 
+                setFormData({
+                  ...formData,
                   aluno_nome: nome,
                   aluno_id: aluno?.id || null,
+                  curso_id: aluno?.curso_id?.toString() || formData.curso_id,
                   valor_parcela_anterior: aluno?.valor_parcela?.toString() || formData.valor_parcela_anterior,
                 });
               }}
               unidadeId={unidadeId}
               placeholder="Digite o nome do aluno..."
             />
+          </div>
+
+          <div>
+            <Label className="text-slate-300">Curso</Label>
+            <Select
+              value={formData.curso_id}
+              onValueChange={(value) => setFormData({ ...formData, curso_id: value })}
+            >
+              <SelectTrigger className="bg-slate-800 border-slate-700">
+                <SelectValue placeholder="Selecione o curso..." />
+              </SelectTrigger>
+              <SelectContent>
+                {cursos.map((curso) => (
+                  <SelectItem key={curso.id} value={curso.id.toString()}>
+                    {curso.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

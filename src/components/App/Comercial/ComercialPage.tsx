@@ -28,7 +28,9 @@ import {
   GraduationCap,
   Trophy,
   CheckSquare,
-  Search
+  Search,
+  Phone,
+  PhoneOff
 } from 'lucide-react';
 import { TarefasRapidasTab } from '@/components/shared/TarefasRapidas';
 import { PageTour, TourHelpButton } from '@/components/Onboarding';
@@ -266,6 +268,7 @@ export function ComercialPage() {
   // Aba selecionada no detalhamento
   const [abaDetalhamento, setAbaDetalhamento] = useState<'leads' | 'experimental' | 'visita' | 'matricula'>('matricula');
   const [buscaFunil, setBuscaFunil] = useState('');
+  const [filtroTelefoneFunil, setFiltroTelefoneFunil] = useState<'todos' | 'com' | 'sem'>('todos');
   
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingData, setEditingData] = useState<Partial<LeadDiario>>({});
@@ -2651,16 +2654,55 @@ export function ComercialPage() {
           </div>
         </div>
 
-        {/* Campo de busca */}
+        {/* Campo de busca + filtro de telefone */}
         <div className="px-6 py-3 border-b border-slate-700/50">
-          <div className="relative max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <Input
-              placeholder="Buscar nome ou telefone..."
-              value={buscaFunil}
-              onChange={e => setBuscaFunil(e.target.value)}
-              className="pl-9 bg-slate-800/50 border-slate-700 h-9 text-sm"
-            />
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="relative flex-1 min-w-[200px] max-w-sm">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Input
+                placeholder="Buscar nome ou telefone..."
+                value={buscaFunil}
+                onChange={e => setBuscaFunil(e.target.value)}
+                className="pl-9 bg-slate-800/50 border-slate-700 h-9 text-sm"
+              />
+            </div>
+            <div className="flex items-center gap-1 bg-slate-800/50 border border-slate-700 rounded-lg p-0.5">
+              <button
+                onClick={() => setFiltroTelefoneFunil('todos')}
+                className={cn(
+                  "px-3 py-1.5 rounded-md text-xs font-medium transition-all",
+                  filtroTelefoneFunil === 'todos'
+                    ? "bg-slate-600 text-white"
+                    : "text-slate-400 hover:text-white"
+                )}
+              >
+                Todos
+              </button>
+              <button
+                onClick={() => setFiltroTelefoneFunil('com')}
+                className={cn(
+                  "px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1",
+                  filtroTelefoneFunil === 'com'
+                    ? "bg-emerald-500/20 text-emerald-400"
+                    : "text-slate-400 hover:text-white"
+                )}
+              >
+                <Phone className="w-3 h-3" />
+                Com tel.
+              </button>
+              <button
+                onClick={() => setFiltroTelefoneFunil('sem')}
+                className={cn(
+                  "px-3 py-1.5 rounded-md text-xs font-medium transition-all flex items-center gap-1",
+                  filtroTelefoneFunil === 'sem'
+                    ? "bg-red-500/20 text-red-400"
+                    : "text-slate-400 hover:text-white"
+                )}
+              >
+                <PhoneOff className="w-3 h-3" />
+                Sem tel.
+              </button>
+            </div>
           </div>
         </div>
 
@@ -2668,14 +2710,22 @@ export function ComercialPage() {
         {/* TABELA DE LEADS ATENDIDOS */}
         {/* ══════════════════════════════════════════════════════════════ */}
         {abaDetalhamento === 'leads' && (() => {
-          const leadsFiltrados = buscaFunil
-            ? leadsMes.filter(l => {
-                const termo = buscaFunil.toLowerCase();
-                const nome = (l.nome || '').toLowerCase();
-                const tel = ((l as any).telefone || '').toLowerCase();
-                return nome.includes(termo) || tel.includes(termo);
-              })
-            : leadsMes;
+          const leadsFiltrados = leadsMes.filter(l => {
+            if (buscaFunil) {
+              const termo = buscaFunil.toLowerCase();
+              const nome = (l.nome || '').toLowerCase();
+              const tel = ((l as any).telefone || '').toLowerCase();
+              if (!nome.includes(termo) && !tel.includes(termo)) return false;
+            }
+            if (filtroTelefoneFunil === 'sem') {
+              const tel = ((l as any).telefone || '').trim();
+              if (tel !== '' && tel !== '-') return false;
+            } else if (filtroTelefoneFunil === 'com') {
+              const tel = ((l as any).telefone || '').trim();
+              if (tel === '' || tel === '-') return false;
+            }
+            return true;
+          });
           return (
           <div className="p-4 overflow-x-auto">
             {leadsFiltrados.length > 0 ? (
