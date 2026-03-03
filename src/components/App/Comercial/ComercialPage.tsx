@@ -669,8 +669,6 @@ export function ComercialPage() {
         .eq('unidade_id', unidadeParaSalvar)
         .gte('data_contato', startDate)
         .lte('data_contato', endDate)
-        .not('nome', 'is', null)
-        .neq('nome', '')
         .order('data_contato', { ascending: false });
       
       if (error) throw error;
