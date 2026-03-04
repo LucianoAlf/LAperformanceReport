@@ -755,8 +755,20 @@ export function ComercialPage() {
       if (error) throw error;
 
       // Atualizar apenas o registro alterado localmente (sem recarregar tudo)
-      const patchRow = (row: any) =>
-        row.id === matriculaId ? { ...row, [campo]: valor } : row;
+      const patchRow = (row: any) => {
+        if (row.id !== matriculaId) return row;
+        const updated = { ...row, [campo]: valor };
+        // Atualizar nomes derivados para exibição inline imediata
+        if (campo === 'canal_origem_id') {
+          const canal = canais.find(c => c.value === valor);
+          updated.canal_nome = canal?.label || '';
+        }
+        if (campo === 'curso_interesse_id') {
+          const curso = cursos.find(c => c.value === valor);
+          updated.curso_nome = curso?.label || '';
+        }
+        return updated;
+      };
 
       setMatriculasMes(prev => prev.map(patchRow));
       setLeadsMes(prev => prev.map(patchRow));
@@ -788,7 +800,7 @@ export function ComercialPage() {
         toast.error('Erro ao atualizar');
       }
     }
-  }, []);
+  }, [canais, cursos]);
 
   const confirmDelete = async () => {
     if (!deleteId) return;
