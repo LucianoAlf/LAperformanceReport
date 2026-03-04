@@ -61,6 +61,9 @@ interface PresencaRegistro {
   status: string;
   horario_aula: string | null;
   professor_nome: string | null;
+  curso_nome: string | null;
+  turma_nome: string | null;
+  sala_nome: string | null;
 }
 
 interface Props {
@@ -258,11 +261,11 @@ export function ModalDetalhesSucessoAluno({ open, onClose, aluno, competencia }:
     if (!aluno) return;
     const { data: presencaData, error } = await supabase
       .from('aluno_presenca')
-      .select('data_aula, status, horario_aula, professores(nome)')
+      .select('data_aula, status, horario_aula, curso_nome, turma_nome, sala_nome, professores(nome)')
       .eq('aluno_id', aluno.id)
       .in('status', ['presente', 'ausente'])
       .order('data_aula', { ascending: false })
-      .limit(50);
+      .limit(100);
 
     if (error) {
       console.error('Erro ao carregar presença:', error);
@@ -275,6 +278,9 @@ export function ModalDetalhesSucessoAluno({ open, onClose, aluno, competencia }:
         status: p.status,
         horario_aula: p.horario_aula,
         professor_nome: p.professores?.nome || null,
+        curso_nome: p.curso_nome || null,
+        turma_nome: p.turma_nome || null,
+        sala_nome: p.sala_nome || null,
       }))
     );
   };
@@ -637,7 +643,7 @@ export function ModalDetalhesSucessoAluno({ open, onClose, aluno, competencia }:
           ) : (
             <div className="space-y-1.5">
               {(mostrarTodas ? presencas : presencas.slice(0, 10)).map((p, idx) => (
-                <div key={idx} className="flex items-center gap-3 py-1.5 px-3 rounded-lg bg-slate-800/30">
+                <div key={idx} className="flex items-center gap-2 py-1.5 px-3 rounded-lg bg-slate-800/30">
                   <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
                     p.status === 'presente' ? 'bg-green-400' : 'bg-red-400'
                   }`} />
@@ -652,6 +658,11 @@ export function ModalDetalhesSucessoAluno({ open, onClose, aluno, competencia }:
                   <span className="text-slate-500 text-xs">
                     {p.horario_aula ? p.horario_aula.slice(0, 5) : '—'}
                   </span>
+                  {p.curso_nome && (
+                    <span className="text-blue-400 text-xs truncate max-w-[100px]" title={p.curso_nome}>
+                      {p.curso_nome}
+                    </span>
+                  )}
                   {p.professor_nome && (
                     <span className="text-slate-500 text-xs ml-auto truncate max-w-[120px]">
                       {p.professor_nome}

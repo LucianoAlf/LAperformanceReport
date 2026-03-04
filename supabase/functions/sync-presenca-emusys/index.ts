@@ -1,5 +1,5 @@
 // Edge Function: sync-presenca-emusys
-// Sincroniza presença dos alunos do Emusys para aluno_presenca
+// Sincroniza aulas e presença dos alunos do Emusys para aulas_emusys + aluno_presenca
 // Chamada semanalmente via pg_cron (domingo 22h BRT) ou manualmente via botão
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
@@ -32,21 +32,36 @@ function normalizarNome(nome: string): string {
     .trim();
 }
 
-interface AulaEmusys {
-  id: number;
-  cancelada: boolean;
-  data_hora_inicio: string;
-  curso_nome: string;
-  professores: { nome: string; presenca: string }[];
-  alunos: { nome_aluno: string; presenca: string; horario_presenca: string | null }[];
+interface AlunoEmusys {
+  nome_aluno: string;
+  presenca: string;
+  horario_presenca: string | null;
+  data_nascimento_aluno?: string;
+  email_aluno?: string;
+  telefone_aluno?: string;
+  nome_responsavel?: string;
+  email_responsavel?: string;
+  telefone_responsavel?: string;
 }
 
-interface PresencaAgrupada {
-  nomeOriginal: string;
-  nomeNormalizado: string;
-  status: 'presente' | 'ausente';
-  horario: string | null;
-  professorNome: string | null;
+interface AulaEmusys {
+  id: number;
+  nr_da_aula: number | null;
+  qtd_aulas_contrato: number | null;
+  tipo: string;
+  categoria: string;
+  turma_nome: string | null;
+  curso_id: number | null;
+  curso_nome: string;
+  cancelada: boolean;
+  data_hora_inicio: string;
+  data_hora_fim: string | null;
+  duracao_minutos: number | null;
+  sala_id: number | null;
+  sala_nome: string | null;
+  professores: { nome: string; presenca: string }[];
+  alunos: AlunoEmusys[];
+  anotacoes: string | null;
 }
 
 // Match professor: exato → prefixo → primeiro+último nome
@@ -111,42 +126,10 @@ async function fetchAulasDia(token: string, data: string): Promise<AulaEmusys[]>
   return todas;
 }
 
-// Extrair e agrupar presença dos alunos (presente em qualquer aula = presente no dia)
-function extrairPresencas(aulas: AulaEmusys[]): Map<string, PresencaAgrupada> {
-  const mapa = new Map<string, PresencaAgrupada>();
-
-  for (const aula of aulas) {
-    if (aula.cancelada) continue;
-
-    const profNome = aula.professores?.[0]?.nome || null;
-
-    for (const aluno of aula.alunos || []) {
-      const nome = aluno.nome_aluno?.trim();
-      if (!nome) continue;
-
-      const key = normalizarNome(nome);
-      const status = aluno.presenca === 'presente' ? 'presente' : 'ausente';
-
-      const existing = mapa.get(key);
-      if (existing) {
-        if (status === 'presente') {
-          existing.status = 'presente';
-          existing.horario = aluno.horario_presenca;
-          if (profNome) existing.professorNome = profNome;
-        }
-      } else {
-        mapa.set(key, {
-          nomeOriginal: nome,
-          nomeNormalizado: key,
-          status,
-          horario: aluno.horario_presenca,
-          professorNome: profNome,
-        });
-      }
-    }
-  }
-
-  return mapa;
+// Converter data_hora_inicio do Emusys ("2026-03-04 14:00") para ISO com timezone BRT
+function parseDataHoraEmusys(dataHora: string): string {
+  // Emusys retorna "YYYY-MM-DD HH:mm" em horário local (BRT = UTC-3)
+  return dataHora.replace(' ', 'T') + ':00-03:00';
 }
 
 serve(async (req: Request) => {
@@ -188,7 +171,7 @@ serve(async (req: Request) => {
     const { data: alunosDB, error: alunosError } = await supabase
       .from('alunos')
       .select('id, nome, unidade_id')
-      .eq('status', 'ativo');
+      .in('status', ['ativo', 'aviso_previo']);
 
     if (alunosError) {
       throw new Error(`Erro ao buscar alunos: ${alunosError.message}`);
@@ -229,67 +212,117 @@ serve(async (req: Request) => {
         // 1. Buscar aulas do dia no Emusys
         const aulas = await fetchAulasDia(unidade.token, dataAlvo);
 
-        // 2. Extrair e agrupar presença
-        const presencas = extrairPresencas(aulas);
-
         const mapaAlunos = alunosPorUnidade.get(unidade.id) || new Map();
+        let totalPresencas = 0;
         let matched = 0;
         let naoEncontrados = 0;
         const nomesNaoEncontrados: string[] = [];
         let presentes = 0;
         let ausentes = 0;
+        let aulasProcessadas = 0;
 
-        // 3. UPSERT presença para cada aluno
-        for (const [_key, presenca] of presencas) {
-          const alunoId = mapaAlunos.get(presenca.nomeNormalizado);
+        // 2. Processar aula por aula (não mais agrupado por dia)
+        for (const aula of aulas) {
+          if (aula.cancelada) continue;
+          aulasProcessadas++;
 
-          if (!alunoId) {
-            naoEncontrados++;
-            nomesNaoEncontrados.push(presenca.nomeOriginal);
+          const profNome = aula.professores?.[0]?.nome || null;
+          const professorId = profNome ? matchProfessor(profNome, profMapa, profNomes) : null;
+
+          // 2a. UPSERT dados da aula na aulas_emusys
+          const { data: aulaDB, error: aulaError } = await supabase
+            .from('aulas_emusys')
+            .upsert(
+              {
+                emusys_id: aula.id,
+                unidade_id: unidade.id,
+                data_aula: dataAlvo,
+                data_hora_inicio: parseDataHoraEmusys(aula.data_hora_inicio),
+                data_hora_fim: aula.data_hora_fim ? parseDataHoraEmusys(aula.data_hora_fim) : null,
+                duracao_minutos: aula.duracao_minutos,
+                tipo: aula.tipo,
+                categoria: aula.categoria,
+                turma_nome: aula.turma_nome,
+                curso_emusys_id: aula.curso_id,
+                curso_nome: aula.curso_nome,
+                sala_nome: aula.sala_nome,
+                professor_nome: profNome,
+                professor_id: professorId,
+                cancelada: false,
+                nr_da_aula: aula.nr_da_aula,
+                qtd_alunos: aula.alunos?.length || 0,
+                anotacoes: aula.anotacoes || null,
+              },
+              { onConflict: 'emusys_id,unidade_id', ignoreDuplicates: false }
+            )
+            .select('id')
+            .single();
+
+          if (aulaError) {
+            console.error(`[sync-presenca] Upsert aula ${aula.id} error:`, aulaError.message);
             continue;
           }
 
-          matched++;
-          if (presenca.status === 'presente') presentes++;
-          else ausentes++;
+          const aulaLocalId = aulaDB.id;
 
-          // Match professor
-          const professorId = presenca.professorNome
-            ? matchProfessor(presenca.professorNome, profMapa, profNomes)
-            : null;
+          // 2b. Processar presença de cada aluno nesta aula
+          for (const aluno of aula.alunos || []) {
+            const nome = aluno.nome_aluno?.trim();
+            if (!nome) continue;
 
-          // UPSERT presença
-          const { error: upsertError } = await supabase
-            .from('aluno_presenca')
-            .upsert(
-              {
-                aluno_id: alunoId,
-                professor_id: professorId,
-                unidade_id: unidade.id,
-                data_aula: dataAlvo,
-                horario_aula: presenca.horario,
-                status: presenca.status,
-                respondido_por: 'emusys',
-                respondido_em: new Date().toISOString(),
-              },
-              {
-                onConflict: 'aluno_id,data_aula',
-                ignoreDuplicates: false,
+            totalPresencas++;
+            const alunoId = mapaAlunos.get(normalizarNome(nome));
+
+            if (!alunoId) {
+              naoEncontrados++;
+              if (!nomesNaoEncontrados.includes(nome)) {
+                nomesNaoEncontrados.push(nome);
               }
-            );
+              continue;
+            }
 
-          if (upsertError) {
-            console.error(`[sync-presenca] Upsert error para ${presenca.nomeOriginal}:`, upsertError.message);
+            matched++;
+            const status = aluno.presenca === 'presente' ? 'presente' : 'ausente';
+            if (status === 'presente') presentes++;
+            else ausentes++;
+
+            // UPSERT presença vinculada à aula
+            const { error: upsertError } = await supabase
+              .from('aluno_presenca')
+              .upsert(
+                {
+                  aluno_id: alunoId,
+                  aula_emusys_id: aulaLocalId,
+                  professor_id: professorId,
+                  unidade_id: unidade.id,
+                  data_aula: dataAlvo,
+                  horario_aula: aluno.horario_presenca,
+                  status,
+                  curso_nome: aula.curso_nome,
+                  turma_nome: aula.turma_nome,
+                  sala_nome: aula.sala_nome,
+                  respondido_por: 'emusys',
+                  respondido_em: new Date().toISOString(),
+                },
+                {
+                  onConflict: 'aluno_id,aula_emusys_id',
+                  ignoreDuplicates: false,
+                }
+              );
+
+            if (upsertError) {
+              console.error(`[sync-presenca] Upsert presença ${nome} aula ${aula.id}:`, upsertError.message);
+            }
           }
         }
 
-        // 4. Log
+        // 3. Log
         await supabase.from('emusys_sync_log').insert({
           unidade_id: unidade.id,
           unidade_nome: unidade.nome,
           data_sync: dataAlvo,
-          total_aulas: aulas.filter(a => !a.cancelada).length,
-          total_registros: presencas.size,
+          total_aulas: aulasProcessadas,
+          total_registros: totalPresencas,
           presentes,
           ausentes,
           alunos_matched: matched,
@@ -300,8 +333,8 @@ serve(async (req: Request) => {
         resultados.push({
           data: dataAlvo,
           unidade: unidade.nome,
-          aulas: aulas.length,
-          alunos: presencas.size,
+          aulas: aulasProcessadas,
+          registros_presenca: totalPresencas,
           matched,
           nao_encontrados: naoEncontrados,
           presentes,

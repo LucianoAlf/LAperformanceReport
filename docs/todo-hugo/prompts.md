@@ -12,7 +12,7 @@ acho que o que realmente importa é:
 
 
 
-# Alunos
+# Alunos (JA EXECUTADO)
 
 - Sera que faria sentido criar um calendario na parte de alunos>sucesso do cliente, criar mais uma tab alo para mostrar a presença deles? quando a api fizer o fetch, ela vai registrar a presença deles e marcaria no calendario. Teria um campo de busca por nome, onde poderiamos ver com detalhe o calendario de presença de cada aluno.
 
