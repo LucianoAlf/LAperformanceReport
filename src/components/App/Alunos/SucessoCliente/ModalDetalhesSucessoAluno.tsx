@@ -2,9 +2,10 @@ import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { toast } from 'sonner';
 import {
   X, Target, Calendar, CheckCircle2, Clock, AlertTriangle,
-  TrendingUp, TrendingDown, Sparkles, Loader2, Users, BarChart3, Brain, Heart, FileText, Copy, Check, Music, User, DollarSign
+  TrendingUp, TrendingDown, Sparkles, Loader2, Users, BarChart3, Brain, Heart, FileText, Copy, Check, Music, User, DollarSign, RefreshCw
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -55,6 +56,13 @@ interface Acao {
   responsavel: string | null;
 }
 
+interface PresencaRegistro {
+  data_aula: string;
+  status: string;
+  horario_aula: string | null;
+  professor_nome: string | null;
+}
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -71,6 +79,9 @@ export function ModalDetalhesSucessoAluno({ open, onClose, aluno, competencia }:
   const [relatorioTexto, setRelatorioTexto] = useState('');
   const [loadingRelatorio, setLoadingRelatorio] = useState(false);
   const [copiado, setCopiado] = useState(false);
+  const [presencas, setPresencas] = useState<PresencaRegistro[]>([]);
+  const [mostrarTodas, setMostrarTodas] = useState(false);
+  const [syncLoading, setSyncLoading] = useState(false);
 
   // Limpar estados quando o aluno muda
   useEffect(() => {
@@ -78,6 +89,8 @@ export function ModalDetalhesSucessoAluno({ open, onClose, aluno, competencia }:
       setRelatorioTexto('');
       setInsights(null);
       setCopiado(false);
+      setPresencas([]);
+      setMostrarTodas(false);
     }
   }, [aluno?.id]);
 
@@ -110,6 +123,9 @@ export function ModalDetalhesSucessoAluno({ open, onClose, aluno, competencia }:
         .limit(10);
 
       setAcoes(acoesData || []);
+
+      // Carregar presença do aluno
+      await carregarPresenca();
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
     } finally {
@@ -235,6 +251,58 @@ export function ModalDetalhesSucessoAluno({ open, onClose, aluno, competencia }:
       setRelatorioTexto('Erro ao gerar relatório. Tente novamente.');
     } finally {
       setLoadingRelatorio(false);
+    }
+  };
+
+  const carregarPresenca = async () => {
+    if (!aluno) return;
+    const { data: presencaData, error } = await supabase
+      .from('aluno_presenca')
+      .select('data_aula, status, horario_aula, professores(nome)')
+      .eq('aluno_id', aluno.id)
+      .in('status', ['presente', 'ausente'])
+      .order('data_aula', { ascending: false })
+      .limit(50);
+
+    if (error) {
+      console.error('Erro ao carregar presença:', error);
+      return;
+    }
+
+    setPresencas(
+      (presencaData || []).map((p: any) => ({
+        data_aula: p.data_aula,
+        status: p.status,
+        horario_aula: p.horario_aula,
+        professor_nome: p.professores?.nome || null,
+      }))
+    );
+  };
+
+  const sincronizarPresenca = async () => {
+    setSyncLoading(true);
+    toast.info('Sincronizando presença dos últimos 7 dias...');
+    try {
+      const { data, error } = await supabase.functions.invoke('sync-presenca-emusys', {
+        body: { dias: 7 },
+      });
+
+      if (error) {
+        console.error('Erro ao sincronizar:', error);
+        toast.error('Erro ao sincronizar presença');
+        return;
+      }
+
+      const totalMatched = data?.resultados?.reduce((acc: number, r: any) => acc + (r.matched || 0), 0) || 0;
+      toast.success(`Presença sincronizada! ${totalMatched} registros processados`);
+
+      // Recarregar dados de presença deste aluno
+      await carregarPresenca();
+    } catch (error) {
+      console.error('Erro ao sincronizar presença:', error);
+      toast.error('Erro ao sincronizar presença. Tente novamente.');
+    } finally {
+      setSyncLoading(false);
     }
   };
 
@@ -525,6 +593,82 @@ export function ModalDetalhesSucessoAluno({ open, onClose, aluno, competencia }:
               </div>
             )}
           </div>
+        </div>
+
+        {/* Histórico de Presença */}
+        <div className="py-4 border-b border-slate-700">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-medium text-slate-400 flex items-center gap-2">
+              <Calendar className="w-4 h-4" />
+              Histórico de Presença
+              {presencas.length > 0 && (
+                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                  (aluno.percentual_presenca || 0) >= 80 ? 'bg-green-500/20 text-green-400' :
+                  (aluno.percentual_presenca || 0) >= 60 ? 'bg-yellow-500/20 text-yellow-400' :
+                  'bg-red-500/20 text-red-400'
+                }`}>
+                  {aluno.percentual_presenca ? `${aluno.percentual_presenca.toFixed(0)}%` : '—'}
+                </span>
+              )}
+            </h3>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={sincronizarPresenca}
+              disabled={syncLoading}
+              className="text-blue-400 hover:text-blue-300"
+            >
+              {syncLoading ? (
+                <>
+                  <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                  Sincronizando...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-3 h-3 mr-1" />
+                  Atualizar
+                </>
+              )}
+            </Button>
+          </div>
+
+          {presencas.length === 0 ? (
+            <p className="text-slate-500 text-sm">Nenhum registro de presença encontrado</p>
+          ) : (
+            <div className="space-y-1.5">
+              {(mostrarTodas ? presencas : presencas.slice(0, 10)).map((p, idx) => (
+                <div key={idx} className="flex items-center gap-3 py-1.5 px-3 rounded-lg bg-slate-800/30">
+                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                    p.status === 'presente' ? 'bg-green-400' : 'bg-red-400'
+                  }`} />
+                  <span className="text-white text-sm w-20 flex-shrink-0">
+                    {format(new Date(p.data_aula + 'T12:00:00'), 'dd/MM EEE', { locale: ptBR })}
+                  </span>
+                  <span className={`text-xs font-medium w-16 flex-shrink-0 ${
+                    p.status === 'presente' ? 'text-green-400' : 'text-red-400'
+                  }`}>
+                    {p.status === 'presente' ? 'Presente' : 'Ausente'}
+                  </span>
+                  <span className="text-slate-500 text-xs">
+                    {p.horario_aula ? p.horario_aula.slice(0, 5) : '—'}
+                  </span>
+                  {p.professor_nome && (
+                    <span className="text-slate-500 text-xs ml-auto truncate max-w-[120px]">
+                      {p.professor_nome}
+                    </span>
+                  )}
+                </div>
+              ))}
+              {presencas.length > 10 && (
+                <button
+                  onClick={() => setMostrarTodas(!mostrarTodas)}
+                  className="text-blue-400 text-xs hover:text-blue-300 mt-2 w-full text-center py-1"
+                >
+                  {mostrarTodas ? 'Ver menos' : `Ver todas (${presencas.length})`}
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Metas Ativas */}

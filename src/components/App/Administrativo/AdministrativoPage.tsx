@@ -423,7 +423,7 @@ export function AdministrativoPage() {
         let matriculasQuery = supabase
           .from('alunos')
           .select('id, is_segundo_curso, curso_id, cursos(nome)')
-          .eq('status', 'ativo');
+          .in('status', ['ativo', 'aviso_previo']);
 
         if (unidade !== 'todos') {
           matriculasQuery = matriculasQuery.eq('unidade_id', unidade);
