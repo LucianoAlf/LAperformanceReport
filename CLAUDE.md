@@ -77,6 +77,7 @@ VITE_GEMINI_API_KEY=...  # opcional
 - **Estado:** não usar Redux ou state managers externos — preferir hooks + Context
 - **Hooks:** preferir hooks customizados para lógica de negócio reutilizável
 - **MCP** Sempre utilize ferramentas mcp para facilitar sua analise.
+- **Memória Self-Heal:** manter arquivos em `.claude/memory/` atualizados proativamente. Ao descobrir regras de negócio, padrões de código ou mudanças no domínio, atualizar o arquivo de memória correspondente e informar o usuário. Ver protocolo completo em `MEMORY.md`.
 ## Skills
 
 Ao trabalhar com agentes IA ou function calling, consulte `.claude/skills/ai-agents-architect/SKILL.md`

@@ -24,7 +24,7 @@ export interface DadosIniciaisMatricula {
 
 interface ModalNovoAlunoProps {
   onClose: () => void;
-  onSalvar: () => void;
+  onSalvar: (alunoId?: number) => void;
   professores: {id: number, nome: string}[];
   cursos: {id: number, nome: string}[];
   tiposMatricula: {id: number, nome: string}[];
@@ -213,7 +213,7 @@ export function ModalNovoAluno({
       else if (formData.tipo_aluno === 'bolsista_parcial') tipo_matricula_id = 4;
       else if (formData.tipo_aluno === 'nao_pagante') tipo_matricula_id = 3;
 
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from('alunos')
         .insert({
           nome: formData.aluno_nome.trim(),
@@ -238,11 +238,13 @@ export function ModalNovoAluno({
           responsavel_nome: formData.responsavel_nome?.trim() || null,
           responsavel_telefone: formData.responsavel_telefone?.trim() || null,
           responsavel_parentesco: formData.responsavel_parentesco || null,
-        });
+        })
+        .select('id')
+        .single();
 
       if (error) throw error;
 
-      onSalvar();
+      onSalvar(data?.id);
       onClose();
     } catch (error: any) {
       console.error('Erro ao salvar:', error);

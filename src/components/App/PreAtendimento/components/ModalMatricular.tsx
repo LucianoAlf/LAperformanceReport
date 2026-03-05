@@ -72,13 +72,14 @@ export function ModalMatricular({ aberto, onClose, onSalvo, lead }: ModalMatricu
     );
   }
 
-  const handleSalvar = async () => {
-    // Marcar lead como convertido
+  const handleSalvar = async (alunoId?: number) => {
+    // Marcar lead como convertido e vincular ao aluno
     if (lead.id) {
       await supabase.from('leads').update({
         converteu: true,
         data_conversao: new Date().toISOString().split('T')[0],
         etapa_pipeline_id: 8, // Matriculado
+        ...(alunoId && { aluno_id: alunoId }),
       }).eq('id', lead.id);
 
       // Registrar no histórico
