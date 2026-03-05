@@ -5,7 +5,7 @@ import { ptBR } from 'date-fns/locale';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import {
   CalendarDays, Search, Loader2, ChevronDown, ChevronUp,
-  ChevronLeft, ChevronRight, Check, X, AlertCircle, Users
+  ChevronLeft, ChevronRight, Check, X, AlertCircle, Users, Filter
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,6 +16,22 @@ interface AlunoSimples {
   id: number;
   nome: string;
   unidade_id: string;
+}
+
+interface PresencaDia {
+  aluno_id: number;
+  aluno_nome: string;
+  status: string;
+  horario_aula: string | null;
+  curso_nome: string | null;
+  turma_nome: string | null;
+  sala_nome: string | null;
+  professor_nome: string | null;
+  anotacoes: string | null;
+  duracao_minutos: number | null;
+  tipo: string | null;
+  nr_da_aula: number | null;
+  qtd_alunos: number | null;
 }
 
 interface PresencaAula {
@@ -43,6 +59,10 @@ interface SyncLog {
   alunos_matched: number;
   alunos_nao_encontrados: number;
   nomes_nao_encontrados: string[] | null;
+  experimentais_count: number;
+  nomes_experimentais: string[] | null;
+  inativos_count: number;
+  nomes_inativos: string[] | null;
   executado_em: string;
 }
 
@@ -71,28 +91,45 @@ export function PresencaTab({ unidadeAtual }: Props) {
   const [loadingLogs, setLoadingLogs] = useState(true);
   const [logExpandido, setLogExpandido] = useState<string | null>(null);
   const [paginaLog, setPaginaLog] = useState(1);
+  const [filtroData, setFiltroData] = useState('');
+
+  // === Estado da Presença do Dia (filtro por data) ===
+  const [presencasDoDia, setPresencasDoDia] = useState<PresencaDia[]>([]);
+  const [loadingDia, setLoadingDia] = useState(false);
 
   // Dias da semana (Seg a Sáb)
   const diasDaSemana = useMemo(() => {
     return Array.from({ length: 6 }, (_, i) => addDays(semanaInicio, i));
   }, [semanaInicio]);
 
-  // Buscar alunos
+  // Buscar alunos (paginado para superar limite de 1000 rows do PostgREST)
   useEffect(() => {
     const fetchAlunos = async () => {
       setLoadingAlunos(true);
-      let query = supabase
-        .from('alunos')
-        .select('id, nome, unidade_id')
-        .in('status', ['ativo', 'aviso_previo'])
-        .order('nome');
+      const todos: AlunoSimples[] = [];
+      const pageSize = 1000;
+      let offset = 0;
+      let hasMore = true;
 
-      if (unidadeAtual !== 'todos') {
-        query = query.eq('unidade_id', unidadeAtual);
+      while (hasMore) {
+        let query = supabase
+          .from('alunos')
+          .select('id, nome, unidade_id')
+          .in('status', ['ativo', 'aviso_previo'])
+          .order('nome')
+          .range(offset, offset + pageSize - 1);
+
+        if (unidadeAtual !== 'todos') {
+          query = query.eq('unidade_id', unidadeAtual);
+        }
+
+        const { data } = await query;
+        todos.push(...(data || []));
+        hasMore = (data?.length || 0) === pageSize;
+        offset += pageSize;
       }
 
-      const { data } = await query;
-      setAlunos(data || []);
+      setAlunos(todos);
       setLoadingAlunos(false);
     };
     fetchAlunos();
@@ -107,7 +144,7 @@ export function PresencaTab({ unidadeAtual }: Props) {
       setLoadingLogs(true);
       let query = supabase
         .from('emusys_sync_log')
-        .select('id, data_sync, unidade_nome, total_aulas, total_registros, alunos_matched, alunos_nao_encontrados, nomes_nao_encontrados, executado_em')
+        .select('id, data_sync, unidade_nome, total_aulas, total_registros, alunos_matched, alunos_nao_encontrados, nomes_nao_encontrados, experimentais_count, nomes_experimentais, inativos_count, nomes_inativos, executado_em')
         .order('executado_em', { ascending: false })
         .limit(100);
 
@@ -122,6 +159,45 @@ export function PresencaTab({ unidadeAtual }: Props) {
     };
     fetchLogs();
   }, [unidadeAtual]);
+
+  // Buscar todas as presenças do dia (quando filtro de data ativo)
+  useEffect(() => {
+    if (!filtroData) { setPresencasDoDia([]); return; }
+    const fetchDia = async () => {
+      setLoadingDia(true);
+      let query = supabase
+        .from('aluno_presenca')
+        .select('aluno_id, alunos(nome), status, horario_aula, curso_nome, turma_nome, sala_nome, aulas_emusys(professor_nome, anotacoes, duracao_minutos, tipo, nr_da_aula, qtd_alunos)')
+        .eq('data_aula', filtroData)
+        .in('status', ['presente', 'ausente'])
+        .order('horario_aula');
+
+      if (unidadeAtual !== 'todos') {
+        query = query.eq('unidade_id', unidadeAtual);
+      }
+
+      const { data } = await query;
+      setPresencasDoDia(
+        (data || []).map((p: any) => ({
+          aluno_id: p.aluno_id,
+          aluno_nome: p.alunos?.nome || '???',
+          status: p.status,
+          horario_aula: p.horario_aula,
+          curso_nome: p.curso_nome,
+          turma_nome: p.turma_nome,
+          sala_nome: p.sala_nome,
+          professor_nome: p.aulas_emusys?.professor_nome || null,
+          anotacoes: p.aulas_emusys?.anotacoes || null,
+          duracao_minutos: p.aulas_emusys?.duracao_minutos || null,
+          tipo: p.aulas_emusys?.tipo || null,
+          nr_da_aula: p.aulas_emusys?.nr_da_aula || null,
+          qtd_alunos: p.aulas_emusys?.qtd_alunos || null,
+        }))
+      );
+      setLoadingDia(false);
+    };
+    fetchDia();
+  }, [filtroData, unidadeAtual]);
 
   // Buscar presença da semana
   const carregarPresencaSemana = useCallback(async () => {
@@ -226,6 +302,147 @@ export function PresencaTab({ unidadeAtual }: Props) {
           <h2 className="font-semibold text-white">Grade de Presença</h2>
         </div>
 
+        {/* Filtro por data */}
+        <div className="flex flex-wrap items-center gap-3 mb-4">
+          <div className="flex items-center gap-1.5 text-slate-400">
+            <Filter className="w-3.5 h-3.5" />
+            <span className="text-xs font-medium">Data:</span>
+          </div>
+          <input
+            type="date"
+            value={filtroData}
+            onChange={(e) => { setFiltroData(e.target.value); }}
+            className="h-7 px-2 text-xs bg-slate-700/50 border border-slate-600 rounded-md text-slate-200 focus:outline-none focus:border-violet-500"
+          />
+          {filtroData && (
+            <button
+              onClick={() => { setFiltroData(''); }}
+              className="text-xs text-slate-500 hover:text-slate-300 underline"
+            >
+              Limpar
+            </button>
+          )}
+        </div>
+
+        {/* Conteúdo: filtro por data OU busca de aluno */}
+        {filtroData ? (
+          /* === MODO DATA: todos os alunos do dia === */
+          <div>
+            {loadingDia ? (
+              <div className="flex items-center justify-center h-48">
+                <Loader2 className="w-6 h-6 animate-spin text-violet-500" />
+              </div>
+            ) : presencasDoDia.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-slate-500">
+                <CalendarDays className="w-10 h-10 mb-2 opacity-30" />
+                <p className="text-sm">Nenhuma aula registrada em {format(parseISO(filtroData), "dd/MM/yyyy")}.</p>
+              </div>
+            ) : (
+              <>
+                {/* Resumo */}
+                {(() => {
+                  const presentes = presencasDoDia.filter(p => p.status === 'presente').length;
+                  const total = presencasDoDia.length;
+                  const pct = total > 0 ? Math.round((presentes / total) * 100) : 0;
+                  return (
+                    <div className="flex items-center gap-3 mb-3">
+                      <span className="px-2.5 py-1 text-xs font-medium rounded-full border bg-violet-500/20 text-violet-400 border-violet-500/30">
+                        {total} registro{total !== 1 ? 's' : ''}
+                      </span>
+                      <span className="text-xs text-slate-400">
+                        {presentes} presentes / {total - presentes} ausentes
+                        <span className={`ml-1 font-bold ${
+                          pct >= 80 ? 'text-green-400' : pct >= 60 ? 'text-yellow-400' : 'text-red-400'
+                        }`}>
+                          ({pct}%)
+                        </span>
+                      </span>
+                      <span className="text-xs text-slate-500">
+                        em {format(parseISO(filtroData), "dd/MM/yyyy")}
+                      </span>
+                    </div>
+                  );
+                })()}
+                {/* Grid de alunos */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {presencasDoDia.map((p, i) => (
+                    <Tooltip
+                      key={`${p.aluno_id}-${i}`}
+                      side="right"
+                      content={
+                        <div className="space-y-1.5 max-w-[260px]">
+                          {p.professor_nome && (
+                            <p className="text-slate-200"><span className="text-slate-400">Professor:</span> {p.professor_nome}</p>
+                          )}
+                          {p.tipo && (
+                            <p className="text-slate-200"><span className="text-slate-400">Tipo:</span> {p.tipo === 'turma' ? 'Turma' : p.tipo === 'individual' ? 'Individual' : p.tipo}</p>
+                          )}
+                          {p.duracao_minutos && (
+                            <p className="text-slate-200"><span className="text-slate-400">Duração:</span> {p.duracao_minutos} min</p>
+                          )}
+                          {p.nr_da_aula && (
+                            <p className="text-slate-200"><span className="text-slate-400">Aula nº:</span> {p.nr_da_aula}</p>
+                          )}
+                          {p.qtd_alunos != null && (
+                            <p className="text-slate-200"><span className="text-slate-400">Alunos na turma:</span> {p.qtd_alunos}</p>
+                          )}
+                          {p.sala_nome && (
+                            <p className="text-slate-200"><span className="text-slate-400">Sala:</span> {p.sala_nome}</p>
+                          )}
+                          {p.anotacoes && (
+                            <div className="pt-1 border-t border-slate-600">
+                              <p className="text-slate-400 text-[10px] uppercase tracking-wider mb-0.5">Anotações</p>
+                              <p className="text-slate-200 whitespace-pre-wrap">{p.anotacoes}</p>
+                            </div>
+                          )}
+                          {!p.professor_nome && !p.tipo && !p.anotacoes && (
+                            <p className="text-slate-500">Sem detalhes adicionais</p>
+                          )}
+                        </div>
+                      }
+                    >
+                      <div
+                        className={`rounded-lg p-3 border cursor-default ${
+                          p.status === 'presente'
+                            ? 'bg-emerald-500/10 border-emerald-500/20'
+                            : 'bg-red-500/10 border-red-500/20'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <p className="text-sm font-medium text-slate-200 truncate">{p.aluno_nome}</p>
+                          {p.status === 'presente' ? (
+                            <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                          ) : (
+                            <X className="w-4 h-4 text-red-400 flex-shrink-0" />
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 mt-1">
+                          {p.horario_aula && (
+                            <span className="text-xs text-slate-500">{p.horario_aula.slice(0, 5)}</span>
+                          )}
+                          {p.curso_nome && (
+                            <>
+                              <span className="text-xs text-slate-600">·</span>
+                              <span className="text-xs text-blue-400 truncate">{p.curso_nome}</span>
+                            </>
+                          )}
+                          {p.turma_nome && (
+                            <>
+                              <span className="text-xs text-slate-600">·</span>
+                              <span className="text-xs text-slate-500 truncate">{p.turma_nome}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </Tooltip>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        ) : (
+          /* === MODO NORMAL: busca de aluno + grade semanal === */
+          <>
         {/* Busca de aluno */}
         <div className="relative mb-4 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -431,6 +648,8 @@ export function PresencaTab({ unidadeAtual }: Props) {
             <p className="text-sm">Busque um aluno acima para ver a grade de presença</p>
           </div>
         )}
+          </>
+        )}
       </div>
 
       {/* === SEÇÃO 2: LOG DE SINCRONIZAÇÃO === */}
@@ -450,7 +669,9 @@ export function PresencaTab({ unidadeAtual }: Props) {
             <Loader2 className="w-6 h-6 animate-spin text-violet-500" />
           </div>
         ) : logs.length === 0 ? (
-          <p className="text-sm text-slate-500 text-center py-8">Nenhum log de sincronização encontrado.</p>
+          <p className="text-sm text-slate-500 text-center py-8">
+            {logs.length === 0 ? 'Nenhum log de sincronização encontrado.' : 'Nenhum log encontrado com os filtros selecionados.'}
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
@@ -461,6 +682,8 @@ export function PresencaTab({ unidadeAtual }: Props) {
                   <th className="text-center px-3 py-2 text-xs font-medium text-slate-400 w-[70px]">Aulas</th>
                   <th className="text-center px-3 py-2 text-xs font-medium text-slate-400 w-[80px]">Registros</th>
                   <th className="text-center px-3 py-2 text-xs font-medium text-slate-400 w-[90px]">Vinculados</th>
+                  <th className="text-center px-3 py-2 text-xs font-medium text-slate-400 w-[100px]">Experimentais</th>
+                  <th className="text-center px-3 py-2 text-xs font-medium text-slate-400 w-[90px]">Inativos</th>
                   <th className="text-center px-3 py-2 text-xs font-medium text-slate-400 w-[130px]">Não Encontrados</th>
                   <th className="text-center px-3 py-2 text-xs font-medium text-slate-400 w-[80px]">Executado</th>
                   <th className="w-8 px-1"></th>
@@ -470,12 +693,15 @@ export function PresencaTab({ unidadeAtual }: Props) {
                 {logsPaginados.map((log) => {
                   const expandido = logExpandido === log.id;
                   const temNaoEncontrados = (log.alunos_nao_encontrados || 0) > 0;
+                  const temExperimentais = (log.experimentais_count || 0) > 0;
+                  const temInativos = (log.inativos_count || 0) > 0;
+                  const temDetalhes = temNaoEncontrados || temExperimentais || temInativos;
                   return (
                     <Fragment key={log.id}>
                       <tr
-                        onClick={() => temNaoEncontrados && setLogExpandido(expandido ? null : log.id)}
+                        onClick={() => temDetalhes && setLogExpandido(expandido ? null : log.id)}
                         className={`border-b border-slate-700/50 hover:bg-slate-700/30 transition ${
-                          temNaoEncontrados ? 'cursor-pointer' : ''
+                          temDetalhes ? 'cursor-pointer' : ''
                         }`}
                       >
                         <td className="px-3 py-2.5 text-sm text-slate-200">
@@ -494,6 +720,24 @@ export function PresencaTab({ unidadeAtual }: Props) {
                           {log.alunos_matched}
                         </td>
                         <td className="px-3 py-2.5 text-center">
+                          {temExperimentais ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-500/20 text-amber-400 text-xs font-medium rounded-full border border-amber-500/30">
+                              {log.experimentais_count}
+                            </span>
+                          ) : (
+                            <span className="text-sm text-slate-500">0</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 text-center">
+                          {temInativos ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-orange-500/20 text-orange-400 text-xs font-medium rounded-full border border-orange-500/30">
+                              {log.inativos_count}
+                            </span>
+                          ) : (
+                            <span className="text-sm text-slate-500">0</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 text-center">
                           {temNaoEncontrados ? (
                             <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-red-500/20 text-red-400 text-xs font-medium rounded-full border border-red-500/30">
                               <AlertCircle className="w-3 h-3" />
@@ -507,7 +751,7 @@ export function PresencaTab({ unidadeAtual }: Props) {
                           {log.executado_em ? format(parseISO(log.executado_em), 'HH:mm') : '—'}
                         </td>
                         <td className="px-1 py-2.5">
-                          {temNaoEncontrados && (
+                          {temDetalhes && (
                             expandido
                               ? <ChevronUp className="w-4 h-4 text-slate-400" />
                               : <ChevronDown className="w-4 h-4 text-slate-400" />
@@ -515,20 +759,54 @@ export function PresencaTab({ unidadeAtual }: Props) {
                         </td>
                       </tr>
                       {/* Nomes expandidos */}
-                      {expandido && log.nomes_nao_encontrados && (
+                      {expandido && (
                         <tr>
-                          <td colSpan={8} className="px-4 pb-3 pt-1 bg-slate-800/30">
-                            <p className="text-xs text-slate-500 mb-2">Alunos não encontrados no sistema:</p>
-                            <div className="flex flex-wrap gap-1.5">
-                              {log.nomes_nao_encontrados.map((nome, i) => (
-                                <span
-                                  key={i}
-                                  className="px-2 py-1 bg-red-500/10 text-red-300 text-xs rounded-md border border-red-500/20"
-                                >
-                                  {nome}
-                                </span>
-                              ))}
-                            </div>
+                          <td colSpan={10} className="px-4 pb-3 pt-1 bg-slate-800/30 space-y-3">
+                            {log.nomes_experimentais && log.nomes_experimentais.length > 0 && (
+                              <div>
+                                <p className="text-xs text-amber-500/80 mb-2">Participantes de aula experimental (leads):</p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {log.nomes_experimentais.map((nome, i) => (
+                                    <span
+                                      key={`exp-${i}`}
+                                      className="px-2 py-1 bg-amber-500/10 text-amber-300 text-xs rounded-md border border-amber-500/20"
+                                    >
+                                      {nome}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {log.nomes_inativos && log.nomes_inativos.length > 0 && (
+                              <div>
+                                <p className="text-xs text-orange-500/80 mb-2">Alunos com matrícula inativa no sistema:</p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {log.nomes_inativos.map((nome, i) => (
+                                    <span
+                                      key={`ina-${i}`}
+                                      className="px-2 py-1 bg-orange-500/10 text-orange-300 text-xs rounded-md border border-orange-500/20"
+                                    >
+                                      {nome}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                            {log.nomes_nao_encontrados && log.nomes_nao_encontrados.length > 0 && (
+                              <div>
+                                <p className="text-xs text-slate-500 mb-2">Alunos não encontrados no sistema:</p>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {log.nomes_nao_encontrados.map((nome, i) => (
+                                    <span
+                                      key={`nf-${i}`}
+                                      className="px-2 py-1 bg-red-500/10 text-red-300 text-xs rounded-md border border-red-500/20"
+                                    >
+                                      {nome}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
                           </td>
                         </tr>
                       )}
