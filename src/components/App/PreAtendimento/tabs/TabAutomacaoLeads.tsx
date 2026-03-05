@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Loader2, AlertTriangle, Search } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -20,6 +21,11 @@ interface LeadsAutomacaoLogItem {
 }
 
 const acaoStyles: Record<string, { bg: string; text: string; label: string }> = {
+  // Novos valores (RPC)
+  inserted: { bg: 'bg-emerald-500/20', text: 'text-emerald-400', label: 'Novo Lead' },
+  updated: { bg: 'bg-blue-500/20', text: 'text-blue-400', label: 'Atualizado' },
+  archived: { bg: 'bg-slate-500/20', text: 'text-slate-400', label: 'Arquivado' },
+  // Valores antigos (backward compat)
   lead_inserido: { bg: 'bg-emerald-500/20', text: 'text-emerald-400', label: 'Novo Lead' },
   lead_atualizado: { bg: 'bg-blue-500/20', text: 'text-blue-400', label: 'Atualizado' },
   lead_arquivado: { bg: 'bg-slate-500/20', text: 'text-slate-400', label: 'Arquivado' },
@@ -28,7 +34,10 @@ const acaoStyles: Record<string, { bg: string; text: string; label: string }> = 
   experimental_cancelada: { bg: 'bg-rose-500/20', text: 'text-rose-400', label: 'Exp. Cancelada' },
 };
 
-const eventoLabels: Record<string, string> = {
+const origemLabels: Record<string, string> = {
+  emusys: 'Emusys',
+  nocodb: 'NocoDB',
+  // Valores antigos
   lead_criado: 'Lead Criado',
   lead_editado: 'Lead Editado',
   lead_arquivado: 'Lead Arquivado',
@@ -37,6 +46,18 @@ const eventoLabels: Record<string, string> = {
   aula_experimental_cancelada: 'Experimental Cancelada',
 };
 
+const origemStyles: Record<string, { bg: string; text: string }> = {
+  emusys: { bg: 'bg-violet-500/20', text: 'text-violet-400' },
+  nocodb: { bg: 'bg-orange-500/20', text: 'text-orange-400' },
+};
+
+// Contadores agrupam valores novos e antigos
+const contadorAcoes = [
+  { keys: ['inserted', 'lead_inserido'], bg: 'bg-emerald-500/20', text: 'text-emerald-400', label: 'Novos' },
+  { keys: ['updated', 'lead_atualizado'], bg: 'bg-blue-500/20', text: 'text-blue-400', label: 'Atualizados' },
+  { keys: ['archived', 'lead_arquivado'], bg: 'bg-slate-500/20', text: 'text-slate-400', label: 'Arquivados' },
+];
+
 interface TabAutomacaoLeadsProps {
   unidadeAtual: string;
 }
@@ -44,12 +65,15 @@ interface TabAutomacaoLeadsProps {
 export function TabAutomacaoLeads({ unidadeAtual }: TabAutomacaoLeadsProps) {
   const [registros, setRegistros] = useState<LeadsAutomacaoLogItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filtroEvento, setFiltroEvento] = useState<string>('');
+  const [filtroOrigem, setFiltroOrigem] = useState<string>('todos');
+  const [filtroAcao, setFiltroAcao] = useState<string>('todos');
   const [filtroPeriodo, setFiltroPeriodo] = useState<string>('7');
+  const [filtroIncompleto, setFiltroIncompleto] = useState<string>('todos');
+  const [busca, setBusca] = useState('');
 
   useEffect(() => {
     carregarRegistros();
-  }, [filtroEvento, filtroPeriodo, unidadeAtual]);
+  }, [filtroOrigem, filtroAcao, filtroPeriodo, filtroIncompleto, unidadeAtual]);
 
   const carregarRegistros = async () => {
     setLoading(true);
@@ -67,8 +91,27 @@ export function TabAutomacaoLeads({ unidadeAtual }: TabAutomacaoLeadsProps) {
         query = query.gte('created_at', dataLimite.toISOString());
       }
 
-      if (filtroEvento && filtroEvento !== 'todos') {
-        query = query.eq('evento', filtroEvento);
+      if (filtroOrigem && filtroOrigem !== 'todos') {
+        query = query.eq('evento', filtroOrigem);
+      }
+
+      if (filtroAcao && filtroAcao !== 'todos') {
+        // Mapear para incluir valores antigos
+        const acaoMap: Record<string, string[]> = {
+          inserted: ['inserted', 'lead_inserido'],
+          updated: ['updated', 'lead_atualizado'],
+          archived: ['archived', 'lead_arquivado'],
+        };
+        const valores = acaoMap[filtroAcao];
+        if (valores) {
+          query = query.in('acao', valores);
+        }
+      }
+
+      if (filtroIncompleto === 'sem_telefone') {
+        query = query.eq('detalhes->sem_telefone', true);
+      } else if (filtroIncompleto === 'sem_nome') {
+        query = query.eq('detalhes->sem_nome', true);
       }
 
       if (unidadeAtual && unidadeAtual !== 'todos') {
@@ -92,6 +135,11 @@ export function TabAutomacaoLeads({ unidadeAtual }: TabAutomacaoLeadsProps) {
     }
   };
 
+  // Filtro local por busca de nome
+  const registrosFiltrados = busca.trim()
+    ? registros.filter(r => r.lead_nome?.toLowerCase().includes(busca.toLowerCase()))
+    : registros;
+
   const formatarData = (data: string) => {
     const date = new Date(data);
     const agora = new Date();
@@ -110,12 +158,21 @@ export function TabAutomacaoLeads({ unidadeAtual }: TabAutomacaoLeadsProps) {
     if (detalhes.professor) partes.push(`Prof. ${detalhes.professor}`);
     if (detalhes.data && detalhes.horario) partes.push(`${detalhes.data} ${detalhes.horario}`);
     if (detalhes.telefone) partes.push(detalhes.telefone);
-    if (detalhes.email) partes.push(detalhes.email);
+    if (detalhes.canal) partes.push(detalhes.canal);
+    if (detalhes.curso) partes.push(detalhes.curso);
 
     return partes.length > 0 ? partes.join(' · ') : '';
   };
 
-  const totalPorAcao = registros.reduce((acc, r) => {
+  const getAlertas = (item: LeadsAutomacaoLogItem): string[] => {
+    const detalhes = item.detalhes || {};
+    const alertas: string[] = [];
+    if (detalhes.sem_nome) alertas.push('Sem nome');
+    if (detalhes.sem_telefone) alertas.push('Sem telefone');
+    return alertas;
+  };
+
+  const totalPorAcao = registrosFiltrados.reduce((acc, r) => {
     acc[r.acao] = (acc[r.acao] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
@@ -123,53 +180,84 @@ export function TabAutomacaoLeads({ unidadeAtual }: TabAutomacaoLeadsProps) {
   return (
     <div className="space-y-6">
       {/* Contadores resumidos */}
-      {registros.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-          {Object.entries(acaoStyles).map(([acao, style]) => (
-            <div
-              key={acao}
-              className={cn(
-                'flex items-center gap-3 px-4 py-3 rounded-lg border',
-                style.bg,
-                'border-slate-700/50'
-              )}
-            >
-              <span className={cn('text-2xl font-bold', style.text)}>
-                {totalPorAcao[acao] || 0}
-              </span>
-              <span className="text-slate-400 text-sm">{style.label}</span>
-            </div>
-          ))}
+      {registrosFiltrados.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          {contadorAcoes.map((grupo) => {
+            const total = grupo.keys.reduce((sum, key) => sum + (totalPorAcao[key] || 0), 0);
+            return (
+              <div
+                key={grupo.label}
+                className={cn(
+                  'flex items-center gap-3 px-4 py-3 rounded-lg border',
+                  grupo.bg,
+                  'border-slate-700/50'
+                )}
+              >
+                <span className={cn('text-2xl font-bold', grupo.text)}>
+                  {total}
+                </span>
+                <span className="text-slate-400 text-sm">{grupo.label}</span>
+              </div>
+            );
+          })}
         </div>
       )}
 
       {/* Timeline */}
       <div className="bg-slate-800/50 rounded-xl border border-slate-700">
-        <div className="p-4 border-b border-slate-700 flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-3">
-            <span className="text-lg">⚡</span>
-            <h2 className="text-lg font-semibold text-white">Log da Automacao de Leads</h2>
-            <span className="text-sm text-slate-400">
-              {registros.length} registro{registros.length !== 1 ? 's' : ''}
-            </span>
+        <div className="p-4 border-b border-slate-700 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-lg">⚡</span>
+              <h2 className="text-lg font-semibold text-white">Log da Automacao de Leads</h2>
+              <span className="text-sm text-slate-400">
+                {registrosFiltrados.length} registro{registrosFiltrados.length !== 1 ? 's' : ''}
+              </span>
+            </div>
           </div>
-          <div className="flex gap-3">
-            <Select value={filtroEvento} onValueChange={setFiltroEvento}>
-              <SelectTrigger className="w-[200px] bg-slate-900 border-slate-600">
-                <SelectValue placeholder="Todos os eventos" />
+          <div className="flex flex-wrap gap-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Input
+                placeholder="Buscar por nome..."
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                className="w-[200px] pl-9 bg-slate-900 border-slate-600"
+              />
+            </div>
+            <Select value={filtroOrigem} onValueChange={setFiltroOrigem}>
+              <SelectTrigger className="w-[150px] bg-slate-900 border-slate-600">
+                <SelectValue placeholder="Origem" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="todos">Todos os eventos</SelectItem>
-                <SelectItem value="lead_criado">Lead Criado</SelectItem>
-                <SelectItem value="lead_editado">Lead Editado</SelectItem>
-                <SelectItem value="lead_arquivado">Lead Arquivado</SelectItem>
-                <SelectItem value="aula_experimental_criada">Exp. Criada</SelectItem>
-                <SelectItem value="aula_experimental_reagendada">Exp. Reagendada</SelectItem>
-                <SelectItem value="aula_experimental_cancelada">Exp. Cancelada</SelectItem>
+                <SelectItem value="todos">Todas origens</SelectItem>
+                <SelectItem value="emusys">Emusys</SelectItem>
+                <SelectItem value="nocodb">NocoDB</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filtroAcao} onValueChange={setFiltroAcao}>
+              <SelectTrigger className="w-[160px] bg-slate-900 border-slate-600">
+                <SelectValue placeholder="Acao" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todas acoes</SelectItem>
+                <SelectItem value="inserted">Criado</SelectItem>
+                <SelectItem value="updated">Atualizado</SelectItem>
+                <SelectItem value="archived">Arquivado</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filtroIncompleto} onValueChange={setFiltroIncompleto}>
+              <SelectTrigger className="w-[170px] bg-slate-900 border-slate-600">
+                <SelectValue placeholder="Dados" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os dados</SelectItem>
+                <SelectItem value="sem_telefone">Sem telefone</SelectItem>
+                <SelectItem value="sem_nome">Sem nome</SelectItem>
               </SelectContent>
             </Select>
             <Select value={filtroPeriodo} onValueChange={setFiltroPeriodo}>
-              <SelectTrigger className="w-[180px] bg-slate-900 border-slate-600">
+              <SelectTrigger className="w-[170px] bg-slate-900 border-slate-600">
                 <SelectValue placeholder="Periodo" />
               </SelectTrigger>
               <SelectContent>
@@ -186,7 +274,7 @@ export function TabAutomacaoLeads({ unidadeAtual }: TabAutomacaoLeadsProps) {
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-8 h-8 text-violet-400 animate-spin" />
             </div>
-          ) : registros.length === 0 ? (
+          ) : registrosFiltrados.length === 0 ? (
             <div className="text-center py-12 text-slate-400">
               <span className="text-4xl mb-4 block">⚡</span>
               <p className="text-lg font-medium">Nenhum registro de automacao encontrado</p>
@@ -194,9 +282,11 @@ export function TabAutomacaoLeads({ unidadeAtual }: TabAutomacaoLeadsProps) {
             </div>
           ) : (
             <div className="space-y-2">
-              {registros.map((registro) => {
-                const style = acaoStyles[registro.acao] || acaoStyles.lead_atualizado;
+              {registrosFiltrados.map((registro) => {
+                const style = acaoStyles[registro.acao] || acaoStyles.updated;
                 const detalhesStr = formatarDetalhes(registro);
+                const alertas = getAlertas(registro);
+                const origemStyle = origemStyles[registro.evento];
 
                 return (
                   <div
@@ -206,28 +296,50 @@ export function TabAutomacaoLeads({ unidadeAtual }: TabAutomacaoLeadsProps) {
                     <div className="min-w-[130px] text-sm text-slate-400">
                       {formatarData(registro.created_at)}
                     </div>
-                    <div className="min-w-[110px]">
+                    <div className="min-w-[110px] flex flex-col gap-1">
                       <span className={cn(
-                        'inline-block px-2 py-0.5 rounded text-xs font-medium',
+                        'inline-block px-2 py-0.5 rounded text-xs font-medium w-fit',
                         style.bg,
                         style.text
                       )}>
                         {style.label}
                       </span>
+                      {origemStyle && (
+                        <span className={cn(
+                          'inline-block px-2 py-0.5 rounded text-xs font-medium w-fit',
+                          origemStyle.bg,
+                          origemStyle.text
+                        )}>
+                          {origemLabels[registro.evento] || registro.evento}
+                        </span>
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <span className="text-white font-medium">{registro.lead_nome}</span>
-                      {registro.unidade_nome && (
-                        <span className="text-slate-500 text-sm ml-2">({registro.unidade_nome})</span>
-                      )}
+                      <div className="flex items-center gap-2">
+                        <span className="text-white font-medium">{registro.lead_nome || '(sem nome)'}</span>
+                        {registro.unidade_nome && (
+                          <span className="text-slate-500 text-sm">({registro.unidade_nome})</span>
+                        )}
+                        {alertas.length > 0 && (
+                          <span
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 text-xs cursor-help"
+                            title={alertas.join(', ')}
+                          >
+                            <AlertTriangle className="w-3 h-3" />
+                            {alertas.join(', ')}
+                          </span>
+                        )}
+                      </div>
                       {detalhesStr && (
                         <p className="text-slate-400 text-sm mt-0.5 truncate">{detalhesStr}</p>
                       )}
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-slate-600 text-xs">
-                        {eventoLabels[registro.evento] || registro.evento}
-                      </span>
+                      {!origemStyle && (
+                        <span className="text-slate-600 text-xs">
+                          {origemLabels[registro.evento] || registro.evento}
+                        </span>
+                      )}
                       {registro.execution_id && (
                         <span
                           className="text-slate-600 text-xs font-mono cursor-help"
