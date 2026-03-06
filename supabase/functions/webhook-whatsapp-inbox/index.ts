@@ -407,6 +407,7 @@ async function handleStatusUpdate(payload: any, supabase: any): Promise<{ atuali
         continue;
       }
 
+      // Tentar atualizar em crm_mensagens
       const { data, error } = await supabase
         .from('crm_mensagens')
         .update({ status_entrega: novoStatus })
@@ -415,13 +416,31 @@ async function handleStatusUpdate(payload: any, supabase: any): Promise<{ atuali
         .maybeSingle();
 
       if (error) {
-        console.error('[webhook-status] Erro ao atualizar:', error);
-        continue;
+        console.error('[webhook-status] Erro ao atualizar crm:', error);
       }
 
       if (data) {
         atualizadas++;
-        console.log(`[webhook-status] Mensagem ${messageId} -> ${novoStatus}`);
+        console.log(`[webhook-status] CRM Mensagem ${messageId} -> ${novoStatus}`);
+        continue;
+      }
+
+      // Se não encontrou em crm_mensagens, tentar em admin_mensagens
+      const { data: adminData, error: adminError } = await supabase
+        .from('admin_mensagens')
+        .update({ status_entrega: novoStatus })
+        .eq('whatsapp_message_id', messageId)
+        .select('id, conversa_id')
+        .maybeSingle();
+
+      if (adminError) {
+        console.error('[webhook-status] Erro ao atualizar admin:', adminError);
+        continue;
+      }
+
+      if (adminData) {
+        atualizadas++;
+        console.log(`[webhook-status] Admin Mensagem ${messageId} -> ${novoStatus}`);
       }
     } catch (updateErr) {
       console.error('[webhook-status] Erro individual:', updateErr);
@@ -429,6 +448,142 @@ async function handleStatusUpdate(payload: any, supabase: any): Promise<{ atuali
   }
 
   return { atualizadas };
+}
+
+// ========== HANDLER ADMIN INBOX ==========
+// Processa mensagens recebidas em caixas administrativas (alunos, não leads)
+async function handleAdminInboxMessage(
+  msg: any,
+  phone: string,
+  whatsappMessageId: string | null,
+  caixaId: number,
+  unidadeId: string,
+  supabase: any
+): Promise<boolean> {
+  try {
+    // Verificar duplicata em admin_mensagens
+    if (whatsappMessageId) {
+      const { data: existente } = await supabase
+        .from('admin_mensagens')
+        .select('id')
+        .eq('whatsapp_message_id', whatsappMessageId)
+        .maybeSingle();
+
+      if (existente) {
+        console.log('[webhook-admin] Mensagem duplicada, ignorando:', whatsappMessageId);
+        return true;
+      }
+    }
+
+    // Buscar aluno pelo telefone (whatsapp ou telefone)
+    // Tenta match com e sem prefixo 55
+    const phoneSuffix = phone.slice(-11); // DDD + número
+    const { data: aluno } = await supabase
+      .from('alunos')
+      .select('id, nome, unidade_id, telefone, whatsapp')
+      .or(`telefone.like.%${phoneSuffix},whatsapp.like.%${phoneSuffix}`)
+      .eq('unidade_id', unidadeId)
+      .limit(1)
+      .maybeSingle();
+
+    if (!aluno) {
+      // Tentar sem filtro de unidade (pode ser aluno de outra unidade)
+      const { data: alunoGlobal } = await supabase
+        .from('alunos')
+        .select('id, nome, unidade_id, telefone, whatsapp')
+        .or(`telefone.like.%${phoneSuffix},whatsapp.like.%${phoneSuffix}`)
+        .limit(1)
+        .maybeSingle();
+
+      if (!alunoGlobal) {
+        console.log(`[webhook-admin] Aluno não encontrado para telefone: ${phone}`);
+        return false; // Não é aluno, deixar cair no fluxo CRM
+      }
+
+      // Aluno encontrado em outra unidade — usar a unidade do aluno
+      return await processAdminMessage(msg, phone, whatsappMessageId, caixaId, alunoGlobal, supabase);
+    }
+
+    return await processAdminMessage(msg, phone, whatsappMessageId, caixaId, aluno, supabase);
+  } catch (err) {
+    console.error('[webhook-admin] Erro:', err);
+    return false;
+  }
+}
+
+async function processAdminMessage(
+  msg: any,
+  phone: string,
+  whatsappMessageId: string | null,
+  caixaId: number,
+  aluno: { id: number; nome: string; unidade_id: string },
+  supabase: any
+): Promise<boolean> {
+  // Buscar ou criar admin_conversa
+  let { data: conversa } = await supabase
+    .from('admin_conversas')
+    .select('id')
+    .eq('aluno_id', aluno.id)
+    .eq('unidade_id', aluno.unidade_id)
+    .maybeSingle();
+
+  if (!conversa) {
+    const { data: novaConversa, error: criarErr } = await supabase
+      .from('admin_conversas')
+      .insert({
+        aluno_id: aluno.id,
+        unidade_id: aluno.unidade_id,
+        caixa_id: caixaId,
+        whatsapp_jid: phone,
+        status: 'aberta',
+      })
+      .select('id')
+      .single();
+
+    if (criarErr) {
+      console.error('[webhook-admin] Erro ao criar conversa:', criarErr);
+      return false;
+    }
+    conversa = novaConversa;
+    console.log(`[webhook-admin] Conversa admin criada: ${conversa.id} para aluno ${aluno.nome}`);
+  }
+
+  // Detectar tipo de mensagem
+  const { tipo, conteudo, midia_url, midia_mimetype, midia_nome } = detectMessageType(msg);
+
+  // Inserir mensagem
+  const { error: insertErr } = await supabase
+    .from('admin_mensagens')
+    .insert({
+      conversa_id: conversa.id,
+      aluno_id: aluno.id,
+      direcao: 'entrada',
+      tipo,
+      conteudo,
+      midia_url,
+      midia_mimetype,
+      midia_nome,
+      remetente: 'aluno',
+      remetente_nome: msg.pushName || aluno.nome || 'Aluno',
+      status_entrega: 'entregue',
+      whatsapp_message_id: whatsappMessageId,
+    });
+
+  if (insertErr) {
+    console.error('[webhook-admin] Erro ao inserir mensagem:', insertErr);
+    return false;
+  }
+
+  // Atualizar conversa: preview, timestamp, nao_lidas++ (via RPC atômica)
+  const preview = conteudo?.substring(0, 100) || `[${tipo}]`;
+  await supabase.rpc('admin_conversa_nova_mensagem', {
+    p_conversa_id: conversa.id,
+    p_preview: preview,
+    p_whatsapp_jid: phone,
+  });
+
+  console.log(`[webhook-admin] ✅ Mensagem de ${aluno.nome} salva (tipo: ${tipo})`);
+  return true;
 }
 
 // ========== DETECTAR TIPO DE EVENTO ==========
@@ -475,6 +630,22 @@ serve(async (req: Request) => {
     }
 
     console.log('[webhook] Detectado: messages (nova mensagem)');
+
+    // Verificar se a caixa é administrativa (rotear para admin inbox)
+    let isAdminCaixa = false;
+    let adminCaixaUnidadeId: string | null = null;
+    if (caixaIdFromUrl) {
+      const { data: caixaInfo } = await supabase
+        .from('whatsapp_caixas')
+        .select('funcao, unidade_id')
+        .eq('id', caixaIdFromUrl)
+        .maybeSingle();
+      if (caixaInfo?.funcao === 'administrativo') {
+        isAdminCaixa = true;
+        adminCaixaUnidadeId = caixaInfo.unidade_id;
+        console.log(`[webhook] Caixa ${caixaIdFromUrl} é ADMINISTRATIVA (unidade: ${adminCaixaUnidadeId})`);
+      }
+    }
 
     // UAZAPI envia objeto único com estrutura própria
     // Normalizar para formato interno
@@ -528,12 +699,29 @@ serve(async (req: Request) => {
           continue;
         }
 
-        // Ignorar mensagens enviadas por nos (fromMe = true) - apenas para CRM
+        // Ignorar mensagens enviadas por nos (fromMe = true)
         if (msg.key?.fromMe === true) {
-          console.log('[webhook-inbox] Ignorando mensagem enviada por nos (CRM)');
+          console.log('[webhook-inbox] Ignorando mensagem enviada por nos');
           continue;
         }
 
+        // ========== ROTEAMENTO ADMIN ==========
+        // Se a caixa é administrativa, rotear para admin inbox
+        if (isAdminCaixa && adminCaixaUnidadeId && caixaIdFromUrl) {
+          const adminHandled = await handleAdminInboxMessage(
+            msg, phone, whatsappMessageId, caixaIdFromUrl, adminCaixaUnidadeId, supabase
+          );
+          if (adminHandled) {
+            processadas++;
+            console.log(`[webhook-inbox] Mensagem roteada para admin inbox`);
+          } else {
+            console.log(`[webhook-inbox] Admin handler não processou, caindo para CRM`);
+          }
+          // Mesmo se não processou como admin, continuar para o próximo msg (não cair no CRM)
+          if (adminHandled) continue;
+        }
+
+        // ========== FLUXO CRM (leads) ==========
         // Verificar se mensagem ja existe (evitar duplicatas)
         if (whatsappMessageId) {
           const { data: existente } = await supabase

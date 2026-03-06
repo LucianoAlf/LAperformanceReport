@@ -40,7 +40,8 @@ import { PlanoAcaoRetencao } from './PlanoAcaoRetencao';
 import { TabProgramaFideliza } from './TabProgramaFideliza';
 import { TabLojinha } from '../Lojinha';
 import { PainelFarmer } from './PainelFarmer';
-import { Trophy, ShoppingBag, ClipboardList } from 'lucide-react';
+import { Trophy, ShoppingBag, ClipboardList, MessageSquare } from 'lucide-react';
+import { CaixaEntradaTab } from './CaixaEntrada';
 
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 
@@ -135,7 +136,7 @@ export function AdministrativoPage() {
   // Estado
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>('renovacoes');
-  const [mainTab, setMainTab] = useState<'lancamentos' | 'fideliza' | 'lojinha' | 'farmer'>('lancamentos');
+  const [mainTab, setMainTab] = useState<'lancamentos' | 'fideliza' | 'lojinha' | 'farmer' | 'caixa_entrada'>('lancamentos');
   
   // Dados
   const [resumo, setResumo] = useState<ResumoMes | null>(null);
@@ -783,13 +784,16 @@ export function AdministrativoPage() {
           { id: 'fideliza' as const, label: 'Programa Fideliza+ LA', shortLabel: 'Fideliza+', icon: Trophy, activeGradient: 'from-yellow-500 to-orange-500', activeShadow: 'shadow-yellow-500/20' },
           { id: 'lojinha' as const, label: 'Lojinha', shortLabel: 'Lojinha', icon: ShoppingBag, activeGradient: 'from-sky-500 to-cyan-500', activeShadow: 'shadow-sky-500/20' },
           { id: 'farmer' as const, label: 'Painel Farmer', shortLabel: 'Farmer', icon: ClipboardList, activeGradient: 'from-violet-500 to-purple-500', activeShadow: 'shadow-violet-500/20' },
+          { id: 'caixa_entrada' as const, label: 'Caixa de Entrada', shortLabel: 'Caixa', icon: MessageSquare, activeGradient: 'from-emerald-500 to-teal-500', activeShadow: 'shadow-emerald-500/20' },
         ]}
         activeTab={mainTab}
         onTabChange={setMainTab}
       />
 
       {/* Conteúdo baseado na tab principal */}
-      {mainTab === 'fideliza' ? (
+      {mainTab === 'caixa_entrada' ? (
+        <CaixaEntradaTab unidadeId={unidade} />
+      ) : mainTab === 'fideliza' ? (
         <TabProgramaFideliza 
           unidadeSelecionada={unidade} 
           ano={competenciaFiltro.filtro.ano} 

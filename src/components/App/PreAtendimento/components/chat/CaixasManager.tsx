@@ -159,8 +159,8 @@ export function CaixasManager() {
       return;
     }
 
-    if (editando.funcao === 'agente' && !editando.unidade_id) {
-      setErro('Caixas com função Agente devem ter uma unidade vinculada');
+    if ((editando.funcao === 'agente' || editando.funcao === 'administrativo') && !editando.unidade_id) {
+      setErro(`Caixas com função ${editando.funcao === 'agente' ? 'Agente' : 'Administrativo'} devem ter uma unidade vinculada`);
       return;
     }
 
@@ -348,30 +348,34 @@ export function CaixasManager() {
                     funcao: novaFuncao,
                     unidade_id: novaFuncao === 'sistema' ? '' : editando.unidade_id,
                   });
+                  // Nota: 'administrativo' também requer unidade, análogo ao 'agente'
                 }}
                 className="w-full px-3 py-2 bg-slate-900/60 border border-slate-700/50 rounded-lg text-sm text-white focus:border-violet-500/50 focus:outline-none"
               >
                 <option value="agente">Agente (CRM — Mila + Andreza)</option>
                 <option value="sistema">Sistema (Relatórios e Alertas)</option>
                 <option value="ambos">Ambos (Caixa única)</option>
+                <option value="administrativo">Administrativo (Caixa de Entrada por Unidade)</option>
               </select>
               <p className="text-[10px] text-slate-500 mt-1">
-                Agente: mensagens de leads. Sistema: relatórios, notificações, alertas.
+                {editando.funcao === 'administrativo'
+                  ? 'Administrativo: comunicação direta com alunos da unidade (cobranças, recados).'
+                  : 'Agente: mensagens de leads. Sistema: relatórios, notificações, alertas.'}
               </p>
             </div>
 
-            {/* Unidade (obrigatória para agente, oculta para sistema) */}
+            {/* Unidade (obrigatória para agente e administrativo, oculta para sistema) */}
             {editando.funcao !== 'sistema' && (
               <div>
                 <label className="text-xs text-slate-400 mb-1 flex items-center gap-1">
-                  <Building2 className="w-3 h-3" /> Unidade {editando.funcao === 'agente' && <span className="text-red-400">*</span>}
+                  <Building2 className="w-3 h-3" /> Unidade {(editando.funcao === 'agente' || editando.funcao === 'administrativo') && <span className="text-red-400">*</span>}
                 </label>
                 <select
                   value={editando.unidade_id}
                   onChange={e => setEditando({ ...editando, unidade_id: e.target.value })}
                   className="w-full px-3 py-2 bg-slate-900/60 border border-slate-700/50 rounded-lg text-sm text-white focus:border-violet-500/50 focus:outline-none"
                 >
-                  <option value="">{editando.funcao === 'agente' ? 'Selecione a unidade...' : 'Nenhuma (todas)'}</option>
+                  <option value="">{(editando.funcao === 'agente' || editando.funcao === 'administrativo') ? 'Selecione a unidade...' : 'Nenhuma (todas)'}</option>
                   {unidades.map(u => (
                     <option key={u.id} value={u.id}>{u.nome} ({u.codigo})</option>
                   ))}
@@ -379,6 +383,11 @@ export function CaixasManager() {
                 {editando.funcao === 'agente' && (
                   <p className="text-[10px] text-amber-400/70 mt-1">
                     Leads criados automaticamente serão vinculados a esta unidade.
+                  </p>
+                )}
+                {editando.funcao === 'administrativo' && (
+                  <p className="text-[10px] text-amber-400/70 mt-1">
+                    Mensagens recebidas nesta caixa serão roteadas para a caixa de entrada administrativa da unidade.
                   </p>
                 )}
               </div>
@@ -514,8 +523,9 @@ export function CaixasManager() {
                           caixa.funcao === 'agente' && 'bg-emerald-500/15 text-emerald-400',
                           caixa.funcao === 'sistema' && 'bg-blue-500/15 text-blue-400',
                           caixa.funcao === 'ambos' && 'bg-amber-500/15 text-amber-400',
+                          caixa.funcao === 'administrativo' && 'bg-teal-500/15 text-teal-400',
                         )}>
-                          {caixa.funcao === 'agente' ? 'Agente' : caixa.funcao === 'sistema' ? 'Sistema' : 'Ambos'}
+                          {caixa.funcao === 'agente' ? 'Agente' : caixa.funcao === 'sistema' ? 'Sistema' : caixa.funcao === 'administrativo' ? 'Admin' : 'Ambos'}
                         </span>
                       )}
                       {test.status === 'success' && (

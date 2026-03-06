@@ -281,7 +281,7 @@ export interface CursoCRM {
 }
 
 // Caixa WhatsApp (UAZAPI)
-export type FuncaoCaixa = 'agente' | 'sistema' | 'ambos';
+export type FuncaoCaixa = 'agente' | 'sistema' | 'ambos' | 'administrativo';
 
 export interface WhatsAppCaixa {
   id: number;

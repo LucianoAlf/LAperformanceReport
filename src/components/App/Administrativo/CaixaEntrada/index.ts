@@ -1,0 +1,1 @@
+export { CaixaEntradaTab } from './CaixaEntradaTab';
