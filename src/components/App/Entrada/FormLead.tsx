@@ -180,7 +180,7 @@ export function FormLead() {
   const inserirLead = async (data: LeadFormData) => {
     setLoading(true);
     try {
-      const { error } = await supabase.from('leads').insert({
+      const { data: novoLead, error } = await supabase.from('leads').insert({
         nome: data.nome,
         telefone: data.telefone || null,
         whatsapp: data.whatsapp || null,
@@ -197,9 +197,27 @@ export function FormLead() {
         observacoes: data.observacoes || null,
         status: data.experimental_agendada ? 'agendado' : 'novo',
         etapa_pipeline_id: data.experimental_agendada ? 5 : 1,
-      });
+      }).select('id').single();
 
       if (error) throw error;
+
+      // Logar inserção manual em leads_automacao_log
+      const unidadeNome = unidades.find(u => u.id === data.unidade_id)?.nome;
+      const canalNome = canais.find(c => c.id === data.canal_origem_id)?.nome;
+      const cursoNome = cursos.find(c => c.id === data.curso_interesse_id)?.nome;
+      await supabase.from('leads_automacao_log').insert({
+        lead_nome: data.nome,
+        lead_id: novoLead?.id || null,
+        unidade_nome: unidadeNome || null,
+        evento: 'manual',
+        acao: 'inserted',
+        detalhes: {
+          canal: canalNome || null,
+          curso: cursoNome || null,
+          telefone: data.telefone || null,
+          experimental: data.experimental_agendada || false,
+        },
+      });
 
       toast.success('Lead cadastrado com sucesso!');
       navigate('/app/entrada');

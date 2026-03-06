@@ -37,6 +37,7 @@ const acaoStyles: Record<string, { bg: string; text: string; label: string }> = 
 const origemLabels: Record<string, string> = {
   emusys: 'Emusys',
   nocodb: 'NocoDB',
+  manual: 'Manual',
   // Valores antigos
   lead_criado: 'Lead Criado',
   lead_editado: 'Lead Editado',
@@ -49,6 +50,7 @@ const origemLabels: Record<string, string> = {
 const origemStyles: Record<string, { bg: string; text: string }> = {
   emusys: { bg: 'bg-violet-500/20', text: 'text-violet-400' },
   nocodb: { bg: 'bg-orange-500/20', text: 'text-orange-400' },
+  manual: { bg: 'bg-slate-500/20', text: 'text-slate-300' },
 };
 
 // Contadores agrupam valores novos e antigos
@@ -233,6 +235,7 @@ export function TabAutomacaoLeads({ unidadeAtual }: TabAutomacaoLeadsProps) {
                 <SelectItem value="todos">Todas origens</SelectItem>
                 <SelectItem value="emusys">Emusys</SelectItem>
                 <SelectItem value="nocodb">NocoDB</SelectItem>
+                <SelectItem value="manual">Manual</SelectItem>
               </SelectContent>
             </Select>
             <Select value={filtroAcao} onValueChange={setFiltroAcao}>

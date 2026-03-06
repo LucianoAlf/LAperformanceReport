@@ -66,10 +66,16 @@ export function ModalNovoLead({ aberto, onClose, onSalvo, etapas, canais, cursos
     onClose();
   };
 
+  const unidadeNomeMap: Record<string, string> = {
+    '2ec861f6-023f-4d7b-9927-3960ad8c2a92': 'Campo Grande',
+    '95553e96-971b-4590-a6eb-0201d013c14d': 'Recreio',
+    '368d47f5-2d88-4475-bc14-ba084a9a348e': 'Barra',
+  };
+
   const inserirLead = async () => {
     setSalvando(true);
     try {
-      const { error } = await supabase.from('leads').insert({
+      const { data: novoLead, error } = await supabase.from('leads').insert({
         nome: nome.trim(),
         telefone: telefone.trim() || null,
         whatsapp: telefone.trim() || null,
@@ -84,9 +90,25 @@ export function ModalNovoLead({ aberto, onClose, onSalvo, etapas, canais, cursos
         temperatura: 'quente',
         data_contato: new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }),
         data_ultimo_contato: new Date().toISOString(),
-      });
+      }).select('id').single();
 
       if (error) throw error;
+
+      // Logar inserção manual em leads_automacao_log
+      const canalNome = canais.find(c => String(c.id) === canalOrigemId)?.nome;
+      const cursoNome = cursos.find(c => String(c.id) === cursoInteresseId)?.nome;
+      await supabase.from('leads_automacao_log').insert({
+        lead_nome: nome.trim(),
+        lead_id: novoLead?.id || null,
+        unidade_nome: unidadeNomeMap[unidadeId] || null,
+        evento: 'manual',
+        acao: 'inserted',
+        detalhes: {
+          canal: canalNome || null,
+          curso: cursoNome || null,
+          telefone: telefone.trim() || null,
+        },
+      });
 
       limpar();
       onClose();
