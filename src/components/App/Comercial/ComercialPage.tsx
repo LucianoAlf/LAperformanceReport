@@ -30,7 +30,8 @@ import {
   CheckSquare,
   Search,
   Phone,
-  PhoneOff
+  PhoneOff,
+  AlertTriangle
 } from 'lucide-react';
 import { TarefasRapidasTab } from '@/components/shared/TarefasRapidas';
 import { PageTour, TourHelpButton } from '@/components/Onboarding';
@@ -275,6 +276,8 @@ export function ComercialPage() {
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   const [leadsGlobais, setLeadsGlobais] = useState<any[]>([]);
   const [buscandoGlobal, setBuscandoGlobal] = useState(false);
+  const [leadsDuplicados, setLeadsDuplicados] = useState<any[]>([]);
+  const [carregandoDuplicados, setCarregandoDuplicados] = useState(false);
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingData, setEditingData] = useState<Partial<LeadDiario>>({});
@@ -928,6 +931,74 @@ export function ComercialPage() {
 
     return () => clearTimeout(timer);
   }, [buscaFunil, abaDetalhamento, leadsMes, isAdmin, context?.unidadeSelecionada, usuario?.unidade_id]);
+
+  // Busca inteligente de duplicatas (por telefone OU nome com mix com/sem telefone)
+  useEffect(() => {
+    if (filtroIncompletoFunil !== 'duplicados' || abaDetalhamento !== 'leads') {
+      setLeadsDuplicados([]);
+      return;
+    }
+    const buscar = async () => {
+      setCarregandoDuplicados(true);
+      try {
+        let query = supabase
+          .from('leads')
+          .select('id, nome, telefone, data_contato, status, unidade_id, created_at, unidades(codigo)')
+          .eq('arquivado', false)
+          .order('created_at');
+        if (isAdmin) {
+          if (context?.unidadeSelecionada && context.unidadeSelecionada !== 'todos') {
+            query = query.eq('unidade_id', context.unidadeSelecionada);
+          }
+        } else if (usuario?.unidade_id) {
+          query = query.eq('unidade_id', usuario.unidade_id);
+        }
+        const { data } = await query;
+        if (!data) return;
+
+        const norm = (s: string) => s.toLowerCase().trim().replace(/\s+/g, ' ');
+
+        // Critério 1: mesmo telefone ≥ 2 entradas
+        const contagemTel = new Map<string, number>();
+        data.forEach(l => { if (l.telefone) contagemTel.set(l.telefone, (contagemTel.get(l.telefone) || 0) + 1); });
+        const telsDupes = new Set([...contagemTel.entries()].filter(([, n]) => n > 1).map(([t]) => t));
+
+        // Critério 2: mesmo nome ≥ 2 entradas E mix com/sem telefone (evita falso positivo de nomes comuns como "Ana")
+        const porNome = new Map<string, { comTel: number; semTel: number }>();
+        data.forEach(l => {
+          if (!l.nome) return;
+          const k = norm(l.nome);
+          const entry = porNome.get(k) || { comTel: 0, semTel: 0 };
+          if (l.telefone) entry.comTel++; else entry.semTel++;
+          porNome.set(k, entry);
+        });
+        const nomesDupes = new Set(
+          [...porNome.entries()]
+            .filter(([, { comTel, semTel }]) => comTel > 0 && semTel > 0)
+            .map(([n]) => n)
+        );
+
+        const dupes = data.filter(l =>
+          (l.telefone && telsDupes.has(l.telefone)) ||
+          (l.nome && nomesDupes.has(norm(l.nome)))
+        );
+
+        // Ordenar por grupo (telefone prioritário, depois nome normalizado)
+        dupes.sort((a, b) => {
+          const keyA = a.telefone || norm(a.nome || '');
+          const keyB = b.telefone || norm(b.nome || '');
+          return keyA.localeCompare(keyB) || new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+        });
+
+        setLeadsDuplicados(dupes);
+      } catch (err) {
+        console.error('Erro ao buscar duplicatas:', err);
+      } finally {
+        setCarregandoDuplicados(false);
+      }
+    };
+    buscar();
+  }, [filtroIncompletoFunil, abaDetalhamento, isAdmin, context?.unidadeSelecionada, usuario?.unidade_id]);
 
   // Reset form
   const resetForm = () => {
@@ -2944,6 +3015,7 @@ export function ComercialPage() {
                   <SelectItem value="sem_nome">Sem nome</SelectItem>
                   <SelectItem value="sem_canal">Sem canal de origem</SelectItem>
                   <SelectItem value="sem_curso">Sem curso de interesse</SelectItem>
+                  <SelectItem value="duplicados">Possíveis duplicatas</SelectItem>
                 </SelectContent>
               </Select>
             )}
@@ -3201,6 +3273,123 @@ export function ComercialPage() {
                 </table>
               </div>
             )}
+
+            {/* View de duplicatas */}
+            {filtroIncompletoFunil === 'duplicados' && (() => {
+              if (carregandoDuplicados) {
+                return (
+                  <div className="flex items-center gap-2 text-xs text-slate-500 mt-4">
+                    <Loader2 className="w-3 h-3 animate-spin" /> Buscando possíveis duplicatas...
+                  </div>
+                );
+              }
+              if (leadsDuplicados.length === 0) {
+                return (
+                  <div className="text-center py-8 text-slate-400 mt-4">
+                    <p className="text-sm">Nenhuma duplicata encontrada.</p>
+                  </div>
+                );
+              }
+
+              const norm = (s: string) => s.toLowerCase().trim().replace(/\s+/g, ' ');
+              const statusLabel: Record<string, { label: string; color: string }> = {
+                novo: { label: 'Novo', color: 'bg-slate-500/20 text-slate-400' },
+                experimental_agendada: { label: 'Exp. Agendada', color: 'bg-amber-500/20 text-amber-400' },
+                experimental_realizada: { label: 'Exp. Realizada', color: 'bg-emerald-500/20 text-emerald-400' },
+                experimental_cancelada: { label: 'Exp. Cancelada', color: 'bg-rose-500/20 text-rose-400' },
+                visita_escola: { label: 'Visita', color: 'bg-cyan-500/20 text-cyan-400' },
+                matriculado: { label: 'Matriculado', color: 'bg-violet-500/20 text-violet-400' },
+                convertido: { label: 'Convertido', color: 'bg-violet-500/20 text-violet-400' },
+              };
+
+              // Agrupar por telefone (prioritário) ou nome normalizado
+              const grupos = new Map<string, { tipo: 'tel' | 'nome'; valor: string; leads: any[] }>();
+              leadsDuplicados.forEach(l => {
+                const chave = l.telefone || norm(l.nome || '');
+                if (!grupos.has(chave)) {
+                  grupos.set(chave, { tipo: l.telefone ? 'tel' : 'nome', valor: l.telefone || l.nome || '', leads: [] });
+                }
+                grupos.get(chave)!.leads.push(l);
+              });
+
+              return (
+                <div className="mt-4 space-y-4">
+                  <div className="flex items-center gap-2 text-xs text-red-400">
+                    <AlertTriangle className="w-3 h-3" />
+                    <span>{grupos.size} grupo{grupos.size !== 1 ? 's' : ''} de duplicatas · {leadsDuplicados.length} registros no total</span>
+                  </div>
+                  {[...grupos.entries()].map(([chave, grupo]) => (
+                    <div key={chave}>
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="h-px flex-1 bg-red-500/20" />
+                        <span className="text-xs text-red-400/80 font-medium flex items-center gap-1.5 whitespace-nowrap">
+                          {grupo.tipo === 'tel' ? '📞' : '👤'} {grupo.valor}
+                          <span className="px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400">
+                            {grupo.leads.length} cópias
+                          </span>
+                        </span>
+                        <div className="h-px flex-1 bg-red-500/20" />
+                      </div>
+                      <table className="w-full text-sm">
+                        <tbody>
+                          {grupo.leads.map(lead => {
+                            const dataLead = new Date(lead.data_contato + 'T12:00:00');
+                            const mesLabel = dataLead.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' });
+                            const st = statusLabel[lead.status] || { label: lead.status, color: 'bg-slate-500/20 text-slate-400' };
+                            return (
+                              <tr
+                                key={lead.id}
+                                className={cn(
+                                  'border-b border-slate-700/50 bg-red-500/5 hover:bg-red-500/10 transition-colors',
+                                  selecionadosFunil.has(lead.id) && 'bg-violet-500/10'
+                                )}
+                              >
+                                <td className="py-2 px-2 w-10">
+                                  <input
+                                    type="checkbox"
+                                    checked={selecionadosFunil.has(lead.id)}
+                                    onChange={() => lead.id && toggleSelecionadoFunil(lead.id)}
+                                    className="rounded border-slate-600 bg-slate-700 text-violet-500 focus:ring-violet-500 cursor-pointer"
+                                  />
+                                </td>
+                                <td className="py-2 px-2 border-r border-slate-700/30">
+                                  <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-500/20 text-amber-400">{mesLabel}</span>
+                                </td>
+                                <td className="py-2 px-2 border-r border-slate-700/30 font-medium text-white">
+                                  {lead.nome || <span className="text-slate-500 italic">sem nome</span>}
+                                </td>
+                                <td className="py-2 px-2 border-r border-slate-700/30 text-emerald-400">
+                                  {lead.telefone || <span className="text-slate-500">—</span>}
+                                </td>
+                                <td className="py-2 px-2 border-r border-slate-700/30">
+                                  <span className={cn('px-1.5 py-0.5 rounded text-xs font-medium', st.color)}>{st.label}</span>
+                                </td>
+                                {isAdmin && (
+                                  <td className="py-2 px-2 border-r border-slate-700/30">
+                                    <span className="px-2 py-0.5 rounded text-xs bg-slate-600/30 text-slate-300">
+                                      {(lead.unidades as any)?.codigo || '-'}
+                                    </span>
+                                  </td>
+                                )}
+                                <td className="py-2 px-2 text-right">
+                                  <button
+                                    onClick={() => lead.id && setDeleteId(lead.id)}
+                                    className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded transition-colors"
+                                    title="Excluir"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
           );
         })()}
