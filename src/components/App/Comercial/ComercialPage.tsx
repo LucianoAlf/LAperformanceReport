@@ -879,28 +879,38 @@ export function ComercialPage() {
     }
   };
 
-  // Busca global por telefone (ignora filtro de data)
+  // Busca global por telefone ou nome (ignora filtro de data)
   const ehBuscaTelefone = (termo: string) => {
     const digits = termo.replace(/\D/g, '');
     return digits.length >= 8;
   };
+  const ehBuscaNome = (termo: string) =>
+    termo.trim().length >= 3 && /[a-zA-ZÀ-ú]/.test(termo);
 
   useEffect(() => {
-    if (!ehBuscaTelefone(buscaFunil) || abaDetalhamento !== 'leads') {
+    const isTel = ehBuscaTelefone(buscaFunil);
+    const isNome = ehBuscaNome(buscaFunil);
+
+    if ((!isTel && !isNome) || abaDetalhamento !== 'leads') {
       setLeadsGlobais([]);
       return;
     }
 
-    const digits = buscaFunil.replace(/\D/g, '');
     const timer = setTimeout(async () => {
       setBuscandoGlobal(true);
       try {
         let query = supabase
           .from('leads')
           .select('*, canais_origem(nome), cursos(nome), unidades(codigo)')
-          .ilike('telefone', `%${digits}%`)
           .order('data_contato', { ascending: false })
           .limit(50);
+
+        if (isTel) {
+          const digits = buscaFunil.replace(/\D/g, '');
+          query = query.ilike('telefone', `%${digits}%`);
+        } else {
+          query = query.ilike('nome', `%${buscaFunil.trim()}%`);
+        }
 
         if (isAdmin) {
           if (context?.unidadeSelecionada && context.unidadeSelecionada !== 'todos') {
