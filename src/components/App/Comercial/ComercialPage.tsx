@@ -31,7 +31,8 @@ import {
   Search,
   Phone,
   PhoneOff,
-  AlertTriangle
+  AlertTriangle,
+  ChevronRight
 } from 'lucide-react';
 import { TarefasRapidasTab } from '@/components/shared/TarefasRapidas';
 import { PageTour, TourHelpButton } from '@/components/Onboarding';
@@ -45,6 +46,7 @@ import { PageFilterBar } from '@/components/ui/page-filter-bar';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from '@/components/ui/command';
 import { DatePicker } from '@/components/ui/date-picker';
 import { DatePickerNascimento } from '@/components/ui/date-picker-nascimento';
 import { Input } from '@/components/ui/input';
@@ -67,9 +69,13 @@ import { ComboboxTelefone } from '@/components/ui/combobox-telefone';
 import { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
 import { verificarDuplicadosEmLote } from '@/hooks/useCheckLeadDuplicado';
 import { CelulaEditavelInline } from '@/components/ui/CelulaEditavelInline';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { AlertasComercial } from './AlertasComercial';
 import { PlanoAcaoComercial } from './PlanoAcaoComercial';
 import { TabProgramaMatriculador } from './TabProgramaMatriculador';
+import { ModalMatricular } from '../PreAtendimento/components/ModalMatricular';
+import { ModalArquivar } from '../PreAtendimento/components/ModalArquivar';
+import type { LeadCRM } from '../PreAtendimento/types';
 
 // Tipos
 interface LeadDiario {
@@ -77,6 +83,7 @@ interface LeadDiario {
   unidade_id: string;
   data_contato: string;
   status: string;
+  etapa_pipeline_id: number | null;
   canal_origem_id: number | null;
   curso_interesse_id: number | null;
   quantidade: number;
@@ -154,12 +161,6 @@ const quickInputCards = [
   },
 ];
 
-const STATUS_EXPERIMENTAL = [
-  { value: 'experimental_agendada', label: 'Agendada' },
-  { value: 'experimental_realizada', label: 'Realizada' },
-  { value: 'experimental_faltou', label: 'Faltou' },
-];
-
 const TIPOS_MATRICULA = [
   { value: 'EMLA', label: 'EMLA (Adulto)' },
   { value: 'LAMK', label: 'LAMK (Kids)' },
@@ -200,7 +201,7 @@ export function ComercialPage() {
   const [saving, setSaving] = useState(false);
   const [confirmouDuplicataLote, setConfirmouDuplicataLote] = useState(false);
   const [abaPrincipal, setAbaPrincipal] = useState<'lancamentos' | 'programa' | 'tarefas'>('lancamentos');
-  const [modalOpen, setModalOpen] = useState<'lead' | 'experimental' | 'visita' | 'matricula' | null>(null);
+  const [modalOpen, setModalOpen] = useState<'lead' | 'matricula' | null>(null);
   const [relatorioOpen, setRelatorioOpen] = useState(false);
   const [tipoRelatorio, setTipoRelatorio] = useState<'diario' | 'semanal' | 'mensal' | 'matriculas' | 'comparativo_mensal' | 'comparativo_anual' | null>(null);
   const [relatorioTexto, setRelatorioTexto] = useState('');
@@ -300,16 +301,25 @@ export function ComercialPage() {
   const [loteLeads, setLoteLeads] = useState<LoteLinha[]>([
     { id: genId(), aluno_nome: '', telefone: '', canal_origem_id: null, curso_id: null, quantidade: 1 }
   ]);
-  const [loteExperimentais, setLoteExperimentais] = useState<LoteLinha[]>([
-    { id: genId(), aluno_nome: '', telefone: '', canal_origem_id: null, curso_id: null, quantidade: 1, status_experimental: 'experimental_agendada', professor_id: null, sabia_preco: null }
-  ]);
-  const [loteVisitas, setLoteVisitas] = useState<LoteLinha[]>([
-    { id: genId(), aluno_nome: '', telefone: '', canal_origem_id: null, curso_id: null, quantidade: 1 }
-  ]);
   
   // Sugestões de leads para autocomplete
   const [sugestoesLeads, setSugestoesLeads] = useState<SugestaoLead[]>([]);
-  
+
+  // State para popover de mover etapa (campos condicionais)
+  const [moverEtapaForm, setMoverEtapaForm] = useState<{
+    leadId: number;
+    etapa: number;
+    professorId: string;
+    dataExp: string;
+  } | null>(null);
+
+  // State para modais de matricular/arquivar via etapa
+  const [leadParaMatricular, setLeadParaMatricular] = useState<LeadCRM | null>(null);
+  const [leadParaArquivar, setLeadParaArquivar] = useState<LeadCRM | null>(null);
+
+  // State para form experimental em bulk
+  const [bulkExpForm, setBulkExpForm] = useState<{ professorId: string; dataExp: string } | null>(null);
+
   // Form states (para matrícula individual)
   const [formData, setFormData] = useState({
     data: new Date(),
@@ -749,6 +759,130 @@ export function ComercialPage() {
     }
   };
 
+  // ── Dados e handlers compartilhados entre abas do funil ──
+
+  const transicoesEtapa: Record<number, { etapa: number; label: string }[]> = {
+    1: [
+      { etapa: 5, label: 'Exp. Agendada' },
+      { etapa: 6, label: 'Visita Agendada' },
+      { etapa: 10, label: 'Matriculado' },
+    ],
+    5: [
+      { etapa: 7, label: 'Exp. Realizada' },
+      { etapa: 9, label: 'Faltou' },
+      { etapa: 10, label: 'Matriculado' },
+    ],
+    6: [
+      { etapa: 8, label: 'Visita Realizada' },
+      { etapa: 9, label: 'Faltou' },
+      { etapa: 10, label: 'Matriculado' },
+    ],
+    7: [{ etapa: 10, label: 'Matriculado' }],
+    8: [{ etapa: 10, label: 'Matriculado' }],
+    9: [
+      { etapa: 5, label: 'Reagendar Exp.' },
+      { etapa: 6, label: 'Reagendar Visita' },
+      { etapa: 10, label: 'Matriculado' },
+    ],
+  };
+
+  const voltarEtapa: Record<number, { etapa: number; label: string } | null> = {
+    1: null,
+    5: { etapa: 1, label: 'Novo' },
+    6: { etapa: 1, label: 'Novo' },
+    7: { etapa: 5, label: 'Exp. Agendada' },
+    8: { etapa: 6, label: 'Visita Agendada' },
+    9: { etapa: 5, label: 'Exp. Agendada' },
+    10: null,
+    11: null,
+  };
+
+  const statusFromEtapa = (etapa: number): string => {
+    const map: Record<number, string> = { 1: 'novo', 2: 'novo', 3: 'novo', 4: 'novo', 5: 'experimental_agendada', 6: 'visita_escola', 7: 'experimental_realizada', 8: 'experimental_realizada', 9: 'experimental_faltou', 10: 'convertido', 11: 'arquivado' };
+    return map[etapa] || 'novo';
+  };
+
+  const toLeadCRM = (lead: LeadDiario): LeadCRM => ({
+    id: lead.id!,
+    nome: lead.nome,
+    telefone: (lead as any).telefone || null,
+    email: null,
+    whatsapp: null,
+    idade: lead.idade,
+    unidade_id: lead.unidade_id,
+    curso_interesse_id: lead.curso_interesse_id,
+    canal_origem_id: lead.canal_origem_id,
+    data_contato: lead.data_contato,
+    data_primeiro_contato: null,
+    data_ultimo_contato: null,
+    status: lead.status,
+    observacoes: lead.observacoes,
+    created_at: '',
+    updated_at: '',
+    etapa_pipeline_id: lead.etapa_pipeline_id,
+    professor_experimental_id: lead.professor_experimental_id,
+  } as LeadCRM);
+
+  const handleMoverEtapa = async (leadId: number, novaEtapa: number, extras?: Record<string, any>) => {
+    try {
+      const { error } = await supabase.from('leads').update({
+        etapa_pipeline_id: novaEtapa,
+        ...extras,
+      }).eq('id', leadId);
+      if (error) throw error;
+      const newStatus = statusFromEtapa(novaEtapa);
+      setLeadsMes(prev => prev.map(l => l.id === leadId
+        ? { ...l, etapa_pipeline_id: novaEtapa, status: newStatus, ...extras } : l));
+      if (newStatus.startsWith('experimental')) {
+        setExperimentaisMes(prev => prev.map(l => l.id === leadId
+          ? { ...l, etapa_pipeline_id: novaEtapa, status: newStatus, ...extras } as any : l));
+      } else {
+        setExperimentaisMes(prev => prev.filter(l => l.id !== leadId));
+      }
+      if (newStatus === 'visita_escola') {
+        setVisitasMes(prev => prev.map(l => l.id === leadId
+          ? { ...l, etapa_pipeline_id: novaEtapa, status: newStatus, ...extras } as any : l));
+      } else {
+        setVisitasMes(prev => prev.filter(l => l.id !== leadId));
+      }
+      toast.success('Etapa atualizada');
+    } catch (err) {
+      toast.error('Erro ao mover etapa');
+      console.error(err);
+    }
+  };
+
+  const handleBulkMoverEtapa = async (novaEtapa: number, extras?: Record<string, any>) => {
+    const ids = Array.from(selecionadosFunil);
+    if (ids.length === 0) return;
+    try {
+      for (const id of ids) {
+        const { error } = await supabase.from('leads').update({
+          etapa_pipeline_id: novaEtapa,
+          ...extras,
+        }).eq('id', id);
+        if (error) throw error;
+      }
+      const newStatus = statusFromEtapa(novaEtapa);
+      setLeadsMes(prev => prev.map(l => ids.includes(l.id!) ? { ...l, etapa_pipeline_id: novaEtapa, status: newStatus } : l));
+      if (newStatus.startsWith('experimental')) {
+        setExperimentaisMes(prev => prev.map(l => ids.includes(l.id!) ? { ...l, etapa_pipeline_id: novaEtapa, status: newStatus } as any : l));
+      } else {
+        setExperimentaisMes(prev => prev.filter(l => !ids.includes(l.id!)));
+      }
+      if (newStatus === 'visita_escola') {
+        setVisitasMes(prev => prev.map(l => ids.includes(l.id!) ? { ...l, etapa_pipeline_id: novaEtapa, status: newStatus } as any : l));
+      } else {
+        setVisitasMes(prev => prev.filter(l => !ids.includes(l.id!)));
+      }
+      setSelecionadosFunil(new Set());
+      toast.success(`${ids.length} lead(s) movido(s)`);
+    } catch (err) {
+      toast.error('Erro ao mover etapas em lote');
+      console.error(err);
+    }
+  };
+
   // Função para salvar campo individual (edição inline por célula)
   const salvarCampoMatricula = useCallback(async (matriculaId: number, campo: string, valor: string | number | null) => {
     try {
@@ -982,8 +1116,6 @@ export function ComercialPage() {
     // Reset lotes
     setLoteData(new Date());
     setLoteLeads([{ id: genId(), aluno_nome: '', telefone: '', canal_origem_id: null, curso_id: null, quantidade: 1 }]);
-    setLoteExperimentais([{ id: genId(), aluno_nome: '', telefone: '', canal_origem_id: null, curso_id: null, quantidade: 1, status_experimental: 'experimental_agendada', professor_id: null, sabia_preco: null }]);
-    setLoteVisitas([{ id: genId(), aluno_nome: '', telefone: '', canal_origem_id: null, curso_id: null, quantidade: 1 }]);
   };
 
   // Salvar lote de leads atendidos
@@ -1066,181 +1198,6 @@ export function ComercialPage() {
     }
   };
 
-  // Salvar lote de experimentais
-  const handleSaveLoteExperimentais = async () => {
-    if (!unidadeParaSalvar) {
-      toast.error('Selecione uma unidade no filtro acima');
-      return;
-    }
-
-    // Validar que cada experimental tem nome preenchido
-    const linhasValidas = loteExperimentais.filter(l => l.aluno_nome && l.aluno_nome.trim().length > 0);
-    if (linhasValidas.length === 0) {
-      toast.error('Preencha o nome de pelo menos uma experimental');
-      return;
-    }
-
-    // Verificar se há linhas sem nome
-    const linhasSemNome = loteExperimentais.filter(l => !l.aluno_nome || l.aluno_nome.trim().length === 0);
-    if (linhasSemNome.length > 0 && linhasValidas.length < loteExperimentais.length) {
-      toast.warning(`${linhasSemNome.length} linha(s) sem nome serão ignoradas`);
-    }
-
-    setSaving(true);
-    try {
-      const dataLancamento = loteData.toISOString().split('T')[0];
-
-      // Verificar duplicatas por telefone
-      const telefonesNorm = linhasValidas
-        .map(l => l.telefone ? normalizePhone(l.telefone) : null)
-        .filter((t): t is string => !!t);
-
-      const duplicatas = telefonesNorm.length > 0
-        ? await verificarDuplicadosEmLote(telefonesNorm, unidadeParaSalvar!)
-        : new Map();
-
-      const novos: Record<string, any>[] = [];
-      const updates: { id: number; data: Record<string, any> }[] = [];
-
-      for (const linha of linhasValidas) {
-        const telNorm = linha.telefone ? normalizePhone(linha.telefone) : null;
-        const existente = telNorm ? duplicatas.get(telNorm) : null;
-
-        if (existente) {
-          updates.push({
-            id: existente.id,
-            data: {
-              status: linha.status_experimental || 'experimental_agendada',
-              nome: linha.aluno_nome?.trim() || existente.nome,
-              canal_origem_id: linha.canal_origem_id,
-              curso_interesse_id: linha.curso_id,
-              professor_experimental_id: linha.professor_id,
-              sabia_preco: linha.sabia_preco,
-              etapa_pipeline_id: 5,
-              data_contato: dataLancamento,
-            },
-          });
-        } else {
-          novos.push({
-            unidade_id: unidadeParaSalvar,
-            data_contato: dataLancamento,
-            status: linha.status_experimental || 'experimental_agendada',
-            nome: linha.aluno_nome?.trim(),
-            telefone: telNorm,
-            canal_origem_id: linha.canal_origem_id,
-            curso_interesse_id: linha.curso_id,
-            quantidade: 1,
-            professor_experimental_id: linha.professor_id,
-            sabia_preco: linha.sabia_preco,
-            etapa_pipeline_id: 5,
-          });
-        }
-      }
-
-      if (novos.length > 0) {
-        const { error } = await supabase.from('leads').insert(novos);
-        if (error) throw error;
-      }
-      for (const up of updates) {
-        const { error } = await supabase.from('leads').update(up.data).eq('id', up.id);
-        if (error) throw error;
-      }
-
-      const total = novos.length + updates.length;
-      toast.success(`${total} experimental(is) registrada(s)!${updates.length > 0 ? ` (${updates.length} lead(s) atualizado(s))` : ''}`);
-      setModalOpen(null);
-      resetForm();
-      loadData();
-      loadSugestoesLeads();
-    } catch (error) {
-      console.error('Erro ao salvar experimentais:', error);
-      const errMsg = (error as any)?.message || (error as any)?.code || 'Erro desconhecido';
-      toast.error(`Erro ao salvar experimentais: ${errMsg}`);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // Salvar lote de visitas
-  const handleSaveLoteVisitas = async () => {
-    if (!unidadeParaSalvar) {
-      toast.error('Selecione uma unidade no filtro acima');
-      return;
-    }
-
-    if (loteVisitas.length === 0) {
-      toast.error('Adicione pelo menos uma visita');
-      return;
-    }
-
-    setSaving(true);
-    try {
-      const dataLancamento = loteData.toISOString().split('T')[0];
-
-      // Verificar duplicatas por telefone
-      const telefonesNorm = loteVisitas
-        .map(l => l.telefone ? normalizePhone(l.telefone) : null)
-        .filter((t): t is string => !!t);
-
-      const duplicatas = telefonesNorm.length > 0
-        ? await verificarDuplicadosEmLote(telefonesNorm, unidadeParaSalvar!)
-        : new Map();
-
-      const novos: Record<string, any>[] = [];
-      const updates: { id: number; data: Record<string, any> }[] = [];
-
-      for (const linha of loteVisitas) {
-        const telNorm = linha.telefone ? normalizePhone(linha.telefone) : null;
-        const existente = telNorm ? duplicatas.get(telNorm) : null;
-
-        if (existente) {
-          updates.push({
-            id: existente.id,
-            data: {
-              status: 'visita_escola',
-              nome: linha.aluno_nome?.trim() || existente.nome,
-              canal_origem_id: linha.canal_origem_id,
-              curso_interesse_id: linha.curso_id,
-              etapa_pipeline_id: 6,
-              data_contato: dataLancamento,
-            },
-          });
-        } else {
-          novos.push({
-            unidade_id: unidadeParaSalvar,
-            data_contato: dataLancamento,
-            status: 'visita_escola',
-            nome: linha.aluno_nome || null,
-            telefone: telNorm,
-            canal_origem_id: linha.canal_origem_id,
-            curso_interesse_id: linha.curso_id,
-            quantidade: 1,
-            etapa_pipeline_id: 6,
-          });
-        }
-      }
-
-      if (novos.length > 0) {
-        const { error } = await supabase.from('leads').insert(novos);
-        if (error) throw error;
-      }
-      for (const up of updates) {
-        const { error } = await supabase.from('leads').update(up.data).eq('id', up.id);
-        if (error) throw error;
-      }
-
-      const total = novos.length + updates.length;
-      toast.success(`${total} visita${total !== 1 ? 's' : ''} registrada${total !== 1 ? 's' : ''}!${updates.length > 0 ? ` (${updates.length} lead(s) atualizado(s))` : ''}`);
-      setModalOpen(null);
-      resetForm();
-      loadData();
-    } catch (error) {
-      console.error('Erro ao salvar visitas:', error);
-      toast.error('Erro ao salvar visitas');
-    } finally {
-      setSaving(false);
-    }
-  };
 
   // Funções auxiliares para manipular linhas do lote
   const addLinhaLead = () => {
@@ -1270,7 +1227,7 @@ export function ComercialPage() {
     return digits.length <= 11 ? '55' + digits : digits;
   };
 
-  const checkLeadByPhone = async (telefone: string | undefined, linhaId: string, tipo: 'lead' | 'experimental' | 'visita' | 'matricula' = 'lead') => {
+  const checkLeadByPhone = async (telefone: string | undefined, linhaId: string, tipo: 'lead' | 'matricula' = 'lead') => {
     if (!telefone || !unidadeParaSalvar) return;
     const digits = telefone.replace(/\D/g, '');
     if (digits.length < 10) return;
@@ -1293,10 +1250,6 @@ export function ComercialPage() {
 
       if (tipo === 'lead') {
         setLoteLeads(prev => prev.map(l => l.id === linhaId ? { ...l, ...updates } : l));
-      } else if (tipo === 'experimental') {
-        setLoteExperimentais(prev => prev.map(l => l.id === linhaId ? { ...l, ...updates } : l));
-      } else if (tipo === 'visita') {
-        setLoteVisitas(prev => prev.map(l => l.id === linhaId ? { ...l, ...updates } : l));
       } else if (tipo === 'matricula') {
         setFormData(prev => ({
           ...prev,
@@ -1309,33 +1262,6 @@ export function ComercialPage() {
     }
   };
 
-  const addLinhaExperimental = () => {
-    setLoteExperimentais([...loteExperimentais, { id: genId(), aluno_nome: '', telefone: '', canal_origem_id: null, curso_id: null, quantidade: 1, status_experimental: 'experimental_agendada', professor_id: null, sabia_preco: null }]);
-  };
-
-  const removeLinhaExperimental = (id: string) => {
-    if (loteExperimentais.length > 1) {
-      setLoteExperimentais(loteExperimentais.filter(l => l.id !== id));
-    }
-  };
-
-  const updateLinhaExperimental = (id: string, field: keyof LoteLinha, value: any) => {
-    setLoteExperimentais(loteExperimentais.map(l => l.id === id ? { ...l, [field]: value } : l));
-  };
-
-  const addLinhaVisita = () => {
-    setLoteVisitas([...loteVisitas, { id: genId(), aluno_nome: '', telefone: '', canal_origem_id: null, curso_id: null, quantidade: 1 }]);
-  };
-
-  const removeLinhaVisita = (id: string) => {
-    if (loteVisitas.length > 1) {
-      setLoteVisitas(loteVisitas.filter(l => l.id !== id));
-    }
-  };
-
-  const updateLinhaVisita = (id: string, field: keyof LoteLinha, value: any) => {
-    setLoteVisitas(loteVisitas.map(l => l.id === id ? { ...l, [field]: value } : l));
-  };
 
   // Salvar registro
   const handleSave = async () => {
@@ -1367,10 +1293,7 @@ export function ComercialPage() {
       // Usar a data selecionada no formulário (permite lançamento retroativo)
       const dataLancamento = formData.data.toISOString().split('T')[0];
       
-      let tipo = modalOpen;
-      if (modalOpen === 'experimental') {
-        tipo = formData.status_experimental;
-      }
+      const tipo = modalOpen;
 
       // Mapear etapa do pipeline conforme tipo de registro
       const etapaMap: Record<string, number> = {
@@ -1410,11 +1333,6 @@ export function ComercialPage() {
         registro.forma_pagamento_passaporte_id = formData.forma_pagamento_passaporte_id;
         registro.dia_vencimento = formData.dia_vencimento;
         registro.quantidade = 1; // Matrícula sempre é 1
-      }
-
-      // Campos extras para experimental
-      if (modalOpen === 'experimental') {
-        registro.professor_experimental_id = formData.professor_id;
       }
 
       // Bolsistas não passam pelo funil comercial — não inserir em leads
@@ -2546,17 +2464,18 @@ export function ComercialPage() {
             {quickInputCards.map((card) => {
               const Icon = card.icon;
               const contagemHoje = getContagemHoje(card.id);
-              
+              const isClickable = card.id === 'lead' || card.id === 'matricula';
+
               return (
                 <button
                   key={card.id}
                   data-tour={`btn-${card.id}`}
-                  onClick={() => setModalOpen(card.id)}
+                  onClick={() => isClickable && setModalOpen(card.id)}
                   className={cn(
-                    "group relative p-5 rounded-2xl border-2 transition-all hover:scale-[1.02] hover:shadow-xl",
+                    "group relative p-5 rounded-2xl border-2 transition-all",
                     card.bgColor,
                     card.borderColor,
-                    "hover:border-opacity-60"
+                    isClickable ? "hover:scale-[1.02] hover:shadow-xl hover:border-opacity-60 cursor-pointer" : "cursor-default opacity-90"
                   )}
                 >
                   <div className="flex items-start justify-between mb-3">
@@ -2566,9 +2485,11 @@ export function ComercialPage() {
                     )}>
                       <Icon className="w-5 h-5 text-white" />
                     </div>
-                    <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center group-hover:bg-white/10 transition-colors">
-                      <Plus className={cn("w-4 h-4", card.textColor)} />
-                    </div>
+                    {isClickable && (
+                      <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center group-hover:bg-white/10 transition-colors">
+                        <Plus className={cn("w-4 h-4", card.textColor)} />
+                      </div>
+                    )}
                   </div>
                   <div className="text-left">
                     <p className={cn("text-3xl font-bold mb-0.5", card.textColor)}>{contagemHoje}</p>
@@ -2838,7 +2759,7 @@ export function ComercialPage() {
                 "px-2 py-0.5 rounded-full text-xs",
                 abaDetalhamento === 'leads' ? "bg-white/20" : "bg-slate-600"
               )}>
-                {leadsMes.length}
+                {leadsMes.filter(l => !l.status || l.status === 'novo').length}
               </span>
             </button>
             
@@ -2987,7 +2908,9 @@ export function ComercialPage() {
             visita_escola: { label: 'Visita', color: 'bg-cyan-500/20 text-cyan-400' },
             matriculado: { label: 'Matriculado', color: 'bg-violet-500/20 text-violet-400' },
             convertido: { label: 'Convertido', color: 'bg-violet-500/20 text-violet-400' },
+            arquivado: { label: 'Arquivado', color: 'bg-slate-600/20 text-slate-500' },
           };
+
           const leadsFiltrados = leadsMes.filter(l => {
             if (buscaFunil) {
               const termo = buscaFunil.toLowerCase();
@@ -3021,6 +2944,99 @@ export function ComercialPage() {
                 <span className="text-sm text-violet-300">
                   <strong>{selecionadosFunil.size}</strong> selecionado{selecionadosFunil.size > 1 ? 's' : ''}
                 </span>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-7 text-xs border-violet-500/50 text-violet-400 hover:bg-violet-500/20">
+                      <ChevronRight className="w-3 h-3 mr-1" /> Mover Etapa
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-64 p-2" align="start">
+                    {bulkExpForm ? (
+                      <div className="space-y-2">
+                        <p className="text-xs font-medium text-slate-300 px-1">Agendar Experimental ({selecionadosFunil.size} leads)</p>
+                        <div>
+                          <label className="text-[10px] text-slate-500 mb-0.5 block px-1">Professor</label>
+                          <Command className="rounded-md border border-slate-700 bg-slate-800/50">
+                            <CommandInput placeholder="Buscar professor..." className="h-7 text-xs" />
+                            <CommandList className="max-h-[160px]">
+                              <CommandEmpty className="py-2 text-center text-xs">Nenhum encontrado</CommandEmpty>
+                              <CommandGroup>
+                                {professores.map(p => (
+                                  <CommandItem
+                                    key={p.value}
+                                    value={p.label}
+                                    onSelect={() => setBulkExpForm(prev => prev ? { ...prev, professorId: p.value.toString() } : prev)}
+                                    className="text-xs"
+                                  >
+                                    {p.label}
+                                  </CommandItem>
+                                ))}
+                              </CommandGroup>
+                            </CommandList>
+                          </Command>
+                          {bulkExpForm.professorId && (
+                            <p className="text-[10px] text-violet-400 px-1 mt-0.5">
+                              {professores.find(p => p.value.toString() === bulkExpForm.professorId)?.label}
+                            </p>
+                          )}
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-500 mb-0.5 block px-1">Data da experimental</label>
+                          <input
+                            type="date"
+                            value={bulkExpForm.dataExp}
+                            onChange={(e) => setBulkExpForm(prev => prev ? { ...prev, dataExp: e.target.value } : prev)}
+                            className="w-full h-7 rounded-md bg-slate-800/50 border border-slate-700 text-xs text-white px-2 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                          />
+                        </div>
+                        <div className="flex gap-1 pt-1">
+                          <button
+                            onClick={() => setBulkExpForm(null)}
+                            className="flex-1 px-2 py-1 text-xs rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors"
+                          >
+                            Cancelar
+                          </button>
+                          <button
+                            onClick={() => {
+                              handleBulkMoverEtapa(5, {
+                                ...(bulkExpForm.professorId ? { professor_experimental_id: Number(bulkExpForm.professorId) } : {}),
+                                ...(bulkExpForm.dataExp ? { data_experimental: bulkExpForm.dataExp } : {}),
+                              });
+                              setBulkExpForm(null);
+                            }}
+                            className="flex-1 px-2 py-1 text-xs rounded bg-violet-600 text-white hover:bg-violet-500 transition-colors"
+                          >
+                            Confirmar
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-xs text-slate-400 mb-2 px-1">Mover para:</p>
+                        {[
+                          { etapa: 5, label: 'Exp. Agendada' },
+                          { etapa: 6, label: 'Visita Agendada' },
+                          { etapa: 7, label: 'Exp. Realizada' },
+                          { etapa: 9, label: 'Faltou' },
+                        ].map(opt => (
+                          <button
+                            key={opt.etapa}
+                            onClick={() => {
+                              if (opt.etapa === 5) {
+                                setBulkExpForm({ professorId: '', dataExp: '' });
+                              } else {
+                                handleBulkMoverEtapa(opt.etapa);
+                              }
+                            }}
+                            className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-slate-700 text-slate-300 transition-colors"
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </>
+                    )}
+                  </PopoverContent>
+                </Popover>
                 <Button
                   variant="outline"
                   size="sm"
@@ -3039,7 +3055,7 @@ export function ComercialPage() {
             )}
             {(() => {
               // Quando há busca, separar leads novos dos de outras etapas
-              const leadsTabela = buscaFunil ? leadsFiltrados.filter(l => !l.status || l.status === 'novo') : leadsFiltrados;
+              const leadsTabela = leadsFiltrados.filter(l => !l.status || l.status === 'novo');
               const leadsOutrasEtapas = buscaFunil ? leadsFiltrados.filter(l => l.status && l.status !== 'novo') : [];
 
               // Paginação
@@ -3065,6 +3081,7 @@ export function ComercialPage() {
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Telefone</th>
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Canal</th>
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Curso</th>
+                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Etapa</th>
                     {isAdmin && <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Unidade</th>}
                     <th className="pb-3 px-2 font-medium text-right">Ações</th>
                   </tr>
@@ -3132,6 +3149,132 @@ export function ComercialPage() {
                           placeholder="-"
                           formatarExibicao={() => <span className="text-purple-400">{lead.curso_nome || '-'}</span>}
                         />
+                      </td>
+                      <td className="py-3 px-2 border-r border-slate-700/30">
+                        {(() => {
+                          const etapa = lead.etapa_pipeline_id || 1;
+                          const st = statusLabel[lead.status] || statusLabel.novo;
+                          const transicoes = transicoesEtapa[etapa] || [];
+                          return (
+                            <div className="flex items-center gap-1">
+                              <span className={cn("px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap", st.color)}>
+                                {st.label}
+                              </span>
+                              {transicoes.length > 0 && (
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <button className="p-0.5 text-slate-500 hover:text-white hover:bg-slate-700 rounded transition-colors" title="Mover etapa">
+                                      <ChevronRight className="w-3.5 h-3.5" />
+                                    </button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-64 p-2" align="start">
+                                    {moverEtapaForm?.leadId === lead.id ? (
+                                      <div className="space-y-2">
+                                        <p className="text-xs font-medium text-slate-300 px-1">Agendar Experimental</p>
+                                        <div>
+                                          <label className="text-[10px] text-slate-500 mb-0.5 block px-1">Professor</label>
+                                          <Command className="rounded-md border border-slate-700 bg-slate-800/50">
+                                            <CommandInput placeholder="Buscar professor..." className="h-7 text-xs" />
+                                            <CommandList className="max-h-[160px]">
+                                              <CommandEmpty className="py-2 text-center text-xs">Nenhum encontrado</CommandEmpty>
+                                              <CommandGroup>
+                                                {professores.map(p => (
+                                                  <CommandItem
+                                                    key={p.value}
+                                                    value={p.label}
+                                                    onSelect={() => setMoverEtapaForm(prev => prev ? { ...prev, professorId: p.value.toString() } : prev)}
+                                                    className="text-xs"
+                                                  >
+                                                    {p.label}
+                                                  </CommandItem>
+                                                ))}
+                                              </CommandGroup>
+                                            </CommandList>
+                                          </Command>
+                                          {moverEtapaForm.professorId && (
+                                            <p className="text-[10px] text-violet-400 px-1 mt-0.5">
+                                              {professores.find(p => p.value.toString() === moverEtapaForm.professorId)?.label}
+                                            </p>
+                                          )}
+                                        </div>
+                                        <div>
+                                          <label className="text-[10px] text-slate-500 mb-0.5 block px-1">Data da experimental</label>
+                                          <input
+                                            type="date"
+                                            value={moverEtapaForm.dataExp}
+                                            onChange={(e) => setMoverEtapaForm(prev => prev ? { ...prev, dataExp: e.target.value } : prev)}
+                                            className="w-full h-7 rounded-md bg-slate-800/50 border border-slate-700 text-xs text-white px-2 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                                          />
+                                        </div>
+                                        <div className="flex gap-1 pt-1">
+                                          <button
+                                            onClick={() => setMoverEtapaForm(null)}
+                                            className="flex-1 px-2 py-1 text-xs rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors"
+                                          >
+                                            Cancelar
+                                          </button>
+                                          <button
+                                            onClick={() => {
+                                              handleMoverEtapa(lead.id!, moverEtapaForm.etapa, {
+                                                ...(moverEtapaForm.professorId ? { professor_experimental_id: Number(moverEtapaForm.professorId) } : {}),
+                                                ...(moverEtapaForm.dataExp ? { data_experimental: moverEtapaForm.dataExp } : {}),
+                                              });
+                                              setMoverEtapaForm(null);
+                                            }}
+                                            className="flex-1 px-2 py-1 text-xs rounded bg-violet-600 text-white hover:bg-violet-500 transition-colors"
+                                          >
+                                            Confirmar
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ) : (
+                                      <>
+                                        <p className="text-xs text-slate-400 mb-2 px-1">Avançar para:</p>
+                                        {transicoes.map(t => (
+                                          <button
+                                            key={t.etapa}
+                                            onClick={() => {
+                                              if (t.etapa === 5) {
+                                                setMoverEtapaForm({ leadId: lead.id!, etapa: 5, professorId: '', dataExp: '' });
+                                              } else if (t.etapa === 10) {
+                                                setLeadParaMatricular(toLeadCRM(lead));
+                                              } else {
+                                                handleMoverEtapa(lead.id!, t.etapa);
+                                              }
+                                            }}
+                                            className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-slate-700 text-slate-300 transition-colors"
+                                          >
+                                            {t.label}
+                                          </button>
+                                        ))}
+                                        {/* Arquivar sempre disponível */}
+                                        <div className="border-t border-slate-700/50 mt-1 pt-1">
+                                          <button
+                                            onClick={() => setLeadParaArquivar(toLeadCRM(lead))}
+                                            className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-rose-500/20 text-rose-400 transition-colors"
+                                          >
+                                            Arquivar
+                                          </button>
+                                        </div>
+                                        {/* Voltar para etapa anterior */}
+                                        {voltarEtapa[etapa] && (
+                                          <div className="border-t border-slate-700/50 mt-1 pt-1">
+                                            <button
+                                              onClick={() => handleMoverEtapa(lead.id!, voltarEtapa[etapa]!.etapa)}
+                                              className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-slate-700 text-slate-500 transition-colors flex items-center gap-1"
+                                            >
+                                              <RotateCcw className="w-3 h-3" /> Voltar para {voltarEtapa[etapa]!.label}
+                                            </button>
+                                          </div>
+                                        )}
+                                      </>
+                                    )}
+                                  </PopoverContent>
+                                </Popover>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
                       {isAdmin && (
                         <td className="py-3 px-2 border-r border-slate-700/30">
@@ -3489,13 +3632,130 @@ export function ComercialPage() {
                         </td>
                       )}
                       <td className="py-3 px-2 text-right">
-                        <button
-                          onClick={() => exp.id && setDeleteId(exp.id)}
-                          className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded transition-colors"
-                          title="Excluir"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-end gap-1">
+                          {(() => {
+                            const etapa = exp.etapa_pipeline_id || 5;
+                            const transicoes = transicoesEtapa[etapa] || [];
+                            if (transicoes.length === 0) return null;
+                            return (
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <button className="p-1 text-slate-500 hover:text-white hover:bg-slate-700 rounded transition-colors" title="Mover etapa">
+                                    <ChevronRight className="w-3.5 h-3.5" />
+                                  </button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-64 p-2" align="end">
+                                  {moverEtapaForm?.leadId === exp.id ? (
+                                    <div className="space-y-2">
+                                      <p className="text-xs font-medium text-slate-300 px-1">Agendar Experimental</p>
+                                      <div>
+                                        <label className="text-[10px] text-slate-500 mb-0.5 block px-1">Professor</label>
+                                        <Command className="rounded-md border border-slate-700 bg-slate-800/50">
+                                          <CommandInput placeholder="Buscar professor..." className="h-7 text-xs" />
+                                          <CommandList className="max-h-[160px]">
+                                            <CommandEmpty className="py-2 text-center text-xs">Nenhum encontrado</CommandEmpty>
+                                            <CommandGroup>
+                                              {professores.map(p => (
+                                                <CommandItem
+                                                  key={p.value}
+                                                  value={p.label}
+                                                  onSelect={() => setMoverEtapaForm(prev => prev ? { ...prev, professorId: p.value.toString() } : prev)}
+                                                  className="text-xs"
+                                                >
+                                                  {p.label}
+                                                </CommandItem>
+                                              ))}
+                                            </CommandGroup>
+                                          </CommandList>
+                                        </Command>
+                                        {moverEtapaForm.professorId && (
+                                          <p className="text-[10px] text-violet-400 px-1 mt-0.5">
+                                            {professores.find(p => p.value.toString() === moverEtapaForm.professorId)?.label}
+                                          </p>
+                                        )}
+                                      </div>
+                                      <div>
+                                        <label className="text-[10px] text-slate-500 mb-0.5 block px-1">Data da experimental</label>
+                                        <input
+                                          type="date"
+                                          value={moverEtapaForm.dataExp}
+                                          onChange={(e) => setMoverEtapaForm(prev => prev ? { ...prev, dataExp: e.target.value } : prev)}
+                                          className="w-full h-7 rounded-md bg-slate-800/50 border border-slate-700 text-xs text-white px-2 focus:outline-none focus:ring-1 focus:ring-violet-500"
+                                        />
+                                      </div>
+                                      <div className="flex gap-1 pt-1">
+                                        <button
+                                          onClick={() => setMoverEtapaForm(null)}
+                                          className="flex-1 px-2 py-1 text-xs rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors"
+                                        >
+                                          Cancelar
+                                        </button>
+                                        <button
+                                          onClick={() => {
+                                            handleMoverEtapa(exp.id!, moverEtapaForm.etapa, {
+                                              ...(moverEtapaForm.professorId ? { professor_experimental_id: Number(moverEtapaForm.professorId) } : {}),
+                                              ...(moverEtapaForm.dataExp ? { data_experimental: moverEtapaForm.dataExp } : {}),
+                                            });
+                                            setMoverEtapaForm(null);
+                                          }}
+                                          className="flex-1 px-2 py-1 text-xs rounded bg-violet-600 text-white hover:bg-violet-500 transition-colors"
+                                        >
+                                          Confirmar
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <p className="text-xs text-slate-400 mb-2 px-1">Avançar para:</p>
+                                      {transicoes.map(t => (
+                                        <button
+                                          key={t.etapa}
+                                          onClick={() => {
+                                            if (t.etapa === 5) {
+                                              setMoverEtapaForm({ leadId: exp.id!, etapa: 5, professorId: '', dataExp: '' });
+                                            } else if (t.etapa === 10) {
+                                              setLeadParaMatricular(toLeadCRM(exp as any));
+                                            } else {
+                                              handleMoverEtapa(exp.id!, t.etapa);
+                                            }
+                                          }}
+                                          className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-slate-700 text-slate-300 transition-colors"
+                                        >
+                                          {t.label}
+                                        </button>
+                                      ))}
+                                      <div className="border-t border-slate-700/50 mt-1 pt-1">
+                                        <button
+                                          onClick={() => setLeadParaArquivar(toLeadCRM(exp as any))}
+                                          className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-rose-500/20 text-rose-400 transition-colors"
+                                        >
+                                          Arquivar
+                                        </button>
+                                      </div>
+                                      {voltarEtapa[etapa] && (
+                                        <div className="border-t border-slate-700/50 mt-1 pt-1">
+                                          <button
+                                            onClick={() => handleMoverEtapa(exp.id!, voltarEtapa[etapa]!.etapa)}
+                                            className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-slate-700 text-slate-500 transition-colors flex items-center gap-1"
+                                          >
+                                            <RotateCcw className="w-3 h-3" /> Voltar para {voltarEtapa[etapa]!.label}
+                                          </button>
+                                        </div>
+                                      )}
+                                    </>
+                                  )}
+                                </PopoverContent>
+                              </Popover>
+                            );
+                          })()}
+                          <button
+                            onClick={() => exp.id && setDeleteId(exp.id)}
+                            className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded transition-colors"
+                            title="Excluir"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -3610,13 +3870,67 @@ export function ComercialPage() {
                         </td>
                       )}
                       <td className="py-3 px-2 text-right">
-                        <button
-                          onClick={() => visita.id && setDeleteId(visita.id)}
-                          className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded transition-colors"
-                          title="Excluir"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-end gap-1">
+                          {(() => {
+                            const etapa = visita.etapa_pipeline_id || 6;
+                            const transicoes = transicoesEtapa[etapa] || [];
+                            if (transicoes.length === 0) return null;
+                            return (
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <button className="p-1 text-slate-500 hover:text-white hover:bg-slate-700 rounded transition-colors" title="Mover etapa">
+                                    <ChevronRight className="w-3.5 h-3.5" />
+                                  </button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-64 p-2" align="end">
+                                  <>
+                                    <p className="text-xs text-slate-400 mb-2 px-1">Avançar para:</p>
+                                    {transicoes.map(t => (
+                                      <button
+                                        key={t.etapa}
+                                        onClick={() => {
+                                          if (t.etapa === 10) {
+                                            setLeadParaMatricular(toLeadCRM(visita as any));
+                                          } else {
+                                            handleMoverEtapa(visita.id!, t.etapa);
+                                          }
+                                        }}
+                                        className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-slate-700 text-slate-300 transition-colors"
+                                      >
+                                        {t.label}
+                                      </button>
+                                    ))}
+                                    <div className="border-t border-slate-700/50 mt-1 pt-1">
+                                      <button
+                                        onClick={() => setLeadParaArquivar(toLeadCRM(visita as any))}
+                                        className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-rose-500/20 text-rose-400 transition-colors"
+                                      >
+                                        Arquivar
+                                      </button>
+                                    </div>
+                                    {voltarEtapa[etapa] && (
+                                      <div className="border-t border-slate-700/50 mt-1 pt-1">
+                                        <button
+                                          onClick={() => handleMoverEtapa(visita.id!, voltarEtapa[etapa]!.etapa)}
+                                          className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-slate-700 text-slate-500 transition-colors flex items-center gap-1"
+                                        >
+                                          <RotateCcw className="w-3 h-3" /> Voltar para {voltarEtapa[etapa]!.label}
+                                        </button>
+                                      </div>
+                                    )}
+                                  </>
+                                </PopoverContent>
+                              </Popover>
+                            );
+                          })()}
+                          <button
+                            onClick={() => visita.id && setDeleteId(visita.id)}
+                            className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded transition-colors"
+                            title="Excluir"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -4083,340 +4397,6 @@ export function ComercialPage() {
         </Modal>
       )}
 
-      {/* Modal de Experimental */}
-      {modalOpen === 'experimental' && (
-        <Modal title="Registrar Experimentais" onClose={() => { setModalOpen(null); resetForm(); }}>
-          <div className="space-y-4">
-            <div>
-              <Label className="mb-2 block">📅 Data do Lançamento</Label>
-              <DatePicker
-                date={loteData}
-                onDateChange={(date) => setLoteData(date || new Date())}
-                placeholder="Selecione a data"
-              />
-            </div>
-
-            {/* Tabela de linhas */}
-            <div className="border border-slate-700 rounded-xl overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-800/50">
-                  <tr className="text-slate-400 text-xs uppercase">
-                    <th className="py-2 px-1 text-left">Nome</th>
-                    <th className="py-2 px-1 text-left w-36">Telefone</th>
-                    <th className="py-2 px-1 text-left w-24">Status</th>
-                    <th className="py-2 px-1 text-left w-24">Canal</th>
-                    <th className="py-2 px-1 text-left w-24">Curso</th>
-                    <th className="py-2 px-1 text-left w-24">Prof.</th>
-                    <th className="py-2 px-1 text-center w-16">💰</th>
-                    <th className="py-2 px-1 w-8"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loteExperimentais.map((linha) => (
-                    <tr key={linha.id} className="border-t border-slate-700/50">
-                      <td className="py-2 px-1">
-                        <ComboboxNome
-                          value={linha.aluno_nome || ''}
-                          onChange={(nome) => updateLinhaExperimental(linha.id, 'aluno_nome', nome)}
-                          onSelectSugestao={(sugestao) => {
-                            setLoteExperimentais(prev => prev.map(l =>
-                              l.id === linha.id
-                                ? {
-                                    ...l,
-                                    aluno_nome: sugestao.nome,
-                                    telefone: sugestao.telefone ? maskPhone(sugestao.telefone.replace(/^55/, '')) : l.telefone,
-                                    canal_origem_id: sugestao.canal_origem_id || l.canal_origem_id,
-                                    curso_id: sugestao.curso_id || l.curso_id,
-                                  }
-                                : l
-                            ));
-                          }}
-                          sugestoes={sugestoesLeads.filter(s => ['novo','agendado','lead'].includes(s.tipo))}
-                          placeholder="Nome do aluno..."
-                        />
-                      </td>
-                      <td className="py-2 px-1">
-                        <ComboboxTelefone
-                          value={linha.telefone || ''}
-                          onChange={(masked) => updateLinhaExperimental(linha.id, 'telefone', masked)}
-                          onSelectSugestao={(sugestao) => {
-                            setLoteExperimentais(prev => prev.map(l =>
-                              l.id === linha.id
-                                ? {
-                                    ...l,
-                                    aluno_nome: sugestao.nome,
-                                    telefone: sugestao.telefone ? maskPhone(sugestao.telefone.replace(/^55/, '')) : l.telefone,
-                                    canal_origem_id: sugestao.canal_origem_id ?? l.canal_origem_id,
-                                    curso_id: sugestao.curso_id ?? l.curso_id,
-                                  }
-                                : l
-                            ));
-                          }}
-                          onBlur={() => checkLeadByPhone(linha.telefone, linha.id, 'experimental')}
-                          sugestoes={sugestoesLeads.filter(s => ['novo','agendado','lead'].includes(s.tipo))}
-                          maskPhone={maskPhone}
-                          placeholder="(21) 99999-9999"
-                        />
-                      </td>
-                      <td className="py-2 px-1">
-                        <Select
-                          value={linha.status_experimental || 'experimental_agendada'}
-                          onValueChange={(value) => updateLinhaExperimental(linha.id, 'status_experimental', value)}
-                        >
-                          <SelectTrigger className="h-8 text-xs">
-                            <SelectValue placeholder="Status..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {STATUS_EXPERIMENTAL.map((s) => (
-                              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </td>
-                      <td className="py-2 px-1">
-                        <Select
-                          value={linha.canal_origem_id?.toString() || ''}
-                          onValueChange={(value) => updateLinhaExperimental(linha.id, 'canal_origem_id', parseInt(value) || null)}
-                        >
-                          <SelectTrigger className="h-8 text-xs">
-                            <SelectValue placeholder="Canal..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {canais.map((c) => (
-                              <SelectItem key={c.value} value={c.value.toString()}>{c.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </td>
-                      <td className="py-2 px-1">
-                        <Select
-                          value={linha.curso_id?.toString() || ''}
-                          onValueChange={(value) => updateLinhaExperimental(linha.id, 'curso_id', parseInt(value) || null)}
-                        >
-                          <SelectTrigger className="h-8 text-xs">
-                            <SelectValue placeholder="Curso..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {cursos.map((c) => (
-                              <SelectItem key={c.value} value={c.value.toString()}>{c.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </td>
-                      <td className="py-2 px-1">
-                        <Select
-                          value={linha.professor_id?.toString() || ''}
-                          onValueChange={(value) => updateLinhaExperimental(linha.id, 'professor_id', parseInt(value) || null)}
-                        >
-                          <SelectTrigger className="h-8 text-xs">
-                            <SelectValue placeholder="Prof..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {professores.map((p) => (
-                              <SelectItem key={p.value} value={p.value.toString()}>{p.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </td>
-                      <td className="py-2 px-1 text-center">
-                        <Checkbox
-                          checked={linha.sabia_preco === true}
-                          onCheckedChange={(checked) => updateLinhaExperimental(linha.id, 'sabia_preco', checked ? true : false)}
-                          className="data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
-                        />
-                      </td>
-                      <td className="py-2 px-1">
-                        <button
-                          onClick={() => removeLinhaExperimental(linha.id)}
-                          className="p-1 text-slate-500 hover:text-red-400 transition-colors"
-                          disabled={loteExperimentais.length === 1}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Legenda do checkbox */}
-            <p className="text-xs text-slate-500">💰 = Lead sabia o preço antes da experimental</p>
-
-            {/* Botão adicionar linha */}
-            <button
-              onClick={addLinhaExperimental}
-              className="w-full py-2 border border-dashed border-slate-600 rounded-xl text-slate-400 hover:text-purple-400 hover:border-purple-500/50 transition-colors flex items-center justify-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              Adicionar linha
-            </button>
-
-            {/* Total */}
-            <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-xl">
-              <span className="text-slate-400">Total de experimentais:</span>
-              <span className="text-2xl font-bold text-purple-400">
-                {loteExperimentais.filter(l => l.aluno_nome && l.aluno_nome.trim().length > 0).length}
-              </span>
-            </div>
-
-            <Button
-              onClick={handleSaveLoteExperimentais}
-              disabled={saving || loteExperimentais.filter(l => l.aluno_nome && l.aluno_nome.trim().length > 0).length === 0}
-              className="w-full bg-gradient-to-r from-purple-500 to-pink-500"
-            >
-              {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
-              Registrar ({loteExperimentais.filter(l => l.aluno_nome && l.aluno_nome.trim().length > 0).length} experimentais)
-            </Button>
-          </div>
-        </Modal>
-      )}
-
-      {/* Modal de Visita - LOTE */}
-      {modalOpen === 'visita' && (
-        <Modal title="Registrar Visitas em Lote" onClose={() => { setModalOpen(null); resetForm(); }}>
-          <div className="space-y-4">
-            <div>
-              <Label className="mb-2 block">📅 Data do Lançamento</Label>
-              <DatePicker
-                date={loteData}
-                onDateChange={(date) => setLoteData(date || new Date())}
-                placeholder="Selecione a data"
-              />
-            </div>
-
-            {/* Tabela de linhas */}
-            <div className="border border-slate-700 rounded-xl overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-800/50">
-                  <tr className="text-slate-400 text-xs uppercase">
-                    <th className="py-2 px-2 text-left">Nome</th>
-                    <th className="py-2 px-2 text-left w-36">Telefone</th>
-                    <th className="py-2 px-2 text-left w-32">Canal</th>
-                    <th className="py-2 px-2 text-left w-32">Curso</th>
-                    <th className="py-2 px-2 w-10"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loteVisitas.map((linha) => (
-                    <tr key={linha.id} className="border-t border-slate-700/50">
-                      <td className="py-2 px-2">
-                        <ComboboxNome
-                          value={linha.aluno_nome || ''}
-                          onChange={(nome) => updateLinhaVisita(linha.id, 'aluno_nome', nome)}
-                          onSelectSugestao={(sugestao) => {
-                            setLoteVisitas(prev => prev.map(l =>
-                              l.id === linha.id
-                                ? {
-                                    ...l,
-                                    aluno_nome: sugestao.nome,
-                                    telefone: sugestao.telefone ? maskPhone(sugestao.telefone.replace(/^55/, '')) : l.telefone,
-                                    canal_origem_id: sugestao.canal_origem_id || l.canal_origem_id,
-                                    curso_id: sugestao.curso_id || l.curso_id,
-                                  }
-                                : l
-                            ));
-                          }}
-                          sugestoes={sugestoesLeads}
-                          placeholder="Nome do visitante..."
-                        />
-                      </td>
-                      <td className="py-2 px-2">
-                        <ComboboxTelefone
-                          value={linha.telefone || ''}
-                          onChange={(masked) => updateLinhaVisita(linha.id, 'telefone', masked)}
-                          onSelectSugestao={(sugestao) => {
-                            setLoteVisitas(prev => prev.map(l =>
-                              l.id === linha.id
-                                ? {
-                                    ...l,
-                                    aluno_nome: sugestao.nome,
-                                    telefone: sugestao.telefone ? maskPhone(sugestao.telefone.replace(/^55/, '')) : l.telefone,
-                                    canal_origem_id: sugestao.canal_origem_id ?? l.canal_origem_id,
-                                    curso_id: sugestao.curso_id ?? l.curso_id,
-                                  }
-                                : l
-                            ));
-                          }}
-                          onBlur={() => checkLeadByPhone(linha.telefone, linha.id, 'visita')}
-                          sugestoes={sugestoesLeads}
-                          maskPhone={maskPhone}
-                          placeholder="(21) 99999-9999"
-                        />
-                      </td>
-                      <td className="py-2 px-2">
-                        <Select
-                          value={linha.canal_origem_id?.toString() || ''}
-                          onValueChange={(value) => updateLinhaVisita(linha.id, 'canal_origem_id', parseInt(value) || null)}
-                        >
-                          <SelectTrigger className="h-8 text-xs">
-                            <SelectValue placeholder="Canal..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {canais.map((c) => (
-                              <SelectItem key={c.value} value={c.value.toString()}>{c.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </td>
-                      <td className="py-2 px-2">
-                        <Select
-                          value={linha.curso_id?.toString() || ''}
-                          onValueChange={(value) => updateLinhaVisita(linha.id, 'curso_id', parseInt(value) || null)}
-                        >
-                          <SelectTrigger className="h-8 text-xs">
-                            <SelectValue placeholder="Curso..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {cursos.map((c) => (
-                              <SelectItem key={c.value} value={c.value.toString()}>{c.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </td>
-                      <td className="py-2 px-2">
-                        <button
-                          onClick={() => removeLinhaVisita(linha.id)}
-                          className="p-1 text-slate-500 hover:text-red-400 transition-colors"
-                          disabled={loteVisitas.length === 1}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Botão adicionar linha */}
-            <button
-              onClick={addLinhaVisita}
-              className="w-full py-2 border border-dashed border-slate-600 rounded-xl text-slate-400 hover:text-amber-400 hover:border-amber-500/50 transition-colors flex items-center justify-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              Adicionar linha
-            </button>
-
-            {/* Total */}
-            <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-xl">
-              <span className="text-slate-400">Total de visitas:</span>
-              <span className="text-2xl font-bold text-amber-400">
-                {loteVisitas.length}
-              </span>
-            </div>
-
-            <Button
-              onClick={handleSaveLoteVisitas}
-              disabled={saving}
-              className="w-full bg-gradient-to-r from-amber-500 to-orange-500"
-            >
-              {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
-              Registrar Todas ({loteVisitas.length} visita{loteVisitas.length !== 1 ? 's' : ''})
-            </Button>
-          </div>
-        </Modal>
-      )}
 
       {/* Modal de Matrícula */}
       {modalOpen === 'matricula' && (
@@ -5231,6 +5211,22 @@ export function ComercialPage() {
       </AlertDialog>
         </>
       )}
+
+      {/* Modal Matricular via mover etapa */}
+      <ModalMatricular
+        aberto={!!leadParaMatricular}
+        onClose={() => setLeadParaMatricular(null)}
+        onSalvo={() => { setLeadParaMatricular(null); loadData(); }}
+        lead={leadParaMatricular}
+      />
+
+      {/* Modal Arquivar via mover etapa */}
+      <ModalArquivar
+        aberto={!!leadParaArquivar}
+        onClose={() => setLeadParaArquivar(null)}
+        onSalvo={() => { setLeadParaArquivar(null); loadData(); }}
+        lead={leadParaArquivar}
+      />
 
       {/* Tour e Botão de Ajuda */}
       <PageTour tourName="comercial" steps={comercialTourSteps} />

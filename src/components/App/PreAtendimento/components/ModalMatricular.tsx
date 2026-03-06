@@ -78,7 +78,8 @@ export function ModalMatricular({ aberto, onClose, onSalvo, lead }: ModalMatricu
       await supabase.from('leads').update({
         converteu: true,
         data_conversao: new Date().toISOString().split('T')[0],
-        etapa_pipeline_id: 8, // Matriculado
+        status: 'convertido',
+        etapa_pipeline_id: 10, // Matriculado
         ...(alunoId && { aluno_id: alunoId }),
       }).eq('id', lead.id);
 

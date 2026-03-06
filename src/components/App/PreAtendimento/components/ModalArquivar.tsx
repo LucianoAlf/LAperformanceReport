@@ -57,6 +57,7 @@ export function ModalArquivar({ aberto, onClose, onSalvo, lead }: ModalArquivarP
         .from('leads')
         .update({
           arquivado: true,
+          status: 'arquivado',
           motivo_arquivamento: motivo,
           etapa_pipeline_id: 11, // Arquivado
           data_ultimo_contato: new Date().toISOString(),
