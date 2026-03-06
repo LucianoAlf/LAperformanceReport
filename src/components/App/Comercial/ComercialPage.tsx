@@ -834,14 +834,22 @@ export function ComercialPage() {
       setLeadsMes(prev => prev.map(l => l.id === leadId
         ? { ...l, etapa_pipeline_id: novaEtapa, status: newStatus, ...extras } : l));
       if (newStatus.startsWith('experimental')) {
-        setExperimentaisMes(prev => prev.map(l => l.id === leadId
-          ? { ...l, etapa_pipeline_id: novaEtapa, status: newStatus, ...extras } as any : l));
+        setExperimentaisMes(prev => {
+          const exists = prev.some(l => l.id === leadId);
+          if (exists) return prev.map(l => l.id === leadId ? { ...l, etapa_pipeline_id: novaEtapa, status: newStatus, ...extras } as any : l);
+          const lead = leadsMes.find(l => l.id === leadId);
+          return lead ? [...prev, { ...lead, etapa_pipeline_id: novaEtapa, status: newStatus, ...extras } as any] : prev;
+        });
       } else {
         setExperimentaisMes(prev => prev.filter(l => l.id !== leadId));
       }
       if (newStatus === 'visita_escola') {
-        setVisitasMes(prev => prev.map(l => l.id === leadId
-          ? { ...l, etapa_pipeline_id: novaEtapa, status: newStatus, ...extras } as any : l));
+        setVisitasMes(prev => {
+          const exists = prev.some(l => l.id === leadId);
+          if (exists) return prev.map(l => l.id === leadId ? { ...l, etapa_pipeline_id: novaEtapa, status: newStatus, ...extras } as any : l);
+          const lead = leadsMes.find(l => l.id === leadId);
+          return lead ? [...prev, { ...lead, etapa_pipeline_id: novaEtapa, status: newStatus, ...extras } as any] : prev;
+        });
       } else {
         setVisitasMes(prev => prev.filter(l => l.id !== leadId));
       }
@@ -866,12 +874,24 @@ export function ComercialPage() {
       const newStatus = statusFromEtapa(novaEtapa);
       setLeadsMes(prev => prev.map(l => ids.includes(l.id!) ? { ...l, etapa_pipeline_id: novaEtapa, status: newStatus } : l));
       if (newStatus.startsWith('experimental')) {
-        setExperimentaisMes(prev => prev.map(l => ids.includes(l.id!) ? { ...l, etapa_pipeline_id: novaEtapa, status: newStatus } as any : l));
+        setExperimentaisMes(prev => {
+          const updated = prev.map(l => ids.includes(l.id!) ? { ...l, etapa_pipeline_id: novaEtapa, status: newStatus } as any : l);
+          const existingIds = new Set(prev.map(l => l.id));
+          const novos = leadsMes.filter(l => ids.includes(l.id!) && !existingIds.has(l.id))
+            .map(l => ({ ...l, etapa_pipeline_id: novaEtapa, status: newStatus } as any));
+          return [...updated, ...novos];
+        });
       } else {
         setExperimentaisMes(prev => prev.filter(l => !ids.includes(l.id!)));
       }
       if (newStatus === 'visita_escola') {
-        setVisitasMes(prev => prev.map(l => ids.includes(l.id!) ? { ...l, etapa_pipeline_id: novaEtapa, status: newStatus } as any : l));
+        setVisitasMes(prev => {
+          const updated = prev.map(l => ids.includes(l.id!) ? { ...l, etapa_pipeline_id: novaEtapa, status: newStatus } as any : l);
+          const existingIds = new Set(prev.map(l => l.id));
+          const novos = leadsMes.filter(l => ids.includes(l.id!) && !existingIds.has(l.id))
+            .map(l => ({ ...l, etapa_pipeline_id: novaEtapa, status: newStatus } as any));
+          return [...updated, ...novos];
+        });
       } else {
         setVisitasMes(prev => prev.filter(l => !ids.includes(l.id!)));
       }
@@ -1167,7 +1187,7 @@ export function ComercialPage() {
     setSaving(true);
     setConfirmouDuplicataLote(false);
     try {
-      const dataLancamento = loteData.toISOString().split('T')[0];
+      const dataLancamento = loteData.toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
 
       // Cada lead atendido é 1 registro (quantidade sempre 1)
       const registros = linhasValidas.map(linha => ({

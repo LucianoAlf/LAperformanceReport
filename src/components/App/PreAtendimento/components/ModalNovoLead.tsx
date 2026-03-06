@@ -82,7 +82,7 @@ export function ModalNovoLead({ aberto, onClose, onSalvo, etapas, canais, cursos
         observacoes: observacoes.trim() || null,
         etapa_pipeline_id: 1, // Novo Lead
         temperatura: 'quente',
-        data_contato: new Date().toISOString().split('T')[0],
+        data_contato: new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }),
         data_ultimo_contato: new Date().toISOString(),
       });
 
