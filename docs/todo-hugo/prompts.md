@@ -10,14 +10,11 @@ acho que o que realmente importa é:
 
 - Caso realmente nao ocorra lead correspondente com o numero informado, e o usuario esteja tentando inserir um lead em uma etapa diferente de novos leads, o sistema deve avisa-lo antes que nao existe lead com esse telefone e que ira cria-lo.
 
-
-
 # Alunos (JA EXECUTADO)
 
 - Sera que faria sentido criar um calendario na parte de alunos>sucesso do cliente, criar mais uma tab alo para mostrar a presença deles? quando a api fizer o fetch, ela vai registrar a presença deles e marcaria no calendario. Teria um campo de busca por nome, onde poderiamos ver com detalhe o calendario de presença de cada aluno.
 
 - Este endpoint do emusys de aulas registram faltas e presenças?
-
 
 # Skills
 

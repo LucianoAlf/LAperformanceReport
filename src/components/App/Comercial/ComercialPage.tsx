@@ -269,7 +269,13 @@ export function ComercialPage() {
   const [abaDetalhamento, setAbaDetalhamento] = useState<'leads' | 'experimental' | 'visita' | 'matricula'>('matricula');
   const [buscaFunil, setBuscaFunil] = useState('');
   const [filtroTelefoneFunil, setFiltroTelefoneFunil] = useState<'todos' | 'com' | 'sem'>('todos');
-  
+  const [filtroIncompletoFunil, setFiltroIncompletoFunil] = useState<string>('todos');
+  const [selecionadosFunil, setSelecionadosFunil] = useState<Set<number>>(new Set());
+  const [excluindoEmLote, setExcluindoEmLote] = useState(false);
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [leadsGlobais, setLeadsGlobais] = useState<any[]>([]);
+  const [buscandoGlobal, setBuscandoGlobal] = useState(false);
+
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingData, setEditingData] = useState<Partial<LeadDiario>>({});
   const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -804,7 +810,7 @@ export function ComercialPage() {
 
   const confirmDelete = async () => {
     if (!deleteId) return;
-    
+
     try {
       const { error } = await supabase
         .from('leads')
@@ -813,14 +819,115 @@ export function ComercialPage() {
 
       if (error) throw error;
 
-      toast.success('Matrícula excluída!');
+      toast.success('Registro excluído!');
       setDeleteId(null);
-      loadData();
+      // Update otimista: remove do state local sem recarregar (mantém scroll)
+      setLeadsMes(prev => prev.filter(l => l.id !== deleteId));
+      setExperimentaisMes(prev => prev.filter(l => l.id !== deleteId));
+      setVisitasMes(prev => prev.filter(l => l.id !== deleteId));
+      setMatriculasMes(prev => prev.filter(l => l.id !== deleteId));
     } catch (error) {
       console.error('Erro ao excluir:', error);
-      toast.error('Erro ao excluir matrícula');
+      toast.error('Erro ao excluir registro');
     }
   };
+
+  // Exclusão em lote
+  const toggleSelecionadoFunil = (id: number) => {
+    setSelecionadosFunil(prev => {
+      const novo = new Set(prev);
+      if (novo.has(id)) novo.delete(id);
+      else novo.add(id);
+      return novo;
+    });
+  };
+
+  const toggleTodosFunil = (lista: { id?: number }[]) => {
+    const ids = lista.filter(l => l.id != null).map(l => l.id!);
+    if (ids.length > 0 && ids.every(id => selecionadosFunil.has(id))) {
+      setSelecionadosFunil(new Set());
+    } else {
+      setSelecionadosFunil(new Set(ids));
+    }
+  };
+
+  const confirmDeleteEmLote = async () => {
+    if (selecionadosFunil.size === 0) return;
+    setExcluindoEmLote(true);
+    try {
+      const ids = Array.from(selecionadosFunil);
+      const { error } = await supabase.from('leads').delete().in('id', ids);
+      if (error) throw error;
+
+      toast.success(`${ids.length} lead${ids.length > 1 ? 's' : ''} excluído${ids.length > 1 ? 's' : ''}!`);
+      setShowBulkDeleteDialog(false);
+      // Update otimista
+      const idsSet = selecionadosFunil;
+      setLeadsMes(prev => prev.filter(l => !idsSet.has(l.id!)));
+      setExperimentaisMes(prev => prev.filter(l => !idsSet.has(l.id!)));
+      setVisitasMes(prev => prev.filter(l => !idsSet.has(l.id!)));
+      setMatriculasMes(prev => prev.filter(l => !idsSet.has(l.id!)));
+      setSelecionadosFunil(new Set());
+    } catch (error) {
+      console.error('Erro ao excluir em lote:', error);
+      toast.error('Erro ao excluir leads');
+    } finally {
+      setExcluindoEmLote(false);
+    }
+  };
+
+  // Busca global por telefone (ignora filtro de data)
+  const ehBuscaTelefone = (termo: string) => {
+    const digits = termo.replace(/\D/g, '');
+    return digits.length >= 8;
+  };
+
+  useEffect(() => {
+    if (!ehBuscaTelefone(buscaFunil) || abaDetalhamento !== 'leads') {
+      setLeadsGlobais([]);
+      return;
+    }
+
+    const digits = buscaFunil.replace(/\D/g, '');
+    const timer = setTimeout(async () => {
+      setBuscandoGlobal(true);
+      try {
+        let query = supabase
+          .from('leads')
+          .select('*, canais_origem(nome), cursos(nome), unidades(codigo)')
+          .ilike('telefone', `%${digits}%`)
+          .order('data_contato', { ascending: false })
+          .limit(50);
+
+        if (isAdmin) {
+          if (context?.unidadeSelecionada && context.unidadeSelecionada !== 'todos') {
+            query = query.eq('unidade_id', context.unidadeSelecionada);
+          }
+        } else if (usuario?.unidade_id) {
+          query = query.eq('unidade_id', usuario.unidade_id);
+        }
+
+        const { data } = await query;
+        if (data) {
+          const idsLocais = new Set(leadsMes.map(l => l.id));
+          const extras = data
+            .filter(l => !idsLocais.has(l.id))
+            .map(l => ({
+              ...l,
+              canal_nome: (l.canais_origem as any)?.nome || '',
+              curso_nome: (l.cursos as any)?.nome || '',
+            }));
+          setLeadsGlobais(extras);
+        }
+      } catch (err) {
+        console.error('Erro na busca global:', err);
+      } finally {
+        setBuscandoGlobal(false);
+      }
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [buscaFunil, abaDetalhamento, leadsMes, isAdmin, context?.unidadeSelecionada, usuario?.unidade_id]);
 
   // Reset form
   const resetForm = () => {
@@ -2701,7 +2808,7 @@ export function ComercialPage() {
           {/* Abas de navegação */}
           <div data-tour="comercial-abas-funil" className="flex gap-2 flex-wrap">
             <button
-              onClick={() => setAbaDetalhamento('leads')}
+              onClick={() => { setAbaDetalhamento('leads'); setSelecionadosFunil(new Set()); }}
               className={cn(
                 "px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2",
                 abaDetalhamento === 'leads'
@@ -2720,7 +2827,7 @@ export function ComercialPage() {
             </button>
             
             <button
-              onClick={() => setAbaDetalhamento('experimental')}
+              onClick={() => { setAbaDetalhamento('experimental'); setSelecionadosFunil(new Set()); }}
               className={cn(
                 "px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2",
                 abaDetalhamento === 'experimental'
@@ -2739,7 +2846,7 @@ export function ComercialPage() {
             </button>
             
             <button
-              onClick={() => setAbaDetalhamento('visita')}
+              onClick={() => { setAbaDetalhamento('visita'); setSelecionadosFunil(new Set()); }}
               className={cn(
                 "px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2",
                 abaDetalhamento === 'visita'
@@ -2758,7 +2865,7 @@ export function ComercialPage() {
             </button>
             
             <button
-              onClick={() => setAbaDetalhamento('matricula')}
+              onClick={() => { setAbaDetalhamento('matricula'); setSelecionadosFunil(new Set()); }}
               className={cn(
                 "px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2",
                 abaDetalhamento === 'matricula'
@@ -2778,7 +2885,7 @@ export function ComercialPage() {
           </div>
         </div>
 
-        {/* Campo de busca + filtro de telefone */}
+        {/* Campo de busca + filtros */}
         <div className="px-6 py-3 border-b border-slate-700/50">
           <div className="flex items-center gap-3 flex-wrap">
             <div className="relative flex-1 min-w-[200px] max-w-sm">
@@ -2827,6 +2934,27 @@ export function ComercialPage() {
                 Sem tel.
               </button>
             </div>
+            {abaDetalhamento === 'leads' && (
+              <Select value={filtroIncompletoFunil} onValueChange={v => setFiltroIncompletoFunil(v)}>
+                <SelectTrigger className="w-[180px] bg-slate-800/50 border-slate-700 h-9 text-xs">
+                  <SelectValue placeholder="Dados incompletos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos os leads</SelectItem>
+                  <SelectItem value="sem_nome">Sem nome</SelectItem>
+                  <SelectItem value="sem_canal">Sem canal de origem</SelectItem>
+                  <SelectItem value="sem_curso">Sem curso de interesse</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+            {(filtroIncompletoFunil !== 'todos' && abaDetalhamento === 'leads') && (
+              <button
+                onClick={() => setFiltroIncompletoFunil('todos')}
+                className="text-xs text-slate-500 hover:text-white flex items-center gap-1 transition-colors"
+              >
+                <X className="w-3 h-3" /> Limpar filtro
+              </button>
+            )}
           </div>
         </div>
 
@@ -2848,14 +2976,53 @@ export function ComercialPage() {
               const tel = ((l as any).telefone || '').trim();
               if (tel === '' || tel === '-') return false;
             }
+            // Filtros de dados incompletos
+            if (filtroIncompletoFunil === 'sem_nome') {
+              const nome = (l.nome || '').trim();
+              if (nome !== '' && nome !== '-') return false;
+            } else if (filtroIncompletoFunil === 'sem_canal') {
+              if (l.canal_origem_id !== null) return false;
+            } else if (filtroIncompletoFunil === 'sem_curso') {
+              if (l.curso_interesse_id !== null) return false;
+            }
             return true;
           });
           return (
           <div className="p-4 overflow-x-auto">
+            {/* Barra de ações em lote */}
+            {selecionadosFunil.size > 0 && (
+              <div className="mb-3 flex items-center gap-3 bg-violet-500/10 border border-violet-500/30 rounded-lg px-4 py-2.5">
+                <span className="text-sm text-violet-300">
+                  <strong>{selecionadosFunil.size}</strong> selecionado{selecionadosFunil.size > 1 ? 's' : ''}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs border-red-500/50 text-red-400 hover:bg-red-500/20 hover:text-red-300"
+                  onClick={() => setShowBulkDeleteDialog(true)}
+                >
+                  <Trash2 className="w-3 h-3 mr-1" /> Excluir selecionados
+                </Button>
+                <button
+                  onClick={() => setSelecionadosFunil(new Set())}
+                  className="text-xs text-slate-500 hover:text-white flex items-center gap-1 ml-auto transition-colors"
+                >
+                  <X className="w-3 h-3" /> Limpar seleção
+                </button>
+              </div>
+            )}
             {leadsFiltrados.length > 0 ? (
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-left text-slate-400 border-b border-slate-700">
+                    <th className="pb-3 px-2 w-10">
+                      <input
+                        type="checkbox"
+                        checked={leadsFiltrados.length > 0 && leadsFiltrados.every(l => selecionadosFunil.has(l.id!))}
+                        onChange={() => toggleTodosFunil(leadsFiltrados)}
+                        className="rounded border-slate-600 bg-slate-700 text-violet-500 focus:ring-violet-500 cursor-pointer"
+                      />
+                    </th>
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">#</th>
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Data</th>
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Nome</th>
@@ -2870,8 +3037,19 @@ export function ComercialPage() {
                   {leadsFiltrados.map((lead, index) => (
                     <tr
                       key={lead.id}
-                      className="border-b border-slate-700/50 hover:bg-slate-700/20 transition-colors"
+                      className={cn(
+                        "border-b border-slate-700/50 hover:bg-slate-700/20 transition-colors",
+                        selecionadosFunil.has(lead.id!) && "bg-violet-500/10"
+                      )}
                     >
+                      <td className="py-3 px-2">
+                        <input
+                          type="checkbox"
+                          checked={selecionadosFunil.has(lead.id!)}
+                          onChange={() => lead.id && toggleSelecionadoFunil(lead.id)}
+                          className="rounded border-slate-600 bg-slate-700 text-violet-500 focus:ring-violet-500 cursor-pointer"
+                        />
+                      </td>
                       <td className="py-3 px-2 text-slate-500 font-medium border-r border-slate-700/30">{index + 1}</td>
                       <td className="py-3 px-2 border-r border-slate-700/30">
                         <CelulaEditavelInline
@@ -2943,9 +3121,84 @@ export function ComercialPage() {
               <div className="text-center py-12">
                 <Smartphone className="w-12 h-12 text-slate-600 mx-auto mb-3" />
                 <p className="text-slate-400">
-                  {buscaFunil ? 'Nenhum lead encontrado para esta busca' : 'Nenhum lead atendido registrado ainda'}
+                  {buscaFunil || filtroIncompletoFunil !== 'todos' ? 'Nenhum lead encontrado com os filtros atuais' : 'Nenhum lead atendido registrado ainda'}
                 </p>
-                {!buscaFunil && <p className="text-slate-500 text-sm mt-1">Clique no card "Leads Atendidos" acima para adicionar</p>}
+                {!buscaFunil && filtroIncompletoFunil === 'todos' && <p className="text-slate-500 text-sm mt-1">Clique no card "Leads Atendidos" acima para adicionar</p>}
+              </div>
+            )}
+
+            {/* Resultados globais (outros períodos) */}
+            {buscandoGlobal && (
+              <div className="flex items-center gap-2 text-xs text-slate-500 mt-3">
+                <Loader2 className="w-3 h-3 animate-spin" /> Buscando em outros períodos...
+              </div>
+            )}
+            {leadsGlobais.length > 0 && (
+              <div className="mt-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="h-px flex-1 bg-amber-500/30" />
+                  <span className="text-xs text-amber-400 font-medium whitespace-nowrap">
+                    Encontrados em outros períodos ({leadsGlobais.length})
+                  </span>
+                  <div className="h-px flex-1 bg-amber-500/30" />
+                </div>
+                <table className="w-full text-sm">
+                  <tbody>
+                    {leadsGlobais.map((lead, index) => {
+                      const dataLead = new Date(lead.data_contato + 'T12:00:00');
+                      const mesLabel = dataLead.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' });
+                      return (
+                        <tr
+                          key={lead.id}
+                          className="border-b border-slate-700/50 bg-amber-500/5 hover:bg-amber-500/10 transition-colors"
+                        >
+                          <td className="py-3 px-2 w-10">
+                            <input
+                              type="checkbox"
+                              checked={selecionadosFunil.has(lead.id!)}
+                              onChange={() => lead.id && toggleSelecionadoFunil(lead.id)}
+                              className="rounded border-slate-600 bg-slate-700 text-violet-500 focus:ring-violet-500 cursor-pointer"
+                            />
+                          </td>
+                          <td className="py-3 px-2 text-slate-500 font-medium border-r border-slate-700/30">-</td>
+                          <td className="py-3 px-2 border-r border-slate-700/30">
+                            <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-500/20 text-amber-400">
+                              {mesLabel}
+                            </span>
+                          </td>
+                          <td className="py-3 px-2 border-r border-slate-700/30">
+                            <span className="text-white font-medium">{lead.nome || '-'}</span>
+                          </td>
+                          <td className="py-3 px-2 border-r border-slate-700/30">
+                            <span className="text-emerald-400">{lead.telefone || '-'}</span>
+                          </td>
+                          <td className="py-3 px-2 border-r border-slate-700/30">
+                            <span className="text-cyan-400">{lead.canal_nome || '-'}</span>
+                          </td>
+                          <td className="py-3 px-2 border-r border-slate-700/30">
+                            <span className="text-purple-400">{lead.curso_nome || '-'}</span>
+                          </td>
+                          {isAdmin && (
+                            <td className="py-3 px-2 border-r border-slate-700/30">
+                              <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-600/30 text-slate-300">
+                                {lead.unidades?.codigo || '-'}
+                              </span>
+                            </td>
+                          )}
+                          <td className="py-3 px-2 text-right">
+                            <button
+                              onClick={() => lead.id && setDeleteId(lead.id)}
+                              className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded transition-colors"
+                              title="Excluir"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>
@@ -4772,23 +5025,54 @@ export function ComercialPage() {
       />
 
       {/* AlertDialog de Confirmação de Exclusão */}
+      {/* AlertDialog de exclusão individual */}
       <AlertDialog open={deleteId !== null} onOpenChange={(open) => !open && setDeleteId(null)}>
         <AlertDialogContent className="bg-slate-900 border-slate-700">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-white">Confirmar Exclusão</AlertDialogTitle>
             <AlertDialogDescription className="text-slate-400">
-              Tem certeza que deseja excluir esta matrícula? Esta ação não pode ser desfeita.
+              Tem certeza que deseja excluir este registro? Esta ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className="bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600">
               Cancelar
             </AlertDialogCancel>
-            <AlertDialogAction 
+            <AlertDialogAction
               onClick={confirmDelete}
               className="bg-red-600 hover:bg-red-500 text-white"
             >
               Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* AlertDialog de exclusão em lote */}
+      <AlertDialog open={showBulkDeleteDialog} onOpenChange={(open) => !open && setShowBulkDeleteDialog(false)}>
+        <AlertDialogContent className="bg-slate-900 border-slate-700">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white">
+              Excluir {selecionadosFunil.size} lead{selecionadosFunil.size > 1 ? 's' : ''} permanentemente?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-400">
+              Esta ação não pode ser desfeita. Todos os registros selecionados serão removidos permanentemente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={excluindoEmLote} className="bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600">
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteEmLote}
+              disabled={excluindoEmLote}
+              className="bg-red-600 hover:bg-red-500 text-white"
+            >
+              {excluindoEmLote ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Excluindo...</>
+              ) : (
+                <><Trash2 className="w-4 h-4 mr-2" /> Excluir {selecionadosFunil.size}</>
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
