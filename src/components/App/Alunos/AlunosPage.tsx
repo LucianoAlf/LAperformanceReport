@@ -726,6 +726,48 @@ export function AlunosPage() {
     }
   }
 
+  // Remover aluno de uma turma
+  async function handleRemoverAlunoTurma(turma: Turma, alunoId: number, alunoNome: string) {
+    try {
+      // 1. Remover de turmas_alunos (se turma explícita)
+      if (turma.turma_explicita_id) {
+        await supabase
+          .from('turmas_alunos')
+          .delete()
+          .eq('turma_id', turma.turma_explicita_id)
+          .eq('aluno_id', alunoId);
+      }
+
+      // 2. Limpar dia/horário do aluno
+      await supabase
+        .from('alunos')
+        .update({ dia_aula: null, horario_aula: null })
+        .eq('id', alunoId);
+
+      // 3. Registrar no histórico
+      if (turma.turma_explicita_id) {
+        await supabase
+          .from('turmas_historico')
+          .insert({
+            turma_id: turma.turma_explicita_id,
+            aluno_id: alunoId,
+            acao: 'remover',
+            turma_origem_id: turma.turma_explicita_id,
+            turma_destino_id: null,
+            metadata: {
+              turma_info: `${turma.dia_semana} ${turma.horario_inicio}`,
+              aluno_nome: alunoNome,
+            },
+          });
+      }
+
+      carregarDados();
+    } catch (error) {
+      console.error('Erro ao remover aluno da turma:', error);
+      alert('Erro ao remover aluno da turma. Tente novamente.');
+    }
+  }
+
   function limparFiltros() {
     setFiltros({
       nome: '',
@@ -1006,6 +1048,25 @@ export function AlunosPage() {
                         <p className="font-medium">{nome}</p>
                       </div>
                     </div>
+                    {turmaDetalheAbrir.ids_alunos?.[index] && (
+                      <button
+                        onClick={() => {
+                          if (confirm(`Remover ${nome} desta turma?`)) {
+                            handleRemoverAlunoTurma(turmaDetalheAbrir, turmaDetalheAbrir.ids_alunos[index], nome);
+                            setTurmaDetalheAbrir(prev => {
+                              if (!prev) return prev;
+                              const novosNomes = prev.nomes_alunos.filter((_, i) => i !== index);
+                              const novosIds = prev.ids_alunos.filter((_, i) => i !== index);
+                              return { ...prev, nomes_alunos: novosNomes, ids_alunos: novosIds, total_alunos: novosNomes.length };
+                            });
+                          }
+                        }}
+                        className="text-slate-500 hover:text-red-400 transition p-1"
+                        title="Remover da turma"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 ))
               ) : (
@@ -1165,6 +1226,7 @@ export function AlunosPage() {
               onEditarTurma={handleEditarTurma}
               onExcluirTurma={handleExcluirTurma}
               onAdicionarAlunoTurma={handleAdicionarAlunoTurma}
+              onRemoverAlunoTurma={handleRemoverAlunoTurma}
               onNovaTurma={() => setModalNovaTurma(true)}
             />
           )}

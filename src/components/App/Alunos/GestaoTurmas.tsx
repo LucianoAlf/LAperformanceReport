@@ -13,6 +13,7 @@ interface GestaoTurmasProps {
   onEditarTurma?: (turma: Turma) => void;
   onExcluirTurma?: (turmaId: number) => void;
   onAdicionarAlunoTurma?: (turma: Turma) => void;
+  onRemoverAlunoTurma?: (turma: Turma, alunoId: number, alunoNome: string) => void;
   onNovaTurma?: () => void;
 }
 
@@ -36,7 +37,7 @@ const EMOJIS_CURSO: Record<string, string> = {
   'Violino': '🎻'
 };
 
-export function GestaoTurmas({ turmas, professores, salas, onRecarregar, onEditarTurma, onExcluirTurma, onAdicionarAlunoTurma, onNovaTurma }: GestaoTurmasProps) {
+export function GestaoTurmas({ turmas, professores, salas, onRecarregar, onEditarTurma, onExcluirTurma, onAdicionarAlunoTurma, onRemoverAlunoTurma, onNovaTurma }: GestaoTurmasProps) {
   const [filtros, setFiltros] = useState({
     professor_id: '',
     dia: '',
@@ -622,6 +623,25 @@ export function GestaoTurmas({ turmas, professores, salas, onRecarregar, onEdita
                           <p className="font-medium">{nome}</p>
                         </div>
                       </div>
+                      {onRemoverAlunoTurma && turmaDetalhe.ids_alunos?.[index] && (
+                        <button
+                          onClick={() => {
+                            if (confirm(`Remover ${nome} desta turma?`)) {
+                              onRemoverAlunoTurma(turmaDetalhe, turmaDetalhe.ids_alunos[index], nome);
+                              setTurmaDetalhe(prev => {
+                                if (!prev) return prev;
+                                const novosNomes = prev.nomes_alunos.filter((_, i) => i !== index);
+                                const novosIds = prev.ids_alunos.filter((_, i) => i !== index);
+                                return { ...prev, nomes_alunos: novosNomes, ids_alunos: novosIds, total_alunos: novosNomes.length };
+                              });
+                            }
+                          }}
+                          className="text-slate-500 hover:text-red-400 transition p-1"
+                          title="Remover da turma"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   ))
                 ) : (
