@@ -83,3 +83,4 @@ VITE_GEMINI_API_KEY=...  # opcional
 Ao trabalhar com agentes IA ou function calling, consulte `.claude/skills/ai-agents-architect/SKILL.md`
 Ao trabalhar com LLMs, RAG ou integrações IA, consulte `.claude/skills/ai-engineer/SKILL.md`
 Ao trabalhar com schema, queries ou migrations, consulte `.claude/skills/database-design/SKILL.md`
+Ao trabalhar com WhatsApp, UAZAPI ou webhooks, consulte `.claude/skills/uazapi-whatsapp/SKILL.md`

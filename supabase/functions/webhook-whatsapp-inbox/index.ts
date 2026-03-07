@@ -17,6 +17,25 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
+// Baixar mídia via UAZAPI /message/download (retorna URL pública permanente)
+async function downloadMedia(
+  messageId: string,
+  creds: { baseUrl: string; token: string }
+): Promise<string | null> {
+  try {
+    const resp = await fetch(`${creds.baseUrl}/message/download`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', token: creds.token },
+      body: JSON.stringify({ id: messageId, return_link: true }),
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    return data.fileURL || data.fileUrl || null;
+  } catch {
+    return null;
+  }
+}
+
 // Extrair numero limpo do JID ou remoteJid
 function extractPhone(jidOrPhone: string): string {
   if (!jidOrPhone) return '';
@@ -47,9 +66,9 @@ function normalizeUazapiPayload(payload: any): { key: any; message: any; message
         id: msg.messageid || msg.id
       },
       message: {
-        // Texto
-        conversation: msg.text || null,
-        extendedTextMessage: msg.text ? { text: msg.text } : null,
+        // Texto (ignorar se for reação — senão o emoji vira mensagem de texto)
+        conversation: (msg.type !== 'reaction' && msg.messageType !== 'ReactionMessage') ? (msg.text || null) : null,
+        extendedTextMessage: (msg.type !== 'reaction' && msg.messageType !== 'ReactionMessage' && msg.text) ? { text: msg.text } : null,
         // Áudio/PTT
         audioMessage: (msg.mediaType === 'ptt' || msg.mediaType === 'audio' || msg.messageType === 'AudioMessage') ? {
           url: content.URL || content.url || null,
@@ -73,7 +92,17 @@ function normalizeUazapiPayload(payload: any): { key: any; message: any; message
           url: content.URL || content.url || null,
           fileName: content.fileName || 'documento',
           mimetype: content.mimetype || 'application/pdf'
-        } : null
+        } : null,
+        // Sticker
+        stickerMessage: (msg.mediaType === 'sticker' || msg.mediaType === 'user_created_sticker') ? {
+          url: content.URL || content.url || null,
+          mimetype: content.mimetype || 'image/webp'
+        } : null,
+        // Reação
+        reactionMessage: (msg.type === 'reaction' || msg.messageType === 'ReactionMessage') ? {
+          key: { id: msg.reaction || content?.key?.ID },
+          text: msg.text || content?.text || ''
+        } : null,
       },
       messageTimestamp: msg.messageTimestamp || Date.now()
     };
@@ -458,7 +487,8 @@ async function handleAdminInboxMessage(
   whatsappMessageId: string | null,
   caixaId: number,
   unidadeId: string,
-  supabase: any
+  supabase: any,
+  uazapiCreds: { baseUrl: string; token: string } | null = null
 ): Promise<boolean> {
   try {
     // Verificar duplicata em admin_mensagens
@@ -498,14 +528,14 @@ async function handleAdminInboxMessage(
       if (!alunoGlobal) {
         // Nao é aluno cadastrado — criar conversa como contato externo
         console.log(`[webhook-admin] Aluno não encontrado para ${phone}, criando contato externo`);
-        return await processExternalAdminMessage(msg, phone, whatsappMessageId, caixaId, unidadeId, supabase);
+        return await processExternalAdminMessage(msg, phone, whatsappMessageId, caixaId, unidadeId, supabase, uazapiCreds);
       }
 
       // Aluno encontrado em outra unidade — usar a unidade do aluno
-      return await processAdminMessage(msg, phone, whatsappMessageId, caixaId, alunoGlobal, supabase);
+      return await processAdminMessage(msg, phone, whatsappMessageId, caixaId, alunoGlobal, supabase, uazapiCreds);
     }
 
-    return await processAdminMessage(msg, phone, whatsappMessageId, caixaId, aluno, supabase);
+    return await processAdminMessage(msg, phone, whatsappMessageId, caixaId, aluno, supabase, uazapiCreds);
   } catch (err) {
     console.error('[webhook-admin] Erro:', err);
     return false;
@@ -518,7 +548,8 @@ async function processAdminMessage(
   whatsappMessageId: string | null,
   caixaId: number,
   aluno: { id: number; nome: string; unidade_id: string },
-  supabase: any
+  supabase: any,
+  uazapiCreds: { baseUrl: string; token: string } | null = null
 ): Promise<boolean> {
   // Buscar ou criar admin_conversa
   let { data: conversa } = await supabase
@@ -552,6 +583,16 @@ async function processAdminMessage(
   // Detectar tipo de mensagem
   const { tipo, conteudo, midia_url, midia_mimetype, midia_nome } = detectMessageType(msg);
 
+  // Baixar mídia persistente para stickers (URL do WhatsApp é criptografada e expira)
+  let midiaUrlFinal = midia_url;
+  if (tipo === 'sticker' && whatsappMessageId && uazapiCreds) {
+    const persistentUrl = await downloadMedia(whatsappMessageId, uazapiCreds);
+    if (persistentUrl) {
+      midiaUrlFinal = persistentUrl;
+      console.log(`[webhook-admin] Sticker baixado: ${persistentUrl.substring(0, 80)}...`);
+    }
+  }
+
   // Inserir mensagem
   const { error: insertErr } = await supabase
     .from('admin_mensagens')
@@ -561,7 +602,7 @@ async function processAdminMessage(
       direcao: 'entrada',
       tipo,
       conteudo,
-      midia_url,
+      midia_url: midiaUrlFinal,
       midia_mimetype,
       midia_nome,
       remetente: 'aluno',
@@ -594,7 +635,8 @@ async function processExternalAdminMessage(
   whatsappMessageId: string | null,
   caixaId: number,
   unidadeId: string,
-  supabase: any
+  supabase: any,
+  uazapiCreds: { baseUrl: string; token: string } | null = null
 ): Promise<boolean> {
   // Buscar ou criar conversa externa por telefone_externo + unidade
   let { data: conversa } = await supabase
@@ -640,6 +682,16 @@ async function processExternalAdminMessage(
   // Detectar tipo de mensagem
   const { tipo, conteudo, midia_url, midia_mimetype, midia_nome } = detectMessageType(msg);
 
+  // Baixar mídia persistente para stickers (URL do WhatsApp é criptografada e expira)
+  let midiaUrlFinal = midia_url;
+  if (tipo === 'sticker' && whatsappMessageId && uazapiCreds) {
+    const persistentUrl = await downloadMedia(whatsappMessageId, uazapiCreds);
+    if (persistentUrl) {
+      midiaUrlFinal = persistentUrl;
+      console.log(`[webhook-admin] Sticker externo baixado: ${persistentUrl.substring(0, 80)}...`);
+    }
+  }
+
   // Inserir mensagem
   const { error: insertErr } = await supabase
     .from('admin_mensagens')
@@ -649,7 +701,7 @@ async function processExternalAdminMessage(
       direcao: 'entrada',
       tipo,
       conteudo,
-      midia_url,
+      midia_url: midiaUrlFinal,
       midia_mimetype,
       midia_nome,
       remetente: 'externo',
@@ -736,6 +788,16 @@ serve(async (req: Request) => {
       }
     }
 
+    // Resolver credenciais UAZAPI para download de mídia (stickers, etc.)
+    let uazapiCreds: { baseUrl: string; token: string } | null = null;
+    if (caixaIdFromUrl) {
+      try {
+        uazapiCreds = await getUazapiCredentials(supabase, { caixaId: caixaIdFromUrl });
+      } catch (e) {
+        console.log(`[webhook] Não foi possível resolver creds UAZAPI: ${e.message}`);
+      }
+    }
+
     // UAZAPI envia objeto único com estrutura própria
     // Normalizar para formato interno
     const normalizedMsg = normalizeUazapiPayload(payload);
@@ -794,11 +856,63 @@ serve(async (req: Request) => {
           continue;
         }
 
+        // ========== REAÇÕES (antes do roteamento admin/CRM) ==========
+        if (msg.message?.reactionMessage) {
+          const reaction = msg.message.reactionMessage;
+          const reactedMsgId = reaction.key?.id;
+          const emoji = reaction.text || '';
+
+          if (reactedMsgId) {
+            console.log(`[webhook-inbox] Reação recebida: "${emoji}" na msg ${reactedMsgId}`);
+
+            // Buscar em crm_mensagens primeiro (sufixo para msgs de saída com prefixo phone:id)
+            const { data: msgReagida } = await supabase
+              .from('crm_mensagens')
+              .select('id, reacoes')
+              .or(`whatsapp_message_id.eq.${reactedMsgId},whatsapp_message_id.like.%:${reactedMsgId}`)
+              .maybeSingle();
+
+            let tabelaReacao = 'crm_mensagens';
+            let msgReagidaData = msgReagida;
+
+            if (!msgReagidaData) {
+              // Fallback: buscar em admin_mensagens (sufixo para msgs de saída com prefixo phone:id)
+              const { data: msgAdmin } = await supabase
+                .from('admin_mensagens')
+                .select('id, reacoes')
+                .or(`whatsapp_message_id.eq.${reactedMsgId},whatsapp_message_id.like.%:${reactedMsgId}`)
+                .maybeSingle();
+              if (msgAdmin) {
+                msgReagidaData = msgAdmin;
+                tabelaReacao = 'admin_mensagens';
+              }
+            }
+
+            if (msgReagidaData) {
+              const reacoesAtuais = Array.isArray(msgReagidaData.reacoes) ? msgReagidaData.reacoes : [];
+              const de = isAdminCaixa ? 'aluno' : 'lead';
+              let novasReacoes;
+              if (!emoji) {
+                novasReacoes = reacoesAtuais.filter((r: any) => r.de !== de);
+              } else {
+                const semReacao = reacoesAtuais.filter((r: any) => r.de !== de);
+                novasReacoes = [...semReacao, { emoji, de, timestamp: Date.now() }];
+              }
+              await supabase.from(tabelaReacao).update({ reacoes: novasReacoes }).eq('id', msgReagidaData.id);
+              console.log(`[webhook-inbox] ✅ Reação salva em ${tabelaReacao}: ${emoji || '(removida)'}`);
+            } else {
+              console.log(`[webhook-inbox] Mensagem reagida não encontrada: ${reactedMsgId}`);
+            }
+          }
+          processadas++;
+          continue;
+        }
+
         // ========== ROTEAMENTO ADMIN ==========
         // Se a caixa é administrativa, rotear para admin inbox
         if (isAdminCaixa && adminCaixaUnidadeId && caixaIdFromUrl) {
           const adminHandled = await handleAdminInboxMessage(
-            msg, phone, whatsappMessageId, caixaIdFromUrl, adminCaixaUnidadeId, supabase
+            msg, phone, whatsappMessageId, caixaIdFromUrl, adminCaixaUnidadeId, supabase, uazapiCreds
           );
           if (adminHandled) {
             processadas++;
@@ -880,51 +994,18 @@ serve(async (req: Request) => {
             .eq('id', conversa.id);
         }
 
-        // Detectar reação (reactionMessage) — não é uma mensagem nova, é uma reação a uma existente
-        if (msg.message?.reactionMessage) {
-          const reaction = msg.message.reactionMessage;
-          const reactedMsgId = reaction.key?.id;
-          const emoji = reaction.text || '';
-
-          if (reactedMsgId) {
-            console.log(`[webhook-inbox] Reação recebida: "${emoji}" na msg ${reactedMsgId}`);
-
-            // Buscar a mensagem reagida
-            const { data: msgReagida } = await supabase
-              .from('crm_mensagens')
-              .select('id, reacoes')
-              .eq('whatsapp_message_id', reactedMsgId)
-              .maybeSingle();
-
-            if (msgReagida) {
-              const reacoesAtuais = Array.isArray(msgReagida.reacoes) ? msgReagida.reacoes : [];
-              let novasReacoes;
-
-              if (!emoji) {
-                // Remover reação do lead
-                novasReacoes = reacoesAtuais.filter((r) => r.de !== 'lead');
-              } else {
-                // Adicionar/atualizar reação do lead
-                const semReacaoLead = reacoesAtuais.filter((r) => r.de !== 'lead');
-                novasReacoes = [...semReacaoLead, { emoji, de: 'lead', timestamp: Date.now() }];
-              }
-
-              await supabase
-                .from('crm_mensagens')
-                .update({ reacoes: novasReacoes })
-                .eq('id', msgReagida.id);
-
-              console.log(`[webhook-inbox] ✅ Reação salva: ${emoji || '(removida)'} na msg ${msgReagida.id}`);
-            } else {
-              console.log(`[webhook-inbox] Mensagem reagida não encontrada: ${reactedMsgId}`);
-            }
-          }
-          processadas++;
-          continue;
-        }
-
         // Detectar tipo de mensagem
         const { tipo, conteudo, midia_url, midia_mimetype, midia_nome } = detectMessageType(msg);
+
+        // Baixar mídia persistente para stickers (URL do WhatsApp é criptografada e expira)
+        let midiaUrlFinal = midia_url;
+        if (tipo === 'sticker' && whatsappMessageId && uazapiCreds) {
+          const persistentUrl = await downloadMedia(whatsappMessageId, uazapiCreds);
+          if (persistentUrl) {
+            midiaUrlFinal = persistentUrl;
+            console.log(`[webhook-inbox] Sticker CRM baixado: ${persistentUrl.substring(0, 80)}...`);
+          }
+        }
 
         // Inserir mensagem
         const { error: insertErr } = await supabase
@@ -935,7 +1016,7 @@ serve(async (req: Request) => {
             direcao: 'entrada',
             tipo,
             conteudo,
-            midia_url,
+            midia_url: midiaUrlFinal,
             midia_mimetype,
             midia_nome,
             remetente: 'lead',

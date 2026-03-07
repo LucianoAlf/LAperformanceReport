@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Paperclip, Image, FileText, Music, Video, Loader2, ChevronUp, Check, CheckCheck, Clock, AlertCircle, User, Phone } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/lib/supabase';
 import type { AdminConversa, AdminMensagem, AlunoInbox } from './types';
 
 function getStatusAlunoTag(status: string | null | undefined) {
@@ -41,6 +42,14 @@ function formatarHoraMsg(data: string): string {
 }
 
 function MidiaRender({ msg }: { msg: AdminMensagem }) {
+  if (msg.tipo === 'sticker') {
+    return msg.midia_url ? (
+      <img src={msg.midia_url} alt="Sticker" className="w-32 h-32 object-contain" loading="lazy" />
+    ) : (
+      <span className="text-2xl">🏷️</span>
+    );
+  }
+
   if (!msg.midia_url) return null;
 
   if (msg.tipo === 'imagem') {
@@ -130,6 +139,20 @@ function ChatBubble({ msg }: { msg: AdminMensagem }) {
           </span>
           {isSaida && <StatusIcon status={msg.status_entrega} />}
         </div>
+
+        {/* Reações */}
+        {msg.reacoes && msg.reacoes.length > 0 && (
+          <div className={cn('flex gap-1 mt-0.5 px-1', isSaida ? 'justify-end' : 'justify-start')}>
+            {msg.reacoes.map((r, i) => (
+              <span
+                key={`${r.emoji}-${i}`}
+                className="text-sm bg-slate-800/80 border border-slate-700/50 rounded-full px-1.5 py-0.5 cursor-default hover:scale-110 transition-transform"
+              >
+                {r.emoji}
+              </span>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -148,10 +171,33 @@ export function AdminChatPanel({
 }: AdminChatPanelProps) {
   const [texto, setTexto] = useState('');
   const [menuAnexoAberto, setMenuAnexoAberto] = useState(false);
+  const [fotoPerfil, setFotoPerfil] = useState<string | null>(conversa.foto_perfil_url || null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [tipoUpload, setTipoUpload] = useState<'imagem' | 'audio' | 'video' | 'documento'>('imagem');
+
+  // Sync foto from conversa prop
+  useEffect(() => {
+    setFotoPerfil(conversa.foto_perfil_url || null);
+  }, [conversa.id, conversa.foto_perfil_url]);
+
+  // Buscar foto de perfil se nao cacheada
+  useEffect(() => {
+    if (conversa.foto_perfil_url || !conversa.whatsapp_jid) return;
+
+    supabase.functions.invoke('buscar-foto-perfil', {
+      body: {
+        conversa_id: conversa.id,
+        whatsapp_jid: conversa.whatsapp_jid,
+        tabela: 'admin_conversas',
+      },
+    }).then(({ data }) => {
+      if (data?.foto_perfil_url) {
+        setFotoPerfil(data.foto_perfil_url);
+      }
+    }).catch(() => {});
+  }, [conversa.id, conversa.foto_perfil_url, conversa.whatsapp_jid]);
 
   // Auto-scroll
   useEffect(() => {
@@ -208,9 +254,18 @@ export function AdminChatPanel({
         <div className="flex items-center gap-3">
           {aluno ? (
             <>
-              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-400 to-purple-500 flex items-center justify-center text-white font-bold text-xs">
-                {aluno.nome?.split(' ').filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase() || '??'}
-              </div>
+              {fotoPerfil ? (
+                <img
+                  src={fotoPerfil}
+                  alt={aluno.nome}
+                  className="w-9 h-9 rounded-full object-cover"
+                  onError={() => setFotoPerfil(null)}
+                />
+              ) : (
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-400 to-purple-500 flex items-center justify-center text-white font-bold text-xs">
+                  {aluno.nome?.split(' ').filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase() || '??'}
+                </div>
+              )}
               <div>
                 <p className="text-sm font-semibold text-white">{aluno.nome}</p>
                 <p className="text-[11px] text-slate-500">
@@ -220,9 +275,18 @@ export function AdminChatPanel({
             </>
           ) : (
             <>
-              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-slate-400 to-slate-500 flex items-center justify-center text-white">
-                <Phone className="w-4 h-4" />
-              </div>
+              {fotoPerfil ? (
+                <img
+                  src={fotoPerfil}
+                  alt={conversa.nome_externo || 'Contato'}
+                  className="w-9 h-9 rounded-full object-cover"
+                  onError={() => setFotoPerfil(null)}
+                />
+              ) : (
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-slate-400 to-slate-500 flex items-center justify-center text-white">
+                  <Phone className="w-4 h-4" />
+                </div>
+              )}
               <div>
                 <p className="text-sm font-semibold text-white">
                   {conversa.nome_externo || conversa.telefone_externo || 'Contato desconhecido'}

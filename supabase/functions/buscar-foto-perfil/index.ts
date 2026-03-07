@@ -21,7 +21,7 @@ serve(async (req: Request) => {
   }
 
   try {
-    const { conversa_id, whatsapp_jid } = await req.json();
+    const { conversa_id, whatsapp_jid, tabela = 'crm_conversas' } = await req.json();
 
     if (!conversa_id || !whatsapp_jid) {
       return new Response(
@@ -30,37 +30,43 @@ serve(async (req: Request) => {
       );
     }
 
+    const isAdmin = tabela === 'admin_conversas';
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     // Buscar conversa para resolver credenciais UAZAPI
     const { data: conversa } = await supabase
-      .from('crm_conversas')
+      .from(isAdmin ? 'admin_conversas' : 'crm_conversas')
       .select('caixa_id, unidade_id')
       .eq('id', conversa_id)
       .single();
 
-    const creds = await getUazapiCredentials(supabase, { funcao: 'agente', caixaId: conversa?.caixa_id ?? undefined, unidadeId: conversa?.unidade_id ?? undefined });
+    // Usar a caixa da conversa (caixa_id), com fallback por funcao
+    const creds = await getUazapiCredentials(supabase, {
+      caixaId: conversa?.caixa_id ?? undefined,
+      funcao: isAdmin ? 'administrativo' : 'agente',
+      unidadeId: conversa?.unidade_id ?? undefined,
+    });
 
-    // Buscar foto de perfil via UAZAPI
+    // Buscar foto de perfil via UAZAPI (POST /chat/details)
     const numero = whatsapp_jid.replace('@s.whatsapp.net', '');
-    const response = await fetch(`${creds.baseUrl}/misc/getProfilePicUrl`, {
+    const response = await fetch(`${creds.baseUrl}/chat/details`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'token': creds.token,
       },
-      body: JSON.stringify({ number: numero }),
+      body: JSON.stringify({ number: numero, preview: false }),
     });
 
     const data = await response.json();
     console.log(`[buscar-foto-perfil] Resposta UAZAPI (caixa: ${creds.caixaNome}):`, JSON.stringify(data).substring(0, 200));
 
-    const fotoUrl = data?.profilePictureUrl || data?.url || data?.imgUrl || data?.profilePicUrl || null;
+    const fotoUrl = data?.image || data?.imagePreview || null;
 
     if (fotoUrl) {
       // Cachear no banco
       await supabase
-        .from('crm_conversas')
+        .from(isAdmin ? 'admin_conversas' : 'crm_conversas')
         .update({ foto_perfil_url: fotoUrl })
         .eq('id', conversa_id);
 

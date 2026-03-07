@@ -29,6 +29,7 @@ export interface AdminConversa {
   whatsapp_jid: string | null;
   telefone_externo: string | null;
   nome_externo: string | null;
+  foto_perfil_url: string | null;
   nao_lidas: number;
   ultima_mensagem_at: string | null;
   ultima_mensagem_preview: string | null;
@@ -60,6 +61,7 @@ export interface AdminMensagem {
   remetente_nome: string | null;
   status_entrega: StatusEntrega;
   whatsapp_message_id: string | null;
+  reacoes?: { emoji: string; de: string; timestamp?: number }[];
   created_at: string;
 }
 

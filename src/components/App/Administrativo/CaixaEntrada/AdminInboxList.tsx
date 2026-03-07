@@ -105,11 +105,22 @@ function AdminInboxItem({ conversa, ativa, onClick }: { conversa: AdminConversa;
     >
       <div className="flex gap-3">
         {/* Avatar */}
-        <div className={cn(
-          'w-11 h-11 rounded-full flex items-center justify-center text-white font-bold text-sm bg-gradient-to-br flex-shrink-0',
-          semConversa ? 'bg-slate-700' : isExterno ? 'from-slate-400 to-slate-500' : getCorAvatar(nome)
-        )}>
-          {isExterno ? <Phone className="w-4 h-4" /> : getIniciais(nome)}
+        <div className="relative flex-shrink-0">
+          {conversa.foto_perfil_url ? (
+            <img
+              src={conversa.foto_perfil_url}
+              alt={nome}
+              className="w-11 h-11 rounded-full object-cover"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden'); }}
+            />
+          ) : null}
+          <div className={cn(
+            'w-11 h-11 rounded-full flex items-center justify-center text-white font-bold text-sm bg-gradient-to-br',
+            semConversa ? 'bg-slate-700' : isExterno ? 'from-slate-400 to-slate-500' : getCorAvatar(nome),
+            conversa.foto_perfil_url && 'hidden'
+          )}>
+            {isExterno ? <Phone className="w-4 h-4" /> : getIniciais(nome)}
+          </div>
         </div>
 
         <div className="flex-1 min-w-0">
