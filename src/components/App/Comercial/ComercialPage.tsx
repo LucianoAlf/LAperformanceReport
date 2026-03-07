@@ -272,6 +272,8 @@ export function ComercialPage() {
   const [buscaFunil, setBuscaFunil] = useState('');
   const [filtroTelefoneFunil, setFiltroTelefoneFunil] = useState<'todos' | 'com' | 'sem'>('todos');
   const [filtroIncompletoFunil, setFiltroIncompletoFunil] = useState<string>('todos');
+  const [filtroCanalFunil, setFiltroCanalFunil] = useState<string>('todos');
+  const [filtroCursoFunil, setFiltroCursoFunil] = useState<string>('todos');
   const [selecionadosFunil, setSelecionadosFunil] = useState<Set<number>>(new Set());
   const [excluindoEmLote, setExcluindoEmLote] = useState(false);
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
@@ -1096,7 +1098,7 @@ export function ComercialPage() {
   }, [buscaFunil, abaDetalhamento, leadsMes, isAdmin, context?.unidadeSelecionada, usuario?.unidade_id]);
 
   // Resetar paginação ao mudar filtros
-  useEffect(() => { setPaginaLeads(1); }, [buscaFunil, filtroTelefoneFunil, filtroIncompletoFunil]);
+  useEffect(() => { setPaginaLeads(1); }, [buscaFunil, filtroTelefoneFunil, filtroIncompletoFunil, filtroCanalFunil, filtroCursoFunil]);
 
 
   // Reset form
@@ -2891,6 +2893,30 @@ export function ComercialPage() {
                 Sem tel.
               </button>
             </div>
+            {/* Filtro Canal */}
+            <Select value={filtroCanalFunil} onValueChange={v => setFiltroCanalFunil(v)}>
+              <SelectTrigger className="w-[170px] bg-slate-800/50 border-slate-700 h-9 text-xs">
+                <SelectValue placeholder="Canal" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os canais</SelectItem>
+                {canais.map(c => (
+                  <SelectItem key={c.value} value={String(c.value)}>{c.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {/* Filtro Curso */}
+            <Select value={filtroCursoFunil} onValueChange={v => setFiltroCursoFunil(v)}>
+              <SelectTrigger className="w-[170px] bg-slate-800/50 border-slate-700 h-9 text-xs">
+                <SelectValue placeholder="Curso" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os cursos</SelectItem>
+                {cursos.map(c => (
+                  <SelectItem key={c.value} value={String(c.value)}>{c.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {abaDetalhamento === 'leads' && (
               <Select value={filtroIncompletoFunil} onValueChange={v => setFiltroIncompletoFunil(v)}>
                 <SelectTrigger className="w-[180px] bg-slate-800/50 border-slate-700 h-9 text-xs">
@@ -2904,12 +2930,12 @@ export function ComercialPage() {
                 </SelectContent>
               </Select>
             )}
-            {(filtroIncompletoFunil !== 'todos' && abaDetalhamento === 'leads') && (
+            {(filtroIncompletoFunil !== 'todos' || filtroCanalFunil !== 'todos' || filtroCursoFunil !== 'todos') && (
               <button
-                onClick={() => setFiltroIncompletoFunil('todos')}
+                onClick={() => { setFiltroIncompletoFunil('todos'); setFiltroCanalFunil('todos'); setFiltroCursoFunil('todos'); }}
                 className="text-xs text-slate-500 hover:text-white flex items-center gap-1 transition-colors"
               >
-                <X className="w-3 h-3" /> Limpar filtro
+                <X className="w-3 h-3" /> Limpar filtros
               </button>
             )}
           </div>
@@ -2953,6 +2979,14 @@ export function ComercialPage() {
               if (l.canal_origem_id !== null) return false;
             } else if (filtroIncompletoFunil === 'sem_curso') {
               if (l.curso_interesse_id !== null) return false;
+            }
+            // Filtro por canal
+            if (filtroCanalFunil !== 'todos') {
+              if (String(l.canal_origem_id) !== filtroCanalFunil) return false;
+            }
+            // Filtro por curso
+            if (filtroCursoFunil !== 'todos') {
+              if (String(l.curso_interesse_id) !== filtroCursoFunil) return false;
             }
             return true;
           });
@@ -3524,12 +3558,15 @@ export function ComercialPage() {
         {/* TABELA DE EXPERIMENTAIS */}
         {/* ══════════════════════════════════════════════════════════════ */}
         {abaDetalhamento === 'experimental' && (() => {
-          const expFiltradas = buscaFunil
-            ? experimentaisMes.filter(l => {
-                const termo = buscaFunil.toLowerCase();
-                return (l.nome || '').toLowerCase().includes(termo);
-              })
-            : experimentaisMes;
+          const expFiltradas = experimentaisMes.filter(l => {
+            if (buscaFunil) {
+              const termo = buscaFunil.toLowerCase();
+              if (!(l.nome || '').toLowerCase().includes(termo)) return false;
+            }
+            if (filtroCanalFunil !== 'todos' && String(l.canal_origem_id) !== filtroCanalFunil) return false;
+            if (filtroCursoFunil !== 'todos' && String(l.curso_interesse_id) !== filtroCursoFunil) return false;
+            return true;
+          });
           return (
           <div className="p-4 overflow-x-auto">
             {expFiltradas.length > 0 ? (
@@ -3798,12 +3835,15 @@ export function ComercialPage() {
         {/* TABELA DE VISITAS */}
         {/* ══════════════════════════════════════════════════════════════ */}
         {abaDetalhamento === 'visita' && (() => {
-          const visitasFiltradas = buscaFunil
-            ? visitasMes.filter(l => {
-                const termo = buscaFunil.toLowerCase();
-                return (l.nome || '').toLowerCase().includes(termo);
-              })
-            : visitasMes;
+          const visitasFiltradas = visitasMes.filter(l => {
+            if (buscaFunil) {
+              const termo = buscaFunil.toLowerCase();
+              if (!(l.nome || '').toLowerCase().includes(termo)) return false;
+            }
+            if (filtroCanalFunil !== 'todos' && String(l.canal_origem_id) !== filtroCanalFunil) return false;
+            if (filtroCursoFunil !== 'todos' && String(l.curso_interesse_id) !== filtroCursoFunil) return false;
+            return true;
+          });
           return (
           <div className="p-4 overflow-x-auto">
             {visitasFiltradas.length > 0 ? (
@@ -3973,14 +4013,16 @@ export function ComercialPage() {
         {/* TABELA DE MATRÍCULAS (original - mantida intacta) */}
         {/* ══════════════════════════════════════════════════════════════ */}
         {abaDetalhamento === 'matricula' && (() => {
-          const matriculasFiltradas = buscaFunil
-            ? matriculasMes.filter(l => {
-                const termo = buscaFunil.toLowerCase();
-                const nome = ((l as any).aluno_nome || (l as any).nome || '').toLowerCase();
-                const tel = ((l as any).telefone || '').toLowerCase();
-                return nome.includes(termo) || tel.includes(termo);
-              })
-            : matriculasMes;
+          const matriculasFiltradas = matriculasMes.filter(l => {
+            if (buscaFunil) {
+              const termo = buscaFunil.toLowerCase();
+              const nome = ((l as any).aluno_nome || (l as any).nome || '').toLowerCase();
+              const tel = ((l as any).telefone || '').toLowerCase();
+              if (!nome.includes(termo) && !tel.includes(termo)) return false;
+            }
+            if (filtroCursoFunil !== 'todos' && String((l as any).curso_id || (l as any).curso_interesse_id) !== filtroCursoFunil) return false;
+            return true;
+          });
           return (
           <>
             {/* Header específico de matrículas */}
