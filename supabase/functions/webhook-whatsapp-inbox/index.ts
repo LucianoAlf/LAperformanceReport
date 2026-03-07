@@ -496,8 +496,9 @@ async function handleAdminInboxMessage(
         .maybeSingle();
 
       if (!alunoGlobal) {
-        console.log(`[webhook-admin] Aluno não encontrado para telefone: ${phone}`);
-        return false; // Não é aluno, deixar cair no fluxo CRM
+        // Nao é aluno cadastrado — criar conversa como contato externo
+        console.log(`[webhook-admin] Aluno não encontrado para ${phone}, criando contato externo`);
+        return await processExternalAdminMessage(msg, phone, whatsappMessageId, caixaId, unidadeId, supabase);
       }
 
       // Aluno encontrado em outra unidade — usar a unidade do aluno
@@ -583,6 +584,94 @@ async function processAdminMessage(
   });
 
   console.log(`[webhook-admin] ✅ Mensagem de ${aluno.nome} salva (tipo: ${tipo})`);
+  return true;
+}
+
+// Processar mensagem de contato externo (numero nao cadastrado como aluno)
+async function processExternalAdminMessage(
+  msg: any,
+  phone: string,
+  whatsappMessageId: string | null,
+  caixaId: number,
+  unidadeId: string,
+  supabase: any
+): Promise<boolean> {
+  // Buscar ou criar conversa externa por telefone_externo + unidade
+  let { data: conversa } = await supabase
+    .from('admin_conversas')
+    .select('id')
+    .eq('telefone_externo', phone)
+    .eq('unidade_id', unidadeId)
+    .is('aluno_id', null)
+    .maybeSingle();
+
+  if (!conversa) {
+    const { data: novaConversa, error: criarErr } = await supabase
+      .from('admin_conversas')
+      .insert({
+        aluno_id: null,
+        telefone_externo: phone,
+        nome_externo: msg.pushName || null,
+        unidade_id: unidadeId,
+        caixa_id: caixaId,
+        whatsapp_jid: phone,
+        status: 'aberta',
+      })
+      .select('id')
+      .single();
+
+    if (criarErr) {
+      console.error('[webhook-admin] Erro ao criar conversa externa:', criarErr);
+      return false;
+    }
+    conversa = novaConversa;
+    console.log(`[webhook-admin] Conversa externa criada: ${conversa.id} para telefone ${phone}`);
+  } else {
+    // Atualizar pushName se disponivel
+    if (msg.pushName) {
+      await supabase
+        .from('admin_conversas')
+        .update({ nome_externo: msg.pushName })
+        .eq('id', conversa.id)
+        .is('nome_externo', null);
+    }
+  }
+
+  // Detectar tipo de mensagem
+  const { tipo, conteudo, midia_url, midia_mimetype, midia_nome } = detectMessageType(msg);
+
+  // Inserir mensagem
+  const { error: insertErr } = await supabase
+    .from('admin_mensagens')
+    .insert({
+      conversa_id: conversa.id,
+      aluno_id: null,
+      direcao: 'entrada',
+      tipo,
+      conteudo,
+      midia_url,
+      midia_mimetype,
+      midia_nome,
+      remetente: 'externo',
+      remetente_nome: msg.pushName || phone,
+      status_entrega: 'entregue',
+      whatsapp_message_id: whatsappMessageId,
+    });
+
+  if (insertErr) {
+    console.error('[webhook-admin] Erro ao inserir mensagem externa:', insertErr);
+    return false;
+  }
+
+  // Atualizar conversa via RPC
+  const preview = conteudo?.substring(0, 100) || `[${tipo}]`;
+  await supabase.rpc('admin_conversa_nova_mensagem', {
+    p_conversa_id: conversa.id,
+    p_preview: preview,
+    p_whatsapp_jid: phone,
+  });
+
+  console.log(`[webhook-admin] ✅ Mensagem externa de ${msg.pushName || phone} salva (tipo: ${tipo})`);
   return true;
 }
 

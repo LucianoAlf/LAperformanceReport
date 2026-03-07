@@ -52,15 +52,20 @@ export function useAdminConversas({ unidadeId, filtro = 'todas', busca }: UseAdm
 
       let resultado = (data || []) as AdminConversa[];
 
-      // Filtro de busca local (nome do aluno)
+      // Filtro de busca local (nome/telefone do aluno ou contato externo)
       if (busca && busca.trim()) {
         const termo = busca.toLowerCase().trim();
         resultado = resultado.filter(c => {
           const aluno = c.aluno as any;
-          if (!aluno) return false;
-          const nome = (aluno.nome || '').toLowerCase();
-          const telefone = (aluno.telefone || '');
-          return nome.includes(termo) || telefone.includes(termo);
+          if (aluno) {
+            const nome = (aluno.nome || '').toLowerCase();
+            const telefone = (aluno.telefone || '');
+            return nome.includes(termo) || telefone.includes(termo);
+          }
+          // Contato externo
+          const nomeExt = (c.nome_externo || '').toLowerCase();
+          const telExt = (c.telefone_externo || '');
+          return nomeExt.includes(termo) || telExt.includes(termo);
         });
       }
 

@@ -7,6 +7,7 @@ import { AdminInboxList } from './AdminInboxList';
 import { AdminChatPanel } from './AdminChatPanel';
 import { NovaConversaModal } from './NovaConversaModal';
 import type { AdminConversa, AlunoInbox, FiltroAdminInbox } from './types';
+import type { ContatoInbox } from './NovaConversaModal';
 
 interface NotificacaoToast {
   id: string;
@@ -49,28 +50,15 @@ export function CaixaEntradaTab({ unidadeId }: CaixaEntradaTabProps) {
     }
   }, [marcarComoLida]);
 
-  const handleIniciarConversa = useCallback(async (aluno: AlunoInbox) => {
-    // Após criar a conversa, refetch e selecionar
-    await refetch();
-    // Buscar conversa recém-criada pelo aluno_id
-    setTimeout(async () => {
-      const { conversas: updated } = await new Promise<{ conversas: AdminConversa[] }>((resolve) => {
-        // Usar refetch + timeout para pegar o estado atualizado
-        refetch().then(() => {
-          // A conversa será selecionada no próximo render quando conversas atualizar
-          resolve({ conversas: [] });
-        });
-      });
-    }, 300);
-  }, [refetch]);
-
-  // Efeito: quando conversas atualizarem após criar nova, selecionar automaticamente
-  const handleNovaConversaCriada = useCallback((aluno: AlunoInbox) => {
-    // Refetch e selecionar a conversa do aluno
+  const handleNovaConversaCriada = useCallback((contato: ContatoInbox) => {
     refetch().then(() => {
-      // Encontrar conversa pelo aluno_id após refetch
       setTimeout(() => {
-        const conversa = conversas.find(c => c.aluno_id === aluno.id);
+        let conversa: AdminConversa | undefined;
+        if (contato.tipo === 'aluno' && contato.aluno) {
+          conversa = conversas.find(c => c.aluno_id === contato.aluno!.id);
+        } else if (contato.tipo === 'externo' && contato.telefone_externo) {
+          conversa = conversas.find(c => c.telefone_externo === contato.telefone_externo && c.aluno_id === null);
+        }
         if (conversa) {
           setConversaSelecionada(conversa);
         }
@@ -111,7 +99,7 @@ export function CaixaEntradaTab({ unidadeId }: CaixaEntradaTabProps) {
         />
 
         {/* Coluna 2: Chat */}
-        {conversaSelecionada && alunoSelecionado ? (
+        {conversaSelecionada ? (
           <AdminChatPanel
             conversa={conversaSelecionada}
             aluno={alunoSelecionado}

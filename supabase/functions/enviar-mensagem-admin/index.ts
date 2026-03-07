@@ -35,9 +35,9 @@ serve(async (req: Request) => {
   try {
     const { conversa_id, aluno_id, conteudo, tipo = 'texto', remetente_nome = 'Admin', midia_url, midia_mimetype, midia_nome } = await req.json();
 
-    if (!conversa_id || !aluno_id) {
+    if (!conversa_id) {
       return new Response(
-        JSON.stringify({ error: 'conversa_id e aluno_id são obrigatórios' }),
+        JSON.stringify({ error: 'conversa_id é obrigatório' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -58,10 +58,10 @@ serve(async (req: Request) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // 1. Buscar conversa + aluno
+    // 1. Buscar conversa + aluno (se existir)
     const { data: conversa, error: conversaError } = await supabase
       .from('admin_conversas')
-      .select('whatsapp_jid, caixa_id, unidade_id, aluno:aluno_id(telefone, whatsapp, nome)')
+      .select('whatsapp_jid, caixa_id, unidade_id, telefone_externo, nome_externo, aluno:aluno_id(telefone, whatsapp, nome)')
       .eq('id', conversa_id)
       .single();
 
@@ -73,12 +73,13 @@ serve(async (req: Request) => {
       );
     }
 
+    // Resolver telefone: aluno cadastrado ou contato externo
     const aluno = conversa.aluno as any;
-    const telefone = aluno?.whatsapp || aluno?.telefone;
+    const telefone = aluno ? (aluno.whatsapp || aluno.telefone) : conversa.telefone_externo;
 
     if (!telefone) {
       return new Response(
-        JSON.stringify({ error: 'Aluno sem telefone cadastrado' }),
+        JSON.stringify({ error: 'Sem telefone para envio' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -90,7 +91,7 @@ serve(async (req: Request) => {
       .from('admin_mensagens')
       .insert({
         conversa_id,
-        aluno_id,
+        aluno_id: aluno_id || null,
         direcao: 'saida',
         tipo,
         conteudo: conteudo || null,

@@ -132,14 +132,14 @@ export function useAdminMensagens({ conversaId, alunoId, remetenteNome = 'Admin'
 
   // Enviar mensagem de texto
   const enviarMensagem = useCallback(async (conteudo: string) => {
-    if (!conversaId || !alunoId || !conteudo.trim()) return null;
+    if (!conversaId || !conteudo.trim()) return null;
 
     setEnviando(true);
     try {
       const msgOtimista: AdminMensagem = {
         id: crypto.randomUUID(),
         conversa_id: conversaId,
-        aluno_id: alunoId,
+        aluno_id: alunoId ?? null,
         direcao: 'saida',
         tipo: 'texto',
         conteudo: conteudo.trim(),
@@ -158,7 +158,7 @@ export function useAdminMensagens({ conversaId, alunoId, remetenteNome = 'Admin'
       const { data, error } = await supabase.functions.invoke('enviar-mensagem-admin', {
         body: {
           conversa_id: conversaId,
-          aluno_id: alunoId,
+          aluno_id: alunoId ?? null,
           conteudo: conteudo.trim(),
           tipo: 'texto',
           remetente_nome: remetenteNome,
@@ -197,7 +197,7 @@ export function useAdminMensagens({ conversaId, alunoId, remetenteNome = 'Admin'
     tipo: 'imagem' | 'audio' | 'video' | 'documento',
     caption?: string,
   ) => {
-    if (!conversaId || !alunoId || !arquivo) return null;
+    if (!conversaId || !arquivo) return null;
 
     setEnviando(true);
     try {
@@ -222,7 +222,7 @@ export function useAdminMensagens({ conversaId, alunoId, remetenteNome = 'Admin'
       const msgOtimista: AdminMensagem = {
         id: crypto.randomUUID(),
         conversa_id: conversaId,
-        aluno_id: alunoId,
+        aluno_id: alunoId ?? null,
         direcao: 'saida',
         tipo,
         conteudo: caption || null,
@@ -241,7 +241,7 @@ export function useAdminMensagens({ conversaId, alunoId, remetenteNome = 'Admin'
       const { data, error } = await supabase.functions.invoke('enviar-mensagem-admin', {
         body: {
           conversa_id: conversaId,
-          aluno_id: alunoId,
+          aluno_id: alunoId ?? null,
           conteudo: caption || null,
           tipo,
           remetente_nome: remetenteNome,

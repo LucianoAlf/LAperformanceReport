@@ -1,11 +1,21 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Paperclip, Image, FileText, Music, Video, Loader2, ChevronUp, Check, CheckCheck, Clock, AlertCircle, User } from 'lucide-react';
+import { Send, Paperclip, Image, FileText, Music, Video, Loader2, ChevronUp, Check, CheckCheck, Clock, AlertCircle, User, Phone } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { AdminConversa, AdminMensagem, AlunoInbox } from './types';
 
+function getStatusAlunoTag(status: string | null | undefined) {
+  if (!status || status === 'ativo') return null;
+  const map: Record<string, { label: string; classes: string }> = {
+    aviso_previo: { label: 'Aviso Previo', classes: 'bg-orange-500/20 text-orange-400' },
+    trancado: { label: 'Trancado', classes: 'bg-yellow-500/20 text-yellow-400' },
+    inativo: { label: 'Inativo', classes: 'bg-slate-500/20 text-slate-400' },
+  };
+  return map[status] || null;
+}
+
 interface AdminChatPanelProps {
   conversa: AdminConversa;
-  aluno: AlunoInbox;
+  aluno: AlunoInbox | null;
   mensagens: AdminMensagem[];
   loading: boolean;
   enviando: boolean;
@@ -196,18 +206,49 @@ export function AdminChatPanel({
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/50">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-400 to-purple-500 flex items-center justify-center text-white font-bold text-xs">
-            {aluno.nome?.split(' ').filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase() || '??'}
-          </div>
-          <div>
-            <p className="text-sm font-semibold text-white">{aluno.nome}</p>
-            <p className="text-[11px] text-slate-500">
-              {aluno.cursos?.nome || 'Sem curso'} · {aluno.telefone || aluno.whatsapp || 'Sem telefone'}
-            </p>
-          </div>
+          {aluno ? (
+            <>
+              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-violet-400 to-purple-500 flex items-center justify-center text-white font-bold text-xs">
+                {aluno.nome?.split(' ').filter(Boolean).slice(0, 2).map(p => p[0]).join('').toUpperCase() || '??'}
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-white">{aluno.nome}</p>
+                <p className="text-[11px] text-slate-500">
+                  {aluno.cursos?.nome || 'Sem curso'} · {aluno.telefone || aluno.whatsapp || 'Sem telefone'}
+                </p>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-slate-400 to-slate-500 flex items-center justify-center text-white">
+                <Phone className="w-4 h-4" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-white">
+                  {conversa.nome_externo || conversa.telefone_externo || 'Contato desconhecido'}
+                </p>
+                <p className="text-[11px] text-slate-500">
+                  {conversa.telefone_externo || 'Sem telefone'}
+                </p>
+              </div>
+            </>
+          )}
         </div>
         <div className="flex items-center gap-2">
-          {aluno.status_pagamento && (
+          {!aluno && (
+            <span className="text-[9px] px-2 py-0.5 rounded-full font-bold uppercase bg-slate-600/30 text-slate-400">
+              Nao cadastrado
+            </span>
+          )}
+          {(() => {
+            const statusAluno = getStatusAlunoTag(aluno?.status);
+            return statusAluno ? (
+              <span className={cn('text-[9px] px-2 py-0.5 rounded-full font-bold uppercase', statusAluno.classes)}>
+                {statusAluno.label}
+              </span>
+            ) : null;
+          })()}
+          {aluno?.status_pagamento && (
             <span className={cn(
               'text-[9px] px-2 py-0.5 rounded-full font-bold uppercase',
               aluno.status_pagamento === 'em_dia' ? 'bg-emerald-500/20 text-emerald-400' :
@@ -244,7 +285,7 @@ export function AdminChatPanel({
           <div className="flex flex-col items-center justify-center h-32 text-center">
             <User className="w-8 h-8 text-slate-600 mb-2" />
             <p className="text-sm text-slate-500">Nenhuma mensagem ainda</p>
-            <p className="text-xs text-slate-600 mt-1">Envie a primeira mensagem para {aluno.nome?.split(' ')[0]}</p>
+            <p className="text-xs text-slate-600 mt-1">Envie a primeira mensagem para {aluno?.nome?.split(' ')[0] || conversa.nome_externo?.split(' ')[0] || 'este contato'}</p>
           </div>
         ) : (
           mensagens.map(msg => <ChatBubble key={msg.id} msg={msg} />)

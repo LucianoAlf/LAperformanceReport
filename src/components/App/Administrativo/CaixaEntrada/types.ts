@@ -20,13 +20,15 @@ export interface AlunoInbox {
   unidades?: { nome: string; codigo: string } | null;
 }
 
-// Conversa administrativa (1 por aluno por unidade)
+// Conversa administrativa (1 por aluno/contato por unidade)
 export interface AdminConversa {
   id: string;
-  aluno_id: number;
+  aluno_id: number | null;
   unidade_id: string;
   caixa_id: number | null;
   whatsapp_jid: string | null;
+  telefone_externo: string | null;
+  nome_externo: string | null;
   nao_lidas: number;
   ultima_mensagem_at: string | null;
   ultima_mensagem_preview: string | null;
@@ -41,13 +43,13 @@ export interface AdminConversa {
 // Mensagem administrativa
 export type TipoMensagemAdmin = 'texto' | 'imagem' | 'audio' | 'video' | 'documento' | 'sticker' | 'sistema';
 export type DirecaoMensagem = 'entrada' | 'saida';
-export type RemetenteAdmin = 'aluno' | 'admin' | 'sistema';
+export type RemetenteAdmin = 'aluno' | 'admin' | 'sistema' | 'externo';
 export type StatusEntrega = 'enviando' | 'enviada' | 'entregue' | 'lida' | 'erro';
 
 export interface AdminMensagem {
   id: string;
   conversa_id: string;
-  aluno_id: number;
+  aluno_id: number | null;
   direcao: DirecaoMensagem;
   tipo: TipoMensagemAdmin;
   conteudo: string | null;

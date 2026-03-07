@@ -1,4 +1,4 @@
-import { Search, Loader2, Inbox, Plus, GraduationCap } from 'lucide-react';
+import { Search, Loader2, Inbox, Plus, GraduationCap, Phone } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { AdminConversa, AlunoInbox, FiltroAdminInbox } from './types';
 
@@ -70,12 +70,26 @@ function getStatusPagamentoTag(status: string | null) {
   return map[status] || null;
 }
 
+function getStatusAlunoTag(status: string | null | undefined) {
+  if (!status || status === 'ativo') return null;
+  const map: Record<string, { label: string; classes: string }> = {
+    aviso_previo: { label: 'Aviso Previo', classes: 'bg-orange-500/20 text-orange-400' },
+    trancado: { label: 'Trancado', classes: 'bg-yellow-500/20 text-yellow-400' },
+    inativo: { label: 'Inativo', classes: 'bg-slate-500/20 text-slate-400' },
+  };
+  return map[status] || null;
+}
+
 function AdminInboxItem({ conversa, ativa, onClick }: { conversa: AdminConversa; ativa: boolean; onClick: () => void }) {
   const aluno = conversa.aluno as AlunoInbox | undefined;
-  const nome = aluno?.nome || 'Aluno sem nome';
+  const isExterno = conversa.aluno_id === null;
+  const nome = isExterno
+    ? (conversa.nome_externo || conversa.telefone_externo || 'Contato desconhecido')
+    : (aluno?.nome || 'Aluno sem nome');
   const curso = aluno?.cursos?.nome || '';
   const professor = aluno?.professores?.nome || '';
   const statusPag = getStatusPagamentoTag(aluno?.status_pagamento || null);
+  const statusAluno = getStatusAlunoTag(aluno?.status);
   const semConversa = !conversa.ultima_mensagem_at;
 
   return (
@@ -93,9 +107,9 @@ function AdminInboxItem({ conversa, ativa, onClick }: { conversa: AdminConversa;
         {/* Avatar */}
         <div className={cn(
           'w-11 h-11 rounded-full flex items-center justify-center text-white font-bold text-sm bg-gradient-to-br flex-shrink-0',
-          semConversa ? 'bg-slate-700' : getCorAvatar(nome)
+          semConversa ? 'bg-slate-700' : isExterno ? 'from-slate-400 to-slate-500' : getCorAvatar(nome)
         )}>
-          {getIniciais(nome)}
+          {isExterno ? <Phone className="w-4 h-4" /> : getIniciais(nome)}
         </div>
 
         <div className="flex-1 min-w-0">
@@ -108,6 +122,16 @@ function AdminInboxItem({ conversa, ativa, onClick }: { conversa: AdminConversa;
               )}>
                 {nome}
               </span>
+              {isExterno && (
+                <span className="text-[8px] px-1.5 py-0.5 rounded font-bold uppercase flex-shrink-0 bg-slate-600/30 text-slate-400">
+                  Externo
+                </span>
+              )}
+              {statusAluno && (
+                <span className={cn('text-[8px] px-1.5 py-0.5 rounded font-bold uppercase flex-shrink-0', statusAluno.classes)}>
+                  {statusAluno.label}
+                </span>
+              )}
               {statusPag && (
                 <span className={cn('text-[8px] px-1.5 py-0.5 rounded font-bold uppercase flex-shrink-0', statusPag.classes)}>
                   {statusPag.label}
@@ -141,6 +165,12 @@ function AdminInboxItem({ conversa, ativa, onClick }: { conversa: AdminConversa;
 
           {/* Tags */}
           <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+            {isExterno && conversa.telefone_externo && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-400 font-medium flex items-center gap-0.5">
+                <Phone className="w-2.5 h-2.5" />
+                {conversa.telefone_externo}
+              </span>
+            )}
             {curso && (
               <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-400 font-medium flex items-center gap-0.5">
                 <GraduationCap className="w-2.5 h-2.5" />
@@ -190,7 +220,7 @@ export function AdminInboxList({
           <Search className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="Buscar aluno..."
+            placeholder="Buscar conversa..."
             value={busca}
             onChange={(e) => onBuscaChange(e.target.value)}
             className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none"
