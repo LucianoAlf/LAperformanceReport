@@ -85,21 +85,48 @@ export function useAdminConversas({ unidadeId, filtro = 'todas', busca }: UseAdm
     fetchConversas();
   }, [fetchConversas]);
 
-  // Realtime
+  // Realtime — targeted updates (sem refetch completo)
   useEffect(() => {
     const channel = supabase
       .channel('admin_conversas_changes')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'admin_conversas' },
-        () => fetchConversas()
+        { event: 'UPDATE', schema: 'public', table: 'admin_conversas' },
+        (payload) => {
+          const updated = payload.new as any;
+          setConversas(prev => {
+            const idx = prev.findIndex(c => c.id === updated.id);
+            if (idx === -1) return prev;
+            const merged = { ...prev[idx], ...updated };
+            const next = [...prev];
+            next[idx] = merged;
+            // Re-ordenar por ultima_mensagem_at (mais recente primeiro)
+            next.sort((a, b) => {
+              const ta = a.ultima_mensagem_at || a.created_at || '';
+              const tb = b.ultima_mensagem_at || b.created_at || '';
+              return tb.localeCompare(ta);
+            });
+            return next;
+          });
+          // Recalcular total nao lidas
+          setTotalNaoLidas(prev => {
+            const old = conversas.find(c => c.id === updated.id);
+            const diff = (updated.nao_lidas || 0) - (old?.nao_lidas || 0);
+            return Math.max(0, prev + diff);
+          });
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'admin_conversas' },
+        () => fetchConversas() // Nova conversa: refetch completo (raro)
       )
       .subscribe();
 
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [fetchConversas]);
+  }, [fetchConversas, conversas]);
 
   // Marcar como lida
   const marcarComoLida = useCallback(async (conversaId: string) => {

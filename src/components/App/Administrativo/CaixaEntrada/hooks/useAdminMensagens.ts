@@ -130,68 +130,63 @@ export function useAdminMensagens({ conversaId, alunoId, remetenteNome = 'Admin'
     };
   }, [conversaId]);
 
-  // Enviar mensagem de texto
+  // Enviar mensagem de texto (fire-and-forget: nao bloqueia UI)
   const enviarMensagem = useCallback(async (conteudo: string) => {
     if (!conversaId || !conteudo.trim()) return null;
 
-    setEnviando(true);
-    try {
-      const msgOtimista: AdminMensagem = {
-        id: crypto.randomUUID(),
+    const msgOtimista: AdminMensagem = {
+      id: crypto.randomUUID(),
+      conversa_id: conversaId,
+      aluno_id: alunoId ?? null,
+      direcao: 'saida',
+      tipo: 'texto',
+      conteudo: conteudo.trim(),
+      midia_url: null,
+      midia_mimetype: null,
+      midia_nome: null,
+      remetente: 'admin',
+      remetente_nome: remetenteNome,
+      status_entrega: 'enviando',
+      whatsapp_message_id: null,
+      created_at: new Date().toISOString(),
+    };
+
+    setMensagens(prev => [...prev, msgOtimista]);
+
+    // Fire-and-forget: edge function responde rapido (early return),
+    // e o realtime subscription cuida de atualizar o status
+    supabase.functions.invoke('enviar-mensagem-admin', {
+      body: {
         conversa_id: conversaId,
         aluno_id: alunoId ?? null,
-        direcao: 'saida',
-        tipo: 'texto',
         conteudo: conteudo.trim(),
-        midia_url: null,
-        midia_mimetype: null,
-        midia_nome: null,
-        remetente: 'admin',
+        tipo: 'texto',
         remetente_nome: remetenteNome,
-        status_entrega: 'enviando',
-        whatsapp_message_id: null,
-        created_at: new Date().toISOString(),
-      };
-
-      setMensagens(prev => [...prev, msgOtimista]);
-
-      const { data, error } = await supabase.functions.invoke('enviar-mensagem-admin', {
-        body: {
-          conversa_id: conversaId,
-          aluno_id: alunoId ?? null,
-          conteudo: conteudo.trim(),
-          tipo: 'texto',
-          remetente_nome: remetenteNome,
-        },
-      });
-
-      if (error) throw error;
-
+      },
+    }).then(({ data, error }) => {
+      if (error) {
+        console.error('[useAdminMensagens] Erro ao enviar:', error);
+        setMensagens(prev =>
+          prev.map(m => m.id === msgOtimista.id ? { ...m, status_entrega: 'erro' as const } : m)
+        );
+        return;
+      }
+      // Substituir ID otimista pelo real do banco (realtime cuida do status)
       if (data?.mensagem_id) {
         setMensagens(prev =>
-          prev.map(m =>
-            m.id === msgOtimista.id
-              ? { ...m, id: data.mensagem_id, status_entrega: 'enviada' as const, whatsapp_message_id: data.whatsapp_message_id }
-              : m
-          )
+          prev.map(m => m.id === msgOtimista.id ? { ...m, id: data.mensagem_id } : m)
         );
       }
-
-      return data;
-    } catch (err) {
-      console.error('[useAdminMensagens] Erro ao enviar:', err);
+    }).catch(() => {
       setMensagens(prev =>
-        prev.map(m =>
-          m.status_entrega === 'enviando' ? { ...m, status_entrega: 'erro' as const } : m
-        )
+        prev.map(m => m.id === msgOtimista.id ? { ...m, status_entrega: 'erro' as const } : m)
       );
-      return null;
-    } finally {
-      setEnviando(false);
-    }
+    });
+
+    return { mensagem_id: msgOtimista.id };
   }, [conversaId, alunoId, remetenteNome]);
 
-  // Enviar mídia
+  // Enviar mídia (upload sincrono, envio UAZAPI fire-and-forget)
   const enviarMidia = useCallback(async (
     arquivo: File,
     tipo: 'imagem' | 'audio' | 'video' | 'documento',
@@ -201,6 +196,7 @@ export function useAdminMensagens({ conversaId, alunoId, remetenteNome = 'Admin'
 
     setEnviando(true);
     try {
+      // Upload precisa ser sincrono (precisa da URL para a edge function)
       const extensao = arquivo.name.split('.').pop() || 'bin';
       const nomeArquivo = `admin/${conversaId}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.${extensao}`;
 
@@ -238,7 +234,8 @@ export function useAdminMensagens({ conversaId, alunoId, remetenteNome = 'Admin'
 
       setMensagens(prev => [...prev, msgOtimista]);
 
-      const { data, error } = await supabase.functions.invoke('enviar-mensagem-admin', {
+      // Fire-and-forget apos upload
+      supabase.functions.invoke('enviar-mensagem-admin', {
         body: {
           conversa_id: conversaId,
           aluno_id: alunoId ?? null,
@@ -249,21 +246,26 @@ export function useAdminMensagens({ conversaId, alunoId, remetenteNome = 'Admin'
           midia_mimetype: arquivo.type,
           midia_nome: arquivo.name,
         },
+      }).then(({ data, error }) => {
+        if (error) {
+          console.error('[useAdminMensagens] Erro ao enviar mídia:', error);
+          setMensagens(prev =>
+            prev.map(m => m.id === msgOtimista.id ? { ...m, status_entrega: 'erro' as const } : m)
+          );
+          return;
+        }
+        if (data?.mensagem_id) {
+          setMensagens(prev =>
+            prev.map(m => m.id === msgOtimista.id ? { ...m, id: data.mensagem_id } : m)
+          );
+        }
+      }).catch(() => {
+        setMensagens(prev =>
+          prev.map(m => m.id === msgOtimista.id ? { ...m, status_entrega: 'erro' as const } : m)
+        );
       });
 
-      if (error) throw error;
-
-      if (data?.mensagem_id) {
-        setMensagens(prev =>
-          prev.map(m =>
-            m.id === msgOtimista.id
-              ? { ...m, id: data.mensagem_id, status_entrega: 'enviada' as const, whatsapp_message_id: data.whatsapp_message_id }
-              : m
-          )
-        );
-      }
-
-      return data;
+      return { mensagem_id: msgOtimista.id };
     } catch (err) {
       console.error('[useAdminMensagens] Erro ao enviar mídia:', err);
       setMensagens(prev =>

@@ -1,6 +1,8 @@
 // Edge Function: enviar-mensagem-admin
 // Envia mensagem administrativa (texto ou mídia) para um aluno via UAZAPI
 // Insere no admin_mensagens e envia via WhatsApp
+// Usa early-return: responde ao frontend imediatamente após inserir no DB,
+// e faz o envio UAZAPI em background via EdgeRuntime.waitUntil()
 // @ts-nocheck
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
@@ -58,7 +60,7 @@ serve(async (req: Request) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // 1. Buscar conversa + aluno (se existir)
+    // 1. Buscar conversa + aluno
     const { data: conversa, error: conversaError } = await supabase
       .from('admin_conversas')
       .select('whatsapp_jid, caixa_id, unidade_id, telefone_externo, nome_externo, aluno:aluno_id(telefone, whatsapp, nome)')
@@ -73,7 +75,6 @@ serve(async (req: Request) => {
       );
     }
 
-    // Resolver telefone: aluno cadastrado ou contato externo
     const aluno = conversa.aluno as any;
     const telefone = aluno ? (aluno.whatsapp || aluno.telefone) : conversa.telefone_externo;
 
@@ -86,26 +87,35 @@ serve(async (req: Request) => {
 
     const numero = conversa.whatsapp_jid || formatPhoneNumber(telefone);
 
-    // 2. Inserir mensagem (status: enviando)
-    const { data: mensagem, error: msgError } = await supabase
-      .from('admin_mensagens')
-      .insert({
-        conversa_id,
-        aluno_id: aluno_id || null,
-        direcao: 'saida',
-        tipo,
-        conteudo: conteudo || null,
-        midia_url: midia_url || null,
-        midia_mimetype: midia_mimetype || null,
-        midia_nome: midia_nome || null,
-        remetente: 'admin',
-        remetente_nome,
-        status_entrega: 'enviando',
-      })
-      .select('id')
-      .single();
+    // 2. Inserir mensagem + buscar creds UAZAPI em paralelo
+    const [msgResult, creds] = await Promise.all([
+      supabase
+        .from('admin_mensagens')
+        .insert({
+          conversa_id,
+          aluno_id: aluno_id || null,
+          direcao: 'saida',
+          tipo,
+          conteudo: conteudo || null,
+          midia_url: midia_url || null,
+          midia_mimetype: midia_mimetype || null,
+          midia_nome: midia_nome || null,
+          remetente: 'admin',
+          remetente_nome,
+          status_entrega: 'enviando',
+        })
+        .select('id')
+        .single(),
+      getUazapiCredentials(supabase, {
+        funcao: 'administrativo',
+        caixaId: conversa.caixa_id ?? undefined,
+        unidadeId: conversa.unidade_id ?? undefined,
+      }),
+    ]);
 
-    if (msgError) {
+    const { data: mensagem, error: msgError } = msgResult;
+
+    if (msgError || !mensagem) {
       console.error('[enviar-mensagem-admin] Erro ao inserir mensagem:', msgError);
       return new Response(
         JSON.stringify({ error: 'Erro ao salvar mensagem' }),
@@ -113,121 +123,122 @@ serve(async (req: Request) => {
       );
     }
 
-    console.log(`[enviar-mensagem-admin] Mensagem ${mensagem.id} inserida. Enviando para ${numero}...`);
+    console.log(`[enviar-mensagem-admin] Mensagem ${mensagem.id} inserida. Enviando para ${numero} via ${creds.caixaNome}...`);
 
-    // 3. Resolver credenciais UAZAPI (caixa administrativa)
-    const creds = await getUazapiCredentials(supabase, {
-      funcao: 'administrativo',
-      caixaId: conversa.caixa_id ?? undefined,
-      unidadeId: conversa.unidade_id ?? undefined,
-    });
-    console.log(`[enviar-mensagem-admin] Usando caixa: ${creds.caixaNome} (ID: ${creds.caixaId})`);
+    // 3. EARLY RETURN — responde ao frontend imediatamente
+    const response = new Response(
+      JSON.stringify({ success: true, mensagem_id: mensagem.id }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
 
-    // 4. Montar payload UAZAPI
-    let endpoint = '/send/text';
-    let uazapiBody: Record<string, any> = {
-      number: numero,
-      delay: 2000,
-      readchat: true,
-    };
+    // 4. Envio UAZAPI em background (nao bloqueia o frontend)
+    EdgeRuntime.waitUntil((async () => {
+      try {
+        // Montar payload UAZAPI
+        let endpoint = '/send/text';
+        let uazapiBody: Record<string, any> = {
+          number: numero,
+          delay: 500,
+          readchat: true,
+        };
 
-    if (tipo === 'texto') {
-      endpoint = '/send/text';
-      uazapiBody.text = conteudo;
-      uazapiBody.linkPreview = true;
-    } else {
-      endpoint = '/send/media';
-      uazapiBody.file = midia_url;
-      uazapiBody.text = conteudo || '';
+        if (tipo === 'texto') {
+          endpoint = '/send/text';
+          uazapiBody.text = conteudo;
+          uazapiBody.linkPreview = true;
+        } else {
+          endpoint = '/send/media';
+          uazapiBody.file = midia_url;
+          uazapiBody.text = conteudo || '';
 
-      switch (tipo) {
-        case 'imagem':
-          uazapiBody.type = 'image';
-          break;
-        case 'audio':
-          uazapiBody.type = 'ptt';
-          break;
-        case 'video':
-          uazapiBody.type = 'video';
-          break;
-        case 'documento':
-          uazapiBody.type = 'document';
-          uazapiBody.docName = midia_nome || 'documento';
-          if (midia_mimetype) uazapiBody.mimetype = midia_mimetype;
-          break;
-        default:
-          uazapiBody.type = 'document';
-          uazapiBody.docName = midia_nome || 'arquivo';
-          break;
+          switch (tipo) {
+            case 'imagem':
+              uazapiBody.type = 'image';
+              break;
+            case 'audio':
+              uazapiBody.type = 'ptt';
+              break;
+            case 'video':
+              uazapiBody.type = 'video';
+              break;
+            case 'documento':
+              uazapiBody.type = 'document';
+              uazapiBody.docName = midia_nome || 'documento';
+              if (midia_mimetype) uazapiBody.mimetype = midia_mimetype;
+              break;
+            default:
+              uazapiBody.type = 'document';
+              uazapiBody.docName = midia_nome || 'arquivo';
+              break;
+          }
+        }
+
+        console.log(`[enviar-mensagem-admin] [bg] Endpoint: ${endpoint}, tipo: ${tipo}`);
+
+        // Timeout de 15s para evitar hang
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15000);
+
+        const uazapiResponse = await fetch(`${creds.baseUrl}${endpoint}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'token': creds.token,
+          },
+          body: JSON.stringify(uazapiBody),
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeout);
+
+        const uazapiData = await uazapiResponse.json();
+        console.log('[enviar-mensagem-admin] [bg] Resposta UAZAPI:', JSON.stringify(uazapiData).substring(0, 300));
+
+        if (uazapiResponse.ok && !uazapiData.error) {
+          const whatsappMessageId = uazapiData.id || uazapiData.messageid || uazapiData.key?.id;
+
+          // Atualizar mensagem + conversa em paralelo
+          const preview = tipo === 'texto' ? (conteudo || '').substring(0, 100) : `📎 ${tipo}`;
+          await Promise.all([
+            supabase
+              .from('admin_mensagens')
+              .update({
+                status_entrega: 'enviada',
+                whatsapp_message_id: whatsappMessageId,
+              })
+              .eq('id', mensagem.id),
+            supabase
+              .from('admin_conversas')
+              .update({
+                ultima_mensagem_at: new Date().toISOString(),
+                ultima_mensagem_preview: preview,
+                whatsapp_jid: conversa.whatsapp_jid || numero,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', conversa_id),
+          ]);
+
+          console.log(`[enviar-mensagem-admin] [bg] ✅ Enviada! WhatsApp ID: ${whatsappMessageId}`);
+        } else {
+          const errorMsg = uazapiData.error || uazapiData.message || 'Erro UAZAPI';
+          console.error('[enviar-mensagem-admin] [bg] ❌ Erro UAZAPI:', errorMsg);
+
+          await supabase
+            .from('admin_mensagens')
+            .update({ status_entrega: 'erro' })
+            .eq('id', mensagem.id);
+        }
+      } catch (bgError) {
+        console.error('[enviar-mensagem-admin] [bg] Erro no background:', bgError);
+
+        await supabase
+          .from('admin_mensagens')
+          .update({ status_entrega: 'erro' })
+          .eq('id', mensagem.id);
       }
-    }
+    })());
 
-    console.log(`[enviar-mensagem-admin] Endpoint: ${endpoint}, tipo: ${tipo}`);
-
-    const uazapiResponse = await fetch(`${creds.baseUrl}${endpoint}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'token': creds.token,
-      },
-      body: JSON.stringify(uazapiBody),
-    });
-
-    const uazapiData = await uazapiResponse.json();
-    console.log('[enviar-mensagem-admin] Resposta UAZAPI:', JSON.stringify(uazapiData).substring(0, 300));
-
-    if (uazapiResponse.ok && !uazapiData.error) {
-      const whatsappMessageId = uazapiData.id || uazapiData.messageid || uazapiData.key?.id;
-
-      // 5. Atualizar mensagem com ID do WhatsApp
-      await supabase
-        .from('admin_mensagens')
-        .update({
-          status_entrega: 'enviada',
-          whatsapp_message_id: whatsappMessageId,
-        })
-        .eq('id', mensagem.id);
-
-      // 6. Atualizar conversa
-      const preview = tipo === 'texto' ? (conteudo || '').substring(0, 100) : `📎 ${tipo}`;
-      await supabase
-        .from('admin_conversas')
-        .update({
-          ultima_mensagem_at: new Date().toISOString(),
-          ultima_mensagem_preview: preview,
-          whatsapp_jid: conversa.whatsapp_jid || numero,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', conversa_id);
-
-      console.log(`[enviar-mensagem-admin] ✅ Mensagem enviada! WhatsApp ID: ${whatsappMessageId}`);
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          mensagem_id: mensagem.id,
-          whatsapp_message_id: whatsappMessageId,
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    } else {
-      const errorMsg = uazapiData.error || uazapiData.message || 'Erro ao enviar via UAZAPI';
-      console.error('[enviar-mensagem-admin] ❌ Erro UAZAPI:', errorMsg);
-
-      await supabase
-        .from('admin_mensagens')
-        .update({ status_entrega: 'erro' })
-        .eq('id', mensagem.id);
-
-      return new Response(
-        JSON.stringify({
-          success: false,
-          mensagem_id: mensagem.id,
-          error: errorMsg,
-        }),
-        { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    return response;
   } catch (error) {
     console.error('[enviar-mensagem-admin] Erro geral:', error);
     return new Response(
