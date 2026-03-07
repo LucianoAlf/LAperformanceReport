@@ -226,51 +226,67 @@ export function TabelaAlunos({
     return contagem;
   }, [todosAlunos, alunos]);
 
+  // Helper: aplica update otimista num registro (principal ou outro curso)
+  const aplicarUpdateLocal = useCallback((registro: Aluno, campo: string, valor: string | number | null): Aluno => {
+    const updated = { ...registro };
+    switch (campo) {
+      case 'nome':
+        updated.nome = valor as string;
+        break;
+      case 'professor_atual_id':
+        updated.professor_atual_id = valor ? Number(valor) : null;
+        updated.professor_nome = professores.find(p => p.id === Number(valor))?.nome || null;
+        break;
+      case 'curso_id':
+        updated.curso_id = valor ? Number(valor) : null;
+        updated.curso_nome = cursos.find(c => c.id === Number(valor))?.nome || null;
+        break;
+      case 'dia_aula':
+        updated.dia_aula = valor as string || null;
+        break;
+      case 'horario_aula':
+        updated.horario_aula = valor ? `${valor}:00` : null;
+        break;
+      case 'valor_parcela':
+        updated.valor_parcela = valor ? Number(valor) : null;
+        break;
+      case 'status':
+        updated.status = (valor as string) || 'ativo';
+        break;
+      case 'status_pagamento':
+        updated.status_pagamento = valor === '-' ? null : (valor as string);
+        break;
+      case 'dia_vencimento':
+        updated.dia_vencimento = valor ? Number(valor) : 5;
+        break;
+      case 'telefone':
+        updated.telefone = valor as string;
+        break;
+      case 'responsavel_telefone':
+        updated.responsavel_telefone = valor as string;
+        break;
+    }
+    return updated;
+  }, [professores, cursos]);
+
   // Função para salvar campo individual do aluno
   const salvarCampo = useCallback(async (alunoId: number, campo: string, valor: string | number | null) => {
     // Atualização otimista - atualiza UI imediatamente
+    // Busca tanto no top-level quanto em outros_cursos (segundo curso)
     setAlunosLocal(prev => prev.map(aluno => {
-      if (aluno.id !== alunoId) return aluno;
-      
-      const updated = { ...aluno };
-      switch (campo) {
-        case 'nome':
-          updated.nome = valor as string;
-          break;
-        case 'professor_atual_id':
-          updated.professor_atual_id = valor ? Number(valor) : null;
-          updated.professor_nome = professores.find(p => p.id === Number(valor))?.nome || null;
-          break;
-        case 'curso_id':
-          updated.curso_id = valor ? Number(valor) : null;
-          updated.curso_nome = cursos.find(c => c.id === Number(valor))?.nome || null;
-          break;
-        case 'dia_aula':
-          updated.dia_aula = valor as string || null;
-          break;
-        case 'horario_aula':
-          updated.horario_aula = valor ? `${valor}:00` : null;
-          break;
-        case 'valor_parcela':
-          updated.valor_parcela = valor ? Number(valor) : null;
-          break;
-        case 'status':
-          updated.status = (valor as string) || 'ativo';
-          break;
-        case 'status_pagamento':
-          updated.status_pagamento = valor === '-' ? null : (valor as string);
-          break;
-        case 'dia_vencimento':
-          updated.dia_vencimento = valor ? Number(valor) : 5;
-          break;
-        case 'telefone':
-          updated.telefone = valor as string;
-          break;
-        case 'responsavel_telefone':
-          updated.responsavel_telefone = valor as string;
-          break;
+      if (aluno.id === alunoId) {
+        return aplicarUpdateLocal(aluno, campo, valor);
       }
-      return updated;
+      // Match em outros_cursos (segundo curso nested)
+      if (aluno.outros_cursos?.some(oc => oc.id === alunoId)) {
+        return {
+          ...aluno,
+          outros_cursos: aluno.outros_cursos.map(oc =>
+            oc.id === alunoId ? aplicarUpdateLocal(oc, campo, valor) : oc
+          ),
+        };
+      }
+      return aluno;
     }));
 
     // Preparar dados para o banco
@@ -326,7 +342,7 @@ export function TabelaAlunos({
       setAlunosLocal(alunosProp);
       throw error;
     }
-  }, [professores, cursos, alunosProp]);
+  }, [aplicarUpdateLocal, alunosProp]);
 
   async function confirmarExclusao() {
     if (!alunoParaExcluir) return;
