@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { Send, Paperclip, Image, FileText, Music, Video, Loader2, ChevronUp, Check, CheckCheck, Clock, AlertCircle, User, Phone } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
+import { Tooltip } from '@/components/ui/Tooltip';
 import type { AdminConversa, AdminMensagem, AlunoInbox } from './types';
 
 function getStatusAlunoTag(status: string | null | undefined) {
@@ -137,7 +138,13 @@ function ChatBubble({ msg }: { msg: AdminMensagem }) {
           <span className={cn('text-[10px]', isSaida ? 'text-violet-200/50' : 'text-slate-500')}>
             {formatarHoraMsg(msg.created_at)}
           </span>
-          {isSaida && <StatusIcon status={msg.status_entrega} />}
+          {isSaida && msg.status_entrega === 'erro' ? (
+            <Tooltip content={msg.erro_motivo || 'Falha ao enviar mensagem'} side="top">
+              <span className="cursor-help"><StatusIcon status={msg.status_entrega} /></span>
+            </Tooltip>
+          ) : isSaida ? (
+            <StatusIcon status={msg.status_entrega} />
+          ) : null}
         </div>
 
         {/* Reações */}

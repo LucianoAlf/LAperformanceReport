@@ -60,6 +60,7 @@ export interface AdminMensagem {
   remetente: RemetenteAdmin;
   remetente_nome: string | null;
   status_entrega: StatusEntrega;
+  erro_motivo?: string;
   whatsapp_message_id: string | null;
   reacoes?: { emoji: string; de: string; timestamp?: number }[];
   created_at: string;

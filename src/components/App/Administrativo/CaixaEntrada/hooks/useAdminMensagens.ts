@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase, invokeWithRetry } from '@/lib/supabase';
+import { toast } from 'sonner';
 import type { AdminMensagem } from '../types';
 
 const MENSAGENS_POR_PAGINA = 50;
@@ -153,9 +154,8 @@ export function useAdminMensagens({ conversaId, alunoId, remetenteNome = 'Admin'
 
     setMensagens(prev => [...prev, msgOtimista]);
 
-    // Fire-and-forget: edge function responde rapido (early return),
-    // e o realtime subscription cuida de atualizar o status
-    supabase.functions.invoke('enviar-mensagem-admin', {
+    // Fire-and-forget com retry em auth errors
+    invokeWithRetry('enviar-mensagem-admin', {
       body: {
         conversa_id: conversaId,
         aluno_id: alunoId ?? null,
@@ -166,8 +166,9 @@ export function useAdminMensagens({ conversaId, alunoId, remetenteNome = 'Admin'
     }).then(({ data, error }) => {
       if (error) {
         console.error('[useAdminMensagens] Erro ao enviar:', error);
+        const motivo = error.message || 'Erro desconhecido ao enviar mensagem';
         setMensagens(prev =>
-          prev.map(m => m.id === msgOtimista.id ? { ...m, status_entrega: 'erro' as const } : m)
+          prev.map(m => m.id === msgOtimista.id ? { ...m, status_entrega: 'erro' as const, erro_motivo: motivo } : m)
         );
         return;
       }
@@ -179,7 +180,7 @@ export function useAdminMensagens({ conversaId, alunoId, remetenteNome = 'Admin'
       }
     }).catch(() => {
       setMensagens(prev =>
-        prev.map(m => m.id === msgOtimista.id ? { ...m, status_entrega: 'erro' as const } : m)
+        prev.map(m => m.id === msgOtimista.id ? { ...m, status_entrega: 'erro' as const, erro_motivo: 'Falha de conexão' } : m)
       );
     });
 
@@ -234,8 +235,8 @@ export function useAdminMensagens({ conversaId, alunoId, remetenteNome = 'Admin'
 
       setMensagens(prev => [...prev, msgOtimista]);
 
-      // Fire-and-forget apos upload
-      supabase.functions.invoke('enviar-mensagem-admin', {
+      // Fire-and-forget com retry em auth errors
+      invokeWithRetry('enviar-mensagem-admin', {
         body: {
           conversa_id: conversaId,
           aluno_id: alunoId ?? null,
@@ -249,8 +250,9 @@ export function useAdminMensagens({ conversaId, alunoId, remetenteNome = 'Admin'
       }).then(({ data, error }) => {
         if (error) {
           console.error('[useAdminMensagens] Erro ao enviar mídia:', error);
+          const motivo = error.message || 'Erro desconhecido ao enviar mídia';
           setMensagens(prev =>
-            prev.map(m => m.id === msgOtimista.id ? { ...m, status_entrega: 'erro' as const } : m)
+            prev.map(m => m.id === msgOtimista.id ? { ...m, status_entrega: 'erro' as const, erro_motivo: motivo } : m)
           );
           return;
         }
@@ -261,16 +263,17 @@ export function useAdminMensagens({ conversaId, alunoId, remetenteNome = 'Admin'
         }
       }).catch(() => {
         setMensagens(prev =>
-          prev.map(m => m.id === msgOtimista.id ? { ...m, status_entrega: 'erro' as const } : m)
+          prev.map(m => m.id === msgOtimista.id ? { ...m, status_entrega: 'erro' as const, erro_motivo: 'Falha de conexão' } : m)
         );
       });
 
       return { mensagem_id: msgOtimista.id };
     } catch (err) {
       console.error('[useAdminMensagens] Erro ao enviar mídia:', err);
+      const motivo = err instanceof Error ? err.message : 'Erro ao fazer upload do arquivo';
       setMensagens(prev =>
         prev.map(m =>
-          m.status_entrega === 'enviando' ? { ...m, status_entrega: 'erro' as const } : m
+          m.status_entrega === 'enviando' ? { ...m, status_entrega: 'erro' as const, erro_motivo: motivo } : m
         )
       );
       return null;

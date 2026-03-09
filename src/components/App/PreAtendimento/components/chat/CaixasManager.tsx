@@ -205,10 +205,12 @@ export function CaixasManager() {
   };
 
   const handleExcluir = async (id: number) => {
-    if (!confirm('Tem certeza que deseja excluir esta caixa?')) return;
+    const caixa = caixas.find(c => c.id === id);
+    if (!confirm(`Tem certeza que deseja excluir a caixa "${caixa?.nome || id}"? Conversas existentes não serão apagadas.`)) return;
     const { error } = await supabase.from('whatsapp_caixas').delete().eq('id', id);
     if (error) {
-      setErro(error.message);
+      setErro('Erro ao excluir caixa. Tente novamente.');
+      console.error('[CaixasManager] Erro ao excluir:', error);
     } else {
       setSucesso('Caixa excluída!');
       await fetchCaixas();

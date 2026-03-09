@@ -15,3 +15,7 @@ Obs 1: Segundo Curso conta como 1 aluno, então eleva o Ticket Medio. Ex: Maria 
 Obs 2: Bolsista Parcial nao entra na contagem de alunos pagantes. Professor, funcionario que paga R$170/Mês. Esses nao entram na contagem de alunos pagantes e nem no Ticket Médio, so entram na contagem de alunos e ativos e matrículas. 
 
 Obs 3: Alunos Bolsistas Integral, Bolsistas Parciais, Banda, Coral, não contam no Ticket Médio.
+
+
+- LTV Nao entra bolsista.
+

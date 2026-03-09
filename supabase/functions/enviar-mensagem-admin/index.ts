@@ -7,7 +7,7 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { getUazapiCredentials } from '../_shared/uazapi.ts';
+import { getUazapiCredentials } from './_shared/uazapi.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -35,7 +35,17 @@ serve(async (req: Request) => {
   }
 
   try {
-    const { conversa_id, aluno_id, conteudo, tipo = 'texto', remetente_nome = 'Admin', midia_url, midia_mimetype, midia_nome } = await req.json();
+    const body = await req.json();
+
+    // Health check / warm-up ping (pg_cron)
+    if (body.ping) {
+      return new Response(
+        JSON.stringify({ ok: true }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const { conversa_id, aluno_id, conteudo, tipo = 'texto', remetente_nome = 'Admin', midia_url, midia_mimetype, midia_nome } = body;
 
     if (!conversa_id) {
       return new Response(
