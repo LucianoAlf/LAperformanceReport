@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Paperclip, Image, FileText, Music, Video, Loader2, ChevronUp, Check, CheckCheck, Clock, AlertCircle, User, Phone } from 'lucide-react';
+import { Send, Paperclip, Image, FileText, Music, Video, Loader2, ChevronUp, Check, CheckCheck, Clock, AlertCircle, User, Phone, Mic, X, Play, Pause } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -42,7 +42,104 @@ function formatarHoraMsg(data: string): string {
   return new Date(data).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 }
 
-function MidiaRender({ msg }: { msg: AdminMensagem }) {
+function AudioPlayer({ src, isSaida }: { src: string; isSaida: boolean }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const onLoaded = () => setDuration(audio.duration || 0);
+    const onTimeUpdate = () => setCurrentTime(audio.currentTime);
+    const onEnded = () => { setPlaying(false); setCurrentTime(0); };
+
+    audio.addEventListener('loadedmetadata', onLoaded);
+    audio.addEventListener('timeupdate', onTimeUpdate);
+    audio.addEventListener('ended', onEnded);
+    return () => {
+      audio.removeEventListener('loadedmetadata', onLoaded);
+      audio.removeEventListener('timeupdate', onTimeUpdate);
+      audio.removeEventListener('ended', onEnded);
+    };
+  }, []);
+
+  const togglePlay = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (playing) { audio.pause(); } else { audio.play(); }
+    setPlaying(!playing);
+  };
+
+  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    const audio = audioRef.current;
+    if (!audio || !duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+    audio.currentTime = pct * duration;
+    setCurrentTime(audio.currentTime);
+  };
+
+  const formatTime = (s: number) => {
+    if (!s || !isFinite(s)) return '0:00';
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60);
+    return `${m}:${sec.toString().padStart(2, '0')}`;
+  };
+
+  const progress = duration ? (currentTime / duration) * 100 : 0;
+
+  return (
+    <div className="flex items-center gap-2.5 min-w-[200px] max-w-[260px]">
+      <audio ref={audioRef} src={src} preload="metadata" />
+
+      <button
+        onClick={togglePlay}
+        className={cn(
+          'w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 transition',
+          isSaida
+            ? 'bg-white/20 hover:bg-white/30 text-white'
+            : 'bg-violet-500/20 hover:bg-violet-500/30 text-violet-400'
+        )}
+      >
+        {playing
+          ? <Pause className="w-4 h-4" />
+          : <Play className="w-4 h-4 ml-0.5" />
+        }
+      </button>
+
+      <div className="flex-1 min-w-0">
+        {/* Barra de progresso */}
+        <div
+          className={cn(
+            'h-1.5 rounded-full cursor-pointer relative',
+            isSaida ? 'bg-white/20' : 'bg-slate-600'
+          )}
+          onClick={handleSeek}
+        >
+          <div
+            className={cn(
+              'h-full rounded-full transition-all',
+              isSaida ? 'bg-white/70' : 'bg-violet-400'
+            )}
+            style={{ width: `${progress}%` }}
+          />
+        </div>
+
+        {/* Tempo */}
+        <div className="flex justify-between mt-1">
+          <span className={cn('text-[10px]', isSaida ? 'text-violet-100/60' : 'text-slate-500')}>
+            {formatTime(playing ? currentTime : duration)}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MidiaRender({ msg, isSaida }: { msg: AdminMensagem; isSaida: boolean }) {
   if (msg.tipo === 'sticker') {
     return msg.midia_url ? (
       <img src={msg.midia_url} alt="Sticker" className="w-32 h-32 object-contain" loading="lazy" />
@@ -65,7 +162,7 @@ function MidiaRender({ msg }: { msg: AdminMensagem }) {
   }
 
   if (msg.tipo === 'audio') {
-    return <audio controls src={msg.midia_url} className="max-w-[260px]" />;
+    return <AudioPlayer src={msg.midia_url} isSaida={isSaida} />;
   }
 
   if (msg.tipo === 'video') {
@@ -126,7 +223,7 @@ function ChatBubble({ msg }: { msg: AdminMensagem }) {
         )}
 
         {/* Mídia */}
-        <MidiaRender msg={msg} />
+        <MidiaRender msg={msg} isSaida={isSaida} />
 
         {/* Texto */}
         {msg.conteudo && (
@@ -254,6 +351,99 @@ export function AdminChatPanel({
     documento: '.pdf,.doc,.docx,.xls,.xlsx,.txt,.csv',
   };
 
+  // === Gravação de áudio ===
+  const [gravando, setGravando] = useState(false);
+  const [tempoGravacao, setTempoGravacao] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+
+  const pararTimer = useCallback(() => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  const limparGravacao = useCallback(() => {
+    pararTimer();
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
+    }
+    mediaRecorderRef.current = null;
+    chunksRef.current = [];
+    setGravando(false);
+    setTempoGravacao(0);
+  }, [pararTimer]);
+
+  const iniciarGravacao = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+
+      const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')
+          ? 'audio/ogg;codecs=opus'
+          : 'audio/webm';
+
+      const recorder = new MediaRecorder(stream, { mimeType });
+      mediaRecorderRef.current = recorder;
+      chunksRef.current = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      recorder.start();
+      setGravando(true);
+      setTempoGravacao(0);
+      timerRef.current = setInterval(() => setTempoGravacao(prev => prev + 1), 1000);
+    } catch {
+      // Permissão negada ou mic indisponível
+    }
+  }, []);
+
+  const enviarGravacao = useCallback(() => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === 'inactive') return;
+
+    recorder.onstop = async () => {
+      const blob = new Blob(chunksRef.current, { type: recorder.mimeType });
+      const ext = recorder.mimeType.includes('ogg') ? 'ogg' : 'webm';
+      const file = new File([blob], `audio_${Date.now()}.${ext}`, { type: recorder.mimeType });
+      limparGravacao();
+      await onEnviarMidia(file, 'audio');
+    };
+    recorder.stop();
+  }, [limparGravacao, onEnviarMidia]);
+
+  const cancelarGravacao = useCallback(() => {
+    const recorder = mediaRecorderRef.current;
+    if (recorder && recorder.state !== 'inactive') {
+      recorder.onstop = null;
+      recorder.stop();
+    }
+    limparGravacao();
+  }, [limparGravacao]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+      pararTimer();
+    };
+  }, [pararTimer]);
+
+  const formatarTempo = (s: number) => {
+    const min = Math.floor(s / 60).toString().padStart(2, '0');
+    const sec = (s % 60).toString().padStart(2, '0');
+    return `${min}:${sec}`;
+  };
+
   return (
     <div className="flex-1 flex flex-col" style={{ background: 'linear-gradient(180deg, #0f172a 0%, #0d1424 100%)' }}>
       {/* Header */}
@@ -367,65 +557,100 @@ export function AdminChatPanel({
 
       {/* Input */}
       <div className="px-4 py-3 border-t border-slate-700/50">
-        <div className="flex items-end gap-2">
-          {/* Botão anexo */}
-          <div className="relative">
+        {gravando ? (
+          /* === Modo Gravação === */
+          <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-2.5">
             <button
-              onClick={() => setMenuAnexoAberto(prev => !prev)}
-              className="p-2 rounded-lg text-slate-400 hover:text-violet-400 hover:bg-slate-700/50 transition"
+              onClick={cancelarGravacao}
+              className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-red-400 transition"
             >
-              <Paperclip className="w-5 h-5" />
+              <X className="w-4 h-4" />
+              Cancelar
             </button>
-            {menuAnexoAberto && (
-              <div className="absolute bottom-12 left-0 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl py-1.5 min-w-[160px] z-10">
-                <button onClick={() => abrirUpload('imagem')} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700/50 transition">
-                  <Image className="w-4 h-4 text-emerald-400" /> Imagem
-                </button>
-                <button onClick={() => abrirUpload('audio')} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700/50 transition">
-                  <Music className="w-4 h-4 text-cyan-400" /> Áudio
-                </button>
-                <button onClick={() => abrirUpload('video')} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700/50 transition">
-                  <Video className="w-4 h-4 text-purple-400" /> Vídeo
-                </button>
-                <button onClick={() => abrirUpload('documento')} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700/50 transition">
-                  <FileText className="w-4 h-4 text-orange-400" /> Documento
-                </button>
-              </div>
-            )}
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept={acceptMap[tipoUpload]}
-              onChange={handleFileChange}
-              className="hidden"
-            />
+
+            <div className="flex-1 flex items-center justify-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+              <span className="text-sm font-mono text-red-400">{formatarTempo(tempoGravacao)}</span>
+            </div>
+
+            <button
+              onClick={enviarGravacao}
+              className="p-2.5 rounded-xl bg-violet-600 text-white hover:bg-violet-500 transition"
+            >
+              <Send className="w-5 h-5" />
+            </button>
           </div>
+        ) : (
+          /* === Modo Normal === */
+          <div className="flex items-end gap-2">
+            {/* Botão anexo */}
+            <div className="relative">
+              <button
+                onClick={() => setMenuAnexoAberto(prev => !prev)}
+                className="p-2 rounded-lg text-slate-400 hover:text-violet-400 hover:bg-slate-700/50 transition"
+              >
+                <Paperclip className="w-5 h-5" />
+              </button>
+              {menuAnexoAberto && (
+                <div className="absolute bottom-12 left-0 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl py-1.5 min-w-[160px] z-10">
+                  <button onClick={() => abrirUpload('imagem')} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700/50 transition">
+                    <Image className="w-4 h-4 text-emerald-400" /> Imagem
+                  </button>
+                  <button onClick={() => abrirUpload('audio')} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700/50 transition">
+                    <Music className="w-4 h-4 text-cyan-400" /> Áudio (arquivo)
+                  </button>
+                  <button onClick={() => abrirUpload('video')} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700/50 transition">
+                    <Video className="w-4 h-4 text-purple-400" /> Vídeo
+                  </button>
+                  <button onClick={() => abrirUpload('documento')} className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700/50 transition">
+                    <FileText className="w-4 h-4 text-orange-400" /> Documento
+                  </button>
+                </div>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={acceptMap[tipoUpload]}
+                onChange={handleFileChange}
+                className="hidden"
+              />
+            </div>
 
-          {/* Textarea */}
-          <textarea
-            ref={textareaRef}
-            value={texto}
-            onChange={e => setTexto(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Digite uma mensagem..."
-            rows={1}
-            className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none resize-none"
-          />
+            {/* Textarea */}
+            <textarea
+              ref={textareaRef}
+              value={texto}
+              onChange={e => setTexto(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Digite uma mensagem..."
+              rows={1}
+              className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none resize-none"
+            />
 
-          {/* Botão enviar */}
-          <button
-            onClick={handleEnviar}
-            disabled={!texto.trim() || enviando}
-            className={cn(
-              'p-2.5 rounded-xl transition',
-              texto.trim() && !enviando
-                ? 'bg-violet-600 text-white hover:bg-violet-500'
-                : 'bg-slate-700 text-slate-500 cursor-not-allowed'
+            {/* Botão mic ou enviar */}
+            {texto.trim() ? (
+              <button
+                onClick={handleEnviar}
+                disabled={enviando}
+                className={cn(
+                  'p-2.5 rounded-xl transition',
+                  !enviando
+                    ? 'bg-violet-600 text-white hover:bg-violet-500'
+                    : 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                )}
+              >
+                {enviando ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+              </button>
+            ) : (
+              <button
+                onClick={iniciarGravacao}
+                className="p-2.5 rounded-xl bg-violet-600 text-white hover:bg-violet-500 transition"
+              >
+                <Mic className="w-5 h-5" />
+              </button>
             )}
-          >
-            {enviando ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
-          </button>
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { MessageSquare, X, MessageCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useWidgetOverlapSentinel } from '@/contexts/WidgetVisibilityContext';
 import { useAdminConversas } from './hooks/useAdminConversas';
 import { useAdminMensagens } from './hooks/useAdminMensagens';
 import { AdminInboxList } from './AdminInboxList';
@@ -23,6 +24,7 @@ interface CaixaEntradaTabProps {
 
 export function CaixaEntradaTab({ unidadeId }: CaixaEntradaTabProps) {
   const { usuario } = useAuth();
+  const sentinelRef = useWidgetOverlapSentinel();
   const [conversaSelecionada, setConversaSelecionada] = useState<AdminConversa | null>(null);
   const [filtro, setFiltro] = useState<FiltroAdminInbox>('todas');
   const [busca, setBusca] = useState('');
@@ -81,7 +83,7 @@ export function CaixaEntradaTab({ unidadeId }: CaixaEntradaTabProps) {
   }
 
   return (
-    <div className="flex flex-col -mx-6 -mt-2" style={{ height: 'calc(100vh - 220px)' }}>
+    <div ref={sentinelRef} className="flex flex-col -mx-6 -mt-2" style={{ height: 'calc(100vh - 220px)' }}>
       {/* Split Panel: Inbox + Chat */}
       <div className="flex flex-1 overflow-hidden rounded-xl border border-slate-700/50">
         {/* Coluna 1: Inbox */}
