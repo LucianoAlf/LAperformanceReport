@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical, Play, MessageSquarePlus, MessageCircle, CheckCircle2, Circle, FileEdit, ChevronDown, ChevronRight, Music2, Layers, CreditCard, FileText, Banknote, QrCode, Link2, Receipt } from 'lucide-react';
+import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical, Play, MessageSquarePlus, MessageCircle, CheckCircle2, Circle, FileEdit, ChevronDown, ChevronRight, Music2, Layers, CreditCard, FileText, Banknote, QrCode, Link2, Receipt, ChevronsUpDown } from 'lucide-react';
 import { CelulaEditavel } from '@/components/ui/CelulaEditavel';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
@@ -25,6 +25,19 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { useWidgetOverlapSentinel } from '@/contexts/WidgetVisibilityContext';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover';
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from '@/components/ui/command';
 import type { Aluno, Filtros } from './AlunosPage';
 
 interface TabelaAlunosProps {
@@ -100,6 +113,7 @@ export function TabelaAlunos({
   const [editandoAnotacaoId, setEditandoAnotacaoId] = useState<number | null>(null);
   const [textoEdicao, setTextoEdicao] = useState('');
   const [categoriaEdicao, setCategoriaEdicao] = useState('geral');
+  const [professorPopoverOpen, setProfessorPopoverOpen] = useState(false);
   const [anotacaoParaExcluir, setAnotacaoParaExcluir] = useState<number | null>(null);
   const [alunosSelecionados, setAlunosSelecionados] = useState<Set<number>>(new Set());
   const [processandoMassa, setProcessandoMassa] = useState(false);
@@ -910,21 +924,58 @@ export function TabelaAlunos({
             />
           </div>
 
-          {/* Filtro Professor */}
-          <Select
-            value={filtros.professor_id || "todos"}
-            onValueChange={(value) => setFiltros({ ...filtros, professor_id: value === "todos" ? "" : value })}
-          >
-            <SelectTrigger className={`w-[140px] ${filtros.professor_id && filtros.professor_id !== 'todos' ? 'border-2 border-purple-500 bg-purple-500/10' : ''}`}>
-              <SelectValue placeholder="Professor" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="todos">Professor</SelectItem>
-              {professores.map(p => (
-                <SelectItem key={p.id} value={String(p.id)}>{p.nome}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          {/* Filtro Professor — Combobox com busca */}
+          <Popover open={professorPopoverOpen} onOpenChange={setProfessorPopoverOpen}>
+            <PopoverTrigger asChild>
+              <button
+                role="combobox"
+                aria-expanded={professorPopoverOpen}
+                className={`flex items-center justify-between gap-2 w-[180px] h-10 px-3 py-2 text-sm rounded-md border bg-slate-800/50 border-slate-700 hover:bg-slate-700/50 transition-colors ${
+                  filtros.professor_id ? 'border-2 border-purple-500 bg-purple-500/10' : ''
+                }`}
+              >
+                <span className="truncate">
+                  {filtros.professor_id
+                    ? professores.find(p => String(p.id) === filtros.professor_id)?.nome || 'Professor'
+                    : 'Professor'}
+                </span>
+                <ChevronsUpDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-[220px] p-0" align="start">
+              <Command>
+                <CommandInput placeholder="Buscar professor..." />
+                <CommandList>
+                  <CommandEmpty>Nenhum professor encontrado.</CommandEmpty>
+                  <CommandGroup>
+                    <CommandItem
+                      value="todos"
+                      onSelect={() => {
+                        setFiltros({ ...filtros, professor_id: '' });
+                        setProfessorPopoverOpen(false);
+                      }}
+                    >
+                      <Check className={`w-4 h-4 mr-2 ${!filtros.professor_id ? 'opacity-100' : 'opacity-0'}`} />
+                      Todos
+                    </CommandItem>
+                    {professores.map(p => (
+                      <CommandItem
+                        key={p.id}
+                        value={p.nome}
+                        onSelect={() => {
+                          setFiltros({ ...filtros, professor_id: String(p.id) });
+                          setProfessorPopoverOpen(false);
+                        }}
+                      >
+                        <Check className={`w-4 h-4 mr-2 ${filtros.professor_id === String(p.id) ? 'opacity-100' : 'opacity-0'}`} />
+                        {p.nome}
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
 
           {/* Filtro Dia */}
           <Select
@@ -1568,7 +1619,10 @@ export function TabelaAlunos({
                 </tr>
                 
                 {/* Linhas expandidas para outros cursos (segundo curso) — edição inline */}
-                {alunosExpandidos.has(aluno.id) && aluno.outros_cursos?.map((outroCurso, idx) => (
+                {alunosExpandidos.has(aluno.id) && (filtros.professor_id
+                  ? aluno.outros_cursos?.filter(oc => oc.professor_atual_id === parseInt(filtros.professor_id))
+                  : aluno.outros_cursos
+                )?.map((outroCurso, idx) => (
                   <tr 
                     key={`${aluno.id}-curso-${idx}`}
                     className="bg-purple-500/5 border-l-2 border-purple-500"
@@ -1592,6 +1646,7 @@ export function TabelaAlunos({
                         </button>
                       </div>
                     </td>
+                    <td className="px-4 py-2"></td>
                     <td className="px-4 py-2">
                       {getBadgeEscola(outroCurso.classificacao)}
                     </td>

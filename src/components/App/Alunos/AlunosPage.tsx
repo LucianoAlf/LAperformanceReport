@@ -64,6 +64,7 @@ export interface Aluno {
   telefone?: string;
   // Campos calculados para agrupamento
   cursos_ids?: number[]; // IDs de todos os cursos do aluno
+  professores_ids?: number[]; // IDs de todos os professores do aluno
   outros_cursos?: Aluno[]; // Outros registros do mesmo aluno (segundo curso)
   valor_total?: number; // Soma de todos os valores de parcela
   // Health Score - percepção do professor
@@ -371,6 +372,7 @@ export function AlunosPage() {
             outros_cursos: outrosCursos,
             valor_total: valorTotal,
             cursos_ids: grupo.map(a => a.curso_id).filter(Boolean) as number[],
+            professores_ids: grupo.map(a => a.professor_atual_id).filter(Boolean) as number[],
           });
         }
       });
@@ -595,7 +597,39 @@ export function AlunosPage() {
       resultado = resultado.filter(a => a.nome.toLowerCase().includes(termo));
     }
     if (filtros.professor_id) {
-      resultado = resultado.filter(a => a.professor_atual_id === parseInt(filtros.professor_id));
+      const profId = parseInt(filtros.professor_id);
+      resultado = resultado.filter(a =>
+        a.professor_atual_id === profId ||
+        (a.professores_ids && a.professores_ids.includes(profId))
+      );
+      // Se o professor filtrado está no segundo curso (não no principal), promover o segundo curso para a row principal
+      resultado = resultado.map(a => {
+        if (a.professor_atual_id === profId) return a;
+        const cursoMatch = a.outros_cursos?.find(oc => oc.professor_atual_id === profId);
+        if (!cursoMatch) return a;
+        // Trocar: segundo curso vira principal, principal vira segundo
+        const outrosCursosSemMatch = [
+          ...(a.outros_cursos?.filter(oc => oc.id !== cursoMatch.id) || []),
+        ];
+        return {
+          ...a,
+          professor_atual_id: cursoMatch.professor_atual_id,
+          professor_nome: cursoMatch.professor_nome,
+          curso_id: cursoMatch.curso_id,
+          curso_nome: cursoMatch.curso_nome,
+          modalidade: cursoMatch.modalidade,
+          dia_aula: cursoMatch.dia_aula,
+          horario_aula: cursoMatch.horario_aula,
+          valor_parcela: cursoMatch.valor_parcela,
+          status_pagamento: cursoMatch.status_pagamento,
+          dia_vencimento: cursoMatch.dia_vencimento,
+          total_alunos_turma: cursoMatch.total_alunos_turma,
+          classificacao: cursoMatch.classificacao || a.classificacao,
+          forma_pagamento_id: cursoMatch.forma_pagamento_id,
+          forma_pagamento_nome: cursoMatch.forma_pagamento_nome,
+          outros_cursos: outrosCursosSemMatch,
+        };
+      });
     }
     if (filtros.curso_id) {
       const cursoIdFiltro = parseInt(filtros.curso_id);
