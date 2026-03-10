@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertTriangle } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -65,7 +65,7 @@ export function TabAutomacao({ unidadeAtual }: TabAutomacaoProps) {
         query = query.gte('created_at', dataLimite.toISOString());
       }
 
-      if (filtroEvento && filtroEvento !== 'todos') {
+      if (filtroEvento && filtroEvento !== 'todos' && filtroEvento !== 'sem_professor') {
         query = query.eq('evento', filtroEvento);
       }
 
@@ -112,16 +112,22 @@ export function TabAutomacao({ unidadeAtual }: TabAutomacaoProps) {
     return partes.length > 0 ? partes.join(' · ') : '';
   };
 
-  const totalPorAcao = registros.reduce((acc, r) => {
+  const registrosFiltrados = filtroEvento === 'sem_professor'
+    ? registros.filter(r => r.detalhes?.sem_professor === true)
+    : registros;
+
+  const totalPorAcao = registrosFiltrados.reduce((acc, r) => {
     acc[r.acao] = (acc[r.acao] || 0) + 1;
     return acc;
   }, {} as Record<string, number>);
+
+  const totalSemProfessor = registros.filter(r => r.detalhes?.sem_professor === true).length;
 
   return (
     <div className="space-y-6">
       {/* Contadores resumidos */}
       {registros.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
           {Object.entries(acaoStyles).map(([acao, style]) => (
             <div
               key={acao}
@@ -137,6 +143,24 @@ export function TabAutomacao({ unidadeAtual }: TabAutomacaoProps) {
               <span className="text-slate-400 text-sm">{style.label}</span>
             </div>
           ))}
+          {totalSemProfessor > 0 && (
+            <div
+              className={cn(
+                'flex items-center gap-3 px-4 py-3 rounded-lg border cursor-pointer transition-colors',
+                filtroEvento === 'sem_professor' ? 'bg-orange-500/30 border-orange-500/50' : 'bg-orange-500/20 border-slate-700/50 hover:border-orange-500/30'
+              )}
+              onClick={() => setFiltroEvento(filtroEvento === 'sem_professor' ? 'todos' : 'sem_professor')}
+              title="Clique para filtrar"
+            >
+              <span className="text-2xl font-bold text-orange-400">
+                {totalSemProfessor}
+              </span>
+              <span className="text-slate-400 text-sm flex items-center gap-1">
+                <AlertTriangle className="w-3.5 h-3.5 text-orange-400" />
+                Sem Professor
+              </span>
+            </div>
+          )}
         </div>
       )}
 
@@ -147,7 +171,7 @@ export function TabAutomacao({ unidadeAtual }: TabAutomacaoProps) {
             <span className="text-lg">⚡</span>
             <h2 className="text-lg font-semibold text-white">Log da Automacao</h2>
             <span className="text-sm text-slate-400">
-              {registros.length} registro{registros.length !== 1 ? 's' : ''}
+              {registrosFiltrados.length} registro{registrosFiltrados.length !== 1 ? 's' : ''}
             </span>
           </div>
           <div className="flex gap-3">
@@ -161,6 +185,7 @@ export function TabAutomacao({ unidadeAtual }: TabAutomacaoProps) {
                 <SelectItem value="matricula_renovacao">Renovacao</SelectItem>
                 <SelectItem value="matricula_trancamento">Trancamento</SelectItem>
                 <SelectItem value="matricula_finalizacao">Finalizacao</SelectItem>
+                <SelectItem value="sem_professor">Sem Professor</SelectItem>
               </SelectContent>
             </Select>
             <Select value={filtroPeriodo} onValueChange={setFiltroPeriodo}>
@@ -181,7 +206,7 @@ export function TabAutomacao({ unidadeAtual }: TabAutomacaoProps) {
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-8 h-8 text-violet-400 animate-spin" />
             </div>
-          ) : registros.length === 0 ? (
+          ) : registrosFiltrados.length === 0 ? (
             <div className="text-center py-12 text-slate-400">
               <span className="text-4xl mb-4 block">⚡</span>
               <p className="text-lg font-medium">Nenhum registro de automacao encontrado</p>
@@ -189,14 +214,20 @@ export function TabAutomacao({ unidadeAtual }: TabAutomacaoProps) {
             </div>
           ) : (
             <div className="space-y-2">
-              {registros.map((registro) => {
+              {registrosFiltrados.map((registro) => {
                 const style = acaoStyles[registro.acao] || acaoStyles.atualizado;
                 const detalhesStr = formatarDetalhes(registro);
+                const semProfessor = registro.detalhes?.sem_professor === true;
 
                 return (
                   <div
                     key={registro.id}
-                    className="flex items-start gap-4 p-3 bg-slate-900/50 rounded-lg hover:bg-slate-900/80 transition-colors"
+                    className={cn(
+                      'flex items-start gap-4 p-3 rounded-lg transition-colors',
+                      semProfessor
+                        ? 'bg-orange-500/5 border border-orange-500/20 hover:bg-orange-500/10'
+                        : 'bg-slate-900/50 hover:bg-slate-900/80'
+                    )}
                   >
                     <div className="min-w-[130px] text-sm text-slate-400">
                       {formatarData(registro.created_at)}
@@ -211,10 +242,18 @@ export function TabAutomacao({ unidadeAtual }: TabAutomacaoProps) {
                       </span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <span className="text-white font-medium">{registro.aluno_nome}</span>
-                      {registro.unidade_nome && (
-                        <span className="text-slate-500 text-sm ml-2">({registro.unidade_nome})</span>
-                      )}
+                      <div className="flex items-center gap-2">
+                        <span className="text-white font-medium">{registro.aluno_nome}</span>
+                        {semProfessor && (
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-orange-500/20 text-orange-400" title="Professor nao vinculado ao aluno">
+                            <AlertTriangle className="w-3 h-3" />
+                            Sem professor
+                          </span>
+                        )}
+                        {registro.unidade_nome && (
+                          <span className="text-slate-500 text-sm">({registro.unidade_nome})</span>
+                        )}
+                      </div>
                       {detalhesStr && (
                         <p className="text-slate-400 text-sm mt-0.5 truncate">{detalhesStr}</p>
                       )}
