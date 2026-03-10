@@ -228,7 +228,8 @@ export function ModalRelatorio({
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
     texto += `• Matrículas Ativas: *${resumo?.matriculas_ativas || 0}*\n`;
     texto += `• Matrículas em Banda: *${resumo?.matriculas_banda || 0}*\n`;
-    texto += `• Matrículas de 2º Curso: *${resumo?.matriculas_2_curso || 0}*\n\n`;
+    texto += `• Matrículas de 2º Curso: *${resumo?.matriculas_2_curso || 0}*\n`;
+    texto += `• Alunos no Coral: *${resumo?.alunos_coral || 0}*\n\n`;
 
     texto += `🔄 *RENOVAÇÕES DO MÊS*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
@@ -254,6 +255,24 @@ export function ModalRelatorio({
       texto += `✅ *RENOVAÇÕES DO DIA: 0*\n\n`;
     }
 
+    // Não Renovações do dia
+    const naoRenovacoesHoje = naoRenovacoes.filter(r => dentroDoRange(r.data));
+    if (naoRenovacoesHoje.length > 0) {
+      texto += `❌ *NÃO RENOVAÇÕES DO DIA (${naoRenovacoesHoje.length})*\n`;
+      texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+      naoRenovacoesHoje.forEach((r, i) => {
+        const reajuste = r.valor_parcela_anterior && r.valor_parcela_novo
+          ? ((r.valor_parcela_novo - r.valor_parcela_anterior) / r.valor_parcela_anterior) * 100
+          : 0;
+        texto += `${i + 1}) Nome: *${r.aluno_nome}*\n`;
+        texto += `   De: R$ ${(r.valor_parcela_anterior || 0).toFixed(2)} para R$ ${(r.valor_parcela_novo || 0).toFixed(2)} (${reajuste.toFixed(1)}%)\n`;
+        texto += `   Professor(a): ${r.professor_nome || 'N/A'}\n`;
+        texto += `   Motivo: ${r.motivo || 'Não informado'}\n\n`;
+      });
+    } else {
+      texto += `❌ *NÃO RENOVAÇÕES DO DIA: 0*\n\n`;
+    }
+
     // Avisos Prévios
     texto += `⚠️ *AVISOS PRÉVIOS PARA SAIR EM ${new Date(ano, dataSelecionada.getMonth() + 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase()}*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
@@ -277,7 +296,8 @@ export function ModalRelatorio({
     texto += `• Interrompido 2º Curso: *${evasoes.filter(e => e.tipo_evasao === 'interrompido_2_curso').length}*\n`;
     texto += `• Interrompido Bolsista: *${evasoes.filter(e => e.tipo_evasao === 'interrompido_bolsista').length}*\n`;
     texto += `• Interrompido Banda: *${evasoes.filter(e => e.tipo_evasao === 'interrompido_banda').length}*\n`;
-    texto += `• Não Renovou: *${evasoes.filter(e => e.tipo_evasao === 'nao_renovou').length}*\n\n`;
+    texto += `• Não Renovou: *${evasoes.filter(e => e.tipo_evasao === 'nao_renovou').length}*\n`;
+    texto += `• Transferência: *${evasoes.filter(e => e.tipo_evasao === 'transferencia').length}*\n\n`;
 
     if (evasoesHoje.length > 0) {
       texto += `Evasões do dia: *${evasoesHoje.length}*\n\n`;

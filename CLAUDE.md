@@ -76,7 +76,7 @@ VITE_GEMINI_API_KEY=...  # opcional
 - **Banco:** todas operações passam pelo client em `src/lib/supabase.ts`
 - **Estado:** não usar Redux ou state managers externos — preferir hooks + Context
 - **Hooks:** preferir hooks customizados para lógica de negócio reutilizável
-- **MCP** Sempre utilize ferramentas mcp para facilitar sua analise.
+- **MCP (OBRIGATÓRIO):** Sempre utilize ferramentas MCP proativamente para análise e investigação. Antes de explorar código manualmente, verifique se há um MCP disponível que facilite a tarefa (ex: Supabase MCP para consultar banco, n8n MCP para verificar workflows, NocoDB MCP para dados). MCPs são a via preferencial para acessar dados reais do sistema — use-os ANTES de ler código fonte quando precisar entender estado atual do banco, schemas, dados ou configurações.
 - **Memória Self-Heal:** manter arquivos em `.claude/memory/` atualizados proativamente. Ao descobrir regras de negócio, padrões de código ou mudanças no domínio, atualizar o arquivo de memória correspondente e informar o usuário. Ver protocolo completo em `MEMORY.md`.
 ## Skills
 

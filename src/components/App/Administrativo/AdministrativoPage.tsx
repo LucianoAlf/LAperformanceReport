@@ -84,6 +84,7 @@ export interface ResumoMes {
   matriculas_ativas: number;
   matriculas_banda: number;
   matriculas_2_curso: number;
+  alunos_coral: number;
   renovacoes_previstas: number;
   renovacoes_realizadas: number;
   renovacoes_pendentes: number;
@@ -413,12 +414,14 @@ export function AdministrativoPage() {
       let matriculasAtivas = 0;
       let matriculasBanda = 0;
       let matriculas2Curso = 0;
+      let alunosCoral = 0;
 
       if (snapshotMatriculas) {
         // Usar snapshot histórico do dados_mensais
         matriculasAtivas = kpisData.reduce((acc: number, k: any) => acc + (k._matriculas_ativas || 0), 0);
         matriculasBanda = kpisData.reduce((acc: number, k: any) => acc + (k._matriculas_banda || 0), 0);
         matriculas2Curso = kpisData.reduce((acc: number, k: any) => acc + (k._matriculas_2_curso || 0), 0);
+        alunosCoral = kpisData.reduce((acc: number, k: any) => acc + (k._alunos_coral || 0), 0);
       } else {
         // Query ao vivo (período atual ou sem snapshot)
         let matriculasQuery = supabase
@@ -437,6 +440,9 @@ export function AdministrativoPage() {
           m.cursos?.nome?.toLowerCase().includes('banda')
         ).length || 0;
         matriculas2Curso = matriculasData?.filter((m: any) => m.is_segundo_curso).length || 0;
+        alunosCoral = matriculasData?.filter((m: any) =>
+          m.cursos?.nome?.toLowerCase().includes('coral')
+        ).length || 0;
       }
 
       // Consolidar KPIs
@@ -448,6 +454,7 @@ export function AdministrativoPage() {
         bolsistas_parciais: (acc.bolsistas_parciais || 0) + (k.total_bolsistas_parciais || 0),
         matriculas_banda: matriculasBanda,
         matriculas_2_curso: matriculas2Curso,
+        alunos_coral: alunosCoral,
         ticket_medio: k.ticket_medio || acc.ticket_medio || 0,
         faturamento: (acc.faturamento || 0) + (Number(k.faturamento_previsto) || 0),
         churn_rate: k.churn_rate || acc.churn_rate || 0,
