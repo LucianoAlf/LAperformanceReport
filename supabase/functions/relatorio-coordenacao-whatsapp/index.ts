@@ -17,6 +17,7 @@ interface RelatorioPayload {
   tipoRelatorio: string;
   unidadeNome?: string;
   competencia?: string;
+  numero_teste?: string; // Se informado, envia apenas para este número (modo teste)
 }
 
 async function enviarWhatsAppGrupo(
@@ -85,6 +86,17 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
     const creds = await getUazapiCredentials(supabase, { funcao: 'sistema' });
+
+    // Modo teste: enviar para número específico ao invés dos grupos
+    if (payload.numero_teste) {
+      const numero = payload.numero_teste.replace(/\D/g, '');
+      console.log(`[relatorio-coordenacao-whatsapp] 🧪 MODO TESTE — enviando para ${numero}`);
+      const resultado = await enviarWhatsAppGrupo(numero, payload.texto, creds);
+      return new Response(
+        JSON.stringify({ success: resultado.success, error: resultado.error, resultados: [{ grupo: 'TESTE', ...resultado }] }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Buscar destinatários do banco
     const { data: destinatarios, error: destError } = await supabase

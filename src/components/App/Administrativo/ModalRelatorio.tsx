@@ -7,6 +7,7 @@ import { Copy, Check, RotateCcw, FileText, Calendar, RefreshCw, AlertTriangle, L
 import { cn } from '@/lib/utils';
 import { DatePicker } from '@/components/ui/date-picker';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/contexts/AuthContext';
 import type { MovimentacaoAdmin, ResumoMes } from './AdministrativoPage';
 
 // Mapeamento de UUIDs para nomes de unidade
@@ -58,6 +59,8 @@ export function ModalRelatorio({
   const [enviandoWhatsApp, setEnviandoWhatsApp] = useState(false);
   const [enviadoWhatsApp, setEnviadoWhatsApp] = useState(false);
   const [erroWhatsApp, setErroWhatsApp] = useState<string | null>(null);
+  const [numeroTeste, setNumeroTeste] = useState('');
+  const { usuario } = useAuth();
   
   // Estado para período do relatório
   const [relatorioPeriodo, setRelatorioPeriodo] = useState<'hoje' | 'ontem' | 'semana' | 'mes' | 'personalizado'>('hoje');
@@ -781,6 +784,7 @@ export function ModalRelatorio({
           tipoRelatorio: tipoSelecionado,
           unidade: unidade,
           competencia: competencia,
+          ...(numeroTeste ? { numero_teste: numeroTeste } : {}),
         },
       });
       
@@ -956,6 +960,15 @@ export function ModalRelatorio({
                     </>
                   )}
                 </Button>
+                {usuario?.email === 'hugo@lamusic.com.br' && (
+                  <input
+                    type="text"
+                    placeholder="Teste: 5521999999999"
+                    value={numeroTeste}
+                    onChange={e => setNumeroTeste(e.target.value)}
+                    className="px-3 py-1.5 bg-slate-900/60 border border-amber-500/30 rounded-lg text-xs text-white placeholder-slate-500 w-40"
+                  />
+                )}
                 <Button
                   onClick={enviarWhatsAppGrupo}
                   disabled={loadingIA || enviandoWhatsApp || !textoRelatorio}

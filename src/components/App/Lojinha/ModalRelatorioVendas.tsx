@@ -9,6 +9,7 @@ import { cn } from '@/lib/utils';
 import { DatePicker } from '@/components/ui/date-picker';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Mapeamento de UUIDs para nomes de unidade
 const UUID_NOME_MAP: Record<string, string> = {
@@ -38,7 +39,9 @@ export function ModalRelatorioVendas({ open, onOpenChange, unidadeId }: ModalRel
   const [copiado, setCopiado] = useState(false);
   const [loading, setLoading] = useState(false);
   const [enviandoWhatsApp, setEnviandoWhatsApp] = useState(false);
-  
+  const [numeroTeste, setNumeroTeste] = useState('');
+  const { usuario } = useAuth();
+
   // Estado para período do relatório
   const [relatorioPeriodo, setRelatorioPeriodo] = useState<'ontem' | 'personalizado'>('ontem');
   const [relatorioData, setRelatorioData] = useState<Date>(new Date());
@@ -128,6 +131,7 @@ export function ModalRelatorioVendas({ open, onOpenChange, unidadeId }: ModalRel
         body: {
           texto: textoRelatorio,
           tipo: 'lojinha_vendas',
+          ...(numeroTeste ? { numero_teste: numeroTeste } : {}),
         },
       });
 
@@ -256,6 +260,15 @@ export function ModalRelatorioVendas({ open, onOpenChange, unidadeId }: ModalRel
                     {copiado ? <Check className="w-4 h-4 mr-1" /> : <Copy className="w-4 h-4 mr-1" />}
                     {copiado ? 'Copiado!' : 'Copiar'}
                   </Button>
+                  {usuario?.email === 'hugo@lamusic.com.br' && (
+                    <input
+                      type="text"
+                      placeholder="Teste: 5521..."
+                      value={numeroTeste}
+                      onChange={e => setNumeroTeste(e.target.value)}
+                      className="px-3 py-1.5 bg-slate-900/60 border border-amber-500/30 rounded-lg text-xs text-white placeholder-slate-500 w-40"
+                    />
+                  )}
                   <Button
                     onClick={enviarWhatsApp}
                     disabled={enviandoWhatsApp || !textoRelatorio}

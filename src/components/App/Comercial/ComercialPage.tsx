@@ -208,6 +208,7 @@ export function ComercialPage() {
   const [enviandoWhatsApp, setEnviandoWhatsApp] = useState(false);
   const [enviadoWhatsApp, setEnviadoWhatsApp] = useState(false);
   const [erroWhatsApp, setErroWhatsApp] = useState<string | null>(null);
+  const [numeroTeste, setNumeroTeste] = useState('');
   
   // Estado para período do relatório (simplificado)
   const [relatorioPeriodo, setRelatorioPeriodo] = useState<'hoje' | 'ontem' | 'personalizado'>('hoje');
@@ -2303,6 +2304,7 @@ export function ComercialPage() {
           tipoRelatorio: tipoRelatorio,
           unidade: unidadeEnvio,
           competencia: `${competencia.filtro.ano}-${String(competencia.filtro.mes).padStart(2, '0')}`,
+          ...(numeroTeste ? { numero_teste: numeroTeste } : {}),
         },
       });
       
@@ -5175,6 +5177,15 @@ export function ComercialPage() {
                 <Copy className="w-5 h-5 mr-2" />
                 Copiar
               </Button>
+              {usuario?.email === 'hugo@lamusic.com.br' && (
+                <input
+                  type="text"
+                  placeholder="Teste: 5521..."
+                  value={numeroTeste}
+                  onChange={e => setNumeroTeste(e.target.value)}
+                  className="px-3 py-1.5 bg-slate-900/60 border border-amber-500/30 rounded-lg text-xs text-white placeholder-slate-500 w-40"
+                />
+              )}
               <Button
                 onClick={enviarWhatsAppGrupo}
                 disabled={!relatorioTexto || enviandoWhatsApp}

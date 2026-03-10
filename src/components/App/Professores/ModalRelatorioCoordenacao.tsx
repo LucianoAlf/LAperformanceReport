@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useToast } from '@/hooks/useToast';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface ModalRelatorioCoordenacaoProps {
   open: boolean;
@@ -50,6 +51,8 @@ export function ModalRelatorioCoordenacao({
   const [enviandoWhatsApp, setEnviandoWhatsApp] = useState(false);
   const [enviadoWhatsApp, setEnviadoWhatsApp] = useState(false);
   const [erroWhatsApp, setErroWhatsApp] = useState<string | null>(null);
+  const [numeroTeste, setNumeroTeste] = useState('');
+  const { usuario } = useAuth();
 
   const mesesPorExtenso: Record<number, string> = {
     1: 'Janeiro', 2: 'Fevereiro', 3: 'Março', 4: 'Abril',
@@ -195,6 +198,7 @@ export function ModalRelatorioCoordenacao({
           tipoRelatorio: tipoRelatorio,
           unidadeNome: unidadeNome,
           competencia: `${ano}-${String(mes).padStart(2, '0')}`,
+          ...(numeroTeste ? { numero_teste: numeroTeste } : {}),
         },
       });
       
@@ -351,6 +355,15 @@ export function ModalRelatorioCoordenacao({
                   )}
                 </Button>
 
+                {usuario?.email === 'hugo@lamusic.com.br' && (
+                  <input
+                    type="text"
+                    placeholder="Teste: 5521..."
+                    value={numeroTeste}
+                    onChange={e => setNumeroTeste(e.target.value)}
+                    className="px-3 py-1.5 bg-slate-900/60 border border-amber-500/30 rounded-lg text-xs text-white placeholder-slate-500 w-40"
+                  />
+                )}
                 <Button
                   onClick={enviarWhatsAppGrupo}
                   disabled={!textoRelatorio || enviandoWhatsApp}

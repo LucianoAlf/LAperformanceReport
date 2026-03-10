@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   Select,
   SelectContent,
@@ -50,6 +51,8 @@ export function RelatoriosTab({ unidadeId, ano, mes }: RelatoriosTabProps) {
   const [enviando, setEnviando] = useState(false);
   const [enviado, setEnviado] = useState(false);
   const [erroEnvio, setErroEnvio] = useState<string | null>(null);
+  const [numeroTeste, setNumeroTeste] = useState('');
+  const { usuario } = useAuth();
 
   const enviarWhatsApp = async () => {
     setEnviando(true);
@@ -62,6 +65,7 @@ export function RelatoriosTab({ unidadeId, ano, mes }: RelatoriosTabProps) {
           tipoRelatorio: tipoSelecionado,
           unidade: unidadeId || 'todos',
           competencia: `${ano}-${String(mes).padStart(2, '0')}`,
+          ...(numeroTeste ? { numero_teste: numeroTeste } : {}),
         },
       });
 
@@ -164,6 +168,15 @@ export function RelatoriosTab({ unidadeId, ano, mes }: RelatoriosTabProps) {
                   <><Copy className="w-3 h-3 mr-1" /> Copiar</>
                 )}
               </Button>
+              {usuario?.email === 'hugo@lamusic.com.br' && (
+                <input
+                  type="text"
+                  placeholder="Teste: 5521..."
+                  value={numeroTeste}
+                  onChange={e => setNumeroTeste(e.target.value)}
+                  className="px-2 py-1 bg-slate-900/60 border border-amber-500/30 rounded text-xs text-white placeholder-slate-500 w-32 h-7"
+                />
+              )}
               <Button
                 size="sm"
                 className="bg-emerald-600 hover:bg-emerald-700 text-white h-7 text-xs"

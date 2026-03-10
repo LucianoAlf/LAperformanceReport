@@ -16,6 +16,7 @@ interface RelatorioPayload {
   tipoRelatorio: string;
   unidade: string; // UUID da unidade ou 'todos' para consolidado
   competencia: string;
+  numero_teste?: string; // Se informado, envia apenas para este número (modo teste)
 }
 
 /**
@@ -85,6 +86,17 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ success: false, error: 'Texto do relatório não informado' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Modo teste: enviar para número específico ao invés dos grupos
+    if (payload.numero_teste) {
+      const numero = payload.numero_teste.replace(/\D/g, '');
+      console.log(`[relatorio-admin-whatsapp] 🧪 MODO TESTE — enviando para ${numero}`);
+      const resultado = await enviarWhatsAppGrupo(numero, payload.texto, creds);
+      return new Response(
+        JSON.stringify({ success: resultado.success, error: resultado.error, resultados: [{ grupo: 'TESTE', ...resultado }] }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
