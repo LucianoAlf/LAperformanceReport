@@ -569,9 +569,24 @@ export function useProfessor360(competencia: string, unidadeId?: string) {
         let totalPenalidades = 0;
 
         criteriosPenalidade.forEach(c => {
-          const qtd = contagem[c.codigo] || 0;
-          const excedente = Math.max(0, qtd - c.tolerancia);
-          const penalidade = excedente * c.pontos_perda;
+          const ocsCriterio = ocsAtivas.filter(oc => oc.criterio_id === c.id);
+          let penalidade = 0;
+
+          if (c.limite_minutos_atraso) {
+            // Atrasos graves (> limite) penalizam direto, sem tolerância
+            // Atrasos leves (≤ limite ou sem minutos) usam tolerância normalmente
+            const graves = ocsCriterio.filter(oc =>
+              oc.minutos_atraso && oc.minutos_atraso > c.limite_minutos_atraso!
+            ).length;
+            const leves = ocsCriterio.length - graves;
+            const excedenteLeves = Math.max(0, leves - c.tolerancia);
+            penalidade = (graves + excedenteLeves) * c.pontos_perda;
+          } else {
+            const qtd = ocsCriterio.length;
+            const excedente = Math.max(0, qtd - c.tolerancia);
+            penalidade = excedente * c.pontos_perda;
+          }
+
           const pontoCriterio = Math.max(0, 100 - penalidade);
           pontos[c.codigo] = pontoCriterio;
           totalPenalidades += penalidade;
