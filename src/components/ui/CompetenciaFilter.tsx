@@ -15,6 +15,7 @@ interface CompetenciaFilterProps {
 }
 
 const TIPOS: { id: TipoCompetencia; label: string; shortLabel: string }[] = [
+  { id: 'diario', label: 'Hoje', shortLabel: 'Hoje' },
   { id: 'mensal', label: 'Mensal', shortLabel: 'Mês' },
   { id: 'trimestral', label: 'Trimestre', shortLabel: 'Trim' },
   { id: 'semestral', label: 'Semestre', shortLabel: 'Sem' },
@@ -79,8 +80,8 @@ export function CompetenciaFilter({
         ))}
       </div>
 
-      {/* Seletores de Período */}
-      <div className="flex items-center gap-2">
+      {/* Seletores de Período — ocultos quando filtro é "Hoje" */}
+      {filtro.tipo !== 'diario' && <div className="flex items-center gap-2">
         {/* Seletor de Ano */}
         <Select
           value={filtro.ano.toString()}
@@ -154,7 +155,7 @@ export function CompetenciaFilter({
             </SelectContent>
           </Select>
         )}
-      </div>
+      </div>}
     </div>
   );
 }

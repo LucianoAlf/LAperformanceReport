@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 
-export type TipoCompetencia = 'mensal' | 'trimestral' | 'semestral' | 'anual';
+export type TipoCompetencia = 'diario' | 'mensal' | 'trimestral' | 'semestral' | 'anual';
 
 export interface CompetenciaFiltro {
   tipo: TipoCompetencia;
@@ -57,6 +57,22 @@ export function useCompetenciaFiltro() {
     let label: string;
 
     switch (tipo) {
+      case 'diario': {
+        mesInicio = mes;
+        mesFim = mes;
+        const hojeStr = new Date().toISOString().split('T')[0];
+        label = 'Hoje';
+        return {
+          startDate: hojeStr,
+          endDate: hojeStr,
+          meses: [mes],
+          label,
+          ano,
+          mesInicio,
+          mesFim,
+        };
+      }
+
       case 'mensal':
         mesInicio = mes;
         mesFim = mes;
