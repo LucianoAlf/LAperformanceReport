@@ -18,6 +18,7 @@ export interface ProfessorTurma {
   unidadeId: string;
   unidadeNome: string;
   totalAlunos: number;
+  totalMatriculas: number;
   totalTurmas: number;
   mediaAlunosTurma: number;
   mrrCarteira: number;

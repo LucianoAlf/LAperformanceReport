@@ -168,41 +168,42 @@ export function useSimuladorTurma(
         nome: string;
         unidadeId: string;
         unidadeNome: string;
-        alunos: Set<string>;
+        matriculas: number;
         turmas: Set<string>;
         mrr: number;
       }>();
-      
+
       profData?.forEach(aluno => {
         const profId = aluno.professor_atual_id;
         const prof = aluno.professores as any;
         const unidade = aluno.unidades as any;
-        
+
         if (!profMap.has(profId)) {
           profMap.set(profId, {
             id: profId,
             nome: prof.nome,
             unidadeId: unidade.id,
             unidadeNome: unidade.nome,
-            alunos: new Set(),
+            matriculas: 0,
             turmas: new Set(),
             mrr: 0,
           });
         }
-        
+
         const p = profMap.get(profId)!;
-        p.alunos.add(`${aluno.professor_atual_id}-${aluno.dia_aula}-${aluno.horario_aula}-${Math.random()}`);
+        p.matriculas++;
         p.turmas.add(`${aluno.dia_aula}-${aluno.horario_aula}`);
         p.mrr += Number(aluno.valor_parcela) || 0;
       });
-      
+
       // Converter para array
       const professoresArray = Array.from(profMap.values()).map(p => ({
         id: p.id,
         nome: p.nome,
         unidadeId: p.unidadeId,
         unidadeNome: p.unidadeNome,
-        totalAlunos: p.alunos.size,
+        totalAlunos: p.matriculas,
+        totalMatriculas: p.matriculas,
         totalTurmas: p.turmas.size,
         mrrCarteira: p.mrr,
       }));

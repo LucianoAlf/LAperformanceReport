@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { Users, ChevronDown, ChevronUp, AlertTriangle, Loader2, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { ProfessorTurma } from '@/lib/simulador-turma/tipos';
 import { formatarMoeda, formatarPercentual } from '@/lib/simulador-turma/calculos';
 import { supabase } from '@/lib/supabase';
@@ -173,9 +174,11 @@ export function RankingProfessores({ professores, mediaMeta, unidadeId }: Rankin
                 </div>
                 <div className="flex items-center gap-6">
                   <div className="text-right">
-                    <p className={cn('text-2xl font-bold', cores.text)}>
-                      {prof.mediaAlunosTurma.toFixed(2)}
-                    </p>
+                    <Tooltip content={`${prof.totalMatriculas} mat ÷ ${prof.totalTurmas} turmas = ${prof.mediaAlunosTurma.toFixed(1)} alunos/turma`}>
+                      <p className={cn('text-2xl font-bold cursor-help', cores.text)}>
+                        {prof.mediaAlunosTurma.toFixed(2)}
+                      </p>
+                    </Tooltip>
                     <p className="text-xs text-slate-500">alunos/turma</p>
                   </div>
                   {isExpandido ? (

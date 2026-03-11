@@ -33,6 +33,8 @@ interface ProfessorPerformance {
   total_alunos: number;
   total_turmas: number;
   media_alunos_turma: number;
+  turmas_para_media: number;
+  alunos_para_media: number;
   taxa_retencao: number;
   taxa_conversao: number;
   nps: number | null;
@@ -126,29 +128,22 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights }: Props
         const { data } = await kpisQuery;
         kpisData = data || [];
       } else {
-        // PERÍODO HISTÓRICO: usar experimentais_professor_mensal + dados calculados
-        let historicoQuery = supabase
-          .from('experimentais_professor_mensal')
-          .select('*')
-          .eq('ano', anoFiltro)
-          .eq('mes', mesFiltro);
+        // PERÍODO HISTÓRICO: usar RPC que lê leads (mesma lógica do mês atual)
+        const rpcParams: Record<string, any> = { p_ano: anoFiltro, p_mes: mesFiltro };
+        if (unidadeAtual !== 'todos') rpcParams.p_unidade_id = unidadeAtual;
 
-        if (unidadeAtual !== 'todos') {
-          historicoQuery = historicoQuery.eq('unidade_id', unidadeAtual);
-        }
+        const { data: historicoData } = await supabase
+          .rpc('get_kpis_experimentais_professor', rpcParams);
 
-        const { data: historicoData } = await historicoQuery;
-        
         if (historicoData && historicoData.length > 0) {
-          // Transformar dados históricos para o formato esperado
           kpisData = historicoData.map((d: any) => ({
             professor_id: d.professor_id,
             unidade_id: d.unidade_id,
-            ano: d.ano,
-            mes: d.mes,
+            ano: anoFiltro,
+            mes: mesFiltro,
             experimentais: d.experimentais || 0,
             matriculas: d.matriculas || 0,
-            taxa_conversao: d.experimentais > 0 ? ((d.matriculas || 0) / d.experimentais) * 100 : 0,
+            taxa_conversao: d.taxa_conversao || 0,
             // Campos que não temos no histórico - usar valores padrão
             carteira_alunos: 0,
             ticket_medio: 0,
@@ -285,6 +280,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights }: Props
       turmasExplicitas?.forEach(t => {
         const profId = t.professor_id;
         const alunosTurma = alunosPorTurmaExplicita.get(t.id) || 0;
+        if (alunosTurma === 0) return; // ignorar turmas sem alunos — evita média < 1.0
         turmasPorProfessor.set(profId, (turmasPorProfessor.get(profId) || 0) + 1);
         alunosPorProfessor.set(profId, (alunosPorProfessor.get(profId) || 0) + alunosTurma);
         const turmasAlunos = totalAlunosTurmasPorProfessor.get(profId) || [];
@@ -312,14 +308,18 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights }: Props
           const totalTurmas = turmasPorProfessor.get(prof.id) || 0;
           const totalAlunos = kpis?.carteira_alunos || alunosPorProfessor.get(prof.id) || 0;
           
+          // Dados brutos para tooltip (sempre calculados do fallback)
+          const turmasAlunos = totalAlunosTurmasPorProfessor.get(prof.id) || [];
+          const alunosParaMedia = turmasAlunos.reduce((sum, n) => sum + n, 0);
+          const turmasParaMedia = turmasAlunos.length;
+
           // Média de alunos por turma: usar da view se disponível, senão calcular
           let mediaAlunosTurma = 0;
           if (kpis?.media_alunos_turma && Number(kpis.media_alunos_turma) > 0) {
             mediaAlunosTurma = Number(kpis.media_alunos_turma);
           } else {
-            const turmasAlunos = totalAlunosTurmasPorProfessor.get(prof.id) || [];
-            mediaAlunosTurma = turmasAlunos.length > 0 
-              ? turmasAlunos.reduce((sum, n) => sum + n, 0) / turmasAlunos.length 
+            mediaAlunosTurma = turmasParaMedia > 0
+              ? alunosParaMedia / turmasParaMedia
               : 0;
           }
 
@@ -377,6 +377,8 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights }: Props
             total_alunos: totalAlunos,
             total_turmas: totalTurmas,
             media_alunos_turma: Math.round(mediaAlunosTurma * 100) / 100,
+            turmas_para_media: turmasParaMedia,
+            alunos_para_media: alunosParaMedia,
             taxa_retencao: Math.round(taxaRetencao * 10) / 10,
             taxa_conversao: Math.round(taxaConversao * 10) / 10,
             nps: nps ? Math.round(nps * 10) / 10 : null,
@@ -860,12 +862,14 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights }: Props
                     </td>
                     <td className="text-center px-4 py-3 text-white">{professor.total_alunos}</td>
                     <td className="text-center px-4 py-3">
-                      <span className={`font-medium ${getMetricaColor(professor.media_alunos_turma, { critico: 1.3, atencao: 1.5 })}`}>
-                        {professor.media_alunos_turma.toFixed(1)}
-                      </span>
+                      <Tooltip side="top" content={professor.turmas_para_media > 0 ? `${professor.alunos_para_media} mat ÷ ${professor.turmas_para_media} turmas = ${(professor.alunos_para_media / professor.turmas_para_media).toFixed(1)} alunos/turma` : `${professor.media_alunos_turma.toFixed(1)} alunos/turma (via banco)`}>
+                        <span className={`font-medium cursor-help ${getMetricaColor(professor.media_alunos_turma, { critico: 1.3, atencao: 1.5 })}`}>
+                          {professor.media_alunos_turma.toFixed(1)}
+                        </span>
+                      </Tooltip>
                       {professor.tendencia_media && (
                         <span className={`ml-1 text-xs ${
-                          professor.tendencia_media === 'subindo' ? 'text-green-400' : 
+                          professor.tendencia_media === 'subindo' ? 'text-green-400' :
                           professor.tendencia_media === 'caindo' ? 'text-red-400' : 'text-slate-400'
                         }`}>
                           {professor.tendencia_media === 'subindo' ? '↑' : professor.tendencia_media === 'caindo' ? '↓' : ''}

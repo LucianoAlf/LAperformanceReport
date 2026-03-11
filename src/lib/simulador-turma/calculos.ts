@@ -305,6 +305,7 @@ export function calcularDadosProfessor(
     unidadeId: string;
     unidadeNome: string;
     totalAlunos: number;
+    totalMatriculas?: number;
     totalTurmas: number;
     mrrCarteira: number;
   },
@@ -313,8 +314,9 @@ export function calcularDadosProfessor(
   incremento: number,
   semanas: number = SEMANAS_MES
 ): ProfessorTurma {
-  const mediaAlunosTurma = professor.totalTurmas > 0 
-    ? professor.totalAlunos / professor.totalTurmas 
+  const matriculas = professor.totalMatriculas ?? professor.totalAlunos;
+  const mediaAlunosTurma = professor.totalTurmas > 0
+    ? matriculas / professor.totalTurmas
     : 1;
   
   const ticketMedio = professor.totalAlunos > 0 
@@ -347,6 +349,7 @@ export function calcularDadosProfessor(
     unidadeId: professor.unidadeId,
     unidadeNome: professor.unidadeNome,
     totalAlunos: professor.totalAlunos,
+    totalMatriculas: matriculas,
     totalTurmas: professor.totalTurmas,
     mediaAlunosTurma,
     mrrCarteira: professor.mrrCarteira,
