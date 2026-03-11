@@ -1,0 +1,1298 @@
+{
+  "name": "[ Emusys] WBHK - leads criados",
+  "description": null,
+  "active": true,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "lead_criado",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -208,
+        -288
+      ],
+      "id": "d7b1601f-011e-4967-a1c0-b06aa44e6571",
+      "name": "Webhook",
+      "webhookId": "565051ff-9a49-4431-ab98-7a8a60464ca2"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.body.evento }}",
+                    "rightValue": "lead_criado",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    },
+                    "id": "688436a1-13a5-4a06-9413-98f245123252"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "lead_criado"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "76df0479-d715-47a6-a7a7-5824738c64e1",
+                    "leftValue": "={{ $json.body.evento }}",
+                    "rightValue": "lead_arquivado",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "lead_arquivado"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "06e33db0-ffd7-4c6d-81b3-165a04588f52",
+                    "leftValue": "={{ $json.body.evento }}",
+                    "rightValue": "lead_editado",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "lead_editado"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.3,
+      "position": [
+        240,
+        -304
+      ],
+      "id": "5b151520-638c-4e20-ab4a-3ea53954761d",
+      "name": "Filtro Evento"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "unidade-uuid",
+              "name": "unidade_uuid",
+              "value": "={{ ($json.body.escola_id == 39) ? '2ec861f6-023f-4d7b-9927-3960ad8c2a92' : ( ($json.body.escola_id == 40) ? '95553e96-971b-4590-a6eb-0201d013c14d' : ( ($json.body.escola_id == 316) ? '368d47f5-2d88-4475-bc14-ba084a9a348e' : '368d47f5-2d88-4475-bc14-ba084a9a348e' ) ) }}",
+              "type": "string"
+            },
+            {
+              "id": "lead-nome",
+              "name": "lead.nome",
+              "value": "={{ $json.body.lead.nome_aluno }}",
+              "type": "string"
+            },
+            {
+              "id": "lead-telefone",
+              "name": "lead.telefone",
+              "value": "={{ $json.body.lead.telefone ? '55' + $json.body.lead.telefone.toString().replace(/\\D/g, '') : null }}",
+              "type": "string"
+            },
+            {
+              "id": "lead-email",
+              "name": "lead.email",
+              "value": "={{ $json.body.lead.email }}",
+              "type": "string"
+            },
+            {
+              "id": "lead-origem",
+              "name": "lead.origem",
+              "value": "={{ $json.body.lead.origem }}",
+              "type": "string"
+            },
+            {
+              "id": "lead-instrumento",
+              "name": "lead.instrumento",
+              "value": "={{ $json.body.lead.instrumento || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "lead-como-conheceu",
+              "name": "lead.como_conheceu",
+              "value": "={{ ($json.body.lead.campos_personalizados && $json.body.lead.campos_personalizados.find(c => c.id === 3) && $json.body.lead.campos_personalizados.find(c => c.id === 3).valor && $json.body.lead.campos_personalizados.find(c => c.id === 3).valor.valor) || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "lead-emusys-id",
+              "name": "lead.emusys_id",
+              "value": "={{ $json.body.lead.id }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        544,
+        -352
+      ],
+      "id": "4b396450-7912-4050-ad2c-78d38b958bce",
+      "name": "Preparar Dados Lead"
+    },
+    {
+      "parameters": {
+        "dataToSave": {
+          "values": [
+            {
+              "key": "rayan_dash"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executionData",
+      "typeVersion": 1.1,
+      "position": [
+        1072,
+        -704
+      ],
+      "id": "3161e782-ea46-4819-be29-b8babafffcae",
+      "name": "Execution Data"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "unidade-uuid-arq",
+              "name": "unidade_uuid",
+              "value": "={{ ($json.body.escola_id == 39) ? '2ec861f6-023f-4d7b-9927-3960ad8c2a92' : ( ($json.body.escola_id == 40) ? '95553e96-971b-4590-a6eb-0201d013c14d' : ( ($json.body.escola_id == 316) ? '368d47f5-2d88-4475-bc14-ba084a9a348e' : '368d47f5-2d88-4475-bc14-ba084a9a348e' ) ) }}",
+              "type": "string"
+            },
+            {
+              "id": "lead-telefone-arq",
+              "name": "lead.telefone",
+              "value": "={{ $json.body.lead.telefone ? '55' + $json.body.lead.telefone.toString().replace(/\\D/g, '') : null }}",
+              "type": "string"
+            },
+            {
+              "id": "arquivamento-motivo-id",
+              "name": "arquivamento.motivo_id",
+              "value": "={{ $json.body.lead.arquivamento.motivo_id }}",
+              "type": "number"
+            },
+            {
+              "id": "arquivamento-motivo-nome",
+              "name": "arquivamento.motivo_nome",
+              "value": "={{ $json.body.lead.arquivamento.motivo_nome }}",
+              "type": "string"
+            },
+            {
+              "id": "arquivamento-observacoes",
+              "name": "arquivamento.observacoes",
+              "value": "={{ $json.body.lead.arquivamento.observacoes }}",
+              "type": "string"
+            },
+            {
+              "id": "arquivamento-data-hora",
+              "name": "arquivamento.data_hora",
+              "value": "={{ $json.body.lead.arquivamento.data_hora }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        816,
+        -176
+      ],
+      "id": "05f40e2c-2a5e-41d0-adb1-70d8d781278d",
+      "name": "Preparar Dados Arquivamento"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://aexacbmirdlcssmjjbzx.supabase.co/functions/v1/emusys-webhook",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFleGFjYm1pcmRsY3NzbWpqYnp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc3MzcyMDMsImV4cCI6MjA4MzMxMzIwM30.-ELsXosq_NngtLSrnb0c_SMAnIbyLcfjYLhprnkZ9Lw"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"evento\": \"lead_criado\",\n  \"escola_id\": {{ $json.body.escola_id }},\n  \"data_hora_criacao\": \"{{ $json.body.lead.data_hora_criacao || $json.body.data_hora_criacao }}\",\n  \"lead\": {\n    \"id\": {{ $json.body.lead.id }},\n    \"nome_aluno\": \"{{ $json.body.lead.nome_aluno }}\",\n    \"telefone\": \"{{ $json.body.lead.telefone }}\",\n    \"email\": \"{{ $json.body.lead.email }}\",\n    \"nome_responsavel_aluno\": \"{{ $json.body.lead.nome_responsavel_aluno }}\",\n    \"instrumento\": \"{{ $json.body.lead.instrumento }}\",\n    \"curso\": \"{{ $json.body.lead.instrumento }}\",\n    \"origem\": \"{{ $json.body.lead.origem || '' }}\",\n    \"como_conheceu\": \"{{ ($json.body.lead.campos_personalizados && $json.body.lead.campos_personalizados.find(c => c.id === 3) && $json.body.lead.campos_personalizados.find(c => c.id === 3).valor && $json.body.lead.campos_personalizados.find(c => c.id === 3).valor.valor) || '' }}\"\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        816,
+        -704
+      ],
+      "id": "b42f0619-3d7c-4082-be31-6d1884d0337f",
+      "name": "manda pro dash do rayan",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "dataToSave": {
+          "values": [
+            {
+              "key": "evento",
+              "value": "={{ $json.body.evento }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executionData",
+      "typeVersion": 1.1,
+      "position": [
+        528,
+        112
+      ],
+      "id": "1c14e191-698f-4bd1-a15e-d9169086340f",
+      "name": "Execution Data1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://aexacbmirdlcssmjjbzx.supabase.co/functions/v1/emusys-webhook",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFleGFjYm1pcmRsY3NzbWpqYnp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc3MzcyMDMsImV4cCI6MjA4MzMxMzIwM30.-ELsXosq_NngtLSrnb0c_SMAnIbyLcfjYLhprnkZ9Lw"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"evento\": \"lead_arquivado\",\n  \"escola_id\": {{ $('Webhook').item.json.body.escola_id }},\n  \"data_hora_criacao\": \"{{ $json.body.lead.data_hora_criacao || $json.body.data_hora_criacao }}\",\n  \"lead\": {\n    \"telefone\": \"{{ $('Webhook').item.json.body.lead.telefone }}\",\n    \"arquivamento\": {\n      \"motivo_id\": {{ $json.arquivamento.motivo_id || 'null' }},\n      \"motivo_nome\": \"{{ $json.arquivamento.motivo_nome }}\",\n      \"observacoes\": \"{{ $json.arquivamento.observacoes }}\",\n      \"data_hora\": \"{{ $json.arquivamento.data_hora }}\"\n    }\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1088,
+        -176
+      ],
+      "id": "30430a22-2287-428c-a313-86ab264d024c",
+      "name": "manda pro dash do rayan1"
+    },
+    {
+      "parameters": {
+        "dataToSave": {
+          "values": [
+            {
+              "key": "evento",
+              "value": "={{ $json.body.evento }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executionData",
+      "typeVersion": 1.1,
+      "position": [
+        528,
+        -176
+      ],
+      "id": "bc305abf-9018-4c66-b8c4-d5a54231bb3d",
+      "name": "Execution Data2"
+    },
+    {
+      "parameters": {
+        "dataToSave": {
+          "values": [
+            {
+              "key": "evento",
+              "value": "={{ $json.body.evento }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executionData",
+      "typeVersion": 1.1,
+      "position": [
+        544,
+        -704
+      ],
+      "id": "aceaa5a5-cef6-442e-a423-00fe74262100",
+      "name": "Execution Data3"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "unidade-uuid-arq",
+              "name": "unidade_uuid",
+              "value": "={{ ($json.body.escola_id == 39) ? '2ec861f6-023f-4d7b-9927-3960ad8c2a92' : ( ($json.body.escola_id == 40) ? '95553e96-971b-4590-a6eb-0201d013c14d' : ( ($json.body.escola_id == 316) ? '368d47f5-2d88-4475-bc14-ba084a9a348e' : '368d47f5-2d88-4475-bc14-ba084a9a348e' ) ) }}",
+              "type": "string"
+            },
+            {
+              "id": "lead-telefone-arq",
+              "name": "lead.telefone",
+              "value": "={{ $json.body.lead.telefone ? '55' + $json.body.lead.telefone.toString().replace(/\\D/g, '') : null }}",
+              "type": "string"
+            },
+            {
+              "id": "d8b192a2-94a3-4fea-a3c3-2af00afd618a",
+              "name": "body.lead.nome_aluno",
+              "value": "={{ $json.body.lead.nome_aluno }}",
+              "type": "string"
+            },
+            {
+              "id": "64d2b64e-1bb2-4a30-801f-84cbb0bc521d",
+              "name": "evento",
+              "value": "={{ $json.body.evento }}",
+              "type": "string"
+            },
+            {
+              "id": "562dac9a-e5c4-405a-a986-376461a83fc2",
+              "name": "data_hora_criacao",
+              "value": "={{ $json.body.lead.data_hora_criacao }}",
+              "type": "string"
+            },
+            {
+              "id": "ae319af2-0862-45c1-a5df-6c4da67df8b7",
+              "name": "body.escola_id",
+              "value": "={{ $json.body.escola_id }}",
+              "type": "number"
+            },
+            {
+              "id": "aa7d7f87-bc27-49ed-9b6c-bc9fdf09b659",
+              "name": "nome_responsavel_aluno",
+              "value": "={{ $json.body.lead.nome_responsavel_aluno }}",
+              "type": "string"
+            },
+            {
+              "id": "cbc22f04-037f-48aa-a802-b26abd2e29cf",
+              "name": "lead.email",
+              "value": "={{ $json.body.lead.email }}",
+              "type": "string"
+            },
+            {
+              "id": "29874a0c-508b-47c7-82d7-b3e8e3e3c821",
+              "name": "lead.id",
+              "value": "={{ $json.body.lead.id }}",
+              "type": "number"
+            },
+            {
+              "id": "5bfb365f-96f7-4d2c-b77d-d31ac0f472ca",
+              "name": "body.lead.campos_personalizados[0].id",
+              "value": "={{ $json.body.lead.campos_personalizados[0].id }}",
+              "type": "number"
+            },
+            {
+              "id": "lead-instrumento-arq",
+              "name": "lead.instrumento",
+              "value": "={{ $json.body.lead.instrumento || '' }}",
+              "type": "string"
+            },
+            {
+              "id": "lead-como-conheceu-arq",
+              "name": "lead.como_conheceu",
+              "value": "={{ ($json.body.lead.campos_personalizados && $json.body.lead.campos_personalizados.find(c => c.id === 3) && $json.body.lead.campos_personalizados.find(c => c.id === 3).valor && $json.body.lead.campos_personalizados.find(c => c.id === 3).valor.valor) || '' }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        800,
+        112
+      ],
+      "id": "d5437034-03a0-45b8-a52e-6e40c650b265",
+      "name": "Preparar Dados Arquivamento1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://aexacbmirdlcssmjjbzx.supabase.co/functions/v1/emusys-webhook",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFleGFjYm1pcmRsY3NzbWpqYnp4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc3MzcyMDMsImV4cCI6MjA4MzMxMzIwM30.-ELsXosq_NngtLSrnb0c_SMAnIbyLcfjYLhprnkZ9Lw"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"evento\": \"{{ $json.evento }}\",\n  \"escola_id\":{{ $json.body.escola_id }},\n  \"data_hora_criacao\": \"{{ $json.data_hora_criacao || $json.body.data_hora_criacao }}\",\n  \"lead\": {\n    \"id\": {{ $json.lead.id }},\n    \"nome_aluno\": \"{{ $json.body.lead.nome_aluno }}\",\n    \"telefone\": \"{{ $json.lead.telefone }}\",\n    \"email\": \"{{ $json.lead.email }}\",\n    \"nome_responsavel_aluno\": \"{{ $json.nome_responsavel_aluno }}\",\n    \"instrumento\": \"{{ $('Webhook').item.json.body.lead.instrumento }}\",\n    \"curso\": \"{{ $('Webhook').item.json.body.lead.instrumento }}\",\n    \"origem\": \"{{ $('Webhook').item.json.body.lead.origem || '' }}\",\n    \"como_conheceu\": \"{{ $json.lead.como_conheceu || '' }}\"\n  }\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1088,
+        112
+      ],
+      "id": "e1ed40c1-b2f0-4e04-81fc-6f85d4bce78e",
+      "name": "manda pro dash do rayan3",
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000
+    },
+    {
+      "parameters": {
+        "dataToSave": {
+          "values": [
+            {
+              "key": "telefone",
+              "value": "={{ $json.body.lead.telefone ? '55' + $json.body.lead.telefone.toString().replace(/\\D/g, '') : null }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executionData",
+      "typeVersion": 1.1,
+      "position": [
+        0,
+        -288
+      ],
+      "id": "57e213d5-9056-4ab1-8d1e-006d63a9ae15",
+      "name": "Execution Data4"
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM upsert_lead($1, $2, $3, $4, $5, $6, $7, 'emusys', FALSE);",
+        "options": {
+          "queryReplacement": "={{ [\n  $('Preparar Dados Lead').item.json.lead.nome,\n  $('Preparar Dados Lead').item.json.lead.telefone,\n  $('Preparar Dados Lead').item.json.lead.email,\n  $('Preparar Dados Lead').item.json.unidade_uuid,\n  $('Preparar Dados Lead').item.json.lead.instrumento,\n  $('Preparar Dados Lead').item.json.lead.como_conheceu,\n  $('Preparar Dados Lead').item.json.lead.emusys_id\n] }}"
+        }
+      },
+      "id": "69751d50-3873-4f4e-a3c0-4673cdae9a53",
+      "name": "Upsert Lead",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1056,
+        -352
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "4oVVstGl3KixyKpd",
+          "name": "LA Performance Report Creds"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "executeQuery",
+        "query": "SELECT * FROM upsert_lead($1, $2, $3, $4, $5, $6, $7, 'emusys', FALSE);",
+        "options": {
+          "queryReplacement": "={{ [\n  $('Preparar Dados Arquivamento1').item.json.body.lead.nome_aluno,\n  $('Preparar Dados Arquivamento1').item.json.lead.telefone,\n  $('Preparar Dados Arquivamento1').item.json.lead.email,\n  $('Preparar Dados Arquivamento1').item.json.unidade_uuid,\n  $('Preparar Dados Arquivamento1').item.json.lead.instrumento,\n  $('Preparar Dados Arquivamento1').item.json.lead.como_conheceu,\n  $('Preparar Dados Arquivamento1').item.json.lead.id\n] }}"
+        }
+      },
+      "id": "8d683b98-aac9-471e-8478-5af31f5cc043",
+      "name": "Upsert Lead Editado",
+      "type": "n8n-nodes-base.postgres",
+      "typeVersion": 2.4,
+      "position": [
+        1312,
+        112
+      ],
+      "credentials": {
+        "postgres": {
+          "id": "4oVVstGl3KixyKpd",
+          "name": "LA Performance Report Creds"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const dados = $('Preparar Dados Lead').first().json;\nconst webhook = $('Webhook').first().json;\n\nconst unidadeMap = {\n  '95553e96-971b-4590-a6eb-0201d013c14d': 'Recreio',\n  '2ec861f6-023f-4d7b-9927-3960ad8c2a92': 'CG',\n  '368d47f5-2d88-4475-bc14-ba084a9a348e': 'Barra'\n};\n\nconst telefone = dados.lead.telefone ? dados.lead.telefone.replace(/^55/, '') : '';\nconst unidade = unidadeMap[dados.unidade_uuid] || '';\nconst dataHora = webhook.body.lead.data_hora_criacao || '';\nconst dataEntrada = dataHora ? dataHora.split(' ')[0] : '';\n\nreturn {\n  json: {\n    Nome: dados.lead.nome,\n    Telefone: telefone,\n    Unidade: unidade,\n    Estagio: 'Novos Leads',\n    Curso: dados.lead.instrumento || '',\n    'Origem do Lead': dados.lead.como_conheceu || dados.lead.origem || '',\n    'Data de entrada': dataEntrada,\n    'Hora da mensagem': dataHora ? new Date(dataHora.replace(' ', 'T') + '-03:00').toISOString() : '',\n    Observacoes: 'emusys'\n  }\n};"
+      },
+      "id": "809d1ba7-1500-44e1-aff2-a0febf9cdf37",
+      "name": "Preparar NocoDB",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1312,
+        -352
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "nocoDbApiToken",
+        "operation": "create",
+        "projectId": "pyhap3besob1yjr",
+        "table": "m1e7k051jr4czww",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldName": "Nome",
+              "fieldValue": "={{ $json.Nome }}"
+            },
+            {
+              "fieldName": "Telefone",
+              "fieldValue": "={{ $json.Telefone }}"
+            },
+            {
+              "fieldName": "Unidade",
+              "fieldValue": "={{ $json.Unidade }}"
+            },
+            {
+              "fieldName": "Estagio",
+              "fieldValue": "={{ $json.Estagio }}"
+            },
+            {
+              "fieldName": "Curso",
+              "fieldValue": "={{ $json.Curso }}"
+            },
+            {
+              "fieldName": "Origem do Lead",
+              "fieldValue": "={{ $json['Origem do Lead'] }}"
+            },
+            {
+              "fieldName": "Data de entrada",
+              "fieldValue": "={{ $json['Data de entrada'] }}"
+            },
+            {
+              "fieldName": "Hora da mensagem",
+              "fieldValue": "={{ $json['Hora da mensagem'] }}"
+            },
+            {
+              "fieldName": "Observações",
+              "fieldValue": "={{ $json.Observacoes }}"
+            }
+          ]
+        }
+      },
+      "id": "91ef2930-9bcf-48e0-a237-298ea699de8f",
+      "name": "Criar Lead NocoDB",
+      "type": "n8n-nodes-base.nocoDb",
+      "typeVersion": 3,
+      "position": [
+        2496,
+        -464
+      ],
+      "credentials": {
+        "nocoDbApiToken": {
+          "id": "2KWPkp1f1X1SSto1",
+          "name": "NocoDB Luciano"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const dados = $('Preparar Dados Arquivamento1').first().json;\nconst webhook = $('Webhook').first().json;\n\nconst estagioMap = {\n  'Novo': 'Novos Leads',\n  'Novo Lead': 'Novos Leads',\n  'Experimental Agendada': 'Experimental Marcada',\n  'Realizou experimental': 'Compareceram',\n  'Compareceu': 'Compareceram',\n  'Matriculado': 'Matriculado',\n  'Faltou aula experimental': 'Faltaram',\n};\n\nconst unidadeMap = {\n  '95553e96-971b-4590-a6eb-0201d013c14d': 'Recreio',\n  '2ec861f6-023f-4d7b-9927-3960ad8c2a92': 'CG',\n  '368d47f5-2d88-4475-bc14-ba084a9a348e': 'Barra'\n};\n\nconst telefone = dados.lead.telefone ? dados.lead.telefone.replace(/^55/, '') : '';\nconst estagioEmusys = webhook.body.lead.estagio_funil?.nome || '';\nconst estagio = estagioMap[estagioEmusys] || '';\nconst observacoes = webhook.body.lead.observacoes || '';\n\nreturn {\n  json: {\n    telefone_busca: telefone,\n    Nome: dados.body.lead.nome_aluno,\n    Estagio: estagio,\n    Curso: dados.lead.instrumento || '',\n    Observacoes: observacoes,\n    Unidade: unidadeMap[dados.unidade_uuid] || ''\n  }\n};"
+      },
+      "id": "a1b2c3d4-prep-update-nocodb-edit",
+      "name": "Preparar Update NocoDB",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1568,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "nocoDbApiToken",
+        "operation": "getAll",
+        "projectId": "pyhap3besob1yjr",
+        "table": "m1e7k051jr4czww",
+        "limit": 1,
+        "options": {
+          "where": "=(Telefone,eq,{{ $json.telefone_busca }})"
+        }
+      },
+      "id": "b2c3d4e5-buscar-lead-nocodb-edit",
+      "name": "Buscar Lead NocoDB",
+      "type": "n8n-nodes-base.nocoDb",
+      "typeVersion": 3,
+      "position": [
+        1808,
+        112
+      ],
+      "credentials": {
+        "nocoDbApiToken": {
+          "id": "2KWPkp1f1X1SSto1",
+          "name": "NocoDB Luciano"
+        }
+      },
+      "alwaysOutputData": true,
+      "settings": {
+        "alwaysOutputData": true
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "nocoDbApiToken",
+        "operation": "update",
+        "projectId": "pyhap3besob1yjr",
+        "table": "m1e7k051jr4czww",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldName": "Id",
+              "fieldValue": "={{ $json.Id }}"
+            },
+            {
+              "fieldName": "Nome",
+              "fieldValue": "={{ $('Preparar Update NocoDB').first().json.Nome }}"
+            },
+            {
+              "fieldName": "Estagio",
+              "fieldValue": "={{ $('Preparar Update NocoDB').first().json.Estagio }}"
+            },
+            {
+              "fieldName": "Curso",
+              "fieldValue": "={{ $('Preparar Update NocoDB').first().json.Curso }}"
+            },
+            {
+              "fieldName": "Observações",
+              "fieldValue": "={{ $('Preparar Update NocoDB').first().json.Observacoes }}"
+            }
+          ]
+        }
+      },
+      "id": "c3d4e5f6-atualizar-lead-nocodb-edit",
+      "name": "Atualizar Lead NocoDB",
+      "type": "n8n-nodes-base.nocoDb",
+      "typeVersion": 3,
+      "position": [
+        2528,
+        32
+      ],
+      "credentials": {
+        "nocoDbApiToken": {
+          "id": "2KWPkp1f1X1SSto1",
+          "name": "NocoDB Luciano"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "nocoDbApiToken",
+        "operation": "getAll",
+        "projectId": "pyhap3besob1yjr",
+        "table": "m1e7k051jr4czww",
+        "limit": 1,
+        "options": {
+          "where": "=(Telefone,eq,{{ $json.Telefone }})"
+        }
+      },
+      "id": "13221f22-679c-49a4-977e-457a269fc0dc",
+      "name": "Buscar Lead NocoDB1",
+      "type": "n8n-nodes-base.nocoDb",
+      "typeVersion": 3,
+      "position": [
+        1920,
+        -368
+      ],
+      "credentials": {
+        "nocoDbApiToken": {
+          "id": "2KWPkp1f1X1SSto1",
+          "name": "NocoDB Luciano"
+        }
+      },
+      "alwaysOutputData": true,
+      "settings": {
+        "alwaysOutputData": true
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "6964c9d8-bca5-4bb7-8a08-ecae6c9ca6a0",
+              "leftValue": "={{ $json.Telefone }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "isNotEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1680,
+        -352
+      ],
+      "id": "816c101d-ba11-422d-832f-318a5f0ed321",
+      "name": "tem numero?"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "95b762f4-60c2-483d-b504-080739d6f389",
+              "leftValue": "={{ $json.Id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2128,
+        -368
+      ],
+      "id": "2591a4a4-bdfe-4ffc-99eb-913f931a3686",
+      "name": "ja existe?"
+    },
+    {
+      "id": "05475d0f-c92e-456f-a3d6-864a500e3029",
+      "name": "Update Lead Existente",
+      "type": "n8n-nodes-base.nocoDb",
+      "typeVersion": 3,
+      "position": [
+        2400,
+        -250
+      ],
+      "parameters": {
+        "authentication": "nocoDbApiToken",
+        "operation": "update",
+        "projectId": "pyhap3besob1yjr",
+        "table": "m1e7k051jr4czww",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldName": "Id",
+              "fieldValue": "={{ $json.Id }}"
+            },
+            {
+              "fieldName": "Nome",
+              "fieldValue": "={{ $('Preparar NocoDB').first().json.Nome }}"
+            },
+            {
+              "fieldName": "Estagio",
+              "fieldValue": "={{ $('Preparar NocoDB').first().json.Estagio }}"
+            },
+            {
+              "fieldName": "Curso",
+              "fieldValue": "={{ $('Preparar NocoDB').first().json.Curso }}"
+            },
+            {
+              "fieldName": "Origem do Lead",
+              "fieldValue": "={{ $('Preparar NocoDB').first().json['Origem do Lead'] }}"
+            },
+            {
+              "fieldName": "Observações",
+              "fieldValue": "={{ $('Preparar NocoDB').first().json.Observacoes }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "nocoDbApiToken": {
+          "id": "2KWPkp1f1X1SSto1",
+          "name": "NocoDB Luciano"
+        }
+      }
+    },
+    {
+      "id": "5f2ce2ad-89cf-4af2-8175-df3b4ec06d5e",
+      "name": "Lead Encontrado?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2088,
+        112
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "lead-encontrado-cond-001",
+              "leftValue": "={{ $json.Id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "number",
+                "operation": "exists",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "99c95ab2-2633-48a4-93c2-12c520f1edc1",
+      "name": "Criar Lead Editado NocoDB",
+      "type": "n8n-nodes-base.nocoDb",
+      "typeVersion": 3,
+      "position": [
+        2528,
+        192
+      ],
+      "parameters": {
+        "authentication": "nocoDbApiToken",
+        "operation": "create",
+        "projectId": "pyhap3besob1yjr",
+        "table": "m1e7k051jr4czww",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldName": "Nome",
+              "fieldValue": "={{ $('Preparar Update NocoDB').first().json.Nome }}"
+            },
+            {
+              "fieldName": "Telefone",
+              "fieldValue": "={{ $('Preparar Update NocoDB').first().json.telefone_busca }}"
+            },
+            {
+              "fieldName": "Unidade",
+              "fieldValue": "={{ $('Preparar Update NocoDB').first().json.Unidade }}"
+            },
+            {
+              "fieldName": "Estagio",
+              "fieldValue": "={{ $('Preparar Update NocoDB').first().json.Estagio }}"
+            },
+            {
+              "fieldName": "Curso",
+              "fieldValue": "={{ $('Preparar Update NocoDB').first().json.Curso }}"
+            },
+            {
+              "fieldName": "Observações",
+              "fieldValue": "={{ $('Preparar Update NocoDB').first().json.Observacoes }}"
+            }
+          ]
+        }
+      },
+      "credentials": {
+        "nocoDbApiToken": {
+          "id": "2KWPkp1f1X1SSto1",
+          "name": "NocoDB Luciano"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Execution Data4",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtro Evento": {
+      "main": [
+        [
+          {
+            "node": "Preparar Dados Lead",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Execution Data3",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Execution Data2",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Execution Data1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Dados Arquivamento": {
+      "main": [
+        [
+          {
+            "node": "manda pro dash do rayan1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "manda pro dash do rayan": {
+      "main": [
+        [
+          {
+            "node": "Execution Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execution Data2": {
+      "main": [
+        [
+          {
+            "node": "Preparar Dados Arquivamento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execution Data3": {
+      "main": [
+        [
+          {
+            "node": "manda pro dash do rayan",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execution Data1": {
+      "main": [
+        [
+          {
+            "node": "Preparar Dados Arquivamento1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Dados Arquivamento1": {
+      "main": [
+        [
+          {
+            "node": "manda pro dash do rayan3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execution Data4": {
+      "main": [
+        [
+          {
+            "node": "Filtro Evento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Dados Lead": {
+      "main": [
+        [
+          {
+            "node": "Upsert Lead",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "manda pro dash do rayan3": {
+      "main": [
+        [
+          {
+            "node": "Upsert Lead Editado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Lead": {
+      "main": [
+        [
+          {
+            "node": "Preparar NocoDB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar NocoDB": {
+      "main": [
+        [
+          {
+            "node": "tem numero?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upsert Lead Editado": {
+      "main": [
+        [
+          {
+            "node": "Preparar Update NocoDB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Update NocoDB": {
+      "main": [
+        [
+          {
+            "node": "Buscar Lead NocoDB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Lead NocoDB1": {
+      "main": [
+        [
+          {
+            "node": "ja existe?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "tem numero?": {
+      "main": [
+        [
+          {
+            "node": "Buscar Lead NocoDB1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ja existe?": {
+      "main": [
+        [
+          {
+            "node": "Update Lead Existente",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Criar Lead NocoDB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Lead NocoDB": {
+      "main": [
+        [
+          {
+            "node": "Lead Encontrado?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lead Encontrado?": {
+      "main": [
+        [
+          {
+            "node": "Atualizar Lead NocoDB",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Criar Lead Editado NocoDB",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "staticData": null,
+  "pinData": {
+    "Webhook": [
+      {
+        "json": {
+          "headers": {
+            "host": "webhookla.latecnology.com.br",
+            "content-length": "859",
+            "accept": "application/json",
+            "accept-encoding": "deflate, gzip, br, zstd",
+            "content-type": "application/json",
+            "x-forwarded-for": "52.67.146.71",
+            "x-forwarded-host": "webhookla.latecnology.com.br",
+            "x-forwarded-port": "443",
+            "x-forwarded-proto": "https",
+            "x-forwarded-server": "traefik_traefik.1",
+            "x-real-ip": "52.67.146.71"
+          },
+          "params": {},
+          "query": {},
+          "body": {
+            "lead": {
+              "id": 12305,
+              "nome_aluno": "Consultora Goold",
+              "nome_responsavel_aluno": null,
+              "data_nascimento_aluno": null,
+              "email": null,
+              "telefone": "(21) 97533-7703",
+              "nome_atendente": "Mila iA",
+              "endereco_escola": "Rua Luiz Barata, 164 - Bairro Campo Grande, Rio de Janeiro, 23050-390",
+              "unidade_escola": "LA Music School Campo Grande",
+              "observacoes": null,
+              "data_hora_criacao": "2026-03-10 22:17",
+              "instrumento": "",
+              "criado_por": {
+                "id": 0,
+                "nome": ""
+              },
+              "origem": "api",
+              "estagio_funil": {
+                "id": 1,
+                "nome": "Novo"
+              },
+              "arquivamento": {
+                "data_hora": "",
+                "motivo_id": null,
+                "motivo_nome": "",
+                "observacoes": ""
+              },
+              "campos_personalizados": [
+                {
+                  "id": 3,
+                  "nome": "Como conheceu a escola",
+                  "tipo": "escolha",
+                  "valor": ""
+                },
+                {
+                  "id": 4,
+                  "nome": "Nome de quem indicou",
+                  "tipo": "texto",
+                  "valor": ""
+                }
+              ]
+            },
+            "evento": "lead_criado",
+            "id": 15058,
+            "data_hora_criacao": "2026-03-10 22:17:40",
+            "escola_id": 39,
+            "escola_nome": "LA Music School Campo Grande"
+          },
+          "webhookUrl": "https://webhookla.latecnology.com.br/webhook/lead_criado",
+          "executionMode": "production"
+        }
+      }
+    ]
+  }
+}
