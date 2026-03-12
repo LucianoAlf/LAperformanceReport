@@ -3488,7 +3488,7 @@ export function ComercialPage() {
                   <tbody>
                     {leadsGlobais.map((lead, index) => {
                       const dataLead = new Date(lead.data_contato + 'T12:00:00');
-                      const mesLabel = dataLead.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' });
+                      const mesLabel = dataLead.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short', year: '2-digit' });
                       return (
                         <tr
                           key={lead.id}
