@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react';
+import { format } from 'date-fns';
 import { supabase } from '@/lib/supabase';
 
 export type TipoCompetencia = 'diario' | 'mensal' | 'trimestral' | 'semestral' | 'anual';
@@ -60,7 +61,7 @@ export function useCompetenciaFiltro() {
       case 'diario': {
         mesInicio = mes;
         mesFim = mes;
-        const hojeStr = new Date().toISOString().split('T')[0];
+        const hojeStr = format(new Date(), 'yyyy-MM-dd'); // usa timezone local (BRT)
         label = 'Hoje';
         return {
           startDate: hojeStr,

@@ -430,7 +430,7 @@ export function ComercialPage() {
 
     setLoading(true);
     try {
-      const hoje = new Date().toISOString().split('T')[0];
+      const hoje = format(new Date(), 'yyyy-MM-dd'); // usa timezone local (BRT)
       
       // Usar range de datas do filtro de competência
       const { startDate, endDate } = competencia.range;
@@ -494,7 +494,9 @@ export function ComercialPage() {
       const conversaoExpMat = experimentais > 0 ? (matriculas / experimentais) * 100 : 0;
 
       // Se não houver registros em leads, tentar buscar de dados_comerciais (histórico)
-      if (registros.length === 0) {
+      // Não disparar fallback para filtro "Hoje" — 0 leads no dia é correto
+      const isFiltroHoje = competencia.filtro.tipo === 'diario';
+      if (registros.length === 0 && !isFiltroHoje) {
         // Extrair ano e mês do range diretamente da string para evitar bug de timezone
         const [anoFiltroStr, mesFiltroStr] = startDate.split('-');
         const anoFiltro = parseInt(anoFiltroStr);
