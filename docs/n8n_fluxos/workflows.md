@@ -11,3 +11,11 @@
 **Webhook de Matricula do Emusys:**ttps://workla.latecnology.com.br/workflow/ZzuR9slRx8UqXg9N
 
 
+# Como funciona o lead na laperformance
+
+- fluxo normal da mila que chega no emusys ele pega
+
+- workflow que vem da polirede definir etiqueta pela mensagem do anuncio https://workla.latecnology.com.br/workflow/5lRs2UVCB9xl0RCP/debug/7035 ja extrai origem do lead. tem subworkflow de update do emusys la
+
+
+- **Webhook de leads do nocodb**: https://workla.latecnology.com.br/workflow/1uP2GhoHG1shEFLg/executions/309743 alinha os leads que ja existem no emusys mas nao existiam ainda no nocodb para a supabase.

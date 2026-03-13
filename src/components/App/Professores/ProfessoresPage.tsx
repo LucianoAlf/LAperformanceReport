@@ -19,14 +19,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { 
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle 
-} from '@/components/ui/alert-dialog';
 import { ToastContainer } from '@/components/ui/toast';
 import { useToast } from '@/hooks/useToast';
 import { ModalProfessor } from './ModalProfessor';
 import { ModalDetalhesProfessor } from './ModalDetalhesProfessor';
+import { ModalConfirmarExclusaoProfessor } from './ModalConfirmarExclusaoProfessor';
 import { CardProfessor } from './CardProfessor';
 import { TabPerformanceProfessores } from './TabPerformanceProfessores';
 import { TabAgendaProfessores } from './TabAgendaProfessores';
@@ -546,6 +543,25 @@ export function ProfessoresPage() {
       await carregarProfessores();
     } catch (error: any) {
       toast.error('Erro ao alterar status', error.message);
+    }
+  };
+
+  const handleMarcarInativo = async (professor: Professor) => {
+    try {
+      const { error } = await supabase
+        .from('professores')
+        .update({ ativo: false })
+        .eq('id', professor.id);
+
+      if (error) throw error;
+
+      toast.success(
+        'Professor marcado como inativo!',
+        `${professor.nome} foi desativado. Todo o histórico foi preservado.`
+      );
+      await carregarProfessores();
+    } catch (error: any) {
+      toast.error('Erro ao marcar como inativo', error.message);
     }
   };
 
@@ -1167,25 +1183,13 @@ export function ProfessoresPage() {
         professor={modalDetalhes.professor}
       />
 
-      {/* Dialog de confirmação de exclusão */}
-      <AlertDialog open={!!professorParaExcluir} onOpenChange={() => setProfessorParaExcluir(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir Professor</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tem certeza que deseja excluir <strong>{professorParaExcluir?.nome}</strong>?
-              <br />
-              Esta ação não pode ser desfeita.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleExcluirProfessor}>
-              Excluir
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Modal de confirmação de exclusão com verificação de dependências */}
+      <ModalConfirmarExclusaoProfessor
+        professor={professorParaExcluir}
+        onConfirm={handleExcluirProfessor}
+        onCancel={() => setProfessorParaExcluir(null)}
+        onMarcarInativo={handleMarcarInativo}
+      />
         </>
       )}
 
