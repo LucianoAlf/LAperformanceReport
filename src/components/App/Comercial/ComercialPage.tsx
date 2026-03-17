@@ -35,6 +35,7 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { TarefasRapidasTab } from '@/components/shared/TarefasRapidas';
+import { CanalOrigemBadge } from '@/components/shared/CanalOrigemBadge';
 import { PageTour, TourHelpButton } from '@/components/Onboarding';
 import { comercialTourSteps } from '@/components/Onboarding/tours';
 import { supabase } from '@/lib/supabase';
@@ -3299,7 +3300,7 @@ export function ComercialPage() {
                           tipo="select"
                           opcoes={canais.map(c => ({ value: c.value, label: c.label }))}
                           placeholder="-"
-                          formatarExibicao={() => <span className="text-cyan-400">{lead.canal_nome || '-'}</span>}
+                          formatarExibicao={() => <CanalOrigemBadge canal={lead.canal_nome || '-'} />}
                         />
                       </td>
                       <td className="py-3 px-2 border-r border-slate-700/30">
@@ -3543,7 +3544,7 @@ export function ComercialPage() {
                             <span className="text-emerald-400">{(lead as any).telefone || '-'}</span>
                           </td>
                           <td className="py-3 px-2 border-r border-slate-700/30">
-                            <span className="text-cyan-400">{lead.canal_nome || '-'}</span>
+                            <CanalOrigemBadge canal={lead.canal_nome || '-'} />
                           </td>
                           <td className="py-3 px-2 border-r border-slate-700/30">
                             <span className="text-purple-400">{lead.curso_nome || '-'}</span>
@@ -3629,7 +3630,7 @@ export function ComercialPage() {
                             <span className="text-emerald-400">{lead.telefone || '-'}</span>
                           </td>
                           <td className="py-3 px-2 border-r border-slate-700/30">
-                            <span className="text-cyan-400">{lead.canal_nome || '-'}</span>
+                            <CanalOrigemBadge canal={lead.canal_nome || '-'} />
                           </td>
                           <td className="py-3 px-2 border-r border-slate-700/30">
                             <span className="text-purple-400">{lead.curso_nome || '-'}</span>
@@ -3766,7 +3767,7 @@ export function ComercialPage() {
                           tipo="select"
                           opcoes={canais.map(c => ({ value: c.value, label: c.label }))}
                           placeholder="-"
-                          formatarExibicao={() => <span className="text-cyan-400">{exp.canal_nome || '-'}</span>}
+                          formatarExibicao={() => <CanalOrigemBadge canal={exp.canal_nome || '-'} />}
                         />
                       </td>
                       <td className="py-3 px-2 border-r border-slate-700/30">
@@ -4009,7 +4010,7 @@ export function ComercialPage() {
                           tipo="select"
                           opcoes={canais.map(c => ({ value: c.value, label: c.label }))}
                           placeholder="-"
-                          formatarExibicao={() => <span className="text-cyan-400">{visita.canal_nome || '-'}</span>}
+                          formatarExibicao={() => <CanalOrigemBadge canal={visita.canal_nome || '-'} />}
                         />
                       </td>
                       <td className="py-3 px-2 border-r border-slate-700/30">
@@ -4239,7 +4240,7 @@ export function ComercialPage() {
                         tipo="select"
                         opcoes={canais.map(c => ({ value: c.value, label: c.label }))}
                         placeholder="-"
-                        formatarExibicao={() => mat.canal_nome || '-'}
+                        formatarExibicao={() => <CanalOrigemBadge canal={mat.canal_nome || '-'} />}
                         textClassName="text-blue-400"
                       />
                     </td>
