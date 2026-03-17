@@ -461,16 +461,85 @@ export function ComercialPage() {
 
       const registros = data || [];
 
-      // Calcular resumo
-      // Leads = TODOS os registros (cada lead conta, independente do status atual)
-      const leads = registros.reduce((acc, r) => acc + r.quantidade, 0);
-      const experimentais = registros.filter(r => r.status?.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0);
-      const visitas = registros.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0);
-      const matriculas = registros.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0);
+      // Query complementar: leads que tiveram EVENTO de etapa HOJE (via log de automação)
+      // Usa leads_automacao_log em vez de updated_at para evitar falsos positivos
+      // (ex: editar telefone de lead com experimental antiga não deve fazê-lo aparecer no "Hoje")
+      const inicioHojeUTC = new Date(hoje + 'T03:00:00.000Z').toISOString(); // 00:00 BRT em UTC
+      const fimHojeUTC = new Date(hoje + 'T03:00:00.000Z');
+      fimHojeUTC.setDate(fimHojeUTC.getDate() + 1);
+
+      const { data: logEventosHoje } = await supabase
+        .from('leads_automacao_log')
+        .select('lead_id')
+        .in('evento', ['aula_experimental_criada', 'aula_experimental_reagendada'])
+        .gte('created_at', inicioHojeUTC)
+        .lt('created_at', fimHojeUTC.toISOString());
+
+      const idsRegistros = new Set(registros.map(r => r.id));
+      const idsEventoHoje = [...new Set(
+        (logEventosHoje || []).map(l => l.lead_id).filter((id): id is number => id != null && !idsRegistros.has(id))
+      )];
+
+      let leadsEtapaHoje: typeof data = [];
+      if (idsEventoHoje.length > 0) {
+        let queryExtras = supabase
+          .from('leads')
+          .select('*, canais_origem(nome), cursos(nome), unidades(codigo)')
+          .in('id', idsEventoHoje);
+
+        // Aplicar mesmo filtro de unidade
+        if (isAdmin) {
+          if (context?.unidadeSelecionada && context.unidadeSelecionada !== 'todos') {
+            queryExtras = queryExtras.eq('unidade_id', context.unidadeSelecionada);
+          }
+        } else {
+          if (usuario?.unidade_id) {
+            queryExtras = queryExtras.eq('unidade_id', usuario.unidade_id);
+          }
+        }
+
+        const { data: extras } = await queryExtras;
+        leadsEtapaHoje = extras || [];
+      }
+
+      // Quando o filtro é "Hoje", buscar dados do mês inteiro para o "Acumulado do Mês"
+      const isFiltroHoje = competencia.filtro.tipo === 'diario';
+      let registrosParaResumo = registros;
+
+      if (isFiltroHoje) {
+        const mesStartDate = `${competencia.filtro.ano}-${String(competencia.filtro.mes).padStart(2, '0')}-01`;
+        const ultimoDiaMes = new Date(competencia.filtro.ano, competencia.filtro.mes, 0).getDate();
+        const mesEndDate = `${competencia.filtro.ano}-${String(competencia.filtro.mes).padStart(2, '0')}-${ultimoDiaMes}`;
+
+        let queryMes = supabase
+          .from('leads')
+          .select('*, canais_origem(nome), cursos(nome), unidades(codigo)')
+          .gte('data_contato', mesStartDate)
+          .lte('data_contato', mesEndDate);
+
+        if (isAdmin) {
+          if (context?.unidadeSelecionada && context.unidadeSelecionada !== 'todos') {
+            queryMes = queryMes.eq('unidade_id', context.unidadeSelecionada);
+          }
+        } else {
+          if (usuario?.unidade_id) {
+            queryMes = queryMes.eq('unidade_id', usuario.unidade_id);
+          }
+        }
+
+        const { data: dadosMes } = await queryMes;
+        registrosParaResumo = dadosMes || [];
+      }
+
+      // Calcular resumo (usa mês inteiro quando filtro é "Hoje")
+      const leads = registrosParaResumo.reduce((acc, r) => acc + r.quantidade, 0);
+      const experimentais = registrosParaResumo.filter(r => r.status?.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0);
+      const visitas = registrosParaResumo.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0);
+      const matriculas = registrosParaResumo.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0);
 
       // Matrículas por canal (convertidos)
       const canalMap = new Map<string, number>();
-      registros.filter(r => ['matriculado','convertido'].includes(r.status)).forEach(r => {
+      registrosParaResumo.filter(r => ['matriculado','convertido'].includes(r.status)).forEach(r => {
         const canal = (r.canais_origem as any)?.nome || 'Não informado';
         canalMap.set(canal, (canalMap.get(canal) || 0) + r.quantidade);
       });
@@ -480,7 +549,7 @@ export function ComercialPage() {
 
       // Matrículas por curso (convertidos)
       const cursoMap = new Map<string, number>();
-      registros.filter(r => ['matriculado','convertido'].includes(r.status)).forEach(r => {
+      registrosParaResumo.filter(r => ['matriculado','convertido'].includes(r.status)).forEach(r => {
         const curso = (r.cursos as any)?.nome || 'Não informado';
         cursoMap.set(curso, (cursoMap.get(curso) || 0) + r.quantidade);
       });
@@ -495,8 +564,7 @@ export function ComercialPage() {
 
       // Se não houver registros em leads, tentar buscar de dados_comerciais (histórico)
       // Não disparar fallback para filtro "Hoje" — 0 leads no dia é correto
-      const isFiltroHoje = competencia.filtro.tipo === 'diario';
-      if (registros.length === 0 && !isFiltroHoje) {
+      if (registrosParaResumo.length === 0 && !isFiltroHoje) {
         // Extrair ano e mês do range diretamente da string para evitar bug de timezone
         const [anoFiltroStr, mesFiltroStr] = startDate.split('-');
         const anoFiltro = parseInt(anoFiltroStr);
@@ -572,8 +640,11 @@ export function ComercialPage() {
         conversaoExpMat,
       });
 
-      // Registros de hoje
-      setRegistrosHoje(registros.filter(r => r.data_contato === hoje));
+      // Registros de hoje: leads que entraram hoje + leads que mudaram de etapa hoje
+      const registrosEntradaHoje = registros.filter(r => r.data_contato === hoje);
+      const idsEntrada = new Set(registrosEntradaHoje.map(r => r.id));
+      const registrosEtapaMudouHoje = (leadsEtapaHoje || []).filter(r => !idsEntrada.has(r.id));
+      setRegistrosHoje([...registrosEntradaHoje, ...registrosEtapaMudouHoje]);
 
       // Matrículas do mês (com nomes dos relacionamentos)
       const matriculasDoMes = registros
@@ -615,6 +686,7 @@ export function ComercialPage() {
         });
       }
       
+      // Nota: matrículas extras de leadsEtapaHoje serão mergeadas após cálculo de leadsEtapaExtra
       setMatriculasMes(matriculasDoMes);
 
       // Leads do mês (TODOS os leads, incluindo experimentais e convertidos)
@@ -625,7 +697,6 @@ export function ComercialPage() {
           canal_nome: (l.canais_origem as any)?.nome || '',
           curso_nome: (l.cursos as any)?.nome || '',
         }));
-      setLeadsMes(leadsDoMes);
 
       // Experimentais do mês (com nomes dos relacionamentos)
       const experimentaisDoMes = registros
@@ -655,7 +726,29 @@ export function ComercialPage() {
           });
         }
       }
-      setExperimentaisMes(experimentaisDoMes);
+      // Merge leads com etapa mudada hoje (mas data_contato anterior) nos arrays do funil
+      const leadsEtapaExtra = (leadsEtapaHoje || [])
+        .filter(r => !idsRegistros.has(r.id))
+        .map(l => ({
+          ...l,
+          canal_nome: (l.canais_origem as any)?.nome || '',
+          curso_nome: (l.cursos as any)?.nome || '',
+        }));
+      setLeadsMes([...leadsDoMes, ...leadsEtapaExtra]);
+
+      // Experimentais extras (etapa mudada hoje)
+      const expExtras = leadsEtapaExtra.filter(r => r.status?.startsWith('experimental'));
+      if (expExtras.length > 0) {
+        // Buscar nomes de professores para extras
+        const profExtrasIds = new Set<number>();
+        expExtras.forEach(e => { if (e.professor_experimental_id) profExtrasIds.add(e.professor_experimental_id); });
+        if (profExtrasIds.size > 0) {
+          const { data: profsExtrasData } = await supabase.from('professores').select('id, nome').in('id', Array.from(profExtrasIds));
+          const profExtrasMap = new Map<number, string>(profsExtrasData?.map(p => [p.id, p.nome] as [number, string]) || []);
+          expExtras.forEach(e => { (e as any).professor_nome = e.professor_experimental_id ? profExtrasMap.get(e.professor_experimental_id) || '' : ''; });
+        }
+      }
+      setExperimentaisMes([...experimentaisDoMes, ...expExtras]);
 
       // Visitas do mês (com nomes dos relacionamentos)
       const visitasDoMes = registros
@@ -665,7 +758,18 @@ export function ComercialPage() {
           canal_nome: (v.canais_origem as any)?.nome || '',
           curso_nome: (v.cursos as any)?.nome || '',
         }));
-      setVisitasMes(visitasDoMes);
+      const visitasExtras = leadsEtapaExtra.filter(r => r.status === 'visita_escola');
+      setVisitasMes([...visitasDoMes, ...visitasExtras]);
+
+      // Matrículas extras (etapa mudada hoje)
+      const matExtras = leadsEtapaExtra.filter(r => ['matriculado', 'convertido'].includes(r.status));
+      if (matExtras.length > 0) {
+        setMatriculasMes(prev => {
+          const idsExistentes = new Set(prev.map(m => m.id));
+          const novas = matExtras.filter(m => !idsExistentes.has(m.id));
+          return [...prev, ...novas];
+        });
+      }
 
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
