@@ -472,7 +472,7 @@ export function ComercialPage() {
       const { data: logEventosHoje } = await supabase
         .from('leads_automacao_log')
         .select('lead_id')
-        .in('evento', ['aula_experimental_criada', 'aula_experimental_reagendada'])
+        .in('evento', ['aula_experimental_criada', 'aula_experimental_reagendada', 'matricula_registrada'])
         .gte('created_at', inicioHojeUTC)
         .lt('created_at', fimHojeUTC.toISOString());
 
