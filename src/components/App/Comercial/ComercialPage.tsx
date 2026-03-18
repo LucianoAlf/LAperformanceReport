@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import { TarefasRapidasTab } from '@/components/shared/TarefasRapidas';
 import { CanalOrigemBadge } from '@/components/shared/CanalOrigemBadge';
+import { FunnelPipelineNav } from './FunnelPipelineNav';
 import { PageTour, TourHelpButton } from '@/components/Onboarding';
 import { comercialTourSteps } from '@/components/Onboarding/tours';
 import { supabase } from '@/lib/supabase';
@@ -462,47 +463,6 @@ export function ComercialPage() {
 
       const registros = data || [];
 
-      // Query complementar: leads que tiveram EVENTO de etapa HOJE (via log de automação)
-      // Usa leads_automacao_log em vez de updated_at para evitar falsos positivos
-      // (ex: editar telefone de lead com experimental antiga não deve fazê-lo aparecer no "Hoje")
-      const inicioHojeUTC = new Date(hoje + 'T03:00:00.000Z').toISOString(); // 00:00 BRT em UTC
-      const fimHojeUTC = new Date(hoje + 'T03:00:00.000Z');
-      fimHojeUTC.setDate(fimHojeUTC.getDate() + 1);
-
-      const { data: logEventosHoje } = await supabase
-        .from('leads_automacao_log')
-        .select('lead_id')
-        .in('evento', ['aula_experimental_criada', 'aula_experimental_reagendada', 'matricula_registrada'])
-        .gte('created_at', inicioHojeUTC)
-        .lt('created_at', fimHojeUTC.toISOString());
-
-      const idsRegistros = new Set(registros.map(r => r.id));
-      const idsEventoHoje = [...new Set(
-        (logEventosHoje || []).map(l => l.lead_id).filter((id): id is number => id != null && !idsRegistros.has(id))
-      )];
-
-      let leadsEtapaHoje: typeof data = [];
-      if (idsEventoHoje.length > 0) {
-        let queryExtras = supabase
-          .from('leads')
-          .select('*, canais_origem(nome), cursos(nome), unidades(codigo)')
-          .in('id', idsEventoHoje);
-
-        // Aplicar mesmo filtro de unidade
-        if (isAdmin) {
-          if (context?.unidadeSelecionada && context.unidadeSelecionada !== 'todos') {
-            queryExtras = queryExtras.eq('unidade_id', context.unidadeSelecionada);
-          }
-        } else {
-          if (usuario?.unidade_id) {
-            queryExtras = queryExtras.eq('unidade_id', usuario.unidade_id);
-          }
-        }
-
-        const { data: extras } = await queryExtras;
-        leadsEtapaHoje = extras || [];
-      }
-
       // Quando o filtro é "Hoje", buscar dados do mês inteiro para o "Acumulado do Mês"
       const isFiltroHoje = competencia.filtro.tipo === 'diario';
       let registrosParaResumo = registros;
@@ -641,11 +601,9 @@ export function ComercialPage() {
         conversaoExpMat,
       });
 
-      // Registros de hoje: leads que entraram hoje + leads que mudaram de etapa hoje
+      // Registros de hoje: apenas leads que entraram hoje (por data_contato)
       const registrosEntradaHoje = registros.filter(r => r.data_contato === hoje);
-      const idsEntrada = new Set(registrosEntradaHoje.map(r => r.id));
-      const registrosEtapaMudouHoje = (leadsEtapaHoje || []).filter(r => !idsEntrada.has(r.id));
-      setRegistrosHoje([...registrosEntradaHoje, ...registrosEtapaMudouHoje]);
+      setRegistrosHoje(registrosEntradaHoje);
 
       // Matrículas do mês (com nomes dos relacionamentos)
       const matriculasDoMes = registros
@@ -687,7 +645,6 @@ export function ComercialPage() {
         });
       }
       
-      // Nota: matrículas extras de leadsEtapaHoje serão mergeadas após cálculo de leadsEtapaExtra
       setMatriculasMes(matriculasDoMes);
 
       // Leads do mês (TODOS os leads, incluindo experimentais e convertidos)
@@ -727,29 +684,8 @@ export function ComercialPage() {
           });
         }
       }
-      // Merge leads com etapa mudada hoje (mas data_contato anterior) nos arrays do funil
-      const leadsEtapaExtra = (leadsEtapaHoje || [])
-        .filter(r => !idsRegistros.has(r.id))
-        .map(l => ({
-          ...l,
-          canal_nome: (l.canais_origem as any)?.nome || '',
-          curso_nome: (l.cursos as any)?.nome || '',
-        }));
-      setLeadsMes([...leadsDoMes, ...leadsEtapaExtra]);
-
-      // Experimentais extras (etapa mudada hoje)
-      const expExtras = leadsEtapaExtra.filter(r => r.status?.startsWith('experimental'));
-      if (expExtras.length > 0) {
-        // Buscar nomes de professores para extras
-        const profExtrasIds = new Set<number>();
-        expExtras.forEach(e => { if (e.professor_experimental_id) profExtrasIds.add(e.professor_experimental_id); });
-        if (profExtrasIds.size > 0) {
-          const { data: profsExtrasData } = await supabase.from('professores').select('id, nome').in('id', Array.from(profExtrasIds));
-          const profExtrasMap = new Map<number, string>(profsExtrasData?.map(p => [p.id, p.nome] as [number, string]) || []);
-          expExtras.forEach(e => { (e as any).professor_nome = e.professor_experimental_id ? profExtrasMap.get(e.professor_experimental_id) || '' : ''; });
-        }
-      }
-      setExperimentaisMes([...experimentaisDoMes, ...expExtras]);
+      setLeadsMes(leadsDoMes);
+      setExperimentaisMes(experimentaisDoMes);
 
       // Visitas do mês (com nomes dos relacionamentos)
       const visitasDoMes = registros
@@ -759,18 +695,7 @@ export function ComercialPage() {
           canal_nome: (v.canais_origem as any)?.nome || '',
           curso_nome: (v.cursos as any)?.nome || '',
         }));
-      const visitasExtras = leadsEtapaExtra.filter(r => r.status === 'visita_escola');
-      setVisitasMes([...visitasDoMes, ...visitasExtras]);
-
-      // Matrículas extras (etapa mudada hoje)
-      const matExtras = leadsEtapaExtra.filter(r => ['matriculado', 'convertido'].includes(r.status));
-      if (matExtras.length > 0) {
-        setMatriculasMes(prev => {
-          const idsExistentes = new Set(prev.map(m => m.id));
-          const novas = matExtras.filter(m => !idsExistentes.has(m.id));
-          return [...prev, ...novas];
-        });
-      }
+      setVisitasMes(visitasDoMes);
 
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
@@ -2873,83 +2798,18 @@ export function ComercialPage() {
             </div>
           </div>
           
-          {/* Abas de navegação */}
-          <div data-tour="comercial-abas-funil" className="flex gap-2 flex-wrap">
-            <button
-              onClick={() => { setAbaDetalhamento('leads'); setSelecionadosFunil(new Set()); }}
-              className={cn(
-                "px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2",
-                abaDetalhamento === 'leads'
-                  ? "bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg"
-                  : "bg-slate-700/50 text-slate-400 hover:bg-slate-700 hover:text-white"
-              )}
-            >
-              <Smartphone className="w-4 h-4" />
-              Leads Atendidos
-              <span className={cn(
-                "px-2 py-0.5 rounded-full text-xs",
-                abaDetalhamento === 'leads' ? "bg-white/20" : "bg-slate-600"
-              )}>
-                {leadsMes.filter(l => !l.status || l.status === 'novo').length}
-              </span>
-            </button>
-            
-            <button
-              onClick={() => { setAbaDetalhamento('experimental'); setSelecionadosFunil(new Set()); }}
-              className={cn(
-                "px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2",
-                abaDetalhamento === 'experimental'
-                  ? "bg-gradient-to-r from-purple-500 to-violet-500 text-white shadow-lg"
-                  : "bg-slate-700/50 text-slate-400 hover:bg-slate-700 hover:text-white"
-              )}
-            >
-              <Guitar className="w-4 h-4" />
-              Experimentais
-              <span className={cn(
-                "px-2 py-0.5 rounded-full text-xs",
-                abaDetalhamento === 'experimental' ? "bg-white/20" : "bg-slate-600"
-              )}>
-                {experimentaisMes.length}
-              </span>
-            </button>
-            
-            <button
-              onClick={() => { setAbaDetalhamento('visita'); setSelecionadosFunil(new Set()); }}
-              className={cn(
-                "px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2",
-                abaDetalhamento === 'visita'
-                  ? "bg-gradient-to-r from-amber-500 to-orange-500 text-white shadow-lg"
-                  : "bg-slate-700/50 text-slate-400 hover:bg-slate-700 hover:text-white"
-              )}
-            >
-              <Building2 className="w-4 h-4" />
-              Visitas
-              <span className={cn(
-                "px-2 py-0.5 rounded-full text-xs",
-                abaDetalhamento === 'visita' ? "bg-white/20" : "bg-slate-600"
-              )}>
-                {visitasMes.length}
-              </span>
-            </button>
-            
-            <button
-              onClick={() => { setAbaDetalhamento('matricula'); setSelecionadosFunil(new Set()); }}
-              className={cn(
-                "px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2",
-                abaDetalhamento === 'matricula'
-                  ? "bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg"
-                  : "bg-slate-700/50 text-slate-400 hover:bg-slate-700 hover:text-white"
-              )}
-            >
-              <GraduationCap className="w-4 h-4" />
-              Matrículas
-              <span className={cn(
-                "px-2 py-0.5 rounded-full text-xs",
-                abaDetalhamento === 'matricula' ? "bg-white/20" : "bg-slate-600"
-              )}>
-                {matriculasMes.length}
-              </span>
-            </button>
+          {/* Pipeline de navegação */}
+          <div data-tour="comercial-abas-funil">
+            <FunnelPipelineNav
+              stages={[
+                { key: 'leads', label: 'Novos', count: leadsMes.filter(l => !l.status || l.status === 'novo').length, icon: Smartphone, color: '#3b82f6', gradient: 'from-blue-500 to-cyan-500' },
+                { key: 'experimental', label: 'Experimentais', count: experimentaisMes.length, icon: Guitar, color: '#a855f7', gradient: 'from-purple-500 to-violet-500' },
+                { key: 'visita', label: 'Visitas', count: visitasMes.length, icon: Building2, color: '#f59e0b', gradient: 'from-amber-500 to-orange-500' },
+                { key: 'matricula', label: 'Matrículas', count: matriculasMes.length, icon: GraduationCap, color: '#10b981', gradient: 'from-emerald-500 to-teal-500' },
+              ]}
+              activeStage={abaDetalhamento}
+              onStageClick={(key) => { setAbaDetalhamento(key as any); setSelecionadosFunil(new Set()); }}
+            />
           </div>
         </div>
 
