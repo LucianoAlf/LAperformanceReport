@@ -253,7 +253,7 @@ export function ComercialPage() {
     } else if (tipoRelatorio === 'comparativo_anual') {
       gerarRelatorioComparativoAnual().then(texto => setRelatorioTexto(texto));
     }
-  }, [tipoRelatorio, relatorioPeriodo, relatorioDataInicio, relatorioDataFim]);
+  }, [tipoRelatorio, relatorioPeriodo, relatorioDataInicio, relatorioDataFim, filtroAtivo]);
   
   // Matrículas do mês (para tabela)
   const [matriculasMes, setMatriculasMes] = useState<(LeadDiario & { 
@@ -1496,8 +1496,8 @@ export function ComercialPage() {
     }
 
     return {
-      dataInicio: dataInicio.toISOString().split('T')[0],
-      dataFim: dataFim.toISOString().split('T')[0],
+      dataInicio: format(dataInicio, 'yyyy-MM-dd'),
+      dataFim: format(dataFim, 'yyyy-MM-dd'),
       dataInicioObj: dataInicio,
       dataFimObj: dataFim
     };
