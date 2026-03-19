@@ -43,8 +43,10 @@ serve(async (req: Request) => {
     }
 
     if (!mensagens || mensagens.length === 0) {
+      // Mesmo sem mensagens CRM, processar fila do agente IA
+      const agenteFilaProcessadas = await processarFilaAgente(supabase);
       return new Response(
-        JSON.stringify({ ok: true, processadas: 0, mensagem: 'Nenhuma mensagem pendente' }),
+        JSON.stringify({ ok: true, processadas: 0, mensagem: 'Nenhuma mensagem pendente', agente_fila: agenteFilaProcessadas }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -104,8 +106,14 @@ serve(async (req: Request) => {
       }
     }
 
+    // ─── Processar fila do agente IA ──────────────────────────────────────────
+    const agenteFilaProcessadas = await processarFilaAgente(supabase);
+    if (agenteFilaProcessadas > 0) {
+      console.log(`[processar-agendadas] 🤖 ${agenteFilaProcessadas} msg(s) da fila do agente processadas`);
+    }
+
     return new Response(
-      JSON.stringify({ ok: true, processadas: mensagens.length, enviadas, erros }),
+      JSON.stringify({ ok: true, processadas: mensagens.length, enviadas, erros, agente_fila: agenteFilaProcessadas }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (err) {
@@ -116,3 +124,42 @@ serve(async (req: Request) => {
     );
   }
 });
+
+// ─── Processar fila do agente IA (debounce) ──────────────────────────────────
+
+async function processarFilaAgente(supabase: any): Promise<number> {
+  const agora = new Date().toISOString()
+
+  // Safety: destravar filas stuck (processando há mais de 5 min)
+  await supabase
+    .from('agente_fila_mensagens')
+    .update({ processando: false })
+    .eq('processando', true)
+    .lt('created_at', new Date(Date.now() - 5 * 60000).toISOString())
+
+  // Buscar pendentes com processar_apos no passado
+  const { data: pendentes } = await supabase
+    .from('agente_fila_mensagens')
+    .select('id, agente_id, unidade_id, telefone')
+    .eq('processando', false)
+    .lte('processar_apos', agora)
+    .limit(10)
+
+  if (!pendentes?.length) return 0
+
+  for (const item of pendentes) {
+    fetch(`${SUPABASE_URL}/functions/v1/agente-webhook`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
+      body: JSON.stringify({
+        unidade_id: item.unidade_id,
+        agente_id: item.agente_id,
+        telefone: item.telefone,
+        texto: '',
+        tipo_mensagem: 'debounce_trigger',
+      }),
+    }).catch(err => console.error('[processar-agendadas] Erro fila agente:', err))
+  }
+
+  return pendentes.length
+}

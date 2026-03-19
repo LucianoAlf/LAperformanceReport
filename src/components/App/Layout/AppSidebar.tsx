@@ -22,9 +22,11 @@ import {
   Pencil,
   Key,
   Camera,
-  TrendingUp
+  TrendingUp,
+  Megaphone
 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
 import { Tooltip } from '../../ui/Tooltip';
 import { 
   DropdownMenu, 
@@ -43,6 +45,7 @@ const prefetchMap: Record<string, () => Promise<any>> = {
   '/app/config': () => import('@/components/App/Config'),
   '/app/comercial': () => import('@/components/App/Comercial'),
   '/app/pre-atendimento': () => import('@/components/App/PreAtendimento'),
+  '/app/campanhas': () => import('@/components/App/Campanhas'),
   '/app/administrativo': () => import('@/components/App/Administrativo'),
   '/app/alunos': () => import('@/components/App/Alunos'),
   '/app/professores': () => import('@/components/App/Professores'),
@@ -65,6 +68,7 @@ const menuItems = [
 
 const operacional = [
   { path: '/app/pre-atendimento', label: 'Pré-Atendimento', icon: Phone },
+  { path: '/app/campanhas', label: 'Campanhas', icon: Megaphone },
   { path: '/app/comercial', label: 'Comercial', icon: Briefcase },
   { path: '/app/administrativo', label: 'Administrativo', icon: ClipboardList },
   { path: '/app/alunos', label: 'Alunos', icon: Users },
@@ -76,6 +80,41 @@ const operacional = [
 export function AppSidebar() {
   const navigate = useNavigate();
   const { usuario, isAdmin, signOut } = useAuth();
+
+  // Visibilidade do módulo Campanhas
+  const DEV_EMAIL = 'hugo@lamusic.com.br'
+  const isDev = usuario?.email === DEV_EMAIL
+  const [campanhasVisivel, setCampanhasVisivel] = useState(false)
+  useEffect(() => {
+    supabase.from('campanhas_config').select('visibilidade_global').single()
+      .then(({ data }) => {
+        setCampanhasVisivel(isDev || data?.visibilidade_global === true)
+      })
+  }, [isDev])
+
+  // Badge de não lidas para Campanhas
+  const [campanhasNaoLidas, setCampanhasNaoLidas] = useState(0);
+  useEffect(() => {
+    // Buscar total de não lidas
+    supabase.from('conversas_campanha').select('nao_lidas').gt('nao_lidas', 0)
+      .then(({ data }) => {
+        const total = data?.reduce((s: number, c: any) => s + (c.nao_lidas ?? 0), 0) ?? 0;
+        setCampanhasNaoLidas(total);
+      });
+
+    // Realtime: atualizar quando muda
+    const channel = supabase.channel('sidebar_campanhas_badge')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'conversas_campanha' }, () => {
+        supabase.from('conversas_campanha').select('nao_lidas').gt('nao_lidas', 0)
+          .then(({ data }) => {
+            const total = data?.reduce((s: number, c: any) => s + (c.nao_lidas ?? 0), 0) ?? 0;
+            setCampanhasNaoLidas(total);
+          });
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, []);
   const [isCollapsed, setIsCollapsed] = useState(() => {
     const saved = localStorage.getItem('sidebar-collapsed');
     return saved === 'true';
@@ -181,7 +220,7 @@ export function AppSidebar() {
             <Wrench className="w-3 h-3" /> Operacional
           </div>
         )}
-        {operacional.map((item) => {
+        {operacional.filter(item => item.path !== '/app/campanhas' || campanhasVisivel).map((item) => {
           const Icon = item.icon;
           return (
             <Tooltip key={item.path} content={item.label} enabled={isCollapsed}>
@@ -200,7 +239,14 @@ export function AppSidebar() {
                 style={isCollapsed ? { background: 'none', border: 'none', boxShadow: 'none', outline: 'none' } : {}}
               >
                 <Icon className={`w-5 h-5 ${isCollapsed ? (item.path === window.location.pathname ? 'text-emerald-400' : 'text-gray-400 hover:text-white') : ''}`} />
-                {!isCollapsed && <span className="text-sm font-medium">{item.label}</span>}
+                {!isCollapsed && (
+                  <span className="text-sm font-medium flex-1">{item.label}</span>
+                )}
+                {item.path === '/app/campanhas' && campanhasNaoLidas > 0 && (
+                  <span className={`${isCollapsed ? 'absolute -top-1 -right-1' : ''} w-5 h-5 rounded-full bg-amber-500 text-black text-[10px] flex items-center justify-center font-bold`}>
+                    {campanhasNaoLidas > 99 ? '99+' : campanhasNaoLidas}
+                  </span>
+                )}
               </NavLink>
             </Tooltip>
           );

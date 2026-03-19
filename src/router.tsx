@@ -34,6 +34,28 @@ function lazyLoad(importFn: () => Promise<{ default: React.ComponentType<any> }>
 // Layout e Autenticação (sempre necessários)
 import { AppLayout } from './components/App/Layout';
 import { LoginPage, PrivateRoute } from './components/App/Auth';
+import { useAuth } from './contexts/AuthContext';
+import { useState, useEffect } from 'react';
+import { supabase } from './lib/supabase';
+
+function CampanhasGuard({ children }: { children: React.ReactNode }) {
+  const { usuario } = useAuth()
+  const [permitido, setPermitido] = useState<boolean | null>(null)
+  const DEV_EMAIL = 'hugo@lamusic.com.br'
+
+  useEffect(() => {
+    if (usuario?.email === DEV_EMAIL) {
+      setPermitido(true)
+      return
+    }
+    supabase.from('campanhas_config').select('visibilidade_global').single()
+      .then(({ data }) => setPermitido(data?.visibilidade_global === true))
+  }, [usuario?.email])
+
+  if (permitido === null) return <PageLoader />
+  if (!permitido) return <Navigate to="/app" replace />
+  return <>{children}</>
+}
 
 // Dashboard (página inicial - carrega imediatamente)
 import { DashboardPage } from './components/App/Dashboard';
@@ -63,6 +85,7 @@ const AlunosPage = lazy(() => import('./components/App/Alunos').then(m => ({ def
 const SalasPage = lazy(() => import('./components/App/Salas').then(m => ({ default: m.SalasPage })));
 const ProjetosPage = lazy(() => import('./components/App/Projetos').then(m => ({ default: m.ProjetosPage })));
 const PreAtendimentoPage = lazy(() => import('./components/App/PreAtendimento').then(m => ({ default: m.PreAtendimentoPage })));
+const CampanhasPage = lazy(() => import('./components/App/Campanhas').then(m => ({ default: m.CampanhasPage })));
 
 // Metas
 const MetasPageNew = lazy(() => import('./components/App/Metas').then(m => ({ default: m.MetasPageNew })));
@@ -206,6 +229,10 @@ export const router = createBrowserRouter([
           {
             path: 'pre-atendimento',
             element: <Suspense fallback={<PageLoader />}><PreAtendimentoPage /></Suspense>,
+          },
+          {
+            path: 'campanhas',
+            element: <CampanhasGuard><Suspense fallback={<PageLoader />}><CampanhasPage /></Suspense></CampanhasGuard>,
           },
           {
             path: 'administrativo',

@@ -225,13 +225,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
     
-    // Timeout de segurança reduzido para 5 segundos
+    // Timeout de segurança - 15 segundos para garantir recuperação da sessão
     const safetyTimeout = setTimeout(() => {
       if (mounted && loading) {
         console.warn('Timeout de autenticação - forçando fim do loading');
         setLoading(false);
       }
-    }, 5000);
+    }, 15000);
 
     const initAuth = async () => {
       try {
