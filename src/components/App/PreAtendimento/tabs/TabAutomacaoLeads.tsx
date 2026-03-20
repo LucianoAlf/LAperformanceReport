@@ -139,9 +139,15 @@ export function TabAutomacaoLeads({ unidadeAtual }: TabAutomacaoLeadsProps) {
     }
   };
 
-  // Filtro local por busca de nome
+  // Filtro local por busca de nome ou telefone
   const registrosFiltrados = busca.trim()
-    ? registros.filter(r => r.lead_nome?.toLowerCase().includes(busca.toLowerCase()))
+    ? registros.filter(r => {
+        const termo = busca.toLowerCase().replace(/\D/g, ''); // Remove não-dígitos para busca de telefone
+        const nomeMatch = r.lead_nome?.toLowerCase().includes(busca.toLowerCase());
+        const telefone = r.detalhes?.telefone?.replace(/\D/g, '') || '';
+        const telefoneMatch = termo.length >= 4 && telefone.includes(termo);
+        return nomeMatch || telefoneMatch;
+      })
     : registros;
 
   const formatarData = (data: string) => {
@@ -241,7 +247,7 @@ export function TabAutomacaoLeads({ unidadeAtual }: TabAutomacaoLeadsProps) {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <Input
-                placeholder="Buscar por nome..."
+                placeholder="Buscar nome ou telefone..."
                 value={busca}
                 onChange={(e) => setBusca(e.target.value)}
                 className="w-[200px] pl-9 bg-slate-900 border-slate-600"
