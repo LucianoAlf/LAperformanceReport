@@ -4,10 +4,13 @@
       "command": "npx",
       "args": [
         "-y",
-        "n8n-mcp-server@latest"
+        "n8n-mcp"
       ],
       "env": {
-        "N8N_API_URL": "https://workla.latecnology.com.br/api/v1",
+        "MCP_MODE": "stdio",
+        "LOG_LEVEL": "error",
+        "DISABLE_CONSOLE_OUTPUT": "true",
+        "N8N_API_URL": "https://workla.latecnology.com.br",
         "N8N_API_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NjA2YjVhMS1hMmQxLTQyOTUtOTllMi05ZjM3OTkzOWUxODIiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzY2MTgwMjMwfQ.rd8nGWj7TcU2KfUSovNq-mJGHVqRmj_QJK6uCAfH-uM"
       }
     },

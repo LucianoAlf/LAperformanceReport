@@ -114,6 +114,8 @@ export function TabAutomacaoLeads({ unidadeAtual }: TabAutomacaoLeadsProps) {
         query = query.eq('detalhes->sem_telefone', true);
       } else if (filtroIncompleto === 'sem_nome') {
         query = query.eq('detalhes->sem_nome', true);
+      } else if (filtroIncompleto === 'sem_professor') {
+        query = query.eq('detalhes->sem_professor', true);
       }
 
       if (unidadeAtual && unidadeAtual !== 'todos') {
@@ -171,6 +173,7 @@ export function TabAutomacaoLeads({ unidadeAtual }: TabAutomacaoLeadsProps) {
     const alertas: string[] = [];
     if (detalhes.sem_nome) alertas.push('Sem nome');
     if (detalhes.sem_telefone) alertas.push('Sem telefone');
+    if (detalhes.sem_professor) alertas.push('Sem professor');
     return alertas;
   };
 
@@ -179,11 +182,13 @@ export function TabAutomacaoLeads({ unidadeAtual }: TabAutomacaoLeadsProps) {
     return acc;
   }, {} as Record<string, number>);
 
+  const totalSemProfessor = registrosFiltrados.filter(r => r.detalhes?.sem_professor === true).length;
+
   return (
     <div className="space-y-6">
       {/* Contadores resumidos */}
       {registrosFiltrados.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {contadorAcoes.map((grupo) => {
             const total = grupo.keys.reduce((sum, key) => sum + (totalPorAcao[key] || 0), 0);
             return (
@@ -202,6 +207,21 @@ export function TabAutomacaoLeads({ unidadeAtual }: TabAutomacaoLeadsProps) {
               </div>
             );
           })}
+          {totalSemProfessor > 0 && (
+            <button
+              onClick={() => setFiltroIncompleto(filtroIncompleto === 'sem_professor' ? 'todos' : 'sem_professor')}
+              className={cn(
+                'flex items-center gap-3 px-4 py-3 rounded-lg border transition-colors',
+                filtroIncompleto === 'sem_professor'
+                  ? 'bg-orange-500/30 border-orange-500/50'
+                  : 'bg-orange-500/20 border-slate-700/50 hover:border-orange-500/30',
+              )}
+            >
+              <AlertTriangle className="w-5 h-5 text-orange-400" />
+              <span className="text-2xl font-bold text-orange-400">{totalSemProfessor}</span>
+              <span className="text-slate-400 text-sm">Sem Professor</span>
+            </button>
+          )}
         </div>
       )}
 
@@ -257,6 +277,7 @@ export function TabAutomacaoLeads({ unidadeAtual }: TabAutomacaoLeadsProps) {
                 <SelectItem value="todos">Todos os dados</SelectItem>
                 <SelectItem value="sem_telefone">Sem telefone</SelectItem>
                 <SelectItem value="sem_nome">Sem nome</SelectItem>
+                <SelectItem value="sem_professor">Sem professor</SelectItem>
               </SelectContent>
             </Select>
             <Select value={filtroPeriodo} onValueChange={setFiltroPeriodo}>
