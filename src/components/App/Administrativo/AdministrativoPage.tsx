@@ -772,6 +772,8 @@ export function AdministrativoPage() {
               onMesChange={competenciaFiltro.setMes}
               onTrimestreChange={competenciaFiltro.setTrimestre}
               onSemestreChange={competenciaFiltro.setSemestre}
+              onDataInicioChange={competenciaFiltro.setDataInicio}
+              onDataFimChange={competenciaFiltro.setDataFim}
             />
             <button
               onClick={() => setModalRelatorio(true)}

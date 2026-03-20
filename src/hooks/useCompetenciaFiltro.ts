@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { format } from 'date-fns';
 import { supabase } from '@/lib/supabase';
 
-export type TipoCompetencia = 'diario' | 'mensal' | 'trimestral' | 'semestral' | 'anual';
+export type TipoCompetencia = 'diario' | 'mensal' | 'trimestral' | 'semestral' | 'anual' | 'personalizado';
 
 export interface CompetenciaFiltro {
   tipo: TipoCompetencia;
@@ -10,6 +10,8 @@ export interface CompetenciaFiltro {
   mes: number;           // Para mensal
   trimestre: 1 | 2 | 3 | 4;    // Para trimestral
   semestre: 1 | 2;         // Para semestral
+  dataInicio?: Date;     // Para personalizado
+  dataFim?: Date;        // Para personalizado
 }
 
 export interface CompetenciaRange {
@@ -47,17 +49,48 @@ export function useCompetenciaFiltro() {
     mes: mesAtual,
     trimestre: Math.ceil(mesAtual / 3) as 1 | 2 | 3 | 4,
     semestre: mesAtual <= 6 ? 1 : 2,
+    dataInicio: undefined,
+    dataFim: undefined,
   });
 
   // Calcular range de datas baseado no filtro
   const range = useMemo<CompetenciaRange>(() => {
-    const { tipo, ano, mes, trimestre, semestre } = filtro;
+    const { tipo, ano, mes, trimestre, semestre, dataInicio, dataFim } = filtro;
 
     let mesInicio: number;
     let mesFim: number;
     let label: string;
 
     switch (tipo) {
+      case 'personalizado': {
+        if (dataInicio && dataFim) {
+          const startDate = format(dataInicio, 'yyyy-MM-dd');
+          const endDate = format(dataFim, 'yyyy-MM-dd');
+          const labelInicio = format(dataInicio, 'dd/MM');
+          const labelFim = format(dataFim, 'dd/MM/yyyy');
+          return {
+            startDate,
+            endDate,
+            meses: [],
+            label: `${labelInicio} - ${labelFim}`,
+            ano: dataFim.getFullYear(),
+            mesInicio: dataInicio.getMonth() + 1,
+            mesFim: dataFim.getMonth() + 1,
+          };
+        }
+        // fallback para hoje se datas não definidas
+        const hojeStr = format(new Date(), 'yyyy-MM-dd');
+        return {
+          startDate: hojeStr,
+          endDate: hojeStr,
+          meses: [mes],
+          label: 'Selecione período',
+          ano,
+          mesInicio: mes,
+          mesFim: mes,
+        };
+      }
+
       case 'diario': {
         mesInicio = mes;
         mesFim = mes;
@@ -147,6 +180,14 @@ export function useCompetenciaFiltro() {
     setFiltro(prev => ({ ...prev, semestre }));
   };
 
+  const setDataInicio = (dataInicio: Date | undefined) => {
+    setFiltro(prev => ({ ...prev, dataInicio }));
+  };
+
+  const setDataFim = (dataFim: Date | undefined) => {
+    setFiltro(prev => ({ ...prev, dataFim }));
+  };
+
   // Anos disponíveis - buscar dinamicamente do banco de dados + ano atual
   const [anosDisponiveis, setAnosDisponiveis] = useState<number[]>([anoAtual]);
 
@@ -200,6 +241,8 @@ export function useCompetenciaFiltro() {
     setMes,
     setTrimestre,
     setSemestre,
+    setDataInicio,
+    setDataFim,
     anosDisponiveis,
     MESES_NOME,
     MESES_CURTO,

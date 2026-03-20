@@ -1,6 +1,7 @@
 import { cn } from '@/lib/utils';
 import { TipoCompetencia, CompetenciaFiltro, CompetenciaRange } from '@/hooks/useCompetenciaFiltro';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { DatePicker } from '@/components/ui/date-picker';
 
 interface CompetenciaFilterProps {
   filtro: CompetenciaFiltro;
@@ -11,6 +12,8 @@ interface CompetenciaFilterProps {
   onMesChange: (mes: number) => void;
   onTrimestreChange: (trimestre: 1 | 2 | 3 | 4) => void;
   onSemestreChange: (semestre: 1 | 2) => void;
+  onDataInicioChange?: (data: Date | undefined) => void;
+  onDataFimChange?: (data: Date | undefined) => void;
   className?: string;
 }
 
@@ -20,6 +23,7 @@ const TIPOS: { id: TipoCompetencia; label: string; shortLabel: string }[] = [
   { id: 'trimestral', label: 'Trimestre', shortLabel: 'Trim' },
   { id: 'semestral', label: 'Semestre', shortLabel: 'Sem' },
   { id: 'anual', label: 'Anual', shortLabel: 'Ano' },
+  { id: 'personalizado', label: 'Personalizado', shortLabel: 'Personalizado' },
 ];
 
 const MESES = [
@@ -58,6 +62,8 @@ export function CompetenciaFilter({
   onMesChange,
   onTrimestreChange,
   onSemestreChange,
+  onDataInicioChange,
+  onDataFimChange,
   className,
 }: CompetenciaFilterProps) {
   return (
@@ -80,8 +86,29 @@ export function CompetenciaFilter({
         ))}
       </div>
 
-      {/* Seletores de Período — ocultos quando filtro é "Hoje" */}
-      {filtro.tipo !== 'diario' && <div className="flex items-center gap-2">
+      {/* Seletores de Período Personalizado */}
+      {filtro.tipo === 'personalizado' && (
+        <div className="flex items-center gap-2">
+          <DatePicker
+            date={filtro.dataInicio}
+            onDateChange={onDataInicioChange || (() => {})}
+            placeholder="Data inicial"
+            maxDate={filtro.dataFim}
+            className="w-[130px] bg-slate-800/50 border-slate-700"
+          />
+          <span className="text-slate-400 text-sm">até</span>
+          <DatePicker
+            date={filtro.dataFim}
+            onDateChange={onDataFimChange || (() => {})}
+            placeholder="Data final"
+            minDate={filtro.dataInicio}
+            className="w-[130px] bg-slate-800/50 border-slate-700"
+          />
+        </div>
+      )}
+
+      {/* Seletores de Período — ocultos quando filtro é "Hoje" ou "Personalizado" */}
+      {filtro.tipo !== 'diario' && filtro.tipo !== 'personalizado' && <div className="flex items-center gap-2">
         {/* Seletor de Ano */}
         <Select
           value={filtro.ano.toString()}

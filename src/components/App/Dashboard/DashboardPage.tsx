@@ -42,6 +42,8 @@ interface OutletContextType {
     setMes: (mes: number) => void;
     setTrimestre: (trimestre: 1 | 2 | 3 | 4) => void;
     setSemestre: (semestre: 1 | 2) => void;
+    setDataInicio: (data: Date | undefined) => void;
+    setDataFim: (data: Date | undefined) => void;
   };
 }
 
@@ -140,6 +142,8 @@ export function DashboardPage() {
   const setMes = competencia?.setMes;
   const setTrimestre = competencia?.setTrimestre;
   const setSemestre = competencia?.setSemestre;
+  const setDataInicio = competencia?.setDataInicio;
+  const setDataFim = competencia?.setDataFim;
 
   useEffect(() => {
     async function fetchDados() {
@@ -723,6 +727,8 @@ export function DashboardPage() {
             onMesChange={setMes}
             onTrimestreChange={setTrimestre}
             onSemestreChange={setSemestre}
+            onDataInicioChange={setDataInicio}
+            onDataFimChange={setDataFim}
           />
         </div>
       )}

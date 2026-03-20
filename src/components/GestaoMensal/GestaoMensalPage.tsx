@@ -56,6 +56,8 @@ export function GestaoMensalPage({ mesReferencia }: GestaoMensalPageProps) {
   const setMes = competencia?.setMes;
   const setTrimestre = competencia?.setTrimestre;
   const setSemestre = competencia?.setSemestre;
+  const setDataInicio = competencia?.setDataInicio;
+  const setDataFim = competencia?.setDataFim;
 
   const handleTabChange = (tabId: TabId) => {
     setActiveTab(tabId);
@@ -75,6 +77,8 @@ export function GestaoMensalPage({ mesReferencia }: GestaoMensalPageProps) {
             onMesChange={setMes}
             onTrimestreChange={setTrimestre}
             onSemestreChange={setSemestre}
+            onDataInicioChange={setDataInicio}
+            onDataFimChange={setDataFim}
           />
         </div>
       )}

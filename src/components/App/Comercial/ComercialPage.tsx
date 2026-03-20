@@ -2429,6 +2429,8 @@ export function ComercialPage() {
           onMesChange={competencia.setMes}
           onTrimestreChange={competencia.setTrimestre}
           onSemestreChange={competencia.setSemestre}
+          onDataInicioChange={competencia.setDataInicio}
+          onDataFimChange={competencia.setDataFim}
         />
         <button
           onClick={() => setRelatorioOpen(true)}
