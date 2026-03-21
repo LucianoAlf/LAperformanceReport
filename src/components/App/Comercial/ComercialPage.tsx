@@ -2804,7 +2804,7 @@ export function ComercialPage() {
           <div data-tour="comercial-abas-funil">
             <FunnelPipelineNav
               stages={[
-                { key: 'leads', label: 'Novos', count: leadsMes.filter(l => !l.status || l.status === 'novo').length, icon: Smartphone, color: '#3b82f6', gradient: 'from-blue-500 to-cyan-500' },
+                { key: 'leads', label: 'Novos', count: leadsMes.length, icon: Smartphone, color: '#3b82f6', gradient: 'from-blue-500 to-cyan-500' },
                 { key: 'experimental', label: 'Experimentais', count: experimentaisMes.length, icon: Guitar, color: '#a855f7', gradient: 'from-purple-500 to-violet-500' },
                 { key: 'visita', label: 'Visitas', count: visitasMes.length, icon: Building2, color: '#f59e0b', gradient: 'from-amber-500 to-orange-500' },
                 { key: 'matricula', label: 'Matrículas', count: matriculasMes.length, icon: GraduationCap, color: '#10b981', gradient: 'from-emerald-500 to-teal-500' },

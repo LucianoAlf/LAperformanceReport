@@ -17,7 +17,8 @@ interface FunnelPipelineNavProps {
 }
 
 export function FunnelPipelineNav({ stages, activeStage, onStageClick }: FunnelPipelineNavProps) {
-  const total = stages.reduce((sum, s) => sum + s.count, 0);
+  // Base do funil é a primeira etapa (Novos)
+  const baseCount = stages[0]?.count || 0;
 
   return (
     <div className="space-y-4">
@@ -26,7 +27,7 @@ export function FunnelPipelineNav({ stages, activeStage, onStageClick }: FunnelP
         <div className="flex items-center gap-2">
           <span className="text-sm text-slate-400">Pipeline</span>
           <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-700 text-white">
-            {total} leads
+            {baseCount} leads
           </span>
         </div>
       </div>
@@ -35,7 +36,8 @@ export function FunnelPipelineNav({ stages, activeStage, onStageClick }: FunnelP
       <div className="flex items-stretch gap-1 md:gap-2">
         {stages.map((stage, index) => {
           const isActive = activeStage === stage.key;
-          const pctOfTotal = total > 0 ? (stage.count / total * 100) : 0;
+          // Porcentagem relativa à base (primeira etapa)
+          const pctOfBase = baseCount > 0 ? (stage.count / baseCount * 100) : 0;
           const Icon = stage.icon;
 
           return (
@@ -79,12 +81,12 @@ export function FunnelPipelineNav({ stages, activeStage, onStageClick }: FunnelP
                   {stage.count}
                 </div>
 
-                {/* % do total */}
+                {/* % do total (relativo à base) */}
                 <div className={cn(
                   "text-[10px] mt-1",
                   isActive ? "text-white/60" : "text-slate-500"
                 )}>
-                  {pctOfTotal > 0 ? `${pctOfTotal.toFixed(1)}% do total` : '—'}
+                  {pctOfBase > 0 ? `${pctOfBase.toFixed(1)}% do total` : '—'}
                 </div>
 
                 {/* Barra de preenchimento */}
@@ -95,7 +97,7 @@ export function FunnelPipelineNav({ stages, activeStage, onStageClick }: FunnelP
                   <div
                     className="h-full rounded-full transition-all duration-500"
                     style={{
-                      width: `${Math.max(pctOfTotal, 2)}%`,
+                      width: `${Math.max(pctOfBase, 2)}%`,
                       backgroundColor: isActive ? 'rgba(255,255,255,0.5)' : stage.color,
                     }}
                   />
