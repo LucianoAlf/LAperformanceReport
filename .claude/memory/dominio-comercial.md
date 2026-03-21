@@ -34,6 +34,14 @@
 - Componente em `src/components/ui/command.tsx` (shadcn)
 - Padrao: Command + CommandInput + CommandList + CommandEmpty + CommandGroup + CommandItem
 
+## Funil Pipeline (FunnelPipelineNav)
+- Componente: `src/components/App/Comercial/FunnelPipelineNav.tsx`
+- 4 etapas: Novos → Experimentais → Visitas → Matriculas
+- **Base do funil = primeira etapa (Novos)** — % de conversao relativo a base
+- "Novos" = `leadsMes.length` (todos os leads do periodo, NAO apenas status='novo')
+- Porcentagens: experimentais/total, matriculas/total (funil de conversao real)
+- Componente exibe: icone, label, contagem, % do total, barra de progresso
+
 ## Detalhamento do Funil
 - 4 sub-tabs: Leads, Experimentais, Visitas, Matriculas
 - Cada tab filtra por status (ver regras-negocio.md "Filtro por Tab")
@@ -90,7 +98,7 @@
 - **`yko5HstPTze0gsIM`**: Agente Mila Barra — **PRINCIPAL FONTE DE LEADS**
   - Os 3 agentes Mila SDR sao a principal origem de leads. Recebem WhatsApp, processam com IA e chamam a API Emusys de cadastro. Emusys dispara webhook → `EB0LibpOJCLhKp7M`
 - **`EB0LibpOJCLhKp7M`**: Emusys webhook → Supabase + NocoDB (lead_criado, lead_editado, lead_arquivado). Ativado toda vez que a API de registro de leads do Emusys e chamada (pelos Mila SDR ou manual)
-- **`1uP2GhoHG1shEFLg`**: NocoDB webhook → log controle apenas (NAO sincroniza Supabase, NAO e responsavel por leads novos)
+- **`1uP2GhoHG1shEFLg`**: NocoDB webhook → upsert_lead() Supabase (origem='nocodb') + log controle. Garante que TODO lead do NocoDB chegue ao Supabase
 - **`dJ7Dc9LHLTSnKIsi`**: Gerenciar CRM NocoDB — apenas UPDATEs (triggered por Chatwoot), NAO cria leads
 
 ### Tabelas de Aggregacao (Supabase)

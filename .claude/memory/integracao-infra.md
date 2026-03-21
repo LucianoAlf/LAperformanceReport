@@ -91,12 +91,22 @@
 - Lead criado no NocoDB recebe `Observacoes: "emusys"`
 
 ### NocoDB webhook — `1uP2GhoHG1shEFLg` ("[ Nocodb ] Criacao/Atualizacao de leads")
-- Webhook: `POST /webhook/nocodb_leads` (disparo automatico do NocoDB on record update)
+- Webhook: `POST /webhook/nocodb_leads` (disparo automatico do NocoDB on insert/update)
 - Branches ativas:
-  1. `Transformar NocoDB → Emusys` → `Enviar para emusys-webhook` → projeto `aexacbmirdlcssmjjbzx` (seta nocodb_lead_id no LA Performance via outro projeto)
-  2. `Call '[ Controle ] Registrar Lead Metrics'` (sub-workflow YiSWPwsuvO74XNAs) — log em tabela NocoDB controle apenas
-- Nodes `Preparar Dados Arquivamento1` e `Upsert Lead` estao desconectados (intencional — redundante com path Emusys)
-- `[ Controle ] Registrar Lead Metrics` (YiSWPwsuvO74XNAs) — apenas cria registro em NocoDB `musrzcrvkkwl27j`, NAO sincroniza Supabase
+  1. `Webhook` → `Transformar NocoDB → Emusys` → `Preparar Dados Arquivamento1` → `Upsert Lead` (Supabase com origem='nocodb')
+  2. `Webhook` → `Call '[ Controle ] Registrar Lead Metrics'` (sub-workflow YiSWPwsuvO74XNAs) — log em tabela NocoDB controle
+- O upsert_lead() sincroniza TODO lead do NocoDB para Supabase (confirmado 2026-03-21)
+- Nó orfao (desconectado): `Transformar NocoDB → Emusys1` → `enviar para o dashboard do rayan` — outro projeto, nao relevante
+- `[ Controle ] Registrar Lead Metrics` (YiSWPwsuvO74XNAs) — apenas log em NocoDB `musrzcrvkkwl27j`
+
+### Sincronizacao bidirecional de leads (confirmado 2026-03-21)
+| Origem | → Supabase | → NocoDB | → Emusys |
+|--------|------------|----------|----------|
+| Emusys webhook | ✅ via EB0LibpOJCLhKp7M | ✅ via EB0LibpOJCLhKp7M | — (ja esta) |
+| NocoDB (agente SDR) | ✅ via 1uP2GhoHG1shEFLg | — (ja esta) | ❌ nao sincroniza |
+| Manual (Supabase) | — (ja esta) | ❌ | ❌ |
+
+**Por design:** leads criados no NocoDB (via agente SDR) NAO vao para o Emusys. O Emusys e populado apenas quando o agente SDR chama a API do Emusys diretamente.
 
 ### Agentes Mila SDR (3 workflows) — PRINCIPAL FONTE DE LEADS
 | Unidade | ID | Nos |
