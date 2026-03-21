@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
-import { 
-  Trophy, 
-  AlertTriangle, 
-  Settings, 
-  Plus, 
+import {
+  Trophy,
+  AlertTriangle,
+  Settings,
+  Plus,
   Trash2,
   Gift,
   Star,
@@ -15,7 +15,8 @@ import {
   ShoppingBag,
   Check,
   X,
-  Loader2
+  Loader2,
+  Info
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFidelizaPrograma, FarmerDados } from '@/hooks/useFidelizaPrograma';
@@ -43,6 +44,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 // Tipos de penalidade
 const TIPOS_PENALIDADE = [
@@ -1810,6 +1812,12 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026 }: TabProgr
             : 'Atencao: churn acima da meta'
           }
           icon={<TrendingUp className="w-5 h-5" />}
+          formula={{
+            descricao: 'Media das taxas de churn dos 3 meses do trimestre.',
+            calculo: `${farmerAtual.metricas.churn_bruto?.evasoes || 0} evasoes / ${farmerAtual.metricas.churn_bruto?.alunos_base || 0} alunos`,
+            resultado: `= ${farmerAtual.metricas.churn_rate.toFixed(1)}%`,
+            meta: `<= ${config?.metas.churn_maximo || 4}%`
+          }}
         />
 
         <MetricaCardFarmer
@@ -1823,6 +1831,12 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026 }: TabProgr
             : 'Atencao: inadimplencia acima da meta'
           }
           icon={<Percent className="w-5 h-5" />}
+          formula={{
+            descricao: 'Percentual de mensalidades em atraso (media do trimestre).',
+            calculo: 'Inadimplentes / total',
+            resultado: `= ${farmerAtual.metricas.inadimplencia_pct.toFixed(1)}%`,
+            meta: `<= ${config?.metas.inadimplencia_maxima || 1}%`
+          }}
         />
 
         <MetricaCardFarmer
@@ -1836,6 +1850,12 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026 }: TabProgr
             : 'Foco nas renovacoes pendentes'
           }
           icon={<Target className="w-5 h-5" />}
+          formula={{
+            descricao: 'Contratos renovados / total de contratos a vencer no trimestre.',
+            calculo: `${farmerAtual.metricas.renovacao_bruto?.renovados || 0} renovados / ${farmerAtual.metricas.renovacao_bruto?.total_contratos || 0} contratos`,
+            resultado: `= ${farmerAtual.metricas.taxa_renovacao.toFixed(0)}%`,
+            meta: `>= ${config?.metas.renovacao_minima || 90}%`
+          }}
         />
 
         <MetricaCardFarmer
@@ -1849,6 +1869,12 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026 }: TabProgr
             : 'Busque reajustes maiores'
           }
           icon={<TrendingUp className="w-5 h-5" />}
+          formula={{
+            descricao: 'Media dos percentuais de reajuste aplicados nas renovacoes.',
+            calculo: 'Media de reajuste',
+            resultado: `= ${farmerAtual.metricas.reajuste_medio.toFixed(1)}%`,
+            meta: `>= ${config?.metas.reajuste_minimo || 7}%`
+          }}
         />
 
         <MetricaCardFarmer
@@ -1859,6 +1885,12 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026 }: TabProgr
           bateu={farmerAtual.metricas.vendas_lojinha >= getMetaLojinha(farmerAtual.unidade_id)}
           mensagem="Vendas da lojinha no trimestre"
           icon={<ShoppingBag className="w-5 h-5" />}
+          formula={{
+            descricao: 'Total de vendas na lojinha durante o trimestre.',
+            calculo: 'Soma de todas as vendas',
+            resultado: `= R$ ${farmerAtual.metricas.vendas_lojinha.toLocaleString('pt-BR')}`,
+            meta: `R$ ${getMetaLojinha(farmerAtual.unidade_id).toLocaleString('pt-BR')}`
+          }}
         />
 
         {/* Penalidades */}
@@ -2197,6 +2229,14 @@ function MetricaRow({
   );
 }
 
+interface FormulaTooltip {
+  descricao: string;
+  calculo: string;
+  resultado: string;
+  meta: string;
+  bonus?: string;
+}
+
 function MetricaCardFarmer({
   titulo,
   meta,
@@ -2204,7 +2244,8 @@ function MetricaCardFarmer({
   pontos,
   bateu,
   mensagem,
-  icon
+  icon,
+  formula
 }: {
   titulo: string;
   meta: string;
@@ -2213,6 +2254,7 @@ function MetricaCardFarmer({
   bateu: boolean;
   mensagem: string;
   icon: React.ReactNode;
+  formula?: FormulaTooltip;
 }) {
   return (
     <div className="bg-slate-900 rounded-xl p-5">
@@ -2221,6 +2263,29 @@ function MetricaCardFarmer({
           <h4 className="font-medium flex items-center gap-2">
             {icon}
             {titulo}
+            {formula && (
+              <Tooltip
+                side="top"
+                content={
+                  <div className="max-w-[300px] text-xs space-y-2 p-1">
+                    <div className="font-semibold text-slate-200 border-b border-slate-600 pb-1.5">
+                      Como e calculado
+                    </div>
+                    <p className="text-slate-400">{formula.descricao}</p>
+                    <div className="font-mono text-[11px] bg-slate-900/60 rounded-lg p-2.5 space-y-1">
+                      <div className="text-slate-300">{formula.calculo}</div>
+                      <div className="text-amber-300 font-semibold">{formula.resultado}</div>
+                    </div>
+                    <div className="flex justify-between text-[10px] pt-1 border-t border-slate-700">
+                      <span className="text-slate-500">Meta: {formula.meta}</span>
+                      {formula.bonus && <span className="text-emerald-400">{formula.bonus}</span>}
+                    </div>
+                  </div>
+                }
+              >
+                <Info className="w-3.5 h-3.5 text-slate-500 hover:text-slate-300 cursor-help transition-colors" />
+              </Tooltip>
+            )}
           </h4>
           <p className="text-sm text-slate-400">{meta}</p>
         </div>

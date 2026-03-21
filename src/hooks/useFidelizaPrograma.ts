@@ -42,6 +42,9 @@ export interface FarmerDados {
     taxa_renovacao: number;
     reajuste_medio: number;
     vendas_lojinha: number;
+    // Valores brutos para tooltip de cálculo
+    churn_bruto?: { evasoes: number; alunos_base: number };
+    renovacao_bruto?: { renovados: number; total_contratos: number };
   };
   penalidades: {
     total_pontos: number;
