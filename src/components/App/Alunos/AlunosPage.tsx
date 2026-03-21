@@ -184,7 +184,7 @@ export function AlunosPage() {
 
   // Estados de opções para selects
   const [professores, setProfessores] = useState<{ id: number, nome: string }[]>([]);
-  const [cursos, setCursos] = useState<{ id: number, nome: string }[]>([]);
+  const [cursos, setCursos] = useState<{ id: number, nome: string, is_projeto_banda?: boolean }[]>([]);
   const [tiposMatricula, setTiposMatricula] = useState<{ id: number, nome: string }[]>([]);
   const [salas, setSalas] = useState<{ id: number, nome: string, capacidade_maxima: number }[]>([]);
   const [horarios, setHorarios] = useState<{ id: number, nome: string, hora_inicio: string }[]>([]);
@@ -256,7 +256,7 @@ export function AlunosPage() {
         status, status_pagamento, dia_vencimento, tipo_matricula_id, unidade_id, data_matricula,
         is_segundo_curso, data_nascimento, forma_pagamento_id, telefone, responsavel_telefone,
         professores:professor_atual_id!left(nome),
-        cursos:curso_id!left(nome),
+        cursos:curso_id!left(nome, is_projeto_banda),
         tipos_matricula:tipo_matricula_id!left(nome, conta_como_pagante, entra_ticket_medio, codigo),
         unidades:unidade_id!inner(codigo),
         formas_pagamento:forma_pagamento_id!left(nome)
@@ -393,11 +393,11 @@ export function AlunosPage() {
       const totalMatriculasAtivas = ativosETrancados.length; // inclui segundo curso + banda
 
       // Separar banda, coral e segundo curso
-      const cursosBanda = ['minha banda para sempre', 'power kids'];
       const cursosCoral = ['canto coral'];
 
+      // Banda: usar is_projeto_banda do curso
       const matriculasBanda = ativosETrancados.filter((a: any) =>
-        cursosBanda.some(nome => a.cursos?.nome?.toLowerCase().includes(nome))
+        a.cursos?.is_projeto_banda === true
       ).length;
 
       const matriculasCoral = ativosETrancados.filter((a: any) =>
@@ -407,7 +407,7 @@ export function AlunosPage() {
       // Segundo curso = is_segundo_curso true, excluindo banda e coral
       const matriculasSegundoCurso = ativosETrancados.filter((a: any) =>
         a.is_segundo_curso &&
-        !cursosBanda.some(nome => a.cursos?.nome?.toLowerCase().includes(nome)) &&
+        a.cursos?.is_projeto_banda !== true &&
         !cursosCoral.some(nome => a.cursos?.nome?.toLowerCase().includes(nome))
       ).length;
       const totalPagantes = naoSegundoCurso.filter((a: any) =>
@@ -574,7 +574,7 @@ export function AlunosPage() {
     // Disparar TODAS as queries em paralelo
     const [profs, cursosResult, tiposResult, salasResult, horariosResult] = await Promise.all([
       profsPromise,
-      supabase.from('cursos').select('id, nome').eq('ativo', true).order('nome'),
+      supabase.from('cursos').select('id, nome, is_projeto_banda').eq('ativo', true).order('nome'),
       supabase.from('tipos_matricula').select('id, nome').eq('ativo', true).order('id'),
       supabase.from('salas').select('id, nome, capacidade_maxima')
         .eq('unidade_id', unidadeAtual).eq('ativo', true).order('nome'),
@@ -652,6 +652,37 @@ export function AlunosPage() {
       if (tipoId === 2) {
         // Segundo curso: verificar tipo_matricula_id nos registros agrupados em outros_cursos
         resultado = resultado.filter(a => a.outros_cursos?.some(oc => oc.tipo_matricula_id === 2));
+      } else if (tipoId === 5) {
+        // Matrícula em Banda: mostrar APENAS o registro da banda (sem curso principal)
+        const cursosBandaIds = cursos.filter(c => c.is_projeto_banda).map(c => c.id);
+        resultado = resultado
+          .filter(a =>
+            cursosBandaIds.includes(a.curso_id) ||
+            a.outros_cursos?.some(oc => cursosBandaIds.includes(oc.curso_id))
+          )
+          .map(a => {
+            // Se o curso principal já é banda, manter (sem outros cursos não-banda)
+            if (cursosBandaIds.includes(a.curso_id)) {
+              return {
+                ...a,
+                outros_cursos: a.outros_cursos?.filter(oc => cursosBandaIds.includes(oc.curso_id)) || [],
+              };
+            }
+
+            // Senão, encontrar o registro de banda em outros_cursos e "promovê-lo"
+            const registroBanda = a.outros_cursos?.find(oc => cursosBandaIds.includes(oc.curso_id));
+            if (!registroBanda) return a;
+
+            // Mostrar apenas a banda (sem o curso principal, apenas outras bandas se houver)
+            const outrasBandas = a.outros_cursos?.filter(oc =>
+              oc.id !== registroBanda.id && cursosBandaIds.includes(oc.curso_id)
+            ) || [];
+
+            return {
+              ...registroBanda,
+              outros_cursos: outrasBandas,
+            };
+          });
       } else {
         resultado = resultado.filter(a => a.tipo_matricula_id === tipoId);
       }
@@ -703,7 +734,7 @@ export function AlunosPage() {
     }
 
     return resultado;
-  }, [alunos, filtros, turmas]);
+  }, [alunos, filtros, turmas, cursos]);
 
   // Adicionar contagem de alunos na turma para cada aluno
   const alunosComTurma = useMemo(() => {
