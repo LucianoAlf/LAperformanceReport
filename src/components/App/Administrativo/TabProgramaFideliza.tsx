@@ -1813,10 +1813,11 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026 }: TabProgr
           }
           icon={<TrendingUp className="w-5 h-5" />}
           formula={{
-            descricao: 'Media das taxas de churn mensais. Cada mes: evasoes / alunos pagantes do mes anterior.',
-            calculo: `Total: ${farmerAtual.metricas.churn_bruto?.evasoes || 0} evasoes · Base media: ${farmerAtual.metricas.churn_bruto?.alunos_base || 0} alunos`,
-            resultado: `Media mensal = ${farmerAtual.metricas.churn_rate.toFixed(1)}%`,
-            meta: `<= ${config?.metas.churn_maximo || 4}%`
+            descricao: 'Media das taxas de churn mensais do trimestre.',
+            calculo: `Total: ${farmerAtual.metricas.churn_bruto?.evasoes || 0} evasoes`,
+            resultado: `${farmerAtual.metricas.churn_rate.toFixed(2)}%`,
+            meta: `<= ${config?.metas.churn_maximo || 4}%`,
+            meses: farmerAtual.metricas.churn_bruto?.meses
           }}
         />
 
@@ -2229,12 +2230,20 @@ function MetricaRow({
   );
 }
 
+interface FormulaTooltipMes {
+  mes: number;
+  evasoes: number;
+  alunos: number;
+  taxa: number;
+}
+
 interface FormulaTooltip {
   descricao: string;
   calculo: string;
   resultado: string;
   meta: string;
   bonus?: string;
+  meses?: FormulaTooltipMes[];
 }
 
 function MetricaCardFarmer({
@@ -2267,15 +2276,29 @@ function MetricaCardFarmer({
               <Tooltip
                 side="top"
                 content={
-                  <div className="max-w-[300px] text-xs space-y-2 p-1">
+                  <div className="max-w-[320px] text-xs space-y-2 p-1">
                     <div className="font-semibold text-slate-200 border-b border-slate-600 pb-1.5">
                       Como e calculado
                     </div>
                     <p className="text-slate-400">{formula.descricao}</p>
-                    <div className="font-mono text-[11px] bg-slate-900/60 rounded-lg p-2.5 space-y-1">
-                      <div className="text-slate-300">{formula.calculo}</div>
-                      <div className="text-amber-300 font-semibold">{formula.resultado}</div>
-                    </div>
+                    {formula.meses && formula.meses.length > 0 ? (
+                      <div className="font-mono text-[11px] bg-slate-900/60 rounded-lg p-2.5 space-y-1.5">
+                        {formula.meses.map((m) => (
+                          <div key={m.mes} className="text-slate-300">
+                            Mes {m.mes}: {m.evasoes} evasoes / {m.alunos} alunos = <span className="text-amber-300">{m.taxa.toFixed(2)}%</span>
+                          </div>
+                        ))}
+                        <div className="border-t border-slate-700 pt-1.5 mt-1.5">
+                          <span className="text-slate-400">Media: </span>
+                          <span className="text-amber-300 font-semibold">{formula.resultado}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="font-mono text-[11px] bg-slate-900/60 rounded-lg p-2.5 space-y-1">
+                        <div className="text-slate-300">{formula.calculo}</div>
+                        <div className="text-amber-300 font-semibold">{formula.resultado}</div>
+                      </div>
+                    )}
                     <div className="flex justify-between text-[10px] pt-1 border-t border-slate-700">
                       <span className="text-slate-500">Meta: {formula.meta}</span>
                       {formula.bonus && <span className="text-emerald-400">{formula.bonus}</span>}
