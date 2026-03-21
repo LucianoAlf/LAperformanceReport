@@ -1813,9 +1813,9 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026 }: TabProgr
           }
           icon={<TrendingUp className="w-5 h-5" />}
           formula={{
-            descricao: 'Media das taxas de churn dos 3 meses do trimestre.',
-            calculo: `${farmerAtual.metricas.churn_bruto?.evasoes || 0} evasoes / ${farmerAtual.metricas.churn_bruto?.alunos_base || 0} alunos`,
-            resultado: `= ${farmerAtual.metricas.churn_rate.toFixed(1)}%`,
+            descricao: 'Media das taxas de churn mensais. Cada mes: evasoes / alunos pagantes do mes anterior.',
+            calculo: `Total: ${farmerAtual.metricas.churn_bruto?.evasoes || 0} evasoes · Base media: ${farmerAtual.metricas.churn_bruto?.alunos_base || 0} alunos`,
+            resultado: `Media mensal = ${farmerAtual.metricas.churn_rate.toFixed(1)}%`,
             meta: `<= ${config?.metas.churn_maximo || 4}%`
           }}
         />
