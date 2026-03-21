@@ -4,7 +4,7 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   X, Target, Calendar, CheckCircle2, Clock, AlertTriangle,
-  TrendingUp, TrendingDown, Sparkles, Loader2, Users, BarChart3, Brain, Heart, FileText, Copy, Check
+  TrendingUp, TrendingDown, Sparkles, Loader2, Users, BarChart3, Brain, Heart, FileText, Copy, Check, FlaskConical
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
@@ -83,6 +83,15 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
   const [metas, setMetas] = useState<Meta[]>([]);
   const [acoes, setAcoes] = useState<Acao[]>([]);
   const [evasoes, setEvasoes] = useState<Evasao[]>([]);
+  const [experimentais, setExperimentais] = useState<{
+    id: number;
+    nome: string;
+    data_experimental: string;
+    horario_experimental: string;
+    status: string;
+    experimental_realizada: boolean;
+    faltou_experimental: boolean;
+  }[]>([]);
   const [insights, setInsights] = useState<InsightsIA | null>(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -147,6 +156,17 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
       }));
 
       setEvasoes(evasoesFormatadas);
+
+      // Carregar experimentais do professor no período
+      const { data: expData } = await supabase
+        .from('leads')
+        .select('id, nome, data_experimental, horario_experimental, status, experimental_realizada, faltou_experimental')
+        .eq('professor_experimental_id', professor.id)
+        .not('data_experimental', 'is', null)
+        .gte('data_experimental', inicioMes)
+        .order('data_experimental', { ascending: true });
+
+      setExperimentais(expData || []);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
     } finally {
@@ -673,6 +693,82 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
                         style={{ width: `${Math.min(progresso, 100)}%` }}
                       />
                     </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Experimentais do Período */}
+        <div className="py-4 border-b border-slate-700">
+          <h3 className="text-sm font-medium text-slate-400 mb-4 flex items-center gap-2">
+            <FlaskConical className="w-4 h-4 text-amber-400" />
+            Experimentais
+            {experimentais.length > 0 && (
+              <span className="ml-1 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 text-xs font-semibold">
+                {experimentais.length}
+              </span>
+            )}
+          </h3>
+
+          {experimentais.length > 0 && (
+            <div className="grid grid-cols-4 gap-2 mb-4">
+              {(() => {
+                const agendadas = experimentais.filter(e => !e.experimental_realizada && !e.faltou_experimental && e.status !== 'matriculado' && e.status !== 'convertido').length;
+                const realizadas = experimentais.filter(e => e.experimental_realizada).length;
+                const faltou = experimentais.filter(e => e.faltou_experimental).length;
+                const matriculou = experimentais.filter(e => e.status === 'matriculado' || e.status === 'convertido').length;
+                const convRate = realizadas + matriculou > 0 ? Math.round((matriculou / (realizadas + matriculou)) * 100) : 0;
+                return (
+                  <>
+                    <div className="bg-amber-500/10 rounded-lg px-3 py-2 text-center">
+                      <p className="text-amber-400 text-lg font-bold">{agendadas}</p>
+                      <p className="text-slate-400 text-xs">Agendadas</p>
+                    </div>
+                    <div className="bg-emerald-500/10 rounded-lg px-3 py-2 text-center">
+                      <p className="text-emerald-400 text-lg font-bold">{realizadas}</p>
+                      <p className="text-slate-400 text-xs">Realizadas</p>
+                    </div>
+                    <div className="bg-red-500/10 rounded-lg px-3 py-2 text-center">
+                      <p className="text-red-400 text-lg font-bold">{faltou}</p>
+                      <p className="text-slate-400 text-xs">Faltou</p>
+                    </div>
+                    <div className="bg-cyan-500/10 rounded-lg px-3 py-2 text-center">
+                      <p className="text-cyan-400 text-lg font-bold">{convRate}%</p>
+                      <p className="text-slate-400 text-xs">Conversão</p>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
+
+          {experimentais.length === 0 ? (
+            <p className="text-slate-500 text-sm">Nenhuma experimental no período</p>
+          ) : (
+            <div className="space-y-2">
+              {experimentais.map((exp) => {
+                const statusExp = exp.status === 'matriculado' || exp.status === 'convertido'
+                  ? { label: 'Matriculou', color: 'text-cyan-400 bg-cyan-500/10' }
+                  : exp.experimental_realizada
+                  ? { label: 'Realizada', color: 'text-emerald-400 bg-emerald-500/10' }
+                  : exp.faltou_experimental
+                  ? { label: 'Faltou', color: 'text-red-400 bg-red-500/10' }
+                  : { label: 'Agendada', color: 'text-amber-400 bg-amber-500/10' };
+
+                return (
+                  <div key={exp.id} className="flex items-center justify-between bg-slate-800/50 rounded-lg px-4 py-2.5">
+                    <div>
+                      <p className="text-white text-sm font-medium">{exp.nome || 'Lead sem nome'}</p>
+                      <p className="text-slate-400 text-xs">
+                        {format(new Date(exp.data_experimental + 'T12:00:00'), 'dd/MM', { locale: ptBR })}
+                        {exp.horario_experimental && ` · ${exp.horario_experimental.slice(0, 5)}`}
+                      </p>
+                    </div>
+                    <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${statusExp.color}`}>
+                      {statusExp.label}
+                    </span>
                   </div>
                 );
               })}

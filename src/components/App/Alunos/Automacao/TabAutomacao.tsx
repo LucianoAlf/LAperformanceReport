@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, AlertTriangle } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Loader2, AlertTriangle, Search } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -26,6 +27,7 @@ const acaoStyles: Record<string, { bg: string; text: string; label: string }> = 
   status_trancado: { bg: 'bg-amber-500/20', text: 'text-amber-400', label: 'Trancado' },
   status_evadido: { bg: 'bg-rose-500/20', text: 'text-rose-400', label: 'Evadido' },
   segundo_curso: { bg: 'bg-violet-500/20', text: 'text-violet-400', label: '2º Curso' },
+  nao_encontrado: { bg: 'bg-amber-500/20', text: 'text-amber-400', label: 'Não Encontrado' },
 };
 
 const eventoLabels: Record<string, string> = {
@@ -33,6 +35,7 @@ const eventoLabels: Record<string, string> = {
   matricula_renovacao: 'Renovação',
   matricula_trancamento: 'Trancamento',
   matricula_finalizacao: 'Finalização',
+  sync_presenca: 'Sync Presença',
 };
 
 interface TabAutomacaoProps {
@@ -43,11 +46,13 @@ export function TabAutomacao({ unidadeAtual }: TabAutomacaoProps) {
   const [registros, setRegistros] = useState<AutomacaoLogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [filtroEvento, setFiltroEvento] = useState<string>('');
+  const [filtroAcao, setFiltroAcao] = useState<string>('todos');
   const [filtroPeriodo, setFiltroPeriodo] = useState<string>('7');
+  const [busca, setBusca] = useState('');
 
   useEffect(() => {
     carregarRegistros();
-  }, [filtroEvento, filtroPeriodo, unidadeAtual]);
+  }, [filtroEvento, filtroAcao, filtroPeriodo, unidadeAtual]);
 
   const carregarRegistros = async () => {
     setLoading(true);
@@ -67,6 +72,10 @@ export function TabAutomacao({ unidadeAtual }: TabAutomacaoProps) {
 
       if (filtroEvento && filtroEvento !== 'todos' && filtroEvento !== 'sem_professor') {
         query = query.eq('evento', filtroEvento);
+      }
+
+      if (filtroAcao && filtroAcao !== 'todos') {
+        query = query.eq('acao', filtroAcao);
       }
 
       if (unidadeAtual && unidadeAtual !== 'todos') {
@@ -105,6 +114,13 @@ export function TabAutomacao({ unidadeAtual }: TabAutomacaoProps) {
     const detalhes = item.detalhes || {};
     const partes: string[] = [];
 
+    if (item.evento === 'sync_presenca') {
+      if (detalhes.data) partes.push(detalhes.data);
+      if (detalhes.curso) partes.push(detalhes.curso);
+      if (detalhes.professor) partes.push(`Prof. ${detalhes.professor}`);
+      return partes.join(' · ');
+    }
+
     if (detalhes.curso) partes.push(detalhes.curso);
     if (detalhes.professor) partes.push(`Prof. ${detalhes.professor}`);
     if (detalhes.dia && detalhes.horario) partes.push(`${detalhes.dia} ${detalhes.horario}`);
@@ -112,9 +128,14 @@ export function TabAutomacao({ unidadeAtual }: TabAutomacaoProps) {
     return partes.length > 0 ? partes.join(' · ') : '';
   };
 
-  const registrosFiltrados = filtroEvento === 'sem_professor'
-    ? registros.filter(r => r.detalhes?.sem_professor === true)
-    : registros;
+  const registrosFiltrados = registros.filter(r => {
+    if (filtroEvento === 'sem_professor' && r.detalhes?.sem_professor !== true) return false;
+    if (busca.trim()) {
+      const termo = busca.toLowerCase();
+      if (!r.aluno_nome?.toLowerCase().includes(termo)) return false;
+    }
+    return true;
+  });
 
   const totalPorAcao = registrosFiltrados.reduce((acc, r) => {
     acc[r.acao] = (acc[r.acao] || 0) + 1;
@@ -166,36 +187,63 @@ export function TabAutomacao({ unidadeAtual }: TabAutomacaoProps) {
 
       {/* Timeline */}
       <div className="bg-slate-800/50 rounded-xl border border-slate-700">
-        <div className="p-4 border-b border-slate-700 flex items-center justify-between flex-wrap gap-3">
-          <div className="flex items-center gap-3">
-            <span className="text-lg">⚡</span>
-            <h2 className="text-lg font-semibold text-white">Log da Automacao</h2>
-            <span className="text-sm text-slate-400">
-              {registrosFiltrados.length} registro{registrosFiltrados.length !== 1 ? 's' : ''}
-            </span>
+        <div className="p-4 border-b border-slate-700 space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-lg">⚡</span>
+              <h2 className="text-lg font-semibold text-white">Log da Automacao</h2>
+              <span className="text-sm text-slate-400">
+                {registrosFiltrados.length} registro{registrosFiltrados.length !== 1 ? 's' : ''}
+              </span>
+            </div>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Input
+                placeholder="Buscar nome..."
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                className="w-[200px] pl-9 bg-slate-900 border-slate-600"
+              />
+            </div>
             <Select value={filtroEvento} onValueChange={setFiltroEvento}>
-              <SelectTrigger className="w-[180px] bg-slate-900 border-slate-600">
-                <SelectValue placeholder="Todos os eventos" />
+              <SelectTrigger className="w-[170px] bg-slate-900 border-slate-600">
+                <SelectValue placeholder="Todas origens" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="todos">Todos os eventos</SelectItem>
-                <SelectItem value="matricula_nova">Matricula Nova</SelectItem>
-                <SelectItem value="matricula_renovacao">Renovacao</SelectItem>
+                <SelectItem value="todos">Todas origens</SelectItem>
+                <SelectItem value="matricula_nova">Matrícula Nova</SelectItem>
+                <SelectItem value="matricula_renovacao">Renovação</SelectItem>
                 <SelectItem value="matricula_trancamento">Trancamento</SelectItem>
-                <SelectItem value="matricula_finalizacao">Finalizacao</SelectItem>
+                <SelectItem value="matricula_finalizacao">Finalização</SelectItem>
+                <SelectItem value="sync_presenca">Sync Presença</SelectItem>
                 <SelectItem value="sem_professor">Sem Professor</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={filtroPeriodo} onValueChange={setFiltroPeriodo}>
-              <SelectTrigger className="w-[180px] bg-slate-900 border-slate-600">
-                <SelectValue placeholder="Periodo" />
+            <Select value={filtroAcao} onValueChange={setFiltroAcao}>
+              <SelectTrigger className="w-[170px] bg-slate-900 border-slate-600">
+                <SelectValue placeholder="Todas ações" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="7">Ultimos 7 dias</SelectItem>
-                <SelectItem value="30">Ultimos 30 dias</SelectItem>
-                <SelectItem value="90">Ultimos 3 meses</SelectItem>
+                <SelectItem value="todos">Todas ações</SelectItem>
+                <SelectItem value="inserido">Novo Aluno</SelectItem>
+                <SelectItem value="atualizado">Atualizado</SelectItem>
+                <SelectItem value="status_ativo">Renovado</SelectItem>
+                <SelectItem value="status_trancado">Trancado</SelectItem>
+                <SelectItem value="status_evadido">Evadido</SelectItem>
+                <SelectItem value="segundo_curso">2º Curso</SelectItem>
+                <SelectItem value="nao_encontrado">Não Encontrado</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select value={filtroPeriodo} onValueChange={setFiltroPeriodo}>
+              <SelectTrigger className="w-[170px] bg-slate-900 border-slate-600">
+                <SelectValue placeholder="Período" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7">Últimos 7 dias</SelectItem>
+                <SelectItem value="30">Últimos 30 dias</SelectItem>
+                <SelectItem value="90">Últimos 3 meses</SelectItem>
               </SelectContent>
             </Select>
           </div>

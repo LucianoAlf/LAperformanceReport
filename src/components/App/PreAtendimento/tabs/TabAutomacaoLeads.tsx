@@ -32,6 +32,11 @@ const acaoStyles: Record<string, { bg: string; text: string; label: string }> = 
   experimental_agendada: { bg: 'bg-amber-500/20', text: 'text-amber-400', label: 'Exp. Agendada' },
   experimental_reagendada: { bg: 'bg-cyan-500/20', text: 'text-cyan-400', label: 'Exp. Reagendada' },
   experimental_cancelada: { bg: 'bg-rose-500/20', text: 'text-rose-400', label: 'Exp. Cancelada' },
+  // Sync experimental presença
+  confirmada: { bg: 'bg-emerald-500/20', text: 'text-emerald-400', label: 'Exp. Confirmada' },
+  nao_encontrada: { bg: 'bg-amber-500/20', text: 'text-amber-400', label: 'Não Encontrada' },
+  cancelada: { bg: 'bg-rose-500/20', text: 'text-rose-400', label: 'Exp. Cancelada' },
+  erro: { bg: 'bg-red-500/20', text: 'text-red-400', label: 'Erro' },
 };
 
 const origemLabels: Record<string, string> = {
@@ -45,12 +50,19 @@ const origemLabels: Record<string, string> = {
   aula_experimental_criada: 'Experimental Criada',
   aula_experimental_reagendada: 'Experimental Reagendada',
   aula_experimental_cancelada: 'Experimental Cancelada',
+  sync_experimental_presenca: 'Sync Presença',
+  matricula_registrada: 'Matrícula',
 };
 
 const origemStyles: Record<string, { bg: string; text: string }> = {
   emusys: { bg: 'bg-violet-500/20', text: 'text-violet-400' },
   nocodb: { bg: 'bg-orange-500/20', text: 'text-orange-400' },
   manual: { bg: 'bg-slate-500/20', text: 'text-slate-300' },
+  sync_experimental_presenca: { bg: 'bg-teal-500/20', text: 'text-teal-400' },
+  matricula_registrada: { bg: 'bg-emerald-500/20', text: 'text-emerald-400' },
+  aula_experimental_criada: { bg: 'bg-amber-500/20', text: 'text-amber-400' },
+  aula_experimental_reagendada: { bg: 'bg-cyan-500/20', text: 'text-cyan-400' },
+  aula_experimental_cancelada: { bg: 'bg-rose-500/20', text: 'text-rose-400' },
 };
 
 // Contadores agrupam valores novos e antigos
@@ -98,7 +110,6 @@ export function TabAutomacaoLeads({ unidadeAtual }: TabAutomacaoLeadsProps) {
       }
 
       if (filtroAcao && filtroAcao !== 'todos') {
-        // Mapear para incluir valores antigos
         const acaoMap: Record<string, string[]> = {
           inserted: ['inserted', 'lead_inserido'],
           updated: ['updated', 'lead_atualizado'],
@@ -107,6 +118,8 @@ export function TabAutomacaoLeads({ unidadeAtual }: TabAutomacaoLeadsProps) {
         const valores = acaoMap[filtroAcao];
         if (valores) {
           query = query.in('acao', valores);
+        } else {
+          query = query.eq('acao', filtroAcao);
         }
       }
 
@@ -164,6 +177,13 @@ export function TabAutomacaoLeads({ unidadeAtual }: TabAutomacaoLeadsProps) {
   const formatarDetalhes = (item: LeadsAutomacaoLogItem): string => {
     const detalhes = item.detalhes || {};
     const partes: string[] = [];
+
+    // Sync experimental presença — mostrar motivo e data
+    if (item.evento === 'sync_experimental_presenca') {
+      if (detalhes.data) partes.push(detalhes.data);
+      if (detalhes.motivo) partes.push(detalhes.motivo);
+      return partes.join(' · ');
+    }
 
     if (detalhes.professor) partes.push(`Prof. ${detalhes.professor}`);
     if (detalhes.data && detalhes.horario) partes.push(`${detalhes.data} ${detalhes.horario}`);
@@ -261,6 +281,11 @@ export function TabAutomacaoLeads({ unidadeAtual }: TabAutomacaoLeadsProps) {
                 <SelectItem value="todos">Todas origens</SelectItem>
                 <SelectItem value="emusys">Emusys</SelectItem>
                 <SelectItem value="nocodb">NocoDB</SelectItem>
+                <SelectItem value="aula_experimental_criada">Exp. Criada</SelectItem>
+                <SelectItem value="aula_experimental_reagendada">Exp. Reagendada</SelectItem>
+                <SelectItem value="aula_experimental_cancelada">Exp. Cancelada</SelectItem>
+                <SelectItem value="sync_experimental_presenca">Sync Presença</SelectItem>
+                <SelectItem value="matricula_registrada">Matrícula</SelectItem>
                 <SelectItem value="manual">Manual</SelectItem>
               </SelectContent>
             </Select>
@@ -269,10 +294,15 @@ export function TabAutomacaoLeads({ unidadeAtual }: TabAutomacaoLeadsProps) {
                 <SelectValue placeholder="Acao" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="todos">Todas acoes</SelectItem>
+                <SelectItem value="todos">Todas ações</SelectItem>
                 <SelectItem value="inserted">Criado</SelectItem>
                 <SelectItem value="updated">Atualizado</SelectItem>
                 <SelectItem value="archived">Arquivado</SelectItem>
+                <SelectItem value="experimental_agendada">Exp. Agendada</SelectItem>
+                <SelectItem value="experimental_reagendada">Exp. Reagendada</SelectItem>
+                <SelectItem value="experimental_cancelada">Exp. Cancelada</SelectItem>
+                <SelectItem value="confirmada">Exp. Confirmada</SelectItem>
+                <SelectItem value="nao_encontrada">Não Encontrada</SelectItem>
               </SelectContent>
             </Select>
             <Select value={filtroIncompleto} onValueChange={setFiltroIncompleto}>

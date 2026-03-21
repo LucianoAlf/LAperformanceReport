@@ -132,6 +132,132 @@ function parseDataHoraEmusys(dataHora: string): string {
   return dataHora.replace(' ', 'T') + ':00-03:00';
 }
 
+// Confirmar experimentais: cruzar aulas_emusys (categoria=experimental) com leads agendados
+async function confirmarExperimentais(
+  supabase: any,
+  datasProcessar: string[]
+) {
+  const logs: { lead_id: number; lead_nome: string; unidade: string; data: string; professor: string; status: string; motivo: string }[] = [];
+
+  // Buscar leads com experimental agendada nas datas processadas
+  const { data: leadsAgendados } = await supabase
+    .from('leads')
+    .select('id, nome, data_experimental, horario_experimental, professor_experimental_id, unidade_id')
+    .eq('experimental_agendada', true)
+    .eq('experimental_realizada', false)
+    .eq('faltou_experimental', false)
+    .in('data_experimental', datasProcessar);
+
+  if (!leadsAgendados?.length) return logs;
+
+  // Buscar nomes de unidades para o log
+  const unidadeNomes = new Map(UNIDADES.map(u => [u.id, u.nome]));
+
+  for (const lead of leadsAgendados) {
+    // Pular se professor_experimental_id é null
+    if (!lead.professor_experimental_id) {
+      logs.push({
+        lead_id: lead.id,
+        lead_nome: lead.nome || 'Sem nome',
+        unidade: unidadeNomes.get(lead.unidade_id) || lead.unidade_id,
+        data: lead.data_experimental,
+        professor: 'sem_professor',
+        status: 'nao_encontrada',
+        motivo: 'Lead sem professor experimental vinculado'
+      });
+      continue;
+    }
+
+    // Buscar aula experimental no Emusys para essa combinação
+    const { data: aulasMatch } = await supabase
+      .from('aulas_emusys')
+      .select('id, data_hora_inicio, cancelada')
+      .eq('data_aula', lead.data_experimental)
+      .eq('professor_id', lead.professor_experimental_id)
+      .eq('unidade_id', lead.unidade_id)
+      .eq('categoria', 'experimental')
+      .limit(5);
+
+    const unidadeNome = unidadeNomes.get(lead.unidade_id) || lead.unidade_id;
+
+    if (!aulasMatch?.length) {
+      logs.push({
+        lead_id: lead.id,
+        lead_nome: lead.nome || 'Sem nome',
+        unidade: unidadeNome,
+        data: lead.data_experimental,
+        professor: String(lead.professor_experimental_id),
+        status: 'nao_encontrada',
+        motivo: 'Aula experimental não encontrada no Emusys'
+      });
+      continue;
+    }
+
+    // Filtrar por horário se disponível e houver múltiplas aulas
+    let aulaFinal = aulasMatch[0];
+    if (lead.horario_experimental && aulasMatch.length > 1) {
+      const horaLead = lead.horario_experimental.slice(0, 5);
+      const matchHorario = aulasMatch.find((a: any) => {
+        const horaAula = new Date(a.data_hora_inicio).toISOString().slice(11, 16);
+        return horaAula === horaLead;
+      });
+      if (matchHorario) aulaFinal = matchHorario;
+    }
+
+    if (aulaFinal.cancelada) {
+      logs.push({
+        lead_id: lead.id,
+        lead_nome: lead.nome || 'Sem nome',
+        unidade: unidadeNome,
+        data: lead.data_experimental,
+        professor: String(lead.professor_experimental_id),
+        status: 'cancelada',
+        motivo: 'Aula experimental cancelada no Emusys'
+      });
+      continue;
+    }
+
+    // Aula existe e não está cancelada → marcar como realizada
+    const { error } = await supabase
+      .from('leads')
+      .update({
+        experimental_realizada: true,
+        status: 'compareceu',
+        etapa_pipeline_id: 6,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', lead.id);
+
+    logs.push({
+      lead_id: lead.id,
+      lead_nome: lead.nome || 'Sem nome',
+      unidade: unidadeNome,
+      data: lead.data_experimental,
+      professor: String(lead.professor_experimental_id),
+      status: error ? 'erro' : 'confirmada',
+      motivo: error ? error.message : 'Experimental confirmada via sync Emusys'
+    });
+  }
+
+  // Gravar logs no leads_automacao_log
+  for (const log of logs) {
+    await supabase.from('leads_automacao_log').insert({
+      lead_id: log.lead_id,
+      lead_nome: log.lead_nome,
+      unidade_nome: log.unidade,
+      evento: 'sync_experimental_presenca',
+      acao: log.status,
+      detalhes: { data: log.data, professor_id: log.professor, motivo: log.motivo },
+      workflow_id: 'sync-presenca-emusys',
+      execution_id: new Date().toISOString()
+    });
+  }
+
+  console.log(`[sync-presenca] Experimentais: ${logs.filter(l => l.status === 'confirmada').length} confirmadas, ${logs.filter(l => l.status === 'nao_encontrada').length} não encontradas, ${logs.filter(l => l.status === 'cancelada').length} canceladas`);
+
+  return logs;
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -277,6 +403,17 @@ serve(async (req: Request) => {
               naoEncontrados++;
               if (!nomesNaoEncontrados.includes(nome)) {
                 nomesNaoEncontrados.push(nome);
+                // Log individual para alunos não encontrados
+                await supabase.from('automacao_log').insert({
+                  aluno_nome: nome,
+                  aluno_id: null,
+                  unidade_nome: unidade.nome,
+                  evento: 'sync_presenca',
+                  acao: 'nao_encontrado',
+                  detalhes: { curso: aula.curso_nome, professor: profNome, data: dataAlvo },
+                  workflow_id: 'sync-presenca-emusys',
+                  execution_id: new Date().toISOString()
+                });
               }
               continue;
             }
@@ -348,8 +485,12 @@ serve(async (req: Request) => {
       await supabase.rpc('atualizar_percentual_presenca', { p_unidade_id: unidade.id });
     }
 
+    // Confirmar experimentais com base nas aulas sincronizadas
+    const logsExperimentais = await confirmarExperimentais(supabase, datasProcessar);
+    console.log(`[sync-presenca] Experimentais processadas: ${logsExperimentais.length}`);
+
     return new Response(
-      JSON.stringify({ success: true, dias, data_inicio: datasProcessar[0], data_fim: dataFim, resultados }),
+      JSON.stringify({ success: true, dias, data_inicio: datasProcessar[0], data_fim: dataFim, resultados, experimentais_confirmadas: logsExperimentais }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
