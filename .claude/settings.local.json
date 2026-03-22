@@ -39,7 +39,20 @@
       "WebFetch(domain:github.com)",
       "mcp__n8n__n8n_update_partial_workflow",
       "mcp__n8n__n8n_get_workflow",
-      "mcp__n8n__n8n_update_full_workflow"
+      "mcp__n8n__n8n_update_full_workflow",
+      "Bash(grep:*)",
+      "Bash(ls:*)",
+      "mcp__n8n__n8n_list_workflows",
+      "mcp__n8n__n8n_executions",
+      "mcp__claude_ai_Supabase__execute_sql",
+      "mcp__supabase-local__execute_sql",
+      "mcp__claude_ai_Supabase__list_projects",
+      "mcp__supabase-local__list_projects",
+      "Bash(npm search:*)",
+      "WebFetch(domain:workla.latecnology.com.br)",
+      "WebFetch(domain:emusys.gitbook.io)",
+      "Bash(echo \"exit: $?\")",
+      "mcp__emusys__searchDocumentation"
     ]
   }
 }

@@ -76,6 +76,10 @@ Retorna aulas com presença individual de cada aluno. Usado pelo sync automátic
 
 **Usado por:** Edge Function `sync-presenca-emusys` (pg_cron diário `0 1 * * *` = 22h BRT, body `{"dias":1}`)
 
+## MCP
+- Documentação acessível via MCP GitBook SSE: `https://emusys.gitbook.io/emusys/api-emusys/~gitbook/mcp`
+- Configurado em `.mcp.json` como server `emusys` (type: sse)
+
 ## Versão
 - v1.1.0
 
