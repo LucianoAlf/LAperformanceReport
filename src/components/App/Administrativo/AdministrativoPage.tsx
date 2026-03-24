@@ -42,6 +42,7 @@ import { TabLojinha } from '../Lojinha';
 import { PainelFarmer } from './PainelFarmer';
 import { Trophy, ShoppingBag, ClipboardList, MessageSquare } from 'lucide-react';
 import { CaixaEntradaTab } from './CaixaEntrada';
+import { ModalPermanenciaDetalhe } from '@/components/GestaoMensal/ModalPermanenciaDetalhe';
 
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 
@@ -159,6 +160,7 @@ export function AdministrativoPage() {
   const [itemParaDestrancar, setItemParaDestrancar] = useState<MovimentacaoAdmin | null>(null);
   const [destrancando, setDestrancando] = useState(false);
   const [modalConfirmacaoExcluir, setModalConfirmacaoExcluir] = useState(false);
+  const [modalPermanenciaOpen, setModalPermanenciaOpen] = useState(false);
   const [itemParaExcluir, setItemParaExcluir] = useState<{ id: number; nome: string } | null>(null);
   const [excluindo, setExcluindo] = useState(false);
 
@@ -1207,8 +1209,11 @@ export function AdministrativoPage() {
               </div>
               
               {/* LTV Médio */}
-              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4">
-                <p className="text-xs text-emerald-400 uppercase tracking-wider mb-1">LTV Médio (Evasões)</p>
+              <div
+                className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 cursor-pointer hover:bg-emerald-500/15 transition-colors"
+                onClick={() => setModalPermanenciaOpen(true)}
+              >
+                <p className="text-xs text-emerald-400 uppercase tracking-wider mb-1">LTV Médio (Evasões) · clique para detalhar</p>
                 <p className="text-3xl font-bold text-emerald-400">
                   R$ {(() => {
                     // Usar tempo de permanência global (da view) × ticket médio das evasões do mês
@@ -1441,6 +1446,14 @@ export function AdministrativoPage() {
       />
         </>
       )}
+
+      {/* Modal de detalhamento de permanência */}
+      <ModalPermanenciaDetalhe
+        open={modalPermanenciaOpen}
+        onOpenChange={setModalPermanenciaOpen}
+        unidadeId={unidade || 'todos'}
+        mediaAtual={resumo?.ltv_meses ? Number(resumo.ltv_meses) : 0}
+      />
 
       {/* Tour e Botão de Ajuda */}
       <PageTour tourName="administrativo" steps={administrativoTourSteps} />

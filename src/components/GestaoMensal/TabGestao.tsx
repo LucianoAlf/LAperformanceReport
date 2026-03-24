@@ -10,6 +10,7 @@ import { formatCurrency, getMesNomeCurto } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { useMetasKPI } from '@/hooks/useMetasKPI';
+import { ModalPermanenciaDetalhe } from './ModalPermanenciaDetalhe';
 
 interface TabGestaoProps {
   ano: number;
@@ -106,6 +107,9 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
   // Estados para comparativos históricos
   const [dadosMesAnterior, setDadosMesAnterior] = useState<any | null>(null);
   const [dadosAnoAnterior, setDadosAnoAnterior] = useState<any | null>(null);
+
+  // Modal de drill-down de permanência
+  const [modalPermanenciaOpen, setModalPermanenciaOpen] = useState(false);
   
   // Estado para verificar se o mês está fechado (tem dados em dados_mensais)
   const [mesFechado, setMesFechado] = useState<boolean>(false);
@@ -1577,10 +1581,11 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               icon={Calendar}
               label="Tempo Permanência"
               value={dados.tempo_permanencia}
-              subvalue="Meses (média)"
+              subvalue="Meses (média) · clique para detalhar"
               variant="cyan"
               comparativoMesAnterior={dadosMesAnterior ? { valor: dadosMesAnterior.tempo_permanencia, label: dadosMesAnterior.label } : undefined}
               comparativoAnoAnterior={dadosAnoAnterior ? { valor: dadosAnoAnterior.tempo_permanencia, label: dadosAnoAnterior.label } : undefined}
+              onClick={() => setModalPermanenciaOpen(true)}
             />
             <KPICard
               icon={Star}
@@ -1665,6 +1670,13 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
         </div>
       )}
 
+      {/* Modal de detalhamento de permanência */}
+      <ModalPermanenciaDetalhe
+        open={modalPermanenciaOpen}
+        onOpenChange={setModalPermanenciaOpen}
+        unidadeId={unidade}
+        mediaAtual={dados?.tempo_permanencia || 0}
+      />
     </div>
   );
 }
