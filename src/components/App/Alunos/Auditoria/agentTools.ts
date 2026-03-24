@@ -200,7 +200,7 @@ export const AGENT_TOOLS_SCHEMA = [
         type: 'function' as const,
         function: {
             name: 'consultar_banco',
-            description: 'Executa uma consulta SQL SELECT no banco de dados da LA Music. Use esta ferramenta quando nenhuma outra ferramenta específica cobre a informação desejada. APENAS SELECT é permitido — qualquer INSERT/UPDATE/DELETE será rejeitado. Limite de 50 linhas. Principais tabelas: leads, alunos, professores, turmas, cursos, dados_mensais, movimentacoes_admin, evasoes_v2, renovacoes, dados_comerciais, experimentais_mensal_unidade, horarios, crm_pipeline_etapas, canais_origem, crm_lead_historico, crm_followups, loja_vendas, loja_vendas_itens, loja_produtos, inventario, metas, metas_comerciais, farmer_checklists, projetos. Views úteis: vw_funil_conversao_mensal, vw_kpis_comercial_mensal, vw_kpis_professor_mensal, vw_leads_comercial, vw_leads_por_canal, vw_evasoes_resumo, vw_renovacoes_mensal, vw_ranking_unidades, vw_turmas_completa.',
+            description: 'Executa uma consulta SQL SELECT no banco de dados da LA Music. Use esta ferramenta quando nenhuma outra ferramenta específica cobre a informação desejada. APENAS SELECT é permitido — qualquer INSERT/UPDATE/DELETE será rejeitado. Limite de 50 linhas. Principais tabelas: leads, alunos, professores, turmas, cursos, dados_mensais, movimentacoes_admin, renovacoes, dados_comerciais, experimentais_mensal_unidade, horarios, crm_pipeline_etapas, canais_origem, crm_lead_historico, crm_followups, loja_vendas, loja_vendas_itens, loja_produtos, inventario, metas, metas_comerciais, farmer_checklists, projetos. Views úteis: vw_funil_conversao_mensal, vw_kpis_comercial_mensal, vw_kpis_professor_mensal, vw_leads_comercial, vw_leads_por_canal, vw_evasoes_resumo, vw_renovacoes_mensal, vw_ranking_unidades, vw_turmas_completa.',
             parameters: {
                 type: 'object',
                 properties: {
@@ -687,8 +687,7 @@ async function toolListarTabelas(): Promise<string> {
         { tabela: 'cursos', descricao: 'Cursos oferecidos (guitarra, violão, piano, etc.)' },
         { tabela: 'unidades', descricao: 'Unidades/escolas da rede (Barra, Recreio, Campo Grande, etc.)' },
         { tabela: 'dados_mensais', descricao: 'Métricas mensais por unidade — alunos pagantes, matrículas, evasões, churn, ticket médio, faturamento' },
-        { tabela: 'movimentacoes_admin', descricao: 'Movimentações de alunos — evasão, renovação, trancamento, aviso prévio' },
-        { tabela: 'evasoes_v2', descricao: 'Registro detalhado de evasões — motivo, professor, curso, data' },
+        { tabela: 'movimentacoes_admin', descricao: 'Movimentações de alunos — evasão, renovação, não renovação, trancamento, aviso prévio (SSOT para evasões)' },
         { tabela: 'renovacoes', descricao: 'Registro de renovações de contratos' },
         { tabela: 'dados_comerciais', descricao: 'Dados comerciais mensais por unidade (matrículas, experimentais, leads)' },
         { tabela: 'experimentais_mensal_unidade', descricao: 'Experimentais agendadas/realizadas por mês e unidade' },

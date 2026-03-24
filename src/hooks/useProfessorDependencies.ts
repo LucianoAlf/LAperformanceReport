@@ -117,9 +117,10 @@ export function useProfessorDependencies() {
           .eq('professor_id', professorId),
         
         supabase
-          .from('evasoes_v2')
+          .from('movimentacoes_admin')
           .select('id', { count: 'exact', head: true })
-          .eq('professor_id', professorId),
+          .eq('professor_id', professorId)
+          .in('tipo', ['evasao', 'nao_renovacao', 'aviso_previo']),
         
         supabase
           .from('experimentais_professor_mensal')
@@ -289,9 +290,11 @@ export function useProfessorDependencies() {
         
         // Evasões detalhadas
         supabase
-          .from('evasoes_v2')
-          .select('id, aluno_nome, tipo_evasao, mes_saida')
+          .from('movimentacoes_admin')
+          .select('id, aluno_nome, tipo_evasao, data')
           .eq('professor_id', professorId)
+          .in('tipo', ['evasao', 'nao_renovacao', 'aviso_previo'])
+          .order('data', { ascending: false })
           .limit(20),
         
         // Experimentais detalhadas
@@ -363,7 +366,7 @@ export function useProfessorDependencies() {
         evasoesDetalhes: evasoesData.data?.map(e => ({
           id: e.id,
           nome: e.aluno_nome,
-          info_adicional: `${e.tipo_evasao} - ${e.mes_saida || ''}`
+          info_adicional: `${e.tipo_evasao || e.tipo} - ${e.data || ''}`
         })) || [],
         
         experimentaisDetalhes: experimentaisData.data?.map(e => ({
