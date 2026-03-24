@@ -1,6 +1,6 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical, Play, MessageSquarePlus, MessageCircle, CheckCircle2, Circle, FileEdit, ChevronDown, ChevronRight, Music2, Layers, CreditCard, FileText, Banknote, QrCode, Link2, Receipt, ChevronsUpDown } from 'lucide-react';
+import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical, Play, MessageSquarePlus, MessageCircle, CheckCircle2, Circle, FileEdit, ChevronDown, ChevronRight, Music2, Layers, CreditCard, FileText, Banknote, QrCode, Link2, Receipt, ChevronsUpDown, Columns3 } from 'lucide-react';
 import { CelulaEditavel } from '@/components/ui/CelulaEditavel';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
@@ -60,6 +60,33 @@ interface TabelaAlunosProps {
 
 const DIAS_SEMANA = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 const HORARIOS_LISTA = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00'];
+
+// Configuração de colunas toggleable
+const COLUNAS_CONFIG = [
+  { id: 'telefone', label: 'Telefone', defaultVisible: false },
+  { id: 'escola', label: 'Escola', defaultVisible: true },
+  { id: 'professor', label: 'Professor', defaultVisible: true },
+  { id: 'curso', label: 'Curso', defaultVisible: true },
+  { id: 'modalidade', label: 'Mod.', defaultVisible: false },
+  { id: 'dia', label: 'Dia', defaultVisible: true },
+  { id: 'horario', label: 'Horário', defaultVisible: true },
+  { id: 'turma', label: 'Turma', defaultVisible: true },
+  { id: 'parcela', label: 'Parcela', defaultVisible: true },
+  { id: 'pago', label: 'Pago', defaultVisible: false },
+  { id: 'vencimento', label: 'Venc.', defaultVisible: false },
+  { id: 'tempo', label: 'Tempo', defaultVisible: true },
+  { id: 'status', label: 'Status', defaultVisible: true },
+] as const;
+
+const STORAGE_KEY = 'la-music-tabela-alunos-colunas';
+
+function getDefaultColunas(): Set<string> {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) return new Set(JSON.parse(saved));
+  } catch {}
+  return new Set(COLUNAS_CONFIG.filter(c => c.defaultVisible).map(c => c.id));
+}
 
 export function TabelaAlunos({
   alunos: alunosProp,
@@ -121,10 +148,24 @@ export function TabelaAlunos({
   const [confirmacaoReset, setConfirmacaoReset] = useState('');
   const [processandoReset, setProcessandoReset] = useState(false);
   const [filtrosExpandidos, setFiltrosExpandidos] = useState(false);
+  const [colunasVisiveis, setColunasVisiveis] = useState<Set<string>>(getDefaultColunas);
+  const [colunasDropdownOpen, setColunasDropdownOpen] = useState(false);
   const [alunoFicha, setAlunoFicha] = useState<Aluno | null>(null);
   const [alunosExpandidos, setAlunosExpandidos] = useState<Set<number>>(new Set());
   const [alertaInadimplenciaDismissed, setAlertaInadimplenciaDismissed] = useState(false);
   const itensPorPagina = 30;
+
+  const toggleColuna = useCallback((id: string) => {
+    setColunasVisiveis(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify([...next]));
+      return next;
+    });
+  }, []);
+
+  const col = useCallback((id: string) => colunasVisiveis.has(id), [colunasVisiveis]);
 
   // Contagem de inadimplentes (usa todosAlunos para não depender de filtros)
   // Conta ALUNOS únicos, mas soma VALOR de todos os cursos (incluindo segundo curso)
@@ -1052,6 +1093,31 @@ export function TabelaAlunos({
             {filtrosExpandidos ? '⊖' : '⊕'} {filtrosExpandidos ? 'Menos' : 'Mais'} Filtros
           </button>
 
+          {/* Toggle de Colunas */}
+          <Popover open={colunasDropdownOpen} onOpenChange={setColunasDropdownOpen}>
+            <PopoverTrigger asChild>
+              <button className="h-10 bg-slate-700 hover:bg-slate-600 px-4 rounded-xl text-sm transition flex items-center gap-2">
+                <Columns3 className="w-4 h-4" />
+                Colunas
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-48 p-2" align="start">
+              <p className="text-xs text-slate-400 px-2 pb-2 font-medium">Colunas visíveis</p>
+              {COLUNAS_CONFIG.map(c => (
+                <label
+                  key={c.id}
+                  className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-slate-700/50 cursor-pointer text-sm"
+                >
+                  <Checkbox
+                    checked={colunasVisiveis.has(c.id)}
+                    onCheckedChange={() => toggleColuna(c.id)}
+                  />
+                  {c.label}
+                </label>
+              ))}
+            </PopoverContent>
+          </Popover>
+
           {/* Limpar filtros */}
           <button
             onClick={limparFiltros}
@@ -1250,19 +1316,19 @@ export function TabelaAlunos({
               </th>
               <th className="px-4 py-3 font-medium">#</th>
               <th className="px-4 py-3 font-medium text-left">Nome</th>
-              <th className="px-4 py-3 font-medium">Telefone</th>
-              <th className="px-4 py-3 font-medium">Escola</th>
-              <th className="px-4 py-3 font-medium">Professor</th>
-              <th className="px-4 py-3 font-medium">Curso</th>
-              <th className="px-4 py-3 font-medium">Mod.</th>
-              <th className="px-4 py-3 font-medium">Dia</th>
-              <th className="px-4 py-3 font-medium">Horário</th>
-              <th className="px-4 py-3 font-medium">Turma</th>
-              <th className="px-4 py-3 font-medium">Parcela</th>
-              <th className="px-2 py-3 font-medium">Pago</th>
-              <th className="px-2 py-3 font-medium">Venc.</th>
-              <th className="px-4 py-3 font-medium">Tempo</th>
-              <th className="px-2 py-3 font-medium">Status</th>
+              {col('telefone') && <th className="px-4 py-3 font-medium">Telefone</th>}
+              {col('escola') && <th className="px-4 py-3 font-medium">Escola</th>}
+              {col('professor') && <th className="px-4 py-3 font-medium">Professor</th>}
+              {col('curso') && <th className="px-4 py-3 font-medium">Curso</th>}
+              {col('modalidade') && <th className="px-4 py-3 font-medium">Mod.</th>}
+              {col('dia') && <th className="px-4 py-3 font-medium">Dia</th>}
+              {col('horario') && <th className="px-4 py-3 font-medium">Horário</th>}
+              {col('turma') && <th className="px-4 py-3 font-medium">Turma</th>}
+              {col('parcela') && <th className="px-4 py-3 font-medium">Parcela</th>}
+              {col('pago') && <th className="px-2 py-3 font-medium">Pago</th>}
+              {col('vencimento') && <th className="px-2 py-3 font-medium">Venc.</th>}
+              {col('tempo') && <th className="px-4 py-3 font-medium">Tempo</th>}
+              {col('status') && <th className="px-2 py-3 font-medium">Status</th>}
               <th className="px-2 py-3 font-medium text-right">Ações</th>
             </tr>
           </thead>
@@ -1364,6 +1430,7 @@ export function TabelaAlunos({
                   </td>
 
                   {/* Telefone - Edição inline */}
+                  {col('telefone') && (
                   <td className="px-4 py-2">
                     <CelulaEditavel
                       value={aluno.responsavel_telefone || aluno.telefone}
@@ -1372,8 +1439,10 @@ export function TabelaAlunos({
                       className="min-w-[120px]"
                     />
                   </td>
+                  )}
 
                   {/* Escola - Não editável */}
+                  {col('escola') && (
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1.5">
                       {getBadgeEscola(aluno.classificacao)}
@@ -1384,8 +1453,10 @@ export function TabelaAlunos({
                       )}
                     </div>
                   </td>
+                  )}
 
                   {/* Professor - Edição inline */}
+                  {col('professor') && (
                   <td className="px-4 py-2">
                     <CelulaEditavel
                       value={aluno.professor_atual_id}
@@ -1397,8 +1468,10 @@ export function TabelaAlunos({
                       className="min-w-[120px]"
                     />
                   </td>
+                  )}
 
                   {/* Curso - Edição inline */}
+                  {col('curso') && (
                   <td className="px-4 py-2">
                     <CelulaEditavel
                       value={aluno.curso_id}
@@ -1410,8 +1483,10 @@ export function TabelaAlunos({
                       className="min-w-[100px]"
                     />
                   </td>
+                  )}
 
                   {/* Modalidade - Edição inline */}
+                  {col('modalidade') && (
                   <td className="px-2 py-2 text-center">
                     <CelulaEditavel
                       value={aluno.modalidade || 'turma'}
@@ -1425,8 +1500,10 @@ export function TabelaAlunos({
                       className="min-w-[50px] text-center"
                     />
                   </td>
+                  )}
 
                   {/* Dia - Edição inline */}
+                  {col('dia') && (
                   <td className="px-4 py-2">
                     <CelulaEditavel
                       value={aluno.dia_aula}
@@ -1437,8 +1514,10 @@ export function TabelaAlunos({
                       className="min-w-[90px]"
                     />
                   </td>
+                  )}
 
                   {/* Horário - Edição inline */}
+                  {col('horario') && (
                   <td className="px-4 py-2">
                     <CelulaEditavel
                       value={aluno.horario_aula?.substring(0, 5) || null}
@@ -1449,16 +1528,20 @@ export function TabelaAlunos({
                       className="min-w-[70px]"
                     />
                   </td>
+                  )}
 
                   {/* Turma - Não editável */}
+                  {col('turma') && (
                   <td className="px-4 py-3">
                     {aluno.dia_aula && aluno.horario_aula
                       ? getBadgeTurma(aluno.total_alunos_turma || 1, aluno)
                       : <span className="bg-slate-500/20 text-slate-400 px-2 py-1 rounded text-xs">-</span>
                     }
                   </td>
+                  )}
 
                   {/* Parcela - Edição inline com cor baseada no status de pagamento */}
+                  {col('parcela') && (
                   <td className="px-4 py-2">
                     <div className={`rounded-md ${
                       aluno.status_pagamento === 'inadimplente' ? 'text-red-400' :
@@ -1475,8 +1558,10 @@ export function TabelaAlunos({
                       />
                     </div>
                   </td>
+                  )}
 
                   {/* Status Pagamento - Edição inline com ícone de forma de pagamento */}
+                  {col('pago') && (
                   <td className="px-2 py-2">
                     <div className="flex items-center gap-1">
                       <CelulaEditavel
@@ -1518,8 +1603,10 @@ export function TabelaAlunos({
                       />
                     </div>
                   </td>
+                  )}
 
                   {/* Dia Vencimento - Edição inline */}
+                  {col('vencimento') && (
                   <td className="px-2 py-2">
                     <CelulaEditavel
                       value={aluno.dia_vencimento?.toString() || '5'}
@@ -1529,13 +1616,17 @@ export function TabelaAlunos({
                       className="min-w-[40px] text-center"
                     />
                   </td>
+                  )}
 
                   {/* Tempo - Não editável */}
+                  {col('tempo') && (
                   <td className="px-4 py-3 text-slate-300">
                     {formatarTempoPermanencia(aluno.tempo_permanencia_meses)}
                   </td>
+                  )}
 
                   {/* Status - Edição inline */}
+                  {col('status') && (
                   <td className="px-2 py-2">
                     <CelulaEditavel
                       value={aluno.status}
@@ -1560,6 +1651,7 @@ export function TabelaAlunos({
                       className="min-w-[80px]"
                     />
                   </td>
+                  )}
 
                   {/* Ações */}
                   <td className="px-2 py-3 text-right">
@@ -1646,10 +1738,13 @@ export function TabelaAlunos({
                         </button>
                       </div>
                     </td>
-                    <td className="px-4 py-2"></td>
+                    {col('telefone') && <td className="px-4 py-2"></td>}
+                    {col('escola') && (
                     <td className="px-4 py-2">
                       {getBadgeEscola(outroCurso.classificacao)}
                     </td>
+                    )}
+                    {col('professor') && (
                     <td className="px-4 py-2">
                       <CelulaEditavel
                         value={outroCurso.professor_atual_id}
@@ -1661,6 +1756,8 @@ export function TabelaAlunos({
                         className="min-w-[120px]"
                       />
                     </td>
+                    )}
+                    {col('curso') && (
                     <td className="px-4 py-2">
                       <CelulaEditavel
                         value={outroCurso.curso_id}
@@ -1672,6 +1769,8 @@ export function TabelaAlunos({
                         className="min-w-[100px]"
                       />
                     </td>
+                    )}
+                    {col('modalidade') && (
                     <td className="px-2 py-2 text-center">
                       <CelulaEditavel
                         value={outroCurso.modalidade || 'turma'}
@@ -1685,6 +1784,8 @@ export function TabelaAlunos({
                         className="min-w-[50px] text-center"
                       />
                     </td>
+                    )}
+                    {col('dia') && (
                     <td className="px-4 py-2">
                       <CelulaEditavel
                         value={outroCurso.dia_aula}
@@ -1695,6 +1796,8 @@ export function TabelaAlunos({
                         className="min-w-[90px]"
                       />
                     </td>
+                    )}
+                    {col('horario') && (
                     <td className="px-4 py-2">
                       <CelulaEditavel
                         value={outroCurso.horario_aula?.substring(0, 5) || null}
@@ -1705,13 +1808,17 @@ export function TabelaAlunos({
                         className="min-w-[70px]"
                       />
                     </td>
+                    )}
                     {/* Turma - Não editável */}
+                    {col('turma') && (
                     <td className="px-4 py-2">
                       {outroCurso.dia_aula && outroCurso.horario_aula
                         ? getBadgeTurma(outroCurso.total_alunos_turma || 1, { ...aluno, ...outroCurso, total_alunos_turma: outroCurso.total_alunos_turma || 1 })
                         : <span className="bg-slate-500/20 text-slate-400 px-2 py-1 rounded text-xs">-</span>
                       }
                     </td>
+                    )}
+                    {col('parcela') && (
                     <td className="px-4 py-2">
                       <div className={`rounded-md ${
                         outroCurso.status_pagamento === 'inadimplente' ? 'text-red-400' :
@@ -1728,6 +1835,8 @@ export function TabelaAlunos({
                         />
                       </div>
                     </td>
+                    )}
+                    {col('pago') && (
                     <td className="px-2 py-2">
                       <div className="flex items-center gap-1">
                         <CelulaEditavel
@@ -1769,6 +1878,8 @@ export function TabelaAlunos({
                         />
                       </div>
                     </td>
+                    )}
+                    {col('vencimento') && (
                     <td className="px-2 py-2">
                       <CelulaEditavel
                         value={outroCurso.dia_vencimento?.toString() || '5'}
@@ -1778,7 +1889,9 @@ export function TabelaAlunos({
                         className="min-w-[40px] text-center"
                       />
                     </td>
-                    <td className="px-4 py-2 text-slate-400 text-sm">-</td>
+                    )}
+                    {col('tempo') && <td className="px-4 py-2 text-slate-400 text-sm">-</td>}
+                    {col('status') && (
                     <td className="px-2 py-2">
                       <CelulaEditavel
                         value={outroCurso.status}
@@ -1795,6 +1908,7 @@ export function TabelaAlunos({
                         className="min-w-[70px]"
                       />
                     </td>
+                    )}
                     <td className="px-2 py-2"></td>
                   </tr>
                 ))}

@@ -14,6 +14,7 @@ import { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
 import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
 import { PageFilterBar } from '@/components/ui/page-filter-bar';
 import { KPICard } from '@/components/ui/KPICard';
+import { ModalPermanenciaDetalhe } from '@/components/GestaoMensal/ModalPermanenciaDetalhe';
 import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TabelaAlunos } from './TabelaAlunos';
@@ -167,6 +168,9 @@ export function AlunosPage() {
     setDataInicio: setCompetenciaDataInicio,
     setDataFim: setCompetenciaDataFim,
   } = useCompetenciaFiltro();
+
+  // Modal de drill-down de permanência
+  const [modalPermanenciaOpen, setModalPermanenciaOpen] = useState(false);
 
   // Estados principais
   const [tabAtiva, setTabAtiva] = useState<TabAtiva>('lista');
@@ -1267,9 +1271,10 @@ export function AlunosPage() {
         <KPICard
           title="T. Permanência"
           value={kpis.ltvMedio}
-          subvalue="meses"
+          subvalue="meses · clique para detalhar"
           icon={Clock}
           variant="green"
+          onClick={() => setModalPermanenciaOpen(true)}
         />
         <div className={`bg-red-900/30 border border-red-500/50 rounded-xl p-4 ${kpis.turmasSozinhos > 0 ? 'animate-pulse' : ''}`}>
           <div className="flex items-center justify-between mb-2">
@@ -1439,6 +1444,14 @@ export function AlunosPage() {
 
       {/* Toast Container */}
       <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} />
+
+      {/* Modal de detalhamento de permanência */}
+      <ModalPermanenciaDetalhe
+        open={modalPermanenciaOpen}
+        onOpenChange={setModalPermanenciaOpen}
+        unidadeId={unidadeAtual || 'todos'}
+        mediaAtual={kpis.ltvMedio}
+      />
 
       {/* Tour e Botão de Ajuda */}
       <PageTour tourName="alunos" steps={alunosTourSteps} />
