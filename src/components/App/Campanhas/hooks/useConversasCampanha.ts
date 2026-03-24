@@ -43,7 +43,7 @@ export function useConversasCampanha(unidadeId?: string | null) {
         .select('*')
         .order('ultima_mensagem_em', { ascending: false })
         .limit(100)
-      if (unidadeId) query = query.eq('unidade_id', unidadeId)
+      // Conversas de campanha são compartilhadas — não filtrar por unidade
       const { data } = await query
       // Deduplicar por telefone — manter a conversa mais recente
       const porTelefone = new Map<string, typeof data extends (infer T)[] ? T : never>()
