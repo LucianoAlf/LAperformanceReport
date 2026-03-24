@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { useOutletContext } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
@@ -10,6 +10,9 @@ import {
   Plus, Search, RotateCcw, Edit2, Trash2, Check, X, History,
   Calendar, Upload, Heart, Zap
 } from 'lucide-react';
+import { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
+import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
+import { PageFilterBar } from '@/components/ui/page-filter-bar';
 import { KPICard } from '@/components/ui/KPICard';
 import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -151,6 +154,20 @@ export function AlunosPage() {
   const unidadeAtual = context?.unidadeSelecionada || 'todos';
   const toast = useToast();
 
+  // Filtro de competência (período)
+  const {
+    filtro: competenciaFiltro,
+    range: competenciaRange,
+    anosDisponiveis,
+    setTipo: setCompetenciaTipo,
+    setAno: setCompetenciaAno,
+    setMes: setCompetenciaMes,
+    setTrimestre: setCompetenciaTrimestre,
+    setSemestre: setCompetenciaSemestre,
+    setDataInicio: setCompetenciaDataInicio,
+    setDataFim: setCompetenciaDataFim,
+  } = useCompetenciaFiltro();
+
   // Estados principais
   const [tabAtiva, setTabAtiva] = useState<TabAtiva>('lista');
   const [alunos, setAlunos] = useState<Aluno[]>([]);
@@ -219,7 +236,7 @@ export function AlunosPage() {
   // Carregar dados iniciais
   useEffect(() => {
     carregarDados();
-  }, [unidadeAtual]);
+  }, [unidadeAtual, competenciaRange.startDate, competenciaRange.endDate]);
 
   // Listener para navegação de turma
   useEffect(() => {
@@ -271,6 +288,14 @@ export function AlunosPage() {
     if (unidadeAtual && unidadeAtual !== 'todos') {
       qAlunos = qAlunos.eq('unidade_id', unidadeAtual);
       qTurmasView = qTurmasView.eq('unidade_id', unidadeAtual);
+    }
+
+    // Filtro de período por data_matricula
+    if (competenciaRange.startDate) {
+      qAlunos = qAlunos.gte('data_matricula', competenciaRange.startDate);
+    }
+    if (competenciaRange.endDate) {
+      qAlunos = qAlunos.lte('data_matricula', competenciaRange.endDate);
     }
 
     // Disparar tudo em paralelo: alunos, turmas view, anotações, turmas explícitas, opções, LTV
@@ -1167,6 +1192,22 @@ export function AlunosPage() {
 
   return (
     <div className="space-y-6">
+      {/* Filtro de período */}
+      <PageFilterBar>
+        <CompetenciaFilter
+          filtro={competenciaFiltro}
+          range={competenciaRange}
+          anosDisponiveis={anosDisponiveis}
+          onTipoChange={setCompetenciaTipo}
+          onAnoChange={setCompetenciaAno}
+          onMesChange={setCompetenciaMes}
+          onTrimestreChange={setCompetenciaTrimestre}
+          onSemestreChange={setCompetenciaSemestre}
+          onDataInicioChange={setCompetenciaDataInicio}
+          onDataFimChange={setCompetenciaDataFim}
+        />
+      </PageFilterBar>
+
       {/* Header actions */}
       <div className="flex items-center justify-end gap-4">
         {/* Badge de Alerta - Alunos sem lançamento de pagamento */}
