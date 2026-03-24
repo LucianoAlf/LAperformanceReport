@@ -18,6 +18,7 @@ interface CompetenciaFilterProps {
 }
 
 const TIPOS: { id: TipoCompetencia; label: string; shortLabel: string }[] = [
+  { id: 'todos', label: 'Todos', shortLabel: 'Todos' },
   { id: 'diario', label: 'Hoje', shortLabel: 'Hoje' },
   { id: 'mensal', label: 'Mensal', shortLabel: 'Mês' },
   { id: 'trimestral', label: 'Trimestre', shortLabel: 'Trim' },

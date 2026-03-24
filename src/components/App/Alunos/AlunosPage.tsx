@@ -167,7 +167,7 @@ export function AlunosPage() {
     setSemestre: setCompetenciaSemestre,
     setDataInicio: setCompetenciaDataInicio,
     setDataFim: setCompetenciaDataFim,
-  } = useCompetenciaFiltro();
+  } = useCompetenciaFiltro('todos');
 
   // Modal de drill-down de permanência
   const [modalPermanenciaOpen, setModalPermanenciaOpen] = useState(false);

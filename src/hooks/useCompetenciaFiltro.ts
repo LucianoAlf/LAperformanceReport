@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { format } from 'date-fns';
 import { supabase } from '@/lib/supabase';
 
-export type TipoCompetencia = 'diario' | 'mensal' | 'trimestral' | 'semestral' | 'anual' | 'personalizado';
+export type TipoCompetencia = 'todos' | 'diario' | 'mensal' | 'trimestral' | 'semestral' | 'anual' | 'personalizado';
 
 export interface CompetenciaFiltro {
   tipo: TipoCompetencia;
@@ -38,13 +38,13 @@ const MESES_CURTO = [
  * Hook para gerenciar o filtro de competência (período)
  * Default: mês atual
  */
-export function useCompetenciaFiltro() {
+export function useCompetenciaFiltro(tipoInicial: TipoCompetencia = 'mensal') {
   const hoje = new Date();
   const anoAtual = hoje.getFullYear();
   const mesAtual = hoje.getMonth() + 1; // 1-12
 
   const [filtro, setFiltro] = useState<CompetenciaFiltro>({
-    tipo: 'mensal',
+    tipo: tipoInicial,
     ano: anoAtual,
     mes: mesAtual,
     trimestre: Math.ceil(mesAtual / 3) as 1 | 2 | 3 | 4,
@@ -62,6 +62,17 @@ export function useCompetenciaFiltro() {
     let label: string;
 
     switch (tipo) {
+      case 'todos':
+        return {
+          startDate: '',
+          endDate: '',
+          meses: [],
+          label: 'Todos',
+          ano,
+          mesInicio: 1,
+          mesFim: 12,
+        };
+
       case 'personalizado': {
         if (dataInicio && dataFim) {
           const startDate = format(dataInicio, 'yyyy-MM-dd');
