@@ -541,9 +541,9 @@ export function AdministrativoPage() {
         renovacoes_realizadas: renovacoesRealizadasCount,
         renovacoes_pendentes: renovacoesPendentesCount,
         nao_renovacoes: naoRenovacoesCount,
-        avisos_previos: retConsolidado.avisos_previos || avisosPrevios.length,
-        evasoes_total: retConsolidado.total_evasoes || (evasoes.length + naoRenovacoes.length),
-        evasoes_interrompido: retConsolidado.evasoes_interrompidas || evasoes.length,
+        avisos_previos: avisosPrevios.length,
+        evasoes_total: evasoes.length,
+        evasoes_interrompido: evasoes.length,
         evasoes_nao_renovou: naoRenovacoesCount,
         mrr_perdido: retConsolidado.mrr_perdido || 0,
       });
