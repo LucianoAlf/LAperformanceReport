@@ -126,6 +126,7 @@ export function ModalFichaAluno({
     data_inicio_contrato: null as Date | null,
     data_fim_contrato: null as Date | null,
     status: 'ativo',
+    data_saida: null as Date | null,
     is_segundo_curso: false,
     // Financeiro
     tipo_aluno: 'pagante',
@@ -265,6 +266,7 @@ export function ModalFichaAluno({
         data_inicio_contrato: alunoData.data_inicio_contrato ? new Date(alunoData.data_inicio_contrato) : null,
         data_fim_contrato: alunoData.data_fim_contrato ? new Date(alunoData.data_fim_contrato) : null,
         status: alunoData.status || 'ativo',
+        data_saida: alunoData.data_saida ? new Date(alunoData.data_saida) : null,
         is_segundo_curso: alunoData.is_segundo_curso || false,
         tipo_aluno: alunoData.tipo_aluno || 'pagante',
         tipo_matricula_id: alunoData.tipo_matricula_id || 1,
@@ -318,6 +320,7 @@ export function ModalFichaAluno({
           data_inicio_contrato: formData.data_inicio_contrato?.toISOString().split('T')[0] || null,
           data_fim_contrato: formData.data_fim_contrato?.toISOString().split('T')[0] || null,
           status: formData.status,
+          data_saida: formData.data_saida?.toISOString().split('T')[0] || null,
           is_segundo_curso: formData.is_segundo_curso,
           tipo_aluno: formData.tipo_aluno,
           tipo_matricula_id: formData.tipo_matricula_id,
@@ -728,6 +731,17 @@ export function ModalFichaAluno({
                     </SelectContent>
                   </Select>
                 </div>
+
+                {(formData.status === 'inativo' || formData.status === 'evadido') && (
+                  <div>
+                    <Label className="mb-2 block">Data de Saída</Label>
+                    <DatePicker
+                      date={formData.data_saida}
+                      onDateChange={(date) => setFormData({ ...formData, data_saida: date })}
+                      placeholder="Selecione..."
+                    />
+                  </div>
+                )}
               </div>
 
               <div className="border-t border-slate-700 pt-4">
