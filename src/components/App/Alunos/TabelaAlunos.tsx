@@ -76,6 +76,7 @@ const COLUNAS_CONFIG = [
   { id: 'vencimento', label: 'Venc.', defaultVisible: false },
   { id: 'tempo', label: 'Tempo', defaultVisible: true },
   { id: 'status', label: 'Status', defaultVisible: true },
+  { id: 'data_saida', label: 'Saída', defaultVisible: false },
 ] as const;
 
 const STORAGE_KEY = 'la-music-tabela-alunos-colunas';
@@ -1329,6 +1330,7 @@ export function TabelaAlunos({
               {col('vencimento') && <th className="px-2 py-3 font-medium">Venc.</th>}
               {col('tempo') && <th className="px-4 py-3 font-medium">Tempo</th>}
               {col('status') && <th className="px-2 py-3 font-medium">Status</th>}
+              {col('data_saida') && <th className="px-4 py-3 font-medium">Saída</th>}
               <th className="px-2 py-3 font-medium text-right">Ações</th>
             </tr>
           </thead>
@@ -1653,6 +1655,14 @@ export function TabelaAlunos({
                   </td>
                   )}
 
+                  {col('data_saida') && (
+                  <td className="px-4 py-3 text-slate-300 text-sm">
+                    {aluno.data_saida
+                      ? new Date(aluno.data_saida).toLocaleDateString('pt-BR')
+                      : '-'}
+                  </td>
+                  )}
+
                   {/* Ações */}
                   <td className="px-2 py-3 text-right">
                     <DropdownMenu>
@@ -1907,6 +1917,13 @@ export function TabelaAlunos({
                         placeholder="-"
                         className="min-w-[70px]"
                       />
+                    </td>
+                    )}
+                    {col('data_saida') && (
+                    <td className="px-4 py-2 text-slate-400 text-sm">
+                      {outroCurso.data_saida
+                        ? new Date(outroCurso.data_saida).toLocaleDateString('pt-BR')
+                        : '-'}
                     </td>
                     )}
                     <td className="px-2 py-2"></td>

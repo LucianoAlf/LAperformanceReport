@@ -77,6 +77,7 @@ export interface Aluno {
   forma_pagamento_id?: number | null;
   forma_pagamento_nome?: string | null;
   responsavel_telefone?: string | null;
+  data_saida?: string | null;
 }
 
 export interface Turma {
@@ -275,7 +276,7 @@ export function AlunosPage() {
         id, nome, classificacao, idade_atual, professor_atual_id, curso_id, modalidade,
         dia_aula, horario_aula, valor_parcela, tempo_permanencia_meses,
         status, status_pagamento, dia_vencimento, tipo_matricula_id, unidade_id, data_matricula,
-        is_segundo_curso, data_nascimento, forma_pagamento_id, telefone, responsavel_telefone,
+        is_segundo_curso, data_nascimento, forma_pagamento_id, telefone, responsavel_telefone, data_saida,
         professores:professor_atual_id!left(nome),
         cursos:curso_id!left(nome, is_projeto_banda),
         tipos_matricula:tipo_matricula_id!left(nome, conta_como_pagante, entra_ticket_medio, codigo),
