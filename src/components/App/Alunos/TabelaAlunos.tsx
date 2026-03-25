@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical, Play, MessageSquarePlus, MessageCircle, CheckCircle2, Circle, FileEdit, ChevronDown, ChevronRight, Music2, Layers, CreditCard, FileText, Banknote, QrCode, Link2, Receipt, ChevronsUpDown, Columns3 } from 'lucide-react';
 import { CelulaEditavel } from '@/components/ui/CelulaEditavel';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -1656,10 +1657,16 @@ export function TabelaAlunos({
                   )}
 
                   {col('data_saida') && (
-                  <td className="px-4 py-3 text-slate-300 text-sm">
-                    {aluno.data_saida
-                      ? new Date(aluno.data_saida).toLocaleDateString('pt-BR')
-                      : '-'}
+                  <td className="px-2 py-2">
+                    <DatePicker
+                      date={aluno.data_saida ? new Date(aluno.data_saida) : undefined}
+                      onDateChange={async (date) => {
+                        const valor = date ? date.toISOString().split('T')[0] : null;
+                        await salvarCampo(aluno.id, 'data_saida', valor);
+                      }}
+                      placeholder="-"
+                      className="h-7 text-xs min-w-[110px] bg-transparent border-transparent hover:border-slate-600"
+                    />
                   </td>
                   )}
 
@@ -1920,10 +1927,16 @@ export function TabelaAlunos({
                     </td>
                     )}
                     {col('data_saida') && (
-                    <td className="px-4 py-2 text-slate-400 text-sm">
-                      {outroCurso.data_saida
-                        ? new Date(outroCurso.data_saida).toLocaleDateString('pt-BR')
-                        : '-'}
+                    <td className="px-2 py-2">
+                      <DatePicker
+                        date={outroCurso.data_saida ? new Date(outroCurso.data_saida) : undefined}
+                        onDateChange={async (date) => {
+                          const valor = date ? date.toISOString().split('T')[0] : null;
+                          await salvarCampo(outroCurso.id, 'data_saida', valor);
+                        }}
+                        placeholder="-"
+                        className="h-7 text-xs min-w-[110px] bg-transparent border-transparent hover:border-slate-600"
+                      />
                     </td>
                     )}
                     <td className="px-2 py-2"></td>
