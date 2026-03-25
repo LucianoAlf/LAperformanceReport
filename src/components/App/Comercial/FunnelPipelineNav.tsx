@@ -17,7 +17,9 @@ interface FunnelPipelineNavProps {
 }
 
 export function FunnelPipelineNav({ stages, activeStage, onStageClick }: FunnelPipelineNavProps) {
-  // Base do funil é a primeira etapa (Novos)
+  // Total do pipeline = soma de todos os stages
+  const totalCount = stages.reduce((sum, s) => sum + s.count, 0);
+  // Base do funil é a primeira etapa (Novos) — usada para % relativas
   const baseCount = stages[0]?.count || 0;
 
   return (
@@ -27,7 +29,7 @@ export function FunnelPipelineNav({ stages, activeStage, onStageClick }: FunnelP
         <div className="flex items-center gap-2">
           <span className="text-sm text-slate-400">Pipeline</span>
           <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-700 text-white">
-            {baseCount} leads
+            {totalCount} leads
           </span>
         </div>
       </div>
