@@ -1,11 +1,12 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { Search, Send, Bot, Image, FileText, Mic, Video, Music, Paperclip, RefreshCw, MessageSquare, Power, PowerOff, X, Play, Pause, Check, CheckCheck, Clock, AlertCircle, Loader2, Lock, Ban, PanelRightOpen } from 'lucide-react'
+import { Search, Send, Bot, Image, FileText, Mic, Video, Music, Paperclip, RefreshCw, MessageSquare, Power, PowerOff, X, Play, Pause, Check, CheckCheck, Clock, AlertCircle, Loader2, Lock, Ban, PanelRightOpen, RotateCcw, Bug } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import { useConversasCampanha, useMensagensCampanha, type MensagemCampanha } from '../hooks/useConversasCampanha'
 import { useNumerosMeta } from '../hooks/useNumerosMeta'
 import { ChatInfoPanel } from '../components/ChatInfoPanel'
+import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao'
 
 // ─── ConversasTab ─────────────────────────────────────────────────────────────
 
@@ -325,7 +326,7 @@ function BolhaMensagem({ msg, onReagir, searchTerm, onImageClick }: { msg: Mensa
 // ─── Chat Pane ────────────────────────────────────────────────────────────────
 
 function ChatPane({ conversaId, telefone, nomeContato }: { conversaId: string; telefone?: string; nomeContato?: string | null }) {
-  const { mensagens, loading, enviar, enviarMidia, reagir } = useMensagensCampanha(conversaId, telefone)
+  const { mensagens, loading, enviar, enviarMidia, reagir, resetarConversa } = useMensagensCampanha(conversaId, telefone)
   const [texto, setTexto] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null)
@@ -341,6 +342,14 @@ function ChatPane({ conversaId, telefone, nomeContato }: { conversaId: string; t
 
   // Nota interna
   const [modoNota, setModoNota] = useState(false)
+
+  // Reset
+  const [resetando, setResetando] = useState(false)
+  const [modalResetAberto, setModalResetAberto] = useState(false)
+
+  // Debug mode
+  const [modoDebug, setModoDebug] = useState(false)
+  const [debugData, setDebugData] = useState<{ bot_ativo: boolean; status: string; total_mensagens: number; session_data: Record<string, any>; ultima_ia: string | null } | null>(null)
 
   // Quick replies
   const [quickRepliesAberto, setQuickRepliesAberto] = useState(false)
@@ -375,6 +384,47 @@ function ChatPane({ conversaId, telefone, nomeContato }: { conversaId: string; t
     })
   }, [conversaId, telefone])
   useEffect(() => { return () => { if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop()); if (timerRef.current) clearInterval(timerRef.current) } }, [])
+
+  // Debug polling — buscar dados do agente_conversas a cada 5s
+  useEffect(() => {
+    if (!modoDebug) { setDebugData(null); return }
+    const tel = telefone || mensagens[0]?.telefone
+    if (!tel) return
+
+    async function fetchDebug() {
+      const { data } = await supabase.from('agente_conversas')
+        .select('bot_ativo, status, total_mensagens, session_data, ultima_mensagem_em')
+        .eq('telefone', tel!)
+        .order('ultima_mensagem_em', { ascending: false })
+        .limit(1).maybeSingle()
+      if (data) {
+        setDebugData({
+          bot_ativo: data.bot_ativo,
+          status: data.status,
+          total_mensagens: data.total_mensagens,
+          session_data: data.session_data ?? {},
+          ultima_ia: data.ultima_mensagem_em,
+        })
+      }
+    }
+    fetchDebug()
+    const interval = setInterval(fetchDebug, 5000)
+    return () => clearInterval(interval)
+  }, [modoDebug, telefone, mensagens.length])
+
+  // ─── Reset conversa ──────────────────────────────────────────────────
+  async function handleResetarConversa() {
+    setResetando(true)
+    const { error } = await resetarConversa()
+    if (error) toast.error(error)
+    else {
+      toast.success('Conversa resetada — agente tratará como novo contato')
+      setBotAtivo(true)
+      setDebugData(null)
+    }
+    setResetando(false)
+    setModalResetAberto(false)
+  }
 
   // Keyboard shortcut: Ctrl+F para busca
   useEffect(() => {
@@ -537,6 +587,12 @@ function ChatPane({ conversaId, telefone, nomeContato }: { conversaId: string; t
           <button onClick={() => { setBuscaAberta(!buscaAberta); if (buscaAberta) setBuscaChat('') }} className="p-1.5 rounded-lg text-slate-400 hover:text-amber-400 hover:bg-slate-700/50 transition" title="Buscar (Ctrl+F)">
             <Search className="w-4 h-4" />
           </button>
+          <button onClick={() => setModalResetAberto(true)} disabled={resetando} className="p-1.5 rounded-lg text-slate-400 hover:text-orange-400 hover:bg-slate-700/50 transition disabled:opacity-50" title="Resetar conversa (apaga mensagens e session_data)">
+            {resetando ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+          </button>
+          <button onClick={() => setModoDebug(v => !v)} className={cn('p-1.5 rounded-lg transition', modoDebug ? 'text-green-400 bg-green-500/10' : 'text-slate-400 hover:text-green-400 hover:bg-slate-700/50')} title="Modo debug">
+            <Bug className="w-4 h-4" />
+          </button>
           <button onClick={handleBloquear} className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-slate-700/50 transition" title="Bloquear contato">
             <Ban className="w-4 h-4" />
           </button>
@@ -557,6 +613,38 @@ function ChatPane({ conversaId, telefone, nomeContato }: { conversaId: string; t
           <input autoFocus value={buscaChat} onChange={e => setBuscaChat(e.target.value)} placeholder="Buscar nas mensagens..." className="flex-1 bg-transparent text-sm text-white placeholder-slate-500 outline-none" />
           {buscaChat && <span className="text-xs text-slate-500">{mensagens.filter(m => m.texto?.toLowerCase().includes(buscaChat.toLowerCase())).length} resultados</span>}
           <button onClick={() => { setBuscaAberta(false); setBuscaChat('') }} className="text-slate-400 hover:text-white"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+
+      {/* Debug Panel */}
+      {modoDebug && debugData && (
+        <div className="px-4 py-2 border-b border-green-500/20 bg-green-500/5 space-y-2">
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-[10px] font-mono text-green-400 uppercase tracking-wider">Debug</span>
+            <div className="flex items-center gap-1.5">
+              <div className={cn('w-2 h-2 rounded-full', debugData.bot_ativo ? 'bg-emerald-400' : debugData.status === 'transferred' ? 'bg-red-400' : 'bg-yellow-400')} />
+              <span className="text-[11px] text-slate-300 font-mono">bot={debugData.bot_ativo ? 'on' : 'off'}</span>
+            </div>
+            <span className="text-[11px] text-slate-400 font-mono">status={debugData.status}</span>
+            <span className="text-[11px] text-slate-400 font-mono">msgs={debugData.total_mensagens}</span>
+            {debugData.ultima_ia && <span className="text-[11px] text-slate-500 font-mono">last_ia={new Date(debugData.ultima_ia).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</span>}
+          </div>
+          {Object.keys(debugData.session_data).length > 0 && (
+            <div className="bg-slate-900/60 border border-green-500/10 rounded-lg px-3 py-2 max-h-32 overflow-y-auto">
+              <p className="text-[10px] text-green-400/60 mb-1 font-mono">session_data</p>
+              {Object.entries(debugData.session_data).filter(([k]) => k !== 'last_ai_response_at').map(([k, v]) => (
+                <div key={k} className="flex gap-2 text-[11px] font-mono">
+                  <span className="text-amber-400/80">{k}:</span>
+                  <span className="text-slate-300 truncate">{typeof v === 'object' ? JSON.stringify(v) : String(v)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {modoDebug && !debugData && (
+        <div className="px-4 py-2 border-b border-green-500/20 bg-green-500/5">
+          <span className="text-[11px] text-slate-500 font-mono">Debug: sem dados de agente_conversas para este contato</span>
         </div>
       )}
 
@@ -672,6 +760,19 @@ function ChatPane({ conversaId, telefone, nomeContato }: { conversaId: string; t
     {infoPanelAberto && telefone && (
       <ChatInfoPanel conversaId={conversaId} telefone={telefone} onClose={() => setInfoPanelAberto(false)} />
     )}
+
+    {/* Modal Reset */}
+    <ModalConfirmacao
+      aberto={modalResetAberto}
+      onClose={() => setModalResetAberto(false)}
+      onConfirmar={handleResetarConversa}
+      titulo="Resetar conversa"
+      mensagem="Isso apaga TODAS as mensagens e dados coletados pelo agente para este contato. O agente tratará a próxima mensagem como um contato totalmente novo. Esta ação é irreversível."
+      tipo="danger"
+      textoConfirmar="Resetar"
+      textoCancelar="Cancelar"
+      carregando={resetando}
+    />
     </div>
   )
 }

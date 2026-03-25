@@ -213,5 +213,36 @@ export function useMensagensCampanha(conversaId: string | null, telefone?: strin
     return { error: null }
   }
 
-  return { mensagens, loading, refetch: fetchMensagens, enviar, enviarMidia, reagir }
+  async function resetarConversa(): Promise<{ error: string | null }> {
+    if (!telefone) return { error: 'Telefone não encontrado' }
+
+    // 1. Buscar todas conversas deste telefone
+    const { data: convs } = await supabase.from('conversas_campanha').select('id').eq('telefone', telefone)
+    const ids = (convs ?? []).map(c => c.id)
+
+    // 2. Deletar mensagens
+    if (ids.length > 0) {
+      const { error: delErr } = await supabase.from('mensagens_campanha').delete().in('conversa_id', ids)
+      if (delErr) return { error: 'Erro ao deletar mensagens: ' + delErr.message }
+    }
+
+    // 3. Resetar agente_conversas (session_data, status, contadores)
+    await supabase.from('agente_conversas')
+      .update({ session_data: {}, status: 'active', total_mensagens: 0, bot_ativo: true })
+      .eq('telefone', telefone)
+
+    // 4. Resetar conversas
+    await supabase.from('conversas_campanha')
+      .update({ nao_lidas: 0, status: 'active' })
+      .eq('telefone', telefone)
+
+    // 5. Limpar fila de mensagens pendentes
+    await supabase.from('agente_fila_mensagens').delete().eq('telefone', telefone)
+
+    // 6. Limpar estado local
+    setMensagens([])
+    return { error: null }
+  }
+
+  return { mensagens, loading, refetch: fetchMensagens, enviar, enviarMidia, reagir, resetarConversa }
 }
