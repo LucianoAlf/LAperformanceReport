@@ -1657,16 +1657,20 @@ export function TabelaAlunos({
                   )}
 
                   {col('data_saida') && (
-                  <td className="px-2 py-2">
-                    <DatePicker
-                      date={aluno.data_saida ? new Date(aluno.data_saida) : undefined}
-                      onDateChange={async (date) => {
-                        const valor = date ? date.toISOString().split('T')[0] : null;
-                        await salvarCampo(aluno.id, 'data_saida', valor);
-                      }}
-                      placeholder="-"
-                      className="h-7 text-xs min-w-[110px] bg-transparent border-transparent hover:border-slate-600"
-                    />
+                  <td className="px-2 py-2 text-sm text-slate-400">
+                    {aluno.status === 'inativo' || aluno.status === 'evadido' ? (
+                      <DatePicker
+                        date={aluno.data_saida ? new Date(aluno.data_saida) : undefined}
+                        onDateChange={async (date) => {
+                          const valor = date ? date.toISOString().split('T')[0] : null;
+                          await salvarCampo(aluno.id, 'data_saida', valor);
+                        }}
+                        placeholder="-"
+                        className="h-7 text-xs min-w-[110px] bg-transparent border-transparent hover:border-slate-600"
+                      />
+                    ) : (
+                      <span className="px-2">-</span>
+                    )}
                   </td>
                   )}
 
@@ -1927,16 +1931,20 @@ export function TabelaAlunos({
                     </td>
                     )}
                     {col('data_saida') && (
-                    <td className="px-2 py-2">
-                      <DatePicker
-                        date={outroCurso.data_saida ? new Date(outroCurso.data_saida) : undefined}
-                        onDateChange={async (date) => {
-                          const valor = date ? date.toISOString().split('T')[0] : null;
-                          await salvarCampo(outroCurso.id, 'data_saida', valor);
-                        }}
-                        placeholder="-"
-                        className="h-7 text-xs min-w-[110px] bg-transparent border-transparent hover:border-slate-600"
-                      />
+                    <td className="px-2 py-2 text-sm text-slate-400">
+                      {outroCurso.status === 'inativo' || outroCurso.status === 'evadido' ? (
+                        <DatePicker
+                          date={outroCurso.data_saida ? new Date(outroCurso.data_saida) : undefined}
+                          onDateChange={async (date) => {
+                            const valor = date ? date.toISOString().split('T')[0] : null;
+                            await salvarCampo(outroCurso.id, 'data_saida', valor);
+                          }}
+                          placeholder="-"
+                          className="h-7 text-xs min-w-[110px] bg-transparent border-transparent hover:border-slate-600"
+                        />
+                      ) : (
+                        <span className="px-2">-</span>
+                      )}
                     </td>
                     )}
                     <td className="px-2 py-2"></td>
