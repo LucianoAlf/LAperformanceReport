@@ -494,7 +494,7 @@ export function ComercialPage() {
 
       // Calcular resumo (usa mês inteiro quando filtro é "Hoje")
       const leads = registrosParaResumo.reduce((acc, r) => acc + r.quantidade, 0);
-      const experimentais = registrosParaResumo.filter(r => r.status?.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0);
+      const experimentais = registrosParaResumo.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0);
       const visitas = registrosParaResumo.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0);
       const matriculas = registrosParaResumo.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0);
 
@@ -658,7 +658,7 @@ export function ComercialPage() {
 
       // Experimentais do mês (com nomes dos relacionamentos)
       const experimentaisDoMes = registros
-        .filter(r => r.status?.startsWith('experimental'))
+        .filter(r => r.experimental_agendada === true)
         .map(e => ({
           ...e,
           canal_nome: (e.canais_origem as any)?.nome || '',
@@ -1534,7 +1534,7 @@ export function ComercialPage() {
       .from('leads')
       .select(`
         status, quantidade, nome, idade, data_contato, tipo_matricula,
-        valor_passaporte, valor_parcela,
+        valor_passaporte, valor_parcela, experimental_agendada,
         cursos:curso_interesse_id(nome),
         canais_origem(nome),
         forma_pgto_passaporte:forma_pagamento_passaporte_id(nome),
@@ -1544,8 +1544,8 @@ export function ComercialPage() {
       .gte('data_contato', dataInicio)
       .lte('data_contato', dataFim);
 
-    const leadsPeriodo = registrosPeriodo?.filter(r => ['novo','agendado'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const experimentaisPeriodo = registrosPeriodo?.filter(r => r.status?.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const leadsPeriodo = registrosPeriodo?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const experimentaisPeriodo = registrosPeriodo?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const matriculasPeriodo = registrosPeriodo?.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
 
     // Detalhamento das matrículas do período
@@ -1642,13 +1642,13 @@ export function ComercialPage() {
     // Buscar dados dos últimos 7 dias
     const { data: registrosSemana } = await supabase
       .from('leads')
-      .select('status, quantidade, valor_passaporte, valor_parcela')
+      .select('status, quantidade, valor_passaporte, valor_parcela, experimental_agendada')
       .eq('unidade_id', unidadeId)
       .gte('data_contato', seteDiasAtras.toISOString().split('T')[0])
       .lte('data_contato', hoje.toISOString().split('T')[0]);
 
-    const leadsSemana = registrosSemana?.filter(r => ['novo','agendado'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const experimentaisSemana = registrosSemana?.filter(r => r.status?.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const leadsSemana = registrosSemana?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const experimentaisSemana = registrosSemana?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const visitasSemana = registrosSemana?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const matriculasSemana = registrosSemana?.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
 
@@ -1727,13 +1727,13 @@ export function ComercialPage() {
     const primeiroDiaMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
     const { data: registrosMes } = await supabase
       .from('leads')
-      .select('status, quantidade, canal_origem_id, curso_interesse_id, canais_origem(nome), cursos(nome)')
+      .select('status, quantidade, canal_origem_id, curso_interesse_id, experimental_agendada, canais_origem(nome), cursos(nome)')
       .eq('unidade_id', unidadeId)
       .gte('data_contato', primeiroDiaMes.toISOString().split('T')[0])
       .lte('data_contato', hoje.toISOString().split('T')[0]);
 
-    const leadsMes = registrosMes?.filter(r => ['novo','agendado'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const experimentaisMes = registrosMes?.filter(r => r.status?.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const leadsMes = registrosMes?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const experimentaisMes = registrosMes?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const visitasMes = registrosMes?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const matriculasMes = registrosMes?.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
 
@@ -2094,7 +2094,7 @@ export function ComercialPage() {
     
     const { data: dadosMesAtual } = await supabase
       .from('leads')
-      .select('status, quantidade')
+      .select('status, quantidade, experimental_agendada')
       .eq('unidade_id', unidadeId)
       .gte('data_contato', inicioMesAtual.toISOString().split('T')[0])
       .lte('data_contato', fimMesAtual.toISOString().split('T')[0]);
@@ -2102,23 +2102,23 @@ export function ComercialPage() {
     // Buscar dados do mês anterior
     const inicioMesAnterior = new Date(anoAnterior, mesAnterior, 1);
     const fimMesAnterior = new Date(anoAnterior, mesAnterior + 1, 0); // Último dia do mês
-    
+
     const { data: dadosMesAnterior } = await supabase
       .from('leads')
-      .select('status, quantidade')
+      .select('status, quantidade, experimental_agendada')
       .eq('unidade_id', unidadeId)
       .gte('data_contato', inicioMesAnterior.toISOString().split('T')[0])
       .lte('data_contato', fimMesAnterior.toISOString().split('T')[0]);
 
     // Calcular totais mês atual
-    const leadsAtual = dadosMesAtual?.filter(r => ['novo','agendado'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const experimentaisAtual = dadosMesAtual?.filter(r => r.status?.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const leadsAtual = dadosMesAtual?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const experimentaisAtual = dadosMesAtual?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const visitasAtual = dadosMesAtual?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const matriculasAtual = dadosMesAtual?.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
 
     // Calcular totais mês anterior
-    const leadsAnterior = dadosMesAnterior?.filter(r => ['novo','agendado'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const experimentaisAnterior = dadosMesAnterior?.filter(r => r.status?.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const leadsAnterior = dadosMesAnterior?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const experimentaisAnterior = dadosMesAnterior?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const visitasAnterior = dadosMesAnterior?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const matriculasAnterior = dadosMesAnterior?.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
 
@@ -2192,7 +2192,7 @@ export function ComercialPage() {
     
     const { data: dadosAnoAtual } = await supabase
       .from('leads')
-      .select('status, quantidade')
+      .select('status, quantidade, experimental_agendada')
       .eq('unidade_id', unidadeId)
       .gte('data_contato', inicioMesAtual.toISOString().split('T')[0])
       .lte('data_contato', fimMesAtual.toISOString().split('T')[0]);
@@ -2200,23 +2200,23 @@ export function ComercialPage() {
     // Buscar dados do mesmo mês no ano anterior
     const inicioMesAnterior = new Date(anoAnterior, mesAtual, 1);
     const fimMesAnterior = new Date(anoAnterior, mesAtual + 1, 0);
-    
+
     const { data: dadosAnoAnterior } = await supabase
       .from('leads')
-      .select('status, quantidade')
+      .select('status, quantidade, experimental_agendada')
       .eq('unidade_id', unidadeId)
       .gte('data_contato', inicioMesAnterior.toISOString().split('T')[0])
       .lte('data_contato', fimMesAnterior.toISOString().split('T')[0]);
 
     // Calcular totais ano atual
-    const leadsAtual = dadosAnoAtual?.filter(r => ['novo','agendado'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const experimentaisAtual = dadosAnoAtual?.filter(r => r.status?.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const leadsAtual = dadosAnoAtual?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const experimentaisAtual = dadosAnoAtual?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const visitasAtual = dadosAnoAtual?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const matriculasAtual = dadosAnoAtual?.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
 
     // Calcular totais ano anterior
-    const leadsAnterior = dadosAnoAnterior?.filter(r => ['novo','agendado'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const experimentaisAnterior = dadosAnoAnterior?.filter(r => r.status?.startsWith('experimental')).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const leadsAnterior = dadosAnoAnterior?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const experimentaisAnterior = dadosAnoAnterior?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const visitasAnterior = dadosAnoAnterior?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const matriculasAnterior = dadosAnoAnterior?.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
 
@@ -2368,7 +2368,7 @@ export function ComercialPage() {
   const getContagemHoje = (tipo: string) => {
     if (tipo === 'experimental') {
       return registrosHoje
-        .filter(r => r.status?.startsWith('experimental'))
+        .filter(r => r.experimental_agendada === true)
         .reduce((acc, r) => acc + r.quantidade, 0);
     }
     if (tipo === 'visita') {
