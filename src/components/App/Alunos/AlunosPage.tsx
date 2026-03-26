@@ -28,6 +28,7 @@ import { AlertaTurma } from './AlertaTurma';
 import { GradeHoraria } from '../Turmas/GradeHoraria';
 import { TabSucessoAluno } from './SucessoCliente';
 import { TabAutomacao } from './Automacao/TabAutomacao';
+import { TabHistoricoLTV } from './TabHistoricoLTV';
 import { ToastContainer } from '@/components/ui/toast';
 import { useToast } from '@/hooks/useToast';
 import { PageTour, TourHelpButton } from '@/components/Onboarding';
@@ -131,7 +132,7 @@ export interface Filtros {
   status_pagamento: string;
 }
 
-type TabAtiva = 'lista' | 'turmas' | 'grade' | 'distribuicao' | 'importar' | 'sucesso' | 'automacao';
+type TabAtiva = 'lista' | 'turmas' | 'grade' | 'distribuicao' | 'importar' | 'sucesso' | 'automacao' | 'historico';
 
 const alunosTabs: PageTab<TabAtiva>[] = [
   { id: 'lista', label: 'Lista de Alunos', shortLabel: 'Lista', icon: Users },
@@ -139,6 +140,7 @@ const alunosTabs: PageTab<TabAtiva>[] = [
   { id: 'grade', label: 'Grade Horária', shortLabel: 'Grade', icon: Clock },
   { id: 'distribuicao', label: 'Distribuição', shortLabel: 'Distrib.', icon: BarChart3 },
   { id: 'sucesso', label: 'Sucesso do Cliente', shortLabel: 'Sucesso', icon: Heart },
+  { id: 'historico', label: 'Histórico LTV', shortLabel: 'LTV', icon: History },
   { id: 'importar', label: 'Importar Alunos', shortLabel: 'Importar', icon: Upload, disabled: true, disabledTitle: 'Em breve — funcionalidade em desenvolvimento' },
   { id: 'automacao', label: 'Automacao', shortLabel: 'Automacao', icon: Zap },
 ];
@@ -1307,6 +1309,8 @@ export function AlunosPage() {
         <TabSucessoAluno unidadeAtual={unidadeAtual} />
       ) : tabAtiva === 'automacao' ? (
         <TabAutomacao unidadeAtual={unidadeAtual} />
+      ) : tabAtiva === 'historico' ? (
+        <TabHistoricoLTV unidadeAtual={unidadeAtual} />
       ) : (
         <section className="bg-slate-800/50 border border-slate-700/50 rounded-xl overflow-hidden">
           {tabAtiva === 'lista' && (
