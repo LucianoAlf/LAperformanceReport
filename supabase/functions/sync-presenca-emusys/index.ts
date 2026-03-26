@@ -297,11 +297,12 @@ serve(async (req: Request) => {
 
     console.log(`[sync-presenca] Iniciando sync para ${dias} dia(s): ${datasProcessar[0]} a ${dataFim}`);
 
-    // Buscar todos os alunos ativos para matching
+    // Buscar todos os alunos ativos para matching (limit alto para evitar paginação padrão de 1000)
     const { data: alunosDB, error: alunosError } = await supabase
       .from('alunos')
       .select('id, nome, unidade_id')
-      .in('status', ['ativo', 'aviso_previo']);
+      .in('status', ['ativo', 'aviso_previo'])
+      .limit(10000);
 
     if (alunosError) {
       throw new Error(`Erro ao buscar alunos: ${alunosError.message}`);
