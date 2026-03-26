@@ -14,11 +14,12 @@ interface FunnelPipelineNavProps {
   stages: FunnelStage[];
   activeStage: string;
   onStageClick: (key: string) => void;
+  totalLeads?: number;
 }
 
-export function FunnelPipelineNav({ stages, activeStage, onStageClick }: FunnelPipelineNavProps) {
-  // Total do pipeline = soma de todos os stages
-  const totalCount = stages.reduce((sum, s) => sum + s.count, 0);
+export function FunnelPipelineNav({ stages, activeStage, onStageClick, totalLeads }: FunnelPipelineNavProps) {
+  // Total do pipeline = prop totalLeads (real) ou fallback soma dos stages
+  const totalCount = totalLeads ?? stages.reduce((sum, s) => sum + s.count, 0);
   // Base do funil é a primeira etapa (Novos) — usada para % relativas
   const baseCount = stages[0]?.count || 0;
 

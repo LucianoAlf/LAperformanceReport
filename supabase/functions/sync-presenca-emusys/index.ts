@@ -222,8 +222,8 @@ async function confirmarExperimentais(
       .from('leads')
       .update({
         experimental_realizada: true,
-        status: 'compareceu',
-        etapa_pipeline_id: 6,
+        status: 'experimental_realizada',
+        etapa_pipeline_id: 7,
         updated_at: new Date().toISOString()
       })
       .eq('id', lead.id);

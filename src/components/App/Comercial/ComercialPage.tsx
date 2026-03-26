@@ -2809,6 +2809,7 @@ export function ComercialPage() {
                 { key: 'visita', label: 'Visitas', count: visitasMes.length, icon: Building2, color: '#f59e0b', gradient: 'from-amber-500 to-orange-500' },
                 { key: 'matricula', label: 'Matrículas', count: matriculasMes.length, icon: GraduationCap, color: '#10b981', gradient: 'from-emerald-500 to-teal-500' },
               ]}
+              totalLeads={leadsMes.length}
               activeStage={abaDetalhamento}
               onStageClick={(key) => { setAbaDetalhamento(key as any); setSelecionadosFunil(new Set()); }}
             />
