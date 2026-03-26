@@ -440,9 +440,11 @@ export function ComercialPage() {
       let query = supabase
         .from('leads')
         .select('*, canais_origem(nome), cursos(nome), unidades(codigo)')
-        .gte('data_contato', startDate)
-        .lte('data_contato', endDate)
         .order('data_contato', { ascending: false });
+
+      // Aplicar filtro de datas apenas se preenchidos (tipo 'todos' não tem datas)
+      if (startDate) query = query.gte('data_contato', startDate);
+      if (endDate) query = query.lte('data_contato', endDate);
 
       // Aplicar filtro de unidade
       if (isAdmin) {
@@ -716,13 +718,16 @@ export function ComercialPage() {
     try {
       const { startDate, endDate } = competencia.range;
       
-      const { data, error } = await supabase
+      let querySugestoes = supabase
         .from('leads')
         .select('id, nome, telefone, status, canal_origem_id, curso_interesse_id, professor_experimental_id, data_contato')
         .eq('unidade_id', unidadeParaSalvar)
-        .gte('data_contato', startDate)
-        .lte('data_contato', endDate)
         .order('data_contato', { ascending: false });
+
+      if (startDate) querySugestoes = querySugestoes.gte('data_contato', startDate);
+      if (endDate) querySugestoes = querySugestoes.lte('data_contato', endDate);
+
+      const { data, error } = await querySugestoes;
       
       if (error) throw error;
       
