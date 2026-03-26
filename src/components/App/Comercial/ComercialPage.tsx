@@ -440,7 +440,8 @@ export function ComercialPage() {
       let query = supabase
         .from('leads')
         .select('*, canais_origem(nome), cursos(nome), unidades(codigo)')
-        .order('data_contato', { ascending: false });
+        .order('data_contato', { ascending: false })
+        .limit(10000);
 
       // Aplicar filtro de datas apenas se preenchidos (tipo 'todos' não tem datas)
       if (startDate) query = query.gte('data_contato', startDate);
@@ -722,7 +723,8 @@ export function ComercialPage() {
         .from('leads')
         .select('id, nome, telefone, status, canal_origem_id, curso_interesse_id, professor_experimental_id, data_contato')
         .eq('unidade_id', unidadeParaSalvar)
-        .order('data_contato', { ascending: false });
+        .order('data_contato', { ascending: false })
+        .limit(10000);
 
       if (startDate) querySugestoes = querySugestoes.gte('data_contato', startDate);
       if (endDate) querySugestoes = querySugestoes.lte('data_contato', endDate);
