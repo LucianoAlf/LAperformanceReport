@@ -37,6 +37,9 @@ interface ProfessorPerformance {
   alunos_para_media: number;
   taxa_retencao: number;
   taxa_conversao: number;
+  experimentais: number;
+  matriculas_pos_exp: number;
+  matriculas_diretas: number;
   nps: number | null;
   taxa_presenca: number;
   evasoes_mes: number;
@@ -143,6 +146,8 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights }: Props
             mes: mesFiltro,
             experimentais: d.experimentais || 0,
             matriculas: d.matriculas || 0,
+            matriculas_pos_exp: d.matriculas_pos_exp || 0,
+            matriculas_diretas: d.matriculas_diretas || 0,
             taxa_conversao: d.taxa_conversao || 0,
             // Campos que não temos no histórico - usar valores padrão
             carteira_alunos: 0,
@@ -381,6 +386,9 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights }: Props
             alunos_para_media: alunosParaMedia,
             taxa_retencao: Math.round(taxaRetencao * 10) / 10,
             taxa_conversao: Math.round(taxaConversao * 10) / 10,
+            experimentais: kpis?.experimentais || 0,
+            matriculas_pos_exp: kpis?.matriculas_pos_exp || 0,
+            matriculas_diretas: kpis?.matriculas_diretas || 0,
             nps: nps ? Math.round(nps * 10) / 10 : null,
             taxa_presenca: Math.round(taxaPresenca * 10) / 10,
             evasoes_mes: evasoesMes,
@@ -882,9 +890,42 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights }: Props
                       </span>
                     </td>
                     <td className="text-center px-4 py-3">
-                      <span className={`font-medium ${getMetricaColor(professor.taxa_conversao, { critico: 70, atencao: 90 })}`}>
-                        {professor.taxa_conversao.toFixed(0)}%
-                      </span>
+                      <Tooltip
+                        side="top"
+                        content={
+                          <div className="text-xs min-w-[180px]">
+                            <p className="font-bold text-slate-200 mb-1.5">Detalhes da Conversão</p>
+                            <div className="space-y-1">
+                              <div className="flex justify-between gap-4">
+                                <span className="text-slate-400">Exp. realizadas</span>
+                                <span className="text-white font-medium">{professor.experimentais}</span>
+                              </div>
+                              <div className="flex justify-between gap-4">
+                                <span className="text-slate-400">Matrículas pós-exp</span>
+                                <span className="text-green-400 font-medium">{professor.matriculas_pos_exp}</span>
+                              </div>
+                              {professor.matriculas_diretas > 0 && (
+                                <div className="flex justify-between gap-4">
+                                  <span className="text-slate-400">Matrículas diretas</span>
+                                  <span className="text-blue-400 font-medium">{professor.matriculas_diretas}</span>
+                                </div>
+                              )}
+                              <div className="border-t border-slate-700 pt-1 flex justify-between gap-4">
+                                <span className="text-slate-300">Total matrículas</span>
+                                <span className="text-white font-bold">{professor.matriculas_pos_exp + professor.matriculas_diretas}</span>
+                              </div>
+                            </div>
+                            <p className="text-slate-500 mt-1.5 text-[10px]">Conversão = pós-exp / experimentais</p>
+                          </div>
+                        }
+                      >
+                        <span className={`font-medium cursor-help ${getMetricaColor(professor.taxa_conversao, { critico: 70, atencao: 90 })}`}>
+                          {professor.taxa_conversao.toFixed(0)}%
+                          {professor.matriculas_diretas > 0 && (
+                            <span className="text-blue-400/70 text-[10px] ml-0.5">+{professor.matriculas_diretas}</span>
+                          )}
+                        </span>
+                      </Tooltip>
                     </td>
                     <td className="text-center px-4 py-3">
                       <span className={`font-medium ${getMetricaColor(professor.taxa_presenca, { critico: 70, atencao: 80 })}`}>

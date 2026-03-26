@@ -25,6 +25,9 @@ interface ProfessorPerformance {
   media_alunos_turma: number;
   taxa_retencao: number;
   taxa_conversao: number;
+  experimentais?: number;
+  matriculas_pos_exp?: number;
+  matriculas_diretas?: number;
   nps: number | null; // DEPRECATED - mantido para compatibilidade
   taxa_presenca: number;
   evasoes_mes: number;
@@ -568,6 +571,9 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
                   {professor.taxa_conversao.toFixed(0)}%
                 </p>
                 <p className="text-xs text-slate-400">Conversão</p>
+                {(professor.matriculas_diretas ?? 0) > 0 && (
+                  <p className="text-[10px] text-blue-400/70 mt-0.5">+{professor.matriculas_diretas} direta{(professor.matriculas_diretas ?? 0) > 1 ? 's' : ''}</p>
+                )}
               </div>
               <div className="bg-slate-800/50 rounded-lg p-3 text-center">
                 <p className={`text-xl font-bold ${
@@ -717,9 +723,9 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
               {(() => {
                 const agendadas = experimentais.filter(e => !e.experimental_realizada && !e.faltou_experimental && e.status !== 'matriculado' && e.status !== 'convertido').length;
                 const realizadas = experimentais.filter(e => e.experimental_realizada).length;
-                const faltou = experimentais.filter(e => e.faltou_experimental).length;
-                const matriculou = experimentais.filter(e => e.status === 'matriculado' || e.status === 'convertido').length;
-                const convRate = realizadas + matriculou > 0 ? Math.round((matriculou / (realizadas + matriculou)) * 100) : 0;
+                const faltou = experimentais.filter(e => e.faltou_experimental || ((e.status === 'matriculado' || e.status === 'convertido') && !e.experimental_realizada)).length;
+                const matriculouPosExp = experimentais.filter(e => (e.status === 'matriculado' || e.status === 'convertido') && e.experimental_realizada).length;
+                const convRate = realizadas > 0 ? Math.round((matriculouPosExp / realizadas) * 100) : 0;
                 return (
                   <>
                     <div className="bg-amber-500/10 rounded-lg px-3 py-2 text-center">
@@ -737,6 +743,7 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
                     <div className="bg-cyan-500/10 rounded-lg px-3 py-2 text-center">
                       <p className="text-cyan-400 text-lg font-bold">{convRate}%</p>
                       <p className="text-slate-400 text-xs">Conversão</p>
+                      <p className="text-slate-500 text-[9px] mt-0.5">pós-experimental</p>
                     </div>
                   </>
                 );
@@ -749,11 +756,12 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
           ) : (
             <div className="space-y-2">
               {experimentais.map((exp) => {
-                const statusExp = exp.status === 'matriculado' || exp.status === 'convertido'
+                const isMatriculado = exp.status === 'matriculado' || exp.status === 'convertido';
+                const statusExp = isMatriculado && exp.experimental_realizada
                   ? { label: 'Matriculou', color: 'text-cyan-400 bg-cyan-500/10' }
                   : exp.experimental_realizada
                   ? { label: 'Realizada', color: 'text-emerald-400 bg-emerald-500/10' }
-                  : exp.faltou_experimental
+                  : exp.faltou_experimental || (isMatriculado && !exp.experimental_realizada)
                   ? { label: 'Faltou', color: 'text-red-400 bg-red-500/10' }
                   : { label: 'Agendada', color: 'text-amber-400 bg-amber-500/10' };
 

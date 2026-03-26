@@ -135,18 +135,22 @@ function parseDataHoraEmusys(dataHora: string): string {
 // Confirmar experimentais: cruzar aulas_emusys (categoria=experimental) com leads agendados
 async function confirmarExperimentais(
   supabase: any,
-  datasProcessar: string[]
+  _datasProcessar: string[]
 ) {
   const logs: { lead_id: number; lead_nome: string; unidade: string; data: string; professor: string; status: string; motivo: string }[] = [];
 
-  // Buscar leads com experimental agendada nas datas processadas
+  // Buscar TODOS os leads pendentes com data_experimental no passado
+  // (não apenas as datas processadas, para recuperar leads que ficaram sem confirmação)
+  const hoje = new Date();
+  const hojeBRT = new Date(hoje.getTime() - 3 * 60 * 60 * 1000).toISOString().split('T')[0];
+
   const { data: leadsAgendados } = await supabase
     .from('leads')
     .select('id, nome, data_experimental, horario_experimental, professor_experimental_id, unidade_id')
     .eq('experimental_agendada', true)
     .eq('experimental_realizada', false)
     .eq('faltou_experimental', false)
-    .in('data_experimental', datasProcessar);
+    .lte('data_experimental', hojeBRT);
 
   if (!leadsAgendados?.length) return logs;
 
