@@ -3,10 +3,14 @@ import { useHistoricoLTV, type RegistroLTV } from '@/hooks/useHistoricoLTV';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import { KPICard } from '@/components/ui/KPICard';
 import { CelulaEditavelInline } from '@/components/ui/CelulaEditavelInline';
+import {
+  AreaChart as RechartsAreaChart, Area, BarChart, Bar, XAxis, YAxis,
+  CartesianGrid, Tooltip, ResponsiveContainer, Cell, ReferenceLine,
+} from 'recharts';
 import { cn } from '@/lib/utils';
 import {
   Users, Clock, Database, BarChart3, Search, Plus, Trash2, ChevronUp, ChevronDown,
-  ArrowUpDown, ChevronLeft, ChevronRight,
+  ArrowUpDown, ChevronLeft, ChevronRight, Table2, Info,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -21,6 +25,15 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
+
+function ChartInsight({ texto }: { texto: string }) {
+  return (
+    <div className="flex items-start gap-2 mt-3 px-1">
+      <Info className="w-3.5 h-3.5 text-slate-500 mt-0.5 shrink-0" />
+      <p className="text-[11px] text-slate-500 leading-relaxed">{texto}</p>
+    </div>
+  );
+}
 
 const CATEGORIAS = [
   { value: 'Interrompido', label: 'Interrompido' },
@@ -41,7 +54,11 @@ export function TabHistoricoLTV({ unidadeAtual }: TabHistoricoLTVProps) {
   const {
     registros, loading, kpis,
     atualizarRegistro, excluirRegistro, adicionarRegistro,
+    dadosSobrevivencia, dadosHistograma, dadosEvolucao,
   } = useHistoricoLTV(unidadeAtual);
+
+  // View toggle
+  const [visao, setVisao] = useState<'tabela' | 'analytics'>('tabela');
 
   // Filtros
   const [busca, setBusca] = useState('');
@@ -179,6 +196,217 @@ export function TabHistoricoLTV({ unidadeAtual }: TabHistoricoLTVProps) {
         />
       </div>
 
+      {/* Toggle Tabela / Analytics */}
+      <div className="flex items-center gap-1 bg-slate-800/70 rounded-lg p-1 w-fit">
+        <button
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all",
+            visao === 'tabela'
+              ? "bg-slate-700 text-white shadow-sm"
+              : "text-slate-400 hover:text-slate-200"
+          )}
+          onClick={() => setVisao('tabela')}
+        >
+          <Table2 className="w-4 h-4" />
+          Tabela
+        </button>
+        <button
+          className={cn(
+            "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-all",
+            visao === 'analytics'
+              ? "bg-slate-700 text-white shadow-sm"
+              : "text-slate-400 hover:text-slate-200"
+          )}
+          onClick={() => setVisao('analytics')}
+        >
+          <BarChart3 className="w-4 h-4" />
+          Analytics
+        </button>
+      </div>
+
+      {visao === 'analytics' ? (
+        <div className="space-y-4">
+          {/* Linha 1: Sobrevivência + Histograma */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Curva de Sobrevivência */}
+            {(() => {
+              const pct6 = dadosSobrevivencia.find(d => d.name === '6m')?.percentual ?? 0;
+              const pct12 = dadosSobrevivencia.find(d => d.name === '12m')?.percentual ?? 0;
+              const pct24 = dadosSobrevivencia.find(d => d.name === '24m')?.percentual ?? 0;
+              return (
+                <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
+                  <h3 className="text-lg font-semibold text-white">Curva de Sobrevivência</h3>
+                  <ChartInsight texto={`Cada ponto mostra o % de ex-alunos que ficaram pelo menos X meses. Aos 12 meses, ${pct12}% dos alunos ainda estavam na escola.`} />
+                  <div className="mt-4" />
+                  <ResponsiveContainer width="100%" height={300}>
+                    <RechartsAreaChart data={dadosSobrevivencia}>
+                      <defs>
+                        <linearGradient id="grad-sobrevivencia" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                      <XAxis dataKey="name" stroke="#94a3b8" style={{ fontSize: '11px' }} />
+                      <YAxis stroke="#94a3b8" style={{ fontSize: '11px' }} tickFormatter={(v) => `${v}%`} />
+                      <Tooltip
+                        content={({ active, payload }: any) => {
+                          if (active && payload?.length) {
+                            return (
+                              <div className="bg-slate-800 border border-slate-700 rounded-lg p-3 shadow-xl">
+                                <p className="text-white font-medium">{payload[0].payload.name}</p>
+                                <p className="text-sm text-cyan-400">
+                                  Permanência: <span className="font-bold">{payload[0].value}%</span>
+                                </p>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                        cursor={{ stroke: '#475569', strokeWidth: 1, strokeDasharray: '5 5' }}
+                      />
+                      <Area type="monotone" dataKey="percentual" stroke="#06b6d4" strokeWidth={2} fillOpacity={1} fill="url(#grad-sobrevivencia)" />
+                      <ReferenceLine x="6m" stroke="#f59e0b" strokeDasharray="4 4" strokeWidth={1.5} label={{ value: `Adaptação ${pct6}%`, position: 'insideTopRight', fill: '#f59e0b', fontSize: 9, dy: -5 }} />
+                      <ReferenceLine x="12m" stroke="#ef4444" strokeDasharray="4 4" strokeWidth={1.5} label={{ value: `1 ano ${pct12}%`, position: 'insideTopRight', fill: '#ef4444', fontSize: 9, dy: -5 }} />
+                      <ReferenceLine x="24m" stroke="#8b5cf6" strokeDasharray="4 4" strokeWidth={1.5} label={{ value: `2 anos ${pct24}%`, position: 'insideTopRight', fill: '#8b5cf6', fontSize: 9, dy: -5 }} />
+                    </RechartsAreaChart>
+                  </ResponsiveContainer>
+                </div>
+              );
+            })()}
+
+            {/* Histograma de Permanência */}
+            {(() => {
+              const faixaMaior = dadosHistograma.reduce((max, d) => d.quantidade > max.quantidade ? d : max, dadosHistograma[0]);
+              return (
+                <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
+                  <h3 className="text-lg font-semibold text-white">Distribuição por Faixa</h3>
+                  <ChartInsight texto={`Mostra quantos ex-alunos ficaram em cada faixa de tempo. A faixa com mais alunos é ${faixaMaior?.name} (${faixaMaior?.quantidade} alunos). Faixas à direita indicam alunos mais fidelizados.`} />
+                  <div className="mt-4" />
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={dadosHistograma} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+                      <defs>
+                        <linearGradient id="grad-bar-histograma" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#06b6d4" stopOpacity={0.9} />
+                          <stop offset="100%" stopColor="#0e7490" stopOpacity={0.4} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                      <XAxis dataKey="name" stroke="#94a3b8" style={{ fontSize: '12px' }} axisLine={false} tickLine={false} />
+                      <YAxis stroke="#94a3b8" style={{ fontSize: '12px' }} axisLine={false} tickLine={false} />
+                      <Tooltip
+                        content={({ active, payload }: any) => {
+                          if (active && payload?.length) {
+                            const pct = kpis.totalExAlunos > 0 ? ((payload[0].value / kpis.totalExAlunos) * 100).toFixed(1) : '0';
+                            return (
+                              <div className="bg-slate-800 border border-slate-700 rounded-lg p-3 shadow-xl">
+                                <p className="text-white font-medium">{payload[0].payload.name}</p>
+                                <p className="text-sm text-cyan-400">
+                                  Alunos: <span className="font-bold">{payload[0].value}</span>
+                                  <span className="text-slate-400 ml-1">({pct}%)</span>
+                                </p>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                        cursor={{ fill: 'rgba(6, 182, 212, 0.08)' }}
+                      />
+                      <Bar dataKey="quantidade" fill="url(#grad-bar-histograma)" radius={[6, 6, 0, 0]} animationDuration={800} barSize={40} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              );
+            })()}
+          </div>
+
+          {/* Linha 2: Evolução */}
+          {(() => {
+            const primeiro = dadosEvolucao[0]?.media ?? 0;
+            const ultimo = dadosEvolucao[dadosEvolucao.length - 1]?.media ?? 0;
+            const variacao = primeiro > 0 ? ((ultimo - primeiro) / primeiro) * 100 : 0;
+            const maiorPonto = dadosEvolucao.reduce((max, d) => d.media > max.media ? d : max, dadosEvolucao[0] || { name: '', media: 0 });
+            const menorPonto = dadosEvolucao.reduce((min, d) => d.media < min.media ? d : min, dadosEvolucao[0] || { name: '', media: 0 });
+
+            return (
+              <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
+                <div className="flex items-center justify-between mb-1">
+                  <h3 className="text-lg font-semibold text-white">Evolução do Tempo Médio por Mês de Saída</h3>
+                  {dadosEvolucao.length >= 2 && (
+                    <span className={cn(
+                      "text-xs font-medium px-2 py-0.5 rounded-full",
+                      variacao >= 0
+                        ? "bg-emerald-500/15 text-emerald-400"
+                        : "bg-rose-500/15 text-rose-400"
+                    )}>
+                      {variacao >= 0 ? '↑' : '↓'} {Math.abs(variacao).toFixed(1)}%
+                    </span>
+                  )}
+                </div>
+                <ChartInsight texto="Tendência subindo = retenção melhorando. Quedas bruscas podem indicar eventos pontuais (ex: reajuste de preço, troca de professor)." />
+
+                {dadosEvolucao.length >= 2 && (
+                  <div className="flex items-center gap-4 mt-3 mb-2">
+                    <span className="text-[11px] text-slate-500">
+                      Pico: <span className="text-emerald-400 font-medium">{maiorPonto.media}m</span> ({maiorPonto.name})
+                    </span>
+                    <span className="text-[11px] text-slate-500">
+                      Mínimo: <span className="text-rose-400 font-medium">{menorPonto.media}m</span> ({menorPonto.name})
+                    </span>
+                  </div>
+                )}
+
+                <div className="mt-2">
+                  <ResponsiveContainer width="100%" height={280}>
+                    <RechartsAreaChart data={dadosEvolucao} margin={{ top: 10, right: 20, left: 10, bottom: 5 }}>
+                      <defs>
+                        <linearGradient id="grad-evolucao" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
+                          <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                      <XAxis dataKey="name" stroke="#94a3b8" style={{ fontSize: '10px' }} axisLine={false} tickLine={false} />
+                      <YAxis stroke="#94a3b8" style={{ fontSize: '11px' }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v}m`} />
+                      <Tooltip
+                        content={({ active, payload }: any) => {
+                          if (active && payload?.length) {
+                            return (
+                              <div className="bg-slate-800 border border-slate-700 rounded-lg p-3 shadow-xl">
+                                <p className="text-white font-medium text-sm">{payload[0].payload.name}</p>
+                                <p className="text-sm text-violet-400">
+                                  Tempo Médio: <span className="font-bold">{payload[0].value}m</span>
+                                </p>
+                                <p className="text-[11px] text-slate-500 mt-0.5">
+                                  {payload[0].payload.quantidade} aluno{payload[0].payload.quantidade !== 1 ? 's' : ''} saíram
+                                </p>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                        cursor={{ stroke: '#475569', strokeWidth: 1, strokeDasharray: '5 5' }}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="media"
+                        stroke="#8b5cf6"
+                        strokeWidth={2.5}
+                        fillOpacity={1}
+                        fill="url(#grad-evolucao)"
+                        dot={{ fill: '#8b5cf6', strokeWidth: 2, r: 4, stroke: '#1e1b4b' }}
+                        activeDot={{ r: 6, strokeWidth: 2, stroke: '#8b5cf6', fill: '#fff' }}
+                        animationDuration={800}
+                      />
+                    </RechartsAreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      ) : (
+        <>
       {/* Filtros + Adicionar */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[200px]">
@@ -403,6 +631,9 @@ export function TabHistoricoLTV({ unidadeAtual }: TabHistoricoLTVProps) {
             </Button>
           </div>
         </div>
+      )}
+
+        </>
       )}
 
       {/* Modal de confirmação de exclusão */}

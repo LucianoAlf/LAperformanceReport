@@ -120,6 +120,73 @@ export function useHistoricoLTV(unidadeId: UnidadeId) {
     };
   }, [registros]);
 
+  // Dados para gráficos
+  const dadosSobrevivencia = useMemo(() => {
+    if (registros.length === 0) return [];
+    const total = registros.length;
+    const maxMes = Math.min(Math.max(...registros.map(r => r.tempo_permanencia_meses)), 72);
+    const dados: Array<{ name: string; percentual: number }> = [];
+    const mesesChave = [1, 2, 3, 4, 5, 6, 9, 12, 15, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72];
+    for (const m of mesesChave) {
+      if (m > maxMes) break;
+      const sobreviveram = registros.filter(r => r.tempo_permanencia_meses >= m).length;
+      dados.push({ name: `${m}m`, percentual: Math.round((sobreviveram / total) * 1000) / 10 });
+    }
+    return dados;
+  }, [registros]);
+
+  const dadosHistograma = useMemo(() => {
+    const faixas = [
+      { label: '4-6m', min: 4, max: 6, cor: '#f59e0b' },
+      { label: '7-12m', min: 7, max: 12, cor: '#eab308' },
+      { label: '13-18m', min: 13, max: 18, cor: '#84cc16' },
+      { label: '19-24m', min: 19, max: 24, cor: '#22c55e' },
+      { label: '25-36m', min: 25, max: 36, cor: '#14b8a6' },
+      { label: '37-48m', min: 37, max: 48, cor: '#06b6d4' },
+      { label: '49+', min: 49, max: 9999, cor: '#10b981' },
+    ];
+    return faixas.map(f => ({
+      name: f.label,
+      quantidade: registros.filter(r => r.tempo_permanencia_meses >= f.min && r.tempo_permanencia_meses <= f.max).length,
+      cor: f.cor,
+    }));
+  }, [registros]);
+
+  const dadosEvolucao = useMemo(() => {
+    if (registros.length === 0) return [];
+    // Agrupar por mes_saida, calcular média
+    const grupos: Record<string, { soma: number; qtd: number }> = {};
+    registros.forEach(r => {
+      const chave = r.mes_saida || 'Sem data';
+      if (chave === 'Sem data') return;
+      if (!grupos[chave]) grupos[chave] = { soma: 0, qtd: 0 };
+      grupos[chave].soma += r.tempo_permanencia_meses;
+      grupos[chave].qtd += 1;
+    });
+    // Converter para array e ordenar
+    const mesesPt: Record<string, number> = {
+      'janeiro': 1, 'fevereiro': 2, 'março': 3, 'marco': 3, 'abril': 4, 'maio': 5, 'junho': 6,
+      'julho': 7, 'agosto': 8, 'setembro': 9, 'outubro': 10, 'novembro': 11, 'dezembro': 12,
+    };
+    return Object.entries(grupos)
+      .map(([mes, { soma, qtd }]) => ({
+        name: mes,
+        media: Math.round((soma / qtd) * 10) / 10,
+        quantidade: qtd,
+      }))
+      .sort((a, b) => {
+        // Tentar parsear "Mês/Ano" ou "Mês de Ano" ou "Mês Ano"
+        const parseDate = (s: string) => {
+          const parts = s.toLowerCase().replace(' de ', '/').replace(' ', '/').split('/');
+          const mesNum = mesesPt[parts[0]] || 0;
+          const ano = parseInt(parts[parts.length - 1]) || 0;
+          return ano * 100 + mesNum;
+        };
+        return parseDate(a.name) - parseDate(b.name);
+      })
+      .slice(-24); // últimos 24 meses
+  }, [registros]);
+
   const atualizarRegistro = useCallback(async (id: number, campo: string, valor: string | number | null) => {
     // Optimistic update
     setRegistros(prev => prev.map(r =>
@@ -182,5 +249,8 @@ export function useHistoricoLTV(unidadeId: UnidadeId) {
     atualizarRegistro,
     excluirRegistro,
     adicionarRegistro,
+    dadosSobrevivencia,
+    dadosHistograma,
+    dadosEvolucao,
   };
 }
