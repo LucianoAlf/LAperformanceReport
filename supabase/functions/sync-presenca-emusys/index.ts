@@ -132,6 +132,132 @@ function parseDataHoraEmusys(dataHora: string): string {
   return dataHora.replace(' ', 'T') + ':00-03:00';
 }
 
+// Dados coletados de aulas experimentais para reconciliação
+interface ExperimentalParaReconciliar {
+  dataAula: string;
+  horario: string;
+  professorId: number | null;
+  unidadeId: string;
+  cancelada: boolean;
+  alunos: AlunoEmusys[];
+}
+
+// Normalizar telefone para formato do banco (55XXXXXXXXXXX)
+function normalizarTelefone(tel: string | null | undefined): string | null {
+  if (!tel) return null;
+  const digits = tel.replace(/\D/g, '');
+  if (digits.length < 10) return null;
+  return digits.startsWith('55') ? digits : '55' + digits;
+}
+
+// Rede de segurança: reconciliar experimentais que o webhook não atualizou
+// Parte das aulas experimentais do Emusys e busca leads correspondentes por telefone/nome
+async function reconciliarExperimentaisOrfas(
+  supabase: any,
+  experimentais: ExperimentalParaReconciliar[]
+) {
+  const logs: { lead_id: number; lead_nome: string; unidade: string; data: string; status: string; motivo: string }[] = [];
+  const unidadeNomes = new Map(UNIDADES.map(u => [u.id, u.nome]));
+
+  for (const exp of experimentais) {
+    if (exp.cancelada) continue;
+
+    for (const aluno of exp.alunos) {
+      const nomeAluno = aluno.nome_aluno?.trim();
+      if (!nomeAluno) continue;
+
+      const unidadeNome = unidadeNomes.get(exp.unidadeId) || exp.unidadeId;
+      const telNorm = normalizarTelefone(aluno.telefone_aluno) || normalizarTelefone(aluno.telefone_responsavel);
+
+      // Buscar lead que NÃO foi atualizado pelo webhook (experimental_agendada = false)
+      let lead: any = null;
+
+      // 1. Match por telefone
+      if (telNorm) {
+        const { data: leadPorTel } = await supabase
+          .from('leads')
+          .select('id, nome, experimental_agendada, experimental_realizada, faltou_experimental')
+          .eq('telefone', telNorm)
+          .eq('unidade_id', exp.unidadeId)
+          .eq('arquivado', false)
+          .limit(1)
+          .maybeSingle();
+        if (leadPorTel) lead = leadPorTel;
+      }
+
+      // 2. Fallback por nome normalizado
+      if (!lead) {
+        const nomeNorm = normalizarNome(nomeAluno);
+        const { data: leads } = await supabase
+          .from('leads')
+          .select('id, nome, experimental_agendada, experimental_realizada, faltou_experimental')
+          .eq('unidade_id', exp.unidadeId)
+          .eq('arquivado', false)
+          .limit(100);
+
+        lead = (leads || []).find((l: any) => normalizarNome(l.nome) === nomeNorm);
+      }
+
+      if (!lead) continue;
+
+      // Pular se já foi atualizado pelo webhook ou já confirmado
+      if (lead.experimental_agendada && (lead.experimental_realizada || lead.faltou_experimental)) continue;
+
+      // Se já tem experimental_agendada mas sem confirmação, pular (confirmarExperimentais cuida)
+      if (lead.experimental_agendada) continue;
+
+      // Lead não foi atualizado pelo webhook → reconciliar direto para estado final
+      const presente = aluno.presenca === 'presente';
+      const updateData: any = {
+        experimental_agendada: true,
+        data_experimental: exp.dataAula,
+        horario_experimental: exp.horario + ':00',
+        professor_experimental_id: exp.professorId,
+        experimental_realizada: presente,
+        faltou_experimental: !presente,
+        status: presente ? 'experimental_realizada' : 'experimental_faltou',
+        etapa_pipeline_id: presente ? 7 : 9,
+        updated_at: new Date().toISOString(),
+      };
+
+      const { error } = await supabase
+        .from('leads')
+        .update(updateData)
+        .eq('id', lead.id);
+
+      logs.push({
+        lead_id: lead.id,
+        lead_nome: lead.nome || nomeAluno,
+        unidade: unidadeNome,
+        data: exp.dataAula,
+        status: error ? 'erro' : (presente ? 'reconciliada_presente' : 'reconciliada_faltou'),
+        motivo: error
+          ? error.message
+          : `Experimental ${presente ? 'realizada' : 'faltou'} via reconciliação (webhook não atualizou lead)`
+      });
+    }
+  }
+
+  // Gravar logs
+  for (const log of logs) {
+    await supabase.from('leads_automacao_log').insert({
+      lead_id: log.lead_id,
+      lead_nome: log.lead_nome,
+      unidade_nome: log.unidade,
+      evento: 'sync_experimental_reconciliacao',
+      acao: log.status,
+      detalhes: { data: log.data, motivo: log.motivo },
+      workflow_id: 'sync-presenca-emusys',
+      execution_id: new Date().toISOString()
+    });
+  }
+
+  const reconciliadas = logs.filter(l => l.status.startsWith('reconciliada_'));
+  console.log(`[sync-presenca] Reconciliação experimentais: ${reconciliadas.length} reconciliadas de ${logs.length} processadas`);
+
+  return logs;
+}
+
 // Confirmar experimentais: cruzar aulas_emusys (categoria=experimental) com leads agendados
 async function confirmarExperimentais(
   supabase: any,
@@ -333,6 +459,7 @@ serve(async (req: Request) => {
     }
 
     const resultados = [];
+    const experimentaisColetadas: ExperimentalParaReconciliar[] = [];
 
     for (const dataAlvo of datasProcessar) {
       console.log(`[sync-presenca] === Processando data: ${dataAlvo} ===`);
@@ -359,6 +486,19 @@ serve(async (req: Request) => {
 
           const profNome = aula.professores?.[0]?.nome || null;
           const professorId = profNome ? matchProfessor(profNome, profMapa, profNomes) : null;
+
+          // Coletar aulas experimentais para reconciliação
+          if (aula.categoria === 'experimental') {
+            const horario = aula.data_hora_inicio?.split(' ')[1] || '00:00';
+            experimentaisColetadas.push({
+              dataAula: dataAlvo,
+              horario,
+              professorId,
+              unidadeId: unidade.id,
+              cancelada: aula.cancelada,
+              alunos: aula.alunos || [],
+            });
+          }
 
           // 2a. UPSERT dados da aula na aulas_emusys
           const { data: aulaDB, error: aulaError } = await supabase
@@ -490,12 +630,16 @@ serve(async (req: Request) => {
       await supabase.rpc('atualizar_percentual_presenca', { p_unidade_id: unidade.id });
     }
 
+    // Reconciliar experimentais órfãs (rede de segurança do webhook)
+    const logsReconciliacao = await reconciliarExperimentaisOrfas(supabase, experimentaisColetadas);
+    console.log(`[sync-presenca] Reconciliação experimentais: ${logsReconciliacao.length}`);
+
     // Confirmar experimentais com base nas aulas sincronizadas
     const logsExperimentais = await confirmarExperimentais(supabase, datasProcessar);
     console.log(`[sync-presenca] Experimentais processadas: ${logsExperimentais.length}`);
 
     return new Response(
-      JSON.stringify({ success: true, dias, data_inicio: datasProcessar[0], data_fim: dataFim, resultados, experimentais_confirmadas: logsExperimentais }),
+      JSON.stringify({ success: true, dias, data_inicio: datasProcessar[0], data_fim: dataFim, resultados, experimentais_reconciliadas: logsReconciliacao, experimentais_confirmadas: logsExperimentais }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
