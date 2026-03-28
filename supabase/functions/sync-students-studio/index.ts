@@ -9,13 +9,17 @@ type AlunoRow = {
   photo_url: string | null;
   status: string | null;
   emusys_student_id: string | null;
+  unidade: { codigo: string | null } | null;
 };
+
+type UnitSlug = 'campo_grande' | 'recreio' | 'barra';
 
 type StudioPayload = {
   emusys_id: string;
   name: string;
   birth_date: string | null;
   brand: 'la_music_kids' | 'la_music_school';
+  unit: UnitSlug | null;
   active: boolean;
   source: 'la_music_report';
   photo_url?: string;
@@ -26,6 +30,8 @@ const STUDIO_WEBHOOK_URL =
 const STUDIO_WEBHOOK_KEY = 'la-studio-webhook-2026';
 const CHUNK_SIZE = 200;
 const BATCH_DELAY_MS = 3000;
+const ALUNOS_SELECT =
+  'id, nome, data_nascimento, classificacao, photo_url, status, emusys_student_id, unidade:unidades!alunos_unidade_id_fkey(codigo)';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -34,11 +40,21 @@ const corsHeaders = {
 };
 
 function buildPayload(aluno: AlunoRow): StudioPayload {
+  const codigoUnidade = aluno.unidade?.codigo?.toUpperCase() || null;
+
   const payload: StudioPayload = {
     emusys_id: aluno.emusys_student_id?.trim() || String(aluno.id),
     name: aluno.nome,
     birth_date: aluno.data_nascimento,
     brand: aluno.classificacao === 'LAMK' ? 'la_music_kids' : 'la_music_school',
+    unit:
+      codigoUnidade === 'CG'
+        ? 'campo_grande'
+        : codigoUnidade === 'REC'
+          ? 'recreio'
+          : codigoUnidade === 'BARRA'
+            ? 'barra'
+            : null,
     active: aluno.status === 'ativo',
     source: 'la_music_report',
   };
@@ -113,7 +129,7 @@ serve(async (req: Request) => {
 
       const { data, error } = await supabase
         .from('alunos')
-        .select('id, nome, data_nascimento, classificacao, photo_url, status, emusys_student_id')
+        .select(ALUNOS_SELECT)
         .eq('id', alunoId)
         .limit(1)
         .maybeSingle();
@@ -139,7 +155,7 @@ serve(async (req: Request) => {
         const to = from + pageSize - 1;
         const { data, error } = await supabase
           .from('alunos')
-          .select('id, nome, data_nascimento, classificacao, photo_url, status, emusys_student_id')
+          .select(ALUNOS_SELECT)
           .in('status', ['ativo', 'aviso_previo'])
           .order('id', { ascending: true })
           .range(from, to);
