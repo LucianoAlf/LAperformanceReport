@@ -249,82 +249,97 @@ export function TabAutomacao({ unidadeAtual }: TabAutomacaoProps) {
           </div>
         </div>
 
-        <div className="p-4">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 text-violet-400 animate-spin" />
-            </div>
-          ) : registrosFiltrados.length === 0 ? (
-            <div className="text-center py-12 text-slate-400">
-              <span className="text-4xl mb-4 block">⚡</span>
-              <p className="text-lg font-medium">Nenhum registro de automacao encontrado</p>
-              <p className="text-sm mt-1">Os logs aparecerao aqui quando o sistema de matriculas processar eventos.</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {registrosFiltrados.map((registro) => {
-                const style = acaoStyles[registro.acao] || acaoStyles.atualizado;
-                const detalhesStr = formatarDetalhes(registro);
-                const semProfessor = registro.detalhes?.sem_professor === true;
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 text-violet-400 animate-spin" />
+          </div>
+        ) : registrosFiltrados.length === 0 ? (
+          <div className="text-center py-12 text-slate-400">
+            <span className="text-4xl mb-4 block">⚡</span>
+            <p className="text-lg font-medium">Nenhum registro de automacao encontrado</p>
+            <p className="text-sm mt-1">Os logs aparecerao aqui quando o sistema de matriculas processar eventos.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-slate-800/50">
+                <tr className="text-xs text-slate-400 uppercase tracking-wider">
+                  <th className="py-3 px-4 text-left">Data</th>
+                  <th className="py-3 px-4 text-left">Acao</th>
+                  <th className="py-3 px-4 text-left">Aluno</th>
+                  <th className="py-3 px-4 text-left">Unidade</th>
+                  <th className="py-3 px-4 text-left">Detalhes</th>
+                  <th className="py-3 px-4 text-left">Origem</th>
+                  <th className="py-3 px-4 text-left">Execucao</th>
+                </tr>
+              </thead>
+              <tbody>
+                {registrosFiltrados.map((registro) => {
+                  const style = acaoStyles[registro.acao] || acaoStyles.atualizado;
+                  const detalhesStr = formatarDetalhes(registro);
+                  const semProfessor = registro.detalhes?.sem_professor === true;
 
-                return (
-                  <div
-                    key={registro.id}
-                    className={cn(
-                      'flex items-start gap-4 p-3 rounded-lg transition-colors',
-                      semProfessor
-                        ? 'bg-orange-500/5 border border-orange-500/20 hover:bg-orange-500/10'
-                        : 'bg-slate-900/50 hover:bg-slate-900/80'
-                    )}
-                  >
-                    <div className="min-w-[130px] text-sm text-slate-400">
-                      {formatarData(registro.created_at)}
-                    </div>
-                    <div className="min-w-[90px]">
-                      <span className={cn(
-                        'inline-block px-2 py-0.5 rounded text-xs font-medium',
-                        style.bg,
-                        style.text
-                      )}>
-                        {style.label}
-                      </span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-white font-medium">{registro.aluno_nome}</span>
-                        {semProfessor && (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-orange-500/20 text-orange-400" title="Professor nao vinculado ao aluno">
-                            <AlertTriangle className="w-3 h-3" />
-                            Sem professor
-                          </span>
-                        )}
-                        {registro.unidade_nome && (
-                          <span className="text-slate-500 text-sm">({registro.unidade_nome})</span>
-                        )}
-                      </div>
-                      {detalhesStr && (
-                        <p className="text-slate-400 text-sm mt-0.5 truncate">{detalhesStr}</p>
+                  return (
+                    <tr
+                      key={registro.id}
+                      className={cn(
+                        'border-t border-slate-700/30 transition-colors',
+                        semProfessor
+                          ? 'bg-orange-500/5 hover:bg-orange-500/10'
+                          : 'hover:bg-slate-800/30'
                       )}
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-slate-600 text-xs">
-                        {eventoLabels[registro.evento] || registro.evento}
-                      </span>
-                      {registro.execution_id && (
-                        <span
-                          className="text-slate-600 text-xs font-mono cursor-help"
-                          title={`Execucao N8N #${registro.execution_id}`}
-                        >
-                          #{registro.execution_id}
+                    >
+                      <td className="py-3 px-4 text-sm text-slate-400 whitespace-nowrap" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                        {formatarData(registro.created_at)}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className={cn(
+                          'inline-block px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap',
+                          style.bg,
+                          style.text
+                        )}>
+                          {style.label}
                         </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <span className="text-white font-medium whitespace-nowrap">{registro.aluno_nome}</span>
+                          {semProfessor && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-orange-500/20 text-orange-400 whitespace-nowrap" title="Professor nao vinculado ao aluno">
+                              <AlertTriangle className="w-3 h-3" aria-hidden="true" />
+                              Sem professor
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-slate-300 whitespace-nowrap">
+                        {registro.unidade_nome || '-'}
+                      </td>
+                      <td className="py-3 px-4 text-slate-400 text-sm max-w-[250px] truncate">
+                        {detalhesStr || '-'}
+                      </td>
+                      <td className="py-3 px-4 text-slate-500 text-xs whitespace-nowrap">
+                        {eventoLabels[registro.evento] || registro.evento}
+                      </td>
+                      <td className="py-3 px-4">
+                        {registro.execution_id ? (
+                          <span
+                            className="text-slate-600 text-xs font-mono cursor-help"
+                            title={`Execucao N8N #${registro.execution_id}`}
+                          >
+                            #{registro.execution_id}
+                          </span>
+                        ) : (
+                          <span className="text-slate-700">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

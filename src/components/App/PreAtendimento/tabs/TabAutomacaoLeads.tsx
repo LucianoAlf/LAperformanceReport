@@ -65,6 +65,20 @@ const origemStyles: Record<string, { bg: string; text: string }> = {
   aula_experimental_cancelada: { bg: 'bg-rose-500/20', text: 'text-rose-400' },
 };
 
+const fluxoMap: Record<string, { label: string; bg: string; text: string }> = {
+  nocodb: { label: 'Sync NocoDB', bg: 'bg-orange-500/20', text: 'text-orange-400' },
+  emusys: { label: 'Sync Emusys', bg: 'bg-violet-500/20', text: 'text-violet-400' },
+  manual: { label: 'Manual', bg: 'bg-slate-500/20', text: 'text-slate-300' },
+  lead_criado: { label: 'N8N Leads', bg: 'bg-blue-500/20', text: 'text-blue-400' },
+  lead_editado: { label: 'N8N Leads', bg: 'bg-blue-500/20', text: 'text-blue-400' },
+  lead_arquivado: { label: 'N8N Leads', bg: 'bg-blue-500/20', text: 'text-blue-400' },
+  aula_experimental_criada: { label: 'N8N Experimental', bg: 'bg-amber-500/20', text: 'text-amber-400' },
+  aula_experimental_reagendada: { label: 'N8N Experimental', bg: 'bg-cyan-500/20', text: 'text-cyan-400' },
+  aula_experimental_cancelada: { label: 'N8N Experimental', bg: 'bg-rose-500/20', text: 'text-rose-400' },
+  sync_experimental_presenca: { label: 'Sync Presenca', bg: 'bg-teal-500/20', text: 'text-teal-400' },
+  matricula_registrada: { label: 'Matricula', bg: 'bg-emerald-500/20', text: 'text-emerald-400' },
+};
+
 // Contadores agrupam valores novos e antigos
 const contadorAcoes = [
   { keys: ['inserted', 'lead_inserido'], bg: 'bg-emerald-500/20', text: 'text-emerald-400', label: 'Novos' },
@@ -329,92 +343,126 @@ export function TabAutomacaoLeads({ unidadeAtual }: TabAutomacaoLeadsProps) {
           </div>
         </div>
 
-        <div className="p-4">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-8 h-8 text-violet-400 animate-spin" />
-            </div>
-          ) : registrosFiltrados.length === 0 ? (
-            <div className="text-center py-12 text-slate-400">
-              <span className="text-4xl mb-4 block">⚡</span>
-              <p className="text-lg font-medium">Nenhum registro de automacao encontrado</p>
-              <p className="text-sm mt-1">Os logs aparecerao aqui quando os workflows do N8N processarem eventos de leads.</p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {registrosFiltrados.map((registro) => {
-                const style = acaoStyles[registro.acao] || acaoStyles.updated;
-                const detalhesStr = formatarDetalhes(registro);
-                const alertas = getAlertas(registro);
-                const origemStyle = origemStyles[registro.evento];
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-8 h-8 text-violet-400 animate-spin" />
+          </div>
+        ) : registrosFiltrados.length === 0 ? (
+          <div className="text-center py-12 text-slate-400">
+            <span className="text-4xl mb-4 block">⚡</span>
+            <p className="text-lg font-medium">Nenhum registro de automacao encontrado</p>
+            <p className="text-sm mt-1">Os logs aparecerao aqui quando os workflows do N8N processarem eventos de leads.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-slate-800/50">
+                <tr className="text-xs text-slate-400 uppercase tracking-wider">
+                  <th className="py-3 px-4 text-left">Data</th>
+                  <th className="py-3 px-4 text-left">Acao</th>
+                  <th className="py-3 px-4 text-left">Origem</th>
+                  <th className="py-3 px-4 text-left">Lead</th>
+                  <th className="py-3 px-4 text-left">Unidade</th>
+                  <th className="py-3 px-4 text-left">Detalhes</th>
+                  <th className="py-3 px-4 text-left">Fluxo</th>
+                  <th className="py-3 px-4 text-left">Execucao</th>
+                </tr>
+              </thead>
+              <tbody>
+                {registrosFiltrados.map((registro) => {
+                  const style = acaoStyles[registro.acao] || acaoStyles.updated;
+                  const detalhesStr = formatarDetalhes(registro);
+                  const alertas = getAlertas(registro);
+                  const origemStyle = origemStyles[registro.evento];
 
-                return (
-                  <div
-                    key={registro.id}
-                    className="flex items-start gap-4 p-3 bg-slate-900/50 rounded-lg hover:bg-slate-900/80 transition-colors"
-                  >
-                    <div className="min-w-[130px] text-sm text-slate-400">
-                      {formatarData(registro.created_at)}
-                    </div>
-                    <div className="min-w-[110px] flex flex-col gap-1">
-                      <span className={cn(
-                        'inline-block px-2 py-0.5 rounded text-xs font-medium w-fit',
-                        style.bg,
-                        style.text
-                      )}>
-                        {style.label}
-                      </span>
-                      {origemStyle && (
+                  return (
+                    <tr
+                      key={registro.id}
+                      className="border-t border-slate-700/30 hover:bg-slate-800/30 transition-colors"
+                    >
+                      <td className="py-3 px-4 text-sm text-slate-400 whitespace-nowrap" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                        {formatarData(registro.created_at)}
+                      </td>
+                      <td className="py-3 px-4">
                         <span className={cn(
-                          'inline-block px-2 py-0.5 rounded text-xs font-medium w-fit',
-                          origemStyle.bg,
-                          origemStyle.text
+                          'inline-block px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap',
+                          style.bg,
+                          style.text
                         )}>
-                          {origemLabels[registro.evento] || registro.evento}
+                          {style.label}
                         </span>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-white font-medium">{registro.lead_nome || '(sem nome)'}</span>
-                        {registro.unidade_nome && (
-                          <span className="text-slate-500 text-sm">({registro.unidade_nome})</span>
-                        )}
-                        {alertas.length > 0 && (
-                          <span
-                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 text-xs cursor-help"
-                            title={alertas.join(', ')}
-                          >
-                            <AlertTriangle className="w-3 h-3" />
-                            {alertas.join(', ')}
+                      </td>
+                      <td className="py-3 px-4">
+                        {origemStyle ? (
+                          <span className={cn(
+                            'inline-block px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap',
+                            origemStyle.bg,
+                            origemStyle.text
+                          )}>
+                            {origemLabels[registro.evento] || registro.evento}
+                          </span>
+                        ) : (
+                          <span className="text-slate-500 text-xs whitespace-nowrap">
+                            {origemLabels[registro.evento] || registro.evento}
                           </span>
                         )}
-                      </div>
-                      {detalhesStr && (
-                        <p className="text-slate-400 text-sm mt-0.5 truncate">{detalhesStr}</p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      {!origemStyle && (
-                        <span className="text-slate-600 text-xs">
-                          {origemLabels[registro.evento] || registro.evento}
-                        </span>
-                      )}
-                      {registro.execution_id && (
-                        <span
-                          className="text-slate-600 text-xs font-mono cursor-help"
-                          title={`Execucao N8N #${registro.execution_id}`}
-                        >
-                          #{registro.execution_id}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <span className="text-white font-medium whitespace-nowrap">{registro.lead_nome || '(sem nome)'}</span>
+                          {alertas.length > 0 && (
+                            <span
+                              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 text-xs whitespace-nowrap"
+                              title={alertas.join(', ')}
+                            >
+                              <AlertTriangle className="w-3 h-3" aria-hidden="true" />
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-slate-300 whitespace-nowrap">
+                        {registro.unidade_nome || '-'}
+                      </td>
+                      <td className="py-3 px-4 text-slate-400 text-sm max-w-[250px] truncate">
+                        {detalhesStr || '-'}
+                      </td>
+                      <td className="py-3 px-4">
+                        {(() => {
+                          const fluxo = fluxoMap[registro.evento];
+                          return fluxo ? (
+                            <span className={cn(
+                              'inline-block px-2 py-0.5 rounded text-xs font-medium whitespace-nowrap',
+                              fluxo.bg,
+                              fluxo.text
+                            )}>
+                              {fluxo.label}
+                            </span>
+                          ) : (
+                            <span className="text-slate-500 text-xs whitespace-nowrap">
+                              {registro.evento}
+                            </span>
+                          );
+                        })()}
+                      </td>
+                      <td className="py-3 px-4">
+                        {registro.execution_id ? (
+                          <span
+                            className="text-slate-600 text-xs font-mono cursor-help"
+                            title={`Execucao N8N #${registro.execution_id}`}
+                          >
+                            #{registro.execution_id}
+                          </span>
+                        ) : (
+                          <span className="text-slate-700">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
