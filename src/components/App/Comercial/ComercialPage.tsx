@@ -274,6 +274,7 @@ export function ComercialPage() {
   const [experimentaisHojeOutros, setExperimentaisHojeOutros] = useState<(LeadDiario & { canal_nome?: string; curso_nome?: string; professor_nome?: string; unidade_codigo?: string })[]>([]);
 
   const [mostrarExpOutros, setMostrarExpOutros] = useState(false);
+  const [gruposExpandidos, setGruposExpandidos] = useState<Set<number>>(new Set());
 
   // Aba selecionada no detalhamento
   const [abaDetalhamento, setAbaDetalhamento] = useState<'leads' | 'experimental' | 'visita' | 'matricula'>('matricula');
@@ -3655,86 +3656,197 @@ export function ComercialPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {expFiltradas.map((exp: any, index: number) => {
-                    const dataExp = exp.data_experimental ? new Date(exp.data_experimental + 'T12:00:00') : null;
-                    const expLabel = dataExp
-                      ? dataExp.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }) + (exp.horario_experimental ? ' ' + exp.horario_experimental.slice(0, 5) : '')
-                      : '-';
-                    const isDependent = exp.nome_aluno !== exp.lead_nome;
-                    return (
-                    <tr
-                      key={exp.id}
-                      className="border-b border-slate-700/50 hover:bg-slate-700/20 transition-colors cursor-pointer"
-                      onClick={() => {
-                        const leadData = exp.leads;
-                        if (leadData) {
-                          setEditingLead({ ...leadData, id: exp.lead_id });
-                          setEditingLeadOriginal(JSON.parse(JSON.stringify({ ...leadData, id: exp.lead_id })));
-                        }
-                      }}
-                    >
-                      <td className="py-3 px-2 text-slate-500 font-medium border-r border-slate-700/30">{index + 1}</td>
-                      <td className="py-3 px-2 border-r border-slate-700/30">
-                        <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-violet-500/20 text-violet-400">
-                          {expLabel}
-                        </span>
-                      </td>
-                      <td className="py-3 px-2 border-r border-slate-700/30">
-                        <span className="text-white font-medium">{exp.nome_aluno || '-'}</span>
-                      </td>
-                      <td className="py-3 px-2 border-r border-slate-700/30">
-                        {isDependent ? (
-                          <span className="text-slate-400 text-xs">{exp.lead_nome}</span>
-                        ) : (
-                          <span className="text-slate-600 text-xs">-</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-2 border-r border-slate-700/30">
-                        <span className="text-emerald-400">{exp.lead_telefone || '-'}</span>
-                      </td>
-                      <td className="py-3 px-2 border-r border-slate-700/30">
-                        <span className={cn(
-                          "px-2 py-0.5 rounded text-xs font-medium",
-                          exp.status === 'experimental_agendada' ? 'bg-amber-500/20 text-amber-400' :
-                          exp.status === 'experimental_realizada' ? 'bg-emerald-500/20 text-emerald-400' :
-                          exp.status === 'experimental_faltou' ? 'bg-red-500/20 text-red-400' :
-                          exp.status === 'convertido' ? 'bg-violet-500/20 text-violet-400' :
-                          'bg-slate-500/20 text-slate-400'
-                        )}>
-                          {exp.status === 'experimental_agendada' ? 'Agendada' :
-                           exp.status === 'experimental_realizada' ? 'Realizada' :
-                           exp.status === 'experimental_faltou' ? 'Faltou' :
-                           exp.status === 'convertido' ? 'Convertido' : exp.status}
-                        </span>
-                      </td>
-                      <td className="py-3 px-2 border-r border-slate-700/30">
-                        <CanalOrigemBadge canal={exp.canal_nome || '-'} />
-                      </td>
-                      <td className="py-3 px-2 border-r border-slate-700/30">
-                        <span className="text-purple-400">{exp.curso_nome || '-'}</span>
-                      </td>
-                      <td className="py-3 px-2 border-r border-slate-700/30">
-                        <span className="text-violet-400">{exp.professor_nome || '-'}</span>
-                      </td>
-                      {isAdmin && (
-                        <td className="py-3 px-2 border-r border-slate-700/30">
-                          <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-600/30 text-slate-300">
-                            {exp.unidade_codigo || '-'}
-                          </span>
-                        </td>
-                      )}
-                      <td className="py-3 px-2 text-right">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); exp.lead_id && setDeleteId(exp.lead_id); }}
-                          className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded transition-colors"
-                          title="Excluir"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </td>
-                    </tr>
+                  {(() => {
+                    const grupos = new Map<number, any[]>();
+                    expFiltradas.forEach((exp: any) => {
+                      const lid = exp.lead_id;
+                      if (!grupos.has(lid)) grupos.set(lid, []);
+                      grupos.get(lid)!.push(exp);
+                    });
+                    let rowIndex = 0;
+                    const statusBadge = (s: string) => (
+                      <span className={cn(
+                        "px-2 py-0.5 rounded text-xs font-medium",
+                        s === 'experimental_agendada' ? 'bg-amber-500/20 text-amber-400' :
+                        s === 'experimental_realizada' ? 'bg-emerald-500/20 text-emerald-400' :
+                        s === 'experimental_faltou' ? 'bg-red-500/20 text-red-400' :
+                        s === 'convertido' ? 'bg-violet-500/20 text-violet-400' :
+                        'bg-slate-500/20 text-slate-400'
+                      )}>
+                        {s === 'experimental_agendada' ? 'Agendada' :
+                         s === 'experimental_realizada' ? 'Realizada' :
+                         s === 'experimental_faltou' ? 'Faltou' :
+                         s === 'convertido' ? 'Convertido' : s}
+                      </span>
                     );
-                  })}
+                    const fmtData = (exp: any) => {
+                      const d = exp.data_experimental ? new Date(exp.data_experimental + 'T12:00:00') : null;
+                      return d ? d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }) + (exp.horario_experimental ? ' ' + exp.horario_experimental.slice(0, 5) : '') : '-';
+                    };
+                    const abrirLead = (exp: any) => {
+                      const leadData = exp.leads;
+                      if (leadData) {
+                        setEditingLead({ ...leadData, id: exp.lead_id });
+                        setEditingLeadOriginal(JSON.parse(JSON.stringify({ ...leadData, id: exp.lead_id })));
+                      }
+                    };
+                    const expToLeadCRM = (exp: any): LeadCRM => ({
+                      id: exp.lead_id,
+                      nome: exp.lead_nome || exp.nome_aluno,
+                      telefone: exp.lead_telefone || null,
+                      email: null, whatsapp: null, idade: null,
+                      unidade_id: exp.unidade_id,
+                      curso_interesse_id: exp.curso_interesse_id,
+                      canal_origem_id: exp.leads?.canal_origem_id || null,
+                      data_contato: exp.data_contato || '',
+                      data_primeiro_contato: null, data_ultimo_contato: null,
+                      status: exp.status, observacoes: null,
+                      created_at: '', updated_at: '',
+                      etapa_pipeline_id: exp.etapa_pipeline_id,
+                      professor_experimental_id: exp.professor_experimental_id,
+                    } as LeadCRM);
+                    const renderAcoes = (exp: any) => {
+                      const etapa = exp.etapa_pipeline_id || 5;
+                      const transicoes = transicoesEtapa[etapa] || [];
+                      return (
+                        <div className="flex items-center justify-end gap-1">
+                          {transicoes.length > 0 && (
+                            <Popover>
+                              <PopoverTrigger asChild>
+                                <button className="p-1 text-slate-500 hover:text-white hover:bg-slate-700 rounded transition-colors" title="Mover etapa" onClick={(e) => e.stopPropagation()}>
+                                  <ChevronRight className="w-3.5 h-3.5" />
+                                </button>
+                              </PopoverTrigger>
+                              <PopoverContent className="w-64 p-2" align="end">
+                                <>
+                                  <p className="text-xs text-slate-400 mb-2 px-1">Avançar para:</p>
+                                  {transicoes.map(t => (
+                                    <button
+                                      key={t.etapa}
+                                      onClick={() => {
+                                        if (t.etapa === 10) {
+                                          setLeadParaMatricular(expToLeadCRM(exp));
+                                        } else {
+                                          handleMoverEtapa(exp.lead_id, t.etapa);
+                                        }
+                                      }}
+                                      className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-slate-700 text-slate-300 transition-colors"
+                                    >
+                                      {t.label}
+                                    </button>
+                                  ))}
+                                  <div className="border-t border-slate-700/50 mt-1 pt-1">
+                                    <button
+                                      onClick={() => setLeadParaArquivar(expToLeadCRM(exp))}
+                                      className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-rose-500/20 text-rose-400 transition-colors"
+                                    >
+                                      Arquivar
+                                    </button>
+                                  </div>
+                                  {voltarEtapa[etapa] && (
+                                    <div className="border-t border-slate-700/50 mt-1 pt-1">
+                                      <button
+                                        onClick={() => handleMoverEtapa(exp.lead_id, voltarEtapa[etapa]!.etapa)}
+                                        className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-slate-700 text-slate-500 transition-colors flex items-center gap-1"
+                                      >
+                                        <RotateCcw className="w-3 h-3" /> Voltar para {voltarEtapa[etapa]!.label}
+                                      </button>
+                                    </div>
+                                  )}
+                                </>
+                              </PopoverContent>
+                            </Popover>
+                          )}
+                          <button onClick={(e) => { e.stopPropagation(); exp.lead_id && setDeleteId(exp.lead_id); }} className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded transition-colors" title="Excluir"><Trash2 className="w-4 h-4" /></button>
+                        </div>
+                      );
+                    };
+                    return Array.from(grupos.entries()).flatMap(([leadId, exps]) => {
+                      const isGrupo = exps.length > 1;
+                      const isExpanded = gruposExpandidos.has(leadId);
+                      const first = exps[0];
+                      rowIndex++;
+
+                      if (!isGrupo) {
+                        // Lead com 1 experimental — linha normal
+                        return [(
+                          <tr key={first.id} className="border-b border-slate-700/50 hover:bg-slate-700/20 transition-colors cursor-pointer" onClick={() => abrirLead(first)}>
+                            <td className="py-3 px-2 text-slate-500 font-medium border-r border-slate-700/30">{rowIndex}</td>
+                            <td className="py-3 px-2 border-r border-slate-700/30"><span className="px-1.5 py-0.5 rounded text-xs font-medium bg-violet-500/20 text-violet-400">{fmtData(first)}</span></td>
+                            <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-white font-medium">{first.nome_aluno || '-'}</span></td>
+                            <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-slate-400 text-xs">{first.lead_nome || '-'}</span></td>
+                            <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-emerald-400">{first.lead_telefone || '-'}</span></td>
+                            <td className="py-3 px-2 border-r border-slate-700/30">{statusBadge(first.status)}</td>
+                            <td className="py-3 px-2 border-r border-slate-700/30"><CanalOrigemBadge canal={first.canal_nome || '-'} /></td>
+                            <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-purple-400">{first.curso_nome || '-'}</span></td>
+                            <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-violet-400">{first.professor_nome || '-'}</span></td>
+                            {isAdmin && <td className="py-3 px-2 border-r border-slate-700/30"><span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-600/30 text-slate-300">{first.unidade_codigo || '-'}</span></td>}
+                            <td className="py-3 px-2 text-right">{renderAcoes(first)}</td>
+                          </tr>
+                        )];
+                      }
+
+                      // Lead com múltiplas experimentais — header clicável + filhos colapsáveis
+                      const rows = [(
+                        <tr
+                          key={`grupo-${leadId}`}
+                          className="border-b border-slate-700/50 bg-violet-500/5 hover:bg-violet-500/10 transition-colors cursor-pointer"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setGruposExpandidos(prev => {
+                              const next = new Set(prev);
+                              if (next.has(leadId)) next.delete(leadId); else next.add(leadId);
+                              return next;
+                            });
+                          }}
+                        >
+                          <td className="py-3 px-2 text-slate-500 font-medium border-r border-slate-700/30">{rowIndex}</td>
+                          <td className="py-3 px-2 border-r border-slate-700/30"><span className="px-1.5 py-0.5 rounded text-xs font-medium bg-violet-500/20 text-violet-400">{fmtData(first)}</span></td>
+                          <td className="py-3 px-2 border-r border-slate-700/30">
+                            <div className="flex items-center gap-1.5">
+                              {isExpanded ? <ChevronDown className="w-3.5 h-3.5 text-violet-400" /> : <ChevronRight className="w-3.5 h-3.5 text-violet-400" />}
+                              <span className="text-white font-medium">{first.nome_aluno || '-'}</span>
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-violet-500/15 text-violet-400">+{exps.length - 1}</span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-slate-400 text-xs">{first.lead_nome || '-'}</span></td>
+                          <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-emerald-400">{first.lead_telefone || '-'}</span></td>
+                          <td className="py-3 px-2 border-r border-slate-700/30">{statusBadge(first.status)}</td>
+                          <td className="py-3 px-2 border-r border-slate-700/30"><CanalOrigemBadge canal={first.canal_nome || '-'} /></td>
+                          <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-purple-400">{first.curso_nome || '-'}</span></td>
+                          <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-violet-400">{first.professor_nome || '-'}</span></td>
+                          {isAdmin && <td className="py-3 px-2 border-r border-slate-700/30"><span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-600/30 text-slate-300">{first.unidade_codigo || '-'}</span></td>}
+                          <td className="py-3 px-2 text-right">{renderAcoes(first)}</td>
+                        </tr>
+                      )];
+
+                      if (isExpanded) {
+                        exps.slice(1).forEach((exp: any) => {
+                          rows.push(
+                            <tr key={exp.id} className="border-b border-slate-700/50 bg-slate-800/30 hover:bg-slate-700/20 transition-colors cursor-pointer" onClick={() => abrirLead(exp)}>
+                              <td className="py-3 px-2 text-slate-600 border-r border-slate-700/30"></td>
+                              <td className="py-3 px-2 border-r border-slate-700/30"><span className="px-1.5 py-0.5 rounded text-xs font-medium bg-violet-500/20 text-violet-400">{fmtData(exp)}</span></td>
+                              <td className="py-3 px-2 border-r border-slate-700/30">
+                                <div className="flex items-center gap-1.5 pl-5">
+                                  <span className="text-slate-600 text-xs">└</span>
+                                  <span className="text-white font-medium">{exp.nome_aluno || '-'}</span>
+                                </div>
+                              </td>
+                              <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-slate-600 text-xs">↑</span></td>
+                              <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-slate-600 text-xs">↑</span></td>
+                              <td className="py-3 px-2 border-r border-slate-700/30">{statusBadge(exp.status)}</td>
+                              <td className="py-3 px-2 border-r border-slate-700/30"><CanalOrigemBadge canal={exp.canal_nome || '-'} /></td>
+                              <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-purple-400">{exp.curso_nome || '-'}</span></td>
+                              <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-violet-400">{exp.professor_nome || '-'}</span></td>
+                              {isAdmin && <td className="py-3 px-2 border-r border-slate-700/30"><span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-600/30 text-slate-300">{exp.unidade_codigo || '-'}</span></td>}
+                              <td className="py-3 px-2 text-right">{renderAcoes(exp)}</td>
+                            </tr>
+                          );
+                        });
+                      }
+                      return rows;
+                    });
+                  })()}
                 </tbody>
               </table>
             ) : (
