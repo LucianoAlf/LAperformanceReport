@@ -269,6 +269,7 @@ export function ComercialPage() {
   // Registros do mês por tipo (para tabelas de detalhamento)
   const [leadsMes, setLeadsMes] = useState<(LeadDiario & { canal_nome?: string; curso_nome?: string })[]>([]);
   const [experimentaisMes, setExperimentaisMes] = useState<(LeadDiario & { canal_nome?: string; curso_nome?: string; professor_nome?: string })[]>([]);
+  const [experimentaisDetalhadas, setExperimentaisDetalhadas] = useState<any[]>([]);
   const [visitasMes, setVisitasMes] = useState<(LeadDiario & { canal_nome?: string; curso_nome?: string })[]>([]);
   const [experimentaisHojeOutros, setExperimentaisHojeOutros] = useState<(LeadDiario & { canal_nome?: string; curso_nome?: string; professor_nome?: string; unidade_codigo?: string })[]>([]);
 
@@ -693,6 +694,45 @@ export function ComercialPage() {
       }
       setLeadsMes(leadsDoMes);
       setExperimentaisMes(experimentaisDoMes);
+
+      // Buscar experimentais detalhadas da nova tabela lead_experimentais
+      // Filtro por data_contato do lead (não por data_experimental)
+      {
+        let expQuery = supabase
+          .from('lead_experimentais')
+          .select(`
+            *,
+            leads!inner(id, nome, telefone, canal_origem_id, unidade_id, data_contato, canais_origem(nome), unidades(codigo)),
+            professores:professor_experimental_id(nome),
+            cursos:curso_interesse_id(nome)
+          `)
+          .neq('status', 'cancelada')
+          .order('data_experimental', { ascending: false });
+
+        // Filtrar pelo data_contato do lead (via join inner)
+        if (startDate) expQuery = expQuery.gte('leads.data_contato', startDate);
+        if (endDate) expQuery = expQuery.lte('leads.data_contato', endDate);
+
+        if (isAdmin) {
+          if (context?.unidadeSelecionada && context.unidadeSelecionada !== 'todos') {
+            expQuery = expQuery.eq('unidade_id', context.unidadeSelecionada);
+          }
+        } else if (usuario?.unidade_id) {
+          expQuery = expQuery.eq('unidade_id', usuario.unidade_id);
+        }
+
+        const { data: expData } = await expQuery;
+        setExperimentaisDetalhadas((expData || []).map((e: any) => ({
+          ...e,
+          lead_nome: e.leads?.nome || e.nome_aluno,
+          lead_telefone: e.leads?.telefone || '',
+          canal_nome: e.leads?.canais_origem?.nome || '',
+          curso_nome: e.cursos?.nome || '',
+          professor_nome: e.professores?.nome || '',
+          unidade_codigo: e.leads?.unidades?.codigo || '',
+          data_contato: e.leads?.data_contato || '',
+        })));
+      }
 
       // Visitas do mês (com nomes dos relacionamentos)
       const visitasDoMes = registros
@@ -2861,7 +2901,7 @@ export function ComercialPage() {
             <FunnelPipelineNav
               stages={[
                 { key: 'leads', label: 'Novos', count: leadsMes.filter(l => !l.status || l.status === 'novo').length, icon: Smartphone, color: '#3b82f6', gradient: 'from-blue-500 to-cyan-500' },
-                { key: 'experimental', label: 'Experimentais', count: experimentaisMes.length, icon: Guitar, color: '#a855f7', gradient: 'from-purple-500 to-violet-500' },
+                { key: 'experimental', label: 'Experimentais', count: experimentaisDetalhadas.length, icon: Guitar, color: '#a855f7', gradient: 'from-purple-500 to-violet-500' },
                 { key: 'visita', label: 'Visitas', count: visitasMes.length, icon: Building2, color: '#f59e0b', gradient: 'from-amber-500 to-orange-500' },
                 { key: 'matricula', label: 'Matrículas', count: matriculasMes.length, icon: GraduationCap, color: '#10b981', gradient: 'from-emerald-500 to-teal-500' },
               ]}
@@ -3586,12 +3626,12 @@ export function ComercialPage() {
         {/* TABELA DE EXPERIMENTAIS */}
         {/* ══════════════════════════════════════════════════════════════ */}
         {abaDetalhamento === 'experimental' && (() => {
-          const expFiltradas = experimentaisMes.filter(l => {
+          const expFiltradas = experimentaisDetalhadas.filter((l: any) => {
             if (buscaFunil) {
               const termo = buscaFunil.toLowerCase();
-              if (!(l.nome || '').toLowerCase().includes(termo)) return false;
+              if (!(l.nome_aluno || '').toLowerCase().includes(termo) && !(l.lead_nome || '').toLowerCase().includes(termo) && !(l.lead_telefone || '').includes(buscaFunil.replace(/\D/g, ''))) return false;
             }
-            if (filtroCanalFunil !== 'todos' && String(l.canal_origem_id) !== filtroCanalFunil) return false;
+            if (filtroCanalFunil !== 'todos' && String(l.leads?.canal_origem_id) !== filtroCanalFunil) return false;
             if (filtroCursoFunil !== 'todos' && String(l.curso_interesse_id) !== filtroCursoFunil) return false;
             return true;
           });
@@ -3602,8 +3642,9 @@ export function ComercialPage() {
                 <thead>
                   <tr className="text-left text-slate-400 border-b border-slate-700">
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">#</th>
-                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Data</th>
-                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Nome</th>
+                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Experimental</th>
+                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Aluno</th>
+                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Responsável</th>
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Telefone</th>
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Status</th>
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Canal</th>
@@ -3614,236 +3655,86 @@ export function ComercialPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {expFiltradas.map((exp, index) => (
-                    <tr 
-                      key={exp.id} 
-                      className="border-b border-slate-700/50 hover:bg-slate-700/20 transition-colors"
+                  {expFiltradas.map((exp: any, index: number) => {
+                    const dataExp = exp.data_experimental ? new Date(exp.data_experimental + 'T12:00:00') : null;
+                    const expLabel = dataExp
+                      ? dataExp.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }) + (exp.horario_experimental ? ' ' + exp.horario_experimental.slice(0, 5) : '')
+                      : '-';
+                    const isDependent = exp.nome_aluno !== exp.lead_nome;
+                    return (
+                    <tr
+                      key={exp.id}
+                      className="border-b border-slate-700/50 hover:bg-slate-700/20 transition-colors cursor-pointer"
+                      onClick={() => {
+                        const leadData = exp.leads;
+                        if (leadData) {
+                          setEditingLead({ ...leadData, id: exp.lead_id });
+                          setEditingLeadOriginal(JSON.parse(JSON.stringify({ ...leadData, id: exp.lead_id })));
+                        }
+                      }}
                     >
                       <td className="py-3 px-2 text-slate-500 font-medium border-r border-slate-700/30">{index + 1}</td>
                       <td className="py-3 px-2 border-r border-slate-700/30">
-                        <CelulaEditavelInline
-                          value={exp.data_contato}
-                          onChange={async (valor) => exp.id && salvarCampoMatricula(exp.id, 'data_contato', valor)}
-                          tipo="data"
-                          textClassName="text-slate-300"
-                        />
+                        <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-violet-500/20 text-violet-400">
+                          {expLabel}
+                        </span>
                       </td>
                       <td className="py-3 px-2 border-r border-slate-700/30">
-                        <CelulaEditavelInline
-                          value={exp.nome}
-                          onChange={async (valor) => exp.id && salvarCampoMatricula(exp.id, 'nome', valor)}
-                          tipo="texto"
-                          textClassName="text-white font-medium"
-                          placeholder="-"
-                        />
+                        <span className="text-white font-medium">{exp.nome_aluno || '-'}</span>
                       </td>
                       <td className="py-3 px-2 border-r border-slate-700/30">
-                        <CelulaEditavelInline
-                          value={(exp as any).telefone}
-                          onChange={async (valor) => exp.id && salvarCampoMatricula(exp.id, 'telefone', valor)}
-                          tipo="texto"
-                          textClassName="text-emerald-400"
-                          placeholder="-"
-                        />
+                        {isDependent ? (
+                          <span className="text-slate-400 text-xs">{exp.lead_nome}</span>
+                        ) : (
+                          <span className="text-slate-600 text-xs">-</span>
+                        )}
                       </td>
                       <td className="py-3 px-2 border-r border-slate-700/30">
-                        <CelulaEditavelInline
-                          value={exp.status}
-                          onChange={async (valor) => exp.id && salvarCampoMatricula(exp.id, 'status', valor)}
-                          tipo="select"
-                          opcoes={[
-                            { value: 'experimental_agendada', label: 'Agendada' },
-                            { value: 'experimental_realizada', label: 'Realizada' },
-                            { value: 'experimental_faltou', label: 'Faltou' },
-                            { value: 'compareceu', label: 'Compareceu' },
-                            { value: 'matriculado', label: 'Matriculado' },
-                            { value: 'convertido', label: 'Convertido' },
-                          ]}
-                          placeholder="-"
-                          formatarExibicao={() => (
-                            <span className={cn(
-                              "px-2 py-0.5 rounded text-xs font-medium",
-                              exp.status === 'experimental_agendada' ? 'bg-amber-500/20 text-amber-400' :
-                              exp.status === 'experimental_realizada' || exp.status === 'compareceu' ? 'bg-emerald-500/20 text-emerald-400' :
-                              exp.status === 'experimental_faltou' ? 'bg-red-500/20 text-red-400' :
-                              exp.status === 'matriculado' || exp.status === 'convertido' ? 'bg-violet-500/20 text-violet-400' :
-                              'bg-slate-500/20 text-slate-400'
-                            )}>
-                              {exp.status === 'experimental_agendada' ? 'Agendada' :
-                               exp.status === 'experimental_realizada' ? 'Realizada' :
-                               exp.status === 'experimental_faltou' ? 'Faltou' :
-                               exp.status === 'compareceu' ? 'Compareceu' :
-                               exp.status === 'matriculado' ? 'Matriculado' :
-                               exp.status === 'convertido' ? 'Convertido' : exp.status}
-                            </span>
-                          )}
-                        />
+                        <span className="text-emerald-400">{exp.lead_telefone || '-'}</span>
                       </td>
                       <td className="py-3 px-2 border-r border-slate-700/30">
-                        <CelulaEditavelInline
-                          value={exp.canal_origem_id}
-                          onChange={async (valor) => exp.id && salvarCampoMatricula(exp.id, 'canal_origem_id', valor ? Number(valor) : null)}
-                          tipo="select"
-                          opcoes={canais.map(c => ({ value: c.value, label: c.label }))}
-                          placeholder="-"
-                          formatarExibicao={() => <CanalOrigemBadge canal={exp.canal_nome || '-'} />}
-                        />
+                        <span className={cn(
+                          "px-2 py-0.5 rounded text-xs font-medium",
+                          exp.status === 'experimental_agendada' ? 'bg-amber-500/20 text-amber-400' :
+                          exp.status === 'experimental_realizada' ? 'bg-emerald-500/20 text-emerald-400' :
+                          exp.status === 'experimental_faltou' ? 'bg-red-500/20 text-red-400' :
+                          exp.status === 'convertido' ? 'bg-violet-500/20 text-violet-400' :
+                          'bg-slate-500/20 text-slate-400'
+                        )}>
+                          {exp.status === 'experimental_agendada' ? 'Agendada' :
+                           exp.status === 'experimental_realizada' ? 'Realizada' :
+                           exp.status === 'experimental_faltou' ? 'Faltou' :
+                           exp.status === 'convertido' ? 'Convertido' : exp.status}
+                        </span>
                       </td>
                       <td className="py-3 px-2 border-r border-slate-700/30">
-                        <CelulaEditavelInline
-                          value={exp.curso_interesse_id}
-                          onChange={async (valor) => exp.id && salvarCampoMatricula(exp.id, 'curso_interesse_id', valor ? Number(valor) : null)}
-                          tipo="select"
-                          opcoes={cursos.map(c => ({ value: c.value, label: c.label }))}
-                          placeholder="-"
-                          formatarExibicao={() => <span className="text-purple-400">{exp.curso_nome || '-'}</span>}
-                        />
+                        <CanalOrigemBadge canal={exp.canal_nome || '-'} />
                       </td>
                       <td className="py-3 px-2 border-r border-slate-700/30">
-                        <CelulaEditavelInline
-                          value={exp.professor_experimental_id}
-                          onChange={async (valor) => exp.id && salvarCampoMatricula(exp.id, 'professor_experimental_id', valor ? Number(valor) : null)}
-                          tipo="select"
-                          opcoes={professores.map(p => ({ value: p.value, label: p.label }))}
-                          placeholder="-"
-                          formatarExibicao={() => <span className="text-violet-400">{(exp as any).professor_nome || '-'}</span>}
-                        />
+                        <span className="text-purple-400">{exp.curso_nome || '-'}</span>
+                      </td>
+                      <td className="py-3 px-2 border-r border-slate-700/30">
+                        <span className="text-violet-400">{exp.professor_nome || '-'}</span>
                       </td>
                       {isAdmin && (
                         <td className="py-3 px-2 border-r border-slate-700/30">
                           <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-600/30 text-slate-300">
-                            {(exp as any).unidades?.codigo || '-'}
+                            {exp.unidade_codigo || '-'}
                           </span>
                         </td>
                       )}
                       <td className="py-3 px-2 text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          {(() => {
-                            const etapa = exp.etapa_pipeline_id || 5;
-                            const transicoes = transicoesEtapa[etapa] || [];
-                            if (transicoes.length === 0) return null;
-                            return (
-                              <Popover>
-                                <PopoverTrigger asChild>
-                                  <button className="p-1 text-slate-500 hover:text-white hover:bg-slate-700 rounded transition-colors" title="Mover etapa">
-                                    <ChevronRight className="w-3.5 h-3.5" />
-                                  </button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-64 p-2" align="end">
-                                  {moverEtapaForm?.leadId === exp.id ? (
-                                    <div className="space-y-2">
-                                      <p className="text-xs font-medium text-slate-300 px-1">Agendar Experimental</p>
-                                      <div>
-                                        <label className="text-[10px] text-slate-500 mb-0.5 block px-1">Professor</label>
-                                        <Command className="rounded-md border border-slate-700 bg-slate-800/50">
-                                          <CommandInput placeholder="Buscar professor..." className="h-7 text-xs" />
-                                          <CommandList className="max-h-[160px]">
-                                            <CommandEmpty className="py-2 text-center text-xs">Nenhum encontrado</CommandEmpty>
-                                            <CommandGroup>
-                                              {professores.map(p => (
-                                                <CommandItem
-                                                  key={p.value}
-                                                  value={p.label}
-                                                  onSelect={() => setMoverEtapaForm(prev => prev ? { ...prev, professorId: p.value.toString() } : prev)}
-                                                  className="text-xs"
-                                                >
-                                                  {p.label}
-                                                </CommandItem>
-                                              ))}
-                                            </CommandGroup>
-                                          </CommandList>
-                                        </Command>
-                                        {moverEtapaForm.professorId && (
-                                          <p className="text-[10px] text-violet-400 px-1 mt-0.5">
-                                            {professores.find(p => p.value.toString() === moverEtapaForm.professorId)?.label}
-                                          </p>
-                                        )}
-                                      </div>
-                                      <div>
-                                        <label className="text-[10px] text-slate-500 mb-0.5 block px-1">Data da experimental</label>
-                                        <input
-                                          type="date"
-                                          value={moverEtapaForm.dataExp}
-                                          onChange={(e) => setMoverEtapaForm(prev => prev ? { ...prev, dataExp: e.target.value } : prev)}
-                                          className="w-full h-7 rounded-md bg-slate-800/50 border border-slate-700 text-xs text-white px-2 focus:outline-none focus:ring-1 focus:ring-violet-500"
-                                        />
-                                      </div>
-                                      <div className="flex gap-1 pt-1">
-                                        <button
-                                          onClick={() => setMoverEtapaForm(null)}
-                                          className="flex-1 px-2 py-1 text-xs rounded bg-slate-700 text-slate-300 hover:bg-slate-600 transition-colors"
-                                        >
-                                          Cancelar
-                                        </button>
-                                        <button
-                                          onClick={() => {
-                                            handleMoverEtapa(exp.id!, moverEtapaForm.etapa, {
-                                              ...(moverEtapaForm.professorId ? { professor_experimental_id: Number(moverEtapaForm.professorId) } : {}),
-                                              ...(moverEtapaForm.dataExp ? { data_experimental: moverEtapaForm.dataExp } : {}),
-                                            });
-                                            setMoverEtapaForm(null);
-                                          }}
-                                          className="flex-1 px-2 py-1 text-xs rounded bg-violet-600 text-white hover:bg-violet-500 transition-colors"
-                                        >
-                                          Confirmar
-                                        </button>
-                                      </div>
-                                    </div>
-                                  ) : (
-                                    <>
-                                      <p className="text-xs text-slate-400 mb-2 px-1">Avançar para:</p>
-                                      {transicoes.map(t => (
-                                        <button
-                                          key={t.etapa}
-                                          onClick={() => {
-                                            if (t.etapa === 5) {
-                                              setMoverEtapaForm({ leadId: exp.id!, etapa: 5, professorId: '', dataExp: '' });
-                                            } else if (t.etapa === 10) {
-                                              setLeadParaMatricular(toLeadCRM(exp as any));
-                                            } else {
-                                              handleMoverEtapa(exp.id!, t.etapa);
-                                            }
-                                          }}
-                                          className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-slate-700 text-slate-300 transition-colors"
-                                        >
-                                          {t.label}
-                                        </button>
-                                      ))}
-                                      <div className="border-t border-slate-700/50 mt-1 pt-1">
-                                        <button
-                                          onClick={() => setLeadParaArquivar(toLeadCRM(exp as any))}
-                                          className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-rose-500/20 text-rose-400 transition-colors"
-                                        >
-                                          Arquivar
-                                        </button>
-                                      </div>
-                                      {voltarEtapa[etapa] && (
-                                        <div className="border-t border-slate-700/50 mt-1 pt-1">
-                                          <button
-                                            onClick={() => handleMoverEtapa(exp.id!, voltarEtapa[etapa]!.etapa)}
-                                            className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-slate-700 text-slate-500 transition-colors flex items-center gap-1"
-                                          >
-                                            <RotateCcw className="w-3 h-3" /> Voltar para {voltarEtapa[etapa]!.label}
-                                          </button>
-                                        </div>
-                                      )}
-                                    </>
-                                  )}
-                                </PopoverContent>
-                              </Popover>
-                            );
-                          })()}
-                          <button
-                            onClick={() => exp.id && setDeleteId(exp.id)}
-                            className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded transition-colors"
-                            title="Excluir"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); exp.lead_id && setDeleteId(exp.lead_id); }}
+                          className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded transition-colors"
+                          title="Excluir"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             ) : (
