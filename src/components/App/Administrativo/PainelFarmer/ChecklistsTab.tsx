@@ -33,11 +33,12 @@ import type { FarmerChecklist, FarmerChecklistTemplate, TaskBuilderItem } from '
 
 interface ChecklistsTabProps {
   unidadeId: string;
+  departamentoFixo?: 'administrativo' | 'comercial' | 'pedagogico';
 }
 
 type FiltroStatus = 'ativo' | 'concluido' | 'todos';
 
-export function ChecklistsTab({ unidadeId }: ChecklistsTabProps) {
+export function ChecklistsTab({ unidadeId, departamentoFixo }: ChecklistsTabProps) {
   const { colaborador } = useColaboradorAtual(unidadeId);
   const {
     checklists,
@@ -55,7 +56,7 @@ export function ChecklistsTab({ unidadeId }: ChecklistsTabProps) {
 
   // Estado de navegação: lista ou detalhe
   const [checklistAberto, setChecklistAberto] = useState<string | null>(null);
-  const [filtroDepartamento, setFiltroDepartamento] = useState<'todos_dept' | 'administrativo' | 'comercial' | 'pedagogico'>('todos_dept');
+  const [filtroDepartamento, setFiltroDepartamento] = useState<'todos_dept' | 'administrativo' | 'comercial' | 'pedagogico'>(departamentoFixo || 'todos_dept');
 
   // Modais
   const [modalNovoAberto, setModalNovoAberto] = useState(false);
@@ -66,7 +67,7 @@ export function ChecklistsTab({ unidadeId }: ChecklistsTabProps) {
   const [titulo, setTitulo] = useState('');
   const [descricao, setDescricao] = useState('');
   const [periodicidade, setPeriodicidade] = useState<'pontual' | 'diario' | 'semanal' | 'mensal'>('pontual');
-  const [departamento, setDepartamento] = useState<'administrativo' | 'comercial' | 'pedagogico' | 'geral'>('administrativo');
+  const [departamento, setDepartamento] = useState<'administrativo' | 'comercial' | 'pedagogico' | 'geral'>(departamentoFixo || 'administrativo');
   const [prioridade, setPrioridade] = useState<'alta' | 'media' | 'baixa'>('media');
   const [dataInicio, setDataInicio] = useState<Date | undefined>(new Date());
   const [dataPrazo, setDataPrazo] = useState<Date | undefined>();
@@ -439,22 +440,24 @@ export function ChecklistsTab({ unidadeId }: ChecklistsTabProps) {
             </button>
           ))}
         </div>
-        <div className="flex gap-1.5">
-          {(['todos_dept', 'administrativo', 'comercial', 'pedagogico'] as const).map((d) => (
-            <button
-              key={d}
-              onClick={() => setFiltroDepartamento(d)}
-              className={cn(
-                'px-3 py-1.5 text-xs font-medium rounded-lg border transition-all',
-                filtroDepartamento === d
-                  ? 'bg-slate-700/50 text-white border-slate-600/50'
-                  : 'text-slate-400 hover:text-white border-transparent hover:border-slate-600/50'
-              )}
-            >
-              {d === 'todos_dept' ? 'Todos' : d === 'administrativo' ? 'Administrativo' : d === 'comercial' ? 'Comercial' : 'Pedagógico'}
-            </button>
-          ))}
-        </div>
+        {!departamentoFixo && (
+          <div className="flex gap-1.5">
+            {(['todos_dept', 'administrativo', 'comercial', 'pedagogico'] as const).map((d) => (
+              <button
+                key={d}
+                onClick={() => setFiltroDepartamento(d)}
+                className={cn(
+                  'px-3 py-1.5 text-xs font-medium rounded-lg border transition-all',
+                  filtroDepartamento === d
+                    ? 'bg-slate-700/50 text-white border-slate-600/50'
+                    : 'text-slate-400 hover:text-white border-transparent hover:border-slate-600/50'
+                )}
+              >
+                {d === 'todos_dept' ? 'Todos' : d === 'administrativo' ? 'Administrativo' : d === 'comercial' ? 'Comercial' : 'Pedagógico'}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Lista de Checklists (filtrada por departamento) */}

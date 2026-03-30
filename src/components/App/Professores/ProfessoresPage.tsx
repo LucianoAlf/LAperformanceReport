@@ -9,7 +9,7 @@ import {
   Users, GraduationCap, Building2, BookOpen, Award, TrendingUp,
   Plus, Search, RotateCcw, Edit2, Trash2, Eye, MoreHorizontal,
   ChevronDown, Filter, Music, BarChart3, Table, LayoutGrid, MapPin, Clock,
-  Calendar, Target, Settings
+  Calendar, Target, Settings, ClipboardList
 } from 'lucide-react';
 import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { PageTour, TourHelpButton } from '@/components/Onboarding';
@@ -31,13 +31,14 @@ import { TabCarteiraProfessores } from './TabCarteiraProfessores';
 import { Tab360Professores } from './Tab360Professores';
 import { HealthScoreConfig } from './HealthScoreConfig';
 import { FatorDemandaCursos } from './FatorDemandaCursos';
+import { ChecklistsTab } from '../Administrativo/PainelFarmer/ChecklistsTab';
 import { useHealthScoreConfig } from '@/hooks/useHealthScoreConfig';
 import type { 
   Professor, Unidade, Curso, KPIsProfessores, 
   FiltrosProfessores, ProfessorFormData
 } from './types';
 
-type AbaAtiva = 'cadastro' | 'performance' | 'carteira' | 'agenda' | '360' | 'configuracoes';
+type AbaAtiva = 'cadastro' | 'performance' | 'carteira' | 'agenda' | '360' | 'checklists' | 'configuracoes';
 
 const professoresTabs: PageTab<AbaAtiva>[] = [
   { id: 'cadastro', label: 'Cadastro', shortLabel: 'Cadastro', icon: Users },
@@ -45,6 +46,7 @@ const professoresTabs: PageTab<AbaAtiva>[] = [
   { id: 'carteira', label: 'Carteira', shortLabel: 'Carteira', icon: Users },
   { id: 'agenda', label: 'Agenda', shortLabel: 'Agenda', icon: Calendar },
   { id: '360', label: '360°', shortLabel: '360°', icon: BarChart3 },
+  { id: 'checklists', label: 'Checklists', shortLabel: 'Checks', icon: ClipboardList },
   { id: 'configuracoes', label: 'Configurações', shortLabel: 'Config', icon: Settings },
 ];
 
@@ -650,6 +652,11 @@ export function ProfessoresPage() {
           competencia={competencia360}
           onCompetenciaChange={setCompetencia360}
         />
+      )}
+
+      {/* Conteúdo da aba Checklists */}
+      {abaAtiva === 'checklists' && (
+        <ChecklistsTab unidadeId={unidadeAtual} departamentoFixo="pedagogico" />
       )}
 
       {/* Conteúdo da aba Configurações */}
