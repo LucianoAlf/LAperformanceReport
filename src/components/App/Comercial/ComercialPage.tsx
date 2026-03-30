@@ -32,7 +32,8 @@ import {
   Phone,
   PhoneOff,
   AlertTriangle,
-  ChevronRight
+  ChevronRight,
+  ChevronDown
 } from 'lucide-react';
 import { TarefasRapidasTab } from '@/components/shared/TarefasRapidas';
 import { CanalOrigemBadge } from '@/components/shared/CanalOrigemBadge';
@@ -269,7 +270,10 @@ export function ComercialPage() {
   const [leadsMes, setLeadsMes] = useState<(LeadDiario & { canal_nome?: string; curso_nome?: string })[]>([]);
   const [experimentaisMes, setExperimentaisMes] = useState<(LeadDiario & { canal_nome?: string; curso_nome?: string; professor_nome?: string })[]>([]);
   const [visitasMes, setVisitasMes] = useState<(LeadDiario & { canal_nome?: string; curso_nome?: string })[]>([]);
-  
+  const [experimentaisHojeOutros, setExperimentaisHojeOutros] = useState<(LeadDiario & { canal_nome?: string; curso_nome?: string; professor_nome?: string; unidade_codigo?: string })[]>([]);
+
+  const [mostrarExpOutros, setMostrarExpOutros] = useState(false);
+
   // Aba selecionada no detalhamento
   const [abaDetalhamento, setAbaDetalhamento] = useState<'leads' | 'experimental' | 'visita' | 'matricula'>('matricula');
   const [buscaFunil, setBuscaFunil] = useState('');
@@ -699,6 +703,51 @@ export function ComercialPage() {
           curso_nome: (v.cursos as any)?.nome || '',
         }));
       setVisitasMes(visitasDoMes);
+
+      // Experimentais marcadas no período mas com data_contato de fora (rede de segurança visual)
+      if (startDate && endDate) {
+        let expOutrosQuery = supabase
+          .from('leads')
+          .select('*, canais_origem(nome), cursos(nome), unidades(codigo)')
+          .gte('data_experimental', startDate)
+          .lte('data_experimental', endDate)
+          .eq('experimental_agendada', true)
+          .eq('arquivado', false)
+          .or(`data_contato.lt.${startDate},data_contato.gt.${endDate},data_contato.is.null`);
+
+        if (isAdmin) {
+          if (context?.unidadeSelecionada && context.unidadeSelecionada !== 'todos') {
+            expOutrosQuery = expOutrosQuery.eq('unidade_id', context.unidadeSelecionada);
+          }
+        } else if (usuario?.unidade_id) {
+          expOutrosQuery = expOutrosQuery.eq('unidade_id', usuario.unidade_id);
+        }
+
+        const { data: expOutrosData } = await expOutrosQuery.order('data_experimental', { ascending: true });
+
+        const expOutrosMapped = (expOutrosData || []).map((l: any) => ({
+          ...l,
+          canal_nome: l.canais_origem?.nome || '',
+          curso_nome: l.cursos?.nome || '',
+          unidade_codigo: l.unidades?.codigo || '',
+        }));
+
+        // Buscar nomes dos professores
+        if (expOutrosMapped.length > 0) {
+          const profIds = new Set<number>();
+          expOutrosMapped.forEach((e: any) => { if (e.professor_experimental_id) profIds.add(e.professor_experimental_id); });
+          if (profIds.size > 0) {
+            const { data: profsData } = await supabase.from('professores').select('id, nome').in('id', Array.from(profIds));
+            const profMap = new Map<number, string>(profsData?.map(p => [p.id, p.nome] as [number, string]) || []);
+            expOutrosMapped.forEach((e: any) => {
+              e.professor_nome = e.professor_experimental_id ? profMap.get(e.professor_experimental_id) || '' : '';
+            });
+          }
+        }
+        setExperimentaisHojeOutros(expOutrosMapped);
+      } else {
+        setExperimentaisHojeOutros([]);
+      }
 
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
@@ -3804,6 +3853,106 @@ export function ComercialPage() {
                   {buscaFunil ? 'Nenhuma experimental encontrada para esta busca' : 'Nenhuma experimental registrada ainda'}
                 </p>
                 {!buscaFunil && <p className="text-slate-500 text-sm mt-1">Clique no card "Experimental" acima para adicionar</p>}
+              </div>
+            )}
+
+            {/* Experimentais marcadas no período mas com data_contato de fora */}
+            {experimentaisHojeOutros.length > 0 && (
+              <div className="mt-4">
+                <button
+                  onClick={() => setMostrarExpOutros(prev => !prev)}
+                  className="flex items-center gap-2 w-full group"
+                >
+                  <div className="h-px flex-1 bg-amber-500/30" />
+                  <span className="text-xs text-amber-400 font-medium whitespace-nowrap flex items-center gap-1.5 group-hover:text-amber-300 transition-colors">
+                    {mostrarExpOutros ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                    Experimentais marcadas no periodo ({experimentaisHojeOutros.length})
+                  </span>
+                  <div className="h-px flex-1 bg-amber-500/30" />
+                </button>
+                {mostrarExpOutros && (
+                <table className="w-full text-sm mt-2">
+                  <thead>
+                    <tr className="text-left text-slate-400 border-b border-slate-700">
+                      <th className="pb-3 px-2 font-medium border-r border-slate-700/30">#</th>
+                      <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Experimental</th>
+                      <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Nome</th>
+                      <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Telefone</th>
+                      <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Status</th>
+                      <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Canal</th>
+                      <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Curso</th>
+                      <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Professor</th>
+                      {isAdmin && <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Unidade</th>}
+                      <th className="pb-3 px-2 font-medium text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {experimentaisHojeOutros.map((exp, index) => {
+                      const dataExp = exp.data_experimental ? new Date(exp.data_experimental + 'T12:00:00') : null;
+                      const expLabel = dataExp
+                        ? dataExp.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }) + (exp.horario_experimental ? ' ' + exp.horario_experimental.slice(0, 5) : '')
+                        : '-';
+                      return (
+                        <tr
+                          key={exp.id}
+                          className="border-b border-slate-700/50 bg-amber-500/5 hover:bg-amber-500/10 transition-colors cursor-pointer"
+                          onClick={() => {
+                            setEditingLead(exp);
+                            setEditingLeadOriginal(JSON.parse(JSON.stringify(exp)));
+                          }}
+                        >
+                          <td className="py-3 px-2 text-slate-500 font-medium border-r border-slate-700/30">{index + 1}</td>
+                          <td className="py-3 px-2 border-r border-slate-700/30">
+                            <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-500/20 text-amber-400">
+                              {expLabel}
+                            </span>
+                          </td>
+                          <td className="py-3 px-2 border-r border-slate-700/30">
+                            <span className="text-white font-medium">{exp.nome || '-'}</span>
+                          </td>
+                          <td className="py-3 px-2 border-r border-slate-700/30">
+                            <span className="text-emerald-400">{(exp as any).telefone || '-'}</span>
+                          </td>
+                          <td className="py-3 px-2 border-r border-slate-700/30">
+                            {(() => {
+                              const st = exp.status === 'experimental_agendada' ? { label: 'Agendada', color: 'bg-amber-500/20 text-amber-400' }
+                                : exp.status === 'experimental_realizada' ? { label: 'Realizada', color: 'bg-emerald-500/20 text-emerald-400' }
+                                : exp.status === 'experimental_faltou' ? { label: 'Faltou', color: 'bg-red-500/20 text-red-400' }
+                                : { label: exp.status || '-', color: 'bg-slate-500/20 text-slate-400' };
+                              return <span className={cn('px-1.5 py-0.5 rounded text-xs font-medium', st.color)}>{st.label}</span>;
+                            })()}
+                          </td>
+                          <td className="py-3 px-2 border-r border-slate-700/30">
+                            <CanalOrigemBadge canal={exp.canal_nome || '-'} />
+                          </td>
+                          <td className="py-3 px-2 border-r border-slate-700/30">
+                            <span className="text-purple-400">{exp.curso_nome || '-'}</span>
+                          </td>
+                          <td className="py-3 px-2 border-r border-slate-700/30">
+                            <span className="text-violet-400">{(exp as any).professor_nome || '-'}</span>
+                          </td>
+                          {isAdmin && (
+                            <td className="py-3 px-2 border-r border-slate-700/30">
+                              <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-600/30 text-slate-300">
+                                {exp.unidade_codigo || '-'}
+                              </span>
+                            </td>
+                          )}
+                          <td className="py-3 px-2 text-right">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); exp.id && setDeleteId(exp.id); }}
+                              className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded transition-colors"
+                              title="Excluir"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                )}
               </div>
             )}
           </div>
