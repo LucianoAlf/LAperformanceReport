@@ -492,17 +492,19 @@ export function ChecklistsTab({ unidadeId, departamentoFixo }: ChecklistsTabProp
         );
       })()}
 
-      {/* Seção: Tarefas Rápidas */}
-      <div className="pt-4 border-t border-slate-700/50">
-        <div className="flex items-center gap-2 mb-4">
-          <Zap className="w-5 h-5 text-amber-400" />
-          <h3 className="text-lg font-semibold text-white">Tarefas Rápidas</h3>
-          <span className="text-xs text-slate-500">
-            (tarefas avulsas, sem checklist)
-          </span>
+      {/* Seção: Tarefas Rápidas — só aparece sem departamento fixo */}
+      {!departamentoFixo && (
+        <div className="pt-4 border-t border-slate-700/50">
+          <div className="flex items-center gap-2 mb-4">
+            <Zap className="w-5 h-5 text-amber-400" />
+            <h3 className="text-lg font-semibold text-white">Tarefas Rápidas</h3>
+            <span className="text-xs text-slate-500">
+              (tarefas avulsas, sem checklist)
+            </span>
+          </div>
+          <TarefasTab unidadeId={unidadeId} />
         </div>
-        <TarefasTab unidadeId={unidadeId} />
-      </div>
+      )}
 
       {/* Modal: Novo Checklist — COMPLETO (wireframe) */}
       <Dialog open={modalNovoAberto} onOpenChange={setModalNovoAberto}>
