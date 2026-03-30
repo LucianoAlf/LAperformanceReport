@@ -207,48 +207,73 @@ export function LeadDrawer({ lead, etapas, open, onClose, onAgendar, onMoverEtap
             </div>
           </Secao>
 
-          {/* Experimental */}
-          <Secao titulo="Experimental / Visita">
-            <div className="space-y-2">
-              <LinhaInfo
-                icone={<Calendar className="w-3.5 h-3.5" />}
-                label="Data"
-                valor={lead.data_experimental
-                  ? new Date(lead.data_experimental + 'T12:00:00').toLocaleDateString('pt-BR')
-                  : 'Não agendada'}
-              />
-              {lead.horario_experimental && (
-                <LinhaInfo
-                  icone={<Clock className="w-3.5 h-3.5" />}
-                  label="Horário"
-                  valor={lead.horario_experimental}
-                />
-              )}
-              {professorNome && (
-                <LinhaInfo
-                  icone={<GraduationCap className="w-3.5 h-3.5" />}
-                  label="Professor"
-                  valor={professorNome}
-                />
-              )}
-              <div className="flex items-center gap-2 flex-wrap mt-2">
-                {lead.experimental_agendada && (
-                  <Badge cor="violet">📅 Agendada</Badge>
-                )}
-                {lead.experimental_realizada && (
-                  <Badge cor="emerald">✅ Realizada</Badge>
-                )}
-                {lead.faltou_experimental && (
-                  <Badge cor="rose">❌ Faltou</Badge>
-                )}
-                {lead.converteu && (
-                  <Badge cor="emerald">🎓 Matriculado</Badge>
-                )}
-                {lead.arquivado && (
-                  <Badge cor="slate">📦 Arquivado</Badge>
-                )}
+          {/* Experimentais */}
+          <Secao titulo={`Experimentais${(lead.lead_experimentais?.length || 0) > 1 ? ` (${lead.lead_experimentais?.length})` : ''}`}>
+            {lead.lead_experimentais && lead.lead_experimentais.length > 0 ? (
+              <div className="space-y-3">
+                {lead.lead_experimentais.map((exp) => (
+                  <div key={exp.id} className="bg-slate-800/30 rounded-lg p-3 space-y-1.5">
+                    {lead.lead_experimentais!.length > 1 && (
+                      <div className="text-white text-sm font-medium">{exp.nome_aluno}</div>
+                    )}
+                    <div className="flex items-center gap-4 text-xs text-slate-400">
+                      <span className="flex items-center gap-1">
+                        <Calendar className="w-3 h-3" />
+                        {exp.data_experimental ? new Date(exp.data_experimental + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}
+                      </span>
+                      {exp.horario_experimental && (
+                        <span className="flex items-center gap-1">
+                          <Clock className="w-3 h-3" />
+                          {exp.horario_experimental.slice(0, 5)}
+                        </span>
+                      )}
+                      {exp.professores?.nome && (
+                        <span className="flex items-center gap-1">
+                          <GraduationCap className="w-3 h-3" />
+                          {exp.professores.nome.split(' ')[0]}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1.5 mt-1">
+                      <Badge cor={
+                        exp.status === 'experimental_realizada' || exp.status === 'convertido' ? 'emerald' :
+                        exp.status === 'experimental_faltou' ? 'rose' :
+                        exp.status === 'cancelada' ? 'slate' : 'violet'
+                      }>
+                        {exp.status === 'experimental_agendada' ? '📅 Agendada' :
+                         exp.status === 'experimental_realizada' ? '✅ Realizada' :
+                         exp.status === 'experimental_faltou' ? '❌ Faltou' :
+                         exp.status === 'convertido' ? '🎓 Matriculado' :
+                         exp.status === 'cancelada' ? '🚫 Cancelada' : exp.status}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
               </div>
-            </div>
+            ) : (
+              <div className="space-y-2">
+                <LinhaInfo
+                  icone={<Calendar className="w-3.5 h-3.5" />}
+                  label="Data"
+                  valor={lead.data_experimental
+                    ? new Date(lead.data_experimental + 'T12:00:00').toLocaleDateString('pt-BR')
+                    : 'Não agendada'}
+                />
+                {lead.horario_experimental && (
+                  <LinhaInfo icone={<Clock className="w-3.5 h-3.5" />} label="Horário" valor={lead.horario_experimental} />
+                )}
+                {professorNome && (
+                  <LinhaInfo icone={<GraduationCap className="w-3.5 h-3.5" />} label="Professor" valor={professorNome} />
+                )}
+                <div className="flex items-center gap-2 flex-wrap mt-2">
+                  {lead.experimental_agendada && <Badge cor="violet">📅 Agendada</Badge>}
+                  {lead.experimental_realizada && <Badge cor="emerald">✅ Realizada</Badge>}
+                  {lead.faltou_experimental && <Badge cor="rose">❌ Faltou</Badge>}
+                  {lead.converteu && <Badge cor="emerald">🎓 Matriculado</Badge>}
+                  {lead.arquivado && <Badge cor="slate">📦 Arquivado</Badge>}
+                </div>
+              </div>
+            )}
           </Secao>
 
           {/* Contadores */}

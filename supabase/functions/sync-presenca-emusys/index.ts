@@ -152,6 +152,7 @@ function normalizarTelefone(tel: string | null | undefined): string | null {
 
 // Rede de segurança: reconciliar experimentais que o webhook não atualizou
 // Parte das aulas experimentais do Emusys e busca leads correspondentes por telefone/nome
+// Insere na lead_experimentais (não nas colunas legadas do lead)
 async function reconciliarExperimentaisOrfas(
   supabase: any,
   experimentais: ExperimentalParaReconciliar[]
@@ -169,65 +170,69 @@ async function reconciliarExperimentaisOrfas(
       const unidadeNome = unidadeNomes.get(exp.unidadeId) || exp.unidadeId;
       const telNorm = normalizarTelefone(aluno.telefone_aluno) || normalizarTelefone(aluno.telefone_responsavel);
 
-      // Buscar lead que NÃO foi atualizado pelo webhook (experimental_agendada = false)
-      let lead: any = null;
+      // Verificar se já existe registro na lead_experimentais para esse aluno+data
+      const { data: expExistente } = await supabase
+        .from('lead_experimentais')
+        .select('id')
+        .eq('nome_aluno', nomeAluno)
+        .eq('data_experimental', exp.dataAula)
+        .eq('unidade_id', exp.unidadeId)
+        .neq('status', 'cancelada')
+        .limit(1)
+        .maybeSingle();
 
-      // 1. Match por telefone
+      if (expExistente) continue; // Já existe registro, pular
+
+      // Buscar lead por telefone
+      let leadId: number | null = null;
       if (telNorm) {
         const { data: leadPorTel } = await supabase
           .from('leads')
-          .select('id, nome, experimental_agendada, experimental_realizada, faltou_experimental')
+          .select('id')
           .eq('telefone', telNorm)
           .eq('unidade_id', exp.unidadeId)
           .eq('arquivado', false)
           .limit(1)
           .maybeSingle();
-        if (leadPorTel) lead = leadPorTel;
+        if (leadPorTel) leadId = leadPorTel.id;
       }
 
-      // 2. Fallback por nome normalizado
-      if (!lead) {
+      // Fallback por nome normalizado
+      if (!leadId) {
         const nomeNorm = normalizarNome(nomeAluno);
         const { data: leads } = await supabase
           .from('leads')
-          .select('id, nome, experimental_agendada, experimental_realizada, faltou_experimental')
+          .select('id, nome')
           .eq('unidade_id', exp.unidadeId)
           .eq('arquivado', false)
           .limit(100);
 
-        lead = (leads || []).find((l: any) => normalizarNome(l.nome) === nomeNorm);
+        const match = (leads || []).find((l: any) => normalizarNome(l.nome) === nomeNorm);
+        if (match) leadId = match.id;
       }
 
-      if (!lead) continue;
+      if (!leadId) continue;
 
-      // Pular se já foi atualizado pelo webhook ou já confirmado
-      if (lead.experimental_agendada && (lead.experimental_realizada || lead.faltou_experimental)) continue;
-
-      // Se já tem experimental_agendada mas sem confirmação, pular (confirmarExperimentais cuida)
-      if (lead.experimental_agendada) continue;
-
-      // Lead não foi atualizado pelo webhook → reconciliar direto para estado final
+      // Inserir na lead_experimentais direto no estado final
       const presente = aluno.presenca === 'presente';
-      const updateData: any = {
-        experimental_agendada: true,
-        data_experimental: exp.dataAula,
-        horario_experimental: exp.horario + ':00',
-        professor_experimental_id: exp.professorId,
-        experimental_realizada: presente,
-        faltou_experimental: !presente,
-        status: presente ? 'experimental_realizada' : 'experimental_faltou',
-        etapa_pipeline_id: presente ? 7 : 9,
-        updated_at: new Date().toISOString(),
-      };
+      const status = presente ? 'experimental_realizada' : 'experimental_faltou';
 
       const { error } = await supabase
-        .from('leads')
-        .update(updateData)
-        .eq('id', lead.id);
+        .from('lead_experimentais')
+        .insert({
+          lead_id: leadId,
+          nome_aluno: nomeAluno,
+          unidade_id: exp.unidadeId,
+          data_experimental: exp.dataAula,
+          horario_experimental: exp.horario + ':00',
+          professor_experimental_id: exp.professorId,
+          status,
+          etapa_pipeline_id: presente ? 7 : 9,
+        });
 
       logs.push({
-        lead_id: lead.id,
-        lead_nome: lead.nome || nomeAluno,
+        lead_id: leadId,
+        lead_nome: nomeAluno,
         unidade: unidadeNome,
         data: exp.dataAula,
         status: error ? 'erro' : (presente ? 'reconciliada_presente' : 'reconciliada_faltou'),
@@ -258,97 +263,102 @@ async function reconciliarExperimentaisOrfas(
   return logs;
 }
 
-// Confirmar experimentais: cruzar aulas_emusys (categoria=experimental) com leads agendados
+// Confirmar experimentais: cruzar aulas_emusys (categoria=experimental) com lead_experimentais agendadas
 async function confirmarExperimentais(
   supabase: any,
   _datasProcessar: string[]
 ) {
   const logs: { lead_id: number; lead_nome: string; unidade: string; data: string; professor: string; status: string; motivo: string }[] = [];
 
-  // Buscar TODOS os leads pendentes com data_experimental no passado
-  // (não apenas as datas processadas, para recuperar leads que ficaram sem confirmação)
   const hoje = new Date();
   const hojeBRT = new Date(hoje.getTime() - 3 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-  const { data: leadsAgendados } = await supabase
-    .from('leads')
-    .select('id, nome, data_experimental, horario_experimental, professor_experimental_id, unidade_id')
-    .eq('experimental_agendada', true)
-    .eq('experimental_realizada', false)
-    .eq('faltou_experimental', false)
+  // Buscar experimentais pendentes na nova tabela
+  const { data: expPendentes } = await supabase
+    .from('lead_experimentais')
+    .select('id, lead_id, nome_aluno, data_experimental, horario_experimental, professor_experimental_id, unidade_id')
+    .eq('status', 'experimental_agendada')
     .lte('data_experimental', hojeBRT);
 
-  if (!leadsAgendados?.length) return logs;
+  if (!expPendentes?.length) return logs;
 
-  // Buscar nomes de unidades para o log
   const unidadeNomes = new Map(UNIDADES.map(u => [u.id, u.nome]));
 
-  for (const lead of leadsAgendados) {
-    // Pular se professor_experimental_id é null
-    if (!lead.professor_experimental_id) {
+  for (const exp of expPendentes) {
+    if (!exp.professor_experimental_id) {
       logs.push({
-        lead_id: lead.id,
-        lead_nome: lead.nome || 'Sem nome',
-        unidade: unidadeNomes.get(lead.unidade_id) || lead.unidade_id,
-        data: lead.data_experimental,
+        lead_id: exp.lead_id,
+        lead_nome: exp.nome_aluno || 'Sem nome',
+        unidade: unidadeNomes.get(exp.unidade_id) || exp.unidade_id,
+        data: exp.data_experimental,
         professor: 'sem_professor',
         status: 'nao_encontrada',
-        motivo: 'Lead sem professor experimental vinculado'
+        motivo: 'Experimental sem professor vinculado'
       });
       continue;
     }
 
-    // Buscar aula experimental no Emusys para essa combinação
+    // Buscar aula experimental no aulas_emusys
     const { data: aulasMatch } = await supabase
       .from('aulas_emusys')
       .select('id, data_hora_inicio, cancelada')
-      .eq('data_aula', lead.data_experimental)
-      .eq('professor_id', lead.professor_experimental_id)
-      .eq('unidade_id', lead.unidade_id)
+      .eq('data_aula', exp.data_experimental)
+      .eq('professor_id', exp.professor_experimental_id)
+      .eq('unidade_id', exp.unidade_id)
       .eq('categoria', 'experimental')
       .limit(5);
 
-    const unidadeNome = unidadeNomes.get(lead.unidade_id) || lead.unidade_id;
+    const unidadeNome = unidadeNomes.get(exp.unidade_id) || exp.unidade_id;
 
     if (!aulasMatch?.length) {
       logs.push({
-        lead_id: lead.id,
-        lead_nome: lead.nome || 'Sem nome',
+        lead_id: exp.lead_id,
+        lead_nome: exp.nome_aluno || 'Sem nome',
         unidade: unidadeNome,
-        data: lead.data_experimental,
-        professor: String(lead.professor_experimental_id),
+        data: exp.data_experimental,
+        professor: String(exp.professor_experimental_id),
         status: 'nao_encontrada',
         motivo: 'Aula experimental não encontrada no Emusys'
       });
       continue;
     }
 
-    // Filtrar por horário se disponível e houver múltiplas aulas
+    // Filtrar por horário
     let aulaFinal = aulasMatch[0];
-    if (lead.horario_experimental && aulasMatch.length > 1) {
-      const horaLead = lead.horario_experimental.slice(0, 5);
+    if (exp.horario_experimental && aulasMatch.length > 1) {
+      const horaExp = exp.horario_experimental.slice(0, 5);
       const matchHorario = aulasMatch.find((a: any) => {
         const horaAula = new Date(a.data_hora_inicio).toISOString().slice(11, 16);
-        return horaAula === horaLead;
+        return horaAula === horaExp;
       });
       if (matchHorario) aulaFinal = matchHorario;
     }
 
     if (aulaFinal.cancelada) {
       logs.push({
-        lead_id: lead.id,
-        lead_nome: lead.nome || 'Sem nome',
+        lead_id: exp.lead_id,
+        lead_nome: exp.nome_aluno || 'Sem nome',
         unidade: unidadeNome,
-        data: lead.data_experimental,
-        professor: String(lead.professor_experimental_id),
+        data: exp.data_experimental,
+        professor: String(exp.professor_experimental_id),
         status: 'cancelada',
         motivo: 'Aula experimental cancelada no Emusys'
       });
       continue;
     }
 
-    // Aula existe e não está cancelada → marcar como realizada
-    const { error } = await supabase
+    // Atualizar na lead_experimentais
+    const { error: expError } = await supabase
+      .from('lead_experimentais')
+      .update({
+        status: 'experimental_realizada',
+        etapa_pipeline_id: 7,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', exp.id);
+
+    // Atualizar colunas legadas do lead (compatibilidade)
+    await supabase
       .from('leads')
       .update({
         experimental_realizada: true,
@@ -356,20 +366,20 @@ async function confirmarExperimentais(
         etapa_pipeline_id: 7,
         updated_at: new Date().toISOString()
       })
-      .eq('id', lead.id);
+      .eq('id', exp.lead_id);
 
     logs.push({
-      lead_id: lead.id,
-      lead_nome: lead.nome || 'Sem nome',
+      lead_id: exp.lead_id,
+      lead_nome: exp.nome_aluno || 'Sem nome',
       unidade: unidadeNome,
-      data: lead.data_experimental,
-      professor: String(lead.professor_experimental_id),
-      status: error ? 'erro' : 'confirmada',
-      motivo: error ? error.message : 'Experimental confirmada via sync Emusys'
+      data: exp.data_experimental,
+      professor: String(exp.professor_experimental_id),
+      status: expError ? 'erro' : 'confirmada',
+      motivo: expError ? expError.message : 'Experimental confirmada via sync Emusys'
     });
   }
 
-  // Gravar logs no leads_automacao_log
+  // Gravar logs
   for (const log of logs) {
     await supabase.from('leads_automacao_log').insert({
       lead_id: log.lead_id,

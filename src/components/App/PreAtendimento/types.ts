@@ -154,6 +154,29 @@ export interface LeadCRM {
   crm_motivos_nao_comparecimento?: MotivoNaoComparecimento | null;
   atendido_por?: { nome: string; apelido: string | null } | null;
   consultor?: { nome: string; apelido: string | null } | null;
+
+  // Experimentais (nova tabela)
+  lead_experimentais?: LeadExperimental[];
+}
+
+export interface LeadExperimental {
+  id: number;
+  lead_id: number;
+  nome_aluno: string;
+  unidade_id: string;
+  data_experimental: string | null;
+  horario_experimental: string | null;
+  professor_experimental_id: number | null;
+  curso_interesse_id: number | null;
+  status: string;
+  etapa_pipeline_id: number | null;
+  aluno_id: number | null;
+  emusys_lead_id: number | null;
+  created_at: string;
+  updated_at: string;
+  // Joins
+  professores?: { nome: string } | null;
+  cursos?: { nome: string } | null;
 }
 
 // Abas do CRM
