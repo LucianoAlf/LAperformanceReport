@@ -4380,6 +4380,7 @@ export function ComercialPage() {
                 <tr className="text-left text-slate-400 border-b border-slate-700">
                   <th className="pb-3 px-2 font-medium border-r border-slate-700/30">#</th>
                   <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Data</th>
+                  <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Conversão</th>
                   <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Aluno(a)</th>
                   <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Telefone</th>
                   <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Idade</th>
@@ -4410,7 +4411,17 @@ export function ComercialPage() {
                         textClassName="text-slate-300"
                       />
                     </td>
-                    
+
+                    {/* Data Conversão - Edição inline */}
+                    <td className="py-3 px-2 border-r border-slate-700/30">
+                      <CelulaEditavelInline
+                        value={mat.data_conversao}
+                        onChange={async (valor) => mat.id && salvarCampoMatricula(mat.id, 'data_conversao', valor)}
+                        tipo="data"
+                        textClassName="text-emerald-400"
+                      />
+                    </td>
+
                     {/* Aluno - Edição inline */}
                     <td className="py-3 px-2 border-r border-slate-700/30">
                       <CelulaEditavelInline
