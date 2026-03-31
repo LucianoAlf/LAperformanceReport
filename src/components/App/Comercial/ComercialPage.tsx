@@ -958,13 +958,48 @@ export function ComercialPage() {
       }).eq('id', leadId);
       if (error) throw error;
       const newStatus = statusFromEtapa(novaEtapa);
+      const lead = leadsMes.find(l => l.id === leadId);
       setLeadsMes(prev => prev.map(l => l.id === leadId
         ? { ...l, etapa_pipeline_id: novaEtapa, status: newStatus, ...extras } : l));
+
+      // Criar registro em lead_experimentais quando avança para Exp. Agendada (etapa 5)
+      if (novaEtapa === 5 && lead) {
+        const expRecord: Record<string, any> = {
+          lead_id: leadId,
+          nome_aluno: lead.nome || '',
+          unidade_id: lead.unidade_id,
+          status: 'experimental_agendada',
+          etapa_pipeline_id: 5,
+          data_experimental: extras?.data_experimental || null,
+          horario_experimental: extras?.horario_experimental || null,
+          professor_experimental_id: extras?.professor_experimental_id || null,
+          curso_interesse_id: lead.curso_interesse_id || null,
+        };
+        const { data: inserted } = await supabase.from('lead_experimentais').upsert(expRecord, {
+          onConflict: 'lead_id,data_experimental,nome_aluno',
+        }).select('*, professores:professor_experimental_id(nome), cursos:curso_interesse_id(nome)').single();
+
+        if (inserted) {
+          const profNome = (inserted as any).professores?.nome || professores.find(p => p.value === extras?.professor_experimental_id)?.label || '';
+          const cursoNome = (inserted as any).cursos?.nome || cursos.find(c => c.value === lead.curso_interesse_id)?.label || '';
+          setExperimentaisDetalhadas(prev => [...prev, {
+            ...inserted,
+            lead_nome: lead.nome || '',
+            lead_telefone: (lead as any).telefone || '',
+            canal_nome: canais.find(c => c.value === lead.canal_origem_id)?.label || '',
+            curso_nome: cursoNome,
+            professor_nome: profNome,
+            unidade_codigo: (lead as any).unidade_codigo || '',
+            leads: { ...lead, canal_origem_id: lead.canal_origem_id },
+            data_contato: lead.data_contato,
+          }]);
+        }
+      }
+
       if (newStatus.startsWith('experimental')) {
         setExperimentaisMes(prev => {
           const exists = prev.some(l => l.id === leadId);
           if (exists) return prev.map(l => l.id === leadId ? { ...l, etapa_pipeline_id: novaEtapa, status: newStatus, ...extras } as any : l);
-          const lead = leadsMes.find(l => l.id === leadId);
           return lead ? [...prev, { ...lead, etapa_pipeline_id: novaEtapa, status: newStatus, ...extras } as any] : prev;
         });
       } else {
@@ -974,7 +1009,6 @@ export function ComercialPage() {
         setVisitasMes(prev => {
           const exists = prev.some(l => l.id === leadId);
           if (exists) return prev.map(l => l.id === leadId ? { ...l, etapa_pipeline_id: novaEtapa, status: newStatus, ...extras } as any : l);
-          const lead = leadsMes.find(l => l.id === leadId);
           return lead ? [...prev, { ...lead, etapa_pipeline_id: novaEtapa, status: newStatus, ...extras } as any] : prev;
         });
       } else {
