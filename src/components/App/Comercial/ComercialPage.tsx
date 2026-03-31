@@ -745,16 +745,20 @@ export function ComercialPage() {
         }));
       setVisitasMes(visitasDoMes);
 
-      // Experimentais marcadas no período mas com data_contato de fora (rede de segurança visual)
+      // Experimentais agendadas no período mas com data_contato do lead fora do range
       if (startDate && endDate) {
         let expOutrosQuery = supabase
-          .from('leads')
-          .select('*, canais_origem(nome), cursos(nome), unidades(codigo)')
-          .gte('data_experimental', startDate)
-          .lte('data_experimental', endDate)
-          .eq('experimental_agendada', true)
-          .eq('arquivado', false)
-          .or(`data_contato.lt.${startDate},data_contato.gt.${endDate},data_contato.is.null`);
+          .from('lead_experimentais')
+          .select(`
+            *,
+            leads!inner(id, nome, telefone, canal_origem_id, unidade_id, data_contato, canais_origem(nome), unidades(codigo)),
+            professores:professor_experimental_id(nome),
+            cursos:curso_interesse_id(nome)
+          `)
+          .gte('created_at', startDate + 'T00:00:00-03:00')
+          .lte('created_at', endDate + 'T23:59:59-03:00')
+          .neq('status', 'cancelada')
+          .or(`data_contato.lt.${startDate},data_contato.gt.${endDate},data_contato.is.null`, { referencedTable: 'leads' });
 
         if (isAdmin) {
           if (context?.unidadeSelecionada && context.unidadeSelecionada !== 'todos') {
@@ -764,27 +768,18 @@ export function ComercialPage() {
           expOutrosQuery = expOutrosQuery.eq('unidade_id', usuario.unidade_id);
         }
 
-        const { data: expOutrosData } = await expOutrosQuery.order('data_experimental', { ascending: true });
+        const { data: expOutrosData } = await expOutrosQuery.order('created_at', { ascending: true });
 
-        const expOutrosMapped = (expOutrosData || []).map((l: any) => ({
-          ...l,
-          canal_nome: l.canais_origem?.nome || '',
-          curso_nome: l.cursos?.nome || '',
-          unidade_codigo: l.unidades?.codigo || '',
+        const expOutrosMapped = (expOutrosData || []).map((e: any) => ({
+          ...e,
+          lead_nome: e.leads?.nome || e.nome_aluno,
+          lead_telefone: e.leads?.telefone || '',
+          canal_nome: e.leads?.canais_origem?.nome || '',
+          curso_nome: e.cursos?.nome || '',
+          professor_nome: e.professores?.nome || '',
+          unidade_codigo: e.leads?.unidades?.codigo || '',
+          data_contato: e.leads?.data_contato || '',
         }));
-
-        // Buscar nomes dos professores
-        if (expOutrosMapped.length > 0) {
-          const profIds = new Set<number>();
-          expOutrosMapped.forEach((e: any) => { if (e.professor_experimental_id) profIds.add(e.professor_experimental_id); });
-          if (profIds.size > 0) {
-            const { data: profsData } = await supabase.from('professores').select('id, nome').in('id', Array.from(profIds));
-            const profMap = new Map<number, string>(profsData?.map(p => [p.id, p.nome] as [number, string]) || []);
-            expOutrosMapped.forEach((e: any) => {
-              e.professor_nome = e.professor_experimental_id ? profMap.get(e.professor_experimental_id) || '' : '';
-            });
-          }
-        }
         setExperimentaisHojeOutros(expOutrosMapped);
       } else {
         setExperimentaisHojeOutros([]);
@@ -1068,6 +1063,25 @@ export function ComercialPage() {
       setLeadsMes(prev => prev.map(patchRow));
       setExperimentaisMes(prev => prev.map(patchRow));
       setVisitasMes(prev => prev.map(patchRow));
+      // Atualizar experimentaisDetalhadas (dados vêm de lead_experimentais join leads)
+      setExperimentaisDetalhadas(prev => prev.map((row: any) => {
+        if (row.lead_id !== matriculaId) return row;
+        const updated = { ...row };
+        // Campos do lead (nome, telefone, canal, curso) precisam ser atualizados nos campos mapeados
+        if (campo === 'nome') updated.lead_nome = valor;
+        if (campo === 'telefone') updated.lead_telefone = valor;
+        if (campo === 'canal_origem_id') {
+          updated.leads = { ...updated.leads, canal_origem_id: valor };
+          const canal = canais.find(c => c.value === valor);
+          updated.canal_nome = canal?.label || '';
+        }
+        if (campo === 'curso_interesse_id') {
+          updated.curso_interesse_id = valor;
+          const curso = cursos.find(c => c.value === valor);
+          updated.curso_nome = curso?.label || '';
+        }
+        return updated;
+      }));
     } catch (error: any) {
       console.error('Erro ao atualizar:', error);
       if (error?.code === '23505' && campo === 'telefone') {
@@ -1095,6 +1109,31 @@ export function ComercialPage() {
       }
     }
   }, [canais, cursos]);
+
+  // Salvar campo na tabela lead_experimentais (professor, status)
+  const salvarCampoExperimental = useCallback(async (expId: number, campo: string, valor: string | number | null) => {
+    try {
+      const updateData: Record<string, any> = { [campo]: valor };
+      const { error } = await supabase
+        .from('lead_experimentais')
+        .update(updateData)
+        .eq('id', expId);
+      if (error) throw error;
+
+      setExperimentaisDetalhadas(prev => prev.map((row: any) => {
+        if (row.id !== expId) return row;
+        const updated = { ...row, [campo]: valor };
+        if (campo === 'professor_experimental_id') {
+          const prof = professores.find(p => p.value === valor);
+          updated.professor_nome = prof?.label || '';
+        }
+        return updated;
+      }));
+      toast.success('Atualizado');
+    } catch {
+      toast.error('Erro ao atualizar');
+    }
+  }, [professores]);
 
   const confirmDelete = async () => {
     if (!deleteId) return;
@@ -3705,6 +3744,13 @@ export function ComercialPage() {
                       etapa_pipeline_id: exp.etapa_pipeline_id,
                       professor_experimental_id: exp.professor_experimental_id,
                     } as LeadCRM);
+                    const statusOpcoes = [
+                      { value: 'experimental_agendada', label: 'Agendada' },
+                      { value: 'experimental_realizada', label: 'Realizada' },
+                      { value: 'experimental_faltou', label: 'Faltou' },
+                      { value: 'convertido', label: 'Convertido' },
+                      { value: 'cancelada', label: 'Cancelada' },
+                    ];
                     const renderAcoes = (exp: any) => {
                       const etapa = exp.etapa_pipeline_id || 5;
                       const transicoes = transicoesEtapa[etapa] || [];
@@ -3773,13 +3819,65 @@ export function ComercialPage() {
                           <tr key={first.id} className="border-b border-slate-700/50 hover:bg-slate-700/20 transition-colors cursor-pointer" onClick={() => abrirLead(first)}>
                             <td className="py-3 px-2 text-slate-500 font-medium border-r border-slate-700/30">{rowIndex}</td>
                             <td className="py-3 px-2 border-r border-slate-700/30"><span className="px-1.5 py-0.5 rounded text-xs font-medium bg-violet-500/20 text-violet-400">{fmtData(first)}</span></td>
-                            <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-white font-medium">{first.nome_aluno || '-'}</span></td>
-                            <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-slate-400 text-xs">{first.lead_nome || '-'}</span></td>
-                            <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-emerald-400">{first.lead_telefone || '-'}</span></td>
-                            <td className="py-3 px-2 border-r border-slate-700/30">{statusBadge(first.status)}</td>
-                            <td className="py-3 px-2 border-r border-slate-700/30"><CanalOrigemBadge canal={first.canal_nome || '-'} /></td>
-                            <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-purple-400">{first.curso_nome || '-'}</span></td>
-                            <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-violet-400">{first.professor_nome || '-'}</span></td>
+                            <td className="py-3 px-2 border-r border-slate-700/30">
+                              <CelulaEditavelInline
+                                value={first.lead_nome || first.nome_aluno}
+                                onChange={async (valor) => first.lead_id && salvarCampoMatricula(first.lead_id, 'nome', valor)}
+                                tipo="texto"
+                                textClassName="text-white font-medium"
+                                placeholder="-"
+                              />
+                            </td>
+                            <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-slate-400 text-xs">{first.nome_aluno !== first.lead_nome ? first.nome_aluno : ''}</span></td>
+                            <td className="py-3 px-2 border-r border-slate-700/30">
+                              <CelulaEditavelInline
+                                value={first.lead_telefone}
+                                onChange={async (valor) => first.lead_id && salvarCampoMatricula(first.lead_id, 'telefone', valor)}
+                                tipo="texto"
+                                textClassName="text-emerald-400"
+                                placeholder="-"
+                              />
+                            </td>
+                            <td className="py-3 px-2 border-r border-slate-700/30" onClick={(e) => e.stopPropagation()}>
+                              <CelulaEditavelInline
+                                value={first.status}
+                                onChange={async (valor) => first.id && salvarCampoExperimental(first.id, 'status', valor)}
+                                tipo="select"
+                                opcoes={statusOpcoes}
+                                placeholder="-"
+                                formatarExibicao={() => statusBadge(first.status)}
+                              />
+                            </td>
+                            <td className="py-3 px-2 border-r border-slate-700/30" onClick={(e) => e.stopPropagation()}>
+                              <CelulaEditavelInline
+                                value={first.leads?.canal_origem_id}
+                                onChange={async (valor) => first.lead_id && salvarCampoMatricula(first.lead_id, 'canal_origem_id', valor ? Number(valor) : null)}
+                                tipo="select"
+                                opcoes={canais.map(c => ({ value: c.value, label: c.label }))}
+                                placeholder="-"
+                                formatarExibicao={() => <CanalOrigemBadge canal={first.canal_nome || '-'} />}
+                              />
+                            </td>
+                            <td className="py-3 px-2 border-r border-slate-700/30" onClick={(e) => e.stopPropagation()}>
+                              <CelulaEditavelInline
+                                value={first.curso_interesse_id}
+                                onChange={async (valor) => first.lead_id && salvarCampoMatricula(first.lead_id, 'curso_interesse_id', valor ? Number(valor) : null)}
+                                tipo="select"
+                                opcoes={cursos.map(c => ({ value: c.value, label: c.label }))}
+                                placeholder="-"
+                                formatarExibicao={() => <span className="text-purple-400">{first.curso_nome || '-'}</span>}
+                              />
+                            </td>
+                            <td className="py-3 px-2 border-r border-slate-700/30" onClick={(e) => e.stopPropagation()}>
+                              <CelulaEditavelInline
+                                value={first.professor_experimental_id}
+                                onChange={async (valor) => first.id && salvarCampoExperimental(first.id, 'professor_experimental_id', valor ? Number(valor) : null)}
+                                tipo="select"
+                                opcoes={professores.map(p => ({ value: p.value, label: p.label }))}
+                                placeholder="-"
+                                formatarExibicao={() => <span className="text-violet-400">{first.professor_nome || '-'}</span>}
+                              />
+                            </td>
                             {isAdmin && <td className="py-3 px-2 border-r border-slate-700/30"><span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-600/30 text-slate-300">{first.unidade_codigo || '-'}</span></td>}
                             <td className="py-3 px-2 text-right">{renderAcoes(first)}</td>
                           </tr>
@@ -3810,11 +3908,55 @@ export function ComercialPage() {
                             </div>
                           </td>
                           <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-slate-400 text-xs">{first.lead_nome || '-'}</span></td>
-                          <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-emerald-400">{first.lead_telefone || '-'}</span></td>
-                          <td className="py-3 px-2 border-r border-slate-700/30">{statusBadge(first.status)}</td>
-                          <td className="py-3 px-2 border-r border-slate-700/30"><CanalOrigemBadge canal={first.canal_nome || '-'} /></td>
-                          <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-purple-400">{first.curso_nome || '-'}</span></td>
-                          <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-violet-400">{first.professor_nome || '-'}</span></td>
+                          <td className="py-3 px-2 border-r border-slate-700/30" onClick={(e) => e.stopPropagation()}>
+                            <CelulaEditavelInline
+                              value={first.lead_telefone}
+                              onChange={async (valor) => first.lead_id && salvarCampoMatricula(first.lead_id, 'telefone', valor)}
+                              tipo="texto"
+                              textClassName="text-emerald-400"
+                              placeholder="-"
+                            />
+                          </td>
+                          <td className="py-3 px-2 border-r border-slate-700/30" onClick={(e) => e.stopPropagation()}>
+                            <CelulaEditavelInline
+                              value={first.status}
+                              onChange={async (valor) => first.id && salvarCampoExperimental(first.id, 'status', valor)}
+                              tipo="select"
+                              opcoes={statusOpcoes}
+                              placeholder="-"
+                              formatarExibicao={() => statusBadge(first.status)}
+                            />
+                          </td>
+                          <td className="py-3 px-2 border-r border-slate-700/30" onClick={(e) => e.stopPropagation()}>
+                            <CelulaEditavelInline
+                              value={first.leads?.canal_origem_id}
+                              onChange={async (valor) => first.lead_id && salvarCampoMatricula(first.lead_id, 'canal_origem_id', valor ? Number(valor) : null)}
+                              tipo="select"
+                              opcoes={canais.map(c => ({ value: c.value, label: c.label }))}
+                              placeholder="-"
+                              formatarExibicao={() => <CanalOrigemBadge canal={first.canal_nome || '-'} />}
+                            />
+                          </td>
+                          <td className="py-3 px-2 border-r border-slate-700/30" onClick={(e) => e.stopPropagation()}>
+                            <CelulaEditavelInline
+                              value={first.curso_interesse_id}
+                              onChange={async (valor) => first.lead_id && salvarCampoMatricula(first.lead_id, 'curso_interesse_id', valor ? Number(valor) : null)}
+                              tipo="select"
+                              opcoes={cursos.map(c => ({ value: c.value, label: c.label }))}
+                              placeholder="-"
+                              formatarExibicao={() => <span className="text-purple-400">{first.curso_nome || '-'}</span>}
+                            />
+                          </td>
+                          <td className="py-3 px-2 border-r border-slate-700/30" onClick={(e) => e.stopPropagation()}>
+                            <CelulaEditavelInline
+                              value={first.professor_experimental_id}
+                              onChange={async (valor) => first.id && salvarCampoExperimental(first.id, 'professor_experimental_id', valor ? Number(valor) : null)}
+                              tipo="select"
+                              opcoes={professores.map(p => ({ value: p.value, label: p.label }))}
+                              placeholder="-"
+                              formatarExibicao={() => <span className="text-violet-400">{first.professor_nome || '-'}</span>}
+                            />
+                          </td>
                           {isAdmin && <td className="py-3 px-2 border-r border-slate-700/30"><span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-600/30 text-slate-300">{first.unidade_codigo || '-'}</span></td>}
                           <td className="py-3 px-2 text-right">{renderAcoes(first)}</td>
                         </tr>
@@ -3834,10 +3976,28 @@ export function ComercialPage() {
                               </td>
                               <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-slate-600 text-xs">↑</span></td>
                               <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-slate-600 text-xs">↑</span></td>
-                              <td className="py-3 px-2 border-r border-slate-700/30">{statusBadge(exp.status)}</td>
+                              <td className="py-3 px-2 border-r border-slate-700/30" onClick={(e) => e.stopPropagation()}>
+                                <CelulaEditavelInline
+                                  value={exp.status}
+                                  onChange={async (valor) => exp.id && salvarCampoExperimental(exp.id, 'status', valor)}
+                                  tipo="select"
+                                  opcoes={statusOpcoes}
+                                  placeholder="-"
+                                  formatarExibicao={() => statusBadge(exp.status)}
+                                />
+                              </td>
                               <td className="py-3 px-2 border-r border-slate-700/30"><CanalOrigemBadge canal={exp.canal_nome || '-'} /></td>
                               <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-purple-400">{exp.curso_nome || '-'}</span></td>
-                              <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-violet-400">{exp.professor_nome || '-'}</span></td>
+                              <td className="py-3 px-2 border-r border-slate-700/30" onClick={(e) => e.stopPropagation()}>
+                                <CelulaEditavelInline
+                                  value={exp.professor_experimental_id}
+                                  onChange={async (valor) => exp.id && salvarCampoExperimental(exp.id, 'professor_experimental_id', valor ? Number(valor) : null)}
+                                  tipo="select"
+                                  opcoes={professores.map(p => ({ value: p.value, label: p.label }))}
+                                  placeholder="-"
+                                  formatarExibicao={() => <span className="text-violet-400">{exp.professor_nome || '-'}</span>}
+                                />
+                              </td>
                               {isAdmin && <td className="py-3 px-2 border-r border-slate-700/30"><span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-600/30 text-slate-300">{exp.unidade_codigo || '-'}</span></td>}
                               <td className="py-3 px-2 text-right">{renderAcoes(exp)}</td>
                             </tr>
@@ -3869,7 +4029,7 @@ export function ComercialPage() {
                   <div className="h-px flex-1 bg-amber-500/30" />
                   <span className="text-xs text-amber-400 font-medium whitespace-nowrap flex items-center gap-1.5 group-hover:text-amber-300 transition-colors">
                     {mostrarExpOutros ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                    Experimentais marcadas no periodo ({experimentaisHojeOutros.length})
+                    Experimentais agendadas no periodo ({experimentaisHojeOutros.length})
                   </span>
                   <div className="h-px flex-1 bg-amber-500/30" />
                 </button>
@@ -3878,8 +4038,9 @@ export function ComercialPage() {
                   <thead>
                     <tr className="text-left text-slate-400 border-b border-slate-700">
                       <th className="pb-3 px-2 font-medium border-r border-slate-700/30">#</th>
-                      <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Experimental</th>
-                      <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Nome</th>
+                      <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Agendada em</th>
+                      <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Aula em</th>
+                      <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Aluno</th>
                       <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Telefone</th>
                       <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Status</th>
                       <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Canal</th>
@@ -3890,10 +4051,13 @@ export function ComercialPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {experimentaisHojeOutros.map((exp, index) => {
-                      const dataExp = exp.data_experimental ? new Date(exp.data_experimental + 'T12:00:00') : null;
-                      const expLabel = dataExp
-                        ? dataExp.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }) + (exp.horario_experimental ? ' ' + exp.horario_experimental.slice(0, 5) : '')
+                    {experimentaisHojeOutros.map((exp: any, index) => {
+                      const createdAt = exp.created_at ? new Date(exp.created_at) : null;
+                      const agendadaLabel = createdAt
+                        ? createdAt.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })
+                        : '-';
+                      const aulaLabel = exp.data_experimental
+                        ? new Date(exp.data_experimental + 'T12:00:00').toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }) + (exp.horario_experimental ? ' ' + exp.horario_experimental.slice(0, 5) : '')
                         : '-';
                       return (
                         <tr
@@ -3907,14 +4071,19 @@ export function ComercialPage() {
                           <td className="py-3 px-2 text-slate-500 font-medium border-r border-slate-700/30">{index + 1}</td>
                           <td className="py-3 px-2 border-r border-slate-700/30">
                             <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-500/20 text-amber-400">
-                              {expLabel}
+                              {agendadaLabel}
                             </span>
                           </td>
                           <td className="py-3 px-2 border-r border-slate-700/30">
-                            <span className="text-white font-medium">{exp.nome || '-'}</span>
+                            <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-violet-500/20 text-violet-400">
+                              {aulaLabel}
+                            </span>
                           </td>
                           <td className="py-3 px-2 border-r border-slate-700/30">
-                            <span className="text-emerald-400">{(exp as any).telefone || '-'}</span>
+                            <span className="text-white font-medium">{exp.nome_aluno || exp.lead_nome || '-'}</span>
+                          </td>
+                          <td className="py-3 px-2 border-r border-slate-700/30">
+                            <span className="text-emerald-400">{exp.lead_telefone || '-'}</span>
                           </td>
                           <td className="py-3 px-2 border-r border-slate-700/30">
                             {(() => {

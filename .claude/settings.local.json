@@ -52,7 +52,20 @@
       "WebFetch(domain:workla.latecnology.com.br)",
       "WebFetch(domain:emusys.gitbook.io)",
       "Bash(echo \"exit: $?\")",
-      "mcp__emusys__searchDocumentation"
+      "mcp__emusys__searchDocumentation",
+      "Bash(find 'c:/Users/hugog/OneDrive/Desktop/Projects/LA Music/LAperformanceReport' -type f \\\\\\(-name *.json -o -name *.ts \\\\\\))",
+      "Bash(do grep:*)",
+      "Bash(echo \"$f\")",
+      "Bash(done)",
+      "Bash(/dev/null -type f)",
+      "Bash(while read:*)",
+      "Bash(python3 -c \":*)",
+      "Bash(ids=\"68058 67840 67821 67814 67081 66985 66926 66870 66761 66424 66307 66264 66019 66016 62212 62140 62086 62083\" __NEW_LINE_82aece4425987075__ for id in $ids)",
+      "Bash(do curl:*)",
+      "Bash(/dev/null done:*)",
+      "Bash(python -c \":*)",
+      "Bash(/dev/null __NEW_LINE_ca9481b2b0d1ba55__ echo)",
+      "Bash(/dev/null __NEW_LINE_1eb480e7d51cd023__ echo)"
     ]
   }
 }
