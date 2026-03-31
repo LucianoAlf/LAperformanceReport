@@ -1467,18 +1467,18 @@ export function ComercialPage() {
 
     if (data && data.length > 0) {
       const existing = data[0];
-      const updates = {
-        aluno_nome: existing.nome || '',
-        canal_origem_id: existing.canal_origem_id,
-        curso_id: existing.curso_interesse_id,
-      };
 
       if (tipo === 'lead') {
-        setLoteLeads(prev => prev.map(l => l.id === linhaId ? { ...l, ...updates } : l));
+        setLoteLeads(prev => prev.map(l => l.id === linhaId ? {
+          ...l,
+          aluno_nome: l.aluno_nome || existing.nome || '',
+          canal_origem_id: existing.canal_origem_id,
+          curso_id: existing.curso_interesse_id,
+        } : l));
       } else if (tipo === 'matricula') {
         setFormData(prev => ({
           ...prev,
-          aluno_nome: existing.nome || prev.aluno_nome,
+          aluno_nome: prev.aluno_nome || existing.nome || '',
           canal_origem_id: existing.canal_origem_id ?? prev.canal_origem_id,
           curso_id: existing.curso_interesse_id ?? prev.curso_id,
         }));
