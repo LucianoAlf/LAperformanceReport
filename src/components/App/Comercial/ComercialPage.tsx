@@ -204,7 +204,7 @@ export function ComercialPage() {
   const [saving, setSaving] = useState(false);
   const [confirmouDuplicataLote, setConfirmouDuplicataLote] = useState(false);
   const [abaPrincipal, setAbaPrincipal] = useState<'lancamentos' | 'programa' | 'tarefas'>('lancamentos');
-  const [modalOpen, setModalOpen] = useState<'lead' | 'matricula' | null>(null);
+  const [modalOpen, setModalOpen] = useState<'lead' | 'matricula' | 'experimental' | null>(null);
   const [relatorioOpen, setRelatorioOpen] = useState(false);
   const [tipoRelatorio, setTipoRelatorio] = useState<'diario' | 'semanal' | 'mensal' | 'matriculas' | 'comparativo_mensal' | 'comparativo_anual' | null>(null);
   const [relatorioTexto, setRelatorioTexto] = useState('');
@@ -223,6 +223,12 @@ export function ComercialPage() {
   const [formasPagamento, setFormasPagamento] = useState<Option[]>([]);
   const [unidades, setUnidades] = useState<Option[]>([]);
   
+  // Estado do modal de experimental
+  const [expForm, setExpForm] = useState({ telefone: '', nome: '', canal_origem_id: null as number | null, curso_interesse_id: null as number | null, data_experimental: '', horario_experimental: '', professor_experimental_id: null as number | null });
+  const [expLeadEncontrado, setExpLeadEncontrado] = useState<any>(null);
+  const [expBuscando, setExpBuscando] = useState(false);
+  const [expBuscou, setExpBuscou] = useState(false);
+
   // Resumo do mês
   const [resumo, setResumo] = useState<ResumoMes>({
     leads: 0,
@@ -1487,6 +1493,115 @@ export function ComercialPage() {
     }
   };
 
+  // Buscar lead por telefone para modal de experimental
+  const buscarLeadParaExperimental = async () => {
+    const digits = expForm.telefone.replace(/\D/g, '');
+    if (digits.length < 10) { toast.warning('Telefone inválido'); return; }
+    const normalized = digits.length <= 11 ? '55' + digits : digits;
+    setExpBuscando(true);
+    try {
+      const { data } = await supabase
+        .from('leads')
+        .select('id, nome, telefone, canal_origem_id, curso_interesse_id, unidade_id, data_contato, status, experimental_agendada, etapa_pipeline_id')
+        .eq('telefone', normalized)
+        .eq('unidade_id', unidadeParaSalvar)
+        .eq('arquivado', false)
+        .order('created_at', { ascending: false })
+        .limit(1);
+      if (data && data.length > 0) {
+        setExpLeadEncontrado(data[0]);
+        setExpForm(prev => ({
+          ...prev,
+          nome: data[0].nome || '',
+          canal_origem_id: data[0].canal_origem_id,
+          curso_interesse_id: data[0].curso_interesse_id,
+        }));
+        toast.success(`Lead encontrado: ${data[0].nome}`);
+      } else {
+        setExpLeadEncontrado(null);
+        toast.info('Lead não encontrado. Preencha os dados para criar.');
+      }
+    } catch (err) {
+      toast.error('Erro ao buscar lead');
+    } finally {
+      setExpBuscando(false);
+      setExpBuscou(true);
+    }
+  };
+
+  // Salvar experimental (cria/atualiza lead + cria lead_experimentais)
+  const handleSaveExperimental = async () => {
+    if (!expForm.nome?.trim()) { toast.warning('Nome é obrigatório'); return; }
+    if (!expForm.data_experimental) { toast.warning('Data da experimental é obrigatória'); return; }
+    if (!unidadeParaSalvar) { toast.warning('Selecione uma unidade'); return; }
+
+    setSaving(true);
+    try {
+      const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+      const telNormalized = expForm.telefone ? normalizePhone(expForm.telefone) : null;
+      let leadId: number;
+
+      if (expLeadEncontrado) {
+        // Atualizar lead existente
+        const { error } = await supabase.from('leads').update({
+          experimental_agendada: true,
+          data_experimental: expForm.data_experimental,
+          horario_experimental: expForm.horario_experimental || null,
+          professor_experimental_id: expForm.professor_experimental_id,
+          etapa_pipeline_id: 5,
+          status: 'experimental_agendada',
+          curso_interesse_id: expForm.curso_interesse_id,
+        }).eq('id', expLeadEncontrado.id);
+        if (error) throw error;
+        leadId = expLeadEncontrado.id;
+      } else {
+        // Criar lead novo
+        const { data: newLead, error } = await supabase.from('leads').insert({
+          nome: expForm.nome.trim(),
+          telefone: telNormalized,
+          canal_origem_id: expForm.canal_origem_id,
+          curso_interesse_id: expForm.curso_interesse_id,
+          unidade_id: unidadeParaSalvar,
+          data_contato: hoje,
+          status: 'experimental_agendada',
+          etapa_pipeline_id: 5,
+          experimental_agendada: true,
+          data_experimental: expForm.data_experimental,
+          horario_experimental: expForm.horario_experimental || null,
+          professor_experimental_id: expForm.professor_experimental_id,
+          temperatura: 'quente',
+          quantidade: 1,
+        }).select('id').single();
+        if (error) throw error;
+        leadId = newLead.id;
+      }
+
+      // Criar registro em lead_experimentais
+      await supabase.from('lead_experimentais').upsert({
+        lead_id: leadId,
+        nome_aluno: expForm.nome.trim(),
+        unidade_id: unidadeParaSalvar,
+        status: 'experimental_agendada',
+        etapa_pipeline_id: 5,
+        data_experimental: expForm.data_experimental,
+        horario_experimental: expForm.horario_experimental || null,
+        professor_experimental_id: expForm.professor_experimental_id,
+        curso_interesse_id: expForm.curso_interesse_id,
+      }, { onConflict: 'lead_id,data_experimental,nome_aluno' });
+
+      toast.success(expLeadEncontrado ? 'Experimental agendada!' : 'Lead criado + experimental agendada!');
+      setModalOpen(null);
+      setExpForm({ telefone: '', nome: '', canal_origem_id: null, curso_interesse_id: null, data_experimental: '', horario_experimental: '', professor_experimental_id: null });
+      setExpLeadEncontrado(null);
+      setExpBuscou(false);
+      loadData();
+    } catch (error) {
+      console.error('Erro ao salvar experimental:', error);
+      toast.error('Erro ao salvar experimental');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // Salvar registro
   const handleSave = async () => {
@@ -2692,7 +2807,7 @@ export function ComercialPage() {
             {quickInputCards.map((card) => {
               const Icon = card.icon;
               const contagemHoje = getContagemHoje(card.id);
-              const isClickable = card.id === 'lead' || card.id === 'matricula';
+              const isClickable = card.id === 'lead' || card.id === 'matricula' || card.id === 'experimental';
 
               return (
                 <button
@@ -5234,6 +5349,126 @@ export function ComercialPage() {
               {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
               Registrar Matrícula
             </Button>
+          </div>
+        </Modal>
+      )}
+
+      {/* Modal de Registrar Experimental */}
+      {modalOpen === 'experimental' && (
+        <Modal title="Registrar Experimental" onClose={() => { setModalOpen(null); setExpForm({ telefone: '', nome: '', canal_origem_id: null, curso_interesse_id: null, data_experimental: '', horario_experimental: '', professor_experimental_id: null }); setExpLeadEncontrado(null); setExpBuscou(false); }}>
+          <div className="space-y-4">
+            {/* Busca por telefone */}
+            <div>
+              <Label className="mb-2 block">Telefone do Lead</Label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="(21) 99999-9999"
+                  value={expForm.telefone}
+                  onChange={(e) => setExpForm(prev => ({ ...prev, telefone: maskPhone(e.target.value) }))}
+                  onKeyDown={(e) => e.key === 'Enter' && buscarLeadParaExperimental()}
+                />
+                <Button onClick={buscarLeadParaExperimental} disabled={expBuscando} variant="outline" className="shrink-0">
+                  {expBuscando ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                  Buscar
+                </Button>
+              </div>
+            </div>
+
+            {/* Lead encontrado */}
+            {expLeadEncontrado && (
+              <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-3">
+                <p className="text-emerald-400 text-sm font-medium flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Lead encontrado: <span className="text-white">{expLeadEncontrado.nome}</span>
+                </p>
+              </div>
+            )}
+
+            {/* Formulário de criação (se buscou e não encontrou) */}
+            {expBuscou && !expLeadEncontrado && (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 space-y-3">
+                <p className="text-amber-400 text-sm font-medium">Lead não encontrado — preencha para criar:</p>
+                <div>
+                  <Label className="mb-1 block text-xs">Nome</Label>
+                  <Input value={expForm.nome} onChange={(e) => setExpForm(prev => ({ ...prev, nome: e.target.value }))} placeholder="Nome do aluno" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <Label className="mb-1 block text-xs">Canal</Label>
+                    <Select value={expForm.canal_origem_id?.toString() || ''} onValueChange={(v) => setExpForm(prev => ({ ...prev, canal_origem_id: v ? parseInt(v) : null }))}>
+                      <SelectTrigger><SelectValue placeholder="Canal" /></SelectTrigger>
+                      <SelectContent>
+                        {canais.map(c => <SelectItem key={c.value} value={c.value!.toString()}>{c.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label className="mb-1 block text-xs">Curso</Label>
+                    <Select value={expForm.curso_interesse_id?.toString() || ''} onValueChange={(v) => setExpForm(prev => ({ ...prev, curso_interesse_id: v ? parseInt(v) : null }))}>
+                      <SelectTrigger><SelectValue placeholder="Curso" /></SelectTrigger>
+                      <SelectContent>
+                        {cursos.map(c => <SelectItem key={c.value} value={c.value!.toString()}>{c.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Dados da experimental (sempre visível após busca) */}
+            {expBuscou && (
+              <div className="bg-purple-500/10 border border-purple-500/30 rounded-xl p-4 space-y-3">
+                <p className="text-purple-400 text-sm font-medium">Dados da Experimental</p>
+                {expLeadEncontrado && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <Label className="mb-1 block text-xs">Nome do aluno</Label>
+                      <Input value={expForm.nome} onChange={(e) => setExpForm(prev => ({ ...prev, nome: e.target.value }))} />
+                    </div>
+                    <div>
+                      <Label className="mb-1 block text-xs">Curso</Label>
+                      <Select value={expForm.curso_interesse_id?.toString() || ''} onValueChange={(v) => setExpForm(prev => ({ ...prev, curso_interesse_id: v ? parseInt(v) : null }))}>
+                        <SelectTrigger><SelectValue placeholder="Curso" /></SelectTrigger>
+                        <SelectContent>
+                          {cursos.map(c => <SelectItem key={c.value} value={c.value!.toString()}>{c.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                )}
+                <div className="grid grid-cols-3 gap-3">
+                  <div>
+                    <Label className="mb-1 block text-xs">Data</Label>
+                    <Input type="date" value={expForm.data_experimental} onChange={(e) => setExpForm(prev => ({ ...prev, data_experimental: e.target.value }))} />
+                  </div>
+                  <div>
+                    <Label className="mb-1 block text-xs">Horário</Label>
+                    <Input type="time" value={expForm.horario_experimental} onChange={(e) => setExpForm(prev => ({ ...prev, horario_experimental: e.target.value }))} />
+                  </div>
+                  <div>
+                    <Label className="mb-1 block text-xs">Professor</Label>
+                    <Select value={expForm.professor_experimental_id?.toString() || ''} onValueChange={(v) => setExpForm(prev => ({ ...prev, professor_experimental_id: v ? parseInt(v) : null }))}>
+                      <SelectTrigger><SelectValue placeholder="Professor" /></SelectTrigger>
+                      <SelectContent>
+                        {professores.map(p => <SelectItem key={p.value} value={p.value!.toString()}>{p.label}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Botão salvar */}
+            {expBuscou && (
+              <Button
+                onClick={handleSaveExperimental}
+                disabled={saving || !expForm.nome || !expForm.data_experimental}
+                className="w-full bg-gradient-to-r from-purple-500 to-pink-500"
+              >
+                {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <Guitar className="w-5 h-5" />}
+                {expLeadEncontrado ? 'Agendar Experimental' : 'Criar Lead + Agendar Experimental'}
+              </Button>
+            )}
           </div>
         </Modal>
       )}
