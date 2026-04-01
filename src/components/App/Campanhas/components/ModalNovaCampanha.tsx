@@ -27,6 +27,7 @@ interface WizardState {
   numeroMetaId: string
   templateId: string
   mapeamento: Record<string, string>  // "1" → coluna CSV
+  mediaUrlCustom: string
 }
 
 interface Props {
@@ -58,6 +59,7 @@ export function ModalNovaCampanha({ open, onOpenChange, onCriada, unidadeId }: P
     numeroMetaId: '',
     templateId: '',
     mapeamento: {},
+    mediaUrlCustom: '',
   })
 
   // Sincronizar unidadeId do header quando muda
@@ -79,7 +81,7 @@ export function ModalNovaCampanha({ open, onOpenChange, onCriada, unidadeId }: P
 
   function resetar() {
     setStep(0)
-    setState({ unidadeId: unidadeId ?? '', nome: '', contatos: [], csvHeaders: [], phoneColumn: '', numeroMetaId: '', templateId: '', mapeamento: {} })
+    setState({ unidadeId: unidadeId ?? '', nome: '', contatos: [], csvHeaders: [], phoneColumn: '', numeroMetaId: '', templateId: '', mapeamento: {}, mediaUrlCustom: '' })
   }
 
   function fechar() {
@@ -119,7 +121,7 @@ export function ModalNovaCampanha({ open, onOpenChange, onCriada, unidadeId }: P
           {step === 1 && <StepNumero state={state} set={set} />}
           {step === 2 && <StepTemplate state={state} set={set} />}
           {step === 3 && <StepVariaveis state={state} set={set} />}
-          {step === 4 && <StepRevisao state={state} />}
+          {step === 4 && <StepRevisao state={state} onMediaUrl={(url) => set('mediaUrlCustom', url)} />}
         </div>
 
         {/* Footer com navegação */}
@@ -613,9 +615,76 @@ function StepVariaveis({ state, set }: { state: WizardState; set: <K extends key
   )
 }
 
+// ─── Upload de mídia do header ────────────────────────────────────────────────
+
+function MediaHeaderUpload({ mediaUrl, onMediaUrl }: { mediaUrl: string; onMediaUrl: (url: string) => void }) {
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    try {
+      const { supabase } = await import('@/lib/supabase')
+      const ext = file.name.split('.').pop() ?? 'jpg'
+      const filePath = `campanhas-headers/${crypto.randomUUID()}.${ext}`
+      const { error: uploadErr } = await supabase.storage
+        .from('whatsapp-media-campanhas')
+        .upload(filePath, file, { contentType: file.type, upsert: false })
+      if (uploadErr) throw new Error(uploadErr.message)
+      const { data: { publicUrl } } = supabase.storage
+        .from('whatsapp-media-campanhas')
+        .getPublicUrl(filePath)
+      onMediaUrl(publicUrl)
+      toast.success('Imagem enviada')
+    } catch (err) {
+      toast.error('Erro ao enviar imagem: ' + (err as Error).message)
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  return (
+    <div className="bg-purple-500/10 border border-purple-500/30 rounded-lg p-4">
+      <label className="text-xs text-purple-400 font-medium block mb-2">
+        Imagem do header (obrigatória para este template)
+      </label>
+      <div className="flex gap-2 mb-2">
+        <input
+          type="text"
+          value={mediaUrl}
+          onChange={(e) => onMediaUrl(e.target.value)}
+          placeholder="https://exemplo.com/imagem.jpg"
+          className="flex-1 bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:border-purple-500 focus:outline-none"
+        />
+        <button
+          type="button"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          className="px-3 py-2 bg-purple-600 hover:bg-purple-500 text-white text-sm rounded-lg flex items-center gap-1.5 disabled:opacity-50 transition-colors"
+        >
+          {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+          {uploading ? 'Enviando...' : 'Upload'}
+        </button>
+        <input ref={fileInputRef} type="file" accept="image/*,video/*" className="hidden" onChange={handleFileUpload} />
+      </div>
+      {mediaUrl && (
+        <div className="mt-2">
+          <img src={mediaUrl} alt="Preview" className="max-h-32 rounded-lg object-cover" onError={(e) => (e.currentTarget.style.display = 'none')} />
+        </div>
+      )}
+      <p className="text-xs text-gray-500 mt-1.5">
+        Envie do seu PC ou cole uma URL pública (HTTPS).
+      </p>
+    </div>
+  )
+}
+
 // ─── Step 5: Revisão ──────────────────────────────────────────────────────────
 
-function StepRevisao({ state }: { state: WizardState }) {
+function StepRevisao({ state, onMediaUrl }: { state: WizardState; onMediaUrl: (url: string) => void }) {
   const { numeros } = useNumerosMeta()
   const { templates } = useTemplatesMeta(state.numeroMetaId || null)
   const numero = numeros.find(n => n.id === state.numeroMetaId)
@@ -652,6 +721,11 @@ function StepRevisao({ state }: { state: WizardState }) {
         <InfoItem label="Número" value={numero?.nome ?? '—'} />
         <InfoItem label="Template" value={template?.nome ?? '—'} />
       </div>
+
+      {/* Mídia do header IMAGE/VIDEO/DOCUMENT */}
+      {template && ['IMAGE', 'VIDEO', 'DOCUMENT'].includes(template.header_type?.toUpperCase?.() ?? '') && (
+        <MediaHeaderUpload mediaUrl={state.mediaUrlCustom} onMediaUrl={onMediaUrl} />
+      )}
 
       {/* Previsão de custo */}
       <div className={cn(
@@ -723,6 +797,7 @@ function BotaoConfirmar({ state, onCriada, onClose }: { state: WizardState; onCr
           numero_meta_id: state.numeroMetaId,
           total_contatos: state.contatos.length,
           mapeamento_variaveis: state.mapeamento,
+          media_url_custom: state.mediaUrlCustom || null,
           custo_estimado: custoEstimado,
           status: 'rascunho',
         })

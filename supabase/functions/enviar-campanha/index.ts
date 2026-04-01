@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
       }
 
       try {
-        const componentes = montarComponentes(campanha.template, campanha.mapeamento_variaveis, contato)
+        const componentes = montarComponentes(campanha.template, campanha.mapeamento_variaveis, contato, campanha.media_url_custom)
 
         const waResponse = await enviarMensagemTemplate(
           config,
@@ -188,37 +188,57 @@ Deno.serve(async (req) => {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
- * Monta componentes do template com as variáveis mapeadas.
+ * Monta componentes do template com as variáveis mapeadas e mídia do header.
  * mapeamento_variaveis ex: { "1": "nome", "2": "empresa" }
+ * mediaUrl: URL customizada da campanha ou URL de exemplo do template
  */
 function montarComponentes(
   template: any,
   mapeamento: Record<string, string> | null,
   contato: any,
+  mediaUrl?: string | null,
 ): any[] | undefined {
-  if (!mapeamento || Object.keys(mapeamento).length === 0) return undefined
-
-  const vars = contato.variaveis ?? {}
-  const chaves = Object.keys(mapeamento).sort((a, b) => parseInt(a) - parseInt(b))
-  const parametros = chaves.map(k => {
-    const campo = mapeamento[k]
-    const valor = vars[campo] ?? contato[campo] ?? ''
-    return { type: 'text', text: String(valor) }
-  })
-
-  if (parametros.length === 0) return undefined
-
   const componentes: any[] = []
   const tplComps = template.componentes ?? []
 
+  // Header: IMAGE, VIDEO, DOCUMENT ou TEXT com variáveis
   const headerComp = tplComps.find((c: any) => c.type === 'HEADER')
-  if (headerComp?.example?.header_text?.length) {
-    const headerCount = headerComp.example.header_text.length
-    componentes.push({ type: 'header', parameters: parametros.splice(0, headerCount) })
+  if (headerComp) {
+    const format = headerComp.format?.toUpperCase()
+    if (['IMAGE', 'VIDEO', 'DOCUMENT'].includes(format)) {
+      // Só enviar header de mídia se houver URL custom (imagem personalizada)
+      // Se não houver, a Meta usa a imagem original do template aprovado
+      const url = mediaUrl || template.media_url
+      if (url) {
+        const mediaType = format === 'IMAGE' ? 'image' : format === 'VIDEO' ? 'video' : 'document'
+        componentes.push({ type: 'header', parameters: [{ type: mediaType, [mediaType]: { link: url } }] })
+      }
+    } else if (headerComp.example?.header_text?.length && mapeamento) {
+      // Header de texto com variáveis
+      const vars = contato.variaveis ?? {}
+      const chaves = Object.keys(mapeamento).sort((a, b) => parseInt(a) - parseInt(b))
+      const allParams = chaves.map(k => {
+        const campo = mapeamento[k]
+        const valor = vars[campo] ?? contato[campo] ?? ''
+        return { type: 'text' as const, text: String(valor) }
+      })
+      const headerCount = headerComp.example.header_text.length
+      componentes.push({ type: 'header', parameters: allParams.splice(0, headerCount) })
+    }
   }
 
-  if (parametros.length > 0) {
-    componentes.push({ type: 'body', parameters: parametros })
+  // Body: variáveis de texto
+  if (mapeamento && Object.keys(mapeamento).length > 0) {
+    const vars = contato.variaveis ?? {}
+    const chaves = Object.keys(mapeamento).sort((a, b) => parseInt(a) - parseInt(b))
+    const parametros = chaves.map(k => {
+      const campo = mapeamento[k]
+      const valor = vars[campo] ?? contato[campo] ?? ''
+      return { type: 'text', text: String(valor) }
+    })
+    if (parametros.length > 0) {
+      componentes.push({ type: 'body', parameters: parametros })
+    }
   }
 
   return componentes.length > 0 ? componentes : undefined

@@ -1,0 +1,14 @@
+-- ============================================================
+-- Migration: Fix race condition em upsert_lead
+-- Data: 2026-03-31
+-- Descrição: Adiciona ON CONFLICT no INSERT do passo 7 para
+--   tratar webhooks simultâneos do Emusys com mesmo telefone
+--   mas emusys_lead_id diferente (race condition).
+-- ============================================================
+
+-- A função foi atualizada diretamente via execute_sql.
+-- Este arquivo documenta a mudança para controle de versão.
+-- Alteração: passo 7 do INSERT agora usa:
+--   ON CONFLICT (telefone, unidade_id) WHERE telefone IS NOT NULL AND arquivado = false
+--   DO UPDATE SET ... (merge dos dados em vez de erro)
+-- Aplica-se a ambos os blocos (emusys e nocodb).

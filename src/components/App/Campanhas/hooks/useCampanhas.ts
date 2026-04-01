@@ -173,15 +173,12 @@ export function useCampanhas(unidadeId?: string | null) {
       .eq('status', 'falha')
     if (resetErr) return { error: resetErr.message }
 
-    // Resetar contador de falhas na campanha
-    const { data: camp } = await supabase.from('campanhas').select('falhas').eq('id', campanhaId).single()
-    if (camp) {
-      await supabase.from('campanhas').update({ falhas: 0, status: 'executando', updated_at: new Date().toISOString() }).eq('id', campanhaId)
-    }
+    // Resetar contador de falhas e setar status para executando
+    await supabase.from('campanhas').update({ falhas: 0, status: 'executando', updated_at: new Date().toISOString() }).eq('id', campanhaId)
 
-    // Disparar envio
-    const { data, error } = await supabase.functions.invoke('controle-campanha', {
-      body: { campanha_id: campanhaId, action: 'retomar' },
+    // Disparar envio diretamente (status já é 'executando')
+    const { data, error } = await supabase.functions.invoke('enviar-campanha', {
+      body: { campanha_id: campanhaId },
     })
     if (error) return { error: error.message }
     if (data?.error) return { error: data.error }
@@ -191,6 +188,9 @@ export function useCampanhas(unidadeId?: string | null) {
   }
 
   async function excluir(campanhaId: string): Promise<{ error: string | null }> {
+    // Deletar registros filhos antes (FK sem CASCADE)
+    await supabase.from('mensagens_campanha').delete().eq('campanha_id', campanhaId)
+    await supabase.from('campanha_contatos').delete().eq('campanha_id', campanhaId)
     const { error: err } = await supabase
       .from('campanhas')
       .delete()
