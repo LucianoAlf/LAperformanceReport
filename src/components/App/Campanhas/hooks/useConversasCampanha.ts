@@ -31,33 +31,35 @@ export interface MensagemCampanha {
   created_at: string
 }
 
+function deduplicarPorTelefone(data: ConversaCampanha[]): ConversaCampanha[] {
+  const porTelefone = new Map<string, ConversaCampanha>()
+  for (const c of data) {
+    const existing = porTelefone.get(c.telefone)
+    if (!existing || (c.ultima_mensagem_em && (!existing.ultima_mensagem_em || c.ultima_mensagem_em > existing.ultima_mensagem_em))) {
+      if (existing) c.nao_lidas = (c.nao_lidas ?? 0) + (existing.nao_lidas ?? 0)
+      porTelefone.set(c.telefone, c)
+    } else if (existing) {
+      existing.nao_lidas = (existing.nao_lidas ?? 0) + (c.nao_lidas ?? 0)
+    }
+  }
+  return Array.from(porTelefone.values())
+}
+
 export function useConversasCampanha(unidadeId?: string | null) {
   const [conversas, setConversas] = useState<ConversaCampanha[]>([])
   const [loading, setLoading] = useState(true)
+  const [buscando, setBuscando] = useState(false)
+  const [resultadosBusca, setResultadosBusca] = useState<ConversaCampanha[]>([])
 
   const fetchConversas = useCallback(async () => {
     setLoading(true)
     try {
-      let query = supabase
+      const { data } = await supabase
         .from('conversas_campanha')
         .select('*')
         .order('ultima_mensagem_em', { ascending: false })
-        .limit(100)
-      // Conversas de campanha são compartilhadas — não filtrar por unidade
-      const { data } = await query
-      // Deduplicar por telefone — manter a conversa mais recente
-      const porTelefone = new Map<string, typeof data extends (infer T)[] ? T : never>()
-      for (const c of (data ?? [])) {
-        const existing = porTelefone.get(c.telefone)
-        if (!existing || (c.ultima_mensagem_em && (!existing.ultima_mensagem_em || c.ultima_mensagem_em > existing.ultima_mensagem_em))) {
-          // Mesclar nao_lidas de conversas duplicadas
-          if (existing) c.nao_lidas = (c.nao_lidas ?? 0) + (existing.nao_lidas ?? 0)
-          porTelefone.set(c.telefone, c)
-        } else if (existing) {
-          existing.nao_lidas = (existing.nao_lidas ?? 0) + (c.nao_lidas ?? 0)
-        }
-      }
-      setConversas(Array.from(porTelefone.values()))
+        .limit(500)
+      setConversas(deduplicarPorTelefone(data ?? []))
     } finally {
       setLoading(false)
     }
@@ -76,7 +78,30 @@ export function useConversasCampanha(unidadeId?: string | null) {
     return () => { supabase.removeChannel(channel) }
   }, [fetchConversas])
 
-  return { conversas, loading, refetch: fetchConversas }
+  // Busca server-side — complementa a lista local com resultados do banco
+  const buscarNoServidor = useCallback(async (termo: string) => {
+    if (termo.length < 3) { setResultadosBusca([]); return }
+    setBuscando(true)
+    try {
+      const termoLike = `%${termo}%`
+      const { data } = await supabase
+        .from('conversas_campanha')
+        .select('*')
+        .or(`telefone.ilike.${termoLike},nome_contato.ilike.${termoLike}`)
+        .order('ultima_mensagem_em', { ascending: false })
+        .limit(50)
+      setResultadosBusca(deduplicarPorTelefone(data ?? []))
+    } finally {
+      setBuscando(false)
+    }
+  }, [])
+
+  // Mesclar conversas locais + resultados de busca (sem duplicatas)
+  const todasConversas = resultadosBusca.length > 0
+    ? deduplicarPorTelefone([...conversas, ...resultadosBusca])
+    : conversas
+
+  return { conversas: todasConversas, loading, buscando, refetch: fetchConversas, buscarNoServidor, limparBusca: () => setResultadosBusca([]) }
 }
 
 export function useMensagensCampanha(conversaId: string | null, telefone?: string) {

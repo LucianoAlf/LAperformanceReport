@@ -11,11 +11,23 @@ import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao'
 // ─── ConversasTab ─────────────────────────────────────────────────────────────
 
 export function ConversasTab({ unidadeId }: { unidadeId: string | null }) {
-  const { conversas, loading } = useConversasCampanha(unidadeId ?? undefined)
+  const { conversas, loading, buscando, buscarNoServidor, limparBusca } = useConversasCampanha(unidadeId ?? undefined)
   const { numeros } = useNumerosMeta()
   const [conversaAtiva, setConversaAtiva] = useState<string | null>(null)
   const [busca, setBusca] = useState('')
   const [filtroCaixa, setFiltroCaixa] = useState<string>('todos')
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>(null)
+
+  // Busca server-side com debounce
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    if (busca.length >= 3) {
+      debounceRef.current = setTimeout(() => buscarNoServidor(busca), 400)
+    } else {
+      limparBusca()
+    }
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
+  }, [busca, buscarNoServidor, limparBusca])
 
   const filtradas = conversas.filter(c => {
     if (busca && !c.telefone.includes(busca) && !c.nome_contato?.toLowerCase().includes(busca.toLowerCase())) return false
@@ -29,7 +41,11 @@ export function ConversasTab({ unidadeId }: { unidadeId: string | null }) {
       <div className="w-80 flex-shrink-0 bg-slate-800/50 border border-slate-700/50 rounded-xl flex flex-col overflow-hidden">
         <div className="p-3 border-b border-slate-700/50 space-y-2">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            {buscando ? (
+              <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-amber-400 animate-spin" />
+            ) : (
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            )}
             <input
               value={busca}
               onChange={e => setBusca(e.target.value)}
