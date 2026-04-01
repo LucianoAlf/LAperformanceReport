@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical, Play, MessageSquarePlus, MessageCircle, CheckCircle2, Circle, FileEdit, ChevronDown, ChevronRight, Music2, Layers, CreditCard, FileText, Banknote, QrCode, Link2, Receipt, ChevronsUpDown, Columns3 } from 'lucide-react';
+import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical, Play, MessageSquarePlus, MessageCircle, CheckCircle2, Circle, FileEdit, ChevronDown, ChevronRight, Music2, Layers, CreditCard, FileText, Banknote, QrCode, Link2, Receipt, ChevronsUpDown, Columns3, Phone } from 'lucide-react';
 import { CelulaEditavel } from '@/components/ui/CelulaEditavel';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -1236,6 +1236,19 @@ export function TabelaAlunos({
                 <SelectItem value="5+">5+ anos</SelectItem>
               </SelectContent>
             </Select>
+
+            {/* Filtro Sem Telefone */}
+            <button
+              onClick={() => setFiltros({ ...filtros, sem_telefone: !filtros.sem_telefone })}
+              className={`h-10 px-4 rounded-xl text-sm transition flex items-center gap-2 ${
+                filtros.sem_telefone
+                  ? 'border-2 border-orange-500 bg-orange-500/10 text-orange-400'
+                  : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+              }`}
+            >
+              <Phone className="w-4 h-4" />
+              Sem Telefone
+            </button>
           </div>
         )}
       </div>
