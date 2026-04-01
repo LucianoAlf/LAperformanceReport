@@ -6,7 +6,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { useNumerosMeta, type NumeroMeta } from '../hooks/useNumerosMeta'
 import { useTemplatesMeta, type TemplateMeta } from '../hooks/useTemplatesMeta'
-import { parseCSV, validarContatos, validarBulkPhones, type ParsedCSV, type ValidacaoContatos } from './WizardSteps/csvParser'
+import { parseCSV, parseExcel, validarContatos, validarBulkPhones, type ParsedCSV, type ValidacaoContatos } from './WizardSteps/csvParser'
 import { extrairVariaveis, renderizarTemplate } from './WizardSteps/templateParser'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
@@ -205,7 +205,8 @@ function StepContatos({ state, set, isAdmin }: { state: WizardState; set: <K ext
     const file = e.target.files?.[0]
     if (!file) return
     try {
-      const parsed = await parseCSV(file)
+      const isExcel = file.name.endsWith('.xlsx') || file.name.endsWith('.xls')
+      const parsed = isExcel ? await parseExcel(file) : await parseCSV(file)
       set('csvHeaders', parsed.headers)
       const phoneCol = parsed.phoneColumn ?? parsed.headers[0] ?? ''
       set('phoneColumn', phoneCol)
@@ -214,7 +215,7 @@ function StepContatos({ state, set, isAdmin }: { state: WizardState; set: <K ext
       setValidacao(resultado)
       toast.success(`${resultado.validos.length} contatos válidos importados`)
     } catch {
-      toast.error('Erro ao ler CSV')
+      toast.error('Erro ao ler arquivo')
     }
   }
 
@@ -249,14 +250,17 @@ function StepContatos({ state, set, isAdmin }: { state: WizardState; set: <K ext
     const selecionados = alunosDisponiveis.filter(a => alunosSelecionados.has(a.id))
     const contatos: ContatoImportado[] = []
     const telefones = new Set<string>()
+    let semTelefone = 0
+    let telInvalido = 0
+    let duplicados = 0
 
     for (const aluno of selecionados) {
       const tel = aluno.whatsapp || aluno.telefone || aluno.responsavel_telefone
-      if (!tel) continue
+      if (!tel) { semTelefone++; continue }
       const digits = tel.replace(/\D/g, '')
-      if (digits.length < 10) continue
+      if (digits.length < 10) { telInvalido++; continue }
       const normalized = digits.length <= 11 ? '55' + digits : digits
-      if (telefones.has(normalized)) continue
+      if (telefones.has(normalized)) { duplicados++; continue }
       telefones.add(normalized)
       contatos.push({
         telefone: normalized,
@@ -274,10 +278,15 @@ function StepContatos({ state, set, isAdmin }: { state: WizardState; set: <K ext
     setValidacao({
       validos: contatos,
       total: selecionados.length,
-      duplicatas: selecionados.length - contatos.length,
-      invalidos: selecionados.filter(a => !(a.whatsapp || a.telefone || a.responsavel_telefone)).length,
+      duplicatas: duplicados,
+      invalidos: semTelefone + telInvalido,
     })
-    toast.success(`${contatos.length} alunos importados`)
+    const detalhes = [
+      semTelefone > 0 && `${semTelefone} sem telefone`,
+      telInvalido > 0 && `${telInvalido} telefone inválido`,
+      duplicados > 0 && `${duplicados} duplicados`,
+    ].filter(Boolean).join(', ')
+    toast.success(`${contatos.length} alunos importados${detalhes ? ` (${detalhes})` : ''}`)
   }
 
   const alunosFiltrados = alunosDisponiveis.filter(a => {
@@ -326,13 +335,13 @@ function StepContatos({ state, set, isAdmin }: { state: WizardState; set: <K ext
 
       {modo === 'csv' ? (
         <div>
-          <input ref={fileRef} type="file" accept=".csv,.txt" onChange={handleCSV} className="hidden" />
+          <input ref={fileRef} type="file" accept=".csv,.txt,.xlsx,.xls" onChange={handleCSV} className="hidden" />
           <button
             onClick={() => fileRef.current?.click()}
             className="w-full p-8 border-2 border-dashed border-slate-700 rounded-xl hover:border-amber-500/50 transition-colors text-center group"
           >
             <Upload className="w-8 h-8 mx-auto mb-2 text-gray-500 group-hover:text-amber-400 transition-colors" />
-            <p className="text-sm text-gray-400">Clique para selecionar CSV</p>
+            <p className="text-sm text-gray-400">Clique para selecionar CSV ou Excel</p>
             <p className="text-xs text-gray-600 mt-1">Precisa ter uma coluna de telefone</p>
           </button>
         </div>

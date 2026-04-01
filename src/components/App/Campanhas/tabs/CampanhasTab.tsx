@@ -115,7 +115,7 @@ export function CampanhasTab({ unidadeId }: { unidadeId: string | null }) {
         unidadeId={unidadeId}
       />
 
-      <CampanhaDrawer campanha={drawerCampanha} onClose={() => setDrawerCampanha(null)} />
+      <CampanhaDrawer campanha={drawerCampanha} onClose={() => setDrawerCampanha(null)} onReenviarFalhas={handleRetry} />
     </div>
   )
 }

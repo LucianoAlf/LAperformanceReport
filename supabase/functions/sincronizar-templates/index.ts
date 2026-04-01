@@ -97,8 +97,60 @@ Deno.serve(async (req) => {
 
       if (upsertErr) {
         console.error(`Erro ao upsert template ${tpl.name}:`, upsertErr.message)
-      } else {
-        sincronizados++
+        continue
+      }
+
+      sincronizados++
+
+      // 6. Baixar e hospedar mídia do header (IMAGE, VIDEO, DOCUMENT)
+      if (['IMAGE', 'VIDEO', 'DOCUMENT'].includes(headerType ?? '')) {
+        const headerHandleUrl = headerComp?.example?.header_handle?.[0]
+        if (headerHandleUrl) {
+          // Verificar se já tem media_url permanente
+          const { data: existing } = await supabase
+            .from('templates_meta')
+            .select('media_url')
+            .eq('meta_template_id', tpl.id)
+            .eq('numero_meta_id', numero.id)
+            .single()
+
+          if (!existing?.media_url) {
+            try {
+              const mediaRes = await fetch(headerHandleUrl)
+              if (mediaRes.ok) {
+                const contentType = mediaRes.headers.get('content-type') ?? 'image/jpeg'
+                const arrayBuffer = await mediaRes.arrayBuffer()
+                const extMap: Record<string, string> = {
+                  'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp',
+                  'video/mp4': 'mp4', 'application/pdf': 'pdf',
+                }
+                const ext = extMap[contentType] ?? 'jpg'
+                const filePath = `templates/${tpl.name}_${crypto.randomUUID().slice(0, 8)}.${ext}`
+
+                const { error: uploadErr } = await supabase.storage
+                  .from('whatsapp-media-campanhas')
+                  .upload(filePath, arrayBuffer, { contentType, upsert: false })
+
+                if (!uploadErr) {
+                  const { data: { publicUrl } } = supabase.storage
+                    .from('whatsapp-media-campanhas')
+                    .getPublicUrl(filePath)
+
+                  await supabase
+                    .from('templates_meta')
+                    .update({ media_url: publicUrl, media_type: contentType })
+                    .eq('meta_template_id', tpl.id)
+                    .eq('numero_meta_id', numero.id)
+
+                  console.log(`Mídia hospedada para template ${tpl.name}: ${publicUrl}`)
+                }
+              }
+            } catch (mediaErr) {
+              console.error(`Falha ao hospedar mídia do template ${tpl.name}:`, mediaErr)
+              // Não falha o sync — mídia é opcional
+            }
+          }
+        }
       }
     }
 

@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
-import { Search, Send, Bot, Image, FileText, Mic, Video, Music, Paperclip, RefreshCw, MessageSquare, Power, PowerOff, X, Play, Pause, Check, CheckCheck, Clock, AlertCircle, Loader2, Lock, Ban, PanelRightOpen, RotateCcw, Bug } from 'lucide-react'
+import { Search, Send, Bot, Image, FileText, Mic, Video, Music, Paperclip, RefreshCw, MessageSquare, Power, PowerOff, X, Play, Pause, Check, CheckCheck, Clock, AlertCircle, Loader2, Lock, Ban, PanelRightOpen, RotateCcw, Bug, Megaphone } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
@@ -267,6 +267,7 @@ function QuickRepliesDropdown({ filtro, onSelecionar, onFechar }: { filtro: stri
 function BolhaMensagem({ msg, onReagir, searchTerm, onImageClick }: { msg: MensagemCampanha; onReagir: (msgId: string, emoji: string) => void; searchTerm: string; onImageClick: (url: string) => void }) {
   const isInbound = msg.direcao === 'inbound'
   const isPrivada = (msg as any).privada === true
+  const isTemplate = msg.tipo === 'template'
   const [showReaction, setShowReaction] = useState(false)
   const hasMedia = msg.media_url && ['image', 'video'].includes(msg.tipo)
 
@@ -279,6 +280,49 @@ function BolhaMensagem({ msg, onReagir, searchTerm, onImageClick }: { msg: Mensa
           </div>
           {msg.texto && <p className="text-sm text-purple-200/80 whitespace-pre-wrap">{searchTerm ? <HighlightText text={msg.texto} highlight={searchTerm} /> : msg.texto}</p>}
           <span className="text-[10px] text-purple-400/40 mt-0.5 block">{formatarHora(msg.created_at)}</span>
+        </div>
+      </div>
+    )
+  }
+
+  // Template message — visual distinto
+  if (isTemplate && !isInbound) {
+    return (
+      <div
+        className={cn('flex justify-end', msg.reaction_emoji ? 'mb-5' : 'mb-2')}
+        onMouseEnter={() => setShowReaction(true)}
+        onMouseLeave={() => setShowReaction(false)}
+      >
+        <div className="relative max-w-[70%]">
+          <div className="min-w-[80px] rounded-2xl overflow-hidden bg-gradient-to-b from-emerald-700/80 to-emerald-800/80 text-white rounded-br-md border border-emerald-600/30">
+            {/* Header badge */}
+            <div className="flex items-center gap-1.5 text-[10px] text-emerald-200/70 px-3.5 pt-2 pb-0">
+              <Megaphone className="w-3 h-3" /> Template de campanha
+            </div>
+            {/* Imagem do header */}
+            {msg.media_url && (
+              <div className="px-2 pt-2">
+                <img src={msg.media_url} alt="Header" className="w-full max-h-[200px] object-cover rounded-lg cursor-pointer" onClick={() => onImageClick(msg.media_url!)} loading="lazy" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
+              </div>
+            )}
+            {/* Corpo */}
+            <div className="px-3.5 pb-1.5">
+              {msg.texto && (
+                <p className="text-sm whitespace-pre-wrap break-words mt-1.5">
+                  {searchTerm ? <HighlightText text={msg.texto} highlight={searchTerm} /> : msg.texto}
+                </p>
+              )}
+              <div className="flex items-center gap-1 mt-1 justify-end">
+                <span className="text-[10px] text-emerald-200/50">{formatarHora(msg.created_at)}</span>
+                {msg.status && <StatusIcon status={msg.status} />}
+              </div>
+            </div>
+          </div>
+          {msg.reaction_emoji && (
+            <div className="absolute -bottom-3 z-10 right-2">
+              <span className="text-sm bg-slate-800/90 border border-slate-700/50 rounded-full px-1.5 py-0.5 shadow-lg backdrop-blur-sm">{msg.reaction_emoji}</span>
+            </div>
+          )}
         </div>
       </div>
     )

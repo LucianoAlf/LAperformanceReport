@@ -1,4 +1,5 @@
 import Papa from 'papaparse'
+import * as XLSX from 'xlsx'
 
 export interface ParsedCSV {
   headers: string[]
@@ -26,7 +27,9 @@ function detectPhoneColumn(headers: string[]): string | null {
 }
 
 function normalizarTelefone(raw: string): string | null {
-  const digits = raw.replace(/\D/g, '')
+  // Se tem múltiplos números (separados por vírgula, barra ou quebra de linha), pegar o primeiro
+  const primeiro = raw.split(/[,;/\n]/).map(s => s.trim()).find(s => s.replace(/\D/g, '').length >= 10) ?? raw
+  const digits = primeiro.replace(/\D/g, '')
   if (digits.length < 10) return null
   // Adicionar prefixo 55 se não tiver (telefone BR)
   if (digits.length === 10 || digits.length === 11) return '55' + digits
@@ -55,6 +58,25 @@ export function parseBulkPhones(text: string): string[] {
     .split(/[\n,;]+/)
     .map(p => p.trim().replace(/\D/g, ''))
     .filter(p => p.length >= 10)
+}
+
+export function parseExcel(file: File): Promise<ParsedCSV> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer)
+        const workbook = XLSX.read(data, { type: 'array' })
+        const sheetName = workbook.SheetNames[0]
+        const sheet = workbook.Sheets[sheetName]
+        const rows = XLSX.utils.sheet_to_json<Record<string, string>>(sheet, { defval: '' })
+        const headers = rows.length > 0 ? Object.keys(rows[0]) : []
+        resolve({ headers, rows, phoneColumn: detectPhoneColumn(headers), totalRows: rows.length })
+      } catch (err) { reject(err) }
+    }
+    reader.onerror = () => reject(new Error('Erro ao ler arquivo'))
+    reader.readAsArrayBuffer(file)
+  })
 }
 
 /** Valida, normaliza e deduplica contatos */

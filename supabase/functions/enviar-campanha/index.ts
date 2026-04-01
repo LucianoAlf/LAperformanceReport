@@ -109,6 +109,7 @@ Deno.serve(async (req) => {
 
         // Inserir em mensagens_campanha — com conteúdo real do template
         const textoTemplate = renderizarTextoTemplate(campanha.template, campanha.mapeamento_variaveis, contato)
+        const templateMediaUrl = campanha.media_url_custom || campanha.template.media_url || null
         await upsertConversaMensagem(supabase, {
           unidadeId: campanha.numero.unidade_id ?? campanha.unidade_id,
           numeroMetaId: campanha.numero.id,
@@ -116,14 +117,19 @@ Deno.serve(async (req) => {
           metaMessageId,
           texto: textoTemplate,
           campanhaId: campanha_id,
+          mediaUrl: templateMediaUrl,
         })
 
         enviados++
       } catch (sendErr) {
-        console.error(`Falha ao enviar para ${contato.telefone}:`, sendErr)
+        const errMsg = (sendErr as Error).message ?? ''
+        const isOptOut = errMsg.includes('131050') || errMsg.toLowerCase().includes('opt') || errMsg.toLowerCase().includes('marketing') || errMsg.includes('re-engagement')
+        const isNotOnWhatsApp = errMsg.includes('131030')
+        const statusErro = isOptOut ? 'bloqueado' : isNotOnWhatsApp ? 'invalido' : 'falha'
+        console.error(`${statusErro} para ${contato.telefone}:`, errMsg)
         await supabase
           .from('campanha_contatos')
-          .update({ status: 'falha', erro: (sendErr as Error).message })
+          .update({ status: statusErro, erro: errMsg })
           .eq('id', contato.id)
         falhas++
       }
@@ -275,9 +281,10 @@ async function upsertConversaMensagem(
     metaMessageId: string | null
     texto: string
     campanhaId: string
+    mediaUrl?: string | null
   },
 ) {
-  const { unidadeId, numeroMetaId, telefone, metaMessageId, texto, campanhaId } = params
+  const { unidadeId, numeroMetaId, telefone, metaMessageId, texto, campanhaId, mediaUrl } = params
 
   // Upsert conversa
   const { data: conversa } = await supabase
@@ -306,6 +313,7 @@ async function upsertConversaMensagem(
       direcao: 'outbound',
       tipo: 'template',
       texto,
+      media_url: mediaUrl ?? null,
       meta_message_id: metaMessageId,
       status: 'sent',
     })

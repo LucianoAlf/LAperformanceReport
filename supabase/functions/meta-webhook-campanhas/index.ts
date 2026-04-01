@@ -373,19 +373,51 @@ async function processarStatus(supabase: any, statusData: any) {
     .eq('id', msg.id)
     .single()
 
-  if (msgFull?.campanha_id && (status === 'delivered' || status === 'read')) {
-    const campo = status === 'delivered' ? 'entregues' : 'lidos'
-    const { data: campanha } = await supabase
-      .from('campanhas')
-      .select(campo)
-      .eq('id', msgFull.campanha_id)
-      .single()
+  if (msgFull?.campanha_id) {
+    const { data: msgTel } = await supabase.from('mensagens_campanha').select('telefone').eq('id', msg.id).single()
 
-    if (campanha) {
-      await supabase.from('campanhas')
-        .update({ [campo]: (campanha[campo] ?? 0) + 1, updated_at: new Date().toISOString() })
-        .eq('id', msgFull.campanha_id)
+    if (status === 'delivered' || status === 'read') {
+      // Atualizar status do contato (só avançar, nunca regredir)
+      const contatoStatus = status === 'read' ? 'lido' : 'entregue'
+      if (msgTel?.telefone) {
+        await supabase.from('campanha_contatos')
+          .update({ status: contatoStatus })
+          .eq('campanha_id', msgFull.campanha_id)
+          .eq('telefone', msgTel.telefone)
+          .in('status', ['enviado', 'entregue'])
+      }
     }
+
+    if (status === 'failed') {
+      const erroMsg = statusData.errors?.[0]?.message
+        ?? statusData.errors?.[0]?.error_data?.details
+        ?? 'Falha na entrega'
+      const errCode = statusData.errors?.[0]?.code?.toString() ?? ''
+      const isOptOut = errCode === '131050' || erroMsg.toLowerCase().includes('marketing') || erroMsg.toLowerCase().includes('opt')
+      const isEcossistema = errCode === '131049' || erroMsg.toLowerCase().includes('ecossistema') || erroMsg.toLowerCase().includes('ecosystem')
+      const isNotWhatsApp = errCode === '131030'
+      const contatoStatus = (isOptOut || isEcossistema) ? 'bloqueado' : isNotWhatsApp ? 'invalido' : 'falha'
+
+      if (msgTel?.telefone) {
+        await supabase.from('campanha_contatos')
+          .update({ status: contatoStatus, erro: erroMsg })
+          .eq('campanha_id', msgFull.campanha_id)
+          .eq('telefone', msgTel.telefone)
+          .eq('status', 'enviado')
+      }
+    }
+
+    // Recalcular contadores baseado nos contatos reais (evita duplicatas)
+    const campanhaId = msgFull.campanha_id
+    const { count: entregues } = await supabase.from('campanha_contatos').select('id', { count: 'exact', head: true }).eq('campanha_id', campanhaId).eq('status', 'entregue')
+    const { count: lidos } = await supabase.from('campanha_contatos').select('id', { count: 'exact', head: true }).eq('campanha_id', campanhaId).eq('status', 'lido')
+    const { count: falhasCount } = await supabase.from('campanha_contatos').select('id', { count: 'exact', head: true }).eq('campanha_id', campanhaId).in('status', ['falha', 'bloqueado', 'invalido'])
+    await supabase.from('campanhas').update({
+      entregues: (entregues ?? 0) + (lidos ?? 0),
+      lidos: lidos ?? 0,
+      falhas: falhasCount ?? 0,
+      updated_at: new Date().toISOString(),
+    }).eq('id', campanhaId)
   }
 }
 
