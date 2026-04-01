@@ -289,6 +289,8 @@ export function ComercialPage() {
   const [filtroIncompletoFunil, setFiltroIncompletoFunil] = useState<string>('todos');
   const [filtroCanalFunil, setFiltroCanalFunil] = useState<string>('todos');
   const [filtroCursoFunil, setFiltroCursoFunil] = useState<string>('todos');
+  const [filtroTipoExp, setFiltroTipoExp] = useState<'leads_novos' | 'todos' | 'alunos'>('leads_novos');
+  const [filtroTipoMat, setFiltroTipoMat] = useState<'novos_alunos' | 'todos' | 'segundo_curso'>('novos_alunos');
   const [selecionadosFunil, setSelecionadosFunil] = useState<Set<number>>(new Set());
   const [excluindoEmLote, setExcluindoEmLote] = useState(false);
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
@@ -448,10 +450,10 @@ export function ComercialPage() {
       
       // Usar range de datas do filtro de competência
       const { startDate, endDate } = competencia.range;
-      // Query base - buscar também cursos e unidades
+      // Query base - buscar também cursos, unidades e dados do aluno (para filtro comercial)
       let query = supabase
         .from('leads')
-        .select('*, canais_origem(nome), cursos(nome), unidades(codigo)')
+        .select('*, canais_origem(nome), cursos(nome), unidades(codigo), alunos:aluno_id(is_segundo_curso, is_aluno_retorno, is_ex_aluno)')
         .order('data_contato', { ascending: false })
         .limit(10000);
 
@@ -627,6 +629,9 @@ export function ComercialPage() {
           ...m,
           canal_nome: (m.canais_origem as any)?.nome || '',
           curso_nome: (m.cursos as any)?.nome || '',
+          is_segundo_curso: (m.alunos as any)?.is_segundo_curso || false,
+          is_aluno_retorno: (m.alunos as any)?.is_aluno_retorno || false,
+          is_ex_aluno: (m.alunos as any)?.is_ex_aluno || false,
         }));
       
       // Buscar nomes dos professores e formas de pagamento
@@ -709,7 +714,7 @@ export function ComercialPage() {
           .from('lead_experimentais')
           .select(`
             *,
-            leads!inner(id, nome, telefone, canal_origem_id, unidade_id, data_contato, canais_origem(nome), unidades(codigo)),
+            leads!inner(id, nome, telefone, canal_origem_id, unidade_id, data_contato, aluno_id, canais_origem(nome), unidades(codigo)),
             professores:professor_experimental_id(nome),
             cursos:curso_interesse_id(nome)
           `)
@@ -733,6 +738,7 @@ export function ComercialPage() {
           ...e,
           lead_nome: e.leads?.nome || e.nome_aluno,
           lead_telefone: e.leads?.telefone || '',
+          lead_aluno_id: e.leads?.aluno_id || null,
           canal_nome: e.leads?.canais_origem?.nome || '',
           curso_nome: e.cursos?.nome || '',
           professor_nome: e.professores?.nome || '',
@@ -3090,9 +3096,9 @@ export function ComercialPage() {
             <FunnelPipelineNav
               stages={[
                 { key: 'leads', label: 'Novos', count: leadsMes.filter(l => !l.status || l.status === 'novo').length, icon: Smartphone, color: '#3b82f6', gradient: 'from-blue-500 to-cyan-500' },
-                { key: 'experimental', label: 'Experimentais', count: experimentaisDetalhadas.length, icon: Guitar, color: '#a855f7', gradient: 'from-purple-500 to-violet-500' },
+                { key: 'experimental', label: 'Experimentais', count: experimentaisDetalhadas.filter((e: any) => filtroTipoExp === 'leads_novos' ? !e.lead_aluno_id : filtroTipoExp === 'alunos' ? !!e.lead_aluno_id : true).length, icon: Guitar, color: '#a855f7', gradient: 'from-purple-500 to-violet-500' },
                 { key: 'visita', label: 'Visitas', count: visitasMes.length, icon: Building2, color: '#f59e0b', gradient: 'from-amber-500 to-orange-500' },
-                { key: 'matricula', label: 'Matrículas', count: matriculasMes.length, icon: GraduationCap, color: '#10b981', gradient: 'from-emerald-500 to-teal-500' },
+                { key: 'matricula', label: 'Matrículas', count: matriculasMes.filter((m: any) => { const isBanda = m.curso_nome?.toLowerCase().includes('banda'); return filtroTipoMat === 'novos_alunos' ? !m.is_segundo_curso && !isBanda : filtroTipoMat === 'segundo_curso' ? m.is_segundo_curso || isBanda : true; }).length, icon: GraduationCap, color: '#10b981', gradient: 'from-emerald-500 to-teal-500' },
               ]}
               totalLeads={leadsMes.length}
               activeStage={abaDetalhamento}
@@ -3184,6 +3190,30 @@ export function ComercialPage() {
                   <SelectItem value="sem_nome">Sem nome</SelectItem>
                   <SelectItem value="sem_canal">Sem canal de origem</SelectItem>
                   <SelectItem value="sem_curso">Sem curso de interesse</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+            {abaDetalhamento === 'experimental' && (
+              <Select value={filtroTipoExp} onValueChange={v => setFiltroTipoExp(v as any)}>
+                <SelectTrigger className="w-[180px] bg-slate-800/50 border-slate-700 h-9 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="leads_novos">Apenas leads novos</SelectItem>
+                  <SelectItem value="todos">Todas as experimentais</SelectItem>
+                  <SelectItem value="alunos">Apenas alunos</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+            {abaDetalhamento === 'matricula' && (
+              <Select value={filtroTipoMat} onValueChange={v => setFiltroTipoMat(v as any)}>
+                <SelectTrigger className="w-[180px] bg-slate-800/50 border-slate-700 h-9 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="novos_alunos">Novos alunos</SelectItem>
+                  <SelectItem value="todos">Todas as matriculas</SelectItem>
+                  <SelectItem value="segundo_curso">Segundo curso / Banda</SelectItem>
                 </SelectContent>
               </Select>
             )}
@@ -3816,6 +3846,9 @@ export function ComercialPage() {
         {/* ══════════════════════════════════════════════════════════════ */}
         {abaDetalhamento === 'experimental' && (() => {
           const expFiltradas = experimentaisDetalhadas.filter((l: any) => {
+            // Filtro por tipo (leads novos vs alunos)
+            if (filtroTipoExp === 'leads_novos' && l.lead_aluno_id) return false;
+            if (filtroTipoExp === 'alunos' && !l.lead_aluno_id) return false;
             if (buscaFunil) {
               const termo = buscaFunil.toLowerCase();
               if (!(l.nome_aluno || '').toLowerCase().includes(termo) && !(l.lead_nome || '').toLowerCase().includes(termo) && !(l.lead_telefone || '').includes(buscaFunil.replace(/\D/g, ''))) return false;
@@ -4462,14 +4495,18 @@ export function ComercialPage() {
         {/* TABELA DE MATRÍCULAS (original - mantida intacta) */}
         {/* ══════════════════════════════════════════════════════════════ */}
         {abaDetalhamento === 'matricula' && (() => {
-          const matriculasFiltradas = matriculasMes.filter(l => {
+          const isBanda = (nome: string) => nome?.toLowerCase().includes('banda');
+          const matriculasFiltradas = matriculasMes.filter((l: any) => {
+            // Filtro por tipo (novos alunos vs segundo curso/banda)
+            if (filtroTipoMat === 'novos_alunos' && (l.is_segundo_curso || isBanda(l.curso_nome))) return false;
+            if (filtroTipoMat === 'segundo_curso' && !l.is_segundo_curso && !isBanda(l.curso_nome)) return false;
             if (buscaFunil) {
               const termo = buscaFunil.toLowerCase();
-              const nome = ((l as any).aluno_nome || (l as any).nome || '').toLowerCase();
-              const tel = ((l as any).telefone || '').toLowerCase();
+              const nome = (l.aluno_nome || l.nome || '').toLowerCase();
+              const tel = (l.telefone || '').toLowerCase();
               if (!nome.includes(termo) && !tel.includes(termo)) return false;
             }
-            if (filtroCursoFunil !== 'todos' && String((l as any).curso_id || (l as any).curso_interesse_id) !== filtroCursoFunil) return false;
+            if (filtroCursoFunil !== 'todos' && String(l.curso_id || l.curso_interesse_id) !== filtroCursoFunil) return false;
             return true;
           });
           return (
