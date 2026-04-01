@@ -1,11 +1,12 @@
 import { useState } from 'react'
-import { RefreshCw, FileText, CheckCircle, XCircle, Clock, ChevronDown, MessageSquare, Send, Loader2 } from 'lucide-react'
+import { RefreshCw, FileText, CheckCircle, XCircle, Clock, ChevronDown, MessageSquare, Send, Loader2, Plus, Trash2, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 import { useNumerosMeta } from '../hooks/useNumerosMeta'
 import { useTemplatesMeta, type TemplateMeta } from '../hooks/useTemplatesMeta'
 import { Button } from '@/components/ui/button'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
 
 // ─── Badges ───────────────────────────────────────────────────────────────────
 
@@ -44,11 +45,13 @@ function CategoriaBadge({ categoria }: { categoria: string | null }) {
 
 // ─── Card de Template ─────────────────────────────────────────────────────────
 
-function TemplateCard({ tpl, numeroMetaId }: { tpl: TemplateMeta; numeroMetaId: string }) {
+function TemplateCard({ tpl, numeroMetaId, onDeleted }: { tpl: TemplateMeta; numeroMetaId: string; onDeleted: () => void }) {
   const [expandido, setExpandido] = useState(false)
   const [testeAberto, setTesteAberto] = useState(false)
   const [telefoneTeste, setTelefoneTeste] = useState('')
   const [enviandoTeste, setEnviandoTeste] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
+  const [deletando, setDeletando] = useState(false)
 
   async function handleTeste() {
     if (!telefoneTeste.trim()) { toast.error('Informe o telefone de teste'); return }
@@ -74,6 +77,40 @@ function TemplateCard({ tpl, numeroMetaId }: { tpl: TemplateMeta; numeroMetaId: 
     }
   }
 
+  async function handleDelete() {
+    setDeletando(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('gerenciar-templates', {
+        body: {
+          action: 'delete',
+          numero_meta_id: numeroMetaId,
+          template_name: tpl.nome,
+          template_db_id: tpl.id,
+        },
+      })
+      if (error) {
+        // Extrair mensagem do body da resposta HTTP
+        let msg = error.message
+        try {
+          const ctx = (error as any).context
+          if (ctx && typeof ctx.json === 'function') {
+            const body = await ctx.json()
+            msg = body?.error || msg
+          }
+        } catch { /* ignore */ }
+        throw new Error(msg)
+      }
+      if (data?.error) throw new Error(data.error)
+      toast.success(`Template "${tpl.nome}" deletado`)
+      onDeleted()
+    } catch (err) {
+      toast.error((err as Error).message)
+    } finally {
+      setDeletando(false)
+      setConfirmDelete(false)
+    }
+  }
+
   return (
     <div className="bg-slate-900/60 border border-slate-700/50 rounded-lg p-4 space-y-3">
       <div className="flex items-start justify-between gap-3">
@@ -86,10 +123,10 @@ function TemplateCard({ tpl, numeroMetaId }: { tpl: TemplateMeta; numeroMetaId: 
             <StatusBadge status={tpl.status} />
             {tpl.categoria && <CategoriaBadge categoria={tpl.categoria} />}
             {tpl.has_buttons && (
-              <span className="text-xs px-2 py-0.5 rounded-full border bg-slate-700/50 text-gray-400 border-slate-600">Com botões</span>
+              <span className="text-xs px-2 py-0.5 rounded-full border bg-slate-700/50 text-gray-400 border-slate-600">Com botoes</span>
             )}
             {tpl.variaveis.length > 0 && (
-              <span className="text-xs px-2 py-0.5 rounded-full border bg-slate-700/50 text-gray-400 border-slate-600">{tpl.variaveis.length} variável{tpl.variaveis.length !== 1 ? 'is' : ''}</span>
+              <span className="text-xs px-2 py-0.5 rounded-full border bg-slate-700/50 text-gray-400 border-slate-600">{tpl.variaveis.length} variavel{tpl.variaveis.length !== 1 ? 'is' : ''}</span>
             )}
           </div>
         </div>
@@ -104,8 +141,22 @@ function TemplateCard({ tpl, numeroMetaId }: { tpl: TemplateMeta; numeroMetaId: 
               <ChevronDown className={cn('w-4 h-4 transition-transform', expandido && 'rotate-180')} />
             </button>
           )}
+          <button onClick={() => setConfirmDelete(true)} className="p-1.5 text-gray-500 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors" title="Deletar template">
+            <Trash2 className="w-4 h-4" />
+          </button>
         </div>
       </div>
+
+      {/* Confirmação de delete */}
+      {confirmDelete && (
+        <div className="flex items-center gap-2 bg-red-500/10 border border-red-500/30 rounded-lg p-2.5">
+          <span className="text-xs text-red-300 flex-1">Deletar "{tpl.nome}" da Meta e do sistema?</span>
+          <button onClick={() => setConfirmDelete(false)} className="px-2 py-1 text-xs text-gray-400 hover:text-white rounded transition-colors">Cancelar</button>
+          <button onClick={handleDelete} disabled={deletando} className="px-3 py-1 bg-red-600 text-white text-xs rounded hover:bg-red-500 transition disabled:opacity-50">
+            {deletando ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Deletar'}
+          </button>
+        </div>
+      )}
 
       {/* Teste inline */}
       {testeAberto && (
@@ -138,13 +189,148 @@ function TemplateCard({ tpl, numeroMetaId }: { tpl: TemplateMeta; numeroMetaId: 
 
 type FiltroStatus = 'todos' | 'APPROVED' | 'PENDING' | 'REJECTED'
 
+// ─── Modal Criar Template ────────────────────────────────────────────────────
+
+const inputCls = 'w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/30'
+
+function ModalCriarTemplate({ open, onOpenChange, numeroMetaId, onCriado }: {
+  open: boolean
+  onOpenChange: (v: boolean) => void
+  numeroMetaId: string
+  onCriado: () => void
+}) {
+  const [nome, setNome] = useState('')
+  const [categoria, setCategoria] = useState('MARKETING')
+  const [idioma, setIdioma] = useState('pt_BR')
+  const [corpo, setCorpo] = useState('')
+  const [headerText, setHeaderText] = useState('')
+  const [footerText, setFooterText] = useState('')
+  const [criando, setCriando] = useState(false)
+
+  function resetar() {
+    setNome(''); setCategoria('MARKETING'); setIdioma('pt_BR'); setCorpo(''); setHeaderText(''); setFooterText('')
+  }
+
+  async function handleCriar() {
+    if (!nome.trim()) { toast.error('Informe o nome do template'); return }
+    if (!corpo.trim()) { toast.error('Informe o corpo da mensagem'); return }
+    // Nome do template: apenas letras minúsculas, números e underscores
+    const nomeFormatado = nome.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_')
+    setCriando(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('gerenciar-templates', {
+        body: {
+          action: 'create',
+          numero_meta_id: numeroMetaId,
+          nome: nomeFormatado,
+          categoria,
+          idioma,
+          corpo,
+          header_text: headerText || undefined,
+          footer_text: footerText || undefined,
+        },
+      })
+      if (error || data?.error) throw new Error(error?.message || data?.error)
+      toast.success(`Template "${nomeFormatado}" criado (status: ${data.status})`)
+      onCriado()
+      onOpenChange(false)
+      resetar()
+    } catch (err) {
+      toast.error((err as Error).message)
+    } finally {
+      setCriando(false)
+    }
+  }
+
+  const varsCount = (corpo.match(/\{\{\d+\}\}/g) || []).length
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="bg-slate-900 border-slate-700 max-w-lg">
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-white">Criar Template</h3>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-400">Nome do template *</label>
+            <input value={nome} onChange={e => setNome(e.target.value)} placeholder="ex: boas_vindas_aluno" className={inputCls} />
+            <p className="text-[11px] text-gray-600">Apenas letras minusculas, numeros e _ (underscore)</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-400">Categoria *</label>
+              <select value={categoria} onChange={e => setCategoria(e.target.value)} className={inputCls}>
+                <option value="MARKETING">Marketing</option>
+                <option value="UTILITY">Utilidade</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-gray-400">Idioma</label>
+              <select value={idioma} onChange={e => setIdioma(e.target.value)} className={inputCls}>
+                <option value="pt_BR">Portugues (BR)</option>
+                <option value="en_US">English (US)</option>
+                <option value="es">Espanol</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-400">Cabecalho (opcional)</label>
+            <input value={headerText} onChange={e => setHeaderText(e.target.value)} placeholder="Texto do cabecalho" className={inputCls} />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-400">Corpo da mensagem *</label>
+            <textarea
+              value={corpo}
+              onChange={e => setCorpo(e.target.value)}
+              placeholder={"Ola {{1}}, sua aula de {{2}} esta confirmada!"}
+              rows={4}
+              className={cn(inputCls, 'resize-none')}
+            />
+            <p className="text-[11px] text-gray-600">
+              Use {'{{1}}'}, {'{{2}}'}, etc. para variaveis.
+              {varsCount > 0 && <span className="text-amber-400 ml-1">{varsCount} variavel(is) detectada(s)</span>}
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-gray-400">Rodape (opcional)</label>
+            <input value={footerText} onChange={e => setFooterText(e.target.value)} placeholder="Ex: LA Music" className={inputCls} />
+          </div>
+
+          {/* Preview */}
+          {corpo && (
+            <div className="bg-slate-800 rounded-lg p-3 border border-slate-700/50">
+              <p className="text-[11px] text-gray-500 mb-1.5">Preview:</p>
+              {headerText && <p className="text-sm text-white font-semibold mb-1">{headerText}</p>}
+              <p className="text-sm text-gray-300 whitespace-pre-wrap">{corpo}</p>
+              {footerText && <p className="text-xs text-gray-500 mt-2">{footerText}</p>}
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
+            <Button onClick={handleCriar} disabled={criando || !nome.trim() || !corpo.trim()} className="bg-amber-500 hover:bg-amber-600 text-black">
+              {criando ? <><Loader2 className="w-4 h-4 mr-1.5 animate-spin" />Criando...</> : <><Plus className="w-4 h-4 mr-1.5" />Criar Template</>}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+// ─── TemplatesTab ─────────────────────────────────────────────────────────────
+
 export function TemplatesTab({ unidadeId }: { unidadeId: string | null }) {
   const { numeros, loading: loadingNumeros } = useNumerosMeta(unidadeId ?? undefined)
 
   const [numeroSelecionado, setNumeroSelecionado] = useState<string>('')
   const [filtroStatus, setFiltroStatus] = useState<FiltroStatus>('todos')
+  const [modalCriar, setModalCriar] = useState(false)
 
-  const { templates, loading, sincronizando, sincronizar } = useTemplatesMeta(numeroSelecionado || null)
+  const { templates, loading, sincronizando, sincronizar, refetch } = useTemplatesMeta(numeroSelecionado || null)
 
   async function handleSincronizar() {
     const resultado = await sincronizar()
@@ -168,7 +354,7 @@ export function TemplatesTab({ unidadeId }: { unidadeId: string | null }) {
 
   return (
     <div className="space-y-5">
-      {/* Seletor de número + sync */}
+      {/* Seletor de número + ações */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="flex-1 min-w-48">
           <select
@@ -177,7 +363,7 @@ export function TemplatesTab({ unidadeId }: { unidadeId: string | null }) {
             className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-sm text-white focus:outline-none focus:border-amber-500/50"
             disabled={loadingNumeros}
           >
-            <option value="">Selecionar número WhatsApp...</option>
+            <option value="">Selecionar numero WhatsApp...</option>
             {numeros.map(n => (
               <option key={n.id} value={n.id}>{n.nome}</option>
             ))}
@@ -192,14 +378,24 @@ export function TemplatesTab({ unidadeId }: { unidadeId: string | null }) {
           <RefreshCw className={cn('w-4 h-4 mr-2', sincronizando && 'animate-spin')} />
           {sincronizando ? 'Sincronizando...' : 'Sincronizar com Meta'}
         </Button>
+
+        <Button
+          onClick={() => setModalCriar(true)}
+          disabled={!numeroSelecionado}
+          variant="outline"
+          className="border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/10"
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          Criar Template
+        </Button>
       </div>
 
       {!numeroSelecionado ? (
         <div className="text-center py-16 text-gray-500">
           <FileText className="w-10 h-10 mx-auto mb-3 opacity-30" />
-          <p>Selecione um número WhatsApp para ver os templates.</p>
+          <p>Selecione um numero WhatsApp para ver os templates.</p>
           {numeros.length === 0 && !loadingNumeros && (
-            <p className="text-xs mt-1.5">Configure um número na aba <strong className="text-gray-400">Config</strong> primeiro.</p>
+            <p className="text-xs mt-1.5">Configure um numero na aba <strong className="text-gray-400">Config</strong> primeiro.</p>
           )}
         </div>
       ) : (
@@ -233,16 +429,26 @@ export function TemplatesTab({ unidadeId }: { unidadeId: string | null }) {
             <div className="text-center py-12 text-gray-500">
               <FileText className="w-8 h-8 mx-auto mb-3 opacity-30" />
               <p>Nenhum template encontrado.</p>
-              <p className="text-xs mt-1">Clique em "Sincronizar com Meta" para importar os templates aprovados.</p>
+              <p className="text-xs mt-1">Clique em "Sincronizar com Meta" para importar ou "Criar Template" para criar um novo.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {templatesFiltrados.map(tpl => (
-                <TemplateCard key={tpl.id} tpl={tpl} numeroMetaId={numeroSelecionado} />
+                <TemplateCard key={tpl.id} tpl={tpl} numeroMetaId={numeroSelecionado} onDeleted={refetch} />
               ))}
             </div>
           )}
         </>
+      )}
+
+      {/* Modal criar template */}
+      {numeroSelecionado && (
+        <ModalCriarTemplate
+          open={modalCriar}
+          onOpenChange={setModalCriar}
+          numeroMetaId={numeroSelecionado}
+          onCriado={refetch}
+        />
       )}
     </div>
   )

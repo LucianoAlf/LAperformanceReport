@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { Upload, Users, Phone, FileText, Settings, CheckCircle, ArrowLeft, ArrowRight, X, AlertCircle, Building2 } from 'lucide-react'
+import { Upload, Users, Phone, FileText, Settings, CheckCircle, ArrowLeft, ArrowRight, X, AlertCircle, Building2, GraduationCap, Search, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
@@ -92,9 +92,8 @@ export function ModalNovaCampanha({ open, onOpenChange, onCriada, unidadeId }: P
       <DialogContent className="bg-slate-900 border-slate-700 max-w-2xl p-0 overflow-hidden">
         {/* Header com stepper */}
         <div className="px-6 pt-5 pb-4 border-b border-slate-700/50">
-          <div className="flex items-center justify-between mb-4">
+          <div className="mb-4">
             <h2 className="text-lg font-semibold text-white">Nova Campanha</h2>
-            <button onClick={fechar} className="text-gray-400 hover:text-white"><X className="w-5 h-5" /></button>
           </div>
           <div className="flex gap-1">
             {STEPS.map(s => {
@@ -155,14 +154,50 @@ function canAdvance(step: number, state: WizardState): boolean {
 function StepContatos({ state, set, isAdmin }: { state: WizardState; set: <K extends keyof WizardState>(k: K, v: WizardState[K]) => void; isAdmin: boolean }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const [bulkText, setBulkText] = useState('')
-  const [modo, setModo] = useState<'csv' | 'manual'>('csv')
+  const [modo, setModo] = useState<'csv' | 'manual' | 'alunos'>('csv')
   const [validacao, setValidacao] = useState<ValidacaoContatos | null>(null)
   const [unidades, setUnidades] = useState<{ id: string; nome: string }[]>([])
+
+  // Estado para modo alunos
+  const [alunosDisponiveis, setAlunosDisponiveis] = useState<any[]>([])
+  const [alunosSelecionados, setAlunosSelecionados] = useState<Set<number>>(new Set())
+  const [carregandoAlunos, setCarregandoAlunos] = useState(false)
+  const [filtroStatusAluno, setFiltroStatusAluno] = useState('ativo')
+  const [filtroCursoAluno, setFiltroCursoAluno] = useState('todos')
+  const [buscaAluno, setBuscaAluno] = useState('')
+  const [cursosLista, setCursosLista] = useState<{ id: number; nome: string }[]>([])
 
   useEffect(() => {
     if (!isAdmin) return
     supabase.from('unidades').select('id, nome').eq('ativo', true).order('nome').then(({ data }) => setUnidades(data ?? []))
   }, [isAdmin])
+
+  // Carregar cursos
+  useEffect(() => {
+    supabase.from('cursos').select('id, nome').eq('ativo', true).order('nome').then(({ data }) => setCursosLista(data ?? []))
+  }, [])
+
+  // Carregar alunos quando muda unidade, status ou curso
+  useEffect(() => {
+    if (modo !== 'alunos' || !state.unidadeId) return
+    setCarregandoAlunos(true)
+    let query = supabase
+      .from('alunos')
+      .select('id, nome, telefone, whatsapp, responsavel_telefone, curso_id, cursos(nome), status')
+      .eq('unidade_id', state.unidadeId)
+
+    if (filtroStatusAluno !== 'todos') {
+      query = query.eq('status', filtroStatusAluno)
+    }
+    if (filtroCursoAluno !== 'todos') {
+      query = query.eq('curso_id', Number(filtroCursoAluno))
+    }
+
+    query.order('nome').then(({ data }) => {
+      setAlunosDisponiveis(data ?? [])
+      setCarregandoAlunos(false)
+    })
+  }, [modo, state.unidadeId, filtroStatusAluno, filtroCursoAluno])
 
   async function handleCSV(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -190,6 +225,63 @@ function StepContatos({ state, set, isAdmin }: { state: WizardState; set: <K ext
     setValidacao(resultado)
     toast.success(`${resultado.validos.length} telefones válidos`)
   }
+
+  function toggleAluno(id: number) {
+    setAlunosSelecionados(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      return next
+    })
+  }
+
+  function toggleTodos() {
+    const filtrados = alunosFiltrados
+    if (alunosSelecionados.size === filtrados.length) {
+      setAlunosSelecionados(new Set())
+    } else {
+      setAlunosSelecionados(new Set(filtrados.map(a => a.id)))
+    }
+  }
+
+  function confirmarAlunos() {
+    const selecionados = alunosDisponiveis.filter(a => alunosSelecionados.has(a.id))
+    const contatos: ContatoImportado[] = []
+    const telefones = new Set<string>()
+
+    for (const aluno of selecionados) {
+      const tel = aluno.whatsapp || aluno.telefone || aluno.responsavel_telefone
+      if (!tel) continue
+      const digits = tel.replace(/\D/g, '')
+      if (digits.length < 10) continue
+      const normalized = digits.length <= 11 ? '55' + digits : digits
+      if (telefones.has(normalized)) continue
+      telefones.add(normalized)
+      contatos.push({
+        telefone: normalized,
+        variaveis: { nome: aluno.nome, curso: (aluno.cursos as any)?.nome || '' },
+      })
+    }
+
+    if (contatos.length === 0) {
+      toast.error('Nenhum aluno selecionado com telefone válido')
+      return
+    }
+
+    set('contatos', contatos)
+    set('csvHeaders', ['nome', 'curso'])
+    setValidacao({
+      validos: contatos,
+      total: selecionados.length,
+      duplicatas: selecionados.length - contatos.length,
+      invalidos: selecionados.filter(a => !(a.whatsapp || a.telefone || a.responsavel_telefone)).length,
+    })
+    toast.success(`${contatos.length} alunos importados`)
+  }
+
+  const alunosFiltrados = alunosDisponiveis.filter(a => {
+    if (!buscaAluno) return true
+    return a.nome.toLowerCase().includes(buscaAluno.toLowerCase())
+  })
 
   return (
     <div className="space-y-4">
@@ -225,6 +317,9 @@ function StepContatos({ state, set, isAdmin }: { state: WizardState; set: <K ext
       <div className="flex gap-2">
         <button onClick={() => setModo('csv')} className={cn(tabCls, modo === 'csv' && tabActiveCls)}>Upload CSV</button>
         <button onClick={() => setModo('manual')} className={cn(tabCls, modo === 'manual' && tabActiveCls)}>Colar telefones</button>
+        <button onClick={() => setModo('alunos')} className={cn(tabCls, modo === 'alunos' && tabActiveCls)}>
+          <span className="flex items-center gap-1"><GraduationCap className="w-3.5 h-3.5" />Alunos</span>
+        </button>
       </div>
 
       {modo === 'csv' ? (
@@ -239,7 +334,7 @@ function StepContatos({ state, set, isAdmin }: { state: WizardState; set: <K ext
             <p className="text-xs text-gray-600 mt-1">Precisa ter uma coluna de telefone</p>
           </button>
         </div>
-      ) : (
+      ) : modo === 'manual' ? (
         <div className="space-y-2">
           <textarea
             value={bulkText}
@@ -249,6 +344,93 @@ function StepContatos({ state, set, isAdmin }: { state: WizardState; set: <K ext
             className={cn(inputCls, 'resize-none')}
           />
           <Button onClick={handleBulk} variant="outline" size="sm">Importar telefones</Button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {!state.unidadeId ? (
+            <div className="text-center py-6 text-gray-500">
+              <Building2 className="w-8 h-8 mx-auto mb-2 opacity-30" />
+              <p className="text-sm">Selecione uma unidade primeiro</p>
+            </div>
+          ) : (
+            <>
+              {/* Filtros */}
+              <div className="flex gap-2 flex-wrap">
+                <select value={filtroStatusAluno} onChange={e => setFiltroStatusAluno(e.target.value)} className={cn(inputCls, 'w-auto')}>
+                  <option value="todos">Todos os status</option>
+                  <option value="ativo">Ativos</option>
+                  <option value="inativo">Inativos</option>
+                  <option value="trancado">Trancados</option>
+                  <option value="evadido">Evadidos</option>
+                  <option value="aviso_previo">Aviso prévio</option>
+                </select>
+                <select value={filtroCursoAluno} onChange={e => setFiltroCursoAluno(e.target.value)} className={cn(inputCls, 'w-auto')}>
+                  <option value="todos">Todos os cursos</option>
+                  {cursosLista.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                </select>
+                <div className="relative flex-1 min-w-[140px]">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
+                  <input value={buscaAluno} onChange={e => setBuscaAluno(e.target.value)} placeholder="Buscar aluno..." className={cn(inputCls, 'pl-8')} />
+                </div>
+              </div>
+
+              {/* Lista de alunos */}
+              {carregandoAlunos ? (
+                <div className="flex items-center justify-center py-8 text-gray-500 gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span className="text-sm">Carregando alunos...</span>
+                </div>
+              ) : alunosFiltrados.length === 0 ? (
+                <div className="text-center py-6 text-gray-500">
+                  <Users className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">Nenhum aluno encontrado</p>
+                </div>
+              ) : (
+                <>
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-2 text-xs text-gray-400 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={alunosSelecionados.size === alunosFiltrados.length && alunosFiltrados.length > 0}
+                        onChange={toggleTodos}
+                        className="rounded border-slate-600 bg-slate-700 text-amber-500 focus:ring-amber-500"
+                      />
+                      Selecionar todos ({alunosFiltrados.length})
+                    </label>
+                    {alunosSelecionados.size > 0 && (
+                      <Button onClick={confirmarAlunos} size="sm" className="bg-amber-500 hover:bg-amber-600 text-black text-xs">
+                        Importar {alunosSelecionados.size} aluno(s)
+                      </Button>
+                    )}
+                  </div>
+                  <div className="max-h-48 overflow-y-auto border border-slate-700/50 rounded-lg divide-y divide-slate-700/30">
+                    {alunosFiltrados.map(aluno => (
+                      <label
+                        key={aluno.id}
+                        className={cn(
+                          'flex items-center gap-3 px-3 py-2 cursor-pointer hover:bg-slate-800/50 transition-colors',
+                          alunosSelecionados.has(aluno.id) && 'bg-amber-500/5',
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={alunosSelecionados.has(aluno.id)}
+                          onChange={() => toggleAluno(aluno.id)}
+                          className="rounded border-slate-600 bg-slate-700 text-amber-500 focus:ring-amber-500 flex-shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm text-white truncate">{aluno.nome}</div>
+                          <div className="text-[11px] text-gray-500 truncate">
+                            {(aluno.cursos as any)?.nome || '-'} · {aluno.whatsapp || aluno.telefone || aluno.responsavel_telefone || 'sem tel.'}
+                          </div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
+          )}
         </div>
       )}
 
