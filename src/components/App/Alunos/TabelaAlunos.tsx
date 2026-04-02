@@ -39,6 +39,7 @@ import {
   CommandItem,
   CommandList,
 } from '@/components/ui/command';
+import { ContatoPopover } from './ContatoPopover';
 import type { Aluno, Filtros } from './AlunosPage';
 
 interface TabelaAlunosProps {
@@ -1508,14 +1509,12 @@ export function TabelaAlunos({
                     </div>
                   </td>
 
-                  {/* Telefone - Edição inline */}
+                  {/* Telefone - Popover com todos os contatos */}
                   {col('telefone') && (
                   <td className="px-4 py-2">
-                    <CelulaEditavel
-                      value={aluno.responsavel_telefone || aluno.telefone}
-                      onChange={async (valor) => salvarCampo(aluno.id, aluno.responsavel_telefone ? 'responsavel_telefone' : 'telefone', valor)}
-                      placeholder="-"
-                      className="min-w-[120px]"
+                    <ContatoPopover
+                      alunoId={aluno.id}
+                      telefonePrincipal={aluno.telefone || aluno.responsavel_telefone || null}
                     />
                   </td>
                   )}

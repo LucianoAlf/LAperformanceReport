@@ -666,7 +666,16 @@ export function AlunosPage() {
 
     if (filtros.nome) {
       const termo = filtros.nome.toLowerCase();
-      resultado = resultado.filter(a => a.nome.toLowerCase().includes(termo));
+      const termoDigits = termo.replace(/\D/g, '');
+      resultado = resultado.filter(a => {
+        if (a.nome.toLowerCase().includes(termo)) return true;
+        // Busca por telefone (qualquer contato)
+        if (termoDigits.length >= 4) {
+          const tels = [a.telefone, a.whatsapp, a.responsavel_telefone].filter(Boolean);
+          return tels.some(t => t!.replace(/\D/g, '').includes(termoDigits));
+        }
+        return false;
+      });
     }
     if (filtros.professor_id) {
       const profId = parseInt(filtros.professor_id);

@@ -13,6 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import type { Aluno } from './AlunosPage';
+import { ContatosAluno } from './ContatosAluno';
 
 interface ModalFichaAlunoProps {
   aluno: Aluno;
@@ -567,46 +568,7 @@ export function ModalFichaAluno({
                 </div>
               </div>
 
-              <div className="border-t border-slate-700 pt-4">
-                <Label className="mb-3 block text-slate-400">👤 Responsável <span className="text-xs font-normal text-slate-500">(opcional)</span></Label>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="col-span-2 sm:col-span-1">
-                    <Label className="mb-1 block text-sm">Nome do Responsável</Label>
-                    <Input
-                      value={formData.responsavel_nome}
-                      onChange={(e) => setFormData({ ...formData, responsavel_nome: e.target.value })}
-                      placeholder="Nome completo"
-                    />
-                  </div>
-                  <div className="col-span-2 sm:col-span-1">
-                    <Label className="mb-1 block text-sm">Telefone/WhatsApp</Label>
-                    <Input
-                      value={formData.responsavel_telefone}
-                      onChange={(e) => setFormData({ ...formData, responsavel_telefone: e.target.value })}
-                      placeholder="(21) 99999-9999"
-                    />
-                  </div>
-                </div>
-                <div className="mt-3">
-                  <Label className="mb-1 block text-sm">Parentesco</Label>
-                  <Select
-                    value={formData.responsavel_parentesco}
-                    onValueChange={(value) => setFormData({ ...formData, responsavel_parentesco: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="mae">Mãe</SelectItem>
-                      <SelectItem value="pai">Pai</SelectItem>
-                      <SelectItem value="avo">Avó/Avô</SelectItem>
-                      <SelectItem value="tio">Tio/Tia</SelectItem>
-                      <SelectItem value="tutor">Tutor Legal</SelectItem>
-                      <SelectItem value="outro">Outro</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+              <ContatosAluno alunoId={aluno.id} nomeAluno={aluno.nome} />
 
               <div className="border-t border-slate-700 pt-4">
                 <Label className="mb-3 block text-slate-400">Flags do Aluno</Label>

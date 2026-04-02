@@ -168,6 +168,7 @@ function StepContatos({ state, set, isAdmin }: { state: WizardState; set: <K ext
   const [filtroCursoAluno, setFiltroCursoAluno] = useState('todos')
   const [buscaAluno, setBuscaAluno] = useState('')
   const [cursosLista, setCursosLista] = useState<{ id: number; nome: string }[]>([])
+  const [enviarPara, setEnviarPara] = useState<'principal' | 'mae' | 'pai' | 'responsavel' | 'proprio'>('principal')
 
   useEffect(() => {
     if (!isAdmin) return
@@ -185,7 +186,7 @@ function StepContatos({ state, set, isAdmin }: { state: WizardState; set: <K ext
     setCarregandoAlunos(true)
     let query = supabase
       .from('alunos')
-      .select('id, nome, telefone, whatsapp, responsavel_telefone, curso_id, cursos(nome), status')
+      .select('id, nome, telefone, whatsapp, responsavel_telefone, curso_id, cursos(nome), status, aluno_contatos(id, nome, telefone, parentesco, principal)')
       .eq('unidade_id', state.unidadeId)
 
     if (filtroStatusAluno !== 'todos') {
@@ -254,16 +255,37 @@ function StepContatos({ state, set, isAdmin }: { state: WizardState; set: <K ext
     let telInvalido = 0
     let duplicados = 0
 
-    for (const aluno of selecionados) {
-      const tel = aluno.whatsapp || aluno.telefone || aluno.responsavel_telefone
-      if (!tel) { semTelefone++; continue }
+    function normTel(tel: string | null | undefined): string | null {
+      if (!tel) return null
       const digits = tel.replace(/\D/g, '')
-      if (digits.length < 10) { telInvalido++; continue }
-      const normalized = digits.length <= 11 ? '55' + digits : digits
-      if (telefones.has(normalized)) { duplicados++; continue }
-      telefones.add(normalized)
+      if (digits.length < 10) return null
+      return digits.length <= 11 ? '55' + digits : digits
+    }
+
+    for (const aluno of selecionados) {
+      const alunoContatos = (aluno.aluno_contatos as any[]) || []
+      let tel: string | null = null
+
+      if (enviarPara === 'principal') {
+        // Contato principal da tabela, fallback para campos legados
+        const principal = alunoContatos.find((c: any) => c.principal)
+        tel = normTel(principal?.telefone) || normTel(aluno.whatsapp) || normTel(aluno.telefone) || normTel(aluno.responsavel_telefone)
+      } else {
+        // Buscar por parentesco específico
+        const contatoMatch = alunoContatos.find((c: any) => c.parentesco === enviarPara)
+        tel = normTel(contatoMatch?.telefone)
+        // Fallback para principal se não encontrar o parentesco
+        if (!tel) {
+          const principal = alunoContatos.find((c: any) => c.principal)
+          tel = normTel(principal?.telefone) || normTel(aluno.whatsapp) || normTel(aluno.telefone)
+        }
+      }
+
+      if (!tel) { semTelefone++; continue }
+      if (telefones.has(tel)) { duplicados++; continue }
+      telefones.add(tel)
       contatos.push({
-        telefone: normalized,
+        telefone: tel,
         variaveis: { nome: aluno.nome, curso: (aluno.cursos as any)?.nome || '' },
       })
     }
@@ -379,6 +401,13 @@ function StepContatos({ state, set, isAdmin }: { state: WizardState; set: <K ext
                   <option value="todos">Todos os cursos</option>
                   {cursosLista.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
                 </select>
+                <select value={enviarPara} onChange={e => setEnviarPara(e.target.value as any)} className={cn(inputCls, 'w-auto')} title="Para qual contato enviar">
+                  <option value="principal">Contato principal</option>
+                  <option value="mae">Mãe</option>
+                  <option value="pai">Pai</option>
+                  <option value="responsavel">Responsável</option>
+                  <option value="proprio">Próprio aluno</option>
+                </select>
                 <div className="relative flex-1 min-w-[140px]">
                   <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
                   <input value={buscaAluno} onChange={e => setBuscaAluno(e.target.value)} placeholder="Buscar aluno..." className={cn(inputCls, 'pl-8')} />
@@ -432,7 +461,15 @@ function StepContatos({ state, set, isAdmin }: { state: WizardState; set: <K ext
                         <div className="flex-1 min-w-0">
                           <div className="text-sm text-white truncate">{aluno.nome}</div>
                           <div className="text-[11px] text-gray-500 truncate">
-                            {(aluno.cursos as any)?.nome || '-'} · {aluno.whatsapp || aluno.telefone || aluno.responsavel_telefone || 'sem tel.'}
+                            {(aluno.cursos as any)?.nome || '-'} · {(() => {
+                              const cts = (aluno.aluno_contatos as any[]) || []
+                              if (enviarPara !== 'principal') {
+                                const match = cts.find((c: any) => c.parentesco === enviarPara)
+                                if (match?.telefone) return match.telefone
+                              }
+                              const princ = cts.find((c: any) => c.principal)
+                              return princ?.telefone || aluno.whatsapp || aluno.telefone || aluno.responsavel_telefone || 'sem tel.'
+                            })()}
                           </div>
                         </div>
                       </label>
