@@ -1,5 +1,4 @@
-import { getOpenAIConfig, loadOpenAIConfigFromDB, type OpenAIConfig } from './useOpenAIAnalysis';
-import { AGENT_TOOLS_SCHEMA, executeTool, type AgentContext } from './agentTools';
+import { supabase } from '@/lib/supabase';
 
 export type Role = 'user' | 'assistant' | 'system' | 'tool';
 
@@ -9,110 +8,115 @@ export interface ChatMessage {
     content: string;
     attachments?: File[];
     isAnalyzedData?: boolean;
+    sqlQuery?: string;
+    sqlResult?: any;
+    visualizationType?: string;
+    visualizationConfig?: any;
+    metadata?: {
+        used_template?: boolean;
+        template_name?: string;
+        from_cache?: boolean;
+        tokens_used?: number;
+        cost_usd?: number;
+        tool_calls_count?: number;
+    };
 }
-
-/**
- * Número máximo de ciclos de tool_calls antes de forçar uma resposta final.
- * Isto evita loops infinitos caso a IA fique num ciclo.
- */
-const MAX_TOOL_ROUNDS = 5;
 
 export interface ToolCallProgress {
     toolName: string;
     status: 'calling' | 'done';
 }
 
+export interface AgentContext {
+    isAdmin: boolean;
+    unidadeId: string | null;
+    unidadeNome: string | null;
+}
+
 /**
- * Envia mensagens para a API da OpenAI com suporte a Tool Calling.
- * 
- * Fluxo:
- * 1. Envia as mensagens + tools schema para a OpenAI
- * 2. Se a resposta contiver tool_calls, executa cada ferramenta localmente
- * 3. Devolve os resultados como mensagens role="tool"
- * 4. Reenvia para a OpenAI até obter uma resposta final em texto
- * 
- * IMPORTANTE: Nenhuma tool altera a base de dados. Apenas leitura.
+ * Envia mensagem para o agente BI via edge function server-side.
+ * API key segura no servidor — nunca exposta no frontend.
  */
 export async function chatComIA(
-    messages: { role: string; content: string; tool_call_id?: string }[],
+    message: string,
+    conversationId: string | null,
     agentCtx: AgentContext,
-    onToolProgress?: (progress: ToolCallProgress) => void,
-): Promise<string> {
-    let config = getOpenAIConfig();
-    if (!config.apiKey) {
-        config = await loadOpenAIConfigFromDB();
-    }
-    if (!config.apiKey) {
-        throw new Error('Chave da API da OpenAI não configurada. Vá em Configurações > Inteligência Artificial.');
-    }
+    _onToolProgress?: (progress: ToolCallProgress) => void,
+): Promise<{
+    content: string;
+    conversationId: string;
+    sqlQuery?: string;
+    sqlResult?: any;
+    visualizationType?: string;
+    visualizationConfig?: any;
+    metadata?: any;
+}> {
+    const { data, error } = await supabase.functions.invoke('bi-agent-lamusic', {
+        body: {
+            message,
+            conversation_id: conversationId,
+            unidade_id_override: agentCtx.isAdmin ? agentCtx.unidadeId : undefined,
+        },
+    });
 
-    // Cópia mutável do histórico para acumular tool calls
-    const conversationMessages: any[] = [...messages];
-
-    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${config.apiKey}`,
-            },
-            body: JSON.stringify({
-                model: config.model || 'gpt-4o-mini',
-                messages: conversationMessages,
-                temperature: 0.3,
-                tools: AGENT_TOOLS_SCHEMA,
-                tool_choice: 'auto',
-            }),
-        });
-
-        if (!response.ok) {
-            const err = await response.json().catch(() => ({}));
-            throw new Error(`Erro na API OpenAI: ${err?.error?.message || response.statusText}`);
-        }
-
-        const data = await response.json();
-        const choice = data.choices?.[0];
-
-        if (!choice) {
-            throw new Error('Resposta inesperada da API OpenAI (sem choices).');
-        }
-
-        const assistantMessage = choice.message;
-
-        // Adiciona a resposta do assistente ao histórico
-        conversationMessages.push(assistantMessage);
-
-        // Se não houver tool_calls, a resposta final é o content
-        if (choice.finish_reason !== 'tool_calls' && !assistantMessage.tool_calls) {
-            return assistantMessage.content || 'Sem resposta da IA.';
-        }
-
-        // Processar tool_calls
-        const toolCalls = assistantMessage.tool_calls || [];
-
-        for (const toolCall of toolCalls) {
-            const toolName = toolCall.function.name;
-            const toolArgs = toolCall.function.arguments;
-
-            // Notificar progresso
-            onToolProgress?.({ toolName, status: 'calling' });
-
-            // Executar a ferramenta localmente (SOMENTE LEITURA, com contexto de permissão)
-            const toolResult = await executeTool(toolName, toolArgs, agentCtx);
-
-            onToolProgress?.({ toolName, status: 'done' });
-
-            // Adicionar o resultado como mensagem role="tool"
-            conversationMessages.push({
-                role: 'tool',
-                tool_call_id: toolCall.id,
-                content: toolResult,
-            });
-        }
-
-        // O loop continua: vamos enviar os resultados das tools de volta à OpenAI
+    if (error) {
+        throw new Error(`Erro no agente BI: ${error.message}`);
     }
 
-    // Se chegou aqui, atingiu o limite de rounds. Forçar resposta.
-    return 'Desculpe, não consegui processar sua solicitação após várias tentativas. Tente reformular a pergunta.';
+    if (data?.error) {
+        throw new Error(data.error);
+    }
+
+    const msg = data?.message;
+    return {
+        content: msg?.content || 'Sem resposta.',
+        conversationId: data?.conversation_id,
+        sqlQuery: msg?.sql_query,
+        sqlResult: msg?.sql_result,
+        visualizationType: msg?.visualization_type,
+        visualizationConfig: msg?.visualization_config,
+        metadata: data?.metadata,
+    };
+}
+
+/**
+ * Carrega histórico de conversas do usuário.
+ */
+export async function loadConversations(): Promise<{ id: string; title: string; updated_at: string }[]> {
+    const { data } = await supabase
+        .from('bi_conversations_lamusic')
+        .select('id, title, updated_at')
+        .eq('is_archived', false)
+        .order('updated_at', { ascending: false })
+        .limit(20);
+    return data || [];
+}
+
+/**
+ * Carrega mensagens de uma conversa.
+ */
+export async function loadMessages(conversationId: string): Promise<ChatMessage[]> {
+    const { data } = await supabase
+        .from('bi_messages_lamusic')
+        .select('id, role, content, sql_query, sql_result, visualization_type, visualization_config, prompt_tokens, completion_tokens, cost_usd, created_at')
+        .eq('conversation_id', conversationId)
+        .order('created_at', { ascending: true });
+
+    return (data || []).map((m: any) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content || '',
+        sqlQuery: m.sql_query,
+        sqlResult: m.sql_result,
+        visualizationType: m.visualization_type,
+        visualizationConfig: m.visualization_config,
+        metadata: m.prompt_tokens ? { tokens_used: (m.prompt_tokens || 0) + (m.completion_tokens || 0), cost_usd: m.cost_usd } : undefined,
+    }));
+}
+
+/**
+ * Salva feedback (rating) em uma mensagem.
+ */
+export async function saveFeedback(messageId: string, rating: number): Promise<void> {
+    await supabase.from('bi_messages_lamusic').update({ feedback_rating: rating }).eq('id', messageId);
 }

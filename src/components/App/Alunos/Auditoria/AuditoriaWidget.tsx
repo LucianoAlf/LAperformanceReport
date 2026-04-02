@@ -7,11 +7,9 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { getOpenAIConfig, loadOpenAIConfigFromDB, analisarComIA } from './useOpenAIAnalysis';
 import { type RelatorioAuditoria, executarAuditoria } from './useAuditoriaEmusys';
 import { parseEmusysFiles, type ParseResult } from './parseEmusysFile';
-import { chatComIA, type ChatMessage, type Role } from './useAgentChat';
-import type { AgentContext } from './agentTools';
+import { chatComIA, type ChatMessage, type Role, type AgentContext } from './useAgentChat';
 
 interface Unidade {
     id: string;
@@ -52,6 +50,7 @@ export function AuditoriaWidget({ onClose, widgetsHidden = false }: AuditoriaWid
     const [isTyping, setIsTyping] = useState(false);
     const [dragActive, setDragActive] = useState(false);
     const [loadingMsg, setLoadingMsg] = useState('');
+    const [conversationId, setConversationId] = useState<string | null>(null);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -130,16 +129,6 @@ export function AuditoriaWidget({ onClose, widgetsHidden = false }: AuditoriaWid
             return;
         }
 
-        let config = getOpenAIConfig();
-        if (!config.apiKey) {
-            // Tentar carregar do banco de dados caso localStorage esteja vazio
-            config = await loadOpenAIConfigFromDB();
-        }
-        if (!config.apiKey) {
-            addMessage('assistant', '⚠️ AVISO: A API Key da OpenAI não está configurada.\nPor favor, vá a **Configurações > Inteligência Artificial** e configure antes de falar comigo.');
-            return;
-        }
-
         // Criar a mensagem do Utilizador visível
         const userMessageContent = txt || (hasAttachments ? 'Por favor analise os ficheiros em anexo.' : '');
         const currentAttachments = [...attachments];
@@ -206,82 +195,26 @@ DETALHES DA ANÁLISE (LISTAS): (Priorize responder sobre isso se for pedido)
                 }
             }
 
-            // 2. Comunicar com OpenAI (com Tool Calling)
+            // 2. Enviar para edge function (tool calling server-side)
             setLoadingMsg('Pensando...');
-            const historyToSend: { role: string; content: string }[] = messages
-                .filter(m => !m.isAnalyzedData)
-                .map(m => ({ role: m.role, content: m.content }));
 
-            // Injetamos a mensagem "sistema" se acabamos de analisar o arquivo
-            if (systemContextContent) {
-                historyToSend.push({
-                    role: 'system',
-                    content: 'Você é um analista de dados especialista em cruzamento de banco de dados vs CRM (Emusys). Aqui estão os dados da última extração de arquivos feita pelo usuário. Faça uma análise detalhada e priorize as correções.\n\n' + systemContextContent
-                });
+            // Montar a mensagem: se teve auditoria, incluir contexto
+            const messageToSend = systemContextContent
+                ? `${systemContextContent}\n\n${newUserMsg.content}`
+                : newUserMsg.content;
+
+            const result = await chatComIA(messageToSend, conversationId, agentCtx);
+
+            // Salvar conversation_id para mensagens futuras
+            if (result.conversationId) {
+                setConversationId(result.conversationId);
             }
 
-            // Adicionamos o que o usuário disse
-            historyToSend.push({ role: 'user', content: newUserMsg.content });
-
-            const TOOL_LABELS: Record<string, string> = {
-                get_unidades: 'Consultando unidades...',
-                get_dados_mensais: 'Buscando métricas no banco de dados...',
-                search_aluno: 'Procurando aluno no sistema...',
-                get_resumo_unidade: 'Calculando resumo da unidade...',
-                get_movimentacoes: 'Verificando movimentações...',
-                search_leads: 'Buscando leads no CRM...',
-                get_leads_hoje: 'Verificando leads de hoje...',
-                get_funil_leads: 'Calculando funil de conversão...',
-                consultar_banco: 'Consultando banco de dados...',
-                listar_tabelas: 'Listando tabelas disponíveis...',
-            };
-
-            // System prompt dinâmico que avisa sobre dias atuais e auditorias
-            const dataHoje = new Date().toLocaleDateString('pt-BR');
-
-            // Construir regra de permissão dinâmica
-            const permissaoPrompt = agentCtx.isAdmin
-                ? 'Você tem acesso ADMIN — pode consultar dados de TODAS as unidades.'
-                : `REGRA DE PERMISSÃO: O usuário atual pertence à unidade "${agentCtx.unidadeNome || 'desconhecida'}" (unidade_id: ${agentCtx.unidadeId}). Você DEVE retornar APENAS dados desta unidade. Se o usuário perguntar sobre outras unidades, informe educadamente que ele só tem acesso aos dados da sua unidade. Ao usar consultar_banco, SEMPRE inclua WHERE unidade_id = '${agentCtx.unidadeId}' nas queries.`;
-
-            const iaResponseString = await chatComIA([{
-                role: 'system',
-                content: `Você é a Inteligência Artificial assistente da LA Music, uma rede de escolas de música.
-Hoje é dia ${dataHoje}.
-Você SEMPRE responde em Português do Brasil (PT-BR).
-
-${permissaoPrompt}
-
-Você tem acesso a ferramentas que consultam o banco de dados da empresa em tempo real. Use-as sempre que o usuário perguntar sobre dados, métricas, alunos, faturamento, ticket médio, evasão, leads, CRM, professores, turmas, etc.
-
-FERRAMENTAS DISPONÍVEIS:
-- get_unidades: listar unidades
-- get_dados_mensais: métricas mensais (alunos, matrículas, evasões, ticket médio, faturamento)
-- search_aluno: buscar alunos por nome
-- get_resumo_unidade: resumo de auditoria da unidade
-- get_movimentacoes: movimentações de alunos (evasão, renovação, trancamento)
-- search_leads: buscar leads/contatos comerciais por nome, status, período, unidade
-- get_leads_hoje: leads que chegaram hoje
-- get_funil_leads: estatísticas do funil/pipeline de leads
-- consultar_banco: consulta SQL genérica para qualquer tabela (apenas SELECT)
-- listar_tabelas: listar tabelas e views disponíveis
-
-ATENÇÃO SOBRE O TICKET MÉDIO E FATURAMENTO: Os valores que você calcula na ferramenta get_resumo_unidade são valores "crus" (raw) mensurando a média real das parcelas ativas. Eles PODEM e DEVEM divergir propositalmente dos relatórios do Dashboard (pois o card tem regras de descontos de bolsas). O seu papel é reportar o valor que você encontrou servindo como uma dupla-checagem de auditoria para o usuário.
-NUNCA invente dados. Se não souber, use as ferramentas disponíveis para buscar.
-Responda de forma clara, profissional e objetiva, usando tabelas markdown e listas quando apropriado.
-Você NÃO pode alterar nenhum dado — apenas consultar e analisar.
-Se o usuário anexar arquivos, analise as divergências entre Emusys (CRM) e o banco de dados interno.`
-            }, ...historyToSend], agentCtx, (progress) => {
-                if (progress.status === 'calling') {
-                    setLoadingMsg(TOOL_LABELS[progress.toolName] || `Executando ${progress.toolName}...`);
-                }
-            });
-
             // Adicionar a resposta
-            addMessage('assistant', iaResponseString);
+            addMessage('assistant', result.content);
 
         } catch (err: any) {
-            addMessage('assistant', `❌ **Ocorreu um Erro**:\n ${err.message}`);
+            addMessage('assistant', `❌ **Ocorreu um Erro**: ${err.message}`);
         } finally {
             setIsTyping(false);
             setLoadingMsg('');
