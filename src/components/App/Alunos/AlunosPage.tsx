@@ -307,6 +307,30 @@ export function AlunosPage() {
       qAlunos = qAlunos.lte('data_matricula', competenciaRange.endDate);
     }
 
+    // Query extra: alunos que saíram no período (para inativos/evadidos aparecerem no mês correto)
+    const selectFields = `
+      id, nome, classificacao, idade_atual, professor_atual_id, curso_id, modalidade,
+      dia_aula, horario_aula, valor_parcela, tempo_permanencia_meses,
+      status, status_pagamento, dia_vencimento, tipo_matricula_id, unidade_id, data_matricula,
+      is_segundo_curso, data_nascimento, forma_pagamento_id, telefone, whatsapp, responsavel_telefone, data_saida,
+      professores:professor_atual_id!left(nome),
+      cursos:curso_id!left(nome, is_projeto_banda),
+      tipos_matricula:tipo_matricula_id!left(nome, conta_como_pagante, entra_ticket_medio, codigo),
+      unidades:unidade_id!inner(codigo),
+      formas_pagamento:forma_pagamento_id!left(nome)
+    `;
+    let qAlunosSaida: ReturnType<typeof supabase.from<'alunos'>> | null = null;
+    if (competenciaRange.startDate && competenciaRange.endDate) {
+      let q = supabase.from('alunos').select(selectFields).not('data_saida', 'is', null)
+        .gte('data_saida', competenciaRange.startDate)
+        .lte('data_saida', competenciaRange.endDate)
+        .order('nome');
+      if (unidadeAtual && unidadeAtual !== 'todos') {
+        q = q.eq('unidade_id', unidadeAtual);
+      }
+      qAlunosSaida = q;
+    }
+
     // Disparar tudo em paralelo: alunos, turmas view, anotações, turmas explícitas, opções, LTV
     const [alunosR, turmasViewR, anotacoesR, ...outrosResults] = await Promise.all([
       qAlunos,
@@ -324,15 +348,27 @@ export function AlunosPage() {
       supabase.rpc('get_tempo_permanencia', {
         p_unidade_id: unidadeAtual && unidadeAtual !== 'todos' ? unidadeAtual : null,
       }),
+      // Query extra: alunos que saíram no período
+      ...(qAlunosSaida ? [qAlunosSaida] : []),
     ]);
 
     const turmasViewData = turmasViewR.data || [];
     const permData = outrosResults[2]?.data;
+    const alunosSaidaR = qAlunosSaida ? outrosResults[3] : null;
 
     // ── FASE 2: processar alunos ──
     const { data: alunosRaw, error } = alunosR;
 
-    if (!error && alunosRaw) {
+    // Mesclar alunos por data_saida (sem duplicatas)
+    let alunosMesclados = alunosRaw ?? [];
+    if (alunosSaidaR?.data) {
+      const idsExistentes = new Set(alunosMesclados.map((a: any) => a.id));
+      for (const a of alunosSaidaR.data) {
+        if (!idsExistentes.has(a.id)) alunosMesclados.push(a);
+      }
+    }
+
+    if (!error && alunosMesclados.length > 0) {
       const turmasMap = new Map(turmasViewData.map((t: any) => [
         `${t.unidade_id}-${t.professor_id}-${t.dia_semana}-${t.horario_inicio}`,
         t
@@ -349,7 +385,7 @@ export function AlunosPage() {
         anotacoesMap.set(a.aluno_id, atual);
       });
 
-      const alunosFormatados = alunosRaw.map((a: any) => {
+      const alunosFormatados = alunosMesclados.map((a: any) => {
         const turmaKey = `${a.unidade_id}-${a.professor_atual_id}-${a.dia_aula}-${a.horario_aula}`;
         const turmaInfo = turmasMap.get(turmaKey) as any;
 
@@ -415,8 +451,10 @@ export function AlunosPage() {
       setAlunos(alunosComSegundoCurso);
 
       // ── FASE 3: calcular KPIs no JS (elimina 5 queries) ──
+      // KPIs usam apenas alunos da query principal (por data_matricula), não os mesclados por data_saida
+      const alunosParaKPIs = alunosRaw ?? [];
       // IDs de tipos: 3=BOLSISTA_INT, 4=BOLSISTA_PARC
-      const ativosETrancados = alunosRaw.filter((a: any) =>
+      const ativosETrancados = alunosParaKPIs.filter((a: any) =>
         (a.status === 'ativo' || a.status === 'trancado')
       );
       const naoSegundoCurso = ativosETrancados.filter((a: any) =>

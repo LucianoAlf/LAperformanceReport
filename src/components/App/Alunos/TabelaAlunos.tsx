@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical, Play, MessageSquarePlus, MessageCircle, CheckCircle2, Circle, FileEdit, ChevronDown, ChevronRight, Music2, Layers, CreditCard, FileText, Banknote, QrCode, Link2, Receipt, ChevronsUpDown, Columns3, Phone } from 'lucide-react';
+import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical, Play, MessageSquarePlus, MessageCircle, CheckCircle2, Circle, FileEdit, ChevronDown, ChevronRight, Music2, Layers, CreditCard, FileText, Banknote, QrCode, Link2, Receipt, ChevronsUpDown, Columns3, Phone, ArrowUp, ArrowDown } from 'lucide-react';
 import { CelulaEditavel } from '@/components/ui/CelulaEditavel';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -90,6 +90,31 @@ function getDefaultColunas(): Set<string> {
   return new Set(COLUNAS_CONFIG.filter(c => c.defaultVisible).map(c => c.id));
 }
 
+function SortableHeader({ label, sortKey, sortConfig, onSort, className = '', px = 'px-4' }: {
+  label: string;
+  sortKey: string;
+  sortConfig: { key: string; direction: 'asc' | 'desc' } | null;
+  onSort: (key: string) => void;
+  className?: string;
+  px?: string;
+}) {
+  const active = sortConfig?.key === sortKey;
+  return (
+    <th
+      className={`${px} py-3 font-medium cursor-pointer select-none hover:text-white transition-colors ${className} ${active ? 'text-amber-400' : ''}`}
+      onClick={() => onSort(sortKey)}
+    >
+      <span className="inline-flex items-center gap-1">
+        {label}
+        {active && (sortConfig.direction === 'asc'
+          ? <ArrowUp className="w-3 h-3" />
+          : <ArrowDown className="w-3 h-3" />
+        )}
+      </span>
+    </th>
+  );
+}
+
 export function TabelaAlunos({
   alunos: alunosProp,
   todosAlunos,
@@ -155,6 +180,7 @@ export function TabelaAlunos({
   const [alunoFicha, setAlunoFicha] = useState<Aluno | null>(null);
   const [alunosExpandidos, setAlunosExpandidos] = useState<Set<number>>(new Set());
   const [alertaInadimplenciaDismissed, setAlertaInadimplenciaDismissed] = useState(false);
+  const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   const itensPorPagina = 30;
 
   const toggleColuna = useCallback((id: string) => {
@@ -245,12 +271,48 @@ export function TabelaAlunos({
     });
   };
 
+  // Sort por coluna
+  const handleSort = (key: string) => {
+    setSortConfig(prev => {
+      if (prev?.key === key) {
+        return prev.direction === 'asc' ? { key, direction: 'desc' } : null;
+      }
+      return { key, direction: 'asc' };
+    });
+    setPaginaAtual(1);
+  };
+
+  const alunosOrdenados = useMemo(() => {
+    if (!sortConfig) return alunos;
+    return [...alunos].sort((a, b) => {
+      const { key, direction } = sortConfig;
+      let valA: any, valB: any;
+      switch (key) {
+        case 'nome': valA = a.nome || ''; valB = b.nome || ''; break;
+        case 'professor': valA = a.professor_nome || ''; valB = b.professor_nome || ''; break;
+        case 'curso': valA = a.curso_nome || ''; valB = b.curso_nome || ''; break;
+        case 'dia': valA = a.dia_aula || ''; valB = b.dia_aula || ''; break;
+        case 'horario': valA = a.horario_aula || ''; valB = b.horario_aula || ''; break;
+        case 'parcela': valA = a.valor_parcela ?? 0; valB = b.valor_parcela ?? 0; break;
+        case 'tempo': valA = a.tempo_permanencia_meses ?? 0; valB = b.tempo_permanencia_meses ?? 0; break;
+        case 'status': valA = a.status || ''; valB = b.status || ''; break;
+        case 'data_saida': valA = a.data_saida || ''; valB = b.data_saida || ''; break;
+        default: return 0;
+      }
+      if (typeof valA === 'string') {
+        const cmp = valA.localeCompare(valB);
+        return direction === 'asc' ? cmp : -cmp;
+      }
+      return direction === 'asc' ? valA - valB : valB - valA;
+    });
+  }, [alunos, sortConfig]);
+
   // Paginação
-  const totalPaginas = Math.ceil(alunos.length / itensPorPagina);
+  const totalPaginas = Math.ceil(alunosOrdenados.length / itensPorPagina);
   const alunosPaginados = useMemo(() => {
     const inicio = (paginaAtual - 1) * itensPorPagina;
-    return alunos.slice(inicio, inicio + itensPorPagina);
-  }, [alunos, paginaAtual]);
+    return alunosOrdenados.slice(inicio, inicio + itensPorPagina);
+  }, [alunosOrdenados, paginaAtual]);
 
   // Contador de turmas por tamanho (usa todosAlunos para manter fixo)
   // IMPORTANTE: Deve usar a mesma lógica da view vw_turmas_implicitas
@@ -1068,6 +1130,7 @@ export function TabelaAlunos({
               <SelectItem value="aviso_previo">Aviso Prévio</SelectItem>
               <SelectItem value="trancado">Trancado</SelectItem>
               <SelectItem value="inativo">Inativo</SelectItem>
+              <SelectItem value="evadido">Evadido</SelectItem>
             </SelectContent>
           </Select>
 
@@ -1330,21 +1393,21 @@ export function TabelaAlunos({
                 />
               </th>
               <th className="px-4 py-3 font-medium">#</th>
-              <th className="px-4 py-3 font-medium text-left">Nome</th>
+              <SortableHeader label="Nome" sortKey="nome" sortConfig={sortConfig} onSort={handleSort} className="text-left" />
               {col('telefone') && <th className="px-4 py-3 font-medium">Telefone</th>}
               {col('escola') && <th className="px-4 py-3 font-medium">Escola</th>}
-              {col('professor') && <th className="px-4 py-3 font-medium">Professor</th>}
-              {col('curso') && <th className="px-4 py-3 font-medium">Curso</th>}
+              {col('professor') && <SortableHeader label="Professor" sortKey="professor" sortConfig={sortConfig} onSort={handleSort} />}
+              {col('curso') && <SortableHeader label="Curso" sortKey="curso" sortConfig={sortConfig} onSort={handleSort} />}
               {col('modalidade') && <th className="px-4 py-3 font-medium">Mod.</th>}
-              {col('dia') && <th className="px-4 py-3 font-medium">Dia</th>}
-              {col('horario') && <th className="px-4 py-3 font-medium">Horário</th>}
+              {col('dia') && <SortableHeader label="Dia" sortKey="dia" sortConfig={sortConfig} onSort={handleSort} />}
+              {col('horario') && <SortableHeader label="Horário" sortKey="horario" sortConfig={sortConfig} onSort={handleSort} />}
               {col('turma') && <th className="px-4 py-3 font-medium">Turma</th>}
-              {col('parcela') && <th className="px-4 py-3 font-medium">Parcela</th>}
+              {col('parcela') && <SortableHeader label="Parcela" sortKey="parcela" sortConfig={sortConfig} onSort={handleSort} />}
               {col('pago') && <th className="px-2 py-3 font-medium">Pago</th>}
               {col('vencimento') && <th className="px-2 py-3 font-medium">Venc.</th>}
-              {col('tempo') && <th className="px-4 py-3 font-medium">Tempo</th>}
-              {col('status') && <th className="px-2 py-3 font-medium">Status</th>}
-              {col('data_saida') && <th className="px-4 py-3 font-medium">Saída</th>}
+              {col('tempo') && <SortableHeader label="Tempo" sortKey="tempo" sortConfig={sortConfig} onSort={handleSort} />}
+              {col('status') && <SortableHeader label="Status" sortKey="status" sortConfig={sortConfig} onSort={handleSort} px="px-2" />}
+              {col('data_saida') && <SortableHeader label="Saída" sortKey="data_saida" sortConfig={sortConfig} onSort={handleSort} />}
               <th className="px-2 py-3 font-medium text-right">Ações</th>
             </tr>
           </thead>
