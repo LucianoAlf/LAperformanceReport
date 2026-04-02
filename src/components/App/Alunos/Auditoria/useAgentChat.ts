@@ -82,10 +82,10 @@ export async function chatComIA(
 /**
  * Carrega histórico de conversas do usuário.
  */
-export async function loadConversations(): Promise<{ id: string; title: string; updated_at: string }[]> {
+export async function loadConversations(): Promise<{ id: string; title: string; updated_at: string; total_tokens: number; total_cost_usd: number }[]> {
     const { data } = await supabase
         .from('bi_conversations_lamusic')
-        .select('id, title, updated_at')
+        .select('id, title, updated_at, total_tokens, total_cost_usd')
         .eq('is_archived', false)
         .order('updated_at', { ascending: false })
         .limit(20);

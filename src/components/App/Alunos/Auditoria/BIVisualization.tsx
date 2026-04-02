@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { ArrowUpDown } from 'lucide-react';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 
 const COLORS = ['#22d3ee', '#a78bfa', '#f472b6', '#fbbf24', '#34d399', '#f87171', '#60a5fa', '#c084fc'];
@@ -40,6 +42,10 @@ export function BIVisualization({ type, data, config }: BIVisualizationProps) {
         </div>
       </div>
     );
+  }
+
+  if (type === 'table') {
+    return <BITable data={data} format={config?.format} />;
   }
 
   if (type === 'pie') {
@@ -99,8 +105,7 @@ export function BIVisualization({ type, data, config }: BIVisualizationProps) {
     );
   }
 
-  // Default: line
-  return (
+  if (type === 'line') return (
     <div className="w-full h-[220px] mt-2">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 5, right: 10, left: -15, bottom: 0 }}>
@@ -121,6 +126,70 @@ export function BIVisualization({ type, data, config }: BIVisualizationProps) {
           {yKeys.length > 1 && <Legend wrapperStyle={{ fontSize: '11px' }} />}
         </LineChart>
       </ResponsiveContainer>
+    </div>
+  );
+
+  // Fallback: renderizar como tabela
+  return <BITable data={data} format={config?.format} />;
+}
+
+// Tabela com sort por coluna
+function BITable({ data, format }: { data: any[]; format?: string }) {
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortAsc, setSortAsc] = useState(true);
+
+  const keys = Object.keys(data[0] || {});
+
+  const handleSort = (key: string) => {
+    if (sortKey === key) {
+      setSortAsc(!sortAsc);
+    } else {
+      setSortKey(key);
+      setSortAsc(true);
+    }
+  };
+
+  const sorted = sortKey
+    ? [...data].sort((a, b) => {
+        const va = a[sortKey], vb = b[sortKey];
+        if (typeof va === 'number' && typeof vb === 'number') return sortAsc ? va - vb : vb - va;
+        return sortAsc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+      })
+    : data;
+
+  return (
+    <div className="overflow-x-auto mt-2 max-h-[300px] overflow-y-auto">
+      <table className="text-xs border-collapse w-full">
+        <thead className="sticky top-0">
+          <tr>
+            {keys.map(k => (
+              <th
+                key={k}
+                onClick={() => handleSort(k)}
+                className="border border-slate-600 px-2 py-1.5 bg-slate-700/80 text-left font-semibold text-slate-300 cursor-pointer hover:bg-slate-600/80 select-none"
+              >
+                <span className="flex items-center gap-1">
+                  {k}
+                  {sortKey === k && (
+                    <ArrowUpDown className="w-3 h-3 text-violet-400" />
+                  )}
+                </span>
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map((row, i) => (
+            <tr key={i} className="hover:bg-slate-800/50">
+              {keys.map(k => (
+                <td key={k} className="border border-slate-700 px-2 py-1 text-slate-300">
+                  {typeof row[k] === 'number' ? formatValue(row[k], format) : String(row[k] ?? '-')}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }

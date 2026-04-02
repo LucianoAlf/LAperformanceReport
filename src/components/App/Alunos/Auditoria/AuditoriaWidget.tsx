@@ -1,7 +1,7 @@
-import React, { useState, useRef, useEffect, KeyboardEvent } from 'react';
+import React, { useState, useRef, useEffect, useCallback, KeyboardEvent } from 'react';
 import {
-    X, FileSpreadsheet, Upload, Loader2, Send, Minimize2, Maximize2, Cpu,
-    Bot, Trash2, ArrowLeft, Paperclip, AlertCircle, Database
+    X, FileSpreadsheet, Upload, Loader2, Send, Minimize2, Maximize2,
+    Bot, Paperclip, Database, MessageSquarePlus, History, ThumbsUp, ThumbsDown, ChevronLeft
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -9,7 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { type RelatorioAuditoria, executarAuditoria } from './useAuditoriaEmusys';
 import { parseEmusysFiles, type ParseResult } from './parseEmusysFile';
-import { chatComIA, type ChatMessage, type Role, type AgentContext } from './useAgentChat';
+import { chatComIA, loadConversations, loadMessages, saveFeedback, type ChatMessage, type Role, type AgentContext } from './useAgentChat';
 import { BIVisualization } from './BIVisualization';
 
 interface Unidade {
@@ -33,18 +33,18 @@ export function AuditoriaWidget({ onClose, widgetsHidden = false }: AuditoriaWid
         unidadeNome: usuario?.unidade_nome ?? null,
     };
 
+    const welcomeMessage: ChatMessage = {
+        id: 'welcome_1',
+        role: 'assistant',
+        content: 'Olá! Sou a **Inteligência Artificial da LA Music** 🎵\n\nPosso ajudar você com:\n- 📊 **Métricas**: ticket médio, faturamento, evasão, churn\n- 🔍 **Buscar alunos** pelo nome no sistema\n- 📈 **Leads & CRM**: leads de hoje, funil de conversão, buscar leads\n- 🗄️ **Consultar qualquer dado** do banco: turmas, professores, evasões, loja, etc.\n- 📋 **Auditoria**: anexe arquivos do Emusys para comparar com o banco\n\nPergunta o que quiser!',
+    };
+
     const [fullscreen, setFullscreen] = useState(false);
     const [unidades, setUnidades] = useState<Unidade[]>([]);
     const [unidadeSelecionada, setUnidadeSelecionada] = useState('');
 
     // Estados do Chat
-    const [messages, setMessages] = useState<ChatMessage[]>([
-        {
-            id: 'welcome_1',
-            role: 'assistant',
-            content: 'Olá! Sou a **Inteligência Artificial da LA Music** 🎵\n\nPosso ajudar você com:\n- 📊 **Métricas**: ticket médio, faturamento, evasão, churn\n- 🔍 **Buscar alunos** pelo nome no sistema\n- 📈 **Leads & CRM**: leads de hoje, funil de conversão, buscar leads\n- 🗄️ **Consultar qualquer dado** do banco: turmas, professores, evasões, loja, etc.\n- 📋 **Auditoria**: anexe arquivos do Emusys para comparar com o banco\n\nPergunta o que quiser!',
-        }
-    ]);
+    const [messages, setMessages] = useState<ChatMessage[]>([welcomeMessage]);
     const [inputText, setInputText] = useState('');
     const [attachments, setAttachments] = useState<File[]>([]);
 
@@ -52,6 +52,12 @@ export function AuditoriaWidget({ onClose, widgetsHidden = false }: AuditoriaWid
     const [dragActive, setDragActive] = useState(false);
     const [loadingMsg, setLoadingMsg] = useState('');
     const [conversationId, setConversationId] = useState<string | null>(null);
+
+    // Histórico de conversas
+    const [showHistory, setShowHistory] = useState(false);
+    const [conversations, setConversations] = useState<{ id: string; title: string; updated_at: string; total_tokens: number; total_cost_usd: number }[]>([]);
+    const [loadingHistory, setLoadingHistory] = useState(false);
+    const [feedbackGiven, setFeedbackGiven] = useState<Record<string, number>>({});
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -72,6 +78,39 @@ export function AuditoriaWidget({ onClose, widgetsHidden = false }: AuditoriaWid
                     }
                 });
         }
+    }, []);
+
+    // Carregar lista de conversas ao abrir histórico
+    const fetchConversations = useCallback(async () => {
+        setLoadingHistory(true);
+        const convs = await loadConversations();
+        setConversations(convs);
+        setLoadingHistory(false);
+    }, []);
+
+    // Abrir uma conversa do histórico
+    const openConversation = useCallback(async (convId: string) => {
+        setLoadingHistory(true);
+        const msgs = await loadMessages(convId);
+        setMessages([welcomeMessage, ...msgs]);
+        setConversationId(convId);
+        setShowHistory(false);
+        setLoadingHistory(false);
+    }, []);
+
+    // Nova conversa
+    const startNewConversation = useCallback(() => {
+        setMessages([welcomeMessage]);
+        setConversationId(null);
+        setShowHistory(false);
+        setFeedbackGiven({});
+    }, []);
+
+    // Feedback handler
+    const handleFeedback = useCallback(async (messageId: string, rating: number) => {
+        if (messageId === 'welcome_1') return;
+        setFeedbackGiven(prev => ({ ...prev, [messageId]: rating }));
+        await saveFeedback(messageId, rating);
     }, []);
 
     // --- Funções de Drag and Drop ---
@@ -286,6 +325,20 @@ DETALHES DA ANÁLISE (LISTAS): (Priorize responder sobre isso se for pedido)
                         <span className="text-[10px] text-slate-400 leading-tight">Suporte Geral & Auditoria DB</span>
                     </div>
 
+                    <button
+                        onClick={() => { setShowHistory(!showHistory); if (!showHistory) fetchConversations(); }}
+                        className={`text-slate-400 hover:text-white p-1 rounded-full hover:bg-slate-700/60 transition-colors ${showHistory ? 'text-violet-400 bg-violet-500/10' : ''}`}
+                        title="Histórico de conversas"
+                    >
+                        <History className="w-4 h-4" />
+                    </button>
+                    <button
+                        onClick={startNewConversation}
+                        className="text-slate-400 hover:text-white p-1 rounded-full hover:bg-slate-700/60 transition-colors"
+                        title="Nova conversa"
+                    >
+                        <MessageSquarePlus className="w-4 h-4" />
+                    </button>
                     <button onClick={() => setFullscreen(!fullscreen)} className="text-slate-400 hover:text-white p-1 rounded-full hover:bg-slate-700/60 transition-colors">
                         {fullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
                     </button>
@@ -314,6 +367,48 @@ DETALHES DA ANÁLISE (LISTAS): (Priorize responder sobre isso se for pedido)
                         <span className="text-xs text-slate-300 font-medium">{agentCtx.unidadeNome || 'Carregando...'}</span>
                     )}
                 </div>
+
+                {/* --- SIDEBAR HISTÓRICO --- */}
+                {showHistory && (
+                    <div className="absolute inset-0 top-[90px] z-30 bg-slate-900/98 backdrop-blur-sm flex flex-col overflow-hidden rounded-b-2xl">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/60">
+                            <h4 className="text-sm font-semibold text-white">Conversas anteriores</h4>
+                            <button onClick={() => setShowHistory(false)} className="text-slate-400 hover:text-white p-1 rounded-full hover:bg-slate-700/60">
+                                <ChevronLeft className="w-4 h-4" />
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                            {loadingHistory ? (
+                                <div className="flex items-center justify-center py-8">
+                                    <Loader2 className="w-5 h-5 animate-spin text-violet-400" />
+                                </div>
+                            ) : conversations.length === 0 ? (
+                                <p className="text-center text-slate-500 text-xs py-8">Nenhuma conversa anterior</p>
+                            ) : (
+                                conversations.map(conv => (
+                                    <button
+                                        key={conv.id}
+                                        onClick={() => openConversation(conv.id)}
+                                        className={`w-full text-left px-3 py-2.5 rounded-lg hover:bg-slate-800 transition-colors group ${conversationId === conv.id ? 'bg-violet-500/10 border border-violet-500/30' : ''}`}
+                                    >
+                                        <p className="text-xs text-slate-200 truncate font-medium">{conv.title || 'Conversa sem título'}</p>
+                                        <div className="flex items-center gap-2 mt-0.5">
+                                            <span className="text-[10px] text-slate-500">
+                                                {new Date(conv.updated_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                                            </span>
+                                            {conv.total_tokens > 0 && (
+                                                <span className="text-[9px] text-slate-600 font-mono">
+                                                    {conv.total_tokens.toLocaleString()} tk
+                                                    {conv.total_cost_usd > 0 && ` · $${conv.total_cost_usd.toFixed(4)}`}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </button>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                )}
 
                 {/* --- CORPO DO CHAT --- */}
                 <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-900 relative">
@@ -367,6 +462,32 @@ DETALHES DA ANÁLISE (LISTAS): (Priorize responder sobre isso se for pedido)
                                                 data={msg.sqlResult}
                                                 config={msg.visualizationConfig}
                                             />
+                                        </div>
+                                    )}
+
+                                    {/* Feedback thumbs up/down em mensagens do assistente */}
+                                    {!isUser && msg.id !== 'welcome_1' && (
+                                        <div className="flex items-center gap-1 mt-2 pt-2 border-t border-slate-700/30">
+                                            <button
+                                                onClick={() => handleFeedback(msg.id, 5)}
+                                                className={`p-1 rounded transition-colors ${feedbackGiven[msg.id] === 5 ? 'text-emerald-400 bg-emerald-500/10' : 'text-slate-500 hover:text-emerald-400 hover:bg-emerald-500/10'}`}
+                                                title="Resposta útil"
+                                            >
+                                                <ThumbsUp className="w-3 h-3" />
+                                            </button>
+                                            <button
+                                                onClick={() => handleFeedback(msg.id, 1)}
+                                                className={`p-1 rounded transition-colors ${feedbackGiven[msg.id] === 1 ? 'text-rose-400 bg-rose-500/10' : 'text-slate-500 hover:text-rose-400 hover:bg-rose-500/10'}`}
+                                                title="Resposta ruim"
+                                            >
+                                                <ThumbsDown className="w-3 h-3" />
+                                            </button>
+                                            {msg.metadata?.tokens_used && (
+                                                <span className="ml-auto text-[9px] text-slate-600 font-mono">
+                                                    {msg.metadata.tokens_used.toLocaleString()} tokens
+                                                    {msg.metadata.cost_usd ? ` · $${msg.metadata.cost_usd.toFixed(4)}` : ''}
+                                                </span>
+                                            )}
                                         </div>
                                     )}
 
@@ -463,7 +584,7 @@ DETALHES DA ANÁLISE (LISTAS): (Priorize responder sobre isso se for pedido)
                         <span className="text-[10px] text-slate-500">
                             Pressione <kbd className="bg-slate-800 px-1 py-0.5 rounded border border-slate-700">Enter</kbd> para enviar
                         </span>
-                        <span className="text-[9px] text-slate-600 font-mono">Modelo GPT-4o</span>
+                        <span className="text-[9px] text-slate-600 font-mono">BI Agent · GPT-4o-mini</span>
                     </div>
 
                 </div>

@@ -7,7 +7,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { FULL_DATABASE_SCHEMA } from './schema.ts';
 import { TOOLS_SCHEMA, executeTool, type AgentContext } from './tools.ts';
 import { validateSQL, ensureLimit, normalizeSQL, extractTablesFromText } from './sql-validator.ts';
-import { hashSQL, matchTemplate, buildVisualizationConfig } from './utils.ts';
+import { hashSQL, matchTemplate, buildVisualizationConfig, autoDetectVisualizationType } from './utils.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -162,9 +162,15 @@ serve(async (req: Request) => {
     const isAdmin = profile?.is_admin || false;
     // Não-admin: SEMPRE usa unidade do perfil (ignora override)
     const unidadeId = isAdmin ? (unidade_id_override || null) : (profile?.unidade_id || null);
-    const unidadeNome = isAdmin
-      ? (unidade_id_override ? (profile?.unidades as any)?.nome : null)
-      : (profile?.unidades as any)?.nome || null;
+    let unidadeNome: string | null = null;
+    if (!isAdmin) {
+      unidadeNome = (profile?.unidades as any)?.nome || null;
+    } else if (unidade_id_override) {
+      // Admin com override: buscar nome da unidade selecionada
+      const { data: unidadeData } = await supabase
+        .from('unidades').select('nome').eq('id', unidade_id_override).single();
+      unidadeNome = unidadeData?.nome || null;
+    }
 
     const ctx: AgentContext = { isAdmin, unidadeId, unidadeNome };
 
@@ -408,14 +414,19 @@ serve(async (req: Request) => {
       } else {
         // Resposta final
         finalContent = msg.content || '';
-        // Extrair hint de visualização da resposta
+        // Extrair hint de visualização da resposta (se o LLM incluiu)
+        let vizHint: string | undefined;
         const vizMatch = finalContent.match(/\[VIZ:(\w+)\]/);
         if (vizMatch) {
-          finalVizType = vizMatch[1];
+          vizHint = vizMatch[1];
           finalContent = finalContent.replace(/\[VIZ:\w+\]/, '').trim();
         }
-        if (finalSQLResult && finalVizType !== 'none') {
-          finalVizConfig = buildVisualizationConfig(finalVizType, finalSQLResult);
+        // Auto-detectar tipo de visualização baseado nos dados + hint do LLM
+        if (finalSQLResult && Array.isArray(finalSQLResult) && finalSQLResult.length > 0) {
+          finalVizType = autoDetectVisualizationType(finalSQLResult, vizHint);
+          if (finalVizType !== 'none' && finalVizType !== 'table') {
+            finalVizConfig = buildVisualizationConfig(finalVizType, finalSQLResult);
+          }
         }
         break;
       }
