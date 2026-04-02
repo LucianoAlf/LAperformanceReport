@@ -23,7 +23,8 @@ const TIPOS_META = [
   { value: 'media_turma', label: 'Média de Alunos por Turma' },
   { value: 'retencao', label: 'Taxa de Retenção' },
   { value: 'conversao', label: 'Taxa de Conversão' },
-  { value: 'presenca', label: 'Taxa de Presença' }
+  { value: 'presenca', label: 'Taxa de Presença' },
+  { value: 'max_evasoes', label: 'Máximo de Evasões' }
 ];
 
 export function ModalNovaMeta({ open, onClose, professorId, onSave }: Props) {

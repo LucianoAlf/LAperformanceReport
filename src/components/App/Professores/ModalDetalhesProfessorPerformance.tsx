@@ -4,8 +4,10 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import {
   X, Target, Calendar, CheckCircle2, Clock, AlertTriangle,
-  TrendingUp, TrendingDown, Sparkles, Loader2, Users, BarChart3, Brain, Heart, FileText, Copy, Check, FlaskConical
+  TrendingUp, TrendingDown, Sparkles, Loader2, Users, BarChart3, Brain, Heart, FileText, Copy, Check, FlaskConical,
+  ChevronLeft, ChevronRight
 } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { Button } from '@/components/ui/button';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle
@@ -82,7 +84,8 @@ interface Props {
   healthWeights?: typeof DEFAULT_HEALTH_WEIGHTS;
 }
 
-export function ModalDetalhesProfessorPerformance({ open, onClose, professor, competencia, onNovaMeta, onNovaAcao, healthWeights }: Props) {
+export function ModalDetalhesProfessorPerformance({ open, onClose, professor, competencia: competenciaInicial, onNovaMeta, onNovaAcao, healthWeights }: Props) {
+  const [competencia, setCompetencia] = useState(competenciaInicial);
   const [metas, setMetas] = useState<Meta[]>([]);
   const [acoes, setAcoes] = useState<Acao[]>([]);
   const [evasoes, setEvasoes] = useState<Evasao[]>([]);
@@ -103,6 +106,19 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
   const [relatorioTexto, setRelatorioTexto] = useState('');
   const [loadingRelatorio, setLoadingRelatorio] = useState(false);
   const [copiado, setCopiado] = useState(false);
+  const [evolucao, setEvolucao] = useState<{ mes: string; alunos: number; evasoes: number }[]>([]);
+
+  // Sincronizar competência quando a prop muda (troca de professor ou mês externo)
+  useEffect(() => {
+    setCompetencia(competenciaInicial);
+  }, [competenciaInicial]);
+
+  function navegarMes(direcao: -1 | 1) {
+    const [ano, mes] = competencia.split('-').map(Number);
+    const novaData = new Date(ano, mes - 1 + direcao, 1);
+    const novaComp = `${novaData.getFullYear()}-${String(novaData.getMonth() + 1).padStart(2, '0')}`;
+    setCompetencia(novaComp);
+  }
 
   // Limpar estados quando o professor muda para evitar dados de outro professor
   useEffect(() => {
@@ -116,6 +132,7 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
   useEffect(() => {
     if (open && professor) {
       carregarDados();
+      carregarEvolucao();
     }
   }, [open, professor, competencia]);
 
@@ -209,6 +226,45 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
     } finally {
       setLoading(false);
     }
+  };
+
+  const carregarEvolucao = async () => {
+    if (!professor) return;
+    const [anoComp, mesComp] = competencia.split('-').map(Number);
+
+    // Meses do ano atual: jan até o mês selecionado
+    const totalMeses = mesComp;
+    const promises = Array.from({ length: totalMeses }, (_, i) => {
+      const d = new Date(anoComp, i, 1);
+      const comp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const fimMes = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+      const fimStr = format(fimMes, 'yyyy-MM-dd');
+      const inicioStr = `${comp}-01`;
+
+      const alunosP = supabase
+        .from('alunos')
+        .select('*', { count: 'exact', head: true })
+        .eq('professor_atual_id', professor.id)
+        .lte('data_matricula', fimStr)
+        .or(`data_saida.is.null,data_saida.gt.${fimStr}`);
+
+      const evasoesP = supabase
+        .from('movimentacoes_admin')
+        .select('data')
+        .eq('professor_id', professor.id)
+        .in('tipo', ['evasao', 'cancelamento'])
+        .gte('data', inicioStr)
+        .lte('data', fimStr);
+
+      return Promise.all([alunosP, evasoesP]).then(([aRes, eRes]) => ({
+        mes: format(d, 'MMM', { locale: ptBR }),
+        alunos: aRes.count ?? 0,
+        evasoes: (eRes.data || []).length,
+      }));
+    });
+
+    const resultados = await Promise.all(promises);
+    setEvolucao(resultados);
   };
 
   const gerarInsightsIA = async () => {
@@ -508,10 +564,30 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
 
         {/* Métricas Atuais + Health Score com Gauge */}
         <div className="py-4 border-b border-slate-700">
-          <h3 className="text-sm font-medium text-slate-400 mb-4 flex items-center gap-2">
-            <BarChart3 className="w-4 h-4" />
-            Métricas Atuais ({format(new Date(competencia + '-01'), 'MMM/yyyy', { locale: ptBR })})
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-medium text-slate-400 flex items-center gap-2">
+              <BarChart3 className="w-4 h-4" />
+              Métricas
+            </h3>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => navegarMes(-1)}
+                className="p-1 rounded hover:bg-slate-700/80 text-slate-400 hover:text-white transition-colors"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+              <span className="text-sm font-medium text-slate-200 min-w-[90px] text-center capitalize">
+                {format(new Date(competencia + '-01'), 'MMM/yyyy', { locale: ptBR })}
+              </span>
+              <button
+                onClick={() => navegarMes(1)}
+                disabled={competencia >= competenciaInicial}
+                className="p-1 rounded hover:bg-slate-700/80 text-slate-400 hover:text-white transition-colors disabled:opacity-30 disabled:pointer-events-none"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
           
           <div className="flex gap-4 items-center">
             {/* Health Score com Gauge - Destaque à esquerda, proporcionalmente maior */}
@@ -625,6 +701,71 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
               </div>
             </div>
           </div>
+
+          {/* Gráfico de Evolução - Últimos 6 meses */}
+          {evolucao.length > 0 && (
+            <div className="mt-4 bg-slate-800/40 rounded-xl p-4 border border-slate-700/50">
+              <h4 className="text-xs font-medium text-slate-400 mb-3 flex items-center gap-1.5">
+                <TrendingUp className="w-3.5 h-3.5" />
+                Evolução — {competencia.split('-')[0]}
+              </h4>
+              <ResponsiveContainer width="100%" height={160}>
+                <LineChart data={evolucao} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
+                  <XAxis
+                    dataKey="mes"
+                    tick={{ fill: '#94a3b8', fontSize: 11 }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tick={{ fill: '#64748b', fontSize: 10 }}
+                    axisLine={false}
+                    tickLine={false}
+                    allowDecimals={false}
+                  />
+                  <RechartsTooltip
+                    contentStyle={{
+                      backgroundColor: '#1e293b',
+                      border: '1px solid #334155',
+                      borderRadius: '8px',
+                      fontSize: '12px',
+                    }}
+                    labelStyle={{ color: '#94a3b8' }}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="alunos"
+                    stroke="#22d3ee"
+                    strokeWidth={2.5}
+                    dot={{ r: 3, fill: '#22d3ee', strokeWidth: 0 }}
+                    activeDot={{ r: 5, fill: '#22d3ee', stroke: '#0e7490', strokeWidth: 2 }}
+                    name="Alunos"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="evasoes"
+                    stroke="#f87171"
+                    strokeWidth={2}
+                    strokeDasharray="5 3"
+                    dot={{ r: 3, fill: '#f87171', strokeWidth: 0 }}
+                    activeDot={{ r: 5, fill: '#f87171', stroke: '#991b1b', strokeWidth: 2 }}
+                    name="Evasões"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+              <div className="flex items-center justify-center gap-5 mt-2">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-0.5 bg-cyan-400 rounded" />
+                  <span className="text-[10px] text-slate-400">Alunos</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-0.5 bg-red-400 rounded border-dashed" style={{ borderTop: '1.5px dashed #f87171', height: 0 }} />
+                  <span className="text-[10px] text-slate-400">Evasões</span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Botão Relatório Individual - Logo após as métricas */}
           <div className="mt-4">

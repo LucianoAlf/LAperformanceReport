@@ -433,15 +433,26 @@ serve(async (req: Request) => {
 
     console.log(`[sync-presenca] Iniciando sync para ${dias} dia(s): ${datasProcessar[0]} a ${dataFim}`);
 
-    // Buscar todos os alunos ativos para matching (limit alto para evitar paginação padrão de 1000)
-    const { data: alunosDB, error: alunosError } = await supabase
-      .from('alunos')
-      .select('id, nome, unidade_id')
-      .in('status', ['ativo', 'aviso_previo'])
-      .limit(10000);
+    // Buscar todos os alunos ativos para matching (paginado para contornar limite de 1000 rows do PostgREST)
+    const alunosDB: { id: number; nome: string; unidade_id: string }[] = [];
+    const PAGE_SIZE = 1000;
+    let offset = 0;
+    let hasMore = true;
+    while (hasMore) {
+      const { data: page, error: pageError } = await supabase
+        .from('alunos')
+        .select('id, nome, unidade_id')
+        .in('status', ['ativo', 'aviso_previo'])
+        .range(offset, offset + PAGE_SIZE - 1);
+      if (pageError) throw new Error(`Erro ao buscar alunos: ${pageError.message}`);
+      alunosDB.push(...(page || []));
+      hasMore = (page?.length || 0) === PAGE_SIZE;
+      offset += PAGE_SIZE;
+    }
+    console.log(`[sync-presenca] ${alunosDB.length} alunos ativos carregados`);
 
-    if (alunosError) {
-      throw new Error(`Erro ao buscar alunos: ${alunosError.message}`);
+    if (alunosDB.length === 0) {
+      throw new Error('Nenhum aluno ativo encontrado');
     }
 
     // Buscar professores ativos para matching

@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
-import { Loader2, AlertTriangle, Search } from 'lucide-react';
+import { Loader2, AlertTriangle, Search, ChevronDown } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -49,6 +49,7 @@ export function TabAutomacao({ unidadeAtual }: TabAutomacaoProps) {
   const [filtroAcao, setFiltroAcao] = useState<string>('todos');
   const [filtroPeriodo, setFiltroPeriodo] = useState<string>('7');
   const [busca, setBusca] = useState('');
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   useEffect(() => {
     carregarRegistros();
@@ -278,19 +279,31 @@ export function TabAutomacao({ unidadeAtual }: TabAutomacaoProps) {
                   const style = acaoStyles[registro.acao] || acaoStyles.atualizado;
                   const detalhesStr = formatarDetalhes(registro);
                   const semProfessor = registro.detalhes?.sem_professor === true;
+                  const isExpanded = expandedId === registro.id;
+                  const hasDetalhes = registro.detalhes && Object.keys(registro.detalhes).length > 0;
 
                   return (
+                    <React.Fragment key={registro.id}>
                     <tr
-                      key={registro.id}
                       className={cn(
-                        'border-t border-slate-700/30 transition-colors',
+                        'border-t border-slate-700/30 transition-colors cursor-pointer',
                         semProfessor
                           ? 'bg-orange-500/5 hover:bg-orange-500/10'
-                          : 'hover:bg-slate-800/30'
+                          : 'hover:bg-slate-800/30',
+                        isExpanded && 'bg-slate-800/40'
                       )}
+                      onClick={() => setExpandedId(isExpanded ? null : registro.id)}
                     >
                       <td className="py-3 px-4 text-sm text-slate-400 whitespace-nowrap" style={{ fontVariantNumeric: 'tabular-nums' }}>
-                        {formatarData(registro.created_at)}
+                        <div className="flex items-center gap-1.5">
+                          {hasDetalhes && (
+                            <ChevronDown className={cn(
+                              'w-3.5 h-3.5 text-slate-600 transition-transform flex-shrink-0',
+                              isExpanded && 'rotate-180'
+                            )} />
+                          )}
+                          {formatarData(registro.created_at)}
+                        </div>
                       </td>
                       <td className="py-3 px-4">
                         <span className={cn(
@@ -334,6 +347,44 @@ export function TabAutomacao({ unidadeAtual }: TabAutomacaoProps) {
                         )}
                       </td>
                     </tr>
+                    {isExpanded && hasDetalhes && (
+                      <tr className="border-t border-slate-700/20">
+                        <td colSpan={7} className="px-4 py-3 bg-slate-800/60">
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                            {Object.entries(registro.detalhes!).map(([chave, valor]) => {
+                              if (valor === null || valor === undefined || valor === '') return null;
+                              const label = chave.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                              const valorStr = typeof valor === 'boolean'
+                                ? (valor ? 'Sim' : 'Não')
+                                : String(valor);
+                              return (
+                                <div key={chave} className="bg-slate-900/50 rounded-md px-3 py-2">
+                                  <span className="text-slate-500 block text-[10px] uppercase tracking-wider mb-0.5">{label}</span>
+                                  <span className="text-slate-200 font-medium">{valorStr}</span>
+                                </div>
+                              );
+                            })}
+                            {registro.workflow_id && (
+                              <div className="bg-slate-900/50 rounded-md px-3 py-2">
+                                <span className="text-slate-500 block text-[10px] uppercase tracking-wider mb-0.5">Workflow</span>
+                                <span className="text-slate-200 font-mono text-[11px]">{registro.workflow_id}</span>
+                              </div>
+                            )}
+                            {registro.aluno_id && (
+                              <div className="bg-slate-900/50 rounded-md px-3 py-2">
+                                <span className="text-slate-500 block text-[10px] uppercase tracking-wider mb-0.5">Aluno ID</span>
+                                <span className="text-slate-200 font-mono">{registro.aluno_id}</span>
+                              </div>
+                            )}
+                            <div className="bg-slate-900/50 rounded-md px-3 py-2">
+                              <span className="text-slate-500 block text-[10px] uppercase tracking-wider mb-0.5">Data Completa</span>
+                              <span className="text-slate-200 font-mono text-[11px]">{format(new Date(registro.created_at), "dd/MM/yyyy HH:mm:ss")}</span>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>

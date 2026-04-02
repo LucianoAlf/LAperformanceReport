@@ -108,14 +108,17 @@ export function JornadaProfessor({ professorId, professorNome, metaAtiva, acoes 
   // Calcular checkpoints intermediários
   const dataInicio = parseISO(meta.data_inicio);
   const dataFim = meta.data_fim ? parseISO(meta.data_fim) : addMonths(dataInicio, 3);
-  const diasTotal = differenceInDays(dataFim, dataInicio);
+  const diasTotal = Math.max(1, differenceInDays(dataFim, dataInicio));
   const diasPassados = differenceInDays(new Date(), dataInicio);
   const progresso = Math.min(100, Math.max(0, (diasPassados / diasTotal) * 100));
 
-  // Gerar checkpoints (início, meio, fim)
+  // Gerar checkpoints proporcionais à duração da meta
   const valorInicial = meta.valor_atual || 0;
   const valorFinal = meta.valor_meta;
-  const incremento = (valorFinal - valorInicial) / 3;
+  const mesesDuracao = Math.max(1, Math.round(diasTotal / 30));
+
+  // Quantidade de checks intermediários baseada na duração
+  const numChecks = mesesDuracao <= 2 ? 0 : mesesDuracao <= 4 ? 1 : 2;
 
   const checkpoints: Checkpoint[] = [
     {
@@ -123,26 +126,30 @@ export function JornadaProfessor({ professorId, professorNome, metaAtiva, acoes 
       valor_esperado: valorInicial,
       valor_real: valorInicial,
       status: 'atingido'
-    },
-    {
-      data: format(addMonths(dataInicio, 1), 'yyyy-MM-dd'),
-      valor_esperado: Math.round((valorInicial + incremento) * 100) / 100,
-      valor_real: null,
-      status: diasPassados > 30 ? 'pendente' : 'pendente'
-    },
-    {
-      data: format(addMonths(dataInicio, 2), 'yyyy-MM-dd'),
-      valor_esperado: Math.round((valorInicial + incremento * 2) * 100) / 100,
-      valor_real: null,
-      status: 'pendente'
-    },
-    {
-      data: meta.data_fim || format(addMonths(dataInicio, 3), 'yyyy-MM-dd'),
-      valor_esperado: valorFinal,
-      valor_real: null,
-      status: 'pendente'
     }
   ];
+
+  // Checkpoints intermediários distribuídos proporcionalmente
+  for (let i = 1; i <= numChecks; i++) {
+    const frac = i / (numChecks + 1);
+    const diasCheck = Math.round(diasTotal * frac);
+    const dataCheck = new Date(dataInicio.getTime() + diasCheck * 86400000);
+    const valorEsperado = Math.round((valorInicial + (valorFinal - valorInicial) * frac) * 100) / 100;
+    checkpoints.push({
+      data: format(dataCheck, 'yyyy-MM-dd'),
+      valor_esperado: valorEsperado,
+      valor_real: null,
+      status: diasPassados > diasCheck ? 'pendente' : 'pendente'
+    });
+  }
+
+  // Checkpoint final (meta)
+  checkpoints.push({
+    data: meta.data_fim || format(dataFim, 'yyyy-MM-dd'),
+    valor_esperado: valorFinal,
+    valor_real: null,
+    status: 'pendente'
+  });
 
   // Filtrar ações concluídas
   const acoesConcluidas = acoesRelacionadas.filter(a => a.status === 'concluida');
@@ -154,6 +161,7 @@ export function JornadaProfessor({ professorId, professorNome, metaAtiva, acoes 
       case 'conversao': return 'Taxa de Conversão';
       case 'nps': return 'NPS';
       case 'presenca': return 'Taxa de Presença';
+      case 'max_evasoes': return 'Máximo de Evasões';
       default: return tipo;
     }
   };
@@ -161,6 +169,9 @@ export function JornadaProfessor({ professorId, professorNome, metaAtiva, acoes 
   const getValorFormatado = (valor: number, tipo: string) => {
     if (tipo === 'media_turma' || tipo === 'nps') {
       return valor.toFixed(1);
+    }
+    if (tipo === 'max_evasoes') {
+      return valor.toFixed(0);
     }
     return `${valor.toFixed(0)}%`;
   };
@@ -217,8 +228,12 @@ export function JornadaProfessor({ professorId, professorNome, metaAtiva, acoes 
           {/* Checkpoints */}
           <div className="relative flex justify-between">
             {checkpoints.map((cp, idx) => {
-              const isAtual = idx === 0 || (diasPassados >= (idx * 30) && diasPassados < ((idx + 1) * 30));
-              const isPast = diasPassados >= ((idx + 1) * 30);
+              const diasCheckpoint = differenceInDays(parseISO(cp.data), dataInicio);
+              const diasProximoCheckpoint = idx < checkpoints.length - 1
+                ? differenceInDays(parseISO(checkpoints[idx + 1].data), dataInicio)
+                : diasTotal + 1;
+              const isAtual = diasPassados >= diasCheckpoint && diasPassados < diasProximoCheckpoint;
+              const isPast = cp.status !== 'atingido' && diasPassados >= diasProximoCheckpoint;
               
               return (
                 <div key={idx} className="flex flex-col items-center">
