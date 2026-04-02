@@ -98,6 +98,8 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
   const [insights, setInsights] = useState<InsightsIA | null>(null);
   const [loadingInsights, setLoadingInsights] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [alunosNoMes, setAlunosNoMes] = useState<number | null>(null);
+  const [turmasNoMes, setTurmasNoMes] = useState<number | null>(null);
   const [relatorioTexto, setRelatorioTexto] = useState('');
   const [loadingRelatorio, setLoadingRelatorio] = useState(false);
   const [copiado, setCopiado] = useState(false);
@@ -115,7 +117,7 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
     if (open && professor) {
       carregarDados();
     }
-  }, [open, professor]);
+  }, [open, professor, competencia]);
 
   const carregarDados = async () => {
     if (!professor) return;
@@ -141,15 +143,46 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
 
       setAcoes(acoesData || []);
 
+      // Calcular alunos e turmas do professor no mês selecionado
+      const [anoComp, mesComp] = competencia.split('-').map(Number);
+      const fimMes = new Date(anoComp, mesComp, 0); // último dia do mês
+      const fimMesStr = format(fimMes, 'yyyy-MM-dd');
+      const inicioMesStr = `${competencia}-01`;
+
+      // Alunos que estavam ativos nesse professor no final do mês:
+      // data_matricula <= fimMes AND (data_saida IS NULL OR data_saida > fimMes) AND professor_atual_id = professor.id
+      const { count: alunosCount } = await supabase
+        .from('alunos')
+        .select('*', { count: 'exact', head: true })
+        .eq('professor_atual_id', professor.id)
+        .lte('data_matricula', fimMesStr)
+        .or(`data_saida.is.null,data_saida.gt.${fimMesStr}`)
+        .in('status', ['ativo', 'inativo', 'trancado', 'evadido']); // inclui inativos que saíram depois do mês
+
+      setAlunosNoMes(alunosCount ?? null);
+
+      // Turmas: contar cursos distintos dos alunos ativos naquele mês
+      const { data: turmasData } = await supabase
+        .from('alunos')
+        .select('curso_id, dia_aula, horario_aula')
+        .eq('professor_atual_id', professor.id)
+        .lte('data_matricula', fimMesStr)
+        .or(`data_saida.is.null,data_saida.gt.${fimMesStr}`);
+
+      const turmasSet = new Set((turmasData || []).map((a: any) => `${a.curso_id}-${a.dia_aula}-${a.horario_aula}`));
+      setTurmasNoMes(turmasSet.size);
+
       // Carregar evasões recentes
-      const inicioMes = `${competencia}-01`;
-      const { data: evasoesData } = await supabase
+      const { data: evasoesRaw } = await supabase
         .from('movimentacoes_admin')
-        .select('aluno_nome, data, motivo, cursos(nome)')
+        .select('*')
         .eq('professor_id', professor.id)
         .in('tipo', ['evasao', 'cancelamento'])
-        .gte('data', inicioMes)
-        .limit(5);
+        .limit(100);
+      // Filtrar por mês no JS (evita conflito PostgREST com campo chamado "data")
+      const evasoesData = (evasoesRaw || []).filter((e: any) =>
+        e.data >= inicioMesStr && e.data <= fimMesStr
+      );
 
       const evasoesFormatadas: Evasao[] = (evasoesData || []).map((e: any) => ({
         aluno_nome: e.aluno_nome || 'Aluno',
@@ -166,7 +199,8 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
         .select('id, nome, data_experimental, horario_experimental, status, experimental_realizada, faltou_experimental')
         .eq('professor_experimental_id', professor.id)
         .not('data_experimental', 'is', null)
-        .gte('data_experimental', inicioMes)
+        .gte('data_experimental', inicioMesStr)
+        .lte('data_experimental', fimMesStr)
         .order('data_experimental', { ascending: true });
 
       setExperimentais(expData || []);
@@ -547,11 +581,11 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
             {/* Métricas em Grid - Cards alinhados no meio */}
             <div className="flex-1 grid grid-cols-2 md:grid-cols-6 gap-3">
               <div className="bg-slate-800/50 rounded-lg p-3 text-center">
-                <p className="text-xl font-bold text-white">{professor.total_alunos}</p>
+                <p className="text-xl font-bold text-white">{alunosNoMes ?? professor.total_alunos}</p>
                 <p className="text-xs text-slate-400">Alunos</p>
               </div>
               <div className="bg-slate-800/50 rounded-lg p-3 text-center">
-                <p className="text-xl font-bold text-white">{professor.total_turmas}</p>
+                <p className="text-xl font-bold text-white">{turmasNoMes ?? professor.total_turmas}</p>
                 <p className="text-xs text-slate-400">Turmas</p>
               </div>
               <div className="bg-slate-800/50 rounded-lg p-3 text-center">
