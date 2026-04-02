@@ -11,7 +11,9 @@ import { hashSQL, matchTemplate, buildVisualizationConfig } from './utils.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY')!;
+
+// API key carregada do banco (assistente_ia_config) — não depende de env secret
+let OPENAI_API_KEY = '';
 
 const MAX_TOOL_ROUNDS = 5;
 const MAX_SQL_RETRIES = 3;
@@ -124,15 +126,25 @@ serve(async (req: Request) => {
   }
 
   try {
+    // 0. Supabase client + carregar API key do banco
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    if (!OPENAI_API_KEY) {
+      const { data: aiConfig } = await supabase
+        .from('assistente_ia_config')
+        .select('openai_api_key')
+        .limit(1)
+        .single();
+      OPENAI_API_KEY = aiConfig?.openai_api_key || Deno.env.get('OPENAI_API_KEY') || '';
+      if (!OPENAI_API_KEY) throw new Error('OpenAI API key não configurada');
+    }
+
     // 1. Auth
     const authHeader = req.headers.get('Authorization');
     if (!authHeader) throw new Error('Authorization header missing');
 
-    const supabaseUser = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
     const token = authHeader.replace('Bearer ', '');
-    const { data: { user }, error: authError } = await supabaseUser.auth.getUser(token);
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     if (authError || !user) throw new Error('Usuário não autenticado');
 
     // 2. Resolver perfil e unidade (SEGURANÇA CRÍTICA)
@@ -379,6 +391,14 @@ serve(async (req: Request) => {
             }
           } else {
             toolResult = await executeTool(supabase, toolName, toolArgs, ctx);
+            // Capturar dados tabulares de qualquer tool para visualização
+            try {
+              const parsed = JSON.parse(toolResult);
+              const dataArray = parsed.dados_mensais || parsed.alunos || parsed.leads || parsed.leads_hoje || parsed.resultado || parsed.unidades;
+              if (Array.isArray(dataArray) && dataArray.length > 0 && !finalSQLResult) {
+                finalSQLResult = dataArray;
+              }
+            } catch { /* não é JSON ou sem dados tabulares */ }
           }
 
           conversationMessages.push({

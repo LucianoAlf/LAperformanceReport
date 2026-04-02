@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase';
 import { type RelatorioAuditoria, executarAuditoria } from './useAuditoriaEmusys';
 import { parseEmusysFiles, type ParseResult } from './parseEmusysFile';
 import { chatComIA, type ChatMessage, type Role, type AgentContext } from './useAgentChat';
+import { BIVisualization } from './BIVisualization';
 
 interface Unidade {
     id: string;
@@ -210,8 +211,17 @@ DETALHES DA ANÁLISE (LISTAS): (Priorize responder sobre isso se for pedido)
                 setConversationId(result.conversationId);
             }
 
-            // Adicionar a resposta
-            addMessage('assistant', result.content);
+            // Adicionar a resposta (com visualização se disponível)
+            const newAssistantMsg: ChatMessage = {
+                id: Date.now().toString(),
+                role: 'assistant',
+                content: result.content,
+                sqlResult: result.sqlResult,
+                visualizationType: result.visualizationType,
+                visualizationConfig: result.visualizationConfig,
+                metadata: result.metadata,
+            };
+            setMessages(prev => [...prev, newAssistantMsg]);
 
         } catch (err: any) {
             addMessage('assistant', `❌ **Ocorreu um Erro**: ${err.message}`);
@@ -347,6 +357,17 @@ DETALHES DA ANÁLISE (LISTAS): (Priorize responder sobre isso se for pedido)
                                         >
                                             {msg.content}
                                         </ReactMarkdown>
+                                    )}
+
+                                    {/* Gráfico BI se houver dados de visualização */}
+                                    {!isUser && msg.visualizationType && msg.sqlResult && Array.isArray(msg.sqlResult) && msg.sqlResult.length > 0 && (
+                                        <div className="mt-3 pt-3 border-t border-slate-700/50">
+                                            <BIVisualization
+                                                type={msg.visualizationType}
+                                                data={msg.sqlResult}
+                                                config={msg.visualizationConfig}
+                                            />
+                                        </div>
                                     )}
 
                                     {/* Mostra Anexos enviados na mensagem */}
