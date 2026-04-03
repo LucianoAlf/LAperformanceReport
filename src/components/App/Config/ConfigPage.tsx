@@ -11,6 +11,7 @@ import { configTourSteps } from '@/components/Onboarding/tours';
 import { CaixasManager } from '@/components/App/PreAtendimento/components/chat/CaixasManager';
 import { DestinatariosRelatorioManager } from './DestinatariosRelatorioManager';
 import { ConfigIA } from '@/components/App/Alunos/Auditoria/ConfigIA';
+import { BiAgentMetrics } from '@/components/App/Alunos/Auditoria/BiAgentMetrics';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -547,15 +548,22 @@ export function ConfigPage() {
       <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
         {/* Tab Inteligência Artificial */}
         {activeTab === 'ia' && (
-          <div data-tour="config-ia" className="space-y-4 max-w-2xl">
-            <h3 className="text-lg font-bold text-white mb-4">Configurações de Inteligência Artificial</h3>
-            <p className="text-sm text-slate-400 mb-6">
-              Configure as credenciais e modelos de IA utilizados pelos componentes no sistema (como o chat da Auditoria).
-            </p>
-            {/* Componente original importado */}
-            <div className="bg-slate-900 border border-slate-700 p-4 rounded-xl">
-              <ConfigIA collapsed={false} onToggle={() => { }} />
+          <div data-tour="config-ia" className="space-y-6">
+            <div className="flex items-start justify-between gap-6">
+              <div>
+                <h3 className="text-lg font-bold text-white mb-1">Inteligência Artificial</h3>
+                <p className="text-sm text-slate-400">
+                  Modelo e métricas do agente BI.
+                </p>
+              </div>
+              {/* Configuração do modelo — compacto no canto */}
+              <div className="bg-slate-900 border border-slate-700 p-3 rounded-xl min-w-[280px]">
+                <ConfigIA collapsed={false} onToggle={() => { }} />
+              </div>
             </div>
+
+            {/* Métricas de uso — largura completa */}
+            <BiAgentMetrics />
           </div>
         )}
 
