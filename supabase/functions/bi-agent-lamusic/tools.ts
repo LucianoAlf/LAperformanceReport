@@ -5,6 +5,7 @@ export interface AgentContext {
   isAdmin: boolean;
   unidadeId: string | null;
   unidadeNome: string | null;
+  fileData?: Record<string, string>[]; // Dados do arquivo enviado pelo usuário (rows como objetos)
 }
 
 // Schema das tools para OpenAI function calling
@@ -37,7 +38,7 @@ export const TOOLS_SCHEMA = [
     type: 'function' as const,
     function: {
       name: 'search_aluno',
-      description: 'Busca alunos por nome. Retorna nome, status, curso, valor parcela.',
+      description: 'Busca alunos por NOME DO ALUNO. NÃO use para buscar por professor — para alunos de um professor, use consultar_banco com JOIN professores.',
       parameters: {
         type: 'object',
         properties: {
@@ -144,8 +145,40 @@ export const TOOLS_SCHEMA = [
     type: 'function' as const,
     function: {
       name: 'listar_tabelas',
-      description: 'Lista tabelas e views disponíveis no banco.',
+      description: 'Lista TODAS as tabelas e views do banco em tempo real. Retorna nome e contagem estimada de linhas.',
       parameters: { type: 'object', properties: {}, required: [] },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'descobrir_schema',
+      description: 'Descobre colunas e tipos de tabelas do banco. Use quando precisar consultar uma tabela que não está no schema conhecido, ou para descobrir a estrutura de tabelas novas (ex: campanhas, crm, conversas).',
+      parameters: {
+        type: 'object',
+        properties: {
+          filtro: { type: 'string', description: 'Filtro por nome da tabela (ex: "campanha", "crm", "conversa"). Se vazio, lista todas.' },
+          tabelas: { type: 'string', description: 'Nomes exatos de tabelas separados por vírgula (ex: "conversas_campanha,mensagens_campanha"). Retorna colunas detalhadas dessas tabelas.' },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: 'function' as const,
+    function: {
+      name: 'comparar_arquivo_com_banco',
+      description: 'Compara dados de um arquivo enviado pelo usuário com uma tabela do banco. Faz match em lote (SQL IN) — preciso e rápido. Use SEMPRE que o usuário enviar arquivo e quiser comparar com o banco. Retorna: encontrados, faltantes no banco, faltantes no arquivo, contagens.',
+      parameters: {
+        type: 'object',
+        properties: {
+          coluna_arquivo: { type: 'string', description: 'Nome da coluna do arquivo a comparar (ex: "Aluno(a) e Idade", "Nome", "Telefone").' },
+          tabela_banco: { type: 'string', description: 'Tabela do banco para comparar (ex: "alunos", "leads", "professores").' },
+          coluna_banco: { type: 'string', description: 'Coluna do banco para match (ex: "nome", "telefone").' },
+          filtros_banco: { type: 'string', description: 'Filtros SQL adicionais para a tabela do banco (ex: "status = \'ativo\'"). Opcional.' },
+        },
+        required: ['coluna_arquivo', 'tabela_banco', 'coluna_banco'],
+      },
     },
   },
 ];
@@ -350,23 +383,166 @@ async function toolConsultarBanco(supabase: any, args: any, ctx: AgentContext): 
   return JSON.stringify({ resultado: result, total: Array.isArray(result) ? result.length : 0 });
 }
 
-async function toolListarTabelas(): Promise<string> {
-  const tabelas = [
-    { tabela: 'alunos', desc: 'Alunos matriculados — nome, status, curso, valor, unidade' },
-    { tabela: 'leads', desc: 'Pipeline comercial — nome, telefone, status, canal, experimental, conversão' },
-    { tabela: 'professores', desc: 'Professores ativos' },
-    { tabela: 'cursos', desc: 'Cursos oferecidos' },
-    { tabela: 'unidades', desc: 'Escolas da rede (CG, Recreio, Barra)' },
-    { tabela: 'dados_mensais', desc: 'Snapshots mensais: alunos, matrículas, evasões, ticket, faturamento' },
-    { tabela: 'movimentacoes_admin', desc: 'Evasões, renovações, trancamentos, aviso prévio' },
-    { tabela: 'metas', desc: 'Metas por unidade/ano/mês' },
-    { tabela: 'turmas', desc: 'Turmas com professor, curso, horário, capacidade' },
-    { tabela: 'canais_origem', desc: 'Canais: Instagram, Google, Indicação, etc.' },
-    { tabela: 'tipos_matricula', desc: 'Normal, 2º Curso, Bolsa, Banda' },
-    { tabela: 'professor_metas', desc: 'Metas individuais de professores' },
-    { tabela: 'professor_acoes', desc: 'Ações agendadas (reunião, treinamento, checkpoint)' },
-  ];
+const TABELAS_INTERNAS = [
+  'bi_agent_config_lamusic', 'bi_query_cache_lamusic', 'bi_query_templates_lamusic',
+  'bi_conversations_lamusic', 'bi_messages_lamusic',
+  'assistente_ia_config', 'whatsapp_caixas', 'mila_config',
+  'usuario_onboarding', 'perfil_permissoes',
+];
+
+async function toolListarTabelas(supabase: any): Promise<string> {
+  const { data, error } = await supabase.rpc('execute_bi_query_lamusic', {
+    query_text: `SELECT t.table_name, pg_stat_user_tables.n_live_tup as linhas_estimadas
+      FROM information_schema.tables t
+      LEFT JOIN pg_stat_user_tables ON pg_stat_user_tables.relname = t.table_name
+      WHERE t.table_schema = 'public' AND t.table_type IN ('BASE TABLE', 'VIEW')
+      ORDER BY t.table_name`,
+    p_unidade_id: null,
+    max_rows: 200,
+  });
+
+  if (!data || data.error) return JSON.stringify({ erro: data?.error || 'Erro ao listar tabelas' });
+
+  const tabelas = (Array.isArray(data) ? data : [])
+    .filter((t: any) => !TABELAS_INTERNAS.includes(t.table_name))
+    .map((t: any) => ({ tabela: t.table_name, linhas: t.linhas_estimadas || 0 }));
+
   return JSON.stringify({ tabelas, total: tabelas.length });
+}
+
+async function toolDescobrirSchema(supabase: any, args: any): Promise<string> {
+  const { filtro, tabelas: tabelasArg } = args;
+
+  if (tabelasArg) {
+    // Modo detalhado: colunas de tabelas específicas
+    const tableNames = tabelasArg.split(',').map((t: string) => t.trim());
+    const { data } = await supabase.rpc('introspect_schema_lamusic', { table_names: tableNames });
+    return JSON.stringify({ schema: data || [], tabelas_consultadas: tableNames });
+  }
+
+  // Modo listagem: tabelas filtradas por nome
+  let sql = `SELECT t.table_name, pg_stat_user_tables.n_live_tup as linhas
+    FROM information_schema.tables t
+    LEFT JOIN pg_stat_user_tables ON pg_stat_user_tables.relname = t.table_name
+    WHERE t.table_schema = 'public' AND t.table_type IN ('BASE TABLE', 'VIEW')`;
+
+  if (filtro) {
+    // Buscar tabelas que contêm o filtro OU tabelas relacionadas (ex: "campanha" → conversas_campanha + mensagens_campanha)
+    sql += ` AND (t.table_name LIKE '%${filtro.replace(/'/g, "''")}%'`;
+    // Incluir tabelas com prefixo/sufixo relacionado
+    if (['conversa', 'campanha', 'crm', 'admin', 'mensag'].some(k => filtro.toLowerCase().includes(k))) {
+      sql += ` OR t.table_name LIKE '%campanha%' OR t.table_name LIKE '%conversa%' OR t.table_name LIKE '%mensag%'`;
+    }
+    sql += `)`;
+  }
+  sql += ` ORDER BY t.table_name`;
+
+  const { data } = await supabase.rpc('execute_bi_query_lamusic', {
+    query_text: sql, p_unidade_id: null, max_rows: 100,
+  });
+
+  if (!data || data.error) return JSON.stringify({ erro: data?.error || 'Erro ao buscar schema' });
+
+  const tabelas = (Array.isArray(data) ? data : [])
+    .filter((t: any) => !TABELAS_INTERNAS.includes(t.table_name));
+
+  // Para cada tabela encontrada, buscar colunas
+  const tableNames = tabelas.map((t: any) => t.table_name);
+  if (tableNames.length > 0 && tableNames.length <= 10) {
+    const { data: schemaData } = await supabase.rpc('introspect_schema_lamusic', { table_names: tableNames });
+    return JSON.stringify({
+      tabelas: tabelas.map((t: any) => ({ tabela: t.table_name, linhas: t.linhas || 0 })),
+      schema: schemaData || [],
+      total: tabelas.length,
+    });
+  }
+
+  return JSON.stringify({
+    tabelas: tabelas.map((t: any) => ({ tabela: t.table_name, linhas: t.linhas || 0 })),
+    total: tabelas.length,
+    dica: tabelas.length > 10 ? 'Muitas tabelas. Use o parâmetro "tabelas" com nomes específicos para ver colunas.' : undefined,
+  });
+}
+
+async function toolCompararArquivoComBanco(supabase: any, args: any, ctx: AgentContext): Promise<string> {
+  if (!ctx.fileData || ctx.fileData.length === 0) {
+    return JSON.stringify({ erro: 'Nenhum arquivo foi enviado pelo usuário nesta mensagem.' });
+  }
+
+  const { coluna_arquivo, tabela_banco, coluna_banco, filtros_banco } = args;
+
+  // Extrair valores da coluna do arquivo
+  const fileValues = ctx.fileData
+    .map(row => {
+      const val = row[coluna_arquivo];
+      return val ? String(val).trim() : '';
+    })
+    .filter(v => v.length > 0);
+
+  if (fileValues.length === 0) {
+    const colsDisponiveis = Object.keys(ctx.fileData[0] || {});
+    return JSON.stringify({ erro: `Coluna "${coluna_arquivo}" não encontrada no arquivo. Colunas disponíveis: ${colsDisponiveis.join(', ')}` });
+  }
+
+  // Tabelas permitidas para comparação
+  const tabelasPermitidas = ['alunos', 'leads', 'professores', 'cursos', 'turmas', 'movimentacoes_admin'];
+  if (!tabelasPermitidas.includes(tabela_banco)) {
+    return JSON.stringify({ erro: `Tabela "${tabela_banco}" não permitida. Use: ${tabelasPermitidas.join(', ')}` });
+  }
+
+  // Buscar dados do banco em blocos (contornar limite de IN clause)
+  const BLOCK_SIZE = 200;
+  const dbMatches: string[] = [];
+  const unidadeFilter = !ctx.isAdmin && ctx.unidadeId ? `AND unidade_id = '${ctx.unidadeId}'` : '';
+  const extraFilter = filtros_banco ? `AND ${filtros_banco}` : '';
+
+  for (let i = 0; i < fileValues.length; i += BLOCK_SIZE) {
+    const block = fileValues.slice(i, i + BLOCK_SIZE);
+    const inClause = block.map(v => `'${v.replace(/'/g, "''")}'`).join(',');
+    const sql = `SELECT ${coluna_banco} FROM ${tabela_banco} WHERE ${coluna_banco} IN (${inClause}) ${unidadeFilter} ${extraFilter}`;
+
+    const { data: result } = await supabase.rpc('execute_bi_query_lamusic', {
+      query_text: sql, p_unidade_id: null, max_rows: 1000,
+    });
+
+    if (result && Array.isArray(result)) {
+      for (const row of result) {
+        if (row[coluna_banco]) dbMatches.push(String(row[coluna_banco]).trim());
+      }
+    }
+  }
+
+  // Comparação case-insensitive
+  const dbMatchesLower = new Set(dbMatches.map(n => n.toLowerCase()));
+  const fileValuesLower = fileValues.map(v => v.toLowerCase());
+
+  const encontrados = fileValues.filter(v => dbMatchesLower.has(v.toLowerCase()));
+  const faltantesNoBanco = fileValues.filter(v => !dbMatchesLower.has(v.toLowerCase()));
+
+  // Buscar todos do banco para achar quem está no banco mas não no arquivo
+  const allDbSql = `SELECT ${coluna_banco} FROM ${tabela_banco} WHERE 1=1 ${unidadeFilter} ${extraFilter}`;
+  const { data: allDb } = await supabase.rpc('execute_bi_query_lamusic', {
+    query_text: allDbSql, p_unidade_id: null, max_rows: 2000,
+  });
+  const allDbNames = (allDb && Array.isArray(allDb)) ? allDb.map((r: any) => String(r[coluna_banco]).trim()) : [];
+  const fileValuesSet = new Set(fileValuesLower);
+  const faltantesNoArquivo = allDbNames.filter((n: string) => !fileValuesSet.has(n.toLowerCase()));
+
+  return JSON.stringify({
+    resumo: {
+      total_arquivo: fileValues.length,
+      total_banco: allDbNames.length,
+      encontrados: encontrados.length,
+      faltantes_no_banco: faltantesNoBanco.length,
+      faltantes_no_arquivo: faltantesNoArquivo.length,
+    },
+    encontrados: encontrados.slice(0, 50),
+    faltantes_no_banco: faltantesNoBanco.slice(0, 50),
+    faltantes_no_arquivo: faltantesNoArquivo.slice(0, 50),
+    nota: encontrados.length > 50 || faltantesNoBanco.length > 50
+      ? 'Listas truncadas em 50 nomes. Use as contagens do resumo para números exatos.'
+      : undefined,
+  });
 }
 
 // ==================== EXECUTOR CENTRAL ====================
@@ -384,7 +560,9 @@ export async function executeTool(supabase: any, toolName: string, argsJson: str
       case 'get_leads_hoje': return await toolGetLeadsHoje(supabase, args, ctx);
       case 'get_funil_leads': return await toolGetFunilLeads(supabase, args, ctx);
       case 'consultar_banco': return await toolConsultarBanco(supabase, args, ctx);
-      case 'listar_tabelas': return await toolListarTabelas();
+      case 'listar_tabelas': return await toolListarTabelas(supabase);
+      case 'descobrir_schema': return await toolDescobrirSchema(supabase, args);
+      case 'comparar_arquivo_com_banco': return await toolCompararArquivoComBanco(supabase, args, ctx);
       default: return JSON.stringify({ erro: `Tool "${toolName}" não reconhecida.` });
     }
   } catch (err: any) {

@@ -31,6 +31,7 @@ export interface AgentContext {
     isAdmin: boolean;
     unidadeId: string | null;
     unidadeNome: string | null;
+    fileData?: Record<string, string>[];
 }
 
 /**
@@ -41,6 +42,7 @@ export async function chatComIA(
     message: string,
     conversationId: string | null,
     agentCtx: AgentContext,
+    title?: string,
     _onToolProgress?: (progress: ToolCallProgress) => void,
 ): Promise<{
     content: string;
@@ -56,6 +58,8 @@ export async function chatComIA(
             message,
             conversation_id: conversationId,
             unidade_id_override: agentCtx.isAdmin ? agentCtx.unidadeId : undefined,
+            title: title || undefined,
+            file_data: agentCtx.fileData || undefined,
         },
     });
 

@@ -7,7 +7,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { FULL_DATABASE_SCHEMA } from './schema.ts';
 import { TOOLS_SCHEMA, executeTool, type AgentContext } from './tools.ts';
 import { validateSQL, ensureLimit, normalizeSQL, extractTablesFromText } from './sql-validator.ts';
-import { hashSQL, matchTemplate, buildVisualizationConfig, autoDetectVisualizationType } from './utils.ts';
+import { hashSQL, matchTemplate, buildVisualizationConfig, autoDetectVisualizationType, stripTechnicalColumns } from './utils.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -39,11 +39,26 @@ Quando retornar dados tabulares, sugira o tipo de visualização mais adequado n
 
 Regras:
 1. Use as tools especializadas primeiro (get_dados_mensais, search_aluno, etc.)
-2. Use consultar_banco como ÚLTIMO recurso para queries que as tools não cobrem
+2. Use consultar_banco para queries que as tools não cobrem (ex: JOINs complexos, filtros por professor)
 3. Ao usar consultar_banco, SEMPRE use SELECT. Nunca INSERT/UPDATE/DELETE
 4. Timezone: sempre BRT (UTC-3) para datas do negócio
 5. Ticket médio: considerar apenas tipos_matricula com entra_ticket_medio = true
 6. Alunos pagantes: considerar apenas tipos_matricula com conta_como_pagante = true
+7. Se o usuário perguntar sobre dados que NÃO estão no schema acima (ex: campanhas, conversas WhatsApp, CRM), use descobrir_schema para encontrar as tabelas e colunas relevantes, depois consultar_banco
+
+IMPORTANTE — Roteamento de perguntas comuns:
+- "alunos do professor X" → consultar_banco: SELECT a.nome, a.status, c.nome as curso FROM alunos a JOIN professores p ON p.id = a.professor_atual_id JOIN cursos c ON c.id = a.curso_id WHERE p.nome ILIKE '%X%' AND a.status = 'ativo'
+- "evasões do professor X" → consultar_banco: SELECT m.aluno_nome, m.data, m.motivo FROM movimentacoes_admin m JOIN professores p ON p.id = m.professor_id WHERE p.nome ILIKE '%X%' AND m.tipo IN ('evasao','cancelamento')
+- "curva/evolução de alunos do professor X" → consultar_banco: SELECT date_trunc('month', a.data_matricula) as mes, COUNT(*) FROM alunos a JOIN professores p ON p.id = a.professor_atual_id WHERE p.nome ILIKE '%X%' GROUP BY mes ORDER BY mes
+- "buscar aluno por nome" → search_aluno (busca NOME DO ALUNO, não do professor)
+- "dados mensais / métricas / faturamento" → get_dados_mensais
+- "leads de hoje" → get_leads_hoje
+- "conversas da campanha / mensagens WhatsApp" → descobrir_schema(filtro: "campanha") → consultar_banco com tabela mensagens_campanha (campo texto para conteúdo)
+
+Quando o usuário enviar um ARQUIVO:
+- Para perguntas sobre o conteúdo do arquivo (contagem, listagem): responda direto da amostra no contexto
+- Para COMPARAR com o banco: use SEMPRE a tool comparar_arquivo_com_banco — ela faz match em lote no SQL, é precisa e rápida. NUNCA tente comparar manualmente ou buscar aluno por aluno
+- Passe os parâmetros corretos: identifique qual coluna do arquivo mapeia para qual coluna/tabela do banco
 
 ${FULL_DATABASE_SCHEMA}`;
 }
@@ -149,22 +164,24 @@ serve(async (req: Request) => {
 
     // 2. Resolver perfil e unidade (SEGURANÇA CRÍTICA)
     const { data: profile } = await supabase
-      .from('profiles')
-      .select('is_admin, unidade_id, nome, unidades:unidade_id(nome, codigo)')
-      .eq('id', user.id)
+      .from('usuarios')
+      .select('perfil, unidade_id, nome, unidades:unidade_id(nome, codigo)')
+      .eq('auth_user_id', user.id)
       .single();
 
+    if (!profile) throw new Error('Perfil de usuário não encontrado');
+
     const body = await req.json();
-    const { message, conversation_id, unidade_id_override } = body;
+    const { message, conversation_id, unidade_id_override, title, file_data } = body;
 
     if (!message) throw new Error('Mensagem é obrigatória');
 
-    const isAdmin = profile?.is_admin || false;
+    const isAdmin = profile.perfil === 'admin';
     // Não-admin: SEMPRE usa unidade do perfil (ignora override)
-    const unidadeId = isAdmin ? (unidade_id_override || null) : (profile?.unidade_id || null);
+    const unidadeId = isAdmin ? (unidade_id_override || null) : (profile.unidade_id || null);
     let unidadeNome: string | null = null;
     if (!isAdmin) {
-      unidadeNome = (profile?.unidades as any)?.nome || null;
+      unidadeNome = (profile.unidades as any)?.nome || null;
     } else if (unidade_id_override) {
       // Admin com override: buscar nome da unidade selecionada
       const { data: unidadeData } = await supabase
@@ -172,7 +189,7 @@ serve(async (req: Request) => {
       unidadeNome = unidadeData?.nome || null;
     }
 
-    const ctx: AgentContext = { isAdmin, unidadeId, unidadeNome };
+    const ctx: AgentContext = { isAdmin, unidadeId, unidadeNome, fileData: Array.isArray(file_data) ? file_data : undefined };
 
     // 3. Config
     const { data: configRow } = await supabase
@@ -194,12 +211,35 @@ serve(async (req: Request) => {
     // 4. Conversa
     let convId = conversation_id;
     if (!convId) {
+      const convTitle = (title || message).substring(0, 100);
       const { data: newConv } = await supabase
         .from('bi_conversations_lamusic')
-        .insert({ user_id: user.id, title: message.substring(0, 100) })
+        .insert({ user_id: user.id, title: convTitle })
         .select('id')
         .single();
       convId = newConv?.id;
+
+      // Limitar 20 conversas ativas por usuário — arquivar excedentes
+      const { data: convCount } = await supabase
+        .from('bi_conversations_lamusic')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', user.id)
+        .eq('is_archived', false);
+      if ((convCount as any)?.count > 20) {
+        const { data: oldest } = await supabase
+          .from('bi_conversations_lamusic')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('is_archived', false)
+          .order('updated_at', { ascending: true })
+          .limit(1)
+          .single();
+        if (oldest) {
+          await supabase.from('bi_conversations_lamusic')
+            .update({ is_archived: true })
+            .eq('id', oldest.id);
+        }
+      }
     }
 
     // Salvar mensagem do usuário
@@ -242,11 +282,12 @@ serve(async (req: Request) => {
             .update({ hit_count: (cached as any).hit_count + 1 || 1 })
             .eq('user_id', user.id).eq('query_hash', sqlHash);
 
-          const vizConfig = buildVisualizationConfig(templateMatch.visualization, cached.result || []);
+          const cleanResult = stripTechnicalColumns(cached.result || []);
+          const vizConfig = buildVisualizationConfig(templateMatch.visualization, cleanResult);
           const msg = await supabase.from('bi_messages_lamusic').insert({
             conversation_id: convId, role: 'assistant',
             content: `Resultado de "${templateMatch.templateName}":`,
-            sql_query: sql, sql_result: cached.result, sql_row_count: cached.row_count,
+            sql_query: sql, sql_result: cleanResult, sql_row_count: cached.row_count,
             visualization_type: templateMatch.visualization, visualization_config: vizConfig,
           }).select('id, content, sql_query, sql_result, sql_row_count, visualization_type, visualization_config, created_at').single();
 
@@ -270,7 +311,7 @@ serve(async (req: Request) => {
       const resultData = (result && !result.error) ? result : [];
       const rowCount = Array.isArray(resultData) ? resultData.length : 0;
 
-      // Cache save
+      // Cache save (dados crus com unidade_id para o filtro funcionar)
       if (config.cacheEnabled && rowCount > 0) {
         await supabase.from('bi_query_cache_lamusic').upsert({
           user_id: user.id, query_hash: sqlHash, original_sql: sql,
@@ -279,11 +320,12 @@ serve(async (req: Request) => {
         }, { onConflict: 'user_id,query_hash' });
       }
 
-      const vizConfig = buildVisualizationConfig(templateMatch.visualization, resultData);
+      const cleanResult = stripTechnicalColumns(resultData);
+      const vizConfig = buildVisualizationConfig(templateMatch.visualization, cleanResult);
       const msg = await supabase.from('bi_messages_lamusic').insert({
         conversation_id: convId, role: 'assistant',
         content: `Resultado de "${templateMatch.templateName}":`,
-        sql_query: sql, sql_result: resultData, sql_row_count: rowCount,
+        sql_query: sql, sql_result: cleanResult, sql_row_count: rowCount,
         visualization_type: templateMatch.visualization, visualization_config: vizConfig,
       }).select('id, content, sql_query, sql_result, sql_row_count, visualization_type, visualization_config, created_at').single();
 
@@ -423,6 +465,7 @@ serve(async (req: Request) => {
         }
         // Auto-detectar tipo de visualização baseado nos dados + hint do LLM
         if (finalSQLResult && Array.isArray(finalSQLResult) && finalSQLResult.length > 0) {
+          finalSQLResult = stripTechnicalColumns(finalSQLResult);
           finalVizType = autoDetectVisualizationType(finalSQLResult, vizHint);
           if (finalVizType !== 'none' && finalVizType !== 'table') {
             finalVizConfig = buildVisualizationConfig(finalVizType, finalSQLResult);

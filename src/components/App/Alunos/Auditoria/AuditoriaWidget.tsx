@@ -5,10 +5,9 @@ import {
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import * as XLSX from 'xlsx';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
-import { type RelatorioAuditoria, executarAuditoria } from './useAuditoriaEmusys';
-import { parseEmusysFiles, type ParseResult } from './parseEmusysFile';
 import { chatComIA, loadConversations, loadMessages, saveFeedback, type ChatMessage, type Role, type AgentContext } from './useAgentChat';
 import { BIVisualization } from './BIVisualization';
 
@@ -41,7 +40,7 @@ export function AuditoriaWidget({ onClose, widgetsHidden = false }: AuditoriaWid
 
     const [fullscreen, setFullscreen] = useState(false);
     const [unidades, setUnidades] = useState<Unidade[]>([]);
-    const [unidadeSelecionada, setUnidadeSelecionada] = useState('');
+    const [unidadeSelecionada, setUnidadeSelecionada] = useState(agentCtx.unidadeId || '');
 
     // Estados do Chat
     const [messages, setMessages] = useState<ChatMessage[]>([welcomeMessage]);
@@ -163,11 +162,6 @@ export function AuditoriaWidget({ onClose, widgetsHidden = false }: AuditoriaWid
 
         if (!txt && !hasAttachments) return;
 
-        // Se houver arquivos e nenhuma unidade foi selecionada, falhar graciosamente
-        if (hasAttachments && !unidadeSelecionada && unidades.length > 1) {
-            addMessage('assistant', '⚠️ Para processar relatórios de alunos, por favor **selecione a Unidade** no topo do chat antes de enviá-los.');
-            return;
-        }
 
         // Criar a mensagem do Utilizador visível
         const userMessageContent = txt || (hasAttachments ? 'Por favor analise os ficheiros em anexo.' : '');
@@ -186,52 +180,43 @@ export function AuditoriaWidget({ onClose, widgetsHidden = false }: AuditoriaWid
         setIsTyping(true);
 
         let systemContextContent = '';
+        let parsedFileData: Record<string, string>[] | undefined;
 
         try {
-            // 1. Processar Arquivos (Auditoria Emusys), se houverem
+            // 1. Processar Arquivos — converter xlsx/csv para dados estruturados
             if (hasAttachments) {
-                setLoadingMsg('O agente está a processar os documentos...');
+                setLoadingMsg('Processando arquivos...');
 
-                let fileAlunos = currentAttachments.find(f => f.name.toLowerCase().includes('aluno') || f.name.toLowerCase().includes('ativo'));
-                let fileMatriculas = currentAttachments.find(f => f.name.toLowerCase().includes('matr') || f.name.toLowerCase().includes('curso'));
+                const allRows: Record<string, string>[] = [];
+                const fileNames: string[] = [];
 
-                // Se a heurística falhou, deduzimos por ordem (1 = alunos, 2 = matriculas)
-                if (!fileAlunos && currentAttachments.length > 0) fileAlunos = currentAttachments[0];
-                if (!fileMatriculas && currentAttachments.length > 1) fileMatriculas = currentAttachments[1];
+                for (const file of currentAttachments) {
+                    const buffer = await file.arrayBuffer();
+                    const wb = XLSX.read(buffer, { type: 'array' });
+                    fileNames.push(file.name);
 
-                if (!fileAlunos) {
-                    throw new Error('Não foi possível identificar um arquivo de base de alunos.');
+                    for (const sheetName of wb.SheetNames) {
+                        const ws = wb.Sheets[sheetName];
+                        const rows = XLSX.utils.sheet_to_json(ws, { defval: '' }) as Record<string, any>[];
+
+                        for (const row of rows) {
+                            const clean: Record<string, string> = {};
+                            for (const [k, v] of Object.entries(row)) {
+                                clean[k] = String(v).replace(/\n.*/g, '').replace(/\s+/g, ' ').trim();
+                            }
+                            allRows.push(clean);
+                        }
+                    }
                 }
 
-                const parseResult: ParseResult = await parseEmusysFiles(fileAlunos, fileMatriculas);
-                setLoadingMsg(`Base Extraída (${parseResult.alunosAtivos.size} alunos). Verificando banco de dados...`);
+                parsedFileData = allRows;
+                const headers = Object.keys(allRows[0] || {});
+                const sampleLines = allRows.slice(0, 5).map(r => headers.map(h => r[h] || '').join(' | '));
 
-                const relatorio = await executarAuditoria(parseResult, unidadeSelecionada);
-                setLoadingMsg('Comparação Completa. Analisando as divergências...');
+                systemContextContent = `[ARQUIVO ENVIADO: ${fileNames.join(', ')}] (${allRows.length} linhas)\nColunas: ${headers.join(', ')}\nAmostra (5 primeiras linhas):\n${sampleLines.join('\n')}\n\nPara comparar estes dados com o banco, use a tool comparar_arquivo_com_banco. Os dados completos do arquivo estão disponíveis nessa tool.`;
 
-                // Montar Resumo das Divergências para a IA compreender
-                systemContextContent = `
-[CONTEXTO DE FICHEIROS ENVIADOS - ANALISE DE BASE DE DADOS DB VS EMUSYS]
-## Dados Extraídos da Auditoria:
-- Total no Emusys (ficheiro): ${relatorio.resumo.totalEmusys}
-- Total na Base de Dados interna (DB): ${relatorio.resumo.totalDB}
-- Faltantes no DB (A criar): ${relatorio.faltantesDB.length}
-- Faltantes no Emusys (Excesso no DB): ${relatorio.faltantesCRM.length}
-- Status Divergente (Ex: inativo no emusys e ativo no db): ${relatorio.statusErrado.length}
-- Duplicatas/Erros Cadastrais: ${relatorio.duplicatas.length}
-- Cursos Faltando DB: ${relatorio.cursosFaltando.length}
-
-DETALHES DA ANÁLISE (LISTAS): (Priorize responder sobre isso se for pedido) 
-- Faltantes no DB (A criar): ${JSON.stringify(relatorio.faltantesDB.slice(0, 50).map(x => x.nome))}
-- Faltantes no Emusys: ${JSON.stringify(relatorio.faltantesCRM.slice(0, 50).map(x => x.nome))}
-- Status Divergente: ${JSON.stringify(relatorio.statusErrado)}
-- Duplicatas: ${JSON.stringify(relatorio.duplicatas)}
-============================
-`;
-
-                // Se o utilizador apenas enviou os arquivos sem prompt escrito, usamos um prompt padrão:
                 if (!txt) {
-                    newUserMsg.content = "Fiz o upload da base. Pode me dar um resumo das divergências identificadas e recomendações das prioridades?";
+                    newUserMsg.content = "Analise os dados do arquivo enviado e me dê um resumo.";
                 }
             }
 
@@ -243,7 +228,8 @@ DETALHES DA ANÁLISE (LISTAS): (Priorize responder sobre isso se for pedido)
                 ? `${systemContextContent}\n\n${newUserMsg.content}`
                 : newUserMsg.content;
 
-            const result = await chatComIA(messageToSend, conversationId, agentCtx);
+            const ctxWithFile = parsedFileData ? { ...agentCtx, fileData: parsedFileData } : agentCtx;
+            const result = await chatComIA(messageToSend, conversationId, ctxWithFile, newUserMsg.content);
 
             // Salvar conversation_id para mensagens futuras
             if (result.conversationId) {
@@ -370,41 +356,54 @@ DETALHES DA ANÁLISE (LISTAS): (Priorize responder sobre isso se for pedido)
 
                 {/* --- SIDEBAR HISTÓRICO --- */}
                 {showHistory && (
-                    <div className="absolute inset-0 top-[90px] z-30 bg-slate-900/98 backdrop-blur-sm flex flex-col overflow-hidden rounded-b-2xl">
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/60">
-                            <h4 className="text-sm font-semibold text-white">Conversas anteriores</h4>
-                            <button onClick={() => setShowHistory(false)} className="text-slate-400 hover:text-white p-1 rounded-full hover:bg-slate-700/60">
-                                <ChevronLeft className="w-4 h-4" />
+                    <div className="absolute inset-0 top-[90px] z-30 bg-slate-900 flex flex-col overflow-hidden rounded-b-2xl">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700/60 shrink-0">
+                            <h4 className="text-sm font-semibold text-white">Conversas</h4>
+                            <button onClick={() => setShowHistory(false)} className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-700/60">
+                                <X className="w-3.5 h-3.5" />
                             </button>
                         </div>
-                        <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                        <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1">
                             {loadingHistory ? (
-                                <div className="flex items-center justify-center py-8">
+                                <div className="flex items-center justify-center py-12">
                                     <Loader2 className="w-5 h-5 animate-spin text-violet-400" />
                                 </div>
                             ) : conversations.length === 0 ? (
-                                <p className="text-center text-slate-500 text-xs py-8">Nenhuma conversa anterior</p>
+                                <div className="text-center py-12">
+                                    <MessageSquarePlus className="w-8 h-8 text-slate-700 mx-auto mb-2" />
+                                    <p className="text-slate-500 text-xs">Nenhuma conversa ainda</p>
+                                </div>
                             ) : (
-                                conversations.map(conv => (
-                                    <button
-                                        key={conv.id}
-                                        onClick={() => openConversation(conv.id)}
-                                        className={`w-full text-left px-3 py-2.5 rounded-lg hover:bg-slate-800 transition-colors group ${conversationId === conv.id ? 'bg-violet-500/10 border border-violet-500/30' : ''}`}
-                                    >
-                                        <p className="text-xs text-slate-200 truncate font-medium">{conv.title || 'Conversa sem título'}</p>
-                                        <div className="flex items-center gap-2 mt-0.5">
-                                            <span className="text-[10px] text-slate-500">
-                                                {new Date(conv.updated_at).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                                            </span>
-                                            {conv.total_tokens > 0 && (
-                                                <span className="text-[9px] text-slate-600 font-mono">
-                                                    {conv.total_tokens.toLocaleString()} tk
-                                                    {conv.total_cost_usd > 0 && ` · $${conv.total_cost_usd.toFixed(4)}`}
-                                                </span>
-                                            )}
-                                        </div>
-                                    </button>
-                                ))
+                                conversations.map(conv => {
+                                    const isActive = conversationId === conv.id;
+                                    const date = new Date(conv.updated_at);
+                                    const timeStr = date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                                    const dateStr = date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
+
+                                    return (
+                                        <button
+                                            key={conv.id}
+                                            onClick={() => openConversation(conv.id)}
+                                            className={`w-full text-left px-3 py-2.5 rounded-xl transition-all ${isActive
+                                                ? 'bg-violet-500/15 border border-violet-500/30'
+                                                : 'hover:bg-slate-800/70 border border-transparent'
+                                            }`}
+                                        >
+                                            <p className={`text-[13px] leading-snug line-clamp-2 ${isActive ? 'text-violet-200 font-medium' : 'text-slate-300'}`}>
+                                                {conv.title || 'Conversa sem título'}
+                                            </p>
+                                            <div className="flex items-center gap-1.5 mt-1.5">
+                                                <span className="text-[10px] text-slate-500">{dateStr}, {timeStr}</span>
+                                                {conv.total_tokens > 0 && (
+                                                    <>
+                                                        <span className="text-slate-700">·</span>
+                                                        <span className="text-[10px] text-slate-600">{conv.total_tokens.toLocaleString()} tokens</span>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </button>
+                                    );
+                                })
                             )}
                         </div>
                     </div>
@@ -592,3 +591,4 @@ DETALHES DA ANÁLISE (LISTAS): (Priorize responder sobre isso se for pedido)
         </>
     );
 }
+

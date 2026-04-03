@@ -273,41 +273,24 @@ export function AlunosPage() {
     setLoading(true);
 
     // ── FASE 1: disparar TUDO em paralelo ──
-    // Query principal dos alunos
-    let qAlunos = supabase
-      .from('alunos')
-      .select(`
-        id, nome, classificacao, idade_atual, professor_atual_id, curso_id, modalidade,
-        dia_aula, horario_aula, valor_parcela, tempo_permanencia_meses,
-        status, status_pagamento, dia_vencimento, tipo_matricula_id, unidade_id, data_matricula,
-        is_segundo_curso, data_nascimento, forma_pagamento_id, telefone, whatsapp, responsavel_telefone, data_saida,
-        professores:professor_atual_id!left(nome),
-        cursos:curso_id!left(nome, is_projeto_banda),
-        tipos_matricula:tipo_matricula_id!left(nome, conta_como_pagante, entra_ticket_medio, codigo),
-        unidades:unidade_id!inner(codigo),
-        formas_pagamento:forma_pagamento_id!left(nome)
-      `)
-      .order('nome');
 
-    // Turmas implícitas (usada por alunos + turmas + KPIs — buscar UMA VEZ)
-    let qTurmasView = supabase
-      .from('vw_turmas_implicitas')
-      .select('*');
-
-    if (unidadeAtual && unidadeAtual !== 'todos') {
-      qAlunos = qAlunos.eq('unidade_id', unidadeAtual);
-      qTurmasView = qTurmasView.eq('unidade_id', unidadeAtual);
+    // Helper: busca paginada para contornar limite 1000 rows do PostgREST
+    const PAGE_SIZE = 1000;
+    async function fetchAllAlunos(buildQuery: () => ReturnType<typeof supabase.from<'alunos'>>): Promise<{ data: any[]; error: any }> {
+      const allData: any[] = [];
+      let offset = 0;
+      let hasMore = true;
+      let lastError: any = null;
+      while (hasMore) {
+        const { data, error } = await buildQuery().range(offset, offset + PAGE_SIZE - 1);
+        if (error) { lastError = error; break; }
+        if (data) allData.push(...data);
+        hasMore = data?.length === PAGE_SIZE;
+        offset += PAGE_SIZE;
+      }
+      return { data: allData, error: lastError };
     }
 
-    // Filtro de período por data_matricula
-    if (competenciaRange.startDate) {
-      qAlunos = qAlunos.gte('data_matricula', competenciaRange.startDate);
-    }
-    if (competenciaRange.endDate) {
-      qAlunos = qAlunos.lte('data_matricula', competenciaRange.endDate);
-    }
-
-    // Query extra: alunos que saíram no período (para inativos/evadidos aparecerem no mês correto)
     const selectFields = `
       id, nome, classificacao, idade_atual, professor_atual_id, curso_id, modalidade,
       dia_aula, horario_aula, valor_parcela, tempo_permanencia_meses,
@@ -319,21 +302,36 @@ export function AlunosPage() {
       unidades:unidade_id!inner(codigo),
       formas_pagamento:forma_pagamento_id!left(nome)
     `;
-    let qAlunosSaida: ReturnType<typeof supabase.from<'alunos'>> | null = null;
-    if (competenciaRange.startDate && competenciaRange.endDate) {
-      let q = supabase.from('alunos').select(selectFields).not('data_saida', 'is', null)
-        .gte('data_saida', competenciaRange.startDate)
-        .lte('data_saida', competenciaRange.endDate)
-        .order('nome');
-      if (unidadeAtual && unidadeAtual !== 'todos') {
-        q = q.eq('unidade_id', unidadeAtual);
-      }
-      qAlunosSaida = q;
-    }
 
-    // Disparar tudo em paralelo: alunos, turmas view, anotações, turmas explícitas, opções, LTV
-    const [alunosR, turmasViewR, anotacoesR, ...outrosResults] = await Promise.all([
-      qAlunos,
+    // Builder da query principal (reutilizado pela paginação)
+    const buildMainQuery = () => {
+      let q = supabase.from('alunos').select(selectFields).order('nome');
+      if (unidadeAtual && unidadeAtual !== 'todos') q = q.eq('unidade_id', unidadeAtual);
+      if (competenciaRange.startDate) q = q.gte('data_matricula', competenciaRange.startDate);
+      if (competenciaRange.endDate) q = q.lte('data_matricula', competenciaRange.endDate);
+      return q;
+    };
+
+    // Builder da query de saída (alunos que saíram no período)
+    const buildSaidaQuery = (competenciaRange.startDate && competenciaRange.endDate)
+      ? () => {
+          let q = supabase.from('alunos').select(selectFields).not('data_saida', 'is', null)
+            .gte('data_saida', competenciaRange.startDate)
+            .lte('data_saida', competenciaRange.endDate)
+            .order('nome');
+          if (unidadeAtual && unidadeAtual !== 'todos') q = q.eq('unidade_id', unidadeAtual);
+          return q;
+        }
+      : null;
+
+    // Turmas implícitas (usada por alunos + turmas + KPIs — buscar UMA VEZ)
+    let qTurmasView = supabase.from('vw_turmas_implicitas').select('*');
+    if (unidadeAtual && unidadeAtual !== 'todos') qTurmasView = qTurmasView.eq('unidade_id', unidadeAtual);
+
+    // Disparar tudo em paralelo: alunos (paginado), turmas view, anotações, turmas explícitas, opções, LTV
+    const [alunosR, alunosSaidaR, turmasViewR, anotacoesR, ...outrosResults] = await Promise.all([
+      fetchAllAlunos(buildMainQuery),
+      buildSaidaQuery ? fetchAllAlunos(buildSaidaQuery) : Promise.resolve({ data: [] as any[], error: null }),
       qTurmasView,
       // Anotações pendentes — são poucas, buscar TODAS sem .in() de 1000 IDs
       supabase.from('anotacoes_alunos')
@@ -348,20 +346,17 @@ export function AlunosPage() {
       supabase.rpc('get_tempo_permanencia', {
         p_unidade_id: unidadeAtual && unidadeAtual !== 'todos' ? unidadeAtual : null,
       }),
-      // Query extra: alunos que saíram no período
-      ...(qAlunosSaida ? [qAlunosSaida] : []),
     ]);
 
     const turmasViewData = turmasViewR.data || [];
     const permData = outrosResults[2]?.data;
-    const alunosSaidaR = qAlunosSaida ? outrosResults[3] : null;
 
     // ── FASE 2: processar alunos ──
     const { data: alunosRaw, error } = alunosR;
 
     // Mesclar alunos por data_saida (sem duplicatas)
     let alunosMesclados = alunosRaw ?? [];
-    if (alunosSaidaR?.data) {
+    if (alunosSaidaR?.data?.length) {
       const idsExistentes = new Set(alunosMesclados.map((a: any) => a.id));
       for (const a of alunosSaidaR.data) {
         if (!idsExistentes.has(a.id)) alunosMesclados.push(a);

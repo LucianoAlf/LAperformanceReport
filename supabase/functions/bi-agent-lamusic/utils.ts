@@ -82,10 +82,27 @@ export function autoDetectVisualizationType(data: any[], vizHint?: string): stri
   return 'bar';
 }
 
+/** Remove colunas técnicas (unidade_id, etc.) dos dados — não devem aparecer em gráficos */
+export function stripTechnicalColumns(data: any[]): any[] {
+  const techCols = ['unidade_id', 'professor_id', 'curso_id', 'aluno_id', 'tipo_matricula_id'];
+  if (!data || data.length === 0) return data;
+  const keys = Object.keys(data[0]);
+  const hasTech = keys.some(k => techCols.includes(k));
+  if (!hasTech) return data;
+  return data.map(row => {
+    const clean: any = {};
+    for (const [k, v] of Object.entries(row)) {
+      if (!techCols.includes(k)) clean[k] = v;
+    }
+    return clean;
+  });
+}
+
 export function buildVisualizationConfig(vizType: string, data: any[]): any {
   if (!data || data.length === 0 || vizType === 'none') return null;
   const keys = Object.keys(data[0] || {});
-  const xAxis = keys[0];
+  // xAxis = primeira key de texto (label), yAxis = primeira key numérica (valor)
+  const xAxis = keys.find(k => typeof data[0][k] !== 'number') || keys[0];
   const yAxis = keys.find(k => typeof data[0][k] === 'number') || keys[1];
 
   return {
