@@ -235,11 +235,41 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights }: Props
       
       const { data: alunosTurmasExplicitas } = await alunosTurmasQuery;
 
-      // Criar mapa de KPIs por professor
+      // Criar mapa de KPIs por professor (agregar quando consolidado — professor com múltiplas unidades)
       const kpisPorProfessor = new Map<number, any>();
       kpisData?.forEach(kpi => {
         if (!kpisPorProfessor.has(kpi.professor_id)) {
-          kpisPorProfessor.set(kpi.professor_id, kpi);
+          kpisPorProfessor.set(kpi.professor_id, { ...kpi, _unidades_count: 1 });
+        } else {
+          // Somar métricas de múltiplas unidades
+          const e = kpisPorProfessor.get(kpi.professor_id);
+          const prevCarteira = e.carteira_alunos || 0;
+          const kpiCarteira = kpi.carteira_alunos || 0;
+          // Somatórios
+          e.carteira_alunos = prevCarteira + kpiCarteira;
+          e.experimentais = (e.experimentais || 0) + (kpi.experimentais || 0);
+          e.matriculas = (e.matriculas || 0) + (kpi.matriculas || 0);
+          e.matriculas_pos_exp = (e.matriculas_pos_exp || 0) + (kpi.matriculas_pos_exp || 0);
+          e.matriculas_diretas = (e.matriculas_diretas || 0) + (kpi.matriculas_diretas || 0);
+          e.renovacoes = (e.renovacoes || 0) + (kpi.renovacoes || 0);
+          e.nao_renovacoes = (e.nao_renovacoes || 0) + (kpi.nao_renovacoes || 0);
+          e.evasoes = (e.evasoes || 0) + (kpi.evasoes || 0);
+          e.mrr_carteira = (Number(e.mrr_carteira) || 0) + (Number(kpi.mrr_carteira) || 0);
+          e.mrr_perdido = (Number(e.mrr_perdido) || 0) + (Number(kpi.mrr_perdido) || 0);
+          // Média ponderada por carteira
+          const totalCarteira = prevCarteira + kpiCarteira;
+          if (totalCarteira > 0) {
+            e.media_presenca = ((Number(e.media_presenca) || 0) * prevCarteira + (Number(kpi.media_presenca) || 0) * kpiCarteira) / totalCarteira;
+            e.media_alunos_turma = ((Number(e.media_alunos_turma) || 0) * prevCarteira + (Number(kpi.media_alunos_turma) || 0) * kpiCarteira) / totalCarteira;
+            e.ticket_medio = ((Number(e.ticket_medio) || 0) * prevCarteira + (Number(kpi.ticket_medio) || 0) * kpiCarteira) / totalCarteira;
+          }
+          // Recalcular taxas
+          const totalExp = e.experimentais || 0;
+          e.taxa_conversao = totalExp > 0 ? ((e.matriculas_pos_exp || 0) / totalExp) * 100 : 0;
+          const totalRenov = (e.renovacoes || 0) + (e.nao_renovacoes || 0);
+          e.taxa_renovacao = totalRenov > 0 ? ((e.renovacoes || 0) / totalRenov) * 100 : 0;
+          e.taxa_cancelamento = e.carteira_alunos > 0 ? ((e.evasoes || 0) / e.carteira_alunos) * 100 : 0;
+          e._unidades_count += 1;
         }
       });
 
@@ -252,11 +282,19 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights }: Props
         historicoMap.get(h.professor_id)!.push(h);
       });
 
-      // Criar mapa de fator de demanda ponderado por professor
+      // Criar mapa de fator de demanda ponderado por professor (média quando múltiplas unidades)
       const fatorDemandaMap = new Map<number, number>();
+      const fatorDemandaCount = new Map<number, number>();
       fatoresDemanda?.forEach(f => {
+        const val = Number(f.fator_demanda_ponderado) || 1.0;
         if (!fatorDemandaMap.has(f.professor_id)) {
-          fatorDemandaMap.set(f.professor_id, Number(f.fator_demanda_ponderado) || 1.0);
+          fatorDemandaMap.set(f.professor_id, val);
+          fatorDemandaCount.set(f.professor_id, 1);
+        } else {
+          const count = (fatorDemandaCount.get(f.professor_id) || 1) + 1;
+          const prev = fatorDemandaMap.get(f.professor_id) || 1.0;
+          fatorDemandaMap.set(f.professor_id, (prev * (count - 1) + val) / count);
+          fatorDemandaCount.set(f.professor_id, count);
         }
       });
 
