@@ -17,6 +17,8 @@ interface Props {
   onClose: () => void;
   professorId: number | null;
   onSave: () => void;
+  unidadeId?: string | null; // pré-selecionada do filtro global
+  professorUnidades?: { id: string; codigo: string; nome: string }[];
 }
 
 const TIPOS_META = [
@@ -27,7 +29,7 @@ const TIPOS_META = [
   { value: 'max_evasoes', label: 'Máximo de Evasões' }
 ];
 
-export function ModalNovaMeta({ open, onClose, professorId, onSave }: Props) {
+export function ModalNovaMeta({ open, onClose, professorId, onSave, unidadeId, professorUnidades }: Props) {
   const [loading, setLoading] = useState(false);
   const [tipo, setTipo] = useState('media_turma');
   const [valorAtual, setValorAtual] = useState('');
@@ -35,18 +37,26 @@ export function ModalNovaMeta({ open, onClose, professorId, onSave }: Props) {
   const [dataInicio, setDataInicio] = useState<Date | undefined>(new Date());
   const [dataFim, setDataFim] = useState<Date | undefined>(undefined);
   const [observacoes, setObservacoes] = useState('');
+  const [unidadeMeta, setUnidadeMeta] = useState<string>(unidadeId || '');
 
   useEffect(() => {
     if (open) {
-      // Reset form
       setTipo('media_turma');
       setValorAtual('');
       setValorMeta('');
       setDataInicio(new Date());
       setDataFim(undefined);
       setObservacoes('');
+      // Pré-selecionar unidade: do filtro global, ou a única do professor
+      if (unidadeId) {
+        setUnidadeMeta(unidadeId);
+      } else if (professorUnidades?.length === 1) {
+        setUnidadeMeta(professorUnidades[0].id);
+      } else {
+        setUnidadeMeta('');
+      }
     }
-  }, [open]);
+  }, [open, unidadeId, professorUnidades]);
 
   const handleSave = async () => {
     if (!professorId || !valorMeta) return;
@@ -57,6 +67,7 @@ export function ModalNovaMeta({ open, onClose, professorId, onSave }: Props) {
         .from('professor_metas')
         .insert({
           professor_id: professorId,
+          unidade_id: unidadeMeta || null,
           tipo,
           valor_atual: valorAtual ? parseFloat(valorAtual) : null,
           valor_meta: parseFloat(valorMeta),
@@ -87,6 +98,25 @@ export function ModalNovaMeta({ open, onClose, professorId, onSave }: Props) {
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          {/* Seletor de unidade — aparece se professor tem mais de 1 unidade */}
+          {professorUnidades && professorUnidades.length > 1 && (
+            <div>
+              <Label className="text-slate-400">Unidade *</Label>
+              <Select value={unidadeMeta} onValueChange={setUnidadeMeta}>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Selecione a unidade" />
+                </SelectTrigger>
+                <SelectContent>
+                  {professorUnidades.map((u) => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div>
             <Label className="text-slate-400">Tipo de Meta</Label>
             <Select value={tipo} onValueChange={setTipo}>
@@ -169,7 +199,7 @@ export function ModalNovaMeta({ open, onClose, professorId, onSave }: Props) {
           </Button>
           <Button
             onClick={handleSave}
-            disabled={loading || !valorMeta}
+            disabled={loading || !valorMeta || (professorUnidades && professorUnidades.length > 1 && !unidadeMeta)}
             className="bg-gradient-to-r from-blue-500 to-purple-500"
           >
             {loading ? (

@@ -5,7 +5,7 @@ import { ptBR } from 'date-fns/locale';
 import {
   X, Target, Calendar, CheckCircle2, Clock, AlertTriangle,
   TrendingUp, TrendingDown, Sparkles, Loader2, Users, BarChart3, Brain, Heart, FileText, Copy, Check, FlaskConical,
-  ChevronLeft, ChevronRight
+  ChevronLeft, ChevronRight, Pencil, Trash2, Ban, Save
 } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { Button } from '@/components/ui/button';
@@ -48,6 +48,8 @@ interface Meta {
   data_inicio: string;
   data_fim: string | null;
   status: string;
+  unidade_id: string | null;
+  observacoes: string | null;
 }
 
 interface Acao {
@@ -109,6 +111,9 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
   const [loadingRelatorio, setLoadingRelatorio] = useState(false);
   const [copiado, setCopiado] = useState(false);
   const [evolucao, setEvolucao] = useState<{ mes: string; alunos: number; evasoes: number }[]>([]);
+  const [editingMeta, setEditingMeta] = useState<string | null>(null); // meta.id being edited
+  const [editValues, setEditValues] = useState<{ valor_atual: string; valor_meta: string; observacoes: string }>({ valor_atual: '', valor_meta: '', observacoes: '' });
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null); // meta.id to confirm delete
 
   // Sincronizar competência quando a prop muda (troca de professor ou mês externo)
   useEffect(() => {
@@ -143,12 +148,17 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
     setLoading(true);
 
     try {
-      // Carregar metas do professor
-      const { data: metasData } = await supabase
+      // Carregar metas do professor (filtrar por unidade se selecionada)
+      let metasQuery = supabase
         .from('professor_metas')
         .select('*')
         .eq('professor_id', professor.id)
         .order('created_at', { ascending: false });
+      if (unidadeId) {
+        // Mostrar apenas metas da unidade selecionada (metas legado só no consolidado)
+        metasQuery = metasQuery.eq('unidade_id', unidadeId);
+      }
+      const { data: metasData } = await metasQuery;
 
       setMetas(metasData || []);
 
@@ -278,6 +288,38 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
 
     const resultados = await Promise.all(promises);
     setEvolucao(resultados);
+  };
+
+  // --- Ações de meta ---
+  const handleUpdateMetaStatus = async (metaId: string, status: string) => {
+    await supabase.from('professor_metas').update({ status, updated_at: new Date().toISOString() }).eq('id', metaId);
+    carregarDados();
+  };
+
+  const handleDeleteMeta = async (metaId: string) => {
+    await supabase.from('professor_metas').delete().eq('id', metaId);
+    setConfirmDelete(null);
+    carregarDados();
+  };
+
+  const handleStartEditMeta = (meta: Meta) => {
+    setEditingMeta(meta.id);
+    setEditValues({
+      valor_atual: String(meta.valor_atual ?? ''),
+      valor_meta: String(meta.valor_meta),
+      observacoes: meta.observacoes || '',
+    });
+  };
+
+  const handleSaveEditMeta = async (metaId: string) => {
+    await supabase.from('professor_metas').update({
+      valor_atual: editValues.valor_atual ? parseFloat(editValues.valor_atual) : null,
+      valor_meta: parseFloat(editValues.valor_meta),
+      observacoes: editValues.observacoes || null,
+      updated_at: new Date().toISOString(),
+    }).eq('id', metaId);
+    setEditingMeta(null);
+    carregarDados();
   };
 
   const gerarInsightsIA = async () => {
@@ -852,6 +894,7 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
               professorNome={professor.nome}
               metaAtiva={metas.find(m => m.status === 'em_andamento')}
               acoes={acoes}
+              unidadeId={unidadeId}
             />
           </div>
         )}
@@ -872,26 +915,92 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
           ) : (
             <div className="space-y-3">
               {metas.filter(m => m.status === 'em_andamento').map((meta) => {
+                const isEditing = editingMeta === meta.id;
+                const isDeleting = confirmDelete === meta.id;
                 const progresso = meta.valor_meta > 0 ? (meta.valor_atual / meta.valor_meta) * 100 : 0;
                 return (
                   <div key={meta.id} className="bg-slate-800/30 rounded-xl p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <p className="text-white font-medium">
-                        {meta.tipo.replace('_', ' ')}: {meta.valor_atual} → {meta.valor_meta}
-                      </p>
-                      <span className="text-yellow-400 text-xs">Em andamento</span>
-                    </div>
-                    {meta.data_fim && (
-                      <p className="text-xs text-slate-400 mb-2">
-                        Prazo: {format(new Date(meta.data_fim), 'dd/MM/yyyy')}
-                      </p>
+                    {isEditing ? (
+                      /* Modo edição inline */
+                      <div className="space-y-3">
+                        <p className="text-xs text-slate-400 font-medium">{meta.tipo.replace(/_/g, ' ')}</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="text-[10px] text-slate-500">Valor Atual</label>
+                            <input type="number" step="0.1" value={editValues.valor_atual} onChange={e => setEditValues(v => ({ ...v, valor_atual: e.target.value }))}
+                              className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1 text-sm text-white focus:outline-none focus:ring-1 focus:ring-violet-500" />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-slate-500">Valor Meta</label>
+                            <input type="number" step="0.1" value={editValues.valor_meta} onChange={e => setEditValues(v => ({ ...v, valor_meta: e.target.value }))}
+                              className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1 text-sm text-white focus:outline-none focus:ring-1 focus:ring-violet-500" />
+                          </div>
+                        </div>
+                        <div>
+                          <label className="text-[10px] text-slate-500">Observações</label>
+                          <input type="text" value={editValues.observacoes} onChange={e => setEditValues(v => ({ ...v, observacoes: e.target.value }))}
+                            className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1 text-sm text-white focus:outline-none focus:ring-1 focus:ring-violet-500" placeholder="Notas..." />
+                        </div>
+                        <div className="flex gap-2 justify-end">
+                          <Button size="sm" variant="ghost" onClick={() => setEditingMeta(null)} className="text-slate-400 h-7 text-xs">Cancelar</Button>
+                          <Button size="sm" onClick={() => handleSaveEditMeta(meta.id)} className="bg-violet-600 hover:bg-violet-700 h-7 text-xs">
+                            <Save className="w-3 h-3 mr-1" /> Salvar
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Modo visualização */
+                      <>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <p className="text-white font-medium">
+                              {meta.tipo.replace(/_/g, ' ')}: {meta.valor_atual} → {meta.valor_meta}
+                            </p>
+                            {meta.unidade_id ? (
+                              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-400 border border-violet-500/30">
+                                {professor.unidades.find(u => u.id === meta.unidade_id)?.codigo || 'Unidade'}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-700/50 text-slate-500">
+                                Consolidado
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => handleStartEditMeta(meta)} className="p-1 text-slate-500 hover:text-violet-400 rounded transition-colors" title="Editar">
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => handleUpdateMetaStatus(meta.id, 'concluida')} className="p-1 text-slate-500 hover:text-emerald-400 rounded transition-colors" title="Concluir">
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => handleUpdateMetaStatus(meta.id, 'cancelada')} className="p-1 text-slate-500 hover:text-amber-400 rounded transition-colors" title="Cancelar meta">
+                              <Ban className="w-3.5 h-3.5" />
+                            </button>
+                            <button onClick={() => setConfirmDelete(meta.id)} className="p-1 text-slate-500 hover:text-rose-400 rounded transition-colors" title="Excluir">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                        {isDeleting && (
+                          <div className="flex items-center gap-2 mb-2 p-2 bg-rose-500/10 border border-rose-500/30 rounded-lg">
+                            <span className="text-xs text-rose-300 flex-1">Excluir esta meta permanentemente?</span>
+                            <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(null)} className="h-6 text-xs text-slate-400">Não</Button>
+                            <Button size="sm" onClick={() => handleDeleteMeta(meta.id)} className="h-6 text-xs bg-rose-600 hover:bg-rose-700">Sim</Button>
+                          </div>
+                        )}
+                        {meta.data_fim && (
+                          <p className="text-xs text-slate-400 mb-2">
+                            Prazo: {format(new Date(meta.data_fim), 'dd/MM/yyyy')}
+                          </p>
+                        )}
+                        <div className="w-full bg-slate-700 rounded-full h-2">
+                          <div
+                            className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all"
+                            style={{ width: `${Math.min(progresso, 100)}%` }}
+                          />
+                        </div>
+                      </>
                     )}
-                    <div className="w-full bg-slate-700 rounded-full h-2">
-                      <div
-                        className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all"
-                        style={{ width: `${Math.min(progresso, 100)}%` }}
-                      />
-                    </div>
                   </div>
                 );
               })}

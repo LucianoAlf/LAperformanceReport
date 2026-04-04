@@ -36,9 +36,10 @@ interface Props {
   professorNome: string;
   metaAtiva?: Meta;
   acoes?: Acao[];
+  unidadeId?: string | null;
 }
 
-export function JornadaProfessor({ professorId, professorNome, metaAtiva, acoes = [] }: Props) {
+export function JornadaProfessor({ professorId, professorNome, metaAtiva, acoes = [], unidadeId }: Props) {
   const [meta, setMeta] = useState<Meta | null>(metaAtiva || null);
   const [acoesRelacionadas, setAcoesRelacionadas] = useState<Acao[]>(acoes);
   const [loading, setLoading] = useState(!metaAtiva);
@@ -52,14 +53,18 @@ export function JornadaProfessor({ professorId, professorNome, metaAtiva, acoes 
   const carregarDados = async () => {
     setLoading(true);
     try {
-      // Buscar meta ativa mais recente
-      const { data: metasData } = await supabase
+      // Buscar meta ativa mais recente (filtrar por unidade se disponível)
+      let metasQuery = supabase
         .from('professor_metas')
         .select('*')
         .eq('professor_id', professorId)
         .eq('status', 'em_andamento')
         .order('created_at', { ascending: false })
         .limit(1);
+      if (unidadeId) {
+        metasQuery = metasQuery.eq('unidade_id', unidadeId);
+      }
+      const { data: metasData } = await metasQuery;
 
       if (metasData && metasData.length > 0) {
         setMeta(metasData[0]);

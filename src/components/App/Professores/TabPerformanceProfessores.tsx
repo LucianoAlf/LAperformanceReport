@@ -1044,6 +1044,8 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights }: Props
           setModalMeta({ open: false, professorId: null });
           toast.success('Meta criada!', 'A meta foi cadastrada com sucesso');
         }}
+        unidadeId={unidadeAtual !== 'todos' ? unidadeAtual : null}
+        professorUnidades={professores.find(p => p.id === modalMeta.professorId)?.unidades}
       />
 
       <ModalNovaAcao
