@@ -1032,6 +1032,8 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights }: Props
           setModalAcao({ open: true, professorId: profId });
         }}
         healthWeights={healthWeights}
+        unidadeId={unidadeAtual !== 'todos' ? unidadeAtual : null}
+        unidadeNome={unidadeAtual !== 'todos' ? unidadeAtual : 'Consolidado'}
       />
 
       <ModalNovaMeta

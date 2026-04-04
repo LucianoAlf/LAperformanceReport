@@ -82,9 +82,11 @@ interface Props {
   onNovaMeta: (professorId: number) => void;
   onNovaAcao: (professorId: number) => void;
   healthWeights?: typeof DEFAULT_HEALTH_WEIGHTS;
+  unidadeId?: string | null; // null = consolidado (todas unidades)
+  unidadeNome?: string;
 }
 
-export function ModalDetalhesProfessorPerformance({ open, onClose, professor, competencia: competenciaInicial, onNovaMeta, onNovaAcao, healthWeights }: Props) {
+export function ModalDetalhesProfessorPerformance({ open, onClose, professor, competencia: competenciaInicial, onNovaMeta, onNovaAcao, healthWeights, unidadeId, unidadeNome }: Props) {
   const [competencia, setCompetencia] = useState(competenciaInicial);
   const [metas, setMetas] = useState<Meta[]>([]);
   const [acoes, setAcoes] = useState<Acao[]>([]);
@@ -167,35 +169,40 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
       const inicioMesStr = `${competencia}-01`;
 
       // Alunos que estavam ativos nesse professor no final do mês:
-      // data_matricula <= fimMes AND (data_saida IS NULL OR data_saida > fimMes) AND professor_atual_id = professor.id
-      const { count: alunosCount } = await supabase
+      let alunosQuery = supabase
         .from('alunos')
         .select('*', { count: 'exact', head: true })
         .eq('professor_atual_id', professor.id)
         .lte('data_matricula', fimMesStr)
         .or(`data_saida.is.null,data_saida.gt.${fimMesStr}`)
-        .in('status', ['ativo', 'inativo', 'trancado', 'evadido']); // inclui inativos que saíram depois do mês
+        .in('status', ['ativo', 'inativo', 'trancado', 'evadido']);
+      if (unidadeId) alunosQuery = alunosQuery.eq('unidade_id', unidadeId);
+      const { count: alunosCount } = await alunosQuery;
 
       setAlunosNoMes(alunosCount ?? null);
 
       // Turmas: contar cursos distintos dos alunos ativos naquele mês
-      const { data: turmasData } = await supabase
+      let turmasQuery = supabase
         .from('alunos')
         .select('curso_id, dia_aula, horario_aula')
         .eq('professor_atual_id', professor.id)
         .lte('data_matricula', fimMesStr)
         .or(`data_saida.is.null,data_saida.gt.${fimMesStr}`);
+      if (unidadeId) turmasQuery = turmasQuery.eq('unidade_id', unidadeId);
+      const { data: turmasData } = await turmasQuery;
 
       const turmasSet = new Set((turmasData || []).map((a: any) => `${a.curso_id}-${a.dia_aula}-${a.horario_aula}`));
       setTurmasNoMes(turmasSet.size);
 
       // Carregar evasões recentes
-      const { data: evasoesRaw } = await supabase
+      let evasoesQuery = supabase
         .from('movimentacoes_admin')
         .select('*')
         .eq('professor_id', professor.id)
         .in('tipo', ['evasao', 'cancelamento'])
         .limit(100);
+      if (unidadeId) evasoesQuery = evasoesQuery.eq('unidade_id', unidadeId);
+      const { data: evasoesRaw } = await evasoesQuery;
       // Filtrar por mês no JS (evita conflito PostgREST com campo chamado "data")
       const evasoesData = (evasoesRaw || []).filter((e: any) =>
         e.data >= inicioMesStr && e.data <= fimMesStr
@@ -211,7 +218,7 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
       setEvasoes(evasoesFormatadas);
 
       // Carregar experimentais do professor no período
-      const { data: expData } = await supabase
+      let expQuery = supabase
         .from('leads')
         .select('id, nome, data_experimental, horario_experimental, status, experimental_realizada, faltou_experimental')
         .eq('professor_experimental_id', professor.id)
@@ -219,6 +226,8 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
         .gte('data_experimental', inicioMesStr)
         .lte('data_experimental', fimMesStr)
         .order('data_experimental', { ascending: true });
+      if (unidadeId) expQuery = expQuery.eq('unidade_id', unidadeId);
+      const { data: expData } = await expQuery;
 
       setExperimentais(expData || []);
     } catch (error) {
@@ -241,20 +250,24 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
       const fimStr = format(fimMes, 'yyyy-MM-dd');
       const inicioStr = `${comp}-01`;
 
-      const alunosP = supabase
+      let alunosQ = supabase
         .from('alunos')
         .select('*', { count: 'exact', head: true })
         .eq('professor_atual_id', professor.id)
         .lte('data_matricula', fimStr)
         .or(`data_saida.is.null,data_saida.gt.${fimStr}`);
+      if (unidadeId) alunosQ = alunosQ.eq('unidade_id', unidadeId);
+      const alunosP = alunosQ;
 
-      const evasoesP = supabase
+      let evasoesQ = supabase
         .from('movimentacoes_admin')
         .select('data')
         .eq('professor_id', professor.id)
         .in('tipo', ['evasao', 'cancelamento'])
         .gte('data', inicioStr)
         .lte('data', fimStr);
+      if (unidadeId) evasoesQ = evasoesQ.eq('unidade_id', unidadeId);
+      const evasoesP = evasoesQ;
 
       return Promise.all([alunosP, evasoesP]).then(([aRes, eRes]) => ({
         mes: format(d, 'MMM', { locale: ptBR }),
@@ -553,6 +566,11 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
                 <DialogTitle className="text-xl font-bold text-white">{professor.nome}</DialogTitle>
                 <p className="text-slate-400 text-sm">
                   {professor.especialidades.join(', ')} • {professor.unidades.map(u => u.codigo).join(' | ')}
+                  {unidadeId && (
+                    <span className="ml-2 text-xs font-medium text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded-full">
+                      Visualizando: {professor.unidades.find(u => u.id === unidadeId)?.nome || unidadeNome}
+                    </span>
+                  )}
                 </p>
               </div>
             </div>
