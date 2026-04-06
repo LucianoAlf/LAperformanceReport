@@ -13,8 +13,7 @@ import {
   Plus
 } from 'lucide-react';
 import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
-import { PageTour, TourHelpButton } from '@/components/Onboarding';
-import { projetosTourSteps } from '@/components/Onboarding/tours';
+
 import { Button } from '../../ui/button';
 import { DashboardView } from './views/DashboardView';
 import { ListaView } from './views/ListaView';
@@ -122,9 +121,7 @@ export function ProjetosPage() {
       {/* Chat Flutuante do Fábio - Disponível em todas as abas */}
       <FabioChatFlutuante unidadeSelecionada={unidadeSelecionada} />
 
-      {/* Tour e Botão de Ajuda */}
-      <PageTour tourName="projetos" steps={projetosTourSteps} />
-      <TourHelpButton tourName="projetos" />
+
     </div>
   );
 }

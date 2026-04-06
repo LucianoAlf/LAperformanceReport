@@ -6,8 +6,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useOutletContext } from 'react-router-dom';
 import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { PageFilterBar } from '@/components/ui/page-filter-bar';
-import { PageTour, TourHelpButton } from '@/components/Onboarding';
-import { configTourSteps } from '@/components/Onboarding/tours';
+
 import { CaixasManager } from '@/components/App/PreAtendimento/components/chat/CaixasManager';
 import { DestinatariosRelatorioManager } from './DestinatariosRelatorioManager';
 import { ConfigIA } from '@/components/App/Alunos/Auditoria/ConfigIA';
@@ -1139,9 +1138,7 @@ export function ConfigPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Tour e Botão de Ajuda */}
-      <PageTour tourName="config" steps={configTourSteps} />
-      <TourHelpButton tourName="config" />
+
     </div>
   );
 }

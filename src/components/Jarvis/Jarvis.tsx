@@ -2,12 +2,14 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../../lib/supabase'
 import JarvisOrb from './JarvisOrb'
 import { Mic, MicOff, Volume2, VolumeX, X, Power, PowerOff } from 'lucide-react'
+import { useWidgetsHidden } from '@/contexts/WidgetVisibilityContext'
 
 type JarvisState = 'sleeping' | 'idle' | 'listening' | 'thinking' | 'speaking'
 
 const WAKE_WORDS = ['jarvis', 'jarves', 'jarvi', 'jarbas']
 
 export function Jarvis() {
+  const widgetsHidden = useWidgetsHidden()
   const [isOpen, setIsOpen] = useState(false)
   const [isEnabled, setIsEnabled] = useState(true)
   const [state, setState] = useState<JarvisState>('sleeping')
@@ -412,7 +414,7 @@ export function Jarvis() {
 
   if (!isOpen) {
     return (
-      <div className="fixed bottom-6 right-6 flex flex-col items-center gap-2 z-50">
+      <div className={`fixed bottom-6 right-6 flex flex-col items-center gap-2 z-50 transition-all duration-300 ease-in-out ${widgetsHidden ? 'translate-y-24 opacity-0 pointer-events-none' : 'translate-y-0 opacity-100'}`}>
         {isEnabled && isSupported && (
           <div className="flex items-center gap-2 bg-slate-800/80 backdrop-blur-sm rounded-full px-3 py-1">
             <div className={`w-2 h-2 rounded-full ${isListeningRef.current ? 'bg-green-400 animate-pulse' : 'bg-cyan-400'}`} />

@@ -31,8 +31,7 @@ import { TabAutomacao } from './Automacao/TabAutomacao';
 import { TabHistoricoLTV } from './TabHistoricoLTV';
 import { ToastContainer } from '@/components/ui/toast';
 import { useToast } from '@/hooks/useToast';
-import { PageTour, TourHelpButton } from '@/components/Onboarding';
-import { alunosTourSteps } from '@/components/Onboarding/tours';
+
 
 // Interfaces
 export interface Aluno {
@@ -1507,9 +1506,7 @@ export function AlunosPage() {
         mediaAtual={kpis.ltvMedio}
       />
 
-      {/* Tour e Botão de Ajuda */}
-      <PageTour tourName="alunos" steps={alunosTourSteps} />
-      <TourHelpButton tourName="alunos" />
+
     </div>
   );
 }

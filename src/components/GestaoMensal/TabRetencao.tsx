@@ -71,7 +71,7 @@ export function TabRetencao({ ano, mes, unidade }: TabRetencaoProps) {
         // Buscar evasões do mês - query simplificada
         let evasoesQuery = supabase
           .from('movimentacoes_admin')
-          .select('id, data, aluno_id, motivo_saida_id, tipo, tipo_evasao, valor_parcela_evasao, valor_parcela_anterior, professor_id, unidade_id')
+          .select('id, data, aluno_id, motivo_saida_id, tipo, tipo_evasao, valor_parcela_evasao, valor_parcela_anterior, professor_id, unidade_id, motivos_saida!left(nome)')
           .in('tipo', ['evasao', 'nao_renovacao', 'aviso_previo'])
           .gte('data', startDate)
           .lte('data', endDate);
@@ -104,7 +104,7 @@ export function TabRetencao({ ano, mes, unidade }: TabRetencaoProps) {
           aluno_id: e.aluno_id,
           aluno_nome: `Aluno ${e.aluno_id || 'N/A'}`,
           motivo_saida_id: e.motivo_saida_id,
-          motivo_nome: `Motivo ${e.motivo_saida_id || 'N/A'}`,
+          motivo_nome: e.motivos_saida?.nome || 'Não informado',
           tipo_saida_id: e.tipo_saida_id,
           tipo_nome: e.tipo_saida_id === 1 ? 'Interrompido' : e.tipo_saida_id === 2 ? 'Não Renovou' : e.tipo_saida_id === 3 ? 'Aviso Prévio' : 'Outro',
           valor_parcela: e.valor_parcela || 0,

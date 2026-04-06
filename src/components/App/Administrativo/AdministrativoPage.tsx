@@ -10,8 +10,7 @@ import {
   FileText, Calendar, Plus, Pause, RefreshCw, XCircle, AlertTriangle, LogOut,
   Zap, BarChart3, CheckCircle, DoorOpen, PauseCircle, Search
 } from 'lucide-react';
-import { PageTour, TourHelpButton } from '@/components/Onboarding';
-import { administrativoTourSteps } from '@/components/Onboarding/tours';
+
 import { supabase } from '@/lib/supabase';
 import { KPICard } from '@/components/ui/KPICard';
 import { Button } from '@/components/ui/button';
@@ -1455,9 +1454,7 @@ export function AdministrativoPage() {
         mediaAtual={resumo?.ltv_meses ? Number(resumo.ltv_meses) : 0}
       />
 
-      {/* Tour e Botão de Ajuda */}
-      <PageTour tourName="administrativo" steps={administrativoTourSteps} />
-      <TourHelpButton tourName="administrativo" />
+
     </div>
   );
 }

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Users, DollarSign, Percent, Clock, AlertTriangle, Wallet, Calendar, TrendingDown, RefreshCw, UserMinus, Info, XCircle, UserX, CheckCircle, Bell, Star, CreditCard, TrendingUp, Target, UserPlus, GraduationCap, Ticket, Music, Baby } from 'lucide-react';
 import { KPICard } from '@/components/ui/KPICard';
 import { DistributionChart } from '@/components/ui/DistributionChart';
+import { DonutChart } from '@/components/ui/DonutChart';
 import { EvolutionChart } from '@/components/ui/EvolutionChart';
 import { RankingTable } from '@/components/ui/RankingTable';
 import { ComparisonChart } from '@/components/ui/ComparisonChart';
@@ -570,8 +571,6 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             .from('movimentacoes_admin')
             .select(`
               id, aluno_id, professor_id, motivo_saida_id, tipo, unidade_id,
-              alunos!left(curso_id, cursos!left(nome)),
-              professores!left(nome),
               motivos_saida!left(nome)
             `)
             .gte('data', startDate)
@@ -584,22 +583,40 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
 
           const { data: evasoesData } = await evasoesQuery;
 
+          // Buscar nomes de alunos (curso) e professores para as evasões
+          const alunoIds = [...new Set((evasoesData || []).map((e: any) => e.aluno_id).filter(Boolean))];
+          const profIds = [...new Set((evasoesData || []).map((e: any) => e.professor_id).filter(Boolean))];
+
+          const [alunosRes, profsRes] = await Promise.all([
+            alunoIds.length > 0
+              ? supabase.from('alunos').select('id, curso_id, cursos!left(nome)').in('id', alunoIds)
+              : { data: [] },
+            profIds.length > 0
+              ? supabase.from('professores').select('id, nome').in('id', profIds)
+              : { data: [] },
+          ]);
+
+          const alunoMap = new Map((alunosRes.data || []).map((a: any) => [a.id, a]));
+          const profMap = new Map((profsRes.data || []).map((p: any) => [p.id, p]));
+
           const cursoEvasaoMap = new Map<string, number>();
           const profEvasaoMap = new Map<string, { id: number; count: number }>();
           const motivosNaoRenovMap = new Map<string, number>();
           const motivosCancelMap = new Map<string, number>();
           evasoesData?.forEach((e: any) => {
-            // Curso via aluno → cursos
-            const cursoNome = e.alunos?.cursos?.nome || 'Não informado';
+            // Curso via aluno
+            const aluno = alunoMap.get(e.aluno_id);
+            const cursoNome = aluno?.cursos?.nome || 'Não informado';
             cursoEvasaoMap.set(cursoNome, (cursoEvasaoMap.get(cursoNome) || 0) + 1);
-            // Professor com nome real
-            const profNome = e.professores?.nome || 'Sem Professor';
+            // Professor
+            const prof = profMap.get(e.professor_id);
+            const profNome = prof?.nome || 'Sem Professor';
             const current = profEvasaoMap.get(profNome) || { id: e.professor_id || 0, count: 0 };
             current.count += 1;
             profEvasaoMap.set(profNome, current);
             const motivo = e.motivos_saida?.nome || 'Não informado';
-            // tipo_saida_id: 1=interrompido, 2=não renovou
-            if (e.tipo_saida_id === 2) {
+            // tipo: 'nao_renovacao' = não renovou, 'evasao' = cancelamento
+            if (e.tipo === 'nao_renovacao') {
               motivosNaoRenovMap.set(motivo, (motivosNaoRenovMap.get(motivo) || 0) + 1);
             } else {
               motivosCancelMap.set(motivo, (motivosCancelMap.get(motivo) || 0) + 1);
@@ -1658,13 +1675,15 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
 
           {/* Gráficos de Motivos */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <DistributionChart
+            <DonutChart
               data={dados.motivos_nao_renovacao}
               title="Motivos de Não Renovação"
+              centerLabel="Saídas"
             />
-            <DistributionChart
+            <DonutChart
               data={dados.motivos_cancelamento}
               title="Motivos de Cancelamento"
+              centerLabel="Saídas"
             />
           </div>
         </div>

@@ -12,8 +12,7 @@ import {
   Calendar, Target, Settings, ClipboardList
 } from 'lucide-react';
 import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
-import { PageTour, TourHelpButton } from '@/components/Onboarding';
-import { professoresTourSteps } from '@/components/Onboarding/tours';
+
 import { KPICard } from '@/components/ui/KPICard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -1203,9 +1202,7 @@ export function ProfessoresPage() {
       {/* Toast Container */}
       <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} />
 
-      {/* Tour e Botão de Ajuda */}
-      <PageTour tourName="professores" steps={professoresTourSteps} />
-      <TourHelpButton tourName="professores" />
+
     </div>
   );
 }

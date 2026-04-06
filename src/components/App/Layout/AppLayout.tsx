@@ -6,8 +6,13 @@ import { useUnidadeFiltro } from '../../../hooks/useUnidadeFiltro';
 import { useCompetenciaFiltro } from '../../../hooks/useCompetenciaFiltro';
 import { OnboardingChecklist } from '@/components/Onboarding/OnboardingChecklist';
 import { PageTitleProvider } from '@/contexts/PageTitleContext';
-import { WidgetVisibilityProvider } from '@/contexts/WidgetVisibilityContext';
+import { WidgetVisibilityProvider, useWidgetOverlapSentinel } from '@/contexts/WidgetVisibilityContext';
 import { AdminToolsHub } from '@/components/App/AdminTools/AdminToolsHub';
+
+function BottomSentinel() {
+  const sentinelRef = useWidgetOverlapSentinel();
+  return <div ref={sentinelRef} className="h-1" />;
+}
 
 export function AppLayout() {
   const { unidadeSelecionada, setUnidadeSelecionada, filtroAtivo } = useUnidadeFiltro();
@@ -56,6 +61,7 @@ export function AppLayout() {
           />
           <main className="p-6">
             <Outlet context={{ filtroAtivo, unidadeSelecionada, competencia }} />
+            <BottomSentinel />
           </main>
         </div>
 

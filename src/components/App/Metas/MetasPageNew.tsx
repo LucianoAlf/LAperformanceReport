@@ -6,8 +6,7 @@ import {
   Percent, Clock, BarChart3, ShoppingCart, UserCheck, Star,
   AlertCircle, LucideIcon
 } from 'lucide-react';
-import { PageTour, TourHelpButton } from '@/components/Onboarding';
-import { metasTourSteps } from '@/components/Onboarding/tours';
+
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { MetaInput, FormatoMeta } from '@/components/ui/MetaInput';
@@ -613,9 +612,7 @@ export function MetasPageNew() {
       </div>
       )}
 
-      {/* Tour e Botão de Ajuda */}
-      <PageTour tourName="metas" steps={metasTourSteps} />
-      <TourHelpButton tourName="metas" />
+
     </div>
   );
 }

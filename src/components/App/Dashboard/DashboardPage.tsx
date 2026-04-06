@@ -28,8 +28,7 @@ import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
 import { TipoCompetencia, CompetenciaFiltro, CompetenciaRange } from '@/hooks/useCompetenciaFiltro';
 import { useMetasKPI } from '@/hooks/useMetasKPI';
 import { KPICard } from '@/components/ui/KPICard';
-import { PageTour, TourHelpButton } from '@/components/Onboarding';
-import { dashboardTourSteps } from '@/components/Onboarding/tours';
+
 
 interface OutletContextType {
   filtroAtivo: string | null;
@@ -1062,9 +1061,7 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* Tour e Botão de Ajuda */}
-      <PageTour tourName="dashboard" steps={dashboardTourSteps} />
-      <TourHelpButton tourName="dashboard" />
+
     </div>
   );
 }

@@ -38,8 +38,7 @@ import {
 import { TarefasRapidasTab } from '@/components/shared/TarefasRapidas';
 import { CanalOrigemBadge } from '@/components/shared/CanalOrigemBadge';
 import { FunnelPipelineNav } from './FunnelPipelineNav';
-import { PageTour, TourHelpButton } from '@/components/Onboarding';
-import { comercialTourSteps } from '@/components/Onboarding/tours';
+
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
@@ -5916,9 +5915,7 @@ export function ComercialPage() {
         lead={leadParaArquivar}
       />
 
-      {/* Tour e Botão de Ajuda */}
-      <PageTour tourName="comercial" steps={comercialTourSteps} />
-      <TourHelpButton tourName="comercial" />
+
     </div>
   );
 }

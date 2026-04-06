@@ -7,8 +7,7 @@ import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import { 
   Building2, Plus, Search, Edit2, Trash2, Users, Clock, AlertTriangle, Package, DoorOpen, Sparkles, Calendar
 } from 'lucide-react';
-import { PageTour, TourHelpButton } from '@/components/Onboarding';
-import { salasTourSteps } from '@/components/Onboarding/tours';
+
 import {
   Select,
   SelectContent,
@@ -791,9 +790,7 @@ export function SalasPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Tour e Botão de Ajuda */}
-      <PageTour tourName="salas" steps={salasTourSteps} />
-      <TourHelpButton tourName="salas" />
+
     </div>
   );
 }

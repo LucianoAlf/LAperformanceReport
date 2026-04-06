@@ -7,9 +7,7 @@ import { TabComercialNew } from './TabComercialNew';
 import { TabProfessoresNew } from './TabProfessoresNew';
 import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
 import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
-import { PageTour } from '@/components/Onboarding/PageTour';
-import { TourHelpButton } from '@/components/Onboarding/TourHelpButton';
-import { analyticsTourSteps } from '@/components/Onboarding/tours';
+
 
 type TabId = 'gestao' | 'comercial' | 'professores';
 
@@ -118,9 +116,7 @@ export function GestaoMensalPage({ mesReferencia }: GestaoMensalPageProps) {
           />
         )}
       </div>
-      {/* Tour de Onboarding */}
-      <PageTour tourName="analytics" steps={analyticsTourSteps} />
-      <TourHelpButton tourName="analytics" />
+
     </div>
   );
 }
