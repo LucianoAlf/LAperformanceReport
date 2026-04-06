@@ -477,7 +477,36 @@ export function ComercialPage() {
 
       if (error) throw error;
 
-      const registros = data || [];
+      let registros = data || [];
+
+      // Buscar matrículas convertidas no período mas com data_contato fora do range
+      // (ex: lead entrou em março, matriculou em abril — não aparece na query por data_contato)
+      if (startDate && endDate) {
+        let queryConvertidos = supabase
+          .from('leads')
+          .select('*, canais_origem(nome), cursos(nome), unidades(codigo), alunos:aluno_id(is_segundo_curso, is_aluno_retorno, is_ex_aluno)')
+          .in('status', ['matriculado', 'convertido'])
+          .not('data_conversao', 'is', null)
+          .gte('data_conversao', startDate)
+          .lte('data_conversao', endDate)
+          .or(`data_contato.lt.${startDate},data_contato.gt.${endDate},data_contato.is.null`);
+
+        if (isAdmin) {
+          if (context?.unidadeSelecionada && context.unidadeSelecionada !== 'todos') {
+            queryConvertidos = queryConvertidos.eq('unidade_id', context.unidadeSelecionada);
+          }
+        } else if (usuario?.unidade_id) {
+          queryConvertidos = queryConvertidos.eq('unidade_id', usuario.unidade_id);
+        }
+
+        const { data: convertidosForaRange } = await queryConvertidos;
+        if (convertidosForaRange?.length) {
+          const idsExistentes = new Set(registros.map(r => r.id));
+          for (const c of convertidosForaRange) {
+            if (!idsExistentes.has(c.id)) registros.push(c);
+          }
+        }
+      }
 
       // Quando o filtro é "Hoje", buscar dados do mês inteiro para o "Acumulado do Mês"
       const isFiltroHoje = competencia.filtro.tipo === 'diario';
@@ -621,9 +650,10 @@ export function ComercialPage() {
       const registrosEntradaHoje = registros.filter(r => r.data_contato === hoje);
       setRegistrosHoje(registrosEntradaHoje);
 
-      // Matrículas do mês (com nomes dos relacionamentos)
+      // Matrículas do mês — filtrar por data_conversao (quando efetivamente matriculou)
       const matriculasDoMes = registros
-        .filter(r => ['matriculado','convertido'].includes(r.status))
+        .filter(r => ['matriculado','convertido'].includes(r.status) && r.data_conversao &&
+          r.data_conversao >= (startDate || '0000') && r.data_conversao <= (endDate || '9999'))
         .map(m => ({
           ...m,
           canal_nome: (m.canais_origem as any)?.nome || '',
@@ -2032,24 +2062,26 @@ export function ComercialPage() {
     const conversaoExpMat = experimentaisMes > 0 ? (matriculasMes / experimentaisMes) * 100 : 0;
     const conversaoLeadMat = leadsMes > 0 ? (matriculasMes / leadsMes) * 100 : 0;
 
-    // Buscar matrículas detalhadas do mês
+    // Buscar matrículas detalhadas do mês (filtrar por data_conversao — quando efetivamente matriculou)
     const { data: matriculasDetalhadas } = await supabase
       .from('leads')
       .select(`
-        data_contato, 
-        nome, 
-        idade, 
+        data_contato,
+        data_conversao,
+        nome,
+        idade,
         tipo_matricula,
-        valor_passaporte, 
+        valor_passaporte,
         valor_parcela,
         canais_origem(nome),
         cursos(nome)
       `)
       .eq('unidade_id', unidadeId)
       .in('status', ['matriculado','convertido'])
-      .gte('data_contato', primeiroDiaMes.toISOString().split('T')[0])
-      .lte('data_contato', hoje.toISOString().split('T')[0])
-      .order('data_contato', { ascending: true });
+      .not('data_conversao', 'is', null)
+      .gte('data_conversao', primeiroDiaMes.toISOString().split('T')[0])
+      .lte('data_conversao', hoje.toISOString().split('T')[0])
+      .order('data_conversao', { ascending: true });
 
     // Agrupar leads por canal
     const leadsPorCanal: { [key: string]: number } = {};
