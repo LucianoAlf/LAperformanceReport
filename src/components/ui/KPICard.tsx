@@ -1,4 +1,4 @@
-import { LucideIcon, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { LucideIcon, TrendingUp, TrendingDown, Minus, HelpCircle } from 'lucide-react';
 import { cn, formatCurrency } from '@/lib/utils';
 
 interface ComparativoProps {
@@ -33,6 +33,8 @@ export interface KPICardProps {
   showProgress?: boolean;
   // Atributo data-tour para onboarding
   dataTour?: string;
+  // Tooltip de explicação
+  tooltip?: string;
 }
 
 const colorMap: Record<string, string> = {
@@ -122,6 +124,7 @@ export function KPICard({
   metaInversa = false,
   showProgress = true,
   dataTour,
+  tooltip,
 }: KPICardProps) {
   const displayLabel = title || label || '';
   const effectiveVariant = color || variant;
@@ -253,10 +256,18 @@ export function KPICard({
       <div className="flex items-start justify-between mb-2">
         <div>
           <div className={cn(
-            "font-medium text-slate-400 mb-1",
+            "font-medium text-slate-400 mb-1 flex items-center gap-1",
             size === 'sm' ? 'text-[10px]' : 'text-xs'
           )}>
             {displayLabel}
+            {tooltip && (
+              <span className="relative group">
+                <HelpCircle size={12} className="text-slate-500 hover:text-slate-300 cursor-help flex-shrink-0" />
+                <span className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-xs text-slate-200 whitespace-normal w-[220px] text-center opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50 shadow-xl pointer-events-none">
+                  {tooltip}
+                </span>
+              </span>
+            )}
           </div>
           {/* Valor + Meta na mesma linha */}
           <div className="flex items-baseline gap-2">

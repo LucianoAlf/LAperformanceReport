@@ -75,53 +75,38 @@ Deno.serve(async (req) => {
     const hunterNome = dados.hunter_nome || 'N/D';
     const farmersNomes = dados.farmers_nomes || [];
 
-    // KPIs de Gestão
+    // KPIs de Gestão — filtrar pelo mês selecionado (kpis_gestao vem com histórico de 12 meses)
     const kpisGestao = dados.kpis_gestao || [];
-    const totalPagantes = kpisGestao.reduce((acc: number, k: any) => acc + (k.total_alunos_pagantes || 0), 0);
-    const totalAtivos = kpisGestao.reduce((acc: number, k: any) => acc + (k.total_alunos_ativos || 0), 0);
-    const ticketMedio = kpisGestao.length > 0 
-      ? kpisGestao.reduce((acc: number, k: any) => acc + (k.ticket_medio || 0), 0) / kpisGestao.length 
-      : 0;
-    const mrr = kpisGestao.reduce((acc: number, k: any) => acc + (k.mrr || 0), 0);
-    const churnRate = kpisGestao.length > 0
-      ? kpisGestao.reduce((acc: number, k: any) => acc + (k.churn_rate || 0), 0) / kpisGestao.length
-      : 0;
-    const inadimplencia = kpisGestao.length > 0
-      ? kpisGestao.reduce((acc: number, k: any) => acc + (k.inadimplencia_pct || 0), 0) / kpisGestao.length
-      : 0;
-    const tempoPermanencia = kpisGestao.length > 0
-      ? kpisGestao.reduce((acc: number, k: any) => acc + (k.tempo_permanencia_medio || 0), 0) / kpisGestao.length
-      : 0;
-    const ltvMedio = kpisGestao.length > 0
-      ? kpisGestao.reduce((acc: number, k: any) => acc + (k.ltv_medio || 0), 0) / kpisGestao.length
-      : 0;
+    const kpiMesAtual = kpisGestao.find((k: any) => k.ano === ano && k.mes === mesAtual) || kpisGestao[kpisGestao.length - 1] || {};
+    const totalPagantes = kpiMesAtual.total_alunos_pagantes || 0;
+    const totalAtivos = kpiMesAtual.total_alunos_ativos || 0;
+    const ticketMedio = kpiMesAtual.ticket_medio || 0;
+    const mrr = kpiMesAtual.mrr || 0;
+    const churnRate = kpiMesAtual.churn_rate || 0;
+    const inadimplencia = kpiMesAtual.inadimplencia_pct || 0;
+    const tempoPermanencia = kpiMesAtual.tempo_permanencia_medio || 0;
+    const ltvMedio = kpiMesAtual.ltv_medio || 0;
 
-    // KPIs de Retenção
+    // KPIs de Retenção — filtrar pelo mês selecionado
     const kpisRetencao = dados.kpis_retencao || [];
-    const totalEvasoes = kpisRetencao.reduce((acc: number, k: any) => acc + (k.total_evasoes || 0), 0);
-    const mrrPerdido = kpisRetencao.reduce((acc: number, k: any) => acc + (k.mrr_perdido || 0), 0);
-    const renovacoesPrevistas = kpisRetencao.reduce((acc: number, k: any) => acc + (k.renovacoes_previstas || 0), 0);
-    const renovacoesRealizadas = kpisRetencao.reduce((acc: number, k: any) => acc + (k.renovacoes_realizadas || 0), 0);
+    const kpiRetMesAtual = kpisRetencao.find((k: any) => k.ano === ano && k.mes === mesAtual) || kpisRetencao[kpisRetencao.length - 1] || {};
+    const totalEvasoes = kpiRetMesAtual.total_evasoes || 0;
+    const mrrPerdido = kpiRetMesAtual.mrr_perdido || 0;
+    const renovacoesPrevistas = kpiRetMesAtual.renovacoes_previstas || 0;
+    const renovacoesRealizadas = kpiRetMesAtual.renovacoes_realizadas || 0;
     const taxaRenovacao = renovacoesPrevistas > 0 ? (renovacoesRealizadas / renovacoesPrevistas * 100) : 0;
-    const naoRenovacoes = kpisRetencao.reduce((acc: number, k: any) => acc + (k.nao_renovacoes || 0), 0);
-    const reajusteMedio = kpisRetencao.length > 0
-      ? kpisRetencao.reduce((acc: number, k: any) => acc + (k.reajuste_medio || 0), 0) / kpisRetencao.length
-      : 0;
+    const naoRenovacoes = kpiRetMesAtual.nao_renovacoes || 0;
+    const reajusteMedio = kpiMesAtual.reajuste_medio || 0;
 
-    // KPIs Comerciais
+    // KPIs Comerciais — filtrar pelo mês selecionado
     const kpisComercial = dados.kpis_comercial || [];
-    const totalLeads = kpisComercial.reduce((acc: number, k: any) => acc + (k.total_leads || 0), 0);
-    const totalExperimentais = kpisComercial.reduce((acc: number, k: any) => acc + (k.experimentais_realizadas || 0), 0);
-    const novasMatriculas = kpisComercial.reduce((acc: number, k: any) => acc + (k.novas_matriculas || 0), 0);
-    const taxaLeadExp = kpisComercial.length > 0
-      ? kpisComercial.reduce((acc: number, k: any) => acc + (k.taxa_lead_experimental || 0), 0) / kpisComercial.length
-      : 0;
-    const taxaExpMat = kpisComercial.length > 0
-      ? kpisComercial.reduce((acc: number, k: any) => acc + (k.taxa_experimental_matricula || 0), 0) / kpisComercial.length
-      : 0;
-    const taxaConversaoGeral = kpisComercial.length > 0
-      ? kpisComercial.reduce((acc: number, k: any) => acc + (k.taxa_conversao_geral || 0), 0) / kpisComercial.length
-      : 0;
+    const kpiComMesAtual = kpisComercial.find((k: any) => k.ano === ano && k.mes === mesAtual) || kpisComercial[kpisComercial.length - 1] || {};
+    const totalLeads = kpiComMesAtual.total_leads || 0;
+    const totalExperimentais = kpiComMesAtual.experimentais_realizadas || 0;
+    const novasMatriculas = kpiComMesAtual.novas_matriculas || 0;
+    const taxaLeadExp = kpiComMesAtual.taxa_conversao_lead_exp || kpiComMesAtual.taxa_lead_experimental || 0;
+    const taxaExpMat = kpiComMesAtual.taxa_conversao_exp_mat || kpiComMesAtual.taxa_experimental_matricula || 0;
+    const taxaConversaoGeral = kpiComMesAtual.taxa_conversao_geral || 0;
 
     // Matrículas detalhadas
     const matriculasAtivas = dados.matriculas_ativas || 0;

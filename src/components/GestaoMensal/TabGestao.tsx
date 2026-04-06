@@ -1319,6 +1319,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             <KPICard
               icon={CreditCard}
               label="Ticket Médio"
+              tooltip="Valor médio da mensalidade dos alunos pagantes. Calculado: faturamento / total de pagantes."
               value={mesFechado ? dados.ticket_medio : '—'}
               target={metas.ticket_medio}
               format={mesFechado ? "currency" : "number"}
@@ -1329,6 +1330,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             <KPICard
               icon={Wallet}
               label="MRR"
+              tooltip="Monthly Recurring Revenue. Receita mensal recorrente: soma das mensalidades de todos os alunos pagantes."
               value={mesFechado ? dados.mrr : '—'}
               format={mesFechado ? "currency" : "number"}
               variant="emerald"
@@ -1338,6 +1340,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             <KPICard
               icon={Calendar}
               label="ARR"
+              tooltip="Annual Recurring Revenue. Receita anual projetada: MRR x 12 meses."
               value={mesFechado ? formatCurrency(dados.arr) : '—'}
               subvalue="Receita Recorrente Anual"
               variant="cyan"
@@ -1345,6 +1348,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             <KPICard
               icon={TrendingUp}
               label="LTV Médio"
+              tooltip="Lifetime Value. Receita total gerada por um aluno durante sua permanencia. Calculado: ticket medio x tempo medio de permanencia."
               value={mesFechado ? formatCurrency(dados.ltv_medio) : '—'}
               subvalue="Lifetime Value"
               variant="violet"
@@ -1352,18 +1356,21 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             <KPICard
               icon={Target}
               label="Faturamento Previsto"
+              tooltip="Receita esperada no mes com base nas mensalidades ativas. Equivale ao MRR."
               value={mesFechado ? formatCurrency(dados.faturamento_previsto) : '—'}
               variant="cyan"
             />
             <KPICard
               icon={CheckCircle}
               label="Faturamento Realizado"
+              tooltip="Receita efetivamente recebida no mes. Diferenca com o previsto indica inadimplencia."
               value={mesFechado ? formatCurrency(dados.faturamento_realizado) : '—'}
               variant="emerald"
             />
             <KPICard
               icon={AlertTriangle}
               label="Inadimplência %"
+              tooltip="Percentual de alunos que nao pagaram no mes. Calculado: (previsto - realizado) / previsto x 100."
               value={mesFechado ? dados.inadimplencia_pct : '—'}
               target={metas.inadimplencia}
               format={mesFechado ? "percent" : "number"}
@@ -1376,6 +1383,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             <KPICard
               icon={Percent}
               label="Reajuste Médio"
+              tooltip="Percentual medio de aumento aplicado nas renovacoes do mes. Indica o poder de precificacao."
               value={mesFechado ? `${dados.reajuste_pct.toFixed(1)}%` : '—'}
               variant="cyan"
             />
