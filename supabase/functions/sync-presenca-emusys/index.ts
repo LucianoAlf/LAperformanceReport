@@ -272,12 +272,36 @@ async function confirmarExperimentais(
 
   const hoje = new Date();
   const hojeBRT = new Date(hoje.getTime() - 3 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const limiteAntiguidadeDias = 14;
+  const limiteAutoFaltouDias = 7;
+  const dataLimite = new Date(hoje.getTime() - limiteAntiguidadeDias * 24 * 60 * 60 * 1000 - 3 * 60 * 60 * 1000).toISOString().split('T')[0];
+  const dataAutoFaltou = new Date(hoje.getTime() - limiteAutoFaltouDias * 24 * 60 * 60 * 1000 - 3 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-  // Buscar experimentais pendentes na nova tabela
+  // Auto-marcar como "faltou" experimentais com mais de 7 dias sem confirmação
+  const { data: expExpiradas } = await supabase
+    .from('lead_experimentais')
+    .select('id, lead_id, nome_aluno, unidade_id')
+    .eq('status', 'experimental_agendada')
+    .lt('data_experimental', dataAutoFaltou);
+
+  if (expExpiradas?.length) {
+    for (const exp of expExpiradas) {
+      await supabase.from('lead_experimentais').update({
+        status: 'experimental_faltou', updated_at: new Date().toISOString()
+      }).eq('id', exp.id);
+      await supabase.from('leads').update({
+        faltou_experimental: true, status: 'experimental_faltou', etapa_pipeline_id: 9, updated_at: new Date().toISOString()
+      }).eq('id', exp.lead_id);
+    }
+    console.log(`[sync-presenca] Auto-faltou: ${expExpiradas.length} experimentais com mais de ${limiteAutoFaltouDias} dias`);
+  }
+
+  // Buscar experimentais pendentes dos últimos 14 dias (não mais antigas)
   const { data: expPendentes } = await supabase
     .from('lead_experimentais')
     .select('id, lead_id, nome_aluno, data_experimental, horario_experimental, professor_experimental_id, unidade_id')
     .eq('status', 'experimental_agendada')
+    .gte('data_experimental', dataLimite)
     .lte('data_experimental', hojeBRT);
 
   if (!expPendentes?.length) return logs;
