@@ -77,6 +77,7 @@ const COLUNAS_CONFIG = [
   { id: 'pago', label: 'Pago', defaultVisible: false },
   { id: 'vencimento', label: 'Venc.', defaultVisible: false },
   { id: 'tempo', label: 'Tempo', defaultVisible: true },
+  { id: 'data_matricula', label: 'Matrícula', defaultVisible: false },
   { id: 'status', label: 'Status', defaultVisible: true },
   { id: 'data_saida', label: 'Saída', defaultVisible: false },
 ] as const;
@@ -1407,6 +1408,7 @@ export function TabelaAlunos({
               {col('pago') && <th className="px-2 py-3 font-medium">Pago</th>}
               {col('vencimento') && <th className="px-2 py-3 font-medium">Venc.</th>}
               {col('tempo') && <SortableHeader label="Tempo" sortKey="tempo" sortConfig={sortConfig} onSort={handleSort} />}
+              {col('data_matricula') && <SortableHeader label="Matrícula" sortKey="data_matricula" sortConfig={sortConfig} onSort={handleSort} />}
               {col('status') && <SortableHeader label="Status" sortKey="status" sortConfig={sortConfig} onSort={handleSort} px="px-2" />}
               {col('data_saida') && <SortableHeader label="Saída" sortKey="data_saida" sortConfig={sortConfig} onSort={handleSort} />}
               <th className="px-2 py-3 font-medium text-right">Ações</th>
@@ -1703,6 +1705,20 @@ export function TabelaAlunos({
                   </td>
                   )}
 
+                  {col('data_matricula') && (
+                  <td className="px-2 py-2">
+                    <DatePicker
+                      date={aluno.data_matricula ? new Date(aluno.data_matricula + 'T00:00:00') : undefined}
+                      onDateChange={async (date) => {
+                        if (!date) return;
+                        await salvarCampo(aluno.id, 'data_matricula', format(date, 'yyyy-MM-dd'));
+                      }}
+                      placeholder="-"
+                      className="min-w-[80px]"
+                    />
+                  </td>
+                  )}
+
                   {/* Status - Edição inline */}
                   {col('status') && (
                   <td className="px-2 py-2">
@@ -1987,6 +2003,19 @@ export function TabelaAlunos({
                     </td>
                     )}
                     {col('tempo') && <td className="px-4 py-2 text-slate-400 text-sm">-</td>}
+                    {col('data_matricula') && (
+                    <td className="px-2 py-2">
+                      <DatePicker
+                        date={outroCurso.data_matricula ? new Date(outroCurso.data_matricula + 'T00:00:00') : undefined}
+                        onDateChange={async (date) => {
+                          if (!date) return;
+                          await salvarCampo(outroCurso.id, 'data_matricula', format(date, 'yyyy-MM-dd'));
+                        }}
+                        placeholder="-"
+                        className="min-w-[80px]"
+                      />
+                    </td>
+                    )}
                     {col('status') && (
                     <td className="px-2 py-2">
                       <CelulaEditavel
