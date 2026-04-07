@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useToast } from '@/hooks/useToast';
 import { Users, DollarSign, Percent, Clock, AlertTriangle, Wallet, Calendar, TrendingDown, RefreshCw, UserMinus, Info, XCircle, UserX, CheckCircle, Bell, Star, CreditCard, TrendingUp, Target, UserPlus, GraduationCap, Ticket, Music, Baby } from 'lucide-react';
 import { KPICard } from '@/components/ui/KPICard';
 import { DistributionChart } from '@/components/ui/DistributionChart';
@@ -80,6 +81,9 @@ interface DadosGestao {
 }
 
 export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
+  const toast = useToast();
+  const [confirmRecalcularAnalytics, setConfirmRecalcularAnalytics] = useState(false);
+  const [recalculandoAnalytics, setRecalculandoAnalytics] = useState(false);
   const [activeSubTab, setActiveSubTab] = useState<SubTabId>('alunos');
   const [loading, setLoading] = useState(true);
   const [dados, setDados] = useState<DadosGestao | null>(null);
@@ -1112,16 +1116,63 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
       {/* Conteúdo da Sub-aba */}
       {activeSubTab === 'alunos' && (
         <div className="space-y-6">
-          {/* Aviso se o mês não está fechado */}
-          {!mesFechado && (
-            <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-center gap-3">
-              <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
-              <p className="text-amber-200 text-sm">
-                <strong>Mês não fechado:</strong> Os dados de {getMesNomeCurto(mes)}/{ano} ainda não foram populados. 
-                Novas Matrículas, Evasões e Saldo Líquido mostram dados do mês atual em andamento.
-              </p>
-            </div>
-          )}
+          {/* Aviso se o mês não está fechado + botão recalcular */}
+          <div className="flex items-center justify-between gap-3">
+            {!mesFechado && (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-center gap-3 flex-1">
+                <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
+                <p className="text-amber-200 text-sm">
+                  <strong>Mês não fechado:</strong> Os dados de {getMesNomeCurto(mes)}/{ano} ainda não foram populados.
+                  Novas Matrículas, Evasões e Saldo Líquido mostram dados do mês atual em andamento.
+                </p>
+              </div>
+            )}
+            {unidade && unidade !== 'todos' && (
+              confirmRecalcularAnalytics ? (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 border border-slate-600 rounded-xl shrink-0">
+                  <span className="text-xs text-slate-300">
+                    Recalcular {getMesNomeCurto(mes)}/{ano}?
+                  </span>
+                  <button
+                    onClick={async () => {
+                      setRecalculandoAnalytics(true);
+                      try {
+                        const { data, error } = await supabase.rpc('recalcular_dados_mensais', {
+                          p_ano: ano, p_mes: mes, p_unidade_id: unidade
+                        });
+                        if (error) throw error;
+                        toast.success('Dados recalculados!', `${data?.alunos_ativos || 0} ativos, ${data?.novas_matriculas || 0} matrículas, ${data?.evasoes || 0} evasões`);
+                        window.location.reload();
+                      } catch (err: any) {
+                        toast.error('Erro ao recalcular', err.message);
+                      } finally {
+                        setRecalculandoAnalytics(false);
+                        setConfirmRecalcularAnalytics(false);
+                      }
+                    }}
+                    disabled={recalculandoAnalytics}
+                    className="h-6 px-2 bg-violet-600 hover:bg-violet-700 disabled:bg-slate-600 rounded text-xs text-white font-medium transition"
+                  >
+                    {recalculandoAnalytics ? 'Recalculando...' : 'Sim'}
+                  </button>
+                  <button
+                    onClick={() => setConfirmRecalcularAnalytics(false)}
+                    className="h-6 px-2 bg-slate-700 hover:bg-slate-600 rounded text-xs text-slate-400 transition"
+                  >
+                    Não
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setConfirmRecalcularAnalytics(true)}
+                  className="h-9 px-4 bg-slate-700 hover:bg-slate-600 rounded-xl text-xs text-slate-300 transition flex items-center gap-2 whitespace-nowrap shrink-0"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Recalcular
+                </button>
+              )
+            )}
+          </div>
           {/* Linha 1: KPIs principais */}
           <div data-tour="analytics-kpis" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <KPICard

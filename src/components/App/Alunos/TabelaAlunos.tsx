@@ -386,6 +386,9 @@ export function TabelaAlunos({
       case 'responsavel_telefone':
         updated.responsavel_telefone = valor as string;
         break;
+      case 'data_matricula':
+        updated.data_matricula = valor as string;
+        break;
     }
     return updated;
   }, [professores, cursos]);
@@ -448,6 +451,9 @@ export function TabelaAlunos({
         break;
       case 'responsavel_telefone':
         updateData.responsavel_telefone = valor || null;
+        break;
+      case 'data_matricula':
+        updateData.data_matricula = valor || null;
         break;
     }
 
@@ -1711,7 +1717,7 @@ export function TabelaAlunos({
                       date={aluno.data_matricula ? new Date(aluno.data_matricula + 'T00:00:00') : undefined}
                       onDateChange={async (date) => {
                         if (!date) return;
-                        await salvarCampo(aluno.id, 'data_matricula', format(date, 'yyyy-MM-dd'));
+                        await salvarCampo(aluno.id, 'data_matricula', date.toISOString().split('T')[0]);
                       }}
                       placeholder="-"
                       className="min-w-[80px]"
@@ -2009,7 +2015,7 @@ export function TabelaAlunos({
                         date={outroCurso.data_matricula ? new Date(outroCurso.data_matricula + 'T00:00:00') : undefined}
                         onDateChange={async (date) => {
                           if (!date) return;
-                          await salvarCampo(outroCurso.id, 'data_matricula', format(date, 'yyyy-MM-dd'));
+                          await salvarCampo(outroCurso.id, 'data_matricula', date.toISOString().split('T')[0]);
                         }}
                         placeholder="-"
                         className="min-w-[80px]"

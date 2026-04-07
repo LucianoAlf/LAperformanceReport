@@ -854,12 +854,14 @@ export function AdministrativoPage() {
           <KPICard
             icon={Users}
             label="Alunos Ativos"
+            tooltip="Total de alunos unicos ativos (sem segundo curso). Representa pessoas fisicas frequentando."
             value={resumo?.alunos_ativos || 0}
             variant="cyan"
           />
           <KPICard
             icon={DollarSign}
             label="Pagantes"
+            tooltip="Alunos com tipo de matricula pagante. Exclui bolsistas integrais e banda gratuita."
             value={resumo?.alunos_pagantes || 0}
             subvalue={`${resumo?.alunos_nao_pagantes || 0} não pagantes`}
             variant="emerald"
@@ -867,6 +869,7 @@ export function AdministrativoPage() {
           <KPICard
             icon={BookOpen}
             label="Matrículas Ativas"
+            tooltip="Total de matriculas incluindo primeiro curso, segundo curso e banda."
             value={resumo?.matriculas_ativas || 0}
             subvalue={`${resumo?.matriculas_banda || 0} banda | ${resumo?.matriculas_2_curso || 0} 2º curso`}
             variant="violet"
@@ -874,6 +877,7 @@ export function AdministrativoPage() {
           <KPICard
             icon={GraduationCap}
             label="Bolsistas"
+            tooltip="Alunos com bolsa integral (valor zero) ou parcial (desconto). Nao entram no calculo de pagantes."
             value={(resumo?.bolsistas_integrais || 0) + (resumo?.bolsistas_parciais || 0)}
             subvalue={`${resumo?.bolsistas_integrais || 0} integrais | ${resumo?.bolsistas_parciais || 0} parciais`}
             variant="amber"
@@ -881,12 +885,14 @@ export function AdministrativoPage() {
           <KPICard
             icon={Pause}
             label="Trancados"
+            tooltip="Alunos com matricula trancada temporariamente. Nao contam como ativos mas mantem o vinculo."
             value={resumo?.alunos_trancados || 0}
             variant="default"
           />
           <KPICard
             icon={UserPlus}
             label="Novos no Mês"
+            tooltip="Alunos que matricularam no mes atual. Inclui novos alunos, segundo curso e bolsistas."
             value={resumo?.alunos_novos || 0}
             subvalue={[
               resumo?.novos_bolsistas ? `${resumo.novos_bolsistas} bolsista${resumo.novos_bolsistas > 1 ? 's' : ''}` : '',

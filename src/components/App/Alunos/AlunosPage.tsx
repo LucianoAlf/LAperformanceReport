@@ -8,7 +8,7 @@ import { ptBR } from 'date-fns/locale';
 import {
   Users, DollarSign, BarChart3, Clock, Layers, AlertTriangle, BookOpen,
   Plus, Search, RotateCcw, Edit2, Trash2, Check, X, History,
-  Calendar, Upload, Heart, Zap
+  Calendar, Upload, Heart, Zap, RefreshCw
 } from 'lucide-react';
 import { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
 import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
@@ -216,6 +216,8 @@ export function AlunosPage() {
 
   // Estados de UI
   const [loading, setLoading] = useState(true);
+  const [confirmRecalcular, setConfirmRecalcular] = useState(false);
+  const [recalculando, setRecalculando] = useState(false);
   const [modalNovoAluno, setModalNovoAluno] = useState(false);
 
   // Calcular alunos sem lançamento de pagamento (após dia 15)
@@ -1282,10 +1284,60 @@ export function AlunosPage() {
         )}
       </div>
 
+      {/* Botão Recalcular Dados Mensais */}
+      {unidadeAtual && unidadeAtual !== 'todos' && (
+        <div className="flex justify-end items-center gap-2">
+          {confirmRecalcular ? (
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 border border-slate-600 rounded-lg">
+              <span className="text-xs text-slate-300">
+                Recalcular {competenciaFiltro.mes}/{competenciaFiltro.ano}?
+              </span>
+              <button
+                onClick={async () => {
+                  setRecalculando(true);
+                  try {
+                    const { data, error } = await supabase.rpc('recalcular_dados_mensais', {
+                      p_ano: competenciaFiltro.ano, p_mes: competenciaFiltro.mes, p_unidade_id: unidadeAtual
+                    });
+                    if (error) throw error;
+                    toast.success('Dados recalculados!', `${data?.alunos_ativos || 0} ativos, ${data?.novas_matriculas || 0} matrículas, ${data?.evasoes || 0} evasões`);
+                  } catch (err: any) {
+                    toast.error('Erro ao recalcular', err.message);
+                  } finally {
+                    setRecalculando(false);
+                    setConfirmRecalcular(false);
+                  }
+                }}
+                disabled={recalculando}
+                className="h-6 px-2 bg-violet-600 hover:bg-violet-700 disabled:bg-slate-600 rounded text-xs text-white font-medium transition"
+              >
+                {recalculando ? 'Recalculando...' : 'Sim'}
+              </button>
+              <button
+                onClick={() => setConfirmRecalcular(false)}
+                className="h-6 px-2 bg-slate-700 hover:bg-slate-600 rounded text-xs text-slate-400 transition"
+              >
+                Não
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setConfirmRecalcular(true)}
+              className="h-8 px-3 bg-slate-700 hover:bg-slate-600 rounded-lg text-xs text-slate-300 transition flex items-center gap-1.5"
+              title="Recalcular snapshot de dados mensais para a unidade selecionada"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              Recalcular Dados Mensais
+            </button>
+          )}
+        </div>
+      )}
+
       {/* KPI Cards */}
       <section data-tour="alunos-kpis" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
         <KPICard
           title="Matrículas Ativas"
+          tooltip="Total de matriculas ativas incluindo primeiro curso, segundo curso, banda e coral."
           value={kpis.totalMatriculasAtivas}
           subvalue={`${kpis.matriculasSegundoCurso || 0} 2º curso | ${kpis.matriculasBanda || 0} banda | ${kpis.matriculasCoral || 0} coral`}
           icon={BookOpen}
@@ -1293,6 +1345,7 @@ export function AlunosPage() {
         />
         <KPICard
           title="Alunos Ativos"
+          tooltip="Alunos unicos ativos (sem contar segundo curso). Representa pessoas fisicas frequentando."
           value={kpis.totalAtivos}
           subvalue="na unidade"
           icon={Users}
@@ -1300,6 +1353,7 @@ export function AlunosPage() {
         />
         <KPICard
           title="Pagantes"
+          tooltip="Alunos com tipo de matricula que conta como pagante (exclui bolsa total e banda gratuita)."
           value={kpis.totalPagantes}
           subvalue={`${kpis.totalBolsistas} bolsistas`}
           icon={DollarSign}
@@ -1307,6 +1361,7 @@ export function AlunosPage() {
         />
         <KPICard
           title="Média/Turma"
+          tooltip="Media de alunos por turma. Calculado pela divisao do total de alunos pelo numero de turmas."
           value={kpis.mediaAlunosTurma.toFixed(2)}
           subvalue="alunos/turma"
           icon={BarChart3}
@@ -1314,6 +1369,7 @@ export function AlunosPage() {
         />
         <KPICard
           title="Ticket Médio"
+          tooltip="Valor medio da mensalidade. Considera apenas alunos com tipo de matricula que entra no calculo de ticket medio."
           value={`R$ ${kpis.ticketMedio}`}
           subvalue="mensal"
           icon={DollarSign}
@@ -1321,6 +1377,7 @@ export function AlunosPage() {
         />
         <KPICard
           title="T. Permanência"
+          tooltip="Tempo medio de permanencia dos alunos ativos em meses. Clique para ver o detalhamento por faixa."
           value={kpis.ltvMedio}
           subvalue="meses · clique para detalhar"
           icon={Clock}
