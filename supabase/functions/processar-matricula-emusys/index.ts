@@ -258,7 +258,7 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
     }).eq('id', alunoExistente.id);
 
     alunoId = alunoExistente.id;
-    action = 'aluno_atualizado';
+    action = 'atualizado';
   } else {
     const { data: newAluno } = await supabase.from('alunos').insert({
       nome: p.nomeAluno,
@@ -283,7 +283,7 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
     }).select('id').single();
 
     alunoId = newAluno?.id || null;
-    action = 'aluno_inserido';
+    action = 'inserido';
   }
 
   // Converter lead
@@ -323,7 +323,7 @@ async function handleRenovacao(supabase: any, p: Payload) {
     p_unidade_id: null, max_rows: 1,
   });
 
-  return { action: 'renovado', aluno_id: aluno.id };
+  return { action: 'status_ativo', aluno_id: aluno.id };
 }
 
 async function handleTrancamento(supabase: any, p: Payload) {
@@ -345,7 +345,7 @@ async function handleTrancamento(supabase: any, p: Payload) {
   const movRegistrada = await registrarMovimentacao(supabase, 'trancamento', p, aluno.id, aluno.professor_atual_id, aluno.curso_id, motivo);
 
   return {
-    action: 'trancado',
+    action: 'status_trancado',
     aluno_id: aluno.id,
     motivo,
     data_inicial: p.trancamentoDataInicial,
@@ -373,7 +373,7 @@ async function handleEvasao(supabase: any, p: Payload) {
   const movRegistrada = await registrarMovimentacao(supabase, 'evasao', p, aluno.id, aluno.professor_atual_id, aluno.curso_id, 'Via Emusys (automação)');
 
   return {
-    action: 'evadido',
+    action: 'status_evadido',
     aluno_id: aluno.id,
     movimentacao_registrada: movRegistrada,
   };

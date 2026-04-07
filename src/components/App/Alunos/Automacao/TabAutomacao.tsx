@@ -23,11 +23,13 @@ interface AutomacaoLogItem {
 const acaoStyles: Record<string, { bg: string; text: string; label: string }> = {
   inserido: { bg: 'bg-emerald-500/20', text: 'text-emerald-400', label: 'Novo Aluno' },
   atualizado: { bg: 'bg-blue-500/20', text: 'text-blue-400', label: 'Atualizado' },
-  status_ativo: { bg: 'bg-emerald-500/20', text: 'text-emerald-400', label: 'Renovado' },
+  status_ativo: { bg: 'bg-cyan-500/20', text: 'text-cyan-400', label: 'Renovado' },
   status_trancado: { bg: 'bg-amber-500/20', text: 'text-amber-400', label: 'Trancado' },
   status_evadido: { bg: 'bg-rose-500/20', text: 'text-rose-400', label: 'Evadido' },
   segundo_curso: { bg: 'bg-violet-500/20', text: 'text-violet-400', label: '2º Curso' },
   nao_encontrado: { bg: 'bg-amber-500/20', text: 'text-amber-400', label: 'Não Encontrado' },
+  erro_aluno_nao_encontrado: { bg: 'bg-rose-500/20', text: 'text-rose-400', label: 'Erro: Não Encontrado' },
+  evento_ignorado: { bg: 'bg-slate-500/20', text: 'text-slate-400', label: 'Ignorado' },
 };
 
 const eventoLabels: Record<string, string> = {
