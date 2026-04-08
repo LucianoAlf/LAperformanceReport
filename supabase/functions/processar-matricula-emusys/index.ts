@@ -141,10 +141,10 @@ async function resolverProfessorId(supabase: any, emusysId: number | null, unida
   return data?.[0]?.professor_id || null;
 }
 
-async function buscarAluno(supabase: any, nome: string, unidadeId: string): Promise<{ id: number; professor_atual_id: number | null; curso_id: number | null } | null> {
+async function buscarAluno(supabase: any, nome: string, unidadeId: string): Promise<{ id: number; professor_atual_id: number | null; curso_id: number | null; valor_parcela: number | null; numero_renovacoes: number | null } | null> {
   const { data } = await supabase
     .from('alunos')
-    .select('id, professor_atual_id, curso_id')
+    .select('id, professor_atual_id, curso_id, valor_parcela, numero_renovacoes')
     .eq('unidade_id', unidadeId)
     .ilike('nome', nome.trim())
     .limit(1);
@@ -310,20 +310,61 @@ async function handleRenovacao(supabase: any, p: Payload) {
     };
   }
 
-  await supabase.from('alunos').update({
-    data_ultima_renovacao: new Date().toISOString(),
-    numero_renovacoes: (aluno as any).numero_renovacoes ? (aluno as any).numero_renovacoes + 1 : 1,
-    status: 'ativo',
-    updated_at: new Date().toISOString(),
-  }).eq('id', aluno.id);
+  const professorId = await resolverProfessorId(supabase, p.professorEmusysId, p.unidadeId);
+  const cursoId = await resolverCursoId(supabase, p.nomeCurso);
+  const hoje = new Date().toISOString().split('T')[0];
 
-  // Incrementar via RPC (Supabase JS não suporta increment direto)
+  // Atualizar aluno: status, renovações, professor, curso, contrato
+  const alunoUpdate: any = {
+    status: 'ativo',
+    data_ultima_renovacao: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+  if (professorId) alunoUpdate.professor_atual_id = professorId;
+  if (cursoId) alunoUpdate.curso_id = cursoId;
+  if (p.diaAula) alunoUpdate.dia_aula = p.diaAula;
+  if (p.horarioAula) alunoUpdate.horario_aula = p.horarioAula;
+  if (p.dataInicioContrato) alunoUpdate.data_inicio_contrato = p.dataInicioContrato;
+  if (p.dataFimContrato) alunoUpdate.data_fim_contrato = p.dataFimContrato;
+
+  await supabase.from('alunos').update(alunoUpdate).eq('id', aluno.id);
+
+  // Incrementar numero_renovacoes via RPC
   await supabase.rpc('execute_bi_query_lamusic', {
     query_text: `UPDATE alunos SET numero_renovacoes = COALESCE(numero_renovacoes, 0) + 1 WHERE id = ${aluno.id}`,
     p_unidade_id: null, max_rows: 1,
   });
 
-  return { action: 'status_ativo', aluno_id: aluno.id };
+  // Dedup: verificar se já existe renovação deste aluno no mesmo mês
+  const inicioMes = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
+  const { data: existente } = await supabase.from('renovacoes')
+    .select('id')
+    .eq('aluno_id', aluno.id)
+    .gte('data_renovacao', inicioMes)
+    .limit(1);
+
+  let renovacaoInserida = false;
+  if (!existente?.length) {
+    await supabase.from('renovacoes').insert({
+      aluno_id: aluno.id,
+      unidade_id: p.unidadeId,
+      data_renovacao: hoje,
+      valor_parcela_anterior: aluno.valor_parcela || null,
+      status: 'renovado',
+      professor_id: professorId || aluno.professor_atual_id || null,
+      observacoes: `Automático via Emusys — ${p.nomeCurso || 'curso não informado'}`,
+    });
+    renovacaoInserida = true;
+  }
+
+  return {
+    action: 'renovado',
+    aluno_id: aluno.id,
+    professor_id: professorId,
+    curso_id: cursoId,
+    renovacao_inserida: renovacaoInserida,
+    dedup: !renovacaoInserida,
+  };
 }
 
 async function handleTrancamento(supabase: any, p: Payload) {

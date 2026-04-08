@@ -124,13 +124,8 @@ export function ModalAdicionarAlunoTurma({
 
   // Calcular idade média da turma para filtro de idade próxima
   const idadeMediaTurma = useMemo(() => {
-    const alunosDaTurma = alunosDisponiveis.filter(a => turma.ids_alunos?.includes(a.id));
-    
-    console.log('🔍 Debug idade média:', {
-      totalAlunosTurma: alunosDaTurma.length,
-      idades: alunosDaTurma.map(a => ({ nome: a.nome, idade: a.idade_atual })),
-      turmaIds: turma.ids_alunos
-    });
+    const todosAlunos = alunosDisponiveis.flatMap(a => [a, ...(a.outros_cursos || [])]);
+    const alunosDaTurma = todosAlunos.filter(a => turma.ids_alunos?.includes(a.id));
     
     if (alunosDaTurma.length === 0) return null;
     
@@ -140,8 +135,6 @@ export function ModalAdicionarAlunoTurma({
     
     const somaIdades = alunosComIdade.reduce((sum, a) => sum + (a.idade_atual || 0), 0);
     const media = Math.round(somaIdades / alunosComIdade.length);
-    
-    console.log('📊 Idade média calculada:', media);
     
     return media;
   }, [alunosDisponiveis, turma.ids_alunos]);
