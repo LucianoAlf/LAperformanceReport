@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Loader2, User, Key, Check, AlertCircle, Camera, X } from 'lucide-react';
+import { Loader2, User, Key, Check, AlertCircle, Camera, X, Phone } from 'lucide-react';
 import { ImageCropModal } from './ImageCropModal';
 
 interface ModalEditarPerfilProps {
@@ -25,6 +25,7 @@ export function ModalEditarPerfil({ open, onOpenChange }: ModalEditarPerfilProps
   // Campos do perfil
   const [nome, setNome] = useState('');
   const [apelido, setApelido] = useState('');
+  const [telefone, setTelefone] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
 
@@ -41,6 +42,7 @@ export function ModalEditarPerfil({ open, onOpenChange }: ModalEditarPerfilProps
     if (open && usuario) {
       setNome(usuario.nome || '');
       setApelido(usuario.apelido || '');
+      setTelefone(usuario.telefone || '');
       setAvatarUrl(usuario.avatar_url || null);
       setAvatarPreview(null);
       setMessage(null);
@@ -131,6 +133,7 @@ export function ModalEditarPerfil({ open, onOpenChange }: ModalEditarPerfilProps
         .update({
           nome: nome.trim(),
           apelido: apelido.trim() || null,
+          telefone: telefone.trim() || null,
           avatar_url: avatarUrl,
         })
         .eq('id', usuario.id);
@@ -312,6 +315,19 @@ export function ModalEditarPerfil({ open, onOpenChange }: ModalEditarPerfilProps
                 value={apelido}
                 onChange={(e) => setApelido(e.target.value)}
                 placeholder="Como você quer ser chamado"
+                className="bg-slate-900 border-slate-600"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label className="flex items-center gap-1.5">
+                <Phone className="w-3.5 h-3.5" />
+                Telefone (opcional)
+              </Label>
+              <Input
+                value={telefone}
+                onChange={(e) => setTelefone(e.target.value)}
+                placeholder="(21) 99999-9999"
                 className="bg-slate-900 border-slate-600"
               />
             </div>

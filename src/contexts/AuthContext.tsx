@@ -7,6 +7,7 @@ export interface Usuario {
   email: string;
   nome: string;
   apelido?: string;
+  telefone?: string;
   avatar_url?: string;
   perfil: 'admin' | 'unidade';
   unidade_id: string | null;
