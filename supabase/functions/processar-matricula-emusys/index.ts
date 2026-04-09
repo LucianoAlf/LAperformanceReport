@@ -72,6 +72,8 @@ interface Payload {
   trancamentoMotivo: string | null;
   trancamentoDataInicial: string | null;
   trancamentoDataFinal: string | null;
+  finalizacaoMotivo: string | null;
+  finalizacaoObservacoes: string | null;
   rawPayload: any; // payload completo para debug
 }
 
@@ -85,6 +87,7 @@ function parsePayload(body: any): Payload | null {
   const disc = m.disciplinas?.[0];
   const agend = disc?.agendamentos?.[0];
   const tranc = body.trancamento;
+  const finaliz = body.finalizacao;
 
   return {
     evento: body.evento,
@@ -112,6 +115,8 @@ function parsePayload(body: any): Payload | null {
     trancamentoMotivo: tranc?.motivo || null,
     trancamentoDataInicial: tranc?.data_inicial || null,
     trancamentoDataFinal: tranc?.data_final || null,
+    finalizacaoMotivo: finaliz?.motivo || null,
+    finalizacaoObservacoes: finaliz?.observacoes || null,
     rawPayload: body,
   };
 }
@@ -411,11 +416,14 @@ async function handleEvasao(supabase: any, p: Payload) {
     updated_at: new Date().toISOString(),
   }).eq('id', aluno.id);
 
-  const movRegistrada = await registrarMovimentacao(supabase, 'evasao', p, aluno.id, aluno.professor_atual_id, aluno.curso_id, 'Via Emusys (automação)');
+  const motivo = p.finalizacaoMotivo || 'Via Emusys (automação)';
+  const movRegistrada = await registrarMovimentacao(supabase, 'evasao', p, aluno.id, aluno.professor_atual_id, aluno.curso_id, motivo);
 
   return {
     action: 'status_evadido',
     aluno_id: aluno.id,
+    motivo,
+    observacoes: p.finalizacaoObservacoes,
     movimentacao_registrada: movRegistrada,
   };
 }
