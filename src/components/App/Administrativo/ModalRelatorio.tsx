@@ -589,7 +589,7 @@ export function ModalRelatorio({
         const reajuste = r.valor_parcela_anterior && r.valor_parcela_novo
           ? ((r.valor_parcela_novo - r.valor_parcela_anterior) / r.valor_parcela_anterior) * 100
           : 0;
-        const dataFormatada = new Date(r.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+        const dataFormatada = new Date(r.data + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
         texto += `${i + 1}. *${r.aluno_nome}*\n`;
         texto += `   📅 ${dataFormatada}\n`;
         texto += `   💰 R$ ${(r.valor_parcela_anterior || 0).toFixed(2)} → R$ ${(r.valor_parcela_novo || 0).toFixed(2)} (*+${reajuste.toFixed(0)}%*)\n`;
@@ -621,7 +621,7 @@ export function ModalRelatorio({
       texto += `📋 *LISTA DE AVISOS*\n`;
       texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
       avisosPrevios.forEach((a, i) => {
-        const dataAviso = new Date(a.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+        const dataAviso = new Date(a.data + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
         const mesSaida = a.mes_saida ? new Date(a.mes_saida).toLocaleDateString('pt-BR', { month: 'long' }) : 'N/A';
         texto += `${i + 1}. *${a.aluno_nome}*\n`;
         texto += `   📅 Aviso: ${dataAviso} | 📆 Sai em: ${mesSaida}\n`;
@@ -683,7 +683,7 @@ export function ModalRelatorio({
           e.tipo_evasao === 'interrompido_2_curso' ? '⏸️ 2º Curso' :
           e.tipo_evasao === 'interrompido_bolsista' ? '⏸️ Bolsista' :
           e.tipo_evasao === 'interrompido_banda' ? '⏸️ Banda' : e.tipo_evasao || 'N/A';
-        const dataFormatada = new Date(e.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+        const dataFormatada = new Date(e.data + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
         texto += `${i + 1}. *${e.aluno_nome}*\n`;
         texto += `   📅 ${dataFormatada} | ${tipoLabel}\n`;
         if (e.valor_parcela_evasao) {

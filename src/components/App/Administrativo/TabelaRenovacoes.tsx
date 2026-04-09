@@ -57,7 +57,7 @@ export function TabelaRenovacoes({ data, onEdit, onDelete }: TabelaRenovacoesPro
                 <tr key={item.id} className="border-t border-slate-700/30 hover:bg-slate-800/30">
                   <td className="py-3 px-4 text-slate-500">{index + 1}</td>
                   <td className="py-3 px-4 text-slate-300">
-                    {new Date(item.data).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                    {new Date(item.data + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
                   </td>
                   <td className="py-3 px-4 text-white font-medium">{item.aluno_nome}</td>
                   <td className="py-3 px-4 text-slate-300 text-sm">{item.curso_nome || '-'}</td>
