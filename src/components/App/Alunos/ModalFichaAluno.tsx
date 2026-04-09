@@ -494,9 +494,13 @@ export function ModalFichaAluno({
       <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
-              <User className="w-5 h-5 text-purple-400" />
-            </div>
+            {aluno?.foto_url ? (
+              <img src={aluno.foto_url} alt={formData.nome} className="w-10 h-10 rounded-full object-cover border-2 border-purple-500/50" />
+            ) : (
+              <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
+                <User className="w-5 h-5 text-purple-400" />
+              </div>
+            )}
             <div>
               <span className="text-lg">Ficha do Aluno</span>
               <p className="text-sm text-slate-400 font-normal">{formData.nome || 'Sem nome'}</p>

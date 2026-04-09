@@ -1441,6 +1441,10 @@ export function TabelaAlunos({
                   {/* Nome - Clicável para abrir ficha */}
                   <td className="px-4 py-2">
                     <div className="flex items-center gap-1">
+                      {/* Avatar do aluno */}
+                      {aluno.foto_url ? (
+                        <img src={aluno.foto_url} alt="" className="w-6 h-6 rounded-full object-cover flex-shrink-0" />
+                      ) : null}
                       {/* Botão de expansão apenas para alunos com segundo curso */}
                       {aluno.outros_cursos && aluno.outros_cursos.length > 0 && (
                         <button
