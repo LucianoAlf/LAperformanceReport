@@ -519,12 +519,16 @@ export function ModalAdicionarAlunoTurma({
                         className={`p-3 rounded-lg border cursor-pointer transition ${getBgClass()}`}
                       >
                         <div className="flex items-center gap-3">
-                          <div className={`
-                            w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center text-sm font-bold
-                            ${isSelected ? 'bg-purple-500' : temMesmoCurso ? 'bg-emerald-500' : temIdadeProxima ? 'bg-violet-500' : 'bg-slate-600'}
-                          `}>
-                            {aluno.nome.charAt(0)}
-                          </div>
+                          {aluno.foto_url ? (
+                            <img src={aluno.foto_url} alt="" className="w-8 h-8 flex-shrink-0 rounded-full object-cover" />
+                          ) : (
+                            <div className={`
+                              w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center text-sm font-bold
+                              ${isSelected ? 'bg-purple-500' : temMesmoCurso ? 'bg-emerald-500' : temIdadeProxima ? 'bg-violet-500' : 'bg-slate-600'}
+                            `}>
+                              {aluno.nome.charAt(0)}
+                            </div>
+                          )}
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <p className="text-sm font-medium text-white truncate">{aluno.nome}</p>

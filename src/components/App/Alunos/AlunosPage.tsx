@@ -1190,9 +1190,17 @@ export function AlunosPage() {
                 turmaDetalheAbrir.nomes_alunos.map((nome, index) => (
                   <div key={index} className="flex items-center justify-between bg-slate-700/50 rounded-lg p-3">
                     <div className="flex items-center gap-3">
-                      <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center text-sm font-bold">
-                        {nome.charAt(0)}
-                      </div>
+                      {(() => {
+                        const alunoId = turmaDetalheAbrir.ids_alunos?.[index];
+                        const foto = alunoId ? alunos.find(a => a.id === alunoId)?.foto_url : null;
+                        return foto ? (
+                          <img src={foto} alt="" className="w-8 h-8 rounded-full object-cover flex-shrink-0" />
+                        ) : (
+                          <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center text-sm font-bold">
+                            {nome.charAt(0)}
+                          </div>
+                        );
+                      })()}
                       <div>
                         <p className="font-medium">{nome}</p>
                       </div>

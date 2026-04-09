@@ -495,10 +495,10 @@ export function ModalFichaAluno({
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-3">
             {aluno?.foto_url ? (
-              <img src={aluno.foto_url} alt={formData.nome} className="w-10 h-10 rounded-full object-cover border-2 border-purple-500/50" />
+              <img src={aluno.foto_url} alt={formData.nome} className="w-14 h-14 rounded-full object-cover border-2 border-purple-500/50" />
             ) : (
-              <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
-                <User className="w-5 h-5 text-purple-400" />
+              <div className="w-14 h-14 rounded-full bg-purple-500/20 flex items-center justify-center">
+                <User className="w-6 h-6 text-purple-400" />
               </div>
             )}
             <div>

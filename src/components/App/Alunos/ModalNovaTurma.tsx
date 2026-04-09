@@ -940,14 +940,18 @@ export function ModalNovaTurma({
                         }`}
                       >
                         {/* Avatar */}
-                        <div className={`w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center text-xs font-bold ${
-                          conflitoHorario ? 'bg-slate-700 text-slate-500' :
-                          mesmoCurso ? 'bg-emerald-500/30 text-emerald-300' :
-                          mesmoProfessor ? 'bg-purple-500/30 text-purple-300' :
-                          'bg-slate-700 text-slate-300'
-                        }`}>
-                          {aluno.nome.charAt(0)}
-                        </div>
+                        {aluno.foto_url ? (
+                          <img src={aluno.foto_url} alt="" className="w-8 h-8 flex-shrink-0 rounded-full object-cover" />
+                        ) : (
+                          <div className={`w-8 h-8 flex-shrink-0 rounded-full flex items-center justify-center text-xs font-bold ${
+                            conflitoHorario ? 'bg-slate-700 text-slate-500' :
+                            mesmoCurso ? 'bg-emerald-500/30 text-emerald-300' :
+                            mesmoProfessor ? 'bg-purple-500/30 text-purple-300' :
+                            'bg-slate-700 text-slate-300'
+                          }`}>
+                            {aluno.nome.charAt(0)}
+                          </div>
+                        )}
 
                         {/* Info */}
                         <div className="flex-1 min-w-0">

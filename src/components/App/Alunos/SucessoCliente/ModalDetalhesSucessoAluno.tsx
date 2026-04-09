@@ -36,6 +36,7 @@ interface AlunoSucesso {
   ultimo_feedback: string | null;
   total_acoes: number;
   metas_ativas: number;
+  foto_url?: string | null;
 }
 
 interface Meta {
@@ -413,9 +414,13 @@ export function ModalDetalhesSucessoAluno({ open, onClose, aluno, competencia }:
         <DialogHeader className="border-b border-slate-700 pb-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
-              <div className={`w-14 h-14 rounded-full bg-gradient-to-br ${getGradientByStatus(aluno.health_status || 'atencao')} flex items-center justify-center text-white font-bold text-xl`}>
-                {getIniciais(aluno.nome)}
-              </div>
+              {aluno.foto_url ? (
+                <img src={aluno.foto_url} alt="" className="w-14 h-14 rounded-full object-cover flex-shrink-0 border-2 border-purple-500/50" />
+              ) : (
+                <div className={`w-14 h-14 rounded-full bg-gradient-to-br ${getGradientByStatus(aluno.health_status || 'atencao')} flex items-center justify-center text-white font-bold text-xl`}>
+                  {getIniciais(aluno.nome)}
+                </div>
+              )}
               <div>
                 <DialogTitle className="text-xl font-bold text-white">{aluno.nome}</DialogTitle>
                 <p className="text-slate-400 text-sm">

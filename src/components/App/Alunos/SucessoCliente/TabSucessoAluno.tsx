@@ -43,6 +43,7 @@ interface AlunoSucesso {
   ultimo_feedback: string | null;
   total_acoes: number;
   metas_ativas: number;
+  foto_url: string | null;
 }
 
 interface AlertaSaude {
@@ -530,9 +531,13 @@ export function TabSucessoAluno({ unidadeAtual }: Props) {
                   >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${getGradientByStatus(aluno.health_status || 'atencao')} flex items-center justify-center text-white font-bold text-sm`}>
-                          {getIniciais(aluno.nome)}
-                        </div>
+                        {aluno.foto_url ? (
+                          <img src={aluno.foto_url} alt="" className="w-10 h-10 rounded-full object-cover flex-shrink-0" />
+                        ) : (
+                          <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${getGradientByStatus(aluno.health_status || 'atencao')} flex items-center justify-center text-white font-bold text-sm`}>
+                            {getIniciais(aluno.nome)}
+                          </div>
+                        )}
                         <div>
                           <p className="text-white font-medium">{aluno.nome}</p>
                           <p className="text-slate-400 text-xs">{aluno.curso_nome || 'Sem curso'}</p>
