@@ -420,10 +420,14 @@ async function handleTrancamento(supabase: any, p: Payload) {
     };
   }
 
-  await supabase.from('alunos').update({
+  const trancUpdate: any = {
     status: 'trancado',
     updated_at: new Date().toISOString(),
-  }).eq('id', aluno.id);
+  };
+  if (p.fotoAlunoUrl) trancUpdate.foto_url = p.fotoAlunoUrl;
+  if (p.instagram) trancUpdate.instagram = p.instagram;
+
+  await supabase.from('alunos').update(trancUpdate).eq('id', aluno.id);
 
   const motivo = p.trancamentoMotivo || 'Via Emusys (automação)';
   const movRegistrada = await registrarMovimentacao(supabase, 'trancamento', p, aluno.id, aluno.professor_atual_id, aluno.curso_id, motivo);
@@ -448,11 +452,15 @@ async function handleEvasao(supabase: any, p: Payload) {
     };
   }
 
-  await supabase.from('alunos').update({
+  const evasaoUpdate: any = {
     status: 'evadido',
     data_saida: new Date().toISOString().split('T')[0],
     updated_at: new Date().toISOString(),
-  }).eq('id', aluno.id);
+  };
+  if (p.fotoAlunoUrl) evasaoUpdate.foto_url = p.fotoAlunoUrl;
+  if (p.instagram) evasaoUpdate.instagram = p.instagram;
+
+  await supabase.from('alunos').update(evasaoUpdate).eq('id', aluno.id);
 
   const motivo = p.finalizacaoMotivo || 'Via Emusys (automação)';
   const movRegistrada = await registrarMovimentacao(supabase, 'evasao', p, aluno.id, aluno.professor_atual_id, aluno.curso_id, motivo);
