@@ -29,6 +29,7 @@ import { TabAgendaProfessores } from './TabAgendaProfessores';
 import { TabCarteiraProfessores } from './TabCarteiraProfessores';
 import { Tab360Professores } from './Tab360Professores';
 import { HealthScoreConfig } from './HealthScoreConfig';
+import { MotivosScoreConfig } from './MotivosScoreConfig';
 import { FatorDemandaCursos } from './FatorDemandaCursos';
 import { ChecklistsTab } from '../Administrativo/PainelFarmer/ChecklistsTab';
 import { useHealthScoreConfig } from '@/hooks/useHealthScoreConfig';
@@ -680,6 +681,9 @@ export function ProfessoresPage() {
               }
             }}
           />
+
+          {/* Motivos de Evasão que Contam no Score */}
+          <MotivosScoreConfig />
 
           {/* Fator de Demanda por Curso */}
           <FatorDemandaCursos 

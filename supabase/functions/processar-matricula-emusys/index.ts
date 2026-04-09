@@ -200,10 +200,11 @@ async function converterLead(supabase: any, p: Payload): Promise<{ leadId: numbe
     leadId = data?.[0]?.id || null;
   }
 
-  // 2. Buscar por telefone + unidade
-  if (!leadId && p.telefoneAluno) {
+  // 2. Buscar por telefone + unidade (fallback para telefone_responsavel em alunos Kids)
+  const telefoneBusca = p.telefoneAluno || p.telefoneResponsavel;
+  if (!leadId && telefoneBusca) {
     const { data } = await supabase.from('leads').select('id')
-      .eq('telefone', p.telefoneAluno).eq('unidade_id', p.unidadeId).eq('arquivado', false).limit(1);
+      .eq('telefone', telefoneBusca).eq('unidade_id', p.unidadeId).eq('arquivado', false).limit(1);
     leadId = data?.[0]?.id || null;
   }
 
@@ -400,12 +401,21 @@ async function handleRenovacao(supabase: any, p: Payload) {
     renovacaoInserida = true;
   }
 
+  // Registrar na movimentacoes_admin (mesmo padrão do trancamento/evasão)
+  const movRegistrada = await registrarMovimentacao(
+    supabase, 'renovacao', p, aluno.id,
+    professorId || aluno.professor_atual_id || null,
+    cursoId || aluno.curso_id || null,
+    `Renovação automática via Emusys — ${p.nomeCurso || 'curso não informado'}`
+  );
+
   return {
     action: 'renovado',
     aluno_id: aluno.id,
     professor_id: professorId,
     curso_id: cursoId,
     renovacao_inserida: renovacaoInserida,
+    movimentacao_registrada: movRegistrada,
     dedup: !renovacaoInserida,
   };
 }

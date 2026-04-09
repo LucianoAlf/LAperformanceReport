@@ -2,6 +2,7 @@ import { GitCompare, TrendingDown, DollarSign, Users, UserPlus, RefreshCcw, Perc
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Cell } from 'recharts';
 import { useEvasoesData } from '../../hooks/useEvasoesData';
 import { useProfessoresPerformance } from '../../hooks/useProfessoresPerformance';
+import { useMotivosScoreProfessor } from '../../hooks/useMotivosScoreProfessor';
 
 interface RetencaoComparativoProps {
   ano: number;
@@ -9,7 +10,8 @@ interface RetencaoComparativoProps {
 
 export function RetencaoComparativo({ ano }: RetencaoComparativoProps) {
   const { dadosPorUnidade, loading } = useEvasoesData(ano, 'Consolidado');
-  const { porUnidade: performancePorUnidade, totais, loading: loadingPerformance } = useProfessoresPerformance(ano);
+  const { idsQueContam } = useMotivosScoreProfessor();
+  const { porUnidade: performancePorUnidade, totais, loading: loadingPerformance } = useProfessoresPerformance(ano, undefined, idsQueContam);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {

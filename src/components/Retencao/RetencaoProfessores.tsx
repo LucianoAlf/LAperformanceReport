@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { Users, AlertTriangle, TrendingDown, ArrowUpDown, Filter, GraduationCap } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ScatterChart, Scatter, ZAxis } from 'recharts';
 import { useProfessoresPerformance } from '../../hooks/useProfessoresPerformance';
+import { useMotivosScoreProfessor } from '../../hooks/useMotivosScoreProfessor';
 import { UnidadeRetencao } from '../../types/retencao';
 
 interface RetencaoProfessoresProps {
@@ -12,7 +13,8 @@ interface RetencaoProfessoresProps {
 type OrdenacaoTipo = 'evasoes' | 'taxa_renovacao' | 'taxa_conversao' | 'score_saude';
 
 export function RetencaoProfessores({ ano, unidade }: RetencaoProfessoresProps) {
-  const { professores, porRisco, loading } = useProfessoresPerformance(ano, unidade === 'Consolidado' ? undefined : unidade);
+  const { idsQueContam } = useMotivosScoreProfessor();
+  const { professores, porRisco, loading } = useProfessoresPerformance(ano, unidade === 'Consolidado' ? undefined : unidade, idsQueContam);
   const [ordenarPor, setOrdenarPor] = useState<OrdenacaoTipo>('evasoes');
   const [filtroRisco, setFiltroRisco] = useState<string>('todos');
 

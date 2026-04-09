@@ -323,7 +323,7 @@ async function confirmarExperimentais(
     }
 
     // Buscar aula experimental no aulas_emusys
-    const { data: aulasMatch } = await supabase
+    let { data: aulasMatch } = await supabase
       .from('aulas_emusys')
       .select('id, data_hora_inicio, cancelada')
       .eq('data_aula', exp.data_experimental)
@@ -331,6 +331,27 @@ async function confirmarExperimentais(
       .eq('unidade_id', exp.unidade_id)
       .eq('categoria', 'experimental')
       .limit(5);
+
+    // Fallback: se não encontrou com professor, buscar por data+unidade+categoria
+    // (professor pode ter mudado no reagendamento)
+    if (!aulasMatch?.length && exp.horario_experimental) {
+      const { data: aulasFallback } = await supabase
+        .from('aulas_emusys')
+        .select('id, data_hora_inicio, cancelada')
+        .eq('data_aula', exp.data_experimental)
+        .eq('unidade_id', exp.unidade_id)
+        .eq('categoria', 'experimental')
+        .limit(10);
+
+      if (aulasFallback?.length) {
+        const horaExp = exp.horario_experimental.slice(0, 5);
+        const matchHorario = aulasFallback.find((a: any) => {
+          const horaAula = new Date(a.data_hora_inicio).toISOString().slice(11, 16);
+          return horaAula === horaExp;
+        });
+        if (matchHorario) aulasMatch = [matchHorario];
+      }
+    }
 
     const unidadeNome = unidadeNomes.get(exp.unidade_id) || exp.unidade_id;
 

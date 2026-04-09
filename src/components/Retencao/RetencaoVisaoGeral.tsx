@@ -1,6 +1,7 @@
 import { Users, DollarSign, TrendingDown, AlertTriangle, Target, UserMinus, RefreshCcw, FileText, CheckCircle, Percent, XCircle, BarChart3 } from 'lucide-react';
 import { useEvasoesData } from '../../hooks/useEvasoesData';
 import { useProfessoresPerformance } from '../../hooks/useProfessoresPerformance';
+import { useMotivosScoreProfessor } from '../../hooks/useMotivosScoreProfessor';
 import { UnidadeRetencao } from '../../types/retencao';
 
 interface RetencaoVisaoGeralProps {
@@ -12,7 +13,8 @@ interface RetencaoVisaoGeralProps {
 
 export function RetencaoVisaoGeral({ ano, unidade, onAnoChange, onUnidadeChange }: RetencaoVisaoGeralProps) {
   const { kpis, dadosPorUnidade, loading } = useEvasoesData(ano, unidade);
-  const { totais: totaisPerformance, loading: loadingPerformance } = useProfessoresPerformance(ano, unidade === 'Consolidado' ? undefined : unidade);
+  const { idsQueContam } = useMotivosScoreProfessor();
+  const { totais: totaisPerformance, loading: loadingPerformance } = useProfessoresPerformance(ano, unidade === 'Consolidado' ? undefined : unidade, idsQueContam);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', {

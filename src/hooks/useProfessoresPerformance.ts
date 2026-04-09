@@ -30,14 +30,14 @@ export interface TotaisPerformance {
   totalProfessores: number;
 }
 
-export function useProfessoresPerformance(ano: number = new Date().getFullYear(), unidade?: string) {
+export function useProfessoresPerformance(ano: number = new Date().getFullYear(), unidade?: string, idsMotivosQueContam?: number[]) {
   const [professores, setProfessores] = useState<ProfessorPerformance[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     fetchProfessores();
-  }, [ano, unidade]);
+  }, [ano, unidade, idsMotivosQueContam?.join(',')]);
 
   const fetchProfessores = async () => {
     setLoading(true);
@@ -58,19 +58,49 @@ export function useProfessoresPerformance(ano: number = new Date().getFullYear()
 
       if (queryError) throw queryError;
 
+      // Buscar evasões filtradas por motivos que contam no score
+      let evasoesFiltradas: Record<number, number> | null = null;
+      if (idsMotivosQueContam && idsMotivosQueContam.length > 0) {
+        let evasaoQuery = supabase
+          .from('movimentacoes_admin')
+          .select('professor_id')
+          .in('tipo', ['evasao', 'nao_renovacao'])
+          .not('professor_id', 'is', null)
+          .gte('data', `${ano}-01-01`)
+          .lte('data', `${ano}-12-31`);
+
+        // Filtrar: motivo_saida_id IN (ids que contam) OU motivo_saida_id IS NULL (sem motivo = conta)
+        evasaoQuery = evasaoQuery.or(`motivo_saida_id.in.(${idsMotivosQueContam.join(',')}),motivo_saida_id.is.null`);
+
+        const { data: evasaoData } = await evasaoQuery;
+
+        if (evasaoData) {
+          evasoesFiltradas = {};
+          for (const row of evasaoData) {
+            const pid = row.professor_id as number;
+            evasoesFiltradas[pid] = (evasoesFiltradas[pid] || 0) + 1;
+          }
+        }
+      }
+
       // Calcular score de saúde e nível de risco
       const processados = (data || []).map(prof => {
         const scoreConversao = (prof.taxa_conversao || 0) * 0.4;
         const scoreRenovacao = (prof.taxa_renovacao || 0) * 0.6;
         const score_saude = scoreConversao + scoreRenovacao;
-        
+
+        // Usar evasões filtradas se disponível, senão usar o total da view
+        const evasoesParaRisco = evasoesFiltradas !== null
+          ? (evasoesFiltradas[prof.id] || 0)
+          : prof.evasoes;
+
         let nivel_risco: 'crítico' | 'alto' | 'médio' | 'normal';
-        if (prof.evasoes >= 15) nivel_risco = 'crítico';
-        else if (prof.evasoes >= 10) nivel_risco = 'alto';
-        else if (prof.evasoes >= 5) nivel_risco = 'médio';
+        if (evasoesParaRisco >= 15) nivel_risco = 'crítico';
+        else if (evasoesParaRisco >= 10) nivel_risco = 'alto';
+        else if (evasoesParaRisco >= 5) nivel_risco = 'médio';
         else nivel_risco = 'normal';
 
-        return { ...prof, score_saude, nivel_risco };
+        return { ...prof, evasoes: evasoesParaRisco, score_saude, nivel_risco };
       });
 
       setProfessores(processados);
