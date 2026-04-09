@@ -74,6 +74,9 @@ interface Payload {
   trancamentoDataFinal: string | null;
   finalizacaoMotivo: string | null;
   finalizacaoObservacoes: string | null;
+  emusysCursoId: number | null;
+  fotoAlunoUrl: string | null;
+  instagram: string | null;
   rawPayload: any; // payload completo para debug
 }
 
@@ -117,22 +120,51 @@ function parsePayload(body: any): Payload | null {
     trancamentoDataFinal: tranc?.data_final || null,
     finalizacaoMotivo: finaliz?.motivo || null,
     finalizacaoObservacoes: finaliz?.observacoes || null,
+    emusysCursoId: m.curso_id ? Number(m.curso_id) : null,
+    fotoAlunoUrl: m.foto_aluno_url || null,
+    instagram: m.campos_personalizados_aluno?.find((c: any) => c.nome === 'Instagram')?.valor || null,
     rawPayload: body,
   };
 }
 
 // ==================== RESOLVERS ====================
 
-async function resolverCursoId(supabase: any, nomeCurso: string | null): Promise<number | null> {
+async function resolverCursoId(supabase: any, nomeCurso: string | null, emusysCursoId: number | null = null): Promise<number | null> {
+  // 1. Tentar match por emusys_curso_id (exato)
+  if (emusysCursoId) {
+    const { data } = await supabase
+      .from('cursos')
+      .select('id')
+      .contains('emusys_ids', [emusysCursoId])
+      .limit(1);
+    if (data?.[0]?.id) return data[0].id;
+  }
+
+  // 2. Fallback: match por nome
   if (!nomeCurso) return null;
   const nome = nomeCurso.trim();
   const { data } = await supabase
     .from('cursos')
-    .select('id')
+    .select('id, emusys_ids')
     .or(`nome.ilike.${nome},nome.ilike.${nome}%`)
     .order('nome')
     .limit(1);
-  return data?.[0]?.id || null;
+
+  const curso = data?.[0];
+  if (!curso) return null;
+
+  // 3. Auto-preencher emusys_ids se encontrou por nome e temos o emusys_curso_id
+  if (emusysCursoId && curso.id) {
+    const idsAtuais = curso.emusys_ids || [];
+    if (!idsAtuais.includes(emusysCursoId)) {
+      await supabase
+        .from('cursos')
+        .update({ emusys_ids: [...idsAtuais, emusysCursoId] })
+        .eq('id', curso.id);
+    }
+  }
+
+  return curso.id;
 }
 
 async function resolverProfessorId(supabase: any, emusysId: number | null, unidadeId: string): Promise<number | null> {
@@ -236,7 +268,7 @@ async function registrarMovimentacao(
 // ==================== HANDLERS ====================
 
 async function handleMatriculaNova(supabase: any, p: Payload) {
-  const cursoId = await resolverCursoId(supabase, p.nomeCurso);
+  const cursoId = await resolverCursoId(supabase, p.nomeCurso, p.emusysCursoId);
   const professorId = await resolverProfessorId(supabase, p.professorEmusysId, p.unidadeId);
   const alunoExistente = await buscarAluno(supabase, p.nomeAluno, p.unidadeId);
 
@@ -259,6 +291,8 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
       horario_aula: p.horarioAula || undefined,
       curso_id: cursoId || undefined,
       professor_atual_id: professorId || undefined,
+      foto_url: p.fotoAlunoUrl || undefined,
+      instagram: p.instagram || undefined,
       updated_at: new Date().toISOString(),
     }).eq('id', alunoExistente.id);
 
@@ -283,6 +317,8 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
       curso_id: cursoId,
       professor_atual_id: professorId,
       professor_experimental_id: professorId,
+      foto_url: p.fotoAlunoUrl,
+      instagram: p.instagram,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     }).select('id').single();
@@ -316,7 +352,7 @@ async function handleRenovacao(supabase: any, p: Payload) {
   }
 
   const professorId = await resolverProfessorId(supabase, p.professorEmusysId, p.unidadeId);
-  const cursoId = await resolverCursoId(supabase, p.nomeCurso);
+  const cursoId = await resolverCursoId(supabase, p.nomeCurso, p.emusysCursoId);
   const hoje = new Date().toISOString().split('T')[0];
 
   // Atualizar aluno: status, renovações, professor, curso, contrato
@@ -331,6 +367,8 @@ async function handleRenovacao(supabase: any, p: Payload) {
   if (p.horarioAula) alunoUpdate.horario_aula = p.horarioAula;
   if (p.dataInicioContrato) alunoUpdate.data_inicio_contrato = p.dataInicioContrato;
   if (p.dataFimContrato) alunoUpdate.data_fim_contrato = p.dataFimContrato;
+  if (p.fotoAlunoUrl) alunoUpdate.foto_url = p.fotoAlunoUrl;
+  if (p.instagram) alunoUpdate.instagram = p.instagram;
 
   await supabase.from('alunos').update(alunoUpdate).eq('id', aluno.id);
 
