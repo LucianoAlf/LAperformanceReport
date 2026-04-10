@@ -3253,10 +3253,10 @@ export function ComercialPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="novos_alunos">Novos alunos (do período)</SelectItem>
-                  <SelectItem value="todos">Todas (do período)</SelectItem>
+                  <SelectItem value="novos_alunos">Novos alunos</SelectItem>
+                  <SelectItem value="todos">Leads do período</SelectItem>
                   <SelectItem value="segundo_curso">Segundo curso / Banda</SelectItem>
-                  <SelectItem value="por_data_matricula">Por data de matrícula</SelectItem>
+                  <SelectItem value="por_data_matricula">Convertidos no período</SelectItem>
                 </SelectContent>
               </Select>
             )}
