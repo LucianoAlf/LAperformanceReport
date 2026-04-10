@@ -28,6 +28,7 @@ import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
 import { TipoCompetencia, CompetenciaFiltro, CompetenciaRange } from '@/hooks/useCompetenciaFiltro';
 import { useMetasKPI } from '@/hooks/useMetasKPI';
 import { KPICard } from '@/components/ui/KPICard';
+import { ModalDetalheKPI } from './ModalDetalheKPI';
 
 
 interface OutletContextType {
@@ -117,6 +118,11 @@ export function DashboardPage() {
   const [evolucaoAlunos, setEvolucaoAlunos] = useState<{ mes: string; valor: number }[]>([]);
   const [funilComercial, setFunilComercial] = useState<{ etapa: string; valor: number; cor: string }[]>([]);
   const [resumoUnidades, setResumoUnidades] = useState<ResumoUnidade[]>([]);
+  const [modalMatriculas, setModalMatriculas] = useState(false);
+  const [modalEvasoes, setModalEvasoes] = useState(false);
+  const [dadosModalMatriculas, setDadosModalMatriculas] = useState<any[]>([]);
+  const [dadosModalEvasoes, setDadosModalEvasoes] = useState<any[]>([]);
+  const [carregandoModal, setCarregandoModal] = useState(false);
 
   // Pegar filtros do contexto
   const context = useOutletContext<OutletContextType>();
@@ -129,6 +135,7 @@ export function DashboardPage() {
   const mesFim = competencia?.range?.mesFim || mesInicio;
   const mes = mesInicio; // Para compatibilidade com código existente
   const unidade = filtroAtivo || 'todos';
+  const labelPeriodo = { todos: 'Todos', diario: 'Dia', mensal: 'Mês', trimestral: 'Trim', semestral: 'Sem', anual: 'Ano', personalizado: 'Período' }[competencia?.filtro?.tipo || 'mensal'] || 'Mês';
   
   // Buscar metas do período
   const unidadeIdParaMetas = unidade === 'todos' ? null : unidade;
@@ -143,6 +150,84 @@ export function DashboardPage() {
   const setSemestre = competencia?.setSemestre;
   const setDataInicio = competencia?.setDataInicio;
   const setDataFim = competencia?.setDataFim;
+
+  // Fetch matrículas do período para o modal
+  const fetchMatriculas = async () => {
+    setCarregandoModal(true);
+    try {
+      const dataInicio = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
+      const dataFimStr = mesFim === 12 ? `${ano + 1}-01-01` : `${ano}-${String(mesFim + 1).padStart(2, '0')}-01`;
+      let query = supabase
+        .from('alunos')
+        .select(`
+          nome, data_matricula, valor_parcela,
+          unidades:unidade_id!inner(nome),
+          cursos:curso_id!left(nome, is_projeto_banda),
+          tipos_matricula:tipo_matricula_id!left(codigo)
+        `)
+        .not('data_matricula', 'is', null)
+        .or('is_segundo_curso.is.null,is_segundo_curso.eq.false')
+        .gte('data_matricula', dataInicio)
+        .lt('data_matricula', dataFimStr)
+        .order('data_matricula', { ascending: false });
+
+      if (unidade !== 'todos') {
+        query = query.eq('unidade_id', unidade);
+      }
+
+      const { data } = await query;
+      const filtrados = (data || []).filter((a: any) => {
+        const codigo = a.tipos_matricula?.codigo;
+        if (codigo === 'BOLSISTA_INT' || codigo === 'BOLSISTA_PARC') return false;
+        if (a.cursos?.is_projeto_banda) return false;
+        if (a.cursos?.nome?.toLowerCase().includes('canto coral')) return false;
+        return true;
+      });
+      setDadosModalMatriculas(filtrados.map((a: any) => ({
+        nome: a.nome,
+        unidade: a.unidades?.nome || '—',
+        data_matricula: a.data_matricula ? new Date(a.data_matricula + 'T12:00:00').toLocaleDateString('pt-BR') : '—',
+        curso: a.cursos?.nome || '—',
+        valor: a.valor_parcela ? `R$ ${Number(a.valor_parcela).toLocaleString('pt-BR')}` : '—',
+      })));
+    } finally {
+      setCarregandoModal(false);
+    }
+  };
+
+  // Fetch evasões do período para o modal
+  const fetchEvasoes = async () => {
+    setCarregandoModal(true);
+    try {
+      const dataInicio = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
+      const dataFimStr = mesFim === 12 ? `${ano + 1}-01-01` : `${ano}-${String(mesFim + 1).padStart(2, '0')}-01`;
+      let query = supabase
+        .from('movimentacoes_admin')
+        .select(`
+          aluno_nome, data, motivo, tipo,
+          unidades:unidade_id!inner(nome)
+        `)
+        .in('tipo', ['evasao', 'nao_renovacao'])
+        .gte('data', dataInicio)
+        .lt('data', dataFimStr)
+        .order('data', { ascending: false });
+
+      if (unidade !== 'todos') {
+        query = query.eq('unidade_id', unidade);
+      }
+
+      const { data } = await query;
+      setDadosModalEvasoes((data || []).map((m: any) => ({
+        nome: m.aluno_nome || '—',
+        unidade: m.unidades?.nome || '—',
+        data_evasao: m.data ? new Date(m.data + 'T12:00:00').toLocaleDateString('pt-BR') : '—',
+        tipo: m.tipo === 'evasao' ? 'Evasão' : 'Não Renovação',
+        motivo: m.motivo || '—',
+      })));
+    } finally {
+      setCarregandoModal(false);
+    }
+  };
 
   useEffect(() => {
     async function fetchDados() {
@@ -300,9 +385,9 @@ export function DashboardPage() {
             total_alunos_pagantes_sum: acc.total_alunos_pagantes_sum + (d.total_alunos_pagantes || 0),
             novas_matriculas: acc.novas_matriculas + (d.novas_matriculas || 0),
             evasoes: acc.evasoes + (d.total_evasoes || d.evasoes || 0),
-            ticket_medio_sum: acc.ticket_medio_sum + (Number(d.ticket_medio) || 0),
+            ticket_medio_ponderado_sum: acc.ticket_medio_ponderado_sum + ((Number(d.ticket_medio) || 0) * (d.total_alunos_pagantes || 0)),
             count: acc.count + 1
-          }), { total_alunos_ativos_sum: 0, total_alunos_pagantes_sum: 0, novas_matriculas: 0, evasoes: 0, ticket_medio_sum: 0, count: 0 });
+          }), { total_alunos_ativos_sum: 0, total_alunos_pagantes_sum: 0, novas_matriculas: 0, evasoes: 0, ticket_medio_ponderado_sum: 0, count: 0 });
 
           // Calcular número de meses únicos para média correta
           const mesesUnicos = new Set(gestaoData.map((d: any) => `${d.ano}-${d.mes}`)).size || 1;
@@ -314,8 +399,8 @@ export function DashboardPage() {
             // Matrículas/Evasões: usar SOMA (eventos acumulam)
             matriculas_mes: consolidado.novas_matriculas,
             evasoes_mes: consolidado.evasoes,
-            // Ticket: usar MÉDIA
-            ticket_medio: consolidado.count > 0 ? consolidado.ticket_medio_sum / consolidado.count : 0
+            // Ticket: usar MÉDIA PONDERADA por alunos pagantes
+            ticket_medio: consolidado.total_alunos_pagantes_sum > 0 ? consolidado.ticket_medio_ponderado_sum / consolidado.total_alunos_pagantes_sum : 0
           });
         } else {
           setDadosGestao(null);
@@ -743,6 +828,7 @@ export function DashboardPage() {
             dataTour="card-alunos"
             icon={Users}
             label="Pagantes"
+            tooltip="Total de alunos ativos com tipo de matrícula pagante (exclui bolsistas integrais). Não conta segundo curso."
             value={dadosGestao?.alunos_pagantes || totais.alunosPagantes}
             target={metas.alunos_pagantes}
             format="number"
@@ -751,26 +837,31 @@ export function DashboardPage() {
           <KPICard
             dataTour="card-matriculas"
             icon={UserPlus}
-            label="Matrículas (Mês)"
+            label={`Matrículas (${labelPeriodo})`}
+            tooltip="Novos alunos que pagaram passaporte no período. Não inclui segundo curso, banda, coral ou bolsistas. Clique para ver a lista."
             value={dadosGestao?.matriculas_mes ?? '--'}
             target={metas.matriculas}
             format="number"
             subvalue={!dadosGestao ? 'Aguardando dados' : undefined}
             variant="emerald"
+            onClick={() => { fetchMatriculas(); setModalMatriculas(true); }}
           />
           <KPICard
             dataTour="card-evasoes"
             icon={UserMinus}
-            label="Evasões (Mês)"
+            label={`Evasões (${labelPeriodo})`}
+            tooltip="Alunos que cancelaram ou não renovaram no período. Conta evasões e não-renovações (deduplicado por aluno/mês). Clique para ver a lista."
             value={dadosGestao?.evasoes_mes ?? '--'}
             subvalue={!dadosGestao ? 'Aguardando dados' : undefined}
             variant="rose"
             inverterCor={true}
+            onClick={() => { fetchEvasoes(); setModalEvasoes(true); }}
           />
           <KPICard
             dataTour="card-ticket"
             icon={DollarSign}
             label="Ticket Médio Parcelas"
+            tooltip="Média do valor total pago por aluno (soma parcelas de todos os cursos). Média ponderada pelo número de pagantes de cada unidade."
             value={dadosGestao?.ticket_medio ?? ticketMedioGeral}
             target={metas.ticket_medio}
             format="currency"
@@ -788,7 +879,8 @@ export function DashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <KPICard
             icon={Phone}
-            label="Leads (Mês)"
+            label={`Leads (${labelPeriodo})`}
+            tooltip="Total de novos leads (contatos) recebidos no período. Inclui leads novos e agendados."
             value={dadosComercial?.leads_mes ?? '--'}
             target={metas.leads}
             format="number"
@@ -798,6 +890,7 @@ export function DashboardPage() {
           <KPICard
             icon={Calendar}
             label="Experimentais Realizadas"
+            tooltip="Aulas experimentais que foram efetivamente realizadas (aluno compareceu) no período."
             value={dadosComercial?.experimentais_realizadas ?? '--'}
             target={metas.experimentais}
             format="number"
@@ -807,6 +900,7 @@ export function DashboardPage() {
           <KPICard
             icon={Percent}
             label="Taxa Conversão"
+            tooltip="Percentual de experimentais realizadas que se converteram em matrículas. Fórmula: matrículas / experimentais × 100."
             value={dadosComercial?.taxa_conversao ?? '--'}
             format="percent"
             subvalue={!dadosComercial ? 'Aguardando dados' : undefined}
@@ -815,6 +909,7 @@ export function DashboardPage() {
           <KPICard
             icon={Ticket}
             label="Ticket Médio Passaporte"
+            tooltip="Valor médio do passaporte (taxa de matrícula) pago pelos novos alunos no período."
             value={dadosComercial?.ticket_passaporte ?? '--'}
             format="currency"
             subvalue={!dadosComercial ? 'Aguardando dados' : undefined}
@@ -833,6 +928,7 @@ export function DashboardPage() {
           <KPICard
             icon={Users}
             label="Total Professores"
+            tooltip="Quantidade de professores ativos vinculados às unidades."
             value={dadosProfessores?.total_professores ?? '--'}
             format="number"
             subvalue={dadosProfessores ? 'ativos' : 'Aguardando dados'}
@@ -841,6 +937,7 @@ export function DashboardPage() {
           <KPICard
             icon={GraduationCap}
             label="Média Alunos/Professor"
+            tooltip="Total de alunos ativos dividido pelo total de professores ativos."
             value={dadosProfessores?.media_alunos_professor ?? '--'}
             format="number"
             subvalue={!dadosProfessores ? 'Aguardando dados' : undefined}
@@ -849,6 +946,7 @@ export function DashboardPage() {
           <KPICard
             icon={RefreshCw}
             label="Taxa Renovação"
+            tooltip="Percentual de contratos que foram renovados em relação ao total de contratos vencidos no período."
             value={dadosProfessores?.taxa_renovacao ?? '--'}
             target={metas.taxa_renovacao}
             format="percent"
@@ -858,6 +956,7 @@ export function DashboardPage() {
           <KPICard
             icon={Target}
             label="Média Alunos/Turma"
+            tooltip="Total de alunos ativos dividido pelo total de turmas ativas. Indicador de eficiência operacional."
             value={dadosProfessores?.media_alunos_turma ?? '--'}
             format="number"
             subvalue={dadosProfessores?.media_alunos_turma ? 'Pilar financeiro' : 'Aguardando Emusys'}
@@ -1062,6 +1161,39 @@ export function DashboardPage() {
       </div>
 
 
+      {/* Modal Matrículas */}
+      <ModalDetalheKPI
+        open={modalMatriculas}
+        onClose={() => setModalMatriculas(false)}
+        titulo={`Matrículas (${labelPeriodo})`}
+        descricao={`Alunos que se matricularam no período — ${unidade === 'todos' ? 'Consolidado' : 'Unidade selecionada'}`}
+        dados={dadosModalMatriculas}
+        colunas={[
+          { key: 'nome', label: 'Aluno' },
+          { key: 'unidade', label: 'Unidade' },
+          { key: 'data_matricula', label: 'Data Matrícula' },
+          { key: 'curso', label: 'Curso' },
+          { key: 'valor', label: 'Valor Parcela' },
+        ]}
+        carregando={carregandoModal}
+      />
+
+      {/* Modal Evasões */}
+      <ModalDetalheKPI
+        open={modalEvasoes}
+        onClose={() => setModalEvasoes(false)}
+        titulo={`Evasões (${labelPeriodo})`}
+        descricao={`Alunos que saíram no período — ${unidade === 'todos' ? 'Consolidado' : 'Unidade selecionada'}`}
+        dados={dadosModalEvasoes}
+        colunas={[
+          { key: 'nome', label: 'Aluno' },
+          { key: 'unidade', label: 'Unidade' },
+          { key: 'data_evasao', label: 'Data' },
+          { key: 'tipo', label: 'Tipo' },
+          { key: 'motivo', label: 'Motivo' },
+        ]}
+        carregando={carregandoModal}
+      />
     </div>
   );
 }
