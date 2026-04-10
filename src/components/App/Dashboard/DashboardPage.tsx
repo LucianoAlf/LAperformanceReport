@@ -122,6 +122,8 @@ export function DashboardPage() {
   const [modalEvasoes, setModalEvasoes] = useState(false);
   const [dadosModalMatriculas, setDadosModalMatriculas] = useState<any[]>([]);
   const [dadosModalEvasoes, setDadosModalEvasoes] = useState<any[]>([]);
+  const [modalExperimentais, setModalExperimentais] = useState(false);
+  const [dadosModalExperimentais, setDadosModalExperimentais] = useState<any[]>([]);
   const [carregandoModal, setCarregandoModal] = useState(false);
 
   // Pegar filtros do contexto
@@ -225,6 +227,44 @@ export function DashboardPage() {
         tipo: m.tipo === 'evasao' ? 'Evasão' : 'Não Renovação',
         _tipo_raw: m.tipo,
         motivo: m.motivo || '—',
+      })));
+    } finally {
+      setCarregandoModal(false);
+    }
+  };
+
+  // Fetch experimentais realizadas do período para o modal
+  const fetchExperimentais = async () => {
+    setCarregandoModal(true);
+    try {
+      const dataInicio = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
+      const dataFimStr = mesFim === 12 ? `${ano + 1}-01-01` : `${ano}-${String(mesFim + 1).padStart(2, '0')}-01`;
+      let query = supabase
+        .from('leads')
+        .select(`
+          nome, telefone, data_contato, status, quantidade,
+          unidades:unidade_id!inner(nome),
+          cursos:curso_interesse_id!left(nome),
+          canais_origem:canal_origem_id!left(nome)
+        `)
+        .in('status', ['experimental_realizada', 'compareceu', 'visita_escola'])
+        .gte('data_contato', dataInicio)
+        .lt('data_contato', dataFimStr)
+        .order('data_contato', { ascending: false });
+
+      if (unidade !== 'todos') {
+        query = query.eq('unidade_id', unidade);
+      }
+
+      const { data } = await query;
+      setDadosModalExperimentais((data || []).map((l: any) => ({
+        nome: l.nome || '—',
+        unidade: l.unidades?.nome || '—',
+        data: l.data_contato ? new Date(l.data_contato + 'T12:00:00').toLocaleDateString('pt-BR') : '—',
+        curso: l.cursos?.nome || '—',
+        canal: l.canais_origem?.nome || '—',
+        status: l.status === 'visita_escola' ? 'Visita' : 'Realizada',
+        _status_raw: l.status,
       })));
     } finally {
       setCarregandoModal(false);
@@ -892,12 +932,13 @@ export function DashboardPage() {
           <KPICard
             icon={Calendar}
             label="Experimentais Realizadas"
-            tooltip="Aulas experimentais que foram efetivamente realizadas (aluno compareceu) no período."
+            tooltip="Aulas experimentais que foram efetivamente realizadas (aluno compareceu) no período. Clique para ver a lista."
             value={dadosComercial?.experimentais_realizadas ?? '--'}
             target={metas.experimentais}
             format="number"
             subvalue={!dadosComercial ? 'Aguardando dados' : undefined}
             variant="violet"
+            onClick={() => { fetchExperimentais(); setModalExperimentais(true); }}
           />
           <KPICard
             icon={Percent}
@@ -1238,6 +1279,47 @@ export function DashboardPage() {
           dados: (() => {
             const contagem: Record<string, number> = {};
             dadosModalEvasoes.forEach(d => { contagem[d.unidade] = (contagem[d.unidade] || 0) + 1; });
+            const cores: Record<string, string> = { 'Recreio': 'bg-violet-500/70', 'Barra': 'bg-amber-500/70', 'Campo Grande': 'bg-emerald-500/70' };
+            return Object.entries(contagem)
+              .sort((a, b) => b[1] - a[1])
+              .map(([label, valor]) => ({ label, valor, cor: cores[label] || 'bg-slate-500/70' }));
+          })(),
+        } : undefined}
+      />
+
+      {/* Modal Experimentais */}
+      <ModalDetalheKPI
+        open={modalExperimentais}
+        onClose={() => setModalExperimentais(false)}
+        titulo={`Experimentais Realizadas (${labelPeriodo})`}
+        descricao={`Aulas experimentais realizadas no período — ${unidade === 'todos' ? 'Consolidado' : 'Unidade selecionada'}`}
+        dados={dadosModalExperimentais}
+        colunas={[
+          { key: 'nome', label: 'Aluno' },
+          { key: 'unidade', label: 'Unidade', render: (v: string) => <BadgeUnidade nome={v} /> },
+          { key: 'data', label: 'Data' },
+          { key: 'curso', label: 'Curso', render: (v: string) => <TextoCurso nome={v} /> },
+          { key: 'canal', label: 'Canal' },
+          { key: 'status', label: 'Tipo', render: (v: string, row: any) => <BadgeTipo tipo={v} variante={row._status_raw === 'visita_escola' ? 'nao_renovacao' : 'evasao'} /> },
+        ]}
+        carregando={carregandoModal}
+        resumo={(() => {
+          const total = dadosModalExperimentais.length;
+          const realizadas = dadosModalExperimentais.filter(d => d._status_raw !== 'visita_escola').length;
+          const visitas = dadosModalExperimentais.filter(d => d._status_raw === 'visita_escola').length;
+          const cursos = new Set(dadosModalExperimentais.map(d => d.curso).filter(c => c !== '—'));
+          return [
+            { label: 'Total', valor: total, icone: <Calendar size={14} />, cor: 'text-sky-400', destaque: true },
+            { label: 'Realizadas', valor: realizadas, icone: <GraduationCap size={14} />, cor: 'text-emerald-400' },
+            { label: 'Visitas', valor: visitas, icone: <Users size={14} />, cor: 'text-amber-400' },
+            { label: 'Cursos', valor: cursos.size, icone: <Target size={14} />, cor: 'text-violet-400' },
+          ];
+        })()}
+        distribuicao={unidade === 'todos' ? {
+          titulo: 'Por Unidade',
+          dados: (() => {
+            const contagem: Record<string, number> = {};
+            dadosModalExperimentais.forEach(d => { contagem[d.unidade] = (contagem[d.unidade] || 0) + 1; });
             const cores: Record<string, string> = { 'Recreio': 'bg-violet-500/70', 'Barra': 'bg-amber-500/70', 'Campo Grande': 'bg-emerald-500/70' };
             return Object.entries(contagem)
               .sort((a, b) => b[1] - a[1])
