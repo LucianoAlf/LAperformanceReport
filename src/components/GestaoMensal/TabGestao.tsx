@@ -1122,8 +1122,8 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-center gap-3 flex-1">
                 <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
                 <p className="text-amber-200 text-sm">
-                  <strong>Mês não fechado:</strong> Os dados de {getMesNomeCurto(mes)}/{ano} ainda não foram populados.
-                  Novas Matrículas, Evasões e Saldo Líquido mostram dados do mês atual em andamento.
+                  <strong>Mês em andamento:</strong> Os dados de {getMesNomeCurto(mes)}/{ano} são calculados em tempo real.
+                  Clique em "Recalcular" para salvar o snapshot do mês.
                 </p>
               </div>
             )}
@@ -1218,27 +1218,27 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             <KPICard
               icon={UserPlus}
               label="Novas Matrículas"
-              value={mesFechado ? dados.novas_matriculas : '—'}
+              value={dados.novas_matriculas}
               variant="green"
-              comparativoMesAnterior={mesFechado && dadosMesAnterior ? { valor: dadosMesAnterior.novas_matriculas, label: dadosMesAnterior.label } : undefined}
-              comparativoAnoAnterior={mesFechado && dadosAnoAnterior ? { valor: dadosAnoAnterior.novas_matriculas, label: dadosAnoAnterior.label } : undefined}
+              comparativoMesAnterior={dadosMesAnterior ? { valor: dadosMesAnterior.novas_matriculas, label: dadosMesAnterior.label } : undefined}
+              comparativoAnoAnterior={dadosAnoAnterior ? { valor: dadosAnoAnterior.novas_matriculas, label: dadosAnoAnterior.label } : undefined}
             />
             <KPICard
               icon={UserMinus}
               label="Evasões"
-              value={mesFechado ? dados.evasoes : '—'}
+              value={dados.evasoes}
               variant="rose"
               inverterCor={true}
-              comparativoMesAnterior={mesFechado && dadosMesAnterior ? { valor: dadosMesAnterior.evasoes, label: dadosMesAnterior.label } : undefined}
-              comparativoAnoAnterior={mesFechado && dadosAnoAnterior ? { valor: dadosAnoAnterior.evasoes, label: dadosAnoAnterior.label } : undefined}
+              comparativoMesAnterior={dadosMesAnterior ? { valor: dadosMesAnterior.evasoes, label: dadosMesAnterior.label } : undefined}
+              comparativoAnoAnterior={dadosAnoAnterior ? { valor: dadosAnoAnterior.evasoes, label: dadosAnoAnterior.label } : undefined}
             />
             <KPICard
               icon={RefreshCw}
               label="Saldo Líquido"
-              value={mesFechado ? dados.saldo_liquido : '—'}
+              value={dados.saldo_liquido}
               variant={dados.saldo_liquido >= 0 ? 'emerald' : 'rose'}
-              comparativoMesAnterior={mesFechado && dadosMesAnterior ? { valor: dadosMesAnterior.novas_matriculas - dadosMesAnterior.evasoes, label: dadosMesAnterior.label } : undefined}
-              comparativoAnoAnterior={mesFechado && dadosAnoAnterior ? { valor: dadosAnoAnterior.novas_matriculas - dadosAnoAnterior.evasoes, label: dadosAnoAnterior.label } : undefined}
+              comparativoMesAnterior={dadosMesAnterior ? { valor: dadosMesAnterior.novas_matriculas - dadosMesAnterior.evasoes, label: dadosMesAnterior.label } : undefined}
+              comparativoAnoAnterior={dadosAnoAnterior ? { valor: dadosAnoAnterior.novas_matriculas - dadosAnoAnterior.evasoes, label: dadosAnoAnterior.label } : undefined}
             />
             <KPICard
               icon={GraduationCap}
