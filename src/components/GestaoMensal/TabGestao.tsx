@@ -13,6 +13,7 @@ import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { useMetasKPI } from '@/hooks/useMetasKPI';
 import { ModalPermanenciaDetalhe } from './ModalPermanenciaDetalhe';
+import { ModalDetalheKPI, BadgeUnidade, TextoCurso, ValorParcela, BadgeTipo } from '@/components/App/Dashboard/ModalDetalheKPI';
 
 interface TabGestaoProps {
   ano: number;
@@ -119,9 +120,107 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
   // Estado para verificar se o mês está fechado (tem dados em dados_mensais)
   const [mesFechado, setMesFechado] = useState<boolean>(false);
 
+  // Estados dos modais de detalhamento
+  const [modalAberto, setModalAberto] = useState<'matriculas' | 'evasoes' | 'banda' | 'bolsista_int' | 'bolsista_parc' | null>(null);
+  const [dadosModal, setDadosModal] = useState<any[]>([]);
+  const [carregandoModal, setCarregandoModal] = useState(false);
+
   // Usar mesFim se fornecido, senão usar mes (para filtro mensal)
   const mesInicio = mes;
   const mesFinal = mesFim || mes;
+
+  // Fetch para modais de detalhamento
+  const fetchModalAlunos = async (tipo: 'matriculas' | 'banda' | 'bolsista_int' | 'bolsista_parc') => {
+    setCarregandoModal(true);
+    try {
+      const dataInicio = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
+      const dataFimStr = mesFinal === 12 ? `${ano + 1}-01-01` : `${ano}-${String(mesFinal + 1).padStart(2, '0')}-01`;
+
+      if (tipo === 'matriculas') {
+        let query = supabase
+          .from('alunos')
+          .select('nome, data_matricula, valor_parcela, unidades:unidade_id!inner(nome), cursos:curso_id!left(nome, is_projeto_banda), tipos_matricula:tipo_matricula_id!left(codigo)')
+          .not('data_matricula', 'is', null)
+          .or('is_segundo_curso.is.null,is_segundo_curso.eq.false')
+          .gte('data_matricula', dataInicio)
+          .lt('data_matricula', dataFimStr)
+          .order('data_matricula', { ascending: false });
+        if (unidade !== 'todos') query = query.eq('unidade_id', unidade);
+        const { data } = await query;
+        const filtrados = (data || []).filter((a: any) => {
+          const codigo = a.tipos_matricula?.codigo;
+          if (codigo === 'BOLSISTA_INT' || codigo === 'BOLSISTA_PARC') return false;
+          if (a.cursos?.is_projeto_banda) return false;
+          if (a.cursos?.nome?.toLowerCase().includes('canto coral')) return false;
+          return true;
+        });
+        setDadosModal(filtrados.map((a: any) => ({
+          nome: a.nome, unidade: a.unidades?.nome || '—',
+          data_matricula: a.data_matricula ? new Date(a.data_matricula + 'T12:00:00').toLocaleDateString('pt-BR') : '—',
+          curso: a.cursos?.nome || '—',
+          valor: a.valor_parcela ? `R$ ${Number(a.valor_parcela).toLocaleString('pt-BR')}` : '—',
+        })));
+      } else if (tipo === 'banda') {
+        let query = supabase
+          .from('alunos')
+          .select('nome, data_matricula, valor_parcela, dia_aula, horario_aula, unidades:unidade_id!inner(nome), cursos:curso_id!inner(nome, is_projeto_banda), professores:professor_atual_id!left(nome)')
+          .in('status', ['ativo', 'trancado'])
+          .eq('cursos.is_projeto_banda', true)
+          .order('nome');
+        if (unidade !== 'todos') query = query.eq('unidade_id', unidade);
+        const { data } = await query;
+        setDadosModal((data || []).map((a: any) => ({
+          nome: a.nome, unidade: a.unidades?.nome || '—',
+          curso: a.cursos?.nome || '—', professor: a.professores?.nome || '—',
+          dia: a.dia_aula || '—', horario: a.horario_aula || '—',
+        })));
+      } else {
+        // bolsista_int ou bolsista_parc
+        const codigoBolsista = tipo === 'bolsista_int' ? 'BOLSISTA_INT' : 'BOLSISTA_PARC';
+        let query = supabase
+          .from('alunos')
+          .select('nome, data_matricula, valor_parcela, unidades:unidade_id!inner(nome), cursos:curso_id!left(nome), tipos_matricula:tipo_matricula_id!inner(codigo), professores:professor_atual_id!left(nome)')
+          .in('status', ['ativo', 'trancado'])
+          .eq('tipos_matricula.codigo', codigoBolsista)
+          .or('is_segundo_curso.is.null,is_segundo_curso.eq.false')
+          .order('nome');
+        if (unidade !== 'todos') query = query.eq('unidade_id', unidade);
+        const { data } = await query;
+        setDadosModal((data || []).map((a: any) => ({
+          nome: a.nome, unidade: a.unidades?.nome || '—',
+          curso: a.cursos?.nome || '—', professor: a.professores?.nome || '—',
+          valor: a.valor_parcela ? `R$ ${Number(a.valor_parcela).toLocaleString('pt-BR')}` : 'R$ 0',
+        })));
+      }
+    } finally {
+      setCarregandoModal(false);
+    }
+  };
+
+  const fetchModalEvasoes = async () => {
+    setCarregandoModal(true);
+    try {
+      const dataInicio = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
+      const dataFimStr = mesFinal === 12 ? `${ano + 1}-01-01` : `${ano}-${String(mesFinal + 1).padStart(2, '0')}-01`;
+      let query = supabase
+        .from('movimentacoes_admin')
+        .select('aluno_nome, data, motivo, tipo, unidades:unidade_id!inner(nome)')
+        .in('tipo', ['evasao', 'nao_renovacao'])
+        .gte('data', dataInicio)
+        .lt('data', dataFimStr)
+        .order('data', { ascending: false });
+      if (unidade !== 'todos') query = query.eq('unidade_id', unidade);
+      const { data } = await query;
+      setDadosModal((data || []).map((m: any) => ({
+        nome: m.aluno_nome || '—', unidade: m.unidades?.nome || '—',
+        data_evasao: m.data ? new Date(m.data + 'T12:00:00').toLocaleDateString('pt-BR') : '—',
+        tipo: m.tipo === 'evasao' ? 'Evasão' : 'Não Renovação', _tipo_raw: m.tipo,
+        motivo: m.motivo || '—',
+      })));
+    } finally {
+      setCarregandoModal(false);
+    }
+  };
 
   useEffect(() => {
     async function fetchDados() {
@@ -1212,9 +1311,10 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             <KPICard
               icon={Music}
               label="Banda"
-              tooltip="Alunos matriculados em projetos de banda (Minha Banda, Power Kids, etc.)."
+              tooltip="Alunos matriculados em projetos de banda (Minha Banda, Power Kids, etc.). Clique para ver a lista."
               value={dados.total_banda}
               variant="violet"
+              onClick={() => { fetchModalAlunos('banda'); setModalAberto('banda'); }}
             />
           </div>
 
@@ -1223,19 +1323,21 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             <KPICard
               icon={UserPlus}
               label="Novas Matrículas"
-              tooltip="Novos alunos passaporte no período. Exclui segundo curso, banda, coral e bolsistas."
+              tooltip="Novos alunos passaporte no período. Exclui segundo curso, banda, coral e bolsistas. Clique para ver a lista."
               value={dados.novas_matriculas}
               variant="green"
+              onClick={() => { fetchModalAlunos('matriculas'); setModalAberto('matriculas'); }}
               comparativoMesAnterior={dadosMesAnterior ? { valor: dadosMesAnterior.novas_matriculas, label: dadosMesAnterior.label } : undefined}
               comparativoAnoAnterior={dadosAnoAnterior ? { valor: dadosAnoAnterior.novas_matriculas, label: dadosAnoAnterior.label } : undefined}
             />
             <KPICard
               icon={UserMinus}
               label="Evasões"
-              tooltip="Cancelamentos e não-renovações no período. Deduplicado por aluno/mês."
+              tooltip="Cancelamentos e não-renovações no período. Deduplicado por aluno/mês. Clique para ver a lista."
               value={dados.evasoes}
               variant="rose"
               inverterCor={true}
+              onClick={() => { fetchModalEvasoes(); setModalAberto('evasoes'); }}
               comparativoMesAnterior={dadosMesAnterior ? { valor: dadosMesAnterior.evasoes, label: dadosMesAnterior.label } : undefined}
               comparativoAnoAnterior={dadosAnoAnterior ? { valor: dadosAnoAnterior.evasoes, label: dadosAnoAnterior.label } : undefined}
             />
@@ -1251,16 +1353,18 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             <KPICard
               icon={GraduationCap}
               label="Bolsistas Integrais"
-              tooltip="Alunos com tipo de matrícula bolsista integral (100% de desconto)."
+              tooltip="Alunos com tipo de matrícula bolsista integral (100% de desconto). Clique para ver a lista."
               value={dados.total_bolsistas_integrais}
               variant="amber"
+              onClick={() => { fetchModalAlunos('bolsista_int'); setModalAberto('bolsista_int'); }}
             />
             <KPICard
               icon={Ticket}
               label="Bolsistas Parciais"
-              tooltip="Alunos com tipo de matrícula bolsista parcial (desconto parcial na mensalidade)."
+              tooltip="Alunos com tipo de matrícula bolsista parcial (desconto parcial na mensalidade). Clique para ver a lista."
               value={dados.total_bolsistas_parciais}
               variant="amber"
+              onClick={() => { fetchModalAlunos('bolsista_parc'); setModalAberto('bolsista_parc'); }}
             />
           </div>
 
@@ -1773,6 +1877,91 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
         onOpenChange={setModalPermanenciaOpen}
         unidadeId={unidade}
         mediaAtual={dados?.tempo_permanencia || 0}
+      />
+
+      {/* Modal Matrículas */}
+      <ModalDetalheKPI
+        open={modalAberto === 'matriculas'}
+        onClose={() => setModalAberto(null)}
+        titulo="Novas Matrículas"
+        descricao={`Alunos passaporte que se matricularam no período — ${unidade === 'todos' ? 'Consolidado' : 'Unidade selecionada'}`}
+        dados={dadosModal}
+        colunas={[
+          { key: 'nome', label: 'Aluno' },
+          { key: 'unidade', label: 'Unidade', render: (v: string) => <BadgeUnidade nome={v} /> },
+          { key: 'data_matricula', label: 'Data Matrícula' },
+          { key: 'curso', label: 'Curso', render: (v: string) => <TextoCurso nome={v} /> },
+          { key: 'valor', label: 'Valor Parcela', render: (v: string) => <ValorParcela valor={v} /> },
+        ]}
+        carregando={carregandoModal}
+      />
+
+      {/* Modal Evasões */}
+      <ModalDetalheKPI
+        open={modalAberto === 'evasoes'}
+        onClose={() => setModalAberto(null)}
+        titulo="Evasões"
+        descricao={`Alunos que saíram no período — ${unidade === 'todos' ? 'Consolidado' : 'Unidade selecionada'}`}
+        dados={dadosModal}
+        colunas={[
+          { key: 'nome', label: 'Aluno' },
+          { key: 'unidade', label: 'Unidade', render: (v: string) => <BadgeUnidade nome={v} /> },
+          { key: 'data_evasao', label: 'Data' },
+          { key: 'tipo', label: 'Tipo', render: (_v: string, row: any) => <BadgeTipo tipo={row.tipo} variante={row._tipo_raw === 'evasao' ? 'evasao' : 'nao_renovacao'} /> },
+          { key: 'motivo', label: 'Motivo' },
+        ]}
+        carregando={carregandoModal}
+      />
+
+      {/* Modal Banda */}
+      <ModalDetalheKPI
+        open={modalAberto === 'banda'}
+        onClose={() => setModalAberto(null)}
+        titulo="Alunos de Banda"
+        descricao={`Alunos em projetos de banda — ${unidade === 'todos' ? 'Consolidado' : 'Unidade selecionada'}`}
+        dados={dadosModal}
+        colunas={[
+          { key: 'nome', label: 'Aluno' },
+          { key: 'unidade', label: 'Unidade', render: (v: string) => <BadgeUnidade nome={v} /> },
+          { key: 'curso', label: 'Projeto', render: (v: string) => <TextoCurso nome={v} /> },
+          { key: 'professor', label: 'Professor' },
+          { key: 'dia', label: 'Dia' },
+          { key: 'horario', label: 'Horário' },
+        ]}
+        carregando={carregandoModal}
+      />
+
+      {/* Modal Bolsistas Integrais */}
+      <ModalDetalheKPI
+        open={modalAberto === 'bolsista_int'}
+        onClose={() => setModalAberto(null)}
+        titulo="Bolsistas Integrais"
+        descricao={`Alunos com bolsa integral — ${unidade === 'todos' ? 'Consolidado' : 'Unidade selecionada'}`}
+        dados={dadosModal}
+        colunas={[
+          { key: 'nome', label: 'Aluno' },
+          { key: 'unidade', label: 'Unidade', render: (v: string) => <BadgeUnidade nome={v} /> },
+          { key: 'curso', label: 'Curso', render: (v: string) => <TextoCurso nome={v} /> },
+          { key: 'professor', label: 'Professor' },
+        ]}
+        carregando={carregandoModal}
+      />
+
+      {/* Modal Bolsistas Parciais */}
+      <ModalDetalheKPI
+        open={modalAberto === 'bolsista_parc'}
+        onClose={() => setModalAberto(null)}
+        titulo="Bolsistas Parciais"
+        descricao={`Alunos com bolsa parcial — ${unidade === 'todos' ? 'Consolidado' : 'Unidade selecionada'}`}
+        dados={dadosModal}
+        colunas={[
+          { key: 'nome', label: 'Aluno' },
+          { key: 'unidade', label: 'Unidade', render: (v: string) => <BadgeUnidade nome={v} /> },
+          { key: 'curso', label: 'Curso', render: (v: string) => <TextoCurso nome={v} /> },
+          { key: 'professor', label: 'Professor' },
+          { key: 'valor', label: 'Valor Parcela', render: (v: string) => <ValorParcela valor={v} /> },
+        ]}
+        carregando={carregandoModal}
       />
     </div>
   );
