@@ -289,9 +289,10 @@ async function confirmarExperimentais(
       await supabase.from('lead_experimentais').update({
         status: 'experimental_faltou', updated_at: new Date().toISOString()
       }).eq('id', exp.id);
+      // NUNCA regredir lead já convertido
       await supabase.from('leads').update({
         faltou_experimental: true, status: 'experimental_faltou', etapa_pipeline_id: 9, updated_at: new Date().toISOString()
-      }).eq('id', exp.lead_id);
+      }).eq('id', exp.lead_id).not('status', 'in', '("convertido","matriculado")');
     }
     console.log(`[sync-presenca] Auto-faltou: ${expExpiradas.length} experimentais com mais de ${limiteAutoFaltouDias} dias`);
   }
@@ -403,6 +404,7 @@ async function confirmarExperimentais(
       .eq('id', exp.id);
 
     // Atualizar colunas legadas do lead (compatibilidade)
+    // NUNCA regredir lead já convertido — só atualizar se não está convertido
     await supabase
       .from('leads')
       .update({
@@ -411,7 +413,8 @@ async function confirmarExperimentais(
         etapa_pipeline_id: 7,
         updated_at: new Date().toISOString()
       })
-      .eq('id', exp.lead_id);
+      .eq('id', exp.lead_id)
+      .not('status', 'in', '("convertido","matriculado")');
 
     logs.push({
       lead_id: exp.lead_id,
