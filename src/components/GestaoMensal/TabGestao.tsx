@@ -1178,12 +1178,14 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             <KPICard
               icon={Users}
               label="Total Alunos Ativos"
+              tooltip="Total de alunos com status ativo, excluindo segundo curso. Inclui pagantes e bolsistas."
               value={dados.total_alunos_ativos}
               variant="cyan"
             />
             <KPICard
               icon={DollarSign}
               label="Alunos Pagantes"
+              tooltip="Alunos ativos com tipo de matrícula pagante (exclui bolsistas integrais e segundo curso)."
               value={dados.total_alunos_pagantes}
               target={metas.alunos_pagantes}
               format="number"
@@ -1194,6 +1196,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             <KPICard
               icon={Baby}
               label="LA Music Kids"
+              tooltip="Alunos com classificação LAMK (até 12 anos)."
               value={dados.total_la_kids}
               subvalue={`${dados.total_alunos_ativos > 0 ? ((dados.total_la_kids / dados.total_alunos_ativos) * 100).toFixed(0) : 0}% do total`}
               variant="rose"
@@ -1201,6 +1204,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             <KPICard
               icon={GraduationCap}
               label="LA Music School"
+              tooltip="Alunos com classificação EMLA (acima de 12 anos)."
               value={dados.total_la_adultos}
               subvalue={`${dados.total_alunos_ativos > 0 ? ((dados.total_la_adultos / dados.total_alunos_ativos) * 100).toFixed(0) : 0}% do total`}
               variant="violet"
@@ -1208,6 +1212,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             <KPICard
               icon={Music}
               label="Banda"
+              tooltip="Alunos matriculados em projetos de banda (Minha Banda, Power Kids, etc.)."
               value={dados.total_banda}
               variant="violet"
             />
@@ -1218,6 +1223,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             <KPICard
               icon={UserPlus}
               label="Novas Matrículas"
+              tooltip="Novos alunos passaporte no período. Exclui segundo curso, banda, coral e bolsistas."
               value={dados.novas_matriculas}
               variant="green"
               comparativoMesAnterior={dadosMesAnterior ? { valor: dadosMesAnterior.novas_matriculas, label: dadosMesAnterior.label } : undefined}
@@ -1226,6 +1232,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             <KPICard
               icon={UserMinus}
               label="Evasões"
+              tooltip="Cancelamentos e não-renovações no período. Deduplicado por aluno/mês."
               value={dados.evasoes}
               variant="rose"
               inverterCor={true}
@@ -1235,6 +1242,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             <KPICard
               icon={RefreshCw}
               label="Saldo Líquido"
+              tooltip="Diferença entre novas matrículas e evasões no período. Positivo = crescimento."
               value={dados.saldo_liquido}
               variant={dados.saldo_liquido >= 0 ? 'emerald' : 'rose'}
               comparativoMesAnterior={dadosMesAnterior ? { valor: dadosMesAnterior.novas_matriculas - dadosMesAnterior.evasoes, label: dadosMesAnterior.label } : undefined}
@@ -1243,12 +1251,14 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             <KPICard
               icon={GraduationCap}
               label="Bolsistas Integrais"
+              tooltip="Alunos com tipo de matrícula bolsista integral (100% de desconto)."
               value={dados.total_bolsistas_integrais}
               variant="amber"
             />
             <KPICard
               icon={Ticket}
               label="Bolsistas Parciais"
+              tooltip="Alunos com tipo de matrícula bolsista parcial (desconto parcial na mensalidade)."
               value={dados.total_bolsistas_parciais}
               variant="amber"
             />
@@ -1361,8 +1371,8 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-center gap-3">
               <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
               <p className="text-amber-200 text-sm">
-                <strong>Mês não fechado:</strong> Os dados de {getMesNomeCurto(mes)}/{ano} ainda não foram populados. 
-                Os KPIs abaixo mostram valores em tempo real dos alunos ativos, não o fechamento do mês.
+                <strong>Mês em andamento:</strong> Os dados de {getMesNomeCurto(mes)}/{ano} são calculados em tempo real.
+                Clique em "Recalcular" para salvar o snapshot do mês.
               </p>
             </div>
           )}
@@ -1371,28 +1381,28 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               icon={CreditCard}
               label="Ticket Médio"
               tooltip="Valor médio da mensalidade dos alunos pagantes. Calculado: faturamento / total de pagantes."
-              value={mesFechado ? dados.ticket_medio : '—'}
+              value={dados.ticket_medio}
               target={metas.ticket_medio}
-              format={mesFechado ? "currency" : "number"}
+              format="currency"
               variant="violet"
-              comparativoMesAnterior={mesFechado && dadosMesAnterior ? { valor: dadosMesAnterior.ticket_medio, label: dadosMesAnterior.label } : undefined}
-              comparativoAnoAnterior={mesFechado && dadosAnoAnterior ? { valor: dadosAnoAnterior.ticket_medio, label: dadosAnoAnterior.label } : undefined}
+              comparativoMesAnterior={dadosMesAnterior ? { valor: dadosMesAnterior.ticket_medio, label: dadosMesAnterior.label } : undefined}
+              comparativoAnoAnterior={dadosAnoAnterior ? { valor: dadosAnoAnterior.ticket_medio, label: dadosAnoAnterior.label } : undefined}
             />
             <KPICard
               icon={Wallet}
               label="MRR"
               tooltip="Monthly Recurring Revenue. Receita mensal recorrente: soma das mensalidades de todos os alunos pagantes."
-              value={mesFechado ? dados.mrr : '—'}
-              format={mesFechado ? "currency" : "number"}
+              value={dados.mrr}
+              format="currency"
               variant="emerald"
-              comparativoMesAnterior={mesFechado && dadosMesAnterior ? { valor: dadosMesAnterior.faturamento_estimado, label: dadosMesAnterior.label } : undefined}
-              comparativoAnoAnterior={mesFechado && dadosAnoAnterior ? { valor: dadosAnoAnterior.faturamento_estimado, label: dadosAnoAnterior.label } : undefined}
+              comparativoMesAnterior={dadosMesAnterior ? { valor: dadosMesAnterior.faturamento_estimado, label: dadosMesAnterior.label } : undefined}
+              comparativoAnoAnterior={dadosAnoAnterior ? { valor: dadosAnoAnterior.faturamento_estimado, label: dadosAnoAnterior.label } : undefined}
             />
             <KPICard
               icon={Calendar}
               label="ARR"
               tooltip="Annual Recurring Revenue. Receita anual projetada: MRR x 12 meses."
-              value={mesFechado ? formatCurrency(dados.arr) : '—'}
+              value={formatCurrency(dados.arr)}
               subvalue="Receita Recorrente Anual"
               variant="cyan"
             />
@@ -1400,7 +1410,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               icon={TrendingUp}
               label="LTV Médio"
               tooltip="Lifetime Value. Receita total gerada por um aluno durante sua permanencia. Calculado: ticket medio x tempo medio de permanencia."
-              value={mesFechado ? formatCurrency(dados.ltv_medio) : '—'}
+              value={formatCurrency(dados.ltv_medio)}
               subvalue="Lifetime Value"
               variant="violet"
             />
@@ -1408,34 +1418,34 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               icon={Target}
               label="Faturamento Previsto"
               tooltip="Receita esperada no mes com base nas mensalidades ativas. Equivale ao MRR."
-              value={mesFechado ? formatCurrency(dados.faturamento_previsto) : '—'}
+              value={formatCurrency(dados.faturamento_previsto)}
               variant="cyan"
             />
             <KPICard
               icon={CheckCircle}
               label="Faturamento Realizado"
               tooltip="Receita efetivamente recebida no mes. Diferenca com o previsto indica inadimplencia."
-              value={mesFechado ? formatCurrency(dados.faturamento_realizado) : '—'}
+              value={formatCurrency(dados.faturamento_realizado)}
               variant="emerald"
             />
             <KPICard
               icon={AlertTriangle}
               label="Inadimplência %"
               tooltip="Percentual de alunos que nao pagaram no mes. Calculado: (previsto - realizado) / previsto x 100."
-              value={mesFechado ? dados.inadimplencia_pct : '—'}
+              value={dados.inadimplencia_pct}
               target={metas.inadimplencia}
-              format={mesFechado ? "percent" : "number"}
+              format="percent"
               metaInversa={true}
               variant="amber"
               inverterCor={true}
-              comparativoMesAnterior={mesFechado && dadosMesAnterior ? { valor: dadosMesAnterior.inadimplencia, label: dadosMesAnterior.label } : undefined}
-              comparativoAnoAnterior={mesFechado && dadosAnoAnterior ? { valor: dadosAnoAnterior.inadimplencia, label: dadosAnoAnterior.label } : undefined}
+              comparativoMesAnterior={dadosMesAnterior ? { valor: dadosMesAnterior.inadimplencia, label: dadosMesAnterior.label } : undefined}
+              comparativoAnoAnterior={dadosAnoAnterior ? { valor: dadosAnoAnterior.inadimplencia, label: dadosAnoAnterior.label } : undefined}
             />
             <KPICard
               icon={Percent}
               label="Reajuste Médio"
               tooltip="Percentual medio de aumento aplicado nas renovacoes do mes. Indica o poder de precificacao."
-              value={mesFechado ? `${dados.reajuste_pct.toFixed(1)}%` : '—'}
+              value={`${dados.reajuste_pct.toFixed(1)}%`}
               variant="cyan"
             />
           </div>
@@ -1579,8 +1589,8 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-center gap-3">
               <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
               <p className="text-amber-200 text-sm">
-                <strong>Mês não fechado:</strong> Os dados de {getMesNomeCurto(mes)}/{ano} ainda não foram populados. 
-                Os KPIs de retenção mostram dados em tempo real, não o fechamento do mês.
+                <strong>Mês em andamento:</strong> Os dados de {getMesNomeCurto(mes)}/{ano} são calculados em tempo real.
+                Clique em "Recalcular" para salvar o snapshot do mês.
               </p>
             </div>
           )}
@@ -1589,22 +1599,25 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             <KPICard
               icon={XCircle}
               label="Cancelamentos"
-              value={mesFechado ? dados.cancelamentos : '—'}
-              subvalue={mesFechado ? `${dados.cancelamento_pct.toFixed(1)}%` : ''}
+              tooltip="Alunos que cancelaram a matrícula no período (finalizações via Emusys)."
+              value={dados.cancelamentos}
+              subvalue={`${dados.cancelamento_pct.toFixed(1)}%`}
               variant="rose"
               inverterCor={true}
             />
             <KPICard
               icon={UserX}
               label="Não Renovações"
-              value={mesFechado ? dados.nao_renovacoes : '—'}
+              tooltip="Alunos cujo contrato venceu e não renovaram no período."
+              value={dados.nao_renovacoes}
               variant="amber"
               inverterCor={true}
             />
             <KPICard
               icon={TrendingDown}
               label="Total Evasões"
-              value={mesFechado ? dados.total_evasoes : '—'}
+              tooltip="Soma de cancelamentos + não renovações no período."
+              value={dados.total_evasoes}
               subvalue="Cancelamentos + Não Renovações"
               variant="rose"
               inverterCor={true}
@@ -1612,19 +1625,21 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             <KPICard
               icon={Percent}
               label="Churn Rate"
-              value={mesFechado ? dados.churn_rate : '—'}
+              tooltip="Taxa de perda de alunos. Calculado: evasões / pagantes do mês anterior × 100."
+              value={dados.churn_rate}
               target={metas.churn_rate}
-              format={mesFechado ? "percent" : "number"}
+              format="percent"
               metaInversa={true}
               variant="rose"
               inverterCor={true}
-              comparativoMesAnterior={mesFechado && dadosMesAnterior ? { valor: dadosMesAnterior.churn_rate, label: dadosMesAnterior.label } : undefined}
-              comparativoAnoAnterior={mesFechado && dadosAnoAnterior ? { valor: dadosAnoAnterior.churn_rate, label: dadosAnoAnterior.label } : undefined}
+              comparativoMesAnterior={dadosMesAnterior ? { valor: dadosMesAnterior.churn_rate, label: dadosMesAnterior.label } : undefined}
+              comparativoAnoAnterior={dadosAnoAnterior ? { valor: dadosAnoAnterior.churn_rate, label: dadosAnoAnterior.label } : undefined}
             />
             <KPICard
               icon={DollarSign}
               label="MRR Perdido"
-              value={mesFechado ? formatCurrency(dados.mrr_perdido) : '—'}
+              tooltip="Receita mensal perdida com as evasões do período. Soma das parcelas dos alunos que saíram."
+              value={formatCurrency(dados.mrr_perdido)}
               variant="rose"
             />
           </div>
@@ -1634,28 +1649,32 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             <KPICard
               icon={CheckCircle}
               label="Renovações"
-              value={mesFechado ? dados.renovacoes : '—'}
+              tooltip="Contratos que foram renovados no período."
+              value={dados.renovacoes}
               variant="emerald"
             />
             <KPICard
               icon={RefreshCw}
               label="Taxa Renovação"
-              value={mesFechado ? dados.renovacoes_pct : '—'}
+              tooltip="Percentual de contratos renovados sobre o total de contratos vencidos no período."
+              value={dados.renovacoes_pct}
               target={metas.taxa_renovacao}
-              format={mesFechado ? "percent" : "number"}
+              format="percent"
               variant="emerald"
-              comparativoMesAnterior={mesFechado && dadosMesAnterior ? { valor: dadosMesAnterior.taxa_renovacao, label: dadosMesAnterior.label } : undefined}
-              comparativoAnoAnterior={mesFechado && dadosAnoAnterior ? { valor: dadosAnoAnterior.taxa_renovacao, label: dadosAnoAnterior.label } : undefined}
+              comparativoMesAnterior={dadosMesAnterior ? { valor: dadosMesAnterior.taxa_renovacao, label: dadosMesAnterior.label } : undefined}
+              comparativoAnoAnterior={dadosAnoAnterior ? { valor: dadosAnoAnterior.taxa_renovacao, label: dadosAnoAnterior.label } : undefined}
             />
             <KPICard
               icon={Bell}
               label="Aviso Prévio"
-              value={mesFechado ? dados.aviso_previo : '—'}
+              tooltip="Alunos que sinalizaram intenção de cancelar mas ainda não efetivaram."
+              value={dados.aviso_previo}
               variant="amber"
             />
             <KPICard
               icon={Calendar}
               label="Tempo Permanência"
+              tooltip="Tempo médio (em meses) que os alunos permanecem na escola antes de sair."
               value={dados.tempo_permanencia}
               subvalue="Meses (média) · clique para detalhar"
               variant="cyan"
