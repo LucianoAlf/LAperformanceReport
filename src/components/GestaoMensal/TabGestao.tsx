@@ -616,27 +616,37 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             setMesFechado(true);
           }
 
-          // Buscar matrículas via LEADS CONVERTIDOS (mesma fonte do funil comercial)
+          // Buscar matrículas via tabela ALUNOS (mesma fonte do card e da view)
           const startDate = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
           const ultimoDia = new Date(ano, mesFinal, 0).getDate();
           const endDate = `${ano}-${String(mesFinal).padStart(2, '0')}-${ultimoDia}`;
 
-          let leadsMatQuery = supabase
-            .from('leads')
+          let alunosMatQuery = supabase
+            .from('alunos')
             .select(`
-              id, status, quantidade,
-              cursos(nome),
-              professores:professor_experimental_id(id, nome)
+              id, nome,
+              cursos:curso_id!left(nome, is_projeto_banda),
+              professores:professor_atual_id!left(id, nome),
+              tipos_matricula:tipo_matricula_id!left(codigo)
             `)
-            .gte('data_contato', startDate)
-            .lte('data_contato', endDate)
-            .in('status', ['matriculado', 'convertido']);
+            .not('data_matricula', 'is', null)
+            .or('is_segundo_curso.is.null,is_segundo_curso.eq.false')
+            .gte('data_matricula', startDate)
+            .lte('data_matricula', endDate);
 
           if (unidade !== 'todos') {
-            leadsMatQuery = leadsMatQuery.eq('unidade_id', unidade);
+            alunosMatQuery = alunosMatQuery.eq('unidade_id', unidade);
           }
 
-          const { data: leadsMatData } = await leadsMatQuery;
+          const { data: alunosMatRaw } = await alunosMatQuery;
+          // Filtrar passaporte only (sem banda, coral, bolsista)
+          const leadsMatData = (alunosMatRaw || []).filter((a: any) => {
+            const codigo = a.tipos_matricula?.codigo;
+            if (codigo === 'BOLSISTA_INT' || codigo === 'BOLSISTA_PARC') return false;
+            if (a.cursos?.is_projeto_banda) return false;
+            if (a.cursos?.nome?.toLowerCase().includes('canto coral')) return false;
+            return true;
+          });
 
           // Buscar distribuição LA Kids vs LA (12+) dos alunos ativos
           let alunosAtivosQuery = supabase
@@ -654,16 +664,16 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           const totalLaKids = alunosAtivosData?.filter(a => a.idade_atual !== null && a.idade_atual <= 11).length || 0;
           const totalLaAdultos = alunosAtivosData?.filter(a => a.idade_atual !== null && a.idade_atual >= 12).length || 0;
 
-          // Matrículas por Curso e Professor (via leads convertidos)
+          // Matrículas por Curso e Professor (via tabela alunos — mesma fonte do card)
           const cursoMatMap = new Map<string, number>();
           const profMatMap = new Map<string, { id: number; count: number }>();
-          leadsMatData?.forEach((l: any) => {
-            const curso = l.cursos?.nome || 'Não informado';
-            cursoMatMap.set(curso, (cursoMatMap.get(curso) || 0) + (l.quantidade || 1));
-            const prof = l.professores?.nome || 'Sem Professor';
-            const profId = l.professores?.id || 0;
+          leadsMatData?.forEach((a: any) => {
+            const curso = a.cursos?.nome || 'Não informado';
+            cursoMatMap.set(curso, (cursoMatMap.get(curso) || 0) + 1);
+            const prof = a.professores?.nome || 'Sem Professor';
+            const profId = a.professores?.id || 0;
             const current = profMatMap.get(prof) || { id: profId, count: 0 };
-            current.count += (l.quantidade || 1);
+            current.count += 1;
             profMatMap.set(prof, current);
           });
 
