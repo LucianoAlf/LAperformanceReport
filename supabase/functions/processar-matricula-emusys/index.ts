@@ -65,6 +65,7 @@ interface Payload {
   dataInicioContrato: string | null;
   dataFimContrato: string | null;
   valorMensalidade: number | null;
+  valorPassaporte: number | null;
   classificacao: string | null;
   idade: number | null;
   professorNome: string | null;
@@ -111,6 +112,7 @@ function parsePayload(body: any): Payload | null {
     dataInicioContrato: disc?.data_hora_primeira_aula || null,
     dataFimContrato: disc?.data_hora_ultima_aula || null,
     valorMensalidade: m.valor || null,
+    valorPassaporte: m.valor_taxa_matricula || null,
     classificacao: calcularClassificacao(m.data_nascimento_aluno),
     idade: calcularIdade(m.data_nascimento_aluno),
     professorNome: disc?.nome_professor || null,
@@ -283,6 +285,7 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
       email: p.emailAluno || undefined,
       data_matricula: p.dataMatricula || undefined,
       valor_parcela: p.valorMensalidade || undefined,
+      valor_passaporte: p.valorPassaporte || undefined,
       data_nascimento: p.dataNascimento || undefined,
       idade_atual: p.idade || undefined,
       classificacao: p.classificacao || undefined,
@@ -308,6 +311,7 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
       email: p.emailAluno,
       data_matricula: p.dataMatricula,
       valor_parcela: p.valorMensalidade,
+      valor_passaporte: p.valorPassaporte,
       data_nascimento: p.dataNascimento,
       idade_atual: p.idade,
       classificacao: p.classificacao,
