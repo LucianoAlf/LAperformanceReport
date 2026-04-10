@@ -289,7 +289,7 @@ export function ComercialPage() {
   const [filtroCanalFunil, setFiltroCanalFunil] = useState<string>('todos');
   const [filtroCursoFunil, setFiltroCursoFunil] = useState<string>('todos');
   const [filtroTipoExp, setFiltroTipoExp] = useState<'leads_novos' | 'todos' | 'alunos'>('leads_novos');
-  const [filtroTipoMat, setFiltroTipoMat] = useState<'novos_alunos' | 'todos' | 'segundo_curso'>('novos_alunos');
+  const [filtroTipoMat, setFiltroTipoMat] = useState<'novos_alunos' | 'todos' | 'segundo_curso' | 'por_data_matricula'>('novos_alunos');
   const [selecionadosFunil, setSelecionadosFunil] = useState<Set<number>>(new Set());
   const [excluindoEmLote, setExcluindoEmLote] = useState(false);
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
@@ -477,10 +477,12 @@ export function ComercialPage() {
 
       if (error) throw error;
 
-      let registros = data || [];
+      const registros = data || [];
 
       // Buscar matrículas convertidas no período mas com data_contato fora do range
-      // (ex: lead entrou em março, matriculou em abril — não aparece na query por data_contato)
+      // (ex: lead entrou em março, matriculou em abril)
+      // NÃO infla o pipeline — armazena separadamente para filtro "por data de matrícula"
+      let matriculasForaRange: any[] = [];
       if (startDate && endDate) {
         let queryConvertidos = supabase
           .from('leads')
@@ -500,12 +502,7 @@ export function ComercialPage() {
         }
 
         const { data: convertidosForaRange } = await queryConvertidos;
-        if (convertidosForaRange?.length) {
-          const idsExistentes = new Set(registros.map(r => r.id));
-          for (const c of convertidosForaRange) {
-            if (!idsExistentes.has(c.id)) registros.push(c);
-          }
-        }
+        matriculasForaRange = convertidosForaRange || [];
       }
 
       // Quando o filtro é "Hoje", buscar dados do mês inteiro para o "Acumulado do Mês"
@@ -650,11 +647,25 @@ export function ComercialPage() {
       const registrosEntradaHoje = registros.filter(r => r.data_contato === hoje);
       setRegistrosHoje(registrosEntradaHoje);
 
-      // Matrículas do mês — filtrar por data_conversao (quando efetivamente matriculou)
-      const matriculasDoMes = registros
+      // Matrículas do mês — leads do período que converteram
+      const matriculasDoFunil = registros
         .filter(r => ['matriculado','convertido'].includes(r.status) && r.data_conversao &&
-          r.data_conversao >= (startDate || '0000') && r.data_conversao <= (endDate || '9999'))
-        .map(m => ({
+          r.data_conversao >= (startDate || '0000') && r.data_conversao <= (endDate || '9999'));
+
+      // Matrículas fora do range formatadas (leads de outros meses que matricularam no período)
+      const matriculasForaFormatadas = matriculasForaRange.map(m => ({
+        ...m,
+        _fora_range: true, // flag para identificar que veio de outro período
+      }));
+
+      // Combinar: matrículas do funil + fora do range (sem duplicatas)
+      const idsDoFunil = new Set(matriculasDoFunil.map(m => m.id));
+      const todasMatriculas = [
+        ...matriculasDoFunil,
+        ...matriculasForaFormatadas.filter(m => !idsDoFunil.has(m.id)),
+      ];
+
+      const matriculasDoMes = todasMatriculas.map(m => ({
           ...m,
           canal_nome: (m.canais_origem as any)?.nome || '',
           curso_nome: (m.cursos as any)?.nome || '',
@@ -3129,7 +3140,7 @@ export function ComercialPage() {
                 { key: 'leads', label: 'Novos', count: leadsMes.filter(l => !l.status || l.status === 'novo').length, icon: Smartphone, color: '#3b82f6', gradient: 'from-blue-500 to-cyan-500' },
                 { key: 'experimental', label: 'Experimentais', count: experimentaisDetalhadas.filter((e: any) => filtroTipoExp === 'leads_novos' ? !e.lead_aluno_id : filtroTipoExp === 'alunos' ? !!e.lead_aluno_id : true).length, icon: Guitar, color: '#a855f7', gradient: 'from-purple-500 to-violet-500' },
                 { key: 'visita', label: 'Visitas', count: visitasMes.length, icon: Building2, color: '#f59e0b', gradient: 'from-amber-500 to-orange-500' },
-                { key: 'matricula', label: 'Matrículas', count: matriculasMes.filter((m: any) => { const isBanda = m.curso_nome?.toLowerCase().includes('banda'); return filtroTipoMat === 'novos_alunos' ? !m.is_segundo_curso && !isBanda : filtroTipoMat === 'segundo_curso' ? m.is_segundo_curso || isBanda : true; }).length, icon: GraduationCap, color: '#10b981', gradient: 'from-emerald-500 to-teal-500' },
+                { key: 'matricula', label: 'Matrículas', count: matriculasMes.filter((m: any) => { const isBanda = m.curso_nome?.toLowerCase().includes('banda'); if (filtroTipoMat === 'novos_alunos') return !m.is_segundo_curso && !isBanda && !m._fora_range; if (filtroTipoMat === 'segundo_curso') return (m.is_segundo_curso || isBanda) && !m._fora_range; if (filtroTipoMat === 'por_data_matricula') return true; return !m._fora_range; }).length, icon: GraduationCap, color: '#10b981', gradient: 'from-emerald-500 to-teal-500' },
               ]}
               totalLeads={leadsMes.length}
               activeStage={abaDetalhamento}
@@ -3242,9 +3253,10 @@ export function ComercialPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="novos_alunos">Novos alunos</SelectItem>
-                  <SelectItem value="todos">Todas as matriculas</SelectItem>
+                  <SelectItem value="novos_alunos">Novos alunos (do período)</SelectItem>
+                  <SelectItem value="todos">Todas (do período)</SelectItem>
                   <SelectItem value="segundo_curso">Segundo curso / Banda</SelectItem>
+                  <SelectItem value="por_data_matricula">Por data de matrícula</SelectItem>
                 </SelectContent>
               </Select>
             )}
@@ -4528,9 +4540,11 @@ export function ComercialPage() {
         {abaDetalhamento === 'matricula' && (() => {
           const isBanda = (nome: string) => nome?.toLowerCase().includes('banda');
           const matriculasFiltradas = matriculasMes.filter((l: any) => {
-            // Filtro por tipo (novos alunos vs segundo curso/banda)
-            if (filtroTipoMat === 'novos_alunos' && (l.is_segundo_curso || isBanda(l.curso_nome))) return false;
-            if (filtroTipoMat === 'segundo_curso' && !l.is_segundo_curso && !isBanda(l.curso_nome)) return false;
+            // Filtro por tipo (novos alunos vs segundo curso/banda vs por data matrícula)
+            if (filtroTipoMat === 'novos_alunos' && (l.is_segundo_curso || isBanda(l.curso_nome) || l._fora_range)) return false;
+            if (filtroTipoMat === 'segundo_curso' && (!l.is_segundo_curso && !isBanda(l.curso_nome) || l._fora_range)) return false;
+            if (filtroTipoMat === 'todos' && l._fora_range) return false;
+            // 'por_data_matricula': mostra todas (incluindo fora do range)
             if (buscaFunil) {
               const termo = buscaFunil.toLowerCase();
               const nome = (l.aluno_nome || l.nome || '').toLowerCase();

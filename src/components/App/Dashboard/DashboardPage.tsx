@@ -28,7 +28,7 @@ import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
 import { TipoCompetencia, CompetenciaFiltro, CompetenciaRange } from '@/hooks/useCompetenciaFiltro';
 import { useMetasKPI } from '@/hooks/useMetasKPI';
 import { KPICard } from '@/components/ui/KPICard';
-import { ModalDetalheKPI } from './ModalDetalheKPI';
+import { ModalDetalheKPI, BadgeUnidade, BadgeTipo, ValorParcela, TextoCurso } from './ModalDetalheKPI';
 
 
 interface OutletContextType {
@@ -189,6 +189,7 @@ export function DashboardPage() {
         data_matricula: a.data_matricula ? new Date(a.data_matricula + 'T12:00:00').toLocaleDateString('pt-BR') : '—',
         curso: a.cursos?.nome || '—',
         valor: a.valor_parcela ? `R$ ${Number(a.valor_parcela).toLocaleString('pt-BR')}` : '—',
+        _valor_raw: a.valor_parcela ? Number(a.valor_parcela) : 0,
       })));
     } finally {
       setCarregandoModal(false);
@@ -222,6 +223,7 @@ export function DashboardPage() {
         unidade: m.unidades?.nome || '—',
         data_evasao: m.data ? new Date(m.data + 'T12:00:00').toLocaleDateString('pt-BR') : '—',
         tipo: m.tipo === 'evasao' ? 'Evasão' : 'Não Renovação',
+        _tipo_raw: m.tipo,
         motivo: m.motivo || '—',
       })));
     } finally {
@@ -1170,12 +1172,36 @@ export function DashboardPage() {
         dados={dadosModalMatriculas}
         colunas={[
           { key: 'nome', label: 'Aluno' },
-          { key: 'unidade', label: 'Unidade' },
+          { key: 'unidade', label: 'Unidade', render: (v: string) => <BadgeUnidade nome={v} /> },
           { key: 'data_matricula', label: 'Data Matrícula' },
-          { key: 'curso', label: 'Curso' },
-          { key: 'valor', label: 'Valor Parcela' },
+          { key: 'curso', label: 'Curso', render: (v: string) => <TextoCurso nome={v} /> },
+          { key: 'valor', label: 'Valor Parcela', render: (v: string) => <ValorParcela valor={v} /> },
         ]}
         carregando={carregandoModal}
+        resumo={(() => {
+          const total = dadosModalMatriculas.length;
+          const comValor = dadosModalMatriculas.filter(d => d._valor_raw > 0);
+          const somaValor = comValor.reduce((s, d) => s + d._valor_raw, 0);
+          const ticketMedio = comValor.length > 0 ? somaValor / comValor.length : 0;
+          const cursos = new Set(dadosModalMatriculas.map(d => d.curso).filter(c => c !== '—'));
+          return [
+            { label: 'Total', valor: total, icone: <UserPlus size={14} />, cor: 'text-sky-400', destaque: true },
+            { label: 'Faturamento', valor: `R$ ${somaValor.toLocaleString('pt-BR')}`, icone: <DollarSign size={14} />, cor: 'text-emerald-400' },
+            { label: 'Ticket Médio', valor: ticketMedio > 0 ? `R$ ${ticketMedio.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}` : '—', icone: <TrendingUp size={14} />, cor: 'text-amber-400' },
+            { label: 'Cursos', valor: cursos.size, icone: <GraduationCap size={14} />, cor: 'text-violet-400' },
+          ];
+        })()}
+        distribuicao={unidade === 'todos' ? {
+          titulo: 'Por Unidade',
+          dados: (() => {
+            const contagem: Record<string, number> = {};
+            dadosModalMatriculas.forEach(d => { contagem[d.unidade] = (contagem[d.unidade] || 0) + 1; });
+            const cores: Record<string, string> = { 'Recreio': 'bg-violet-500/70', 'Barra': 'bg-amber-500/70', 'Campo Grande': 'bg-emerald-500/70' };
+            return Object.entries(contagem)
+              .sort((a, b) => b[1] - a[1])
+              .map(([label, valor]) => ({ label, valor, cor: cores[label] || 'bg-slate-500/70' }));
+          })(),
+        } : undefined}
       />
 
       {/* Modal Evasões */}
@@ -1187,12 +1213,37 @@ export function DashboardPage() {
         dados={dadosModalEvasoes}
         colunas={[
           { key: 'nome', label: 'Aluno' },
-          { key: 'unidade', label: 'Unidade' },
+          { key: 'unidade', label: 'Unidade', render: (v: string) => <BadgeUnidade nome={v} /> },
           { key: 'data_evasao', label: 'Data' },
-          { key: 'tipo', label: 'Tipo' },
+          { key: 'tipo', label: 'Tipo', render: (_v: string, row: any) => <BadgeTipo tipo={row.tipo} variante={row._tipo_raw === 'evasao' ? 'evasao' : 'nao_renovacao'} /> },
           { key: 'motivo', label: 'Motivo' },
         ]}
         carregando={carregandoModal}
+        resumo={(() => {
+          const total = dadosModalEvasoes.length;
+          const evasoes = dadosModalEvasoes.filter(d => d._tipo_raw === 'evasao').length;
+          const naoRenov = dadosModalEvasoes.filter(d => d._tipo_raw === 'nao_renovacao').length;
+          const motivoMap: Record<string, number> = {};
+          dadosModalEvasoes.forEach(d => { if (d.motivo !== '—') motivoMap[d.motivo] = (motivoMap[d.motivo] || 0) + 1; });
+          const topMotivo = Object.entries(motivoMap).sort((a, b) => b[1] - a[1])[0];
+          return [
+            { label: 'Total Saídas', valor: total, icone: <UserMinus size={14} />, cor: 'text-red-400', destaque: true },
+            { label: 'Evasões', valor: evasoes, icone: <AlertTriangle size={14} />, cor: 'text-red-400' },
+            { label: 'Não Renovações', valor: naoRenov, icone: <RefreshCw size={14} />, cor: 'text-orange-400' },
+            { label: 'Top Motivo', valor: topMotivo ? `${topMotivo[0]} (${topMotivo[1]})` : '—', cor: 'text-slate-300' },
+          ];
+        })()}
+        distribuicao={unidade === 'todos' ? {
+          titulo: 'Por Unidade',
+          dados: (() => {
+            const contagem: Record<string, number> = {};
+            dadosModalEvasoes.forEach(d => { contagem[d.unidade] = (contagem[d.unidade] || 0) + 1; });
+            const cores: Record<string, string> = { 'Recreio': 'bg-violet-500/70', 'Barra': 'bg-amber-500/70', 'Campo Grande': 'bg-emerald-500/70' };
+            return Object.entries(contagem)
+              .sort((a, b) => b[1] - a[1])
+              .map(([label, valor]) => ({ label, valor, cor: cores[label] || 'bg-slate-500/70' }));
+          })(),
+        } : undefined}
       />
     </div>
   );
