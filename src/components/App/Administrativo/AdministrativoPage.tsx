@@ -1312,10 +1312,12 @@ export function AdministrativoPage() {
             />
           )}
           {activeTab === 'avisos' && (
-            <TabelaAvisosPrevios 
-              data={avisosPrevios} 
+            <TabelaAvisosPrevios
+              data={avisosPrevios}
               onEdit={handleEdit}
               onDelete={handleDeleteMovimentacao}
+              startDate={startDate}
+              endDate={endDate}
             />
           )}
           {activeTab === 'cancelamentos' && (
