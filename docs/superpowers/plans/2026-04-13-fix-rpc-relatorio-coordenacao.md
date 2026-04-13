@@ -1,10 +1,55 @@
--- Migração: Criar função get_dados_relatorio_coordenacao
--- Data: 2026-01-26 (atualizada 2026-04-13)
--- Descrição: Função para buscar dados do relatório de coordenação pedagógica com IA
--- Coordenadores: Quintela e Juliana
--- V2: Consulta tabelas base por período (não usa mais vw_kpis_professor_mensal)
--- Fix: Consolida professores multi-unidade (sem duplicatas)
+# Fix RPC get_dados_relatorio_coordenacao — Consulta por Periodo
 
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Corrigir a RPC `get_dados_relatorio_coordenacao` para retornar dados corretos para qualquer mes/ano, nao apenas o mes atual, e consolidar professores multi-unidade para corrigir bug de contagem duplicada.
+
+**Architecture:** Substituir todas as referencias a `vw_kpis_professor_mensal` (que usa `CURRENT_DATE` hardcoded) por CTEs que consultam tabelas base (`alunos`, `aulas_emusys`, `aluno_presenca`, `leads`, `movimentacoes_admin`) filtrando pelo periodo `p_ano`/`p_mes`. Agrupar professores que atuam em multiplas unidades (consolidado) antes de retornar os dados. Os comparativos (mes anterior e ano anterior) tambem usam as mesmas CTEs recursivamente.
+
+**Tech Stack:** PostgreSQL (Supabase), plpgsql
+
+**Impacto:** Apenas a RPC `get_dados_relatorio_coordenacao`. Nenhuma outra tela ou view e afetada.
+
+---
+
+## File Structure
+
+- **Modify:** `supabase/migrations/20260126_create_get_dados_relatorio_coordenacao.sql` (referencia local, a alteracao real e via `apply_migration` no Supabase)
+
+---
+
+### Task 1: Criar migration com a RPC corrigida
+
+**Files:**
+- Create: nova migration via Supabase MCP `apply_migration`
+
+**O que muda vs RPC atual:**
+
+1. **CTEs por periodo** em vez de `vw_kpis_professor_mensal`:
+   - `carteira`: `alunos WHERE data_matricula <= fim_mes AND (data_saida IS NULL OR data_saida >= inicio_mes) AND status != 'lead'`
+   - `presenca`: `aulas_emusys + aluno_presenca` filtrado por `data_aula` no mes
+   - `turmas_calc`: `aulas_emusys + aluno_presenca` contando alunos distintos por turma no mes
+   - `experimentais`: `leads WHERE data_contato` no mes
+   - `renovacoes`: `movimentacoes_admin WHERE data` no mes e tipo IN ('renovacao','nao_renovacao')
+   - `evasoes`: `movimentacoes_admin WHERE data` no mes e tipo IN ('evasao','nao_renovacao'), excluindo segundo_curso
+
+2. **Consolidacao multi-unidade**: quando `p_unidade_id IS NULL` (consolidado), agrupa por professor_id somando carteira/experimentais/matriculas/renovacoes/evasoes e fazendo media ponderada de presenca/media_turma
+
+3. **Comparativos** (mes_anterior, ano_anterior): usam as mesmas CTEs com datas do periodo correspondente
+
+4. **Secoes que nao mudam**: agenda, catalogo_treinamentos, metas_professores (ja usam tabelas base com p_ano/p_mes)
+
+5. **top_retencao**: ajustar filtro de `status = 'ativo'` para filtro por periodo (mesma logica da carteira)
+
+- [ ] **Step 1: Aplicar a migration no Supabase**
+
+Usar o MCP `apply_migration` com o SQL completo da nova RPC (CREATE OR REPLACE FUNCTION).
+
+A funcao recebe os mesmos parametros `(p_unidade_id UUID, p_ano INTEGER, p_mes INTEGER)` e retorna o mesmo JSONB com as mesmas chaves, mantendo compatibilidade total com a edge function `gemini-relatorio-coordenacao`.
+
+SQL completo:
+
+```sql
 CREATE OR REPLACE FUNCTION get_dados_relatorio_coordenacao(
   p_unidade_id UUID,
   p_ano INTEGER,
@@ -127,6 +172,7 @@ BEGIN
           AND (p_unidade_id IS NULL OR m.unidade_id = p_unidade_id)
         GROUP BY m.professor_id, m.unidade_id
       ),
+      -- Juntar por professor+unidade
       kpis_por_unidade AS (
         SELECT
           p.id AS professor_id,
@@ -148,8 +194,10 @@ BEGIN
           COALESCE(ev.evasoes, 0)::integer AS evasoes,
           COALESCE(c.mrr_carteira, 0)::numeric(12,2) AS mrr_carteira,
           COALESCE(ev.mrr_perdido, 0)::numeric(12,2) AS mrr_perdido,
+          -- Taxa de retencao
           CASE WHEN COALESCE(c.carteira_alunos,0) > 0
             THEN ROUND((COALESCE(c.carteira_alunos,0) - COALESCE(ev.evasoes,0))::numeric / c.carteira_alunos * 100, 2) ELSE 100 END AS taxa_retencao,
+          -- Taxa de crescimento (placeholder, sem historico no periodo)
           0::numeric AS taxa_crescimento
         FROM professores p
         LEFT JOIN carteira c ON c.professor_id = p.id
@@ -162,11 +210,13 @@ BEGIN
           AND (c.professor_id IS NOT NULL OR pr.professor_id IS NOT NULL
                OR e.professor_id IS NOT NULL OR r.professor_id IS NOT NULL OR ev.professor_id IS NOT NULL)
       ),
+      -- Consolidar multi-unidade por professor
       kpis_consolidados AS (
         SELECT
           professor_id,
           professor_nome,
           SUM(carteira_alunos) AS carteira_alunos,
+          -- Media ponderada por carteira
           CASE WHEN SUM(carteira_alunos) > 0
             THEN ROUND(SUM(media_presenca * carteira_alunos) / SUM(carteira_alunos), 2)
             ELSE 0 END AS media_presenca,
@@ -189,6 +239,7 @@ BEGIN
           CASE WHEN SUM(carteira_alunos) > 0
             THEN ROUND((SUM(carteira_alunos) - SUM(evasoes))::numeric / SUM(carteira_alunos) * 100, 2) ELSE 100 END AS taxa_retencao,
           0::numeric AS taxa_crescimento,
+          -- Cursos do professor
           (SELECT COALESCE(array_agg(DISTINCT c.nome), ARRAY[]::text[])
            FROM professores_cursos pc
            JOIN cursos c ON c.id = pc.curso_id
@@ -200,7 +251,7 @@ BEGIN
     FROM kpis_consolidados k
   ));
 
-  -- Totais consolidados (do kpis_professores ja consolidado)
+  -- Totais consolidados (calculados do kpis_professores ja consolidado)
   v_result := v_result || jsonb_build_object('totais', (
     SELECT row_to_json(t)
     FROM (
@@ -219,7 +270,7 @@ BEGIN
     ) t
   ));
 
-  -- Top 5 por carteira
+  -- Top 5 professores por carteira (do JSON ja consolidado)
   v_result := v_result || jsonb_build_object('top_carteira', (
     SELECT COALESCE(jsonb_agg(jsonb_build_object(
       'professor', p->>'professor_nome',
@@ -231,7 +282,7 @@ BEGIN
     ) sub
   ));
 
-  -- Top 5 por media turma
+  -- Top 5 professores por media de alunos/turma
   v_result := v_result || jsonb_build_object('top_media_turma', (
     SELECT COALESCE(jsonb_agg(jsonb_build_object(
       'professor', p->>'professor_nome',
@@ -244,7 +295,7 @@ BEGIN
     ) sub
   ));
 
-  -- Top 5 por presenca
+  -- Top 5 professores por presenca
   v_result := v_result || jsonb_build_object('top_presenca', (
     SELECT COALESCE(jsonb_agg(jsonb_build_object(
       'professor', p->>'professor_nome',
@@ -256,7 +307,7 @@ BEGIN
     ) sub
   ));
 
-  -- Top 5 matriculadores
+  -- Top 5 professores matriculadores
   v_result := v_result || jsonb_build_object('top_matriculadores', (
     SELECT COALESCE(jsonb_agg(jsonb_build_object(
       'professor', p->>'professor_nome',
@@ -269,7 +320,7 @@ BEGIN
     ) sub
   ));
 
-  -- Top 5 retencao
+  -- Top 5 professores por retencao (tempo medio de permanencia)
   v_result := v_result || jsonb_build_object('top_retencao', (
     SELECT COALESCE(jsonb_agg(row_to_json(t)), '[]'::jsonb)
     FROM (
@@ -289,7 +340,7 @@ BEGIN
     ) t
   ));
 
-  -- Professores em alerta
+  -- Professores em alerta (do JSON ja consolidado)
   v_result := v_result || jsonb_build_object('professores_alerta', (
     SELECT COALESCE(jsonb_agg(jsonb_build_object(
       'professor_id', (p->>'professor_id')::int,
@@ -310,7 +361,7 @@ BEGIN
     ) sub
   ));
 
-  -- Agenda (sem mudanca)
+  -- Agendamentos/Treinamentos do mes (sem mudanca - ja usa tabelas base)
   v_result := v_result || jsonb_build_object('agenda', (
     SELECT row_to_json(a)
     FROM (
@@ -342,7 +393,7 @@ BEGIN
     ) a
   ));
 
-  -- Catalogo treinamentos (sem mudanca)
+  -- Catalogo de treinamentos (sem mudanca)
   v_result := v_result || jsonb_build_object('catalogo_treinamentos', (
     SELECT COALESCE(jsonb_agg(row_to_json(ct)), '[]'::jsonb)
     FROM (
@@ -353,7 +404,7 @@ BEGIN
     ) ct
   ));
 
-  -- Metas professores (sem mudanca)
+  -- Metas de professores (sem mudanca)
   v_result := v_result || jsonb_build_object('metas_professores', (
     SELECT COALESCE(jsonb_object_agg(mk.tipo, mk.valor), '{}'::jsonb)
     FROM metas_kpi mk
@@ -363,11 +414,12 @@ BEGIN
                       'nps_medio', 'presenca_media', 'taxa_conversao_exp', 'melhor_retencao')
   ));
 
-  -- Comparativo mes anterior
+  -- Comparativo com mes anterior (mesmas CTEs com datas do mes anterior)
   v_result := v_result || jsonb_build_object('mes_anterior', (
     WITH
       cart_ant AS (
-        SELECT a.professor_atual_id AS professor_id, COUNT(*) AS carteira_alunos
+        SELECT a.professor_atual_id AS professor_id,
+          COUNT(*) AS carteira_alunos
         FROM alunos a
         WHERE a.professor_atual_id IS NOT NULL
           AND a.data_matricula <= v_fim_ant
@@ -429,11 +481,12 @@ BEGIN
     ) t
   ));
 
-  -- Comparativo mesmo mes ano anterior
+  -- Comparativo com mesmo mes ano anterior
   v_result := v_result || jsonb_build_object('ano_anterior', (
     WITH
       cart_aa AS (
-        SELECT a.professor_atual_id AS professor_id, COUNT(*) AS carteira_alunos
+        SELECT a.professor_atual_id AS professor_id,
+          COUNT(*) AS carteira_alunos
         FROM alunos a
         WHERE a.professor_atual_id IS NOT NULL
           AND a.data_matricula <= v_fim_ano_ant
@@ -499,4 +552,108 @@ BEGIN
 END;
 $$;
 
-COMMENT ON FUNCTION get_dados_relatorio_coordenacao IS 'Funcao para buscar dados do relatorio de coordenacao pedagogica com IA - V2: consulta tabelas base por periodo em vez de vw_kpis_professor_mensal';
+COMMENT ON FUNCTION get_dados_relatorio_coordenacao IS 'Funcao para buscar dados do relatorio de coordenacao pedagogica com IA - Coordenadores: Quintela e Juliana. V2: consulta tabelas base por periodo em vez de vw_kpis_professor_mensal.';
+```
+
+- [ ] **Step 2: Verificar que a migration foi aplicada**
+
+Run: `SELECT routine_name FROM information_schema.routines WHERE routine_name = 'get_dados_relatorio_coordenacao';`
+Expected: 1 row
+
+---
+
+### Task 2: Validar resultados para abril/2026 (mes atual)
+
+- [ ] **Step 1: Chamar a RPC para abril/2026 consolidado**
+
+```sql
+SELECT
+  (r->'totais'->>'total_professores')::int AS total_profs,
+  (r->'totais'->>'total_alunos')::int AS total_alunos,
+  (r->'totais'->>'media_presenca')::numeric AS media_presenca,
+  (r->'totais'->>'total_evasoes')::int AS total_evasoes,
+  jsonb_array_length(r->'kpis_professores') AS kpis_count
+FROM get_dados_relatorio_coordenacao(NULL, 2026, 4) r;
+```
+
+Expected: `total_profs = 42`, `kpis_count = 42` (professores consolidados, sem duplicatas)
+
+- [ ] **Step 2: Verificar que professores nao estao duplicados**
+
+```sql
+SELECT
+  (p->>'professor_id')::int AS pid,
+  p->>'professor_nome' AS nome,
+  COUNT(*) AS ocorrencias
+FROM jsonb_array_elements(
+  (SELECT get_dados_relatorio_coordenacao(NULL, 2026, 4))->'kpis_professores'
+) p
+GROUP BY (p->>'professor_id')::int, p->>'professor_nome'
+HAVING COUNT(*) > 1;
+```
+
+Expected: 0 rows (nenhuma duplicata)
+
+---
+
+### Task 3: Validar resultados para marco/2026 (mes anterior — era zerado)
+
+- [ ] **Step 1: Chamar a RPC para marco/2026 consolidado**
+
+```sql
+SELECT
+  (r->'totais'->>'total_professores')::int AS total_profs,
+  (r->'totais'->>'total_alunos')::int AS total_alunos,
+  (r->'totais'->>'media_presenca')::numeric AS media_presenca,
+  (r->'totais'->>'total_evasoes')::int AS total_evasoes
+FROM get_dados_relatorio_coordenacao(NULL, 2026, 3) r;
+```
+
+Expected: `total_profs > 0`, `total_alunos > 0` (NAO deve ser zerado)
+
+- [ ] **Step 2: Chamar a RPC para marco/2026 Campo Grande**
+
+```sql
+SELECT
+  (r->'totais'->>'total_professores')::int AS total_profs,
+  (r->'totais'->>'total_alunos')::int AS total_alunos
+FROM get_dados_relatorio_coordenacao('2ec861f6-023f-4d7b-9927-3960ad8c2a92', 2026, 3) r;
+```
+
+Expected: `total_profs > 0`
+
+- [ ] **Step 3: Verificar comparativo mes anterior preenchido**
+
+```sql
+SELECT
+  r->'mes_anterior'->>'total_professores' AS profs_ant,
+  r->'mes_anterior'->>'total_alunos' AS alunos_ant
+FROM get_dados_relatorio_coordenacao(NULL, 2026, 3) r;
+```
+
+Expected: valores nao-nulos (dados de fevereiro/2026)
+
+---
+
+### Task 4: Atualizar migration local e commit
+
+**Files:**
+- Modify: `supabase/migrations/20260126_create_get_dados_relatorio_coordenacao.sql`
+
+- [ ] **Step 1: Atualizar o arquivo de migration local**
+
+Substituir o conteudo do arquivo `supabase/migrations/20260126_create_get_dados_relatorio_coordenacao.sql` pelo SQL completo da Task 1.
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add supabase/migrations/20260126_create_get_dados_relatorio_coordenacao.sql
+git commit -m "fix: RPC relatorio coordenacao consulta tabelas base por periodo
+
+- Substitui vw_kpis_professor_mensal (hardcoded CURRENT_DATE) por CTEs parametrizadas
+- Carteira calculada por data_matricula/data_saida no periodo
+- Presenca calculada de aulas_emusys do mes
+- Media turma de alunos distintos por turma no mes
+- Consolida professores multi-unidade (fix contagem duplicada)
+- Comparativos (mes anterior, ano anterior) tambem por periodo"
+```
