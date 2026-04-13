@@ -123,16 +123,22 @@ export function AdministrativoPage() {
   });
 
   const { isAdmin, unidadeId } = useAuth();
-  const context = useOutletContext<{ filtroAtivo: string | null; unidadeSelecionada: string | null }>();
-  
+  const context = useOutletContext<{ filtroAtivo: string | null; unidadeSelecionada: string | null; setPeriodoLabel?: (label: string | null) => void }>();
+
   // Para usuários de unidade: usar unidadeId direto do auth (mais confiável que contexto)
   // Para admin: usar filtroAtivo do contexto, fallback para 'todos'
-  const unidade = isAdmin 
+  const unidade = isAdmin
     ? (context?.filtroAtivo ?? 'todos')
     : unidadeId; // pode ser null inicialmente, mas evita fallback para 'todos'
-  
+
   // Hook de filtro de competência (período)
   const competenciaFiltro = useCompetenciaFiltro();
+
+  // Sincronizar badge do header com o filtro local
+  useEffect(() => {
+    context?.setPeriodoLabel?.(competenciaFiltro.range.label);
+    return () => { context?.setPeriodoLabel?.(null); };
+  }, [competenciaFiltro.range.label]);
   
   // Estado
   const [loading, setLoading] = useState(true);

@@ -1,5 +1,5 @@
 import { Outlet } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { AppSidebar } from './AppSidebar';
 import { AppHeader } from './AppHeader';
 import { useUnidadeFiltro } from '../../../hooks/useUnidadeFiltro';
@@ -17,6 +17,8 @@ function BottomSentinel() {
 export function AppLayout() {
   const { unidadeSelecionada, setUnidadeSelecionada, filtroAtivo } = useUnidadeFiltro();
   const competencia = useCompetenciaFiltro();
+  const [periodoLabelOverride, setPeriodoLabelOverride] = useState<string | null>(null);
+  const setPeriodoLabel = useCallback((label: string | null) => setPeriodoLabelOverride(label), []);
 
   // Monitorar estado da sidebar (colapsada ou expandida)
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => {
@@ -57,10 +59,10 @@ export function AppLayout() {
           <AppHeader
             unidadeSelecionada={unidadeSelecionada}
             onUnidadeChange={setUnidadeSelecionada}
-            periodoLabel={competencia.range.label}
+            periodoLabel={periodoLabelOverride || competencia.range.label}
           />
           <main className="p-6">
-            <Outlet context={{ filtroAtivo, unidadeSelecionada, competencia }} />
+            <Outlet context={{ filtroAtivo, unidadeSelecionada, competencia, setPeriodoLabel }} />
             <BottomSentinel />
           </main>
         </div>

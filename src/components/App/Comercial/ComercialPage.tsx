@@ -188,11 +188,17 @@ export function ComercialPage() {
   });
 
   const { usuario, isAdmin, unidadeId } = useAuth();
-  const context = useOutletContext<{ filtroAtivo: string | null; unidadeSelecionada: string | null }>();
+  const context = useOutletContext<{ filtroAtivo: string | null; unidadeSelecionada: string | null; setPeriodoLabel?: (label: string | null) => void }>();
   const filtroAtivo = context?.filtroAtivo;
-  
+
   // Hook de filtro de competência (período)
   const competencia = useCompetenciaFiltro();
+
+  // Sincronizar badge do header com o filtro local
+  useEffect(() => {
+    context?.setPeriodoLabel?.(competencia.range.label);
+    return () => { context?.setPeriodoLabel?.(null); };
+  }, [competencia.range.label]);
   
   // Para usuário de unidade: sempre usa sua unidade (unidadeId do auth)
   // Para admin: usa a unidade selecionada no dropdown do header (unidadeSelecionada do context)
