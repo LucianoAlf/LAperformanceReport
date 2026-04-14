@@ -3147,8 +3147,9 @@ export function ComercialPage() {
                 { key: 'experimental', label: 'Experimentais', count: (() => {
                   if (filtroTipoExp === 'agendadas_periodo') {
                     const { startDate, endDate } = competencia.range;
-                    const fromMain = experimentaisDetalhadas.filter((e: any) => e.data_experimental >= (startDate || '') && e.data_experimental <= (endDate || ''));
-                    const fromOutros = experimentaisHojeOutros;
+                    const toDateBRT = (ts: string) => ts ? new Date(ts).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }) : '';
+                    const fromMain = experimentaisDetalhadas.filter((e: any) => { const d = toDateBRT(e.created_at); return d >= (startDate || '') && d <= (endDate || ''); });
+                    const fromOutros = experimentaisHojeOutros.filter((e: any) => { const d = toDateBRT(e.created_at); return d >= (startDate || '') && d <= (endDate || ''); });
                     const ids = new Set(fromMain.map((e: any) => e.id));
                     return fromMain.length + fromOutros.filter((e: any) => !ids.has(e.id)).length;
                   }
@@ -3904,13 +3905,14 @@ export function ComercialPage() {
         {/* TABELA DE EXPERIMENTAIS */}
         {/* ══════════════════════════════════════════════════════════════ */}
         {abaDetalhamento === 'experimental' && (() => {
-          // Quando filtro "agendadas_periodo", combinar experimentais da Query A (filtradas por data_experimental) com Query B
+          // Quando filtro "agendadas_periodo", filtrar por created_at (data de marcação) no período
           const expBase = (() => {
             if (filtroTipoExp === 'agendadas_periodo') {
               const { startDate, endDate } = competencia.range;
-              const fromMain = experimentaisDetalhadas.filter((e: any) => e.data_experimental >= (startDate || '') && e.data_experimental <= (endDate || ''));
+              const toDateBRT = (ts: string) => ts ? new Date(ts).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }) : '';
+              const fromMain = experimentaisDetalhadas.filter((e: any) => { const d = toDateBRT(e.created_at); return d >= (startDate || '') && d <= (endDate || ''); });
               const ids = new Set(fromMain.map((e: any) => e.id));
-              const fromOutros = experimentaisHojeOutros.filter((e: any) => !ids.has(e.id));
+              const fromOutros = experimentaisHojeOutros.filter((e: any) => { const d = toDateBRT(e.created_at); return d >= (startDate || '') && d <= (endDate || ''); }).filter((e: any) => !ids.has(e.id));
               return [...fromMain, ...fromOutros];
             }
             return experimentaisDetalhadas;
