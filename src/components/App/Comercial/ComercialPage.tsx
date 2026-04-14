@@ -294,7 +294,7 @@ export function ComercialPage() {
   const [filtroIncompletoFunil, setFiltroIncompletoFunil] = useState<string>('todos');
   const [filtroCanalFunil, setFiltroCanalFunil] = useState<string>('todos');
   const [filtroCursoFunil, setFiltroCursoFunil] = useState<string>('todos');
-  const [filtroTipoExp, setFiltroTipoExp] = useState<'leads_novos' | 'todos' | 'alunos'>('leads_novos');
+  const [filtroTipoExp, setFiltroTipoExp] = useState<'leads_novos' | 'todos' | 'alunos' | 'agendadas_periodo'>('leads_novos');
   const [filtroTipoMat, setFiltroTipoMat] = useState<'novos_alunos' | 'todos' | 'segundo_curso' | 'por_data_matricula'>('novos_alunos');
   const [selecionadosFunil, setSelecionadosFunil] = useState<Set<number>>(new Set());
   const [excluindoEmLote, setExcluindoEmLote] = useState(false);
@@ -813,8 +813,8 @@ export function ComercialPage() {
             professores:professor_experimental_id(nome),
             cursos:curso_interesse_id(nome)
           `)
-          .gte('created_at', startDate + 'T00:00:00-03:00')
-          .lte('created_at', endDate + 'T23:59:59-03:00')
+          .gte('data_experimental', startDate)
+          .lte('data_experimental', endDate)
           .neq('status', 'cancelada')
           .or(`data_contato.lt.${startDate},data_contato.gt.${endDate},data_contato.is.null`, { referencedTable: 'leads' });
 
@@ -3144,7 +3144,16 @@ export function ComercialPage() {
             <FunnelPipelineNav
               stages={[
                 { key: 'leads', label: 'Novos', count: leadsMes.filter(l => !l.status || l.status === 'novo').length, icon: Smartphone, color: '#3b82f6', gradient: 'from-blue-500 to-cyan-500' },
-                { key: 'experimental', label: 'Experimentais', count: experimentaisDetalhadas.filter((e: any) => filtroTipoExp === 'leads_novos' ? !e.lead_aluno_id : filtroTipoExp === 'alunos' ? !!e.lead_aluno_id : true).length, icon: Guitar, color: '#a855f7', gradient: 'from-purple-500 to-violet-500' },
+                { key: 'experimental', label: 'Experimentais', count: (() => {
+                  if (filtroTipoExp === 'agendadas_periodo') {
+                    const { startDate, endDate } = competencia.range;
+                    const fromMain = experimentaisDetalhadas.filter((e: any) => e.data_experimental >= (startDate || '') && e.data_experimental <= (endDate || ''));
+                    const fromOutros = experimentaisHojeOutros;
+                    const ids = new Set(fromMain.map((e: any) => e.id));
+                    return fromMain.length + fromOutros.filter((e: any) => !ids.has(e.id)).length;
+                  }
+                  return experimentaisDetalhadas.filter((e: any) => filtroTipoExp === 'leads_novos' ? !e.lead_aluno_id : filtroTipoExp === 'alunos' ? !!e.lead_aluno_id : true).length;
+                })(), icon: Guitar, color: '#a855f7', gradient: 'from-purple-500 to-violet-500' },
                 { key: 'visita', label: 'Visitas', count: visitasMes.length, icon: Building2, color: '#f59e0b', gradient: 'from-amber-500 to-orange-500' },
                 { key: 'matricula', label: 'Matrículas', count: matriculasMes.filter((m: any) => { const isBanda = m.curso_nome?.toLowerCase().includes('banda'); if (filtroTipoMat === 'novos_alunos') return !m.is_segundo_curso && !isBanda && !m._fora_range; if (filtroTipoMat === 'segundo_curso') return (m.is_segundo_curso || isBanda) && !m._fora_range; if (filtroTipoMat === 'por_data_matricula') return true; return !m._fora_range; }).length, icon: GraduationCap, color: '#10b981', gradient: 'from-emerald-500 to-teal-500' },
               ]}
@@ -3250,6 +3259,7 @@ export function ComercialPage() {
                   <SelectItem value="leads_novos">Apenas leads novos</SelectItem>
                   <SelectItem value="todos">Todas as experimentais</SelectItem>
                   <SelectItem value="alunos">Apenas alunos</SelectItem>
+                  <SelectItem value="agendadas_periodo">Agendadas no período</SelectItem>
                 </SelectContent>
               </Select>
             )}
@@ -3894,7 +3904,18 @@ export function ComercialPage() {
         {/* TABELA DE EXPERIMENTAIS */}
         {/* ══════════════════════════════════════════════════════════════ */}
         {abaDetalhamento === 'experimental' && (() => {
-          const expFiltradas = experimentaisDetalhadas.filter((l: any) => {
+          // Quando filtro "agendadas_periodo", combinar experimentais da Query A (filtradas por data_experimental) com Query B
+          const expBase = (() => {
+            if (filtroTipoExp === 'agendadas_periodo') {
+              const { startDate, endDate } = competencia.range;
+              const fromMain = experimentaisDetalhadas.filter((e: any) => e.data_experimental >= (startDate || '') && e.data_experimental <= (endDate || ''));
+              const ids = new Set(fromMain.map((e: any) => e.id));
+              const fromOutros = experimentaisHojeOutros.filter((e: any) => !ids.has(e.id));
+              return [...fromMain, ...fromOutros];
+            }
+            return experimentaisDetalhadas;
+          })();
+          const expFiltradas = expBase.filter((l: any) => {
             // Filtro por tipo (leads novos vs alunos)
             if (filtroTipoExp === 'leads_novos' && l.lead_aluno_id) return false;
             if (filtroTipoExp === 'alunos' && !l.lead_aluno_id) return false;
@@ -3913,7 +3934,8 @@ export function ComercialPage() {
                 <thead>
                   <tr className="text-left text-slate-400 border-b border-slate-700">
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">#</th>
-                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Experimental</th>
+                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Agendada em</th>
+                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Aula em</th>
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Aluno</th>
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Responsável</th>
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Telefone</th>
@@ -3952,6 +3974,10 @@ export function ComercialPage() {
                     const fmtData = (exp: any) => {
                       const d = exp.data_experimental ? new Date(exp.data_experimental + 'T12:00:00') : null;
                       return d ? d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }) + (exp.horario_experimental ? ' ' + exp.horario_experimental.slice(0, 5) : '') : '-';
+                    };
+                    const fmtAgendada = (exp: any) => {
+                      const d = exp.created_at ? new Date(exp.created_at) : null;
+                      return d ? d.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }) : '-';
                     };
                     const abrirLead = (exp: any) => {
                       const leadData = exp.leads;
@@ -4049,6 +4075,7 @@ export function ComercialPage() {
                         return [(
                           <tr key={first.id} className="border-b border-slate-700/50 hover:bg-slate-700/20 transition-colors cursor-pointer" onClick={() => abrirLead(first)}>
                             <td className="py-3 px-2 text-slate-500 font-medium border-r border-slate-700/30">{rowIndex}</td>
+                            <td className="py-3 px-2 border-r border-slate-700/30"><span className="px-1.5 py-0.5 rounded text-xs font-medium bg-slate-500/20 text-slate-400">{fmtAgendada(first)}</span></td>
                             <td className="py-3 px-2 border-r border-slate-700/30"><span className="px-1.5 py-0.5 rounded text-xs font-medium bg-violet-500/20 text-violet-400">{fmtData(first)}</span></td>
                             <td className="py-3 px-2 border-r border-slate-700/30">
                               <CelulaEditavelInline
@@ -4130,6 +4157,7 @@ export function ComercialPage() {
                           }}
                         >
                           <td className="py-3 px-2 text-slate-500 font-medium border-r border-slate-700/30">{rowIndex}</td>
+                          <td className="py-3 px-2 border-r border-slate-700/30"><span className="px-1.5 py-0.5 rounded text-xs font-medium bg-slate-500/20 text-slate-400">{fmtAgendada(first)}</span></td>
                           <td className="py-3 px-2 border-r border-slate-700/30"><span className="px-1.5 py-0.5 rounded text-xs font-medium bg-violet-500/20 text-violet-400">{fmtData(first)}</span></td>
                           <td className="py-3 px-2 border-r border-slate-700/30">
                             <div className="flex items-center gap-1.5">
@@ -4198,6 +4226,7 @@ export function ComercialPage() {
                           rows.push(
                             <tr key={exp.id} className="border-b border-slate-700/50 bg-slate-800/30 hover:bg-slate-700/20 transition-colors cursor-pointer" onClick={() => abrirLead(exp)}>
                               <td className="py-3 px-2 text-slate-600 border-r border-slate-700/30"></td>
+                              <td className="py-3 px-2 border-r border-slate-700/30"><span className="px-1.5 py-0.5 rounded text-xs font-medium bg-slate-500/20 text-slate-400">{fmtAgendada(exp)}</span></td>
                               <td className="py-3 px-2 border-r border-slate-700/30"><span className="px-1.5 py-0.5 rounded text-xs font-medium bg-violet-500/20 text-violet-400">{fmtData(exp)}</span></td>
                               <td className="py-3 px-2 border-r border-slate-700/30">
                                 <div className="flex items-center gap-1.5 pl-5">
