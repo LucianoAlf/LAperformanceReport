@@ -60,9 +60,10 @@ interface AlertaPerformance {
 interface Props {
   unidadeAtual: UnidadeId;
   healthWeights?: typeof DEFAULT_HEALTH_WEIGHTS;
+  onPeriodoChange?: (label: string | null) => void;
 }
 
-export function TabPerformanceProfessores({ unidadeAtual, healthWeights }: Props) {
+export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPeriodoChange }: Props) {
   const toast = useToast();
   
   // Hook de competência (Mês/Trim/Sem/Ano)
@@ -70,6 +71,12 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights }: Props
   const ano = competenciaFiltro.filtro.ano;
   const mes = competenciaFiltro.filtro.mes;
   const competencia = `${ano}-${String(mes).padStart(2, '0')}`;
+
+  // Sincronizar badge do header com o filtro local
+  useEffect(() => {
+    onPeriodoChange?.(competenciaFiltro.range.label);
+    return () => { onPeriodoChange?.(null); };
+  }, [competenciaFiltro.range.label]);
   
   const [professores, setProfessores] = useState<ProfessorPerformance[]>([]);
   const [loading, setLoading] = useState(true);

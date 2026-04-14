@@ -59,7 +59,7 @@ export function ProfessoresPage() {
     iconeWrapperCor: 'bg-violet-500/20',
   });
 
-  const context = useOutletContext<{ filtroAtivo: boolean; unidadeSelecionada: UnidadeId }>();
+  const context = useOutletContext<{ filtroAtivo: boolean; unidadeSelecionada: UnidadeId; setPeriodoLabel?: (label: string | null) => void }>();
   const unidadeAtual = context?.unidadeSelecionada || 'todos';
   const toast = useToast();
   const { weights: healthWeights, saveWeights } = useHealthScoreConfig(unidadeAtual);
@@ -632,7 +632,7 @@ export function ProfessoresPage() {
 
       {/* Conteúdo da aba Performance */}
       {abaAtiva === 'performance' && (
-        <TabPerformanceProfessores unidadeAtual={unidadeAtual} healthWeights={healthWeights} />
+        <TabPerformanceProfessores unidadeAtual={unidadeAtual} healthWeights={healthWeights} onPeriodoChange={context?.setPeriodoLabel} />
       )}
 
       {/* Conteúdo da aba Carteira */}
