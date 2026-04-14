@@ -19,3 +19,15 @@ Obs 3: Alunos Bolsistas Integral, Bolsistas Parciais, Banda, Coral, não contam 
 
 - LTV Nao entra bolsista.
 
+
+[ Comercial ]
+
+### O que importa pro comercial
+
+- Aulas experimentais somente de leads, tem experimentais que chegam no webhook de alunos ja da escola.
+- o que importa pra mim é: experimentais que são marcadas pra aluno da escola. Tipo, o aluno quer trocar de curso, o aluno faz bateria e quer fazer aula de canto. Aí a gente marca uma aula experimental pro aluno, de canto. Mas essa aula experimental pro aluno da escola não conta, não contabiliza, entendeu? É somente pra uma troca de curso aqui na escola. Então, no Emusys contabiliza tudo.
+
+
+- Matriculas para o comercial: Novas matrículas são todas as matrículas que foram feitas na escola, mas isso não quer dizer que são novos alunos. Eh, matrícula em banda, segundo curso, enfim. O que vale é a entrada de novos alunos, aquele aluno que não tem vínculo com a escola, que entrou agora de novo, entendeu? Ou entrou pela primeira vez, ou eh, eh, já foi ex-aluno. Isso conta pra gente, que paga o passaporte
+
+- Matriculas de bolsista nao conta como matricula.

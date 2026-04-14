@@ -5,3 +5,5 @@
 - corrigir as views de metricas: as metricas de churn rate utilizam umas views que contam valores duplicados.
 
 - o ltv tambem conta dados historicos e nao filtra corretamente pelos dados.
+
+- Professor Gabriel Antony Trabalha em duas unidades mas so esta configurada para uma.
