@@ -884,9 +884,38 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                       )}
                     </td>
                     <td className="text-center px-4 py-3">
-                      <span className={`font-medium ${getMetricaColor(professor.taxa_retencao, { critico: 70, atencao: 95 })}`}>
-                        {professor.taxa_retencao.toFixed(0)}%
-                      </span>
+                      <Tooltip
+                        side="top"
+                        content={
+                          <div className="text-xs min-w-[200px]">
+                            <p className="font-bold text-slate-200 mb-1.5">Cálculo da Retenção</p>
+                            <div className="space-y-1">
+                              <div className="flex justify-between gap-4">
+                                <span className="text-slate-400">Carteira de alunos</span>
+                                <span className="text-white font-medium">{professor.total_alunos}</span>
+                              </div>
+                              <div className="flex justify-between gap-4">
+                                <span className="text-slate-400">Evasões no mês</span>
+                                <span className="text-red-400 font-medium">{professor.evasoes_mes}</span>
+                              </div>
+                              <div className="flex justify-between gap-4 border-t border-slate-600 pt-1 mt-1">
+                                <span className="text-slate-400">Taxa cancelamento</span>
+                                <span className="text-white font-medium">
+                                  {professor.total_alunos > 0 ? ((professor.evasoes_mes / professor.total_alunos) * 100).toFixed(1) : '0'}%
+                                </span>
+                              </div>
+                              <div className="flex justify-between gap-4">
+                                <span className="text-slate-300 font-semibold">Retenção (100 - canc.)</span>
+                                <span className="text-white font-bold">{professor.taxa_retencao.toFixed(1)}%</span>
+                              </div>
+                            </div>
+                          </div>
+                        }
+                      >
+                        <span className={`font-medium cursor-help ${getMetricaColor(professor.taxa_retencao, { critico: 70, atencao: 95 })}`}>
+                          {professor.taxa_retencao.toFixed(0)}%
+                        </span>
+                      </Tooltip>
                     </td>
                     <td className="text-center px-4 py-3">
                       <Tooltip

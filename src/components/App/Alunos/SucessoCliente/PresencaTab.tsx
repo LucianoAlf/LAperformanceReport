@@ -87,6 +87,7 @@ export function PresencaTab({ unidadeAtual }: Props) {
   const [loadingAlunos, setLoadingAlunos] = useState(true);
   const [dropdownAberto, setDropdownAberto] = useState(false);
   const [filtroTipoAula, setFiltroTipoAula] = useState<'todas' | 'experimental'>('todas');
+  const [filtroTipoRegistro, setFiltroTipoRegistro] = useState<'todas' | 'turma' | 'individual'>('todas');
 
   // === Estado dos Logs ===
   const [logs, setLogs] = useState<SyncLog[]>([]);
@@ -274,24 +275,36 @@ export function PresencaTab({ unidadeAtual }: Props) {
     }
   }, [filtroTipoAula]);
 
+  // Filtrar presenças do dia por tipo de registro
+  const presencasDoDiaFiltradas = useMemo(() => {
+    if (filtroTipoRegistro === 'todas') return presencasDoDia;
+    return presencasDoDia.filter(p => p.tipo === filtroTipoRegistro);
+  }, [presencasDoDia, filtroTipoRegistro]);
+
+  // Filtrar presenças da semana por tipo de registro
+  const presencasFiltradas = useMemo(() => {
+    if (filtroTipoRegistro === 'todas') return presencas;
+    return presencas.filter(p => p.tipo === filtroTipoRegistro);
+  }, [presencas, filtroTipoRegistro]);
+
   // Agrupar presença por dia
   const presencaPorDia = useMemo(() => {
     const mapa = new Map<string, PresencaAula[]>();
-    for (const p of presencas) {
+    for (const p of presencasFiltradas) {
       const key = p.data_aula;
       if (!mapa.has(key)) mapa.set(key, []);
       mapa.get(key)!.push(p);
     }
     return mapa;
-  }, [presencas]);
+  }, [presencasFiltradas]);
 
   // Resumo da semana
   const resumoSemana = useMemo(() => {
-    const total = presencas.length;
-    const pres = presencas.filter(p => p.status === 'presente').length;
+    const total = presencasFiltradas.length;
+    const pres = presencasFiltradas.filter(p => p.status === 'presente').length;
     const pct = total > 0 ? Math.round((pres / total) * 100) : 0;
     return { total, presentes: pres, pct };
-  }, [presencas]);
+  }, [presencasFiltradas]);
 
   // Filtrar alunos para busca
   const alunosFiltrados = useMemo(() => {
@@ -351,7 +364,7 @@ export function PresencaTab({ unidadeAtual }: Props) {
           <h2 className="font-semibold text-white">Grade de Presença</h2>
         </div>
 
-        {/* Filtro por data */}
+        {/* Filtros: data + tipo de registro */}
         <div className="flex flex-wrap items-center gap-3 mb-4">
           <div className="flex items-center gap-1.5 text-slate-400">
             <Filter className="w-3.5 h-3.5" />
@@ -371,6 +384,28 @@ export function PresencaTab({ unidadeAtual }: Props) {
               Limpar
             </button>
           )}
+
+          {/* Filtro tipo de registro */}
+          <div className="flex items-center bg-slate-900 border border-slate-600 rounded-md overflow-hidden text-xs">
+            <button
+              onClick={() => setFiltroTipoRegistro('todas')}
+              className={`px-2.5 py-1.5 transition ${filtroTipoRegistro === 'todas' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            >
+              Todas
+            </button>
+            <button
+              onClick={() => setFiltroTipoRegistro('turma')}
+              className={`px-2.5 py-1.5 transition ${filtroTipoRegistro === 'turma' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            >
+              Turma
+            </button>
+            <button
+              onClick={() => setFiltroTipoRegistro('individual')}
+              className={`px-2.5 py-1.5 transition ${filtroTipoRegistro === 'individual' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            >
+              Individual
+            </button>
+          </div>
         </div>
 
         {/* Conteúdo: filtro por data OU busca de aluno */}
@@ -381,17 +416,22 @@ export function PresencaTab({ unidadeAtual }: Props) {
               <div className="flex items-center justify-center h-48">
                 <Loader2 className="w-6 h-6 animate-spin text-violet-500" />
               </div>
-            ) : presencasDoDia.length === 0 ? (
+            ) : presencasDoDiaFiltradas.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-slate-500">
                 <CalendarDays className="w-10 h-10 mb-2 opacity-30" />
-                <p className="text-sm">Nenhuma aula registrada em {format(parseISO(filtroData), "dd/MM/yyyy")}.</p>
+                <p className="text-sm">
+                  {presencasDoDia.length === 0
+                    ? `Nenhuma aula registrada em ${format(parseISO(filtroData), "dd/MM/yyyy")}.`
+                    : `Nenhuma aula do tipo "${filtroTipoRegistro}" em ${format(parseISO(filtroData), "dd/MM/yyyy")}.`
+                  }
+                </p>
               </div>
             ) : (
               <>
                 {/* Resumo + Toggle */}
                 {(() => {
-                  const presentes = presencasDoDia.filter(p => p.status === 'presente').length;
-                  const total = presencasDoDia.length;
+                  const presentes = presencasDoDiaFiltradas.filter(p => p.status === 'presente').length;
+                  const total = presencasDoDiaFiltradas.length;
                   const pct = total > 0 ? Math.round((presentes / total) * 100) : 0;
                   return (
                     <div className="flex items-center justify-between mb-3">
@@ -435,7 +475,7 @@ export function PresencaTab({ unidadeAtual }: Props) {
                 {/* Visualização: Cards ou Tabela */}
                 {viewMode === 'cards' ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                    {presencasDoDia.map((p, i) => (
+                    {presencasDoDiaFiltradas.map((p, i) => (
                       <Tooltip
                         key={`${p.aluno_id}-${i}`}
                         side="right"
@@ -487,6 +527,15 @@ export function PresencaTab({ unidadeAtual }: Props) {
                             )}
                           </div>
                           <div className="flex items-center gap-2 mt-1">
+                            {p.tipo && (
+                              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                                p.tipo === 'turma'
+                                  ? 'bg-blue-500/20 text-blue-400'
+                                  : 'bg-cyan-500/20 text-cyan-400'
+                              }`}>
+                                {p.tipo === 'turma' ? 'T' : 'I'}
+                              </span>
+                            )}
                             {p.horario_aula && (
                               <span className="text-xs text-slate-500">{p.horario_aula.slice(0, 5)}</span>
                             )}
@@ -512,6 +561,7 @@ export function PresencaTab({ unidadeAtual }: Props) {
                     <table className="w-full">
                       <thead>
                         <tr className="border-b border-slate-700">
+                          <th className="text-center px-3 py-2 text-xs font-medium text-slate-400 w-[50px]">Tipo</th>
                           <th className="text-center px-3 py-2 text-xs font-medium text-slate-400 w-[60px]">Status</th>
                           <th className="text-left px-3 py-2 text-xs font-medium text-slate-400">Nome</th>
                           <th className="text-left px-3 py-2 text-xs font-medium text-slate-400 w-[70px]">Horário</th>
@@ -522,7 +572,7 @@ export function PresencaTab({ unidadeAtual }: Props) {
                         </tr>
                       </thead>
                       <tbody>
-                        {presencasDoDia.map((p, i) => (
+                        {presencasDoDiaFiltradas.map((p, i) => (
                           <Tooltip
                             key={`${p.aluno_id}-${i}`}
                             side="top"
@@ -552,6 +602,17 @@ export function PresencaTab({ unidadeAtual }: Props) {
                             <tr className={`border-b border-slate-700/50 hover:bg-slate-700/20 transition cursor-default ${
                               p.status === 'presente' ? 'bg-emerald-500/5' : 'bg-red-500/5'
                             }`}>
+                              <td className="px-3 py-2 text-center">
+                                {p.tipo && (
+                                  <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                                    p.tipo === 'turma'
+                                      ? 'bg-blue-500/20 text-blue-400'
+                                      : 'bg-cyan-500/20 text-cyan-400'
+                                  }`}>
+                                    {p.tipo === 'turma' ? 'T' : 'I'}
+                                  </span>
+                                )}
+                              </td>
                               <td className="px-3 py-2 text-center">
                                 {p.status === 'presente' ? (
                                   <Check className="w-4 h-4 text-emerald-400 mx-auto" />
@@ -722,10 +783,21 @@ export function PresencaTab({ unidadeAtual }: Props) {
                                     : 'bg-red-500/10 border-red-500/30'
                                 }`}
                               >
-                                {/* Horário + Status */}
+                                {/* Tipo + Horário + Status */}
                                 <div className="flex items-center justify-between">
-                                  <span className="text-slate-300 font-medium">
-                                    {aula.horario_aula ? aula.horario_aula.slice(0, 5) : '—'}
+                                  <span className="flex items-center gap-1.5">
+                                    {aula.tipo && (
+                                      <span className={`text-[9px] font-bold px-1 py-0.5 rounded ${
+                                        aula.tipo === 'turma'
+                                          ? 'bg-blue-500/20 text-blue-400'
+                                          : 'bg-cyan-500/20 text-cyan-400'
+                                      }`}>
+                                        {aula.tipo === 'turma' ? 'T' : 'I'}
+                                      </span>
+                                    )}
+                                    <span className="text-slate-300 font-medium">
+                                      {aula.horario_aula ? aula.horario_aula.slice(0, 5) : '—'}
+                                    </span>
                                   </span>
                                   {aula.status === 'presente' ? (
                                     <span className="flex items-center gap-1 text-emerald-400">

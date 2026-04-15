@@ -6,7 +6,7 @@ import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import {
   AlertTriangle, Heart, Search, MessageSquare,
   Loader2, RefreshCw, ChevronLeft, ChevronRight,
-  Table2, Kanban, FileQuestion, CalendarDays
+  Table2, Kanban, FileQuestion, CalendarDays, BarChart3
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,6 +17,7 @@ import { JornadaAlunoKanban } from './JornadaAlunoKanban';
 import { ModalEnviarFeedback } from './ModalEnviarFeedback';
 import { PesquisaEvasaoTab } from './PesquisaEvasaoTab';
 import { PresencaTab } from './PresencaTab';
+import { AnaliseTurmasTab } from './AnaliseTurmasTab';
 import { useWidgetOverlapSentinel } from '@/contexts/WidgetVisibilityContext';
 
 interface AlunoSucesso {
@@ -68,7 +69,7 @@ export function TabSucessoAluno({ unidadeAtual }: Props) {
   const [recalculando, setRecalculando] = useState(false);
   const [modalAluno, setModalAluno] = useState<{ open: boolean; aluno: AlunoSucesso | null }>({ open: false, aluno: null });
   const [modalFeedback, setModalFeedback] = useState(false);
-  const [subAba, setSubAba] = useState<'tabela' | 'jornada' | 'pesquisa' | 'presenca'>('tabela');
+  const [subAba, setSubAba] = useState<'tabela' | 'jornada' | 'pesquisa' | 'presenca' | 'analise'>('tabela');
   const [paginaAtual, setPaginaAtual] = useState(1);
   const itensPorPagina = 30;
 
@@ -421,6 +422,17 @@ export function TabSucessoAluno({ unidadeAtual }: Props) {
           <CalendarDays className="w-4 h-4" />
           Presença
         </button>
+        <button
+          onClick={() => setSubAba('analise')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            subAba === 'analise'
+              ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30'
+              : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+          }`}
+        >
+          <BarChart3 className="w-4 h-4" />
+          Análise
+        </button>
       </div>
 
       {/* Conteúdo da Subaba TABELA */}
@@ -692,6 +704,10 @@ export function TabSucessoAluno({ unidadeAtual }: Props) {
       {/* Conteúdo da Subaba PRESENÇA */}
       {subAba === 'presenca' && (
         <PresencaTab unidadeAtual={unidadeAtual} />
+      )}
+
+      {subAba === 'analise' && (
+        <AnaliseTurmasTab unidadeAtual={unidadeAtual} />
       )}
 
       {/* Modal de Detalhes do Aluno */}
