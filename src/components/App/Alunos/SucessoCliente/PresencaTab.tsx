@@ -5,7 +5,8 @@ import { ptBR } from 'date-fns/locale';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import {
   CalendarDays, Search, Loader2, ChevronDown, ChevronUp,
-  ChevronLeft, ChevronRight, Check, X, AlertCircle, Users, Filter
+  ChevronLeft, ChevronRight, Check, X, AlertCircle, Users, Filter,
+  LayoutGrid, List
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -97,6 +98,9 @@ export function PresencaTab({ unidadeAtual }: Props) {
   // === Estado da Presença do Dia (filtro por data) ===
   const [presencasDoDia, setPresencasDoDia] = useState<PresencaDia[]>([]);
   const [loadingDia, setLoadingDia] = useState(false);
+  const [viewMode, setViewMode] = useState<'cards' | 'tabela'>(() => {
+    return (localStorage.getItem('presenca_view_mode') as 'cards' | 'tabela') || 'cards';
+  });
 
   // Dias da semana (Seg a Sáb)
   const diasDaSemana = useMemo(() => {
@@ -384,104 +388,190 @@ export function PresencaTab({ unidadeAtual }: Props) {
               </div>
             ) : (
               <>
-                {/* Resumo */}
+                {/* Resumo + Toggle */}
                 {(() => {
                   const presentes = presencasDoDia.filter(p => p.status === 'presente').length;
                   const total = presencasDoDia.length;
                   const pct = total > 0 ? Math.round((presentes / total) * 100) : 0;
                   return (
-                    <div className="flex items-center gap-3 mb-3">
-                      <span className="px-2.5 py-1 text-xs font-medium rounded-full border bg-violet-500/20 text-violet-400 border-violet-500/30">
-                        {total} registro{total !== 1 ? 's' : ''}
-                      </span>
-                      <span className="text-xs text-slate-400">
-                        {presentes} presentes / {total - presentes} ausentes
-                        <span className={`ml-1 font-bold ${
-                          pct >= 80 ? 'text-green-400' : pct >= 60 ? 'text-yellow-400' : 'text-red-400'
-                        }`}>
-                          ({pct}%)
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-3">
+                        <span className="px-2.5 py-1 text-xs font-medium rounded-full border bg-violet-500/20 text-violet-400 border-violet-500/30">
+                          {total} registro{total !== 1 ? 's' : ''}
                         </span>
-                      </span>
-                      <span className="text-xs text-slate-500">
-                        em {format(parseISO(filtroData), "dd/MM/yyyy")}
-                      </span>
+                        <span className="text-xs text-slate-400">
+                          {presentes} presentes / {total - presentes} ausentes
+                          <span className={`ml-1 font-bold ${
+                            pct >= 80 ? 'text-green-400' : pct >= 60 ? 'text-yellow-400' : 'text-red-400'
+                          }`}>
+                            ({pct}%)
+                          </span>
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          em {format(parseISO(filtroData), "dd/MM/yyyy")}
+                        </span>
+                      </div>
+                      {/* Toggle visualização */}
+                      <div className="flex items-center bg-slate-900 border border-slate-600 rounded-md overflow-hidden">
+                        <button
+                          onClick={() => { setViewMode('cards'); localStorage.setItem('presenca_view_mode', 'cards'); }}
+                          className={`p-1.5 transition ${viewMode === 'cards' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                          title="Visualização em cards"
+                        >
+                          <LayoutGrid className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => { setViewMode('tabela'); localStorage.setItem('presenca_view_mode', 'tabela'); }}
+                          className={`p-1.5 transition ${viewMode === 'tabela' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                          title="Visualização em tabela"
+                        >
+                          <List className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                   );
                 })()}
-                {/* Grid de alunos */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {presencasDoDia.map((p, i) => (
-                    <Tooltip
-                      key={`${p.aluno_id}-${i}`}
-                      side="right"
-                      content={
-                        <div className="space-y-1.5 max-w-[260px]">
-                          {p.professor_nome && (
-                            <p className="text-slate-200"><span className="text-slate-400">Professor:</span> {p.professor_nome}</p>
-                          )}
-                          {p.tipo && (
-                            <p className="text-slate-200"><span className="text-slate-400">Tipo:</span> {p.tipo === 'turma' ? 'Turma' : p.tipo === 'individual' ? 'Individual' : p.tipo}</p>
-                          )}
-                          {p.duracao_minutos && (
-                            <p className="text-slate-200"><span className="text-slate-400">Duração:</span> {p.duracao_minutos} min</p>
-                          )}
-                          {p.nr_da_aula && (
-                            <p className="text-slate-200"><span className="text-slate-400">Aula nº:</span> {p.nr_da_aula}</p>
-                          )}
-                          {p.qtd_alunos != null && (
-                            <p className="text-slate-200"><span className="text-slate-400">Alunos na turma:</span> {p.qtd_alunos}</p>
-                          )}
-                          {p.sala_nome && (
-                            <p className="text-slate-200"><span className="text-slate-400">Sala:</span> {p.sala_nome}</p>
-                          )}
-                          {p.anotacoes && (
-                            <div className="pt-1 border-t border-slate-600">
-                              <p className="text-slate-400 text-[10px] uppercase tracking-wider mb-0.5">Anotações</p>
-                              <p className="text-slate-200 whitespace-pre-wrap">{p.anotacoes}</p>
-                            </div>
-                          )}
-                          {!p.professor_nome && !p.tipo && !p.anotacoes && (
-                            <p className="text-slate-500">Sem detalhes adicionais</p>
-                          )}
-                        </div>
-                      }
-                    >
-                      <div
-                        className={`rounded-lg p-3 border cursor-default ${
-                          p.status === 'presente'
-                            ? 'bg-emerald-500/10 border-emerald-500/20'
-                            : 'bg-red-500/10 border-red-500/20'
-                        }`}
+
+                {/* Visualização: Cards ou Tabela */}
+                {viewMode === 'cards' ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {presencasDoDia.map((p, i) => (
+                      <Tooltip
+                        key={`${p.aluno_id}-${i}`}
+                        side="right"
+                        content={
+                          <div className="space-y-1.5 max-w-[260px]">
+                            {p.professor_nome && (
+                              <p className="text-slate-200"><span className="text-slate-400">Professor:</span> {p.professor_nome}</p>
+                            )}
+                            {p.tipo && (
+                              <p className="text-slate-200"><span className="text-slate-400">Tipo:</span> {p.tipo === 'turma' ? 'Turma' : p.tipo === 'individual' ? 'Individual' : p.tipo}</p>
+                            )}
+                            {p.duracao_minutos && (
+                              <p className="text-slate-200"><span className="text-slate-400">Duração:</span> {p.duracao_minutos} min</p>
+                            )}
+                            {p.nr_da_aula && (
+                              <p className="text-slate-200"><span className="text-slate-400">Aula nº:</span> {p.nr_da_aula}</p>
+                            )}
+                            {p.qtd_alunos != null && (
+                              <p className="text-slate-200"><span className="text-slate-400">Alunos na turma:</span> {p.qtd_alunos}</p>
+                            )}
+                            {p.sala_nome && (
+                              <p className="text-slate-200"><span className="text-slate-400">Sala:</span> {p.sala_nome}</p>
+                            )}
+                            {p.anotacoes && (
+                              <div className="pt-1 border-t border-slate-600">
+                                <p className="text-slate-400 text-[10px] uppercase tracking-wider mb-0.5">Anotações</p>
+                                <p className="text-slate-200 whitespace-pre-wrap">{p.anotacoes}</p>
+                              </div>
+                            )}
+                            {!p.professor_nome && !p.tipo && !p.anotacoes && (
+                              <p className="text-slate-500">Sem detalhes adicionais</p>
+                            )}
+                          </div>
+                        }
                       >
-                        <div className="flex items-center justify-between">
-                          <p className="text-sm font-medium text-slate-200 truncate">{p.aluno_nome}</p>
-                          {p.status === 'presente' ? (
-                            <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                          ) : (
-                            <X className="w-4 h-4 text-red-400 flex-shrink-0" />
-                          )}
+                        <div
+                          className={`rounded-lg p-3 border cursor-default ${
+                            p.status === 'presente'
+                              ? 'bg-emerald-500/10 border-emerald-500/20'
+                              : 'bg-red-500/10 border-red-500/20'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <p className="text-sm font-medium text-slate-200 truncate">{p.aluno_nome}</p>
+                            {p.status === 'presente' ? (
+                              <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                            ) : (
+                              <X className="w-4 h-4 text-red-400 flex-shrink-0" />
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mt-1">
+                            {p.horario_aula && (
+                              <span className="text-xs text-slate-500">{p.horario_aula.slice(0, 5)}</span>
+                            )}
+                            {p.curso_nome && (
+                              <>
+                                <span className="text-xs text-slate-600">·</span>
+                                <span className="text-xs text-blue-400 truncate">{p.curso_nome}</span>
+                              </>
+                            )}
+                            {p.turma_nome && (
+                              <>
+                                <span className="text-xs text-slate-600">·</span>
+                                <span className="text-xs text-slate-500 truncate">{p.turma_nome}</span>
+                              </>
+                            )}
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2 mt-1">
-                          {p.horario_aula && (
-                            <span className="text-xs text-slate-500">{p.horario_aula.slice(0, 5)}</span>
-                          )}
-                          {p.curso_nome && (
-                            <>
-                              <span className="text-xs text-slate-600">·</span>
-                              <span className="text-xs text-blue-400 truncate">{p.curso_nome}</span>
-                            </>
-                          )}
-                          {p.turma_nome && (
-                            <>
-                              <span className="text-xs text-slate-600">·</span>
-                              <span className="text-xs text-slate-500 truncate">{p.turma_nome}</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </Tooltip>
-                  ))}
-                </div>
+                      </Tooltip>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="border-b border-slate-700">
+                          <th className="text-center px-3 py-2 text-xs font-medium text-slate-400 w-[60px]">Status</th>
+                          <th className="text-left px-3 py-2 text-xs font-medium text-slate-400">Nome</th>
+                          <th className="text-left px-3 py-2 text-xs font-medium text-slate-400 w-[70px]">Horário</th>
+                          <th className="text-left px-3 py-2 text-xs font-medium text-slate-400">Instrumento</th>
+                          <th className="text-left px-3 py-2 text-xs font-medium text-slate-400">Turma</th>
+                          <th className="text-left px-3 py-2 text-xs font-medium text-slate-400 w-[120px]">Professor</th>
+                          <th className="text-left px-3 py-2 text-xs font-medium text-slate-400 w-[80px]">Sala</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {presencasDoDia.map((p, i) => (
+                          <Tooltip
+                            key={`${p.aluno_id}-${i}`}
+                            side="top"
+                            content={
+                              <div className="space-y-1.5 max-w-[260px]">
+                                {p.tipo && (
+                                  <p className="text-slate-200"><span className="text-slate-400">Tipo:</span> {p.tipo === 'turma' ? 'Turma' : p.tipo === 'individual' ? 'Individual' : p.tipo}</p>
+                                )}
+                                {p.duracao_minutos && (
+                                  <p className="text-slate-200"><span className="text-slate-400">Duração:</span> {p.duracao_minutos} min</p>
+                                )}
+                                {p.nr_da_aula && (
+                                  <p className="text-slate-200"><span className="text-slate-400">Aula nº:</span> {p.nr_da_aula}</p>
+                                )}
+                                {p.qtd_alunos != null && (
+                                  <p className="text-slate-200"><span className="text-slate-400">Alunos na turma:</span> {p.qtd_alunos}</p>
+                                )}
+                                {p.anotacoes && (
+                                  <div className="pt-1 border-t border-slate-600">
+                                    <p className="text-slate-400 text-[10px] uppercase tracking-wider mb-0.5">Anotações</p>
+                                    <p className="text-slate-200 whitespace-pre-wrap">{p.anotacoes}</p>
+                                  </div>
+                                )}
+                              </div>
+                            }
+                          >
+                            <tr className={`border-b border-slate-700/50 hover:bg-slate-700/20 transition cursor-default ${
+                              p.status === 'presente' ? 'bg-emerald-500/5' : 'bg-red-500/5'
+                            }`}>
+                              <td className="px-3 py-2 text-center">
+                                {p.status === 'presente' ? (
+                                  <Check className="w-4 h-4 text-emerald-400 mx-auto" />
+                                ) : (
+                                  <X className="w-4 h-4 text-red-400 mx-auto" />
+                                )}
+                              </td>
+                              <td className="px-3 py-2 text-sm text-slate-200 font-medium">{p.aluno_nome}</td>
+                              <td className="px-3 py-2 text-sm text-slate-400">{p.horario_aula ? p.horario_aula.slice(0, 5) : '—'}</td>
+                              <td className="px-3 py-2 text-sm text-blue-400">{p.curso_nome || '—'}</td>
+                              <td className="px-3 py-2 text-sm text-slate-400">{p.turma_nome || '—'}</td>
+                              <td className="px-3 py-2 text-sm text-slate-400">{p.professor_nome || '—'}</td>
+                              <td className="px-3 py-2 text-sm text-slate-500">{p.sala_nome || '—'}</td>
+                            </tr>
+                          </Tooltip>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </>
             )}
           </div>

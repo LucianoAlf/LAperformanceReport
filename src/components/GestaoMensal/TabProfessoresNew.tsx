@@ -761,12 +761,14 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
               label="Total Professores"
               value={dados.total_professores}
               variant="violet"
+              tooltip="Professores ativos vinculados à unidade (tabela professores_unidades)"
             />
             <KPICard
               icon={Users}
               label="Total Alunos"
               value={dados.alunos_total}
               variant="cyan"
+              tooltip="Alunos com status ativo ou trancado na unidade (tabela alunos)"
               comparativoMesAnterior={dadosMesAnterior && dadosMesAnterior.alunos_total > 0 ? { valor: dadosMesAnterior.alunos_total, label: dadosMesAnterior.label } : undefined}
               comparativoAnoAnterior={dadosAnoAnterior && dadosAnoAnterior.alunos_total > 0 ? { valor: dadosAnoAnterior.alunos_total, label: dadosAnoAnterior.label } : undefined}
             />
@@ -776,6 +778,7 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
               value={dados.carteira_media.toFixed(1)}
               subvalue="alunos por professor"
               variant="emerald"
+              tooltip="Total de alunos ÷ total de professores ativos"
             />
             <KPICard
               icon={Users}
@@ -783,6 +786,7 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
               value={dados.media_alunos_turma_geral.toFixed(1)}
               subvalue="alunos por turma"
               variant="cyan"
+              tooltip="Média das médias de alunos/turma de cada professor (via turmas implícitas: mesmo curso + unidade + professor)"
             />
             <KPICard
               icon={DollarSign}
@@ -790,6 +794,7 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
               value={dados.ticket_medio_geral}
               format="currency"
               variant="amber"
+              tooltip="Soma das parcelas de todos os alunos pagantes ÷ total de alunos únicos (segundo curso conta no faturamento mas não no denominador)"
               comparativoMesAnterior={dadosMesAnterior && dadosMesAnterior.ticket_medio_geral > 0 ? { valor: dadosMesAnterior.ticket_medio_geral, label: dadosMesAnterior.label } : undefined}
               comparativoAnoAnterior={dadosAnoAnterior && dadosAnoAnterior.ticket_medio_geral > 0 ? { valor: dadosAnoAnterior.ticket_medio_geral, label: dadosAnoAnterior.label } : undefined}
             />
@@ -799,6 +804,7 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
               value={`${dados.presenca_media.toFixed(1)}%`}
               subvalue={`${(100 - dados.presenca_media).toFixed(1)}% faltas`}
               variant="emerald"
+              tooltip="Média do percentual de presença dos professores que possuem dados de presença"
             />
           </div>
 
