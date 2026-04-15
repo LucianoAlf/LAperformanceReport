@@ -117,60 +117,14 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
       const { data: professoresData, error: profError } = await query;
       if (profError) throw profError;
 
-      // Verificar se é período atual ou histórico
-      const hoje = new Date();
-      const anoAtual = hoje.getFullYear();
-      const mesAtual = hoje.getMonth() + 1;
-      const isPeriodoAtual = anoFiltro === anoAtual && mesFiltro === mesAtual;
+      // Buscar KPIs via RPC parametrizada (funciona para qualquer período)
+      const rpcParams: Record<string, any> = { p_ano: anoFiltro, p_mes: mesFiltro };
+      if (unidadeAtual !== 'todos') rpcParams.p_unidade_id = unidadeAtual;
 
-      let kpisData: any[] = [];
+      const { data: kpisRpc } = await supabase
+        .rpc('get_kpis_professor_periodo', rpcParams);
 
-      if (isPeriodoAtual) {
-        // PERÍODO ATUAL: usar view em tempo real
-        let kpisQuery = supabase
-          .from('vw_kpis_professor_mensal')
-          .select('*');
-        
-        if (unidadeAtual !== 'todos') {
-          kpisQuery = kpisQuery.eq('unidade_id', unidadeAtual);
-        }
-        
-        const { data } = await kpisQuery;
-        kpisData = data || [];
-      } else {
-        // PERÍODO HISTÓRICO: usar RPC que lê leads (mesma lógica do mês atual)
-        const rpcParams: Record<string, any> = { p_ano: anoFiltro, p_mes: mesFiltro };
-        if (unidadeAtual !== 'todos') rpcParams.p_unidade_id = unidadeAtual;
-
-        const { data: historicoData } = await supabase
-          .rpc('get_kpis_experimentais_professor', rpcParams);
-
-        if (historicoData && historicoData.length > 0) {
-          kpisData = historicoData.map((d: any) => ({
-            professor_id: d.professor_id,
-            unidade_id: d.unidade_id,
-            ano: anoFiltro,
-            mes: mesFiltro,
-            experimentais: d.experimentais || 0,
-            matriculas: d.matriculas || 0,
-            matriculas_pos_exp: d.matriculas_pos_exp || 0,
-            matriculas_diretas: d.matriculas_diretas || 0,
-            taxa_conversao: d.taxa_conversao || 0,
-            // Campos que não temos no histórico - usar valores padrão
-            carteira_alunos: 0,
-            ticket_medio: 0,
-            media_presenca: 0,
-            taxa_faltas: 0,
-            mrr_carteira: 0,
-            media_alunos_turma: 0,
-            renovacoes: 0,
-            nao_renovacoes: 0,
-            taxa_renovacao: 0,
-            evasoes: 0,
-            mrr_perdido: 0,
-          }));
-        }
-      }
+      const kpisData: any[] = kpisRpc || [];
 
       // Buscar KPIs históricos para calcular tendências (filtrado por unidade se selecionada)
       let historicoQuery = supabase

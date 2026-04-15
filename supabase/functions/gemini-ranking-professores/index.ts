@@ -1,106 +1,99 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Constantes para cálculo do Health Score (idênticas ao frontend)
+// ═══════════════════════════════════════════════════════════════
+// CÁLCULO DO HEALTH SCORE - IDÊNTICO AO FRONTEND (useHealthScore.ts)
+// ═══════════════════════════════════════════════════════════════
+
+// Pesos padrão (fallback se não houver config no banco)
 const DEFAULT_HEALTH_WEIGHTS = {
-  curso: 0.10,
-  mediaTurma: 0.20,
-  retencao: 0.20,
-  conversao: 0.15,
-  nps: 0.15,
-  presenca: 0.10,
-  evasoes: 0.10
+  taxaCrescimento: 15,
+  mediaTurma: 20,
+  retencao: 25,
+  conversao: 15,
+  presenca: 15,
+  evasoes: 10,
 };
 
-const METAS_REFERENCIA = {
-  mediaTurma: { min: 1.0, ideal: 2.0 },
-  retencao: { min: 60, ideal: 100 },
-  conversao: { min: 50, ideal: 100 },
-  nps: { min: 5, ideal: 10 },
-  presenca: { min: 60, ideal: 100 },
-  evasoes: { min: 0, max: 5 }
-};
+type HealthWeights = typeof DEFAULT_HEALTH_WEIGHTS;
 
-const CURSO_LIMITES_TURMA: Record<string, { ideal: number; max: number }> = {
-  'Bateria': { ideal: 1.0, max: 1.5 },
-  'Canto': { ideal: 3.0, max: 5.0 },
-  'Musicalização': { ideal: 6.0, max: 10.0 },
-  'Musicalização Infantil': { ideal: 6.0, max: 10.0 },
-  'default': { ideal: 1.5, max: 2.0 }
-};
+// Busca pesos configurados no banco para a unidade
+async function buscarPesos(unidadeId: string | null): Promise<HealthWeights> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const client = createClient(supabaseUrl, supabaseKey);
 
-function normalizar(valor: number, min: number, max: number, inverso: boolean = false): number {
-  if (max === min) return inverso ? 100 : 0;
-  const normalizado = Math.max(0, Math.min(100, ((valor - min) / (max - min)) * 100));
-  return inverso ? 100 - normalizado : normalizado;
-}
+    let query = client.from('config_health_score_professor').select('*');
+    if (unidadeId) {
+      query = query.or(`unidade_id.eq.${unidadeId},unidade_id.is.null`);
+    } else {
+      query = query.is('unidade_id', null);
+    }
 
-function calcularFatorCurso(mediaTurma: number, cursos: string[]): number {
-  if (!cursos || cursos.length === 0) {
-    const limite = CURSO_LIMITES_TURMA['default'];
-    return normalizar(mediaTurma, 1, limite.max);
+    const { data } = await query
+      .order('unidade_id', { nullsFirst: false })
+      .limit(1);
+
+    if (data && data.length > 0) {
+      const row = data[0];
+      return {
+        taxaCrescimento: row.peso_taxa_crescimento,
+        mediaTurma: row.peso_media_turma,
+        retencao: row.peso_retencao,
+        conversao: row.peso_conversao,
+        presenca: row.peso_presenca,
+        evasoes: row.peso_evasoes,
+      };
+    }
+  } catch (e) {
+    console.error('[ranking-professores] Erro ao buscar pesos do banco:', e);
   }
-  
-  let somaIdeal = 0;
-  let somaMax = 0;
-  
-  cursos.forEach(curso => {
-    const limite = CURSO_LIMITES_TURMA[curso] || CURSO_LIMITES_TURMA['default'];
-    somaIdeal += limite.ideal;
-    somaMax += limite.max;
-  });
-  
-  const idealMedio = somaIdeal / cursos.length;
-  const maxMedio = somaMax / cursos.length;
-  
-  if (mediaTurma >= idealMedio) {
-    return 100;
-  }
-  
-  return normalizar(mediaTurma, 1, maxMedio);
+  return DEFAULT_HEALTH_WEIGHTS;
 }
 
-interface ProfessorKPIs {
-  mediaTurma: number;
-  retencao: number;
-  conversao: number;
-  nps: number | null;
-  presenca: number;
-  evasoes: number;
-  cursos: string[];
-}
+// Cálculo idêntico ao useHealthScore.ts (V2)
+function calcularHealthScore(
+  kpis: { taxaCrescimento: number; mediaTurma: number; retencao: number; conversao: number; presenca: number; evasoes: number; carteira: number; },
+  weights: HealthWeights
+): { score: number; status: 'critico' | 'atencao' | 'saudavel' } {
+  // 1. Taxa de Crescimento: ((taxa + 10) / 30) * 100
+  const scoreCrescimento = Math.max(0, Math.min(100, ((kpis.taxaCrescimento + 10) / 30) * 100));
 
-function calcularHealthScore(kpis: ProfessorKPIs): { score: number; status: 'critico' | 'atencao' | 'saudavel' } {
-  const weights = DEFAULT_HEALTH_WEIGHTS;
-  
-  const fatorCurso = calcularFatorCurso(kpis.mediaTurma, kpis.cursos);
-  const mediaTurmaNorm = normalizar(kpis.mediaTurma, METAS_REFERENCIA.mediaTurma.min, METAS_REFERENCIA.mediaTurma.ideal);
-  const retencaoNorm = normalizar(kpis.retencao, METAS_REFERENCIA.retencao.min, METAS_REFERENCIA.retencao.ideal);
-  const conversaoNorm = normalizar(kpis.conversao, METAS_REFERENCIA.conversao.min, METAS_REFERENCIA.conversao.ideal);
-  const npsNorm = kpis.nps !== null && kpis.nps > 0 
-    ? normalizar(kpis.nps, METAS_REFERENCIA.nps.min, METAS_REFERENCIA.nps.ideal)
-    : 50;
-  const presencaNorm = normalizar(kpis.presenca, METAS_REFERENCIA.presenca.min, METAS_REFERENCIA.presenca.ideal);
-  const evasoesNorm = normalizar(kpis.evasoes, METAS_REFERENCIA.evasoes.min, METAS_REFERENCIA.evasoes.max, true);
+  // 2. Média/Turma: (media / 2.0) * 100, max 100
+  const scoreMT = Math.min(100, (kpis.mediaTurma / 2.0) * 100);
 
-  const score = 
-    fatorCurso * weights.curso +
-    mediaTurmaNorm * weights.mediaTurma +
-    retencaoNorm * weights.retencao +
-    conversaoNorm * weights.conversao +
-    npsNorm * weights.nps +
-    presencaNorm * weights.presenca +
-    evasoesNorm * weights.evasoes;
+  // 3. Retenção: valor direto (0-100)
+  const scoreRet = kpis.retencao;
+
+  // 4. Conversão: valor direto, max 100
+  const scoreConv = Math.min(100, kpis.conversao);
+
+  // 5. Presença: valor direto (0-100)
+  const scorePres = kpis.presenca;
+
+  // 6. Evasões (inverso): taxa % = (evasoes / carteira) * 100, score = 100 - (taxa * 10)
+  const taxaEvasao = kpis.carteira > 0 ? (kpis.evasoes / kpis.carteira) * 100 : 0;
+  const scoreEvasoes = Math.max(0, 100 - (taxaEvasao * 10));
+
+  const score =
+    scoreCrescimento * (weights.taxaCrescimento / 100) +
+    scoreMT * (weights.mediaTurma / 100) +
+    scoreRet * (weights.retencao / 100) +
+    scoreConv * (weights.conversao / 100) +
+    scorePres * (weights.presenca / 100) +
+    scoreEvasoes * (weights.evasoes / 100);
 
   const finalScore = Math.round(score * 10) / 10;
-  
+
   let status: 'critico' | 'atencao' | 'saudavel';
   if (finalScore < 50) status = 'critico';
-  else if (finalScore < 75) status = 'atencao';
+  else if (finalScore < 70) status = 'atencao';
   else status = 'saudavel';
 
   return { score: finalScore, status };
@@ -136,6 +129,7 @@ Deno.serve(async (req) => {
     // Extrair dados do payload
     const periodo = dados.periodo || {};
     const unidadeNome = periodo.unidade_nome || 'Consolidado';
+    const unidadeId: string | null = periodo.unidade_id || null;
     const ano = periodo.ano || new Date().getFullYear();
     const mes = periodo.mes || new Date().getMonth() + 1;
 
@@ -146,18 +140,21 @@ Deno.serve(async (req) => {
     };
     const mesNome = mesesPorExtenso[mes] || '';
 
-    // KPIs de professores - calcular Health Score para cada um
+    // Buscar pesos configurados no banco para esta unidade
+    const weights = await buscarPesos(unidadeId);
+
+    // KPIs de professores - calcular Health Score com pesos do banco
     const kpisProfessoresRaw = dados.kpis_professores || [];
     const professores = kpisProfessoresRaw.map((p: any) => {
       const healthResult = calcularHealthScore({
+        taxaCrescimento: Number(p.taxa_crescimento) || 0,
         mediaTurma: Number(p.media_alunos_turma) || 0,
-        retencao: 100 - (Number(p.taxa_cancelamento) || 0),
+        retencao: Number(p.taxa_retencao) || 100,
         conversao: Number(p.taxa_conversao) || 0,
-        nps: p.nps_medio && Number(p.nps_medio) > 0 ? Number(p.nps_medio) : null,
         presenca: Number(p.media_presenca) || 0,
         evasoes: Number(p.evasoes) || 0,
-        cursos: p.cursos || []
-      });
+        carteira: Number(p.carteira_alunos) || 0,
+      }, weights);
       return {
         ...p,
         health_score: healthResult.score,

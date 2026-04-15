@@ -99,9 +99,16 @@ export function TabAutomacaoLeads({ unidadeAtual }: TabAutomacaoLeadsProps) {
   const [filtroIncompleto, setFiltroIncompleto] = useState<string>('todos');
   const [busca, setBusca] = useState('');
 
+  // Debounce da busca para não disparar query a cada tecla
+  const [buscaDebounced, setBuscaDebounced] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => setBuscaDebounced(busca.trim()), 400);
+    return () => clearTimeout(timer);
+  }, [busca]);
+
   useEffect(() => {
     carregarRegistros();
-  }, [filtroOrigem, filtroAcao, filtroPeriodo, filtroIncompleto, unidadeAtual]);
+  }, [filtroOrigem, filtroAcao, filtroPeriodo, filtroIncompleto, unidadeAtual, buscaDebounced]);
 
   const carregarRegistros = async () => {
     setLoading(true);
@@ -157,6 +164,18 @@ export function TabAutomacaoLeads({ unidadeAtual }: TabAutomacaoLeadsProps) {
         }
       }
 
+      // Busca server-side por nome ou telefone
+      if (buscaDebounced) {
+        const termo = buscaDebounced;
+        const somenteDigitos = termo.replace(/\D/g, '');
+        // Se parece telefone (4+ dígitos), buscar no campo detalhes->telefone
+        if (somenteDigitos.length >= 4) {
+          query = query.or(`lead_nome.ilike.%${termo}%,detalhes->telefone.ilike.%${somenteDigitos}%`);
+        } else {
+          query = query.ilike('lead_nome', `%${termo}%`);
+        }
+      }
+
       const { data } = await query;
       if (data) setRegistros(data);
     } catch (error) {
@@ -166,16 +185,8 @@ export function TabAutomacaoLeads({ unidadeAtual }: TabAutomacaoLeadsProps) {
     }
   };
 
-  // Filtro local por busca de nome ou telefone
-  const registrosFiltrados = busca.trim()
-    ? registros.filter(r => {
-        const termo = busca.toLowerCase().replace(/\D/g, ''); // Remove não-dígitos para busca de telefone
-        const nomeMatch = r.lead_nome?.toLowerCase().includes(busca.toLowerCase());
-        const telefone = r.detalhes?.telefone?.replace(/\D/g, '') || '';
-        const telefoneMatch = termo.length >= 4 && telefone.includes(termo);
-        return nomeMatch || telefoneMatch;
-      })
-    : registros;
+  // Busca agora é server-side — registros já vêm filtrados
+  const registrosFiltrados = registros;
 
   const formatarData = (data: string) => {
     const date = new Date(data);

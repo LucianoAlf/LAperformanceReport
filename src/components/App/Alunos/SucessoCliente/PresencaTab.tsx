@@ -85,6 +85,7 @@ export function PresencaTab({ unidadeAtual }: Props) {
   const [loadingPresenca, setLoadingPresenca] = useState(false);
   const [loadingAlunos, setLoadingAlunos] = useState(true);
   const [dropdownAberto, setDropdownAberto] = useState(false);
+  const [filtroTipoAula, setFiltroTipoAula] = useState<'todas' | 'experimental'>('todas');
 
   // === Estado dos Logs ===
   const [logs, setLogs] = useState<SyncLog[]>([]);
@@ -207,15 +208,21 @@ export function PresencaTab({ unidadeAtual }: Props) {
     const inicio = format(semanaInicio, 'yyyy-MM-dd');
     const fim = format(addDays(semanaInicio, 5), 'yyyy-MM-dd');
 
-    const { data } = await supabase
+    let query = supabase
       .from('aluno_presenca')
-      .select('data_aula, status, horario_aula, curso_nome, turma_nome, sala_nome, aulas_emusys(professor_nome, anotacoes, duracao_minutos, tipo, nr_da_aula, qtd_alunos)')
+      .select('data_aula, status, horario_aula, curso_nome, turma_nome, sala_nome, aulas_emusys!inner(professor_nome, anotacoes, duracao_minutos, tipo, nr_da_aula, qtd_alunos, categoria)')
       .eq('aluno_id', alunoSelecionado.id)
       .gte('data_aula', inicio)
       .lte('data_aula', fim)
       .in('status', ['presente', 'ausente'])
       .order('data_aula')
       .order('horario_aula');
+
+    if (filtroTipoAula === 'experimental') {
+      query = query.eq('aulas_emusys.categoria', 'experimental');
+    }
+
+    const { data } = await query;
 
     // Flatten join data
     setPresencas(
@@ -235,11 +242,33 @@ export function PresencaTab({ unidadeAtual }: Props) {
       }))
     );
     setLoadingPresenca(false);
-  }, [alunoSelecionado, semanaInicio]);
+  }, [alunoSelecionado, semanaInicio, filtroTipoAula]);
 
   useEffect(() => {
     carregarPresencaSemana();
   }, [carregarPresencaSemana]);
+
+  // Ao trocar filtro de tipo com aluno selecionado, navegar para semana relevante
+  useEffect(() => {
+    if (!alunoSelecionado) return;
+    if (filtroTipoAula === 'experimental') {
+      (async () => {
+        const { data } = await supabase
+          .from('aluno_presenca')
+          .select('data_aula, aulas_emusys!inner(categoria)')
+          .eq('aluno_id', alunoSelecionado.id)
+          .eq('aulas_emusys.categoria', 'experimental')
+          .in('status', ['presente', 'ausente'])
+          .order('data_aula', { ascending: false })
+          .limit(1);
+        if (data?.length) {
+          setSemanaInicio(startOfWeek(parseISO(data[0].data_aula), { weekStartsOn: 1 }));
+        }
+      })();
+    } else {
+      setSemanaInicio(startOfWeek(new Date(), { weekStartsOn: 1 }));
+    }
+  }, [filtroTipoAula]);
 
   // Agrupar presença por dia
   const presencaPorDia = useMemo(() => {
@@ -267,10 +296,26 @@ export function PresencaTab({ unidadeAtual }: Props) {
     return alunos.filter(a => a.nome.toLowerCase().includes(termo)).slice(0, 50);
   }, [alunos, busca]);
 
-  const selecionarAluno = (aluno: AlunoSimples) => {
+  const selecionarAluno = async (aluno: AlunoSimples) => {
     setAlunoSelecionado(aluno);
     setBusca(aluno.nome);
     setDropdownAberto(false);
+
+    // Se filtro é experimental, navegar para a semana da experimental mais recente
+    if (filtroTipoAula === 'experimental') {
+      const { data: ultimaExp } = await supabase
+        .from('aluno_presenca')
+        .select('data_aula, aulas_emusys!inner(categoria)')
+        .eq('aluno_id', aluno.id)
+        .eq('aulas_emusys.categoria', 'experimental')
+        .in('status', ['presente', 'ausente'])
+        .order('data_aula', { ascending: false })
+        .limit(1);
+
+      if (ultimaExp?.length) {
+        setSemanaInicio(startOfWeek(parseISO(ultimaExp[0].data_aula), { weekStartsOn: 1 }));
+      }
+    }
   };
 
   // Paginação dos logs
@@ -443,7 +488,23 @@ export function PresencaTab({ unidadeAtual }: Props) {
         ) : (
           /* === MODO NORMAL: busca de aluno + grade semanal === */
           <>
-        {/* Busca de aluno */}
+        {/* Filtro tipo aula + Busca de aluno */}
+        <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center bg-slate-900 border border-slate-600 rounded-md overflow-hidden text-sm">
+            <button
+              onClick={() => setFiltroTipoAula('todas')}
+              className={`px-3 py-2 transition ${filtroTipoAula === 'todas' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            >
+              Todas as aulas
+            </button>
+            <button
+              onClick={() => setFiltroTipoAula('experimental')}
+              className={`px-3 py-2 transition ${filtroTipoAula === 'experimental' ? 'bg-orange-600 text-white' : 'text-slate-400 hover:text-white'}`}
+            >
+              Experimentais
+            </button>
+          </div>
+        </div>
         <div className="relative mb-4 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <Input

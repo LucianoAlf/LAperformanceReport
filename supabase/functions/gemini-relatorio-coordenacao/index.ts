@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -12,111 +13,84 @@ interface RelatorioCoordenacaoRequest {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// CÁLCULO DO HEALTH SCORE - IDÊNTICO AO FRONTEND
+// CÁLCULO DO HEALTH SCORE - IDÊNTICO AO FRONTEND (useHealthScore.ts)
 // ═══════════════════════════════════════════════════════════════
 
-// Pesos padrão do Health Score V2 (igual ao HealthScoreConfig.tsx)
+// Pesos padrão (fallback se não houver config no banco)
 const DEFAULT_HEALTH_WEIGHTS = {
-  taxaCrescimento: 15,  // Taxa de crescimento ajustada
-  mediaTurma: 20,       // Média de alunos por turma
-  retencao: 25,         // Taxa de retenção (aumentado)
-  conversao: 15,        // Taxa de conversão
-  presenca: 15,         // Taxa de presença (aumentado)
-  evasoes: 10,          // Evasões (inverso)
+  taxaCrescimento: 15,
+  mediaTurma: 20,
+  retencao: 25,
+  conversao: 15,
+  presenca: 15,
+  evasoes: 10,
 };
 
-// Metas de referência V2 (igual ao useHealthScore.ts)
-const METAS_REFERENCIA = {
-  taxaCrescimento: { min: -10, max: 20 },
-  mediaTurma: { min: 1.0, max: 2.0 },
-  retencao: { min: 60, max: 100 },
-  conversao: { min: 50, max: 100 },
-  presenca: { min: 60, max: 100 },
-  evasoes: { min: 0, max: 5 },
-};
+type HealthWeights = typeof DEFAULT_HEALTH_WEIGHTS;
 
-// Limites por tipo de curso (igual ao useHealthScore.ts)
-const CURSO_LIMITES_TURMA: Record<string, { min: number; max: number; ideal: number }> = {
-  'Bateria': { min: 1, max: 2, ideal: 1.5 },
-  'Violino': { min: 1, max: 2, ideal: 1.5 },
-  'Contrabaixo': { min: 1, max: 2, ideal: 1.5 },
-  'Saxofone': { min: 1, max: 2, ideal: 1.5 },
-  'Violão': { min: 1, max: 3, ideal: 2 },
-  'Guitarra': { min: 1, max: 3, ideal: 2 },
-  'Teclado': { min: 1, max: 3, ideal: 2 },
-  'Piano': { min: 1, max: 2, ideal: 1.5 },
-  'Ukulele': { min: 1, max: 4, ideal: 2.5 },
-  'Canto': { min: 1, max: 5, ideal: 3 },
-  'Musicalização': { min: 2, max: 6, ideal: 4 },
-  'Musicalização Infantil': { min: 2, max: 6, ideal: 4 },
-  'Musicalização Preparatória': { min: 2, max: 5, ideal: 3.5 },
-  'Musicalização para Bebês': { min: 2, max: 6, ideal: 4 },
-  'Teoria Musical': { min: 2, max: 8, ideal: 5 },
-  'default': { min: 1, max: 3, ideal: 2 },
-};
+// Busca pesos configurados no banco para a unidade
+async function buscarPesos(unidadeId: string | null): Promise<HealthWeights> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const client = createClient(supabaseUrl, supabaseKey);
 
-// Função de normalização (igual ao useHealthScore.ts)
-function normalizar(valor: number, min: number, max: number, inverso = false): number {
-  const normalizado = Math.max(0, Math.min(100, ((valor - min) / (max - min)) * 100));
-  return inverso ? 100 - normalizado : normalizado;
-}
+    let query = client.from('config_health_score_professor').select('*');
+    if (unidadeId) {
+      query = query.or(`unidade_id.eq.${unidadeId},unidade_id.is.null`);
+    } else {
+      query = query.is('unidade_id', null);
+    }
 
-// Função para calcular fator de curso (igual ao useHealthScore.ts)
-function calcularFatorCurso(cursos: string[], mediaTurmaAtual: number): number {
-  if (!cursos || !cursos.length) return 50;
-  
-  let somaIdeal = 0;
-  let somaMax = 0;
-  
-  cursos.forEach(curso => {
-    const limites = CURSO_LIMITES_TURMA[curso] || CURSO_LIMITES_TURMA['default'];
-    somaIdeal += limites.ideal;
-    somaMax += limites.max;
-  });
-  
-  const idealMedio = somaIdeal / cursos.length;
-  const maxMedio = somaMax / cursos.length;
-  
-  if (mediaTurmaAtual >= idealMedio) {
-    return 100;
+    const { data } = await query
+      .order('unidade_id', { nullsFirst: false })
+      .limit(1);
+
+    if (data && data.length > 0) {
+      const row = data[0];
+      return {
+        taxaCrescimento: row.peso_taxa_crescimento,
+        mediaTurma: row.peso_media_turma,
+        retencao: row.peso_retencao,
+        conversao: row.peso_conversao,
+        presenca: row.peso_presenca,
+        evasoes: row.peso_evasoes,
+      };
+    }
+  } catch (e) {
+    console.error('[relatorio-coordenacao] Erro ao buscar pesos do banco:', e);
   }
-  
-  return normalizar(mediaTurmaAtual, 1, maxMedio);
+  return DEFAULT_HEALTH_WEIGHTS;
 }
 
-// Função principal de cálculo do Health Score V2 (igual ao useHealthScore.ts)
-function calcularHealthScore(kpis: {
-  taxaCrescimento: number;
-  mediaTurma: number;
-  retencao: number;
-  conversao: number;
-  presenca: number;
-  evasoes: number;
-}): { score: number; status: 'critico' | 'atencao' | 'saudavel' } {
-  const weights = DEFAULT_HEALTH_WEIGHTS;
-  
-  // 1. Score da Taxa de Crescimento
-  const scoreTaxaCres = normalizar(kpis.taxaCrescimento, METAS_REFERENCIA.taxaCrescimento.min, METAS_REFERENCIA.taxaCrescimento.max);
-  const contribTaxaCres = scoreTaxaCres * (weights.taxaCrescimento / 100);
-  
-  // 2. Score da Média/Turma
-  const scoreMT = normalizar(kpis.mediaTurma, METAS_REFERENCIA.mediaTurma.min, METAS_REFERENCIA.mediaTurma.max);
+// Cálculo idêntico ao useHealthScore.ts (V2)
+function calcularHealthScore(
+  kpis: { taxaCrescimento: number; mediaTurma: number; retencao: number; conversao: number; presenca: number; evasoes: number; carteira: number; },
+  weights: HealthWeights
+): { score: number; status: 'critico' | 'atencao' | 'saudavel' } {
+  // 1. Taxa de Crescimento: ((taxa + 10) / 30) * 100
+  const scoreCrescimento = Math.max(0, Math.min(100, ((kpis.taxaCrescimento + 10) / 30) * 100));
+  const contribTaxaCres = scoreCrescimento * (weights.taxaCrescimento / 100);
+
+  // 2. Média/Turma: (media / 2.0) * 100, max 100
+  const scoreMT = Math.min(100, (kpis.mediaTurma / 2.0) * 100);
   const contribMT = scoreMT * (weights.mediaTurma / 100);
-  
-  // 3. Score da Retenção
-  const scoreRet = normalizar(kpis.retencao, METAS_REFERENCIA.retencao.min, METAS_REFERENCIA.retencao.max);
+
+  // 3. Retenção: valor direto (0-100)
+  const scoreRet = kpis.retencao;
   const contribRet = scoreRet * (weights.retencao / 100);
-  
-  // 4. Score da Conversão
-  const scoreConv = normalizar(kpis.conversao, METAS_REFERENCIA.conversao.min, METAS_REFERENCIA.conversao.max);
+
+  // 4. Conversão: valor direto, max 100
+  const scoreConv = Math.min(100, kpis.conversao);
   const contribConv = scoreConv * (weights.conversao / 100);
-  
-  // 5. Score da Presença
-  const scorePres = normalizar(kpis.presenca, METAS_REFERENCIA.presenca.min, METAS_REFERENCIA.presenca.max);
+
+  // 5. Presença: valor direto (0-100)
+  const scorePres = kpis.presenca;
   const contribPres = scorePres * (weights.presenca / 100);
-  
-  // 6. Score das Evasões (INVERSO)
-  const scoreEvasoes = normalizar(kpis.evasoes, METAS_REFERENCIA.evasoes.min, METAS_REFERENCIA.evasoes.max, true);
+
+  // 6. Evasões (inverso): taxa % = (evasoes / carteira) * 100, score = 100 - (taxa * 10)
+  const taxaEvasao = kpis.carteira > 0 ? (kpis.evasoes / kpis.carteira) * 100 : 0;
+  const scoreEvasoes = Math.max(0, 100 - (taxaEvasao * 10));
   const contribEvasoes = scoreEvasoes * (weights.evasoes / 100);
   
   // Calcular score total
@@ -170,9 +144,10 @@ Deno.serve(async (req) => {
     // ═══════════════════════════════════════════════════════════════
     // EXTRAIR DADOS DO PAYLOAD
     // ═══════════════════════════════════════════════════════════════
-    
+
     const periodo = dados.periodo || {};
     const unidadeNome = periodo.unidade_nome || 'Consolidado';
+    const unidadeId: string | null = periodo.unidade_id || null;
     const ano = periodo.ano || new Date().getFullYear();
     const mesAtual = periodo.mes || new Date().getMonth() + 1;
     const coordenadores = periodo.coordenadores || ['Quintela', 'Juliana'];
@@ -198,7 +173,10 @@ Deno.serve(async (req) => {
     const totalMatriculas = totais.total_matriculas || 0;
     const mrrTotal = totais.mrr_total || 0;
 
-    // KPIs de professores - calcular Health Score V2 para cada um
+    // Buscar pesos configurados no banco para esta unidade
+    const weights = await buscarPesos(unidadeId);
+
+    // KPIs de professores - calcular Health Score com pesos do banco
     const kpisProfessoresRaw = dados.kpis_professores || [];
     const kpisProfessores = kpisProfessoresRaw.map((p: any) => {
       const healthResult = calcularHealthScore({
@@ -207,8 +185,9 @@ Deno.serve(async (req) => {
         retencao: Number(p.taxa_retencao) || 100,
         conversao: Number(p.taxa_conversao) || 0,
         presenca: Number(p.media_presenca) || 0,
-        evasoes: Number(p.evasoes) || 0
-      });
+        evasoes: Number(p.evasoes) || 0,
+        carteira: Number(p.carteira_alunos) || 0,
+      }, weights);
       return {
         ...p,
         health_score: healthResult.score,
