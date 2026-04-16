@@ -281,7 +281,7 @@ export function ModalRelatorio({
 
     let queryAvisosRelatorio = supabase
       .from('movimentacoes_admin')
-      .select('*, professores(nome)')
+      .select('*')
       .eq('tipo', 'aviso_previo')
       .gte('mes_saida', mesSaidaStart)
       .lte('mes_saida', mesSaidaEnd)
@@ -292,9 +292,18 @@ export function ModalRelatorio({
     }
 
     const { data: avisosProximoMes } = await queryAvisosRelatorio;
+
+    // Enriquecer com nome do professor (sem FK, buscar separadamente)
+    const profIds = [...new Set((avisosProximoMes || []).map((a: any) => a.professor_id).filter(Boolean))];
+    let profMapAvisos = new Map<number, string>();
+    if (profIds.length > 0) {
+      const { data: profs } = await supabase.from('professores').select('id, nome').in('id', profIds);
+      (profs || []).forEach((p: any) => profMapAvisos.set(p.id, p.nome));
+    }
+
     const avisosFiltrados = (avisosProximoMes || []).map((a: any) => ({
       ...a,
-      professor_nome: a.professores?.nome || a.professor_nome || null,
+      professor_nome: a.professor_id ? profMapAvisos.get(a.professor_id) || null : null,
     }));
 
     texto += `⚠️ *AVISOS PRÉVIOS PARA SAIR EM ${proximoMesNome}*\n`;
