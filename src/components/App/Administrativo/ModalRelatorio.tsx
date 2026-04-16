@@ -273,19 +273,42 @@ export function ModalRelatorio({
       texto += `❌ *NÃO RENOVAÇÕES DO DIA: 0*\n\n`;
     }
 
-    // Avisos Prévios
-    texto += `⚠️ *AVISOS PRÉVIOS PARA SAIR EM ${new Date(ano, dataSelecionada.getMonth() + 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase()}*\n`;
+    // Avisos Prévios — buscar por mes_saida do mês seguinte
+    const proximoMesDate = new Date(ano, dataSelecionada.getMonth() + 1, 1);
+    const proximoMesNome = proximoMesDate.toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
+    const mesSaidaStart = `${proximoMesDate.getFullYear()}-${String(proximoMesDate.getMonth() + 1).padStart(2, '0')}-01`;
+    const mesSaidaEnd = `${proximoMesDate.getFullYear()}-${String(proximoMesDate.getMonth() + 1).padStart(2, '0')}-31`;
+
+    let queryAvisosRelatorio = supabase
+      .from('movimentacoes_admin')
+      .select('*, professores(nome)')
+      .eq('tipo', 'aviso_previo')
+      .gte('mes_saida', mesSaidaStart)
+      .lte('mes_saida', mesSaidaEnd)
+      .order('data', { ascending: false });
+
+    if (unidade && unidade !== 'todos') {
+      queryAvisosRelatorio = queryAvisosRelatorio.eq('unidade_id', unidade);
+    }
+
+    const { data: avisosProximoMes } = await queryAvisosRelatorio;
+    const avisosFiltrados = (avisosProximoMes || []).map((a: any) => ({
+      ...a,
+      professor_nome: a.professores?.nome || a.professor_nome || null,
+    }));
+
+    texto += `⚠️ *AVISOS PRÉVIOS PARA SAIR EM ${proximoMesNome}*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    if (avisosPrevios.length === 0) {
+    if (avisosFiltrados.length === 0) {
       texto += `Nenhum aviso prévio registrado 🎉\n\n`;
     } else {
-      avisosPrevios.forEach((a, i) => {
+      avisosFiltrados.forEach((a: any, i: number) => {
         texto += `${i + 1}) Nome: *${a.aluno_nome}*\n`;
         texto += `   Motivo: ${a.motivo || 'Não informado'}\n`;
         texto += `   Parcela: R$ ${(a.valor_parcela_novo || 0).toFixed(2)}\n`;
         texto += `   Professor(a): ${a.professor_nome || 'N/A'}\n\n`;
       });
-      texto += `● Total no mês: *${avisosPrevios.length}*\n\n`;
+      texto += `● Total no mês: *${avisosFiltrados.length}*\n\n`;
     }
 
     // Evasões
