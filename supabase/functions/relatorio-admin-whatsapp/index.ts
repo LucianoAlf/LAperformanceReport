@@ -70,6 +70,8 @@ async function enviarWhatsAppGrupo(
 
 /**
  * Gera o texto do relatório diário para uma unidade
+ * Replica EXATAMENTE a lógica do frontend (ModalRelatorio.tsx gerarRelatorioDiario)
+ * Usa as mesmas views e queries que o AdministrativoPage usa
  */
 async function gerarRelatorioDiario(
   supabase: ReturnType<typeof createClient>,
@@ -83,171 +85,177 @@ async function gerarRelatorioDiario(
   const mes = brt.getMonth() + 1;
   const dia = brt.getDate();
   const primeiroDiaMes = `${ano}-${String(mes).padStart(2, '0')}-01`;
-  const proximoMesDate = new Date(ano, mes, 1); // mês seguinte (JS 0-indexed, mes já é 1-indexed)
-  const primeiroDiaProximoMes = `${proximoMesDate.getFullYear()}-${String(proximoMesDate.getMonth() + 1).padStart(2, '0')}-01`;
-  const ultimoDiaProximoMes = new Date(proximoMesDate.getFullYear(), proximoMesDate.getMonth() + 1, 0);
-  const ultimoDiaProximoMesStr = `${ultimoDiaProximoMes.getFullYear()}-${String(ultimoDiaProximoMes.getMonth() + 1).padStart(2, '0')}-${String(ultimoDiaProximoMes.getDate()).padStart(2, '0')}`;
   const mesNome = brt.toLocaleString('pt-BR', { month: 'long' });
-  const proximoMesNome = proximoMesDate.toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
   const horaStr = `${String(brt.getHours()).padStart(2, '0')}:${String(brt.getMinutes()).padStart(2, '0')}`;
 
-  // Buscar dados da unidade
-  const { data: unidade } = await supabase
+  // Próximo mês (para avisos prévios)
+  const proximoMesDate = new Date(ano, mes, 1);
+  const proximoMesNome = proximoMesDate.toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
+  const mesSaidaStart = `${proximoMesDate.getFullYear()}-${String(proximoMesDate.getMonth() + 1).padStart(2, '0')}-01`;
+  const mesSaidaEnd = `${proximoMesDate.getFullYear()}-${String(proximoMesDate.getMonth() + 1).padStart(2, '0')}-31`;
+
+  // === 1. BUSCAR DADOS (mesmas queries do frontend) ===
+
+  // Unidade info
+  const { data: unidadeInfo } = await supabase
     .from('unidades')
     .select('nome, farmers_nomes')
     .eq('id', unidadeId)
     .single();
+  const unidadeNome = unidadeInfo?.nome || 'Unidade';
+  const farmersNomes = unidadeInfo?.farmers_nomes?.join(' e ') || 'Equipe Administrativa';
 
-  const unidadeNome = unidade?.nome || 'Unidade';
-  const farmersNomes = unidade?.farmers_nomes?.join(' e ') || 'Equipe Administrativa';
+  // KPIs via view (MESMA view que o frontend usa)
+  const { data: kpisData } = await supabase
+    .from('vw_kpis_gestao_mensal')
+    .select('*')
+    .eq('ano', ano)
+    .eq('mes', mes)
+    .eq('unidade_id', unidadeId);
 
-  // Buscar alunos
-  const { data: alunosData } = await supabase
-    .from('alunos')
-    .select('status, tipo_aluno, tipo_matricula_id, is_segundo_curso, created_at')
-    .eq('unidade_id', unidadeId)
-    .in('status', ['ativo', 'aviso_previo', 'trancado']);
+  const kpis = kpisData?.[0] || {};
+  const alunosAtivos = kpis.total_alunos_ativos || 0;
+  const alunosPagantes = kpis.total_alunos_pagantes || 0;
+  const alunosNaoPagantes = alunosAtivos - alunosPagantes;
+  const bolsistasIntegrais = kpis.total_bolsistas_integrais || 0;
+  const bolsistasParciais = kpis.total_bolsistas_parciais || 0;
 
-  const alunos = alunosData || [];
-  const ativos = alunos.filter(a => ['ativo', 'aviso_previo'].includes(a.status)).length;
-  const pagantes = alunos.filter(a => a.tipo_aluno === 'pagante' && ['ativo', 'aviso_previo'].includes(a.status)).length;
-  const naoPagantes = alunos.filter(a => a.tipo_aluno === 'nao_pagante' && ['ativo', 'aviso_previo'].includes(a.status)).length;
-  const bolsistasIntegrais = alunos.filter(a => a.tipo_aluno === 'bolsista_integral' && ['ativo', 'aviso_previo'].includes(a.status)).length;
-  const bolsistasParciais = alunos.filter(a => a.tipo_aluno === 'bolsista_parcial' && ['ativo', 'aviso_previo'].includes(a.status)).length;
-  const trancados = alunos.filter(a => a.status === 'trancado').length;
-
-  // Novos no mês
-  const novosNoMes = alunos.filter(a => {
-    if (!a.created_at) return false;
-    const criado = a.created_at.split('T')[0];
-    return criado >= primeiroDiaMes && criado <= hoje && ['ativo', 'aviso_previo'].includes(a.status);
-  }).length;
-
-  // Matrículas
-  const ativosArr = alunos.filter(a => ['ativo', 'aviso_previo'].includes(a.status));
-  const matriculasAtivas = ativosArr.length;
-  const matriculasBanda = ativosArr.filter(a => a.tipo_matricula_id === 5).length;
-  const matriculas2Curso = ativosArr.filter(a => a.is_segundo_curso === true).length;
-
-  // Coral
-  const { count: alunosCoral } = await supabase
+  // Trancados (contagem direta)
+  const { count: trancados } = await supabase
     .from('alunos')
     .select('id', { count: 'exact', head: true })
     .eq('unidade_id', unidadeId)
-    .in('status', ['ativo', 'aviso_previo'])
-    .ilike('curso_nome', '%coral%');
+    .eq('status', 'trancado');
 
-  // Renovações do mês
-  const { data: renovacoesData } = await supabase
-    .from('movimentacoes_admin')
-    .select('*, professores:professor_id(nome)')
+  // Novos no mês (mesma lógica: data_matricula, excluir 2º curso e bolsistas/banda)
+  const { data: novosData } = await supabase
+    .from('alunos')
+    .select('id, is_segundo_curso, tipo_matricula_id')
     .eq('unidade_id', unidadeId)
-    .eq('tipo', 'renovacao')
+    .gte('data_matricula', primeiroDiaMes)
+    .lte('data_matricula', hoje);
+
+  const novosAlunos = (novosData || []).filter((a: any) =>
+    !a.is_segundo_curso && a.tipo_matricula_id && ![3, 4, 5].includes(a.tipo_matricula_id)
+  );
+
+  // Matrículas (mesma lógica: join cursos para banda/coral)
+  const { data: matriculasData } = await supabase
+    .from('alunos')
+    .select('id, is_segundo_curso, curso_id, cursos(nome)')
+    .eq('unidade_id', unidadeId)
+    .in('status', ['ativo', 'aviso_previo']);
+
+  const matriculasAtivas = matriculasData?.length || 0;
+  const matriculasBanda = matriculasData?.filter((m: any) =>
+    m.cursos?.nome?.toLowerCase().includes('banda')
+  ).length || 0;
+  const matriculas2Curso = matriculasData?.filter((m: any) => m.is_segundo_curso).length || 0;
+  const alunosCoral = matriculasData?.filter((m: any) =>
+    m.cursos?.nome?.toLowerCase().includes('coral')
+  ).length || 0;
+
+  // Retencao view (renovações — MESMA view que o frontend usa)
+  const { data: retData } = await supabase
+    .from('vw_kpis_retencao_mensal')
+    .select('*')
+    .eq('ano', ano)
+    .eq('mes', mes)
+    .eq('unidade_id', unidadeId);
+
+  const ret = retData?.[0] || {};
+
+  // Movimentações do mês (sem join professor — enriquecer depois, como o frontend faz)
+  const { data: movData } = await supabase
+    .from('movimentacoes_admin')
+    .select('*, unidades(codigo)')
+    .eq('unidade_id', unidadeId)
     .gte('data', primeiroDiaMes)
     .lte('data', hoje)
     .order('data', { ascending: false });
 
-  const renovacoes = (renovacoesData || []).map((r: any) => ({
-    ...r,
-    professor_nome: r.professores?.nome || null,
-  }));
+  const movimentacoes = movData || [];
+  const renovacoesMov = movimentacoes.filter((m: any) => m.tipo === 'renovacao');
+  const naoRenovacoesMov = movimentacoes.filter((m: any) => m.tipo === 'nao_renovacao');
+  const evasoesMov = movimentacoes.filter((m: any) => m.tipo === 'evasao');
 
-  // Não renovações do mês
-  const { data: naoRenovacoesData } = await supabase
-    .from('movimentacoes_admin')
-    .select('*, professores:professor_id(nome)')
-    .eq('unidade_id', unidadeId)
-    .eq('tipo', 'nao_renovacao')
-    .gte('data', primeiroDiaMes)
-    .lte('data', hoje)
-    .order('data', { ascending: false });
+  // Enriquecer com nomes de professores (mesma lógica do frontend)
+  const profIds = [...new Set(movimentacoes.map((m: any) => m.professor_id).filter(Boolean))];
+  const profMap = new Map<number, string>();
+  if (profIds.length > 0) {
+    const { data: profs } = await supabase.from('professores').select('id, nome').in('id', profIds);
+    (profs || []).forEach((p: any) => profMap.set(p.id, p.nome));
+  }
+  const enriquecer = (m: any) => ({ ...m, professor_nome: m.professor_id ? profMap.get(m.professor_id) || null : null });
+  const renovacoes = renovacoesMov.map(enriquecer);
+  const naoRenovacoes = naoRenovacoesMov.map(enriquecer);
+  const evasoes = evasoesMov.map(enriquecer);
 
-  const naoRenovacoes = (naoRenovacoesData || []).map((r: any) => ({
-    ...r,
-    professor_nome: r.professores?.nome || null,
-  }));
+  // Combinar view + movimentacoes (Math.max, como o frontend faz)
+  const naoRenovacoesCount = Math.max(ret.nao_renovacoes || 0, naoRenovacoes.length);
+  const renovacoesRealizadasCount = Math.max(ret.renovacoes_realizadas || 0, renovacoes.length);
+  const renovacoesPendentesCount = ret.renovacoes_pendentes || 0;
+  const renovacoesPrevistas = renovacoesRealizadasCount + naoRenovacoesCount + renovacoesPendentesCount;
+  const taxaRenovacao = renovacoesPrevistas > 0 ? (renovacoesRealizadasCount / renovacoesPrevistas * 100) : 0;
 
-  // Renovações do dia
+  // Renovações/evasões do dia
   const renovacoesHoje = renovacoes.filter((r: any) => r.data === hoje);
   const naoRenovacoesHoje = naoRenovacoes.filter((r: any) => r.data === hoje);
-
-  // Cálculos de renovação
-  const renovacoesRealizadas = renovacoes.length;
-  const naoRenovacoesCount = naoRenovacoes.length;
-  const renovacoesPendentes = 0; // Não tem como calcular server-side sem dados_mensais
-  const renovacoesPrevistas = renovacoesRealizadas + naoRenovacoesCount + renovacoesPendentes;
-  const taxaRenovacao = renovacoesPrevistas > 0 ? (renovacoesRealizadas / renovacoesPrevistas * 100) : 0;
-
-  // Avisos prévios (mes_saida do mês seguinte)
-  const { data: avisosData } = await supabase
-    .from('movimentacoes_admin')
-    .select('*, professores:professor_id(nome)')
-    .eq('unidade_id', unidadeId)
-    .eq('tipo', 'aviso_previo')
-    .gte('mes_saida', primeiroDiaProximoMes)
-    .lte('mes_saida', ultimoDiaProximoMesStr)
-    .order('data', { ascending: false });
-
-  const avisosPrevios = (avisosData || []).map((a: any) => ({
-    ...a,
-    professor_nome: a.professores?.nome || null,
-  }));
-
-  // Evasões do mês
-  const { data: evasoesData } = await supabase
-    .from('movimentacoes_admin')
-    .select('*, professores:professor_id(nome)')
-    .eq('unidade_id', unidadeId)
-    .eq('tipo', 'evasao')
-    .gte('data', primeiroDiaMes)
-    .lte('data', hoje)
-    .order('data', { ascending: false });
-
-  const evasoes = (evasoesData || []).map((e: any) => ({
-    ...e,
-    professor_nome: e.professores?.nome || null,
-  }));
-
   const evasoesHoje = evasoes.filter((e: any) => e.data === hoje);
 
-  // === MONTAR TEXTO ===
+  // Avisos prévios (mes_saida do mês seguinte — mesma lógica do fix no frontend)
+  const { data: avisosData } = await supabase
+    .from('movimentacoes_admin')
+    .select('*')
+    .eq('unidade_id', unidadeId)
+    .eq('tipo', 'aviso_previo')
+    .gte('mes_saida', mesSaidaStart)
+    .lte('mes_saida', mesSaidaEnd)
+    .order('data', { ascending: false });
+
+  const avisosProfIds = [...new Set((avisosData || []).map((a: any) => a.professor_id).filter(Boolean))];
+  if (avisosProfIds.length > 0) {
+    const { data: profs } = await supabase.from('professores').select('id, nome').in('id', avisosProfIds);
+    (profs || []).forEach((p: any) => profMap.set(p.id, p.nome));
+  }
+  const avisosPrevios = (avisosData || []).map(enriquecer);
+
+  // === 2. MONTAR TEXTO (idêntico ao frontend) ===
+  const taxaInadimplencia = alunosAtivos > 0 ? (alunosNaoPagantes / alunosAtivos * 100) : 0;
+
   let texto = '';
   texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
   texto += `📋 *RELATÓRIO DIÁRIO ADMINISTRATIVO*\n`;
   texto += `🏢 *${unidadeNome.toUpperCase()}*\n`;
-  texto += `📆 ${dia}/${mesNome}/${ano}\n`;
+  texto += `📆 ${String(dia).padStart(2, '0')}/${mesNome}/${ano}\n`;
   texto += `👥 ${farmersNomes}\n`;
   texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
-  // Alunos
   texto += `👥 *ALUNOS*\n`;
   texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-  texto += `• Ativos: *${ativos}*\n`;
-  texto += `• Pagantes: *${pagantes}*\n`;
-  texto += `• Não Pagantes: *${naoPagantes}* (${ativos > 0 ? ((naoPagantes / ativos) * 100).toFixed(1) : '0'}%)\n`;
+  texto += `• Ativos: *${alunosAtivos}*\n`;
+  texto += `• Pagantes: *${alunosPagantes}*\n`;
+  texto += `• Não Pagantes: *${alunosNaoPagantes}* (${taxaInadimplencia.toFixed(1)}%)\n`;
   texto += `• Bolsistas Integrais: *${bolsistasIntegrais}*\n`;
   texto += `• Bolsistas Parciais: *${bolsistasParciais}*\n`;
-  texto += `• Trancados: *${trancados}*\n`;
-  texto += `• Novos no mês: *${novosNoMes}*\n\n`;
+  texto += `• Trancados: *${trancados || 0}*\n`;
+  texto += `• Novos no mês: *${novosAlunos.length}*\n\n`;
 
-  // Matrículas
   texto += `📚 *MATRÍCULAS*\n`;
   texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
   texto += `• Matrículas Ativas: *${matriculasAtivas}*\n`;
   texto += `• Matrículas em Banda: *${matriculasBanda}*\n`;
   texto += `• Matrículas de 2º Curso: *${matriculas2Curso}*\n`;
-  texto += `• Alunos no Coral: *${alunosCoral || 0}*\n\n`;
+  texto += `• Alunos no Coral: *${alunosCoral}*\n\n`;
 
-  // Renovações
   texto += `🔄 *RENOVAÇÕES DO MÊS*\n`;
   texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
   texto += `• Total previsto: *${renovacoesPrevistas}*\n`;
-  texto += `• Realizadas: *${renovacoesRealizadas}*\n`;
-  texto += `• Pendentes: *${renovacoesPendentes}*\n`;
+  texto += `• Realizadas: *${renovacoesRealizadasCount}*\n`;
+  texto += `• Pendentes: *${renovacoesPendentesCount}*\n`;
   texto += `• Não Renovações: *${naoRenovacoesCount}*\n`;
   texto += `• Taxa de Renovação: *${taxaRenovacao.toFixed(1)}%*\n\n`;
 
-  // Renovações do dia
   if (renovacoesHoje.length > 0) {
     texto += `✅ *RENOVAÇÕES DO DIA (${renovacoesHoje.length})*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
@@ -256,15 +264,13 @@ async function gerarRelatorioDiario(
         ? ((r.valor_parcela_novo - r.valor_parcela_anterior) / r.valor_parcela_anterior) * 100
         : 0;
       texto += `${i + 1}) Nome: *${r.aluno_nome}*\n`;
-      texto += `   De: R$ ${(r.valor_parcela_anterior || 0).toFixed(2)} para R$ ${(r.valor_parcela_novo || 0).toFixed(2)} (${reajuste.toFixed(1)}%)\n`;
-      texto += `   Professor(a): ${r.professor_nome || 'N/A'}\n`;
-      texto += `   Motivo: ${r.motivo || 'Não informado'}\n\n`;
+      texto += `   De: R$ ${(r.valor_parcela_anterior || 0).toFixed(2)} para R$ ${(r.valor_parcela_novo || 0).toFixed(2)} (*+${reajuste.toFixed(1)}%*)\n`;
+      texto += `   Agente: ${r.agente_comercial || 'N/A'}\n\n`;
     });
   } else {
     texto += `✅ *RENOVAÇÕES DO DIA: 0*\n\n`;
   }
 
-  // Não renovações do dia
   if (naoRenovacoesHoje.length > 0) {
     texto += `❌ *NÃO RENOVAÇÕES DO DIA (${naoRenovacoesHoje.length})*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
@@ -281,7 +287,6 @@ async function gerarRelatorioDiario(
     texto += `❌ *NÃO RENOVAÇÕES DO DIA: 0*\n\n`;
   }
 
-  // Avisos prévios
   texto += `⚠️ *AVISOS PRÉVIOS PARA SAIR EM ${proximoMesNome}*\n`;
   texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
   if (avisosPrevios.length === 0) {
@@ -296,7 +301,6 @@ async function gerarRelatorioDiario(
     texto += `● Total no mês: *${avisosPrevios.length}*\n\n`;
   }
 
-  // Evasões
   texto += `🚪 *EVASÕES (Saíram esse mês)*\n`;
   texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
   texto += `• Total de evasões: *${evasoes.length}*\n`;
