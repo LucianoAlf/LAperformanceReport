@@ -1,5 +1,6 @@
 // Edge Function: relatorio-admin-whatsapp
 // Envia relatórios administrativos via WhatsApp para grupos das Farmers
+// Suporta modo manual (texto pronto) e modo cron (gera + envia automaticamente)
 // Integração com UAZAPI
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
@@ -12,11 +13,12 @@ const corsHeaders = {
 };
 
 interface RelatorioPayload {
-  texto: string;
-  tipoRelatorio: string;
-  unidade: string; // UUID da unidade ou 'todos' para consolidado
-  competencia: string;
-  numero_teste?: string; // Se informado, envia apenas para este número (modo teste)
+  texto?: string;
+  tipoRelatorio?: string;
+  unidade?: string;
+  competencia?: string;
+  numero_teste?: string;
+  modo?: 'cron'; // Modo automático: gera + envia para unidades com cron ativo
 }
 
 /**
@@ -59,11 +61,342 @@ async function enviarWhatsAppGrupo(
     }
   } catch (error) {
     console.error(`[relatorio-admin-whatsapp] ❌ Erro de conexão:`, error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Erro de conexão' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Erro de conexão'
     };
   }
+}
+
+/**
+ * Gera o texto do relatório diário para uma unidade
+ */
+async function gerarRelatorioDiario(
+  supabase: ReturnType<typeof createClient>,
+  unidadeId: string
+): Promise<string> {
+  // Calcular datas em BRT (UTC-3)
+  const now = new Date();
+  const brt = new Date(now.getTime() - 3 * 60 * 60 * 1000);
+  const hoje = brt.toISOString().split('T')[0];
+  const ano = brt.getFullYear();
+  const mes = brt.getMonth() + 1;
+  const dia = brt.getDate();
+  const primeiroDiaMes = `${ano}-${String(mes).padStart(2, '0')}-01`;
+  const proximoMesDate = new Date(ano, mes, 1); // mês seguinte (JS 0-indexed, mes já é 1-indexed)
+  const primeiroDiaProximoMes = `${proximoMesDate.getFullYear()}-${String(proximoMesDate.getMonth() + 1).padStart(2, '0')}-01`;
+  const ultimoDiaProximoMes = new Date(proximoMesDate.getFullYear(), proximoMesDate.getMonth() + 1, 0);
+  const ultimoDiaProximoMesStr = `${ultimoDiaProximoMes.getFullYear()}-${String(ultimoDiaProximoMes.getMonth() + 1).padStart(2, '0')}-${String(ultimoDiaProximoMes.getDate()).padStart(2, '0')}`;
+  const mesNome = brt.toLocaleString('pt-BR', { month: 'long' });
+  const proximoMesNome = proximoMesDate.toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
+  const horaStr = `${String(brt.getHours()).padStart(2, '0')}:${String(brt.getMinutes()).padStart(2, '0')}`;
+
+  // Buscar dados da unidade
+  const { data: unidade } = await supabase
+    .from('unidades')
+    .select('nome, farmers_nomes')
+    .eq('id', unidadeId)
+    .single();
+
+  const unidadeNome = unidade?.nome || 'Unidade';
+  const farmersNomes = unidade?.farmers_nomes?.join(' e ') || 'Equipe Administrativa';
+
+  // Buscar alunos
+  const { data: alunosData } = await supabase
+    .from('alunos')
+    .select('status, tipo_aluno, tipo_matricula_id, is_segundo_curso, created_at')
+    .eq('unidade_id', unidadeId)
+    .in('status', ['ativo', 'aviso_previo', 'trancado']);
+
+  const alunos = alunosData || [];
+  const ativos = alunos.filter(a => ['ativo', 'aviso_previo'].includes(a.status)).length;
+  const pagantes = alunos.filter(a => a.tipo_aluno === 'pagante' && ['ativo', 'aviso_previo'].includes(a.status)).length;
+  const naoPagantes = alunos.filter(a => a.tipo_aluno === 'nao_pagante' && ['ativo', 'aviso_previo'].includes(a.status)).length;
+  const bolsistasIntegrais = alunos.filter(a => a.tipo_aluno === 'bolsista_integral' && ['ativo', 'aviso_previo'].includes(a.status)).length;
+  const bolsistasParciais = alunos.filter(a => a.tipo_aluno === 'bolsista_parcial' && ['ativo', 'aviso_previo'].includes(a.status)).length;
+  const trancados = alunos.filter(a => a.status === 'trancado').length;
+
+  // Novos no mês
+  const novosNoMes = alunos.filter(a => {
+    if (!a.created_at) return false;
+    const criado = a.created_at.split('T')[0];
+    return criado >= primeiroDiaMes && criado <= hoje && ['ativo', 'aviso_previo'].includes(a.status);
+  }).length;
+
+  // Matrículas
+  const ativosArr = alunos.filter(a => ['ativo', 'aviso_previo'].includes(a.status));
+  const matriculasAtivas = ativosArr.length;
+  const matriculasBanda = ativosArr.filter(a => a.tipo_matricula_id === 5).length;
+  const matriculas2Curso = ativosArr.filter(a => a.is_segundo_curso === true).length;
+
+  // Coral
+  const { count: alunosCoral } = await supabase
+    .from('alunos')
+    .select('id', { count: 'exact', head: true })
+    .eq('unidade_id', unidadeId)
+    .in('status', ['ativo', 'aviso_previo'])
+    .ilike('curso_nome', '%coral%');
+
+  // Renovações do mês
+  const { data: renovacoesData } = await supabase
+    .from('movimentacoes_admin')
+    .select('*, professores:professor_id(nome)')
+    .eq('unidade_id', unidadeId)
+    .eq('tipo', 'renovacao')
+    .gte('data', primeiroDiaMes)
+    .lte('data', hoje)
+    .order('data', { ascending: false });
+
+  const renovacoes = (renovacoesData || []).map((r: any) => ({
+    ...r,
+    professor_nome: r.professores?.nome || null,
+  }));
+
+  // Não renovações do mês
+  const { data: naoRenovacoesData } = await supabase
+    .from('movimentacoes_admin')
+    .select('*, professores:professor_id(nome)')
+    .eq('unidade_id', unidadeId)
+    .eq('tipo', 'nao_renovacao')
+    .gte('data', primeiroDiaMes)
+    .lte('data', hoje)
+    .order('data', { ascending: false });
+
+  const naoRenovacoes = (naoRenovacoesData || []).map((r: any) => ({
+    ...r,
+    professor_nome: r.professores?.nome || null,
+  }));
+
+  // Renovações do dia
+  const renovacoesHoje = renovacoes.filter((r: any) => r.data === hoje);
+  const naoRenovacoesHoje = naoRenovacoes.filter((r: any) => r.data === hoje);
+
+  // Cálculos de renovação
+  const renovacoesRealizadas = renovacoes.length;
+  const naoRenovacoesCount = naoRenovacoes.length;
+  const renovacoesPendentes = 0; // Não tem como calcular server-side sem dados_mensais
+  const renovacoesPrevistas = renovacoesRealizadas + naoRenovacoesCount + renovacoesPendentes;
+  const taxaRenovacao = renovacoesPrevistas > 0 ? (renovacoesRealizadas / renovacoesPrevistas * 100) : 0;
+
+  // Avisos prévios (mes_saida do mês seguinte)
+  const { data: avisosData } = await supabase
+    .from('movimentacoes_admin')
+    .select('*, professores:professor_id(nome)')
+    .eq('unidade_id', unidadeId)
+    .eq('tipo', 'aviso_previo')
+    .gte('mes_saida', primeiroDiaProximoMes)
+    .lte('mes_saida', ultimoDiaProximoMesStr)
+    .order('data', { ascending: false });
+
+  const avisosPrevios = (avisosData || []).map((a: any) => ({
+    ...a,
+    professor_nome: a.professores?.nome || null,
+  }));
+
+  // Evasões do mês
+  const { data: evasoesData } = await supabase
+    .from('movimentacoes_admin')
+    .select('*, professores:professor_id(nome)')
+    .eq('unidade_id', unidadeId)
+    .eq('tipo', 'evasao')
+    .gte('data', primeiroDiaMes)
+    .lte('data', hoje)
+    .order('data', { ascending: false });
+
+  const evasoes = (evasoesData || []).map((e: any) => ({
+    ...e,
+    professor_nome: e.professores?.nome || null,
+  }));
+
+  const evasoesHoje = evasoes.filter((e: any) => e.data === hoje);
+
+  // === MONTAR TEXTO ===
+  let texto = '';
+  texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+  texto += `📋 *RELATÓRIO DIÁRIO ADMINISTRATIVO*\n`;
+  texto += `🏢 *${unidadeNome.toUpperCase()}*\n`;
+  texto += `📆 ${dia}/${mesNome}/${ano}\n`;
+  texto += `👥 ${farmersNomes}\n`;
+  texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+
+  // Alunos
+  texto += `👥 *ALUNOS*\n`;
+  texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+  texto += `• Ativos: *${ativos}*\n`;
+  texto += `• Pagantes: *${pagantes}*\n`;
+  texto += `• Não Pagantes: *${naoPagantes}* (${ativos > 0 ? ((naoPagantes / ativos) * 100).toFixed(1) : '0'}%)\n`;
+  texto += `• Bolsistas Integrais: *${bolsistasIntegrais}*\n`;
+  texto += `• Bolsistas Parciais: *${bolsistasParciais}*\n`;
+  texto += `• Trancados: *${trancados}*\n`;
+  texto += `• Novos no mês: *${novosNoMes}*\n\n`;
+
+  // Matrículas
+  texto += `📚 *MATRÍCULAS*\n`;
+  texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+  texto += `• Matrículas Ativas: *${matriculasAtivas}*\n`;
+  texto += `• Matrículas em Banda: *${matriculasBanda}*\n`;
+  texto += `• Matrículas de 2º Curso: *${matriculas2Curso}*\n`;
+  texto += `• Alunos no Coral: *${alunosCoral || 0}*\n\n`;
+
+  // Renovações
+  texto += `🔄 *RENOVAÇÕES DO MÊS*\n`;
+  texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+  texto += `• Total previsto: *${renovacoesPrevistas}*\n`;
+  texto += `• Realizadas: *${renovacoesRealizadas}*\n`;
+  texto += `• Pendentes: *${renovacoesPendentes}*\n`;
+  texto += `• Não Renovações: *${naoRenovacoesCount}*\n`;
+  texto += `• Taxa de Renovação: *${taxaRenovacao.toFixed(1)}%*\n\n`;
+
+  // Renovações do dia
+  if (renovacoesHoje.length > 0) {
+    texto += `✅ *RENOVAÇÕES DO DIA (${renovacoesHoje.length})*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    renovacoesHoje.forEach((r: any, i: number) => {
+      const reajuste = r.valor_parcela_anterior && r.valor_parcela_novo
+        ? ((r.valor_parcela_novo - r.valor_parcela_anterior) / r.valor_parcela_anterior) * 100
+        : 0;
+      texto += `${i + 1}) Nome: *${r.aluno_nome}*\n`;
+      texto += `   De: R$ ${(r.valor_parcela_anterior || 0).toFixed(2)} para R$ ${(r.valor_parcela_novo || 0).toFixed(2)} (${reajuste.toFixed(1)}%)\n`;
+      texto += `   Professor(a): ${r.professor_nome || 'N/A'}\n`;
+      texto += `   Motivo: ${r.motivo || 'Não informado'}\n\n`;
+    });
+  } else {
+    texto += `✅ *RENOVAÇÕES DO DIA: 0*\n\n`;
+  }
+
+  // Não renovações do dia
+  if (naoRenovacoesHoje.length > 0) {
+    texto += `❌ *NÃO RENOVAÇÕES DO DIA (${naoRenovacoesHoje.length})*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    naoRenovacoesHoje.forEach((r: any, i: number) => {
+      const reajuste = r.valor_parcela_anterior && r.valor_parcela_novo
+        ? ((r.valor_parcela_novo - r.valor_parcela_anterior) / r.valor_parcela_anterior) * 100
+        : 0;
+      texto += `${i + 1}) Nome: *${r.aluno_nome}*\n`;
+      texto += `   De: R$ ${(r.valor_parcela_anterior || 0).toFixed(2)} para R$ ${(r.valor_parcela_novo || 0).toFixed(2)} (${reajuste.toFixed(1)}%)\n`;
+      texto += `   Professor(a): ${r.professor_nome || 'N/A'}\n`;
+      texto += `   Motivo: ${r.motivo || 'Não informado'}\n\n`;
+    });
+  } else {
+    texto += `❌ *NÃO RENOVAÇÕES DO DIA: 0*\n\n`;
+  }
+
+  // Avisos prévios
+  texto += `⚠️ *AVISOS PRÉVIOS PARA SAIR EM ${proximoMesNome}*\n`;
+  texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+  if (avisosPrevios.length === 0) {
+    texto += `Nenhum aviso prévio registrado 🎉\n\n`;
+  } else {
+    avisosPrevios.forEach((a: any, i: number) => {
+      texto += `${i + 1}) Nome: *${a.aluno_nome}*\n`;
+      texto += `   Motivo: ${a.motivo || 'Não informado'}\n`;
+      texto += `   Parcela: R$ ${(a.valor_parcela_novo || 0).toFixed(2)}\n`;
+      texto += `   Professor(a): ${a.professor_nome || 'N/A'}\n\n`;
+    });
+    texto += `● Total no mês: *${avisosPrevios.length}*\n\n`;
+  }
+
+  // Evasões
+  texto += `🚪 *EVASÕES (Saíram esse mês)*\n`;
+  texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+  texto += `• Total de evasões: *${evasoes.length}*\n`;
+  texto += `• Interrompido: *${evasoes.filter((e: any) => e.tipo_evasao === 'interrompido').length}*\n`;
+  texto += `• Interrompido 2º Curso: *${evasoes.filter((e: any) => e.tipo_evasao === 'interrompido_2_curso').length}*\n`;
+  texto += `• Interrompido Bolsista: *${evasoes.filter((e: any) => e.tipo_evasao === 'interrompido_bolsista').length}*\n`;
+  texto += `• Interrompido Banda: *${evasoes.filter((e: any) => e.tipo_evasao === 'interrompido_banda').length}*\n`;
+  texto += `• Não Renovou: *${evasoes.filter((e: any) => e.tipo_evasao === 'nao_renovou').length}*\n`;
+  texto += `• Transferência: *${evasoes.filter((e: any) => e.tipo_evasao === 'transferencia').length}*\n\n`;
+
+  if (evasoesHoje.length > 0) {
+    texto += `Evasões do dia: *${evasoesHoje.length}*\n\n`;
+    evasoesHoje.forEach((e: any, i: number) => {
+      texto += `${i + 1}) *${e.aluno_nome}*\n`;
+      texto += `   Tipo: ${e.tipo_evasao || 'N/A'}\n`;
+      texto += `   Motivo: ${e.motivo || 'Não informado'}\n\n`;
+    });
+  } else {
+    texto += `Evasões do dia: *0*\n\n`;
+  }
+
+  texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+  texto += `📅 Gerado em: ${String(dia).padStart(2, '0')}/${String(mes).padStart(2, '0')}/${ano} às ${horaStr} (automático)\n`;
+  texto += `━━━━━━━━━━━━━━━━━━━━━━`;
+
+  return texto;
+}
+
+/**
+ * Modo CRON: gera e envia relatório para todas as unidades com cron ativo
+ */
+async function processarCron(
+  supabase: ReturnType<typeof createClient>
+): Promise<{ unidades_processadas: number; resultados: any[] }> {
+  console.log('[relatorio-admin-whatsapp] 🕐 Modo CRON iniciado');
+
+  // Buscar unidades com cron ativo
+  const { data: unidades } = await supabase
+    .from('unidades')
+    .select('id, nome')
+    .eq('relatorio_diario_cron_ativo', true);
+
+  if (!unidades || unidades.length === 0) {
+    console.log('[relatorio-admin-whatsapp] Nenhuma unidade com cron ativo');
+    return { unidades_processadas: 0, resultados: [] };
+  }
+
+  console.log(`[relatorio-admin-whatsapp] ${unidades.length} unidade(s) com cron ativo`);
+
+  const resultados: any[] = [];
+
+  for (const unidade of unidades) {
+    console.log(`[relatorio-admin-whatsapp] Processando: ${unidade.nome}`);
+
+    try {
+      // Buscar destinatários
+      const { data: destinatarios } = await supabase
+        .from('whatsapp_destinatarios_relatorio')
+        .select('jid, nome')
+        .eq('tipo', 'relatorio_admin')
+        .eq('ativo', true)
+        .eq('unidade_id', unidade.id);
+
+      if (!destinatarios || destinatarios.length === 0) {
+        console.warn(`[relatorio-admin-whatsapp] ⚠️ ${unidade.nome}: sem destinatários configurados, pulando`);
+        resultados.push({ unidade: unidade.nome, status: 'skip', motivo: 'sem_destinatarios' });
+        continue;
+      }
+
+      // Gerar relatório
+      const texto = await gerarRelatorioDiario(supabase, unidade.id);
+
+      // Resolver credenciais UAZAPI por unidade
+      const creds = await getUazapiCredentials(supabase, { funcao: 'sistema', unidadeId: unidade.id });
+
+      // Enviar para cada grupo
+      for (const dest of destinatarios) {
+        const resultado = await enviarWhatsAppGrupo(dest.jid, texto, creds);
+        resultados.push({
+          unidade: unidade.nome,
+          grupo: dest.nome,
+          ...resultado,
+        });
+
+        if (destinatarios.length > 1) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+    } catch (error) {
+      console.error(`[relatorio-admin-whatsapp] ❌ Erro ao processar ${unidade.nome}:`, error);
+      resultados.push({
+        unidade: unidade.nome,
+        status: 'error',
+        error: error instanceof Error ? error.message : 'Erro desconhecido',
+      });
+    }
+  }
+
+  console.log(`[relatorio-admin-whatsapp] 🕐 Modo CRON finalizado. ${resultados.length} envio(s)`);
+  return { unidades_processadas: unidades.length, resultados };
 }
 
 serve(async (req) => {
@@ -77,11 +410,19 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
-    const creds = await getUazapiCredentials(supabase, { funcao: 'sistema' });
 
     const payload: RelatorioPayload = await req.json();
 
-    // Validar payload
+    // === MODO CRON ===
+    if (payload.modo === 'cron') {
+      const resultado = await processarCron(supabase);
+      return new Response(
+        JSON.stringify({ success: true, ...resultado }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // === MODO MANUAL (existente) ===
     if (!payload.texto) {
       return new Response(
         JSON.stringify({ success: false, error: 'Texto do relatório não informado' }),
@@ -89,7 +430,9 @@ serve(async (req) => {
       );
     }
 
-    // Modo teste: enviar para número específico ao invés dos grupos
+    const creds = await getUazapiCredentials(supabase, { funcao: 'sistema' });
+
+    // Modo teste
     if (payload.numero_teste) {
       const numero = payload.numero_teste.replace(/\D/g, '');
       console.log(`[relatorio-admin-whatsapp] 🧪 MODO TESTE — enviando para ${numero}`);
@@ -100,7 +443,7 @@ serve(async (req) => {
       );
     }
 
-    // Buscar destinatários do banco
+    // Buscar destinatários
     let destQuery = supabase
       .from('whatsapp_destinatarios_relatorio')
       .select('jid, nome, unidade_id')
@@ -130,27 +473,19 @@ serve(async (req) => {
 
     console.log(`[relatorio-admin-whatsapp] Enviando para ${gruposParaEnviar.length} grupo(s)`);
 
-    // Enviar para cada grupo
     const resultados: { grupo: string; success: boolean; messageId?: string; error?: string }[] = [];
-    
+
     for (const grupo of gruposParaEnviar) {
       const resultado = await enviarWhatsAppGrupo(grupo.jid, payload.texto, creds);
-      resultados.push({
-        grupo: grupo.nome,
-        ...resultado
-      });
-      
-      // Pequeno delay entre envios para evitar rate limit
+      resultados.push({ grupo: grupo.nome, ...resultado });
+
       if (gruposParaEnviar.length > 1) {
         await new Promise(resolve => setTimeout(resolve, 500));
       }
     }
 
-    // Verificar se todos foram enviados com sucesso
     const todosEnviados = resultados.every(r => r.success);
     const algumEnviado = resultados.some(r => r.success);
-
-    // Extrair erro dos resultados para exibir no frontend
     const erroMsg = !todosEnviados
       ? resultados.filter(r => !r.success).map(r => r.error).join('; ')
       : undefined;
@@ -163,10 +498,7 @@ serve(async (req) => {
         resultados,
         messageId: resultados.find(r => r.success)?.messageId,
       }),
-      { 
-        status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      }
+      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {

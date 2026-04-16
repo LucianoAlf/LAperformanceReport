@@ -3,7 +3,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
-import { Copy, Check, RotateCcw, FileText, Calendar, RefreshCw, AlertTriangle, LogOut, Sparkles, Loader2, Send } from 'lucide-react';
+import { Copy, Check, RotateCcw, FileText, Calendar, RefreshCw, AlertTriangle, LogOut, Sparkles, Loader2, Send, Clock } from 'lucide-react';
+import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { DatePicker } from '@/components/ui/date-picker';
 import { supabase } from '@/lib/supabase';
@@ -66,6 +67,42 @@ export function ModalRelatorio({
   const [relatorioPeriodo, setRelatorioPeriodo] = useState<'hoje' | 'ontem' | 'semana' | 'mes' | 'personalizado'>('hoje');
   const [relatorioDataInicio, setRelatorioDataInicio] = useState<Date>(new Date());
   const [relatorioDataFim, setRelatorioDataFim] = useState<Date>(new Date());
+
+  // Toggle cron automático
+  const [cronAtivo, setCronAtivo] = useState(false);
+  const [loadingCron, setLoadingCron] = useState(false);
+
+  // Carregar estado do cron quando modal abre
+  React.useEffect(() => {
+    if (open && unidade && unidade !== 'todos') {
+      supabase
+        .from('unidades')
+        .select('relatorio_diario_cron_ativo')
+        .eq('id', unidade)
+        .single()
+        .then(({ data }) => {
+          setCronAtivo(data?.relatorio_diario_cron_ativo || false);
+        });
+    }
+  }, [open, unidade]);
+
+  const toggleCron = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!unidade || unidade === 'todos') return;
+    setLoadingCron(true);
+    const novoValor = !cronAtivo;
+    const { error } = await supabase
+      .from('unidades')
+      .update({ relatorio_diario_cron_ativo: novoValor })
+      .eq('id', unidade);
+    setLoadingCron(false);
+    if (error) {
+      toast.error('Erro ao atualizar configuração');
+    } else {
+      setCronAtivo(novoValor);
+      toast.success(novoValor ? 'Envio automático ativado às 20h' : 'Envio automático desativado');
+    }
+  };
 
   const [ano, mes] = competencia.split('-').map(Number);
   const mesNome = new Date(ano, mes - 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
@@ -958,6 +995,29 @@ export function ModalRelatorio({
                 <div className="flex-1">
                   <h3 className={cn("font-medium", tipo.destaque ? "text-violet-300" : "text-white")}>{tipo.label}</h3>
                   <p className="text-xs text-slate-400">{tipo.desc}</p>
+                  {tipo.id === 'diario' && (
+                    <div className="flex items-center gap-2 mt-1.5" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={toggleCron}
+                        disabled={loadingCron || !unidade || unidade === 'todos'}
+                        className={cn(
+                          "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
+                          cronAtivo ? "bg-emerald-600" : "bg-slate-600",
+                          (!unidade || unidade === 'todos') && "opacity-40 cursor-not-allowed"
+                        )}
+                        title={!unidade || unidade === 'todos' ? 'Selecione uma unidade' : cronAtivo ? 'Desativar envio automático' : 'Ativar envio automático'}
+                      >
+                        <span className={cn(
+                          "inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform",
+                          cronAtivo ? "translate-x-[18px]" : "translate-x-[3px]"
+                        )} />
+                      </button>
+                      <span className="flex items-center gap-1 text-[10px] text-slate-500">
+                        <Clock className="w-3 h-3" />
+                        {cronAtivo ? 'Envio automático 20h ativo' : 'Envio automático 20h'}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 <span className={tipo.destaque ? "text-violet-400" : "text-slate-500"}>→</span>
               </button>
