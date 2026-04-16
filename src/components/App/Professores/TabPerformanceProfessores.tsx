@@ -18,6 +18,7 @@ import { ModalDetalhesProfessorPerformance } from './ModalDetalhesProfessorPerfo
 import { ModalNovaMeta } from './ModalNovaMeta';
 import { ModalNovaAcao } from './ModalNovaAcao';
 import { ModalRelatorioCoordenacao } from './ModalRelatorioCoordenacao';
+import { ModalDetalhesTurmas } from './ModalDetalhesTurmas';
 import { PlanoAcaoEquipe } from './PlanoAcaoEquipe';
 import { calcularHealthScore } from '@/hooks/useHealthScore';
 import { DEFAULT_HEALTH_WEIGHTS } from './HealthScoreConfig';
@@ -96,6 +97,9 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
     professorId: null
   });
   const [modalRelatorio, setModalRelatorio] = useState(false);
+  const [modalTurmas, setModalTurmas] = useState<{ open: boolean; professorId: number | null; professorNome: string }>({
+    open: false, professorId: null, professorNome: ''
+  });
 
   useEffect(() => {
     carregarDados();
@@ -869,8 +873,11 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                     </td>
                     <td className="text-center px-4 py-3 text-white">{professor.total_alunos}</td>
                     <td className="text-center px-4 py-3">
-                      <Tooltip side="top" content={professor.turmas_para_media > 0 ? `${professor.alunos_para_media} mat ÷ ${professor.turmas_para_media} turmas = ${(professor.alunos_para_media / professor.turmas_para_media).toFixed(1)} alunos/turma` : `${professor.media_alunos_turma.toFixed(1)} alunos/turma (via banco)`}>
-                        <span className={`font-medium cursor-help ${getMetricaColor(professor.media_alunos_turma, { critico: 1.3, atencao: 1.5 })}`}>
+                      <Tooltip side="top" content={professor.turmas_para_media > 0 ? `${professor.alunos_para_media} mat ÷ ${professor.turmas_para_media} turmas = ${(professor.alunos_para_media / professor.turmas_para_media).toFixed(1)} alunos/turma · Clique para detalhes` : `${professor.media_alunos_turma.toFixed(1)} alunos/turma (via banco) · Clique para detalhes`}>
+                        <span
+                          className={`font-medium cursor-pointer hover:underline ${getMetricaColor(professor.media_alunos_turma, { critico: 1.3, atencao: 1.5 })}`}
+                          onClick={() => setModalTurmas({ open: true, professorId: professor.id, professorNome: professor.nome })}
+                        >
                           {professor.media_alunos_turma.toFixed(1)}
                         </span>
                       </Tooltip>
@@ -1097,6 +1104,19 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
         }[unidadeAtual] || unidadeAtual) : 'Consolidado'}
         ano={parseInt(competencia.split('-')[0])}
         mes={parseInt(competencia.split('-')[1])}
+      />
+
+      <ModalDetalhesTurmas
+        open={modalTurmas.open}
+        onClose={() => setModalTurmas({ open: false, professorId: null, professorNome: '' })}
+        professorId={modalTurmas.professorId}
+        professorNome={modalTurmas.professorNome}
+        unidadeId={unidadeAtual}
+        unidadeNome={unidadeAtual !== 'todos' ? ({
+          '2ec861f6-023f-4d7b-9927-3960ad8c2a92': 'Campo Grande',
+          '95553e96-971b-4590-a6eb-0201d013c14d': 'Recreio',
+          '368d47f5-2d88-4475-bc14-ba084a9a348e': 'Barra'
+        }[unidadeAtual] || undefined) : undefined}
       />
 
       <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} />
