@@ -35,7 +35,10 @@ import { Modal360Detalhes } from './Modal360Detalhes';
 import { Professor360Config } from './Professor360Config';
 import { ModalWhatsAppPreview } from './ModalWhatsAppPreview';
 import ModalHistoricoOcorrencias from './ModalHistoricoOcorrencias';
+import ModalEditarOcorrencia from './ModalEditarOcorrencia';
+import ModalReverterOcorrencia from './ModalReverterOcorrencia';
 import { supabase } from '@/lib/supabase';
+import type { Ocorrencia360Completa } from '@/hooks/useProfessor360';
 
 interface Tab360ProfessoresProps {
   unidadeSelecionada: string;
@@ -77,6 +80,8 @@ export function Tab360Professores({
   
   // Estado para o modal de Histórico
   const [modalHistorico, setModalHistorico] = useState<{ professorId: number; professorNome: string } | null>(null);
+  const [modalEditar, setModalEditar] = useState<Ocorrencia360Completa | null>(null);
+  const [modalReverter, setModalReverter] = useState<{ ocorrencia: Ocorrencia360Completa; modo: 'reverter' | 'restaurar' } | null>(null);
 
   // Estado para o modal de WhatsApp
   const [showWhatsAppPreview, setShowWhatsAppPreview] = useState(false);
@@ -699,8 +704,30 @@ export function Tab360Professores({
           professorNome={modalHistorico.professorNome}
           competencia={competencia}
           criterios={criterios}
+          onEditarOcorrencia={(oc) => setModalEditar(oc)}
+          onReverterOcorrencia={(oc) => setModalReverter({ ocorrencia: oc, modo: 'reverter' })}
+          onRestaurarOcorrencia={(oc) => setModalReverter({ ocorrencia: oc, modo: 'restaurar' })}
         />
       )}
+
+      {/* Modal de Editar Ocorrência */}
+      <ModalEditarOcorrencia
+        isOpen={!!modalEditar}
+        onClose={() => setModalEditar(null)}
+        ocorrencia={modalEditar}
+        criterios={criterios}
+        onSuccess={() => { setModalEditar(null); refetch(); }}
+      />
+
+      {/* Modal de Reverter/Restaurar Ocorrência */}
+      <ModalReverterOcorrencia
+        isOpen={!!modalReverter}
+        onClose={() => setModalReverter(null)}
+        ocorrencia={modalReverter?.ocorrencia || null}
+        criterios={criterios}
+        modo={modalReverter?.modo || 'reverter'}
+        onSuccess={() => { setModalReverter(null); refetch(); }}
+      />
     </div>
   );
 }
