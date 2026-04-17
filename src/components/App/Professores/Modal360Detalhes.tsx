@@ -147,7 +147,7 @@ export function Modal360Detalhes({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto bg-slate-900 border-slate-700">
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto overflow-x-hidden bg-slate-900 border-slate-700">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-white">
             <Eye className="h-5 w-5 text-cyan-400" />
@@ -304,7 +304,7 @@ export function Modal360Detalhes({
                                   )}
                                 </div>
                                 {oc.descricao && (
-                                  <p className="text-xs text-slate-400 truncate mt-0.5">{oc.descricao}</p>
+                                  <p className="text-xs text-slate-400 break-words mt-0.5">{oc.descricao}</p>
                                 )}
                                 <p className="text-xs text-slate-500 mt-0.5">
                                   Por: {oc.registrado_por || 'Sistema'}
