@@ -453,7 +453,7 @@ export function AlunosPage() {
       const alunosParaKPIs = alunosRaw ?? [];
       // IDs de tipos: 3=BOLSISTA_INT, 4=BOLSISTA_PARC
       const ativosETrancados = alunosParaKPIs.filter((a: any) =>
-        (a.status === 'ativo' || a.status === 'trancado')
+        (a.status === 'ativo' || a.status === 'trancado' || a.status === 'aviso_previo')
       );
       const naoSegundoCurso = ativosETrancados.filter((a: any) =>
         !a.is_segundo_curso

@@ -42,6 +42,7 @@ import { PainelFarmer } from './PainelFarmer';
 import { Trophy, ShoppingBag, ClipboardList, MessageSquare } from 'lucide-react';
 import { CaixaEntradaTab } from './CaixaEntrada';
 import { ModalPermanenciaDetalhe } from '@/components/GestaoMensal/ModalPermanenciaDetalhe';
+import { ModalDetalheKPI, BadgeUnidade, ValorParcela, TextoCurso } from '@/components/App/Dashboard/ModalDetalheKPI';
 
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 
@@ -166,6 +167,9 @@ export function AdministrativoPage() {
   const [destrancando, setDestrancando] = useState(false);
   const [modalConfirmacaoExcluir, setModalConfirmacaoExcluir] = useState(false);
   const [modalPermanenciaOpen, setModalPermanenciaOpen] = useState(false);
+  const [modalMatriculasAtivas, setModalMatriculasAtivas] = useState(false);
+  const [dadosModalMatriculasAtivas, setDadosModalMatriculasAtivas] = useState<any[]>([]);
+  const [carregandoModalMatriculas, setCarregandoModalMatriculas] = useState(false);
   const [itemParaExcluir, setItemParaExcluir] = useState<{ id: number; nome: string } | null>(null);
   const [excluindo, setExcluindo] = useState(false);
 
@@ -178,6 +182,48 @@ export function AdministrativoPage() {
   
   // Competência formatada para os modais (YYYY-MM)
   const competencia = `${ano}-${String(mes).padStart(2, '0')}`;
+
+  // Fetch matrículas ativas para o modal
+  const fetchMatriculasAtivas = async () => {
+    setCarregandoModalMatriculas(true);
+    try {
+      let query = supabase
+        .from('alunos')
+        .select(`
+          nome, data_matricula, valor_parcela, status, is_segundo_curso,
+          unidades:unidade_id!inner(nome),
+          cursos:curso_id!left(nome, is_projeto_banda)
+        `)
+        .in('status', ['ativo', 'aviso_previo', 'trancado'])
+        .order('nome');
+
+      if (unidade && unidade !== 'todos') {
+        query = query.eq('unidade_id', unidade);
+      }
+
+      const { data } = await query;
+      setDadosModalMatriculasAtivas((data || []).map((a: any) => {
+        const cursoNome = a.cursos?.nome || '';
+        const isBanda = a.cursos?.is_projeto_banda || false;
+        const isCoral = cursoNome.toLowerCase().includes('canto coral');
+        const is2Curso = a.is_segundo_curso || false;
+        const tipo = isBanda ? 'Banda' : isCoral ? 'Coral' : is2Curso ? '2º Curso' : '—';
+
+        return {
+          nome: a.nome,
+          unidade: a.unidades?.nome || '—',
+          data_matricula: a.data_matricula ? new Date(a.data_matricula + 'T12:00:00').toLocaleDateString('pt-BR') : '—',
+          curso: cursoNome || '—',
+          tipo,
+          status: a.status === 'ativo' ? 'Ativo' : a.status === 'trancado' ? 'Trancado' : 'Aviso Prévio',
+          valor: a.valor_parcela ? `R$ ${Number(a.valor_parcela).toLocaleString('pt-BR')}` : '—',
+          _valor_raw: a.valor_parcela ? Number(a.valor_parcela) : 0,
+        };
+      }));
+    } finally {
+      setCarregandoModalMatriculas(false);
+    }
+  };
 
   // Carregar dados - executa quando unidade ou período mudar
   useEffect(() => {
@@ -434,7 +480,7 @@ export function AdministrativoPage() {
         let matriculasQuery = supabase
           .from('alunos')
           .select('id, is_segundo_curso, curso_id, cursos(nome)')
-          .in('status', ['ativo', 'aviso_previo']);
+          .in('status', ['ativo', 'aviso_previo', 'trancado']);
 
         if (unidade !== 'todos') {
           matriculasQuery = matriculasQuery.eq('unidade_id', unidade);
@@ -875,10 +921,11 @@ export function AdministrativoPage() {
           <KPICard
             icon={BookOpen}
             label="Matrículas Ativas"
-            tooltip="Total de matriculas incluindo primeiro curso, segundo curso e banda."
+            tooltip="Total de matriculas ativas incluindo primeiro curso, segundo curso, banda e coral."
             value={resumo?.matriculas_ativas || 0}
             subvalue={`${resumo?.matriculas_banda || 0} banda | ${resumo?.matriculas_2_curso || 0} 2º curso`}
             variant="violet"
+            onClick={() => { fetchMatriculasAtivas(); setModalMatriculasAtivas(true); }}
           />
           <KPICard
             icon={GraduationCap}
@@ -1459,6 +1506,65 @@ export function AdministrativoPage() {
       />
         </>
       )}
+
+      {/* Modal Matrículas Ativas */}
+      <ModalDetalheKPI
+        open={modalMatriculasAtivas}
+        onClose={() => setModalMatriculasAtivas(false)}
+        titulo={`Matrículas Ativas (${competenciaFiltro.range.label})`}
+        descricao={`Alunos ativos, trancados e em aviso prévio — ${unidade === 'todos' ? 'Consolidado' : 'Unidade selecionada'}`}
+        dados={dadosModalMatriculasAtivas}
+        colunas={[
+          { key: 'nome', label: 'Aluno' },
+          { key: 'unidade', label: 'Unidade', render: (v: string) => <BadgeUnidade nome={v} /> },
+          { key: 'data_matricula', label: 'Data Matrícula' },
+          { key: 'curso', label: 'Curso', render: (v: string) => <TextoCurso nome={v} /> },
+          { key: 'tipo', label: 'Tipo', render: (v: string) => (
+            <span className={cn(
+              'text-xs px-2 py-0.5 rounded-full',
+              v === 'Banda' && 'bg-amber-500/20 text-amber-400',
+              v === 'Coral' && 'bg-pink-500/20 text-pink-400',
+              v === '2º Curso' && 'bg-violet-500/20 text-violet-400',
+              v === '—' && 'text-slate-500',
+            )}>{v}</span>
+          )},
+          { key: 'status', label: 'Status', render: (v: string) => (
+            <span className={cn(
+              'text-xs px-2 py-0.5 rounded-full',
+              v === 'Ativo' && 'bg-emerald-500/20 text-emerald-400',
+              v === 'Trancado' && 'bg-slate-500/20 text-slate-400',
+              v === 'Aviso Prévio' && 'bg-amber-500/20 text-amber-400',
+            )}>{v}</span>
+          )},
+          { key: 'valor', label: 'Valor', render: (v: string) => <ValorParcela valor={v} /> },
+        ]}
+        carregando={carregandoModalMatriculas}
+        resumo={(() => {
+          const total = dadosModalMatriculasAtivas.length;
+          const banda = dadosModalMatriculasAtivas.filter(d => d.tipo === 'Banda').length;
+          const coral = dadosModalMatriculasAtivas.filter(d => d.tipo === 'Coral').length;
+          const segundo = dadosModalMatriculasAtivas.filter(d => d.tipo === '2º Curso').length;
+          const comValor = dadosModalMatriculasAtivas.filter(d => d._valor_raw > 0);
+          const somaValor = comValor.reduce((s, d) => s + d._valor_raw, 0);
+          return [
+            { label: 'Total', valor: total, icone: <BookOpen size={14} />, cor: 'text-violet-400', destaque: true },
+            { label: 'Banda', valor: banda, icone: <Users size={14} />, cor: 'text-amber-400' },
+            { label: '2º Curso', valor: segundo, icone: <GraduationCap size={14} />, cor: 'text-violet-400' },
+            { label: 'Faturamento', valor: `R$ ${somaValor.toLocaleString('pt-BR')}`, icone: <DollarSign size={14} />, cor: 'text-emerald-400' },
+          ];
+        })()}
+        distribuicao={unidade === 'todos' ? {
+          titulo: 'Por Unidade',
+          dados: (() => {
+            const contagem: Record<string, number> = {};
+            dadosModalMatriculasAtivas.forEach(d => { contagem[d.unidade] = (contagem[d.unidade] || 0) + 1; });
+            const cores: Record<string, string> = { 'Recreio': 'bg-violet-500/70', 'Barra': 'bg-amber-500/70', 'Campo Grande': 'bg-emerald-500/70' };
+            return Object.entries(contagem)
+              .sort((a, b) => b[1] - a[1])
+              .map(([label, valor]) => ({ label, valor, cor: cores[label] || 'bg-slate-500/70' }));
+          })(),
+        } : undefined}
+      />
 
       {/* Modal de detalhamento de permanência */}
       <ModalPermanenciaDetalhe
