@@ -327,6 +327,21 @@ export function ModalAgendar({ aberto, onClose, onSalvo, lead }: ModalAgendarPro
       const { error } = await supabase.from('leads').update(updates).eq('id', lead.id);
       if (error) throw error;
 
+      // Se for visita, criar registro na tabela visitas
+      if (tipo === 'visita') {
+        await supabase.from('visitas').insert({
+          unidade_id: lead.unidade_id,
+          lead_id: lead.id,
+          nome: lead.nome || '',
+          telefone: lead.telefone || '',
+          data: dataISO,
+          horario: horarioSelecionado ? `${horarioSelecionado}:00` : '00:00:00',
+          status: 'agendada',
+          observacoes: observacoes.trim() || null,
+          criado_por: 'manual',
+        });
+      }
+
       // Registrar no histórico
       const tipoLabel = tipo === 'experimental' ? 'Experimental' : 'Visita';
       await supabase.from('crm_lead_historico').insert({

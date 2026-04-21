@@ -13,6 +13,7 @@ import {
   MessageSquare,
   CheckSquare,
   Zap,
+  Settings,
 } from 'lucide-react';
 import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { DashboardTab } from './tabs/DashboardTab';
@@ -24,6 +25,7 @@ import { MilaTab } from './tabs/MilaTab';
 import { RelatoriosTab } from './tabs/RelatoriosTab';
 import { ConversasTab } from './tabs/ConversasTab';
 import { TabAutomacaoLeads } from './tabs/TabAutomacaoLeads';
+import { ConfigVisitasTab } from './tabs/ConfigVisitasTab';
 import { LeadDrawer } from './components/LeadDrawer';
 import { ModalNovoLead } from './components/ModalNovoLead';
 import { ModalAgendar } from './components/ModalAgendar';
@@ -47,6 +49,7 @@ const crmTabs: PageTab<CRMTabId>[] = [
   { id: 'relatorios', label: 'Relatórios', shortLabel: 'Relat.', icon: FileText },
   { id: 'tarefas', label: 'Tarefas Rápidas', shortLabel: 'Tarefas', icon: CheckSquare },
   { id: 'automacao', label: 'Automacao', shortLabel: 'Automacao', icon: Zap },
+  { id: 'config_visitas', label: 'Config Visitas', shortLabel: 'Visitas', icon: Settings },
 ];
 
 interface OutletContextType {
@@ -177,6 +180,9 @@ export function PreAtendimentoPage() {
         )}
         {activeTab === 'automacao' && (
           <TabAutomacaoLeads unidadeAtual={unidadeId} />
+        )}
+        {activeTab === 'config_visitas' && (
+          <ConfigVisitasTab unidadeId={unidadeId} />
         )}
       </div>
 

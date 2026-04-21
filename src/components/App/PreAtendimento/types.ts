@@ -180,7 +180,7 @@ export interface LeadExperimental {
 }
 
 // Abas do CRM
-export type CRMTabId = 'dashboard' | 'pipeline' | 'conversas' | 'leads' | 'agenda' | 'metas' | 'mila' | 'relatorios' | 'tarefas' | 'automacao';
+export type CRMTabId = 'dashboard' | 'pipeline' | 'conversas' | 'leads' | 'agenda' | 'metas' | 'mila' | 'relatorios' | 'tarefas' | 'automacao' | 'config_visitas';
 
 // =============================================================================
 // TIPOS DO PAINEL CONVERSACIONAL WHATSAPP
