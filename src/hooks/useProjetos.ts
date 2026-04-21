@@ -1417,7 +1417,7 @@ export function useTarefasPorPessoa(unidadeSelecionada: string) {
       // Buscar usuários e professores
       const [{ data: usuarios }, { data: professores }] = await Promise.all([
         supabase.from('usuarios').select('id, nome, cargo'),
-        supabase.from('professores').select('id, nome, instrumento')
+        supabase.from('professores').select('id, nome')
       ]);
 
       // Criar mapas para lookup rápido
@@ -1439,7 +1439,7 @@ export function useTarefasPorPessoa(unidadeSelecionada: string) {
           pessoa = usuario ? { nome: usuario.nome, cargo: usuario.cargo } : undefined;
         } else if (tipo === 'professor') {
           const professor = professoresMap.get(responsavelId);
-          pessoa = professor ? { nome: professor.nome, cargo: `Professor • ${professor.instrumento || 'Música'}` } : undefined;
+          pessoa = professor ? { nome: professor.nome, cargo: 'Professor • Música' } : undefined;
         }
 
         if (!pessoa) continue;
