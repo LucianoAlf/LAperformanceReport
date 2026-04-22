@@ -91,6 +91,7 @@ export function ModalAgendar({ aberto, onClose, onSalvo, lead }: ModalAgendarPro
   const [turmas, setTurmas] = useState<TurmaImplicita[]>([]);
   const [visitasAgendadas, setVisitasAgendadas] = useState<number>(0);
   const [loading, setLoading] = useState(false);
+  const [feriadosSet, setFeriadosSet] = useState<Set<string>>(new Set());
 
   // ── Limpar ao fechar ────────────────────────────────────────────────────
   const limpar = useCallback(() => {
@@ -116,6 +117,18 @@ export function ModalAgendar({ aberto, onClose, onSalvo, lead }: ModalAgendarPro
     if (lead.curso_interesse_id) {
       setCursoId(String(lead.curso_interesse_id));
     }
+
+    // Carregar feriados ativos do ano atual e próximo
+    const anoAtual = new Date().getFullYear();
+    supabase
+      .from('feriados')
+      .select('data')
+      .eq('ativo', true)
+      .gte('data', `${anoAtual}-01-01`)
+      .lte('data', `${anoAtual + 1}-12-31`)
+      .then(({ data: feriadosData }) => {
+        setFeriadosSet(new Set((feriadosData || []).map((f: any) => f.data)));
+      });
 
     Promise.all([
       supabase.from('cursos').select('id, nome').eq('ativo', true).order('nome'),
@@ -473,6 +486,10 @@ export function ModalAgendar({ aberto, onClose, onSalvo, lead }: ModalAgendarPro
                 onDateChange={d => { setData(d); setHorarioSelecionado(''); }}
                 placeholder="Selecione a data"
                 minDate={new Date()}
+                disabled={(d) => {
+                  const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                  return feriadosSet.has(iso);
+                }}
                 className="bg-slate-800/50 border-slate-700"
               />
             </div>

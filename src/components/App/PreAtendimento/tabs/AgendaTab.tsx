@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   ChevronLeft,
   ChevronRight,
@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { supabase } from '@/lib/supabase';
 import { useLeadsCRM } from '../hooks/useLeadsCRM';
 import type { LeadCRM } from '../types';
 
@@ -38,6 +39,22 @@ export function AgendaTab({ unidadeId, ano, mes, onLeadClick }: AgendaTabProps) 
   const [visao, setVisao] = useState<VisaoAgenda>('semana');
   const [semanaOffset, setSemanaOffset] = useState(0);
   const [filtroTipo, setFiltroTipo] = useState<string>('todos');
+
+  // Feriados do ano
+  const [feriadosMap, setFeriadosMap] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    supabase
+      .from('feriados')
+      .select('data, nome')
+      .eq('ativo', true)
+      .gte('data', `${ano}-01-01`)
+      .lte('data', `${ano}-12-31`)
+      .then(({ data }) => {
+        const map = new Map<string, string>();
+        (data || []).forEach((f: any) => map.set(f.data, f.nome));
+        setFeriadosMap(map);
+      });
+  }, [ano]);
 
   // Calcular semana atual + offset
   const hoje = new Date();
@@ -203,6 +220,7 @@ export function AgendaTab({ unidadeId, ano, mes, onLeadClick }: AgendaTabProps) 
           ano={ano}
           mes={mes}
           eventosPorDia={eventosPorDia}
+          feriadosMap={feriadosMap}
           onLeadClick={onLeadClick}
         />
       )}
@@ -214,12 +232,14 @@ export function AgendaTab({ unidadeId, ano, mes, onLeadClick }: AgendaTabProps) 
             const diaStr = formatarDataISO(dia);
             const eventos = eventosPorDia.get(diaStr) || [];
             const isHoje = diaStr === formatarDataISO(hoje);
+            const feriadoNome = feriadosMap.get(diaStr);
 
             return (
               <div
                 key={diaStr}
                 className={cn(
                   "bg-slate-800/30 border rounded-xl p-2 min-h-[200px]",
+                  feriadoNome ? "border-rose-500/30 bg-rose-500/5" :
                   isHoje ? "border-violet-500/50 bg-violet-500/5" : "border-slate-700/50"
                 )}
               >
@@ -230,10 +250,16 @@ export function AgendaTab({ unidadeId, ano, mes, onLeadClick }: AgendaTabProps) 
                   </div>
                   <div className={cn(
                     "text-lg font-bold",
+                    feriadoNome ? "text-rose-400" :
                     isHoje ? "text-violet-400" : "text-white"
                   )}>
                     {dia.getDate()}
                   </div>
+                  {feriadoNome && (
+                    <div className="text-[9px] text-rose-400/80 truncate px-1" title={feriadoNome}>
+                      {feriadoNome}
+                    </div>
+                  )}
                 </div>
 
                 {/* Eventos do dia */}
@@ -329,9 +355,10 @@ function VisaoMes(props: {
   ano: number;
   mes: number;
   eventosPorDia: Map<string, EventoAgenda[]>;
+  feriadosMap: Map<string, string>;
   onLeadClick?: (lead: LeadCRM) => void;
 }) {
-  const { ano, mes, eventosPorDia, onLeadClick } = props;
+  const { ano, mes, eventosPorDia, feriadosMap, onLeadClick } = props;
   const hoje = new Date();
   const hojeStr = formatarDataISO(hoje);
 
@@ -371,20 +398,28 @@ function VisaoMes(props: {
           const diaStr = `${ano}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
           const eventos = eventosPorDia.get(diaStr) || [];
           const isHoje = diaStr === hojeStr;
+          const feriadoNome = feriadosMap.get(diaStr);
 
           return (
             <div
               key={diaStr}
               className={cn(
                 "min-h-[80px] border-b border-r border-slate-700/20 p-1",
+                feriadoNome ? "bg-rose-500/5" :
                 isHoje && "bg-violet-500/5"
               )}
             >
-              <div className={cn(
-                "text-xs font-medium mb-1 text-right pr-1",
-                isHoje ? "text-violet-400" : "text-slate-400"
-              )}>
-                {dia}
+              <div className="flex items-center justify-between mb-1 px-1">
+                {feriadoNome ? (
+                  <span className="text-[8px] text-rose-400/80 truncate" title={feriadoNome}>{feriadoNome}</span>
+                ) : <span />}
+                <span className={cn(
+                  "text-xs font-medium",
+                  feriadoNome ? "text-rose-400" :
+                  isHoje ? "text-violet-400" : "text-slate-400"
+                )}>
+                  {dia}
+                </span>
               </div>
               <div className="space-y-0.5">
                 {eventos.slice(0, 3).map(evento => (
