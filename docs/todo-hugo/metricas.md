@@ -19,6 +19,8 @@ Obs 3: Alunos Bolsistas Integral, Bolsistas Parciais, Banda, Coral, não contam 
 
 - LTV Nao entra bolsista.
 
+- Aviso Previo = Ultimo mes do aluno na escola.
+
 
 [ Comercial ]
 

@@ -25,7 +25,7 @@ import { MilaTab } from './tabs/MilaTab';
 import { RelatoriosTab } from './tabs/RelatoriosTab';
 import { ConversasTab } from './tabs/ConversasTab';
 import { TabAutomacaoLeads } from './tabs/TabAutomacaoLeads';
-import { ConfigVisitasTab } from './tabs/ConfigVisitasTab';
+import { ConfigPreAtendimentoTab } from './tabs/ConfigPreAtendimentoTab';
 import { LeadDrawer } from './components/LeadDrawer';
 import { ModalNovoLead } from './components/ModalNovoLead';
 import { ModalAgendar } from './components/ModalAgendar';
@@ -49,7 +49,7 @@ const crmTabs: PageTab<CRMTabId>[] = [
   { id: 'relatorios', label: 'Relatórios', shortLabel: 'Relat.', icon: FileText },
   { id: 'tarefas', label: 'Tarefas Rápidas', shortLabel: 'Tarefas', icon: CheckSquare },
   { id: 'automacao', label: 'Automacao', shortLabel: 'Automacao', icon: Zap },
-  { id: 'config_visitas', label: 'Config Visitas', shortLabel: 'Visitas', icon: Settings },
+  { id: 'config_visitas', label: 'Configurações', shortLabel: 'Config', icon: Settings },
 ];
 
 interface OutletContextType {
@@ -182,7 +182,7 @@ export function PreAtendimentoPage() {
           <TabAutomacaoLeads unidadeAtual={unidadeId} />
         )}
         {activeTab === 'config_visitas' && (
-          <ConfigVisitasTab unidadeId={unidadeId} />
+          <ConfigPreAtendimentoTab unidadeId={unidadeId} />
         )}
       </div>
 
