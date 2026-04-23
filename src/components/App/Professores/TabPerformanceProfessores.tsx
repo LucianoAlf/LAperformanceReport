@@ -39,6 +39,8 @@ interface ProfessorPerformance {
   taxa_retencao: number;
   taxa_conversao: number;
   experimentais: number;
+  experimentais_agendadas: number;
+  experimentais_faltas: number;
   matriculas_pos_exp: number;
   matriculas_diretas: number;
   nps: number | null;
@@ -213,6 +215,8 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
           // Somatórios
           e.carteira_alunos = prevCarteira + kpiCarteira;
           e.experimentais = (e.experimentais || 0) + (kpi.experimentais || 0);
+          e.experimentais_agendadas = (e.experimentais_agendadas || 0) + (kpi.experimentais_agendadas || 0);
+          e.experimentais_faltas = (e.experimentais_faltas || 0) + (kpi.experimentais_faltas || 0);
           e.matriculas = (e.matriculas || 0) + (kpi.matriculas || 0);
           e.matriculas_pos_exp = (e.matriculas_pos_exp || 0) + (kpi.matriculas_pos_exp || 0);
           e.matriculas_diretas = (e.matriculas_diretas || 0) + (kpi.matriculas_diretas || 0);
@@ -390,6 +394,8 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
             taxa_retencao: Math.round(taxaRetencao * 10) / 10,
             taxa_conversao: Math.round(taxaConversao * 10) / 10,
             experimentais: kpis?.experimentais || 0,
+            experimentais_agendadas: kpis?.experimentais_agendadas || 0,
+            experimentais_faltas: kpis?.experimentais_faltas || 0,
             matriculas_pos_exp: kpis?.matriculas_pos_exp || 0,
             matriculas_diretas: kpis?.matriculas_diretas || 0,
             nps: nps ? Math.round(nps * 10) / 10 : null,
@@ -928,20 +934,46 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                       <Tooltip
                         side="top"
                         content={
-                          <div className="text-xs min-w-[180px]">
-                            <p className="font-bold text-slate-200 mb-1.5">Detalhes da Conversão</p>
+                          <div className="text-xs min-w-[220px]">
+                            <p className="font-bold text-slate-200 mb-1.5">Funil de Experimentais</p>
                             <div className="space-y-1">
                               <div className="flex justify-between gap-4">
-                                <span className="text-slate-400">Exp. realizadas</span>
-                                <span className="text-white font-medium">{professor.experimentais}</span>
+                                <span className="text-amber-400">Agendadas</span>
+                                <span className="text-white font-medium">{professor.experimentais_agendadas}</span>
                               </div>
-                              <div className="flex justify-between gap-4">
-                                <span className="text-slate-400">Matrículas pós-exp</span>
-                                <span className="text-green-400 font-medium">{professor.matriculas_pos_exp}</span>
+                              <div className="pl-2 border-l-2 border-slate-700 space-y-0.5">
+                                <div className="flex justify-between gap-4">
+                                  <span className="text-emerald-400">↓ Realizadas</span>
+                                  <span className="text-white font-medium">
+                                    {professor.experimentais}
+                                    {professor.experimentais_agendadas > 0 && (
+                                      <span className="text-slate-500 text-[10px] ml-1">
+                                        ({Math.round((professor.experimentais / professor.experimentais_agendadas) * 100)}%)
+                                      </span>
+                                    )}
+                                  </span>
+                                </div>
+                                {professor.experimentais_faltas > 0 && (
+                                  <div className="flex justify-between gap-4">
+                                    <span className="text-red-400">↓ Faltas</span>
+                                    <span className="text-white font-medium">{professor.experimentais_faltas}</span>
+                                  </div>
+                                )}
+                              </div>
+                              <div className="flex justify-between gap-4 pt-1">
+                                <span className="text-cyan-400">↓ Matrículas pós-exp</span>
+                                <span className="text-cyan-300 font-medium">
+                                  {professor.matriculas_pos_exp}
+                                  {professor.experimentais > 0 && (
+                                    <span className="text-slate-500 text-[10px] ml-1">
+                                      ({Math.round((professor.matriculas_pos_exp / professor.experimentais) * 100)}%)
+                                    </span>
+                                  )}
+                                </span>
                               </div>
                               {professor.matriculas_diretas > 0 && (
                                 <div className="flex justify-between gap-4">
-                                  <span className="text-slate-400">Matrículas diretas</span>
+                                  <span className="text-slate-400">+ Matrículas diretas</span>
                                   <span className="text-blue-400 font-medium">{professor.matriculas_diretas}</span>
                                 </div>
                               )}
@@ -950,7 +982,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                                 <span className="text-white font-bold">{professor.matriculas_pos_exp + professor.matriculas_diretas}</span>
                               </div>
                             </div>
-                            <p className="text-slate-500 mt-1.5 text-[10px]">Conversão = pós-exp / experimentais</p>
+                            <p className="text-slate-500 mt-1.5 text-[10px]">Conversão = pós-exp / realizadas</p>
                           </div>
                         }
                       >

@@ -32,6 +32,40 @@ function normalizarNome(nome: string): string {
     .trim();
 }
 
+// Normalizar nome de curso: lowercase + sem acentos + remove sufixos do Emusys
+// (" t" — turma, " para instrumento" — variante de Musicalizacao Preparatoria)
+function normalizarCurso(nome: string): string {
+  return nome
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/\s+para\s+instrumento$/, '')
+    .replace(/\s+t$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+// Extrair dia da semana em portugues sem sufixo "-feira" (BRT)
+function extrairDiaSemana(isoDate: string): string {
+  const dia = new Date(isoDate).toLocaleDateString('pt-BR', {
+    weekday: 'long',
+    timeZone: 'America/Sao_Paulo',
+  });
+  const cap = dia.charAt(0).toUpperCase() + dia.slice(1);
+  return cap.replace('-feira', '');
+}
+
+// Extrair horario HH:MM:SS em BRT
+function extrairHorarioBRT(isoDate: string): string {
+  return new Intl.DateTimeFormat('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+    timeZone: 'America/Sao_Paulo',
+  }).format(new Date(isoDate));
+}
+
 interface AlunoEmusys {
   nome_aluno: string;
   presenca: string;
@@ -482,14 +516,14 @@ serve(async (req: Request) => {
     console.log(`[sync-presenca] Iniciando sync para ${dias} dia(s): ${datasProcessar[0]} a ${dataFim}`);
 
     // Buscar todos os alunos ativos para matching (paginado para contornar limite de 1000 rows do PostgREST)
-    const alunosDB: { id: number; nome: string; unidade_id: string }[] = [];
+    const alunosDB: { id: number; nome: string; unidade_id: string; data_nascimento: string | null; curso_id: number | null }[] = [];
     const PAGE_SIZE = 1000;
     let offset = 0;
     let hasMore = true;
     while (hasMore) {
       const { data: page, error: pageError } = await supabase
         .from('alunos')
-        .select('id, nome, unidade_id')
+        .select('id, nome, unidade_id, data_nascimento, curso_id')
         .in('status', ['ativo', 'aviso_previo'])
         .range(offset, offset + PAGE_SIZE - 1);
       if (pageError) throw new Error(`Erro ao buscar alunos: ${pageError.message}`);
@@ -517,14 +551,34 @@ serve(async (req: Request) => {
       profNomes.push(norm);
     }
 
-    // Criar mapa de nome normalizado -> aluno_id por unidade
-    const alunosPorUnidade = new Map<string, Map<string, number>>();
+    // Mapa de cursos: nome_normalizado -> curso_id (nossa base)
+    const { data: cursosDB } = await supabase
+      .from('cursos')
+      .select('id, nome')
+      .eq('ativo', true);
+    const cursoMapa = new Map<string, number>();
+    for (const curso of cursosDB || []) {
+      cursoMapa.set(normalizarCurso(curso.nome), curso.id);
+    }
+
+    // Criar mapa de aluno por unidade com chave composta (nome + data_nasc + curso_id)
+    // Entrada contem array de ids para detectar ambiguidade (nao atualizar se >1 match)
+    // Tambem mantem um mapa de fallback com chave simples (nome) para compatibilidade do match de presenca.
+    const alunosPorUnidadeComposta = new Map<string, Map<string, number[]>>();
+    const alunosPorUnidadeSimples = new Map<string, Map<string, number>>();
     for (const aluno of alunosDB || []) {
       const uid = aluno.unidade_id;
-      if (!alunosPorUnidade.has(uid)) {
-        alunosPorUnidade.set(uid, new Map());
-      }
-      alunosPorUnidade.get(uid)!.set(normalizarNome(aluno.nome), aluno.id);
+      if (!alunosPorUnidadeComposta.has(uid)) alunosPorUnidadeComposta.set(uid, new Map());
+      if (!alunosPorUnidadeSimples.has(uid)) alunosPorUnidadeSimples.set(uid, new Map());
+
+      const nomeNorm = normalizarNome(aluno.nome);
+      const chaveComposta = `${nomeNorm}|${aluno.data_nascimento ?? ''}|${aluno.curso_id ?? ''}`;
+      const mapaComp = alunosPorUnidadeComposta.get(uid)!;
+      const arr = mapaComp.get(chaveComposta) ?? [];
+      arr.push(aluno.id);
+      mapaComp.set(chaveComposta, arr);
+
+      alunosPorUnidadeSimples.get(uid)!.set(nomeNorm, aluno.id);
     }
 
     const resultados = [];
@@ -539,7 +593,8 @@ serve(async (req: Request) => {
         // 1. Buscar aulas do dia no Emusys
         const aulas = await fetchAulasDia(unidade.token, dataAlvo);
 
-        const mapaAlunos = alunosPorUnidade.get(unidade.id) || new Map();
+        const mapaAlunos = alunosPorUnidadeSimples.get(unidade.id) || new Map();
+        const mapaAlunosComposto = alunosPorUnidadeComposta.get(unidade.id) || new Map();
         let totalPresencas = 0;
         let matched = 0;
         let naoEncontrados = 0;
@@ -605,13 +660,17 @@ serve(async (req: Request) => {
 
           const aulaLocalId = aulaDB.id;
 
+          // Resolver curso_id local da aula (para match composto)
+          const cursoIdAula = cursoMapa.get(normalizarCurso(aula.curso_nome || '')) ?? null;
+
           // 2b. Processar presença de cada aluno nesta aula
           for (const aluno of aula.alunos || []) {
             const nome = aluno.nome_aluno?.trim();
             if (!nome) continue;
 
             totalPresencas++;
-            const alunoId = mapaAlunos.get(normalizarNome(nome));
+            const nomeNorm = normalizarNome(nome);
+            const alunoId = mapaAlunos.get(nomeNorm);
 
             if (!alunoId) {
               naoEncontrados++;
@@ -663,6 +722,27 @@ serve(async (req: Request) => {
 
             if (upsertError) {
               console.error(`[sync-presenca] Upsert presença ${nome} aula ${aula.id}:`, upsertError.message);
+            }
+
+            // 2c. Atualizar dia_aula/horario_aula do aluno — so se aula recorrente
+            // (categoria 'normal', nunca reposicao/experimental/extra/avulsa) e match composto inequivoco
+            if (aula.categoria === 'normal') {
+              const chaveComposta = `${nomeNorm}|${aluno.data_nascimento_aluno ?? ''}|${cursoIdAula ?? ''}`;
+              const candidatos = mapaAlunosComposto.get(chaveComposta) ?? [];
+              if (candidatos.length === 1) {
+                const alunoIdUnico = candidatos[0];
+                const diaAula = extrairDiaSemana(aula.data_hora_inicio);
+                const horarioAula = extrairHorarioBRT(aula.data_hora_inicio);
+                const { error: updErr } = await supabase
+                  .from('alunos')
+                  .update({ dia_aula: diaAula, horario_aula: horarioAula })
+                  .eq('id', alunoIdUnico);
+                if (updErr) {
+                  console.error(`[sync-presenca] Update horario ${nome} aluno ${alunoIdUnico}:`, updErr.message);
+                }
+              }
+              // Se candidatos.length !== 1 (ambiguo ou nao encontrado na chave composta):
+              // preserva horario atual para evitar sobrescrever aluno errado (caso de 2o curso sem curso_id mapeado).
             }
           }
         }

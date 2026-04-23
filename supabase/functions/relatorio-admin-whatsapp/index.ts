@@ -144,7 +144,7 @@ async function gerarRelatorioDiario(
     .from('alunos')
     .select('id, is_segundo_curso, curso_id, cursos(nome)')
     .eq('unidade_id', unidadeId)
-    .in('status', ['ativo', 'aviso_previo']);
+    .in('status', ['ativo', 'aviso_previo', 'trancado']);
 
   const matriculasAtivas = matriculasData?.length || 0;
   const matriculasBanda = matriculasData?.filter((m: any) =>

@@ -121,13 +121,18 @@ export function GradeHoraria({
       const { data: salasData } = await salasQuery;
       if (salasData) setSalas(salasData);
 
-      // Carregar professores
-      const { data: professoresData } = await supabase
+      // Carregar professores (filtrado pela unidade selecionada via relacao N:N)
+      let professoresQuery = supabase
         .from('professores')
-        .select('id, nome')
+        .select('id, nome, professores_unidades!inner(unidade_id)')
         .eq('ativo', true)
         .order('nome');
-      
+
+      if (filtros.unidadeId && filtros.unidadeId !== 'todos') {
+        professoresQuery = professoresQuery.eq('professores_unidades.unidade_id', filtros.unidadeId);
+      }
+
+      const { data: professoresData } = await professoresQuery;
       if (professoresData) setProfessores(professoresData);
 
       // Carregar turmas usando a view vw_turmas_implicitas
