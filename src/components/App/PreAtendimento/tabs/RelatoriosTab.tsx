@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 import {
   FileText,
   Copy,
@@ -10,6 +10,7 @@ import {
   Download,
   Send,
   Loader2,
+  RotateCcw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -94,10 +95,15 @@ export function RelatoriosTab({ unidadeId, ano, mes }: RelatoriosTabProps) {
     }
   };
 
-  // Gerar texto do relatório
-  const textoRelatorio = useMemo(() => {
-    return gerarRelatorio(tipoSelecionado, leads, ano, mes);
+  const [textoRelatorio, setTextoRelatorio] = useState('');
+
+  useEffect(() => {
+    setTextoRelatorio(gerarRelatorio(tipoSelecionado, leads, ano, mes));
   }, [tipoSelecionado, leads, ano, mes]);
+
+  const resetarRelatorio = () => {
+    setTextoRelatorio(gerarRelatorio(tipoSelecionado, leads, ano, mes));
+  };
 
   const copiarRelatorio = async () => {
     try {
@@ -160,6 +166,15 @@ export function RelatoriosTab({ unidadeId, ano, mes }: RelatoriosTabProps) {
                 variant="outline"
                 size="sm"
                 className="border-slate-700 text-slate-400 h-7 text-xs"
+                onClick={resetarRelatorio}
+                title="Resetar para o texto gerado"
+              >
+                <RotateCcw className="w-3 h-3 mr-1" /> Resetar
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-slate-700 text-slate-400 h-7 text-xs"
                 onClick={copiarRelatorio}
               >
                 {copiado ? (
@@ -198,9 +213,11 @@ export function RelatoriosTab({ unidadeId, ano, mes }: RelatoriosTabProps) {
               ⚠️ {erroEnvio}
             </div>
           )}
-          <pre className="text-xs text-slate-300 whitespace-pre-wrap font-mono bg-slate-900/50 rounded-xl p-4 max-h-[400px] overflow-y-auto border border-slate-700/30 leading-relaxed">
-            {textoRelatorio}
-          </pre>
+          <textarea
+            value={textoRelatorio}
+            onChange={e => setTextoRelatorio(e.target.value)}
+            className="w-full text-xs text-slate-300 whitespace-pre-wrap font-mono bg-slate-900/50 rounded-xl p-4 max-h-[400px] min-h-[300px] overflow-y-auto border border-slate-700/30 leading-relaxed resize-none focus:outline-none focus:border-violet-500/50"
+          />
         </div>
 
         {/* Preview WhatsApp */}
@@ -270,28 +287,29 @@ function gerarRelatorio(tipo: TipoRelatorio, leads: LeadCRM[], ano: number, mes:
   };
 
   switch (tipo) {
-    case 'diario':
+    case 'diario': {
+      const experimentaisHoje = leads.filter(l => l.data_experimental === hojeISO).length;
       return `📋 *RELATÓRIO DIÁRIO — PRÉ-ATENDIMENTO*
 📅 ${hojeStr}
 
 📊 *Resumo do Dia:*
 • Novos leads hoje: ${leadsHoje}
 • Total leads no mês: ${total}
-• Agendamentos: ${agendadas}
-• Visitas realizadas: ${visitaram}
-• Matrículas: ${matriculados}
+• Experimentais/Visitas agendadas hoje: ${experimentaisHoje}
+• Matrículas no mês: ${matriculados}
+
+Obs.: Experimentais agendadas hoje não necessariamente foram realizadas hoje.
 
 🎯 *Taxa Show-up:* ${taxaShowUp}% (meta: 30%)
 📈 *Taxa Conversão:* ${taxaConversao}%
 
-🏷️ *Tags:* ${taxaTags}% completas (${tagsOK}/${total})
-
-📍 *Por Unidade:*
-• ${porUnidade('2ec861f6-023f-4d7b-9927-3960ad8c2a92', 'CG')}
-• ${porUnidade('95553e96-971b-4590-a6eb-0201d013c14d', 'REC')}
-• ${porUnidade('368d47f5-2d88-4475-bc14-ba084a9a348e', 'BAR')}
+👩‍💻  *Leads atendidos no dia:*
+Instagram (direct e comentários): Todos atendidos até às 18h ✅
+Formulário: Todos ✅
+E-mail unidades: Todos ✅
 
 _Andreza — Pré-Atendimento LA Music_`;
+    }
 
     case 'semanal':
       return `📊 *RELATÓRIO SEMANAL — PRÉ-ATENDIMENTO*
