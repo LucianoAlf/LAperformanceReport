@@ -179,6 +179,27 @@ export interface LeadExperimental {
   cursos?: { nome: string } | null;
 }
 
+// Visita presencial (tabela visitas)
+export type VisitaStatus = 'agendada' | 'realizada' | 'nao_compareceu' | 'cancelada';
+
+export interface Visita {
+  id: string;
+  unidade_id: string;
+  lead_id: number | null;
+  emusys_lead_id: number | null;
+  nome: string;
+  telefone: string;
+  data: string;
+  horario: string;
+  status: VisitaStatus;
+  observacoes: string | null;
+  criado_por: 'mila' | 'manual';
+  created_at: string;
+  updated_at: string;
+  // Join com lead (quando disponivel)
+  lead?: Partial<LeadCRM> | null;
+}
+
 // Abas do CRM
 export type CRMTabId = 'dashboard' | 'pipeline' | 'conversas' | 'leads' | 'agenda' | 'metas' | 'mila' | 'relatorios' | 'tarefas' | 'automacao' | 'config_visitas';
 

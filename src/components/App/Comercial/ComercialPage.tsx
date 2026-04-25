@@ -295,7 +295,7 @@ export function ComercialPage() {
   const [filtroCanalFunil, setFiltroCanalFunil] = useState<string>('todos');
   const [filtroCursoFunil, setFiltroCursoFunil] = useState<string>('todos');
   const [filtroTipoExp, setFiltroTipoExp] = useState<'leads_novos' | 'todos' | 'alunos' | 'agendadas_periodo'>('leads_novos');
-  const [filtroTipoMat, setFiltroTipoMat] = useState<'novos_alunos' | 'todos' | 'segundo_curso' | 'por_data_matricula'>('novos_alunos');
+  const [filtroTipoMat, setFiltroTipoMat] = useState<'novos_alunos' | 'leads_periodo' | 'segundo_curso' | 'por_data_matricula' | 'todos'>('novos_alunos');
   const [selecionadosFunil, setSelecionadosFunil] = useState<Set<number>>(new Set());
   const [excluindoEmLote, setExcluindoEmLote] = useState(false);
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
@@ -3156,7 +3156,7 @@ export function ComercialPage() {
                   return experimentaisDetalhadas.filter((e: any) => filtroTipoExp === 'leads_novos' ? !e.lead_aluno_id : filtroTipoExp === 'alunos' ? !!e.lead_aluno_id : true).length;
                 })(), icon: Guitar, color: '#a855f7', gradient: 'from-purple-500 to-violet-500' },
                 { key: 'visita', label: 'Visitas', count: visitasMes.length, icon: Building2, color: '#f59e0b', gradient: 'from-amber-500 to-orange-500' },
-                { key: 'matricula', label: 'Matrículas', count: matriculasMes.filter((m: any) => { const isBanda = m.curso_nome?.toLowerCase().includes('banda'); if (filtroTipoMat === 'novos_alunos') return !m.is_segundo_curso && !isBanda && !m._fora_range; if (filtroTipoMat === 'segundo_curso') return (m.is_segundo_curso || isBanda) && !m._fora_range; if (filtroTipoMat === 'por_data_matricula') return true; return !m._fora_range; }).length, icon: GraduationCap, color: '#10b981', gradient: 'from-emerald-500 to-teal-500' },
+                { key: 'matricula', label: 'Matrículas', count: matriculasMes.filter((m: any) => { const isBanda = m.curso_nome?.toLowerCase().includes('banda'); if (filtroTipoMat === 'novos_alunos') return !m.is_segundo_curso && !isBanda && !m._fora_range; if (filtroTipoMat === 'segundo_curso') return (m.is_segundo_curso || isBanda) && !m._fora_range; if (filtroTipoMat === 'por_data_matricula') return true; if (filtroTipoMat === 'leads_periodo') return !m._fora_range; return true; }).length, icon: GraduationCap, color: '#10b981', gradient: 'from-emerald-500 to-teal-500' },
               ]}
               totalLeads={leadsMes.length}
               activeStage={abaDetalhamento}
@@ -3270,10 +3270,36 @@ export function ComercialPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="novos_alunos">Novos alunos</SelectItem>
-                  <SelectItem value="todos">Leads do período</SelectItem>
-                  <SelectItem value="segundo_curso">Segundo curso / Banda</SelectItem>
-                  <SelectItem value="por_data_matricula">Convertidos no período</SelectItem>
+                  <SelectItem value="novos_alunos">
+                    <div>
+                      <span>Novos alunos</span>
+                      <p className="text-[10px] text-slate-400 leading-tight">Sem segundo curso, banda ou leads antigos</p>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="todos">
+                    <div>
+                      <span>Todos</span>
+                      <p className="text-[10px] text-slate-400 leading-tight">Todas as matrículas do mês</p>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="leads_periodo">
+                    <div>
+                      <span>Leads do período</span>
+                      <p className="text-[10px] text-slate-400 leading-tight">Leads que entraram e matricularam no período</p>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="segundo_curso">
+                    <div>
+                      <span>Segundo curso / Banda</span>
+                      <p className="text-[10px] text-slate-400 leading-tight">Apenas matrículas de segundo curso ou banda</p>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="por_data_matricula">
+                    <div>
+                      <span>Convertidos no período</span>
+                      <p className="text-[10px] text-slate-400 leading-tight">Inclui leads de outros meses que converteram agora</p>
+                    </div>
+                  </SelectItem>
                 </SelectContent>
               </Select>
             )}
@@ -4580,7 +4606,8 @@ export function ComercialPage() {
             // Filtro por tipo (novos alunos vs segundo curso/banda vs por data matrícula)
             if (filtroTipoMat === 'novos_alunos' && (l.is_segundo_curso || isBanda(l.curso_nome) || l._fora_range)) return false;
             if (filtroTipoMat === 'segundo_curso' && (!l.is_segundo_curso && !isBanda(l.curso_nome) || l._fora_range)) return false;
-            if (filtroTipoMat === 'todos' && l._fora_range) return false;
+            if (filtroTipoMat === 'leads_periodo' && l._fora_range) return false;
+            // 'todos': mostra tudo sem filtro de tipo
             // 'por_data_matricula': mostra todas (incluindo fora do range)
             if (buscaFunil) {
               const termo = buscaFunil.toLowerCase();
@@ -4596,7 +4623,7 @@ export function ComercialPage() {
             {/* Header específico de matrículas */}
             <div className="bg-emerald-500/10 border-b border-emerald-500/20 px-6 py-3">
               <div className="flex items-center justify-between">
-                <p className="text-sm text-emerald-400">{matriculasMes.length} matrícula{matriculasMes.length !== 1 ? 's' : ''} no mês</p>
+                <p className="text-sm text-emerald-400">{matriculasFiltradas.length} matrícula{matriculasFiltradas.length !== 1 ? 's' : ''} no mês</p>
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-slate-400">Total Passaportes:</span>
                   <span className="text-lg font-bold text-emerald-400">

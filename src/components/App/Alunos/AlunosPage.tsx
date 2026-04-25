@@ -729,8 +729,13 @@ export function AlunosPage() {
     if (filtros.tipo_matricula_id) {
       const tipoId = parseInt(filtros.tipo_matricula_id);
       if (tipoId === 2) {
-        // Segundo curso: verificar no próprio registro OU nos agrupados em outros_cursos
-        resultado = resultado.filter(a => a.is_segundo_curso || a.tipo_matricula_id === 2 || a.outros_cursos?.some(oc => oc.tipo_matricula_id === 2));
+        // Segundo curso: excluir banda e coral (têm filtros próprios)
+        const is2CursoReal = (r: any) =>
+          r.is_segundo_curso &&
+          !r.cursos?.nome?.toLowerCase().includes('banda') &&
+          !r.cursos?.nome?.toLowerCase().includes('coral') &&
+          r.cursos?.is_projeto_banda !== true;
+        resultado = resultado.filter(a => is2CursoReal(a) || a.tipo_matricula_id === 2 || a.outros_cursos?.some((oc: any) => is2CursoReal(oc)));
       } else if (tipoId === 5) {
         // Matrícula em Banda: mostrar APENAS o registro da banda (sem curso principal)
         const cursosBandaIds = cursos.filter(c => c.is_projeto_banda).map(c => c.id);

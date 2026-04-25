@@ -23,7 +23,8 @@ import {
 } from '@/components/ui/select';
 import { supabase } from '@/lib/supabase';
 import { useLeadsCRM } from '../hooks/useLeadsCRM';
-import type { LeadCRM } from '../types';
+import { useVisitas } from '../hooks/useVisitas';
+import type { LeadCRM, Visita } from '../types';
 
 interface AgendaTabProps {
   unidadeId: string;
@@ -35,7 +36,9 @@ interface AgendaTabProps {
 type VisaoAgenda = 'mes' | 'semana' | 'dia' | 'lista';
 
 export function AgendaTab({ unidadeId, ano, mes, onLeadClick }: AgendaTabProps) {
-  const { leads, loading } = useLeadsCRM({ unidadeId, ano, mes });
+  const { leads, loading: loadingLeads } = useLeadsCRM({ unidadeId, ano, mes });
+  const { visitas, loading: loadingVisitas } = useVisitas({ unidadeId, ano, mes });
+  const loading = loadingLeads || loadingVisitas;
   const [visao, setVisao] = useState<VisaoAgenda>('semana');
   const [semanaOffset, setSemanaOffset] = useState(0);
   const [filtroTipo, setFiltroTipo] = useState<string>('todos');
@@ -70,13 +73,21 @@ export function AgendaTab({ unidadeId, ano, mes, onLeadClick }: AgendaTabProps) 
     return dia;
   });
 
-  // Filtrar leads com experimental agendada ou follow-ups
+  // Monta eventos da agenda a partir de duas fontes:
+  // - Experimentais: leads.data_experimental + experimental_agendada (experimentais NAO viram pra tabela visitas)
+  // - Visitas: tabela visitas (fonte de verdade do sistema de visitas via Mila)
+  //
+  // TODO: hoje temos duplicacao de dados entre leads (tipo_agendamento='visita', data_experimental)
+  //       e a tabela visitas, mantida por compatibilidade com o Pipeline/Dashboard/Follow-ups.
+  //       Proxima fase do refactor: migrar Pipeline/Dashboard pra tambem lerem de visitas e
+  //       entao remover os campos data_experimental/tipo_agendamento de leads quando for visita.
+  //       Ver PLANO_VISITAS.md no projeto "fiscal mila".
   const eventosAgenda = useMemo(() => {
     const eventos: EventoAgenda[] = [];
 
+    // Experimentais (continuam vindo de leads)
     leads.forEach(lead => {
-      // Experimentais agendadas
-      if (lead.data_experimental && lead.experimental_agendada) {
+      if (lead.data_experimental && lead.experimental_agendada && lead.tipo_agendamento !== 'visita') {
         eventos.push({
           id: `exp-${lead.id}`,
           lead,
@@ -88,20 +99,28 @@ export function AgendaTab({ unidadeId, ano, mes, onLeadClick }: AgendaTabProps) 
           descricao: `Experimental — ${lead.nome || 'Sem nome'}`,
         });
       }
+    });
 
-      // Leads com tipo_agendamento = 'visita' e data_experimental
-      if (lead.data_experimental && lead.tipo_agendamento === 'visita') {
-        eventos.push({
-          id: `vis-${lead.id}`,
-          lead,
-          tipo: 'visita',
-          data: lead.data_experimental,
-          horario: lead.horario_experimental || null,
-          status: lead.experimental_realizada ? 'realizada' :
-            lead.faltou_experimental ? 'faltou' : 'agendada',
-          descricao: `Visita — ${lead.nome || 'Sem nome'}`,
-        });
-      }
+    // Visitas (fonte: tabela visitas, com join opcional em leads)
+    visitas.forEach(visita => {
+      const leadVinculado = (visita.lead as LeadCRM | null) || null;
+      // Constroi um "lead" minimo se nao houver lead vinculado (pra compat. com callback onLeadClick)
+      const leadParaCard: LeadCRM = leadVinculado || {
+        id: visita.lead_id || 0,
+        nome: visita.nome,
+        telefone: visita.telefone,
+        unidade_id: visita.unidade_id,
+      } as LeadCRM;
+
+      eventos.push({
+        id: `vis-${visita.id}`,
+        lead: leadParaCard,
+        tipo: 'visita',
+        data: visita.data,
+        horario: visita.horario ? visita.horario.substring(0, 5) : null,
+        status: mapVisitaStatus(visita.status),
+        descricao: `Visita — ${visita.nome}`,
+      });
     });
 
     // Filtro por tipo
@@ -110,7 +129,7 @@ export function AgendaTab({ unidadeId, ano, mes, onLeadClick }: AgendaTabProps) 
     }
 
     return eventos;
-  }, [leads, filtroTipo]);
+  }, [leads, visitas, filtroTipo]);
 
   // Agrupar eventos por data
   const eventosPorDia = useMemo(() => {
@@ -554,6 +573,14 @@ function getUnidadeCodigo(unidadeId: string): string {
     '368d47f5-2d88-4475-bc14-ba084a9a348e': 'BAR',
   };
   return map[unidadeId] || '?';
+}
+
+// Mapeia o status da tabela `visitas` pros 3 status usados na UI da agenda.
+function mapVisitaStatus(status: Visita['status']): 'agendada' | 'realizada' | 'faltou' {
+  if (status === 'realizada') return 'realizada';
+  if (status === 'nao_compareceu') return 'faltou';
+  // 'agendada' e 'cancelada' (que nem deve chegar aqui porque o hook filtra) caem em agendada
+  return 'agendada';
 }
 
 export default AgendaTab;

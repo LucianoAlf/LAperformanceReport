@@ -21,6 +21,8 @@ Obs 3: Alunos Bolsistas Integral, Bolsistas Parciais, Banda, Coral, não contam 
 
 - Aviso Previo = Ultimo mes do aluno na escola.
 
+- Segundo curso = nao conta com banda e coral
+
 
 [ Comercial ]
 

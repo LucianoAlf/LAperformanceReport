@@ -207,9 +207,13 @@ export function LeadDrawer({ lead, etapas, open, onClose, onAgendar, onMoverEtap
             </div>
           </Secao>
 
-          {/* Experimentais */}
-          <Secao titulo={`Experimentais${(lead.lead_experimentais?.length || 0) > 1 ? ` (${lead.lead_experimentais?.length})` : ''}`}>
-            {lead.lead_experimentais && lead.lead_experimentais.length > 0 ? (
+          {/* Experimentais / Visitas (seção muda de título conforme tipo_agendamento) */}
+          <Secao titulo={
+            lead.tipo_agendamento === 'visita'
+              ? 'Visita'
+              : `Experimentais${(lead.lead_experimentais?.length || 0) > 1 ? ` (${lead.lead_experimentais?.length})` : ''}`
+          }>
+            {lead.tipo_agendamento !== 'visita' && lead.lead_experimentais && lead.lead_experimentais.length > 0 ? (
               <div className="space-y-3">
                 {lead.lead_experimentais.map((exp) => (
                   <div key={exp.id} className="bg-slate-800/30 rounded-lg p-3 space-y-1.5">
@@ -266,9 +270,18 @@ export function LeadDrawer({ lead, etapas, open, onClose, onAgendar, onMoverEtap
                   <LinhaInfo icone={<GraduationCap className="w-3.5 h-3.5" />} label="Professor" valor={professorNome} />
                 )}
                 <div className="flex items-center gap-2 flex-wrap mt-2">
-                  {lead.experimental_agendada && <Badge cor="violet">📅 Agendada</Badge>}
-                  {lead.experimental_realizada && <Badge cor="emerald">✅ Realizada</Badge>}
-                  {lead.faltou_experimental && <Badge cor="rose">❌ Faltou</Badge>}
+                  {lead.tipo_agendamento === 'visita' ? (
+                    <>
+                      {lead.etapa_pipeline_id === 6 && <Badge cor="violet">📅 Visita Agendada</Badge>}
+                      {lead.etapa_pipeline_id === 8 && <Badge cor="emerald">✅ Visita Realizada</Badge>}
+                    </>
+                  ) : (
+                    <>
+                      {lead.experimental_agendada && <Badge cor="violet">📅 Agendada</Badge>}
+                      {lead.experimental_realizada && <Badge cor="emerald">✅ Realizada</Badge>}
+                      {lead.faltou_experimental && <Badge cor="rose">❌ Faltou</Badge>}
+                    </>
+                  )}
                   {lead.converteu && <Badge cor="emerald">🎓 Matriculado</Badge>}
                   {lead.arquivado && <Badge cor="slate">📦 Arquivado</Badge>}
                 </div>
