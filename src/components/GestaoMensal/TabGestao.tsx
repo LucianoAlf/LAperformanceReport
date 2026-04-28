@@ -230,7 +230,17 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
         const hoje = new Date();
         const anoAtual = hoje.getFullYear();
         const mesAtual = hoje.getMonth() + 1;
-        const isPeriodoAtual = ano === anoAtual && mes === mesAtual;
+
+        // Verificar se o mês já foi fechado (existe em dados_mensais)
+        let mesFechadoQuery = supabase
+          .from('dados_mensais')
+          .select('id', { count: 'exact', head: true })
+          .eq('ano', ano)
+          .eq('mes', mes);
+        if (unidade !== 'todos') mesFechadoQuery = mesFechadoQuery.eq('unidade_id', unidade);
+        const { count: mesFechadoCount } = await mesFechadoQuery;
+        const isPeriodoAtual = ano === anoAtual && mes === mesAtual && !(mesFechadoCount && mesFechadoCount > 0);
+        console.log('[DEBUG Reajuste] ano=', ano, 'mes=', mes, 'anoAtual=', anoAtual, 'mesAtual=', mesAtual, 'mesFechadoCount=', mesFechadoCount, 'isPeriodoAtual=', isPeriodoAtual);
 
         let gestaoData: any[] = [];
         let retencaoData: any[] = [];
@@ -304,6 +314,9 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             const val = Number(v.reajuste_medio);
             if (val > 0) reajusteViewMap.set(key, val);
           });
+          console.log('[DEBUG Reajuste] viewData=', viewData);
+          console.log('[DEBUG Reajuste] reajusteViewMap=', Array.from(reajusteViewMap.entries()));
+          console.log('[DEBUG Reajuste] historicoData reajuste_parcelas=', historicoData?.map((d: any) => ({ uid: d.unidade_id, rp: d.reajuste_parcelas })));
 
           // Buscar dados de evasões detalhados de movimentacoes_admin
           const startDate = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
