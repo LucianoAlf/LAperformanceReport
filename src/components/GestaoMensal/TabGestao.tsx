@@ -328,7 +328,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               churn_rate: Number(d.churn_rate) || 0,
               total_evasoes: d.evasoes || 0,
               novas_matriculas: d.novas_matriculas || 0,
-              reajuste_pct: Number(d.reajuste_parcelas) || 0,
+              reajuste_pct: Number(d.reajuste_medio ?? d.reajuste_parcelas) || 0,
             }));
 
             // Dados de retenção do histórico
@@ -400,6 +400,10 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             const renovacoesData = renovacoesRes.data || [];
             const renovacoesRealizadas = renovacoesData.filter((r: any) => r.status === 'renovado').length;
             const taxaRenovacao = renovacoesData.length > 0 ? (renovacoesRealizadas / renovacoesData.length) * 100 : 0;
+            const reajusteRenovados = renovacoesData.filter((r: any) => r.status === 'renovado' && r.percentual_reajuste != null);
+            const reajusteMedioFallback = reajusteRenovados.length > 0
+              ? reajusteRenovados.reduce((sum: number, r: any) => sum + Number(r.percentual_reajuste), 0) / reajusteRenovados.length
+              : 0;
 
             gestaoData = [{
               unidade_id: unidade !== 'todos' ? unidade : null,
@@ -422,7 +426,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               churn_rate: totalPagantes > 0 ? (totalEvasoes / totalPagantes) * 100 : 0,
               total_evasoes: totalEvasoes,
               novas_matriculas: novasMatriculas,
-              reajuste_pct: 0,
+              reajuste_pct: Math.round(reajusteMedioFallback * 100) / 100,
             }];
 
             retencaoData = [{

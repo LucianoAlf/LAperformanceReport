@@ -4,7 +4,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_MODEL = "gemini-3-flash-preview";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -179,6 +179,15 @@ Responda APENAS com o JSON estruturado, sem texto adicional.`;
   return prompt;
 }
 
+function safePreview(value: unknown, maxLength = 1200): string {
+  try {
+    const text = typeof value === 'string' ? value : JSON.stringify(value);
+    return text.length > maxLength ? `${text.slice(0, maxLength)}...[truncated]` : text;
+  } catch {
+    return '[unserializable]';
+  }
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -193,9 +202,19 @@ serve(async (req) => {
     const dados: DadosSimulador = await req.json();
 
     const userPrompt = montarPromptUsuario(dados);
+    console.log('[gemini-insights] payload recebido', {
+      unidadeNome: dados.unidadeNome || null,
+      mesAtual: dados.mesAtual,
+      anoAtual: dados.anoAtual,
+      historicoCount: dados.historico?.length || 0,
+      alertasCount: dados.alertas?.length || 0,
+      promptChars: userPrompt.length,
+      model: GEMINI_MODEL,
+    });
 
     // Chamar Gemini API
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+    const startedAt = Date.now();
 
     const geminiResponse = await fetch(geminiUrl, {
       method: "POST",
@@ -222,29 +241,49 @@ serve(async (req) => {
       }),
     });
 
+    console.log('[gemini-insights] resposta Gemini recebida', {
+      status: geminiResponse.status,
+      ok: geminiResponse.ok,
+      elapsedMs: Date.now() - startedAt,
+      contentType: geminiResponse.headers.get('content-type'),
+    });
+
     if (!geminiResponse.ok) {
       const errorText = await geminiResponse.text();
-      console.error("Erro Gemini:", errorText);
+      console.error("Erro Gemini:", safePreview(errorText));
       throw new Error(`Erro na API Gemini: ${geminiResponse.status}`);
     }
 
     const geminiData = await geminiResponse.json();
+    console.log('[gemini-insights] shape resposta Gemini', {
+      candidatesCount: Array.isArray(geminiData?.candidates) ? geminiData.candidates.length : 0,
+      firstCandidatePreview: safePreview(geminiData?.candidates?.[0]),
+      promptFeedbackPreview: safePreview(geminiData?.promptFeedback),
+      usageMetadataPreview: safePreview(geminiData?.usageMetadata),
+    });
     
     // Extrair o texto da resposta
     const responseText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
     
     if (!responseText) {
+      console.error('[gemini-insights] resposta sem text extraível', safePreview(geminiData));
       throw new Error("Resposta vazia do Gemini");
     }
+
+    console.log('[gemini-insights] responseText bruto', safePreview(responseText, 2000));
 
     // Tentar parsear o JSON
     let planoAcao;
     try {
       // Remover possíveis marcadores de código markdown
       const cleanJson = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      console.log('[gemini-insights] responseText limpo', safePreview(cleanJson, 2000));
       planoAcao = JSON.parse(cleanJson);
     } catch (parseError) {
-      console.error("Erro ao parsear JSON:", responseText);
+      console.error("Erro ao parsear JSON:", {
+        parseError: safePreview(parseError),
+        responseText: safePreview(responseText, 2000),
+      });
       throw new Error("Resposta do Gemini não é um JSON válido");
     }
 
