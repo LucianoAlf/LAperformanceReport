@@ -267,7 +267,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           if (retencaoError) throw retencaoError;
           retencaoData = retData || [];
         } else {
-          // PERÍODO HISTÓRICO: usar dados_mensais
+          // PERÍODO HISTÓRICO: usar dados_mensais + vw_kpis_gestao_mensal como fallback para reajuste
           let historicoQuery = supabase
             .from('dados_mensais')
             .select('*, unidades(nome)')
@@ -279,8 +279,31 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             historicoQuery = historicoQuery.eq('unidade_id', unidade);
           }
 
-          const { data: historicoData, error: historicoError } = await historicoQuery;
+          // Buscar view em paralelo para ter reajuste_medio real como fallback
+          let viewQuery = supabase
+            .from('vw_kpis_gestao_mensal')
+            .select('unidade_id, ano, mes, reajuste_medio')
+            .eq('ano', ano)
+            .gte('mes', mesInicio)
+            .lte('mes', mesFinal);
+
+          if (unidade !== 'todos') {
+            viewQuery = viewQuery.eq('unidade_id', unidade);
+          }
+
+          const [{ data: historicoData, error: historicoError }, { data: viewData }] = await Promise.all([
+            historicoQuery,
+            viewQuery,
+          ]);
           if (historicoError) throw historicoError;
+
+          // Mapa de reajuste_medio real da view por (unidade_id, ano, mes)
+          const reajusteViewMap = new Map<string, number>();
+          (viewData || []).forEach((v: any) => {
+            const key = `${v.unidade_id}-${v.ano}-${v.mes}`;
+            const val = Number(v.reajuste_medio);
+            if (val > 0) reajusteViewMap.set(key, val);
+          });
 
           // Buscar dados de evasões detalhados de movimentacoes_admin
           const startDate = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
@@ -328,7 +351,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               churn_rate: Number(d.churn_rate) || 0,
               total_evasoes: d.evasoes || 0,
               novas_matriculas: d.novas_matriculas || 0,
-              reajuste_pct: Number(d.reajuste_medio ?? d.reajuste_parcelas) || 0,
+              reajuste_pct: Number(reajusteViewMap.get(`${d.unidade_id}-${d.ano}-${d.mes}`) ?? d.reajuste_parcelas) || 0,
             }));
 
             // Dados de retenção do histórico
