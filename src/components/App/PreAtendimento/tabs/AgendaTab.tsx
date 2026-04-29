@@ -554,7 +554,10 @@ function LinhaEvento(props: { key?: React.Key; evento: EventoAgenda; onClick?: (
 // =============================================================================
 
 function formatarDataISO(data: Date): string {
-  return data.toISOString().split('T')[0];
+  const y = data.getFullYear();
+  const m = String(data.getMonth() + 1).padStart(2, '0');
+  const d = String(data.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 function formatarDataCurta(data: Date): string {

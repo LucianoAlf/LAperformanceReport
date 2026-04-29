@@ -53,6 +53,7 @@ import { DatePicker } from '@/components/ui/date-picker';
 import { DatePickerNascimento } from '@/components/ui/date-picker-nascimento';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -2956,46 +2957,54 @@ export function ComercialPage() {
               Totais
             </h3>
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/30">
-                <div className="flex items-center gap-2 mb-2">
-                  <Smartphone className="w-4 h-4 text-blue-400" />
-                  <span className="text-xs text-slate-400 font-medium">Leads Atendidos</span>
+              <Tooltip content="Total de leads registrados no mês (por data de contato). Inclui todos os status." side="bottom">
+                <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/30 cursor-help">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Smartphone className="w-4 h-4 text-blue-400" />
+                    <span className="text-xs text-slate-400 font-medium">Leads Atendidos</span>
+                  </div>
+                  <p className="text-2xl font-bold text-blue-400">{resumo.leads}</p>
+                  {hojeLeads > 0 && (
+                    <p className="text-xs text-emerald-400 mt-1">+{hojeLeads} hoje</p>
+                  )}
                 </div>
-                <p className="text-2xl font-bold text-blue-400">{resumo.leads}</p>
-                {hojeLeads > 0 && (
-                  <p className="text-xs text-emerald-400 mt-1">+{hojeLeads} hoje</p>
-                )}
-              </div>
-              <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/30">
-                <div className="flex items-center gap-2 mb-2">
-                  <Guitar className="w-4 h-4 text-purple-400" />
-                  <span className="text-xs text-slate-400 font-medium">Experimentais</span>
+              </Tooltip>
+              <Tooltip content="Leads que tiveram aula experimental agendada no mês." side="bottom">
+                <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/30 cursor-help">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Guitar className="w-4 h-4 text-purple-400" />
+                    <span className="text-xs text-slate-400 font-medium">Experimentais</span>
+                  </div>
+                  <p className="text-2xl font-bold text-purple-400">{resumo.experimentais}</p>
+                  {hojeExp > 0 && (
+                    <p className="text-xs text-emerald-400 mt-1">+{hojeExp} hoje</p>
+                  )}
                 </div>
-                <p className="text-2xl font-bold text-purple-400">{resumo.experimentais}</p>
-                {hojeExp > 0 && (
-                  <p className="text-xs text-emerald-400 mt-1">+{hojeExp} hoje</p>
-                )}
-              </div>
-              <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/30">
-                <div className="flex items-center gap-2 mb-2">
-                  <Building2 className="w-4 h-4 text-amber-400" />
-                  <span className="text-xs text-slate-400 font-medium">Visitas</span>
+              </Tooltip>
+              <Tooltip content="Leads que visitaram a escola no mês." side="bottom">
+                <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/30 cursor-help">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Building2 className="w-4 h-4 text-amber-400" />
+                    <span className="text-xs text-slate-400 font-medium">Visitas</span>
+                  </div>
+                  <p className="text-2xl font-bold text-amber-400">{resumo.visitas}</p>
+                  {hojeVisitas > 0 && (
+                    <p className="text-xs text-emerald-400 mt-1">+{hojeVisitas} hoje</p>
+                  )}
                 </div>
-                <p className="text-2xl font-bold text-amber-400">{resumo.visitas}</p>
-                {hojeVisitas > 0 && (
-                  <p className="text-xs text-emerald-400 mt-1">+{hojeVisitas} hoje</p>
-                )}
-              </div>
-              <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/30">
-                <div className="flex items-center gap-2 mb-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span className="text-xs text-slate-400 font-medium">Matrículas</span>
+              </Tooltip>
+              <Tooltip content="Leads do mês que converteram em matrícula. Não inclui leads de meses anteriores que matricularam agora." side="bottom">
+                <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/30 cursor-help">
+                  <div className="flex items-center gap-2 mb-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                    <span className="text-xs text-slate-400 font-medium">Matrículas</span>
+                  </div>
+                  <p className="text-2xl font-bold text-emerald-400">{resumo.matriculas}</p>
+                  {hojeMatriculas > 0 && (
+                    <p className="text-xs text-emerald-400 mt-1">+{hojeMatriculas} hoje</p>
+                  )}
                 </div>
-                <p className="text-2xl font-bold text-emerald-400">{resumo.matriculas}</p>
-                {hojeMatriculas > 0 && (
-                  <p className="text-xs text-emerald-400 mt-1">+{hojeMatriculas} hoje</p>
-                )}
-              </div>
+              </Tooltip>
             </div>
           </div>
 
@@ -3007,52 +3016,58 @@ export function ComercialPage() {
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Lead → Experimental */}
-              <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/30">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-blue-400 text-sm font-medium">Lead</span>
-                  <ArrowRight className="w-3 h-3 text-slate-500" />
-                  <span className="text-purple-400 text-sm font-medium">Experimental</span>
+              <Tooltip content="Experimentais agendadas / Total de leads do mês" side="bottom">
+                <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/30 cursor-help">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-blue-400 text-sm font-medium">Lead</span>
+                    <ArrowRight className="w-3 h-3 text-slate-500" />
+                    <span className="text-purple-400 text-sm font-medium">Experimental</span>
+                  </div>
+                  <p className="text-3xl font-bold text-cyan-400 mb-2">{resumo.conversaoLeadExp.toFixed(1)}%</p>
+                  <div className="w-full bg-slate-700/50 rounded-full h-2">
+                    <div
+                      className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all"
+                      style={{ width: `${Math.min(resumo.conversaoLeadExp, 100)}%` }}
+                    />
+                  </div>
                 </div>
-                <p className="text-3xl font-bold text-cyan-400 mb-2">{resumo.conversaoLeadExp.toFixed(1)}%</p>
-                <div className="w-full bg-slate-700/50 rounded-full h-2">
-                  <div 
-                    className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all"
-                    style={{ width: `${Math.min(resumo.conversaoLeadExp, 100)}%` }}
-                  />
-                </div>
-              </div>
+              </Tooltip>
 
               {/* Experimental → Matrícula */}
-              <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/30">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-purple-400 text-sm font-medium">Experimental</span>
-                  <ArrowRight className="w-3 h-3 text-slate-500" />
-                  <span className="text-emerald-400 text-sm font-medium">Matrícula</span>
+              <Tooltip content="Matrículas / Experimentais agendadas do mês" side="bottom">
+                <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/30 cursor-help">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-purple-400 text-sm font-medium">Experimental</span>
+                    <ArrowRight className="w-3 h-3 text-slate-500" />
+                    <span className="text-emerald-400 text-sm font-medium">Matrícula</span>
+                  </div>
+                  <p className="text-3xl font-bold text-cyan-400 mb-2">{resumo.conversaoExpMat.toFixed(1)}%</p>
+                  <div className="w-full bg-slate-700/50 rounded-full h-2">
+                    <div
+                      className="bg-gradient-to-r from-purple-500 to-emerald-500 h-2 rounded-full transition-all"
+                      style={{ width: `${Math.min(resumo.conversaoExpMat, 100)}%` }}
+                    />
+                  </div>
                 </div>
-                <p className="text-3xl font-bold text-cyan-400 mb-2">{resumo.conversaoExpMat.toFixed(1)}%</p>
-                <div className="w-full bg-slate-700/50 rounded-full h-2">
-                  <div 
-                    className="bg-gradient-to-r from-purple-500 to-emerald-500 h-2 rounded-full transition-all"
-                    style={{ width: `${Math.min(resumo.conversaoExpMat, 100)}%` }}
-                  />
-                </div>
-              </div>
+              </Tooltip>
 
               {/* Lead → Matrícula (direto) */}
-              <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/30">
-                <div className="flex items-center gap-2 mb-3">
-                  <span className="text-blue-400 text-sm font-medium">Lead</span>
-                  <ArrowRight className="w-3 h-3 text-slate-500" />
-                  <span className="text-emerald-400 text-sm font-medium">Matrícula</span>
+              <Tooltip content="Matrículas / Total de leads do mês (conversão direta)" side="bottom">
+                <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/30 cursor-help">
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-blue-400 text-sm font-medium">Lead</span>
+                    <ArrowRight className="w-3 h-3 text-slate-500" />
+                    <span className="text-emerald-400 text-sm font-medium">Matrícula</span>
+                  </div>
+                  <p className="text-3xl font-bold text-emerald-400 mb-2">{resumo.conversaoLeadMat.toFixed(1)}%</p>
+                  <div className="w-full bg-slate-700/50 rounded-full h-2">
+                    <div
+                      className="bg-gradient-to-r from-blue-500 to-emerald-500 h-2 rounded-full transition-all"
+                      style={{ width: `${Math.min(resumo.conversaoLeadMat, 100)}%` }}
+                    />
+                  </div>
                 </div>
-                <p className="text-3xl font-bold text-emerald-400 mb-2">{resumo.conversaoLeadMat.toFixed(1)}%</p>
-                <div className="w-full bg-slate-700/50 rounded-full h-2">
-                  <div 
-                    className="bg-gradient-to-r from-blue-500 to-emerald-500 h-2 rounded-full transition-all"
-                    style={{ width: `${Math.min(resumo.conversaoLeadMat, 100)}%` }}
-                  />
-                </div>
-              </div>
+              </Tooltip>
             </div>
           </div>
 
