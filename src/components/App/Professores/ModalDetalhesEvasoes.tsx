@@ -1,11 +1,12 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { supabase } from '@/lib/supabase';
-import { Loader2, Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Loader2, Search, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/Tooltip';
 
 interface EvasaoDetalhe {
   id: number;
@@ -13,6 +14,7 @@ interface EvasaoDetalhe {
   tipo: string;
   tipo_evasao: string | null;
   motivo: string | null;
+  motivo_saida_id: number | null;
   data: string;
   mrr_perdido: number;
 }
@@ -60,7 +62,7 @@ export function ModalDetalhesEvasoes({ open, onClose, professorId, professorNome
 
         let q = supabase
           .from('movimentacoes_admin')
-          .select('id, aluno_nome, tipo, tipo_evasao, motivo, data, valor_parcela_evasao, valor_parcela_anterior')
+          .select('id, aluno_nome, tipo, tipo_evasao, motivo, motivo_saida_id, data, valor_parcela_evasao, valor_parcela_anterior')
           .eq('professor_id', professorId)
           .in('tipo', ['evasao', 'nao_renovacao'])
           .gte('data', inicio)
@@ -79,6 +81,7 @@ export function ModalDetalhesEvasoes({ open, onClose, professorId, professorNome
           tipo: m.tipo,
           tipo_evasao: m.tipo_evasao,
           motivo: m.motivo,
+          motivo_saida_id: m.motivo_saida_id,
           data: m.data,
           mrr_perdido: Number(m.valor_parcela_evasao || m.valor_parcela_anterior || 0),
         }));
@@ -204,8 +207,17 @@ export function ModalDetalhesEvasoes({ open, onClose, professorId, professorNome
                         {d.tipo_evasao ? (TIPO_EVASAO_LABELS[d.tipo_evasao] || d.tipo_evasao) : (d.tipo === 'evasao' ? 'Cancelamento' : 'Nao Renovou')}
                       </span>
                     </td>
-                    <td className="py-2 px-2 text-slate-400 text-xs max-w-[150px] truncate" title={d.motivo || ''}>
-                      {d.motivo || '-'}
+                    <td className="py-2 px-2 text-xs max-w-[150px]">
+                      <div className="flex items-center gap-1">
+                        {!d.motivo_saida_id && d.motivo && (
+                          <Tooltip content="Motivo nao vinculado — conta no score por padrao" side="top">
+                            <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0 cursor-help" />
+                          </Tooltip>
+                        )}
+                        <span className="text-slate-400 truncate" title={d.motivo || ''}>
+                          {d.motivo || '-'}
+                        </span>
+                      </div>
                     </td>
                     <td className="py-2 px-2 text-center text-slate-300 text-xs">
                       {new Date(d.data + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}

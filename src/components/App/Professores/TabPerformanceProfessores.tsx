@@ -21,6 +21,7 @@ import { ModalRelatorioCoordenacao } from './ModalRelatorioCoordenacao';
 import { ModalDetalhesTurmas } from './ModalDetalhesTurmas';
 import { ModalDetalhesPresenca } from './ModalDetalhesPresenca';
 import { ModalDetalhesEvasoes } from './ModalDetalhesEvasoes';
+import { ModalDetalhesRetencao } from './ModalDetalhesRetencao';
 import { PlanoAcaoEquipe } from './PlanoAcaoEquipe';
 import { calcularHealthScore } from '@/hooks/useHealthScore';
 import { DEFAULT_HEALTH_WEIGHTS } from './HealthScoreConfig';
@@ -112,6 +113,9 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
   });
   const [modalEvasoes, setModalEvasoes] = useState<{ open: boolean; professorId: number | null; professorNome: string }>({
     open: false, professorId: null, professorNome: ''
+  });
+  const [modalRetencao, setModalRetencao] = useState<{ open: boolean; professorId: number | null; professorNome: string; taxaRetencao: number; totalAlunos: number; evasoesMes: number }>({
+    open: false, professorId: null, professorNome: '', taxaRetencao: 0, totalAlunos: 0, evasoesMes: 0
   });
 
   useEffect(() => {
@@ -939,7 +943,10 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                           </div>
                         }
                       >
-                        <span className={`font-medium cursor-help ${getMetricaColor(professor.taxa_retencao, { critico: 70, atencao: 95 })}`}>
+                        <span
+                          className={`font-medium cursor-pointer hover:underline ${getMetricaColor(professor.taxa_retencao, { critico: 70, atencao: 95 })}`}
+                          onClick={(e) => { e.stopPropagation(); setModalRetencao({ open: true, professorId: professor.id, professorNome: professor.nome, taxaRetencao: professor.taxa_retencao, totalAlunos: professor.total_alunos, evasoesMes: professor.evasoes_mes }); }}
+                        >
                           {professor.taxa_retencao.toFixed(0)}%
                         </span>
                       </Tooltip>
@@ -1030,7 +1037,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                       >
                         <span
                           className={`font-medium cursor-pointer hover:underline ${getMetricaColor(professor.taxa_presenca, { critico: 70, atencao: 80 })}`}
-                          onClick={() => setModalPresenca({ open: true, professorId: professor.id, professorNome: professor.nome })}
+                          onClick={(e) => { e.stopPropagation(); setModalPresenca({ open: true, professorId: professor.id, professorNome: professor.nome }); }}
                         >
                           {professor.taxa_presenca.toFixed(0)}%
                         </span>
@@ -1065,7 +1072,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                       >
                         <span
                           className={`font-medium cursor-pointer hover:underline ${getMetricaColor(professor.evasoes_mes, { critico: 1, atencao: 3 }, true)}`}
-                          onClick={() => setModalEvasoes({ open: true, professorId: professor.id, professorNome: professor.nome })}
+                          onClick={(e) => { e.stopPropagation(); setModalEvasoes({ open: true, professorId: professor.id, professorNome: professor.nome }); }}
                         >
                           {professor.evasoes_mes}
                         </span>
@@ -1223,6 +1230,19 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
         ano={parseInt(competencia.split('-')[0])}
         mes={parseInt(competencia.split('-')[1])}
         unidadeId={unidadeAtual}
+      />
+
+      <ModalDetalhesRetencao
+        open={modalRetencao.open}
+        onClose={() => setModalRetencao({ open: false, professorId: null, professorNome: '', taxaRetencao: 0, totalAlunos: 0, evasoesMes: 0 })}
+        professorId={modalRetencao.professorId}
+        professorNome={modalRetencao.professorNome}
+        ano={parseInt(competencia.split('-')[0])}
+        mes={parseInt(competencia.split('-')[1])}
+        unidadeId={unidadeAtual}
+        taxaRetencao={modalRetencao.taxaRetencao}
+        totalAlunos={modalRetencao.totalAlunos}
+        evasoesMes={modalRetencao.evasoesMes}
       />
 
       <ModalDetalhesTurmas

@@ -254,6 +254,19 @@ async function registrarMovimentacao(
 
   if (existing?.length) return false;
 
+  // Lookup motivo_saida_id pelo texto do motivo (match case-insensitive)
+  let motivoSaidaId: number | null = null;
+  if (motivo && !motivo.startsWith('Via Emusys') && !motivo.startsWith('Renovação automática')) {
+    const { data: motivoMatch } = await supabase
+      .from('motivos_saida')
+      .select('id')
+      .ilike('nome', motivo)
+      .eq('ativo', true)
+      .limit(1)
+      .maybeSingle();
+    motivoSaidaId = motivoMatch?.id || null;
+  }
+
   await supabase.from('movimentacoes_admin').insert({
     unidade_id: p.unidadeId,
     data: new Date().toISOString().split('T')[0],
@@ -263,6 +276,7 @@ async function registrarMovimentacao(
     professor_id: professorId,
     curso_id: cursoId,
     motivo,
+    motivo_saida_id: motivoSaidaId,
     created_at: new Date().toISOString(),
   });
   return true;
