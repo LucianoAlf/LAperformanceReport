@@ -239,7 +239,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           .eq('mes', mes);
         if (unidade !== 'todos') mesFechadoQuery = mesFechadoQuery.eq('unidade_id', unidade);
         const { count: mesFechadoCount } = await mesFechadoQuery;
-        const isPeriodoAtual = ano === anoAtual && mes === mesAtual && !(mesFechadoCount && mesFechadoCount > 0);
+        const isPeriodoAtual = ano === anoAtual && mes === mesAtual;
         console.log('[DEBUG Reajuste] ano=', ano, 'mes=', mes, 'anoAtual=', anoAtual, 'mesAtual=', mesAtual, 'mesFechadoCount=', mesFechadoCount, 'isPeriodoAtual=', isPeriodoAtual);
 
         let gestaoData: any[] = [];
@@ -357,7 +357,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               mrr: Number(d.faturamento_estimado) || 0,
               arr: (Number(d.faturamento_estimado) || 0) * 12,
               tempo_permanencia_medio: Number(d.tempo_permanencia) || 0,
-              ltv_medio: 0,
+              ltv_medio: (Number(d.ticket_medio) || 0) * (Number(d.tempo_permanencia) || 0),
               inadimplencia_pct: Number(d.inadimplencia) || 0,
               faturamento_previsto: Number(d.faturamento_estimado) || 0,
               faturamento_realizado: (Number(d.faturamento_estimado) || 0) * (1 - (Number(d.inadimplencia) || 0) / 100),
