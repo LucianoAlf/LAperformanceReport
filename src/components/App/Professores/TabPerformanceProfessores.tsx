@@ -19,6 +19,8 @@ import { ModalNovaMeta } from './ModalNovaMeta';
 import { ModalNovaAcao } from './ModalNovaAcao';
 import { ModalRelatorioCoordenacao } from './ModalRelatorioCoordenacao';
 import { ModalDetalhesTurmas } from './ModalDetalhesTurmas';
+import { ModalDetalhesPresenca } from './ModalDetalhesPresenca';
+import { ModalDetalhesEvasoes } from './ModalDetalhesEvasoes';
 import { PlanoAcaoEquipe } from './PlanoAcaoEquipe';
 import { calcularHealthScore } from '@/hooks/useHealthScore';
 import { DEFAULT_HEALTH_WEIGHTS } from './HealthScoreConfig';
@@ -45,7 +47,10 @@ interface ProfessorPerformance {
   matriculas_diretas: number;
   nps: number | null;
   taxa_presenca: number;
+  taxa_faltas: number;
   evasoes_mes: number;
+  nao_renovacoes_mes: number;
+  mrr_perdido: number;
   status: 'critico' | 'atencao' | 'excelente';
   tendencia_media?: 'subindo' | 'estavel' | 'caindo';
   health_score: number;
@@ -100,6 +105,12 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
   });
   const [modalRelatorio, setModalRelatorio] = useState(false);
   const [modalTurmas, setModalTurmas] = useState<{ open: boolean; professorId: number | null; professorNome: string }>({
+    open: false, professorId: null, professorNome: ''
+  });
+  const [modalPresenca, setModalPresenca] = useState<{ open: boolean; professorId: number | null; professorNome: string }>({
+    open: false, professorId: null, professorNome: ''
+  });
+  const [modalEvasoes, setModalEvasoes] = useState<{ open: boolean; professorId: number | null; professorNome: string }>({
     open: false, professorId: null, professorNome: ''
   });
 
@@ -400,7 +411,10 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
             matriculas_diretas: kpis?.matriculas_diretas || 0,
             nps: nps ? Math.round(nps * 10) / 10 : null,
             taxa_presenca: Math.round(taxaPresenca * 10) / 10,
+            taxa_faltas: kpis?.taxa_faltas ? Math.round(Number(kpis.taxa_faltas) * 10) / 10 : 0,
             evasoes_mes: evasoesMes,
+            nao_renovacoes_mes: kpis?.nao_renovacoes || 0,
+            mrr_perdido: Number(kpis?.mrr_perdido) || 0,
             status,
             tendencia_media: tendencia,
             health_score: healthResult.score,
@@ -995,14 +1009,67 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                       </Tooltip>
                     </td>
                     <td className="text-center px-4 py-3">
-                      <span className={`font-medium ${getMetricaColor(professor.taxa_presenca, { critico: 70, atencao: 80 })}`}>
-                        {professor.taxa_presenca.toFixed(0)}%
-                      </span>
+                      <Tooltip
+                        side="top"
+                        content={
+                          <div className="text-xs min-w-[180px]">
+                            <p className="font-bold text-slate-200 mb-1.5">Presenca no Mes</p>
+                            <div className="space-y-1">
+                              <div className="flex justify-between gap-4">
+                                <span className="text-emerald-400">Presenca</span>
+                                <span className="text-white font-medium">{professor.taxa_presenca.toFixed(1)}%</span>
+                              </div>
+                              <div className="flex justify-between gap-4">
+                                <span className="text-red-400">Faltas</span>
+                                <span className="text-white font-medium">{professor.taxa_faltas.toFixed(1)}%</span>
+                              </div>
+                            </div>
+                            <p className="text-slate-500 mt-1.5 text-[10px]">Clique para ver por aluno</p>
+                          </div>
+                        }
+                      >
+                        <span
+                          className={`font-medium cursor-pointer hover:underline ${getMetricaColor(professor.taxa_presenca, { critico: 70, atencao: 80 })}`}
+                          onClick={() => setModalPresenca({ open: true, professorId: professor.id, professorNome: professor.nome })}
+                        >
+                          {professor.taxa_presenca.toFixed(0)}%
+                        </span>
+                      </Tooltip>
                     </td>
                     <td className="text-center px-4 py-3">
-                      <span className={`font-medium ${getMetricaColor(professor.evasoes_mes, { critico: 1, atencao: 3 }, true)}`}>
-                        {professor.evasoes_mes}
-                      </span>
+                      <Tooltip
+                        side="top"
+                        content={
+                          <div className="text-xs min-w-[200px]">
+                            <p className="font-bold text-slate-200 mb-1.5">Evasões no Mês</p>
+                            <div className="space-y-1">
+                              <div className="flex justify-between gap-4">
+                                <span className="text-red-400">Cancelamentos</span>
+                                <span className="text-white font-medium">{professor.evasoes_mes}</span>
+                              </div>
+                              <div className="flex justify-between gap-4">
+                                <span className="text-amber-400">Não renovações</span>
+                                <span className="text-white font-medium">{professor.nao_renovacoes_mes}</span>
+                              </div>
+                              {professor.mrr_perdido > 0 && (
+                                <div className="flex justify-between gap-4 border-t border-slate-600 pt-1 mt-1">
+                                  <span className="text-slate-400">MRR perdido</span>
+                                  <span className="text-red-400 font-medium">
+                                    {professor.mrr_perdido.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        }
+                      >
+                        <span
+                          className={`font-medium cursor-pointer hover:underline ${getMetricaColor(professor.evasoes_mes, { critico: 1, atencao: 3 }, true)}`}
+                          onClick={() => setModalEvasoes({ open: true, professorId: professor.id, professorNome: professor.nome })}
+                        >
+                          {professor.evasoes_mes}
+                        </span>
+                      </Tooltip>
                     </td>
                     <td className="text-center px-4 py-3">
                       <span className={`px-2 py-1 rounded-full text-xs font-medium border ${getStatusColor(professor.status)}`}>
@@ -1136,6 +1203,26 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
         }[unidadeAtual] || unidadeAtual) : 'Consolidado'}
         ano={parseInt(competencia.split('-')[0])}
         mes={parseInt(competencia.split('-')[1])}
+      />
+
+      <ModalDetalhesPresenca
+        open={modalPresenca.open}
+        onClose={() => setModalPresenca({ open: false, professorId: null, professorNome: '' })}
+        professorId={modalPresenca.professorId}
+        professorNome={modalPresenca.professorNome}
+        ano={parseInt(competencia.split('-')[0])}
+        mes={parseInt(competencia.split('-')[1])}
+        unidadeId={unidadeAtual}
+      />
+
+      <ModalDetalhesEvasoes
+        open={modalEvasoes.open}
+        onClose={() => setModalEvasoes({ open: false, professorId: null, professorNome: '' })}
+        professorId={modalEvasoes.professorId}
+        professorNome={modalEvasoes.professorNome}
+        ano={parseInt(competencia.split('-')[0])}
+        mes={parseInt(competencia.split('-')[1])}
+        unidadeId={unidadeAtual}
       />
 
       <ModalDetalhesTurmas

@@ -58,6 +58,7 @@ interface Curso {
   nome: string;
   ativo: boolean;
   capacidade_maxima: number | null;
+  is_projeto_banda: boolean;
 }
 
 type TabId = 'unidades' | 'canais' | 'motivos' | 'tipos' | 'cursos' | 'whatsapp' | 'ia';
@@ -404,6 +405,15 @@ export function ConfigPage() {
       } catch (err) {
         console.error('Erro ao atualizar curso:', err);
       }
+    }
+  }
+
+  async function toggleBanda(id: number, atual: boolean) {
+    try {
+      await supabase.from('cursos').update({ is_projeto_banda: !atual }).eq('id', id);
+      setCursos(prev => prev.map(c => c.id === id ? { ...c, is_projeto_banda: !atual } : c));
+    } catch (err) {
+      console.error('Erro ao atualizar banda:', err);
     }
   }
 
@@ -912,6 +922,13 @@ export function ConfigPage() {
                       )}
                     </div>
                     <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => toggleBanda(c.id, c.is_projeto_banda)}
+                        className={`px-3 py-1 rounded text-xs ${c.is_projeto_banda ? 'bg-amber-500/20 text-amber-400' : 'bg-slate-700/50 text-slate-500'}`}
+                        title={c.is_projeto_banda ? 'Curso marcado como banda/extracurricular — não conta na média de turma' : 'Marcar como banda/extracurricular'}
+                      >
+                        {c.is_projeto_banda ? 'Banda' : 'Banda'}
+                      </button>
                       <button
                         onClick={() => toggleCurso(c.id, ativoNaUnidade)}
                         className={`px-3 py-1 rounded text-xs ${ativoNaUnidade ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700 text-slate-400'
