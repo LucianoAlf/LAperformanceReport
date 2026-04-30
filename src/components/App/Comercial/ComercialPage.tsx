@@ -32,6 +32,7 @@ import {
   Phone,
   PhoneOff,
   AlertTriangle,
+  AlertCircle,
   ChevronRight,
   ChevronDown
 } from 'lucide-react';
@@ -70,7 +71,9 @@ import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
 import { ComboboxNome, SugestaoLead } from '@/components/ui/combobox-nome';
 import { ComboboxTelefone } from '@/components/ui/combobox-telefone';
 import { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
-import { verificarDuplicadosEmLote } from '@/hooks/useCheckLeadDuplicado';
+import { verificarDuplicadosEmLote, useCheckLeadDuplicado } from '@/hooks/useCheckLeadDuplicado';
+import { useCheckAlunoDuplicado, type AlunoDuplicado } from '@/hooks/useCheckAlunoDuplicado';
+import type { LeadDuplicado } from '@/hooks/useCheckLeadDuplicado';
 import { CelulaEditavelInline } from '@/components/ui/CelulaEditavelInline';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { AlertasComercial } from './AlertasComercial';
@@ -379,6 +382,69 @@ export function ComercialPage() {
     responsavel_telefone: '',
     responsavel_parentesco: '',
   });
+
+  // Verificacao de duplicidade no fluxo de Matricula
+  const [confirmouDupMatricula, setConfirmouDupMatricula] = useState(false);
+  const [ignorarDupFortes, setIgnorarDupFortes] = useState<Set<number>>(new Set());
+  const [ignorarDupFracas, setIgnorarDupFracas] = useState<Set<number>>(new Set());
+  const checkLead = useCheckLeadDuplicado();
+  const checkAluno = useCheckAlunoDuplicado();
+
+  // Verificacao em tempo real quando matricula esta aberta
+  useEffect(() => {
+    if (modalOpen !== 'matricula') {
+      checkLead.limparDuplicados();
+      checkAluno.limparDuplicados();
+      return;
+    }
+    // Mesma logica do handleSave: admin usa formData.unidade_id se preenchida, senao fallback
+    const unidade = isAdmin
+      ? (formData.unidade_id || unidadeParaSalvar)
+      : unidadeParaSalvar;
+    if (!unidade) return;
+    const nome = formData.aluno_nome.trim();
+    const tel = formData.aluno_telefone.trim();
+    const telResp = formData.responsavel_telefone.trim();
+    if (nome.length < 3 && !tel && !telResp) return;
+    const t = setTimeout(() => {
+      checkLead.verificar(nome, tel, unidade);
+      checkAluno.verificar({
+        nome,
+        telefoneAluno: tel || null,
+        telefoneResponsavel: telResp || null,
+        dataNascimento: formData.aluno_data_nascimento
+          ? formData.aluno_data_nascimento.toISOString().split('T')[0]
+          : null,
+        unidadeId: unidade,
+      });
+    }, 500);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    modalOpen,
+    formData.aluno_nome,
+    formData.aluno_telefone,
+    formData.responsavel_telefone,
+    formData.aluno_data_nascimento,
+    formData.unidade_id,
+    unidadeParaSalvar,
+    isAdmin,
+  ]);
+
+  // Reset confirmacao quando lista de duplicatas muda
+  useEffect(() => {
+    setConfirmouDupMatricula(false);
+  }, [checkLead.duplicatasFortes, checkAluno.duplicatasFortes]);
+
+  const matFortesAtivas = [
+    ...checkLead.duplicatasFortes.filter(d => !ignorarDupFortes.has(d.id)).map(d => ({ ...d, _origem: 'lead' as const })),
+    ...checkAluno.duplicatasFortes.filter(d => !ignorarDupFortes.has(d.id)).map(d => ({ ...d, _origem: 'aluno' as const })),
+  ];
+  const matFracasAtivas = [
+    ...checkLead.duplicatasFracas.filter(d => !ignorarDupFracas.has(d.id)).map(d => ({ ...d, _origem: 'lead' as const })),
+    ...checkAluno.duplicatasFracas.filter(d => !ignorarDupFracas.has(d.id)).map(d => ({ ...d, _origem: 'aluno' as const })),
+  ];
+  const matTemForteNaoIgnorada = matFortesAtivas.length > 0;
 
   // Carregar dados mestres
   useEffect(() => {
@@ -1400,6 +1466,12 @@ export function ComercialPage() {
     // Reset lotes
     setLoteData(new Date());
     setLoteLeads([{ id: genId(), aluno_nome: '', telefone: '', canal_origem_id: null, curso_id: null, quantidade: 1 }]);
+    // Reset verificacao de duplicidade
+    setConfirmouDupMatricula(false);
+    setIgnorarDupFortes(new Set());
+    setIgnorarDupFracas(new Set());
+    checkLead.limparDuplicados();
+    checkAluno.limparDuplicados();
   };
 
   // Salvar lote de leads atendidos
@@ -1677,6 +1749,12 @@ export function ComercialPage() {
       }
       if (!TIPOS_SEM_PAGAMENTO.includes(formData.tipo_aluno) && !formData.forma_pagamento_id) {
         toast.error('Selecione a forma de pagamento da parcela mensal');
+        return;
+      }
+      // Bloqueio dupla-confirmacao quando ha duplicata forte (lead ou aluno) ainda nao ignorada
+      if (matTemForteNaoIgnorada && !confirmouDupMatricula) {
+        setConfirmouDupMatricula(true);
+        toast.warning('Possivel duplicata detectada. Revise antes de confirmar.', { duration: 5000 });
         return;
       }
     }
@@ -5085,6 +5163,81 @@ export function ComercialPage() {
       {modalOpen === 'matricula' && (
         <Modal title="Registrar Matrícula" onClose={() => { setModalOpen(null); resetForm(); }}>
           <div className="space-y-4">
+            {matFortesAtivas.length > 0 && (
+              <div className="rounded-lg border border-red-500/50 bg-red-500/10 p-3 space-y-2">
+                <div className="flex items-center gap-2 text-red-400 text-sm font-medium">
+                  <AlertCircle className="w-4 h-4" />
+                  Já existe registro com estes dados (telefone ou nome+nascimento batem)
+                </div>
+                <div className="space-y-1.5">
+                  {matFortesAtivas.map((d) => (
+                    <div key={`${d._origem}-${d.id}`} className="flex items-center justify-between gap-2 text-xs bg-slate-800/50 rounded px-2 py-1.5">
+                      <div className="min-w-0 flex-1">
+                        <span className="text-slate-300 text-[10px] uppercase mr-2">{d._origem}</span>
+                        <span className="text-white font-medium">{d.nome}</span>
+                        {d._origem === 'lead' && (d as LeadDuplicado).telefone && (
+                          <span className="text-slate-400 ml-2">{(d as LeadDuplicado).telefone}</span>
+                        )}
+                        {d._origem === 'aluno' && (d as AlunoDuplicado).data_nascimento && (
+                          <span className="text-slate-400 ml-2">
+                            {new Date((d as AlunoDuplicado).data_nascimento + 'T00:00:00').toLocaleDateString('pt-BR')}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-slate-400 whitespace-nowrap">
+                        <span>{d.status}</span>
+                        <button
+                          type="button"
+                          onClick={() => setIgnorarDupFortes(prev => new Set(prev).add(d.id))}
+                          className="text-slate-500 hover:text-slate-300 underline"
+                        >
+                          ignorar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {confirmouDupMatricula && (
+                  <p className="text-xs text-red-400/80">
+                    Confirmar criação? Clique em "Salvar" novamente.
+                  </p>
+                )}
+              </div>
+            )}
+            {matFracasAtivas.length > 0 && (
+              <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 space-y-2">
+                <div className="flex items-center gap-2 text-amber-400 text-sm font-medium">
+                  <AlertTriangle className="w-4 h-4" />
+                  Possível duplicata (mesmo nome)
+                </div>
+                <div className="space-y-1.5">
+                  {matFracasAtivas.map((d) => (
+                    <div key={`${d._origem}-${d.id}`} className="flex items-center justify-between gap-2 text-xs bg-slate-800/50 rounded px-2 py-1.5">
+                      <div className="min-w-0 flex-1">
+                        <span className="text-slate-300 text-[10px] uppercase mr-2">{d._origem}</span>
+                        <span className="text-white font-medium">{d.nome}</span>
+                        {d._origem === 'lead' && (d as LeadDuplicado).telefone && (
+                          <span className="text-slate-400 ml-2">{(d as LeadDuplicado).telefone}</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-slate-400 whitespace-nowrap">
+                        <span>{d.status}</span>
+                        <button
+                          type="button"
+                          onClick={() => setIgnorarDupFracas(prev => new Set(prev).add(d.id))}
+                          className="text-slate-500 hover:text-slate-300 underline"
+                        >
+                          ignorar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-amber-400/80">
+                  Se for o mesmo cliente, abra o registro existente em vez de criar um novo.
+                </p>
+              </div>
+            )}
             <div>
               <Label className="mb-2 block">Data da Matrícula</Label>
               <DatePicker
@@ -5505,10 +5658,28 @@ export function ComercialPage() {
             <Button
               onClick={handleSave}
               disabled={saving || !formData.aluno_nome || !formData.aluno_data_nascimento || (!TIPOS_SEM_PAGAMENTO.includes(formData.tipo_aluno) && !formData.forma_pagamento_id)}
-              className="w-full bg-gradient-to-r from-emerald-500 to-teal-500"
+              className={
+                matTemForteNaoIgnorada && confirmouDupMatricula
+                  ? 'w-full bg-gradient-to-r from-red-500 to-rose-500'
+                  : matTemForteNaoIgnorada
+                    ? 'w-full bg-gradient-to-r from-amber-500 to-orange-500'
+                    : 'w-full bg-gradient-to-r from-emerald-500 to-teal-500'
+              }
             >
-              {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
-              Registrar Matrícula
+              {saving ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : matTemForteNaoIgnorada && confirmouDupMatricula ? (
+                <AlertCircle className="w-5 h-5" />
+              ) : matTemForteNaoIgnorada ? (
+                <AlertTriangle className="w-5 h-5" />
+              ) : (
+                <CheckCircle2 className="w-5 h-5" />
+              )}
+              {matTemForteNaoIgnorada && confirmouDupMatricula
+                ? 'Criar mesmo assim'
+                : matTemForteNaoIgnorada
+                  ? 'Confirmar duplicata'
+                  : 'Registrar Matrícula'}
             </Button>
           </div>
         </Modal>

@@ -1,80 +1,118 @@
 import { useCallback, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { normalizarTelefone } from '@/lib/normalizarTelefone';
 
 export interface LeadDuplicado {
   id: number;
   nome: string;
   telefone: string | null;
+  whatsapp?: string | null;
   status: string;
   etapa_pipeline_id: number | null;
   created_at: string;
+  tipo_match?: 'forte' | 'fraca';
 }
 
 /**
- * Hook para verificar leads duplicados antes da criação.
+ * Hook para verificar leads duplicados antes da criacao.
  *
- * Critérios:
- * - Mesmo telefone na mesma unidade → duplicata forte
- * - Mesmo nome exato + ambos sem telefone na mesma unidade → duplicata fraca
- * - Mesmo nome com telefones diferentes → NÃO é duplicata
+ * Cascata de match (espelha edge function processar-matricula-emusys):
+ * - FORTE: telefone normalizado bate com lead.telefone OU lead.whatsapp
+ * - FRACA: mesmo nome (case-insensitive, trim) na mesma unidade, telefones diferentes
+ *
+ * Retorna duplicatasFortes e duplicatasFracas separadas, e tambem `duplicados`
+ * (lista combinada) para compatibilidade com chamadores antigos.
  */
 export function useCheckLeadDuplicado() {
   const [verificando, setVerificando] = useState(false);
-  const [duplicados, setDuplicados] = useState<LeadDuplicado[]>([]);
+  const [duplicatasFortes, setDuplicatasFortes] = useState<LeadDuplicado[]>([]);
+  const [duplicatasFracas, setDuplicatasFracas] = useState<LeadDuplicado[]>([]);
 
   const verificar = useCallback(async (
     nome: string,
     telefone: string | null | undefined,
     unidadeId: string
   ): Promise<LeadDuplicado[]> => {
-    if (!nome.trim() || !unidadeId) return [];
+    if (!unidadeId) return [];
+    if (!nome.trim() && !telefone?.trim()) return [];
 
     setVerificando(true);
     try {
-      const tel = telefone?.trim() || '';
       const nomeLimpo = nome.trim();
+      const telNormalizado = normalizarTelefone(telefone);
+      const telSemDDI = telNormalizado?.startsWith('55') ? telNormalizado.slice(2) : telNormalizado;
 
-      let query = supabase
+      const baseQuery = () => supabase
         .from('leads')
-        .select('id, nome, telefone, status, etapa_pipeline_id, created_at')
+        .select('id, nome, telefone, whatsapp, status, etapa_pipeline_id, created_at')
         .eq('unidade_id', unidadeId)
         .eq('arquivado', false);
 
-      if (tel) {
-        // Se tem telefone: buscar por telefone exato
-        query = query.eq('telefone', tel);
-      } else {
-        // Se não tem telefone: buscar por nome exato onde o lead existente também não tem telefone
-        query = query
+      // FORTE: match por telefone (telefone OU whatsapp, com OU sem DDI)
+      let fortes: LeadDuplicado[] = [];
+      if (telNormalizado) {
+        const orParts = [
+          `telefone.eq.${telNormalizado}`,
+          `whatsapp.eq.${telNormalizado}`,
+        ];
+        if (telSemDDI && telSemDDI !== telNormalizado) {
+          orParts.push(`telefone.eq.${telSemDDI}`);
+          orParts.push(`whatsapp.eq.${telSemDDI}`);
+        }
+        const { data, error } = await baseQuery()
+          .or(orParts.join(','))
+          .limit(5);
+        if (error) {
+          console.error('Erro ao verificar duplicata forte:', error);
+        } else {
+          fortes = (data || []).map(d => ({ ...d, tipo_match: 'forte' as const }));
+        }
+      }
+
+      // FRACA: match por nome (case-insensitive), excluindo os ja achados como forte
+      let fracas: LeadDuplicado[] = [];
+      if (nomeLimpo.length >= 3) {
+        const idsFortes = new Set(fortes.map(f => f.id));
+        const { data, error } = await baseQuery()
           .ilike('nome', nomeLimpo)
-          .or('telefone.is.null,telefone.eq.');
+          .order('created_at', { ascending: false })
+          .limit(10);
+        if (error) {
+          console.error('Erro ao verificar duplicata fraca:', error);
+        } else {
+          fracas = (data || [])
+            .filter(d => !idsFortes.has(d.id))
+            .slice(0, 5)
+            .map(d => ({ ...d, tipo_match: 'fraca' as const }));
+        }
       }
 
-      const { data, error } = await query.limit(5);
-
-      if (error) {
-        console.error('Erro ao verificar duplicatas:', error);
-        return [];
-      }
-
-      const resultado = data || [];
-      setDuplicados(resultado);
-      return resultado;
+      setDuplicatasFortes(fortes);
+      setDuplicatasFracas(fracas);
+      return [...fortes, ...fracas];
     } finally {
       setVerificando(false);
     }
   }, []);
 
   const limparDuplicados = useCallback(() => {
-    setDuplicados([]);
+    setDuplicatasFortes([]);
+    setDuplicatasFracas([]);
   }, []);
 
-  return { duplicados, verificando, verificar, limparDuplicados };
+  return {
+    duplicados: [...duplicatasFortes, ...duplicatasFracas],
+    duplicatasFortes,
+    duplicatasFracas,
+    verificando,
+    verificar,
+    limparDuplicados,
+  };
 }
 
 /**
- * Verificação em lote para batch inserts.
- * Recebe lista de telefones e retorna quais já existem na unidade.
+ * Verificacao em lote para batch inserts.
+ * Recebe lista de telefones e retorna quais ja existem na unidade.
  */
 export async function verificarDuplicadosEmLote(
   telefones: string[],
@@ -85,7 +123,7 @@ export async function verificarDuplicadosEmLote(
 
   const { data, error } = await supabase
     .from('leads')
-    .select('id, nome, telefone, status, etapa_pipeline_id, created_at')
+    .select('id, nome, telefone, whatsapp, status, etapa_pipeline_id, created_at')
     .eq('unidade_id', unidadeId)
     .eq('arquivado', false)
     .in('telefone', telefonesValidos)

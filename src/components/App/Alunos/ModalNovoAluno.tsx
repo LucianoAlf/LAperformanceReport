@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { X, CheckCircle2, Loader2 } from 'lucide-react';
+import { X, CheckCircle2, Loader2, AlertCircle, AlertTriangle } from 'lucide-react';
 import { gerarHorariosDisponiveis } from '@/lib/horarios';
 import type { DisponibilidadeSemanal } from '../Professores/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
+import { useCheckAlunoDuplicado, type AlunoDuplicado } from '@/hooks/useCheckAlunoDuplicado';
 
 export interface DadosIniciaisMatricula {
   aluno_nome?: string;
@@ -103,6 +104,57 @@ export function ModalNovoAluno({
   });
   const [disponibilidadeProfessor, setDisponibilidadeProfessor] = useState<DisponibilidadeSemanal | null>(null);
   const [cursosProfessor, setCursosProfessor] = useState<{id: number, nome: string}[]>([]);
+
+  // Verificacao de duplicidade
+  const [confirmouDuplicata, setConfirmouDuplicata] = useState(false);
+  const [ignorarFortes, setIgnorarFortes] = useState<Set<number>>(new Set());
+  const [ignorarFracas, setIgnorarFracas] = useState<Set<number>>(new Set());
+  const { duplicatasFortes, duplicatasFracas, verificar, limparDuplicados } = useCheckAlunoDuplicado();
+
+  const telefoneIniciais = dadosIniciais?.telefone || '';
+
+  // Debounced check ao alterar nome, telefone, responsavel ou data nascimento
+  useEffect(() => {
+    if (!formData.unidade_id) {
+      limparDuplicados();
+      return;
+    }
+    const nomeOk = formData.aluno_nome.trim().length >= 3;
+    const telOk = !!(telefoneIniciais.trim() || formData.responsavel_telefone.trim());
+    if (!nomeOk && !telOk) {
+      limparDuplicados();
+      return;
+    }
+    const t = setTimeout(() => {
+      verificar({
+        nome: formData.aluno_nome,
+        telefoneAluno: telefoneIniciais || null,
+        telefoneResponsavel: formData.responsavel_telefone || null,
+        dataNascimento: formData.aluno_data_nascimento
+          ? formData.aluno_data_nascimento.toISOString().split('T')[0]
+          : null,
+        unidadeId: formData.unidade_id,
+      });
+    }, 500);
+    return () => clearTimeout(t);
+  }, [
+    formData.aluno_nome,
+    formData.responsavel_telefone,
+    formData.aluno_data_nascimento,
+    formData.unidade_id,
+    telefoneIniciais,
+    verificar,
+    limparDuplicados,
+  ]);
+
+  const fortesAtivas = duplicatasFortes.filter(d => !ignorarFortes.has(d.id));
+  const fracasAtivas = duplicatasFracas.filter(d => !ignorarFracas.has(d.id));
+  const temForteNaoIgnorada = fortesAtivas.length > 0;
+
+  // Reset da confirmacao quando a lista de duplicatas mudar
+  useEffect(() => {
+    setConfirmouDuplicata(false);
+  }, [duplicatasFortes, duplicatasFracas]);
 
   // Buscar disponibilidade do professor fixo quando selecionado
   useEffect(() => {
@@ -199,6 +251,12 @@ export function ModalNovoAluno({
       return;
     }
 
+    // Bloqueio dupla-confirmacao quando ha duplicata forte ainda nao ignorada
+    if (temForteNaoIgnorada && !confirmouDuplicata) {
+      setConfirmouDuplicata(true);
+      return;
+    }
+
     setSaving(true);
 
     try {
@@ -279,6 +337,10 @@ export function ModalNovoAluno({
       responsavel_telefone: '',
       responsavel_parentesco: '',
     });
+    setConfirmouDuplicata(false);
+    setIgnorarFortes(new Set());
+    setIgnorarFracas(new Set());
+    limparDuplicados();
   }
 
   return (
@@ -293,6 +355,77 @@ export function ModalNovoAluno({
         </div>
         <div className="p-6 overflow-y-auto flex-1 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-700 hover:scrollbar-thumb-slate-600">
           <div className="space-y-4">
+            {fortesAtivas.length > 0 && (
+              <div className="rounded-lg border border-red-500/50 bg-red-500/10 p-3 space-y-2">
+                <div className="flex items-center gap-2 text-red-400 text-sm font-medium">
+                  <AlertCircle className="w-4 h-4" />
+                  Aluno já existe (telefone ou nome+nascimento batem)
+                </div>
+                <div className="space-y-1.5">
+                  {fortesAtivas.map((d: AlunoDuplicado) => (
+                    <div key={d.id} className="flex items-center justify-between gap-2 text-xs bg-slate-800/50 rounded px-2 py-1.5">
+                      <div className="min-w-0 flex-1">
+                        <span className="text-white font-medium">{d.nome}</span>
+                        {d.data_nascimento && (
+                          <span className="text-slate-400 ml-2">
+                            {new Date(d.data_nascimento + 'T00:00:00').toLocaleDateString('pt-BR')}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-slate-400 whitespace-nowrap">
+                        <span>{d.status}</span>
+                        <span>{d.tipo_match === 'forte_telefone' ? 'tel' : 'nome+nasc'}</span>
+                        <button
+                          type="button"
+                          onClick={() => setIgnorarFortes(prev => new Set(prev).add(d.id))}
+                          className="text-slate-500 hover:text-slate-300 underline"
+                        >
+                          ignorar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {confirmouDuplicata && (
+                  <p className="text-xs text-red-400/80">Confirmar criação? Clique em "Criar mesmo assim".</p>
+                )}
+              </div>
+            )}
+            {fracasAtivas.length > 0 && (
+              <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 space-y-2">
+                <div className="flex items-center gap-2 text-amber-400 text-sm font-medium">
+                  <AlertTriangle className="w-4 h-4" />
+                  Possível duplicata (mesmo nome, data diferente ou ausente)
+                </div>
+                <div className="space-y-1.5">
+                  {fracasAtivas.map((d: AlunoDuplicado) => (
+                    <div key={d.id} className="flex items-center justify-between gap-2 text-xs bg-slate-800/50 rounded px-2 py-1.5">
+                      <div className="min-w-0 flex-1">
+                        <span className="text-white font-medium">{d.nome}</span>
+                        {d.data_nascimento && (
+                          <span className="text-slate-400 ml-2">
+                            {new Date(d.data_nascimento + 'T00:00:00').toLocaleDateString('pt-BR')}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 text-slate-400 whitespace-nowrap">
+                        <span>{d.status}</span>
+                        <button
+                          type="button"
+                          onClick={() => setIgnorarFracas(prev => new Set(prev).add(d.id))}
+                          className="text-slate-500 hover:text-slate-300 underline"
+                        >
+                          ignorar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-amber-400/80">
+                  Se for o mesmo aluno, abra o registro existente. Se for homônimo legítimo, prossiga.
+                </p>
+              </div>
+            )}
             <div>
               <Label className="mb-2 block">Data da Matrícula</Label>
               <DatePicker
@@ -656,10 +789,28 @@ export function ModalNovoAluno({
             <Button
               onClick={handleSave}
               disabled={saving || !formData.aluno_nome || !formData.aluno_data_nascimento || (!TIPOS_SEM_PAGAMENTO.includes(formData.tipo_aluno) && !formData.forma_pagamento_id)}
-              className="w-full bg-gradient-to-r from-emerald-500 to-teal-500"
+              className={
+                temForteNaoIgnorada && confirmouDuplicata
+                  ? 'w-full bg-gradient-to-r from-red-500 to-rose-500'
+                  : temForteNaoIgnorada
+                    ? 'w-full bg-gradient-to-r from-amber-500 to-orange-500'
+                    : 'w-full bg-gradient-to-r from-emerald-500 to-teal-500'
+              }
             >
-              {saving ? <Loader2 className="w-5 h-5 animate-spin" /> : <CheckCircle2 className="w-5 h-5" />}
-              Registrar Matrícula
+              {saving ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : temForteNaoIgnorada && confirmouDuplicata ? (
+                <AlertCircle className="w-5 h-5" />
+              ) : temForteNaoIgnorada ? (
+                <AlertTriangle className="w-5 h-5" />
+              ) : (
+                <CheckCircle2 className="w-5 h-5" />
+              )}
+              {temForteNaoIgnorada && confirmouDuplicata
+                ? 'Criar mesmo assim'
+                : temForteNaoIgnorada
+                  ? 'Confirmar duplicata'
+                  : 'Registrar Matrícula'}
             </Button>
           </div>
         </div>

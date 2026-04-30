@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Loader2, AlertTriangle } from 'lucide-react';
+import { Plus, Loader2, AlertTriangle, AlertCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useCheckLeadDuplicado, type LeadDuplicado } from '@/hooks/useCheckLeadDuplicado';
 import type { PipelineEtapa } from '../types';
@@ -32,7 +32,7 @@ interface ModalNovoLeadProps {
 
 export function ModalNovoLead({ aberto, onClose, onSalvo, etapas, canais, cursos }: ModalNovoLeadProps) {
   const [salvando, setSalvando] = useState(false);
-  const [mostrarAlertaDuplicata, setMostrarAlertaDuplicata] = useState(false);
+  const [confirmouDuplicata, setConfirmouDuplicata] = useState(false);
 
   // Campos do formulário
   const [nome, setNome] = useState('');
@@ -44,8 +44,10 @@ export function ModalNovoLead({ aberto, onClose, onSalvo, etapas, canais, cursos
   const [faixaEtaria, setFaixaEtaria] = useState('');
   const [sabiaPreco, setSabiaPreco] = useState('');
   const [observacoes, setObservacoes] = useState('');
+  const [ignorarFortes, setIgnorarFortes] = useState<Set<number>>(new Set());
+  const [ignorarFracas, setIgnorarFracas] = useState<Set<number>>(new Set());
 
-  const { duplicados, verificando, verificar, limparDuplicados } = useCheckLeadDuplicado();
+  const { duplicatasFortes, duplicatasFracas, verificando, verificar, limparDuplicados } = useCheckLeadDuplicado();
 
   const limpar = () => {
     setNome('');
@@ -57,7 +59,9 @@ export function ModalNovoLead({ aberto, onClose, onSalvo, etapas, canais, cursos
     setFaixaEtaria('');
     setSabiaPreco('');
     setObservacoes('');
-    setMostrarAlertaDuplicata(false);
+    setConfirmouDuplicata(false);
+    setIgnorarFortes(new Set());
+    setIgnorarFracas(new Set());
     limparDuplicados();
   };
 
@@ -65,6 +69,18 @@ export function ModalNovoLead({ aberto, onClose, onSalvo, etapas, canais, cursos
     limpar();
     onClose();
   };
+
+  // Verificacao debounced em tempo real ao digitar nome ou telefone
+  useEffect(() => {
+    if (!unidadeId || (!nome.trim() && !telefone.trim())) {
+      limparDuplicados();
+      return;
+    }
+    const t = setTimeout(() => {
+      verificar(nome, telefone, unidadeId);
+    }, 500);
+    return () => clearTimeout(t);
+  }, [nome, telefone, unidadeId, verificar, limparDuplicados]);
 
   const unidadeNomeMap: Record<string, string> = {
     '2ec861f6-023f-4d7b-9927-3960ad8c2a92': 'Campo Grande',
@@ -120,22 +136,16 @@ export function ModalNovoLead({ aberto, onClose, onSalvo, etapas, canais, cursos
     }
   };
 
+  const fortesAtivas = duplicatasFortes.filter(d => !ignorarFortes.has(d.id));
+  const fracasAtivas = duplicatasFracas.filter(d => !ignorarFracas.has(d.id));
+  const temForteNaoIgnorada = fortesAtivas.length > 0;
+
   const handleSalvar = async () => {
     if (!nome.trim() || !unidadeId) return;
-
-    // Se já viu o alerta e clicou "Criar mesmo assim", inserir direto
-    if (mostrarAlertaDuplicata) {
-      await inserirLead();
+    if (temForteNaoIgnorada && !confirmouDuplicata) {
+      setConfirmouDuplicata(true);
       return;
     }
-
-    // Verificar duplicatas antes de inserir
-    const encontrados = await verificar(nome, telefone, unidadeId);
-    if (encontrados.length > 0) {
-      setMostrarAlertaDuplicata(true);
-      return;
-    }
-
     await inserirLead();
   };
 
@@ -157,6 +167,26 @@ export function ModalNovoLead({ aberto, onClose, onSalvo, etapas, canais, cursos
     return new Date(dataStr).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
   };
 
+  const renderItem = (d: LeadDuplicado, onIgnorar: () => void) => (
+    <div key={d.id} className="flex items-center justify-between gap-2 text-xs bg-slate-800/50 rounded px-2 py-1.5">
+      <div className="min-w-0 flex-1">
+        <span className="text-white font-medium truncate">{d.nome}</span>
+        {d.telefone && <span className="text-slate-400 ml-2">{d.telefone}</span>}
+      </div>
+      <div className="flex items-center gap-2 text-slate-400 whitespace-nowrap">
+        <span>{formatarStatus(d.status)}</span>
+        <span>{formatarData(d.created_at)}</span>
+        <button
+          type="button"
+          onClick={onIgnorar}
+          className="text-slate-500 hover:text-slate-300 underline"
+        >
+          ignorar
+        </button>
+      </div>
+    </div>
+  );
+
   return (
     <Dialog open={aberto} onOpenChange={v => !v && handleClose()}>
       <DialogContent className="sm:max-w-lg">
@@ -173,29 +203,36 @@ export function ModalNovoLead({ aberto, onClose, onSalvo, etapas, canais, cursos
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          {/* Alerta de duplicata */}
-          {mostrarAlertaDuplicata && duplicados.length > 0 && (
+          {/* Painel FORTE: telefone bate (vermelho) */}
+          {fortesAtivas.length > 0 && (
+            <div className="rounded-lg border border-red-500/50 bg-red-500/10 p-3 space-y-2">
+              <div className="flex items-center gap-2 text-red-400 text-sm font-medium">
+                <AlertCircle className="w-4 h-4" />
+                Lead já existe com este telefone
+              </div>
+              <div className="space-y-1.5">
+                {fortesAtivas.map(d => renderItem(d, () => setIgnorarFortes(prev => new Set(prev).add(d.id))))}
+              </div>
+              {confirmouDuplicata && (
+                <p className="text-xs text-red-400/80">
+                  Confirmar criação mesmo com duplicata? Clique em "Criar mesmo assim".
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Painel FRACA: nome bate (amarelo) */}
+          {fracasAtivas.length > 0 && (
             <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 p-3 space-y-2">
               <div className="flex items-center gap-2 text-amber-400 text-sm font-medium">
                 <AlertTriangle className="w-4 h-4" />
-                Lead possivelmente duplicado
+                Possível duplicata (mesmo nome)
               </div>
               <div className="space-y-1.5">
-                {duplicados.map((d: LeadDuplicado) => (
-                  <div key={d.id} className="flex items-center justify-between text-xs bg-slate-800/50 rounded px-2 py-1.5">
-                    <div>
-                      <span className="text-white font-medium">{d.nome}</span>
-                      {d.telefone && <span className="text-slate-400 ml-2">{d.telefone}</span>}
-                    </div>
-                    <div className="flex items-center gap-2 text-slate-400">
-                      <span>{formatarStatus(d.status)}</span>
-                      <span>{formatarData(d.created_at)}</span>
-                    </div>
-                  </div>
-                ))}
+                {fracasAtivas.map(d => renderItem(d, () => setIgnorarFracas(prev => new Set(prev).add(d.id))))}
               </div>
               <p className="text-xs text-amber-400/80">
-                Deseja criar mesmo assim?
+                Se for o mesmo cliente, abra o lead existente em vez de criar novo.
               </p>
             </div>
           )}
@@ -207,7 +244,7 @@ export function ModalNovoLead({ aberto, onClose, onSalvo, etapas, canais, cursos
               <Input
                 placeholder="Nome do lead"
                 value={nome}
-                onChange={e => { setNome(e.target.value); setMostrarAlertaDuplicata(false); }}
+                onChange={e => { setNome(e.target.value); setConfirmouDuplicata(false); }}
                 className="bg-slate-800/50 border-slate-700"
               />
             </div>
@@ -216,7 +253,7 @@ export function ModalNovoLead({ aberto, onClose, onSalvo, etapas, canais, cursos
               <Input
                 placeholder="(21) 99999-9999"
                 value={telefone}
-                onChange={e => { setTelefone(e.target.value); setMostrarAlertaDuplicata(false); }}
+                onChange={e => { setTelefone(e.target.value); setConfirmouDuplicata(false); }}
                 className="bg-slate-800/50 border-slate-700"
               />
             </div>
@@ -235,7 +272,7 @@ export function ModalNovoLead({ aberto, onClose, onSalvo, etapas, canais, cursos
             </div>
             <div>
               <label className="text-xs text-slate-400 mb-1 block">Unidade *</label>
-              <Select value={unidadeId} onValueChange={v => { setUnidadeId(v); setMostrarAlertaDuplicata(false); }}>
+              <Select value={unidadeId} onValueChange={v => { setUnidadeId(v); setConfirmouDuplicata(false); }}>
                 <SelectTrigger className="bg-slate-800/50 border-slate-700">
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
@@ -328,15 +365,21 @@ export function ModalNovoLead({ aberto, onClose, onSalvo, etapas, canais, cursos
           </Button>
           <Button
             onClick={handleSalvar}
-            disabled={!nome.trim() || !unidadeId || salvando || verificando}
-            className={mostrarAlertaDuplicata ? 'bg-amber-600 hover:bg-amber-700' : 'bg-violet-600 hover:bg-violet-700'}
+            disabled={!nome.trim() || !unidadeId || salvando}
+            className={
+              temForteNaoIgnorada && confirmouDuplicata
+                ? 'bg-red-600 hover:bg-red-700'
+                : temForteNaoIgnorada
+                  ? 'bg-amber-600 hover:bg-amber-700'
+                  : 'bg-violet-600 hover:bg-violet-700'
+            }
           >
-            {verificando ? (
-              <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Verificando...</>
-            ) : salvando ? (
+            {salvando ? (
               <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Salvando...</>
-            ) : mostrarAlertaDuplicata ? (
-              <><AlertTriangle className="w-4 h-4 mr-2" /> Criar mesmo assim</>
+            ) : temForteNaoIgnorada && confirmouDuplicata ? (
+              <><AlertCircle className="w-4 h-4 mr-2" /> Criar mesmo assim</>
+            ) : temForteNaoIgnorada ? (
+              <><AlertTriangle className="w-4 h-4 mr-2" /> Confirmar duplicata</>
             ) : (
               <><Plus className="w-4 h-4 mr-2" /> Criar Lead</>
             )}
