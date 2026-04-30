@@ -22,6 +22,7 @@ import { ModalDetalhesTurmas } from './ModalDetalhesTurmas';
 import { ModalDetalhesPresenca } from './ModalDetalhesPresenca';
 import { ModalDetalhesEvasoes } from './ModalDetalhesEvasoes';
 import { ModalDetalhesRetencao } from './ModalDetalhesRetencao';
+import { ModalDetalhesConversao } from './ModalDetalhesConversao';
 import { PlanoAcaoEquipe } from './PlanoAcaoEquipe';
 import { calcularHealthScore } from '@/hooks/useHealthScore';
 import { DEFAULT_HEALTH_WEIGHTS } from './HealthScoreConfig';
@@ -72,20 +73,71 @@ interface Props {
   onPeriodoChange?: (label: string | null) => void;
 }
 
+// Codigo do trimestre operacional baseado no mes
+function getTrimestreCodigo(mes: number): 'T1' | 'T2' | 'T3' | 'NC' {
+  if (mes >= 3 && mes <= 5) return 'T1';
+  if (mes >= 6 && mes <= 8) return 'T2';
+  if (mes >= 9 && mes <= 11) return 'T3';
+  return 'NC';
+}
+
+// Mes representativo de cada trimestre (usado ao trocar trimestre no dropdown)
+const TRIMESTRE_MES_REPRESENTATIVO: Record<'T1' | 'T2' | 'T3' | 'NC', number> = {
+  T1: 4, // Abril
+  T2: 7, // Julho
+  T3: 10, // Outubro
+  NC: 1, // Janeiro (Periodo Nao Considerado: Dez(ano-1) + Jan/Fev(ano))
+};
+
+// Calcula trimestre operacional (T1/T2/T3 ou Período Não Considerado) a partir de ano + mes
+function getTrimestreOperacional(ano: number, mes: number): { dataInicio: string; dataFim: string; label: string } {
+  if (mes >= 3 && mes <= 5) {
+    return { dataInicio: `${ano}-03-01`, dataFim: `${ano}-05-31`, label: `T1 ${ano}` };
+  }
+  if (mes >= 6 && mes <= 8) {
+    return { dataInicio: `${ano}-06-01`, dataFim: `${ano}-08-31`, label: `T2 ${ano}` };
+  }
+  if (mes >= 9 && mes <= 11) {
+    return { dataInicio: `${ano}-09-01`, dataFim: `${ano}-11-30`, label: `T3 ${ano}` };
+  }
+  // Período Não Considerado: Dez(ano-1) + Jan/Fev(ano) (quando mes 1 ou 2)
+  // ou Dez(ano) + Jan/Fev(ano+1) (quando mes 12)
+  if (mes === 12) {
+    const ultimoDiaFev = new Date(ano + 1, 2, 0).getDate();
+    return {
+      dataInicio: `${ano}-12-01`,
+      dataFim: `${ano + 1}-02-${String(ultimoDiaFev).padStart(2, '0')}`,
+      label: `Período Não Considerado ${ano + 1}`,
+    };
+  }
+  // mes 1 ou 2
+  const ultimoDiaFev = new Date(ano, 2, 0).getDate();
+  return {
+    dataInicio: `${ano - 1}-12-01`,
+    dataFim: `${ano}-02-${String(ultimoDiaFev).padStart(2, '0')}`,
+    label: `Período Não Considerado ${ano}`,
+  };
+}
+
 export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPeriodoChange }: Props) {
   const toast = useToast();
-  
+
   // Hook de competência (Mês/Trim/Sem/Ano)
   const competenciaFiltro = useCompetenciaFiltro();
   const ano = competenciaFiltro.filtro.ano;
   const mes = competenciaFiltro.filtro.mes;
   const competencia = `${ano}-${String(mes).padStart(2, '0')}`;
 
+  // Modo de visualização (mensal vs trimestral) — local desta aba
+  const [modoVisualizacao, setModoVisualizacao] = useState<'mensal' | 'trimestre'>('mensal');
+  const trimestreInfo = useMemo(() => getTrimestreOperacional(ano, mes), [ano, mes]);
+  const periodoLabel = modoVisualizacao === 'trimestre' ? trimestreInfo.label : competenciaFiltro.range.label;
+
   // Sincronizar badge do header com o filtro local
   useEffect(() => {
-    onPeriodoChange?.(competenciaFiltro.range.label);
+    onPeriodoChange?.(periodoLabel);
     return () => { onPeriodoChange?.(null); };
-  }, [competenciaFiltro.range.label]);
+  }, [periodoLabel]);
   
   const [professores, setProfessores] = useState<ProfessorPerformance[]>([]);
   const [loading, setLoading] = useState(true);
@@ -117,10 +169,13 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
   const [modalRetencao, setModalRetencao] = useState<{ open: boolean; professorId: number | null; professorNome: string; taxaRetencao: number; totalAlunos: number; evasoesMes: number }>({
     open: false, professorId: null, professorNome: '', taxaRetencao: 0, totalAlunos: 0, evasoesMes: 0
   });
+  const [modalConversao, setModalConversao] = useState<{ open: boolean; professorId: number | null; professorNome: string }>({
+    open: false, professorId: null, professorNome: ''
+  });
 
   useEffect(() => {
     carregarDados();
-  }, [unidadeAtual, ano, mes]);
+  }, [unidadeAtual, ano, mes, modoVisualizacao]);
 
   const carregarDados = async () => {
     setLoading(true);
@@ -141,6 +196,10 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
       // Buscar KPIs via RPC parametrizada (funciona para qualquer período)
       const rpcParams: Record<string, any> = { p_ano: anoFiltro, p_mes: mesFiltro };
       if (unidadeAtual !== 'todos') rpcParams.p_unidade_id = unidadeAtual;
+      if (modoVisualizacao === 'trimestre') {
+        rpcParams.p_data_inicio = trimestreInfo.dataInicio;
+        rpcParams.p_data_fim = trimestreInfo.dataFim;
+      }
 
       const { data: kpisRpc } = await supabase
         .rpc('get_kpis_professor_periodo', rpcParams);
@@ -749,16 +808,76 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
               </SelectContent>
             </Select>
             
-            <Select value={String(mes)} onValueChange={(v) => competenciaFiltro.setMes(Number(v))}>
-              <SelectTrigger className="w-[120px]">
-                <SelectValue placeholder="Mês" />
-              </SelectTrigger>
-              <SelectContent>
-                {competenciaFiltro.MESES_CURTO.map((m, i) => (
-                  <SelectItem key={i + 1} value={String(i + 1)}>{m}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {modoVisualizacao === 'mensal' ? (
+              <Select value={String(mes)} onValueChange={(v) => competenciaFiltro.setMes(Number(v))}>
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue placeholder="Mês" />
+                </SelectTrigger>
+                <SelectContent>
+                  {competenciaFiltro.MESES_CURTO.map((m, i) => (
+                    <SelectItem key={i + 1} value={String(i + 1)}>{m}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Select
+                value={getTrimestreCodigo(mes)}
+                onValueChange={(v) => competenciaFiltro.setMes(TRIMESTRE_MES_REPRESENTATIVO[v as 'T1' | 'T2' | 'T3' | 'NC'])}
+              >
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="Trimestre" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="T1">T1 (Mar / Abr / Mai)</SelectItem>
+                  <SelectItem value="T2">T2 (Jun / Jul / Ago)</SelectItem>
+                  <SelectItem value="T3">T3 (Set / Out / Nov)</SelectItem>
+                  <SelectItem value="NC">Não Considerado (Dez / Jan / Fev)</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+
+            {/* Toggle Mensal / Trimestral */}
+            <Tooltip
+              side="top"
+              content={
+                <div className="text-xs max-w-[260px]">
+                  <p className="font-bold text-slate-200 mb-1">Visão Trimestral</p>
+                  <p className="text-slate-400 mb-1.5">
+                    Agrega 3 meses em trimestres operacionais para diluir distorções estatísticas em professores com poucas experimentais.
+                  </p>
+                  <ul className="text-slate-400 text-[11px] space-y-0.5">
+                    <li><span className="text-violet-400 font-medium">T1:</span> Mar / Abr / Mai</li>
+                    <li><span className="text-violet-400 font-medium">T2:</span> Jun / Jul / Ago</li>
+                    <li><span className="text-violet-400 font-medium">T3:</span> Set / Out / Nov</li>
+                    <li><span className="text-slate-500 font-medium">Não Considerado:</span> Dez / Jan / Fev</li>
+                  </ul>
+                </div>
+              }
+            >
+              <div className="bg-slate-800/50 p-1 rounded-lg inline-flex gap-1 border border-slate-700">
+                <button
+                  onClick={() => setModoVisualizacao('mensal')}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                    modoVisualizacao === 'mensal'
+                      ? 'bg-violet-600 text-white'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+                  }`}
+                >
+                  Mensal
+                </button>
+                <button
+                  onClick={() => setModoVisualizacao('trimestre')}
+                  className={`px-3 py-1 rounded-md text-xs font-medium transition-all flex items-center gap-1 ${
+                    modoVisualizacao === 'trimestre'
+                      ? 'bg-violet-600 text-white'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+                  }`}
+                >
+                  <Calendar className="w-3 h-3" />
+                  Trimestral
+                </button>
+              </div>
+            </Tooltip>
           </div>
 
           {/* Botão Relatório à direita */}
@@ -1007,7 +1126,10 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                           </div>
                         }
                       >
-                        <span className={`font-medium cursor-help ${getMetricaColor(professor.taxa_conversao, { critico: 70, atencao: 90 })}`}>
+                        <span
+                          className={`font-medium cursor-pointer hover:underline ${getMetricaColor(professor.taxa_conversao, { critico: 70, atencao: 90 })}`}
+                          onClick={(e) => { e.stopPropagation(); setModalConversao({ open: true, professorId: professor.id, professorNome: professor.nome }); }}
+                        >
                           {professor.taxa_conversao.toFixed(0)}%
                           {professor.matriculas_diretas > 0 && (
                             <span className="text-blue-400/70 text-[10px] ml-0.5">+{professor.matriculas_diretas}</span>
@@ -1220,6 +1342,9 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
         ano={parseInt(competencia.split('-')[0])}
         mes={parseInt(competencia.split('-')[1])}
         unidadeId={unidadeAtual}
+        dataInicio={modoVisualizacao === 'trimestre' ? trimestreInfo.dataInicio : undefined}
+        dataFim={modoVisualizacao === 'trimestre' ? trimestreInfo.dataFim : undefined}
+        periodoLabel={modoVisualizacao === 'trimestre' ? trimestreInfo.label : undefined}
       />
 
       <ModalDetalhesEvasoes
@@ -1230,6 +1355,9 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
         ano={parseInt(competencia.split('-')[0])}
         mes={parseInt(competencia.split('-')[1])}
         unidadeId={unidadeAtual}
+        dataInicio={modoVisualizacao === 'trimestre' ? trimestreInfo.dataInicio : undefined}
+        dataFim={modoVisualizacao === 'trimestre' ? trimestreInfo.dataFim : undefined}
+        periodoLabel={modoVisualizacao === 'trimestre' ? trimestreInfo.label : undefined}
       />
 
       <ModalDetalhesRetencao
@@ -1243,6 +1371,22 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
         taxaRetencao={modalRetencao.taxaRetencao}
         totalAlunos={modalRetencao.totalAlunos}
         evasoesMes={modalRetencao.evasoesMes}
+        dataInicio={modoVisualizacao === 'trimestre' ? trimestreInfo.dataInicio : undefined}
+        dataFim={modoVisualizacao === 'trimestre' ? trimestreInfo.dataFim : undefined}
+        periodoLabel={modoVisualizacao === 'trimestre' ? trimestreInfo.label : undefined}
+      />
+
+      <ModalDetalhesConversao
+        open={modalConversao.open}
+        onClose={() => setModalConversao({ open: false, professorId: null, professorNome: '' })}
+        professorId={modalConversao.professorId}
+        professorNome={modalConversao.professorNome}
+        ano={parseInt(competencia.split('-')[0])}
+        mes={parseInt(competencia.split('-')[1])}
+        unidadeId={unidadeAtual}
+        dataInicio={modoVisualizacao === 'trimestre' ? trimestreInfo.dataInicio : undefined}
+        dataFim={modoVisualizacao === 'trimestre' ? trimestreInfo.dataFim : undefined}
+        periodoLabel={modoVisualizacao === 'trimestre' ? trimestreInfo.label : undefined}
       />
 
       <ModalDetalhesTurmas

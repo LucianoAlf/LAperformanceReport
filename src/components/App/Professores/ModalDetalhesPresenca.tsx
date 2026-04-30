@@ -24,11 +24,14 @@ interface Props {
   ano: number;
   mes: number;
   unidadeId: string;
+  dataInicio?: string;
+  dataFim?: string;
+  periodoLabel?: string;
 }
 
 const POR_PAGINA = 15;
 
-export function ModalDetalhesPresenca({ open, onClose, professorId, professorNome, ano, mes, unidadeId }: Props) {
+export function ModalDetalhesPresenca({ open, onClose, professorId, professorNome, ano, mes, unidadeId, dataInicio, dataFim, periodoLabel }: Props) {
   const [dados, setDados] = useState<AlunoPresenca[]>([]);
   const [loading, setLoading] = useState(false);
   const [busca, setBusca] = useState('');
@@ -46,9 +49,9 @@ export function ModalDetalhesPresenca({ open, onClose, professorId, professorNom
       setOrdenacao('presenca_asc');
       setPagina(1);
       try {
-        const inicio = `${ano}-${String(mes).padStart(2, '0')}-01`;
+        const inicio = dataInicio ?? `${ano}-${String(mes).padStart(2, '0')}-01`;
         const ultimoDia = new Date(ano, mes, 0).getDate();
-        const fim = `${ano}-${String(mes).padStart(2, '0')}-${ultimoDia}`;
+        const fim = dataFim ?? `${ano}-${String(mes).padStart(2, '0')}-${ultimoDia}`;
 
         let query = supabase.rpc('get_presenca_por_aluno_professor', {
           p_professor_id: professorId,
@@ -116,7 +119,7 @@ export function ModalDetalhesPresenca({ open, onClose, professorId, professorNom
     };
 
     fetchPresenca();
-  }, [open, professorId, ano, mes, unidadeId]);
+  }, [open, professorId, ano, mes, unidadeId, dataInicio, dataFim]);
 
   // Filtrar e ordenar
   const dadosFiltrados = useMemo(() => {
@@ -158,6 +161,7 @@ export function ModalDetalhesPresenca({ open, onClose, professorId, professorNom
   const mediaGeral = totalGeral > 0 ? Math.round((presencasGeral / totalGeral) * 1000) / 10 : 0;
 
   const mesNome = new Date(ano, mes - 1).toLocaleString('pt-BR', { month: 'long' });
+  const labelPeriodo = periodoLabel ?? `${mesNome} ${ano}`;
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -166,7 +170,7 @@ export function ModalDetalhesPresenca({ open, onClose, professorId, professorNom
           <DialogTitle className="text-white">
             Presenca — {professorNome}
           </DialogTitle>
-          <p className="text-sm text-slate-400 capitalize">{mesNome} {ano}</p>
+          <p className="text-sm text-slate-400 capitalize">{labelPeriodo}</p>
         </DialogHeader>
 
         {loading ? (

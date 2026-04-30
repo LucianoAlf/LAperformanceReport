@@ -28,6 +28,9 @@ interface Props {
   ano: number;
   mes: number;
   unidadeId: string;
+  dataInicio?: string;
+  dataFim?: string;
+  periodoLabel?: string;
 }
 
 const TIPO_EVASAO_LABELS: Record<string, string> = {
@@ -41,7 +44,7 @@ const TIPO_EVASAO_LABELS: Record<string, string> = {
 
 const POR_PAGINA = 15;
 
-export function ModalDetalhesEvasoes({ open, onClose, professorId, professorNome, ano, mes, unidadeId }: Props) {
+export function ModalDetalhesEvasoes({ open, onClose, professorId, professorNome, ano, mes, unidadeId, dataInicio, dataFim, periodoLabel }: Props) {
   const [dados, setDados] = useState<EvasaoDetalhe[]>([]);
   const [loading, setLoading] = useState(false);
   const [busca, setBusca] = useState('');
@@ -59,9 +62,9 @@ export function ModalDetalhesEvasoes({ open, onClose, professorId, professorNome
       setFiltroScore('todos');
       setPagina(1);
       try {
-        const inicio = `${ano}-${String(mes).padStart(2, '0')}-01`;
+        const inicio = dataInicio ?? `${ano}-${String(mes).padStart(2, '0')}-01`;
         const ultimoDia = new Date(ano, mes, 0).getDate();
-        const fim = `${ano}-${String(mes).padStart(2, '0')}-${ultimoDia}`;
+        const fim = dataFim ?? `${ano}-${String(mes).padStart(2, '0')}-${ultimoDia}`;
 
         let q = supabase
           .from('movimentacoes_admin')
@@ -125,7 +128,7 @@ export function ModalDetalhesEvasoes({ open, onClose, professorId, professorNome
     };
 
     fetchEvasoes();
-  }, [open, professorId, ano, mes, unidadeId]);
+  }, [open, professorId, ano, mes, unidadeId, dataInicio, dataFim]);
 
   const dadosFiltrados = useMemo(() => {
     let resultado = [...dados];
@@ -155,6 +158,7 @@ export function ModalDetalhesEvasoes({ open, onClose, professorId, professorNome
   const mrrPerdidoTotal = dados.reduce((acc, d) => acc + d.mrr_perdido, 0);
 
   const mesNome = new Date(ano, mes - 1).toLocaleString('pt-BR', { month: 'long' });
+  const labelPeriodo = periodoLabel ?? `${mesNome} ${ano}`;
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -163,7 +167,7 @@ export function ModalDetalhesEvasoes({ open, onClose, professorId, professorNome
           <DialogTitle className="text-white">
             Evasoes — {professorNome}
           </DialogTitle>
-          <p className="text-sm text-slate-400 capitalize">{mesNome} {ano}</p>
+          <p className="text-sm text-slate-400 capitalize">{labelPeriodo}</p>
         </DialogHeader>
 
         {loading ? (

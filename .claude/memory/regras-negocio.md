@@ -62,6 +62,23 @@ Definidas em `ComercialPage.tsx` (~linha 764):
 - Risco por professor: critico >= 15, alto >= 10, medio >= 5, normal < 5
 - Tabela `motivos_saida` com id, nome, categoria, ativo, `conta_score_professor`
 
+## Taxa de Conversao do Professor (>100% Possivel)
+
+A formula `taxa_conversao = matriculas_pos_exp / experimentais * 100` pode passar de 100% por uma assimetria de criterios entre numerador e denominador na RPC `get_kpis_professor_periodo`:
+
+- **Denominador (`experimentais`)**: exige `experimental_realizada = true`
+- **Numerador (`matriculas_pos_exp`)**: aceita `experimental_realizada = true` **OU** `(converteu = true AND faltou_experimental IS NOT TRUE)`
+
+**Caso ambiguo** (lead aparece no numerador mas nao no denominador): lead com `data_experimental` no periodo, `experimental_realizada = false`, `faltou_experimental = false`, `status IN ('matriculado', 'convertido')`. Isso ocorre quando:
+- Lead matricula antes da experimental acontecer
+- Operador esquece de marcar `experimental_realizada = true` no Emusys
+
+Exemplo real: Willian/T1 2026 → 200% de conversao (Carlos Yan matriculou em 15/04 mas a experimental marcada para 16/04 ficou com `experimental_realizada = false`).
+
+**Ferramenta de diagnostico**: `ModalDetalhesConversao` na coluna Conversao da `TabPerformanceProfessores`. Lista todos os leads, classifica em 6 categorias e destaca os "ambiguos" (badge ambar). Permite identificar quais leads precisam ser corrigidos no Emusys ou se a formula da RPC precisa ser ajustada para usar criterios simetricos.
+
+**TODO** (decisao pendente): definir se a fix e operacional (corrigir registros no Emusys) ou de formula (RPC alinhar criterios — `matriculas_pos_exp` exigir tambem `experimental_realizada = true`, com leads "matriculou sem realizar" caindo em `matriculas_diretas`).
+
 ## Score do Professor — Motivos de Evasao
 - Campo `conta_score_professor` (bool) em `motivos_saida` controla se o motivo penaliza o professor no score
 - Gerenciado em `MotivosScoreConfig.tsx` (Performance > Professores) via toggles

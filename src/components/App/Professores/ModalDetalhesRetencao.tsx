@@ -33,11 +33,14 @@ interface Props {
   taxaRetencao: number;
   totalAlunos: number;
   evasoesMes: number;
+  dataInicio?: string;
+  dataFim?: string;
+  periodoLabel?: string;
 }
 
 const POR_PAGINA = 15;
 
-export function ModalDetalhesRetencao({ open, onClose, professorId, professorNome, ano, mes, unidadeId, taxaRetencao, totalAlunos, evasoesMes }: Props) {
+export function ModalDetalhesRetencao({ open, onClose, professorId, professorNome, ano, mes, unidadeId, taxaRetencao, totalAlunos, evasoesMes, dataInicio, dataFim, periodoLabel }: Props) {
   const [dados, setDados] = useState<MovimentacaoRetencao[]>([]);
   const [loading, setLoading] = useState(false);
   const [busca, setBusca] = useState('');
@@ -55,9 +58,9 @@ export function ModalDetalhesRetencao({ open, onClose, professorId, professorNom
       setFiltroScore('todos');
       setPagina(1);
       try {
-        const inicio = `${ano}-${String(mes).padStart(2, '0')}-01`;
+        const inicio = dataInicio ?? `${ano}-${String(mes).padStart(2, '0')}-01`;
         const ultimoDia = new Date(ano, mes, 0).getDate();
-        const fim = `${ano}-${String(mes).padStart(2, '0')}-${ultimoDia}`;
+        const fim = dataFim ?? `${ano}-${String(mes).padStart(2, '0')}-${ultimoDia}`;
 
         let q = supabase
           .from('movimentacoes_admin')
@@ -116,7 +119,7 @@ export function ModalDetalhesRetencao({ open, onClose, professorId, professorNom
     };
 
     fetchDados();
-  }, [open, professorId, ano, mes, unidadeId]);
+  }, [open, professorId, ano, mes, unidadeId, dataInicio, dataFim]);
 
   const dadosFiltrados = useMemo(() => {
     let resultado = [...dados];
@@ -147,6 +150,7 @@ export function ModalDetalhesRetencao({ open, onClose, professorId, professorNom
   const totalContamScore = dados.filter(d => d.conta_score).length;
 
   const mesNome = new Date(ano, mes - 1).toLocaleString('pt-BR', { month: 'long' });
+  const labelPeriodo = periodoLabel ?? `${mesNome} ${ano}`;
 
   const getTipoBadge = (tipo: string, tipoEvasao?: string | null) => {
     switch (tipo) {
@@ -164,7 +168,7 @@ export function ModalDetalhesRetencao({ open, onClose, professorId, professorNom
           <DialogTitle className="text-white">
             Retencao — {professorNome}
           </DialogTitle>
-          <p className="text-sm text-slate-400 capitalize">{mesNome} {ano}</p>
+          <p className="text-sm text-slate-400 capitalize">{labelPeriodo}</p>
         </DialogHeader>
 
         {loading ? (
