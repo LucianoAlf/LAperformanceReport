@@ -674,27 +674,55 @@ export function DashboardPage() {
         });
 
         // ===== EVOLUÇÃO DE ALUNOS (12 meses) =====
+        // Histórico vem de dados_mensais; mês corrente vem de vw_dashboard_unidade (tempo real)
         // IMPORTANTE: Filtrar por unidade se não for consolidado
+        const hojeAno = new Date().getFullYear();
+        const hojeMes = new Date().getMonth() + 1;
+
         let evolucaoQuery = supabase
           .from('dados_mensais')
           .select('ano, mes, alunos_pagantes, unidade_id')
           .gte('ano', ano - 1)
           .order('ano', { ascending: true })
           .order('mes', { ascending: true });
-        
+
         if (unidade !== 'todos') {
           evolucaoQuery = evolucaoQuery.eq('unidade_id', unidade);
         }
-        
-        const { data: evolucaoData } = await evolucaoQuery;
+
+        let realtimeAtualQuery = supabase
+          .from('vw_dashboard_unidade')
+          .select('alunos_pagantes, unidade_id');
+
+        if (unidade !== 'todos') {
+          realtimeAtualQuery = realtimeAtualQuery.eq('unidade_id', unidade);
+        }
+
+        const [{ data: evolucaoData }, { data: realtimeAtualData }] = await Promise.all([
+          evolucaoQuery,
+          realtimeAtualQuery,
+        ]);
+
+        const pagantesAtual = (realtimeAtualData || []).reduce(
+          (acc: number, d: any) => acc + (Number(d.alunos_pagantes) || 0),
+          0
+        );
 
         if (evolucaoData) {
           const mesesNomes = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-          const agrupado = evolucaoData.reduce((acc: Record<string, number>, d: any) => {
+          // Excluir mês corrente do histórico — será sobrescrito pelo valor em tempo real
+          const dadosHistoricos = evolucaoData.filter(
+            (d: any) => !(d.ano === hojeAno && d.mes === hojeMes)
+          );
+
+          const agrupado = dadosHistoricos.reduce((acc: Record<string, number>, d: any) => {
             const key = `${mesesNomes[d.mes - 1]}/${String(d.ano).slice(-2)}`;
             acc[key] = (acc[key] || 0) + (d.alunos_pagantes || 0);
             return acc;
           }, {});
+
+          const keyAtual = `${mesesNomes[hojeMes - 1]}/${String(hojeAno).slice(-2)}`;
+          agrupado[keyAtual] = pagantesAtual;
 
           const evolucao = Object.entries(agrupado)
             .slice(-12)

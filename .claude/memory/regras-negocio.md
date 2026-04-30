@@ -60,7 +60,15 @@ Definidas em `ComercialPage.tsx` (~linha 764):
 - Tipos: `interrompido` (4 subtipos: padrao, bolsista, banda, 2o_curso) ou `transferencia`
 - Formula churn: evasoes / (alunos_inicio + novas_matriculas) x 100
 - Risco por professor: critico >= 15, alto >= 10, medio >= 5, normal < 5
-- Tabela `motivos_saida` com id, nome, categoria, ativo
+- Tabela `motivos_saida` com id, nome, categoria, ativo, `conta_score_professor`
+
+## Score do Professor — Motivos de Evasao
+- Campo `conta_score_professor` (bool) em `motivos_saida` controla se o motivo penaliza o professor no score
+- Gerenciado em `MotivosScoreConfig.tsx` (Performance > Professores) via toggles
+- Criacao/exclusao de motivos em `ConfigPage.tsx` aba "Motivos de Saida"
+- **RPC `get_kpis_professor_periodo`**: filtra evasoes por `ms.conta_score_professor = true`. Lookup por FK (`motivo_saida_id`) ou fallback ILIKE em `motivo` (texto). **Motivo NULL sem match = NAO conta** (regra alterada — antes contava por padrao)
+- **Edge function `processar-matricula-emusys`**: ao criar evasao/nao_renovacao, faz ILIKE em `motivos_saida` para popular `motivo_saida_id` automaticamente no insert
+- **Modais `ModalDetalhesEvasoes` e `ModalDetalhesRetencao`**: coluna "Score" (Conta/Nao conta), card "Contam no Score", filtro por score, indicadores `vinc. por texto` (match por nome) e `sem vinculo` (sem match algum)
 
 ## Aviso Previo
 - `mes_saida` = dropdown de 6 meses a partir do mes seguinte ao aviso

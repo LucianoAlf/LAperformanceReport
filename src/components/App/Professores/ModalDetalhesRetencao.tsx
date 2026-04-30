@@ -1,12 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { supabase } from '@/lib/supabase';
-import { Loader2, Search, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Loader2, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Tooltip } from '@/components/ui/Tooltip';
 
 interface MovimentacaoRetencao {
   id: number;
@@ -19,6 +18,8 @@ interface MovimentacaoRetencao {
   valor_parcela_anterior: number | null;
   valor_parcela_novo: number | null;
   agente_comercial: string | null;
+  conta_score: boolean;
+  match_por_texto: boolean;
 }
 
 interface Props {
@@ -41,6 +42,7 @@ export function ModalDetalhesRetencao({ open, onClose, professorId, professorNom
   const [loading, setLoading] = useState(false);
   const [busca, setBusca] = useState('');
   const [filtroTipo, setFiltroTipo] = useState<string>('todos');
+  const [filtroScore, setFiltroScore] = useState<string>('todos');
   const [pagina, setPagina] = useState(1);
 
   useEffect(() => {
@@ -50,6 +52,7 @@ export function ModalDetalhesRetencao({ open, onClose, professorId, professorNom
       setLoading(true);
       setBusca('');
       setFiltroTipo('todos');
+      setFiltroScore('todos');
       setPagina(1);
       try {
         const inicio = `${ano}-${String(mes).padStart(2, '0')}-01`;
@@ -69,8 +72,42 @@ export function ModalDetalhesRetencao({ open, onClose, professorId, professorNom
           q = q.eq('unidade_id', unidadeId);
         }
 
-        const { data: rawData } = await q;
-        setDados((rawData || []) as MovimentacaoRetencao[]);
+        const [{ data: rawData }, { data: motivosData }] = await Promise.all([
+          q,
+          supabase.from('motivos_saida').select('id, nome, conta_score_professor').eq('ativo', true),
+        ]);
+
+        const porId = new Map<number, boolean>();
+        const porNome = new Map<string, boolean>();
+        (motivosData || []).forEach((m: any) => {
+          porId.set(m.id, m.conta_score_professor);
+          porNome.set(m.nome.toLowerCase(), m.conta_score_professor);
+        });
+
+        const resultado: MovimentacaoRetencao[] = (rawData || []).map((m: any) => {
+          let conta_score = false;
+          let match_por_texto = false;
+
+          if (m.tipo !== 'renovacao') {
+            if (m.motivo_saida_id != null) {
+              conta_score = porId.get(m.motivo_saida_id) ?? false;
+            } else if (m.motivo) {
+              const val = porNome.get(m.motivo.toLowerCase());
+              if (val !== undefined) {
+                conta_score = val;
+                match_por_texto = true;
+              }
+            }
+          }
+
+          return {
+            ...m,
+            conta_score,
+            match_por_texto,
+          };
+        });
+
+        setDados(resultado);
       } catch (err) {
         console.error('Erro ao buscar retencao:', err);
       } finally {
@@ -93,17 +130,21 @@ export function ModalDetalhesRetencao({ open, onClose, professorId, professorNom
       resultado = resultado.filter(d => d.tipo === filtroTipo);
     }
 
+    if (filtroScore === 'conta') resultado = resultado.filter(d => d.conta_score);
+    else if (filtroScore === 'nao_conta') resultado = resultado.filter(d => d.tipo !== 'renovacao' && !d.conta_score);
+
     return resultado;
-  }, [dados, busca, filtroTipo]);
+  }, [dados, busca, filtroTipo, filtroScore]);
 
   const totalPaginas = Math.max(1, Math.ceil(dadosFiltrados.length / POR_PAGINA));
   const dadosPaginados = dadosFiltrados.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
 
-  useEffect(() => { setPagina(1); }, [busca, filtroTipo]);
+  useEffect(() => { setPagina(1); }, [busca, filtroTipo, filtroScore]);
 
   const totalRenovacoes = dados.filter(d => d.tipo === 'renovacao').length;
   const totalNaoRenovacoes = dados.filter(d => d.tipo === 'nao_renovacao').length;
   const totalEvasoes = dados.filter(d => d.tipo === 'evasao').length;
+  const totalContamScore = dados.filter(d => d.conta_score).length;
 
   const mesNome = new Date(ano, mes - 1).toLocaleString('pt-BR', { month: 'long' });
 
@@ -133,7 +174,7 @@ export function ModalDetalhesRetencao({ open, onClose, professorId, professorNom
         ) : (
           <>
             {/* Resumo */}
-            <div className="grid grid-cols-4 gap-3 mb-4">
+            <div className="grid grid-cols-5 gap-2 mb-4">
               <div className="bg-slate-800/50 rounded-lg p-3 text-center">
                 <p className="text-xs text-slate-400">Carteira</p>
                 <p className="text-lg font-bold text-white">{totalAlunos}</p>
@@ -150,11 +191,15 @@ export function ModalDetalhesRetencao({ open, onClose, professorId, professorNom
                 <p className="text-xs text-slate-400">Evasoes</p>
                 <p className="text-lg font-bold text-rose-400">{totalEvasoes}</p>
               </div>
+              <div className="bg-violet-500/10 rounded-lg p-3 text-center border border-violet-500/20">
+                <p className="text-xs text-slate-400">No Score</p>
+                <p className="text-lg font-bold text-violet-400">{totalContamScore}</p>
+              </div>
             </div>
 
             {/* Calculo */}
             <div className="flex items-center justify-between px-3 py-2 bg-slate-800/30 rounded-lg mb-3">
-              <div className="text-xs text-slate-400 space-y-0.5">
+              <div className="text-xs text-slate-400">
                 <p>Evasoes: {evasoesMes} | Taxa canc.: {totalAlunos > 0 ? ((evasoesMes / totalAlunos) * 100).toFixed(1) : '0'}%</p>
               </div>
               <div className="text-right">
@@ -179,14 +224,24 @@ export function ModalDetalhesRetencao({ open, onClose, professorId, professorNom
                 />
               </div>
               <Select value={filtroTipo} onValueChange={v => setFiltroTipo(v)}>
-                <SelectTrigger className="w-[150px] h-8 text-xs bg-slate-800/50 border-slate-700">
+                <SelectTrigger className="w-[135px] h-8 text-xs bg-slate-800/50 border-slate-700">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="todos">Todos</SelectItem>
+                  <SelectItem value="todos">Todos os tipos</SelectItem>
                   <SelectItem value="renovacao">Renovacoes</SelectItem>
                   <SelectItem value="nao_renovacao">Nao Renovacoes</SelectItem>
                   <SelectItem value="evasao">Evasoes</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={filtroScore} onValueChange={v => setFiltroScore(v)}>
+                <SelectTrigger className="w-[125px] h-8 text-xs bg-slate-800/50 border-slate-700">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Score: todos</SelectItem>
+                  <SelectItem value="conta">Contam</SelectItem>
+                  <SelectItem value="nao_conta">Nao contam</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -204,6 +259,7 @@ export function ModalDetalhesRetencao({ open, onClose, professorId, professorNom
                       <th className="text-left py-2 px-2">Aluno</th>
                       <th className="text-center py-2 px-2">Status</th>
                       <th className="text-left py-2 px-2">Motivo</th>
+                      <th className="text-center py-2 px-2">Score</th>
                       <th className="text-center py-2 px-2">Data</th>
                       <th className="text-right py-2 px-2">Reajuste</th>
                     </tr>
@@ -217,23 +273,41 @@ export function ModalDetalhesRetencao({ open, onClose, professorId, professorNom
 
                       return (
                         <tr key={d.id} className="border-b border-slate-800/50 hover:bg-slate-800/30">
-                          <td className="py-2 px-2 text-white">{d.aluno_nome}</td>
+                          <td className="py-2 px-2 text-white text-xs">{d.aluno_nome}</td>
                           <td className="py-2 px-2 text-center">
-                            <span className={cn('text-xs px-2 py-0.5 rounded-full', badge.bg)}>
+                            <span className={cn('text-xs px-2 py-0.5 rounded-full whitespace-nowrap', badge.bg)}>
                               {badge.label}
                             </span>
                           </td>
-                          <td className="py-2 px-2 text-xs max-w-[140px]">
-                            <div className="flex items-center gap-1">
-                              {d.tipo !== 'renovacao' && !d.motivo_saida_id && d.motivo && (
-                                <Tooltip content="Motivo nao vinculado — conta no score por padrao" side="top">
-                                  <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0 cursor-help" />
-                                </Tooltip>
-                              )}
-                              <span className="text-slate-400 truncate" title={d.motivo || ''}>
-                                {d.motivo || '-'}
+                          <td className="py-2 px-2 text-xs max-w-[120px]">
+                            {d.tipo === 'renovacao' ? (
+                              <span className="text-slate-600 italic">-</span>
+                            ) : (
+                              <div className="flex flex-col gap-0.5">
+                                <span className="text-slate-400 truncate" title={d.motivo || ''}>
+                                  {d.motivo || <span className="text-slate-600 italic">sem motivo</span>}
+                                </span>
+                                {d.match_por_texto && (
+                                  <span className="text-slate-600 text-[10px]">vinc. por texto</span>
+                                )}
+                                {!d.motivo_saida_id && !d.match_por_texto && d.motivo && (
+                                  <span className="text-slate-600 text-[10px]">sem vinculo</span>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                          <td className="py-2 px-2 text-center">
+                            {d.tipo === 'renovacao' ? (
+                              <span className="text-slate-600 text-xs">-</span>
+                            ) : d.conta_score ? (
+                              <span className="text-xs px-1.5 py-0.5 rounded-full bg-rose-500/20 text-rose-400 font-medium whitespace-nowrap">
+                                Conta
                               </span>
-                            </div>
+                            ) : (
+                              <span className="text-xs px-1.5 py-0.5 rounded-full bg-slate-700/50 text-slate-500 whitespace-nowrap">
+                                Nao conta
+                              </span>
+                            )}
                           </td>
                           <td className="py-2 px-2 text-center text-slate-300 text-xs">
                             {new Date(d.data + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
@@ -256,7 +330,7 @@ export function ModalDetalhesRetencao({ open, onClose, professorId, professorNom
                     })}
                     {dadosPaginados.length === 0 && (
                       <tr>
-                        <td colSpan={5} className="py-6 text-center text-slate-500 text-xs">
+                        <td colSpan={6} className="py-6 text-center text-slate-500 text-xs">
                           Nenhuma movimentacao encontrada com os filtros atuais
                         </td>
                       </tr>

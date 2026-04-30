@@ -53,8 +53,9 @@ Path alias: `@/` = `./src/`
 
 - PostgreSQL via Supabase
 - Tabelas principais: `unidades`, `alunos`, `leads`, `matriculas`, `renovacoes`, `evasoes`, `professores`, `turmas`, `cursos`, `dados_mensais`, `metas`
-- RPC functions para queries complexas (ex: `get_kpis_consolidados`)
+- RPC functions para queries complexas (ex: `get_kpis_consolidados`, `get_kpis_professor_periodo`)
 - Tipos gerados: `src/types/database.types.ts`
+- `motivos_saida`: tabela com campo `conta_score_professor` (bool) — controla quais motivos penalizam o professor no score. NULL sem match = não conta.
 
 ## Integrações
 
@@ -69,6 +70,17 @@ VITE_SUPABASE_URL=...
 VITE_SUPABASE_ANON_KEY=...
 VITE_GEMINI_API_KEY=...  # opcional
 ```
+
+## Módulo de Professores
+
+- **`TabPerformanceProfessores`**: tabela de KPIs por professor, dados via RPC `get_kpis_professor_periodo`
+- **`ModalDetalhesPresenca`**: detalhe de presença por aluno, com paginação, busca e filtro por faixa
+- **`ModalDetalhesEvasoes`**: detalhe de evasões com coluna "Score" (Conta/Não conta), lookup em `motivos_saida` por FK ou texto, filtro por score, card "Contam no Score"
+- **`ModalDetalhesRetencao`**: detalhe de renovações/não-renovações/evasões com mesma lógica de score que o modal de evasões
+- **`MotivosScoreConfig`**: gerencia quais motivos penalizam o professor (toggles de `conta_score_professor`)
+- **Score de evasões**: RPC filtra apenas `ms.conta_score_professor = true`. Motivo NULL sem match em `motivos_saida` = não conta (alterado de comportamento anterior onde NULL contava por padrão)
+- **Edge function `processar-matricula-emusys`**: ao registrar evasão/não-renovação, faz ILIKE em `motivos_saida` para popular `motivo_saida_id` automaticamente
+- **`is_projeto_banda`** em `cursos`: exclui curso de médias de turma, carteira e score do professor
 
 ## Regras Importantes
 

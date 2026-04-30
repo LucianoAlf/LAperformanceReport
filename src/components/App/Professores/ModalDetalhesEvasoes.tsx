@@ -1,12 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { supabase } from '@/lib/supabase';
-import { Loader2, Search, ChevronLeft, ChevronRight, AlertTriangle } from 'lucide-react';
+import { Loader2, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Tooltip } from '@/components/ui/Tooltip';
 
 interface EvasaoDetalhe {
   id: number;
@@ -17,6 +16,8 @@ interface EvasaoDetalhe {
   motivo_saida_id: number | null;
   data: string;
   mrr_perdido: number;
+  conta_score: boolean;
+  match_por_texto: boolean;
 }
 
 interface Props {
@@ -45,6 +46,7 @@ export function ModalDetalhesEvasoes({ open, onClose, professorId, professorNome
   const [loading, setLoading] = useState(false);
   const [busca, setBusca] = useState('');
   const [filtroTipo, setFiltroTipo] = useState<string>('todos');
+  const [filtroScore, setFiltroScore] = useState<string>('todos');
   const [pagina, setPagina] = useState(1);
 
   useEffect(() => {
@@ -54,6 +56,7 @@ export function ModalDetalhesEvasoes({ open, onClose, professorId, professorNome
       setLoading(true);
       setBusca('');
       setFiltroTipo('todos');
+      setFiltroScore('todos');
       setPagina(1);
       try {
         const inicio = `${ano}-${String(mes).padStart(2, '0')}-01`;
@@ -73,18 +76,45 @@ export function ModalDetalhesEvasoes({ open, onClose, professorId, professorNome
           q = q.eq('unidade_id', unidadeId);
         }
 
-        const { data: rawData } = await q;
+        const [{ data: rawData }, { data: motivosData }] = await Promise.all([
+          q,
+          supabase.from('motivos_saida').select('id, nome, conta_score_professor').eq('ativo', true),
+        ]);
 
-        const resultado: EvasaoDetalhe[] = (rawData || []).map((m: any) => ({
-          id: m.id,
-          aluno_nome: m.aluno_nome || 'Sem nome',
-          tipo: m.tipo,
-          tipo_evasao: m.tipo_evasao,
-          motivo: m.motivo,
-          motivo_saida_id: m.motivo_saida_id,
-          data: m.data,
-          mrr_perdido: Number(m.valor_parcela_evasao || m.valor_parcela_anterior || 0),
-        }));
+        const porId = new Map<number, boolean>();
+        const porNome = new Map<string, boolean>();
+        (motivosData || []).forEach((m: any) => {
+          porId.set(m.id, m.conta_score_professor);
+          porNome.set(m.nome.toLowerCase(), m.conta_score_professor);
+        });
+
+        const resultado: EvasaoDetalhe[] = (rawData || []).map((m: any) => {
+          let conta_score = false;
+          let match_por_texto = false;
+
+          if (m.motivo_saida_id != null) {
+            conta_score = porId.get(m.motivo_saida_id) ?? false;
+          } else if (m.motivo) {
+            const val = porNome.get(m.motivo.toLowerCase());
+            if (val !== undefined) {
+              conta_score = val;
+              match_por_texto = true;
+            }
+          }
+
+          return {
+            id: m.id,
+            aluno_nome: m.aluno_nome || 'Sem nome',
+            tipo: m.tipo,
+            tipo_evasao: m.tipo_evasao,
+            motivo: m.motivo,
+            motivo_saida_id: m.motivo_saida_id,
+            data: m.data,
+            mrr_perdido: Number(m.valor_parcela_evasao || m.valor_parcela_anterior || 0),
+            conta_score,
+            match_por_texto,
+          };
+        });
 
         setDados(resultado);
       } catch (err) {
@@ -105,21 +135,23 @@ export function ModalDetalhesEvasoes({ open, onClose, professorId, professorNome
       resultado = resultado.filter(d => d.aluno_nome.toLowerCase().includes(termo));
     }
 
-    if (filtroTipo !== 'todos') {
-      if (filtroTipo === 'evasao') resultado = resultado.filter(d => d.tipo === 'evasao');
-      else if (filtroTipo === 'nao_renovacao') resultado = resultado.filter(d => d.tipo === 'nao_renovacao');
-    }
+    if (filtroTipo === 'evasao') resultado = resultado.filter(d => d.tipo === 'evasao');
+    else if (filtroTipo === 'nao_renovacao') resultado = resultado.filter(d => d.tipo === 'nao_renovacao');
+
+    if (filtroScore === 'conta') resultado = resultado.filter(d => d.conta_score);
+    else if (filtroScore === 'nao_conta') resultado = resultado.filter(d => !d.conta_score);
 
     return resultado;
-  }, [dados, busca, filtroTipo]);
+  }, [dados, busca, filtroTipo, filtroScore]);
 
   const totalPaginas = Math.max(1, Math.ceil(dadosFiltrados.length / POR_PAGINA));
   const dadosPaginados = dadosFiltrados.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
 
-  useEffect(() => { setPagina(1); }, [busca, filtroTipo]);
+  useEffect(() => { setPagina(1); }, [busca, filtroTipo, filtroScore]);
 
   const totalCancelamentos = dados.filter(d => d.tipo === 'evasao').length;
   const totalNaoRenovacoes = dados.filter(d => d.tipo === 'nao_renovacao').length;
+  const totalContamScore = dados.filter(d => d.conta_score).length;
   const mrrPerdidoTotal = dados.reduce((acc, d) => acc + d.mrr_perdido, 0);
 
   const mesNome = new Date(ano, mes - 1).toLocaleString('pt-BR', { month: 'long' });
@@ -145,7 +177,7 @@ export function ModalDetalhesEvasoes({ open, onClose, professorId, professorNome
         ) : (
           <>
             {/* Resumo */}
-            <div className="grid grid-cols-3 gap-3 mb-4">
+            <div className="grid grid-cols-4 gap-2 mb-4">
               <div className="bg-rose-500/10 rounded-lg p-3 text-center border border-rose-500/20">
                 <p className="text-xs text-slate-400">Cancelamentos</p>
                 <p className="text-lg font-bold text-rose-400">{totalCancelamentos}</p>
@@ -156,9 +188,13 @@ export function ModalDetalhesEvasoes({ open, onClose, professorId, professorNome
               </div>
               <div className="bg-slate-800/50 rounded-lg p-3 text-center">
                 <p className="text-xs text-slate-400">MRR Perdido</p>
-                <p className="text-lg font-bold text-rose-400">
+                <p className="text-sm font-bold text-rose-400">
                   {mrrPerdidoTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                 </p>
+              </div>
+              <div className="bg-violet-500/10 rounded-lg p-3 text-center border border-violet-500/20">
+                <p className="text-xs text-slate-400">Contam no Score</p>
+                <p className="text-lg font-bold text-violet-400">{totalContamScore}</p>
               </div>
             </div>
 
@@ -174,13 +210,23 @@ export function ModalDetalhesEvasoes({ open, onClose, professorId, professorNome
                 />
               </div>
               <Select value={filtroTipo} onValueChange={v => setFiltroTipo(v)}>
-                <SelectTrigger className="w-[160px] h-8 text-xs bg-slate-800/50 border-slate-700">
+                <SelectTrigger className="w-[135px] h-8 text-xs bg-slate-800/50 border-slate-700">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="todos">Todos</SelectItem>
+                  <SelectItem value="todos">Todos os tipos</SelectItem>
                   <SelectItem value="evasao">Cancelamentos</SelectItem>
                   <SelectItem value="nao_renovacao">Nao Renovacoes</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={filtroScore} onValueChange={v => setFiltroScore(v)}>
+                <SelectTrigger className="w-[125px] h-8 text-xs bg-slate-800/50 border-slate-700">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Score: todos</SelectItem>
+                  <SelectItem value="conta">Contam</SelectItem>
+                  <SelectItem value="nao_conta">Nao contam</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -192,6 +238,7 @@ export function ModalDetalhesEvasoes({ open, onClose, professorId, professorNome
                   <th className="text-left py-2 px-2">Aluno</th>
                   <th className="text-center py-2 px-2">Tipo</th>
                   <th className="text-left py-2 px-2">Motivo</th>
+                  <th className="text-center py-2 px-2">Score</th>
                   <th className="text-center py-2 px-2">Data</th>
                   <th className="text-right py-2 px-2">MRR</th>
                 </tr>
@@ -199,7 +246,7 @@ export function ModalDetalhesEvasoes({ open, onClose, professorId, professorNome
               <tbody>
                 {dadosPaginados.map(d => (
                   <tr key={d.id} className="border-b border-slate-800/50 hover:bg-slate-800/30">
-                    <td className="py-2 px-2 text-white">{d.aluno_nome}</td>
+                    <td className="py-2 px-2 text-white text-xs">{d.aluno_nome}</td>
                     <td className="py-2 px-2 text-center">
                       <span className={cn('text-xs px-2 py-0.5 rounded-full',
                         d.tipo === 'evasao' ? 'bg-rose-500/20 text-rose-400' : 'bg-amber-500/20 text-amber-400'
@@ -207,17 +254,29 @@ export function ModalDetalhesEvasoes({ open, onClose, professorId, professorNome
                         {d.tipo_evasao ? (TIPO_EVASAO_LABELS[d.tipo_evasao] || d.tipo_evasao) : (d.tipo === 'evasao' ? 'Cancelamento' : 'Nao Renovou')}
                       </span>
                     </td>
-                    <td className="py-2 px-2 text-xs max-w-[150px]">
-                      <div className="flex items-center gap-1">
-                        {!d.motivo_saida_id && d.motivo && (
-                          <Tooltip content="Motivo nao vinculado — conta no score por padrao" side="top">
-                            <AlertTriangle className="w-3 h-3 text-amber-400 shrink-0 cursor-help" />
-                          </Tooltip>
-                        )}
+                    <td className="py-2 px-2 text-xs max-w-[120px]">
+                      <div className="flex flex-col gap-0.5">
                         <span className="text-slate-400 truncate" title={d.motivo || ''}>
-                          {d.motivo || '-'}
+                          {d.motivo || <span className="text-slate-600 italic">sem motivo</span>}
                         </span>
+                        {d.match_por_texto && (
+                          <span className="text-slate-600 text-[10px]">vinc. por texto</span>
+                        )}
+                        {!d.motivo_saida_id && !d.match_por_texto && d.motivo && (
+                          <span className="text-slate-600 text-[10px]">sem vinculo</span>
+                        )}
                       </div>
+                    </td>
+                    <td className="py-2 px-2 text-center">
+                      {d.conta_score ? (
+                        <span className="text-xs px-1.5 py-0.5 rounded-full bg-rose-500/20 text-rose-400 font-medium whitespace-nowrap">
+                          Conta
+                        </span>
+                      ) : (
+                        <span className="text-xs px-1.5 py-0.5 rounded-full bg-slate-700/50 text-slate-500 whitespace-nowrap">
+                          Nao conta
+                        </span>
+                      )}
                     </td>
                     <td className="py-2 px-2 text-center text-slate-300 text-xs">
                       {new Date(d.data + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
@@ -229,7 +288,7 @@ export function ModalDetalhesEvasoes({ open, onClose, professorId, professorNome
                 ))}
                 {dadosPaginados.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="py-6 text-center text-slate-500 text-xs">
+                    <td colSpan={6} className="py-6 text-center text-slate-500 text-xs">
                       Nenhuma evasao encontrada com os filtros atuais
                     </td>
                   </tr>
