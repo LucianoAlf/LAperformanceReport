@@ -197,6 +197,14 @@ function CampanhaCard({ campanha: c, onAction, onExcluir, onRetry, onClick }: {
               {c.entregues > 0 && <span className="text-emerald-400">{c.entregues} entregues</span>}
               {c.lidos > 0 && <span className="text-blue-400">{c.lidos} lidos</span>}
               {c.respondidos > 0 && <span className="text-purple-400">{c.respondidos} respostas</span>}
+              {(() => {
+                const naoEntregues = c.enviados - c.entregues - c.falhas;
+                return naoEntregues > 0 ? (
+                  <span className="text-amber-400" title="Saíram da plataforma mas WhatsApp ainda não confirmou entrega">
+                    {naoEntregues} não entregues
+                  </span>
+                ) : null;
+              })()}
               {c.falhas > 0 && <span className="text-red-400">{c.falhas} falhas</span>}
             </div>
             <span>{progresso}% · {c.total_contatos} total</span>
