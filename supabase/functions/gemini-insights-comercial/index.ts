@@ -6,6 +6,23 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Retry com backoff exponencial para erros 503/429 do Gemini
+async function fetchGeminiComRetry(url: string, options: RequestInit, maxRetries = 3): Promise<Response> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const res = await fetch(url, options);
+    if (res.ok) return res;
+    if ((res.status === 503 || res.status === 429) && attempt < maxRetries) {
+      const wait = 1000 * Math.pow(2, attempt);
+      console.log(`[gemini-retry] status ${res.status}, tentativa ${attempt + 1}/${maxRetries + 1}, esperando ${wait}ms`);
+      await new Promise(r => setTimeout(r, wait));
+      continue;
+    }
+    return res;
+  }
+  return new Response(null, { status: 500 });
+}
+
+
 // Mapeamento de UUIDs para nomes de unidades (UUIDs reais do banco)
 const UUID_NOME_MAP: Record<string, string> = {
   "2ec861f6-023f-4d7b-9927-3960ad8c2a92": "Campo Grande",
@@ -380,7 +397,7 @@ Gere uma análise em JSON com a estrutura:
 }`;
 
     // Chamar Gemini API
-    const geminiResponse = await fetch(
+    const geminiResponse = await fetchGeminiComRetry(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${geminiApiKey}`,
       {
         method: "POST",

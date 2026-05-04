@@ -6,6 +6,23 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Retry com backoff exponencial para erros 503/429 do Gemini
+async function fetchGeminiComRetry(url: string, options: RequestInit, maxRetries = 3): Promise<Response> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const res = await fetch(url, options);
+    if (res.ok) return res;
+    if ((res.status === 503 || res.status === 429) && attempt < maxRetries) {
+      const wait = 1000 * Math.pow(2, attempt);
+      console.log(`[gemini-retry] status ${res.status}, tentativa ${attempt + 1}/${maxRetries + 1}, esperando ${wait}ms`);
+      await new Promise(r => setTimeout(r, wait));
+      continue;
+    }
+    return res;
+  }
+  return new Response(null, { status: 500 });
+}
+
+
 // ═══════════════════════════════════════════════════════════════
 // CÁLCULO DO HEALTH SCORE - IDÊNTICO AO FRONTEND (useHealthScore.ts)
 // ═══════════════════════════════════════════════════════════════
@@ -403,7 +420,7 @@ Gere um JSON com:
 IMPORTANTE: Seja direto, use nomes dos professores, foque em ações práticas.`;
 
     // Chamar API do Gemini
-    const response = await fetch(
+    const response = await fetchGeminiComRetry(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: 'POST',

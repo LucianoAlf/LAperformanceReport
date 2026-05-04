@@ -11,6 +11,22 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Retry com backoff exponencial para erros 503/429 do Gemini
+async function fetchGeminiComRetry(url: string, options: RequestInit, maxRetries = 3): Promise<Response> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const res = await fetch(url, options);
+    if (res.ok) return res;
+    if ((res.status === 503 || res.status === 429) && attempt < maxRetries) {
+      const wait = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s
+      console.log(`[gemini-retry] status ${res.status}, tentativa ${attempt + 1}/${maxRetries + 1}, esperando ${wait}ms`);
+      await new Promise(r => setTimeout(r, wait));
+      continue;
+    }
+    return res;
+  }
+  return new Response(null, { status: 500 });
+}
+
 const SYSTEM_PROMPT = `Você é um consultor pedagógico especializado em desenvolvimento de professores de música.
 Seu papel é analisar dados de performance e gerar planos de ação práticos e motivacionais.
 
@@ -346,7 +362,7 @@ serve(async (req) => {
     // Chamar Gemini API
     const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
-    const geminiResponse = await fetch(geminiUrl, {
+    const geminiResponse = await fetchGeminiComRetry(geminiUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
