@@ -60,6 +60,25 @@
 
 ### Presenca
 - `sync-presenca-emusys` — sync aulas/presenca do Emusys (pg_cron diario 22h BRT)
+- `sync-students-studio` — sync alunos com LA Studio (projeto separado)
+- `sync-feriados` — sincroniza feriados (via BrasilAPI) para agenda
+
+### Webhook Matricula (Emusys)
+- `processar-matricula-emusys` — recebe webhook Emusys (matricula_nova/renovacao/trancamento/finalizacao). Insere/atualiza `alunos`, `movimentacoes_admin`, atualiza `leads` para convertido. v9 com lookup ILIKE em `motivos_saida` para popular `motivo_saida_id`.
+
+### Meta WhatsApp Cloud API (Campanhas)
+- `meta-webhook-campanhas` — webhook receiver da Meta WhatsApp API (status updates de campanhas)
+- `enviar-campanha` — dispatcher batch de campanhas (recursivo, batch 50, delay 100ms)
+- `controle-campanha` — UI controller (iniciar/pausar/retomar). Atualiza status em `campanhas`, invoca `enviar-campanha`
+- `enviar-mensagem-meta` — envio individual via Meta Cloud API
+- `sincronizar-templates` — sync templates aprovados pela Meta
+- `gerenciar-templates` — CRUD de templates locais
+
+### Agente Webhook (BI / IA)
+- `agente-webhook` — webhook generico para agentes IA (BI agent)
+- `bi-agent-lamusic` — BI agent que responde perguntas via LLM (insights ad-hoc)
+- `gerar-prompt-agente` — gera prompt customizado para agentes IA
+- `jarvis-chat` — chatbot interno IA
 
 ### Admin
 - `admin-create-user` — criar usuario

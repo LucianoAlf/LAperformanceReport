@@ -79,6 +79,15 @@ Exemplo real: Willian/T1 2026 → 200% de conversao (Carlos Yan matriculou em 15
 
 **TODO** (decisao pendente): definir se a fix e operacional (corrigir registros no Emusys) ou de formula (RPC alinhar criterios — `matriculas_pos_exp` exigir tambem `experimental_realizada = true`, com leads "matriculou sem realizar" caindo em `matriculas_diretas`).
 
+## Telefone do Aluno — Fallback para Responsavel (v10)
+
+`processar-matricula-emusys` v10 (deploy 2026-05-01) corrigiu o bug onde alunos LAMK (kids) ficavam sem telefone porque o Emusys envia `telefone_aluno: null` quando so o responsavel tem fone. Agora o INSERT/UPDATE faz fallback:
+
+- **INSERT (novo aluno):** `telefone: p.telefoneAluno || p.telefoneResponsavel`
+- **UPDATE (aluno existente):** `telefone: (p.telefoneAluno || p.telefoneResponsavel) || undefined` (preserva valor existente se ambos forem null no payload)
+
+**Sem backfill** — historicos (~830 alunos sem tel) ficam sem ate passarem por algum webhook futuro (renovacao, ajuste). A self-healing acontece naturalmente ao longo de 6-12 meses.
+
 ## Score do Professor — Motivos de Evasao
 - Campo `conta_score_professor` (bool) em `motivos_saida` controla se o motivo penaliza o professor no score
 - Gerenciado em `MotivosScoreConfig.tsx` (Performance > Professores) via toggles

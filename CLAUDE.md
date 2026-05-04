@@ -74,12 +74,15 @@ VITE_GEMINI_API_KEY=...  # opcional
 ## Módulo de Professores
 
 - **`TabPerformanceProfessores`**: tabela de KPIs por professor, dados via RPC `get_kpis_professor_periodo`
+- **Modo Mensal vs Trimestral**: toggle local na aba Performance. Em Trimestral, agrega 3 meses (T1=Mar/Abr/Mai, T2=Jun/Jul/Ago, T3=Set/Out/Nov, "Período Não Considerado"=Dez/Jan/Fev) para diluir distorções estatísticas em professores com poucas experimentais. RPC aceita `p_data_inicio` + `p_data_fim` opcionais (sobrescrevem `p_ano + p_mes`).
 - **`ModalDetalhesPresenca`**: detalhe de presença por aluno, com paginação, busca e filtro por faixa
 - **`ModalDetalhesEvasoes`**: detalhe de evasões com coluna "Score" (Conta/Não conta), lookup em `motivos_saida` por FK ou texto, filtro por score, card "Contam no Score"
 - **`ModalDetalhesRetencao`**: detalhe de renovações/não-renovações/evasões com mesma lógica de score que o modal de evasões
+- **`ModalDetalhesConversao`**: detalhe lead-a-lead da taxa de conversão. Classifica leads em 6 categorias (Realizou+Matriculou, Realizou sem matrícula, Faltou, Matriculou sem realizar, Matrícula direta, Agendada/Pendente). Destaca casos "ambíguos" que distorcem a taxa para >100% (ver regras-negocio.md).
+- **Modais aceitam range de datas**: todos os 4 modais (Presença, Evasões, Retenção, Conversão) recebem props opcionais `dataInicio`/`dataFim`/`periodoLabel` para funcionar tanto em modo Mensal quanto Trimestral.
 - **`MotivosScoreConfig`**: gerencia quais motivos penalizam o professor (toggles de `conta_score_professor`)
 - **Score de evasões**: RPC filtra apenas `ms.conta_score_professor = true`. Motivo NULL sem match em `motivos_saida` = não conta (alterado de comportamento anterior onde NULL contava por padrão)
-- **Edge function `processar-matricula-emusys`**: ao registrar evasão/não-renovação, faz ILIKE em `motivos_saida` para popular `motivo_saida_id` automaticamente
+- **Edge function `processar-matricula-emusys` v10**: ao registrar evasão/não-renovação, faz ILIKE em `motivos_saida` para popular `motivo_saida_id` automaticamente. No INSERT/UPDATE de alunos, faz fallback `telefone_aluno || telefone_responsavel` para evitar que LAMK (kids) fiquem sem telefone quando o Emusys envia `telefone_aluno: null`.
 - **`is_projeto_banda`** em `cursos`: exclui curso de médias de turma, carteira e score do professor
 
 ## Regras Importantes
@@ -90,6 +93,10 @@ VITE_GEMINI_API_KEY=...  # opcional
 - **Hooks:** preferir hooks customizados para lógica de negócio reutilizável
 - **MCP (OBRIGATÓRIO):** Sempre utilize ferramentas MCP proativamente para análise e investigação. Antes de explorar código manualmente, verifique se há um MCP disponível que facilite a tarefa (ex: Supabase MCP para consultar banco, n8n MCP para verificar workflows, NocoDB MCP para dados). MCPs são a via preferencial para acessar dados reais do sistema — use-os ANTES de ler código fonte quando precisar entender estado atual do banco, schemas, dados ou configurações.
 - **Memória Self-Heal:** manter arquivos em `.claude/memory/` atualizados proativamente. Ao descobrir regras de negócio, padrões de código ou mudanças no domínio, atualizar o arquivo de memória correspondente e informar o usuário. Ver protocolo completo em `MEMORY.md`.
+## Subagents
+
+- **`fiscal-dados`** (em `.claude/agents/fiscal-dados.md`): auditor read-only de automações de dados (webhooks Emusys, syncs, Mila SDR, WhatsApp). Use proativamente quando o usuário pedir verificação de integridade, divergências entre sistemas, FK NULLs, duplicatas, falhas silenciosas. Lê `integracao-infra.md` + auto-discovery via `list_edge_functions` → reporta gaps de documentação. Tools restritas (sem Edit/Write).
+
 ## Skills
 
 Ao trabalhar com agentes IA ou function calling, consulte `.claude/skills/ai-agents-architect/SKILL.md`
