@@ -9,6 +9,8 @@
 - [integracao-infra.md](integracao-infra.md) — Edge functions, pg_cron, WhatsApp CRM, UAZAPI, Gemini AI
 - [emusys-api.md](emusys-api.md) — API Emusys (tokens, endpoints, convenções)
 - [chatwoot.md](chatwoot.md) — Chatwoot CRM (inboxes, agentes, labels, endpoints, filtros, quirks de timezone)
+- [todos-pendentes.md](todos-pendentes.md) — Problemas conhecidos sem fix aplicado (priorizados por severidade)
+- [pendencias-emusys.md](pendencias-emusys.md) — Limitações do lado do Emusys (API/cadastro) que não podem ser resolvidas no nosso código
 
 ## Unidades
 - CG (Campo Grande): `2ec861f6-023f-4d7b-9927-3960ad8c2a92`
