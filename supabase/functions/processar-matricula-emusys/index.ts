@@ -295,7 +295,7 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
   if (alunoExistente) {
     await supabase.from('alunos').update({
       status: 'ativo',
-      telefone: p.telefoneAluno || undefined,
+      telefone: (p.telefoneAluno || p.telefoneResponsavel) || undefined,
       email: p.emailAluno || undefined,
       data_matricula: p.dataMatricula || undefined,
       valor_parcela: p.valorMensalidade || undefined,
@@ -321,7 +321,7 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
       nome: p.nomeAluno,
       unidade_id: p.unidadeId,
       status: 'ativo',
-      telefone: p.telefoneAluno,
+      telefone: p.telefoneAluno || p.telefoneResponsavel,
       email: p.emailAluno,
       data_matricula: p.dataMatricula,
       valor_parcela: p.valorMensalidade,
