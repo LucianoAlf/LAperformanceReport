@@ -34,53 +34,22 @@ export function ModalPermanenciaDetalhe({ open, onOpenChange, unidadeId, mediaAt
   async function carregarDados() {
     setLoading(true);
     try {
-      // Buscar de alunos_historico
-      // Buscar de alunos_historico
-      let qHistorico = supabase
-        .from('alunos_historico')
-        .select('nome, tempo_permanencia_meses, categoria_saida, mes_saida')
-        .gte('tempo_permanencia_meses', 4);
-      if (unidadeId && unidadeId !== 'todos') {
-        qHistorico = qHistorico.eq('unidade_id', unidadeId);
-      }
-      const { data: historico } = await qHistorico;
+      // Usa a RPC get_historico_ltv (regra "saiu de tudo" + agrupamento por passagem).
+      // Mesmos filtros aplicados pela RPC: tempo>=4, exclui bolsistas/banda, NOT EXISTS matrícula viva.
+      const { data, error } = await supabase.rpc('get_historico_ltv', {
+        p_unidade_id: unidadeId && unidadeId !== 'todos' ? unidadeId : null,
+      });
+      if (error) throw error;
 
-      // Buscar de alunos (inativo/evadido, 4+ meses, sem bolsista/banda/segundo curso)
-      let qSistema = supabase
-        .from('alunos')
-        .select('nome, tempo_permanencia_meses, tipo_matricula_id, is_segundo_curso, status')
-        .in('status', ['inativo', 'evadido'])
-        .gte('tempo_permanencia_meses', 4);
-      if (unidadeId && unidadeId !== 'todos') {
-        qSistema = qSistema.eq('unidade_id', unidadeId);
-      }
-      const { data: sistema } = await qSistema;
-
-      // Buscar tipos_matricula para filtrar bolsistas/banda
-      const { data: tiposExcluir } = await supabase
-        .from('tipos_matricula')
-        .select('id, codigo')
-        .in('codigo', ['BOLSISTA_INT', 'BOLSISTA_PARC', 'BANDA']);
-
-      const idsExcluir = new Set((tiposExcluir || []).map(t => t.id));
-
-      const rowsHistorico: ExAlunoRow[] = (historico || []).map(h => ({
-        nome: h.nome,
-        tempo_permanencia_meses: h.tempo_permanencia_meses,
-        fonte: 'historico' as const,
-        categoria_saida: h.categoria_saida || undefined,
-        mes_saida: h.mes_saida || undefined,
+      const linhas: ExAlunoRow[] = (data || []).map((r: any) => ({
+        nome: r.nome,
+        tempo_permanencia_meses: Number(r.tempo_meses),
+        fonte: r.fonte as 'historico' | 'sistema',
+        categoria_saida: r.categoria_saida || undefined,
+        mes_saida: r.mes_saida || undefined,
       }));
 
-      const rowsSistema: ExAlunoRow[] = (sistema || [])
-        .filter(a => !idsExcluir.has(a.tipo_matricula_id) && !a.is_segundo_curso)
-        .map(a => ({
-          nome: a.nome,
-          tempo_permanencia_meses: a.tempo_permanencia_meses,
-          fonte: 'sistema' as const,
-        }));
-
-      setDados([...rowsHistorico, ...rowsSistema]);
+      setDados(linhas);
     } catch (err) {
       console.error('Erro ao carregar detalhes de permanência:', err);
     } finally {

@@ -526,9 +526,16 @@ export function TabHistoricoLTV({ unidadeAtual }: TabHistoricoLTVProps) {
                       {numGlobal}
                     </td>
                     <td
-                      className="py-1.5 px-3 text-slate-300 truncate max-w-[300px] cursor-pointer hover:text-cyan-400 hover:underline transition-colors"
-                      onClick={() => setPessoaSelecionada(`${reg.nome}|${reg.unidade_id}`)}
-                      title="Ver passagens deste aluno"
+                      className={cn(
+                        "py-1.5 px-3 text-slate-300 truncate max-w-[300px] transition-colors",
+                        reg.qtd_passagens_pessoa >= 2 && "cursor-pointer hover:text-cyan-400 hover:underline"
+                      )}
+                      onClick={() => {
+                        if (reg.qtd_passagens_pessoa >= 2) {
+                          setPessoaSelecionada(`${reg.nome}|${reg.unidade_id}`);
+                        }
+                      }}
+                      title={reg.qtd_passagens_pessoa >= 2 ? 'Ver passagens deste aluno' : undefined}
                     >
                       {reg.nome}
                       {reg.qtd_passagens_pessoa >= 2 && (
@@ -596,18 +603,20 @@ export function TabHistoricoLTV({ unidadeAtual }: TabHistoricoLTVProps) {
                     </td>
                     <td className="py-1.5 px-3 text-center">
                       <div className="flex items-center justify-center gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 w-7 p-0 text-slate-500 hover:text-violet-400"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setPessoaSelecionada(`${reg.nome}|${reg.unidade_id}`);
-                          }}
-                          title="Ver passagens"
-                        >
-                          <History className="w-3.5 h-3.5" />
-                        </Button>
+                        {reg.qtd_passagens_pessoa >= 2 && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 text-slate-500 hover:text-violet-400"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPessoaSelecionada(`${reg.nome}|${reg.unidade_id}`);
+                            }}
+                            title="Ver passagens"
+                          >
+                            <History className="w-3.5 h-3.5" />
+                          </Button>
+                        )}
                         {editavel ? (
                           <Button
                             variant="ghost"
