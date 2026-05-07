@@ -9,9 +9,11 @@ import {
 } from 'recharts';
 import { cn } from '@/lib/utils';
 import {
-  Users, Clock, Database, BarChart3, Search, Plus, Trash2, ChevronUp, ChevronDown,
-  ArrowUpDown, ChevronLeft, ChevronRight, Table2, Info,
+  Users, Clock, Repeat2, BarChart3, Search, Plus, Trash2, ChevronUp, ChevronDown,
+  ArrowUpDown, ChevronLeft, ChevronRight, Table2, Info, History,
 } from 'lucide-react';
+import { ModalPassagensAluno } from './ModalPassagensAluno';
+import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -54,8 +56,10 @@ export function TabHistoricoLTV({ unidadeAtual }: TabHistoricoLTVProps) {
   const {
     registros, loading, kpis,
     atualizarRegistro, excluirRegistro, adicionarRegistro,
+    anularPassagem, reverterAnulacao,
     dadosSobrevivencia, dadosHistograma, dadosEvolucao,
   } = useHistoricoLTV(unidadeAtual);
+  const { user } = useAuth();
 
   // View toggle
   const [visao, setVisao] = useState<'tabela' | 'analytics'>('tabela');
@@ -75,6 +79,16 @@ export function TabHistoricoLTV({ unidadeAtual }: TabHistoricoLTVProps) {
   const [registroExcluir, setRegistroExcluir] = useState<RegistroLTV | null>(null);
   const [modalNovo, setModalNovo] = useState(false);
   const [novoRegistro, setNovoRegistro] = useState({ nome: '', tempo: '', categoria: 'Interrompido', mes_saida: '' });
+
+  // Modal de passagens (chave = "nome|unidade_id")
+  const [pessoaSelecionada, setPessoaSelecionada] = useState<string | null>(null);
+
+  const passagensDaPessoa = useMemo(() => {
+    if (!pessoaSelecionada) return [];
+    return registros.filter(r => `${r.nome}|${r.unidade_id}` === pessoaSelecionada);
+  }, [pessoaSelecionada, registros]);
+
+  const nomePessoaSelecionada = passagensDaPessoa[0]?.nome || '';
 
   // Filtragem
   const dadosFiltrados = useMemo(() => {
@@ -181,11 +195,12 @@ export function TabHistoricoLTV({ unidadeAtual }: TabHistoricoLTVProps) {
           size="sm"
         />
         <KPICard
-          label="Histórico (importados)"
-          icon={Database}
-          value={kpis.totalHistorico}
+          label="Taxa de Retorno"
+          icon={Repeat2}
+          value={`${kpis.taxaRetorno.toFixed(1)}%`}
           variant="amber"
           size="sm"
+          subvalue="alunos com 2+ passagens"
         />
         <KPICard
           label="Sistema (registrados)"
@@ -510,8 +525,17 @@ export function TabHistoricoLTV({ unidadeAtual }: TabHistoricoLTVProps) {
                     <td className="text-center py-1.5 px-2 text-slate-500 text-xs font-mono">
                       {numGlobal}
                     </td>
-                    <td className="py-1.5 px-3 text-slate-300 truncate max-w-[300px]">
+                    <td
+                      className="py-1.5 px-3 text-slate-300 truncate max-w-[300px] cursor-pointer hover:text-cyan-400 hover:underline transition-colors"
+                      onClick={() => setPessoaSelecionada(`${reg.nome}|${reg.unidade_id}`)}
+                      title="Ver passagens deste aluno"
+                    >
                       {reg.nome}
+                      {reg.qtd_passagens_pessoa >= 2 && (
+                        <span className="ml-2 text-[10px] bg-violet-500/20 text-violet-300 px-1.5 py-0.5 rounded font-medium">
+                          ↻ {reg.qtd_passagens_pessoa}x
+                        </span>
+                      )}
                     </td>
                     <td className="py-1.5 px-3 text-center">
                       {editavel ? (
@@ -571,18 +595,34 @@ export function TabHistoricoLTV({ unidadeAtual }: TabHistoricoLTVProps) {
                       </span>
                     </td>
                     <td className="py-1.5 px-3 text-center">
-                      {editavel ? (
+                      <div className="flex items-center justify-center gap-1">
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="h-7 w-7 p-0 text-slate-500 hover:text-rose-400"
-                          onClick={() => setRegistroExcluir(reg)}
+                          className="h-7 w-7 p-0 text-slate-500 hover:text-violet-400"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setPessoaSelecionada(`${reg.nome}|${reg.unidade_id}`);
+                          }}
+                          title="Ver passagens"
                         >
-                          <Trash2 className="w-3.5 h-3.5" />
+                          <History className="w-3.5 h-3.5" />
                         </Button>
-                      ) : (
-                        <span className="text-slate-600">—</span>
-                      )}
+                        {editavel ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0 text-slate-500 hover:text-rose-400"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setRegistroExcluir(reg);
+                            }}
+                            title="Excluir definitivo"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -634,6 +674,18 @@ export function TabHistoricoLTV({ unidadeAtual }: TabHistoricoLTVProps) {
       )}
 
         </>
+      )}
+
+      {/* Modal de passagens da pessoa */}
+      {pessoaSelecionada && passagensDaPessoa.length > 0 && (
+        <ModalPassagensAluno
+          nome={nomePessoaSelecionada}
+          passagens={passagensDaPessoa}
+          userName={user?.email || 'sistema'}
+          onClose={() => setPessoaSelecionada(null)}
+          onAnular={anularPassagem}
+          onReverter={reverterAnulacao}
+        />
       )}
 
       {/* Modal de confirmação de exclusão */}

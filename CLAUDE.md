@@ -82,8 +82,16 @@ VITE_GEMINI_API_KEY=...  # opcional
 - **Modais aceitam range de datas**: todos os 4 modais (Presença, Evasões, Retenção, Conversão) recebem props opcionais `dataInicio`/`dataFim`/`periodoLabel` para funcionar tanto em modo Mensal quanto Trimestral.
 - **`MotivosScoreConfig`**: gerencia quais motivos penalizam o professor (toggles de `conta_score_professor`)
 - **Score de evasões**: RPC filtra apenas `ms.conta_score_professor = true`. Motivo NULL sem match em `motivos_saida` = não conta (alterado de comportamento anterior onde NULL contava por padrão)
-- **Edge function `processar-matricula-emusys` v10**: ao registrar evasão/não-renovação, faz ILIKE em `motivos_saida` para popular `motivo_saida_id` automaticamente. No INSERT/UPDATE de alunos, faz fallback `telefone_aluno || telefone_responsavel` para evitar que LAMK (kids) fiquem sem telefone quando o Emusys envia `telefone_aluno: null`.
+- **Edge function `processar-matricula-emusys` v12** (2026-05-07): mantém matching em camadas + backfill `emusys_matricula_id` + fallback de telefone. **Novo**: `handleEvasao` chama `registrarPassagemFinalizada` que grava 1 linha em `alunos_historico` quando o aluno saiu de TODAS as matrículas (`data_entrada=MIN(data_matricula)`, `data_saida=hoje`, `aluno_ids=[...]`). Idempotência via UNIQUE constraint `(aluno_id, data_saida) WHERE anulado = false`.
 - **`is_projeto_banda`** em `cursos`: exclui curso de médias de turma, carteira e score do professor
+
+## Módulo de Histórico LTV (Tempo de Permanência)
+
+- **`TabHistoricoLTV`**: tela de ex-alunos. 4 KPIs (Total, Tempo Médio, **Taxa de Retorno** = % pessoas com 2+ passagens, Sistema). Tabela com edição inline + botão `History` (abrir passagens) + botão `Trash2` (DELETE físico, UX planilha).
+- **Hook `useHistoricoLTV`**: usa RPC `get_historico_ltv(p_unidade_id)` que une `alunos_historico` (anulado=false) + `alunos` agrupados por pessoa (`NOT EXISTS` matrícula viva). Retorna `qtd_passagens_pessoa` via window function.
+- **`ModalPassagensAluno`**: lista cronológica de passagens da pessoa. Soft delete via flag `anulado` em `alunos_historico` (motivo obrigatório, reversível). DELETE físico continua na tabela principal — soft é recurso adicional.
+- **Edge function v12 + RPC** centralizam a regra "saiu de tudo": tempo só conta quando aluno encerra TODAS as matrículas. Trigger `fn_alunos_reentrada_historico` simplificada (só zera `data_saida` na reentrada — INSERT é da edge).
+- Detalhes: `regras-negocio.md` seção "Histórico LTV / Tempo de Permanência".
 
 ## Regras Importantes
 

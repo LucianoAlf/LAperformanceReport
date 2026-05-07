@@ -99,7 +99,21 @@
       "Bash(git -C \"c:\\\\Users\\\\hugog\\\\OneDrive\\\\Desktop\\\\Projects\\\\LA Music\\\\LAperformanceReport\" log --oneline cc9aa9d -1)",
       "Bash(MCP_MODE=stdio LOG_LEVEL=error DISABLE_CONSOLE_OUTPUT=true N8N_API_URL=\"https://workla.latecnology.com.br\" N8N_API_KEY=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NjA2YjVhMS1hMmQxLTQyOTUtOTllMi05ZjM3OTkzOWUxODIiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzY2MTgwMjMwfQ.rd8nGWj7TcU2KfUSovNq-mJGHVqRmj_QJK6uCAfH-uM\" npx -y n8n-mcp)",
       "Bash(wait)",
-      "Bash(MCP_MODE=stdio LOG_LEVEL=error DISABLE_CONSOLE_OUTPUT=true N8N_API_URL=\"https://workla.latecnology.com.br\" N8N_API_KEY=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NjA2YjVhMS1hMmQxLTQyOTUtOTllMi05ZjM3OTkzOWUxODIiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzY2MTgwMjMwfQ.rd8nGWj7TcU2KfUSovNq-mJGHVqRmj_QJK6uCAfH-uM\" timeout 10 npx -y n8n-mcp)"
+      "Bash(MCP_MODE=stdio LOG_LEVEL=error DISABLE_CONSOLE_OUTPUT=true N8N_API_URL=\"https://workla.latecnology.com.br\" N8N_API_KEY=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2NjA2YjVhMS1hMmQxLTQyOTUtOTllMi05ZjM3OTkzOWUxODIiLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzY2MTgwMjMwfQ.rd8nGWj7TcU2KfUSovNq-mJGHVqRmj_QJK6uCAfH-uM\" timeout 10 npx -y n8n-mcp)",
+      "Bash(python -c ':*)",
+      "Bash(python -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d, indent=2, ensure_ascii=False\\)\\)\")",
+      "Bash(Select-Object -First 30)",
+      "Bash(python \"C:\\\\Users\\\\hugog\\\\.claude\\\\projects\\\\c--Users-hugog-OneDrive-Desktop-Projects-LA-Music-LAperformanceReport\\\\2076d8e0-2c7a-4af6-a792-7ab39265b4e0\\\\tool-results\\\\parse_wf.py\")",
+      "Skill(uazapi-whatsapp)",
+      "Skill(uazapi-whatsapp:*)",
+      "Bash(start \"http://localhost:5175\")",
+      "Bash(ipconfig /flushdns)",
+      "Bash(powershell.exe -Command \"ipconfig /flushdns\")",
+      "Bash(powershell.exe -Command \"Get-NetAdapter | Format-Table Name, Status -AutoSize\")",
+      "Bash(powershell.exe -Command \"Set-DnsClientServerAddress -InterfaceAlias 'Ethernet' -ServerAddresses \\('8.8.8.8','8.8.4.4'\\)\")",
+      "mcp__supabase__generate_typescript_types",
+      "mcp__obsidian__list_allowed_directories",
+      "Bash(wmic process *)"
     ]
   }
 }

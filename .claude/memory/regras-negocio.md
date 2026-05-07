@@ -105,6 +105,54 @@ Exemplo real: Willian/T1 2026 → 200% de conversao (Carlos Yan matriculou em 15
 - Pausa temporaria (NAO e cancelamento)
 - Requer `previsao_retorno`, status muda para `trancado`
 
+## Histórico LTV / Tempo de Permanência
+
+Implementado em 2026-05-07: edge function v12 + RPC `get_historico_ltv` + `ModalPassagensAluno` + card Taxa de Retorno + soft delete.
+
+### Modelagem: matrícula ≠ aluno
+- Tabela `alunos` armazena **matrículas**, não pessoas. Aluno com 2 cursos = 2 linhas.
+- Identidade da pessoa = `nome + unidade_id`.
+- Sempre 1 matrícula com `is_segundo_curso=false` + N com `is_segundo_curso=true`. Edge function v11+ já cobre.
+
+### Quando o aluno conta como saída (regra "saiu de tudo")
+- Tempo de permanência só é contabilizado quando o aluno encerra **TODAS** as matrículas.
+- Se cancelou só 1 curso e continua em outro → NÃO grava em `alunos_historico`, NÃO aparece na tela.
+- Implementação:
+  - Edge function v12 (`handleEvasao` → `registrarPassagemFinalizada`): só grava em `alunos_historico` se `aindaAtivas.length === 0`.
+  - RPC `get_historico_ltv`: fonte_sistema filtra `NOT EXISTS` matrícula ativa/trancada da pessoa.
+
+### Cada passagem é entrada independente
+- Aluno que sai e volta gera passagens separadas (1ª, 2ª, 3ª).
+- Estatísticas tratam cada passagem como caso individual (sem somar). KPI Taxa de Retorno = % pessoas com `qtd_passagens_pessoa >= 2`.
+
+### Cálculo do tempo da passagem
+- Tempo = `MAX(data_saida) - MIN(data_matricula)` das matrículas que compuseram a passagem.
+- Edge v12 grava `data_entrada`, `data_saida`, `aluno_ids[]` em `alunos_historico` no momento da evasão final.
+- RPC: registros antigos sem `data_entrada/data_saida` (1.385 importados) usam `tempo_permanencia_meses` como fallback.
+
+### Data de saída usada
+- `data_saida` em `alunos` = data do disparo do webhook (`new Date()`). Comportamento desde v10.
+- Edge v12 usa essa mesma data ao gravar `alunos_historico.data_saida` (= hoje no momento da execução).
+
+### Soft delete (anular passagens) — implementado
+- Botão "Anular" no `ModalPassagensAluno` (acessado via click no nome ou botão `History` na tabela).
+- Marca `anulado=true` + grava `motivo_anulacao`, `anulado_por`, `anulado_em` em `alunos_historico`.
+- Reversível pelo mesmo modal.
+- RPC filtra `anulado = false`, então passagens anuladas somem da tela mas ficam no banco.
+- DELETE físico continua disponível na tabela principal (botão `Trash2`) — UX planilha mantida.
+
+### Trigger `fn_alunos_reentrada_historico`
+- Simplificada na migration 2026-05-07: hoje só zera `NEW.data_saida = NULL` em UPDATE quando `OLD.status IN ('inativo','evadido') AND NEW.status = 'ativo'` (reentrada).
+- Antes ela também fazia INSERT em `alunos_historico` — agora isso é responsabilidade exclusiva da edge function v12 (centraliza lógica + idempotência via UNIQUE constraint).
+
+### Idempotência
+- UNIQUE constraint `(aluno_id, data_saida) WHERE anulado = false AND aluno_id IS NOT NULL AND data_saida IS NOT NULL` em `alunos_historico`.
+- Edge v12 trata erro `23505` como duplicate idempotente (não erro real).
+
+### Filtros existentes a manter
+- `tempo_permanencia_meses >= 4` (saídas curtas excluídas).
+- Tipos de matrícula excluídos: `BOLSISTA_INT`, `BOLSISTA_PARC`, `BANDA` (excluídos do `aluno_ids` mas não impedem gravação se a pessoa também tinha EMLA/LAMK).
+
 ## Programas Gamificados
 - **Matriculador+ (Hunters):** taxa_showup_exp, taxa_exp_mat, taxa_lead_matricula, volume, ticket_medio
 - **Fideliza+ (Farmers):** trimestral, 5 criterios (churn, inadimplencia, renovacao, reajuste, vendas_lojinha)

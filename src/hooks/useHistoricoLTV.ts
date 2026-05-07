@@ -5,13 +5,21 @@ import { toast } from 'sonner';
 
 export interface RegistroLTV {
   id: number;
+  passagem_id: string;
+  historico_id: number | null;
   nome: string;
   tempo_permanencia_meses: number;
   categoria_saida: string;
   mes_saida: string | null;
+  motivo_saida: string | null;
   unidade_id: string | null;
   aluno_id: number | null;
+  data_entrada: string | null;
+  data_saida: string | null;
+  aluno_ids: number[];
+  qtd_passagens_pessoa: number;
   fonte: 'historico' | 'sistema';
+  anulado: boolean;
 }
 
 interface KPIsLTV {
@@ -19,6 +27,7 @@ interface KPIsLTV {
   tempoMedio: number;
   totalHistorico: number;
   totalSistema: number;
+  taxaRetorno: number;
   porCategoria: Record<string, number>;
 }
 
@@ -29,65 +38,31 @@ export function useHistoricoLTV(unidadeId: UnidadeId) {
   const carregarDados = useCallback(async () => {
     setLoading(true);
     try {
-      // Fonte 1: alunos_historico
-      let qHistorico = supabase
-        .from('alunos_historico')
-        .select('id, nome, tempo_permanencia_meses, categoria_saida, mes_saida, unidade_id, aluno_id')
-        .gte('tempo_permanencia_meses', 4);
-      if (unidadeId && unidadeId !== 'todos') {
-        qHistorico = qHistorico.eq('unidade_id', unidadeId);
-      }
-      const { data: historico, error: errHist } = await qHistorico;
-      if (errHist) throw errHist;
+      const { data, error } = await supabase.rpc('get_historico_ltv', {
+        p_unidade_id: unidadeId && unidadeId !== 'todos' ? unidadeId : null,
+      });
+      if (error) throw error;
 
-      // Fonte 2: alunos inativos/evadidos
-      let qSistema = supabase
-        .from('alunos')
-        .select('id, nome, tempo_permanencia_meses, status, data_saida, unidade_id, tipo_matricula_id, is_segundo_curso')
-        .in('status', ['inativo', 'evadido'])
-        .gte('tempo_permanencia_meses', 4);
-      if (unidadeId && unidadeId !== 'todos') {
-        qSistema = qSistema.eq('unidade_id', unidadeId);
-      }
-      const { data: sistema, error: errSis } = await qSistema;
-      if (errSis) throw errSis;
-
-      // Buscar tipos_matricula para excluir bolsistas/banda
-      const { data: tiposExcluir } = await supabase
-        .from('tipos_matricula')
-        .select('id, codigo')
-        .in('codigo', ['BOLSISTA_INT', 'BOLSISTA_PARC', 'BANDA']);
-      const idsExcluir = new Set((tiposExcluir || []).map(t => t.id));
-
-      // Mapear historico
-      const rowsHistorico: RegistroLTV[] = (historico || []).map(h => ({
-        id: h.id,
-        nome: h.nome,
-        tempo_permanencia_meses: h.tempo_permanencia_meses,
-        categoria_saida: h.categoria_saida || 'Interrompido',
-        mes_saida: h.mes_saida || null,
-        unidade_id: h.unidade_id,
-        aluno_id: h.aluno_id || null,
-        fonte: 'historico' as const,
+      const mapped: RegistroLTV[] = (data || []).map((r: any) => ({
+        id: r.historico_id ?? -Math.abs(r.aluno_ids?.[0] ?? 0),
+        passagem_id: r.passagem_id,
+        historico_id: r.historico_id,
+        nome: r.nome,
+        tempo_permanencia_meses: Number(r.tempo_meses),
+        categoria_saida: r.categoria_saida || 'Interrompido',
+        mes_saida: r.mes_saida || null,
+        motivo_saida: r.motivo_saida || null,
+        unidade_id: r.unidade_id,
+        aluno_id: r.aluno_ids?.[0] ?? null,
+        data_entrada: r.data_entrada,
+        data_saida: r.data_saida,
+        aluno_ids: r.aluno_ids || [],
+        qtd_passagens_pessoa: Number(r.qtd_passagens_pessoa || 1),
+        fonte: r.fonte,
+        anulado: !!r.anulado,
       }));
 
-      // Mapear sistema (excluir bolsistas/banda/segundo curso)
-      const rowsSistema: RegistroLTV[] = (sistema || [])
-        .filter(a => !idsExcluir.has(a.tipo_matricula_id) && !a.is_segundo_curso)
-        .map(a => ({
-          id: -a.id, // id negativo para distinguir
-          nome: a.nome,
-          tempo_permanencia_meses: a.tempo_permanencia_meses,
-          categoria_saida: a.status === 'evadido' ? 'Evadido' : 'Interrompido',
-          mes_saida: a.data_saida
-            ? new Date(a.data_saida + 'T12:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
-            : null,
-          unidade_id: a.unidade_id,
-          aluno_id: a.id,
-          fonte: 'sistema' as const,
-        }));
-
-      setRegistros([...rowsHistorico, ...rowsSistema]);
+      setRegistros(mapped);
     } catch (err) {
       console.error('Erro ao carregar histórico LTV:', err);
       toast.error('Erro ao carregar dados do histórico');
@@ -105,6 +80,15 @@ export function useHistoricoLTV(unidadeId: UnidadeId) {
     const totalSistema = registros.filter(r => r.fonte === 'sistema').length;
     const soma = registros.reduce((acc, r) => acc + r.tempo_permanencia_meses, 0);
 
+    const pessoaPassagens = new Map<string, number>();
+    registros.forEach(r => {
+      const chave = `${r.nome}|${r.unidade_id}`;
+      pessoaPassagens.set(chave, (pessoaPassagens.get(chave) || 0) + 1);
+    });
+    const totalPessoas = pessoaPassagens.size;
+    const pessoasComRetorno = Array.from(pessoaPassagens.values()).filter(c => c >= 2).length;
+    const taxaRetorno = totalPessoas > 0 ? (pessoasComRetorno / totalPessoas) * 100 : 0;
+
     const porCategoria: Record<string, number> = {};
     registros.forEach(r => {
       const cat = r.categoria_saida || 'Sem categoria';
@@ -116,11 +100,11 @@ export function useHistoricoLTV(unidadeId: UnidadeId) {
       tempoMedio: registros.length > 0 ? soma / registros.length : 0,
       totalHistorico,
       totalSistema,
+      taxaRetorno,
       porCategoria,
     };
   }, [registros]);
 
-  // Dados para gráficos
   const dadosSobrevivencia = useMemo(() => {
     if (registros.length === 0) return [];
     const total = registros.length;
@@ -154,7 +138,6 @@ export function useHistoricoLTV(unidadeId: UnidadeId) {
 
   const dadosEvolucao = useMemo(() => {
     if (registros.length === 0) return [];
-    // Agrupar por mes_saida, calcular média
     const grupos: Record<string, { soma: number; qtd: number }> = {};
     registros.forEach(r => {
       const chave = r.mes_saida || 'Sem data';
@@ -163,7 +146,6 @@ export function useHistoricoLTV(unidadeId: UnidadeId) {
       grupos[chave].soma += r.tempo_permanencia_meses;
       grupos[chave].qtd += 1;
     });
-    // Converter para array e ordenar
     const mesesPt: Record<string, number> = {
       'janeiro': 1, 'fevereiro': 2, 'março': 3, 'marco': 3, 'abril': 4, 'maio': 5, 'junho': 6,
       'julho': 7, 'agosto': 8, 'setembro': 9, 'outubro': 10, 'novembro': 11, 'dezembro': 12,
@@ -175,7 +157,6 @@ export function useHistoricoLTV(unidadeId: UnidadeId) {
         quantidade: qtd,
       }))
       .sort((a, b) => {
-        // Tentar parsear "Mês/Ano" ou "Mês de Ano" ou "Mês Ano"
         const parseDate = (s: string) => {
           const parts = s.toLowerCase().replace(' de ', '/').replace(' ', '/').split('/');
           const mesNum = mesesPt[parts[0]] || 0;
@@ -184,11 +165,15 @@ export function useHistoricoLTV(unidadeId: UnidadeId) {
         };
         return parseDate(a.name) - parseDate(b.name);
       })
-      .slice(-24); // últimos 24 meses
+      .slice(-24);
   }, [registros]);
 
   const atualizarRegistro = useCallback(async (id: number, campo: string, valor: string | number | null) => {
-    // Optimistic update
+    if (id <= 0) {
+      toast.error('Esta passagem ainda não foi consolidada — edite a matrícula original.');
+      return;
+    }
+
     setRegistros(prev => prev.map(r =>
       r.id === id ? { ...r, [campo]: valor } : r
     ));
@@ -200,13 +185,18 @@ export function useHistoricoLTV(unidadeId: UnidadeId) {
 
     if (error) {
       toast.error('Erro ao atualizar registro');
-      carregarDados(); // rollback
+      carregarDados();
       return;
     }
     toast.success('Registro atualizado');
   }, [carregarDados]);
 
   const excluirRegistro = useCallback(async (id: number) => {
+    if (id <= 0) {
+      toast.error('Esta passagem ainda não foi consolidada — não é possível excluir.');
+      return;
+    }
+
     setRegistros(prev => prev.filter(r => r.id !== id));
 
     const { error } = await supabase
@@ -216,10 +206,59 @@ export function useHistoricoLTV(unidadeId: UnidadeId) {
 
     if (error) {
       toast.error('Erro ao excluir registro');
-      carregarDados(); // rollback
+      carregarDados();
       return;
     }
     toast.success('Registro excluído');
+  }, [carregarDados]);
+
+  const anularPassagem = useCallback(async (
+    historicoId: number,
+    motivo: string,
+    anuladoPor: string,
+  ) => {
+    if (!historicoId || historicoId <= 0) {
+      toast.error('Esta passagem ainda não foi consolidada — não é possível anular.');
+      return false;
+    }
+
+    const { error } = await supabase
+      .from('alunos_historico')
+      .update({
+        anulado: true,
+        motivo_anulacao: motivo,
+        anulado_por: anuladoPor,
+        anulado_em: new Date().toISOString(),
+      })
+      .eq('id', historicoId);
+
+    if (error) {
+      toast.error('Erro ao anular passagem');
+      return false;
+    }
+    toast.success('Passagem anulada');
+    carregarDados();
+    return true;
+  }, [carregarDados]);
+
+  const reverterAnulacao = useCallback(async (historicoId: number) => {
+    const { error } = await supabase
+      .from('alunos_historico')
+      .update({
+        anulado: false,
+        motivo_anulacao: null,
+        anulado_por: null,
+        anulado_em: null,
+      })
+      .eq('id', historicoId);
+
+    if (error) {
+      toast.error('Erro ao reverter anulação');
+      return false;
+    }
+    toast.success('Anulação revertida');
+    carregarDados();
+    return true;
   }, [carregarDados]);
 
   const adicionarRegistro = useCallback(async (dados: {
@@ -248,6 +287,8 @@ export function useHistoricoLTV(unidadeId: UnidadeId) {
     recarregar: carregarDados,
     atualizarRegistro,
     excluirRegistro,
+    anularPassagem,
+    reverterAnulacao,
     adicionarRegistro,
     dadosSobrevivencia,
     dadosHistograma,
