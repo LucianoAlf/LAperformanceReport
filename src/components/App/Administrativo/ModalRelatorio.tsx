@@ -313,8 +313,9 @@ export function ModalRelatorio({
     // Avisos Prévios — buscar por mes_saida do mês seguinte
     const proximoMesDate = new Date(ano, dataSelecionada.getMonth() + 1, 1);
     const proximoMesNome = proximoMesDate.toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
+    const ultimoDiaProximoMes = new Date(proximoMesDate.getFullYear(), proximoMesDate.getMonth() + 1, 0).getDate();
     const mesSaidaStart = `${proximoMesDate.getFullYear()}-${String(proximoMesDate.getMonth() + 1).padStart(2, '0')}-01`;
-    const mesSaidaEnd = `${proximoMesDate.getFullYear()}-${String(proximoMesDate.getMonth() + 1).padStart(2, '0')}-31`;
+    const mesSaidaEnd = `${proximoMesDate.getFullYear()}-${String(proximoMesDate.getMonth() + 1).padStart(2, '0')}-${String(ultimoDiaProximoMes).padStart(2, '0')}`;
 
     let queryAvisosRelatorio = supabase
       .from('movimentacoes_admin')
