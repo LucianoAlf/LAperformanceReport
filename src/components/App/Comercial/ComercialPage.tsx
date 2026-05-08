@@ -298,6 +298,7 @@ export function ComercialPage() {
   const [filtroIncompletoFunil, setFiltroIncompletoFunil] = useState<string>('todos');
   const [filtroCanalFunil, setFiltroCanalFunil] = useState<string>('todos');
   const [filtroCursoFunil, setFiltroCursoFunil] = useState<string>('todos');
+  const [filtroProfessorFunil, setFiltroProfessorFunil] = useState<string>('todos');
   const [filtroTipoExp, setFiltroTipoExp] = useState<'leads_novos' | 'todos' | 'alunos' | 'agendadas_periodo'>('leads_novos');
   const [filtroTipoMat, setFiltroTipoMat] = useState<'novos_alunos' | 'leads_periodo' | 'segundo_curso' | 'por_data_matricula' | 'todos'>('novos_alunos');
   const [selecionadosFunil, setSelecionadosFunil] = useState<Set<number>>(new Set());
@@ -1426,7 +1427,7 @@ export function ComercialPage() {
   }, [buscaFunil, abaDetalhamento, leadsMes, isAdmin, context?.unidadeSelecionada, usuario?.unidade_id]);
 
   // Resetar paginação ao mudar filtros
-  useEffect(() => { setPaginaLeads(1); }, [buscaFunil, filtroTelefoneFunil, filtroIncompletoFunil, filtroCanalFunil, filtroCursoFunil]);
+  useEffect(() => { setPaginaLeads(1); }, [buscaFunil, filtroTelefoneFunil, filtroIncompletoFunil, filtroCanalFunil, filtroCursoFunil, filtroProfessorFunil]);
 
 
   // Reset form
@@ -3331,6 +3332,18 @@ export function ComercialPage() {
                 ))}
               </SelectContent>
             </Select>
+            {/* Filtro Professor */}
+            <Select value={filtroProfessorFunil} onValueChange={v => setFiltroProfessorFunil(v)}>
+              <SelectTrigger className="w-[180px] bg-slate-800/50 border-slate-700 h-9 text-xs">
+                <SelectValue placeholder="Professor" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Todos os professores</SelectItem>
+                {professores.map(p => (
+                  <SelectItem key={p.value} value={String(p.value)}>{p.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {abaDetalhamento === 'leads' && (
               <Select value={filtroIncompletoFunil} onValueChange={v => setFiltroIncompletoFunil(v)}>
                 <SelectTrigger className="w-[180px] bg-slate-800/50 border-slate-700 h-9 text-xs">
@@ -3396,9 +3409,9 @@ export function ComercialPage() {
                 </SelectContent>
               </Select>
             )}
-            {(filtroIncompletoFunil !== 'todos' || filtroCanalFunil !== 'todos' || filtroCursoFunil !== 'todos') && (
+            {(filtroIncompletoFunil !== 'todos' || filtroCanalFunil !== 'todos' || filtroCursoFunil !== 'todos' || filtroProfessorFunil !== 'todos') && (
               <button
-                onClick={() => { setFiltroIncompletoFunil('todos'); setFiltroCanalFunil('todos'); setFiltroCursoFunil('todos'); }}
+                onClick={() => { setFiltroIncompletoFunil('todos'); setFiltroCanalFunil('todos'); setFiltroCursoFunil('todos'); setFiltroProfessorFunil('todos'); }}
                 className="text-xs text-slate-500 hover:text-white flex items-center gap-1 transition-colors"
               >
                 <X className="w-3 h-3" /> Limpar filtros
@@ -3453,6 +3466,10 @@ export function ComercialPage() {
             // Filtro por curso
             if (filtroCursoFunil !== 'todos') {
               if (String(l.curso_interesse_id) !== filtroCursoFunil) return false;
+            }
+            // Filtro por professor (experimental)
+            if (filtroProfessorFunil !== 'todos') {
+              if (String(l.professor_experimental_id) !== filtroProfessorFunil) return false;
             }
             return true;
           });
@@ -4046,6 +4063,7 @@ export function ComercialPage() {
             }
             if (filtroCanalFunil !== 'todos' && String(l.leads?.canal_origem_id) !== filtroCanalFunil) return false;
             if (filtroCursoFunil !== 'todos' && String(l.curso_interesse_id) !== filtroCursoFunil) return false;
+            if (filtroProfessorFunil !== 'todos' && String(l.professor_experimental_id) !== filtroProfessorFunil) return false;
             return true;
           });
           return (
@@ -4523,6 +4541,7 @@ export function ComercialPage() {
             }
             if (filtroCanalFunil !== 'todos' && String(l.canal_origem_id) !== filtroCanalFunil) return false;
             if (filtroCursoFunil !== 'todos' && String(l.curso_interesse_id) !== filtroCursoFunil) return false;
+            if (filtroProfessorFunil !== 'todos' && String(l.professor_experimental_id) !== filtroProfessorFunil) return false;
             return true;
           });
           return (
@@ -4709,6 +4728,11 @@ export function ComercialPage() {
               if (!nome.includes(termo) && !tel.includes(termo)) return false;
             }
             if (filtroCursoFunil !== 'todos' && String(l.curso_id || l.curso_interesse_id) !== filtroCursoFunil) return false;
+            if (filtroProfessorFunil !== 'todos') {
+              const expId = (l as any).professor_experimental_id;
+              const fixoId = (l as any).professor_fixo_id;
+              if (String(expId) !== filtroProfessorFunil && String(fixoId) !== filtroProfessorFunil) return false;
+            }
             return true;
           });
           return (

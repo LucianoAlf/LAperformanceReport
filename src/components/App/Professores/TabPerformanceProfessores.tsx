@@ -37,9 +37,8 @@ interface ProfessorPerformance {
   unidades: { id: string; codigo: string; nome: string }[];
   total_alunos: number;
   total_turmas: number;
+  alunos_via_turmas: number;
   media_alunos_turma: number;
-  turmas_para_media: number;
-  alunos_para_media: number;
   taxa_retencao: number;
   taxa_conversao: number;
   experimentais: number;
@@ -299,11 +298,16 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
           e.evasoes = (e.evasoes || 0) + (kpi.evasoes || 0);
           e.mrr_carteira = (Number(e.mrr_carteira) || 0) + (Number(kpi.mrr_carteira) || 0);
           e.mrr_perdido = (Number(e.mrr_perdido) || 0) + (Number(kpi.mrr_perdido) || 0);
-          // Média ponderada por carteira
+          // Turmas: soma direta. media_alunos_turma = alunos_via_turmas / total_turmas (mesma fórmula do modal)
+          e.total_turmas = (e.total_turmas || 0) + (kpi.total_turmas || 0);
+          e.alunos_via_turmas = (e.alunos_via_turmas || 0) + (kpi.alunos_via_turmas || 0);
+          e.media_alunos_turma = e.total_turmas > 0
+            ? Math.round((e.alunos_via_turmas / e.total_turmas) * 100) / 100
+            : 0;
+          // Média ponderada por carteira (presença e ticket continuam ponderados — outras métricas)
           const totalCarteira = prevCarteira + kpiCarteira;
           if (totalCarteira > 0) {
             e.media_presenca = ((Number(e.media_presenca) || 0) * prevCarteira + (Number(kpi.media_presenca) || 0) * kpiCarteira) / totalCarteira;
-            e.media_alunos_turma = ((Number(e.media_alunos_turma) || 0) * prevCarteira + (Number(kpi.media_alunos_turma) || 0) * kpiCarteira) / totalCarteira;
             e.ticket_medio = ((Number(e.ticket_medio) || 0) * prevCarteira + (Number(kpi.ticket_medio) || 0) * kpiCarteira) / totalCarteira;
           }
           // Recalcular taxas
@@ -389,25 +393,20 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
 
           // Buscar KPIs reais do professor
           const kpis = kpisPorProfessor.get(prof.id);
-          
-          // Usar dados reais ou fallback para contagem manual
-          const totalTurmas = turmasPorProfessor.get(prof.id) || 0;
-          const totalAlunos = kpis?.carteira_alunos || alunosPorProfessor.get(prof.id) || 0;
-          
-          // Dados brutos para tooltip (sempre calculados do fallback)
-          const turmasAlunos = totalAlunosTurmasPorProfessor.get(prof.id) || [];
-          const alunosParaMedia = turmasAlunos.reduce((sum, n) => sum + n, 0);
-          const turmasParaMedia = turmasAlunos.length;
 
-          // Média de alunos por turma: usar da view se disponível, senão calcular
-          let mediaAlunosTurma = 0;
-          if (kpis?.media_alunos_turma && Number(kpis.media_alunos_turma) > 0) {
-            mediaAlunosTurma = Number(kpis.media_alunos_turma);
-          } else {
-            mediaAlunosTurma = turmasParaMedia > 0
-              ? alunosParaMedia / turmasParaMedia
-              : 0;
-          }
+          // Carteira de alunos (com matricula viva)
+          const totalAlunos = kpis?.carteira_alunos || alunosPorProfessor.get(prof.id) || 0;
+
+          // Turmas e alunos via aulas (mesma fonte do modal: aulas_emusys + aluno_presenca)
+          // Fallback para o agregador local quando RPC nao tem dados
+          const turmasFallback = totalAlunosTurmasPorProfessor.get(prof.id) || [];
+          const totalTurmas = (kpis?.total_turmas ?? turmasFallback.length) || 0;
+          const alunosViaTurmas = (kpis?.alunos_via_turmas ?? turmasFallback.reduce((sum, n) => sum + n, 0)) || 0;
+
+          // Media = alunos_via_turmas / total_turmas (mesma formula da coluna e do modal)
+          const mediaAlunosTurma = totalTurmas > 0
+            ? (kpis?.media_alunos_turma ? Number(kpis.media_alunos_turma) : alunosViaTurmas / totalTurmas)
+            : 0;
 
           // Métricas REAIS da view vw_kpis_professor_mensal
           const taxaPresenca = kpis?.media_presenca ? Number(kpis.media_presenca) : 0;
@@ -462,9 +461,8 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
             unidades: unidadesProf,
             total_alunos: totalAlunos,
             total_turmas: totalTurmas,
+            alunos_via_turmas: alunosViaTurmas,
             media_alunos_turma: Math.round(mediaAlunosTurma * 100) / 100,
-            turmas_para_media: turmasParaMedia,
-            alunos_para_media: alunosParaMedia,
             taxa_retencao: Math.round(taxaRetencao * 10) / 10,
             taxa_conversao: Math.round(taxaConversao * 10) / 10,
             experimentais: kpis?.experimentais || 0,
@@ -1016,10 +1014,12 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                     </td>
                     <td className="text-center px-4 py-3 text-white">{professor.total_alunos}</td>
                     <td className="text-center px-4 py-3">
-                      <Tooltip side="top" content={professor.turmas_para_media > 0 ? `${professor.alunos_para_media} mat ÷ ${professor.turmas_para_media} turmas = ${(professor.alunos_para_media / professor.turmas_para_media).toFixed(1)} alunos/turma · Clique para detalhes` : `${professor.media_alunos_turma.toFixed(1)} alunos/turma (via banco) · Clique para detalhes`}>
+                      <Tooltip side="top" content={professor.total_turmas > 0
+                        ? `${professor.alunos_via_turmas} alunos com presença ÷ ${professor.total_turmas} turmas = ${professor.media_alunos_turma.toFixed(2)} alunos/turma · Clique para detalhes`
+                        : 'Sem aulas registradas no período · Clique para detalhes'}>
                         <span
                           className={`font-medium cursor-pointer hover:underline ${getMetricaColor(professor.media_alunos_turma, { critico: 1.3, atencao: 1.5 })}`}
-                          onClick={() => setModalTurmas({ open: true, professorId: professor.id, professorNome: professor.nome })}
+                          onClick={(e) => { e.stopPropagation(); setModalTurmas({ open: true, professorId: professor.id, professorNome: professor.nome }); }}
                         >
                           {professor.media_alunos_turma.toFixed(1)}
                         </span>
@@ -1400,6 +1400,13 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
           '95553e96-971b-4590-a6eb-0201d013c14d': 'Recreio',
           '368d47f5-2d88-4475-bc14-ba084a9a348e': 'Barra'
         }[unidadeAtual] || undefined) : undefined}
+        dataInicio={modoVisualizacao === 'trimestre'
+          ? trimestreInfo.dataInicio
+          : `${ano}-${String(mes).padStart(2, '0')}-01`}
+        dataFim={modoVisualizacao === 'trimestre'
+          ? trimestreInfo.dataFim
+          : `${ano}-${String(mes).padStart(2, '0')}-${String(new Date(ano, mes, 0).getDate()).padStart(2, '0')}`}
+        periodoLabel={periodoLabel}
       />
 
       <ToastContainer toasts={toast.toasts} onClose={toast.removeToast} />

@@ -1,16 +1,33 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { supabase } from '@/lib/supabase';
-import { Users, Music, Clock, MapPin, Loader2 } from 'lucide-react';
+import { Loader2, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Button } from '@/components/ui/button';
+import { Tooltip } from '@/components/ui/Tooltip';
 
-interface TurmaImplicita {
+const STATUS_LABEL: Record<string, string> = {
+  trancado: 'Trancados',
+  evadido: 'Evadidos',
+  inativo: 'Inativos',
+  aviso_previo: 'Em aviso prévio',
+};
+function formatarStatus(s: string): string {
+  return STATUS_LABEL[s] || s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+interface LinhaAlunoTurma {
+  aluno_id: number;
+  aluno_nome: string;
+  aluno_status: string;
+  turma_chave: string;
+  turma_nome: string | null;
   curso_nome: string;
-  dia_semana: string;
-  horario_inicio: string;
-  total_alunos: number;
-  nomes_alunos: string[];
   sala_nome: string | null;
+  dia_semana_iso: number;
+  horario_inicio: string;
 }
 
 interface Props {
@@ -20,176 +37,368 @@ interface Props {
   professorNome: string;
   unidadeId: string;
   unidadeNome?: string;
+  dataInicio?: string;
+  dataFim?: string;
+  periodoLabel?: string;
 }
 
-const DIAS_ORDEM: Record<string, number> = {
-  'Segunda': 1, 'Segunda-feira': 1,
-  'Terça': 2, 'Terça-feira': 2,
-  'Quarta': 3, 'Quarta-feira': 3,
-  'Quinta': 4, 'Quinta-feira': 4,
-  'Sexta': 5, 'Sexta-feira': 5,
-  'Sábado': 6,
-  'Domingo': 7,
+const POR_PAGINA = 15;
+
+const DIAS_NOMES: Record<number, string> = {
+  1: 'Segunda', 2: 'Terça', 3: 'Quarta', 4: 'Quinta', 5: 'Sexta', 6: 'Sábado', 7: 'Domingo',
 };
 
-function normalizarDia(dia: string): string {
-  const mapa: Record<string, string> = {
-    'Segunda-feira': 'Segunda', 'Terça-feira': 'Terça',
-    'Quarta-feira': 'Quarta', 'Quinta-feira': 'Quinta',
-    'Sexta-feira': 'Sexta',
-  };
-  return mapa[dia] || dia;
-}
-
-export function ModalDetalhesTurmas({ open, onClose, professorId, professorNome, unidadeId, unidadeNome }: Props) {
-  const [turmas, setTurmas] = useState<TurmaImplicita[]>([]);
+export function ModalDetalhesTurmas({
+  open, onClose, professorId, professorNome, unidadeId, unidadeNome,
+  dataInicio, dataFim, periodoLabel,
+}: Props) {
+  const [linhas, setLinhas] = useState<LinhaAlunoTurma[]>([]);
   const [loading, setLoading] = useState(false);
+  const [busca, setBusca] = useState('');
+  const [filtroTurma, setFiltroTurma] = useState<string>('todos');
+  const [filtroStatus, setFiltroStatus] = useState<string>('todos');
+  const [pagina, setPagina] = useState(1);
 
   useEffect(() => {
     if (!open || !professorId) return;
 
     async function fetchTurmas() {
       setLoading(true);
+      setBusca('');
+      setFiltroTurma('todos');
+      setFiltroStatus('todos');
+      setPagina(1);
+
+      // Range default: mês corrente
+      const hoje = new Date();
+      const inicio = dataInicio
+        ?? `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-01`;
+      const fim = dataFim
+        ?? `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
+
       let query = supabase
-        .from('vw_turmas_implicitas')
-        .select('curso_nome, dia_semana, horario_inicio, total_alunos, nomes_alunos, sala_nome')
-        .eq('professor_id', professorId!);
+        .from('vw_turmas_professor_periodo')
+        .select('turma_chave, turma_nome, curso_nome, sala_nome, dia_semana_iso, horario_inicio, aluno_id, aluno_nome, aluno_status')
+        .eq('professor_id', professorId!)
+        .gte('data_aula', inicio)
+        .lte('data_aula', fim);
 
       if (unidadeId && unidadeId !== 'todos') {
         query = query.eq('unidade_id', unidadeId);
       }
 
-      const { data } = await query.order('dia_semana').order('horario_inicio');
-      setTurmas(data || []);
+      const { data } = await query;
+
+      // Deduplicar: 1 linha por (aluno, turma_chave)
+      const dedup = new Map<string, LinhaAlunoTurma>();
+      (data || []).forEach((row: any) => {
+        const chave = `${row.aluno_id}|${row.turma_chave}`;
+        if (!dedup.has(chave)) {
+          dedup.set(chave, {
+            aluno_id: row.aluno_id,
+            aluno_nome: row.aluno_nome,
+            aluno_status: row.aluno_status,
+            turma_chave: row.turma_chave,
+            turma_nome: row.turma_nome,
+            curso_nome: row.curso_nome,
+            sala_nome: row.sala_nome,
+            dia_semana_iso: row.dia_semana_iso,
+            horario_inicio: row.horario_inicio,
+          });
+        }
+      });
+
+      const lista = Array.from(dedup.values()).sort((a, b) => {
+        if (a.dia_semana_iso !== b.dia_semana_iso) return a.dia_semana_iso - b.dia_semana_iso;
+        if (a.horario_inicio !== b.horario_inicio) return (a.horario_inicio || '').localeCompare(b.horario_inicio || '');
+        return a.aluno_nome.localeCompare(b.aluno_nome);
+      });
+
+      setLinhas(lista);
       setLoading(false);
     }
 
     fetchTurmas();
-  }, [open, professorId, unidadeId]);
+  }, [open, professorId, unidadeId, dataInicio, dataFim]);
+
+  // Lista de turmas únicas para o filtro (chave estável + label amigável)
+  const turmasUnicas = useMemo(() => {
+    const map = new Map<string, string>(); // chave -> label
+    linhas.forEach(l => {
+      if (!map.has(l.turma_chave)) {
+        const label = l.turma_nome
+          ? l.turma_nome
+          : `${l.curso_nome} (${DIAS_NOMES[l.dia_semana_iso] || ''} ${l.horario_inicio})`;
+        map.set(l.turma_chave, label);
+      }
+    });
+    return Array.from(map.entries()).sort((a, b) => a[1].localeCompare(b[1]));
+  }, [linhas]);
+
+  const linhasFiltradas = useMemo(() => {
+    let resultado = linhas;
+    if (busca) {
+      const termo = busca.toLowerCase();
+      resultado = resultado.filter(l => l.aluno_nome.toLowerCase().includes(termo));
+    }
+    if (filtroTurma !== 'todos') {
+      resultado = resultado.filter(l => l.turma_chave === filtroTurma);
+    }
+    if (filtroStatus === 'ativo') {
+      resultado = resultado.filter(l => l.aluno_status === 'ativo');
+    } else if (filtroStatus === 'outros') {
+      resultado = resultado.filter(l => l.aluno_status !== 'ativo');
+    }
+    return resultado;
+  }, [linhas, busca, filtroTurma, filtroStatus]);
+
+  useEffect(() => { setPagina(1); }, [busca, filtroTurma, filtroStatus]);
+
+  const totalPaginas = Math.max(1, Math.ceil(linhasFiltradas.length / POR_PAGINA));
+  const linhasPaginadas = linhasFiltradas.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
+
+  // Resumo (sempre considerando o conjunto completo, sem filtro)
+  const totalTurmas = turmasUnicas.length;
+  const alunosAtivosUnicos = useMemo(() => {
+    const set = new Set<number>();
+    linhas.forEach(l => { if (l.aluno_status === 'ativo') set.add(l.aluno_id); });
+    return set.size;
+  }, [linhas]);
+  const alunosOutrosUnicos = useMemo(() => {
+    const set = new Set<number>();
+    linhas.forEach(l => { if (l.aluno_status !== 'ativo') set.add(l.aluno_id); });
+    return set.size;
+  }, [linhas]);
+  // Breakdown de "outros" por status (alunos únicos por status)
+  const breakdownOutros = useMemo(() => {
+    const porStatus = new Map<string, Set<number>>();
+    linhas.forEach(l => {
+      if (l.aluno_status !== 'ativo') {
+        if (!porStatus.has(l.aluno_status)) porStatus.set(l.aluno_status, new Set());
+        porStatus.get(l.aluno_status)!.add(l.aluno_id);
+      }
+    });
+    return Array.from(porStatus.entries())
+      .map(([status, set]) => ({ status, count: set.size }))
+      .sort((a, b) => b.count - a.count);
+  }, [linhas]);
+  // Média = alunos distintos / turmas distintas (mesma fórmula da coluna Média/Turma da RPC)
+  // Aluno em N turmas conta 1x, igual COUNT(DISTINCT aluno_id) / COUNT(DISTINCT turma_nome)
+  const alunosDistintosTotais = useMemo(() => {
+    const set = new Set<number>();
+    linhas.forEach(l => set.add(l.aluno_id));
+    return set.size;
+  }, [linhas]);
+  const media = totalTurmas > 0 ? (alunosDistintosTotais / totalTurmas).toFixed(1) : '0';
 
   if (!professorId) return null;
 
-  // Agrupar por dia da semana
-  const turmasPorDia = turmas.reduce<Record<string, TurmaImplicita[]>>((acc, t) => {
-    const dia = normalizarDia(t.dia_semana);
-    if (!acc[dia]) acc[dia] = [];
-    acc[dia].push(t);
-    return acc;
-  }, {});
-
-  const diasOrdenados = Object.keys(turmasPorDia).sort(
-    (a, b) => (DIAS_ORDEM[a] || 99) - (DIAS_ORDEM[b] || 99)
-  );
-
-  const totalAlunos = turmas.reduce((sum, t) => sum + t.total_alunos, 0);
-  const totalTurmas = turmas.length;
-  const media = totalTurmas > 0 ? (totalAlunos / totalTurmas).toFixed(1) : '0';
-
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Users className="w-5 h-5 text-violet-400" />
+          <DialogTitle className="text-white">
             Turmas — {professorNome}
           </DialogTitle>
-          {unidadeNome && (
-            <p className="text-xs text-slate-400 flex items-center gap-1 mt-1">
-              <MapPin size={12} /> {unidadeNome}
-            </p>
-          )}
+          <p className="text-sm text-slate-400">
+            {unidadeNome && <span>{unidadeNome}</span>}
+            {unidadeNome && periodoLabel && <span className="mx-1.5 text-slate-600">·</span>}
+            {periodoLabel && <span className="capitalize">{periodoLabel}</span>}
+          </p>
         </DialogHeader>
 
-        {/* Resumo */}
-        <div className="grid grid-cols-3 gap-3 py-3 border-b border-slate-700/50">
-          <div className="text-center">
-            <p className="text-2xl font-bold text-white">{totalTurmas}</p>
-            <p className="text-[10px] text-slate-400 uppercase tracking-wider">Turmas</p>
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="w-6 h-6 animate-spin text-violet-400" />
           </div>
-          <div className="text-center">
-            <p className="text-2xl font-bold text-white">{totalAlunos}</p>
-            <p className="text-[10px] text-slate-400 uppercase tracking-wider">Alunos</p>
-          </div>
-          <div className="text-center">
-            <p className={cn(
-              "text-2xl font-bold",
-              Number(media) >= 1.5 ? 'text-emerald-400' :
-              Number(media) >= 1.3 ? 'text-amber-400' : 'text-rose-400'
-            )}>{media}</p>
-            <p className="text-[10px] text-slate-400 uppercase tracking-wider">Média/Turma</p>
-          </div>
-        </div>
-
-        {/* Lista de turmas */}
-        <div className="flex-1 overflow-y-auto space-y-4 py-3 pr-1">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-6 h-6 animate-spin text-violet-400" />
-            </div>
-          ) : turmas.length === 0 ? (
-            <p className="text-center text-slate-500 py-8">Nenhuma turma encontrada</p>
-          ) : (
-            diasOrdenados.map(dia => (
-              <div key={dia}>
-                <div className="py-2 border-b border-slate-700/40 mb-2">
-                  <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                    {dia}
-                  </h3>
-                </div>
-                <div className="space-y-2">
-                  {turmasPorDia[dia]
-                    .sort((a, b) => (a.horario_inicio || '').localeCompare(b.horario_inicio || ''))
-                    .map((turma, idx) => (
-                    <div
-                      key={idx}
-                      className="bg-slate-800/60 border border-slate-700/40 rounded-lg p-3 hover:border-slate-600/60 transition-colors"
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <Music size={14} className="text-violet-400 flex-shrink-0" />
-                          <span className="text-sm font-medium text-white">{turma.curso_nome}</span>
-                        </div>
-                        <div className="flex items-center gap-3 text-xs text-slate-400">
-                          <span className="flex items-center gap-1">
-                            <Clock size={11} />
-                            {turma.horario_inicio?.substring(0, 5)}
-                          </span>
-                          {turma.sala_nome && (
-                            <span className="flex items-center gap-1">
-                              <MapPin size={11} />
-                              {turma.sala_nome}
-                            </span>
-                          )}
-                          <span className={cn(
-                            "font-semibold px-1.5 py-0.5 rounded text-[10px]",
-                            turma.total_alunos >= 2 ? 'bg-emerald-500/20 text-emerald-400' :
-                            turma.total_alunos === 1 ? 'bg-amber-500/20 text-amber-400' :
-                            'bg-rose-500/20 text-rose-400'
-                          )}>
-                            {turma.total_alunos} {turma.total_alunos === 1 ? 'aluno' : 'alunos'}
-                          </span>
-                        </div>
-                      </div>
-                      {/* Lista de alunos */}
-                      {turma.nomes_alunos && turma.nomes_alunos.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 mt-1">
-                          {turma.nomes_alunos.map((nome, i) => (
-                            <span
-                              key={i}
-                              className="text-[11px] text-slate-300 bg-slate-700/50 px-2 py-0.5 rounded-full"
-                            >
-                              {nome}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
+        ) : (
+          <>
+            {/* Resumo */}
+            <div className="grid grid-cols-4 gap-2 mb-4">
+              <div className="bg-slate-800/50 rounded-lg p-3 text-center">
+                <p className="text-xs text-slate-400">Turmas</p>
+                <p className="text-lg font-bold text-white">{totalTurmas}</p>
               </div>
-            ))
-          )}
-        </div>
+              <div className="bg-emerald-500/10 rounded-lg p-3 text-center border border-emerald-500/20">
+                <p className="text-xs text-slate-400">Alunos ativos</p>
+                <p className="text-lg font-bold text-emerald-400">{alunosAtivosUnicos}</p>
+              </div>
+              <Tooltip
+                side="top"
+                content={
+                  <div className="text-xs max-w-[280px]">
+                    <p className="font-medium text-slate-200 mb-1">Alunos que faziam aula no período</p>
+                    <p className="text-slate-400 mb-2">mas hoje estão com outro status:</p>
+                    {breakdownOutros.length > 0 ? (
+                      <ul className="space-y-0.5">
+                        {breakdownOutros.map(({ status, count }) => (
+                          <li key={status} className="flex justify-between gap-3">
+                            <span className="text-slate-400">{formatarStatus(status)}</span>
+                            <span className="text-white font-medium">{count}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-slate-500 italic">Nenhum</p>
+                    )}
+                    <p className="text-slate-500 text-[10px] mt-2 pt-1 border-t border-slate-700/50">
+                      Continuam contando na média do período — em {periodoLabel || 'no período'} eles ainda estavam ativos.
+                    </p>
+                  </div>
+                }
+              >
+                <div className="bg-slate-700/30 rounded-lg p-3 text-center border border-slate-600/30 cursor-help">
+                  <p className="text-xs text-slate-400">Outros</p>
+                  <p className="text-lg font-bold text-slate-300">{alunosOutrosUnicos}</p>
+                </div>
+              </Tooltip>
+              <div className={cn(
+                "rounded-lg p-3 text-center border",
+                Number(media) >= 1.5 ? 'bg-emerald-500/10 border-emerald-500/20' :
+                Number(media) >= 1.3 ? 'bg-amber-500/10 border-amber-500/20' :
+                'bg-rose-500/10 border-rose-500/20'
+              )}>
+                <p className="text-xs text-slate-400">Média/Turma</p>
+                <p className={cn(
+                  "text-lg font-bold",
+                  Number(media) >= 1.5 ? 'text-emerald-400' :
+                  Number(media) >= 1.3 ? 'text-amber-400' : 'text-rose-400'
+                )}>{media}</p>
+              </div>
+            </div>
+
+            {/* Filtros */}
+            <div className="flex items-center gap-2 mb-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                <Input
+                  value={busca}
+                  onChange={e => setBusca(e.target.value)}
+                  placeholder="Buscar aluno..."
+                  className="pl-8 h-8 text-xs bg-slate-800/50 border-slate-700"
+                />
+              </div>
+              <Select value={filtroTurma} onValueChange={v => setFiltroTurma(v)}>
+                <SelectTrigger className="w-[180px] h-8 text-xs bg-slate-800/50 border-slate-700">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todas as turmas</SelectItem>
+                  {turmasUnicas.map(([chave, label]) => (
+                    <SelectItem key={chave} value={chave}>{label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={filtroStatus} onValueChange={v => setFiltroStatus(v)}>
+                <SelectTrigger className="w-[130px] h-8 text-xs bg-slate-800/50 border-slate-700">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos status</SelectItem>
+                  <SelectItem value="ativo">Apenas ativos</SelectItem>
+                  <SelectItem value="outros">Não ativos</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Tabela */}
+            {linhas.length === 0 ? (
+              <div className="text-center py-12 text-slate-500 text-sm">
+                Nenhuma turma encontrada no período
+              </div>
+            ) : (
+              <>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-700 text-xs text-slate-400">
+                      <th className="text-left py-2 px-2">Aluno</th>
+                      <th className="text-center py-2 px-2">Status</th>
+                      <th className="text-left py-2 px-2">Curso</th>
+                      <th className="text-left py-2 px-2">Turma</th>
+                      <th className="text-center py-2 px-2">Dia</th>
+                      <th className="text-center py-2 px-2">Horário</th>
+                      <th className="text-left py-2 px-2">Sala</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {linhasPaginadas.map((l, idx) => (
+                      <tr key={`${l.aluno_id}-${l.turma_chave}-${idx}`} className="border-b border-slate-800/50 hover:bg-slate-800/30">
+                        <td className={cn(
+                          "py-2 px-2 text-xs",
+                          l.aluno_status === 'ativo' ? "text-white" : "text-slate-400 line-through"
+                        )}>
+                          {l.aluno_nome}
+                        </td>
+                        <td className="py-2 px-2 text-center">
+                          <span className={cn(
+                            'text-xs px-2 py-0.5 rounded-full whitespace-nowrap capitalize',
+                            l.aluno_status === 'ativo' ? 'bg-emerald-500/20 text-emerald-400' :
+                            l.aluno_status === 'trancado' ? 'bg-amber-500/20 text-amber-400' :
+                            'bg-slate-700/50 text-slate-400'
+                          )}>
+                            {l.aluno_status}
+                          </span>
+                        </td>
+                        <td className="py-2 px-2 text-xs text-slate-300">{l.curso_nome}</td>
+                        <td className="py-2 px-2 text-xs text-slate-400 max-w-[200px] truncate" title={l.turma_nome || '—'}>
+                          {l.turma_nome || <span className="text-slate-600 italic">—</span>}
+                        </td>
+                        <td className="py-2 px-2 text-center text-xs text-slate-300">
+                          {DIAS_NOMES[l.dia_semana_iso] || `Dia ${l.dia_semana_iso}`}
+                        </td>
+                        <td className="py-2 px-2 text-center text-xs text-slate-300">
+                          {l.horario_inicio}
+                        </td>
+                        <td className="py-2 px-2 text-xs text-slate-400">
+                          {l.sala_nome || <span className="text-slate-600 italic">-</span>}
+                        </td>
+                      </tr>
+                    ))}
+                    {linhasPaginadas.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="py-6 text-center text-slate-500 text-xs">
+                          Nenhum registro encontrado com os filtros atuais
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+
+                {/* Paginação */}
+                {totalPaginas > 1 && (
+                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-slate-700/50">
+                    <span className="text-xs text-slate-500">
+                      {linhasFiltradas.length} registro{linhasFiltradas.length !== 1 ? 's' : ''} | Página {pagina} de {totalPaginas}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <Button variant="ghost" size="icon" className="h-7 w-7" disabled={pagina <= 1} onClick={() => setPagina(p => p - 1)}>
+                        <ChevronLeft className="w-4 h-4" />
+                      </Button>
+                      {Array.from({ length: totalPaginas }, (_, i) => i + 1)
+                        .filter(p => p === 1 || p === totalPaginas || Math.abs(p - pagina) <= 1)
+                        .map((p, i, arr) => (
+                          <span key={p}>
+                            {i > 0 && arr[i - 1] !== p - 1 && <span className="text-slate-600 px-1">...</span>}
+                            <Button
+                              variant={p === pagina ? 'default' : 'ghost'}
+                              size="icon"
+                              className={cn('h-7 w-7 text-xs', p === pagina && 'bg-violet-600')}
+                              onClick={() => setPagina(p)}
+                            >
+                              {p}
+                            </Button>
+                          </span>
+                        ))}
+                      <Button variant="ghost" size="icon" className="h-7 w-7" disabled={pagina >= totalPaginas} onClick={() => setPagina(p => p + 1)}>
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );
