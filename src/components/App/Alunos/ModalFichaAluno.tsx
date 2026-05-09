@@ -1,4 +1,10 @@
 import { useState, useEffect } from 'react';
+
+const parseLocalDate = (s: string | null | undefined): Date | null =>
+  s ? new Date(s + 'T00:00:00') : null;
+
+const formatLocalDate = (d: Date | null | undefined): string | null =>
+  d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : null;
 import { supabase } from '@/lib/supabase';
 import { X, Loader2, Save, User, GraduationCap, DollarSign, TrendingUp, History, AlertCircle, Plus, Users, Pencil } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -263,11 +269,11 @@ export function ModalFichaAluno({
         professor_atual_id: alunoData.professor_atual_id,
         dia_aula: alunoData.dia_aula || '',
         horario_aula: alunoData.horario_aula?.substring(0, 5) || '',
-        data_matricula: alunoData.data_matricula ? new Date(alunoData.data_matricula) : null,
-        data_inicio_contrato: alunoData.data_inicio_contrato ? new Date(alunoData.data_inicio_contrato) : null,
-        data_fim_contrato: alunoData.data_fim_contrato ? new Date(alunoData.data_fim_contrato) : null,
+        data_matricula: parseLocalDate(alunoData.data_matricula),
+        data_inicio_contrato: parseLocalDate(alunoData.data_inicio_contrato),
+        data_fim_contrato: parseLocalDate(alunoData.data_fim_contrato),
         status: alunoData.status || 'ativo',
-        data_saida: alunoData.data_saida ? new Date(alunoData.data_saida) : null,
+        data_saida: parseLocalDate(alunoData.data_saida),
         is_segundo_curso: alunoData.is_segundo_curso || false,
         tipo_aluno: alunoData.tipo_aluno || 'pagante',
         tipo_matricula_id: alunoData.tipo_matricula_id || 1,
@@ -317,11 +323,11 @@ export function ModalFichaAluno({
           professor_atual_id: formData.professor_atual_id,
           dia_aula: formData.dia_aula || null,
           horario_aula: formData.horario_aula || null,
-          data_matricula: formData.data_matricula?.toISOString().split('T')[0] || null,
-          data_inicio_contrato: formData.data_inicio_contrato?.toISOString().split('T')[0] || null,
-          data_fim_contrato: formData.data_fim_contrato?.toISOString().split('T')[0] || null,
+          data_matricula: formatLocalDate(formData.data_matricula),
+          data_inicio_contrato: formatLocalDate(formData.data_inicio_contrato),
+          data_fim_contrato: formatLocalDate(formData.data_fim_contrato),
           status: formData.status,
-          data_saida: formData.data_saida?.toISOString().split('T')[0] || null,
+          data_saida: formatLocalDate(formData.data_saida),
           is_segundo_curso: formData.is_segundo_curso,
           tipo_aluno: formData.tipo_aluno,
           tipo_matricula_id: formData.tipo_matricula_id,
