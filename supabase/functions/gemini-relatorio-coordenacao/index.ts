@@ -580,7 +580,6 @@ Responda EXATAMENTE neste formato JSON:
           ],
           generationConfig: {
             temperature: 0.7,
-            topK: 40,
             topP: 0.95,
             maxOutputTokens: 2048,
           }
@@ -591,7 +590,7 @@ Responda EXATAMENTE neste formato JSON:
     if (!response.ok) {
       const errorText = await response.text();
       console.error('Erro Gemini:', errorText);
-      throw new Error(`Erro na API Gemini: ${response.status}`);
+      throw new Error(`Erro na API Gemini: ${response.status} — ${errorText}`);
     }
 
     const geminiResponse = await response.json();
@@ -646,15 +645,13 @@ Responda EXATAMENTE neste formato JSON:
     );
 
   } catch (error) {
-    console.error('Erro na Edge Function:', error);
+    const msg = error instanceof Error ? error.message : 'Erro desconhecido';
+    console.error('Erro na Edge Function:', msg);
     return new Response(
-      JSON.stringify({ 
-        success: false, 
-        error: error instanceof Error ? error.message : 'Erro desconhecido' 
-      }),
-      { 
+      JSON.stringify({ success: false, error: msg }),
+      {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500 
+        status: 500
       }
     );
   }
