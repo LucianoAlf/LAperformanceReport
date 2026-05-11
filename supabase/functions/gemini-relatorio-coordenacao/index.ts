@@ -581,7 +581,7 @@ Responda EXATAMENTE neste formato JSON:
             { role: 'user', content: 'DADOS:\n' + JSON.stringify(dadosParaIA, null, 2) }
           ],
           temperature: 0.7,
-          max_tokens: 2048,
+          max_completion_tokens: 2048,
         })
       }
     );
