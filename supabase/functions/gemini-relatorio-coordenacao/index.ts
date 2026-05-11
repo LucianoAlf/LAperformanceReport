@@ -6,14 +6,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Retry com backoff exponencial para erros 503/429 do Gemini
-async function fetchGeminiComRetry(url: string, options: RequestInit, maxRetries = 3): Promise<Response> {
+// Retry com backoff exponencial para erros 429 da OpenAI
+async function fetchOpenAIComRetry(url: string, options: RequestInit, maxRetries = 3): Promise<Response> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const res = await fetch(url, options);
     if (res.ok) return res;
-    if ((res.status === 503 || res.status === 429) && attempt < maxRetries) {
+    if (res.status === 429 && attempt < maxRetries) {
       const wait = 1000 * Math.pow(2, attempt);
-      console.log(`[gemini-retry] status ${res.status}, tentativa ${attempt + 1}/${maxRetries + 1}, esperando ${wait}ms`);
+      console.log(`[openai-retry] status ${res.status}, tentativa ${attempt + 1}/${maxRetries + 1}, esperando ${wait}ms`);
       await new Promise(r => setTimeout(r, wait));
       continue;
     }
@@ -150,9 +150,9 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
-    if (!GEMINI_API_KEY) {
-      throw new Error('GEMINI_API_KEY não configurada');
+    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    if (!OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY não configurada');
     }
 
     const payload: RelatorioCoordenacaoRequest = await req.json();
@@ -566,38 +566,37 @@ Responda EXATAMENTE neste formato JSON:
       }
     };
 
-    const response = await fetchGeminiComRetry(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+    const response = await fetchOpenAIComRetry(
+      'https://api.openai.com/v1/chat/completions',
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        },
         body: JSON.stringify({
-          contents: [
-            {
-              role: 'user',
-              parts: [{ text: systemPrompt + '\n\nDADOS:\n' + JSON.stringify(dadosParaIA, null, 2) }]
-            }
+          model: 'gpt-5.4-mini-2026-03-17',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: 'DADOS:\n' + JSON.stringify(dadosParaIA, null, 2) }
           ],
-          generationConfig: {
-            temperature: 0.7,
-            topP: 0.95,
-            maxOutputTokens: 2048,
-          }
+          temperature: 0.7,
+          max_tokens: 2048,
         })
       }
     );
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Erro Gemini:', errorText);
-      throw new Error(`Erro na API Gemini: ${response.status} — ${errorText}`);
+      console.error('Erro OpenAI:', errorText);
+      throw new Error(`Erro na API OpenAI: ${response.status} — ${errorText}`);
     }
 
-    const geminiResponse = await response.json();
-    const iaResponseText = geminiResponse.candidates?.[0]?.content?.parts?.[0]?.text;
+    const openaiResponse = await response.json();
+    const iaResponseText = openaiResponse.choices?.[0]?.message?.content;
 
     if (!iaResponseText) {
-      throw new Error('Resposta vazia da API Gemini');
+      throw new Error('Resposta vazia da API OpenAI');
     }
 
     // Parsear resposta da IA
@@ -646,7 +645,7 @@ Responda EXATAMENTE neste formato JSON:
 
   } catch (error) {
     const msg = error instanceof Error ? error.message : 'Erro desconhecido';
-    console.error('Erro na Edge Function:', msg);
+    console.error('Erro na Edge Function:', msg, error instanceof Error ? error.stack : '');
     return new Response(
       JSON.stringify({ success: false, error: msg }),
       {
