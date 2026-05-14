@@ -23,6 +23,10 @@ interface VisitaConfig {
   horario_fim_seg_sex: string;
   horario_inicio_sab: string;
   horario_fim_sab: string;
+  atendimento_inicio_seg_sex: string;
+  atendimento_fim_seg_sex: string;
+  atendimento_inicio_sab: string;
+  atendimento_fim_sab: string;
   ativo: boolean;
 }
 
@@ -64,6 +68,10 @@ const CONFIG_PADRAO: Omit<VisitaConfig, 'unidade_id'> = {
   horario_fim_seg_sex: '20:00',
   horario_inicio_sab: '08:00',
   horario_fim_sab: '14:00',
+  atendimento_inicio_seg_sex: '11:00',
+  atendimento_fim_seg_sex: '20:00',
+  atendimento_inicio_sab: '08:00',
+  atendimento_fim_sab: '14:00',
   ativo: false,
 };
 
@@ -144,6 +152,10 @@ export function ConfigPreAtendimentoTab({ unidadeId }: ConfigPreAtendimentoTabPr
           horario_fim_seg_sex: c.horario_fim_seg_sex?.substring(0, 5) || '20:00',
           horario_inicio_sab: c.horario_inicio_sab?.substring(0, 5) || '08:00',
           horario_fim_sab: c.horario_fim_sab?.substring(0, 5) || '14:00',
+          atendimento_inicio_seg_sex: c.atendimento_inicio_seg_sex?.substring(0, 5) || '11:00',
+          atendimento_fim_seg_sex: c.atendimento_fim_seg_sex?.substring(0, 5) || '20:00',
+          atendimento_inicio_sab: c.atendimento_inicio_sab?.substring(0, 5) || '08:00',
+          atendimento_fim_sab: c.atendimento_fim_sab?.substring(0, 5) || '14:00',
           ativo: c.ativo,
         };
       });
@@ -175,6 +187,10 @@ export function ConfigPreAtendimentoTab({ unidadeId }: ConfigPreAtendimentoTabPr
         horario_fim_seg_sex: config.horario_fim_seg_sex,
         horario_inicio_sab: config.horario_inicio_sab,
         horario_fim_sab: config.horario_fim_sab,
+        atendimento_inicio_seg_sex: config.atendimento_inicio_seg_sex,
+        atendimento_fim_seg_sex: config.atendimento_fim_seg_sex,
+        atendimento_inicio_sab: config.atendimento_inicio_sab,
+        atendimento_fim_sab: config.atendimento_fim_sab,
         ativo: config.ativo,
       };
 
@@ -385,7 +401,7 @@ export function ConfigPreAtendimentoTab({ unidadeId }: ConfigPreAtendimentoTabPr
           </div>
           <div>
             <h2 className="text-lg font-semibold text-white">Configuração de Visitas</h2>
-            <p className="text-sm text-slate-400">Horários de funcionamento e limite de visitas por unidade</p>
+            <p className="text-sm text-slate-400">Expediente do consultor e janela de agendamento de visitas por unidade</p>
           </div>
         </div>
 
@@ -416,37 +432,79 @@ export function ConfigPreAtendimentoTab({ unidadeId }: ConfigPreAtendimentoTabPr
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-sm font-medium text-slate-300">
-                      <Clock className="w-4 h-4 text-sky-400" />
-                      Segunda a Sexta
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-slate-400">Início</Label>
-                        <Input type="time" value={config.horario_inicio_seg_sex} onChange={(e) => updateLocal(uid, 'horario_inicio_seg_sex', e.target.value)} className="bg-slate-800/50 border-slate-700 text-white text-sm" />
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Janela de Agendamento de Visitas</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 text-sm font-medium text-slate-300">
+                        <Clock className="w-4 h-4 text-sky-400" />
+                        Segunda a Sexta
                       </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-slate-400">Fim</Label>
-                        <Input type="time" value={config.horario_fim_seg_sex} onChange={(e) => updateLocal(uid, 'horario_fim_seg_sex', e.target.value)} className="bg-slate-800/50 border-slate-700 text-white text-sm" />
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-slate-400">Início</Label>
+                          <Input type="time" value={config.horario_inicio_seg_sex} onChange={(e) => updateLocal(uid, 'horario_inicio_seg_sex', e.target.value)} className="bg-slate-800/50 border-slate-700 text-white text-sm" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-slate-400">Fim</Label>
+                          <Input type="time" value={config.horario_fim_seg_sex} onChange={(e) => updateLocal(uid, 'horario_fim_seg_sex', e.target.value)} className="bg-slate-800/50 border-slate-700 text-white text-sm" />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 text-sm font-medium text-slate-300">
+                        <Clock className="w-4 h-4 text-amber-400" />
+                        Sábado
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-slate-400">Início</Label>
+                          <Input type="time" value={config.horario_inicio_sab} onChange={(e) => updateLocal(uid, 'horario_inicio_sab', e.target.value)} className="bg-slate-800/50 border-slate-700 text-white text-sm" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-slate-400">Fim</Label>
+                          <Input type="time" value={config.horario_fim_sab} onChange={(e) => updateLocal(uid, 'horario_fim_sab', e.target.value)} className="bg-slate-800/50 border-slate-700 text-white text-sm" />
+                        </div>
                       </div>
                     </div>
                   </div>
+                </div>
 
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-sm font-medium text-slate-300">
-                      <Clock className="w-4 h-4 text-amber-400" />
-                      Sábado
-                    </div>
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-slate-400">Início</Label>
-                        <Input type="time" value={config.horario_inicio_sab} onChange={(e) => updateLocal(uid, 'horario_inicio_sab', e.target.value)} className="bg-slate-800/50 border-slate-700 text-white text-sm" />
+                <div className="space-y-1">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Expediente do Consultor</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 text-sm font-medium text-slate-300">
+                        <Clock className="w-4 h-4 text-indigo-400" />
+                        Segunda a Sexta
                       </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs text-slate-400">Fim</Label>
-                        <Input type="time" value={config.horario_fim_sab} onChange={(e) => updateLocal(uid, 'horario_fim_sab', e.target.value)} className="bg-slate-800/50 border-slate-700 text-white text-sm" />
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-slate-400">Início</Label>
+                          <Input type="time" value={config.atendimento_inicio_seg_sex} onChange={(e) => updateLocal(uid, 'atendimento_inicio_seg_sex', e.target.value)} className="bg-slate-800/50 border-slate-700 text-white text-sm" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-slate-400">Fim</Label>
+                          <Input type="time" value={config.atendimento_fim_seg_sex} onChange={(e) => updateLocal(uid, 'atendimento_fim_seg_sex', e.target.value)} className="bg-slate-800/50 border-slate-700 text-white text-sm" />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3">
+                      <div className="flex items-center gap-2 text-sm font-medium text-slate-300">
+                        <Clock className="w-4 h-4 text-orange-400" />
+                        Sábado
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-slate-400">Início</Label>
+                          <Input type="time" value={config.atendimento_inicio_sab} onChange={(e) => updateLocal(uid, 'atendimento_inicio_sab', e.target.value)} className="bg-slate-800/50 border-slate-700 text-white text-sm" />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-slate-400">Fim</Label>
+                          <Input type="time" value={config.atendimento_fim_sab} onChange={(e) => updateLocal(uid, 'atendimento_fim_sab', e.target.value)} className="bg-slate-800/50 border-slate-700 text-white text-sm" />
+                        </div>
                       </div>
                     </div>
                   </div>
