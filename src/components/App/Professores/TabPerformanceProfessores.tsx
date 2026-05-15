@@ -397,11 +397,10 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
           // Carteira de alunos (com matricula viva)
           const totalAlunos = kpis?.carteira_alunos || alunosPorProfessor.get(prof.id) || 0;
 
-          // Turmas e alunos via aulas (mesma fonte do modal: aulas_emusys + aluno_presenca)
-          // Fallback para o agregador local quando RPC nao tem dados
+          // Turmas e alunos via carteira (fallback para vw_turmas_implicitas se RPC retornar 0)
           const turmasFallback = totalAlunosTurmasPorProfessor.get(prof.id) || [];
-          const totalTurmas = (kpis?.total_turmas ?? turmasFallback.length) || 0;
-          const alunosViaTurmas = (kpis?.alunos_via_turmas ?? turmasFallback.reduce((sum, n) => sum + n, 0)) || 0;
+          const totalTurmas = kpis?.total_turmas || turmasFallback.length || 0;
+          const alunosViaTurmas = kpis?.alunos_via_turmas || turmasFallback.reduce((sum, n) => sum + n, 0) || 0;
 
           // Media = alunos_via_turmas / total_turmas (mesma formula da coluna e do modal)
           const mediaAlunosTurma = totalTurmas > 0
