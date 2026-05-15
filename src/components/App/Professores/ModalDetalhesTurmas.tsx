@@ -26,7 +26,7 @@ interface LinhaAlunoTurma {
   turma_nome: string | null;
   curso_nome: string;
   sala_nome: string | null;
-  dia_semana_iso: number;
+  dia_semana: string;
   horario_inicio: string;
 }
 
@@ -44,8 +44,13 @@ interface Props {
 
 const POR_PAGINA = 15;
 
-const DIAS_NOMES: Record<number, string> = {
-  1: 'Segunda', 2: 'Terça', 3: 'Quarta', 4: 'Quinta', 5: 'Sexta', 6: 'Sábado', 7: 'Domingo',
+const DIA_ISO: Record<string, number> = {
+  'Segunda': 1, 'Segunda-feira': 1,
+  'Terça': 2, 'Terça-feira': 2,
+  'Quarta': 3, 'Quarta-feira': 3,
+  'Quinta': 4, 'Quinta-feira': 4,
+  'Sexta': 5, 'Sexta-feira': 5,
+  'Sábado': 6, 'Domingo': 7,
 };
 
 export function ModalDetalhesTurmas({
@@ -69,19 +74,14 @@ export function ModalDetalhesTurmas({
       setFiltroStatus('todos');
       setPagina(1);
 
-      // Range default: mês corrente
-      const hoje = new Date();
-      const inicio = dataInicio
-        ?? `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-01`;
-      const fim = dataFim
-        ?? `${hoje.getFullYear()}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${String(new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
-
+      // Fonte: carteira (alunos ativos + trancados), independente de aulas registradas
       let query = supabase
-        .from('vw_turmas_professor_periodo')
-        .select('turma_chave, turma_nome, curso_nome, sala_nome, dia_semana_iso, horario_inicio, aluno_id, aluno_nome, aluno_status')
-        .eq('professor_id', professorId!)
-        .gte('data_aula', inicio)
-        .lte('data_aula', fim);
+        .from('alunos')
+        .select('id, nome, status, dia_aula, horario_aula, cursos!inner(nome)')
+        .eq('professor_atual_id', professorId!)
+        .in('status', ['ativo', 'trancado'])
+        .not('dia_aula', 'is', null)
+        .not('horario_aula', 'is', null);
 
       if (unidadeId && unidadeId !== 'todos') {
         query = query.eq('unidade_id', unidadeId);
@@ -89,28 +89,25 @@ export function ModalDetalhesTurmas({
 
       const { data } = await query;
 
-      // Deduplicar: 1 linha por (aluno, turma_chave)
-      const dedup = new Map<string, LinhaAlunoTurma>();
-      (data || []).forEach((row: any) => {
-        const chave = `${row.aluno_id}|${row.turma_chave}`;
-        if (!dedup.has(chave)) {
-          dedup.set(chave, {
-            aluno_id: row.aluno_id,
-            aluno_nome: row.aluno_nome,
-            aluno_status: row.aluno_status,
-            turma_chave: row.turma_chave,
-            turma_nome: row.turma_nome,
-            curso_nome: row.curso_nome,
-            sala_nome: row.sala_nome,
-            dia_semana_iso: row.dia_semana_iso,
-            horario_inicio: row.horario_inicio,
-          });
-        }
-      });
-
-      const lista = Array.from(dedup.values()).sort((a, b) => {
-        if (a.dia_semana_iso !== b.dia_semana_iso) return a.dia_semana_iso - b.dia_semana_iso;
-        if (a.horario_inicio !== b.horario_inicio) return (a.horario_inicio || '').localeCompare(b.horario_inicio || '');
+      const lista: LinhaAlunoTurma[] = (data || []).map((row: any) => {
+        const cursoNome = (row.cursos as any)?.nome || '';
+        const horario = row.horario_aula?.substring(0, 5) || '';
+        return {
+          aluno_id: row.id,
+          aluno_nome: row.nome,
+          aluno_status: row.status,
+          turma_chave: `${cursoNome}@${row.dia_aula}:${horario}`,
+          turma_nome: null,
+          curso_nome: cursoNome,
+          sala_nome: null,
+          dia_semana: row.dia_aula || '',
+          horario_inicio: horario,
+        };
+      }).sort((a, b) => {
+        const diaA = DIA_ISO[a.dia_semana] ?? 9;
+        const diaB = DIA_ISO[b.dia_semana] ?? 9;
+        if (diaA !== diaB) return diaA - diaB;
+        if (a.horario_inicio !== b.horario_inicio) return a.horario_inicio.localeCompare(b.horario_inicio);
         return a.aluno_nome.localeCompare(b.aluno_nome);
       });
 
@@ -128,7 +125,7 @@ export function ModalDetalhesTurmas({
       if (!map.has(l.turma_chave)) {
         const label = l.turma_nome
           ? l.turma_nome
-          : `${l.curso_nome} (${DIAS_NOMES[l.dia_semana_iso] || ''} ${l.horario_inicio})`;
+          : `${l.curso_nome} (${l.dia_semana} ${l.horario_inicio})`;
         map.set(l.turma_chave, label);
       }
     });
@@ -182,14 +179,8 @@ export function ModalDetalhesTurmas({
       .map(([status, set]) => ({ status, count: set.size }))
       .sort((a, b) => b.count - a.count);
   }, [linhas]);
-  // Média = alunos distintos / turmas distintas (mesma fórmula da coluna Média/Turma da RPC)
-  // Aluno em N turmas conta 1x, igual COUNT(DISTINCT aluno_id) / COUNT(DISTINCT turma_nome)
-  const alunosDistintosTotais = useMemo(() => {
-    const set = new Set<number>();
-    linhas.forEach(l => set.add(l.aluno_id));
-    return set.size;
-  }, [linhas]);
-  const media = totalTurmas > 0 ? (alunosDistintosTotais / totalTurmas).toFixed(1) : '0';
+  // Média = ativos / turmas (alinha com o card da aba Performance)
+  const media = totalTurmas > 0 ? (alunosAtivosUnicos / totalTurmas).toFixed(1) : '0';
 
   if (!professorId) return null;
 
@@ -227,8 +218,8 @@ export function ModalDetalhesTurmas({
                 side="top"
                 content={
                   <div className="text-xs max-w-[280px]">
-                    <p className="font-medium text-slate-200 mb-1">Alunos que faziam aula no período</p>
-                    <p className="text-slate-400 mb-2">mas hoje estão com outro status:</p>
+                    <p className="font-medium text-slate-200 mb-1">Alunos com outro status na carteira</p>
+                    <p className="text-slate-400 mb-2">não contam na média/turma:</p>
                     {breakdownOutros.length > 0 ? (
                       <ul className="space-y-0.5">
                         {breakdownOutros.map(({ status, count }) => (
@@ -242,7 +233,7 @@ export function ModalDetalhesTurmas({
                       <p className="text-slate-500 italic">Nenhum</p>
                     )}
                     <p className="text-slate-500 text-[10px] mt-2 pt-1 border-t border-slate-700/50">
-                      Continuam contando na média do período — em {periodoLabel || 'no período'} eles ainda estavam ativos.
+                      Exibidos para referência, mas excluídos do cálculo de média/turma.
                     </p>
                   </div>
                 }
@@ -344,7 +335,7 @@ export function ModalDetalhesTurmas({
                           {l.turma_nome || <span className="text-slate-600 italic">—</span>}
                         </td>
                         <td className="py-2 px-2 text-center text-xs text-slate-300">
-                          {DIAS_NOMES[l.dia_semana_iso] || `Dia ${l.dia_semana_iso}`}
+                          {l.dia_semana}
                         </td>
                         <td className="py-2 px-2 text-center text-xs text-slate-300">
                           {l.horario_inicio}
