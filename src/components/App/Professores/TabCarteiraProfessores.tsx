@@ -95,48 +95,14 @@ export function TabCarteiraProfessores({ unidadeAtual, healthWeights }: Props) {
         .order('nome');
       setCursos(cursosData || []);
 
-      // Buscar professores ativos
-      let queryProfs = supabase
-        .from('professores')
-        .select('id, nome, foto_url, ativo')
-        .eq('ativo', true)
-        .order('nome');
+      // Buscar carteira agregada via RPC (evita truncamento de 1000 linhas e RLS bypass da vw_turmas_implicitas)
+      const rpcParams = unidadeAtual !== 'todos' ? { p_unidade_id: unidadeAtual } : {};
+      const { data: carteiraData } = await supabase.rpc('get_carteira_professores', rpcParams);
 
-      const { data: professoresData } = await queryProfs;
-
-      if (!professoresData) {
+      if (!carteiraData) {
         setCarteiras([]);
         return;
       }
-
-      // Buscar alunos ativos agrupados por professor
-      // CORREÇÃO: Incluir is_segundo_curso e tipos_matricula para cálculo correto de pagantes
-      let queryAlunos = supabase
-        .from('alunos')
-        .select(`
-          id, nome, classificacao, valor_parcela, tempo_permanencia_meses,
-          professor_atual_id, unidade_id, curso_id, is_segundo_curso,
-          unidades(nome), cursos(nome), tipos_matricula(conta_como_pagante)
-        `)
-        .eq('status', 'ativo');
-
-      if (unidadeAtual !== 'todos') {
-        queryAlunos = queryAlunos.eq('unidade_id', unidadeAtual);
-      }
-
-      const { data: alunosData } = await queryAlunos;
-
-      // Buscar turmas da view vw_turmas_implicitas (mesma fonte da aba Performance)
-      // Isso garante consistência entre Carteira e Performance
-      let queryTurmas = supabase
-        .from('vw_turmas_implicitas')
-        .select('professor_id, total_alunos, unidade_id');
-
-      if (unidadeAtual !== 'todos') {
-        queryTurmas = queryTurmas.eq('unidade_id', unidadeAtual);
-      }
-
-      const { data: turmasData } = await queryTurmas;
 
       // Buscar KPIs de performance para calcular Health Score (mesma fonte da aba Performance)
       const agora = new Date();
@@ -163,69 +129,20 @@ export function TabCarteiraProfessores({ unidadeAtual, healthWeights }: Props) {
         }
       });
 
-      // Calcular turmas e alunos por professor (mesma lógica da aba Performance)
-      const turmasPorProfessor = new Map<number, number>();
-      const alunosPorProfessorTurma = new Map<number, number>();
-      (turmasData || []).forEach((t: any) => {
-        const profId = t.professor_id;
-        if (profId) {
-          turmasPorProfessor.set(profId, (turmasPorProfessor.get(profId) || 0) + 1);
-          alunosPorProfessorTurma.set(profId, (alunosPorProfessorTurma.get(profId) || 0) + (t.total_alunos || 0));
-        }
-      });
-
-      // Agrupar alunos por professor
-      const alunosPorProfessor = new Map<number, any[]>();
-      // Guardar alunos SEM professor para incluir nos KPIs totais
-      const alunosSemProfessor: any[] = [];
-      (alunosData || []).forEach((a: any) => {
-        if (a.professor_atual_id) {
-          if (!alunosPorProfessor.has(a.professor_atual_id)) {
-            alunosPorProfessor.set(a.professor_atual_id, []);
-          }
-          alunosPorProfessor.get(a.professor_atual_id)!.push(a);
-        } else {
-          alunosSemProfessor.push(a);
-        }
-      });
-
-      // Montar carteiras
-      const carteirasCalculadas: CarteiraProfessor[] = professoresData.map((prof: any) => {
-        const alunos = alunosPorProfessor.get(prof.id) || [];
-        const turmas = turmasPorProfessor.get(prof.id) || 0;
-        
-        const totalAlunos = alunos.length;
-        const alunosLamk = alunos.filter((a: any) => a.classificacao === 'LAMK').length;
-        const alunosEmla = alunos.filter((a: any) => a.classificacao === 'EMLA').length;
-        
-        // CORREÇÃO: Usar mesma lógica do Analytics (TabGestao.tsx)
-        // MRR = soma das parcelas de TODOS os alunos com valor > 0 (incluindo segundo curso)
-        const todosPagantes = alunos.filter((a: any) => (Number(a.valor_parcela) || 0) > 0);
-        const mrrTotal = todosPagantes.reduce((acc: number, a: any) => acc + (Number(a.valor_parcela) || 0), 0);
-        // Pagantes únicos = valor > 0 E is_segundo_curso = false (para denominador do ticket)
-        const pagantesUnicos = todosPagantes.filter((a: any) => !a.is_segundo_curso);
-        // Ticket médio = MRR / pagantes únicos
-        const ticketMedio = pagantesUnicos.length > 0 ? mrrTotal / pagantesUnicos.length : 0;
-        const tempoMedio = totalAlunos > 0 
-          ? alunos.reduce((acc: number, a: any) => acc + (a.tempo_permanencia_meses || 0), 0) / totalAlunos 
-          : 0;
-        const mediaAlunosTurma = turmas > 0 ? totalAlunos / turmas : 0;
-
-        // Cursos únicos
-        const cursosUnicos = [...new Set(alunos.map((a: any) => (a.cursos as any)?.nome).filter(Boolean))];
-        
-        // Unidades únicas
-        const unidadesUnicas = [...new Set(alunos.map((a: any) => (a.unidades as any)?.nome).filter(Boolean))];
+      // Montar carteiras a partir da RPC
+      const carteirasCalculadas: CarteiraProfessor[] = (carteiraData as any[]).map((row: any) => {
+        const totalAlunos = row.total_alunos;
+        const mediaAlunosTurma = Number(row.media_alunos_turma);
 
         // Calcular Health Score usando os KPIs reais (mesma lógica da aba Performance)
-        const kpis = kpisPorProfessor.get(prof.id);
-        const taxaRetencao = kpis?.taxa_cancelamento 
-          ? 100 - Number(kpis.taxa_cancelamento) 
+        const kpis = kpisPorProfessor.get(row.professor_id);
+        const taxaRetencao = kpis?.taxa_cancelamento
+          ? 100 - Number(kpis.taxa_cancelamento)
           : (totalAlunos > 0 ? 100 : 0);
         const taxaConversao = kpis?.taxa_conversao ? Number(kpis.taxa_conversao) : 0;
         const taxaPresenca = kpis?.media_presenca ? Number(kpis.media_presenca) : 75;
         const evasoesMes = kpis?.evasoes || 0;
-        
+
         const healthResult = calcularHealthScore({
           mediaTurma: mediaAlunosTurma,
           retencao: taxaRetencao,
@@ -238,19 +155,19 @@ export function TabCarteiraProfessores({ unidadeAtual, healthWeights }: Props) {
         }, healthWeights);
 
         return {
-          id: prof.id,
-          nome: prof.nome,
-          foto_url: prof.foto_url,
+          id: row.professor_id,
+          nome: row.professor_nome,
+          foto_url: row.foto_url,
           total_alunos: totalAlunos,
-          alunos_lamk: alunosLamk,
-          alunos_emla: alunosEmla,
-          mrr_total: mrrTotal,
-          ticket_medio: ticketMedio,
-          tempo_medio_meses: tempoMedio,
-          total_turmas: turmas,
+          alunos_lamk: row.alunos_lamk,
+          alunos_emla: row.alunos_emla,
+          mrr_total: Number(row.mrr_total),
+          ticket_medio: Number(row.ticket_medio),
+          tempo_medio_meses: Number(row.tempo_medio_meses),
+          total_turmas: row.total_turmas,
           media_alunos_turma: mediaAlunosTurma,
-          cursos: cursosUnicos,
-          unidades: unidadesUnicas,
+          cursos: row.cursos || [],
+          unidades: row.unidades || [],
           health_score: healthResult.score,
           health_status: healthResult.status
         };
