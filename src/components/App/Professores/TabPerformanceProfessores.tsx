@@ -1014,8 +1014,8 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                     <td className="text-center px-4 py-3 text-white">{professor.total_alunos}</td>
                     <td className="text-center px-4 py-3">
                       <Tooltip side="top" content={professor.total_turmas > 0
-                        ? `${professor.alunos_via_turmas} alunos com presença ÷ ${professor.total_turmas} turmas = ${professor.media_alunos_turma.toFixed(2)} alunos/turma · Clique para detalhes`
-                        : 'Sem aulas registradas no período · Clique para detalhes'}>
+                        ? `${professor.alunos_via_turmas} alunos na carteira ÷ ${professor.total_turmas} turmas = ${professor.media_alunos_turma.toFixed(2)} alunos/turma · Clique para detalhes`
+                        : 'Sem turmas ativas no período · Clique para detalhes'}>
                         <span
                           className={`font-medium cursor-pointer hover:underline ${getMetricaColor(professor.media_alunos_turma, { critico: 1.3, atencao: 1.5 })}`}
                           onClick={(e) => { e.stopPropagation(); setModalTurmas({ open: true, professorId: professor.id, professorNome: professor.nome }); }}
