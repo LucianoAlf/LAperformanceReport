@@ -155,7 +155,12 @@ export function ModalDetalhesTurmas({
   const linhasPaginadas = linhasFiltradas.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
 
   // Resumo (sempre considerando o conjunto completo, sem filtro)
-  const totalTurmas = turmasUnicas.length;
+  // Conta apenas turmas com pelo menos 1 aluno ativo (alinha com RPC get_kpis_professor_periodo)
+  const totalTurmas = useMemo(() => {
+    const turmasComAtivos = new Set<string>();
+    linhas.forEach(l => { if (l.aluno_status === 'ativo') turmasComAtivos.add(l.turma_chave); });
+    return turmasComAtivos.size;
+  }, [linhas]);
   const alunosAtivosUnicos = useMemo(() => {
     const set = new Set<number>();
     linhas.forEach(l => { if (l.aluno_status === 'ativo') set.add(l.aluno_id); });
