@@ -237,8 +237,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const initAuth = async () => {
       try {
         const { data: { session }, error } = await supabase.auth.getSession();
-        
+
+        console.log('[Auth] getSession result:', { session: !!session, error, user: session?.user?.email });
+
         if (error || !mounted) {
+          console.log('[Auth] Abortando - error ou desmontado:', { error, mounted });
           if (mounted) setLoading(false);
           return;
         }
