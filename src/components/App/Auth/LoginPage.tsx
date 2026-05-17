@@ -75,10 +75,17 @@ const formVariants = {
 
 export function LoginPage() {
   const navigate = useNavigate();
-  const { signIn, signOut } = useAuth();
+  const { signIn, signOut, user, loading: authLoading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Redireciona para /app se já estiver autenticado
+  React.useEffect(() => {
+    if (!authLoading && user) {
+      navigate('/app', { replace: true });
+    }
+  }, [user, authLoading, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
