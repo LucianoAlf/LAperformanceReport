@@ -104,6 +104,7 @@ export function PresencaTab({ unidadeAtual }: Props) {
     return (localStorage.getItem('presenca_view_mode') as 'cards' | 'tabela') || 'cards';
   });
   const [paginaPresenca, setPaginaPresenca] = useState(1);
+  const [filtroProfessor, setFiltroProfessor] = useState('');
 
   // Dias da semana (Seg a Sáb)
   const diasDaSemana = useMemo(() => {
@@ -279,9 +280,22 @@ export function PresencaTab({ unidadeAtual }: Props) {
 
   // Filtrar presenças do dia por tipo de registro
   const presencasDoDiaFiltradas = useMemo(() => {
-    if (filtroTipoRegistro === 'todas') return presencasDoDia;
-    return presencasDoDia.filter(p => p.tipo === filtroTipoRegistro);
-  }, [presencasDoDia, filtroTipoRegistro]);
+    let resultado = presencasDoDia;
+    if (filtroTipoRegistro !== 'todas') {
+      resultado = resultado.filter(p => p.tipo === filtroTipoRegistro);
+    }
+    if (filtroProfessor !== '') {
+      resultado = resultado.filter(p => p.professor_nome === filtroProfessor);
+    }
+    return resultado;
+  }, [presencasDoDia, filtroTipoRegistro, filtroProfessor]);
+
+  const professoresDisponiveis = useMemo(() => {
+    const nomes = presencasDoDia
+      .map(p => p.professor_nome)
+      .filter((n): n is string => !!n);
+    return [...new Set(nomes)].sort();
+  }, [presencasDoDia]);
 
   // Slice paginado dos cards de presença do dia
   const presencasDoDiaPaginadas = useMemo(() => {
@@ -383,7 +397,7 @@ export function PresencaTab({ unidadeAtual }: Props) {
           <input
             type="date"
             value={filtroData}
-            onChange={(e) => { setFiltroData(e.target.value); setPaginaPresenca(1); }}
+            onChange={(e) => { setFiltroData(e.target.value); setPaginaPresenca(1); setFiltroProfessor(''); }}
             className="h-7 px-2 text-xs bg-slate-700/50 border border-slate-600 rounded-md text-slate-200 focus:outline-none focus:border-violet-500"
           />
           {filtroData && (
@@ -416,6 +430,19 @@ export function PresencaTab({ unidadeAtual }: Props) {
               Individual
             </button>
           </div>
+
+          {filtroData && professoresDisponiveis.length > 0 && (
+            <select
+              value={filtroProfessor}
+              onChange={(e) => { setFiltroProfessor(e.target.value); setPaginaPresenca(1); }}
+              className="h-7 px-2 text-xs bg-slate-700/50 border border-slate-600 rounded-md text-slate-200 focus:outline-none focus:border-violet-500"
+            >
+              <option value="">Todos os professores</option>
+              {professoresDisponiveis.map(nome => (
+                <option key={nome} value={nome}>{nome}</option>
+              ))}
+            </select>
+          )}
         </div>
 
         {/* Conteúdo: filtro por data OU busca de aluno */}
