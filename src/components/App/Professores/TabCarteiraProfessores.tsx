@@ -194,7 +194,8 @@ export function TabCarteiraProfessores({ unidadeAtual, healthWeights }: Props) {
           cursos(nome)
         `)
         .eq('professor_atual_id', professorId)
-        .eq('status', 'ativo')
+        .in('status', ['ativo', 'trancado'])
+        .order('status')
         .order('nome');
 
       if (unidadeAtual !== 'todos') {
@@ -583,6 +584,7 @@ export function TabCarteiraProfessores({ unidadeAtual, healthWeights }: Props) {
                       <thead>
                         <tr className="text-left text-slate-400 border-b border-slate-700/50">
                           <th className="pb-2 font-medium">Nome</th>
+                          <th className="pb-2 font-medium">Status</th>
                           <th className="pb-2 font-medium">Escola</th>
                           <th className="pb-2 font-medium text-center">Idade</th>
                           <th className="pb-2 font-medium">Curso</th>
@@ -609,6 +611,17 @@ export function TabCarteiraProfessores({ unidadeAtual, healthWeights }: Props) {
                                 </Tooltip>
                               )}
                               {aluno.nome}
+                            </td>
+                            <td className="py-2">
+                              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                                aluno.status === 'ativo'
+                                  ? 'bg-emerald-500/20 text-emerald-400'
+                                  : aluno.status === 'trancado'
+                                    ? 'bg-amber-500/20 text-amber-400'
+                                    : 'bg-slate-500/20 text-slate-400'
+                              }`}>
+                                {aluno.status === 'ativo' ? 'Ativo' : aluno.status === 'trancado' ? 'Trancado' : aluno.status}
+                              </span>
                             </td>
                             <td className="py-2">
                               <span className={`px-2 py-0.5 rounded text-xs font-medium ${
