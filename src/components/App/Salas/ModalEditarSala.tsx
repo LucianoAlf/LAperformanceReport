@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { 
-  Building2, X, Plus
+  Building2, X
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -32,30 +32,6 @@ const TIPOS_SALA = [
   'Violino',
 ];
 
-// Recursos comuns pré-definidos
-const RECURSOS_SUGERIDOS = [
-  'Piano de Cauda',
-  'Piano Digital',
-  'Teclado',
-  'Bateria Acústica',
-  'Bateria Eletrônica',
-  'Amplificador',
-  'Violão',
-  'Guitarra',
-  'Baixo',
-  'Ar Condicionado',
-  'Ventilador',
-  'Estante de Partitura',
-  'Metrônomo',
-  'Afinador',
-  'Microfone',
-  'Caixa de Som',
-  'Pedestal',
-  'Cadeiras',
-  'Espelho',
-  'Quadro Branco',
-];
-
 interface ModalEditarSalaProps {
   sala: Sala | null;
   unidades: Unidade[];
@@ -73,10 +49,6 @@ export function ModalEditarSala({ sala, unidades, onClose, onSalvar }: ModalEdit
   const [tipoSala, setTipoSala] = useState(sala?.tipo_sala || '');
   const [capacidadeMaxima, setCapacidadeMaxima] = useState(sala?.capacidade_maxima || 4);
   const [bufferOperacional, setBufferOperacional] = useState(sala?.buffer_operacional || 10);
-  const [recursos, setRecursos] = useState<string[]>(sala?.recursos || []);
-  const [novoRecurso, setNovoRecurso] = useState('');
-  const [recursosFiltrados, setRecursosFiltrados] = useState<string[]>([]);
-  const [mostrarSugestoes, setMostrarSugestoes] = useState(false);
   const [salaCoringa, setSalaCoringa] = useState(sala?.sala_coringa || false);
   const [salvando, setSalvando] = useState(false);
 
@@ -88,43 +60,9 @@ export function ModalEditarSala({ sala, unidades, onClose, onSalvar }: ModalEdit
       setTipoSala(sala.tipo_sala || '');
       setCapacidadeMaxima(sala.capacidade_maxima);
       setBufferOperacional(sala.buffer_operacional);
-      setRecursos(sala.recursos || []);
       setSalaCoringa(sala.sala_coringa);
     }
   }, [sala]);
-
-  // Filtrar recursos conforme digitação
-  useEffect(() => {
-    if (novoRecurso.trim().length >= 2) {
-      const termo = novoRecurso.toLowerCase();
-      const filtrados = RECURSOS_SUGERIDOS.filter(r => 
-        r.toLowerCase().includes(termo) && !recursos.includes(r)
-      );
-      setRecursosFiltrados(filtrados);
-      setMostrarSugestoes(filtrados.length > 0);
-    } else {
-      setRecursosFiltrados([]);
-      setMostrarSugestoes(false);
-    }
-  }, [novoRecurso, recursos]);
-
-  // Adicionar recurso (da sugestão ou digitado)
-  function handleAdicionarRecurso(recurso?: string) {
-    const recursoParaAdicionar = recurso || novoRecurso.trim();
-    if (!recursoParaAdicionar) return;
-    if (recursos.includes(recursoParaAdicionar)) {
-      alert('Este recurso já foi adicionado.');
-      return;
-    }
-    setRecursos([...recursos, recursoParaAdicionar]);
-    setNovoRecurso('');
-    setMostrarSugestoes(false);
-  }
-
-  // Remover recurso
-  function handleRemoverRecurso(recurso: string) {
-    setRecursos(recursos.filter(r => r !== recurso));
-  }
 
   // Salvar sala
   async function handleSalvar() {
@@ -155,7 +93,6 @@ export function ModalEditarSala({ sala, unidades, onClose, onSalvar }: ModalEdit
         tipo_sala: tipoSala,
         capacidade_maxima: capacidadeMaxima,
         buffer_operacional: bufferOperacional,
-        recursos: recursos,
         sala_coringa: salaCoringa,
         ativo: true,
         updated_at: new Date().toISOString(),
@@ -328,81 +265,6 @@ export function ModalEditarSala({ sala, unidades, onClose, onSalvar }: ModalEdit
                 </p>
               </div>
             </div>
-          </div>
-
-          {/* Seção: Recursos e Inventário */}
-          <div className="bg-slate-800/50 rounded-xl p-4 space-y-4">
-            <div>
-              <h4 className="text-sm font-medium text-slate-300 uppercase tracking-wide">
-                Recursos e Inventário
-              </h4>
-              <p className="text-xs text-slate-400 mt-1">
-                Digite o nome do equipamento ou recurso e pressione <kbd className="px-1.5 py-0.5 bg-slate-700 rounded text-xs">Enter</kbd> para adicionar.
-              </p>
-            </div>
-
-            {/* Input para adicionar recursos com autocomplete */}
-            <div className="relative">
-              <input 
-                type="text" 
-                value={novoRecurso}
-                onChange={(e) => setNovoRecurso(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    handleAdicionarRecurso();
-                  }
-                  if (e.key === 'Escape') {
-                    setMostrarSugestoes(false);
-                  }
-                }}
-                onFocus={() => {
-                  if (recursosFiltrados.length > 0) {
-                    setMostrarSugestoes(true);
-                  }
-                }}
-                placeholder="Ex: Ar Condicionado, Piano Elétrico, Amplificador..."
-                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-2.5 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-purple-500/50 transition"
-              />
-              
-              {/* Lista de sugestões */}
-              {mostrarSugestoes && recursosFiltrados.length > 0 && (
-                <div className="absolute z-10 w-full mt-2 bg-slate-800 border border-slate-700 rounded-xl shadow-xl max-h-48 overflow-y-auto">
-                  {recursosFiltrados.map((recurso, idx) => (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => handleAdicionarRecurso(recurso)}
-                      className="w-full text-left px-4 py-2.5 text-sm text-slate-200 hover:bg-purple-500/20 hover:text-purple-300 transition first:rounded-t-xl last:rounded-b-xl"
-                    >
-                      {recurso}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Lista de recursos adicionados */}
-            {recursos.length > 0 ? (
-              <div className="flex flex-wrap gap-2">
-                {recursos.map((recurso, idx) => (
-                  <span 
-                    key={idx}
-                    className="bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg text-sm flex items-center gap-2"
-                  >
-                    {recurso}
-                    <button 
-                      onClick={() => handleRemoverRecurso(recurso)}
-                      className="text-red-400 hover:text-red-300 transition"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </span>
-                ))}
-              </div>
-            ) : (
-              <p className="text-sm text-slate-400">Nenhum recurso adicionado.</p>
-            )}
           </div>
 
           {/* Seção: Configurações Especiais */}

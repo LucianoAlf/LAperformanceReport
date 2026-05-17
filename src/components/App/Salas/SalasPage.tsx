@@ -95,6 +95,7 @@ export function SalasPage() {
   const [unidades, setUnidades] = useState<Unidade[]>([]);
   const [ocupacaoSalas, setOcupacaoSalas] = useState<Record<number, number>>({});
   const [horasOcupadasSalas, setHorasOcupadasSalas] = useState<Record<number, number>>({});
+  const [itensInventarioPorSala, setItensInventarioPorSala] = useState<Record<number, string[]>>({});
   const [loading, setLoading] = useState(true);
   const [busca, setBusca] = useState('');
   const [filtroUnidade, setFiltroUnidade] = useState<string>('');
@@ -191,6 +192,26 @@ export function SalasPage() {
         });
         setOcupacaoSalas(ocupacao);
         setHorasOcupadasSalas(horasOcupadas);
+      }
+
+      // Carregar itens do inventário por sala
+      const { data: inventarioData } = await supabase
+        .from('inventario')
+        .select('sala_id, nome')
+        .eq('ativo', true)
+        .not('sala_id', 'is', null);
+
+      if (inventarioData) {
+        const itensPorSala: Record<number, string[]> = {};
+        inventarioData.forEach((item: any) => {
+          if (item.sala_id) {
+            if (!itensPorSala[item.sala_id]) {
+              itensPorSala[item.sala_id] = [];
+            }
+            itensPorSala[item.sala_id].push(item.nome);
+          }
+        });
+        setItensInventarioPorSala(itensPorSala);
       }
     } catch (error) {
       console.error('Erro:', error);
@@ -666,24 +687,27 @@ export function SalasPage() {
                   </span>
                 </div>
 
-                {/* Recursos */}
-                {sala.recursos && sala.recursos.length > 0 && (
-                  <div className="mb-4">
-                    <span className="text-xs text-slate-400 uppercase font-medium block mb-2">Recursos Disponíveis</span>
-                    <div className="flex flex-wrap gap-2">
-                      {sala.recursos.slice(0, 3).map((recurso, idx) => (
-                        <span key={idx} className="bg-slate-700 text-slate-300 px-2 py-1 rounded text-xs">
-                          {recurso}
-                        </span>
-                      ))}
-                      {sala.recursos.length > 3 && (
-                        <span className="bg-slate-700 text-slate-400 px-2 py-1 rounded text-xs">
-                          +{sala.recursos.length - 3}
-                        </span>
-                      )}
+                {/* Itens do Inventário */}
+                {(() => {
+                  const itens = itensInventarioPorSala[sala.id] || [];
+                  return itens.length > 0 ? (
+                    <div className="mb-4">
+                      <span className="text-xs text-slate-400 uppercase font-medium block mb-2">Equipamentos</span>
+                      <div className="flex flex-wrap gap-2">
+                        {itens.slice(0, 3).map((item, idx) => (
+                          <span key={idx} className="bg-slate-700 text-slate-300 px-2 py-1 rounded text-xs">
+                            {item}
+                          </span>
+                        ))}
+                        {itens.length > 3 && (
+                          <span className="bg-slate-700 text-slate-400 px-2 py-1 rounded text-xs">
+                            +{itens.length - 3}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  ) : null;
+                })()}
 
                 {/* Buffer */}
                 <div className="mb-4 pb-4 border-b border-slate-700">
