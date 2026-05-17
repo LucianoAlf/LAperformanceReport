@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { 
-  Building2, X
+  Building2, X, Package, Info
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -50,6 +50,8 @@ export function ModalEditarSala({ sala, unidades, onClose, onSalvar }: ModalEdit
   const [capacidadeMaxima, setCapacidadeMaxima] = useState(sala?.capacidade_maxima || 4);
   const [bufferOperacional, setBufferOperacional] = useState(sala?.buffer_operacional || 10);
   const [salaCoringa, setSalaCoringa] = useState(sala?.sala_coringa || false);
+  const [itensInventario, setItensInventario] = useState<string[]>([]);
+  const [carregandoItens, setCarregandoItens] = useState(false);
   const [salvando, setSalvando] = useState(false);
 
   // Preencher dados quando editar
@@ -61,8 +63,37 @@ export function ModalEditarSala({ sala, unidades, onClose, onSalvar }: ModalEdit
       setCapacidadeMaxima(sala.capacidade_maxima);
       setBufferOperacional(sala.buffer_operacional);
       setSalaCoringa(sala.sala_coringa);
+      carregarItensInventario(sala.id);
+    } else {
+      setItensInventario([]);
     }
   }, [sala]);
+
+  // Carregar itens do inventário vinculados à sala
+  async function carregarItensInventario(salaId: number) {
+    setCarregandoItens(true);
+    try {
+      const { data, error } = await supabase
+        .from('inventario')
+        .select('nome')
+        .eq('sala_id', salaId)
+        .eq('ativo', true)
+        .order('nome');
+
+      if (error) {
+        console.error('Erro ao carregar itens do inventário:', error);
+        return;
+      }
+
+      if (data) {
+        setItensInventario(data.map((item: any) => item.nome));
+      }
+    } catch (error) {
+      console.error('Erro:', error);
+    } finally {
+      setCarregandoItens(false);
+    }
+  }
 
   // Salvar sala
   async function handleSalvar() {
@@ -266,6 +297,45 @@ export function ModalEditarSala({ sala, unidades, onClose, onSalvar }: ModalEdit
               </div>
             </div>
           </div>
+
+          {/* Seção: Equipamentos da Sala (somente leitura) */}
+          {isEdicao && (
+            <div className="bg-slate-800/50 rounded-xl p-4 space-y-4">
+              <div className="flex items-center gap-2">
+                <Package className="w-4 h-4 text-purple-400" />
+                <h4 className="text-sm font-medium text-slate-300 uppercase tracking-wide">
+                  Equipamentos da Sala
+                </h4>
+              </div>
+
+              {carregandoItens ? (
+                <div className="flex items-center gap-2 text-slate-400 text-sm">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-purple-400"></div>
+                  Carregando equipamentos...
+                </div>
+              ) : itensInventario.length > 0 ? (
+                <div className="flex flex-wrap gap-2">
+                  {itensInventario.map((item, idx) => (
+                    <span
+                      key={idx}
+                      className="bg-slate-700 text-slate-200 px-3 py-1.5 rounded-lg text-sm"
+                    >
+                      {item}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-slate-400">Nenhum equipamento vinculado a esta sala.</p>
+              )}
+
+              <div className="flex items-start gap-2 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl">
+                <Info className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
+                <p className="text-xs text-blue-300 leading-relaxed">
+                  Para adicionar, remover ou editar equipamentos desta sala, acesse a aba <strong>Inventário</strong>. O cadastro de equipamentos é feito exclusivamente por lá.
+                </p>
+              </div>
+            </div>
+          )}
 
           {/* Seção: Configurações Especiais */}
           <div className="bg-slate-800/50 rounded-xl p-4 space-y-4">
