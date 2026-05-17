@@ -485,7 +485,7 @@ export function PresencaTab({ unidadeAtual }: Props) {
                 {/* Visualização: Cards ou Tabela */}
                 {viewMode === 'cards' ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                    {presencasDoDiaFiltradas.map((p, i) => (
+                    {presencasDoDiaPaginadas.map((p, i) => (
                       <Tooltip
                         key={`${p.aluno_id}-${i}`}
                         side="right"
@@ -522,23 +522,28 @@ export function PresencaTab({ unidadeAtual }: Props) {
                         }
                       >
                         <div
-                          className={`rounded-lg p-3 border cursor-default ${
+                          className={`rounded-lg p-3.5 border cursor-default ${
                             p.status === 'presente'
                               ? 'bg-emerald-500/10 border-emerald-500/20'
                               : 'bg-red-500/10 border-red-500/20'
                           }`}
                         >
-                          <div className="flex items-center justify-between">
-                            <p className="text-sm font-medium text-slate-200 truncate">{p.aluno_nome}</p>
-                            {p.status === 'presente' ? (
-                              <Check className="w-4 h-4 text-emerald-400 flex-shrink-0" />
-                            ) : (
-                              <X className="w-4 h-4 text-red-400 flex-shrink-0" />
-                            )}
+                          {/* Linha 1: Nome + Badge status */}
+                          <div className="flex items-center justify-between gap-2 mb-1.5">
+                            <p className="text-sm font-medium text-slate-200 truncate flex-1">{p.aluno_nome}</p>
+                            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full flex-shrink-0 ${
+                              p.status === 'presente'
+                                ? 'bg-emerald-500/20 text-emerald-400'
+                                : 'bg-red-500/20 text-red-400'
+                            }`}>
+                              {p.status === 'presente' ? 'Presente' : 'Ausente'}
+                            </span>
                           </div>
-                          <div className="flex items-center gap-2 mt-1">
+
+                          {/* Linha 2: Tipo + Horário + Nº aula + Duração */}
+                          <div className="flex items-center gap-1.5 mb-1">
                             {p.tipo && (
-                              <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
+                              <span className={`text-[9px] font-bold px-1 py-0.5 rounded flex-shrink-0 ${
                                 p.tipo === 'turma'
                                   ? 'bg-blue-500/20 text-blue-400'
                                   : 'bg-cyan-500/20 text-cyan-400'
@@ -547,21 +552,29 @@ export function PresencaTab({ unidadeAtual }: Props) {
                               </span>
                             )}
                             {p.horario_aula && (
-                              <span className="text-xs text-slate-500">{p.horario_aula.slice(0, 5)}</span>
+                              <span className="text-xs text-slate-400">{p.horario_aula.slice(0, 5)}</span>
                             )}
-                            {p.curso_nome && (
-                              <>
-                                <span className="text-xs text-slate-600">·</span>
-                                <span className="text-xs text-blue-400 truncate">{p.curso_nome}</span>
-                              </>
+                            {p.nr_da_aula && (
+                              <span className="text-xs text-slate-500">· Aula #{p.nr_da_aula}</span>
                             )}
-                            {p.turma_nome && (
-                              <>
-                                <span className="text-xs text-slate-600">·</span>
-                                <span className="text-xs text-slate-500 truncate">{p.turma_nome}</span>
-                              </>
+                            {p.duracao_minutos && (
+                              <span className="text-xs text-slate-500">· {p.duracao_minutos} min</span>
                             )}
                           </div>
+
+                          {/* Linha 3: Curso */}
+                          {p.curso_nome && (
+                            <p className="text-xs text-blue-400 truncate mb-1">{p.curso_nome}</p>
+                          )}
+
+                          {/* Linha 4: Professor + Sala */}
+                          {(p.professor_nome || p.sala_nome) && (
+                            <p className="text-xs text-slate-500 truncate">
+                              {p.professor_nome && `Prof.: ${p.professor_nome}`}
+                              {p.professor_nome && p.sala_nome && ' · '}
+                              {p.sala_nome}
+                            </p>
+                          )}
                         </div>
                       </Tooltip>
                     ))}
