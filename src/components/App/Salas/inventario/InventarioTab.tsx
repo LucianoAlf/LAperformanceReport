@@ -22,9 +22,10 @@ interface InventarioTabProps {
   unidadeAtual: string;
   salas: Sala[];
   unidades: Unidade[];
+  salaFiltroInicial?: number | null;
 }
 
-export function InventarioTab({ unidadeAtual, salas, unidades }: InventarioTabProps) {
+export function InventarioTab({ unidadeAtual, salas, unidades, salaFiltroInicial }: InventarioTabProps) {
   const { isAdmin, user } = useAuth();
   
   // Estados
@@ -38,6 +39,13 @@ export function InventarioTab({ unidadeAtual, salas, unidades }: InventarioTabPr
   const [modalNovoAberto, setModalNovoAberto] = useState(false);
   const [itemParaEditar, setItemParaEditar] = useState<ItemInventario | null>(null);
   const [salaDetalhada, setSalaDetalhada] = useState<number | null>(null);
+
+  // Aplicar filtro de sala inicial quando prop mudar
+  useEffect(() => {
+    if (salaFiltroInicial) {
+      setFiltroSala(salaFiltroInicial.toString());
+    }
+  }, [salaFiltroInicial]);
 
   // Carregar itens do inventário
   useEffect(() => {

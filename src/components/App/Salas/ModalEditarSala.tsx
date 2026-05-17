@@ -37,9 +37,10 @@ interface ModalEditarSalaProps {
   unidades: Unidade[];
   onClose: () => void;
   onSalvar: () => void;
+  onIrParaInventario?: (salaId: number) => void;
 }
 
-export function ModalEditarSala({ sala, unidades, onClose, onSalvar }: ModalEditarSalaProps) {
+export function ModalEditarSala({ sala, unidades, onClose, onSalvar, onIrParaInventario }: ModalEditarSalaProps) {
   const { isAdmin, usuario } = useAuth();
   const isEdicao = !!sala;
   
@@ -330,9 +331,19 @@ export function ModalEditarSala({ sala, unidades, onClose, onSalvar }: ModalEdit
 
               <div className="flex items-start gap-2 p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl">
                 <Info className="w-4 h-4 text-blue-400 mt-0.5 flex-shrink-0" />
-                <p className="text-xs text-blue-300 leading-relaxed">
-                  Para adicionar, remover ou editar equipamentos desta sala, acesse a aba <strong>Inventário</strong>. O cadastro de equipamentos é feito exclusivamente por lá.
-                </p>
+                <div className="flex-1">
+                  <p className="text-xs text-blue-300 leading-relaxed">
+                    Para adicionar, remover ou editar equipamentos desta sala, acesse a aba <strong>Inventário</strong>. O cadastro de equipamentos é feito exclusivamente por lá.
+                  </p>
+                  {onIrParaInventario && sala && (
+                    <button
+                      onClick={() => onIrParaInventario(sala.id)}
+                      className="mt-2 text-xs font-medium text-blue-400 hover:text-blue-300 underline transition"
+                    >
+                      Ir para o Inventário desta sala →
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           )}

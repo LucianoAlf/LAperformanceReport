@@ -107,6 +107,7 @@ export function SalasPage() {
   const [salaParaExcluir, setSalaParaExcluir] = useState<{ id: number; nome: string } | null>(null);
   const [modalOcupacaoAberto, setModalOcupacaoAberto] = useState(false);
   const [salaParaOcupacao, setSalaParaOcupacao] = useState<Sala | null>(null);
+  const [salaFiltroInventario, setSalaFiltroInventario] = useState<number | null>(null);
 
   // Carregar dados
   useEffect(() => {
@@ -757,6 +758,7 @@ export function SalasPage() {
           unidadeAtual={unidadeAtual}
           salas={salas}
           unidades={unidades}
+          salaFiltroInicial={salaFiltroInventario}
         />
       )}
 
@@ -770,6 +772,12 @@ export function SalasPage() {
             setSalaParaEditar(null);
           }}
           onSalvar={handleSalvarSala}
+          onIrParaInventario={(salaId) => {
+            setModalAberto(false);
+            setSalaParaEditar(null);
+            setSalaFiltroInventario(salaId);
+            setTabAtiva('inventario');
+          }}
         />
       )}
 
