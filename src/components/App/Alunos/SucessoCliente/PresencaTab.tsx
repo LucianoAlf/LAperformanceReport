@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback, Fragment } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, Fragment } from 'react';
 import { supabase } from '@/lib/supabase';
 import { format, parseISO, startOfWeek, addDays, addWeeks, subWeeks } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
@@ -105,6 +105,9 @@ export function PresencaTab({ unidadeAtual }: Props) {
   });
   const [paginaPresenca, setPaginaPresenca] = useState(1);
   const [filtroProfessor, setFiltroProfessor] = useState('');
+  const [buscaProfessor, setBuscaProfessor] = useState('');
+  const [comboProfessorAberto, setComboProfessorAberto] = useState(false);
+  const comboProfessorRef = useRef<HTMLDivElement>(null);
 
   // Dias da semana (Seg a Sáb)
   const diasDaSemana = useMemo(() => {
@@ -256,6 +259,18 @@ export function PresencaTab({ unidadeAtual }: Props) {
     carregarPresencaSemana();
   }, [carregarPresencaSemana]);
 
+  // Fecha combobox de professor ao clicar fora
+  useEffect(() => {
+    if (!comboProfessorAberto) return;
+    const handler = (e: MouseEvent) => {
+      if (comboProfessorRef.current && !comboProfessorRef.current.contains(e.target as Node)) {
+        setComboProfessorAberto(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [comboProfessorAberto]);
+
   // Ao trocar filtro de tipo com aluno selecionado, navegar para semana relevante
   useEffect(() => {
     if (!alunoSelecionado) return;
@@ -397,7 +412,7 @@ export function PresencaTab({ unidadeAtual }: Props) {
           <input
             type="date"
             value={filtroData}
-            onChange={(e) => { setFiltroData(e.target.value); setPaginaPresenca(1); setFiltroProfessor(''); }}
+            onChange={(e) => { setFiltroData(e.target.value); setPaginaPresenca(1); setFiltroProfessor(''); setBuscaProfessor(''); }}
             className="h-7 px-2 text-xs bg-slate-700/50 border border-slate-600 rounded-md text-slate-200 focus:outline-none focus:border-violet-500"
           />
           {filtroData && (
@@ -432,16 +447,48 @@ export function PresencaTab({ unidadeAtual }: Props) {
           </div>
 
           {filtroData && professoresDisponiveis.length > 0 && (
-            <select
-              value={filtroProfessor}
-              onChange={(e) => { setFiltroProfessor(e.target.value); setPaginaPresenca(1); }}
-              className="h-7 px-2 text-xs bg-slate-700/50 border border-slate-600 rounded-md text-slate-200 focus:outline-none focus:border-violet-500"
-            >
-              <option value="">Todos os professores</option>
-              {professoresDisponiveis.map(nome => (
-                <option key={nome} value={nome}>{nome}</option>
-              ))}
-            </select>
+            <div ref={comboProfessorRef} className="relative">
+              <div className="flex items-center gap-1 h-7 px-2 bg-slate-700/50 border border-slate-600 rounded-md focus-within:border-violet-500">
+                <Search className="w-3 h-3 text-slate-400 flex-shrink-0" />
+                <input
+                  type="text"
+                  placeholder="Professor..."
+                  value={filtroProfessor || buscaProfessor}
+                  onFocus={() => { setBuscaProfessor(filtroProfessor); setFiltroProfessor(''); setComboProfessorAberto(true); }}
+                  onChange={(e) => { setBuscaProfessor(e.target.value); setComboProfessorAberto(true); }}
+                  className="w-32 bg-transparent text-xs text-slate-200 placeholder-slate-500 outline-none"
+                />
+                {filtroProfessor && (
+                  <button
+                    onClick={() => { setFiltroProfessor(''); setBuscaProfessor(''); setPaginaPresenca(1); }}
+                    className="text-slate-500 hover:text-slate-300"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+              {comboProfessorAberto && (
+                <div className="absolute z-50 top-8 left-0 w-56 bg-slate-800 border border-slate-600 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                  <button
+                    className="w-full text-left px-3 py-1.5 text-xs text-slate-400 hover:bg-slate-700"
+                    onMouseDown={() => { setFiltroProfessor(''); setBuscaProfessor(''); setPaginaPresenca(1); setComboProfessorAberto(false); }}
+                  >
+                    Todos os professores
+                  </button>
+                  {professoresDisponiveis
+                    .filter(n => n.toLowerCase().includes(buscaProfessor.toLowerCase()))
+                    .map(nome => (
+                      <button
+                        key={nome}
+                        className="w-full text-left px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-700 truncate"
+                        onMouseDown={() => { setFiltroProfessor(nome); setBuscaProfessor(''); setPaginaPresenca(1); setComboProfessorAberto(false); }}
+                      >
+                        {nome}
+                      </button>
+                    ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
 
