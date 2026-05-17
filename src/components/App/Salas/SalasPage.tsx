@@ -39,7 +39,6 @@ export interface Sala {
   capacidade_maxima: number;
   tipo_sala: string | null;
   buffer_operacional: number;
-  recursos: string[];
   sala_coringa: boolean;
   cursos_permitidos: string[] | null;
   descricao: string | null;
@@ -80,7 +79,7 @@ const salasTabs: PageTab<TabAtiva>[] = [
 export function SalasPage() {
   useSetPageTitle({
     titulo: 'Gestão de Salas',
-    subtitulo: 'Configure espaços físicos e recursos da escola',
+    subtitulo: 'Configure espaços físicos e equipamentos da escola',
     icone: Building2,
     iconeCor: 'text-white',
     iconeWrapperCor: 'bg-gradient-to-br from-purple-500 to-pink-500',
@@ -139,7 +138,6 @@ export function SalasPage() {
           capacidade_maxima,
           tipo_sala,
           buffer_operacional,
-          recursos,
           sala_coringa,
           cursos_permitidos,
           descricao,
@@ -164,7 +162,6 @@ export function SalasPage() {
         const salasFormatadas: Sala[] = salasData.map((sala: any) => ({
           ...sala,
           unidade_nome: sala.unidades?.nome || '',
-          recursos: sala.recursos || [],
           buffer_operacional: sala.buffer_operacional || 10,
           sala_coringa: sala.sala_coringa || false,
         }));

@@ -51,7 +51,7 @@ export const salasTourSteps: Step[] = [
   {
     target: '[data-tour="btn-nova-sala"]',
     title: '➕ Nova Sala',
-    content: 'Clique aqui para cadastrar uma nova sala. Você vai definir:\n\n• Nome e código da sala\n• Tipo (Piano, Bateria, Cordas, etc.)\n• Capacidade máxima de alunos\n• Se é sala coringa (aceita qualquer curso)\n• Buffer operacional entre aulas\n• Recursos disponíveis (instrumentos, equipamentos)',
+    content: 'Clique aqui para cadastrar uma nova sala. Você vai definir:\n\n• Nome e código da sala\n• Tipo (Piano, Bateria, Cordas, etc.)\n• Capacidade máxima de alunos\n• Se é sala coringa (aceita qualquer curso)\n• Buffer operacional entre aulas\n• Equipamentos disponíveis (consulte a aba Inventário)',
     placement: 'left',
     disableBeacon: true,
   },
@@ -62,7 +62,7 @@ export const salasTourSteps: Step[] = [
   {
     target: '[data-tour="salas-cards"]',
     title: '🏢 Cards de Salas',
-    content: 'Cada card mostra informações completas da sala:\n\n• Ocupação: Barra de progresso mostrando % de uso\n• Tipo: Categoria da sala com emoji identificador\n• Recursos: Equipamentos disponíveis\n• Buffer: Tempo entre aulas\n\nAções disponíveis:\n• 📅 Ver ocupação (grade de horários)\n• ✏️ Editar configurações\n• 🗑️ Excluir sala',
+    content: 'Cada card mostra informações completas da sala:\n\n• Ocupação: Barra de progresso mostrando % de uso\n• Tipo: Categoria da sala com emoji identificador\n• Equipamentos: Itens do inventário vinculados à sala\n• Buffer: Tempo entre aulas\n\nAções disponíveis:\n• 📅 Ver ocupação (grade de horários)\n• ✏️ Editar configurações\n• 🗑️ Excluir sala',
     placement: 'top',
     disableBeacon: true,
   },
