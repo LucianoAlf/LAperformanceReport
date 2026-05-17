@@ -484,6 +484,7 @@ export function PresencaTab({ unidadeAtual }: Props) {
 
                 {/* Visualização: Cards ou Tabela */}
                 {viewMode === 'cards' ? (
+                  <>
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                     {presencasDoDiaPaginadas.map((p, i) => (
                       <Tooltip
@@ -579,6 +580,38 @@ export function PresencaTab({ unidadeAtual }: Props) {
                       </Tooltip>
                     ))}
                   </div>
+                  {/* Paginação */}
+                  {totalPaginasPresenca > 1 && (
+                    <div className="flex items-center justify-between mt-4 pt-3 border-t border-slate-700/50">
+                      <span className="text-xs text-slate-500">
+                        Mostrando {(paginaPresenca - 1) * PRESENCA_POR_PAGINA + 1}–{Math.min(paginaPresenca * PRESENCA_POR_PAGINA, presencasDoDiaFiltradas.length)} de {presencasDoDiaFiltradas.length} registros
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-7 w-7 border-slate-600"
+                          onClick={() => setPaginaPresenca(p => Math.max(1, p - 1))}
+                          disabled={paginaPresenca === 1}
+                        >
+                          <ChevronLeft className="w-3.5 h-3.5" />
+                        </Button>
+                        <span className="text-xs text-slate-400 min-w-[80px] text-center">
+                          Página {paginaPresenca} de {totalPaginasPresenca}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="icon"
+                          className="h-7 w-7 border-slate-600"
+                          onClick={() => setPaginaPresenca(p => Math.min(totalPaginasPresenca, p + 1))}
+                          disabled={paginaPresenca === totalPaginasPresenca}
+                        >
+                          <ChevronRight className="w-3.5 h-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                  </>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full">
