@@ -73,6 +73,7 @@ interface Props {
 
 const DIAS_SEMANA = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 const LOGS_POR_PAGINA = 10;
+const PRESENCA_POR_PAGINA = 30;
 
 export function PresencaTab({ unidadeAtual }: Props) {
   const sentinelRef = useWidgetOverlapSentinel();
@@ -102,6 +103,7 @@ export function PresencaTab({ unidadeAtual }: Props) {
   const [viewMode, setViewMode] = useState<'cards' | 'tabela'>(() => {
     return (localStorage.getItem('presenca_view_mode') as 'cards' | 'tabela') || 'cards';
   });
+  const [paginaPresenca, setPaginaPresenca] = useState(1);
 
   // Dias da semana (Seg a Sáb)
   const diasDaSemana = useMemo(() => {
@@ -281,6 +283,14 @@ export function PresencaTab({ unidadeAtual }: Props) {
     return presencasDoDia.filter(p => p.tipo === filtroTipoRegistro);
   }, [presencasDoDia, filtroTipoRegistro]);
 
+  // Slice paginado dos cards de presença do dia
+  const presencasDoDiaPaginadas = useMemo(() => {
+    const inicio = (paginaPresenca - 1) * PRESENCA_POR_PAGINA;
+    return presencasDoDiaFiltradas.slice(inicio, inicio + PRESENCA_POR_PAGINA);
+  }, [presencasDoDiaFiltradas, paginaPresenca]);
+
+  const totalPaginasPresenca = Math.ceil(presencasDoDiaFiltradas.length / PRESENCA_POR_PAGINA);
+
   // Filtrar presenças da semana por tipo de registro
   const presencasFiltradas = useMemo(() => {
     if (filtroTipoRegistro === 'todas') return presencas;
@@ -373,7 +383,7 @@ export function PresencaTab({ unidadeAtual }: Props) {
           <input
             type="date"
             value={filtroData}
-            onChange={(e) => { setFiltroData(e.target.value); }}
+            onChange={(e) => { setFiltroData(e.target.value); setPaginaPresenca(1); }}
             className="h-7 px-2 text-xs bg-slate-700/50 border border-slate-600 rounded-md text-slate-200 focus:outline-none focus:border-violet-500"
           />
           {filtroData && (
@@ -388,19 +398,19 @@ export function PresencaTab({ unidadeAtual }: Props) {
           {/* Filtro tipo de registro */}
           <div className="flex items-center bg-slate-900 border border-slate-600 rounded-md overflow-hidden text-xs">
             <button
-              onClick={() => setFiltroTipoRegistro('todas')}
+              onClick={() => { setFiltroTipoRegistro('todas'); setPaginaPresenca(1); }}
               className={`px-2.5 py-1.5 transition ${filtroTipoRegistro === 'todas' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'}`}
             >
               Todas
             </button>
             <button
-              onClick={() => setFiltroTipoRegistro('turma')}
+              onClick={() => { setFiltroTipoRegistro('turma'); setPaginaPresenca(1); }}
               className={`px-2.5 py-1.5 transition ${filtroTipoRegistro === 'turma' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}
             >
               Turma
             </button>
             <button
-              onClick={() => setFiltroTipoRegistro('individual')}
+              onClick={() => { setFiltroTipoRegistro('individual'); setPaginaPresenca(1); }}
               className={`px-2.5 py-1.5 transition ${filtroTipoRegistro === 'individual' ? 'bg-cyan-600 text-white' : 'text-slate-400 hover:text-white'}`}
             >
               Individual
