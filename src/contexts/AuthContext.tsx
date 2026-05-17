@@ -250,9 +250,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const usuarioData = await fetchUsuario(session.user.id, session.user.email);
           if (mounted) {
             setUsuario(usuarioData);
-            // Carregar permissões após obter dados do usuário
+            // Permissões carregam em background — não bloqueiam o setLoading
             if (usuarioData) {
-              await fetchPermissoes(usuarioData.id, usuarioData.perfil === 'admin');
+              fetchPermissoes(usuarioData.id, usuarioData.perfil === 'admin');
             }
           }
         }
