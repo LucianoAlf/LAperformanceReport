@@ -263,7 +263,7 @@ async function backfillMatriculaId(supabase: any, alunoId: number, matriculaId: 
 
 // ==================== CONVERTER LEAD ====================
 
-async function converterLead(supabase: any, p: Payload): Promise<{ leadId: number | null; action: string }> {
+async function converterLead(supabase: any, p: Payload, alunoId: number | null): Promise<{ leadId: number | null; action: string }> {
   let leadId: number | null = null;
 
   if (p.emusysLeadId) {
@@ -297,6 +297,7 @@ async function converterLead(supabase: any, p: Payload): Promise<{ leadId: numbe
     updated_at: new Date().toISOString(),
   };
   if (p.emusysLeadId) updates.emusys_lead_id = p.emusysLeadId;
+  if (alunoId) updates.aluno_id = alunoId;
 
   await supabase.from('leads').update(updates).eq('id', leadId);
 
@@ -454,7 +455,7 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
     fonte = 'aluno_novo';
   }
 
-  const leadResult = await converterLead(supabase, p);
+  const leadResult = await converterLead(supabase, p, alunoId);
 
   return {
     action,
