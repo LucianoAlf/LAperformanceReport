@@ -214,11 +214,15 @@ async function buscarAluno(
   const matriculaId = payload.matriculaIdEmusys;
   const nomeNorm = normalizar(payload.nomeAluno);
 
-  // CAMADA 1: match exato por emusys_matricula_id
+  // CAMADA 1: match exato por emusys_matricula_id + unidade_id
+  // IMPORTANTE: IDs de matrícula são sequenciais por escola no Emusys — escolas diferentes
+  // podem ter o mesmo matricula_id. Sem filtro de unidade, o sistema sobrescrevia dados de
+  // alunos de outra unidade que tivessem o mesmo ID (ex: Recreio 791 sobrescreveu Barra 791).
   if (matriculaId) {
     const { data } = await supabase.from('alunos')
       .select(ALUNO_SELECT)
       .eq('emusys_matricula_id', matriculaId)
+      .eq('unidade_id', payload.unidadeId)
       .maybeSingle();
     if (data) return { aluno: data, fonte: 'matricula_id' };
   }
