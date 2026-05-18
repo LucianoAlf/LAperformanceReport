@@ -1,6 +1,6 @@
 // Edge Function: sync-presenca-emusys
 // Sincroniza aulas e presença dos alunos do Emusys para aulas_emusys + aluno_presenca
-// Chamada semanalmente via pg_cron (domingo 22h BRT) ou manualmente via botão
+// Chamada diariamente via pg_cron (22h BRT) com janela de 7 dias
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -195,7 +195,21 @@ async function reconciliarExperimentaisOrfas(
   const unidadeNomes = new Map(UNIDADES.map(u => [u.id, u.nome]));
 
   for (const exp of experimentais) {
-    if (exp.cancelada) continue;
+    // Cancelada: atualizar registros existentes para 'cancelada' e pular
+    if (exp.cancelada) {
+      for (const aluno of exp.alunos) {
+        const nomeAluno = aluno.nome_aluno?.trim();
+        if (!nomeAluno) continue;
+        await supabase
+          .from('lead_experimentais')
+          .update({ status: 'cancelada', updated_at: new Date().toISOString() })
+          .eq('nome_aluno', nomeAluno)
+          .eq('data_experimental', exp.dataAula)
+          .eq('unidade_id', exp.unidadeId)
+          .neq('status', 'cancelada');
+      }
+      continue;
+    }
 
     for (const aluno of exp.alunos) {
       const nomeAluno = aluno.nome_aluno?.trim();
@@ -204,10 +218,13 @@ async function reconciliarExperimentaisOrfas(
       const unidadeNome = unidadeNomes.get(exp.unidadeId) || exp.unidadeId;
       const telNorm = normalizarTelefone(aluno.telefone_aluno) || normalizarTelefone(aluno.telefone_responsavel);
 
+      const presente = aluno.presenca === 'presente';
+      const novoStatus = presente ? 'experimental_realizada' : 'experimental_faltou';
+
       // Verificar se já existe registro na lead_experimentais para esse aluno+data
       const { data: expExistente } = await supabase
         .from('lead_experimentais')
-        .select('id')
+        .select('id, status')
         .eq('nome_aluno', nomeAluno)
         .eq('data_experimental', exp.dataAula)
         .eq('unidade_id', exp.unidadeId)
@@ -215,10 +232,21 @@ async function reconciliarExperimentaisOrfas(
         .limit(1)
         .maybeSingle();
 
-      if (expExistente) continue; // Já existe registro, pular
+      if (expExistente) {
+        // Reconciliação bidirecional: corrigir se status diverge do Emusys
+        if (expExistente.status !== novoStatus) {
+          await supabase.from('lead_experimentais').update({
+            status: novoStatus,
+            etapa_pipeline_id: presente ? 7 : 9,
+            updated_at: new Date().toISOString()
+          }).eq('id', expExistente.id);
+        }
+        continue;
+      }
 
       // Buscar lead por telefone
       let leadId: number | null = null;
+      let matchadoPorNome = false;
       if (telNorm) {
         const { data: leadPorTel } = await supabase
           .from('leads')
@@ -236,20 +264,25 @@ async function reconciliarExperimentaisOrfas(
         const nomeNorm = normalizarNome(nomeAluno);
         const { data: leads } = await supabase
           .from('leads')
-          .select('id, nome')
+          .select('id, nome, data_experimental')
           .eq('unidade_id', exp.unidadeId)
           .eq('arquivado', false)
           .limit(100);
 
         const match = (leads || []).find((l: any) => normalizarNome(l.nome) === nomeNorm);
-        if (match) leadId = match.id;
+        if (match) {
+          // Guard: match por nome só é aceito se o lead tem data_experimental definida
+          // (evita falso positivo ao criar registro para lead diferente com nome parecido)
+          if (!match.data_experimental) continue;
+          leadId = match.id;
+          matchadoPorNome = true;
+        }
       }
 
       if (!leadId) continue;
 
       // Inserir na lead_experimentais direto no estado final
-      const presente = aluno.presenca === 'presente';
-      const status = presente ? 'experimental_realizada' : 'experimental_faltou';
+      const status = novoStatus;
 
       const { error } = await supabase
         .from('lead_experimentais')
@@ -272,7 +305,7 @@ async function reconciliarExperimentaisOrfas(
         status: error ? 'erro' : (presente ? 'reconciliada_presente' : 'reconciliada_faltou'),
         motivo: error
           ? error.message
-          : `Experimental ${presente ? 'realizada' : 'faltou'} via reconciliação (webhook não atualizou lead)`
+          : `Experimental ${presente ? 'realizada' : 'faltou'} via reconciliação (matchadoPorNome=${matchadoPorNome})`
       });
     }
   }
@@ -415,6 +448,10 @@ async function confirmarExperimentais(
     }
 
     if (aulaFinal.cancelada) {
+      await supabase
+        .from('lead_experimentais')
+        .update({ status: 'cancelada', updated_at: new Date().toISOString() })
+        .eq('id', exp.id);
       logs.push({
         lead_id: exp.lead_id,
         lead_nome: exp.nome_aluno || 'Sem nome',
