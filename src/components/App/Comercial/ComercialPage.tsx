@@ -34,7 +34,9 @@ import {
   AlertTriangle,
   AlertCircle,
   ChevronRight,
-  ChevronDown
+  ChevronDown,
+  ChevronUp,
+  ArrowUpDown
 } from 'lucide-react';
 import { TarefasRapidasTab } from '@/components/shared/TarefasRapidas';
 import { CanalOrigemBadge } from '@/components/shared/CanalOrigemBadge';
@@ -82,6 +84,60 @@ import { TabProgramaMatriculador } from './TabProgramaMatriculador';
 import { ModalMatricular } from '../PreAtendimento/components/ModalMatricular';
 import { ModalArquivar } from '../PreAtendimento/components/ModalArquivar';
 import type { LeadCRM } from '../PreAtendimento/types';
+
+// Helpers de ordenação (3 estados: asc -> desc -> null)
+type SortDir = 'asc' | 'desc';
+type SortConfig = { col: string; dir: SortDir } | null;
+
+const nextSort = (prev: SortConfig, col: string): SortConfig => {
+  if (prev?.col !== col) return { col, dir: 'asc' };
+  if (prev.dir === 'asc') return { col, dir: 'desc' };
+  return null;
+};
+
+const sortArray = <T,>(arr: T[], cfg: SortConfig, getter: (item: T, col: string) => unknown): T[] => {
+  if (!cfg) return arr;
+  const sign = cfg.dir === 'asc' ? 1 : -1;
+  return [...arr].sort((a, b) => {
+    const va = getter(a, cfg.col);
+    const vb = getter(b, cfg.col);
+    if (va == null && vb == null) return 0;
+    if (va == null) return 1;
+    if (vb == null) return -1;
+    if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * sign;
+    return String(va).localeCompare(String(vb), 'pt-BR', { numeric: true, sensitivity: 'base' }) * sign;
+  });
+};
+
+interface SortableThProps {
+  col: string;
+  label: string;
+  sort: SortConfig;
+  onSort: (col: string) => void;
+  className?: string;
+  align?: 'left' | 'right';
+}
+const SortableTh: React.FC<SortableThProps> = ({ col, label, sort, onSort, className, align = 'left' }) => {
+  const active = sort?.col === col;
+  const dir = active ? sort!.dir : null;
+  return (
+    <th
+      className={`pb-3 px-2 font-medium cursor-pointer select-none hover:text-white transition-colors ${className ?? 'border-r border-slate-700/30'}`}
+      onClick={() => onSort(col)}
+    >
+      <span className={`inline-flex items-center gap-1 ${align === 'right' ? 'justify-end w-full' : ''}`}>
+        {label}
+        {dir === 'asc' ? (
+          <ChevronUp className="w-3 h-3 text-violet-400" />
+        ) : dir === 'desc' ? (
+          <ChevronDown className="w-3 h-3 text-violet-400" />
+        ) : (
+          <ArrowUpDown className="w-3 h-3 opacity-30" />
+        )}
+      </span>
+    </th>
+  );
+};
 
 // Tipos
 interface LeadDiario {
@@ -307,6 +363,12 @@ export function ComercialPage() {
   const [leadsGlobais, setLeadsGlobais] = useState<any[]>([]);
   const [buscandoGlobal, setBuscandoGlobal] = useState(false);
   const [paginaLeads, setPaginaLeads] = useState(1);
+
+  // Ordenação por tabela do funil (independente entre as abas)
+  const [sortNovos, setSortNovos] = useState<SortConfig>(null);
+  const [sortExperimentais, setSortExperimentais] = useState<SortConfig>(null);
+  const [sortVisitas, setSortVisitas] = useState<SortConfig>(null);
+  const [sortMatriculas, setSortMatriculas] = useState<SortConfig>(null);
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingData, setEditingData] = useState<Partial<LeadDiario>>({});
@@ -3592,8 +3654,22 @@ export function ComercialPage() {
             )}
             {(() => {
               // Quando há busca, separar leads novos dos de outras etapas
-              const leadsTabela = leadsFiltrados.filter(l => !l.status || l.status === 'novo');
+              const leadsBase = leadsFiltrados.filter(l => !l.status || l.status === 'novo');
               const leadsOutrasEtapas = buscaFunil ? leadsFiltrados.filter(l => l.status && l.status !== 'novo') : [];
+
+              // Ordenação
+              const leadsTabela = sortArray(leadsBase, sortNovos, (l, col) => {
+                switch (col) {
+                  case 'data': return l.data_contato;
+                  case 'nome': return l.nome;
+                  case 'telefone': return (l as any).telefone;
+                  case 'canal': return (l as any).canal_nome;
+                  case 'curso': return (l as any).curso_nome;
+                  case 'etapa': return l.etapa_pipeline_id;
+                  case 'unidade': return (l as any).unidades?.codigo;
+                  default: return null;
+                }
+              });
 
               // Paginação
               const LEADS_POR_PAGINA = 50;
@@ -3613,13 +3689,13 @@ export function ComercialPage() {
                       />
                     </th>
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">#</th>
-                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Data</th>
-                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Nome</th>
-                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Telefone</th>
-                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Canal</th>
-                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Curso</th>
-                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Etapa</th>
-                    {isAdmin && <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Unidade</th>}
+                    <SortableTh col="data" label="Data" sort={sortNovos} onSort={(c) => setSortNovos(prev => nextSort(prev, c))} />
+                    <SortableTh col="nome" label="Nome" sort={sortNovos} onSort={(c) => setSortNovos(prev => nextSort(prev, c))} />
+                    <SortableTh col="telefone" label="Telefone" sort={sortNovos} onSort={(c) => setSortNovos(prev => nextSort(prev, c))} />
+                    <SortableTh col="canal" label="Canal" sort={sortNovos} onSort={(c) => setSortNovos(prev => nextSort(prev, c))} />
+                    <SortableTh col="curso" label="Curso" sort={sortNovos} onSort={(c) => setSortNovos(prev => nextSort(prev, c))} />
+                    <SortableTh col="etapa" label="Etapa" sort={sortNovos} onSort={(c) => setSortNovos(prev => nextSort(prev, c))} />
+                    {isAdmin && <SortableTh col="unidade" label="Unidade" sort={sortNovos} onSort={(c) => setSortNovos(prev => nextSort(prev, c))} />}
                     <th className="pb-3 px-2 font-medium text-right">Ações</th>
                   </tr>
                 </thead>
@@ -4053,7 +4129,7 @@ export function ComercialPage() {
             }
             return experimentaisDetalhadas;
           })();
-          const expFiltradas = expBase.filter((l: any) => {
+          const expFiltradasRaw = expBase.filter((l: any) => {
             // Filtro por tipo (leads novos vs alunos)
             if (filtroTipoExp === 'leads_novos' && l.lead_aluno_id) return false;
             if (filtroTipoExp === 'alunos' && !l.lead_aluno_id) return false;
@@ -4066,6 +4142,21 @@ export function ComercialPage() {
             if (filtroProfessorFunil !== 'todos' && String(l.professor_experimental_id) !== filtroProfessorFunil) return false;
             return true;
           });
+          // Ordenação (afeta a ordem dos grupos por lead_id — o primeiro item de cada grupo na lista ordenada vira o "header")
+          const expFiltradas = sortArray(expFiltradasRaw, sortExperimentais, (l: any, col) => {
+            switch (col) {
+              case 'agendada_em': return l.created_at;
+              case 'aula_em': return l.data_experimental;
+              case 'aluno': return l.lead_nome || l.nome_aluno;
+              case 'telefone': return l.lead_telefone;
+              case 'status': return l.status;
+              case 'canal': return l.canal_nome;
+              case 'curso': return l.curso_nome;
+              case 'professor': return l.professor_nome;
+              case 'unidade': return l.unidade_codigo;
+              default: return null;
+            }
+          });
           return (
           <div className="p-4 overflow-x-auto">
             {expFiltradas.length > 0 ? (
@@ -4073,16 +4164,16 @@ export function ComercialPage() {
                 <thead>
                   <tr className="text-left text-slate-400 border-b border-slate-700">
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">#</th>
-                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Agendada em</th>
-                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Aula em</th>
-                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Aluno</th>
+                    <SortableTh col="agendada_em" label="Agendada em" sort={sortExperimentais} onSort={(c) => setSortExperimentais(prev => nextSort(prev, c))} />
+                    <SortableTh col="aula_em" label="Aula em" sort={sortExperimentais} onSort={(c) => setSortExperimentais(prev => nextSort(prev, c))} />
+                    <SortableTh col="aluno" label="Aluno" sort={sortExperimentais} onSort={(c) => setSortExperimentais(prev => nextSort(prev, c))} />
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Responsável</th>
-                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Telefone</th>
-                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Status</th>
-                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Canal</th>
-                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Curso</th>
-                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Professor</th>
-                    {isAdmin && <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Unidade</th>}
+                    <SortableTh col="telefone" label="Telefone" sort={sortExperimentais} onSort={(c) => setSortExperimentais(prev => nextSort(prev, c))} />
+                    <SortableTh col="status" label="Status" sort={sortExperimentais} onSort={(c) => setSortExperimentais(prev => nextSort(prev, c))} />
+                    <SortableTh col="canal" label="Canal" sort={sortExperimentais} onSort={(c) => setSortExperimentais(prev => nextSort(prev, c))} />
+                    <SortableTh col="curso" label="Curso" sort={sortExperimentais} onSort={(c) => setSortExperimentais(prev => nextSort(prev, c))} />
+                    <SortableTh col="professor" label="Professor" sort={sortExperimentais} onSort={(c) => setSortExperimentais(prev => nextSort(prev, c))} />
+                    {isAdmin && <SortableTh col="unidade" label="Unidade" sort={sortExperimentais} onSort={(c) => setSortExperimentais(prev => nextSort(prev, c))} />}
                     <th className="pb-3 px-2 font-medium text-right">Ações</th>
                   </tr>
                 </thead>
@@ -4534,7 +4625,7 @@ export function ComercialPage() {
         {/* TABELA DE VISITAS */}
         {/* ══════════════════════════════════════════════════════════════ */}
         {abaDetalhamento === 'visita' && (() => {
-          const visitasFiltradas = visitasMes.filter(l => {
+          const visitasFiltradasRaw = visitasMes.filter(l => {
             if (buscaFunil) {
               const termo = buscaFunil.toLowerCase();
               if (!(l.nome || '').toLowerCase().includes(termo)) return false;
@@ -4544,6 +4635,18 @@ export function ComercialPage() {
             if (filtroProfessorFunil !== 'todos' && String(l.professor_experimental_id) !== filtroProfessorFunil) return false;
             return true;
           });
+          const visitasFiltradas = sortArray(visitasFiltradasRaw, sortVisitas, (v, col) => {
+            switch (col) {
+              case 'data': return v.data_contato;
+              case 'nome': return (v as any).nome;
+              case 'telefone': return (v as any).telefone;
+              case 'canal': return v.canal_nome;
+              case 'curso': return v.curso_nome;
+              case 'qtd': return v.quantidade;
+              case 'unidade': return (v as any).unidades?.codigo;
+              default: return null;
+            }
+          });
           return (
           <div className="p-4 overflow-x-auto">
             {visitasFiltradas.length > 0 ? (
@@ -4551,13 +4654,13 @@ export function ComercialPage() {
                 <thead>
                   <tr className="text-left text-slate-400 border-b border-slate-700">
                     <th className="pb-3 px-2 font-medium border-r border-slate-700/30">#</th>
-                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Data</th>
-                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Nome</th>
-                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Telefone</th>
-                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Canal</th>
-                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Curso</th>
-                    <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Qtd</th>
-                    {isAdmin && <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Unidade</th>}
+                    <SortableTh col="data" label="Data" sort={sortVisitas} onSort={(c) => setSortVisitas(prev => nextSort(prev, c))} />
+                    <SortableTh col="nome" label="Nome" sort={sortVisitas} onSort={(c) => setSortVisitas(prev => nextSort(prev, c))} />
+                    <SortableTh col="telefone" label="Telefone" sort={sortVisitas} onSort={(c) => setSortVisitas(prev => nextSort(prev, c))} />
+                    <SortableTh col="canal" label="Canal" sort={sortVisitas} onSort={(c) => setSortVisitas(prev => nextSort(prev, c))} />
+                    <SortableTh col="curso" label="Curso" sort={sortVisitas} onSort={(c) => setSortVisitas(prev => nextSort(prev, c))} />
+                    <SortableTh col="qtd" label="Qtd" sort={sortVisitas} onSort={(c) => setSortVisitas(prev => nextSort(prev, c))} />
+                    {isAdmin && <SortableTh col="unidade" label="Unidade" sort={sortVisitas} onSort={(c) => setSortVisitas(prev => nextSort(prev, c))} />}
                     <th className="pb-3 px-2 font-medium text-right">Ações</th>
                   </tr>
                 </thead>
@@ -4713,8 +4816,26 @@ export function ComercialPage() {
         {/* TABELA DE MATRÍCULAS (original - mantida intacta) */}
         {/* ══════════════════════════════════════════════════════════════ */}
         {abaDetalhamento === 'matricula' && (() => {
+          // helper local para ordenar mantendo todos os campos calculados
+          const sortMat = (arr: typeof matriculasMes) => sortArray(arr, sortMatriculas, (m: any, col) => {
+            switch (col) {
+              case 'data': return m.data_contato;
+              case 'conversao': return m.data_conversao;
+              case 'aluno': return m.nome;
+              case 'telefone': return m.telefone;
+              case 'idade': return m.idade;
+              case 'curso': return m.curso_nome;
+              case 'canal': return m.canal_nome;
+              case 'prof_exp': return m.professor_exp_nome;
+              case 'prof_fixo': return m.professor_fixo_nome;
+              case 'passaporte': return m.valor_passaporte;
+              case 'parcela': return m.valor_parcela;
+              case 'escola': return m.idade != null ? (m.idade <= 11 ? 'LAMK' : 'EMLA') : m.tipo_matricula;
+              default: return null;
+            }
+          });
           const isBanda = (nome: string) => nome?.toLowerCase().includes('banda');
-          const matriculasFiltradas = matriculasMes.filter((l: any) => {
+          const matriculasFiltradasRaw = matriculasMes.filter((l: any) => {
             // Filtro por tipo (novos alunos vs segundo curso/banda vs por data matrícula)
             if (filtroTipoMat === 'novos_alunos' && (l.is_segundo_curso || isBanda(l.curso_nome) || l._fora_range)) return false;
             if (filtroTipoMat === 'segundo_curso' && (!l.is_segundo_curso && !isBanda(l.curso_nome) || l._fora_range)) return false;
@@ -4735,6 +4856,7 @@ export function ComercialPage() {
             }
             return true;
           });
+          const matriculasFiltradas = sortMat(matriculasFiltradasRaw);
           return (
           <>
             {/* Header específico de matrículas */}
@@ -4757,18 +4879,18 @@ export function ComercialPage() {
               <thead>
                 <tr className="text-left text-slate-400 border-b border-slate-700">
                   <th className="pb-3 px-2 font-medium border-r border-slate-700/30">#</th>
-                  <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Data</th>
-                  <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Conversão</th>
-                  <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Aluno(a)</th>
-                  <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Telefone</th>
-                  <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Idade</th>
-                  <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Curso</th>
-                  <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Canal</th>
-                  <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Prof. Exp.</th>
-                  <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Prof. Fixo</th>
-                  <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Passaporte</th>
-                  <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Parcela</th>
-                  <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Escola</th>
+                  <SortableTh col="data" label="Data" sort={sortMatriculas} onSort={(c) => setSortMatriculas(prev => nextSort(prev, c))} />
+                  <SortableTh col="conversao" label="Conversão" sort={sortMatriculas} onSort={(c) => setSortMatriculas(prev => nextSort(prev, c))} />
+                  <SortableTh col="aluno" label="Aluno(a)" sort={sortMatriculas} onSort={(c) => setSortMatriculas(prev => nextSort(prev, c))} />
+                  <SortableTh col="telefone" label="Telefone" sort={sortMatriculas} onSort={(c) => setSortMatriculas(prev => nextSort(prev, c))} />
+                  <SortableTh col="idade" label="Idade" sort={sortMatriculas} onSort={(c) => setSortMatriculas(prev => nextSort(prev, c))} />
+                  <SortableTh col="curso" label="Curso" sort={sortMatriculas} onSort={(c) => setSortMatriculas(prev => nextSort(prev, c))} />
+                  <SortableTh col="canal" label="Canal" sort={sortMatriculas} onSort={(c) => setSortMatriculas(prev => nextSort(prev, c))} />
+                  <SortableTh col="prof_exp" label="Prof. Exp." sort={sortMatriculas} onSort={(c) => setSortMatriculas(prev => nextSort(prev, c))} />
+                  <SortableTh col="prof_fixo" label="Prof. Fixo" sort={sortMatriculas} onSort={(c) => setSortMatriculas(prev => nextSort(prev, c))} />
+                  <SortableTh col="passaporte" label="Passaporte" sort={sortMatriculas} onSort={(c) => setSortMatriculas(prev => nextSort(prev, c))} />
+                  <SortableTh col="parcela" label="Parcela" sort={sortMatriculas} onSort={(c) => setSortMatriculas(prev => nextSort(prev, c))} />
+                  <SortableTh col="escola" label="Escola" sort={sortMatriculas} onSort={(c) => setSortMatriculas(prev => nextSort(prev, c))} />
                   <th className="pb-3 px-2 font-medium text-right">Ações</th>
                 </tr>
               </thead>
