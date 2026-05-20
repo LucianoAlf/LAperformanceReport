@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useSetPageTitle } from '@/contexts/PageTitleContext';
 import { useOutletContext } from 'react-router-dom';
 import { 
@@ -33,6 +33,7 @@ import {
   PhoneOff,
   AlertTriangle,
   AlertCircle,
+  Brain,
   ChevronRight,
   ChevronDown,
   ChevronUp,
@@ -169,6 +170,33 @@ interface LeadDiario {
 interface Option {
   value: number;
   label: string;
+}
+
+interface AnamnesePendente {
+  id: number;
+  nome_aluno: string;
+  tipo_formulario: string | null;
+  temperamento_codinome: string | null;
+  created_at: string;
+}
+
+const UNIDADE_MAP: Record<string, string> = {
+  cg: '95553e96-971b-4590-a6eb-0201d013c14d',
+  rec: '368d47f5-2d88-4475-bc14-ba084a9a348e',
+  bar: '2ec861f6-023f-4d7b-9927-3960ad8c2a92',
+};
+
+function normalizarBuscaAnamnese(valor: string) {
+  return valor
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function resolverUnidade(valor?: string | null) {
+  if (!valor) return '';
+  return UNIDADE_MAP[String(valor).trim().toLowerCase()] || valor;
 }
 
 interface ResumoMes {
@@ -450,8 +478,50 @@ export function ComercialPage() {
   const [confirmouDupMatricula, setConfirmouDupMatricula] = useState(false);
   const [ignorarDupFortes, setIgnorarDupFortes] = useState<Set<number>>(new Set());
   const [ignorarDupFracas, setIgnorarDupFracas] = useState<Set<number>>(new Set());
+  const [anamnesePendenteMatricula, setAnamnesePendenteMatricula] = useState<AnamnesePendente | null>(null);
+  const [buscandoAnamneseMatricula, setBuscandoAnamneseMatricula] = useState(false);
+  const buscaAnamneseTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const checkLead = useCheckLeadDuplicado();
   const checkAluno = useCheckAlunoDuplicado();
+
+  const limparBuscaAnamneseMatricula = useCallback(() => {
+    if (buscaAnamneseTimeoutRef.current) {
+      clearTimeout(buscaAnamneseTimeoutRef.current);
+      buscaAnamneseTimeoutRef.current = null;
+    }
+    setBuscandoAnamneseMatricula(false);
+  }, []);
+
+  const agendarBuscaAnamneseMatricula = useCallback((nome: string, unidade?: string | null) => {
+    limparBuscaAnamneseMatricula();
+
+    const nomeDigitado = nome.trim();
+    const unidadeBusca = resolverUnidade(unidade || null) || null;
+
+    if (nomeDigitado.length < 3 || !unidadeBusca) {
+      setAnamnesePendenteMatricula(null);
+      return;
+    }
+
+    buscaAnamneseTimeoutRef.current = setTimeout(async () => {
+      setBuscandoAnamneseMatricula(true);
+
+      const { data, error } = await supabase.rpc('buscar_anamnese_pendente', {
+        p_nome: nomeDigitado,
+        p_unidade_id: unidadeBusca,
+      });
+
+      if (error) {
+        console.error('Erro ao buscar anamnese pendente da matrícula:', error);
+        setAnamnesePendenteMatricula(null);
+      } else {
+        setAnamnesePendenteMatricula(data || null);
+      }
+
+      setBuscandoAnamneseMatricula(false);
+      buscaAnamneseTimeoutRef.current = null;
+    }, 500);
+  }, [limparBuscaAnamneseMatricula]);
 
   // Verificacao em tempo real quando matricula esta aberta
   useEffect(() => {
@@ -493,6 +563,19 @@ export function ComercialPage() {
     unidadeParaSalvar,
     isAdmin,
   ]);
+
+  useEffect(() => {
+    if (modalOpen !== 'matricula') {
+      limparBuscaAnamneseMatricula();
+      setAnamnesePendenteMatricula(null);
+      return;
+    }
+
+    const unidadeBusca = isAdmin
+      ? (formData.unidade_id || unidadeParaSalvar)
+      : unidadeParaSalvar;
+    agendarBuscaAnamneseMatricula(formData.aluno_nome, unidadeBusca);
+  }, [modalOpen, formData.aluno_nome, formData.unidade_id, isAdmin, unidadeParaSalvar, agendarBuscaAnamneseMatricula, limparBuscaAnamneseMatricula]);
 
   // Reset confirmacao quando lista de duplicatas muda
   useEffect(() => {
@@ -1533,6 +1616,8 @@ export function ComercialPage() {
     setConfirmouDupMatricula(false);
     setIgnorarDupFortes(new Set());
     setIgnorarDupFracas(new Set());
+    setAnamnesePendenteMatricula(null);
+    limparBuscaAnamneseMatricula();
     checkLead.limparDuplicados();
     checkAluno.limparDuplicados();
   };
@@ -2121,7 +2206,7 @@ export function ComercialPage() {
     // Buscar dados dos últimos 7 dias
     const { data: registrosSemana } = await supabase
       .from('leads')
-      .select('status, quantidade, valor_passaporte, valor_parcela, experimental_agendada')
+      .select('status, quantidade, valor_passaporte, valor_parcela, experimental_agendada, tipo_aluno')
       .eq('unidade_id', unidadeId)
       .gte('data_contato', seteDiasAtras.toISOString().split('T')[0])
       .lte('data_contato', hoje.toISOString().split('T')[0]);
@@ -2230,6 +2315,7 @@ export function ComercialPage() {
         nome,
         idade,
         tipo_matricula,
+        tipo_aluno,
         valor_passaporte,
         valor_parcela,
         canais_origem(nome),
@@ -3658,15 +3744,16 @@ export function ComercialPage() {
               const leadsOutrasEtapas = buscaFunil ? leadsFiltrados.filter(l => l.status && l.status !== 'novo') : [];
 
               // Ordenação
-              const leadsTabela = sortArray(leadsBase, sortNovos, (l, col) => {
+              type LeadComCampos = LeadDiario & { canal_nome?: string; curso_nome?: string; telefone?: string };
+              const leadsTabela = sortArray(leadsBase as LeadComCampos[], sortNovos, (l: LeadComCampos, col) => {
                 switch (col) {
                   case 'data': return l.data_contato;
                   case 'nome': return l.nome;
-                  case 'telefone': return (l as any).telefone;
-                  case 'canal': return (l as any).canal_nome;
-                  case 'curso': return (l as any).curso_nome;
+                  case 'telefone': return l.telefone;
+                  case 'canal': return l.canal_nome;
+                  case 'curso': return l.curso_nome;
                   case 'etapa': return l.etapa_pipeline_id;
-                  case 'unidade': return (l as any).unidades?.codigo;
+                  case 'unidade': return l.unidades?.codigo;
                   default: return null;
                 }
               });
@@ -4212,8 +4299,7 @@ export function ComercialPage() {
                     const abrirLead = (exp: any) => {
                       const leadData = exp.leads;
                       if (leadData) {
-                        setEditingLead({ ...leadData, id: exp.lead_id });
-                        setEditingLeadOriginal(JSON.parse(JSON.stringify({ ...leadData, id: exp.lead_id })));
+                        startEditing({ ...leadData, id: exp.lead_id } as LeadDiario);
                       }
                     };
                     const expToLeadCRM = (exp: any): LeadCRM => ({
@@ -4554,8 +4640,7 @@ export function ComercialPage() {
                           key={exp.id}
                           className="border-b border-slate-700/50 bg-amber-500/5 hover:bg-amber-500/10 transition-colors cursor-pointer"
                           onClick={() => {
-                            setEditingLead(exp);
-                            setEditingLeadOriginal(JSON.parse(JSON.stringify(exp)));
+                            startEditing(exp as LeadDiario);
                           }}
                         >
                           <td className="py-3 px-2 text-slate-500 font-medium border-r border-slate-700/30">{index + 1}</td>
@@ -4635,15 +4720,16 @@ export function ComercialPage() {
             if (filtroProfessorFunil !== 'todos' && String(l.professor_experimental_id) !== filtroProfessorFunil) return false;
             return true;
           });
-          const visitasFiltradas = sortArray(visitasFiltradasRaw, sortVisitas, (v, col) => {
+          type VisitaComCampos = LeadDiario & { canal_nome?: string; curso_nome?: string; telefone?: string; curso_id?: number };
+          const visitasFiltradas = sortArray(visitasFiltradasRaw as VisitaComCampos[], sortVisitas, (v: VisitaComCampos, col) => {
             switch (col) {
               case 'data': return v.data_contato;
-              case 'nome': return (v as any).nome;
-              case 'telefone': return (v as any).telefone;
+              case 'nome': return v.nome;
+              case 'telefone': return v.telefone;
               case 'canal': return v.canal_nome;
               case 'curso': return v.curso_nome;
               case 'qtd': return v.quantidade;
-              case 'unidade': return (v as any).unidades?.codigo;
+              case 'unidade': return v.unidades?.codigo;
               default: return null;
             }
           });
@@ -5412,6 +5498,19 @@ export function ComercialPage() {
                 sugestoes={sugestoesLeads}
                 placeholder="Digite ou selecione o nome..."
               />
+              {anamnesePendenteMatricula && (
+                <div className="mt-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-400">
+                  <p>
+                    🧠 Anamnese encontrada: &quot;{anamnesePendenteMatricula.nome_aluno}&quot; — {anamnesePendenteMatricula.temperamento_codinome || anamnesePendenteMatricula.tipo_formulario}
+                  </p>
+                  <p className="text-xs text-emerald-500/70">
+                    Será vinculada automaticamente ao salvar a matrícula.
+                  </p>
+                </div>
+              )}
+              {!anamnesePendenteMatricula && buscandoAnamneseMatricula && formData.aluno_nome.trim().length >= 3 && (
+                <p className="mt-2 text-xs text-slate-400">Buscando anamnese pendente...</p>
+              )}
               <p className="text-xs text-slate-500 mt-1">
                 Sugestões do funil ou digite um nome novo (ex-aluno)
               </p>

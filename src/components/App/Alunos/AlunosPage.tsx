@@ -682,12 +682,20 @@ export function AlunosPage() {
     })();
 
     // Disparar TODAS as queries em paralelo
+    let salasQuery = supabase
+      .from('salas').select('id, nome, capacidade_maxima')
+      .eq('ativo', true)
+      .order('nome');
+
+    if (unidadeAtual && unidadeAtual !== 'todos') {
+      salasQuery = salasQuery.eq('unidade_id', unidadeAtual);
+    }
+
     const [profs, cursosResult, tiposResult, salasResult, horariosResult] = await Promise.all([
       profsPromise,
       supabase.from('cursos').select('id, nome, is_projeto_banda').eq('ativo', true).order('nome'),
       supabase.from('tipos_matricula').select('id, nome').eq('ativo', true).order('id'),
-      supabase.from('salas').select('id, nome, capacidade_maxima')
-        .eq('unidade_id', unidadeAtual).eq('ativo', true).order('nome'),
+      salasQuery,
       supabase.from('horarios').select('id, nome, hora_inicio').eq('ativo', true).order('hora_inicio'),
     ]);
 
@@ -1581,7 +1589,7 @@ export function AlunosPage() {
           )}
         </section>
       )}
-
+ 
       {/* Modal Novo Aluno */}
       {modalNovoAluno && (
         <ModalNovoAluno
@@ -1609,7 +1617,7 @@ export function AlunosPage() {
         />
       )}
 
-      {/* Modal Nova Turma/Banda */}
+      {/* Modal Nova Turma */}
       {modalNovaTurma && (
         <ModalNovaTurma
           onClose={() => setModalNovaTurma(false)}
@@ -1620,7 +1628,6 @@ export function AlunosPage() {
           horarios={horarios}
           unidadeAtual={unidadeAtual}
           alunosDisponiveis={alunos}
-          turmasExistentes={turmas}
         />
       )}
 
@@ -1649,8 +1656,6 @@ export function AlunosPage() {
         unidadeId={unidadeAtual || 'todos'}
         mediaAtual={kpis.ltvMedio}
       />
-
-
     </div>
   );
 }

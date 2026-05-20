@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { X, CheckCircle2, Loader2, AlertCircle, AlertTriangle } from 'lucide-react';
+import { X, CheckCircle2, Loader2, AlertCircle, AlertTriangle, Brain } from 'lucide-react';
 import { gerarHorariosDisponiveis } from '@/lib/horarios';
 import type { DisponibilidadeSemanal } from '../Professores/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -61,6 +61,33 @@ const TIPO_ALUNO_PARA_MATRICULA: Record<string, number> = {
   'bolsista_parcial': 4,
 };
 
+const UNIDADE_MAP: Record<string, string> = {
+  cg: '95553e96-971b-4590-a6eb-0201d013c14d',
+  rec: '368d47f5-2d88-4475-bc14-ba084a9a348e',
+  bar: '2ec861f6-023f-4d7b-9927-3960ad8c2a92',
+};
+
+interface AnamnesePendente {
+  id: number;
+  nome_aluno: string;
+  tipo_formulario: string | null;
+  temperamento_codinome: string | null;
+  created_at: string;
+}
+
+function normalizarBuscaAnamnese(valor: string) {
+  return valor
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function resolverUnidade(valor?: string | null) {
+  if (!valor) return '';
+  return UNIDADE_MAP[String(valor).trim().toLowerCase()] || valor;
+}
+
 export function ModalNovoAluno({
   onClose,
   onSalvar,
@@ -72,16 +99,18 @@ export function ModalNovoAluno({
   unidadeAtual,
   dadosIniciais,
 }: ModalNovoAlunoProps) {
-  const { isAdmin } = useAuth();
+  const { isAdmin, unidadeId } = useAuth();
   const [saving, setSaving] = useState(false);
   const [canais, setCanais] = useState<{value: number, label: string}[]>([]);
   const [formasPagamento, setFormasPagamento] = useState<{value: number, label: string}[]>([]);
   const [unidades, setUnidades] = useState<{value: string, label: string}[]>([]);
+  const [anamnesePendente, setAnamnesePendente] = useState<AnamnesePendente | null>(null);
+  const [buscandoAnamnese, setBuscandoAnamnese] = useState(false);
   
   const [formData, setFormData] = useState({
     data: new Date(),
     aluno_nome: dadosIniciais?.aluno_nome || '',
-    unidade_id: dadosIniciais?.unidade_id || unidadeAtual,
+    unidade_id: dadosIniciais?.unidade_id || unidadeAtual || unidadeId || '',
     aluno_data_nascimento: null as Date | null,
     tipo_aluno: 'pagante',
     modalidade: 'turma' as string,
@@ -240,6 +269,37 @@ export function ModalNovoAluno({
     loadData();
   }, []);
 
+  useEffect(() => {
+    const nome = formData.aluno_nome.trim();
+    const unidadeUuid = resolverUnidade(formData.unidade_id || unidadeId || unidadeAtual);
+
+    if (nome.length < 3 || !unidadeUuid) {
+      setAnamnesePendente(null);
+      setBuscandoAnamnese(false);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setBuscandoAnamnese(true);
+
+      const { data, error } = await supabase.rpc('buscar_anamnese_pendente', {
+        p_nome: nome,
+        p_unidade_id: unidadeUuid,
+      });
+
+      if (error) {
+        console.error('Erro ao buscar anamnese pendente:', error);
+        setAnamnesePendente(null);
+      } else {
+        setAnamnesePendente(data || null);
+      }
+
+      setBuscandoAnamnese(false);
+    }, 500);
+
+    return () => clearTimeout(timer);
+  }, [formData.aluno_nome, formData.unidade_id, unidadeId, unidadeAtual]);
+
   async function handleSave() {
     const dispensaPagamento = TIPOS_SEM_PAGAMENTO.includes(formData.tipo_aluno);
     if (!formData.aluno_nome || !formData.aluno_data_nascimento) {
@@ -316,7 +376,7 @@ export function ModalNovoAluno({
     setFormData({
       data: new Date(),
       aluno_nome: '',
-      unidade_id: unidadeAtual,
+      unidade_id: unidadeAtual || unidadeId || '',
       aluno_data_nascimento: null,
       tipo_aluno: 'pagante',
       modalidade: 'turma',
@@ -340,6 +400,8 @@ export function ModalNovoAluno({
     setConfirmouDuplicata(false);
     setIgnorarFortes(new Set());
     setIgnorarFracas(new Set());
+    setAnamnesePendente(null);
+    setBuscandoAnamnese(false);
     limparDuplicados();
   }
 
@@ -443,25 +505,36 @@ export function ModalNovoAluno({
                 onChange={(e) => setFormData({ ...formData, aluno_nome: e.target.value })}
                 placeholder="Nome completo"
               />
+              {anamnesePendente && (
+                <div className="mt-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-400">
+                  <p>
+                    🧠 Anamnese encontrada: &quot;{anamnesePendente.nome_aluno}&quot; — {anamnesePendente.temperamento_codinome || anamnesePendente.tipo_formulario}
+                  </p>
+                  <p className="text-xs text-emerald-500/70">
+                    Será vinculada automaticamente ao salvar a matrícula.
+                  </p>
+                </div>
+              )}
+              {!anamnesePendente && buscandoAnamnese && formData.aluno_nome.trim().length >= 3 && (
+                <p className="mt-2 text-xs text-slate-400">Buscando anamnese pendente...</p>
+              )}
             </div>
-            {isAdmin && (
-              <div>
-                <Label className="mb-2 block">Unidade *</Label>
-                <Select
-                  value={formData.unidade_id || ''}
-                  onValueChange={(value) => setFormData({ ...formData, unidade_id: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione a unidade..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {unidades.map((u) => (
-                      <SelectItem key={u.value} value={u.value.toString()}>{u.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            <div>
+              <Label className="mb-2 block">Unidade *</Label>
+              <Select
+                value={formData.unidade_id || ''}
+                onValueChange={(value) => setFormData({ ...formData, unidade_id: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a unidade..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {unidades.map((u) => (
+                    <SelectItem key={u.value} value={u.value.toString()}>{u.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label className="mb-2 block">Data de Nascimento *</Label>
