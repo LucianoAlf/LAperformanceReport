@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical, Play, MessageSquarePlus, MessageCircle, CheckCircle2, Circle, FileEdit, ChevronDown, ChevronRight, Music2, Layers, CreditCard, FileText, Banknote, QrCode, Link2, Receipt, ChevronsUpDown, Columns3, Phone, ArrowUp, ArrowDown } from 'lucide-react';
+import { Search, RotateCcw, Plus, Edit2, Trash2, Check, X, History, AlertTriangle, MoreVertical, Play, MessageSquarePlus, MessageCircle, CheckCircle2, Circle, FileEdit, ChevronDown, ChevronRight, Music2, Layers, CreditCard, FileText, Banknote, QrCode, Link2, Receipt, ChevronsUpDown, Columns3, Phone, ArrowUp, ArrowDown, Brain } from 'lucide-react';
 import { CelulaEditavel } from '@/components/ui/CelulaEditavel';
 import { DatePicker } from '@/components/ui/date-picker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -66,6 +66,7 @@ const HORARIOS_LISTA = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '1
 // Configuração de colunas toggleable
 const COLUNAS_CONFIG = [
   { id: 'telefone', label: 'Telefone', defaultVisible: false },
+  { id: 'anamnese', label: 'Anamnese', defaultVisible: false },
   { id: 'escola', label: 'Escola', defaultVisible: true },
   { id: 'professor', label: 'Professor', defaultVisible: true },
   { id: 'curso', label: 'Curso', defaultVisible: true },
@@ -83,6 +84,13 @@ const COLUNAS_CONFIG = [
 ] as const;
 
 const STORAGE_KEY = 'la-music-tabela-alunos-colunas';
+
+const TEMPERAMENTO_BADGE: Record<string, { emoji: string; className: string }> = {
+  CAZUZA: { emoji: '🔥', className: 'border-red-500/30 bg-red-500/15 text-red-300' },
+  SLASH: { emoji: '⚡', className: 'border-blue-500/30 bg-blue-500/15 text-blue-300' },
+  FRANK: { emoji: '🎩', className: 'border-amber-500/30 bg-amber-500/15 text-amber-300' },
+  AMY: { emoji: '🌙', className: 'border-violet-500/30 bg-violet-500/15 text-violet-300' },
+};
 
 function getDefaultColunas(): Set<string> {
   try {
@@ -196,6 +204,23 @@ export function TabelaAlunos({
   }, []);
 
   const col = useCallback((id: string) => colunasVisiveis.has(id), [colunasVisiveis]);
+
+  const getBadgeAnamnese = useCallback((aluno: Aluno) => {
+    if (!aluno.anamnese_preenchida) return null;
+
+    const codinome = (aluno.temperamento_codinome || '').toUpperCase();
+    const config = TEMPERAMENTO_BADGE[codinome];
+
+    return (
+      <Tooltip content={codinome ? `Anamnese preenchida • ${codinome}` : 'Anamnese preenchida'}>
+        <div className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${config?.className || 'border-cyan-500/30 bg-cyan-500/15 text-cyan-300'}`}>
+          <Brain className="w-3 h-3" />
+          {config?.emoji ? <span>{config.emoji}</span> : null}
+          <span>{codinome || 'OK'}</span>
+        </div>
+      </Tooltip>
+    );
+  }, []);
 
   // Contagem de inadimplentes (usa todosAlunos para não depender de filtros)
   // Conta ALUNOS únicos, mas soma VALOR de todos os cursos (incluindo segundo curso)
@@ -1241,6 +1266,54 @@ export function TabelaAlunos({
               </SelectContent>
             </Select>
 
+            <Select
+              value={filtros.anamnese || "todos"}
+              onValueChange={(value) => setFiltros({ ...filtros, anamnese: value === "todos" ? "" : value })}
+            >
+              <SelectTrigger className={`w-[140px] ${filtros.anamnese && filtros.anamnese !== 'todos' ? 'border-2 border-purple-500 bg-purple-500/10' : ''}`}>
+                <SelectValue placeholder="Anamnese" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Anamnese</SelectItem>
+                <SelectItem value="preenchida">Preenchida</SelectItem>
+                <SelectItem value="nao_preenchida">Não preenchida</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select
+              value={filtros.temperamento || "todos"}
+              onValueChange={(value) => setFiltros({ ...filtros, temperamento: value === "todos" ? "" : value })}
+            >
+              <SelectTrigger className={`w-[150px] ${filtros.temperamento && filtros.temperamento !== 'todos' ? 'border-2 border-purple-500 bg-purple-500/10' : ''}`}>
+                <SelectValue placeholder="Temperamento" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Temperamento</SelectItem>
+                <SelectItem value="CAZUZA">🔥 CAZUZA</SelectItem>
+                <SelectItem value="SLASH">⚡ SLASH</SelectItem>
+                <SelectItem value="FRANK">🎩 FRANK</SelectItem>
+                <SelectItem value="AMY">🌙 AMY</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select
+              value={filtros.diagnostico || "todos"}
+              onValueChange={(value) => setFiltros({ ...filtros, diagnostico: value === "todos" ? "" : value })}
+            >
+              <SelectTrigger className={`w-[140px] ${filtros.diagnostico && filtros.diagnostico !== 'todos' ? 'border-2 border-purple-500 bg-purple-500/10' : ''}`}>
+                <SelectValue placeholder="Diagnóstico" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todos">Diagnóstico</SelectItem>
+                <SelectItem value="TEA">TEA</SelectItem>
+                <SelectItem value="TDAH">TDAH</SelectItem>
+                <SelectItem value="TOD">TOD</SelectItem>
+                <SelectItem value="TOC">TOC</SelectItem>
+                <SelectItem value="TAG">TAG</SelectItem>
+                <SelectItem value="nao">NÃO</SelectItem>
+              </SelectContent>
+            </Select>
+
             {/* Filtro Horário */}
             <Select
               value={filtros.horario_aula || "todos"}
@@ -1403,6 +1476,7 @@ export function TabelaAlunos({
               <th className="px-4 py-3 font-medium">#</th>
               <SortableHeader label="Nome" sortKey="nome" sortConfig={sortConfig} onSort={handleSort} className="text-left" />
               {col('telefone') && <th className="px-4 py-3 font-medium">Telefone</th>}
+              {col('anamnese') && <th className="px-4 py-3 font-medium">Anamnese</th>}
               {col('escola') && <th className="px-4 py-3 font-medium">Escola</th>}
               {col('professor') && <SortableHeader label="Professor" sortKey="professor" sortConfig={sortConfig} onSort={handleSort} />}
               {col('curso') && <SortableHeader label="Curso" sortKey="curso" sortConfig={sortConfig} onSort={handleSort} />}
@@ -1479,6 +1553,7 @@ export function TabelaAlunos({
                       >
                         {aluno.nome || '-'}
                       </button>
+                      {getBadgeAnamnese(aluno)}
                       {/* Badge de múltiplos cursos */}
                       {aluno.outros_cursos && aluno.outros_cursos.length > 0 && (
                         <Tooltip content={`${aluno.outros_cursos.length + 1} cursos • Ticket: R$ ${aluno.valor_total?.toLocaleString('pt-BR')}`}>
@@ -1528,6 +1603,19 @@ export function TabelaAlunos({
                       alunoId={aluno.id}
                       telefonePrincipal={aluno.telefone || aluno.responsavel_telefone || null}
                     />
+                  </td>
+                  )}
+
+                  {col('anamnese') && (
+                  <td className="px-4 py-2">
+                    {aluno.anamnese_preenchida ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-emerald-400 font-medium">✓</span>
+                        <span className="text-xs text-slate-300">{aluno.temperamento_codinome || 'Preenchida'}</span>
+                      </div>
+                    ) : (
+                      <span className="text-slate-500">—</span>
+                    )}
                   </td>
                   )}
 
@@ -1861,6 +1949,18 @@ export function TabelaAlunos({
                       </div>
                     </td>
                     {col('telefone') && <td className="px-4 py-2"></td>}
+                    {col('anamnese') && (
+                    <td className="px-4 py-2">
+                      {outroCurso.anamnese_preenchida ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-emerald-400 font-medium">✓</span>
+                          <span className="text-xs text-slate-300">{outroCurso.temperamento_codinome || 'Preenchida'}</span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-500">—</span>
+                      )}
+                    </td>
+                    )}
                     {col('escola') && (
                     <td className="px-4 py-2">
                       {getBadgeEscola(outroCurso.classificacao)}

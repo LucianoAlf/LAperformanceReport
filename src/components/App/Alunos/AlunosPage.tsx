@@ -44,6 +44,9 @@ export interface Aluno {
   curso_id: number | null;
   curso_nome?: string;
   modalidade?: string;
+  anamnese_preenchida?: boolean;
+  anamnese_preenchida_em?: string | null;
+  temperamento_codinome?: string | null;
   dia_aula: string | null;
   horario_aula: string | null;
   sala_nome?: string;
@@ -80,6 +83,7 @@ export interface Aluno {
   data_saida?: string | null;
   foto_url?: string | null;
   instagram?: string | null;
+  anamnese_diagnosticos?: string[];
 }
 
 export interface Turma {
@@ -131,6 +135,9 @@ export interface Filtros {
   turma_size: string;
   tempo_permanencia: string;
   status_pagamento: string;
+  anamnese: string;
+  temperamento: string;
+  diagnostico: string;
   sem_telefone: boolean;
 }
 
@@ -206,6 +213,9 @@ export function AlunosPage() {
     turma_size: '',
     tempo_permanencia: '',
     status_pagamento: '',
+    anamnese: '',
+    temperamento: '',
+    diagnostico: '',
     sem_telefone: false,
   });
 
@@ -299,6 +309,7 @@ export function AlunosPage() {
       dia_aula, horario_aula, valor_parcela, tempo_permanencia_meses,
       status, status_pagamento, dia_vencimento, tipo_matricula_id, unidade_id, data_matricula,
       is_segundo_curso, data_nascimento, forma_pagamento_id, telefone, whatsapp, responsavel_telefone, data_saida, foto_url, instagram,
+      anamnese_preenchida, anamnese_preenchida_em, temperamento_codinome,
       professores:professor_atual_id!left(nome),
       cursos:curso_id!left(nome, is_projeto_banda),
       tipos_matricula:tipo_matricula_id!left(nome, conta_como_pagante, entra_ticket_medio, codigo),
@@ -367,6 +378,34 @@ export function AlunosPage() {
     }
 
     if (!error && alunosMesclados.length > 0) {
+      const alunoIds = alunosMesclados.map((registro: any) => registro.id).filter(Boolean);
+      const { data: anamnesesLista } = await supabase
+        .from('anamneses')
+        .select('aluno_id, diagnosticos')
+        .in('aluno_id', alunoIds)
+        .eq('status', 'completa')
+        .order('created_at', { ascending: false });
+
+      const diagnosticosPorAluno = new Map<number, string[]>();
+      anamnesesLista?.forEach((registro: any) => {
+        if (diagnosticosPorAluno.has(registro.aluno_id)) return;
+
+        let diagnosticos: string[] = [];
+        if (Array.isArray(registro.diagnosticos)) {
+          diagnosticos = registro.diagnosticos.map((item: any) => {
+            if (typeof item === 'string') return item;
+            if (item && typeof item === 'object') {
+              return String(item.label || item.nome || item.valor || item.value || '').trim();
+            }
+            return String(item).trim();
+          }).filter(Boolean);
+        } else if (typeof registro.diagnosticos === 'string') {
+          diagnosticos = registro.diagnosticos.split(',').map((item: string) => item.trim()).filter(Boolean);
+        }
+
+        diagnosticosPorAluno.set(registro.aluno_id, diagnosticos);
+      });
+
       const turmasMap = new Map(turmasViewData.map((t: any) => [
         `${t.unidade_id}-${t.professor_id}-${t.dia_semana}-${t.horario_inicio}`,
         t
@@ -394,6 +433,7 @@ export function AlunosPage() {
           tipo_matricula_nome: a.tipos_matricula?.nome || '',
           unidade_codigo: a.unidades?.codigo || '',
           forma_pagamento_nome: a.formas_pagamento?.nome || null,
+          anamnese_diagnosticos: diagnosticosPorAluno.get(a.id) || [],
           total_alunos_turma: turmaInfo?.total_alunos || 1,
           turma_id: turmaInfo?.id,
           nomes_alunos_turma: turmaInfo?.nomes_alunos || [],
@@ -817,6 +857,35 @@ export function AlunosPage() {
       });
     }
 
+    if (filtros.anamnese) {
+      if (filtros.anamnese === 'preenchida') {
+        resultado = resultado.filter(a => a.anamnese_preenchida === true);
+      }
+
+      if (filtros.anamnese === 'nao_preenchida') {
+        resultado = resultado.filter(a => a.anamnese_preenchida !== true);
+      }
+    }
+
+    if (filtros.temperamento) {
+      const termoTemperamento = filtros.temperamento.toLowerCase();
+      resultado = resultado.filter(a =>
+        (a.temperamento_codinome || '').toLowerCase().includes(termoTemperamento)
+      );
+    }
+
+    if (filtros.diagnostico) {
+      const diagnosticoFiltro = filtros.diagnostico.toLowerCase();
+      resultado = resultado.filter(a => {
+        const diagnosticos = (a as Aluno & { anamnese_diagnosticos?: string[] }).anamnese_diagnosticos || [];
+        if (diagnosticoFiltro === 'nao') {
+          return diagnosticos.length === 0;
+        }
+
+        return diagnosticos.some(diagnostico => diagnostico.toLowerCase().includes(diagnosticoFiltro));
+      });
+    }
+
     // Filtro sem telefone
     if (filtros.sem_telefone) {
       resultado = resultado.filter(a => !a.telefone && !a.whatsapp && !a.responsavel_telefone);
@@ -934,7 +1003,11 @@ export function AlunosPage() {
       classificacao: '',
       turma_size: '',
       tempo_permanencia: '',
-      status_pagamento: ''
+      status_pagamento: '',
+      anamnese: '',
+      temperamento: '',
+      diagnostico: '',
+      sem_telefone: false,
     });
   }
 

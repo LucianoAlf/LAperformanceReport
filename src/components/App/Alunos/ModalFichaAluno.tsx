@@ -6,7 +6,7 @@ const parseLocalDate = (s: string | null | undefined): Date | null =>
 const formatLocalDate = (d: Date | null | undefined): string | null =>
   d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : null;
 import { supabase } from '@/lib/supabase';
-import { X, Loader2, Save, User, GraduationCap, DollarSign, TrendingUp, History, AlertCircle, Plus, Users, Pencil } from 'lucide-react';
+import { X, Loader2, Save, User, GraduationCap, DollarSign, TrendingUp, History, AlertCircle, Plus, Users, Pencil, Brain, ExternalLink, MessageCircle } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -74,6 +74,120 @@ interface Anotacao {
   resolvido: boolean;
 }
 
+interface AnamneseRespostaPerfil {
+  id: string;
+  pergunta_numero: number;
+  resposta_posicao: number;
+}
+
+interface AnamneseAluno {
+  id: string;
+  aluno_id: number;
+  tipo_formulario: 'EMLA' | 'LAMK' | string;
+  telefone_aluno?: string | null;
+  entrevistador?: string | null;
+  status?: string | null;
+  genero?: string | null;
+  possui_instrumento?: string | boolean | null;
+  cursos_escolhidos?: unknown;
+  objetivos?: unknown;
+  tempo_para_metas?: string | null;
+  tempo_disponivel_estudo?: string | null;
+  experiencia_anterior?: unknown;
+  interesse_bandas?: string | boolean | null;
+  cuidado_medico?: string | null;
+  medicacao_continua?: string | null;
+  diagnosticos?: unknown;
+  necessidade_apoio?: string | null;
+  generos_musicais?: unknown;
+  instrumentos_toca?: unknown;
+  nivel_conhecimento_musical?: string | null;
+  nivel_habilidade_instrumento?: string | null;
+  motivo_procura_pais?: unknown;
+  metas_pais?: unknown;
+  fonte_exposicao_musical?: unknown;
+  musicos_na_familia?: string | null;
+  interesse_instrumento_cantar?: string | null;
+  exposicao_telas?: string | null;
+  comunicacao_crianca?: string | null;
+  sono_crianca?: unknown;
+  estereotipias?: string | null;
+  situacao_responsaveis?: string | null;
+  filiacao?: string | null;
+  quem_traz_crianca?: unknown;
+  temperamento_primario?: string | null;
+  temperamento_secundario?: string | null;
+  temperamento_codinome?: string | null;
+  temperamento_contagem?: Record<string, number> | null;
+  perfil_baby?: string | null;
+  observacoes_entrevistador?: string | null;
+  share_token?: string | null;
+  created_at: string;
+  anamnese_respostas_perfil?: AnamneseRespostaPerfil[];
+}
+
+const TEMPERAMENTO_META: Record<string, { emoji: string; label: string; color: string; soft: string }> = {
+  CAZUZA: { emoji: '🔥', label: 'Colérico', color: 'text-red-400', soft: 'bg-red-500/15 border-red-500/30' },
+  SLASH: { emoji: '⚡', label: 'Sanguíneo', color: 'text-blue-400', soft: 'bg-blue-500/15 border-blue-500/30' },
+  FRANK: { emoji: '🎩', label: 'Fleumático', color: 'text-amber-400', soft: 'bg-amber-500/15 border-amber-500/30' },
+  AMY: { emoji: '🌙', label: 'Melancólico', color: 'text-violet-400', soft: 'bg-violet-500/15 border-violet-500/30' },
+};
+
+function toArray(value: unknown): string[] {
+  if (!value) return [];
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => {
+        if (typeof item === 'string') return item;
+        if (item && typeof item === 'object') {
+          const registro = item as Record<string, unknown>;
+          return String(registro.label || registro.nome || registro.valor || registro.value || '').trim();
+        }
+        return String(item).trim();
+      })
+      .filter(Boolean);
+  }
+  if (typeof value === 'string') return value.split(',').map(item => item.trim()).filter(Boolean);
+  if (typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>)
+      .flatMap(item => Array.isArray(item) ? item.map(sub => String(sub).trim()) : [String(item).trim()])
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function formatarDataHora(data: string | null | undefined) {
+  if (!data) return '-';
+  return new Date(data).toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function formatarBooleano(valor: string | boolean | null | undefined) {
+  if (typeof valor === 'boolean') return valor ? 'Sim' : 'Não';
+  if (!valor) return '-';
+  const texto = String(valor).trim().toLowerCase();
+  if (['sim', 'yes', 'true'].includes(texto)) return 'Sim';
+  if (['nao', 'não', 'no', 'false'].includes(texto)) return 'Não';
+  return String(valor);
+}
+
+function obterContagemTemperamento(contagem: Record<string, number> | null | undefined, chaves: string[]) {
+  if (!contagem) return 0;
+  return chaves.reduce((total, chave) => total + Number(contagem[chave] || 0), 0);
+}
+
+function normalizarTelefoneWhatsapp(telefone: string | null | undefined) {
+  if (!telefone) return null;
+  const digits = telefone.replace(/\D/g, '');
+  if (!digits) return null;
+  return digits.startsWith('55') ? digits : `55${digits}`;
+}
+
 const DIAS_SEMANA = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 const HORARIOS_LISTA = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00'];
 
@@ -100,13 +214,14 @@ export function ModalFichaAluno({
   tiposMatricula,
   onAbrirOutroCurso,
 }: ModalFichaAlunoProps) {
-  const { user } = useAuth();
+  const { user, usuario, perfis } = useAuth();
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('pessoal');
   
   // Dados completos do aluno
   const [dadosCompletos, setDadosCompletos] = useState<AlunoCompleto | null>(null);
+  const [anamnese, setAnamnese] = useState<AnamneseAluno | null>(null);
   
   // Dados de lookup
   const [canais, setCanais] = useState<{ value: number; label: string }[]>([]);
@@ -172,6 +287,14 @@ export function ModalFichaAluno({
   const [turmaSegundoCurso, setTurmaSegundoCurso] = useState<any>(null);
   const [carregandoTurma, setCarregandoTurma] = useState(false);
 
+  const perfisAtivos = perfis.map((perfil) => perfil.perfil_nome.toLowerCase());
+  const podeReenviarWhatsapp = usuario?.perfil === 'admin' || perfisAtivos.includes('admin') || perfisAtivos.includes('gerente');
+
+  const telefonesWhatsapp = [anamnese?.telefone_aluno, dadosCompletos?.telefone, dadosCompletos?.responsavel_telefone, aluno.telefone, aluno.responsavel_telefone]
+    .map(normalizarTelefoneWhatsapp)
+    .filter((telefone): telefone is string => Boolean(telefone));
+  const telefoneWhatsapp = telefonesWhatsapp[0] || null;
+
   useEffect(() => {
     carregarDadosCompletos();
   }, [aluno.id]);
@@ -230,9 +353,19 @@ export function ModalFichaAluno({
           .limit(10),
       ]);
 
+      const { data: anamneseData } = await supabase
+        .from('anamneses')
+        .select('*, anamnese_respostas_perfil(*)')
+        .eq('aluno_id', aluno.id)
+        .eq('status', 'completa')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
       setMovimentacoes(movRes.data || []);
       setRenovacoes(renRes.data || []);
       setAnotacoes(anotRes.data || []);
+      setAnamnese((anamneseData as AnamneseAluno | null) || null);
 
       // Buscar outros cursos do mesmo aluno (registros com mesmo nome + data_nascimento + unidade)
       if (alunoData.nome && alunoData.unidade_id) {
@@ -482,6 +615,35 @@ export function ModalFichaAluno({
     return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
   }
 
+  function abrirPerfilAnamnese() {
+    if (!anamnese?.share_token) return;
+    window.open(`https://anamnese-la-music.vercel.app/perfil/${anamnese.share_token}`, '_blank', 'noopener,noreferrer');
+  }
+
+  function reenviarWhatsappAnamnese() {
+    if (!anamnese?.share_token || !telefoneWhatsapp) return;
+    const link = `https://anamnese-la-music.vercel.app/perfil/${anamnese.share_token}`;
+    const mensagem = encodeURIComponent(`Olá! Segue o link da anamnese de ${dadosCompletos?.nome || aluno.nome}: ${link}`);
+    window.open(`https://wa.me/${telefoneWhatsapp}?text=${mensagem}`, '_blank', 'noopener,noreferrer');
+  }
+
+  const diagnosticos = toArray(anamnese?.diagnosticos);
+  const objetivos = toArray(anamnese?.objetivos);
+  const generosMusicais = toArray(anamnese?.generos_musicais);
+  const motivoPais = toArray(anamnese?.motivo_procura_pais);
+  const metasPais = toArray(anamnese?.metas_pais);
+  const cursosEscolhidos = toArray(anamnese?.cursos_escolhidos);
+  const contagemTemperamento = anamnese?.temperamento_contagem || null;
+  const colerico = obterContagemTemperamento(contagemTemperamento, ['col', 'colerico', 'colérico']);
+  const sanguineo = obterContagemTemperamento(contagemTemperamento, ['san', 'sanguineo', 'sanguíneo']);
+  const fleumatico = obterContagemTemperamento(contagemTemperamento, ['fle', 'fleumatico', 'fleumático']);
+  const melancolico = obterContagemTemperamento(contagemTemperamento, ['mel', 'melancolico', 'melancólico']);
+  const primaryCode = (anamnese?.temperamento_primario || '').toUpperCase();
+  const secondaryCode = (anamnese?.temperamento_secundario || '').toUpperCase();
+  const primaryMeta = TEMPERAMENTO_META[primaryCode];
+  const secondaryMeta = TEMPERAMENTO_META[secondaryCode];
+  const codinomeMeta = TEMPERAMENTO_META[(anamnese?.temperamento_codinome || '').toUpperCase()];
+
   if (loading) {
     return (
       <Dialog open onOpenChange={onClose}>
@@ -515,7 +677,7 @@ export function ModalFichaAluno({
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid grid-cols-5 flex-shrink-0">
+          <TabsList className="grid grid-cols-6 flex-shrink-0">
             <TabsTrigger value="pessoal" className="flex items-center gap-2">
               <User className="w-4 h-4" />
               <span className="hidden sm:inline">Pessoal</span>
@@ -531,6 +693,10 @@ export function ModalFichaAluno({
             <TabsTrigger value="comercial" className="flex items-center gap-2">
               <TrendingUp className="w-4 h-4" />
               <span className="hidden sm:inline">Comercial</span>
+            </TabsTrigger>
+            <TabsTrigger value="anamnese" className="flex items-center gap-2">
+              <Brain className="w-4 h-4" />
+              <span className="hidden sm:inline">Anamnese</span>
             </TabsTrigger>
             <TabsTrigger value="historico" className="flex items-center gap-2">
               <History className="w-4 h-4" />
@@ -1010,6 +1176,134 @@ export function ModalFichaAluno({
                   </div>
                 </div>
               </div>
+            </TabsContent>
+
+            <TabsContent value="anamnese" className="space-y-4 mt-0">
+              {anamnese ? (
+                <>
+                  <div className={`rounded-xl border p-4 ${codinomeMeta?.soft || 'bg-slate-800/50 border-slate-700'}`}>
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-sm text-slate-300 flex items-center gap-2">
+                          <Brain className="w-4 h-4" />
+                          Perfil de Temperamento
+                        </p>
+                        <div className="mt-3 flex flex-wrap items-center gap-3 text-xl font-semibold text-white">
+                          <span className={primaryMeta?.color || 'text-white'}>{primaryMeta?.emoji || '🧠'} {primaryCode || '-'}</span>
+                          <span className="text-slate-500">/</span>
+                          <span className={secondaryMeta?.color || 'text-white'}>{secondaryMeta?.emoji || '🧠'} {secondaryCode || '-'}</span>
+                        </div>
+                        <p className="mt-2 text-sm text-slate-300">
+                          {primaryMeta?.label || anamnese.temperamento_primario || '-'} + {secondaryMeta?.label || anamnese.temperamento_secundario || '-'}
+                        </p>
+                      </div>
+                      {anamnese.temperamento_codinome && (
+                        <div className={`rounded-full border px-3 py-1 text-xs font-semibold ${codinomeMeta?.soft || 'bg-slate-700/50 border-slate-600'} ${codinomeMeta?.color || 'text-slate-200'}`}>
+                          {codinomeMeta?.emoji || '🧠'} {anamnese.temperamento_codinome}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="mt-4 grid gap-3 md:grid-cols-4">
+                      {[
+                        { label: 'Col', valor: colerico, cls: 'bg-red-500' },
+                        { label: 'San', valor: sanguineo, cls: 'bg-blue-500' },
+                        { label: 'Fle', valor: fleumatico, cls: 'bg-amber-500' },
+                        { label: 'Mel', valor: melancolico, cls: 'bg-violet-500' },
+                      ].map((item) => (
+                        <div key={item.label} className="space-y-1">
+                          <div className="flex items-center justify-between text-xs text-slate-300">
+                            <span>{item.label}</span>
+                            <span>{item.valor}</span>
+                          </div>
+                          <div className="h-2 rounded-full bg-slate-900/60 overflow-hidden">
+                            <div className={`h-full ${item.cls}`} style={{ width: `${Math.min(item.valor * 14, 100)}%` }} />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <p className="mt-4 text-xs text-slate-400">
+                      Preenchido em: {formatarDataHora(anamnese.created_at)}{anamnese.entrevistador ? ` por ${anamnese.entrevistador}` : ''}
+                    </p>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-4">
+                      <h4 className="text-sm font-medium text-slate-200 mb-3">⚠️ Saúde e Necessidades</h4>
+                      <div className="space-y-2 text-sm text-slate-300">
+                        <p><span className="text-slate-400">Diagnósticos:</span> {diagnosticos.length ? diagnosticos.join(', ') : 'Não informado'}</p>
+                        <p><span className="text-slate-400">Medicação:</span> {anamnese.medicacao_continua || 'Não informado'}</p>
+                        <p><span className="text-slate-400">Cuidado médico:</span> {anamnese.cuidado_medico || 'Não informado'}</p>
+                        <p><span className="text-slate-400">Apoio necessário:</span> {anamnese.necessidade_apoio || 'Não informado'}</p>
+                        {anamnese.tipo_formulario === 'LAMK' && (
+                          <p><span className="text-slate-400">Comunicação:</span> {anamnese.comunicacao_crianca || 'Não informado'}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-4">
+                      <h4 className="text-sm font-medium text-slate-200 mb-3">🎯 Objetivos</h4>
+                      <div className="space-y-2 text-sm text-slate-300">
+                        <p><span className="text-slate-400">Objetivos:</span> {objetivos.length ? objetivos.join(', ') : 'Não informado'}</p>
+                        <p><span className="text-slate-400">Tempo de estudo:</span> {anamnese.tempo_disponivel_estudo || 'Não informado'}</p>
+                        <p><span className="text-slate-400">Tem instrumento:</span> {formatarBooleano(anamnese.possui_instrumento)}</p>
+                        <p><span className="text-slate-400">Interesse bandas:</span> {formatarBooleano(anamnese.interesse_bandas)}</p>
+                        <p><span className="text-slate-400">Tempo para metas:</span> {anamnese.tempo_para_metas || 'Não informado'}</p>
+                        {cursosEscolhidos.length > 0 && (
+                          <p><span className="text-slate-400">Cursos escolhidos:</span> {cursosEscolhidos.join(', ')}</p>
+                        )}
+                        {anamnese.tipo_formulario === 'EMLA' ? (
+                          <>
+                            <p><span className="text-slate-400">Nível musical:</span> {anamnese.nivel_conhecimento_musical || 'Não informado'}</p>
+                            <p><span className="text-slate-400">Nível instrumento:</span> {anamnese.nivel_habilidade_instrumento || 'Não informado'}</p>
+                            <p><span className="text-slate-400">Gêneros:</span> {generosMusicais.length ? generosMusicais.join(', ') : 'Não informado'}</p>
+                          </>
+                        ) : (
+                          <>
+                            <p><span className="text-slate-400">Motivo pais:</span> {motivoPais.length ? motivoPais.join(', ') : 'Não informado'}</p>
+                            <p><span className="text-slate-400">Metas pais:</span> {metasPais.length ? metasPais.join(', ') : 'Não informado'}</p>
+                            <p><span className="text-slate-400">Exposição telas:</span> {anamnese.exposicao_telas || 'Não informado'}</p>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-4">
+                    <h4 className="text-sm font-medium text-slate-200 mb-3">📝 Observações do Entrevistador</h4>
+                    <p className="text-sm text-slate-300 whitespace-pre-wrap">
+                      {anamnese.observacoes_entrevistador || 'Sem observações registradas.'}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-4">
+                    <h4 className="text-sm font-medium text-slate-200 mb-3">🔗 Ações</h4>
+                    <div className="flex flex-wrap gap-3">
+                      <Button type="button" variant="outline" onClick={abrirPerfilAnamnese} disabled={!anamnese.share_token}>
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        Ver anamnese completa
+                      </Button>
+                      {podeReenviarWhatsapp && (
+                        <Button type="button" variant="outline" onClick={reenviarWhatsappAnamnese} disabled={!anamnese.share_token || !telefoneWhatsapp}>
+                          <MessageCircle className="w-4 h-4 mr-2" />
+                          Reenviar WhatsApp
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-6 text-center">
+                  <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-slate-700/60">
+                    <Brain className="w-6 h-6 text-slate-300" />
+                  </div>
+                  <h4 className="text-base font-medium text-white">Anamnese não preenchida</h4>
+                  <p className="mt-2 text-sm text-slate-400 max-w-lg mx-auto">
+                    Este aluno ainda não possui anamnese. A anamnese é preenchida pelo responsável no tablet da recepção durante a matrícula.
+                  </p>
+                </div>
+              )}
             </TabsContent>
 
             {/* ABA HISTÓRICO */}
