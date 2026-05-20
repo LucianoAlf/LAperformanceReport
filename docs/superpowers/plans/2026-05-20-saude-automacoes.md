@@ -341,7 +341,6 @@ export type ResultadoMatricula = {
   aluno_id: number | null;
   curso_id: number | null;
   professor_id: number | null;
-  professor_resolvido_por: 'emusys_id' | 'nome' | 'nenhum';
   lead_id: number | null;
   unidade_id: string | null;
   // deno-lint-ignore no-explicit-any
@@ -386,12 +385,9 @@ export function checarMatricula(payload: any, resultado: ResultadoMatricula): In
   if (isEmpty(d0?.id_professor)) {
     v.push({ regra: 'matricula_sem_professor', severidade: 'critico',
       mensagem: 'disciplinas[0].id_professor ausente no payload' });
-  } else if (resultado.professor_id === null && resultado.professor_resolvido_por === 'nenhum') {
+  } else if (resultado.professor_id === null) {
     v.push({ regra: 'matricula_professor_nao_resolvido', severidade: 'critico',
-      mensagem: `id_professor=${d0.id_professor} veio mas não casou em professores_unidades (nem por id nem por nome)` });
-  } else if (resultado.professor_resolvido_por === 'nome') {
-    v.push({ regra: 'matricula_professor_resolvido_por_nome', severidade: 'aviso',
-      mensagem: `Auto-curou via nome="${d0?.nome_professor ?? '?'}" — emusys_id gravado retroativamente` });
+      mensagem: `id_professor=${d0.id_professor} nome="${d0?.nome_professor ?? '?'}" veio mas não casou em professores_unidades (nem por id nem por nome)` });
   }
 
   if (isEmpty(d0?.id_curso) && resultado.curso_id === null) {
@@ -542,7 +538,6 @@ async function handleMatriculaNova(supabase: any, payload: any) {
       aluno_id,
       curso_id,
       professor_id,
-      professor_resolvido_por,  // 'emusys_id' | 'nome' | 'nenhum'
       lead_id,
       unidade_id,
       payload,
@@ -586,7 +581,7 @@ Aplicar padrão equivalente para `handleRenovacao` (chama `checarRenovacao`), `h
 - `acao` (renovado / status_trancado / status_evadido)
 - função `checar*` chamada
 
-**IMPORTANTE:** O handler existente já deve estar retornando `professor_resolvido_por` (v16 introduziu fallback de nome). Confirmar isso ou expor o valor como retorno.
+**Nota:** Não precisa expor "como o professor foi resolvido" (por id vs por nome). A invariante `matricula_professor_nao_resolvido` é detectada simplesmente por: payload trouxe `id_professor` MAS `resultado.professor_id IS NULL`. Auto-cura por nome (v16) continua funcionando — só não fica visível no painel como invariante de aviso (pra saber se auto-curou, consultar `professores_sync_log`).
 
 - [ ] **Step 4: Atualizar marca de versão**
 
