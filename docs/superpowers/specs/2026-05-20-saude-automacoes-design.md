@@ -59,10 +59,13 @@ ALTER TABLE automacao_invariantes ENABLE ROW LEVEL SECURITY;
 ```
 
 Políticas:
-- SELECT em ambas: admin only (`perfis.tipo = 'admin'` ou permissão granular `admin_automacoes`)
-- UPDATE em `automacao_invariantes`: admin only (apenas `visto_em`/`visto_por`)
-- INSERT: via `service_role` (edge functions), bypassa RLS
-- DELETE: ninguém via UI (não tem cron de limpeza)
+- SELECT em `automacao_log`: qualquer `authenticated` (compatibilidade — 4 telas existentes leem essa tabela com client anon: `ModalNovoLead.tsx`, `TabAutomacaoLeads.tsx`, `TabAutomacao.tsx`, `FormLead.tsx`). Habilitar RLS admin-only quebraria essas leituras.
+- SELECT em `automacao_invariantes`: qualquer `authenticated` (tabela nova, mas mesma política por consistência)
+- UPDATE em `automacao_invariantes` (`visto_em`/`visto_por`): admin only (`perfis.tipo = 'admin'` ou `admin_automacoes`)
+- INSERT em ambas: via `service_role` (edge functions), bypassa RLS
+- DELETE: ninguém via UI
+
+Gatekeeping de quem ENXERGA o módulo (item de menu + rota `/automacoes`) fica no frontend via `hasPermission('admin_automacoes')`. RLS é defesa em profundidade, não autorização de UI.
 
 ### Retenção
 
@@ -80,14 +83,35 @@ Identificadores estáveis (`regra`), severidade (`critico` = entra ruim no banco
 - `lead_duplicado_mesmo_dia` (aviso)
 - `lead_origem_desconhecida` (aviso)
 
-### Experimental
-- `experimental_sem_lead` (crítico)
-- `experimental_data_passada` (aviso)
-- `experimental_sem_professor` (crítico)
-- `experimental_professor_nao_resolvido` (crítico)
-- `experimental_professor_resolvido_por_nome` (aviso) — auto-curou via nome
-- `experimental_sem_curso` (aviso)
-- `experimental_remarcacao_sem_motivo` (aviso)
+### Experimental marcada
+- `experimental_sem_lead` (crítico) — webhook chegou mas não achou lead por telefone (mesmo após criar)
+- `experimental_data_passada` (aviso) — `data_experimental` < hoje no momento da marcação
+- `experimental_sem_professor` (crítico) — `id_professor` ausente no payload
+- `experimental_professor_nao_resolvido` (crítico) — id veio mas `professores_unidades` não tem
+- `experimental_professor_resolvido_por_nome` (aviso) — auto-curou via nome (gravou emusys_id retroativo)
+- `experimental_sem_curso` (aviso) — `curso_id` ausente
+- `experimental_remarcacao_sem_motivo` (aviso) — mudou data e não veio motivo
+
+### Experimental reagendada
+- `experimental_reagendada_data_passada` (aviso) — reagendou pra data já passada
+- `experimental_reagendada_mesmo_horario` (aviso) — webhook chegou mas data/hora idênticas (no-op)
+- `experimental_reagendada_apos_realizada` (crítico) — paradoxo: já estava marcada como realizada
+- `experimental_reagendada_apos_cancelada` (aviso) — reativando exp cancelada (provável OK, registrar)
+
+### Experimental cancelada
+- `experimental_cancelada_sem_motivo` (aviso) — `motivo_cancelamento` null/vazio
+- `experimental_cancelada_apos_realizada` (crítico) — paradoxo
+- `experimental_cancelada_aluno_ja_matriculado` (aviso) — virou aluno e ainda chega cancelamento
+
+### Experimental realizada
+- `experimental_realizada_data_futura` (crítico) — marcou compareceu antes da data marcada
+- `experimental_realizada_sem_professor_atribuido` (aviso) — `id_professor` veio NULL no realizada
+- `experimental_realizada_professor_diverge_marcacao` (aviso) — `id_professor` no realizada ≠ do marcada (trocou professor de última hora — registrar)
+- `experimental_realizada_e_faltou` (crítico) — flags `experimental_realizada=true` e `faltou_experimental=true` simultâneas
+
+### Experimental faltou
+- `experimental_faltou_data_futura` (crítico) — marcou faltou antes da data
+- `experimental_faltou_apos_realizada` (crítico) — paradoxo
 
 ### Matrícula nova / segundo curso
 - `matricula_sem_aluno_nome` (crítico)
@@ -126,7 +150,10 @@ Identificadores estáveis (`regra`), severidade (`critico` = entra ruim no banco
 - `webhook_reentregue` (aviso) — `idempotency_key` repetida em < 5min
 - `processamento_falhou_excecao` (crítico)
 
-Total: ~30 regras. Em produção saudável, `crítico` deve tender a zero.
+Total: ~44 regras. Em produção saudável, `crítico` deve tender a zero.
+
+### Meta-invariante (do próprio módulo)
+- `invariante_checagem_falhou` (crítico) — alguma função `checar*` lançou exceção inesperada durante a checagem (payload em formato não previsto, bug no helper, etc.). Garante observabilidade do próprio módulo de observabilidade.
 
 ## Captura nas Edge Functions
 
@@ -136,12 +163,32 @@ Total: ~30 regras. Em produção saudável, `crítico` deve tender a zero.
 type Severidade = 'critico' | 'aviso';
 type Invariante = { regra: string; severidade: Severidade; mensagem: string };
 
+// Cada checar* é envelopado internamente em try/catch.
+// Se a checagem em si falhar, retorna [{ regra: 'invariante_checagem_falhou', ... }]
+// em vez de lançar — protege o fluxo principal da edge.
 export function checarLead(payload, resultado): Invariante[];
-export function checarExperimental(payload, resultado): Invariante[];
+export function checarExperimentalMarcada(payload, resultado): Invariante[];
+export function checarExperimentalReagendada(payload, resultado): Invariante[];
+export function checarExperimentalCancelada(payload, resultado): Invariante[];
+export function checarExperimentalRealizada(payload, resultado): Invariante[];
+export function checarExperimentalFaltou(payload, resultado): Invariante[];
 export function checarMatricula(payload, resultado): Invariante[];
 export function checarRenovacao(payload, resultado): Invariante[];
 export function checarTrancamento(payload, resultado): Invariante[];
 export function checarFinalizacao(payload, resultado): Invariante[];
+
+// Wrapper compartilhado por todas as checar*
+function comFallback(fn: () => Invariante[]): Invariante[] {
+  try {
+    return fn();
+  } catch (e) {
+    return [{
+      regra: 'invariante_checagem_falhou',
+      severidade: 'critico',
+      mensagem: `Checagem lançou exceção: ${e.message}`,
+    }];
+  }
+}
 
 export async function gravarLog(supabase, params: {
   evento: string;
