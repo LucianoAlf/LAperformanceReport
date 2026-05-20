@@ -112,3 +112,152 @@ export async function computarHash(input: string): Promise<string> {
   const bytes = new Uint8Array(hashBuffer);
   return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('');
 }
+
+// =============================================================================
+// Resultado esperado das funções de processamento (passado às checar*)
+// =============================================================================
+
+export type ResultadoMatricula = {
+  aluno_id: number | null;
+  curso_id: number | null;
+  professor_id: number | null;
+  lead_id: number | null;
+  unidade_id: string | null;
+  // deno-lint-ignore no-explicit-any
+  payload?: any;
+};
+
+// =============================================================================
+// Helpers internos
+// =============================================================================
+
+// deno-lint-ignore no-explicit-any
+function isEmpty(v: any): boolean {
+  return v === null || v === undefined || (typeof v === 'string' && v.trim() === '');
+}
+
+// =============================================================================
+// checarMatricula (matricula_nova / inserido_segundo_curso)
+// =============================================================================
+
+// deno-lint-ignore no-explicit-any
+export function checarMatricula(payload: any, resultado: ResultadoMatricula): Invariante[] {
+  const v: Invariante[] = [];
+  const m = payload?.matricula ?? {};
+  const aluno = payload?.aluno ?? m?.aluno ?? {};
+  const disciplinas: any[] = m?.disciplinas ?? [];
+
+  if (isEmpty(aluno?.nome)) {
+    v.push({ regra: 'matricula_sem_aluno_nome', severidade: 'critico',
+      mensagem: 'payload.aluno.nome ausente ou vazio' });
+  }
+  if (isEmpty(m?.id_matricula) && isEmpty(payload?.id_matricula)) {
+    v.push({ regra: 'matricula_sem_emusys_matricula_id', severidade: 'critico',
+      mensagem: 'id_matricula ausente — impede idempotência' });
+  }
+  if (!Array.isArray(disciplinas) || disciplinas.length === 0) {
+    v.push({ regra: 'matricula_sem_disciplinas', severidade: 'critico',
+      mensagem: 'payload.matricula.disciplinas[] vazio ou ausente' });
+    return v;
+  }
+
+  const d0 = disciplinas[0] ?? {};
+  if (isEmpty(d0?.id_professor)) {
+    v.push({ regra: 'matricula_sem_professor', severidade: 'critico',
+      mensagem: 'disciplinas[0].id_professor ausente no payload' });
+  } else if (resultado.professor_id === null) {
+    v.push({ regra: 'matricula_professor_nao_resolvido', severidade: 'critico',
+      mensagem: `id_professor=${d0.id_professor} nome="${d0?.nome_professor ?? '?'}" veio mas não casou em professores_unidades (nem por id nem por nome)` });
+  }
+
+  if (isEmpty(d0?.id_curso) && resultado.curso_id === null) {
+    v.push({ regra: 'matricula_sem_curso', severidade: 'critico',
+      mensagem: 'curso_id ausente ou não casou' });
+  }
+
+  if (resultado.lead_id === null && !isEmpty(aluno?.telefone)) {
+    v.push({ regra: 'matricula_sem_lead_origem', severidade: 'aviso',
+      mensagem: `nenhum lead com telefone ${aluno.telefone} encontrado — matrícula direta` });
+  }
+
+  const vp = Number(m?.valor_passaporte ?? 0);
+  if (vp === 0) {
+    v.push({ regra: 'matricula_sem_valor_passaporte', severidade: 'aviso',
+      mensagem: 'valor_passaporte = 0 (re-matrícula, bolsista ou erro?)' });
+  }
+
+  return v;
+}
+
+// =============================================================================
+// checarRenovacao
+// =============================================================================
+
+// deno-lint-ignore no-explicit-any
+export function checarRenovacao(payload: any, resultado: ResultadoMatricula): Invariante[] {
+  const v: Invariante[] = [];
+
+  if (resultado.aluno_id === null) {
+    v.push({ regra: 'renovacao_sem_matricula_anterior', severidade: 'critico',
+      mensagem: 'não achou matrícula prévia por emusys_matricula_id nem por (aluno+curso)' });
+  }
+
+  const valorNovo = Number(payload?.matricula?.valor_parcela ?? 0);
+  const valorAnterior = Number(payload?.matricula?.valor_parcela_anterior ?? 0);
+  if (valorAnterior > 0 && valorNovo > 0) {
+    const reajuste = (valorNovo - valorAnterior) / valorAnterior;
+    if (reajuste > 0.30) {
+      v.push({ regra: 'renovacao_reajuste_acima_30pct', severidade: 'aviso',
+        mensagem: `reajuste ${(reajuste * 100).toFixed(1)}% (de ${valorAnterior} para ${valorNovo})` });
+    }
+  }
+
+  return v;
+}
+
+// =============================================================================
+// checarTrancamento
+// =============================================================================
+
+// deno-lint-ignore no-explicit-any
+export function checarTrancamento(payload: any, resultado: ResultadoMatricula): Invariante[] {
+  const v: Invariante[] = [];
+
+  if (resultado.aluno_id === null) {
+    v.push({ regra: 'trancamento_aluno_nao_encontrado', severidade: 'critico',
+      mensagem: 'aluno não localizado por emusys_matricula_id nem (aluno+curso)' });
+  }
+
+  if (isEmpty(payload?.matricula?.motivo) && isEmpty(payload?.motivo)) {
+    v.push({ regra: 'trancamento_sem_motivo', severidade: 'aviso',
+      mensagem: 'motivo do trancamento vazio' });
+  }
+
+  return v;
+}
+
+// =============================================================================
+// checarFinalizacao (evasão)
+// =============================================================================
+
+// deno-lint-ignore no-explicit-any
+export function checarFinalizacao(payload: any, resultado: ResultadoMatricula): Invariante[] {
+  const v: Invariante[] = [];
+
+  if (resultado.aluno_id === null) {
+    v.push({ regra: 'evasao_aluno_nao_encontrado', severidade: 'critico',
+      mensagem: 'aluno não localizado' });
+  }
+
+  const motivoTexto = payload?.matricula?.motivo ?? payload?.motivo;
+  const motivoId = payload?.matricula?.motivo_saida_id ?? payload?.motivo_saida_id;
+  if (isEmpty(motivoTexto) && isEmpty(motivoId)) {
+    v.push({ regra: 'evasao_motivo_nulo', severidade: 'aviso',
+      mensagem: 'motivo da evasão vazio (não impacta score)' });
+  } else if (isEmpty(motivoId)) {
+    v.push({ regra: 'evasao_sem_motivo_saida_id', severidade: 'aviso',
+      mensagem: `motivo veio só como texto: "${motivoTexto}" — impacta cálculo de score` });
+  }
+
+  return v;
+}
