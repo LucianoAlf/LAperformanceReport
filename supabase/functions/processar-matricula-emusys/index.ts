@@ -1,5 +1,11 @@
-// Edge Function: processar-matricula-emusys v12
+// Edge Function: processar-matricula-emusys v16
 // Processa webhooks de matrícula do Emusys: nova, renovação, trancamento, evasão
+//
+// MUDANÇAS v16 (2026-05-20):
+// - resolverProfessorId ganha CAMADA 2 (fallback por nome+unidade)
+// - Quando emusys_id não bate, tenta match por nome normalizado dentro da unidade
+// - Auto-cura: ao achar por nome, grava o emusys_id pra próxima requisição
+// - Resolve problema dos professores cadastrados sem emusys_id (3 alunos órfãos em Maio/2026)
 //
 // MUDANÇAS v12 (2026-05-07):
 // - handleEvasao grava passagem em alunos_historico quando o aluno saiu de TODAS as matrículas
@@ -193,15 +199,50 @@ async function resolverCursoId(supabase: any, nomeCurso: string | null, emusysCu
   return curso.id;
 }
 
-async function resolverProfessorId(supabase: any, emusysId: number | null, unidadeId: string): Promise<number | null> {
-  if (!emusysId) return null;
-  const { data } = await supabase
-    .from('professores_unidades')
-    .select('professor_id')
-    .eq('emusys_id', emusysId)
-    .eq('unidade_id', unidadeId)
-    .limit(1);
-  return data?.[0]?.professor_id || null;
+async function resolverProfessorId(
+  supabase: any,
+  emusysId: number | null,
+  unidadeId: string,
+  payloadNome: string | null = null,
+): Promise<number | null> {
+  // CAMADA 1: match exato por emusys_id + unidade (caminho feliz)
+  if (emusysId) {
+    const { data } = await supabase
+      .from('professores_unidades')
+      .select('professor_id')
+      .eq('emusys_id', emusysId)
+      .eq('unidade_id', unidadeId)
+      .limit(1);
+    if (data?.[0]?.professor_id) return data[0].professor_id;
+  }
+
+  // CAMADA 2: fallback por nome normalizado + unidade (auto-cura)
+  // Protege contra professores cadastrados sem emusys_id ou novos sem mapeamento.
+  // Ao achar, grava o emusys_id no vínculo pra próximas chamadas baterem na camada 1.
+  if (payloadNome) {
+    const nomeNorm = normalizar(payloadNome);
+    if (nomeNorm) {
+      const { data: candidatos } = await supabase
+        .from('professores_unidades')
+        .select('professor_id, professores(nome)')
+        .eq('unidade_id', unidadeId);
+      const match = (candidatos || []).find((pu: any) =>
+        normalizar(pu.professores?.nome) === nomeNorm
+      );
+      if (match?.professor_id) {
+        if (emusysId) {
+          await supabase
+            .from('professores_unidades')
+            .update({ emusys_id: emusysId })
+            .eq('professor_id', match.professor_id)
+            .eq('unidade_id', unidadeId);
+        }
+        return match.professor_id;
+      }
+    }
+  }
+
+  return null;
 }
 
 const ALUNO_SELECT = 'id, professor_atual_id, curso_id, valor_parcela, numero_renovacoes, status, is_segundo_curso, emusys_matricula_id, nome';
@@ -357,7 +398,7 @@ async function registrarMovimentacao(
 
 async function handleMatriculaNova(supabase: any, p: Payload) {
   const cursoId = await resolverCursoId(supabase, p.nomeCurso, p.emusysCursoId);
-  const professorId = await resolverProfessorId(supabase, p.professorEmusysId, p.unidadeId);
+  const professorId = await resolverProfessorId(supabase, p.professorEmusysId, p.unidadeId, p.professorNome);
 
   // Tenta encontrar aluno EXATO (por matricula_id ou nome+curso)
   const found = await buscarAluno(supabase, p, cursoId);
@@ -485,7 +526,7 @@ async function handleRenovacao(supabase: any, p: Payload) {
   }
 
   const aluno = found.aluno;
-  const professorId = await resolverProfessorId(supabase, p.professorEmusysId, p.unidadeId);
+  const professorId = await resolverProfessorId(supabase, p.professorEmusysId, p.unidadeId, p.professorNome);
   const hoje = new Date().toISOString().split('T')[0];
 
   await backfillMatriculaId(supabase, aluno.id, p.matriculaIdEmusys, aluno.emusys_matricula_id);
@@ -741,7 +782,7 @@ serve(async (req: Request) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    console.log(`[v12] ${p.evento} | Aluno: ${p.nomeAluno} | Unidade: ${p.unidadeNome} | matricula_id: ${p.matriculaIdEmusys}`);
+    console.log(`[v16] ${p.evento} | Aluno: ${p.nomeAluno} | Unidade: ${p.unidadeNome} | matricula_id: ${p.matriculaIdEmusys}`);
 
     let result: any;
 
@@ -774,7 +815,7 @@ serve(async (req: Request) => {
         telefone: p.telefoneAluno,
         emusys_lead_id: p.emusysLeadId,
         emusys_matricula_id: p.matriculaIdEmusys,
-        version: 'v12',
+        version: 'v16',
         payload_completo: p.rawPayload,
       },
       workflow_id: 'processar-matricula-emusys',
@@ -785,7 +826,7 @@ serve(async (req: Request) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error) {
-    console.error('[v12] Erro:', error);
+    console.error('[v16] Erro:', error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : 'Erro interno' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
