@@ -81,6 +81,8 @@ const ComercialPage = lazy(() => import('./components/App/Comercial').then(m => 
 const PlanilhaRetencao = lazy(() => import('./components/App/Retencao').then(m => ({ default: m.PlanilhaRetencao })));
 const ProfessoresPage = lazy(() => import('./components/App/Professores').then(m => ({ default: m.ProfessoresPage })));
 const AdministrativoPage = lazy(() => import('./components/App/Administrativo').then(m => ({ default: m.AdministrativoPage })));
+// Saúde das Automações (admin)
+const AutomacoesPage = lazy(() => import('./components/App/Automacoes').then(m => ({ default: m.AutomacoesPage })));
 const AlunosPage = lazy(() => import('./components/App/Alunos').then(m => ({ default: m.AlunosPage })));
 const SalasPage = lazy(() => import('./components/App/Salas').then(m => ({ default: m.SalasPage })));
 const ProjetosPage = lazy(() => import('./components/App/Projetos').then(m => ({ default: m.ProjetosPage })));
@@ -253,6 +255,10 @@ export const router = createBrowserRouter([
           {
             path: 'projetos',
             element: <Suspense fallback={<PageLoader />}><ProjetosPage /></Suspense>,
+          },
+          {
+            path: 'automacoes',
+            element: <Suspense fallback={<PageLoader />}><AutomacoesPage /></Suspense>,
           },
           {
             path: 'salas',

@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom';
 import { useState, useEffect, useCallback } from 'react';
-import { 
-  LayoutDashboard, 
+import {
+  LayoutDashboard,
   Target,
   Settings,
   LogOut,
@@ -23,7 +23,8 @@ import {
   Key,
   Camera,
   TrendingUp,
-  Megaphone
+  Megaphone,
+  Activity
 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -35,6 +36,7 @@ import {
   DropdownMenuTrigger 
 } from '@/components/ui/dropdown-menu';
 import { ModalEditarPerfil } from './ModalEditarPerfil';
+import { useBadgeAutomacoes } from '@/hooks/useBadgeAutomacoes';
 
 // =============================================================================
 // PREFETCH - Pré-carrega páginas no hover para navegação instantânea
@@ -115,6 +117,10 @@ export function AppSidebar() {
 
     return () => { supabase.removeChannel(channel); };
   }, []);
+
+  // Badge de invariantes críticas não vistas em Automações
+  const { count: criticosNaoVistos } = useBadgeAutomacoes();
+
   const [isCollapsed, setIsCollapsed] = useState(() => {
     const saved = localStorage.getItem('sidebar-collapsed');
     return saved === 'true';
@@ -297,6 +303,31 @@ export function AppSidebar() {
               >
                 <Shield className={`w-5 h-5 ${isCollapsed ? (window.location.pathname === "/app/admin/permissoes" ? 'text-purple-400' : 'text-gray-400 hover:text-white') : ''}`} />
                 {!isCollapsed && <span className="text-sm font-medium">Permissões</span>}
+              </NavLink>
+            </Tooltip>
+            <Tooltip content="Saúde das Automações" enabled={isCollapsed}>
+              <NavLink
+                to="/app/automacoes"
+                className={({ isActive }) =>
+                  isCollapsed
+                    ? "w-full flex items-center justify-center py-2.5 relative"
+                    : `w-full flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all ${
+                        isActive
+                          ? 'bg-gradient-to-r from-rose-500/20 to-orange-500/20 text-rose-400 border border-rose-500/30'
+                          : 'text-gray-400 hover:text-white hover:bg-slate-800/50'
+                      }`
+                }
+                style={isCollapsed ? { background: 'none', border: 'none', boxShadow: 'none', outline: 'none' } : {}}
+              >
+                <Activity className={`w-5 h-5 ${isCollapsed && criticosNaoVistos > 0 ? 'text-rose-400' : ''}`} />
+                {!isCollapsed && (
+                  <span className="text-sm font-medium flex-1">Saúde das Automações</span>
+                )}
+                {criticosNaoVistos > 0 && (
+                  <span className={`${isCollapsed ? 'absolute -top-1 -right-1' : ''} w-5 h-5 rounded-full bg-rose-500 text-white text-[10px] flex items-center justify-center font-bold`}>
+                    {criticosNaoVistos > 99 ? '99+' : criticosNaoVistos}
+                  </span>
+                )}
               </NavLink>
             </Tooltip>
           </>
