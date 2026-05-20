@@ -91,6 +91,20 @@ export function CelulaTurma({ turma, onClick, draggable = false }: CelulaTurmaPr
             {turma.curso_nome}
           </div>
         )}
+
+        {/* Alunos (até 2 + contador) */}
+        {turma.nomes_alunos && turma.nomes_alunos.length > 0 && (
+          <div className="mt-1 pt-1 border-t border-white/10 text-[10px] text-slate-300 space-y-0.5">
+            {turma.nomes_alunos.slice(0, 2).map((nome, i) => (
+              <div key={i} className="truncate" title={nome}>
+                · {nome.split(' ').slice(0, 2).join(' ')}
+              </div>
+            ))}
+            {turma.nomes_alunos.length > 2 && (
+              <div className="text-slate-500">+{turma.nomes_alunos.length - 2} aluno(s)</div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

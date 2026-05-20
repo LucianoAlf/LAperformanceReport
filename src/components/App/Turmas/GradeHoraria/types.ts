@@ -19,6 +19,7 @@ export interface TurmaGrade {
   capacidade_maxima: number;
   num_alunos: number;
   alunos?: number[];
+  nomes_alunos?: string[];
   ativo: boolean;
   turma_explicita_id?: number | null;
 }
@@ -29,6 +30,8 @@ export interface FiltrosGrade {
   professorId?: number;
   cursoId?: number;
   diaSemana?: string;
+  buscaAluno?: string;
+  buscaProfessor?: string;
 }
 
 export interface SlotHorario {

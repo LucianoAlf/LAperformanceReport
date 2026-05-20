@@ -171,6 +171,7 @@ export function GradeHoraria({
             capacidade_maxima: t.capacidade_maxima || 4,
             num_alunos: t.total_alunos || 0,
             alunos: t.ids_alunos || [],
+            nomes_alunos: t.nomes_alunos || [],
             ativo: true
           };
         });
@@ -185,11 +186,19 @@ export function GradeHoraria({
 
   // Filtrar turmas
   const turmasFiltradas = useMemo(() => {
+    const buscaAluno = filtros.buscaAluno?.trim().toLowerCase() ?? '';
+    const buscaProfessor = filtros.buscaProfessor?.trim().toLowerCase() ?? '';
     return turmas.filter(turma => {
       if (filtros.salaId && turma.sala_id !== filtros.salaId) return false;
       if (filtros.professorId && turma.professor_id !== filtros.professorId) return false;
       if (filtros.cursoId && turma.curso_id !== filtros.cursoId) return false;
       if (filtros.diaSemana && turma.dia_semana !== filtros.diaSemana) return false;
+      if (buscaProfessor && !turma.professor_nome?.toLowerCase().includes(buscaProfessor)) return false;
+      if (buscaAluno) {
+        const nomes = turma.nomes_alunos ?? [];
+        const algum = nomes.some(n => n.toLowerCase().includes(buscaAluno));
+        if (!algum) return false;
+      }
       return true;
     });
   }, [turmas, filtros]);
@@ -454,8 +463,8 @@ export function GradeHoraria({
           </Select>
 
           {/* Filtro Dia */}
-          <Select 
-            value={filtros.diaSemana || 'todos'} 
+          <Select
+            value={filtros.diaSemana || 'todos'}
             onValueChange={(v) => handleFiltroChange('diaSemana', v === 'todos' ? undefined : v)}
           >
             <SelectTrigger className="w-[140px] bg-slate-900 border-slate-700">
@@ -468,6 +477,48 @@ export function GradeHoraria({
               ))}
             </SelectContent>
           </Select>
+        </div>
+
+        {/* Linha de busca por texto */}
+        <div className="flex flex-wrap items-center gap-2 mt-3">
+          <div className="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-md px-3 py-1.5 flex-1 min-w-[220px]">
+            <Users className="w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Buscar aluno..."
+              value={filtros.buscaAluno ?? ''}
+              onChange={e => handleFiltroChange('buscaAluno', e.target.value || undefined)}
+              className="bg-transparent text-sm text-gray-200 placeholder:text-gray-500 outline-none flex-1"
+            />
+            {filtros.buscaAluno && (
+              <button
+                onClick={() => handleFiltroChange('buscaAluno', undefined)}
+                className="text-xs text-slate-500 hover:text-white"
+                title="Limpar"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-2 bg-slate-900 border border-slate-700 rounded-md px-3 py-1.5 flex-1 min-w-[220px]">
+            <Users className="w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Buscar professor..."
+              value={filtros.buscaProfessor ?? ''}
+              onChange={e => handleFiltroChange('buscaProfessor', e.target.value || undefined)}
+              className="bg-transparent text-sm text-gray-200 placeholder:text-gray-500 outline-none flex-1"
+            />
+            {filtros.buscaProfessor && (
+              <button
+                onClick={() => handleFiltroChange('buscaProfessor', undefined)}
+                className="text-xs text-slate-500 hover:text-white"
+                title="Limpar"
+              >
+                ✕
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Contador de turmas */}
