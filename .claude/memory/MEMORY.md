@@ -10,6 +10,7 @@
 - [integracao-infra.md](integracao-infra.md) — Edge functions, pg_cron, WhatsApp CRM, UAZAPI, Gemini AI
 - [emusys-api.md](emusys-api.md) — API Emusys (tokens, endpoints, convenções, webhooks)
 - [chatwoot.md](chatwoot.md) — Chatwoot CRM (inboxes, agentes, labels, endpoints, filtros, quirks de timezone)
+- [modulo-saude-automacoes.md](modulo-saude-automacoes.md) — Monitoramento de webhooks Emusys (edge auditor, helper invariantes, automacao_log/invariantes, frontend)
 - [todos-pendentes.md](todos-pendentes.md) — Problemas conhecidos sem fix aplicado (priorizados por severidade)
 - [pendencias-emusys.md](pendencias-emusys.md) — Limitações do lado do Emusys (API/cadastro) que não podem ser resolvidas no nosso código
 
@@ -27,8 +28,9 @@
 
 ## Supabase
 - Project ID: `ouqwbbermlzqqvtqwlul`
-- 41+ edge functions ativas (ver integracao-infra.md)
-- 8 pg_cron jobs (ver integracao-infra.md)
+- 42+ edge functions ativas (ver integracao-infra.md)
+- 9 pg_cron jobs (ver integracao-infra.md)
+- Tabelas de auditoria: `automacao_log` (extendida com status/lead_id/payload_bruto/idempotency_key) + `automacao_invariantes` (nova, 1 linha por regra violada com soft visto_em)
 
 ---
 

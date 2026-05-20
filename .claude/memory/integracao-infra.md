@@ -65,7 +65,14 @@
 - `sync-feriados` — sincroniza feriados (via BrasilAPI) para agenda
 
 ### Webhook Matricula (Emusys)
-- `processar-matricula-emusys` (v16, 2026-05-20) — recebe webhook Emusys (matricula_nova/renovacao/trancamento/finalizacao). Insere/atualiza `alunos`, `movimentacoes_admin`, atualiza `leads` para convertido. v16 adiciona CAMADA 2 ao `resolverProfessorId` (fallback por nome+unidade com auto-cura do `emusys_id`).
+- `processar-matricula-emusys` (v17, 2026-05-20) — recebe webhook Emusys (matricula_nova/renovacao/trancamento/finalizacao). Insere/atualiza `alunos`, `movimentacoes_admin`, atualiza `leads` para convertido. v16 adiciona CAMADA 2 ao `resolverProfessorId` (fallback por nome+unidade com auto-cura do `emusys_id`). **v17**: integra helper `_shared/invariantes.ts` — cada handler chama `checar*()` + `gravarLog()` no final; try/catch externo grava `processamento_falhou_excecao` em exceção.
+
+### Saude das Automacoes
+- `auditor-divergencias-emusys` (v1, 2026-05-20, NOVA) — varre banco com 13 regras SQL idempotentes via RPC `executar_query_auditoria`. Disparo: pg_cron horário OU botão manual no frontend. Grava em `automacao_invariantes` com `idempotency_key='audit:<regra>:<id>'` (re-execução não duplica). Detalhes completos: ver `modulo-saude-automacoes.md`.
+- Helper `supabase/functions/_shared/invariantes.ts` — exports: types (`Severidade`, `Invariante`, `GravarLogParams`, `ResultadoMatricula`), `comFallback`, `gravarLog`, `computarHash` (SHA-256), `checarMatricula/Renovacao/Trancamento/Finalizacao`. Usado pela edge de matrícula.
+- RPC `executar_query_auditoria(p_sql text)` — SECURITY DEFINER, restrita a `service_role`, aceita só `SELECT`/`WITH`. Usada pelo auditor para rodar queries sem hardcode.
+- Tabela `automacao_log` ganhou colunas `status` (ok/warn/erro), `lead_id`, `payload_bruto` (jsonb), `idempotency_key` (UNIQUE).
+- Tabela nova `automacao_invariantes` — 1 linha por regra violada, com soft `visto_em`. RLS: SELECT para `authenticated`, UPDATE só para admin.
 
 ### Meta WhatsApp Cloud API (Campanhas)
 - `meta-webhook-campanhas` — webhook receiver da Meta WhatsApp API (status updates de campanhas)
@@ -101,6 +108,7 @@
 | `snapshot_dados_mensais` | `0 3 1 * *` (dia 1, 0h BRT) | Snapshot mensal de KPIs |
 | `warm-enviar-mensagem-admin` | `*/5 * * * *` (cada 5 min) | Warm-up ping para evitar cold start |
 | `sync-professores-emusys-semanal` | `0 7 * * 0` (Domingo 4h BRT) | Sync professores Emusys → professores_unidades |
+| `auditor-divergencias-cron` | `0 * * * *` (toda hora cheia) | Roda `auditor-divergencias-emusys` (13 regras SQL → `automacao_invariantes`) |
 
 ## n8n Workflows
 
