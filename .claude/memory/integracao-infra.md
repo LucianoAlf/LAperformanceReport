@@ -58,13 +58,14 @@
 - `lojinha-relatorio-professor` — relatorio comissoes professor
 - `lojinha-relatorio-vendas` — relatorio de vendas
 
-### Presenca
-- `sync-presenca-emusys` — sync aulas/presenca do Emusys (pg_cron diario 22h BRT)
+### Presenca / Sync Emusys
+- `sync-presenca-emusys` (v24) — sync aulas/presenca do Emusys (pg_cron diario 22h BRT)
+- `sync-professores-emusys` (v1, 2026-05-20) — sync semanal de professores. Auto-cura `emusys_id` por nome, cria professores novos, vincula a unidades existentes, loga "sumiu da lista" sem desativar. Cron `sync-professores-emusys-semanal`: Domingo 04:00 BRT. Audita em `professores_sync_log`.
 - `sync-students-studio` — sync alunos com LA Studio (projeto separado)
 - `sync-feriados` — sincroniza feriados (via BrasilAPI) para agenda
 
 ### Webhook Matricula (Emusys)
-- `processar-matricula-emusys` — recebe webhook Emusys (matricula_nova/renovacao/trancamento/finalizacao). Insere/atualiza `alunos`, `movimentacoes_admin`, atualiza `leads` para convertido. v9 com lookup ILIKE em `motivos_saida` para popular `motivo_saida_id`.
+- `processar-matricula-emusys` (v16, 2026-05-20) — recebe webhook Emusys (matricula_nova/renovacao/trancamento/finalizacao). Insere/atualiza `alunos`, `movimentacoes_admin`, atualiza `leads` para convertido. v16 adiciona CAMADA 2 ao `resolverProfessorId` (fallback por nome+unidade com auto-cura do `emusys_id`).
 
 ### Meta WhatsApp Cloud API (Campanhas)
 - `meta-webhook-campanhas` — webhook receiver da Meta WhatsApp API (status updates de campanhas)
@@ -99,6 +100,7 @@
 | `resumo-semanal` | `0 12 * * 1` (segunda 9h BRT) | Resumo semanal via WhatsApp |
 | `snapshot_dados_mensais` | `0 3 1 * *` (dia 1, 0h BRT) | Snapshot mensal de KPIs |
 | `warm-enviar-mensagem-admin` | `*/5 * * * *` (cada 5 min) | Warm-up ping para evitar cold start |
+| `sync-professores-emusys-semanal` | `0 7 * * 0` (Domingo 4h BRT) | Sync professores Emusys → professores_unidades |
 
 ## n8n Workflows
 

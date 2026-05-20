@@ -44,7 +44,26 @@ Header `token` em todas as requisições.
 - `PATCH /v1/leads/` — Atualizar lead
 - `GET /v1/cursos/` — Buscar cursos
 - `GET /v1/aulas/` — Listar aulas com presença dos alunos (ver detalhes abaixo)
+- `GET /v1/professores` — Listar professores da unidade (ver detalhes abaixo)
 - Consultar disponibilidade de aulas experimentais
+
+### GET /v1/professores
+Retorna a lista de professores da unidade definida pelo token (uma chamada por unidade).
+
+**Sem query params.** Resposta:
+```json
+{
+  "professores": [
+    { "id": 1522, "nome": "Leticia de Almeida Palmeira" },
+    { "id": 2109, "nome": "Erick Osmy" }
+  ]
+}
+```
+
+**Observacoes:**
+- Mesmo humano tem `id` DIFERENTE em cada unidade (Emusys e por-escola).
+- A lista provavelmente retorna apenas professores ativos no Emusys (a confirmar — quem desativar deixara de aparecer aqui).
+- Usado pela edge `sync-professores-emusys` (cron semanal).
 
 ### GET /v1/aulas/ — Aulas e Presença
 Retorna aulas com presença individual de cada aluno. Usado pelo sync automático de presença.
@@ -80,8 +99,21 @@ Retorna aulas com presença individual de cada aluno. Usado pelo sync automátic
 - Documentação acessível via MCP GitBook SSE: `https://emusys.gitbook.io/emusys/api-emusys/~gitbook/mcp`
 - Configurado em `.mcp.json` como server `emusys` (type: sse)
 
+## Webhooks → nosso sistema
+
+Eventos recebidos por `processar-matricula-emusys`: `matricula_nova`, `matricula_renovacao`, `matricula_trancamento`, `matricula_finalizacao` (evasao).
+
+**Onde fica o professor no payload de matricula:**
+```
+payload.matricula.disciplinas[0].id_professor    ← ID Emusys
+payload.matricula.disciplinas[0].nome_professor  ← nome (usado no fallback)
+```
+NUNCA na raiz da matricula. Edge function le `disciplinas[0]` corretamente desde v12+.
+
+**Resolucao do `professor_atual_id`** (ver `regras-negocio.md`): 3 camadas — emusys_id+unidade → nome+unidade (auto-cura) → NULL.
+
 ## Versão
-- v1.1.0
+- v1.1.2
 
 ## Suporte
 - Email: dev@emusys.com.br

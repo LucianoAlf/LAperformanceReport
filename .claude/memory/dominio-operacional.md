@@ -4,10 +4,22 @@
 - `src/components/App/Professores/ProfessoresPage.tsx`
 - Cadastro, feedback 360, performance, health score, itinerario
 - Hooks: `useProfessoresData`, `useProfessoresPerformance`
-- Metricas: carteira de alunos, taxa evasao por professor, avaliacao 360
+- Metricas: carteira de alunos, taxa evasao por professor, avaliacao 360 (fórmulas em `metricas.md`)
 - Edge function `professor-360-whatsapp` — envia feedback via WhatsApp
 - Edge function `gemini-insights-professor` — insights IA por professor
 - Edge function `gemini-ranking-professores` — ranking comparativo
+
+### Schema multi-unidade
+- Tabela `professores` armazena a PESSOA (id, nome, ativo, comissao_percentual, etc).
+- Tabela `professores_unidades` e a juncao N×N entre professor e unidade. Armazena `emusys_id` por par (professor, unidade) — Emusys e por-escola, o mesmo humano tem `emusys_id` DIFERENTE em cada unidade.
+- Exemplo: Leticia (prof_id 18) → CG emusys=2745, REC emusys=1522. Sao a mesma pessoa, 2 cadastros no Emusys.
+- Hoje: 23 professores multi-unidade, 3 deles em 3 unidades (Joel, Lohana, Willer).
+
+### Sync semanal com Emusys (2026-05-20)
+- Edge function `sync-professores-emusys` (v1) — chama `GET /v1/professores` em cada unidade.
+- Cron `sync-professores-emusys-semanal`: Domingo 04:00 BRT.
+- Acoes: (1) ja vinculado, (2) vinculou emusys_id por nome, (3) vinculou unidade existente, (4) criou professor novo.
+- "Sumiu da lista" — apenas LOGA em `professores_sync_log`, NAO desativa.
 
 ## Salas
 - `src/components/App/Salas/SalasPage.tsx`
@@ -69,3 +81,5 @@
 - `professores`, `turmas`, `cursos`, `dados_mensais`, `metas`
 - `movimentacoes_admin`, `aulas_emusys`, `aluno_presenca`, `motivos_saida`
 - `loja_*` (produtos, variacoes, estoque, vendas, vendas_itens, carteira, movimentacao)
+- `professores_unidades` (juncao N×N + emusys_id por par)
+- `professores_sync_log` (auditoria do sync semanal)

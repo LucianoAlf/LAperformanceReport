@@ -1,13 +1,14 @@
 # Memoria do Projeto — LA Music Performance Report
 
 ## Indice de Arquivos
-- [regras-negocio.md](regras-negocio.md) — Regras de negocio (duplicatas, pipeline, etapas, matricula, evasao, permissoes)
+- [regras-negocio.md](regras-negocio.md) — Regras de negocio (duplicatas, pipeline, etapas, matricula, evasao, vinculo professor↔aluno, permissoes)
+- [metricas.md](metricas.md) — Fórmulas canônicas das KPIs (carteira, saldo líquido, score, conversão, ticket, churn, LTV, renovação)
 - [padroes-codigo.md](padroes-codigo.md) — Padroes de codigo (hooks, modais, inline edit, filtros, toasts, supabase, edge functions)
 - [dominio-comercial.md](dominio-comercial.md) — Pipeline comercial, leads, funil, etapas, cards de entrada
 - [dominio-alunos.md](dominio-alunos.md) — Alunos, matriculas, renovacoes, evasoes, presenca
-- [dominio-operacional.md](dominio-operacional.md) — Professores, turmas, salas, metas, lojinha, administrativo
+- [dominio-operacional.md](dominio-operacional.md) — Professores (schema multi-unidade + sync), turmas, salas, metas, lojinha, administrativo
 - [integracao-infra.md](integracao-infra.md) — Edge functions, pg_cron, WhatsApp CRM, UAZAPI, Gemini AI
-- [emusys-api.md](emusys-api.md) — API Emusys (tokens, endpoints, convenções)
+- [emusys-api.md](emusys-api.md) — API Emusys (tokens, endpoints, convenções, webhooks)
 - [chatwoot.md](chatwoot.md) — Chatwoot CRM (inboxes, agentes, labels, endpoints, filtros, quirks de timezone)
 - [todos-pendentes.md](todos-pendentes.md) — Problemas conhecidos sem fix aplicado (priorizados por severidade)
 - [pendencias-emusys.md](pendencias-emusys.md) — Limitações do lado do Emusys (API/cadastro) que não podem ser resolvidas no nosso código
@@ -18,7 +19,7 @@
 - Barra: `368d47f5-2d88-4475-bc14-ba084a9a348e`
 
 ## Integracoes Externas
-- **Emusys**: API REST v1.1.0 em `https://api.emusys.com.br/v1/` (ver emusys-api.md)
+- **Emusys**: API REST v1.1.2 em `https://api.emusys.com.br/v1/` (ver emusys-api.md)
 - **n8n**: Automacoes via webhooks (leads, experimentais, matriculas)
 - **UAZAPI**: WhatsApp CRM — caixas por unidade, webhooks, conversas (ver integracao-infra.md e skill `.claude/skills/uazapi-whatsapp/SKILL.md`)
 - **Gemini AI**: Insights, relatorios, rankings via edge functions (ver integracao-infra.md)
@@ -27,7 +28,7 @@
 ## Supabase
 - Project ID: `ouqwbbermlzqqvtqwlul`
 - 41+ edge functions ativas (ver integracao-infra.md)
-- 6 pg_cron jobs (ver integracao-infra.md)
+- 8 pg_cron jobs (ver integracao-infra.md)
 
 ---
 
@@ -42,11 +43,12 @@
 Apos cada commit ou conjunto de mudancas, perguntar-se:
 1. Criei um pattern novo (hook, utility, componente)? → Atualizar `padroes-codigo.md`
 2. Mudei regra de negocio ou fluxo? → Atualizar `regras-negocio.md`
-3. Mudei algo no pipeline comercial/leads/funil? → Atualizar `dominio-comercial.md`
-4. Mudei algo em alunos/matriculas/presenca? → Atualizar `dominio-alunos.md`
-5. Mudei algo em professores/turmas/lojinha/admin? → Atualizar `dominio-operacional.md`
-6. Criei/modifiquei edge function, cron job, integracao? → Atualizar `integracao-infra.md`
-7. Mudei algo na API Emusys? → Atualizar `emusys-api.md`
+3. Mudei fórmula de KPI/métrica ou descobri implementação divergente? → Atualizar `metricas.md`
+4. Mudei algo no pipeline comercial/leads/funil? → Atualizar `dominio-comercial.md`
+5. Mudei algo em alunos/matriculas/presenca? → Atualizar `dominio-alunos.md`
+6. Mudei algo em professores/turmas/lojinha/admin? → Atualizar `dominio-operacional.md`
+7. Criei/modifiquei edge function, cron job, integracao? → Atualizar `integracao-infra.md`
+8. Mudei algo na API Emusys? → Atualizar `emusys-api.md`
 Se QUALQUER resposta for sim, atualizar o arquivo correspondente imediatamente.
 
 ### Outros Gatilhos

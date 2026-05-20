@@ -88,6 +88,25 @@ Exemplo real: Willian/T1 2026 → 200% de conversao (Carlos Yan matriculou em 15
 
 **Sem backfill** — historicos (~830 alunos sem tel) ficam sem ate passarem por algum webhook futuro (renovacao, ajuste). A self-healing acontece naturalmente ao longo de 6-12 meses.
 
+## Vinculo Professor↔Aluno (Politica)
+
+**Quando o aluno sai (evasao / trancamento / inativacao), `professor_atual_id` NAO e zerado.** O vinculo historico e mantido — afinal o aluno realmente foi daquele professor.
+
+Consequencia: queries de carteira/score/KPI devem filtrar `WHERE status = 'ativo'`. Ver `metricas.md` para a lista de lugares onde esse filtro precisa estar.
+
+Distincao importante:
+- **Aluno orfao:** `professor_atual_id IS NULL` AND `status = 'ativo'` — bug de cadastro
+- **Aluno fantasma:** `professor_atual_id IS NOT NULL` AND `status != 'ativo'` — vinculo historico valido (intencional)
+
+## Resolucao de Professor em Matricula Nova (edge v16, 2026-05-20)
+
+`processar-matricula-emusys` v16 resolve `professor_atual_id` em 3 camadas:
+1. **emusys_id + unidade_id** em `professores_unidades` (caminho feliz)
+2. **Nome normalizado + unidade_id** (fallback) — ao achar, grava o `emusys_id` no vinculo (auto-cura para proximas chamadas)
+3. Senao, `professor_atual_id = NULL` (atribuicao manual depois)
+
+A experimental NAO e usada como fallback. Emusys e a fonte da verdade (`payload.matricula.disciplinas[0].id_professor`). A experimental nem sempre vai ser o professor da matricula — pode haver remanejamento legitimo.
+
 ## Score do Professor — Motivos de Evasao
 - Campo `conta_score_professor` (bool) em `motivos_saida` controla se o motivo penaliza o professor no score
 - Gerenciado em `MotivosScoreConfig.tsx` (Performance > Professores) via toggles
