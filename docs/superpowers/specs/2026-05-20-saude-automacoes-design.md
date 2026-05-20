@@ -2,11 +2,23 @@
 
 ## Objetivo
 
-Módulo de monitoramento passivo dos 3 webhooks Emusys (lead, experimental, matrícula) que captura todo evento, valida invariantes de negócio (matrícula sem professor, experimental sem lead, etc.) e expõe ao admin uma visão de jornada por pessoa/lead + feed cronológico. Foco: observação e diagnóstico, sem ação automática.
+Módulo de monitoramento passivo dos 3 webhooks Emusys (lead, experimental, matrícula) que captura divergências de negócio (matrícula sem professor, experimental sem lead, etc.) e expõe ao admin uma visão de jornada por pessoa/lead + feed cronológico. Foco: observação e diagnóstico, sem ação automática.
 
-## Abordagem
+## Abordagem (arquitetura híbrida)
 
-Estender `automacao_log` (já gravada pelas edge functions) com 4 colunas (status, lead_id, payload_bruto, idempotency_key) + nova tabela auxiliar `automacao_invariantes` (1 linha por regra violada). Helper compartilhado em `_shared/invariantes.ts` checa regras após processar e grava as violações. Edge functions continuam não-bloqueantes — invariantes só observam.
+Estado atual da infra: somente **matrícula** tem edge function nossa (`processar-matricula-emusys`). **Lead** e **experimental** entram via workflows n8n com lógica complexa (UPSERT direto, IA SDR Mila, waits, NocoDB). Migrar esses workflows traz risco alto.
+
+Solução híbrida:
+1. **Matrícula** — validação em tempo real: a edge existente chama helper de invariantes ao final do processamento e grava `automacao_log` + `automacao_invariantes`.
+2. **Lead + Experimental + Alunos** — auditoria periódica: nova edge `auditor-divergencias-emusys` roda via pg_cron horário (e por botão manual no frontend) varrendo tabelas com queries SQL idempotentes.
+
+Vantagens:
+- Zero migração de workflows n8n
+- Captura também cadastros manuais via frontend (FormLead, etc.) e registros antigos quebrados
+- Edge crítica de matrícula tocada minimamente (helper com `comFallback`)
+- Latência aceitável (1h por padrão, ajustável; botão manual dá feedback imediato)
+
+Storage: estender `automacao_log` com 4 colunas (status, lead_id, payload_bruto, idempotency_key) + nova tabela auxiliar `automacao_invariantes` (1 linha por regra violada).
 
 ## Banco de Dados
 
@@ -209,12 +221,9 @@ Status derivado:
 - `warn` se tem só `aviso`
 - `ok` se array vazio
 
-### Fluxo nas edges
+### Fluxo na edge de matrícula (única edge modificada)
 
-Edges modificadas (3):
-- `processar-lead-emusys` — chama `checarLead` ao final
-- `processar-experimental-emusys` — chama `checarExperimental` ao final
-- `processar-matricula-emusys` — chama `checarMatricula`/`Renovacao`/`Trancamento`/`Finalizacao` conforme `tipo_evento`
+`processar-matricula-emusys` chama `checarMatricula`/`Renovacao`/`Trancamento`/`Finalizacao` conforme `tipo_evento` ao final do processamento.
 
 Padrão:
 
@@ -224,7 +233,7 @@ const idempotency_key = computarHash(payload);
 
 try {
   const resultado = await processarMatricula(supabase, payload);
-  const invariantes = checarMatricula(payload, resultado);
+  const invariantes = comFallback(() => checarMatricula(payload, resultado));
   await gravarLog(supabase, { ...resultado, payload_bruto: payload, idempotency_key, invariantes });
   return new Response(JSON.stringify({ ok: true }), { status: 200 });
 } catch (e) {
@@ -242,9 +251,103 @@ try {
 
 Princípio: invariantes nunca bloqueiam. Webhook continua entrando — só observa.
 
-### Idempotência
+### Edge auditor (lead + experimental + alunos)
 
-`idempotency_key` = hash estável de campos do payload (ex: SHA-256 de `emusys_matricula_id + tipo_evento + data_evento`). `INSERT ... ON CONFLICT (idempotency_key) DO NOTHING` → reentrega vira no-op + grava invariante `webhook_reentregue`.
+Nova edge function `auditor-divergencias-emusys` cobre os pilares que NÃO têm edge nossa (workflows n8n complexos: `EB0LibpOJCLhKp7M` para leads e `Fucq0bQwF4oeuWnv` para experimentais).
+
+Disparo em 2 modos:
+1. **Automático**: pg_cron horário (`auditor-divergencias-cron`, every hour at minute 0)
+2. **Manual**: botão "Rodar agora" no frontend chama `supabase.functions.invoke('auditor-divergencias-emusys', { body: { trigger: 'manual', user_id } })`
+
+Estrutura interna:
+
+```typescript
+type Trigger = 'cron' | 'manual';
+
+const REGRAS = [
+  {
+    regra: 'lead_sem_telefone',
+    severidade: 'critico' as const,
+    query: `
+      SELECT id, nome, unidade_id, created_at
+      FROM leads
+      WHERE (telefone IS NULL OR telefone = '')
+        AND created_at > now() - interval '24 hours'
+        AND NOT EXISTS (
+          SELECT 1 FROM automacao_invariantes ai
+          WHERE ai.regra = 'lead_sem_telefone' AND ai.mensagem LIKE 'lead_id=' || leads.id || '%'
+        )
+    `,
+    construirMensagem: (row) => `lead_id=${row.id} nome=${row.nome} unidade=${row.unidade_id}`,
+    construirLog: (row) => ({
+      evento: 'auditoria_lead',
+      acao: 'divergencia_detectada',
+      aluno_nome: row.nome,
+      lead_id: row.id,
+    }),
+  },
+  // ... ~25-30 outras regras de lead/experimental/alunos
+];
+
+serve(async (req) => {
+  const { trigger = 'cron', user_id = null } = req.method === 'POST' ? await req.json() : {};
+  const t0 = Date.now();
+  let totalDetectado = 0, totalNovo = 0;
+
+  for (const regra of REGRAS) {
+    try {
+      const { data: rows } = await supabase.rpc('executar_query_segura', { sql: regra.query });
+      for (const row of rows ?? []) {
+        await gravarLog(supabase, {
+          ...regra.construirLog(row),
+          payload_bruto: row,  // snapshot do banco (não webhook bruto)
+          idempotency_key: `audit:${regra.regra}:${row.id}`,
+          invariantes: [{ regra: regra.regra, severidade: regra.severidade, mensagem: regra.construirMensagem(row) }],
+          detalhes: { trigger, user_id, audit_run_at: new Date().toISOString() },
+        });
+        totalNovo++;
+      }
+      totalDetectado += (rows?.length ?? 0);
+    } catch (e) {
+      // falha numa regra não derruba as outras
+      console.error(`Regra ${regra.regra} falhou:`, e);
+    }
+  }
+
+  return new Response(JSON.stringify({
+    ok: true,
+    duracao_ms: Date.now() - t0,
+    total_detectado: totalDetectado,
+    novos: totalNovo,
+    trigger,
+  }), { status: 200 });
+});
+```
+
+Idempotência: `idempotency_key = 'audit:<regra>:<record_id>'`. Mesma regra detectada na mesma linha em rodadas seguintes vira no-op via `ON CONFLICT DO NOTHING`. Se a divergência for resolvida (ex: admin preencheu o telefone), próxima rodada não detecta mais, mas o log antigo permanece — útil pra histórico.
+
+### pg_cron
+
+```sql
+SELECT cron.schedule(
+  'auditor-divergencias-cron',
+  '0 * * * *',  -- toda hora cheia
+  $$
+    SELECT net.http_post(
+      url := 'https://ouqwbbermlzqqvtqwlul.supabase.co/functions/v1/auditor-divergencias-emusys',
+      headers := jsonb_build_object(
+        'Authorization', 'Bearer ' || (SELECT setting FROM auth_keys WHERE name = 'anon_key'),
+        'Content-Type', 'application/json'
+      ),
+      body := '{"trigger": "cron"}'
+    );
+  $$
+);
+```
+
+### Idempotência (matrícula em tempo real)
+
+`idempotency_key` na edge de matrícula = hash estável de campos do payload (ex: SHA-256 de `emusys_matricula_id + tipo_evento + data_evento`). `INSERT ... ON CONFLICT (idempotency_key) DO NOTHING` → reentrega vira no-op + grava invariante `webhook_reentregue`.
 
 ## Frontend
 
@@ -293,14 +396,29 @@ Botão "Marcar todas como vistas" no topo (escopo: filtros aplicados em tela). M
 
 Auto-refresh polling a cada 30s na aba aberta. Botão manual de refresh no topo. Sem WebSocket.
 
+### Botão "Rodar auditoria agora"
+
+Acima das abas, botão proeminente "Rodar auditoria agora" (ícone `RefreshCw`). Disponível só para admins.
+
+Comportamento:
+1. Clica → botão desabilita, label muda para "Rodando..." com spinner
+2. Chama `supabase.functions.invoke('auditor-divergencias-emusys', { body: { trigger: 'manual', user_id: auth.uid() } })`
+3. Edge varre o banco (~5-15s para queries SQL idempotentes)
+4. Retorno traz `{ total_detectado, novos, duracao_ms }`
+5. Toast: `Auditoria concluída em Xs — Y novas divergências detectadas` (verde) ou `Sem novas divergências desde a última auditoria` (cinza)
+6. Lista do painel auto-recarrega
+
+Throttle: bloquear botão por 30s após click (evita spam clicks).
+
 ### Componentes a criar
 
-- `AutomacoesPage.tsx` — container com tabs
+- `AutomacoesPage.tsx` — container com tabs + botão "Rodar auditoria agora"
 - `TabJornadas.tsx` — aba 1
 - `TabFeedEventos.tsx` — aba 2
 - `CardJornada.tsx` — card colapsado/expandido
 - `LinhaEvento.tsx` — linha do feed e timeline
 - `ModalPayloadBruto.tsx` — visualização JSON formatado
+- `BotaoRodarAuditoria.tsx` — botão com loading state + invoke da edge auditor
 - `useAutomacoesData.ts` — hook de fetch com filtros
 - `useBadgeAutomacoes.ts` — hook do contador do menu
 
@@ -312,18 +430,29 @@ Auto-refresh polling a cada 30s na aba aberta. Botão manual de refresh no topo.
 
 ## Estimativas
 
-- Volume atual: ~250 webhooks/semana (~13k/ano)
-- Cada linha completa: ~5 KB (com payload bruto) → ~75 MB/ano em `automacao_log`
-- Invariantes: 0–3 linhas por log, ~0.5 KB cada → ~10 MB/ano em `automacao_invariantes`
-- **Total: ~85 MB/ano**, irrelevante para Supabase Pro (8 GB+)
-- Latência adicional na edge: ~2-5ms (checagem + 1-2 inserts via service_role)
+- Volume atual: ~250 webhooks/semana (matrícula) + ~1000 leads/mês + ~150 experimentais/mês
+- Auditor adiciona ~24 execuções/dia × ~30 regras × 0-N divergências (idempotente, só insere as novas)
+- Cada linha de `automacao_log` completa: ~5 KB → ~85 MB/ano combinado
+- Invariantes: 0–3 linhas por log, ~0.5 KB cada → ~15 MB/ano
+- **Total: ~100 MB/ano**, irrelevante para Supabase Pro (8 GB+)
+- Latência adicional na edge de matrícula: ~2-5ms (checagem + 1-2 inserts via service_role)
+- Edge auditor: ~5-15s por execução varrendo todas as regras
+- Cron horário consome 24 invocações/dia = ~720/mês = 0.04% do limite Pro
+
+## Volume real medido (2026-05-20)
+
+- Leads: média 30-35/dia, pico 60/dia, pico instantâneo 8 leads em 1 minuto (raro)
+- Experimentais: 3-5 registros/dia em `lead_experimentais`
+- Matrículas (todos eventos): ~250/semana = ~36/dia em `automacao_log`
 
 ## Não inclui
 
-- Reprocessamento de webhooks antigos (sem payload bruto salvo)
-- Backfill de invariantes retroativas
+- Reprocessamento de webhooks antigos
+- Backfill de invariantes retroativas (mas o auditor capturará automaticamente divergências em dados pré-existentes na primeira execução)
 - Alertas externos (WhatsApp/email) — só badge no menu
 - Sync de presença, sync de professores, WhatsApp/UAZAPI — fora do escopo desta v1
+- Migração dos workflows n8n de lead e experimental (lógica complexa: IA SDR Mila, waits, NocoDB) — auditor cobre via varredura
+- Edges novas `processar-lead-emusys` / `processar-experimental-emusys`
 - Botão "reprocessar" no UI — observação pura, sem ação
 - Cron de limpeza — manter tudo
 
