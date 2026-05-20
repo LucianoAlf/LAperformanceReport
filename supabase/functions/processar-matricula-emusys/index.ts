@@ -1,5 +1,14 @@
-// Edge Function: processar-matricula-emusys v16
+// Edge Function: processar-matricula-emusys v17
 // Processa webhooks de matrícula do Emusys: nova, renovação, trancamento, evasão
+//
+// MUDANÇAS v17 (2026-05-20):
+// - Cada handler agora chama o helper de invariantes (gravarLog + checar*) ao final
+// - Gera idempotency_key via SHA-256 no início de cada handler
+// - try/catch externo em cada handler: exceção grava log com invariante 'processamento_falhou_excecao'
+// - Removida a chamada central de automacao_log.insert no serve() — agora cada handler grava o próprio log
+// - Bloco gravarLog grava também em automacao_invariantes (1 linha por regra detectada)
+// - status derivado: 'erro' se alguma invariante crítica, 'warn' se só aviso, 'ok' caso contrário
+// - Lógica de resolução de aluno/professor/curso permanece intacta
 //
 // MUDANÇAS v16 (2026-05-20):
 // - resolverProfessorId ganha CAMADA 2 (fallback por nome+unidade)
@@ -23,9 +32,21 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import {
+  checarMatricula,
+  checarRenovacao,
+  checarTrancamento,
+  checarFinalizacao,
+  comFallback,
+  computarHash,
+  gravarLog,
+  type ResultadoMatricula,
+} from '../_shared/invariantes.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+
+const VERSAO = 'v17';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -397,24 +418,87 @@ async function registrarMovimentacao(
 // ==================== HANDLERS ====================
 
 async function handleMatriculaNova(supabase: any, p: Payload) {
-  const cursoId = await resolverCursoId(supabase, p.nomeCurso, p.emusysCursoId);
-  const professorId = await resolverProfessorId(supabase, p.professorEmusysId, p.unidadeId, p.professorNome);
+  const idempotency_key = await computarHash(
+    `matricula_nova:${p.matriculaIdEmusys ?? ''}:${p.unidadeId}:${p.dataMatricula ?? ''}`
+  );
 
-  // Tenta encontrar aluno EXATO (por matricula_id ou nome+curso)
-  const found = await buscarAluno(supabase, p, cursoId);
+  try {
+    const cursoId = await resolverCursoId(supabase, p.nomeCurso, p.emusysCursoId);
+    const professorId = await resolverProfessorId(supabase, p.professorEmusysId, p.unidadeId, p.professorNome);
 
-  let alunoId: number | null;
-  let action: string;
-  let fonte = found?.fonte;
+    // Tenta encontrar aluno EXATO (por matricula_id ou nome+curso)
+    const found = await buscarAluno(supabase, p, cursoId);
 
-  if (found?.aluno) {
-    if (found.fonte === 'nome_unico' || found.fonte === 'nome_priorizado') {
-      // Aluno existe em outro curso → criar registro de segundo curso
-      const { data: novoSegundo } = await supabase.from('alunos').insert({
+    let alunoId: number | null;
+    let action: string;
+    let fonte = found?.fonte;
+
+    if (found?.aluno) {
+      if (found.fonte === 'nome_unico' || found.fonte === 'nome_priorizado') {
+        // Aluno existe em outro curso → criar registro de segundo curso
+        const { data: novoSegundo } = await supabase.from('alunos').insert({
+          nome: p.nomeAluno,
+          unidade_id: p.unidadeId,
+          status: 'ativo',
+          is_segundo_curso: true,
+          telefone: p.telefoneAluno || p.telefoneResponsavel,
+          email: p.emailAluno,
+          data_matricula: p.dataMatricula,
+          valor_parcela: p.valorMensalidade,
+          valor_passaporte: p.valorPassaporte,
+          data_nascimento: p.dataNascimento,
+          idade_atual: p.idade,
+          classificacao: p.classificacao,
+          data_inicio_contrato: p.dataInicioContrato,
+          data_fim_contrato: p.dataFimContrato,
+          dia_aula: p.diaAula,
+          horario_aula: p.horarioAula,
+          curso_id: cursoId,
+          professor_atual_id: professorId,
+          professor_experimental_id: professorId,
+          emusys_matricula_id: p.matriculaIdEmusys,
+          foto_url: p.fotoAlunoUrl,
+          instagram: p.instagram,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }).select('id').single();
+
+        alunoId = novoSegundo?.id || null;
+        action = 'inserido_segundo_curso';
+        fonte = 'segundo_curso_detectado';
+      } else {
+        // matricula_id ou nome_curso → mesma matrícula, apenas atualiza
+        await supabase.from('alunos').update({
+          status: 'ativo',
+          telefone: (p.telefoneAluno || p.telefoneResponsavel) || undefined,
+          email: p.emailAluno || undefined,
+          data_matricula: p.dataMatricula || undefined,
+          valor_parcela: p.valorMensalidade || undefined,
+          valor_passaporte: p.valorPassaporte || undefined,
+          data_nascimento: p.dataNascimento || undefined,
+          idade_atual: p.idade || undefined,
+          classificacao: p.classificacao || undefined,
+          data_inicio_contrato: p.dataInicioContrato || undefined,
+          data_fim_contrato: p.dataFimContrato || undefined,
+          dia_aula: p.diaAula || undefined,
+          horario_aula: p.horarioAula || undefined,
+          curso_id: cursoId || undefined,
+          professor_atual_id: professorId || undefined,
+          foto_url: p.fotoAlunoUrl || undefined,
+          instagram: p.instagram || undefined,
+          emusys_matricula_id: p.matriculaIdEmusys || undefined,
+          updated_at: new Date().toISOString(),
+        }).eq('id', found.aluno.id);
+
+        alunoId = found.aluno.id;
+        action = 'atualizado';
+      }
+    } else {
+      const { data: newAluno } = await supabase.from('alunos').insert({
         nome: p.nomeAluno,
         unidade_id: p.unidadeId,
         status: 'ativo',
-        is_segundo_curso: true,
+        is_segundo_curso: false,
         telefone: p.telefoneAluno || p.telefoneResponsavel,
         email: p.emailAluno,
         data_matricula: p.dataMatricula,
@@ -437,196 +521,355 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
         updated_at: new Date().toISOString(),
       }).select('id').single();
 
-      alunoId = novoSegundo?.id || null;
-      action = 'inserido_segundo_curso';
-      fonte = 'segundo_curso_detectado';
-    } else {
-      // matricula_id ou nome_curso → mesma matrícula, apenas atualiza
-      await supabase.from('alunos').update({
-        status: 'ativo',
-        telefone: (p.telefoneAluno || p.telefoneResponsavel) || undefined,
-        email: p.emailAluno || undefined,
-        data_matricula: p.dataMatricula || undefined,
-        valor_parcela: p.valorMensalidade || undefined,
-        valor_passaporte: p.valorPassaporte || undefined,
-        data_nascimento: p.dataNascimento || undefined,
-        idade_atual: p.idade || undefined,
-        classificacao: p.classificacao || undefined,
-        data_inicio_contrato: p.dataInicioContrato || undefined,
-        data_fim_contrato: p.dataFimContrato || undefined,
-        dia_aula: p.diaAula || undefined,
-        horario_aula: p.horarioAula || undefined,
-        curso_id: cursoId || undefined,
-        professor_atual_id: professorId || undefined,
-        foto_url: p.fotoAlunoUrl || undefined,
-        instagram: p.instagram || undefined,
-        emusys_matricula_id: p.matriculaIdEmusys || undefined,
-        updated_at: new Date().toISOString(),
-      }).eq('id', found.aluno.id);
-
-      alunoId = found.aluno.id;
-      action = 'atualizado';
+      alunoId = newAluno?.id || null;
+      action = 'inserido';
+      fonte = 'aluno_novo';
     }
-  } else {
-    const { data: newAluno } = await supabase.from('alunos').insert({
-      nome: p.nomeAluno,
-      unidade_id: p.unidadeId,
-      status: 'ativo',
-      is_segundo_curso: false,
-      telefone: p.telefoneAluno || p.telefoneResponsavel,
-      email: p.emailAluno,
-      data_matricula: p.dataMatricula,
-      valor_parcela: p.valorMensalidade,
-      valor_passaporte: p.valorPassaporte,
-      data_nascimento: p.dataNascimento,
-      idade_atual: p.idade,
-      classificacao: p.classificacao,
-      data_inicio_contrato: p.dataInicioContrato,
-      data_fim_contrato: p.dataFimContrato,
-      dia_aula: p.diaAula,
-      horario_aula: p.horarioAula,
+
+    const leadResult = await converterLead(supabase, p, alunoId);
+
+    const result = {
+      action,
+      aluno_id: alunoId,
+      matched_via: fonte,
+      lead_action: leadResult.action,
+      lead_id: leadResult.leadId,
+      professor_id: professorId,
       curso_id: cursoId,
-      professor_atual_id: professorId,
-      professor_experimental_id: professorId,
-      emusys_matricula_id: p.matriculaIdEmusys,
-      foto_url: p.fotoAlunoUrl,
-      instagram: p.instagram,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    }).select('id').single();
+      sem_professor: !professorId,
+    };
 
-    alunoId = newAluno?.id || null;
-    action = 'inserido';
-    fonte = 'aluno_novo';
+    // ===== invariantes + gravarLog =====
+    const resultado: ResultadoMatricula = {
+      aluno_id: alunoId ?? null,
+      curso_id: cursoId ?? null,
+      professor_id: professorId ?? null,
+      lead_id: leadResult.leadId ?? null,
+      unidade_id: p.unidadeId ?? null,
+      payload: p.rawPayload,
+    };
+
+    const invariantes = comFallback(() => checarMatricula(p.rawPayload, resultado));
+
+    await gravarLog(supabase, {
+      evento: 'matricula_nova',
+      acao: action,
+      aluno_id: alunoId ?? undefined,
+      aluno_nome: p.nomeAluno || '(desconhecido)',
+      lead_id: leadResult.leadId ?? undefined,
+      unidade_nome: p.unidadeNome ?? undefined,
+      payload_bruto: p.rawPayload,
+      idempotency_key,
+      invariantes,
+      detalhes: {
+        ...result,
+        curso: p.nomeCurso,
+        professor: p.professorNome,
+        telefone: p.telefoneAluno,
+        emusys_lead_id: p.emusysLeadId,
+        emusys_matricula_id: p.matriculaIdEmusys,
+        version: VERSAO,
+      },
+      workflow_id: 'processar-matricula-emusys',
+      execution_id: new Date().toISOString(),
+    });
+
+    return result;
+  } catch (e: any) {
+    await gravarLog(supabase, {
+      evento: 'matricula_nova',
+      acao: 'erro',
+      aluno_nome: p.nomeAluno || '(desconhecido)',
+      unidade_nome: p.unidadeNome ?? undefined,
+      payload_bruto: p.rawPayload,
+      idempotency_key,
+      invariantes: [{
+        regra: 'processamento_falhou_excecao',
+        severidade: 'critico',
+        mensagem: `Exceção em handleMatriculaNova: ${e?.message ?? e}`,
+      }],
+      detalhes: { version: VERSAO, erro: e?.message ?? String(e) },
+      workflow_id: 'processar-matricula-emusys',
+      execution_id: new Date().toISOString(),
+    });
+    throw e;
   }
-
-  const leadResult = await converterLead(supabase, p, alunoId);
-
-  return {
-    action,
-    aluno_id: alunoId,
-    matched_via: fonte,
-    lead_action: leadResult.action,
-    lead_id: leadResult.leadId,
-    professor_id: professorId,
-    curso_id: cursoId,
-    sem_professor: !professorId,
-  };
 }
 
 async function handleRenovacao(supabase: any, p: Payload) {
-  const cursoId = await resolverCursoId(supabase, p.nomeCurso, p.emusysCursoId);
-  const found = await buscarAluno(supabase, p, cursoId);
-
-  if (!found?.aluno) {
-    return {
-      action: 'erro_aluno_nao_encontrado',
-      motivo: `Aluno "${p.nomeAluno}" não encontrado na unidade ${p.unidadeNome}`,
-    };
-  }
-
-  const aluno = found.aluno;
-  const professorId = await resolverProfessorId(supabase, p.professorEmusysId, p.unidadeId, p.professorNome);
-  const hoje = new Date().toISOString().split('T')[0];
-
-  await backfillMatriculaId(supabase, aluno.id, p.matriculaIdEmusys, aluno.emusys_matricula_id);
-
-  const alunoUpdate: any = {
-    status: 'ativo',
-    data_ultima_renovacao: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  };
-  if (professorId) alunoUpdate.professor_atual_id = professorId;
-  if (cursoId) alunoUpdate.curso_id = cursoId;
-  if (p.diaAula) alunoUpdate.dia_aula = p.diaAula;
-  if (p.horarioAula) alunoUpdate.horario_aula = p.horarioAula;
-  if (p.dataInicioContrato) alunoUpdate.data_inicio_contrato = p.dataInicioContrato;
-  if (p.dataFimContrato) alunoUpdate.data_fim_contrato = p.dataFimContrato;
-  if (p.fotoAlunoUrl) alunoUpdate.foto_url = p.fotoAlunoUrl;
-  if (p.instagram) alunoUpdate.instagram = p.instagram;
-
-  await supabase.from('alunos').update(alunoUpdate).eq('id', aluno.id);
-
-  await supabase.rpc('execute_bi_query_lamusic', {
-    query_text: `UPDATE alunos SET numero_renovacoes = COALESCE(numero_renovacoes, 0) + 1 WHERE id = ${aluno.id}`,
-    p_unidade_id: null, max_rows: 1,
-  });
-
-  const inicioMes = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
-  const { data: existente } = await supabase.from('renovacoes')
-    .select('id')
-    .eq('aluno_id', aluno.id)
-    .gte('data_renovacao', inicioMes)
-    .limit(1);
-
-  let renovacaoInserida = false;
-  if (!existente?.length) {
-    await supabase.from('renovacoes').insert({
-      aluno_id: aluno.id,
-      unidade_id: p.unidadeId,
-      data_renovacao: hoje,
-      valor_parcela_anterior: aluno.valor_parcela || null,
-      status: 'renovado',
-      professor_id: professorId || aluno.professor_atual_id || null,
-      observacoes: `Automático via Emusys — ${p.nomeCurso || 'curso não informado'}`,
-    });
-    renovacaoInserida = true;
-  }
-
-  const movRegistrada = await registrarMovimentacao(
-    supabase, 'renovacao', p, aluno.id,
-    professorId || aluno.professor_atual_id || null,
-    cursoId || aluno.curso_id || null,
-    `Renovação automática via Emusys — ${p.nomeCurso || 'curso não informado'}`
+  const idempotency_key = await computarHash(
+    `matricula_renovacao:${p.matriculaIdEmusys ?? ''}:${p.unidadeId}:${p.dataMatricula ?? ''}`
   );
 
-  return {
-    action: 'renovado',
-    aluno_id: aluno.id,
-    matched_via: found.fonte,
-    professor_id: professorId,
-    curso_id: cursoId,
-    renovacao_inserida: renovacaoInserida,
-    movimentacao_registrada: movRegistrada,
-    dedup: !renovacaoInserida,
-  };
+  try {
+    const cursoId = await resolverCursoId(supabase, p.nomeCurso, p.emusysCursoId);
+    const found = await buscarAluno(supabase, p, cursoId);
+
+    if (!found?.aluno) {
+      const result = {
+        action: 'erro_aluno_nao_encontrado',
+        motivo: `Aluno "${p.nomeAluno}" não encontrado na unidade ${p.unidadeNome}`,
+      };
+
+      const resultado: ResultadoMatricula = {
+        aluno_id: null,
+        curso_id: cursoId ?? null,
+        professor_id: null,
+        lead_id: null,
+        unidade_id: p.unidadeId ?? null,
+        payload: p.rawPayload,
+      };
+      const invariantes = comFallback(() => checarRenovacao(p.rawPayload, resultado));
+
+      await gravarLog(supabase, {
+        evento: 'matricula_renovacao',
+        acao: result.action,
+        aluno_nome: p.nomeAluno || '(desconhecido)',
+        unidade_nome: p.unidadeNome ?? undefined,
+        payload_bruto: p.rawPayload,
+        idempotency_key,
+        invariantes,
+        detalhes: { ...result, version: VERSAO, curso: p.nomeCurso, emusys_matricula_id: p.matriculaIdEmusys },
+        workflow_id: 'processar-matricula-emusys',
+        execution_id: new Date().toISOString(),
+      });
+
+      return result;
+    }
+
+    const aluno = found.aluno;
+    const professorId = await resolverProfessorId(supabase, p.professorEmusysId, p.unidadeId, p.professorNome);
+    const hoje = new Date().toISOString().split('T')[0];
+
+    await backfillMatriculaId(supabase, aluno.id, p.matriculaIdEmusys, aluno.emusys_matricula_id);
+
+    const alunoUpdate: any = {
+      status: 'ativo',
+      data_ultima_renovacao: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    if (professorId) alunoUpdate.professor_atual_id = professorId;
+    if (cursoId) alunoUpdate.curso_id = cursoId;
+    if (p.diaAula) alunoUpdate.dia_aula = p.diaAula;
+    if (p.horarioAula) alunoUpdate.horario_aula = p.horarioAula;
+    if (p.dataInicioContrato) alunoUpdate.data_inicio_contrato = p.dataInicioContrato;
+    if (p.dataFimContrato) alunoUpdate.data_fim_contrato = p.dataFimContrato;
+    if (p.fotoAlunoUrl) alunoUpdate.foto_url = p.fotoAlunoUrl;
+    if (p.instagram) alunoUpdate.instagram = p.instagram;
+
+    await supabase.from('alunos').update(alunoUpdate).eq('id', aluno.id);
+
+    await supabase.rpc('execute_bi_query_lamusic', {
+      query_text: `UPDATE alunos SET numero_renovacoes = COALESCE(numero_renovacoes, 0) + 1 WHERE id = ${aluno.id}`,
+      p_unidade_id: null, max_rows: 1,
+    });
+
+    const inicioMes = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
+    const { data: existente } = await supabase.from('renovacoes')
+      .select('id')
+      .eq('aluno_id', aluno.id)
+      .gte('data_renovacao', inicioMes)
+      .limit(1);
+
+    let renovacaoInserida = false;
+    if (!existente?.length) {
+      await supabase.from('renovacoes').insert({
+        aluno_id: aluno.id,
+        unidade_id: p.unidadeId,
+        data_renovacao: hoje,
+        valor_parcela_anterior: aluno.valor_parcela || null,
+        status: 'renovado',
+        professor_id: professorId || aluno.professor_atual_id || null,
+        observacoes: `Automático via Emusys — ${p.nomeCurso || 'curso não informado'}`,
+      });
+      renovacaoInserida = true;
+    }
+
+    const movRegistrada = await registrarMovimentacao(
+      supabase, 'renovacao', p, aluno.id,
+      professorId || aluno.professor_atual_id || null,
+      cursoId || aluno.curso_id || null,
+      `Renovação automática via Emusys — ${p.nomeCurso || 'curso não informado'}`
+    );
+
+    const result = {
+      action: 'renovado',
+      aluno_id: aluno.id,
+      matched_via: found.fonte,
+      professor_id: professorId,
+      curso_id: cursoId,
+      renovacao_inserida: renovacaoInserida,
+      movimentacao_registrada: movRegistrada,
+      dedup: !renovacaoInserida,
+    };
+
+    const resultado: ResultadoMatricula = {
+      aluno_id: aluno.id ?? null,
+      curso_id: cursoId ?? null,
+      professor_id: professorId ?? null,
+      lead_id: null,
+      unidade_id: p.unidadeId ?? null,
+      payload: p.rawPayload,
+    };
+    const invariantes = comFallback(() => checarRenovacao(p.rawPayload, resultado));
+
+    await gravarLog(supabase, {
+      evento: 'matricula_renovacao',
+      acao: result.action,
+      aluno_id: aluno.id ?? undefined,
+      aluno_nome: p.nomeAluno || '(desconhecido)',
+      unidade_nome: p.unidadeNome ?? undefined,
+      payload_bruto: p.rawPayload,
+      idempotency_key,
+      invariantes,
+      detalhes: {
+        ...result,
+        curso: p.nomeCurso,
+        professor: p.professorNome,
+        emusys_matricula_id: p.matriculaIdEmusys,
+        version: VERSAO,
+      },
+      workflow_id: 'processar-matricula-emusys',
+      execution_id: new Date().toISOString(),
+    });
+
+    return result;
+  } catch (e: any) {
+    await gravarLog(supabase, {
+      evento: 'matricula_renovacao',
+      acao: 'erro',
+      aluno_nome: p.nomeAluno || '(desconhecido)',
+      unidade_nome: p.unidadeNome ?? undefined,
+      payload_bruto: p.rawPayload,
+      idempotency_key,
+      invariantes: [{
+        regra: 'processamento_falhou_excecao',
+        severidade: 'critico',
+        mensagem: `Exceção em handleRenovacao: ${e?.message ?? e}`,
+      }],
+      detalhes: { version: VERSAO, erro: e?.message ?? String(e) },
+      workflow_id: 'processar-matricula-emusys',
+      execution_id: new Date().toISOString(),
+    });
+    throw e;
+  }
 }
 
 async function handleTrancamento(supabase: any, p: Payload) {
-  const cursoId = await resolverCursoId(supabase, p.nomeCurso, p.emusysCursoId);
-  const found = await buscarAluno(supabase, p, cursoId);
+  const idempotency_key = await computarHash(
+    `matricula_trancamento:${p.matriculaIdEmusys ?? ''}:${p.unidadeId}:${p.trancamentoDataInicial ?? ''}`
+  );
 
-  if (!found?.aluno) {
-    return {
-      action: 'erro_aluno_nao_encontrado',
-      motivo: `Aluno "${p.nomeAluno}" não encontrado na unidade ${p.unidadeNome}`,
+  try {
+    const cursoId = await resolverCursoId(supabase, p.nomeCurso, p.emusysCursoId);
+    const found = await buscarAluno(supabase, p, cursoId);
+
+    if (!found?.aluno) {
+      const result = {
+        action: 'erro_aluno_nao_encontrado',
+        motivo: `Aluno "${p.nomeAluno}" não encontrado na unidade ${p.unidadeNome}`,
+      };
+
+      const resultado: ResultadoMatricula = {
+        aluno_id: null,
+        curso_id: cursoId ?? null,
+        professor_id: null,
+        lead_id: null,
+        unidade_id: p.unidadeId ?? null,
+        payload: p.rawPayload,
+      };
+      const invariantes = comFallback(() => checarTrancamento(p.rawPayload, resultado));
+
+      await gravarLog(supabase, {
+        evento: 'matricula_trancamento',
+        acao: result.action,
+        aluno_nome: p.nomeAluno || '(desconhecido)',
+        unidade_nome: p.unidadeNome ?? undefined,
+        payload_bruto: p.rawPayload,
+        idempotency_key,
+        invariantes,
+        detalhes: { ...result, version: VERSAO, curso: p.nomeCurso, emusys_matricula_id: p.matriculaIdEmusys },
+        workflow_id: 'processar-matricula-emusys',
+        execution_id: new Date().toISOString(),
+      });
+
+      return result;
+    }
+
+    const aluno = found.aluno;
+    await backfillMatriculaId(supabase, aluno.id, p.matriculaIdEmusys, aluno.emusys_matricula_id);
+
+    const trancUpdate: any = {
+      status: 'trancado',
+      updated_at: new Date().toISOString(),
     };
+    if (p.fotoAlunoUrl) trancUpdate.foto_url = p.fotoAlunoUrl;
+    if (p.instagram) trancUpdate.instagram = p.instagram;
+
+    await supabase.from('alunos').update(trancUpdate).eq('id', aluno.id);
+
+    const motivo = p.trancamentoMotivo || 'Via Emusys (automação)';
+    const movRegistrada = await registrarMovimentacao(supabase, 'trancamento', p, aluno.id, aluno.professor_atual_id, aluno.curso_id, motivo);
+
+    const result = {
+      action: 'status_trancado',
+      aluno_id: aluno.id,
+      matched_via: found.fonte,
+      motivo,
+      data_inicial: p.trancamentoDataInicial,
+      data_final: p.trancamentoDataFinal,
+      movimentacao_registrada: movRegistrada,
+    };
+
+    const resultado: ResultadoMatricula = {
+      aluno_id: aluno.id ?? null,
+      curso_id: aluno.curso_id ?? cursoId ?? null,
+      professor_id: aluno.professor_atual_id ?? null,
+      lead_id: null,
+      unidade_id: p.unidadeId ?? null,
+      payload: p.rawPayload,
+    };
+    const invariantes = comFallback(() => checarTrancamento(p.rawPayload, resultado));
+
+    await gravarLog(supabase, {
+      evento: 'matricula_trancamento',
+      acao: result.action,
+      aluno_id: aluno.id ?? undefined,
+      aluno_nome: p.nomeAluno || '(desconhecido)',
+      unidade_nome: p.unidadeNome ?? undefined,
+      payload_bruto: p.rawPayload,
+      idempotency_key,
+      invariantes,
+      detalhes: {
+        ...result,
+        curso: p.nomeCurso,
+        emusys_matricula_id: p.matriculaIdEmusys,
+        version: VERSAO,
+      },
+      workflow_id: 'processar-matricula-emusys',
+      execution_id: new Date().toISOString(),
+    });
+
+    return result;
+  } catch (e: any) {
+    await gravarLog(supabase, {
+      evento: 'matricula_trancamento',
+      acao: 'erro',
+      aluno_nome: p.nomeAluno || '(desconhecido)',
+      unidade_nome: p.unidadeNome ?? undefined,
+      payload_bruto: p.rawPayload,
+      idempotency_key,
+      invariantes: [{
+        regra: 'processamento_falhou_excecao',
+        severidade: 'critico',
+        mensagem: `Exceção em handleTrancamento: ${e?.message ?? e}`,
+      }],
+      detalhes: { version: VERSAO, erro: e?.message ?? String(e) },
+      workflow_id: 'processar-matricula-emusys',
+      execution_id: new Date().toISOString(),
+    });
+    throw e;
   }
-
-  const aluno = found.aluno;
-  await backfillMatriculaId(supabase, aluno.id, p.matriculaIdEmusys, aluno.emusys_matricula_id);
-
-  const trancUpdate: any = {
-    status: 'trancado',
-    updated_at: new Date().toISOString(),
-  };
-  if (p.fotoAlunoUrl) trancUpdate.foto_url = p.fotoAlunoUrl;
-  if (p.instagram) trancUpdate.instagram = p.instagram;
-
-  await supabase.from('alunos').update(trancUpdate).eq('id', aluno.id);
-
-  const motivo = p.trancamentoMotivo || 'Via Emusys (automação)';
-  const movRegistrada = await registrarMovimentacao(supabase, 'trancamento', p, aluno.id, aluno.professor_atual_id, aluno.curso_id, motivo);
-
-  return {
-    action: 'status_trancado',
-    aluno_id: aluno.id,
-    matched_via: found.fonte,
-    motivo,
-    data_inicial: p.trancamentoDataInicial,
-    data_final: p.trancamentoDataFinal,
-    movimentacao_registrada: movRegistrada,
-  };
 }
 
 // v12: ao finalizar uma matrícula, verifica se o aluno saiu de TODAS as matrículas dele
@@ -726,44 +969,124 @@ async function registrarPassagemFinalizada(
 }
 
 async function handleEvasao(supabase: any, p: Payload) {
-  const cursoId = await resolverCursoId(supabase, p.nomeCurso, p.emusysCursoId);
-  const found = await buscarAluno(supabase, p, cursoId);
+  const idempotency_key = await computarHash(
+    `matricula_finalizacao:${p.matriculaIdEmusys ?? ''}:${p.unidadeId}:${new Date().toISOString().split('T')[0]}`
+  );
 
-  if (!found?.aluno) {
-    return {
-      action: 'erro_aluno_nao_encontrado',
-      motivo: `Aluno "${p.nomeAluno}" não encontrado na unidade ${p.unidadeNome}`,
+  try {
+    const cursoId = await resolverCursoId(supabase, p.nomeCurso, p.emusysCursoId);
+    const found = await buscarAluno(supabase, p, cursoId);
+
+    if (!found?.aluno) {
+      const result = {
+        action: 'erro_aluno_nao_encontrado',
+        motivo: `Aluno "${p.nomeAluno}" não encontrado na unidade ${p.unidadeNome}`,
+      };
+
+      const resultado: ResultadoMatricula = {
+        aluno_id: null,
+        curso_id: cursoId ?? null,
+        professor_id: null,
+        lead_id: null,
+        unidade_id: p.unidadeId ?? null,
+        payload: p.rawPayload,
+      };
+      const invariantes = comFallback(() => checarFinalizacao(p.rawPayload, resultado));
+
+      await gravarLog(supabase, {
+        evento: 'matricula_finalizacao',
+        acao: result.action,
+        aluno_nome: p.nomeAluno || '(desconhecido)',
+        unidade_nome: p.unidadeNome ?? undefined,
+        payload_bruto: p.rawPayload,
+        idempotency_key,
+        invariantes,
+        detalhes: { ...result, version: VERSAO, curso: p.nomeCurso, emusys_matricula_id: p.matriculaIdEmusys },
+        workflow_id: 'processar-matricula-emusys',
+        execution_id: new Date().toISOString(),
+      });
+
+      return result;
+    }
+
+    const aluno = found.aluno;
+    await backfillMatriculaId(supabase, aluno.id, p.matriculaIdEmusys, aluno.emusys_matricula_id);
+
+    const evasaoUpdate: any = {
+      status: 'evadido',
+      data_saida: new Date().toISOString().split('T')[0],
+      updated_at: new Date().toISOString(),
     };
+    if (p.fotoAlunoUrl) evasaoUpdate.foto_url = p.fotoAlunoUrl;
+    if (p.instagram) evasaoUpdate.instagram = p.instagram;
+
+    await supabase.from('alunos').update(evasaoUpdate).eq('id', aluno.id);
+
+    const motivo = p.finalizacaoMotivo || 'Via Emusys (automação)';
+    const movRegistrada = await registrarMovimentacao(supabase, 'evasao', p, aluno.id, aluno.professor_atual_id, aluno.curso_id, motivo);
+
+    // v12: gravar passagem em alunos_historico se aluno saiu de TODAS as matrículas
+    const passagem = await registrarPassagemFinalizada(supabase, { id: aluno.id, nome: aluno.nome }, p);
+
+    const result = {
+      action: 'status_evadido',
+      aluno_id: aluno.id,
+      matched_via: found.fonte,
+      motivo,
+      observacoes: p.finalizacaoObservacoes,
+      movimentacao_registrada: movRegistrada,
+      passagem,
+    };
+
+    const resultado: ResultadoMatricula = {
+      aluno_id: aluno.id ?? null,
+      curso_id: aluno.curso_id ?? cursoId ?? null,
+      professor_id: aluno.professor_atual_id ?? null,
+      lead_id: null,
+      unidade_id: p.unidadeId ?? null,
+      payload: p.rawPayload,
+    };
+    const invariantes = comFallback(() => checarFinalizacao(p.rawPayload, resultado));
+
+    await gravarLog(supabase, {
+      evento: 'matricula_finalizacao',
+      acao: result.action,
+      aluno_id: aluno.id ?? undefined,
+      aluno_nome: p.nomeAluno || '(desconhecido)',
+      unidade_nome: p.unidadeNome ?? undefined,
+      payload_bruto: p.rawPayload,
+      idempotency_key,
+      invariantes,
+      detalhes: {
+        ...result,
+        curso: p.nomeCurso,
+        emusys_matricula_id: p.matriculaIdEmusys,
+        version: VERSAO,
+      },
+      workflow_id: 'processar-matricula-emusys',
+      execution_id: new Date().toISOString(),
+    });
+
+    return result;
+  } catch (e: any) {
+    await gravarLog(supabase, {
+      evento: 'matricula_finalizacao',
+      acao: 'erro',
+      aluno_nome: p.nomeAluno || '(desconhecido)',
+      unidade_nome: p.unidadeNome ?? undefined,
+      payload_bruto: p.rawPayload,
+      idempotency_key,
+      invariantes: [{
+        regra: 'processamento_falhou_excecao',
+        severidade: 'critico',
+        mensagem: `Exceção em handleEvasao: ${e?.message ?? e}`,
+      }],
+      detalhes: { version: VERSAO, erro: e?.message ?? String(e) },
+      workflow_id: 'processar-matricula-emusys',
+      execution_id: new Date().toISOString(),
+    });
+    throw e;
   }
-
-  const aluno = found.aluno;
-  await backfillMatriculaId(supabase, aluno.id, p.matriculaIdEmusys, aluno.emusys_matricula_id);
-
-  const evasaoUpdate: any = {
-    status: 'evadido',
-    data_saida: new Date().toISOString().split('T')[0],
-    updated_at: new Date().toISOString(),
-  };
-  if (p.fotoAlunoUrl) evasaoUpdate.foto_url = p.fotoAlunoUrl;
-  if (p.instagram) evasaoUpdate.instagram = p.instagram;
-
-  await supabase.from('alunos').update(evasaoUpdate).eq('id', aluno.id);
-
-  const motivo = p.finalizacaoMotivo || 'Via Emusys (automação)';
-  const movRegistrada = await registrarMovimentacao(supabase, 'evasao', p, aluno.id, aluno.professor_atual_id, aluno.curso_id, motivo);
-
-  // v12: gravar passagem em alunos_historico se aluno saiu de TODAS as matrículas
-  const passagem = await registrarPassagemFinalizada(supabase, { id: aluno.id, nome: aluno.nome }, p);
-
-  return {
-    action: 'status_evadido',
-    aluno_id: aluno.id,
-    matched_via: found.fonte,
-    motivo,
-    observacoes: p.finalizacaoObservacoes,
-    movimentacao_registrada: movRegistrada,
-    passagem,
-  };
 }
 
 // ==================== SERVE ====================
@@ -782,7 +1105,7 @@ serve(async (req: Request) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    console.log(`[v16] ${p.evento} | Aluno: ${p.nomeAluno} | Unidade: ${p.unidadeNome} | matricula_id: ${p.matriculaIdEmusys}`);
+    console.log(`[${VERSAO}] ${p.evento} | Aluno: ${p.nomeAluno} | Unidade: ${p.unidadeNome} | matricula_id: ${p.matriculaIdEmusys}`);
 
     let result: any;
 
@@ -801,32 +1124,29 @@ serve(async (req: Request) => {
         break;
       default:
         result = { action: 'evento_ignorado', motivo: `Evento não tratado: ${p.evento}` };
+        // Evento ignorado: ainda registra para visibilidade (sem invariantes)
+        await gravarLog(supabase, {
+          evento: p.evento,
+          acao: result.action,
+          aluno_nome: p.nomeAluno || '(desconhecido)',
+          unidade_nome: p.unidadeNome ?? undefined,
+          payload_bruto: p.rawPayload,
+          idempotency_key: null,
+          invariantes: [],
+          detalhes: { ...result, version: VERSAO },
+          workflow_id: 'processar-matricula-emusys',
+          execution_id: new Date().toISOString(),
+        });
     }
 
-    await supabase.from('automacao_log').insert({
-      aluno_nome: p.nomeAluno,
-      unidade_nome: p.unidadeNome,
-      evento: p.evento,
-      acao: result.action || 'processado',
-      detalhes: {
-        ...result,
-        curso: p.nomeCurso,
-        professor: p.professorNome,
-        telefone: p.telefoneAluno,
-        emusys_lead_id: p.emusysLeadId,
-        emusys_matricula_id: p.matriculaIdEmusys,
-        version: 'v16',
-        payload_completo: p.rawPayload,
-      },
-      workflow_id: 'processar-matricula-emusys',
-      execution_id: new Date().toISOString(),
-    });
+    // Nota v17: o gravarLog ocorre dentro de cada handler. Aqui não inserimos mais
+    // em automacao_log para evitar duplicidade.
 
     return new Response(JSON.stringify({ success: true, evento: p.evento, ...result }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   } catch (error) {
-    console.error('[v16] Erro:', error);
+    console.error(`[${VERSAO}] Erro:`, error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : 'Erro interno' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
