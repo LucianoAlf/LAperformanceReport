@@ -1,9 +1,10 @@
 // src/components/App/Automacoes/TabJornadas.tsx
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { Filtros, LogAutomacao } from '@/hooks/useAutomacoesData';
 import { useAutomacoesData } from '@/hooks/useAutomacoesData';
 import { LinhaEvento } from './LinhaEvento';
+import { Paginacao } from './Paginacao';
 
 type Props = { filtros: Filtros };
 
@@ -19,6 +20,8 @@ type Jornada = {
 export function TabJornadas({ filtros }: Props) {
   const { logs, loading, erro, marcarVistas } = useAutomacoesData(filtros);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [pagina, setPagina] = useState(1);
+  const [porPagina, setPorPagina] = useState(25);
 
   const jornadas: Jornada[] = useMemo(() => {
     const mapa = new Map<string, Jornada>();
@@ -47,45 +50,68 @@ export function TabJornadas({ filtros }: Props) {
     });
   }, [logs]);
 
+  // Reset pagina quando filtros/dataset mudam
+  useEffect(() => { setPagina(1); }, [filtros, jornadas.length]);
+
+  const { paginadas, totalPaginas } = useMemo(() => {
+    const tp = Math.max(1, Math.ceil(jornadas.length / porPagina));
+    const p = Math.min(pagina, tp);
+    const inicio = (p - 1) * porPagina;
+    return {
+      paginadas: jornadas.slice(inicio, inicio + porPagina),
+      totalPaginas: tp,
+    };
+  }, [jornadas, pagina, porPagina]);
+
   if (erro) return <div className="text-rose-400 p-4">Erro: {erro}</div>;
   if (loading) return <div className="text-gray-400 p-4">Carregando...</div>;
   if (jornadas.length === 0) return <div className="text-gray-500 p-4">Nenhuma jornada nos critérios.</div>;
 
   return (
-    <div className="space-y-3">
-      {jornadas.map(j => {
-        const aberto = expanded[j.chave] ?? false;
-        const Chevron = aberto ? ChevronDown : ChevronRight;
-        return (
-          <div key={j.chave} className="bg-slate-900/60 border border-slate-800 rounded-lg">
-            <button
-              onClick={() => setExpanded(e => ({ ...e, [j.chave]: !aberto }))}
-              className="w-full flex items-center gap-3 p-4 hover:bg-slate-800/30 transition-colors text-left"
-            >
-              <Chevron className="w-5 h-5 text-gray-400" />
-              <div className="flex-1 min-w-0">
-                <div className="text-white font-medium">{j.rotulo}</div>
-                {j.unidade && <div className="text-xs text-gray-500">{j.unidade}</div>}
-                <div className="text-xs text-gray-400 mt-1">
-                  {j.logs.length} evento(s)
+    <div>
+      <div className="space-y-3">
+        {paginadas.map(j => {
+          const aberto = expanded[j.chave] ?? false;
+          const Chevron = aberto ? ChevronDown : ChevronRight;
+          return (
+            <div key={j.chave} className="bg-slate-900/60 border border-slate-800 rounded-lg">
+              <button
+                onClick={() => setExpanded(e => ({ ...e, [j.chave]: !aberto }))}
+                className="w-full flex items-center gap-3 p-4 hover:bg-slate-800/30 transition-colors text-left"
+              >
+                <Chevron className="w-5 h-5 text-gray-400" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-white font-medium">{j.rotulo}</div>
+                  {j.unidade && <div className="text-xs text-gray-500">{j.unidade}</div>}
+                  <div className="text-xs text-gray-400 mt-1">
+                    {j.logs.length} evento(s)
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-3 text-xs">
-                {j.criticos > 0 && <span className="text-rose-400 font-medium">{j.criticos} crítico(s)</span>}
-                {j.avisos > 0 && <span className="text-amber-400 font-medium">{j.avisos} aviso(s)</span>}
-              </div>
-            </button>
+                <div className="flex items-center gap-3 text-xs">
+                  {j.criticos > 0 && <span className="text-rose-400 font-medium">{j.criticos} crítico(s)</span>}
+                  {j.avisos > 0 && <span className="text-amber-400 font-medium">{j.avisos} aviso(s)</span>}
+                </div>
+              </button>
 
-            {aberto && (
-              <div className="px-4 pb-4 pt-1 space-y-2">
-                {j.logs.map(log => (
-                  <LinhaEvento key={log.id} log={log} onMarcarVistas={marcarVistas} />
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })}
+              {aberto && (
+                <div className="px-4 pb-4 pt-1 space-y-2">
+                  {j.logs.map(log => (
+                    <LinhaEvento key={log.id} log={log} onMarcarVistas={marcarVistas} />
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <Paginacao
+        pagina={pagina}
+        totalPaginas={totalPaginas}
+        totalItens={jornadas.length}
+        porPagina={porPagina}
+        onMudarPagina={setPagina}
+        onMudarPorPagina={n => { setPorPagina(n); setPagina(1); }}
+      />
     </div>
   );
 }
