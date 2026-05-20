@@ -289,7 +289,7 @@ export function AlunosPage() {
 
     // Helper: busca paginada para contornar limite 1000 rows do PostgREST
     const PAGE_SIZE = 1000;
-    async function fetchAllAlunos(buildQuery: () => ReturnType<typeof supabase.from<'alunos'>>): Promise<{ data: any[]; error: any }> {
+    async function fetchAllAlunos(buildQuery: () => any): Promise<{ data: any[]; error: any }> {
       const allData: any[] = [];
       let offset = 0;
       let hasMore = true;
@@ -1339,22 +1339,70 @@ export function AlunosPage() {
     <div className="space-y-6">
       {/* Filtro de período */}
       <PageFilterBar>
-        <CompetenciaFilter
-          filtro={competenciaFiltro}
-          range={competenciaRange}
-          anosDisponiveis={anosDisponiveis}
-          onTipoChange={setCompetenciaTipo}
-          onAnoChange={setCompetenciaAno}
-          onMesChange={setCompetenciaMes}
-          onTrimestreChange={setCompetenciaTrimestre}
-          onSemestreChange={setCompetenciaSemestre}
-          onDataInicioChange={setCompetenciaDataInicio}
-          onDataFimChange={setCompetenciaDataFim}
-        />
+        <div className="flex flex-wrap items-center justify-end gap-3 w-full">
+          <CompetenciaFilter
+            filtro={competenciaFiltro}
+            range={competenciaRange}
+            anosDisponiveis={anosDisponiveis}
+            onTipoChange={setCompetenciaTipo}
+            onAnoChange={setCompetenciaAno}
+            onMesChange={setCompetenciaMes}
+            onTrimestreChange={setCompetenciaTrimestre}
+            onSemestreChange={setCompetenciaSemestre}
+            onDataInicioChange={setCompetenciaDataInicio}
+            onDataFimChange={setCompetenciaDataFim}
+          />
+
+          {unidadeAtual && unidadeAtual !== 'todos' ? (
+            confirmRecalcular ? (
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 border border-slate-600 rounded-lg">
+                <span className="text-xs text-slate-300">
+                  Recalcular {competenciaFiltro.mes}/{competenciaFiltro.ano}?
+                </span>
+                <button
+                  onClick={async () => {
+                    setRecalculando(true);
+                    try {
+                      const { data, error } = await supabase.rpc('recalcular_dados_mensais', {
+                        p_ano: competenciaFiltro.ano, p_mes: competenciaFiltro.mes, p_unidade_id: unidadeAtual
+                      });
+                      if (error) throw error;
+                      toast.success('Dados recalculados!', `${data?.alunos_ativos || 0} ativos, ${data?.novas_matriculas || 0} matrículas, ${data?.evasoes || 0} evasões`);
+                    } catch (err: any) {
+                      toast.error('Erro ao recalcular', err.message);
+                    } finally {
+                      setRecalculando(false);
+                      setConfirmRecalcular(false);
+                    }
+                  }}
+                  disabled={recalculando}
+                  className="h-6 px-2 bg-violet-600 hover:bg-violet-700 disabled:bg-slate-600 rounded text-xs text-white font-medium transition"
+                >
+                  {recalculando ? 'Recalculando...' : 'Sim'}
+                </button>
+                <button
+                  onClick={() => setConfirmRecalcular(false)}
+                  className="h-6 px-2 bg-slate-700 hover:bg-slate-600 rounded text-xs text-slate-400 transition"
+                >
+                  Não
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setConfirmRecalcular(true)}
+                className="h-8 px-3 bg-slate-700 hover:bg-slate-600 rounded-lg text-xs text-slate-300 transition flex items-center gap-1.5 whitespace-nowrap"
+                title="Recalcular snapshot de dados mensais para a unidade selecionada"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Recalcular Dados Mensais
+              </button>
+            )
+          ) : null}
+        </div>
       </PageFilterBar>
 
       {/* Header actions */}
-      <div className="flex items-center justify-end gap-4">
+      <div className="flex flex-wrap items-center justify-end gap-4">
         {/* Badge de Alerta - Alunos sem lançamento de pagamento */}
         {alertaPagamentos.mostrar && (
           <button
@@ -1371,55 +1419,6 @@ export function AlunosPage() {
           </button>
         )}
       </div>
-
-      {/* Botão Recalcular Dados Mensais */}
-      {unidadeAtual && unidadeAtual !== 'todos' && (
-        <div className="flex justify-end items-center gap-2">
-          {confirmRecalcular ? (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 border border-slate-600 rounded-lg">
-              <span className="text-xs text-slate-300">
-                Recalcular {competenciaFiltro.mes}/{competenciaFiltro.ano}?
-              </span>
-              <button
-                onClick={async () => {
-                  setRecalculando(true);
-                  try {
-                    const { data, error } = await supabase.rpc('recalcular_dados_mensais', {
-                      p_ano: competenciaFiltro.ano, p_mes: competenciaFiltro.mes, p_unidade_id: unidadeAtual
-                    });
-                    if (error) throw error;
-                    toast.success('Dados recalculados!', `${data?.alunos_ativos || 0} ativos, ${data?.novas_matriculas || 0} matrículas, ${data?.evasoes || 0} evasões`);
-                  } catch (err: any) {
-                    toast.error('Erro ao recalcular', err.message);
-                  } finally {
-                    setRecalculando(false);
-                    setConfirmRecalcular(false);
-                  }
-                }}
-                disabled={recalculando}
-                className="h-6 px-2 bg-violet-600 hover:bg-violet-700 disabled:bg-slate-600 rounded text-xs text-white font-medium transition"
-              >
-                {recalculando ? 'Recalculando...' : 'Sim'}
-              </button>
-              <button
-                onClick={() => setConfirmRecalcular(false)}
-                className="h-6 px-2 bg-slate-700 hover:bg-slate-600 rounded text-xs text-slate-400 transition"
-              >
-                Não
-              </button>
-            </div>
-          ) : (
-            <button
-              onClick={() => setConfirmRecalcular(true)}
-              className="h-8 px-3 bg-slate-700 hover:bg-slate-600 rounded-lg text-xs text-slate-300 transition flex items-center gap-1.5"
-              title="Recalcular snapshot de dados mensais para a unidade selecionada"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              Recalcular Dados Mensais
-            </button>
-          )}
-        </div>
-      )}
 
       {/* KPI Cards */}
       <section data-tour="alunos-kpis" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-4">
