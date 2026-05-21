@@ -334,62 +334,98 @@ Liste executions do dia dos workflows `EB0LibpOJCLhKp7M` (webhook Emusys) e dos 
 
 Quantidade de executions success do dia em `EB0LibpOJCLhKp7M` deve casar (±) com `COUNT(*) FROM leads WHERE data_contato::date = CURRENT_DATE`. Divergências grandes (> 10%) merecem investigação.
 
-### I. Webhook de EXPERIMENTAL — Sub-workflow `j41tPbyjGXUQUxrN`
+### I. Webhook de EXPERIMENTAL — modelo dual (canônica + flags legadas)
 
-Chamado pelo Emusys quando uma aula experimental é agendada/realizada/faltada. Sub-workflow `j41tPbyjGXUQUxrN`:
-- Recebe `body.aula.lead_id`, `body.aula.id_professor`, `body.aula.data_hora_inicio`, status
-- Chama `registrar_experimental()` no Supabase (UPSERT em `lead_experimentais`)
-- Atualiza NocoDB (Estagio + Lead Score)
-- Função anterior `atualizar_lead_experimental()` está deprecada (não é mais usada pelo webhook)
+**Modelo de dados (importante):**
+- **Canônica**: tabela `lead_experimentais` — 1 linha por experimental. Colunas: `lead_id`, `nome_aluno`, `data_experimental` (date), `horario_experimental`, `professor_experimental_id`, `status` (varchar: `experimental_agendada` | `experimental_realizada` | `experimental_faltou` | `cancelada`), `etapa_pipeline_id`, `aluno_id`, `emusys_lead_id`. Suporta N experimentais por lead.
+- **Legada (flags em `leads`)**: 3 booleans únicos (`experimental_agendada`, `experimental_realizada`, `faltou_experimental`) + `data_experimental` (date). Só representa UMA experimental por lead. Mantida por compat com queries antigas.
+- **Risco do modelo dual**: as duas fontes podem divergir, e leads com múltiplos reagendamentos ficam paradoxais nas flags (ex: `realizada=true` antigo + `agendada=true` novo).
 
-**Auditoria de hoje:**
+**Workflows envolvidos:**
+- Sub-workflow `j41tPbyjGXUQUxrN` ("[ LAPerformance/rayandash ] - atualizar lead para experimental"): chama `registrar_experimental()` — UPSERT em `lead_experimentais` + sincroniza flags em `leads`. Função tem 2 versões (9 params e 10 params com `p_created_at` extra) — bug das flags afeta as duas.
+- Webhook `Fucq0bQwF4oeuWnv` ("Webhook do emusys pra confirmar aula experimental", ATIVO, 125 nodes): tem node "Call '[ Function ] - atualizar lead para experimental'5" que chama a função LEGADA `atualizar_lead_experimental()` (NÃO `registrar_experimental`). A legada só toca em `leads.data_experimental`/`horario_experimental`/`professor_experimental_id`/`status` SEM criar linha em `lead_experimentais` e SEM setar flags.
+
+**Atenção: visita ≠ experimental.** O campo `leads.data_experimental` é reaproveitado pra qualquer agendamento (visita ou experimental). Pra distinguir, filtrar `leads.tipo_agendamento` ('experimental' | 'visita'). Visitas usam tabela própria `visitas` e ficam com `status='visita_escola'`, `etapa_pipeline_id=6`.
+
+**Auditoria — sintomas conhecidos:**
 
 ```sql
--- 1. Experimentais agendadas/realizadas hoje, por unidade
+-- 1. Experimentais por status hoje (canônica)
 SELECT u.codigo,
-       COUNT(*) FILTER (WHERE le.data_agendamento::date = CURRENT_DATE) AS agendadas_hoje,
-       COUNT(*) FILTER (WHERE le.experimental_realizada AND le.data_realizacao::date = CURRENT_DATE) AS realizadas_hoje,
-       COUNT(*) FILTER (WHERE le.faltou_experimental AND le.data_agendamento::date = CURRENT_DATE) AS faltou_hoje
+       COUNT(*) FILTER (WHERE le.status = 'experimental_agendada' AND le.data_experimental = CURRENT_DATE) AS agendadas_hoje,
+       COUNT(*) FILTER (WHERE le.status = 'experimental_realizada' AND le.data_experimental = CURRENT_DATE) AS realizadas_hoje,
+       COUNT(*) FILTER (WHERE le.status = 'experimental_faltou'    AND le.data_experimental = CURRENT_DATE) AS faltou_hoje,
+       COUNT(*) FILTER (WHERE le.status = 'cancelada'              AND le.updated_at::date = CURRENT_DATE) AS canceladas_hoje
 FROM lead_experimentais le
 JOIN leads l ON l.id = le.lead_id
 JOIN unidades u ON u.id = l.unidade_id
 GROUP BY u.codigo;
 
--- 2. Experimentais sem professor (FK NULL)
-SELECT le.id, l.nome, l.unidade_id, le.data_agendamento, le.emusys_lead_id
+-- 2. Experimentais sem professor (FK NULL) — janela 7 dias
+SELECT le.id, l.nome, l.unidade_id, le.data_experimental, le.status, le.emusys_lead_id
 FROM lead_experimentais le
 JOIN leads l ON l.id = le.lead_id
-WHERE le.professor_id IS NULL
-  AND le.data_agendamento::date >= CURRENT_DATE - INTERVAL '7 days'
-ORDER BY le.data_agendamento DESC;
+WHERE le.professor_experimental_id IS NULL
+  AND le.status != 'cancelada'
+  AND le.data_experimental >= CURRENT_DATE - INTERVAL '7 days'
+ORDER BY le.data_experimental DESC;
 
--- 3. Paradoxos: realizada=true E faltou=true simultaneamente (invariante experimental_realizada_e_faltou)
-SELECT le.id, l.nome, l.unidade_id, le.data_agendamento, le.data_realizacao
+-- 3. PARADOXO DE FLAGS em `leads` (causado pelo bug `registrar_experimental` não zerar flags antigas em reagendamento)
+-- Invariantes: `flags_agendada_e_realizada`, `flags_realizada_e_faltou`, `flags_agendada_e_faltou`
+SELECT l.id, l.nome, l.unidade_id, l.data_experimental,
+       l.experimental_agendada, l.experimental_realizada, l.faltou_experimental,
+       (SELECT COUNT(*) FROM lead_experimentais le WHERE le.lead_id = l.id AND le.status != 'cancelada') AS qtd_exp_canonica
+FROM leads l
+WHERE (l.experimental_realizada = true AND l.faltou_experimental = true)
+   OR (l.experimental_agendada = true AND l.experimental_realizada = true AND l.data_experimental >= CURRENT_DATE)
+   OR (l.experimental_agendada = true AND l.faltou_experimental = true AND l.data_experimental >= CURRENT_DATE)
+ORDER BY l.updated_at DESC LIMIT 50;
+
+-- 4. DIVERGÊNCIA flags (leads) vs canônica (lead_experimentais)
+-- Lead diz "realizada=true" mas não tem nenhuma linha com status='experimental_realizada' na canônica
+SELECT l.id, l.nome, l.experimental_realizada, l.data_experimental,
+       ARRAY(SELECT le.status FROM lead_experimentais le WHERE le.lead_id = l.id ORDER BY le.data_experimental DESC LIMIT 5) AS status_canonica
+FROM leads l
+WHERE l.experimental_realizada = true
+  AND NOT EXISTS (
+    SELECT 1 FROM lead_experimentais le
+    WHERE le.lead_id = l.id AND le.status = 'experimental_realizada'
+  )
+  AND l.updated_at >= NOW() - INTERVAL '60 days'
+LIMIT 30;
+
+-- 5. Reagendamento múltiplo (lead com N experimentais na canônica — esperado, mas útil pra entender Alice-like)
+SELECT le.lead_id, l.nome, l.unidade_id,
+       COUNT(*) AS qtd_exp_total,
+       COUNT(*) FILTER (WHERE le.status = 'experimental_agendada') AS pendentes,
+       COUNT(*) FILTER (WHERE le.status = 'experimental_realizada') AS realizadas,
+       COUNT(*) FILTER (WHERE le.status = 'experimental_faltou') AS faltou,
+       MIN(le.data_experimental) AS primeira,
+       MAX(le.data_experimental) AS ultima
 FROM lead_experimentais le
 JOIN leads l ON l.id = le.lead_id
-WHERE le.experimental_realizada = true AND le.faltou_experimental = true
-  AND le.data_agendamento::date >= CURRENT_DATE - INTERVAL '30 days';
+GROUP BY le.lead_id, l.nome, l.unidade_id
+HAVING COUNT(*) >= 3
+ORDER BY qtd_exp_total DESC LIMIT 20;
 
--- 4. Experimentais realizadas com data futura (relógio errado ou estado inconsistente)
-SELECT le.id, l.nome, le.data_realizacao, le.data_agendamento
-FROM lead_experimentais le
-JOIN leads l ON l.id = le.lead_id
-WHERE le.experimental_realizada = true
-  AND le.data_realizacao > NOW();
-
--- 5. Experimentais órfãs: matrícula nova entrou hoje mas o lead nunca teve experimental registrada
+-- 6. Experimentais órfãs: matrícula nova hoje mas o lead nunca teve experimental registrada
 SELECT a.id, a.nome, a.unidade_id, a.data_matricula, a.lead_id
 FROM alunos a
 WHERE a.data_matricula::date = CURRENT_DATE
   AND a.lead_id IS NOT NULL
-  AND NOT EXISTS (
-    SELECT 1 FROM lead_experimentais le WHERE le.lead_id = a.lead_id
-  );
+  AND NOT EXISTS (SELECT 1 FROM lead_experimentais le WHERE le.lead_id = a.lead_id);
+
+-- 7. Confusão visita/experimental: lead com data_experimental preenchido mas tipo_agendamento='visita'
+-- (NÃO é bug — é design — mas qualquer query que conta "experimentais" usando só `leads.data_experimental` está errada)
+SELECT COUNT(*) AS visitas_com_data_experimental
+FROM leads
+WHERE data_experimental IS NOT NULL
+  AND tipo_agendamento = 'visita';
 ```
 
-**Correlação com n8n:** liste executions de `j41tPbyjGXUQUxrN` no dia via `mcp__n8n__n8n_executions`. Para cada error/crashed, extraia o `lead_id` do payload e verifique se há linha em `lead_experimentais` com aquele `emusys_lead_id`. Se houver execution com sucesso mas sem linha no banco → falha silenciosa da RPC `registrar_experimental()`.
+**Correlação com n8n:** liste executions de `j41tPbyjGXUQUxrN` (sub-workflow experimental) E `Fucq0bQwF4oeuWnv` (webhook Emusys) no dia via `mcp__n8n__n8n_executions`. Para cada error/crashed, extraia `lead_id`/`emusys_lead_id` do payload e verifique correspondência em `lead_experimentais`. Execution success sem linha no banco → falha silenciosa da RPC.
 
-> **Nota:** a contagem do relatório diário comercial (campo "Experimentais no período") agrega `experimental_agendada` em `leads` + entradas em `lead_experimentais`. Divergência entre os dois pode ser causa de "experimental computada mas matrícula não direcionada ao professor" — investigar via query #5 acima.
+> **Nota crítica sobre contagens:** dashboards que leem `leads.experimental_*` (modelo legado) podem **sub-contar** experimentais antigas de leads que reagendaram (a flag mais antiga foi sobrescrita) E **super-contar** ao misturar visitas (ver query #7). A fonte canônica é `lead_experimentais` — sempre prefira ela em agregações.
 
 ---
 
@@ -452,7 +488,7 @@ Estes são pontos de falha já documentados que você deve sempre considerar:
 
 7. **Colisão de `emusys_matricula_id` entre unidades** — corrigido em `processar-matricula-emusys` v15 (commit 4f1a9f3). Busca por `emusys_matricula_id` agora filtra por `unidade_id`. Antes do fix, matrícula de uma unidade podia sobrescrever a outra. Verificar residuos em registros antigos (< maio/2026).
 
-8. **Reconciliação bidirecional de experimentais** — `processar-matricula-emusys` reconcilia status da experimental ao receber matrícula (commit af4cd2b). Inclui mapeamento de `cancelada` e guard contra falso positivo. Se `experimental_realizada=true` e `faltou_experimental=true` coexistirem, é paradoxo (regra `experimental_realizada_e_faltou` da spec Saúde das Automações).
+8. **Reconciliação bidirecional de experimentais** — `processar-matricula-emusys` reconcilia status da experimental ao receber matrícula (commit af4cd2b). Inclui mapeamento de `cancelada` e guard contra falso positivo. Se `experimental_realizada=true` e `faltou_experimental=true` coexistirem nas flags de `leads`, é paradoxo (regra `experimental_realizada_e_faltou` da spec Saúde). **Causa raiz conhecida (2026-05-21)**: função `registrar_experimental()` (9 e 10 params) não zera `experimental_realizada`/`faltou_experimental` quando o status passa a `experimental_agendada` em reagendamento — flags antigas ficam grudadas. Sempre verificar query #3 da Seção I e correlacionar com `lead_experimentais` (fonte canônica).
 
 9. **Anamnese pendente vinculada à matrícula** — `processar-matricula-emusys` busca e vincula anamnese pendente automaticamente ao criar matrícula (commit 071f2ac). Se anamnese foi criada antes do aluno existir, ela fica órfã até a matrícula entrar. Pode falhar silenciosamente se telefone não casar.
 
@@ -466,7 +502,12 @@ Estes são pontos de falha já documentados que você deve sempre considerar:
 
 14. **Webhook de leads (`EB0LibpOJCLhKp7M`) + Mila SDR** — duas vias de entrada para `leads`. Mila SDR usa `neverError: true` no node "Cadastrar no Emusys" → falha silenciosa do Emusys deixa o lead só no NocoDB, não chega ao Supabase. Webhook Emusys descarta leads sem `body.lead.telefone`. Sempre correlacionar executions n8n (via `mcp__n8n__n8n_executions`) com `COUNT(*) FROM leads WHERE data_contato::date = X` da mesma janela — divergência > 10% é flag.
 
-15. **Webhook de experimental (sub-workflow `j41tPbyjGXUQUxrN`)** — chamado pelo Emusys para aula experimental (agendada/realizada/faltada). UPSERT em `lead_experimentais` via RPC `registrar_experimental()`. Sintomas a auditar: `professor_id` NULL (falha de matching), paradoxo `experimental_realizada=true AND faltou_experimental=true`, `data_realizacao` no futuro, matrícula nova de hoje com lead que nunca registrou experimental (#5 da seção I). Função antiga `atualizar_lead_experimental()` ainda existe mas não é usada.
+15. **Modelo dual de experimentais (canônica vs flags legadas)** — fonte canônica é `lead_experimentais` (N linhas por lead, coluna `status` varchar). Flags `leads.experimental_*` são modelo legado (booleans únicos, 1 lead = 1 estado). Os dois podem divergir.
+    - **Workflow `j41tPbyjGXUQUxrN`** (sub-workflow LAPerformance/rayandash): chama RPC `registrar_experimental()` — atualiza ambas as fontes. Bug ativo: não zera flags antigas em reagendamento (ver risco #8).
+    - **Workflow `Fucq0bQwF4oeuWnv`** (webhook Emusys aula experimental, ATIVO, 125 nodes): chama a função LEGADA `atualizar_lead_experimental()` — só mexe nas flags em `leads`, NÃO escreve em `lead_experimentais`. Funciona pra visitas (`tipo_agendamento='visita'`, status `visita_escola`) e provavelmente pra alguns eventos de experimental.
+    - **Função `atualizar_lead_experimental()` NÃO está deprecada** (memória anterior estava errada) — segue em uso pelo Fucq0bQwF4oeuWnv.
+    - **Sintomas a auditar (Seção I)**: paradoxo de flags (#3), divergência flags vs canônica (#4), reagendamento múltiplo Alice-like (#5), órfãs (#6), confusão visita/experimental nas queries (#7), professor NULL (#2).
+    - **Importante**: queries de contagem de "experimentais" que leem `leads.experimental_*` ou `leads.data_experimental` podem dar números errados — preferir `lead_experimentais` com filtro `status != 'cancelada'`.
 
 ---
 

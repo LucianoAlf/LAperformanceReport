@@ -1016,8 +1016,13 @@ export function ComercialPage() {
         }));
       setVisitasMes(visitasDoMes);
 
-      // Experimentais agendadas no período mas com data_contato do lead fora do range
+      // Experimentais AGENDADAS dentro do período (filtra por created_at do agendamento),
+      // mas só as cujo lead tem data_contato FORA do range (pra não duplicar com a lista principal)
       if (startDate && endDate) {
+        // created_at é timestamptz: converter range BRT (00:00 a 23:59:59) para UTC bounds
+        const createdAtStart = `${startDate}T00:00:00-03:00`;
+        const createdAtEnd = `${endDate}T23:59:59.999-03:00`;
+
         let expOutrosQuery = supabase
           .from('lead_experimentais')
           .select(`
@@ -1026,8 +1031,8 @@ export function ComercialPage() {
             professores:professor_experimental_id(nome),
             cursos:curso_interesse_id(nome)
           `)
-          .gte('data_experimental', startDate)
-          .lte('data_experimental', endDate)
+          .gte('created_at', createdAtStart)
+          .lte('created_at', createdAtEnd)
           .neq('status', 'cancelada')
           .or(`data_contato.lt.${startDate},data_contato.gt.${endDate},data_contato.is.null`, { referencedTable: 'leads' });
 
@@ -4565,7 +4570,7 @@ export function ComercialPage() {
               </div>
             )}
 
-            {/* Experimentais marcadas no período mas com data_contato de fora */}
+            {/* Experimentais agendadas durante o período (created_at no range), de leads de outros períodos */}
             {experimentaisHojeOutros.length > 0 && (
               <div className="mt-4">
                 <button
@@ -4575,7 +4580,7 @@ export function ComercialPage() {
                   <div className="h-px flex-1 bg-amber-500/30" />
                   <span className="text-xs text-amber-400 font-medium whitespace-nowrap flex items-center gap-1.5 group-hover:text-amber-300 transition-colors">
                     {mostrarExpOutros ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                    Experimentais agendadas no periodo ({experimentaisHojeOutros.length})
+                    Experimentais agendadas no período ({experimentaisHojeOutros.length})
                   </span>
                   <div className="h-px flex-1 bg-amber-500/30" />
                 </button>
