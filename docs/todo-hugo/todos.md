@@ -7,3 +7,13 @@
 - o ltv tambem conta dados historicos e nao filtra corretamente pelos dados.
 
 - Professor Gabriel Antony Trabalha em duas unidades mas so esta configurada para uma.
+
+
+Do adm:
+1. ⁠1. A Grade horária está com horários diferentes do real(emusys), aulas em horários diferentes.
+2. ⁠Distribuição dos alunos por professor irregular.
+3. ⁠Quantidade de novas matriculas irregular, ferindo o saldo liquido no report. 
+
+Do comercial: 
+1. Irregularidades na  sinalização das matriculas dos professores, experimental computada, mas matricula não direcionada aos professores. 
+2. ⁠Quantidade de Matriculas no mês diferente entre os dois sistemas, ora para mais ora pra menos.
