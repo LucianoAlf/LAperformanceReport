@@ -1,6 +1,30 @@
 # Fix Grade Horária — Plano
 
-**Status:** Investigação concluída, aguardando aprovação para aplicar.
+**Status:** APLICADO (2026-05-20). Parte A (backfill), Parte B (cron diário) e invariante de professor divergente em produção. Parte C (fix da edge) segue opcional.
+
+## Aplicado em 2026-05-20
+
+### Parte A — Backfill ✓
+- 853 alunos atualizados via UPDATE único (filtro `>= 3 aulas` em 60d, BRT)
+- Backup conservador em `alunos_backup_grade_20260520` (1.209 linhas)
+- Validação manual: Davi Pedro Palmerini (Barra) — Sáb 05h → Sáb 08h, confere com Emusys
+
+### Parte B — Cron diário ✓
+- RPC `public.sincronizar_grade_horaria_alunos()` criada (SECURITY DEFINER)
+  - Janela 30d primária, fallback 60d, filtro `>= 3 aulas`
+  - Converte `data_hora_inicio AT TIME ZONE 'America/Sao_Paulo'` antes de comparar
+- pg_cron `sincronizar-grade-horaria` (jobid 17) — schedule `30 1 * * *` (22h30 BRT)
+- Primeira execução manual: 90 alunos atualizados (drift acumulado pós-backfill — esperado)
+
+### Parte D — Invariante professor_divergente_das_aulas ✓ (não estava no plano original)
+Decisão de produto: webhook do Emusys só atualiza `professor_atual_id` em matricula_nova/renovacao. Troca de professor no meio do contrato fica defasada. Em vez de auto-corrigir (risco em métricas: score, comissão, carteira), foi adicionado **alerta** no auditor `auditor-divergencias-emusys` (v3):
+- Regra `professor_divergente_das_aulas` (severidade `aviso`)
+- Detecta `alunos.professor_atual_id` ≠ professor majoritário em `aluno_presenca` 30d (>= 3 aulas)
+- Primeira run: 163 alunos sinalizados (138 com prof diferente, 25 sem prof_atual_id mas com aulas)
+- Aparece na aba Saúde das Automações como aviso — ação humana decide trocar
+- Agente fiscal-dados (`.claude/agents/fiscal-dados.md`) também atualizado pra observar o cenário
+
+
 
 ## Diagnóstico
 

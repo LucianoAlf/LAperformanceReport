@@ -321,6 +321,60 @@ const REGRAS: Regra[] = [
       unidade_nome: row.unidade_nome ?? null,
     }),
   },
+  // ============================================================
+  // GRADE HORARIA — divergencia entre professor_atual_id do aluno
+  // e o professor majoritario das aulas recentes (aulas_emusys).
+  // Webhook do Emusys so atualiza professor_atual_id em matricula
+  // nova/renovacao — troca no meio do contrato fica defasada ate
+  // a proxima renovacao. Este invariante detecta esse gap.
+  // Severidade: aviso (pode ser cobertura/substituicao legitima).
+  // ============================================================
+  {
+    regra: 'professor_divergente_das_aulas',
+    severidade: 'aviso',
+    evento: 'auditoria_grade',
+    acao: 'divergencia_detectada',
+    sql: `
+      WITH aulas_30d AS (
+        SELECT ap.aluno_id, ap.professor_id, count(*) AS qtd
+        FROM aluno_presenca ap
+        JOIN aulas_emusys ae ON ae.id = ap.aula_emusys_id
+        WHERE ae.cancelada = false
+          AND ae.data_hora_inicio > now() - interval '30 days'
+          AND ap.aluno_id IS NOT NULL
+          AND ap.professor_id IS NOT NULL
+        GROUP BY ap.aluno_id, ap.professor_id
+      ),
+      top_prof AS (
+        SELECT DISTINCT ON (aluno_id) aluno_id, professor_id AS prof_aulas, qtd
+        FROM aulas_30d
+        WHERE qtd >= 3
+        ORDER BY aluno_id, qtd DESC, professor_id ASC
+      )
+      SELECT
+        a.id, a.nome, a.unidade_id, u.nome AS unidade_nome,
+        a.professor_atual_id AS prof_atual_id,
+        pa.nome AS prof_atual_nome,
+        tp.prof_aulas AS prof_aulas_id,
+        pn.nome AS prof_aulas_nome,
+        tp.qtd AS qtd_aulas_30d
+      FROM alunos a
+      JOIN top_prof tp ON tp.aluno_id = a.id
+      LEFT JOIN professores pa ON pa.id = a.professor_atual_id
+      LEFT JOIN professores pn ON pn.id = tp.prof_aulas
+      LEFT JOIN unidades u ON u.id = a.unidade_id
+      WHERE a.status = 'ativo'
+        AND a.professor_atual_id IS DISTINCT FROM tp.prof_aulas
+    `,
+    construirMensagem: (row) =>
+      `aluno_id=${row.id} nome="${row.nome}" cadastrado com prof="${row.prof_atual_nome ?? 'NULL'}" mas teve ${row.qtd_aulas_30d} aula(s) em 30d com prof="${row.prof_aulas_nome ?? '?'}"`,
+    construirIdempotencyKey: (row) => `audit:professor_divergente_das_aulas:${row.id}:${row.prof_aulas_id}`,
+    construirLog: (row) => ({
+      aluno_nome: row.nome ?? '(sem nome)',
+      aluno_id: row.id,
+      unidade_nome: row.unidade_nome ?? null,
+    }),
+  },
 ];
 
 serve(async (req) => {
