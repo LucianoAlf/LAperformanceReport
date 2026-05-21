@@ -2069,11 +2069,18 @@ export function ComercialPage() {
 
   // Gerar relatório diário
   const gerarRelatorioDiario = async () => {
-    const { dataInicio, dataFim, dataInicioObj, dataFimObj } = calcularRangeDatas();
+    const { dataInicio: dataInicioOriginal, dataFim, dataInicioObj, dataFimObj } = calcularRangeDatas();
     const hoje = dataFimObj;
     const dia = hoje.getDate().toString().padStart(2, '0');
     const mesNome = hoje.toLocaleString('pt-BR', { month: 'long' });
     const ano = hoje.getFullYear();
+
+    // Setor comercial pensa em acumulado: quando o filtro é "hoje", reportar
+    // desde o 1º dia do mês até hoje (leads/experimentais/matrículas).
+    // Experimentais agendadas e Visitas continuam só do dia (queries usam dataFim).
+    const dataInicio = relatorioPeriodo === 'hoje'
+      ? format(new Date(hoje.getFullYear(), hoje.getMonth(), 1), 'yyyy-MM-dd')
+      : dataInicioOriginal;
     
     // Buscar informações da unidade incluindo o Hunter
     const unidadeId = filtroAtivo || usuario?.unidade_id;
@@ -2093,17 +2100,10 @@ export function ComercialPage() {
       }
     }
 
-    // Buscar dados do período selecionado (com dados completos para detalhamento)
+    // Buscar dados do período selecionado
     const { data: registrosPeriodo } = await supabase
       .from('leads')
-      .select(`
-        status, quantidade, nome, idade, data_contato, tipo_matricula,
-        valor_passaporte, valor_parcela, experimental_agendada,
-        cursos:curso_interesse_id(nome),
-        canais_origem(nome),
-        forma_pgto_passaporte:forma_pagamento_passaporte_id(nome),
-        forma_pgto_parcela:forma_pagamento_id(nome)
-      `)
+      .select('status, quantidade, experimental_agendada')
       .eq('unidade_id', unidadeId)
       .gte('data_contato', dataInicio)
       .lte('data_contato', dataFim);
@@ -2111,9 +2111,6 @@ export function ComercialPage() {
     const leadsPeriodo = registrosPeriodo?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const experimentaisPeriodo = registrosPeriodo?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const matriculasPeriodo = registrosPeriodo?.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
-
-    // Detalhamento das matrículas do período
-    const matriculasDetalhadas = registrosPeriodo?.filter(r => ['matriculado','convertido'].includes(r.status)) || [];
 
     // Buscar experimentais agendadas para o dia final do período
     const { data: experimentaisDia } = await supabase
@@ -2141,38 +2138,11 @@ export function ComercialPage() {
     texto += `📆 ${dia}/${mesNome}/${ano}\n`;
     texto += `👤 ${hunterNome}\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
-    texto += `🎯 Leads no período: *${leadsPeriodo}*\n`;
+    texto += `🎯 Leads no mês: *${leadsPeriodo}*\n`;
     texto += `🎸 Experimentais no período: *${experimentaisPeriodo}*\n`;
     texto += `📆 Experimentais agendadas: *${experimentaisAgendadasDia}*\n`;
     texto += `🏫 Visitas: *${visitasDiaTotal}*\n`;
     texto += `✅ Matrículas no período: *${matriculasPeriodo}*\n`;
-
-    // Detalhamento das matrículas
-    if (matriculasDetalhadas.length > 0) {
-      texto += `\n📋 *Detalhamento das Matrículas:*\n`;
-      matriculasDetalhadas.forEach((m: any, i: number) => {
-        const cursoNome = m.cursos?.nome || '-';
-        const canalNome = m.canais_origem?.nome || '-';
-        const escola = m.idade != null ? (m.idade <= 11 ? 'LAMK' : 'EMLA') : (m.tipo_matricula || '-');
-        const idadeTexto = m.idade ? `${m.idade} anos` : '-';
-        const passaporte = m.valor_passaporte ? `R$ ${Number(m.valor_passaporte).toFixed(2).replace('.', ',')}` : 'R$ 0,00';
-        const parcela = m.valor_parcela ? `R$ ${Number(m.valor_parcela).toFixed(2).replace('.', ',')}` : 'R$ 0,00';
-        const formaPgtoPass = m.forma_pgto_passaporte?.nome || '-';
-        const formaPgtoParcela = m.forma_pgto_parcela?.nome || '-';
-
-        texto += `\n  *${i + 1}. ${m.nome}*\n`;
-        texto += `     👤 Idade: ${idadeTexto}\n`;
-        texto += `     🎵 Curso: ${cursoNome}\n`;
-        texto += `     📲 Canal: ${canalNome}\n`;
-        texto += `     🏫 Escola: ${escola}\n`;
-        texto += `     💳 Passaporte: ${passaporte}`;
-        if (formaPgtoPass !== '-') texto += ` (${formaPgtoPass})`;
-        texto += `\n`;
-        texto += `     💰 Parcela: ${parcela}`;
-        if (formaPgtoParcela !== '-') texto += ` (${formaPgtoParcela})`;
-        texto += `\n`;
-      });
-    }
 
     texto += `\n━━━━━━━━━━━━━━━━━━━━━━`;
 
