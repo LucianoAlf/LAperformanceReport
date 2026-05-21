@@ -2,7 +2,36 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Plus, Trash2, TestTube, Save, Loader2, CheckCircle2, XCircle,
   Wifi, WifiOff, Phone, Globe, Key, Tag, Building2, Copy, RefreshCw, Zap, QrCode,
+  Smartphone, Pencil, ArrowLeft,
 } from 'lucide-react';
+
+const UAZAPI_URL_PADRAO = 'https://lamusic.uazapi.com';
+
+// Paleta de cores para o avatar fallback (iniciais).
+// Index escolhido por hash determinístico do nome — mesma instância sempre tem a mesma cor.
+const AVATAR_GRADIENTS = [
+  'from-violet-500 to-purple-600',
+  'from-cyan-500 to-blue-600',
+  'from-emerald-500 to-teal-600',
+  'from-rose-500 to-pink-600',
+  'from-amber-500 to-orange-600',
+  'from-indigo-500 to-blue-600',
+  'from-fuchsia-500 to-purple-600',
+  'from-lime-500 to-emerald-600',
+];
+
+function hashIndex(texto: string, modulo: number): number {
+  let hash = 0;
+  for (let i = 0; i < texto.length; i++) hash = (hash * 31 + texto.charCodeAt(i)) | 0;
+  return Math.abs(hash) % modulo;
+}
+
+function iniciaisDe(nome: string): string {
+  const partes = nome.trim().split(/\s+/).filter(Boolean);
+  if (partes.length === 0) return '?';
+  if (partes.length === 1) return partes[0].slice(0, 2).toUpperCase();
+  return (partes[0][0] + partes[partes.length - 1][0]).toUpperCase();
+}
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import type { WhatsAppCaixa, FuncaoCaixa } from '../../types';
@@ -33,6 +62,16 @@ interface TestResult {
   instanceName?: string;
 }
 
+interface InstanciaUazapi {
+  id: string;
+  token: string;
+  status: string;
+  nome: string;
+  numero: string | null;
+  profile_pic_url: string | null;
+  is_business: boolean;
+}
+
 const emptyCaixa: CaixaForm = {
   nome: '',
   numero: '',
@@ -55,6 +94,11 @@ export function CaixasManager() {
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
   const [caixaReconectar, setCaixaReconectar] = useState<WhatsAppCaixa | null>(null);
+  const [instancias, setInstancias] = useState<InstanciaUazapi[]>([]);
+  const [loadingInstancias, setLoadingInstancias] = useState(false);
+  const [instanciaSelecionada, setInstanciaSelecionada] = useState<string>('');
+  const [erroInstancias, setErroInstancias] = useState<string | null>(null);
+  const [instanciaFotoQuebrada, setInstanciaFotoQuebrada] = useState<Record<string, boolean>>({});
 
   const fetchCaixas = useCallback(async () => {
     setLoading(true);
@@ -86,6 +130,48 @@ export function CaixasManager() {
       return () => clearTimeout(timer);
     }
   }, [sucesso, erro]);
+
+  const resetSeletorInstancias = () => {
+    setInstancias([]);
+    setInstanciaSelecionada('');
+    setErroInstancias(null);
+    setInstanciaFotoQuebrada({});
+  };
+
+  const handleBuscarInstancias = async () => {
+    setLoadingInstancias(true);
+    setErroInstancias(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('listar-instancias-uazapi');
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      setInstancias(data?.instancias || []);
+      if (data?.uazapi_url && editando && !editando.uazapi_url) {
+        setEditando(prev => prev ? { ...prev, uazapi_url: data.uazapi_url } : prev);
+      }
+      if (!data?.instancias?.length) {
+        setErroInstancias('Nenhuma instância retornada pelo servidor');
+      }
+    } catch (e: any) {
+      setErroInstancias(e?.message || 'Erro ao buscar instâncias');
+    } finally {
+      setLoadingInstancias(false);
+    }
+  };
+
+  const handleSelecionarInstancia = (instanciaId: string) => {
+    setInstanciaSelecionada(instanciaId);
+    if (!editando) return;
+    const inst = instancias.find(i => i.id === instanciaId);
+    if (!inst) return;
+    setEditando({
+      ...editando,
+      uazapi_token: inst.token,
+      uazapi_url: editando.uazapi_url || UAZAPI_URL_PADRAO,
+      numero: inst.numero || editando.numero,
+      nome: editando.nome || inst.nome,
+    });
+  };
 
   const handleTestarConexao = async (caixaId?: number, url?: string, token?: string) => {
     const uazapiUrl = url || '';
@@ -196,6 +282,7 @@ export function CaixasManager() {
 
       setEditando(null);
       setNewTestResult({ status: 'idle' });
+      resetSeletorInstancias();
       await fetchCaixas();
     } catch (err: any) {
       setErro(err.message || 'Erro ao salvar');
@@ -250,7 +337,11 @@ export function CaixasManager() {
           </p>
         </div>
         <button
-          onClick={() => { setEditando({ ...emptyCaixa }); setNewTestResult({ status: 'idle' }); }}
+          onClick={() => {
+            setEditando({ ...emptyCaixa, uazapi_url: UAZAPI_URL_PADRAO });
+            setNewTestResult({ status: 'idle' });
+            resetSeletorInstancias();
+          }}
           className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium rounded-lg transition-colors"
         >
           <Plus className="w-4 h-4" />
@@ -276,8 +367,148 @@ export function CaixasManager() {
       {editando && (
         <div className="bg-slate-800/80 border border-violet-500/30 rounded-2xl p-6 space-y-4">
           <h4 className="text-sm font-semibold text-white flex items-center gap-2">
-            {editando.id ? '✏️ Editar Caixa' : '➕ Nova Caixa'}
+            {editando.id ? (
+              <>
+                <Pencil className="w-4 h-4 text-amber-400" />
+                Editar Caixa
+              </>
+            ) : (
+              <>
+                <Plus className="w-4 h-4 text-violet-400" />
+                Nova Caixa
+              </>
+            )}
           </h4>
+
+          {/* Seletor de instância UAZAPI: puxa lista do servidor e preenche token + número */}
+          <div className="bg-cyan-500/5 border border-cyan-500/20 rounded-xl p-4 space-y-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-start gap-2">
+                <Smartphone className="w-4 h-4 text-cyan-300 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-xs font-semibold text-cyan-200">Vincular a um número conectado na UAZAPI</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    Lista as instâncias do servidor e preenche token e número automaticamente.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleBuscarInstancias}
+                disabled={loadingInstancias}
+                className="flex items-center gap-2 px-3 py-1.5 bg-cyan-600/20 border border-cyan-500/30 hover:bg-cyan-600/30 text-cyan-200 text-xs font-medium rounded-lg transition-colors disabled:opacity-50 flex-shrink-0"
+              >
+                {loadingInstancias ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+                {instancias.length ? 'Atualizar lista' : 'Buscar instâncias'}
+              </button>
+            </div>
+
+            {erroInstancias && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-300">
+                <XCircle className="w-3 h-3 flex-shrink-0" />
+                <span>{erroInstancias}</span>
+              </div>
+            )}
+
+            {instancias.length > 0 && (() => {
+              // Quando há instância selecionada, mostra apenas ela + botão "Trocar".
+              // Caso contrário, lista todas como cards selecionáveis.
+              const lista = instanciaSelecionada
+                ? instancias.filter(i => i.id === instanciaSelecionada)
+                : instancias;
+
+              return (
+                <div className="space-y-2">
+                  <div className="space-y-1.5 max-h-80 overflow-y-auto pr-1">
+                    {lista.map(inst => {
+                      const isSelected = instanciaSelecionada === inst.id;
+                      const statusConfig = inst.status === 'connected'
+                        ? { dot: 'bg-emerald-400', text: 'text-emerald-300', label: 'Conectado', pulse: true }
+                        : inst.status === 'connecting'
+                        ? { dot: 'bg-amber-400', text: 'text-amber-300', label: 'Conectando', pulse: true }
+                        : { dot: 'bg-slate-500', text: 'text-slate-400', label: 'Desconectado', pulse: false };
+
+                      const gradiente = AVATAR_GRADIENTS[hashIndex(inst.nome || inst.id, AVATAR_GRADIENTS.length)];
+                      const isDisconnected = inst.status === 'disconnected';
+                      // Desconectado: ignora foto (vem cacheada antiga e baixa qualidade) e usa iniciais.
+                      const usarFoto = inst.profile_pic_url && !isDisconnected && !instanciaFotoQuebrada[inst.id];
+
+                      return (
+                        <button
+                          key={inst.id}
+                          type="button"
+                          onClick={() => handleSelecionarInstancia(inst.id)}
+                          disabled={isSelected}
+                          className={cn(
+                            'w-full flex items-center gap-3 px-3 py-2.5 rounded-lg border transition-all text-left',
+                            isSelected
+                              ? 'bg-cyan-500/15 border-cyan-400/50 ring-1 ring-cyan-400/30 cursor-default'
+                              : 'bg-slate-900/40 border-slate-700/30 hover:bg-slate-800/60 hover:border-slate-600/50',
+                            isDisconnected && !isSelected && 'opacity-70',
+                          )}
+                        >
+                          <div className={cn(
+                            'w-9 h-9 rounded-full border flex items-center justify-center flex-shrink-0 overflow-hidden',
+                            usarFoto ? 'border-white/10' : `bg-gradient-to-br ${gradiente} border-white/10`,
+                            isDisconnected && 'grayscale',
+                          )}>
+                            {usarFoto ? (
+                              <img
+                                src={inst.profile_pic_url!}
+                                alt={inst.nome}
+                                className="w-full h-full object-cover"
+                                onError={() => setInstanciaFotoQuebrada(prev => ({ ...prev, [inst.id]: true }))}
+                              />
+                            ) : (
+                              <span className="text-xs font-semibold text-white drop-shadow-sm">
+                                {iniciaisDe(inst.nome)}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className={cn('text-sm font-medium truncate', isDisconnected ? 'text-slate-300' : 'text-white')}>
+                                {inst.nome}
+                              </span>
+                              {inst.is_business && (
+                                <span className="text-[9px] px-1.5 py-0.5 bg-blue-500/15 border border-blue-500/30 text-blue-300 rounded uppercase tracking-wide">
+                                  Business
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-slate-400 font-mono truncate">
+                              {inst.numero || 'sem número'}
+                            </p>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 flex-shrink-0">
+                            <span className={cn('w-1.5 h-1.5 rounded-full', statusConfig.dot, statusConfig.pulse && 'animate-pulse')} />
+                            <span className={cn('text-[10px] font-medium', statusConfig.text)}>
+                              {statusConfig.label}
+                            </span>
+                          </div>
+
+                          {isSelected && <CheckCircle2 className="w-4 h-4 text-cyan-300 flex-shrink-0" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {instanciaSelecionada && (
+                    <button
+                      type="button"
+                      onClick={() => setInstanciaSelecionada('')}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-slate-400 hover:text-cyan-300 transition-colors"
+                    >
+                      <ArrowLeft className="w-3 h-3" />
+                      Trocar instância
+                    </button>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Nome */}
@@ -477,7 +708,7 @@ export function CaixasManager() {
               {editando.id ? 'Atualizar' : 'Criar Caixa'}
             </button>
             <button
-              onClick={() => { setEditando(null); setNewTestResult({ status: 'idle' }); }}
+              onClick={() => { setEditando(null); setNewTestResult({ status: 'idle' }); resetSeletorInstancias(); }}
               className="px-4 py-2 text-slate-400 hover:text-white text-sm transition-colors"
             >
               Cancelar
@@ -595,6 +826,7 @@ export function CaixasManager() {
                           funcao: caixa.funcao || 'agente',
                         });
                         setNewTestResult({ status: 'idle' });
+                        resetSeletorInstancias();
                       }}
                       className="p-2 hover:bg-slate-700/50 rounded-lg transition-colors"
                       title="Editar"
