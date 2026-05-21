@@ -147,13 +147,17 @@ export function checarMatricula(payload: any, resultado: ResultadoMatricula): In
   const aluno = payload?.aluno ?? m?.aluno ?? {};
   const disciplinas: any[] = m?.disciplinas ?? [];
 
-  if (isEmpty(aluno?.nome)) {
+  // Payload Emusys: nome em matricula.nome_aluno. Fallback: aluno.nome (formato antigo).
+  const nomeAluno = m?.nome_aluno ?? aluno?.nome;
+  if (isEmpty(nomeAluno)) {
     v.push({ regra: 'matricula_sem_aluno_nome', severidade: 'critico',
-      mensagem: 'payload.aluno.nome ausente ou vazio' });
+      mensagem: 'matricula.nome_aluno ausente ou vazio' });
   }
-  if (isEmpty(m?.id_matricula) && isEmpty(payload?.id_matricula)) {
+  // Payload Emusys: matricula.matricula_id. Fallback: id_matricula (formato antigo).
+  const matriculaId = m?.matricula_id ?? m?.id_matricula ?? payload?.id_matricula;
+  if (isEmpty(matriculaId)) {
     v.push({ regra: 'matricula_sem_emusys_matricula_id', severidade: 'critico',
-      mensagem: 'id_matricula ausente — impede idempotência' });
+      mensagem: 'matricula_id ausente — impede idempotência' });
   }
   if (!Array.isArray(disciplinas) || disciplinas.length === 0) {
     v.push({ regra: 'matricula_sem_disciplinas', severidade: 'critico',
@@ -170,20 +174,25 @@ export function checarMatricula(payload: any, resultado: ResultadoMatricula): In
       mensagem: `id_professor=${d0.id_professor} nome="${d0?.nome_professor ?? '?'}" veio mas não casou em professores_unidades (nem por id nem por nome)` });
   }
 
-  if (isEmpty(d0?.id_curso) && resultado.curso_id === null) {
+  // Payload Emusys: curso_id em matricula.curso_id (e disciplinas[].id reflete o mesmo).
+  const cursoIdPayload = m?.curso_id ?? d0?.id_curso ?? d0?.id;
+  if (isEmpty(cursoIdPayload) && resultado.curso_id === null) {
     v.push({ regra: 'matricula_sem_curso', severidade: 'critico',
       mensagem: 'curso_id ausente ou não casou' });
   }
 
-  if (resultado.lead_id === null && !isEmpty(aluno?.telefone)) {
+  // Payload Emusys: telefone em matricula.telefone_aluno / telefone_responsavel.
+  const telefone = m?.telefone_aluno ?? m?.telefone_responsavel ?? aluno?.telefone;
+  if (resultado.lead_id === null && !isEmpty(telefone)) {
     v.push({ regra: 'matricula_sem_lead_origem', severidade: 'aviso',
-      mensagem: `nenhum lead com telefone ${aluno.telefone} encontrado — matrícula direta` });
+      mensagem: `nenhum lead com telefone ${telefone} encontrado — matrícula direta` });
   }
 
-  const vp = Number(m?.valor_passaporte ?? 0);
+  // Payload Emusys: taxa em matricula.valor_taxa_matricula. Fallback: valor_passaporte.
+  const vp = Number(m?.valor_taxa_matricula ?? m?.valor_passaporte ?? 0);
   if (vp === 0) {
     v.push({ regra: 'matricula_sem_valor_passaporte', severidade: 'aviso',
-      mensagem: 'valor_passaporte = 0 (re-matrícula, bolsista ou erro?)' });
+      mensagem: 'valor_taxa_matricula = 0 (re-matrícula, bolsista ou erro?)' });
   }
 
   return v;
@@ -202,7 +211,8 @@ export function checarRenovacao(payload: any, resultado: ResultadoMatricula): In
       mensagem: 'não achou matrícula prévia por emusys_matricula_id nem por (aluno+curso)' });
   }
 
-  const valorNovo = Number(payload?.matricula?.valor_parcela ?? 0);
+  // Payload Emusys: mensalidade em matricula.valor. Fallback: valor_parcela.
+  const valorNovo = Number(payload?.matricula?.valor ?? payload?.matricula?.valor_parcela ?? 0);
   const valorAnterior = Number(payload?.matricula?.valor_parcela_anterior ?? 0);
   if (valorAnterior > 0 && valorNovo > 0) {
     const reajuste = (valorNovo - valorAnterior) / valorAnterior;
@@ -228,7 +238,9 @@ export function checarTrancamento(payload: any, resultado: ResultadoMatricula): 
       mensagem: 'aluno não localizado por emusys_matricula_id nem (aluno+curso)' });
   }
 
-  if (isEmpty(payload?.matricula?.motivo) && isEmpty(payload?.motivo)) {
+  // Payload Emusys: motivo em trancamento.motivo. Fallbacks: matricula.motivo / motivo.
+  const motivoTranc = payload?.trancamento?.motivo ?? payload?.matricula?.motivo ?? payload?.motivo;
+  if (isEmpty(motivoTranc)) {
     v.push({ regra: 'trancamento_sem_motivo', severidade: 'aviso',
       mensagem: 'motivo do trancamento vazio' });
   }
@@ -249,8 +261,9 @@ export function checarFinalizacao(payload: any, resultado: ResultadoMatricula): 
       mensagem: 'aluno não localizado' });
   }
 
-  const motivoTexto = payload?.matricula?.motivo ?? payload?.motivo;
-  const motivoId = payload?.matricula?.motivo_saida_id ?? payload?.motivo_saida_id;
+  // Payload Emusys: motivo de evasão em finalizacao.motivo. Fallbacks: matricula.motivo / motivo.
+  const motivoTexto = payload?.finalizacao?.motivo ?? payload?.matricula?.motivo ?? payload?.motivo;
+  const motivoId = payload?.finalizacao?.motivo_saida_id ?? payload?.matricula?.motivo_saida_id ?? payload?.motivo_saida_id;
   if (isEmpty(motivoTexto) && isEmpty(motivoId)) {
     v.push({ regra: 'evasao_motivo_nulo', severidade: 'aviso',
       mensagem: 'motivo da evasão vazio (não impacta score)' });

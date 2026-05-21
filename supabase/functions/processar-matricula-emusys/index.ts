@@ -1,5 +1,12 @@
-// Edge Function: processar-matricula-emusys v17
+// Edge Function: processar-matricula-emusys v18
 // Processa webhooks de matrícula do Emusys: nova, renovação, trancamento, evasão
+//
+// MUDANÇAS v18 (2026-05-21):
+// - Corrige falsos positivos nas invariantes checarMatricula/Renovacao/Trancamento/Finalizacao
+//   que esperavam estrutura antiga do payload (aluno.nome, id_matricula, matricula.motivo,
+//   valor_passaporte). Agora prioriza estrutura real do Emusys (matricula.nome_aluno,
+//   matricula.matricula_id, trancamento.motivo, finalizacao.motivo, valor_taxa_matricula)
+//   mantendo caminhos antigos como fallback. Sem mudança de comportamento da edge function.
 //
 // MUDANÇAS v17 (2026-05-20):
 // - Cada handler agora chama o helper de invariantes (gravarLog + checar*) ao final
@@ -46,7 +53,7 @@ import {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-const VERSAO = 'v17';
+const VERSAO = 'v18';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
