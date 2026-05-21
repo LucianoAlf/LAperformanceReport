@@ -29,4 +29,8 @@ dist-ssr
 
 # Claude Code local configs
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
 .mcp.json
+
+# Supabase CLI temp files (atualizam a cada upgrade da CLI)
+supabase/.temp/
