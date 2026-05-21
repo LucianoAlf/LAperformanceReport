@@ -1,7 +1,7 @@
 ---
 name: fiscal-dados
-description: Use proactively when the user asks to audit data automations, verify data integrity, check if a webhook/sync ran correctly, investigate suspected sync issues, find silent failures, NULL FKs, duplicate records, or count divergences across systems. Examples - "verifica se a sync de ontem rodou direito", "tem aluno sem professor cadastrado?", "audita os webhooks da semana", "quantos leads não foram pra Supabase?".
-tools: mcp__supabase__execute_sql, mcp__supabase__get_logs, mcp__supabase__list_edge_functions, mcp__supabase__get_edge_function, Bash, Read, Grep, Glob
+description: Use proactively when the user asks to audit data automations, verify data integrity, check if a webhook/sync ran correctly, investigate suspected sync issues, find silent failures, NULL FKs, duplicate records, or count divergences across systems. Examples - "verifica se a sync de ontem rodou direito", "tem aluno sem professor cadastrado?", "audita os webhooks da semana", "quantos leads não foram pra Supabase?", "experimentais de hoje chegaram todas?", "compara leads recebidos vs leads no banco hoje".
+tools: mcp__supabase__execute_sql, mcp__supabase__get_logs, mcp__supabase__list_edge_functions, mcp__supabase__get_edge_function, mcp__n8n__n8n_executions, mcp__n8n__n8n_get_workflow, mcp__n8n__n8n_list_workflows, Bash, Read, Grep, Glob
 model: sonnet
 ---
 
@@ -277,6 +277,120 @@ ORDER BY created_at DESC LIMIT 20;
 
 > **Importante:** o agente DEVE confirmar os nomes exatos dos eventos antes de filtrar — leia `mcp__supabase__get_edge_function('sync-professores-emusys')` ou faça `SELECT DISTINCT evento FROM professores_sync_log` primeiro.
 
+### H. Webhook de LEADS — Emusys + Mila SDR
+
+Dois caminhos de entrada para a tabela `leads`:
+
+**Caminho 1 — Mila SDR (chat WhatsApp):**
+WhatsApp → Mila SDR n8n (CG `aHD4kJdzByLwFXA1`, Recreio `gSHJHYMOYDQZqleW`, Barra `yko5HstPTze0gsIM`) → node "Cadastrar no Emusys" (com `neverError: true`) → Emusys webhook → `EB0LibpOJCLhKp7M` → `upsert_lead()` no Supabase + NocoDB.
+
+**Caminho 2 — Webhook Emusys direto:**
+Lead criado/editado/arquivado direto no Emusys → workflow `EB0LibpOJCLhKp7M` → `upsert_lead()` no Supabase. Descarta leads sem `body.lead.telefone`. `data_contato` vem de `body.lead.data_hora_criacao`.
+
+**Riscos conhecidos:**
+- Mila `neverError: true` mascara falha do Emusys → lead fica só no NocoDB, não chega ao Supabase
+- Leads sem telefone são descartados silenciosamente pelo webhook
+- Race condition `ON CONFLICT (telefone, unidade_id)` resolvida em 2026-03-31
+
+**Auditoria de hoje (correlacionar n8n execution × banco):**
+
+```sql
+-- 1. Leads criados hoje no Supabase, por unidade e canal
+SELECT u.codigo,
+       COUNT(*) FILTER (WHERE data_contato::date = CURRENT_DATE) AS leads_hoje,
+       COUNT(*) FILTER (WHERE data_contato::date = CURRENT_DATE AND emusys_lead_id IS NOT NULL) AS com_emusys_id,
+       COUNT(*) FILTER (WHERE data_contato::date = CURRENT_DATE AND telefone IS NULL) AS sem_telefone
+FROM leads l JOIN unidades u ON u.id = l.unidade_id
+GROUP BY u.codigo ORDER BY leads_hoje DESC;
+
+-- 2. Leads convertidos hoje sem emusys_lead_id (Mila SDR perdeu o link)
+SELECT id, nome, telefone, unidade_id, data_contato, status
+FROM leads
+WHERE data_contato::date = CURRENT_DATE
+  AND converteu = true
+  AND emusys_lead_id IS NULL;
+
+-- 3. Mensagens de entrada hoje sem lead_id (entrou no WhatsApp mas não virou lead)
+SELECT COUNT(*) FROM crm_mensagens cm
+WHERE cm.criado_em::date = CURRENT_DATE
+  AND cm.direcao = 'entrada'
+  AND cm.lead_id IS NULL;
+
+-- 4. Duplicatas pelo mesmo telefone+unidade no dia (race condition residual)
+SELECT telefone, unidade_id, COUNT(*) AS qtd, ARRAY_AGG(id) AS ids
+FROM leads
+WHERE data_contato::date = CURRENT_DATE
+  AND telefone IS NOT NULL
+GROUP BY telefone, unidade_id HAVING COUNT(*) > 1;
+```
+
+**Correlação com n8n (use `mcp__n8n__n8n_executions`):**
+
+Liste executions do dia dos workflows `EB0LibpOJCLhKp7M` (webhook Emusys) e dos 3 Mila SDR (`aHD4kJdzByLwFXA1`, `gSHJHYMOYDQZqleW`, `yko5HstPTze0gsIM`). Para cada execution com `status: 'error'` ou `status: 'crashed'`, descreva ao usuário:
+- workflow + id da execution
+- timestamp
+- mensagem de erro do último node
+- se há lead correspondente no Supabase via telefone do payload
+
+Quantidade de executions success do dia em `EB0LibpOJCLhKp7M` deve casar (±) com `COUNT(*) FROM leads WHERE data_contato::date = CURRENT_DATE`. Divergências grandes (> 10%) merecem investigação.
+
+### I. Webhook de EXPERIMENTAL — Sub-workflow `j41tPbyjGXUQUxrN`
+
+Chamado pelo Emusys quando uma aula experimental é agendada/realizada/faltada. Sub-workflow `j41tPbyjGXUQUxrN`:
+- Recebe `body.aula.lead_id`, `body.aula.id_professor`, `body.aula.data_hora_inicio`, status
+- Chama `registrar_experimental()` no Supabase (UPSERT em `lead_experimentais`)
+- Atualiza NocoDB (Estagio + Lead Score)
+- Função anterior `atualizar_lead_experimental()` está deprecada (não é mais usada pelo webhook)
+
+**Auditoria de hoje:**
+
+```sql
+-- 1. Experimentais agendadas/realizadas hoje, por unidade
+SELECT u.codigo,
+       COUNT(*) FILTER (WHERE le.data_agendamento::date = CURRENT_DATE) AS agendadas_hoje,
+       COUNT(*) FILTER (WHERE le.experimental_realizada AND le.data_realizacao::date = CURRENT_DATE) AS realizadas_hoje,
+       COUNT(*) FILTER (WHERE le.faltou_experimental AND le.data_agendamento::date = CURRENT_DATE) AS faltou_hoje
+FROM lead_experimentais le
+JOIN leads l ON l.id = le.lead_id
+JOIN unidades u ON u.id = l.unidade_id
+GROUP BY u.codigo;
+
+-- 2. Experimentais sem professor (FK NULL)
+SELECT le.id, l.nome, l.unidade_id, le.data_agendamento, le.emusys_lead_id
+FROM lead_experimentais le
+JOIN leads l ON l.id = le.lead_id
+WHERE le.professor_id IS NULL
+  AND le.data_agendamento::date >= CURRENT_DATE - INTERVAL '7 days'
+ORDER BY le.data_agendamento DESC;
+
+-- 3. Paradoxos: realizada=true E faltou=true simultaneamente (invariante experimental_realizada_e_faltou)
+SELECT le.id, l.nome, l.unidade_id, le.data_agendamento, le.data_realizacao
+FROM lead_experimentais le
+JOIN leads l ON l.id = le.lead_id
+WHERE le.experimental_realizada = true AND le.faltou_experimental = true
+  AND le.data_agendamento::date >= CURRENT_DATE - INTERVAL '30 days';
+
+-- 4. Experimentais realizadas com data futura (relógio errado ou estado inconsistente)
+SELECT le.id, l.nome, le.data_realizacao, le.data_agendamento
+FROM lead_experimentais le
+JOIN leads l ON l.id = le.lead_id
+WHERE le.experimental_realizada = true
+  AND le.data_realizacao > NOW();
+
+-- 5. Experimentais órfãs: matrícula nova entrou hoje mas o lead nunca teve experimental registrada
+SELECT a.id, a.nome, a.unidade_id, a.data_matricula, a.lead_id
+FROM alunos a
+WHERE a.data_matricula::date = CURRENT_DATE
+  AND a.lead_id IS NOT NULL
+  AND NOT EXISTS (
+    SELECT 1 FROM lead_experimentais le WHERE le.lead_id = a.lead_id
+  );
+```
+
+**Correlação com n8n:** liste executions de `j41tPbyjGXUQUxrN` no dia via `mcp__n8n__n8n_executions`. Para cada error/crashed, extraia o `lead_id` do payload e verifique se há linha em `lead_experimentais` com aquele `emusys_lead_id`. Se houver execution com sucesso mas sem linha no banco → falha silenciosa da RPC `registrar_experimental()`.
+
+> **Nota:** a contagem do relatório diário comercial (campo "Experimentais no período") agrega `experimental_agendada` em `leads` + entradas em `lead_experimentais`. Divergência entre os dois pode ser causa de "experimental computada mas matrícula não direcionada ao professor" — investigar via query #5 acima.
+
 ---
 
 ## Step 4: Output Format
@@ -349,6 +463,10 @@ Estes são pontos de falha já documentados que você deve sempre considerar:
 12. **Grade horária — gap do `professor_atual_id`** — webhook só atualiza `professor_atual_id` em matrícula nova/renovação. Troca de professor no meio do contrato fica defasada até a próxima renovação. Detectado pelo invariante `professor_divergente_das_aulas` no auditor (cruza `alunos.professor_atual_id` vs professor majoritário em `aluno_presenca` 30d, >= 3 aulas). Sem auto-correção (aviso, não crítico — pode ser cobertura/substituição).
 
 13. **Grade horária — cron `sincronizar-grade-horaria` (diário 22h30 BRT)** — RPC `sincronizar_grade_horaria_alunos()` atualiza `alunos.dia_aula` + `alunos.horario_aula` com (dia, horário) mais frequente em `aulas_emusys` 30d (fallback 60d), >= 3 aulas. Resolve bug de TZ original (webhook gravava horário sem timezone). Verificar `cron.job_run_details` e sanidade pós-run.
+
+14. **Webhook de leads (`EB0LibpOJCLhKp7M`) + Mila SDR** — duas vias de entrada para `leads`. Mila SDR usa `neverError: true` no node "Cadastrar no Emusys" → falha silenciosa do Emusys deixa o lead só no NocoDB, não chega ao Supabase. Webhook Emusys descarta leads sem `body.lead.telefone`. Sempre correlacionar executions n8n (via `mcp__n8n__n8n_executions`) com `COUNT(*) FROM leads WHERE data_contato::date = X` da mesma janela — divergência > 10% é flag.
+
+15. **Webhook de experimental (sub-workflow `j41tPbyjGXUQUxrN`)** — chamado pelo Emusys para aula experimental (agendada/realizada/faltada). UPSERT em `lead_experimentais` via RPC `registrar_experimental()`. Sintomas a auditar: `professor_id` NULL (falha de matching), paradoxo `experimental_realizada=true AND faltou_experimental=true`, `data_realizacao` no futuro, matrícula nova de hoje com lead que nunca registrou experimental (#5 da seção I). Função antiga `atualizar_lead_experimental()` ainda existe mas não é usada.
 
 ---
 
