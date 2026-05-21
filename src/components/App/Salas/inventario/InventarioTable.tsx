@@ -1,8 +1,15 @@
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import { 
-  Edit2, Trash2, Eye, MoreVertical, ExternalLink, Image as ImageIcon
+  Edit2, Trash2, MoreVertical, ExternalLink, Wrench, ClipboardList, CheckCircle2
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -13,22 +20,30 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import type { ItemInventario, Sala } from './types';
+import type { ItemInventario } from './types';
 import { getCategoriaConfig, getStatusConfig, getCondicaoConfig } from './types';
 
 interface InventarioTableProps {
   itens: ItemInventario[];
-  salas: Sala[];
+  pendenciasPorSala: Record<number, number>;
   onEditarItem: (item: ItemInventario) => void;
   onVerSala: (salaId: number) => void;
+  onNovaPendencia: (item: ItemInventario) => void;
+  onVerPendenciasSala: (salaId: number) => void;
+  onColocarEmManutencao: (item: ItemInventario) => void;
+  onMarcarComoAtivo: (item: ItemInventario) => void;
   onRecarregar: () => void;
 }
 
 export function InventarioTable({ 
   itens, 
-  salas, 
+  pendenciasPorSala,
   onEditarItem, 
   onVerSala,
+  onNovaPendencia,
+  onVerPendenciasSala,
+  onColocarEmManutencao,
+  onMarcarComoAtivo,
   onRecarregar 
 }: InventarioTableProps) {
   const [alertDialogAberto, setAlertDialogAberto] = useState(false);
@@ -104,6 +119,8 @@ export function InventarioTable({
                 const categoriaConfig = getCategoriaConfig(item.categoria);
                 const statusConfig = getStatusConfig(item.status);
                 const condicaoConfig = getCondicaoConfig(item.condicao);
+                const totalPendenciasSala = item.sala_id ? (pendenciasPorSala[item.sala_id] || 0) : 0;
+                const menuReduzido = item.status === 'baixa' || item.status === 'inativo';
 
                 return (
                   <tr 
@@ -190,24 +207,69 @@ export function InventarioTable({
 
                     {/* Ações */}
                     <td className="px-4 py-3">
-                      <div className="flex items-center justify-center gap-1">
-                        <button
-                          onClick={() => onEditarItem(item)}
-                          className="p-2 hover:bg-slate-700 rounded-lg transition"
-                          title="Editar"
-                        >
-                          <Edit2 className="w-4 h-4 text-slate-400 hover:text-white" />
-                        </button>
-                        <button
-                          onClick={() => {
-                            setItemParaExcluir(item);
-                            setAlertDialogAberto(true);
-                          }}
-                          className="p-2 hover:bg-red-900/30 rounded-lg transition"
-                          title="Excluir"
-                        >
-                          <Trash2 className="w-4 h-4 text-slate-400 hover:text-red-400" />
-                        </button>
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="relative">
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg text-slate-400 hover:bg-slate-700 hover:text-white">
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-56 border-slate-700 bg-slate-900 text-slate-100">
+                              <DropdownMenuItem onClick={() => onEditarItem(item)}>
+                                <Edit2 className="mr-2 h-4 w-4" />
+                                Editar
+                              </DropdownMenuItem>
+
+                              {!menuReduzido && item.status === 'ativo' && (
+                                <DropdownMenuItem onClick={() => onColocarEmManutencao(item)}>
+                                  <Wrench className="mr-2 h-4 w-4" />
+                                  Colocar em manutenção
+                                </DropdownMenuItem>
+                              )}
+
+                              {!menuReduzido && item.status === 'manutencao' && (
+                                <DropdownMenuItem onClick={() => onMarcarComoAtivo(item)}>
+                                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                                  Marcar como ativo
+                                </DropdownMenuItem>
+                              )}
+
+                              {!menuReduzido && (
+                                <DropdownMenuItem onClick={() => onNovaPendencia(item)}>
+                                  <ClipboardList className="mr-2 h-4 w-4" />
+                                  Nova pendência
+                                </DropdownMenuItem>
+                              )}
+
+                              {item.sala_id && (
+                                <DropdownMenuItem onClick={() => onVerPendenciasSala(item.sala_id!)}>
+                                  <ExternalLink className="mr-2 h-4 w-4" />
+                                  Ver pendências da sala
+                                </DropdownMenuItem>
+                              )}
+
+                              <div className="my-1 h-px bg-slate-700" />
+
+                              <DropdownMenuItem
+                                onClick={() => {
+                                  setItemParaExcluir(item);
+                                  setAlertDialogAberto(true);
+                                }}
+                                className="text-rose-300 focus:bg-rose-500/10 focus:text-rose-200"
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Excluir
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+
+                          {totalPendenciasSala > 0 && (
+                            <span className="absolute -right-1 -top-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+                              {totalPendenciasSala}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </td>
                   </tr>

@@ -145,7 +145,7 @@ export function InventarioPorSala({
             <div>
               <p className="text-xs text-slate-400 uppercase">Em Manutenção</p>
               <p className="text-xl font-bold text-white">
-                {itens.filter(i => i.status === 'em_manutencao').length}
+                {itens.filter(i => i.status === 'manutencao').length}
               </p>
             </div>
           </div>

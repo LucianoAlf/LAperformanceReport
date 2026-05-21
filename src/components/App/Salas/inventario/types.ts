@@ -30,7 +30,7 @@ export interface ItemInventario {
   fornecedor: string | null;
   vida_util_meses: number;
   valor_residual: number | null;
-  status: 'ativo' | 'em_manutencao' | 'baixado' | 'emprestado';
+  status: 'ativo' | 'manutencao' | 'baixa' | 'inativo';
   condicao: 'novo' | 'bom' | 'regular' | 'ruim';
   quantidade: number;
   observacoes: string | null;
@@ -44,6 +44,28 @@ export interface ItemInventario {
   // Joins
   sala_nome?: string;
   unidade_nome?: string;
+}
+
+export interface PendenciaInventario {
+  id: number;
+  sala_id: number;
+  unidade_id: string;
+  titulo: string;
+  descricao: string | null;
+  categoria: 'compra' | 'reposicao' | 'reparo' | 'melhoria';
+  prioridade: 'urgente' | 'importante' | 'futuramente';
+  status: 'aberta' | 'em_andamento' | 'concluida' | 'cancelada';
+  solicitante: string | null;
+  created_via: string | null;
+  resolvido_em: string | null;
+  resolvido_por: string | null;
+  resolucao_obs: string | null;
+  item_vinculado_id: number | null;
+  created_at: string;
+  updated_at: string;
+  sala_nome?: string;
+  unidade_nome?: string;
+  item_vinculado_nome?: string;
 }
 
 export interface Manutencao {
@@ -74,23 +96,23 @@ export interface Movimentacao {
 
 // Categorias de equipamentos
 export const CATEGORIAS_EQUIPAMENTO = [
-  { value: 'bateria_percussao', label: 'Bateria/Percussão', emoji: '🥁' },
-  { value: 'cordas', label: 'Cordas', emoji: '🎸' },
-  { value: 'teclados', label: 'Teclados/Piano', emoji: '🎹' },
-  { value: 'sopro', label: 'Sopro', emoji: '🎷' },
-  { value: 'audio', label: 'Áudio', emoji: '🎤' },
-  { value: 'amplificadores', label: 'Amplificadores', emoji: '🔊' },
-  { value: 'mobiliario', label: 'Mobiliário', emoji: '🪑' },
-  { value: 'climatizacao', label: 'Climatização', emoji: '❄️' },
-  { value: 'acessorios', label: 'Acessórios', emoji: '🎼' },
-  { value: 'outros', label: 'Outros', emoji: '📦' },
+  { value: 'Bateria/Percussão', label: 'Bateria/Percussão', emoji: '🥁' },
+  { value: 'Cordas', label: 'Cordas', emoji: '🎸' },
+  { value: 'Teclados/Piano', label: 'Teclados/Piano', emoji: '🎹' },
+  { value: 'Sopro', label: 'Sopro', emoji: '🎷' },
+  { value: 'Áudio', label: 'Áudio', emoji: '🎤' },
+  { value: 'Amplificadores', label: 'Amplificadores', emoji: '🔊' },
+  { value: 'Mobiliário', label: 'Mobiliário', emoji: '🪑' },
+  { value: 'Climatização', label: 'Climatização', emoji: '❄️' },
+  { value: 'Acessórios', label: 'Acessórios', emoji: '🎼' },
+  { value: 'Outros', label: 'Outros', emoji: '📦' },
 ];
 
 export const STATUS_EQUIPAMENTO = [
   { value: 'ativo', label: 'Ativo', cor: 'bg-emerald-500/20 text-emerald-400' },
-  { value: 'em_manutencao', label: 'Em Manutenção', cor: 'bg-yellow-500/20 text-yellow-400' },
-  { value: 'baixado', label: 'Baixado', cor: 'bg-red-500/20 text-red-400' },
-  { value: 'emprestado', label: 'Emprestado', cor: 'bg-blue-500/20 text-blue-400' },
+  { value: 'manutencao', label: 'Em Manutenção', cor: 'bg-yellow-500/20 text-yellow-400' },
+  { value: 'baixa', label: 'Baixa', cor: 'bg-red-500/20 text-red-400' },
+  { value: 'inativo', label: 'Inativo', cor: 'bg-slate-500/20 text-slate-300' },
 ];
 
 export const CONDICAO_EQUIPAMENTO = [
@@ -100,19 +122,66 @@ export const CONDICAO_EQUIPAMENTO = [
   { value: 'ruim', label: 'Ruim', cor: 'bg-red-500/20 text-red-400' },
 ];
 
+export const CATEGORIAS_PENDENCIA = [
+  { value: 'compra', label: 'Compra' },
+  { value: 'reposicao', label: 'Reposição' },
+  { value: 'reparo', label: 'Reparo' },
+  { value: 'melhoria', label: 'Melhoria' },
+];
+
+export const PRIORIDADES_PENDENCIA = [
+  { value: 'urgente', label: 'Urgente', emoji: '🔴', cor: 'bg-red-500/15 text-red-300 border-red-500/30' },
+  { value: 'importante', label: 'Importante', emoji: '🟠', cor: 'bg-amber-500/15 text-amber-300 border-amber-500/30' },
+  { value: 'futuramente', label: 'Futuramente', emoji: '🟡', cor: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/30' },
+];
+
+export const STATUS_PENDENCIA = [
+  { value: 'aberta', label: 'Abertas', cor: 'bg-cyan-500/15 text-cyan-300 border-cyan-500/30' },
+  { value: 'em_andamento', label: 'Em andamento', cor: 'bg-violet-500/15 text-violet-300 border-violet-500/30' },
+  { value: 'concluida', label: 'Concluídas', cor: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' },
+  { value: 'cancelada', label: 'Canceladas', cor: 'bg-slate-500/15 text-slate-300 border-slate-500/30' },
+];
+
+function normalizeText(value: string | null | undefined) {
+  return (value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
 export function getCategoriaConfig(categoria: string | null) {
-  const cat = CATEGORIAS_EQUIPAMENTO.find(c => c.value === categoria);
-  return cat || { value: 'outros', label: 'Outros', emoji: '📦' };
+  const categoriaNormalizada = normalizeText(categoria);
+  const cat = CATEGORIAS_EQUIPAMENTO.find(c => normalizeText(c.value) === categoriaNormalizada);
+  return cat || { value: categoria || 'Outros', label: categoria || 'Outros', emoji: '📦' };
 }
 
 export function getStatusConfig(status: string) {
-  const s = STATUS_EQUIPAMENTO.find(s => s.value === status);
+  const aliases: Record<string, string> = {
+    em_manutencao: 'manutencao',
+    baixado: 'baixa',
+    emprestado: 'inativo',
+  };
+  const statusNormalizado = aliases[status] || status;
+  const s = STATUS_EQUIPAMENTO.find(s => s.value === statusNormalizado);
   return s || STATUS_EQUIPAMENTO[0];
 }
 
 export function getCondicaoConfig(condicao: string) {
   const c = CONDICAO_EQUIPAMENTO.find(c => c.value === condicao);
   return c || CONDICAO_EQUIPAMENTO[1];
+}
+
+export function getPrioridadePendenciaConfig(prioridade: PendenciaInventario['prioridade']) {
+  return PRIORIDADES_PENDENCIA.find(item => item.value === prioridade) || PRIORIDADES_PENDENCIA[1];
+}
+
+export function getStatusPendenciaConfig(status: PendenciaInventario['status']) {
+  return STATUS_PENDENCIA.find(item => item.value === status) || STATUS_PENDENCIA[0];
+}
+
+export function getCategoriaPendenciaLabel(categoria: PendenciaInventario['categoria']) {
+  return CATEGORIAS_PENDENCIA.find(item => item.value === categoria)?.label || categoria;
 }
 
 // Gerar código de patrimônio

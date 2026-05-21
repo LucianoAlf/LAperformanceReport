@@ -5,7 +5,7 @@ import { useOutletContext } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import { 
-  Building2, Plus, Search, Edit2, Trash2, Users, Clock, AlertTriangle, Package, DoorOpen, Sparkles, Calendar
+  Building2, Plus, Search, Edit2, Trash2, Users, Clock, AlertTriangle, Package, DoorOpen, Sparkles, Calendar, ClipboardList
 } from 'lucide-react';
 
 import {
@@ -18,6 +18,7 @@ import {
 import { ModalEditarSala } from './ModalEditarSala';
 import { ModalOcupacaoSala } from './ModalOcupacaoSala';
 import { InventarioTab } from './inventario/InventarioTab';
+import { PendenciasTab } from './inventario/PendenciasTab';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -69,11 +70,12 @@ function getTipoConfig(tipo: string | null) {
   return TIPOS_SALA_CONFIG[tipo] || { emoji: '🏢', cor: 'text-slate-400', bgCor: 'bg-slate-500/20' };
 }
 
-type TabAtiva = 'salas' | 'inventario';
+type TabAtiva = 'salas' | 'inventario' | 'pendencias';
 
 const salasTabs: PageTab<TabAtiva>[] = [
   { id: 'salas', label: 'Salas', shortLabel: 'Salas', icon: DoorOpen },
   { id: 'inventario', label: 'Inventário', shortLabel: 'Invent.', icon: Package },
+  { id: 'pendencias', label: 'Pendências', shortLabel: 'Pend.', icon: ClipboardList },
 ];
 
 export function SalasPage() {
@@ -107,6 +109,7 @@ export function SalasPage() {
   const [modalOcupacaoAberto, setModalOcupacaoAberto] = useState(false);
   const [salaParaOcupacao, setSalaParaOcupacao] = useState<Sala | null>(null);
   const [salaFiltroInventario, setSalaFiltroInventario] = useState<number | null>(null);
+  const [salaFiltroPendencias, setSalaFiltroPendencias] = useState<number | null>(null);
 
   // Carregar dados
   useEffect(() => {
@@ -756,6 +759,19 @@ export function SalasPage() {
           salas={salas}
           unidades={unidades}
           salaFiltroInicial={salaFiltroInventario}
+          onAbrirPendencias={(salaId) => {
+            setSalaFiltroPendencias(salaId);
+            setTabAtiva('pendencias');
+          }}
+        />
+      )}
+
+      {tabAtiva === 'pendencias' && (
+        <PendenciasTab
+          unidadeAtual={unidadeAtual}
+          salas={salas}
+          unidades={unidades}
+          salaFiltroInicial={salaFiltroPendencias}
         />
       )}
 
