@@ -11,6 +11,7 @@ import {
   CheckCircle2,
   XCircle,
   AlertCircle,
+  Loader2,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -25,6 +26,7 @@ import { supabase } from '@/lib/supabase';
 import { useLeadsCRM } from '../hooks/useLeadsCRM';
 import { useVisitas } from '../hooks/useVisitas';
 import type { LeadCRM, Visita } from '../types';
+import { toast } from 'sonner';
 
 interface AgendaTabProps {
   unidadeId: string;
@@ -36,12 +38,81 @@ interface AgendaTabProps {
 type VisaoAgenda = 'mes' | 'semana' | 'dia' | 'lista';
 
 export function AgendaTab({ unidadeId, ano, mes, onLeadClick }: AgendaTabProps) {
-  const { leads, loading: loadingLeads } = useLeadsCRM({ unidadeId, ano, mes });
-  const { visitas, loading: loadingVisitas } = useVisitas({ unidadeId, ano, mes });
+  const { leads, loading: loadingLeads, refetchSilencioso } = useLeadsCRM({ unidadeId, ano, mes });
+  const { visitas, loading: loadingVisitas, refetch: refetchVisitas } = useVisitas({ unidadeId, ano, mes });
   const loading = loadingLeads || loadingVisitas;
   const [visao, setVisao] = useState<VisaoAgenda>('semana');
   const [semanaOffset, setSemanaOffset] = useState(0);
   const [filtroTipo, setFiltroTipo] = useState<string>('todos');
+  const [marcandoId, setMarcandoId] = useState<string | null>(null);
+
+  // Marcar presença manual.
+  //   - Experimental: atualiza `leads` (flags+status+etapa) + UPSERT em `lead_experimentais` (canônico).
+  //                   Preserva leads convertidos/matriculados (não regride).
+  //   - Visita: atualiza só `visitas.status` (mapeando 'faltou' → 'nao_compareceu' do CHECK constraint).
+  const handleMarcarPresenca = async (evento: EventoAgenda, novoStatus: 'realizada' | 'faltou') => {
+    setMarcandoId(evento.id);
+    try {
+      if (evento.tipo === 'experimental') {
+        const lead = evento.lead;
+        if (!lead?.id) return;
+        const presente = novoStatus === 'realizada';
+        const statusLead = presente ? 'experimental_realizada' : 'experimental_faltou';
+        const etapa = presente ? 7 : 9;
+
+        const { error: leadError } = await supabase
+          .from('leads')
+          .update({
+            experimental_realizada: presente,
+            faltou_experimental: !presente,
+            status: statusLead,
+            etapa_pipeline_id: etapa,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', lead.id)
+          .not('status', 'in', '("convertido","matriculado")');
+        if (leadError) throw leadError;
+
+        if (lead.data_experimental) {
+          const { error: expError } = await supabase
+            .from('lead_experimentais')
+            .upsert({
+              lead_id: lead.id,
+              nome_aluno: lead.nome || '(sem nome)',
+              unidade_id: lead.unidade_id,
+              status: statusLead,
+              etapa_pipeline_id: etapa,
+              data_experimental: lead.data_experimental,
+              horario_experimental: lead.horario_experimental || null,
+              professor_experimental_id: (lead as any).professor_experimental_id ?? null,
+              curso_interesse_id: (lead as any).curso_interesse_id ?? null,
+              updated_at: new Date().toISOString(),
+            }, { onConflict: 'lead_id,data_experimental,nome_aluno' });
+          if (expError) throw expError;
+        }
+
+        toast.success(presente ? 'Experimental marcada como realizada' : 'Experimental marcada como faltou');
+        refetchSilencioso();
+      } else if (evento.tipo === 'visita') {
+        if (!evento.visitaId) return;
+        // 'faltou' no UI vira 'nao_compareceu' no banco (CHECK constraint)
+        const statusBanco = novoStatus === 'realizada' ? 'realizada' : 'nao_compareceu';
+        const { error } = await supabase
+          .from('visitas')
+          .update({ status: statusBanco, updated_at: new Date().toISOString() })
+          .eq('id', evento.visitaId);
+        if (error) throw error;
+
+        toast.success(novoStatus === 'realizada' ? 'Visita marcada como realizada' : 'Visita marcada como não compareceu');
+        refetchVisitas();
+      }
+    } catch (err) {
+      console.error('Erro ao marcar presença:', err);
+      toast.error('Erro ao marcar presença');
+    } finally {
+      setMarcandoId(null);
+    }
+  };
 
   // Feriados do ano
   const [feriadosMap, setFeriadosMap] = useState<Map<string, string>>(new Map());
@@ -120,6 +191,7 @@ export function AgendaTab({ unidadeId, ano, mes, onLeadClick }: AgendaTabProps) 
         horario: visita.horario ? visita.horario.substring(0, 5) : null,
         status: mapVisitaStatus(visita.status),
         descricao: `Visita — ${visita.nome}`,
+        visitaId: visita.id,
       });
     });
 
@@ -291,6 +363,8 @@ export function AgendaTab({ unidadeId, ano, mes, onLeadClick }: AgendaTabProps) 
                         key={evento.id}
                         evento={evento}
                         onClick={() => onLeadClick?.(evento.lead)}
+                        onMarcarPresenca={handleMarcarPresenca}
+                        marcando={marcandoId === evento.id}
                       />
                     ))
                   )}
@@ -317,6 +391,8 @@ export function AgendaTab({ unidadeId, ano, mes, onLeadClick }: AgendaTabProps) 
                     key={evento.id}
                     evento={evento}
                     onClick={() => onLeadClick?.(evento.lead)}
+                    onMarcarPresenca={handleMarcarPresenca}
+                    marcando={marcandoId === evento.id}
                   />
                 ))}
             </div>
@@ -345,6 +421,8 @@ export function AgendaTab({ unidadeId, ano, mes, onLeadClick }: AgendaTabProps) 
                     key={evento.id}
                     evento={evento}
                     onClick={() => onLeadClick?.(evento.lead)}
+                    onMarcarPresenca={handleMarcarPresenca}
+                    marcando={marcandoId === evento.id}
                   />
                 ))}
               </div>
@@ -368,7 +446,23 @@ interface EventoAgenda {
   horario: string | null;
   status: 'agendada' | 'realizada' | 'faltou';
   descricao: string;
+  // ID da visita quando evento.tipo === 'visita' (necessário pra marcar presença na tabela `visitas`)
+  visitaId?: string;
 }
+
+// Cor BASE por TIPO de evento (consistente com quickInputCards do ComercialPage)
+const TIPO_CONFIG: Record<EventoAgenda['tipo'], { cor: string; iconeCor: string; corFraca: string }> = {
+  experimental: { cor: 'bg-violet-500/20 border-violet-500/30', iconeCor: 'text-violet-400', corFraca: 'bg-violet-500/15 text-violet-300' },
+  visita:       { cor: 'bg-amber-500/20 border-amber-500/30',  iconeCor: 'text-amber-400',  corFraca: 'bg-amber-500/15 text-amber-300' },
+  followup:     { cor: 'bg-cyan-500/20 border-cyan-500/30',   iconeCor: 'text-cyan-400',   corFraca: 'bg-cyan-500/15 text-cyan-300' },
+};
+
+// Badge de STATUS (sobre o card colorido por tipo)
+const STATUS_BADGE: Record<EventoAgenda['status'], { cor: string; label: string }> = {
+  agendada:  { cor: 'bg-slate-700 text-slate-300',         label: 'Agendada' },
+  realizada: { cor: 'bg-emerald-500/30 text-emerald-300',  label: 'Realizada' },
+  faltou:    { cor: 'bg-rose-500/30 text-rose-300',        label: 'Faltou' },
+};
 
 function VisaoMes(props: {
   ano: number;
@@ -441,21 +535,23 @@ function VisaoMes(props: {
                 </span>
               </div>
               <div className="space-y-0.5">
-                {eventos.slice(0, 3).map(evento => (
-                  <div
-                    key={evento.id}
-                    className={cn(
-                      "text-[9px] px-1 py-0.5 rounded cursor-pointer truncate",
-                      evento.status === 'agendada' && "bg-violet-500/20 text-violet-300",
-                      evento.status === 'realizada' && "bg-emerald-500/20 text-emerald-300",
-                      evento.status === 'faltou' && "bg-rose-500/20 text-rose-300",
-                    )}
-                    onClick={() => onLeadClick?.(evento.lead)}
-                    title={evento.descricao}
-                  >
-                    {evento.horario ? `${evento.horario} ` : ''}{evento.lead.nome || '?'}
-                  </div>
-                ))}
+                {eventos.slice(0, 3).map(evento => {
+                  const tipo = TIPO_CONFIG[evento.tipo];
+                  const prefix = evento.status === 'realizada' ? '✅ ' : evento.status === 'faltou' ? '❌ ' : '';
+                  return (
+                    <div
+                      key={evento.id}
+                      className={cn(
+                        "text-[9px] px-1 py-0.5 rounded cursor-pointer truncate",
+                        tipo.corFraca
+                      )}
+                      onClick={() => onLeadClick?.(evento.lead)}
+                      title={`${evento.descricao} — ${STATUS_BADGE[evento.status].label}`}
+                    >
+                      {prefix}{evento.horario ? `${evento.horario} ` : ''}{evento.lead.nome || '?'}
+                    </div>
+                  );
+                })}
                 {eventos.length > 3 && (
                   <div className="text-[8px] text-slate-500 text-center">
                     +{eventos.length - 3} mais
@@ -480,28 +576,36 @@ function MiniKPI(props: { icone: string; label: string; valor: number; cor: stri
   );
 }
 
-function CardEvento(props: { key?: React.Key; evento: EventoAgenda; onClick?: () => void }) {
-  const { evento, onClick } = props;
-  const statusConfig = {
-    agendada: { cor: 'bg-violet-500/20 border-violet-500/30', icone: <CalendarDays className="w-3 h-3 text-violet-400" /> },
-    realizada: { cor: 'bg-emerald-500/20 border-emerald-500/30', icone: <CheckCircle2 className="w-3 h-3 text-emerald-400" /> },
-    faltou: { cor: 'bg-rose-500/20 border-rose-500/30', icone: <XCircle className="w-3 h-3 text-rose-400" /> },
-  };
-
-  const config = statusConfig[evento.status];
+function CardEvento(props: {
+  key?: React.Key;
+  evento: EventoAgenda;
+  onClick?: () => void;
+  onMarcarPresenca?: (evento: EventoAgenda, status: 'realizada' | 'faltou') => void;
+  marcando?: boolean;
+}) {
+  const { evento, onClick, onMarcarPresenca, marcando } = props;
+  const tipoConfig = TIPO_CONFIG[evento.tipo];
+  const statusBadge = STATUS_BADGE[evento.status];
+  const StatusIcon = evento.status === 'realizada' ? CheckCircle2 : evento.status === 'faltou' ? XCircle : CalendarDays;
+  const podeMArcar = (evento.tipo === 'experimental' || evento.tipo === 'visita') && evento.status === 'agendada' && !!onMarcarPresenca;
 
   return (
     <div
       className={cn(
         "border rounded-lg p-1.5 cursor-pointer hover:brightness-110 transition-all",
-        config.cor
+        tipoConfig.cor
       )}
       onClick={onClick}
     >
-      <div className="flex items-center gap-1 mb-0.5">
-        {config.icone}
-        <span className="text-[10px] font-medium text-white truncate">
-          {evento.lead.nome || 'Sem nome'}
+      <div className="flex items-start justify-between gap-1 mb-0.5">
+        <div className="flex items-center gap-1 min-w-0 flex-1">
+          <StatusIcon className={cn("w-3 h-3 shrink-0", tipoConfig.iconeCor)} />
+          <span className="text-[10px] font-medium text-white truncate">
+            {evento.lead.nome || 'Sem nome'}
+          </span>
+        </div>
+        <span className={cn("text-[8px] font-medium px-1 py-0.5 rounded shrink-0 leading-none", statusBadge.cor)}>
+          {statusBadge.label}
         </span>
       </div>
       {evento.horario && (
@@ -509,24 +613,54 @@ function CardEvento(props: { key?: React.Key; evento: EventoAgenda; onClick?: ()
           <Clock className="w-2.5 h-2.5" /> {evento.horario}
         </div>
       )}
-      <div className="text-[9px] text-slate-500 capitalize">{evento.tipo}</div>
+      <div className={cn("text-[9px] capitalize font-medium", tipoConfig.iconeCor)}>{evento.tipo}</div>
+      {podeMArcar && (
+        <div className="flex gap-1 mt-1.5 pt-1.5 border-t border-white/10">
+          <button
+            type="button"
+            disabled={marcando}
+            onClick={(e) => { e.stopPropagation(); onMarcarPresenca!(evento, 'realizada'); }}
+            className="flex-1 text-[9px] px-1 py-0.5 rounded bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-300 disabled:opacity-50 flex items-center justify-center gap-0.5"
+            title="Marcar como realizada"
+          >
+            {marcando ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <CheckCircle2 className="w-2.5 h-2.5" />}
+            Realizada
+          </button>
+          <button
+            type="button"
+            disabled={marcando}
+            onClick={(e) => { e.stopPropagation(); onMarcarPresenca!(evento, 'faltou'); }}
+            className="flex-1 text-[9px] px-1 py-0.5 rounded bg-rose-500/20 hover:bg-rose-500/40 text-rose-300 disabled:opacity-50 flex items-center justify-center gap-0.5"
+            title="Marcar como faltou"
+          >
+            {marcando ? <Loader2 className="w-2.5 h-2.5 animate-spin" /> : <XCircle className="w-2.5 h-2.5" />}
+            Faltou
+          </button>
+        </div>
+      )}
     </div>
   );
 }
 
-function LinhaEvento(props: { key?: React.Key; evento: EventoAgenda; onClick?: () => void }) {
-  const { evento, onClick } = props;
-  const statusConfig = {
-    agendada: { badge: 'bg-violet-500/20 text-violet-400', label: 'Agendada' },
-    realizada: { badge: 'bg-emerald-500/20 text-emerald-400', label: 'Realizada' },
-    faltou: { badge: 'bg-rose-500/20 text-rose-400', label: 'Faltou' },
-  };
-  const config = statusConfig[evento.status];
+function LinhaEvento(props: {
+  key?: React.Key;
+  evento: EventoAgenda;
+  onClick?: () => void;
+  onMarcarPresenca?: (evento: EventoAgenda, status: 'realizada' | 'faltou') => void;
+  marcando?: boolean;
+}) {
+  const { evento, onClick, onMarcarPresenca, marcando } = props;
+  const tipoConfig = TIPO_CONFIG[evento.tipo];
+  const statusBadge = STATUS_BADGE[evento.status];
   const unidadeCodigo = getUnidadeCodigo(evento.lead.unidade_id);
+  const podeMArcar = (evento.tipo === 'experimental' || evento.tipo === 'visita') && evento.status === 'agendada' && !!onMarcarPresenca;
 
   return (
     <div
-      className="flex items-center gap-4 px-4 py-3 hover:bg-slate-800/50 cursor-pointer transition-colors"
+      className={cn(
+        "flex items-center gap-4 px-4 py-3 hover:brightness-110 cursor-pointer transition-all border-l-4",
+        tipoConfig.cor
+      )}
       onClick={onClick}
     >
       <div className="text-xs text-slate-400 w-20 flex-shrink-0">
@@ -541,10 +675,34 @@ function LinhaEvento(props: { key?: React.Key; evento: EventoAgenda; onClick?: (
       <span className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-slate-700/50 text-slate-300 flex-shrink-0">
         {unidadeCodigo}
       </span>
-      <span className="text-[10px] capitalize text-slate-400 w-20 flex-shrink-0">{evento.tipo}</span>
-      <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded-full flex-shrink-0", config.badge)}>
-        {config.label}
+      <span className={cn("text-[10px] capitalize font-medium w-20 flex-shrink-0", tipoConfig.iconeCor)}>{evento.tipo}</span>
+      <span className={cn("text-[10px] font-medium px-2 py-0.5 rounded-full flex-shrink-0", statusBadge.cor)}>
+        {statusBadge.label}
       </span>
+      {podeMArcar && (
+        <div className="flex gap-1 flex-shrink-0">
+          <button
+            type="button"
+            disabled={marcando}
+            onClick={(e) => { e.stopPropagation(); onMarcarPresenca!(evento, 'realizada'); }}
+            className="text-[10px] px-2 py-1 rounded bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-300 disabled:opacity-50 flex items-center gap-1"
+            title="Marcar como realizada"
+          >
+            {marcando ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+            Realizada
+          </button>
+          <button
+            type="button"
+            disabled={marcando}
+            onClick={(e) => { e.stopPropagation(); onMarcarPresenca!(evento, 'faltou'); }}
+            className="text-[10px] px-2 py-1 rounded bg-rose-500/20 hover:bg-rose-500/40 text-rose-300 disabled:opacity-50 flex items-center gap-1"
+            title="Marcar como faltou"
+          >
+            {marcando ? <Loader2 className="w-3 h-3 animate-spin" /> : <XCircle className="w-3 h-3" />}
+            Faltou
+          </button>
+        </div>
+      )}
     </div>
   );
 }
