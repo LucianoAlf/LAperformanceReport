@@ -1961,10 +1961,35 @@ export function ComercialPage() {
 
       // Bolsistas não passam pelo funil comercial — não inserir em leads
       const isBolsista = modalOpen === 'matricula' && TIPOS_SEM_PAGAMENTO.includes(formData.tipo_aluno);
+      let leadCriadoId: number | null = null;
 
       if (!isBolsista) {
         const { data: leadData, error } = await supabase.from('leads').insert(registro).select().single();
         if (error) throw error;
+        leadCriadoId = leadData?.id ?? null;
+      }
+
+      // Sincronizar com canônico lead_experimentais quando matrícula veio com checkbox "Teve experimental?"
+      // Usa data_matricula como data_experimental (aproximação — a real foi alguns dias antes).
+      // Marcador implícito: emusys_lead_id=NULL diferencia esses registros dos vindos do webhook Emusys.
+      if (modalOpen === 'matricula' && formData.teve_experimental && leadCriadoId && formData.aluno_nome) {
+        const dataExpAprox = formData.data.toISOString().split('T')[0];
+        const { error: expError } = await supabase
+          .from('lead_experimentais')
+          .upsert({
+            lead_id: leadCriadoId,
+            nome_aluno: formData.aluno_nome.trim(),
+            unidade_id: unidadeFinal,
+            status: 'experimental_realizada',
+            etapa_pipeline_id: 7,
+            data_experimental: dataExpAprox,
+            professor_experimental_id: formData.professor_experimental_id,
+            curso_interesse_id: formData.curso_id,
+          }, { onConflict: 'lead_id,data_experimental,nome_aluno' });
+        if (expError) {
+          console.error('Erro ao registrar experimental no canônico:', expError);
+          // Não bloqueia o fluxo — matrícula já salvou. Log e segue.
+        }
       }
 
       // Se for matrícula, criar também o registro na tabela alunos

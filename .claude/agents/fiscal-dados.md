@@ -421,7 +421,143 @@ SELECT COUNT(*) AS visitas_com_data_experimental
 FROM leads
 WHERE data_experimental IS NOT NULL
   AND tipo_agendamento = 'visita';
+
+-- 8. Validação do fix v26 sync-presenca-emusys (deployed 2026-05-21):
+-- Toda reconciliação NOVA deve gerar flags coerentes em leads.
+-- Filtra reconciliações de lead_experimentais feitas pelo sync APÓS o deploy do fix
+-- e checa se as flags em leads batem com o status na canônica.
+WITH reconciliacoes_pos_fix AS (
+  SELECT
+    lal.lead_id,
+    lal.created_at AS reconciliado_em,
+    lal.acao,
+    (lal.detalhes->>'data')::date AS data_exp,
+    CASE
+      WHEN lal.acao = 'reconciliada_presente' THEN 'experimental_realizada'
+      WHEN lal.acao = 'reconciliada_faltou' THEN 'experimental_faltou'
+      ELSE NULL
+    END AS status_esperado
+  FROM leads_automacao_log lal
+  WHERE lal.evento = 'sync_experimental_reconciliacao'
+    AND lal.acao IN ('reconciliada_presente', 'reconciliada_faltou')
+    AND lal.created_at >= '2026-05-21 23:00:00-03:00'  -- após deploy v26
+)
+SELECT
+  r.lead_id,
+  l.nome,
+  r.data_exp,
+  r.acao,
+  r.reconciliado_em,
+  l.experimental_agendada AS f_ag,
+  l.experimental_realizada AS f_real,
+  l.faltou_experimental AS f_faltou,
+  CASE
+    WHEN r.acao = 'reconciliada_presente'
+      AND (l.experimental_agendada = false OR l.experimental_realizada = false OR l.faltou_experimental = true)
+    THEN 'REGRESSAO: flags nao foram atualizadas apos INSERT'
+    WHEN r.acao = 'reconciliada_faltou'
+      AND (l.experimental_agendada = false OR l.faltou_experimental = false OR l.experimental_realizada = true)
+    THEN 'REGRESSAO: flags nao foram atualizadas apos INSERT'
+    ELSE 'OK'
+  END AS verificacao
+FROM reconciliacoes_pos_fix r
+JOIN leads l ON l.id = r.lead_id
+ORDER BY r.reconciliado_em DESC
+LIMIT 30;
+
+-- 9. Resumo agregado da validação do fix v26 (taxa de sucesso ao longo do tempo)
+WITH reconciliacoes_pos_fix AS (
+  SELECT
+    lal.lead_id,
+    lal.created_at,
+    lal.acao,
+    DATE(lal.created_at AT TIME ZONE 'America/Sao_Paulo') AS dia
+  FROM leads_automacao_log lal
+  WHERE lal.evento = 'sync_experimental_reconciliacao'
+    AND lal.acao IN ('reconciliada_presente', 'reconciliada_faltou')
+    AND lal.created_at >= '2026-05-21 23:00:00-03:00'
+),
+validacao AS (
+  SELECT
+    r.dia,
+    COUNT(*) AS total_reconciliacoes,
+    COUNT(*) FILTER (
+      WHERE (r.acao = 'reconciliada_presente'
+             AND l.experimental_agendada = true
+             AND l.experimental_realizada = true
+             AND l.faltou_experimental = false)
+         OR (r.acao = 'reconciliada_faltou'
+             AND l.experimental_agendada = true
+             AND l.experimental_realizada = false
+             AND l.faltou_experimental = true)
+    ) AS flags_coerentes,
+    COUNT(DISTINCT r.lead_id) FILTER (WHERE l.status IN ('convertido','matriculado')) AS leads_convertidos
+  FROM reconciliacoes_pos_fix r
+  JOIN leads l ON l.id = r.lead_id
+  GROUP BY r.dia
+)
+SELECT
+  dia,
+  total_reconciliacoes,
+  flags_coerentes,
+  ROUND(100.0 * flags_coerentes / NULLIF(total_reconciliacoes, 0), 1) AS pct_sucesso,
+  leads_convertidos AS leads_ja_convertidos_no_lote
+FROM validacao
+ORDER BY dia DESC;
 ```
+
+**Critério de sucesso**: query #8 deve retornar **0 linhas com `verificacao = 'REGRESSAO'`**. Se aparecer regressão, é sinal que o fix v26 não está funcionando (problema novo na edge ou trigger sobrescrevendo). Query #9 mostra taxa diária de sucesso — deve ficar próximo de 100% após o deploy.
+
+### Validação do fix v27 sync-presenca-emusys (deployed 2026-05-21, Opção B)
+
+```sql
+-- 10. Verificar se confirmarExperimentais NÃO está mais promovendo pra realizada sem checar presença
+-- Antes do v27: gerava log com acao='confirmada' (~100/mês)
+-- Depois do v27: deve gerar acao='pendente_presenca' (apenas informativo) ou 'cancelada' (cancelamento Emusys)
+-- Se 'confirmada' aparecer após deploy, é REGRESSÃO
+SELECT
+  DATE(created_at AT TIME ZONE 'America/Sao_Paulo') AS dia,
+  acao,
+  COUNT(*) AS qtd
+FROM leads_automacao_log
+WHERE evento = 'sync_experimental_presenca'
+  AND created_at >= '2026-05-21 23:00:00-03:00'  -- após deploy v27
+GROUP BY dia, acao
+ORDER BY dia DESC, qtd DESC;
+
+-- 11. Verificar se reconciliação contextual (fallback v27) está ativando
+-- Procura motivos com "contexto" no log de reconciliação
+SELECT
+  DATE(lal.created_at AT TIME ZONE 'America/Sao_Paulo') AS dia,
+  COUNT(*) FILTER (WHERE detalhes->>'motivo' ILIKE '%contexto%') AS via_contexto,
+  COUNT(*) FILTER (WHERE detalhes->>'motivo' ILIKE '%por nome%') AS via_nome,
+  COUNT(*) AS total_reconciliacoes
+FROM leads_automacao_log lal
+WHERE evento = 'sync_experimental_reconciliacao'
+  AND acao IN ('reconciliada_presente', 'reconciliada_faltou')
+  AND created_at >= '2026-05-21 23:00:00-03:00'
+GROUP BY dia
+ORDER BY dia DESC;
+
+-- 12. Comparação histórica: confirmadas (pré-v27) vs pendentes (pós-v27)
+SELECT
+  CASE
+    WHEN created_at < '2026-05-21 23:00:00-03:00' THEN 'pre_v27'
+    ELSE 'pos_v27'
+  END AS periodo,
+  acao,
+  COUNT(*) AS qtd
+FROM leads_automacao_log
+WHERE evento = 'sync_experimental_presenca'
+  AND created_at >= NOW() - INTERVAL '30 days'
+GROUP BY periodo, acao
+ORDER BY periodo, qtd DESC;
+```
+
+**Critério de sucesso v27**:
+- Query #10: deve mostrar **0 linhas com `acao = 'confirmada'`** após o deploy (essa ação foi removida). Linhas com `acao = 'pendente_presenca'` são esperadas (informativo) — significa que a aula existe no Emusys mas o professor não marcou presença ainda; será reconciliada em sync futura ou virará auto-faltou em 7d.
+- Query #11: dia a dia, esperamos ver `via_contexto > 0` ocasionalmente (= fallback contextual pegou casos com nome divergente, ex: Davi/Diogo).
+- Query #12: período pre-v27 mostra muitas `confirmada` (bug); período pos-v27 deve ter 0 `confirmada` e várias `pendente_presenca`.
 
 **Correlação com n8n:** liste executions de `j41tPbyjGXUQUxrN` (sub-workflow experimental) E `Fucq0bQwF4oeuWnv` (webhook Emusys) no dia via `mcp__n8n__n8n_executions`. Para cada error/crashed, extraia `lead_id`/`emusys_lead_id` do payload e verifique correspondência em `lead_experimentais`. Execution success sem linha no banco → falha silenciosa da RPC.
 
@@ -508,6 +644,7 @@ Estes são pontos de falha já documentados que você deve sempre considerar:
     - **Função `atualizar_lead_experimental()` NÃO está deprecada** (memória anterior estava errada) — segue em uso pelo Fucq0bQwF4oeuWnv.
     - **Sintomas a auditar (Seção I)**: paradoxo de flags (#3), divergência flags vs canônica (#4), reagendamento múltiplo Alice-like (#5), órfãs (#6), confusão visita/experimental nas queries (#7), professor NULL (#2).
     - **Importante**: queries de contagem de "experimentais" que leem `leads.experimental_*` ou `leads.data_experimental` podem dar números errados — preferir `lead_experimentais` com filtro `status != 'cancelada'`.
+    - **Fix v26 sync-presenca-emusys (2026-05-21)**: a função `reconciliarExperimentaisOrfas` agora atualiza flags `experimental_*` em `leads` depois do INSERT em `lead_experimentais` (antes só inseria na canônica). Casos NOVOS de reconciliação ficam coerentes. **Validar com queries #8 e #9 da Seção I** — devem mostrar 0 regressões e taxa de sucesso ~100% após 21/05. Se aparecer regressão, é sinal de problema novo na edge ou trigger sobrescrevendo. Limitação conhecida: leads que já tinham linha em `lead_experimentais` antes do deploy permanecem com flags antigas (sem backfill).
 
 ---
 
