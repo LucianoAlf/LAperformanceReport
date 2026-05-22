@@ -124,6 +124,8 @@ export function DashboardPage() {
   const [dadosModalEvasoes, setDadosModalEvasoes] = useState<any[]>([]);
   const [modalExperimentais, setModalExperimentais] = useState(false);
   const [dadosModalExperimentais, setDadosModalExperimentais] = useState<any[]>([]);
+  const [modalConversao, setModalConversao] = useState(false);
+  const [dadosModalConversao, setDadosModalConversao] = useState<any[]>([]);
   const [carregandoModal, setCarregandoModal] = useState(false);
 
   // Pegar filtros do contexto
@@ -266,6 +268,51 @@ export function DashboardPage() {
         status: l.status === 'visita_escola' ? 'Visita' : 'Realizada',
         _status_raw: l.status,
       })));
+    } finally {
+      setCarregandoModal(false);
+    }
+  };
+
+  // Detalhe da Taxa de Conversão: leads que fizeram experimental no período,
+  // classificados em "Matriculou" / "Não matriculou".
+  // Espelha a fórmula: denominador = experimental_realizada=true; numerador = desses, status matriculado/convertido.
+  const fetchConversao = async () => {
+    setCarregandoModal(true);
+    try {
+      const dataInicio = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
+      const dataFimStr = mesFim === 12 ? `${ano + 1}-01-01` : `${ano}-${String(mesFim + 1).padStart(2, '0')}-01`;
+      let query = supabase
+        .from('leads')
+        .select(`
+          id, nome, telefone, data_contato, data_experimental, data_conversao, status, quantidade,
+          experimental_realizada, faltou_experimental,
+          unidades:unidade_id!inner(nome),
+          cursos:curso_interesse_id!left(nome),
+          canais_origem:canal_origem_id!left(nome)
+        `)
+        .eq('experimental_realizada', true)
+        .gte('data_contato', dataInicio)
+        .lt('data_contato', dataFimStr)
+        .order('data_experimental', { ascending: false, nullsFirst: false });
+
+      if (unidade !== 'todos') {
+        query = query.eq('unidade_id', unidade);
+      }
+
+      const { data } = await query;
+      setDadosModalConversao((data || []).map((l: any) => {
+        const matriculou = ['matriculado', 'convertido'].includes(l.status || '');
+        return {
+          nome: l.nome || '—',
+          unidade: l.unidades?.nome || '—',
+          data_exp: l.data_experimental ? new Date(l.data_experimental + 'T12:00:00').toLocaleDateString('pt-BR') : '—',
+          data_matr: l.data_conversao ? new Date(l.data_conversao + 'T12:00:00').toLocaleDateString('pt-BR') : '—',
+          curso: l.cursos?.nome || '—',
+          canal: l.canais_origem?.nome || '—',
+          resultado: matriculou ? 'Matriculou' : 'Não matriculou',
+          _matriculou: matriculou,
+        };
+      }));
     } finally {
       setCarregandoModal(false);
     }
@@ -501,7 +548,7 @@ export function DashboardPage() {
           
           let leadsQuery = supabase
             .from('leads')
-            .select('id, status, quantidade, data_contato')
+            .select('id, status, quantidade, data_contato, experimental_realizada')
             .gte('data_contato', startDate)
             .lte('data_contato', endDate);
 
@@ -514,14 +561,26 @@ export function DashboardPage() {
 
           // Contagens usando mesma lógica do TabComercialNew.tsx
           const totalLeads = leads.length;
-          // REGRA DE NEGÓCIO: Exp/Visita = realizada + visita_escola (não inclui agendada/faltou)
-          const expTotal = leads.filter((l: any) => 
+          // Exp/Visita exibida no card "Experimentais Realizadas":
+          // status atual exp_realizada/compareceu/visita_escola
+          const expTotal = leads.filter((l: any) =>
             ['experimental_realizada', 'compareceu', 'visita_escola'].includes(l.status)
           ).reduce((acc: number, l: any) => acc + (l.quantidade || 1), 0);
-          const novasMatriculas = leads.filter((l: any) => 
+          const novasMatriculas = leads.filter((l: any) =>
             ['matriculado', 'convertido'].includes(l.status)
           ).reduce((acc: number, l: any) => acc + (l.quantidade || 1), 0);
-          const taxaConversao = expTotal > 0 ? (novasMatriculas / expTotal) * 100 : 0;
+
+          // Taxa de conversão CORRETA: "dos alunos que fizeram exp, quantos matricularam?"
+          // - Denominador: leads com flag experimental_realizada=true (preserva mesmo após virar 'convertido')
+          // - Numerador: desses, os que viraram matriculado/convertido
+          // Exclui matrícula direta do numerador (não passou por exp) e
+          // recupera no denominador os que matricularam após exp (perderam o status 'experimental_realizada')
+          const fezExperimental = leads.filter((l: any) => l.experimental_realizada === true);
+          const fezExpQtd = fezExperimental.reduce((acc: number, l: any) => acc + (l.quantidade || 1), 0);
+          const matriculouAposExp = fezExperimental.filter((l: any) =>
+            ['matriculado', 'convertido'].includes(l.status)
+          ).reduce((acc: number, l: any) => acc + (l.quantidade || 1), 0);
+          const taxaConversao = fezExpQtd > 0 ? (matriculouAposExp / fezExpQtd) * 100 : 0;
 
           // Buscar ticket médio passaporte dos alunos matriculados no mês
           let passaporteQuery = supabase
@@ -971,11 +1030,12 @@ export function DashboardPage() {
           <KPICard
             icon={Percent}
             label="Taxa Conversão"
-            tooltip="Percentual de experimentais realizadas que se converteram em matrículas. Fórmula: matrículas / experimentais × 100."
+            tooltip="Dos alunos que fizeram aula experimental no período, quantos matricularam. Fórmula: leads que fizeram exp E matricularam / leads que fizeram exp × 100. Exclui matrícula direta. Clique para ver a lista."
             value={dadosComercial?.taxa_conversao ?? '--'}
             format="percent"
             subvalue={!dadosComercial ? 'Aguardando dados' : undefined}
             variant="emerald"
+            onClick={() => { fetchConversao(); setModalConversao(true); }}
           />
           <KPICard
             icon={Ticket}
@@ -1348,6 +1408,50 @@ export function DashboardPage() {
           dados: (() => {
             const contagem: Record<string, number> = {};
             dadosModalExperimentais.forEach(d => { contagem[d.unidade] = (contagem[d.unidade] || 0) + 1; });
+            const cores: Record<string, string> = { 'Recreio': 'bg-violet-500/70', 'Barra': 'bg-amber-500/70', 'Campo Grande': 'bg-emerald-500/70' };
+            return Object.entries(contagem)
+              .sort((a, b) => b[1] - a[1])
+              .map(([label, valor]) => ({ label, valor, cor: cores[label] || 'bg-slate-500/70' }));
+          })(),
+        } : undefined}
+      />
+
+      {/* Modal Taxa Conversão */}
+      <ModalDetalheKPI
+        open={modalConversao}
+        onClose={() => setModalConversao(false)}
+        titulo={`Taxa de Conversão (${labelPeriodo})`}
+        descricao={`Leads que fizeram aula experimental no período — ${unidade === 'todos' ? 'Consolidado' : 'Unidade selecionada'}. Numerador = matricularam, Denominador = total.`}
+        dados={dadosModalConversao}
+        colunas={[
+          { key: 'nome', label: 'Aluno' },
+          { key: 'unidade', label: 'Unidade', render: (v: string) => <BadgeUnidade nome={v} /> },
+          { key: 'data_exp', label: 'Data Exp.' },
+          { key: 'data_matr', label: 'Data Matrícula' },
+          { key: 'curso', label: 'Curso', render: (v: string) => <TextoCurso nome={v} /> },
+          { key: 'canal', label: 'Canal' },
+          { key: 'resultado', label: 'Resultado', render: (v: string, row: any) => (
+            <BadgeTipo tipo={v} variante={row._matriculou ? 'nao_renovacao' : 'evasao'} />
+          ) },
+        ]}
+        carregando={carregandoModal}
+        resumo={(() => {
+          const total = dadosModalConversao.length;
+          const matriculou = dadosModalConversao.filter(d => d._matriculou).length;
+          const naoMatriculou = total - matriculou;
+          const taxa = total > 0 ? (matriculou / total) * 100 : 0;
+          return [
+            { label: 'Fizeram Exp', valor: total, icone: <Calendar size={14} />, cor: 'text-sky-400', destaque: true },
+            { label: 'Matricularam', valor: matriculou, icone: <GraduationCap size={14} />, cor: 'text-emerald-400' },
+            { label: 'Não Matricularam', valor: naoMatriculou, icone: <Users size={14} />, cor: 'text-amber-400' },
+            { label: 'Taxa', valor: `${taxa.toFixed(1)}%`, icone: <Percent size={14} />, cor: 'text-violet-400' },
+          ];
+        })()}
+        distribuicao={unidade === 'todos' ? {
+          titulo: 'Por Unidade',
+          dados: (() => {
+            const contagem: Record<string, number> = {};
+            dadosModalConversao.forEach(d => { contagem[d.unidade] = (contagem[d.unidade] || 0) + 1; });
             const cores: Record<string, string> = { 'Recreio': 'bg-violet-500/70', 'Barra': 'bg-amber-500/70', 'Campo Grande': 'bg-emerald-500/70' };
             return Object.entries(contagem)
               .sort((a, b) => b[1] - a[1])
