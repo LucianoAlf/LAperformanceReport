@@ -7,6 +7,7 @@ import { Copy, Check, RotateCcw, FileText, Calendar, RefreshCw, AlertTriangle, L
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { DatePicker } from '@/components/ui/date-picker';
+import { format } from 'date-fns';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import type { MovimentacaoAdmin, ResumoMes } from './AdministrativoPage';
@@ -212,13 +213,17 @@ export function ModalRelatorio({
       farmersNomes = 'Todas as Unidades';
     }
 
-    // Função auxiliar para verificar se uma data está no range selecionado
+    // Compara datas como string YYYY-MM-DD (sem fuso, sem armadilha UTC).
+    // O bug anterior usava new Date(dataStr) que parseia como UTC midnight —
+    // em BRT (UTC-3) isso vira 21h do dia ANTERIOR, perdendo registros do dia atual.
     const dentroDoRange = (dataStr: string) => {
-      const data = new Date(dataStr);
+      if (!dataStr) return false;
+      const apenasData = dataStr.split('T')[0];
       if (isRange) {
-        return data >= new Date(dataInicio.toDateString()) && data <= new Date(dataFim.toDateString());
+        return apenasData >= format(dataInicio, 'yyyy-MM-dd')
+            && apenasData <= format(dataFim, 'yyyy-MM-dd');
       }
-      return data.toDateString() === dataSelecionada.toDateString();
+      return apenasData === format(dataSelecionada, 'yyyy-MM-dd');
     };
 
     // Filtrar renovações do período selecionado
