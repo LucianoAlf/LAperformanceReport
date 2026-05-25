@@ -563,6 +563,49 @@ ORDER BY periodo, qtd DESC;
 
 > **Nota crítica sobre contagens:** dashboards que leem `leads.experimental_*` (modelo legado) podem **sub-contar** experimentais antigas de leads que reagendaram (a flag mais antiga foi sobrescrita) E **super-contar** ao misturar visitas (ver query #7). A fonte canônica é `lead_experimentais` — sempre prefira ela em agregações.
 
+### J. Validação do fix `data_contato` self-heal (`upsert_lead`, aplicado 2026-05-25)
+
+**Contexto do fix:** antes de 2026-05-25, a RPC `upsert_lead` gravava `data_contato` apenas no INSERT (branch 7) e **nunca** no UPDATE (branch 6) — era *write-once*. Leads migrados em massa (`created_at` no minuto `2026-03-26 15:01`, ~2053 leads) ficaram com `data_contato` **congelado** da migração, divergente da data real de criação do lead no Emusys, e nenhum webhook posterior corrigia. O fix adicionou `data_contato = COALESCE(p_data_contato, data_contato)` aos dois branches de UPDATE (emusys + nocodb) do overload em uso `upsert_lead(text,text,text,uuid,text,text,integer,text,boolean,date)`. A partir daí, todo webhook que traz `body.lead.data_hora_criacao` re-alinha a data.
+
+> O overload legado `upsert_lead(text,text,text,uuid,text,integer,text,text,date,boolean)` **NÃO** foi alterado (não é chamado pelo workflow `EB0LibpOJCLhKp7M`). Dívida técnica: consolidar/remover o duplicado.
+
+**Critérios:** (a) o fix não pode gerar data impossível; (b) leads que recebem update do Emusys pós-fix devem ter `data_contato` == data de criação do lead no payload Emusys.
+
+```sql
+-- 1. HARM CHECK: data_contato impossível após o fix (deve ficar 0)
+-- contato no futuro ou depois da conversão = fix gravou data errada
+SELECT
+  COUNT(*) FILTER (WHERE data_contato > CURRENT_DATE) AS contato_futuro,
+  COUNT(*) FILTER (WHERE data_conversao IS NOT NULL AND data_contato > data_conversao) AS contato_apos_conversao,
+  COUNT(*) AS leads_atualizados_pos_fix
+FROM leads
+WHERE updated_at >= '2026-05-25 00:00:00-03:00';
+
+-- 2. SELF-HEAL: leads da migração (26/03 15:01) que receberam update do Emusys pós-fix.
+-- São os candidatos a ter a data corrigida. Liste e confira (passo 3).
+SELECT l.id, l.nome, l.emusys_lead_id, l.data_contato, l.created_at::date AS migrado_em, l.updated_at
+FROM leads l
+WHERE date_trunc('minute', l.created_at) = '2026-03-26 15:01:00+00'
+  AND l.updated_at >= '2026-05-25 00:00:00-03:00'
+ORDER BY l.updated_at DESC
+LIMIT 30;
+
+-- 3. SAÚDE DA RPC: eventos emusys pós-fix por ação (inserted/updated/archived).
+-- Não deve haver queda brusca de 'updated' nem padrão anormal vs. semanas anteriores.
+SELECT acao, COUNT(*) AS qtd
+FROM leads_automacao_log
+WHERE evento = 'emusys' AND created_at >= '2026-05-25 00:00:00-03:00'
+GROUP BY acao;
+```
+
+**Verificação definitiva (correlação com n8n):** para uma amostra dos leads do passo 2 (ou qualquer lead com `updated_at` pós-fix), pegue a execução correspondente do workflow `EB0LibpOJCLhKp7M` via `mcp__n8n__n8n_executions` e compare:
+- `leads.data_contato` (banco) **deve ser igual a** `body.lead.data_hora_criacao.substring(0,10)` (payload Emusys).
+- Iguais → self-heal funcionando. Se `data_contato` continuar no valor antigo mesmo após um update → fix NÃO está pegando (investigar qual overload foi chamado / trigger sobrescrevendo).
+
+**Correlação com n8n (erros):** liste executions de `EB0LibpOJCLhKp7M` com `status: 'error'`/`'crashed'` após 2026-05-25. A mudança é só num `SET` — não deve quebrar. Erro novo mencionando `data_contato`/`date` = regressão do fix.
+
+**Critério de sucesso J:** query #1 retorna `contato_futuro = 0` e `contato_apos_conversao = 0`; query #3 mostra `updated` em volume normal; verificação definitiva mostra `data_contato == payload`. Qualquer data impossível ou erro novo da RPC pós-fix = **o fix prejudicou algo → reportar como CRÍTICO**.
+
 ---
 
 ## Step 4: Output Format
@@ -645,6 +688,8 @@ Estes são pontos de falha já documentados que você deve sempre considerar:
     - **Sintomas a auditar (Seção I)**: paradoxo de flags (#3), divergência flags vs canônica (#4), reagendamento múltiplo Alice-like (#5), órfãs (#6), confusão visita/experimental nas queries (#7), professor NULL (#2).
     - **Importante**: queries de contagem de "experimentais" que leem `leads.experimental_*` ou `leads.data_experimental` podem dar números errados — preferir `lead_experimentais` com filtro `status != 'cancelada'`.
     - **Fix v26 sync-presenca-emusys (2026-05-21)**: a função `reconciliarExperimentaisOrfas` agora atualiza flags `experimental_*` em `leads` depois do INSERT em `lead_experimentais` (antes só inseria na canônica). Casos NOVOS de reconciliação ficam coerentes. **Validar com queries #8 e #9 da Seção I** — devem mostrar 0 regressões e taxa de sucesso ~100% após 21/05. Se aparecer regressão, é sinal de problema novo na edge ou trigger sobrescrevendo. Limitação conhecida: leads que já tinham linha em `lead_experimentais` antes do deploy permanecem com flags antigas (sem backfill).
+
+16. **`data_contato` self-heal no `upsert_lead` (fix 2026-05-25)** — antes, `data_contato` era *write-once* (só gravado no INSERT); leads migrados em 26/03 15:01 (~2053) ficaram com data congelada/errada e nenhum webhook corrigia (ex: lead 4522 Renato com `05/12/2025` vs Emusys `25/04/2026`). Fix adicionou `data_contato = COALESCE(p_data_contato, data_contato)` ao UPDATE do overload `(...,text,boolean,date)` em uso. Agora todo webhook Emusys re-alinha `data_contato` com `body.lead.data_hora_criacao`. **Validar com Seção J**: data impossível (futuro / após conversão) deve ser 0, e `data_contato` deve bater com o payload Emusys nos leads atualizados pós-fix. O overload legado `(...,date,boolean)` não foi alterado (dívida técnica). Limitação: leads já convertidos/arquivados que não recebem mais webhook não se auto-corrigem — precisariam de backfill via API Emusys.
 
 ---
 

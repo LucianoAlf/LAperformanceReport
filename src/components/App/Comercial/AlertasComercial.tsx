@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { AlertTriangle, Bell, CheckCircle, TrendingDown, TrendingUp, Target, Users, X, Zap } from 'lucide-react';
+import { Bell, TrendingDown, TrendingUp, Target, Users, X, Zap } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 
@@ -47,16 +47,17 @@ interface AlertasComercialProps {
   ano: number;
   mes: number;
   resumoLeads?: ResumoLeads;
+  totalMatriculasMes?: number;
 }
 
-export function AlertasComercial({ unidadeId, ano, mes, resumoLeads }: AlertasComercialProps) {
+export function AlertasComercial({ unidadeId, ano, mes, resumoLeads, totalMatriculasMes }: AlertasComercialProps) {
   const [alertas, setAlertas] = useState<Alerta[]>([]);
   const [loading, setLoading] = useState(true);
   const [alertasFechados, setAlertasFechados] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     carregarAlertas();
-  }, [unidadeId, ano, mes, resumoLeads]);
+  }, [unidadeId, ano, mes, resumoLeads, totalMatriculasMes]);
 
   async function carregarAlertas() {
     setLoading(true);
@@ -64,14 +65,20 @@ export function AlertasComercial({ unidadeId, ano, mes, resumoLeads }: AlertasCo
       const alertasGerados: Alerta[] = [];
       const unidadeUUID = getUnidadeUUID(unidadeId);
 
-      // 1. KPIs comerciais do mês — usar resumoLeads (tabela leads) se disponível
-      // Isso garante que o alerta mostre o mesmo número da tabela de detalhamento
+      // Data local em BRT (evita o shift de UTC do toISOString)
+      const fmtData = (d: Date) =>
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+      // 1. KPIs comerciais do mês
+      // Matrículas = todas as matrículas que entraram no mês (mesmo número do filtro "Todos"
+      // da tabela de detalhamento — inclui segundo curso, banda e leads de outros períodos).
       const totalLeads = resumoLeads?.leads ?? 0;
-      const totalMatriculas = resumoLeads?.matriculas ?? 0;
+      const totalMatriculas = totalMatriculasMes ?? resumoLeads?.matriculas ?? 0;
       const taxaConversaoGeral = resumoLeads?.conversaoLeadMat ?? 0;
 
-      // Calcular dias do mês e ritmo
+      // Calcular dias do mês e ritmo — só fazem sentido para o mês corrente
       const hoje = new Date();
+      const mesCorrente = hoje.getFullYear() === ano && hoje.getMonth() + 1 === mes;
       const diasPassados = hoje.getDate();
       const diasNoMes = new Date(ano, mes, 0).getDate();
       const diasRestantes = diasNoMes - diasPassados;
@@ -123,8 +130,8 @@ export function AlertasComercial({ unidadeId, ano, mes, resumoLeads }: AlertasCo
         });
       }
 
-      // Alerta de ritmo
-      if (diasRestantes > 0 && diasRestantes <= 7) {
+      // Alerta de ritmo (apenas no mês corrente)
+      if (mesCorrente && diasRestantes > 0 && diasRestantes <= 7) {
         alertasGerados.push({
           id: 'fim-mes',
           tipo: 'atencao',
@@ -134,14 +141,14 @@ export function AlertasComercial({ unidadeId, ano, mes, resumoLeads }: AlertasCo
         });
       }
 
-      // 2. Buscar leads pendentes (filtrado pelo mês selecionado)
+      // 2. Buscar leads em andamento (filtrado pelo mês selecionado)
       const primeiroDia = `${ano}-${String(mes).padStart(2, '0')}-01`;
       const ultimoDia = new Date(ano, mes, 0).getDate();
       const ultimoDiaStr = `${ano}-${String(mes).padStart(2, '0')}-${ultimoDia}`;
 
       let leadsQuery = supabase
         .from('leads')
-        .select('id, status, data_ultimo_contato')
+        .select('id', { count: 'exact', head: true })
         .gte('data_contato', primeiroDia)
         .lte('data_contato', ultimoDiaStr)
         .in('status', ['novo', 'em_contato', 'agendado']);
@@ -150,49 +157,28 @@ export function AlertasComercial({ unidadeId, ano, mes, resumoLeads }: AlertasCo
         leadsQuery = leadsQuery.eq('unidade_id', unidadeUUID);
       }
 
-      const { data: leads } = await leadsQuery;
+      const { count: totalPendentes } = await leadsQuery;
 
-      if (leads && leads.length > 0) {
-        const tresDiasAtras = new Date();
-        tresDiasAtras.setDate(tresDiasAtras.getDate() - 3);
-        
-        const leadsSemContato = leads.filter(l => 
-          !l.data_ultimo_contato || new Date(l.data_ultimo_contato) < tresDiasAtras
-        ).length;
-
-        if (leadsSemContato > 0) {
-          alertasGerados.push({
-            id: 'leads-abandonados',
-            tipo: 'critico',
-            titulo: `⚠️ ${leadsSemContato} lead(s) sem contato há 3+ dias!`,
-            descricao: 'Faça follow-up imediato para não perder a oportunidade!',
-            icone: <AlertTriangle className="w-5 h-5" />
-          });
-        }
-
-        const totalPendentes = leads.length;
-        if (totalPendentes > 0 && leadsSemContato === 0) {
-          alertasGerados.push({
-            id: 'leads-pendentes',
-            tipo: 'info',
-            titulo: `${totalPendentes} lead(s) em andamento`,
-            descricao: 'Continue o acompanhamento para converter!',
-            icone: <Users className="w-5 h-5" />
-          });
-        }
+      if (totalPendentes && totalPendentes > 0) {
+        alertasGerados.push({
+          id: 'leads-pendentes',
+          tipo: 'info',
+          titulo: `${totalPendentes} lead(s) em andamento`,
+          descricao: 'Continue o acompanhamento para converter!',
+          icone: <Users className="w-5 h-5" />
+        });
       }
 
-      // 3. Buscar experimentais agendadas para hoje/amanhã
-      const hojeStr = hoje.toISOString().split('T')[0];
+      // 3. Buscar experimentais agendadas para hoje/amanhã (fonte canônica: lead_experimentais)
+      const hojeStr = fmtData(hoje);
       const amanha = new Date();
       amanha.setDate(amanha.getDate() + 1);
-      const amanhaStr = amanha.toISOString().split('T')[0];
+      const amanhaStr = fmtData(amanha);
 
       let expQuery = supabase
-        .from('leads')
-        .select('id, nome, data_experimental')
-        .eq('experimental_agendada', true)
-        .eq('experimental_realizada', false)
+        .from('lead_experimentais')
+        .select('id, data_experimental')
+        .eq('status', 'experimental_agendada')
         .gte('data_experimental', hojeStr)
         .lte('data_experimental', amanhaStr);
 

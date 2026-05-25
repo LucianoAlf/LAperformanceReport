@@ -117,25 +117,29 @@ interface SortableThProps {
   onSort: (col: string) => void;
   className?: string;
   align?: 'left' | 'right';
+  tooltip?: string;
 }
-const SortableTh: React.FC<SortableThProps> = ({ col, label, sort, onSort, className, align = 'left' }) => {
+const SortableTh: React.FC<SortableThProps> = ({ col, label, sort, onSort, className, align = 'left', tooltip }) => {
   const active = sort?.col === col;
   const dir = active ? sort!.dir : null;
+  const conteudo = (
+    <span className={`inline-flex items-center gap-1 ${align === 'right' ? 'justify-end w-full' : ''}${tooltip ? ' cursor-help underline decoration-dotted decoration-slate-600 underline-offset-4' : ''}`}>
+      {label}
+      {dir === 'asc' ? (
+        <ChevronUp className="w-3 h-3 text-violet-400" />
+      ) : dir === 'desc' ? (
+        <ChevronDown className="w-3 h-3 text-violet-400" />
+      ) : (
+        <ArrowUpDown className="w-3 h-3 opacity-30" />
+      )}
+    </span>
+  );
   return (
     <th
       className={`pb-3 px-2 font-medium cursor-pointer select-none hover:text-white transition-colors ${className ?? 'border-r border-slate-700/30'}`}
       onClick={() => onSort(col)}
     >
-      <span className={`inline-flex items-center gap-1 ${align === 'right' ? 'justify-end w-full' : ''}`}>
-        {label}
-        {dir === 'asc' ? (
-          <ChevronUp className="w-3 h-3 text-violet-400" />
-        ) : dir === 'desc' ? (
-          <ChevronDown className="w-3 h-3 text-violet-400" />
-        ) : (
-          <ArrowUpDown className="w-3 h-3 opacity-30" />
-        )}
-      </span>
+      {tooltip ? <Tooltip content={tooltip} side="top">{conteudo}</Tooltip> : conteudo}
     </th>
   );
 };
@@ -373,6 +377,7 @@ export function ComercialPage() {
   const [experimentaisHojeOutros, setExperimentaisHojeOutros] = useState<(LeadDiario & { canal_nome?: string; curso_nome?: string; professor_nome?: string; unidade_codigo?: string })[]>([]);
 
   const [mostrarExpOutros, setMostrarExpOutros] = useState(false);
+  const [mostrarMatOutros, setMostrarMatOutros] = useState(false);
   const [gruposExpandidos, setGruposExpandidos] = useState<Set<number>>(new Set());
 
   // Aba selecionada no detalhamento
@@ -3054,6 +3059,7 @@ export function ComercialPage() {
         ano={competencia.filtro.ano}
         mes={competencia.filtro.mes}
         resumoLeads={resumo}
+        totalMatriculasMes={matriculasMes.length}
       />
 
       {/* ═══════════════════════════════════════════════════════════════ */}
@@ -4943,6 +4949,13 @@ export function ComercialPage() {
             return true;
           });
           const matriculasFiltradas = sortMat(matriculasFiltradasRaw);
+          // Matrículas cujo lead entrou em mês anterior (arrasto de outros períodos).
+          // Só faz sentido quando o filtro ativo ESCONDE os _fora_range (senão duplicaria a lista principal).
+          const matriculasOutrosPeriodos = (filtroTipoMat === 'novos_alunos' || filtroTipoMat === 'leads_periodo')
+            ? matriculasMes.filter((m: any) => m._fora_range && !m.is_segundo_curso && !isBanda(m.curso_nome))
+            : filtroTipoMat === 'segundo_curso'
+              ? matriculasMes.filter((m: any) => m._fora_range && (m.is_segundo_curso || isBanda(m.curso_nome)))
+              : [];
           return (
           <>
             {/* Header específico de matrículas */}
@@ -4965,8 +4978,8 @@ export function ComercialPage() {
               <thead>
                 <tr className="text-left text-slate-400 border-b border-slate-700">
                   <th className="pb-3 px-2 font-medium border-r border-slate-700/30">#</th>
-                  <SortableTh col="data" label="Data" sort={sortMatriculas} onSort={(c) => setSortMatriculas(prev => nextSort(prev, c))} />
-                  <SortableTh col="conversao" label="Conversão" sort={sortMatriculas} onSort={(c) => setSortMatriculas(prev => nextSort(prev, c))} />
+                  <SortableTh col="data" label="Data" tooltip="Data de entrada do lead (não é a data da matrícula)" sort={sortMatriculas} onSort={(c) => setSortMatriculas(prev => nextSort(prev, c))} />
+                  <SortableTh col="conversao" label="Conversão" tooltip="Data em que efetivou a matrícula" sort={sortMatriculas} onSort={(c) => setSortMatriculas(prev => nextSort(prev, c))} />
                   <SortableTh col="aluno" label="Aluno(a)" sort={sortMatriculas} onSort={(c) => setSortMatriculas(prev => nextSort(prev, c))} />
                   <SortableTh col="telefone" label="Telefone" sort={sortMatriculas} onSort={(c) => setSortMatriculas(prev => nextSort(prev, c))} />
                   <SortableTh col="idade" label="Idade" sort={sortMatriculas} onSort={(c) => setSortMatriculas(prev => nextSort(prev, c))} />
@@ -5170,6 +5183,69 @@ export function ComercialPage() {
                     </td>
                   </tr>
                 ))}
+                {/* Sub-seção: matrículas cujo lead entrou em mês anterior (mesma tabela = colunas alinhadas) */}
+                {matriculasOutrosPeriodos.length > 0 && (
+                  <>
+                    <tr>
+                      <td colSpan={14} className="p-0">
+                        <button
+                          onClick={() => setMostrarMatOutros(prev => !prev)}
+                          className="flex items-center gap-2 w-full group py-2"
+                        >
+                          <div className="h-px flex-1 bg-amber-500/30" />
+                          <span className="text-xs text-amber-400 font-medium whitespace-nowrap flex items-center gap-1.5 group-hover:text-amber-300 transition-colors">
+                            {mostrarMatOutros ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+                            Matrículas de leads de outros períodos ({matriculasOutrosPeriodos.length})
+                          </span>
+                          <div className="h-px flex-1 bg-amber-500/30" />
+                        </button>
+                      </td>
+                    </tr>
+                    {mostrarMatOutros && matriculasOutrosPeriodos.map((mat: any, index: number) => {
+                      const fmt = (d: string) => d ? new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '-';
+                      const escolaCalc = mat.idade != null ? (mat.idade <= 11 ? 'LAMK' : 'EMLA') : (mat.tipo_matricula || '-');
+                      return (
+                        <tr key={`outros-${mat.id}`} className="border-b border-slate-700/50 bg-amber-500/5 hover:bg-amber-500/10 transition-colors">
+                          <td className="py-3 px-2 text-slate-500 font-medium border-r border-slate-700/30">{index + 1}</td>
+                          <td className="py-3 px-2 border-r border-slate-700/30">
+                            <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-500/20 text-amber-400">{fmt(mat.data_contato)}</span>
+                          </td>
+                          <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-emerald-400">{fmt(mat.data_conversao)}</span></td>
+                          <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-white font-medium">{mat.nome || '-'}</span></td>
+                          <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-emerald-400">{(mat as any).telefone || '-'}</span></td>
+                          <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-slate-300">{mat.idade ?? '-'}</span></td>
+                          <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-purple-400">{mat.curso_nome || '-'}</span></td>
+                          <td className="py-3 px-2 border-r border-slate-700/30"><CanalOrigemBadge canal={mat.canal_nome || '-'} /></td>
+                          <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-slate-300">{mat.professor_exp_nome || '-'}</span></td>
+                          <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-slate-300">{mat.professor_fixo_nome || '-'}</span></td>
+                          <td className="py-3 px-2 border-r border-slate-700/30">
+                            <span className="text-emerald-400 font-medium whitespace-nowrap">R$ {(mat.valor_passaporte || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                          </td>
+                          <td className="py-3 px-2 border-r border-slate-700/30">
+                            <span className="text-cyan-400 font-medium whitespace-nowrap">R$ {(mat.valor_parcela || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                          </td>
+                          <td className="py-3 px-2 border-r border-slate-700/30">
+                            <div className="flex items-center gap-1.5">
+                              <span className={cn("px-2 py-0.5 rounded text-xs font-medium", escolaCalc === 'LAMK' ? 'bg-pink-500/20 text-pink-400' : 'bg-blue-500/20 text-blue-400')}>{escolaCalc}</span>
+                              {isAdmin && mat.unidades?.codigo && (
+                                <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-600/30 text-slate-300">{mat.unidades.codigo}</span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-3 px-2 text-right">
+                            <button
+                              onClick={() => mat.id && setDeleteId(mat.id)}
+                              className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded transition-colors"
+                              title="Excluir"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </>
+                )}
               </tbody>
               <tfoot>
                 <tr className="border-t border-slate-600 bg-slate-800/50">

@@ -118,13 +118,14 @@
 - **Branch lead_criado:** Preparar Dados Lead → Upsert Lead (Supabase) → Preparar NocoDB → Criar Lead NocoDB
 - **Branch lead_editado:** Preparar Dados Arquivamento1 → manda pro dash do rayan3 → Upsert Lead Editado (Supabase) → Preparar Update NocoDB → Buscar Lead NocoDB → Atualizar Lead NocoDB
 - Lead criado no NocoDB recebe `Observacoes: "emusys"`
+- **`data_contato` (fix 2026-05-25):** `upsert_lead()` passou a re-alinhar `data_contato` no UPDATE (`COALESCE(p_data_contato, data_contato)`), não só no INSERT. Origem: `body.lead.data_hora_criacao`. Antes era write-once → leads migrados (26/03, ~2053) ficavam com data congelada/divergente do Emusys (ex: lead 4522 Renato `05/12/2025` vs Emusys `25/04/2026`). Overload legado `(...,date,boolean)` DROPADO em 2026-05-25 (duplicata morta, sem callers). Validação no agente fiscal-dados (Seção J). Limitação: leads já convertidos/arquivados não recebem mais webhook → não se auto-corrigem (precisariam backfill via API Emusys).
 
 ### NocoDB webhook — `1uP2GhoHG1shEFLg` ("[ Nocodb ] Criacao/Atualizacao de leads")
 - Webhook: `POST /webhook/nocodb_leads` (disparo automatico do NocoDB on insert/update)
-- Branches ativas:
-  1. `Webhook` → `Transformar NocoDB → Emusys` → `Preparar Dados Arquivamento1` → `Upsert Lead` (Supabase com origem='nocodb')
+- Branches:
+  1. `Webhook` → `Transformar NocoDB → Emusys` → `Preparar Dados Arquivamento1` → `Upsert Lead` (Supabase, origem='nocodb') — **NÓ DESATIVADO (`disabled`) desde ~2026-03-28**. NÃO sincroniza mais NocoDB→Supabase.
   2. `Webhook` → `Call '[ Controle ] Registrar Lead Metrics'` (sub-workflow YiSWPwsuvO74XNAs) — log em tabela NocoDB controle
-- O upsert_lead() sincroniza TODO lead do NocoDB para Supabase (confirmado 2026-03-21)
+- **OBSOLETO (verificado 2026-05-25):** a afirmação "upsert_lead sincroniza TODO lead do NocoDB" não vale mais — o nó Upsert está `disabled` e há **0 eventos `evento='nocodb'`** em `leads_automacao_log` (30d). Hoje TODO lead chega ao Supabase só pela via Emusys (`EB0LibpOJCLhKp7M`).
 - Nó orfao (desconectado): `Transformar NocoDB → Emusys1` → `enviar para o dashboard do rayan` — outro projeto, nao relevante
 - `[ Controle ] Registrar Lead Metrics` (YiSWPwsuvO74XNAs) — apenas log em NocoDB `musrzcrvkkwl27j`
 
@@ -132,7 +133,7 @@
 | Origem | → Supabase | → NocoDB | → Emusys |
 |--------|------------|----------|----------|
 | Emusys webhook | ✅ via EB0LibpOJCLhKp7M | ✅ via EB0LibpOJCLhKp7M | — (ja esta) |
-| NocoDB (agente SDR) | ✅ via 1uP2GhoHG1shEFLg | — (ja esta) | ❌ nao sincroniza |
+| NocoDB (agente SDR) | ❌ nó Upsert desativado (~28/03/2026) | — (ja esta) | ❌ nao sincroniza |
 | Manual (Supabase) | — (ja esta) | ❌ | ❌ |
 
 **Por design:** leads criados no NocoDB (via agente SDR) NAO vao para o Emusys. O Emusys e populado apenas quando o agente SDR chama a API do Emusys diretamente.

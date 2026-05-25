@@ -98,7 +98,7 @@
 - **`yko5HstPTze0gsIM`**: Agente Mila Barra — **PRINCIPAL FONTE DE LEADS**
   - Os 3 agentes Mila SDR sao a principal origem de leads. Recebem WhatsApp, processam com IA e chamam a API Emusys de cadastro. Emusys dispara webhook → `EB0LibpOJCLhKp7M`
 - **`EB0LibpOJCLhKp7M`**: Emusys webhook → Supabase + NocoDB (lead_criado, lead_editado, lead_arquivado). Ativado toda vez que a API de registro de leads do Emusys e chamada (pelos Mila SDR ou manual)
-- **`1uP2GhoHG1shEFLg`**: NocoDB webhook → upsert_lead() Supabase (origem='nocodb') + log controle. Garante que TODO lead do NocoDB chegue ao Supabase
+- **`1uP2GhoHG1shEFLg`**: NocoDB webhook. Nó `Upsert Lead` (origem='nocodb') **DESATIVADO desde ~28/03/2026** → NÃO sincroniza NocoDB→Supabase (verificado 2026-05-25: 0 eventos `nocodb`/30d). Hoje só roda o log de métricas. Leads chegam ao Supabase apenas pela via Emusys
 - **`dJ7Dc9LHLTSnKIsi`**: Gerenciar CRM NocoDB — apenas UPDATEs (triggered por Chatwoot), NAO cria leads
 
 ### Tabelas de Aggregacao (Supabase)
