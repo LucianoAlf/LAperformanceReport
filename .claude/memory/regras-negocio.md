@@ -8,6 +8,13 @@
 - Leads arquivados (`arquivado = true`) sao ignorados na busca de duplicatas
 - Hook: `src/hooks/useCheckLeadDuplicado.ts`
 
+## Familias / Irmaos (1 responsavel → N alunos) — GAP CONHECIDO (2026-05-25)
+- Emusys cria 1 registro por PESSOA. `matricula.lead_id` (=`emusys_lead_id`) identifica o ALUNO, nao a familia. Cada filho tem `lead_id` proprio. Agrupa cursos do mesmo aluno (2o curso), nunca irmaos.
+- Familia so e ligada pelos campos de responsavel no payload: `nome_responsavel`, `telefone_responsavel`, `email_responsavel` (identicos entre irmaos). `telefone_aluno` geralmente null (kids).
+- `leads.telefone` recebe o `telefone_responsavel` → UNIQUE `idx_leads_telefone_unidade_unique (telefone, unidade_id) WHERE arquivado=false` COLAPSA irmaos em 1 lead. Filhos extras viram aluno SEM lead (`leads.aluno_id` e 1:1, nao comporta N).
+- Efeito: matriculas de irmaos extras SOMEM do funil (funil conta leads convertidos e exibe o nome do lead) → subcontagem + nome trocado. Casos reais: Luiz Felipe (aluno 1657) aparece como lead "Sophia"; Helena (aluno 1711) orfa.
+- Fix pendente — 2 abordagens: (A) cada pessoa = seu lead, relaxar unique de telefone p/ `emusys_lead_id IS NULL` (dedup so p/ leads WhatsApp) — funil ja conta certo; (B) 1 lead-familia → N alunos via novo `alunos.lead_id` + contar matriculas por aluno (reescreve contagem). Detalhe em [[dominio-comercial]].
+
 ## Emusys — Variacoes de Estagio
 - Emusys envia `estagio_funil.nome` com variacoes: "Novo", "Novo Lead", "Faltou aula experimental", "Experimental Agendada", "Realizou experimental", "Compareceu", "Matriculado"
 - Mapeamento completo para NocoDB em `integracao-infra.md` secao "Mapeamento Estagio"

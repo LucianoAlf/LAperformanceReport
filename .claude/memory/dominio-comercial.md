@@ -42,6 +42,15 @@
 - Porcentagens: experimentais/total, matriculas/total (funil de conversao real)
 - Componente exibe: icone, label, contagem, % do total, barra de progresso
 
+## Aba Matrículas do Funil — FONTE = `alunos` (mudança 2026-05-25)
+- A etapa/aba "Matrículas" do Detalhamento do Funil e o card de Matrículas leem de **`alunos`** (cada aluno com `data_matricula` no período = 1 matrícula), NÃO mais de `leads` convertidos. Motivo: matrículas sem lead (irmãos no mesmo telefone, matrículas diretas) sumiam. Ver [[regras-negocio]] "Famílias / Irmãos".
+- `matriculasMes` montado em `loadData`: query `alunos` (joins cursos/professores/formas) + `LEFT JOIN leads` via `aluno_id` para Canal e nome do lead. Campos recebem **aliases legados** (`professor_fixo_id`←`professor_atual_id`, `idade`←`idade_atual`, `curso_interesse_id`←`curso_id`, `data_conversao`←`data_matricula`) p/ não quebrar `sortMat`/filtros.
+- Campos novos por linha: `lead_id`, `lead_nome`, `is_orfao`, `lead_divergente`, `is_banda` (de `cursos.is_projeto_banda`).
+- Coluna **"Lead vinculado"**: "Matrícula direta" se órfão; âmbar se `lead_nome` ≠ aluno. Banda usa flag `is_projeto_banda` (não string match).
+- `filtroTipoMat`: só `novos_alunos` / `segundo_curso` / `todos` (removidos `_fora_range`, `leads_periodo`, `por_data_matricula` + sub-tabela "outros períodos").
+- Edição inline (`salvarCampoMatricula`): grava em `alunos`; Canal/data-entrada gravam no lead vinculado (órfão = "—"); idade/escola read-only. Excluir (`deleteMatriculaId`/`confirmDeleteMatricula`) **apaga o aluno** (estado separado do `deleteId` que apaga leads).
+- Resumo/conversão e relatórios WhatsApp (Diário/Semanal/Mensal/Matrículas) contam de `alunos` via helper `buscarMatriculasAlunos`. `useKPIsComercial` usa view `vw_kpis_comercial_mensal` que já conta de `alunos`.
+
 ## Detalhamento do Funil
 - 4 sub-tabs: Leads, Experimentais, Visitas, Matriculas
 - Cada tab filtra por status (ver regras-negocio.md "Filtro por Tab")

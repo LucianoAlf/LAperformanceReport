@@ -691,6 +691,22 @@ Estes são pontos de falha já documentados que você deve sempre considerar:
 
 16. **`data_contato` self-heal no `upsert_lead` (fix 2026-05-25)** — antes, `data_contato` era *write-once* (só gravado no INSERT); leads migrados em 26/03 15:01 (~2053) ficaram com data congelada/errada e nenhum webhook corrigia (ex: lead 4522 Renato com `05/12/2025` vs Emusys `25/04/2026`). Fix adicionou `data_contato = COALESCE(p_data_contato, data_contato)` ao UPDATE do overload `(...,text,boolean,date)` em uso. Agora todo webhook Emusys re-alinha `data_contato` com `body.lead.data_hora_criacao`. **Validar com Seção J**: data impossível (futuro / após conversão) deve ser 0, e `data_contato` deve bater com o payload Emusys nos leads atualizados pós-fix. O overload legado `(...,date,boolean)` não foi alterado (dívida técnica). Limitação: leads já convertidos/arquivados que não recebem mais webhook não se auto-corrigem — precisariam de backfill via API Emusys.
 
+17. **Lead `convertido` com status regressado para `experimental_agendada`** — `registrar_experimental()` atualiza `leads.status` incondicionalmente, sem checar se o lead já está em estágio mais avançado. Quando Emusys envia `aula_experimental_criada` para um lead já convertido (ex: segundo curso, reagendamento tardio), o workflow `j41tPbyjGXUQUxrN` chama `registrar_experimental()` que sobrescreve o status — apagando o histórico de conversão. **Fix aplicado (2026-05-26)**: guard `AND status NOT IN ('convertido', 'arquivado')` no `UPDATE leads SET status = ...` dentro da função SQL. Após o fix, o UPSERT em `lead_experimentais` continua normalmente — só o `leads.status` não regride. **Detectar regressões**:
+    ```sql
+    -- Leads marcados como já matriculados (têm aluno_id) mas com status de pipeline regressado
+    SELECT l.id, l.nome, l.status, l.updated_at,
+           a.id AS aluno_id, a.status AS status_aluno,
+           lal.acao, lal.evento, lal.created_at AS quando_regressou
+    FROM leads l
+    JOIN alunos a ON a.lead_id = l.id AND a.status = 'ativo'
+    JOIN leads_automacao_log lal ON lal.lead_id = l.id
+    WHERE l.status IN ('experimental_agendada', 'experimental_realizada', 'novo')
+      AND lal.acao = 'experimental_agendada'
+      AND lal.created_at >= NOW() - INTERVAL '30 days'
+    ORDER BY lal.created_at DESC LIMIT 20;
+    ```
+    **Correlação n8n obrigatória quando encontrar regressão:** use `mcp__n8n__n8n_executions` no workflow `j41tPbyjGXUQUxrN` com filtro de data para confirmar qual execution processou o webhook. Verifique se o payload continha `aula_experimental_criada` para um lead que já era `convertido` na época — prova que o guard ainda não estava ativo (antes do fix) ou que o guard foi bypassado (se regressão pós-fix).
+
 ---
 
 ## Nomenclatura de Invariantes (alinhamento com spec Saúde das Automações)

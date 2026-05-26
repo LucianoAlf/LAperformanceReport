@@ -377,7 +377,6 @@ export function ComercialPage() {
   const [experimentaisHojeOutros, setExperimentaisHojeOutros] = useState<(LeadDiario & { canal_nome?: string; curso_nome?: string; professor_nome?: string; unidade_codigo?: string })[]>([]);
 
   const [mostrarExpOutros, setMostrarExpOutros] = useState(false);
-  const [mostrarMatOutros, setMostrarMatOutros] = useState(false);
   const [gruposExpandidos, setGruposExpandidos] = useState<Set<number>>(new Set());
 
   // Aba selecionada no detalhamento
@@ -389,7 +388,7 @@ export function ComercialPage() {
   const [filtroCursoFunil, setFiltroCursoFunil] = useState<string>('todos');
   const [filtroProfessorFunil, setFiltroProfessorFunil] = useState<string>('todos');
   const [filtroTipoExp, setFiltroTipoExp] = useState<'leads_novos' | 'todos' | 'alunos' | 'agendadas_periodo'>('leads_novos');
-  const [filtroTipoMat, setFiltroTipoMat] = useState<'novos_alunos' | 'leads_periodo' | 'segundo_curso' | 'por_data_matricula' | 'todos'>('novos_alunos');
+  const [filtroTipoMat, setFiltroTipoMat] = useState<'novos_alunos' | 'segundo_curso' | 'todos'>('novos_alunos');
   const [selecionadosFunil, setSelecionadosFunil] = useState<Set<number>>(new Set());
   const [excluindoEmLote, setExcluindoEmLote] = useState(false);
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
@@ -406,6 +405,7 @@ export function ComercialPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingData, setEditingData] = useState<Partial<LeadDiario>>({});
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [deleteMatriculaId, setDeleteMatriculaId] = useState<number | null>(null);
 
   // Estados para lançamento em lote
   interface LoteLinha {
@@ -703,32 +703,6 @@ export function ComercialPage() {
 
       const registros = data || [];
 
-      // Buscar matrículas convertidas no período mas com data_contato fora do range
-      // (ex: lead entrou em março, matriculou em abril)
-      // NÃO infla o pipeline — armazena separadamente para filtro "por data de matrícula"
-      let matriculasForaRange: any[] = [];
-      if (startDate && endDate) {
-        let queryConvertidos = supabase
-          .from('leads')
-          .select('*, canais_origem(nome), cursos(nome), unidades(codigo), alunos:aluno_id(is_segundo_curso, is_aluno_retorno, is_ex_aluno)')
-          .in('status', ['matriculado', 'convertido'])
-          .not('data_conversao', 'is', null)
-          .gte('data_conversao', startDate)
-          .lte('data_conversao', endDate)
-          .or(`data_contato.lt.${startDate},data_contato.gt.${endDate},data_contato.is.null`);
-
-        if (isAdmin) {
-          if (context?.unidadeSelecionada && context.unidadeSelecionada !== 'todos') {
-            queryConvertidos = queryConvertidos.eq('unidade_id', context.unidadeSelecionada);
-          }
-        } else if (usuario?.unidade_id) {
-          queryConvertidos = queryConvertidos.eq('unidade_id', usuario.unidade_id);
-        }
-
-        const { data: convertidosForaRange } = await queryConvertidos;
-        matriculasForaRange = convertidosForaRange || [];
-      }
-
       // Quando o filtro é "Hoje", buscar dados do mês inteiro para o "Acumulado do Mês"
       const isFiltroHoje = competencia.filtro.tipo === 'diario';
       let registrosParaResumo = registros;
@@ -871,65 +845,144 @@ export function ComercialPage() {
       const registrosEntradaHoje = registros.filter(r => r.data_contato === hoje);
       setRegistrosHoje(registrosEntradaHoje);
 
-      // Matrículas do mês — leads do período que converteram
-      const matriculasDoFunil = registros
-        .filter(r => ['matriculado','convertido'].includes(r.status) && r.data_conversao &&
-          r.data_conversao >= (startDate || '0000') && r.data_conversao <= (endDate || '9999'));
+      // ════════════════════════════════════════════════════════════════
+      // Matrículas do período — FONTE: tabela `alunos` (cada aluno com
+      // data_matricula no range = 1 matrícula real). Antes vinha de `leads`
+      // convertidos, mas matrículas SEM lead (irmãos no mesmo telefone do
+      // responsável, matrículas diretas) sumiam do funil. Ver regras-negocio.
+      // Campos recebem aliases legados p/ manter compatibilidade com a tabela.
+      // ════════════════════════════════════════════════════════════════
+      let alunosMatQuery = supabase
+        .from('alunos')
+        .select('id, nome, telefone, responsavel_telefone, data_nascimento, idade_atual, curso_id, professor_atual_id, professor_experimental_id, tipo_matricula_id, tipo_aluno, forma_pagamento_id, valor_parcela, valor_passaporte, data_matricula, is_segundo_curso, modalidade, unidade_id, status, cursos:curso_id(nome, is_projeto_banda), unidades:unidade_id(codigo)')
+        .not('data_matricula', 'is', null)
+        .limit(10000);
 
-      // Matrículas fora do range formatadas (leads de outros meses que matricularam no período)
-      const matriculasForaFormatadas = matriculasForaRange.map(m => ({
-        ...m,
-        _fora_range: true, // flag para identificar que veio de outro período
+      if (startDate) alunosMatQuery = alunosMatQuery.gte('data_matricula', startDate);
+      if (endDate) alunosMatQuery = alunosMatQuery.lte('data_matricula', endDate);
+
+      if (isAdmin) {
+        if (context?.unidadeSelecionada && context.unidadeSelecionada !== 'todos') {
+          alunosMatQuery = alunosMatQuery.eq('unidade_id', context.unidadeSelecionada);
+        }
+      } else if (usuario?.unidade_id) {
+        alunosMatQuery = alunosMatQuery.eq('unidade_id', usuario.unidade_id);
+      }
+
+      const { data: alunosMatData } = await alunosMatQuery;
+
+      const matriculasDoMes: any[] = (alunosMatData || []).map((a: any) => ({
+        ...a,
+        // aliases legados (compatibilidade com sortMat/filtros/tabela)
+        curso_interesse_id: a.curso_id,
+        professor_fixo_id: a.professor_atual_id,
+        idade: a.idade_atual,
+        data_conversao: a.data_matricula,
+        curso_nome: (a.cursos as any)?.nome || '',
+        is_banda: (a.cursos as any)?.is_projeto_banda || false,
+        // preenchidos abaixo (professores / forma / lead vinculado)
+        data_contato: null,
+        canal_origem_id: null,
+        canal_nome: '',
+        professor_fixo_nome: '',
+        professor_exp_nome: '',
+        forma_pagamento_nome: '',
+        lead_id: null,
+        lead_nome: null,
+        is_orfao: true,
+        lead_divergente: false,
       }));
 
-      // Combinar: matrículas do funil + fora do range (sem duplicatas)
-      const idsDoFunil = new Set(matriculasDoFunil.map(m => m.id));
-      const todasMatriculas = [
-        ...matriculasDoFunil,
-        ...matriculasForaFormatadas.filter(m => !idsDoFunil.has(m.id)),
-      ];
-
-      const matriculasDoMes = todasMatriculas.map(m => ({
-          ...m,
-          canal_nome: (m.canais_origem as any)?.nome || '',
-          curso_nome: (m.cursos as any)?.nome || '',
-          is_segundo_curso: (m.alunos as any)?.is_segundo_curso || false,
-          is_aluno_retorno: (m.alunos as any)?.is_aluno_retorno || false,
-          is_ex_aluno: (m.alunos as any)?.is_ex_aluno || false,
-        }));
-      
-      // Buscar nomes dos professores e formas de pagamento
+      // Enriquecer com professores, forma de pagamento e lead vinculado (queries separadas)
       if (matriculasDoMes.length > 0) {
         const profIds = new Set<number>();
         const formaIds = new Set<number>();
+        const alunoIds: number[] = [];
         matriculasDoMes.forEach(m => {
           if (m.professor_experimental_id) profIds.add(m.professor_experimental_id);
-          if (m.professor_fixo_id) profIds.add(m.professor_fixo_id);
+          if (m.professor_atual_id) profIds.add(m.professor_atual_id);
           if (m.forma_pagamento_id) formaIds.add(m.forma_pagamento_id);
-          if (m.forma_pagamento_passaporte_id) formaIds.add(m.forma_pagamento_passaporte_id);
+          if (m.id) alunoIds.push(m.id);
         });
-        
-        const [profsData, formasData] = await Promise.all([
-          profIds.size > 0 
+
+        const [profsData, formasData, leadsVinc] = await Promise.all([
+          profIds.size > 0
             ? supabase.from('professores').select('id, nome').in('id', Array.from(profIds))
-            : { data: [] },
-          formaIds.size > 0 
+            : Promise.resolve({ data: [] as any[] }),
+          formaIds.size > 0
             ? supabase.from('formas_pagamento').select('id, nome, sigla').in('id', Array.from(formaIds))
-            : { data: [] },
+            : Promise.resolve({ data: [] as any[] }),
+          alunoIds.length > 0
+            ? supabase.from('leads').select('id, nome, aluno_id, canal_origem_id, data_contato, canais_origem(nome)').in('aluno_id', alunoIds)
+            : Promise.resolve({ data: [] as any[] }),
         ]);
-        
-        const profMap = new Map<number, string>(profsData.data?.map(p => [p.id, p.nome] as [number, string]) || []);
-        const formaMap = new Map<number, string>(formasData.data?.map(f => [f.id, f.sigla || f.nome] as [number, string]) || []);
-        
+
+        const profMap = new Map<number, string>((profsData.data as any[])?.map(p => [p.id, p.nome] as [number, string]) || []);
+        const formaMap = new Map<number, string>((formasData.data as any[])?.map(f => [f.id, f.sigla || f.nome] as [number, string]) || []);
+        const leadMap = new Map<number, any>();
+        ((leadsVinc.data as any[]) || []).forEach(l => {
+          if (l.aluno_id && !leadMap.has(l.aluno_id)) leadMap.set(l.aluno_id, l);
+        });
+
         matriculasDoMes.forEach(m => {
           m.professor_exp_nome = m.professor_experimental_id ? profMap.get(m.professor_experimental_id) || '' : '';
-          m.professor_fixo_nome = m.professor_fixo_id ? profMap.get(m.professor_fixo_id) || '' : '';
+          m.professor_fixo_nome = m.professor_atual_id ? profMap.get(m.professor_atual_id) || '' : '';
           m.forma_pagamento_nome = m.forma_pagamento_id ? formaMap.get(m.forma_pagamento_id) || '' : '';
-          m.forma_pagamento_passaporte_nome = m.forma_pagamento_passaporte_id ? formaMap.get(m.forma_pagamento_passaporte_id) || '' : '';
+          const lead = leadMap.get(m.id);
+          if (lead) {
+            m.lead_id = lead.id;
+            m.lead_nome = lead.nome;
+            m.is_orfao = false;
+            m.lead_divergente = (lead.nome || '').trim().toLowerCase() !== (m.nome || '').trim().toLowerCase();
+            m.data_contato = lead.data_contato || null;
+            m.canal_origem_id = lead.canal_origem_id || null;
+            m.canal_nome = (lead.canais_origem as any)?.nome || '';
+          }
         });
+
+        // Herança de origem por TELEFONE: matrículas órfãs (sem lead direto) de
+        // irmãos/família herdam o canal do lead que compartilha o telefone do responsável.
+        const orfaos = matriculasDoMes.filter((m: any) => m.is_orfao);
+        const telsOrfaos = new Set<string>();
+        orfaos.forEach((m: any) => {
+          if (m.telefone) telsOrfaos.add(m.telefone);
+          if (m.responsavel_telefone) telsOrfaos.add(m.responsavel_telefone);
+        });
+        if (telsOrfaos.size > 0) {
+          const { data: leadsTel } = await supabase
+            .from('leads')
+            .select('id, nome, telefone, canal_origem_id, canais_origem(nome)')
+            .in('telefone', Array.from(telsOrfaos))
+            .eq('arquivado', false);
+          const leadPorTel = new Map<string, any>();
+          ((leadsTel as any[]) || []).forEach(l => {
+            if (l.telefone && !leadPorTel.has(l.telefone)) leadPorTel.set(l.telefone, l);
+          });
+          orfaos.forEach((m: any) => {
+            const lead = leadPorTel.get(m.telefone) || leadPorTel.get(m.responsavel_telefone);
+            if (lead) {
+              m.origem_familia = true;
+              m.lead_familia_nome = lead.nome;
+              m.canal_origem_id = lead.canal_origem_id || null;
+              m.canal_nome = (lead.canais_origem as any)?.nome || '';
+            }
+          });
+        }
       }
-      
-      setMatriculasMes(matriculasDoMes);
+
+      setMatriculasMes(matriculasDoMes as any);
+
+      // Alinhar resumo/conversão à fonte real (alunos): conta matrículas primárias
+      // (sem segundo curso/banda). No modo "Hoje" mantém o acumulado do mês via leads.
+      if (!isFiltroHoje) {
+        const totalMatPrimarias = matriculasDoMes.filter((m: any) => !m.is_segundo_curso && !m.is_banda).length;
+        setResumo(prev => ({
+          ...prev,
+          matriculas: totalMatPrimarias,
+          conversaoLeadMat: prev.leads > 0 ? (totalMatPrimarias / prev.leads) * 100 : 0,
+          conversaoExpMat: prev.experimentais > 0 ? (totalMatPrimarias / prev.experimentais) * 100 : 0,
+        }));
+      }
 
       // Leads do mês (TODOS os leads, incluindo experimentais e convertidos)
       // Cada lead aparece aqui independente do status atual
@@ -1346,84 +1399,48 @@ export function ComercialPage() {
   };
 
   // Função para salvar campo individual (edição inline por célula)
-  const salvarCampoMatricula = useCallback(async (matriculaId: number, campo: string, valor: string | number | null) => {
+  // Edição inline da aba de matrículas. A fonte agora é a tabela `alunos`,
+  // então campos da matrícula gravam em `alunos`; campos que só existem no
+  // lead (canal, data de entrada) gravam no lead vinculado (quando existir).
+  const ALUNO_COL_MAP: Record<string, string> = {
+    nome: 'nome', telefone: 'telefone', data_matricula: 'data_matricula',
+    curso_interesse_id: 'curso_id', professor_experimental_id: 'professor_experimental_id',
+    professor_fixo_id: 'professor_atual_id', valor_passaporte: 'valor_passaporte',
+    valor_parcela: 'valor_parcela', idade: 'idade_atual', tipo_matricula_id: 'tipo_matricula_id',
+  };
+  const LEAD_COL_MAP: Record<string, string> = {
+    canal_origem_id: 'canal_origem_id', data_contato: 'data_contato',
+  };
+  const salvarCampoMatricula = useCallback(async (matriculaId: number, campo: string, valor: string | number | null, leadId?: number | null) => {
     try {
-      const updateData: Record<string, any> = {};
-      updateData[campo] = valor;
+      if (campo in LEAD_COL_MAP) {
+        if (!leadId) { toast.error('Matrícula direta (sem lead) — este campo não é editável aqui'); return; }
+        const { error } = await supabase.from('leads').update({ [LEAD_COL_MAP[campo]]: valor }).eq('id', leadId);
+        if (error) throw error;
+      } else {
+        const col = ALUNO_COL_MAP[campo];
+        if (!col) { toast.error('Campo não editável'); return; }
+        const { error } = await supabase.from('alunos').update({ [col]: valor }).eq('id', matriculaId);
+        if (error) throw error;
+      }
 
-      const { error } = await supabase
-        .from('leads')
-        .update(updateData)
-        .eq('id', matriculaId);
-
-      if (error) throw error;
-
-      // Atualizar apenas o registro alterado localmente (sem recarregar tudo)
-      const patchRow = (row: any) => {
+      // Patch local imediato (só matriculasMes — a aba agora é independente das demais)
+      setMatriculasMes(prev => prev.map((row: any) => {
         if (row.id !== matriculaId) return row;
-        const updated = { ...row, [campo]: valor };
-        // Atualizar nomes derivados para exibição inline imediata
-        if (campo === 'canal_origem_id') {
-          const canal = canais.find(c => c.value === valor);
-          updated.canal_nome = canal?.label || '';
-        }
-        if (campo === 'curso_interesse_id') {
-          const curso = cursos.find(c => c.value === valor);
-          updated.curso_nome = curso?.label || '';
-        }
-        return updated;
-      };
-
-      setMatriculasMes(prev => prev.map(patchRow));
-      setLeadsMes(prev => prev.map(patchRow));
-      setExperimentaisMes(prev => prev.map(patchRow));
-      setVisitasMes(prev => prev.map(patchRow));
-      // Atualizar experimentaisDetalhadas (dados vêm de lead_experimentais join leads)
-      setExperimentaisDetalhadas(prev => prev.map((row: any) => {
-        if (row.lead_id !== matriculaId) return row;
-        const updated = { ...row };
-        // Campos do lead (nome, telefone, canal, curso) precisam ser atualizados nos campos mapeados
-        if (campo === 'nome') updated.lead_nome = valor;
-        if (campo === 'telefone') updated.lead_telefone = valor;
-        if (campo === 'canal_origem_id') {
-          updated.leads = { ...updated.leads, canal_origem_id: valor };
-          const canal = canais.find(c => c.value === valor);
-          updated.canal_nome = canal?.label || '';
-        }
-        if (campo === 'curso_interesse_id') {
-          updated.curso_interesse_id = valor;
-          const curso = cursos.find(c => c.value === valor);
-          updated.curso_nome = curso?.label || '';
-        }
+        const updated: any = { ...row, [campo]: valor };
+        if (campo === 'canal_origem_id') { updated.canal_nome = canais.find(c => c.value === valor)?.label || ''; }
+        if (campo === 'curso_interesse_id') { updated.curso_id = valor; updated.curso_nome = cursos.find(c => c.value === valor)?.label || ''; }
+        if (campo === 'professor_fixo_id') { updated.professor_atual_id = valor; updated.professor_fixo_nome = professores.find(p => p.value === valor)?.label || ''; }
+        if (campo === 'professor_experimental_id') { updated.professor_exp_nome = professores.find(p => p.value === valor)?.label || ''; }
+        if (campo === 'data_matricula') { updated.data_conversao = valor; }
         return updated;
       }));
+      toast.success('Atualizado');
     } catch (error: any) {
-      console.error('Erro ao atualizar:', error);
-      if (error?.code === '23505' && campo === 'telefone') {
-        // Normalizar telefone (mesma lógica do DB) para buscar lead existente
-        const digits = String(valor).replace(/\D/g, '');
-        const telNorm = (digits.length === 10 || digits.length === 11) ? '55' + digits : digits;
-
-        const { data: existente } = await supabase
-          .from('leads')
-          .select('id, nome, status, crm_pipeline_etapas(nome)')
-          .eq('telefone', telNorm)
-          .eq('arquivado', false)
-          .neq('id', matriculaId)
-          .maybeSingle();
-
-        if (existente) {
-          const etapa = (existente.crm_pipeline_etapas as any)?.nome || existente.status;
-          const nome = existente.nome || 'Sem nome';
-          toast.error(`Telefone já cadastrado no lead "${nome}" (etapa: ${etapa})`);
-        } else {
-          toast.error('Este telefone já está cadastrado para outro lead nesta unidade');
-        }
-      } else {
-        toast.error('Erro ao atualizar');
-      }
+      console.error('Erro ao atualizar matrícula:', error);
+      toast.error('Erro ao atualizar');
     }
-  }, [canais, cursos]);
+  }, [canais, cursos, professores]);
 
   // Salvar campo na tabela lead_experimentais (professor, status)
   const salvarCampoExperimental = useCallback(async (expId: number, campo: string, valor: string | number | null) => {
@@ -1467,10 +1484,25 @@ export function ComercialPage() {
       setLeadsMes(prev => prev.filter(l => l.id !== deleteId));
       setExperimentaisMes(prev => prev.filter(l => l.id !== deleteId));
       setVisitasMes(prev => prev.filter(l => l.id !== deleteId));
-      setMatriculasMes(prev => prev.filter(l => l.id !== deleteId));
     } catch (error) {
       console.error('Erro ao excluir:', error);
       toast.error('Erro ao excluir registro');
+    }
+  };
+
+  // Exclusão de matrícula = apaga o ALUNO (a aba de matrículas lê de `alunos`).
+  // Estado separado de `deleteId` (que apaga LEADS nas outras abas).
+  const confirmDeleteMatricula = async () => {
+    if (!deleteMatriculaId) return;
+    try {
+      const { error } = await supabase.from('alunos').delete().eq('id', deleteMatriculaId);
+      if (error) throw error;
+      toast.success('Matrícula (aluno) excluída!');
+      setMatriculasMes(prev => prev.filter((m: any) => m.id !== deleteMatriculaId));
+      setDeleteMatriculaId(null);
+    } catch (error) {
+      console.error('Erro ao excluir matrícula:', error);
+      toast.error('Erro ao excluir matrícula');
     }
   };
 
@@ -2103,6 +2135,20 @@ export function ComercialPage() {
   };
 
   // Gerar relatório diário
+  // Helper: matrículas reais do período (fonte = alunos por data_matricula).
+  // Usado pelos relatórios para alinhar com a aba/funil (que também lê de alunos).
+  const buscarMatriculasAlunos = async (uid: string | null | undefined, dataInicio: string, dataFim: string) => {
+    let q = supabase
+      .from('alunos')
+      .select('id, nome, idade_atual, tipo_aluno, valor_passaporte, valor_parcela, is_segundo_curso, curso_id, cursos:curso_id(nome, is_projeto_banda)')
+      .not('data_matricula', 'is', null)
+      .gte('data_matricula', dataInicio)
+      .lte('data_matricula', dataFim);
+    if (uid && uid !== 'todos') q = q.eq('unidade_id', uid);
+    const { data } = await q;
+    return (data || []) as any[];
+  };
+
   const gerarRelatorioDiario = async () => {
     const { dataInicio: dataInicioOriginal, dataFim, dataInicioObj, dataFimObj } = calcularRangeDatas();
     const hoje = dataFimObj;
@@ -2145,7 +2191,9 @@ export function ComercialPage() {
 
     const leadsPeriodo = registrosPeriodo?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const experimentaisPeriodo = registrosPeriodo?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const matriculasPeriodo = registrosPeriodo?.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    // Matrículas: fonte = alunos por data_matricula (inclui matrículas sem lead)
+    const matAlunosPeriodo = await buscarMatriculasAlunos(unidadeId, dataInicio, dataFim);
+    const matriculasPeriodo = matAlunosPeriodo.length;
 
     // Buscar experimentais agendadas para o dia final do período
     const { data: experimentaisDia } = await supabase
@@ -2219,7 +2267,8 @@ export function ComercialPage() {
     const leadsSemana = registrosSemana?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const experimentaisSemana = registrosSemana?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const visitasSemana = registrosSemana?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const matriculasSemana = registrosSemana?.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    // Matrículas: fonte = alunos por data_matricula
+    const matriculasSemana = (await buscarMatriculasAlunos(unidadeId, seteDiasAtras.toISOString().split('T')[0], hoje.toISOString().split('T')[0])).length;
 
     // Calcular conversões
     const conversaoLeadExp = leadsSemana > 0 ? (experimentaisSemana / leadsSemana) * 100 : 0;
@@ -2304,34 +2353,27 @@ export function ComercialPage() {
     const leadsMes = registrosMes?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const experimentaisMes = registrosMes?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const visitasMes = registrosMes?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const matriculasMes = registrosMes?.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    // Matrículas: fonte = alunos por data_matricula (inclui matrículas sem lead)
+    const matAlunosMes = await buscarMatriculasAlunos(unidadeId, primeiroDiaMes.toISOString().split('T')[0], hoje.toISOString().split('T')[0]);
+    const matriculasMes = matAlunosMes.length;
 
     // Calcular conversões
     const conversaoLeadExp = leadsMes > 0 ? (experimentaisMes / leadsMes) * 100 : 0;
     const conversaoExpMat = experimentaisMes > 0 ? (matriculasMes / experimentaisMes) * 100 : 0;
     const conversaoLeadMat = leadsMes > 0 ? (matriculasMes / leadsMes) * 100 : 0;
 
-    // Buscar matrículas detalhadas do mês (filtrar por data_conversao — quando efetivamente matriculou)
-    const { data: matriculasDetalhadas } = await supabase
-      .from('leads')
-      .select(`
-        data_contato,
-        data_conversao,
-        nome,
-        idade,
-        tipo_matricula,
-        tipo_aluno,
-        valor_passaporte,
-        valor_parcela,
-        canais_origem(nome),
-        cursos(nome)
-      `)
-      .eq('unidade_id', unidadeId)
-      .in('status', ['matriculado','convertido'])
-      .not('data_conversao', 'is', null)
-      .gte('data_conversao', primeiroDiaMes.toISOString().split('T')[0])
-      .lte('data_conversao', hoje.toISOString().split('T')[0])
-      .order('data_conversao', { ascending: true });
+    // Matrículas detalhadas do mês (fonte = alunos por data_matricula)
+    const matriculasDetalhadas = matAlunosMes.map((a: any) => ({
+      nome: a.nome,
+      idade: a.idade_atual,
+      data_contato: a.data_matricula,
+      tipo_matricula: null,
+      tipo_aluno: a.tipo_aluno,
+      valor_passaporte: a.valor_passaporte,
+      valor_parcela: a.valor_parcela,
+      cursos: a.cursos,
+      canais_origem: null,
+    }));
 
     // Agrupar leads por canal
     const leadsPorCanal: { [key: string]: number } = {};
@@ -2354,11 +2396,11 @@ export function ComercialPage() {
       matriculasPorCanal[canal] = (matriculasPorCanal[canal] || 0) + r.quantidade;
     });
 
-    // Agrupar matrículas por curso
+    // Agrupar matrículas por curso (fonte = alunos)
     const matriculasPorCurso: { [key: string]: number } = {};
-    registrosMes?.filter(r => ['matriculado','convertido'].includes(r.status)).forEach(r => {
-      const curso = (r.cursos as any)?.nome || 'Não informado';
-      matriculasPorCurso[curso] = (matriculasPorCurso[curso] || 0) + r.quantidade;
+    matAlunosMes.forEach((a: any) => {
+      const curso = (a.cursos as any)?.nome || 'Não informado';
+      matriculasPorCurso[curso] = (matriculasPorCurso[curso] || 0) + 1;
     });
 
     // Calcular totais financeiros
@@ -2605,8 +2647,9 @@ export function ComercialPage() {
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
     matriculasMes.forEach((mat, i) => {
-      const dataFormatada = new Date(mat.data_contato + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
-      
+      const dataMat = (mat as any).data_matricula || mat.data_contato;
+      const dataFormatada = dataMat ? new Date(dataMat + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '-';
+
       texto += `MAT. ${(i + 1).toString().padStart(2, '0')}\n`;
       texto += `📅 Data: ${dataFormatada}\n`;
       texto += `👤 Aluno: ${mat.nome || 'Não informado'}`;
@@ -3404,7 +3447,7 @@ export function ComercialPage() {
                   return experimentaisDetalhadas.filter((e: any) => filtroTipoExp === 'leads_novos' ? !e.lead_aluno_id : filtroTipoExp === 'alunos' ? !!e.lead_aluno_id : true).length;
                 })(), icon: Guitar, color: '#a855f7', gradient: 'from-purple-500 to-violet-500' },
                 { key: 'visita', label: 'Visitas', count: visitasMes.length, icon: Building2, color: '#f59e0b', gradient: 'from-amber-500 to-orange-500' },
-                { key: 'matricula', label: 'Matrículas', count: matriculasMes.filter((m: any) => { const isBanda = m.curso_nome?.toLowerCase().includes('banda'); if (filtroTipoMat === 'novos_alunos') return !m.is_segundo_curso && !isBanda && !m._fora_range; if (filtroTipoMat === 'segundo_curso') return (m.is_segundo_curso || isBanda) && !m._fora_range; if (filtroTipoMat === 'por_data_matricula') return true; if (filtroTipoMat === 'leads_periodo') return !m._fora_range; return true; }).length, icon: GraduationCap, color: '#10b981', gradient: 'from-emerald-500 to-teal-500' },
+                { key: 'matricula', label: 'Matrículas', count: matriculasMes.filter((m: any) => { const banda = m.is_banda || m.curso_nome?.toLowerCase().includes('banda'); if (filtroTipoMat === 'novos_alunos') return !m.is_segundo_curso && !banda; if (filtroTipoMat === 'segundo_curso') return m.is_segundo_curso || banda; return true; }).length, icon: GraduationCap, color: '#10b981', gradient: 'from-emerald-500 to-teal-500' },
               ]}
               totalLeads={leadsMes.length}
               activeStage={abaDetalhamento}
@@ -3533,7 +3576,7 @@ export function ComercialPage() {
                   <SelectItem value="novos_alunos">
                     <div>
                       <span>Novos alunos</span>
-                      <p className="text-[10px] text-slate-400 leading-tight">Sem segundo curso, banda ou leads antigos</p>
+                      <p className="text-[10px] text-slate-400 leading-tight">Sem segundo curso ou banda</p>
                     </div>
                   </SelectItem>
                   <SelectItem value="todos">
@@ -3542,22 +3585,10 @@ export function ComercialPage() {
                       <p className="text-[10px] text-slate-400 leading-tight">Todas as matrículas do mês</p>
                     </div>
                   </SelectItem>
-                  <SelectItem value="leads_periodo">
-                    <div>
-                      <span>Leads do período</span>
-                      <p className="text-[10px] text-slate-400 leading-tight">Leads que entraram e matricularam no período</p>
-                    </div>
-                  </SelectItem>
                   <SelectItem value="segundo_curso">
                     <div>
                       <span>Segundo curso / Banda</span>
                       <p className="text-[10px] text-slate-400 leading-tight">Apenas matrículas de segundo curso ou banda</p>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="por_data_matricula">
-                    <div>
-                      <span>Convertidos no período</span>
-                      <p className="text-[10px] text-slate-400 leading-tight">Inclui leads de outros meses que converteram agora</p>
                     </div>
                   </SelectItem>
                 </SelectContent>
@@ -4911,9 +4942,9 @@ export function ComercialPage() {
           // helper local para ordenar mantendo todos os campos calculados
           const sortMat = (arr: typeof matriculasMes) => sortArray(arr, sortMatriculas, (m: any, col) => {
             switch (col) {
-              case 'data': return m.data_contato;
-              case 'conversao': return m.data_conversao;
+              case 'data': return m.data_matricula;
               case 'aluno': return m.nome;
+              case 'lead': return m.lead_nome || '';
               case 'telefone': return m.telefone;
               case 'idade': return m.idade;
               case 'curso': return m.curso_nome;
@@ -4926,14 +4957,12 @@ export function ComercialPage() {
               default: return null;
             }
           });
-          const isBanda = (nome: string) => nome?.toLowerCase().includes('banda');
+          const ehBanda = (l: any) => l.is_banda || (l.curso_nome || '').toLowerCase().includes('banda');
           const matriculasFiltradasRaw = matriculasMes.filter((l: any) => {
-            // Filtro por tipo (novos alunos vs segundo curso/banda vs por data matrícula)
-            if (filtroTipoMat === 'novos_alunos' && (l.is_segundo_curso || isBanda(l.curso_nome) || l._fora_range)) return false;
-            if (filtroTipoMat === 'segundo_curso' && (!l.is_segundo_curso && !isBanda(l.curso_nome) || l._fora_range)) return false;
-            if (filtroTipoMat === 'leads_periodo' && l._fora_range) return false;
+            // Filtro por tipo (novos alunos vs segundo curso/banda)
+            if (filtroTipoMat === 'novos_alunos' && (l.is_segundo_curso || ehBanda(l))) return false;
+            if (filtroTipoMat === 'segundo_curso' && !l.is_segundo_curso && !ehBanda(l)) return false;
             // 'todos': mostra tudo sem filtro de tipo
-            // 'por_data_matricula': mostra todas (incluindo fora do range)
             if (buscaFunil) {
               const termo = buscaFunil.toLowerCase();
               const nome = (l.aluno_nome || l.nome || '').toLowerCase();
@@ -4949,13 +4978,6 @@ export function ComercialPage() {
             return true;
           });
           const matriculasFiltradas = sortMat(matriculasFiltradasRaw);
-          // Matrículas cujo lead entrou em mês anterior (arrasto de outros períodos).
-          // Só faz sentido quando o filtro ativo ESCONDE os _fora_range (senão duplicaria a lista principal).
-          const matriculasOutrosPeriodos = (filtroTipoMat === 'novos_alunos' || filtroTipoMat === 'leads_periodo')
-            ? matriculasMes.filter((m: any) => m._fora_range && !m.is_segundo_curso && !isBanda(m.curso_nome))
-            : filtroTipoMat === 'segundo_curso'
-              ? matriculasMes.filter((m: any) => m._fora_range && (m.is_segundo_curso || isBanda(m.curso_nome)))
-              : [];
           return (
           <>
             {/* Header específico de matrículas */}
@@ -4978,9 +5000,9 @@ export function ComercialPage() {
               <thead>
                 <tr className="text-left text-slate-400 border-b border-slate-700">
                   <th className="pb-3 px-2 font-medium border-r border-slate-700/30">#</th>
-                  <SortableTh col="data" label="Data" tooltip="Data de entrada do lead (não é a data da matrícula)" sort={sortMatriculas} onSort={(c) => setSortMatriculas(prev => nextSort(prev, c))} />
-                  <SortableTh col="conversao" label="Conversão" tooltip="Data em que efetivou a matrícula" sort={sortMatriculas} onSort={(c) => setSortMatriculas(prev => nextSort(prev, c))} />
+                  <SortableTh col="data" label="Matrícula" tooltip="Data da matrícula (data_matricula do aluno)" sort={sortMatriculas} onSort={(c) => setSortMatriculas(prev => nextSort(prev, c))} />
                   <SortableTh col="aluno" label="Aluno(a)" sort={sortMatriculas} onSort={(c) => setSortMatriculas(prev => nextSort(prev, c))} />
+                  <SortableTh col="lead" label="Lead vinculado" tooltip="Lead de origem. 'Matrícula direta' = sem lead; âmbar = nome do lead diverge do aluno" sort={sortMatriculas} onSort={(c) => setSortMatriculas(prev => nextSort(prev, c))} />
                   <SortableTh col="telefone" label="Telefone" sort={sortMatriculas} onSort={(c) => setSortMatriculas(prev => nextSort(prev, c))} />
                   <SortableTh col="idade" label="Idade" sort={sortMatriculas} onSort={(c) => setSortMatriculas(prev => nextSort(prev, c))} />
                   <SortableTh col="curso" label="Curso" sort={sortMatriculas} onSort={(c) => setSortMatriculas(prev => nextSort(prev, c))} />
@@ -5001,21 +5023,11 @@ export function ComercialPage() {
                   >
                     <td className="py-3 px-2 text-slate-500 font-medium border-r border-slate-700/30">{index + 1}</td>
                     
-                    {/* Data - Edição inline */}
+                    {/* Matrícula (data) - Edição inline */}
                     <td className="py-3 px-2 border-r border-slate-700/30">
                       <CelulaEditavelInline
-                        value={mat.data_contato}
-                        onChange={async (valor) => mat.id && salvarCampoMatricula(mat.id, 'data_contato', valor)}
-                        tipo="data"
-                        textClassName="text-slate-300"
-                      />
-                    </td>
-
-                    {/* Data Conversão - Edição inline */}
-                    <td className="py-3 px-2 border-r border-slate-700/30">
-                      <CelulaEditavelInline
-                        value={mat.data_conversao}
-                        onChange={async (valor) => mat.id && salvarCampoMatricula(mat.id, 'data_conversao', valor)}
+                        value={mat.data_matricula}
+                        onChange={async (valor) => mat.id && salvarCampoMatricula(mat.id, 'data_matricula', valor)}
                         tipo="data"
                         textClassName="text-emerald-400"
                       />
@@ -5031,7 +5043,22 @@ export function ComercialPage() {
                         placeholder="-"
                       />
                     </td>
-                    
+
+                    {/* Lead vinculado - somente leitura */}
+                    <td className="py-3 px-2 border-r border-slate-700/30">
+                      {!(mat as any).is_orfao ? (
+                        (mat as any).lead_divergente ? (
+                          <span className="px-2 py-0.5 rounded text-xs font-medium bg-amber-500/20 text-amber-400 whitespace-nowrap" title={`Lead "${(mat as any).lead_nome}" tem nome diferente do aluno`}>{(mat as any).lead_nome}</span>
+                        ) : (
+                          <span className="text-slate-400 text-xs">{(mat as any).lead_nome || '-'}</span>
+                        )
+                      ) : (mat as any).origem_familia ? (
+                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-cyan-500/15 text-cyan-400 whitespace-nowrap" title={`Origem herdada do lead "${(mat as any).lead_familia_nome}" (mesmo telefone do responsável)`}>via família</span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-600/30 text-slate-400 whitespace-nowrap">Matrícula direta</span>
+                      )}
+                    </td>
+
                     {/* Telefone - Edição inline */}
                     <td className="py-3 px-2 border-r border-slate-700/30">
                       <CelulaEditavelInline
@@ -5067,17 +5094,25 @@ export function ComercialPage() {
                       />
                     </td>
                     
-                    {/* Canal - Edição inline */}
+                    {/* Canal - Edição inline (grava no lead vinculado; órfão herda da família ou "—") */}
                     <td className="py-3 px-2 border-r border-slate-700/30">
-                      <CelulaEditavelInline
-                        value={mat.canal_origem_id}
-                        onChange={async (valor) => mat.id && salvarCampoMatricula(mat.id, 'canal_origem_id', valor ? Number(valor) : null)}
-                        tipo="select"
-                        opcoes={canais.map(c => ({ value: c.value, label: c.label }))}
-                        placeholder="-"
-                        formatarExibicao={() => <CanalOrigemBadge canal={mat.canal_nome || '-'} />}
-                        textClassName="text-blue-400"
-                      />
+                      {(mat as any).is_orfao ? (
+                        ((mat as any).origem_familia && mat.canal_nome) ? (
+                          <CanalOrigemBadge canal={mat.canal_nome} />
+                        ) : (
+                          <span className="text-slate-500 text-xs">—</span>
+                        )
+                      ) : (
+                        <CelulaEditavelInline
+                          value={mat.canal_origem_id}
+                          onChange={async (valor) => mat.id && salvarCampoMatricula(mat.id, 'canal_origem_id', valor ? Number(valor) : null, (mat as any).lead_id)}
+                          tipo="select"
+                          opcoes={canais.map(c => ({ value: c.value, label: c.label }))}
+                          placeholder="-"
+                          formatarExibicao={() => <CanalOrigemBadge canal={mat.canal_nome || '-'} />}
+                          textClassName="text-blue-400"
+                        />
+                      )}
                     </td>
                     
                     {/* Prof. Exp. - Edição inline */}
@@ -5142,27 +5177,20 @@ export function ComercialPage() {
                       />
                     </td>
                     
-                    {/* Escola - Edição inline */}
+                    {/* Escola - somente leitura (derivado da idade) */}
                     <td className="py-3 px-2 border-r border-slate-700/30">
                       <div className="flex items-center gap-1.5">
-                        <CelulaEditavelInline
-                          value={mat.tipo_matricula}
-                          onChange={async (valor) => mat.id && salvarCampoMatricula(mat.id, 'tipo_matricula', valor)}
-                          tipo="select"
-                          opcoes={TIPOS_MATRICULA.map(t => ({ value: t.value, label: t.label }))}
-                          placeholder="-"
-                          formatarExibicao={() => {
-                            const escolaCalc = mat.idade != null ? (mat.idade <= 11 ? 'LAMK' : 'EMLA') : (mat.tipo_matricula || '-');
-                            return (
-                              <span className={cn(
-                                "px-2 py-0.5 rounded text-xs font-medium",
-                                escolaCalc === 'LAMK' ? 'bg-pink-500/20 text-pink-400' : 'bg-blue-500/20 text-blue-400'
-                              )}>
-                                {escolaCalc}
-                              </span>
-                            );
-                          }}
-                        />
+                        {(() => {
+                          const escolaCalc = mat.idade != null ? (mat.idade <= 11 ? 'LAMK' : 'EMLA') : '-';
+                          return (
+                            <span className={cn(
+                              "px-2 py-0.5 rounded text-xs font-medium",
+                              escolaCalc === 'LAMK' ? 'bg-pink-500/20 text-pink-400' : 'bg-blue-500/20 text-blue-400'
+                            )}>
+                              {escolaCalc}
+                            </span>
+                          );
+                        })()}
                         {isAdmin && mat.unidades?.codigo && (
                           <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-600/30 text-slate-300">
                             {mat.unidades.codigo}
@@ -5171,85 +5199,22 @@ export function ComercialPage() {
                       </div>
                     </td>
                     
-                    {/* Ações - Apenas excluir */}
+                    {/* Ações - Apenas excluir (apaga o ALUNO) */}
                     <td className="py-3 px-2 text-right">
                       <button
-                        onClick={() => mat.id && setDeleteId(mat.id)}
+                        onClick={() => mat.id && setDeleteMatriculaId(mat.id)}
                         className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded transition-colors"
-                        title="Excluir"
+                        title="Excluir matrícula (aluno)"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </td>
                   </tr>
                 ))}
-                {/* Sub-seção: matrículas cujo lead entrou em mês anterior (mesma tabela = colunas alinhadas) */}
-                {matriculasOutrosPeriodos.length > 0 && (
-                  <>
-                    <tr>
-                      <td colSpan={14} className="p-0">
-                        <button
-                          onClick={() => setMostrarMatOutros(prev => !prev)}
-                          className="flex items-center gap-2 w-full group py-2"
-                        >
-                          <div className="h-px flex-1 bg-amber-500/30" />
-                          <span className="text-xs text-amber-400 font-medium whitespace-nowrap flex items-center gap-1.5 group-hover:text-amber-300 transition-colors">
-                            {mostrarMatOutros ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                            Matrículas de leads de outros períodos ({matriculasOutrosPeriodos.length})
-                          </span>
-                          <div className="h-px flex-1 bg-amber-500/30" />
-                        </button>
-                      </td>
-                    </tr>
-                    {mostrarMatOutros && matriculasOutrosPeriodos.map((mat: any, index: number) => {
-                      const fmt = (d: string) => d ? new Date(d + 'T12:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '-';
-                      const escolaCalc = mat.idade != null ? (mat.idade <= 11 ? 'LAMK' : 'EMLA') : (mat.tipo_matricula || '-');
-                      return (
-                        <tr key={`outros-${mat.id}`} className="border-b border-slate-700/50 bg-amber-500/5 hover:bg-amber-500/10 transition-colors">
-                          <td className="py-3 px-2 text-slate-500 font-medium border-r border-slate-700/30">{index + 1}</td>
-                          <td className="py-3 px-2 border-r border-slate-700/30">
-                            <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-500/20 text-amber-400">{fmt(mat.data_contato)}</span>
-                          </td>
-                          <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-emerald-400">{fmt(mat.data_conversao)}</span></td>
-                          <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-white font-medium">{mat.nome || '-'}</span></td>
-                          <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-emerald-400">{(mat as any).telefone || '-'}</span></td>
-                          <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-slate-300">{mat.idade ?? '-'}</span></td>
-                          <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-purple-400">{mat.curso_nome || '-'}</span></td>
-                          <td className="py-3 px-2 border-r border-slate-700/30"><CanalOrigemBadge canal={mat.canal_nome || '-'} /></td>
-                          <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-slate-300">{mat.professor_exp_nome || '-'}</span></td>
-                          <td className="py-3 px-2 border-r border-slate-700/30"><span className="text-slate-300">{mat.professor_fixo_nome || '-'}</span></td>
-                          <td className="py-3 px-2 border-r border-slate-700/30">
-                            <span className="text-emerald-400 font-medium whitespace-nowrap">R$ {(mat.valor_passaporte || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                          </td>
-                          <td className="py-3 px-2 border-r border-slate-700/30">
-                            <span className="text-cyan-400 font-medium whitespace-nowrap">R$ {(mat.valor_parcela || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                          </td>
-                          <td className="py-3 px-2 border-r border-slate-700/30">
-                            <div className="flex items-center gap-1.5">
-                              <span className={cn("px-2 py-0.5 rounded text-xs font-medium", escolaCalc === 'LAMK' ? 'bg-pink-500/20 text-pink-400' : 'bg-blue-500/20 text-blue-400')}>{escolaCalc}</span>
-                              {isAdmin && mat.unidades?.codigo && (
-                                <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-600/30 text-slate-300">{mat.unidades.codigo}</span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="py-3 px-2 text-right">
-                            <button
-                              onClick={() => mat.id && setDeleteId(mat.id)}
-                              className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded transition-colors"
-                              title="Excluir"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </>
-                )}
               </tbody>
               <tfoot>
                 <tr className="border-t border-slate-600 bg-slate-800/50">
-                  <td colSpan={8} className="py-3 px-2 text-right text-slate-400 font-medium">Totais:</td>
+                  <td colSpan={10} className="py-3 px-2 text-right text-slate-400 font-medium">Totais:</td>
                   <td className="py-3 px-2 text-emerald-400 font-bold">
                     R$ {matriculasMes.reduce((acc, m) => acc + (m.valor_passaporte || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </td>
@@ -6479,6 +6444,29 @@ export function ComercialPage() {
               className="bg-red-600 hover:bg-red-500 text-white"
             >
               Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* AlertDialog de exclusão de matrícula (apaga o ALUNO) */}
+      <AlertDialog open={deleteMatriculaId !== null} onOpenChange={(open) => !open && setDeleteMatriculaId(null)}>
+        <AlertDialogContent className="bg-slate-900 border-slate-700">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-white">Excluir matrícula</AlertDialogTitle>
+            <AlertDialogDescription className="text-slate-400">
+              Isto vai apagar o <strong className="text-slate-200">cadastro do aluno</strong> definitivamente — ele some da Gestão de Alunos e dos relatórios. Esta ação não pode ser desfeita. Continuar?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600">
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteMatricula}
+              className="bg-red-600 hover:bg-red-500 text-white"
+            >
+              Excluir aluno
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
