@@ -269,7 +269,7 @@ async function reconciliarExperimentaisOrfas(
           .eq('arquivado', false)
           .limit(100);
 
-        const match = (leads || []).find((l: any) => normalizarNome(l.nome) === nomeNorm);
+        const match = (leads || []).find((l: any) => l.nome && normalizarNome(l.nome) === nomeNorm);
         if (match) {
           // Guard: match por nome só é aceito se o lead tem data_experimental definida
           // (evita falso positivo ao criar registro para lead diferente com nome parecido)
@@ -525,13 +525,15 @@ serve(async (req: Request) => {
   try {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Parâmetros: data (YYYY-MM-DD, default hoje), dias (default 1, cron semanal usa 7)
+    // Parâmetros: data (YYYY-MM-DD, default hoje), dias (default 1), unidade_index (0-2, default todas)
     let dataFim: string;
     let dias = 1;
+    let unidadeIndex: number | null = null;
     try {
       const body = await req.json();
       dataFim = body.data || '';
       dias = Math.min(Math.max(body.dias || 1, 1), 30); // 1-30 dias
+      unidadeIndex = body.unidade_index ?? null;
     } catch {
       dataFim = '';
     }
@@ -550,7 +552,8 @@ serve(async (req: Request) => {
       datasProcessar.push(dt.toISOString().split('T')[0]);
     }
 
-    console.log(`[sync-presenca] Iniciando sync para ${dias} dia(s): ${datasProcessar[0]} a ${dataFim}`);
+    const unidadesProcessar = unidadeIndex !== null ? [UNIDADES[unidadeIndex]] : UNIDADES;
+    console.log(`[sync-presenca] Iniciando sync para ${dias} dia(s): ${datasProcessar[0]} a ${dataFim}, unidade: ${unidadeIndex !== null ? unidadesProcessar[0]?.nome : 'todas'}`);
 
     // Buscar todos os alunos ativos para matching (paginado para contornar limite de 1000 rows do PostgREST)
     const alunosDB: { id: number; nome: string; unidade_id: string; data_nascimento: string | null; curso_id: number | null }[] = [];
@@ -624,7 +627,7 @@ serve(async (req: Request) => {
     for (const dataAlvo of datasProcessar) {
       console.log(`[sync-presenca] === Processando data: ${dataAlvo} ===`);
 
-      for (const unidade of UNIDADES) {
+      for (const unidade of unidadesProcessar) {
         console.log(`[sync-presenca] ${dataAlvo} - ${unidade.nome}...`);
 
         // 1. Buscar aulas do dia no Emusys
