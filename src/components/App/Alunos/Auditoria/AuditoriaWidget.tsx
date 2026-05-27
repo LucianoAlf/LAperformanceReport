@@ -29,6 +29,8 @@ export function AuditoriaWidget({ onClose, widgetsHidden = false }: AuditoriaWid
         isAdmin,
         unidadeId: usuario?.unidade_id ?? null,
         unidadeNome: usuario?.unidade_nome ?? null,
+        colaboradorId: usuario?.id ?? null,
+        colaboradorTipo: usuario?.perfil ?? null,
     };
 
     const welcomeMessage: ChatMessage = {
@@ -58,7 +60,7 @@ export function AuditoriaWidget({ onClose, widgetsHidden = false }: AuditoriaWid
         'Verificando os dados...',
         'Montando a resposta...',
         'Preparando a análise...',
-        'Quase pronto...',
+        'Processando os dados...',
     ];
 
     useEffect(() => {

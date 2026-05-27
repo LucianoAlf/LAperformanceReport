@@ -31,6 +31,8 @@ export interface AgentContext {
     isAdmin: boolean;
     unidadeId: string | null;
     unidadeNome: string | null;
+    colaboradorId?: number | null;
+    colaboradorTipo?: string | null;
     fileData?: Record<string, string>[];
 }
 
@@ -59,7 +61,12 @@ export async function chatComIA(
     if (!convId) {
         const { data, error } = await supabase
             .from('bi_conversations_lamusic')
-            .insert({ title: title || message.slice(0, 60) })
+            .insert({
+                title: title || message.slice(0, 60),
+                unidade_id: agentCtx.unidadeId || null,
+                colaborador_id: agentCtx.colaboradorId || null,
+                colaborador_tipo: agentCtx.colaboradorTipo || null,
+            })
             .select('id')
             .single();
         if (error) throw new Error(`Erro ao criar conversa: ${error.message}`);
@@ -79,7 +86,7 @@ export async function chatComIA(
         .single();
     if (insertError) throw new Error(`Erro ao enviar mensagem: ${insertError.message}`);
 
-    // 3. Aguardar resposta da Sol via Realtime (timeout 90s)
+    // 3. Aguardar resposta da Sol via Realtime
     return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
             channel.unsubscribe();
@@ -88,6 +95,7 @@ export async function chatComIA(
 
         const channel = supabase
             .channel(`sol-reply-${userMsg!.id}`)
+            // Resposta da Sol (INSERT de mensagem assistant)
             .on(
                 'postgres_changes',
                 {
@@ -105,6 +113,24 @@ export async function chatComIA(
                             content: msg.content || '',
                             conversationId: convId!,
                         });
+                    }
+                },
+            )
+            // Detecta erro imediato: status='error' na mensagem do usuário
+            .on(
+                'postgres_changes',
+                {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'bi_messages_lamusic',
+                    filter: `id=eq.${userMsg!.id}`,
+                },
+                (payload) => {
+                    const msg = payload.new as any;
+                    if (msg.status === 'error') {
+                        clearTimeout(timeout);
+                        channel.unsubscribe();
+                        reject(new Error(msg.error_message || 'Sol encontrou um erro ao processar a mensagem.'));
                     }
                 },
             )
