@@ -306,15 +306,36 @@ async function gerarRelatorioDiario(
     texto += `● Total no mês: *${avisosPrevios.length}*\n\n`;
   }
 
+  // Enriquecer evasões com tipo do aluno (mesmo padrão do frontend)
+  const evasaoAlunoIds = [...new Set(evasoes.map((e: any) => e.aluno_id).filter(Boolean))];
+  const alunosMap = new Map();
+  if (evasaoAlunoIds.length > 0) {
+    const { data: alunosData } = await supabase
+      .from('alunos')
+      .select('id, tipo_matricula_id, is_segundo_curso')
+      .in('id', evasaoAlunoIds);
+    (alunosData || []).forEach((a: any) => alunosMap.set(a.id, a));
+  }
+  const getTipoEvasao = (e: any): string => {
+    const aluno = alunosMap.get(e.aluno_id);
+    if (aluno) {
+      if (aluno.tipo_matricula_id === 5) return 'interrompido_banda';
+      if (aluno.is_segundo_curso || aluno.tipo_matricula_id === 2) return 'interrompido_2_curso';
+      if ([3, 4].includes(aluno.tipo_matricula_id)) return 'interrompido_bolsista';
+      return 'interrompido';
+    }
+    return e.tipo_evasao || 'interrompido';
+  };
+
   texto += `🚪 *EVASÕES (Saíram esse mês)*\n`;
   texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-  texto += `• Total de evasões: *${evasoes.length}*\n`;
-  texto += `• Interrompido: *${evasoes.filter((e: any) => (e.tipo_evasao || 'interrompido') === 'interrompido').length}*\n`;
-  texto += `• Interrompido 2º Curso: *${evasoes.filter((e: any) => e.tipo_evasao === 'interrompido_2_curso').length}*\n`;
-  texto += `• Interrompido Bolsista: *${evasoes.filter((e: any) => e.tipo_evasao === 'interrompido_bolsista').length}*\n`;
-  texto += `• Interrompido Banda: *${evasoes.filter((e: any) => e.tipo_evasao === 'interrompido_banda').length}*\n`;
+  texto += `• Total de evasões: *${evasoes.length + naoRenovacoes.length}*\n`;
+  texto += `• Interrompido: *${evasoes.filter((e: any) => getTipoEvasao(e) === 'interrompido').length}*\n`;
+  texto += `• Interrompido 2º Curso: *${evasoes.filter((e: any) => getTipoEvasao(e) === 'interrompido_2_curso').length}*\n`;
+  texto += `• Interrompido Bolsista: *${evasoes.filter((e: any) => getTipoEvasao(e) === 'interrompido_bolsista').length}*\n`;
+  texto += `• Interrompido Banda: *${evasoes.filter((e: any) => getTipoEvasao(e) === 'interrompido_banda').length}*\n`;
   texto += `• Não Renovou: *${naoRenovacoes.length}*\n`;
-  texto += `• Transferência: *${evasoes.filter((e: any) => e.tipo_evasao === 'transferencia').length}*\n\n`;
+  texto += `• Transferência: *${evasoes.filter((e: any) => getTipoEvasao(e) === 'transferencia').length}*\n\n`;
 
   if (evasoesHoje.length > 0) {
     texto += `Evasões do dia: *${evasoesHoje.length}*\n\n`;
