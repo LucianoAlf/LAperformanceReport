@@ -149,15 +149,15 @@ async function gerarRelatorioDiario(
 
   const matriculasAtivas = matriculasData?.length || 0;
   const matriculasBanda = matriculasData?.filter((m: any) =>
-    m.cursos?.nome?.toLowerCase().includes('banda')
+    m.cursos?.nome?.toLowerCase()?.includes('banda')
   ).length || 0;
   const matriculas2Curso = matriculasData?.filter((m: any) =>
     m.is_segundo_curso &&
-    !m.cursos?.nome?.toLowerCase().includes('banda') &&
-    !m.cursos?.nome?.toLowerCase().includes('coral')
+    !m.cursos?.nome?.toLowerCase()?.includes('banda') &&
+    !m.cursos?.nome?.toLowerCase()?.includes('coral')
   ).length || 0;
   const alunosCoral = matriculasData?.filter((m: any) =>
-    m.cursos?.nome?.toLowerCase().includes('coral')
+    m.cursos?.nome?.toLowerCase()?.includes('coral')
   ).length || 0;
 
   // Retencao view (renovações — MESMA view que o frontend usa)
