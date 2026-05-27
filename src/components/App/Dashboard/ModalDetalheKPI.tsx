@@ -16,6 +16,8 @@ interface ResumoItem {
   icone?: React.ReactNode;
   cor?: string; // tailwind text color
   destaque?: boolean;
+  filtroKey?: string;
+  filtroValor?: string;
 }
 
 interface DistribuicaoItem {
@@ -63,17 +65,27 @@ export function ModalDetalheKPI({
   const [pagina, setPagina] = useState(0);
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
+  const [filtroRapido, setFiltroRapido] = useState<{ key: string; valor: string } | null>(null);
 
   const filtrados = useMemo(() => {
-    if (!busca.trim()) return dados;
+    let resultado = dados;
+    if (filtroRapido) {
+      resultado = resultado.filter(d => String(d[filtroRapido.key]) === filtroRapido.valor);
+    }
+    if (!busca.trim()) return resultado;
     const termo = busca.toLowerCase();
-    return dados.filter(d =>
+    return resultado.filter(d =>
       colunas.some(col => {
         const val = d[col.key];
         return val && String(val).toLowerCase().includes(termo);
       })
     );
-  }, [dados, busca, colunas]);
+  }, [dados, busca, colunas, filtroRapido]);
+
+  const handleFiltroRapido = (key: string, valor: string) => {
+    setFiltroRapido(prev => prev?.key === key && prev?.valor === valor ? null : { key, valor });
+    setPagina(0);
+  };
 
   const ordenados = useMemo(() => {
     if (!sortKey) return filtrados;
@@ -125,14 +137,22 @@ export function ModalDetalheKPI({
         {resumo && resumo.length > 0 && (
           <div className="px-6 pb-4">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              {resumo.map((item, i) => (
+              {resumo.map((item, i) => {
+                const isAtivo = filtroRapido?.key === item.filtroKey && filtroRapido?.valor === item.filtroValor;
+                const isCliclavel = !!item.filtroKey;
+                return (
                 <div
                   key={i}
+                  onClick={isCliclavel ? () => handleFiltroRapido(item.filtroKey!, item.filtroValor!) : undefined}
                   className={cn(
                     'relative rounded-xl px-4 py-3 border transition-all',
-                    item.destaque
-                      ? 'bg-sky-500/10 border-sky-500/30'
-                      : 'bg-slate-800/50 border-slate-700/40'
+                    isCliclavel && 'cursor-pointer',
+                    isAtivo
+                      ? 'bg-slate-700/60 border-sky-500/60 ring-1 ring-sky-500/40'
+                      : item.destaque
+                        ? 'bg-sky-500/10 border-sky-500/30'
+                        : 'bg-slate-800/50 border-slate-700/40',
+                    isCliclavel && !isAtivo && 'hover:border-slate-600/60 hover:bg-slate-800/70',
                   )}
                 >
                   <div className="flex items-center gap-2 mb-1">
@@ -152,7 +172,8 @@ export function ModalDetalheKPI({
                     {item.valor}
                   </p>
                 </div>
-              ))}
+              );
+              })}
             </div>
           </div>
         )}

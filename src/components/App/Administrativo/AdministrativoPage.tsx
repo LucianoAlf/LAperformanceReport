@@ -1525,7 +1525,7 @@ export function AdministrativoPage() {
           { key: 'curso', label: 'Curso', render: (v: string) => <TextoCurso nome={v} /> },
           { key: 'tipo', label: 'Tipo', render: (v: string) => (
             <span className={cn(
-              'text-xs px-2 py-0.5 rounded-full',
+              'text-xs px-2 py-0.5 rounded-full whitespace-nowrap',
               v === 'Banda' && 'bg-amber-500/20 text-amber-400',
               v === 'Coral' && 'bg-pink-500/20 text-pink-400',
               v === '2º Curso' && 'bg-violet-500/20 text-violet-400',
@@ -1552,8 +1552,8 @@ export function AdministrativoPage() {
           const somaValor = comValor.reduce((s, d) => s + d._valor_raw, 0);
           return [
             { label: 'Total', valor: total, icone: <BookOpen size={14} />, cor: 'text-violet-400', destaque: true },
-            { label: 'Banda', valor: banda, icone: <Users size={14} />, cor: 'text-amber-400' },
-            { label: '2º Curso', valor: segundo, icone: <GraduationCap size={14} />, cor: 'text-violet-400' },
+            { label: 'Banda', valor: banda, icone: <Users size={14} />, cor: 'text-amber-400', filtroKey: 'tipo', filtroValor: 'Banda' },
+            { label: '2º Curso', valor: segundo, icone: <GraduationCap size={14} />, cor: 'text-violet-400', filtroKey: 'tipo', filtroValor: '2º Curso' },
             { label: 'Faturamento', valor: `R$ ${somaValor.toLocaleString('pt-BR')}`, icone: <DollarSign size={14} />, cor: 'text-emerald-400' },
           ];
         })()}
