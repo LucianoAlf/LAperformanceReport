@@ -5,7 +5,6 @@ import {
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import * as XLSX from 'xlsx';
 import { useAuth } from '@/contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { chatComIA, loadConversations, loadMessages, saveFeedback, type ChatMessage, type Role, type AgentContext } from './useAgentChat';
@@ -199,57 +198,50 @@ export function AuditoriaWidget({ onClose, widgetsHidden = false }: AuditoriaWid
         setAttachments([]);
         setIsTyping(true);
 
-        let systemContextContent = '';
-        let parsedFileData: Record<string, string>[] | undefined;
-
         try {
-            // 1. Processar Arquivos — converter xlsx/csv para dados estruturados
-            if (hasAttachments) {
-                setLoadingMsg('Processando arquivos...');
+            let messageToSend: string;
 
-                const allRows: Record<string, string>[] = [];
+            // 1. Se tem arquivo: faz upload para Storage e manda file_url para a Sol
+            if (hasAttachments) {
+                setLoadingMsg('Enviando arquivo...');
+
+                const fileUrls: string[] = [];
                 const fileNames: string[] = [];
 
                 for (const file of currentAttachments) {
-                    const buffer = await file.arrayBuffer();
-                    const wb = XLSX.read(buffer, { type: 'array' });
+                    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+                    const filePath = `uploads/${Date.now()}-${safeName}`;
+
+                    const { error: uploadError } = await supabase.storage
+                        .from('bi-uploads')
+                        .upload(filePath, file);
+
+                    if (uploadError) throw new Error(`Erro ao enviar arquivo: ${uploadError.message}`);
+
+                    const { data: signedData } = await supabase.storage
+                        .from('bi-uploads')
+                        .createSignedUrl(filePath, 3600);
+
+                    if (signedData?.signedUrl) fileUrls.push(signedData.signedUrl);
                     fileNames.push(file.name);
-
-                    for (const sheetName of wb.SheetNames) {
-                        const ws = wb.Sheets[sheetName];
-                        const rows = XLSX.utils.sheet_to_json(ws, { defval: '' }) as Record<string, any>[];
-
-                        for (const row of rows) {
-                            const clean: Record<string, string> = {};
-                            for (const [k, v] of Object.entries(row)) {
-                                clean[k] = String(v).replace(/\n.*/g, '').replace(/\s+/g, ' ').trim();
-                            }
-                            allRows.push(clean);
-                        }
-                    }
                 }
 
-                parsedFileData = allRows;
-                const headers = Object.keys(allRows[0] || {});
-                const sampleLines = allRows.slice(0, 5).map(r => headers.map(h => r[h] || '').join(' | '));
+                const userText = txt || 'Analise o arquivo enviado e me dê um resumo.';
+                newUserMsg.content = `📎 ${fileNames.join(', ')} — ${userText}`;
 
-                systemContextContent = `[ARQUIVO ENVIADO: ${fileNames.join(', ')}] (${allRows.length} linhas)\nColunas: ${headers.join(', ')}\nAmostra (5 primeiras linhas):\n${sampleLines.join('\n')}\n\nPara comparar estes dados com o banco, use a tool comparar_arquivo_com_banco. Os dados completos do arquivo estão disponíveis nessa tool.`;
-
-                if (!txt) {
-                    newUserMsg.content = "Analise os dados do arquivo enviado e me dê um resumo.";
-                }
+                messageToSend = JSON.stringify({
+                    text: userText,
+                    file_url: fileUrls[0],
+                    file_name: fileNames[0],
+                });
+            } else {
+                messageToSend = txt;
             }
 
-            // 2. Enviar para edge function (tool calling server-side)
+            // 2. Enviar para a fila da Sol
             setLoadingMsg('Pensando...');
 
-            // Montar a mensagem: se teve auditoria, incluir contexto
-            const messageToSend = systemContextContent
-                ? `${systemContextContent}\n\n${newUserMsg.content}`
-                : newUserMsg.content;
-
-            const ctxWithFile = parsedFileData ? { ...agentCtx, fileData: parsedFileData } : agentCtx;
-            const result = await chatComIA(messageToSend, conversationId, ctxWithFile, newUserMsg.content);
+            const result = await chatComIA(messageToSend, conversationId, agentCtx, txt || currentAttachments[0]?.name);
 
             // Salvar conversation_id para mensagens futuras
             if (result.conversationId) {
