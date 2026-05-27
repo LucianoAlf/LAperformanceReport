@@ -35,8 +35,9 @@ export interface AgentContext {
 }
 
 /**
- * Envia mensagem para o agente BI via edge function server-side.
- * API key segura no servidor — nunca exposta no frontend.
+ * Envia mensagem para Sol (VPS) via fila assíncrona na Supabase.
+ * Frontend insere mensagem com status=pending, VPS processa e grava resposta,
+ * frontend recebe via Realtime.
  */
 export async function chatComIA(
     message: string,
@@ -53,34 +54,62 @@ export async function chatComIA(
     visualizationConfig?: any;
     metadata?: any;
 }> {
-    const { data, error } = await supabase.functions.invoke('bi-agent-lamusic', {
-        body: {
-            message,
-            conversation_id: conversationId,
-            unidade_id_override: agentCtx.isAdmin ? agentCtx.unidadeId : undefined,
-            title: title || undefined,
-            file_data: agentCtx.fileData || undefined,
-        },
+    // 1. Garantir conversa
+    let convId = conversationId;
+    if (!convId) {
+        const { data, error } = await supabase
+            .from('bi_conversations_lamusic')
+            .insert({ title: title || message.slice(0, 60) })
+            .select('id')
+            .single();
+        if (error) throw new Error(`Erro ao criar conversa: ${error.message}`);
+        convId = data!.id;
+    }
+
+    // 2. Inserir mensagem do usuário como pending
+    const { data: userMsg, error: insertError } = await supabase
+        .from('bi_messages_lamusic')
+        .insert({
+            conversation_id: convId,
+            role: 'user',
+            content: message,
+            status: 'pending',
+        })
+        .select('id')
+        .single();
+    if (insertError) throw new Error(`Erro ao enviar mensagem: ${insertError.message}`);
+
+    // 3. Aguardar resposta da Sol via Realtime (timeout 90s)
+    return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => {
+            channel.unsubscribe();
+            reject(new Error('Sol não respondeu em 90 segundos. Tente novamente.'));
+        }, 90_000);
+
+        const channel = supabase
+            .channel(`sol-reply-${userMsg!.id}`)
+            .on(
+                'postgres_changes',
+                {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'bi_messages_lamusic',
+                    filter: `conversation_id=eq.${convId}`,
+                },
+                (payload) => {
+                    const msg = payload.new as any;
+                    if (msg.role === 'assistant') {
+                        clearTimeout(timeout);
+                        channel.unsubscribe();
+                        resolve({
+                            content: msg.content || '',
+                            conversationId: convId!,
+                        });
+                    }
+                },
+            )
+            .subscribe();
     });
-
-    if (error) {
-        throw new Error(`Erro no agente BI: ${error.message}`);
-    }
-
-    if (data?.error) {
-        throw new Error(data.error);
-    }
-
-    const msg = data?.message;
-    return {
-        content: msg?.content || 'Sem resposta.',
-        conversationId: data?.conversation_id,
-        sqlQuery: msg?.sql_query,
-        sqlResult: msg?.sql_result,
-        visualizationType: msg?.visualization_type,
-        visualizationConfig: msg?.visualization_config,
-        metadata: data?.metadata,
-    };
 }
 
 /**

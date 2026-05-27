@@ -130,15 +130,41 @@ HAVING COUNT(*) > 1;
 
 ### E. Cron jobs (verificar execuções)
 
+Usar a RPC pública `get_cron_health()` — SECURITY DEFINER que lê `cron.job` + `cron.job_run_details` (schema `cron` inacessível via PostgREST). Retorna: `jobid`, `jobname`, `schedule`, `active`, `ultimo_status`, `ultima_execucao_brt`, `ultima_duracao_ms`, `return_message`.
+
 ```sql
--- Últimas execuções dos cron jobs
-SELECT j.jobname, jrd.start_time, jrd.end_time, jrd.status,
-       jrd.return_message
-FROM cron.job j
-LEFT JOIN cron.job_run_details jrd ON jrd.jobid = j.jobid
-WHERE jrd.start_time >= NOW() - INTERVAL '7 days'
-ORDER BY jrd.start_time DESC LIMIT 30;
+-- Visão geral: todos os jobs com última execução
+SELECT * FROM public.get_cron_health();
+
+-- Apenas jobs com falha ou que nunca rodaram
+SELECT * FROM public.get_cron_health()
+WHERE ultimo_status = 'failed' OR ultimo_status IS NULL;
+
+-- Jobs com duração suspeita (≤ 20ms = fire-and-forget, status "succeeded" não reflete resultado real)
+SELECT jobname, schedule, ultimo_status, ultima_duracao_ms, return_message
+FROM public.get_cron_health()
+WHERE ultima_duracao_ms <= 20 AND active = true;
 ```
+
+> **ARMADILHA CRÍTICA — fire-and-forget:** crons que disparam edge functions via `net.http_post` (ex: alertas, sync, relatorios) retornam em ~6–10ms e reportam `status='succeeded'` **independente do resultado da edge function**. Um cron com `ultimo_status = 'succeeded'` e `ultima_duracao_ms <= 20` pode estar escondendo uma edge function em crash. Sempre verificar logs da edge function (`mcp__supabase__get_logs`) separadamente quando há suspeita. Esse foi o mecanismo que ocultou o WORKER_RESOURCE_LIMIT do `sync-presenca-emusys` por 5 dias (maio/2026).
+
+**Jobs ativos atualmente (referência 2026-05-26):**
+- `sync-presenca-cg` (jobid=18, `0 1 * * *`) — sync presença Campo Grande, `{"dias":7,"unidade_index":0}`
+- `sync-presenca-barra` (jobid=19, `20 1 * * *`) — sync presença Barra, `{"dias":7,"unidade_index":1}`
+- `sync-presenca-recreio` (jobid=20, `40 1 * * *`) — sync presença Recreio, `{"dias":7,"unidade_index":2}`
+- `sincronizar-grade-horaria` (jobid=17, `30 1 * * *`) — RPC grade horária
+- `auditor-divergencias-cron` (jobid=16, `0 * * * *`) — fire-and-forget
+- `alertas-diarios` (jobid=2, `0 11 * * *`) — fire-and-forget
+- `alertas-tarefas-atrasadas` (jobid=1, múltiplos horários) — fire-and-forget
+- `processar-mensagens-agendadas` (jobid=5, `* * * * *`) — fire-and-forget
+- `relatorio-diario-20h` (jobid=13, `0 23 * * 1-6`) — fire-and-forget
+- `resumo-semanal` (jobid=3, `0 12 * * 1`) — fire-and-forget
+- `sync-professores-emusys-semanal` (jobid=15, Dom 7h UTC) — fire-and-forget
+- `snapshot_dados_mensais_mensal` (jobid=4, dia 1 às 3h UTC) — executa SQL direto (não fire-and-forget)
+- `cleanup-audit-log` (jobid=12, Dom 6h UTC) — executa SQL direto
+- `cleanup-bi-conversations` (jobid=10, 6h UTC diário) — executa SQL direto
+- `sync-feriados-anual` (jobid=14, 1 Jan) — nunca rodou ainda
+- `warm-enviar-mensagem-admin` (jobid=9, `*/5 * * * *`) — fire-and-forget
 
 ### F. `alunos_historico` — regra "saiu de tudo" (Histórico LTV)
 
@@ -691,7 +717,9 @@ Estes são pontos de falha já documentados que você deve sempre considerar:
 
 16. **`data_contato` self-heal no `upsert_lead` (fix 2026-05-25)** — antes, `data_contato` era *write-once* (só gravado no INSERT); leads migrados em 26/03 15:01 (~2053) ficaram com data congelada/errada e nenhum webhook corrigia (ex: lead 4522 Renato com `05/12/2025` vs Emusys `25/04/2026`). Fix adicionou `data_contato = COALESCE(p_data_contato, data_contato)` ao UPDATE do overload `(...,text,boolean,date)` em uso. Agora todo webhook Emusys re-alinha `data_contato` com `body.lead.data_hora_criacao`. **Validar com Seção J**: data impossível (futuro / após conversão) deve ser 0, e `data_contato` deve bater com o payload Emusys nos leads atualizados pós-fix. O overload legado `(...,date,boolean)` não foi alterado (dívida técnica). Limitação: leads já convertidos/arquivados que não recebem mais webhook não se auto-corrigem — precisariam de backfill via API Emusys.
 
-17. **Lead `convertido` com status regressado para `experimental_agendada`** — `registrar_experimental()` atualiza `leads.status` incondicionalmente, sem checar se o lead já está em estágio mais avançado. Quando Emusys envia `aula_experimental_criada` para um lead já convertido (ex: segundo curso, reagendamento tardio), o workflow `j41tPbyjGXUQUxrN` chama `registrar_experimental()` que sobrescreve o status — apagando o histórico de conversão. **Fix aplicado (2026-05-26)**: guard `AND status NOT IN ('convertido', 'arquivado')` no `UPDATE leads SET status = ...` dentro da função SQL. Após o fix, o UPSERT em `lead_experimentais` continua normalmente — só o `leads.status` não regride. **Detectar regressões**:
+17. **`sync-presenca-emusys` — split por unidade (fix 2026-05-26)** — antes era 1 cron cobrindo as 3 unidades com `{"dias":7}` (21 chamadas à API Emusys sequenciais por run). Causava WORKER_RESOURCE_LIMIT e a edge retornava 500, mas o cron reportava `succeeded` (fire-and-forget). Fix: 3 crons separados (`sync-presenca-cg`, `sync-presenca-barra`, `sync-presenca-recreio`) com `{"dias":7,"unidade_index":N}` — cada um processa 1 unidade (7 chamadas). O parâmetro `unidade_index` (0=CG, 1=Barra, 2=Recreio) filtra o array `UNIDADES` dentro da edge function. A seção de `atualizar_percentual_presenca` ainda itera todas as unidades (correto — sempre recalcula). **Verificar**: se aparecer gap de 5+ dias em `emusys_sync_log` para alguma unidade, suspeitar de WORKER_RESOURCE_LIMIT novamente. Sintoma: cron mostra `succeeded` (6ms) mas `emusys_sync_log` não tem entrada do dia — checar logs da edge via `mcp__supabase__get_logs`.
+
+18. **Lead `convertido` com status regressado para `experimental_agendada`** — `registrar_experimental()` atualiza `leads.status` incondicionalmente, sem checar se o lead já está em estágio mais avançado. Quando Emusys envia `aula_experimental_criada` para um lead já convertido (ex: segundo curso, reagendamento tardio), o workflow `j41tPbyjGXUQUxrN` chama `registrar_experimental()` que sobrescreve o status — apagando o histórico de conversão. **Fix aplicado (2026-05-26)**: guard `AND status NOT IN ('convertido', 'arquivado')` no `UPDATE leads SET status = ...` dentro da função SQL. Após o fix, o UPSERT em `lead_experimentais` continua normalmente — só o `leads.status` não regride. **Detectar regressões**:
     ```sql
     -- Leads marcados como já matriculados (têm aluno_id) mas com status de pipeline regressado
     SELECT l.id, l.nome, l.status, l.updated_at,
