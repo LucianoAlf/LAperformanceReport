@@ -50,6 +50,26 @@ export function AuditoriaWidget({ onClose, widgetsHidden = false }: AuditoriaWid
     const [isTyping, setIsTyping] = useState(false);
     const [dragActive, setDragActive] = useState(false);
     const [loadingMsg, setLoadingMsg] = useState('');
+    const [typingPhase, setTypingPhase] = useState(0);
+
+    const SOL_TYPING_MESSAGES = [
+        'Consultando o banco de dados...',
+        'Analisando os resultados...',
+        'Cruzando as informações...',
+        'Verificando os dados...',
+        'Montando a resposta...',
+        'Preparando a análise...',
+        'Quase pronto...',
+    ];
+
+    useEffect(() => {
+        if (!isTyping || loadingMsg !== 'Pensando...') return;
+        setTypingPhase(0);
+        const interval = setInterval(() => {
+            setTypingPhase(p => (p + 1) % SOL_TYPING_MESSAGES.length);
+        }, 2500);
+        return () => clearInterval(interval);
+    }, [isTyping, loadingMsg]);
     const [conversationId, setConversationId] = useState<string | null>(null);
 
     // Histórico de conversas
@@ -508,12 +528,31 @@ export function AuditoriaWidget({ onClose, widgetsHidden = false }: AuditoriaWid
                         );
                     })}
 
-                    {/* Loader se a IA estiver pensando / auditando localmente */}
+                    {/* Bubble de loading da Sol */}
                     {isTyping && (
-                        <div className="flex flex-col gap-2 items-start mt-2">
-                            <span className="flex items-center gap-2 text-xs font-semibold text-amber-500 bg-amber-500/10 px-3 py-1 rounded-full border border-amber-500/20">
-                                <Loader2 className="w-3 h-3 animate-spin" /> {loadingMsg}
-                            </span>
+                        <div className="flex items-end gap-2 mt-2">
+                            <div className="w-6 h-6 rounded-full bg-violet-600 flex items-center justify-center shrink-0">
+                                <Bot className="w-3.5 h-3.5 text-white" />
+                            </div>
+                            <div className="bg-slate-700/80 border border-slate-600/50 rounded-2xl rounded-bl-sm px-4 py-3 max-w-[75%]">
+                                {loadingMsg !== 'Pensando...' ? (
+                                    <span className="text-xs text-slate-300 flex items-center gap-2">
+                                        <Loader2 className="w-3 h-3 animate-spin text-violet-400" />
+                                        {loadingMsg}
+                                    </span>
+                                ) : (
+                                    <div className="flex flex-col gap-1.5">
+                                        <div className="flex items-center gap-1">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce [animation-delay:0ms]" />
+                                            <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce [animation-delay:150ms]" />
+                                            <span className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-bounce [animation-delay:300ms]" />
+                                        </div>
+                                        <span className="text-xs text-slate-400 transition-all duration-500">
+                                            {SOL_TYPING_MESSAGES[typingPhase]}
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     )}
 

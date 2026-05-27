@@ -83,8 +83,8 @@ export async function chatComIA(
     return new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
             channel.unsubscribe();
-            reject(new Error('Sol não respondeu em 90 segundos. Tente novamente.'));
-        }, 90_000);
+            reject(new Error('Sol não respondeu em 5 minutos. Tente novamente.'));
+        }, 300_000);
 
         const channel = supabase
             .channel(`sol-reply-${userMsg!.id}`)
