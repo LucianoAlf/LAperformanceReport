@@ -2140,7 +2140,7 @@ export function ComercialPage() {
   const buscarMatriculasAlunos = async (uid: string | null | undefined, dataInicio: string, dataFim: string) => {
     let q = supabase
       .from('alunos')
-      .select('id, nome, idade_atual, tipo_aluno, valor_passaporte, valor_parcela, is_segundo_curso, curso_id, cursos:curso_id(nome, is_projeto_banda)')
+      .select('id, nome, idade_atual, tipo_aluno, valor_passaporte, valor_parcela, is_segundo_curso, curso_id, professor_atual_id, cursos:curso_id(nome, is_projeto_banda)')
       .not('data_matricula', 'is', null)
       .gte('data_matricula', dataInicio)
       .lte('data_matricula', dataFim);
@@ -2190,20 +2190,22 @@ export function ComercialPage() {
       .lte('data_contato', dataFim);
 
     const leadsPeriodo = registrosPeriodo?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const experimentaisPeriodo = registrosPeriodo?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    // Matrículas: fonte = alunos por data_matricula (inclui matrículas sem lead)
-    const matAlunosPeriodo = await buscarMatriculasAlunos(unidadeId, dataInicio, dataFim);
-    const matriculasPeriodo = matAlunosPeriodo.length;
+    const experimentaisPeriodo = registrosPeriodo?.filter((r: any) => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
 
-    // Buscar experimentais agendadas para o dia final do período
-    const { data: experimentaisDia } = await supabase
+    // Experimentais agendadas para o dia (com nome e professor)
+    const { data: experimentaisAgendadasHoje } = await supabase
       .from('leads')
-      .select('quantidade')
+      .select('nome, quantidade, professor_experimental_id')
       .eq('unidade_id', unidadeId)
       .eq('data_contato', dataFim)
-      .like('status', 'experimental%');
-    
-    const experimentaisAgendadasDia = experimentaisDia?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
+      .eq('status', 'experimental_agendada');
+
+    const expProfIds = [...new Set((experimentaisAgendadasHoje || []).map((e: any) => e.professor_experimental_id).filter(Boolean))];
+    const expProfMap = new Map<number, string>();
+    if (expProfIds.length > 0) {
+      const { data: profs } = await supabase.from('professores').select('id, nome').in('id', expProfIds);
+      (profs || []).forEach((p: any) => expProfMap.set(p.id, p.nome));
+    }
 
     // Buscar visitas do dia final do período
     const { data: visitasDia } = await supabase
@@ -2212,8 +2214,15 @@ export function ComercialPage() {
       .eq('unidade_id', unidadeId)
       .eq('data_contato', dataFim)
       .eq('status', 'visita_escola');
-    
+
     const visitasDiaTotal = visitasDia?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
+
+    // Matrículas: usar state já enriquecido, filtrar novos alunos (sem 2º curso e sem banda)
+    const matriculasNovas = matriculasMes.filter((m: any) =>
+      !m.is_segundo_curso && !m.is_banda
+    );
+
+    const totalExpAgendadas = (experimentaisAgendadasHoje || []).reduce((acc: number, e: any) => acc + e.quantidade, 0);
 
     let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
     texto += `📅 *RELATÓRIO DIÁRIO*\n`;
@@ -2223,11 +2232,37 @@ export function ComercialPage() {
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
     texto += `🎯 Leads no mês: *${leadsPeriodo}*\n`;
     texto += `🎸 Experimentais no período: *${experimentaisPeriodo}*\n`;
-    texto += `📆 Experimentais agendadas: *${experimentaisAgendadasDia}*\n`;
-    texto += `🏫 Visitas: *${visitasDiaTotal}*\n`;
-    texto += `✅ Matrículas no período: *${matriculasPeriodo}*\n`;
+    texto += `📆 Experimentais agendadas: *${totalExpAgendadas}*\n`;
+    texto += `🏫 Visitas: *${visitasDiaTotal}*\n\n`;
 
-    texto += `\n━━━━━━━━━━━━━━━━━━━━━━`;
+    texto += `✅ Matrículas no período: *${matriculasNovas.length}*\n\n`;
+
+    if (matriculasNovas.length > 0) {
+      texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+      texto += `📝 *LISTA DETALHADA*\n`;
+      texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
+      matriculasNovas.forEach((mat: any, i: number) => {
+        const dataMat = mat.data_matricula || mat.data_contato;
+        const dataFormatada = dataMat ? new Date(dataMat + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '-';
+        texto += `MAT. ${(i + 1).toString().padStart(2, '0')}\n`;
+        texto += `📅 Data: ${dataFormatada}\n`;
+        texto += `👤 Aluno: ${mat.nome || 'Não informado'}`;
+        if (mat.idade) texto += ` (${mat.idade} anos)`;
+        texto += `\n`;
+        texto += `🎵 Curso: ${mat.curso_nome || 'Não informado'}\n`;
+        texto += `👨‍🏫 Professor: ${mat.professor_fixo_nome || 'Não informado'}\n`;
+        texto += `🎸 Prof. Experimental: ${mat.professor_exp_nome || 'Não teve'}\n`;
+        texto += `📱 Canal: ${mat.canal_nome || 'Não informado'}\n`;
+        texto += `👤 Hunter: ${hunterNome}\n`;
+        texto += `💵 Pass: R$ ${(mat.valor_passaporte || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
+        texto += `💵 Parc: R$ ${(mat.valor_parcela || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n\n`;
+      });
+    }
+
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    const agora = new Date();
+    texto += `📅 Gerado em: ${dia}/${(agora.getMonth() + 1).toString().padStart(2, '0')}/${ano} às ${agora.getHours()}:${agora.getMinutes().toString().padStart(2, '0')}\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━`;
 
     return texto;
   };
