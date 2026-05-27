@@ -479,7 +479,7 @@ export function AdministrativoPage() {
         // Query ao vivo (período atual ou sem snapshot)
         let matriculasQuery = supabase
           .from('alunos')
-          .select('id, is_segundo_curso, curso_id, cursos(nome)')
+          .select('id, is_segundo_curso, curso_id, cursos:curso_id!left(nome, is_projeto_banda)')
           .in('status', ['ativo', 'aviso_previo', 'trancado']);
 
         if (unidade !== 'todos') {
@@ -490,15 +490,15 @@ export function AdministrativoPage() {
 
         matriculasAtivas = matriculasData?.length || 0;
         matriculasBanda = matriculasData?.filter((m: any) =>
-          m.cursos?.nome?.toLowerCase()?.includes('banda')
+          m.cursos?.is_projeto_banda
         ).length || 0;
         matriculas2Curso = matriculasData?.filter((m: any) =>
           m.is_segundo_curso &&
-          !m.cursos?.nome?.toLowerCase()?.includes('banda') &&
+          !m.cursos?.is_projeto_banda &&
           !m.cursos?.nome?.toLowerCase()?.includes('coral')
         ).length || 0;
         alunosCoral = matriculasData?.filter((m: any) =>
-          m.cursos?.nome?.toLowerCase()?.includes('coral')
+          m.cursos?.nome?.toLowerCase()?.includes('canto coral')
         ).length || 0;
       }
 

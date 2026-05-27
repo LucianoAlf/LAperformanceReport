@@ -143,21 +143,21 @@ async function gerarRelatorioDiario(
   // Matrículas (mesma lógica: join cursos para banda/coral)
   const { data: matriculasData } = await supabase
     .from('alunos')
-    .select('id, is_segundo_curso, curso_id, cursos(nome)')
+    .select('id, is_segundo_curso, curso_id, cursos:curso_id!left(nome, is_projeto_banda)')
     .eq('unidade_id', unidadeId)
     .in('status', ['ativo', 'aviso_previo', 'trancado']);
 
   const matriculasAtivas = matriculasData?.length || 0;
   const matriculasBanda = matriculasData?.filter((m: any) =>
-    m.cursos?.nome?.toLowerCase()?.includes('banda')
+    m.cursos?.is_projeto_banda
   ).length || 0;
   const matriculas2Curso = matriculasData?.filter((m: any) =>
     m.is_segundo_curso &&
-    !m.cursos?.nome?.toLowerCase()?.includes('banda') &&
-    !m.cursos?.nome?.toLowerCase()?.includes('coral')
+    !m.cursos?.is_projeto_banda &&
+    !m.cursos?.nome?.toLowerCase()?.includes('canto coral')
   ).length || 0;
   const alunosCoral = matriculasData?.filter((m: any) =>
-    m.cursos?.nome?.toLowerCase()?.includes('coral')
+    m.cursos?.nome?.toLowerCase()?.includes('canto coral')
   ).length || 0;
 
   // Retencao view (renovações — MESMA view que o frontend usa)
