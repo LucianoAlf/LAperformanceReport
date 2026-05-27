@@ -309,11 +309,11 @@ async function gerarRelatorioDiario(
   texto += `🚪 *EVASÕES (Saíram esse mês)*\n`;
   texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
   texto += `• Total de evasões: *${evasoes.length}*\n`;
-  texto += `• Interrompido: *${evasoes.filter((e: any) => e.tipo_evasao === 'interrompido').length}*\n`;
+  texto += `• Interrompido: *${evasoes.filter((e: any) => (e.tipo_evasao || 'interrompido') === 'interrompido').length}*\n`;
   texto += `• Interrompido 2º Curso: *${evasoes.filter((e: any) => e.tipo_evasao === 'interrompido_2_curso').length}*\n`;
   texto += `• Interrompido Bolsista: *${evasoes.filter((e: any) => e.tipo_evasao === 'interrompido_bolsista').length}*\n`;
   texto += `• Interrompido Banda: *${evasoes.filter((e: any) => e.tipo_evasao === 'interrompido_banda').length}*\n`;
-  texto += `• Não Renovou: *${evasoes.filter((e: any) => e.tipo_evasao === 'nao_renovou').length}*\n`;
+  texto += `• Não Renovou: *${naoRenovacoes.length}*\n`;
   texto += `• Transferência: *${evasoes.filter((e: any) => e.tipo_evasao === 'transferencia').length}*\n\n`;
 
   if (evasoesHoje.length > 0) {
