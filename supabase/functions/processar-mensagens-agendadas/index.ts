@@ -1,11 +1,36 @@
 // Edge Function: processar-mensagens-agendadas
 // Busca mensagens agendadas com status 'pendente' e agendada_para <= agora
 // Envia cada uma via a Edge Function enviar-mensagem-lead
+// Também processa fila_relatorios_whatsapp (relatórios diários com 1 min de intervalo)
 // Chamada via Supabase Cron a cada minuto
 // @ts-nocheck
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+// Inline: _shared/uazapi.ts
+async function getUazapiCredentials(supabase: any, opts: { funcao?: string; caixaId?: number; unidadeId?: string } = {}): Promise<{ baseUrl: string; token: string; caixaId: number; caixaNome: string }> {
+  const { funcao, caixaId, unidadeId } = opts;
+  const toCreds = (row: any) => {
+    let baseUrl = row.uazapi_url;
+    if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) baseUrl = 'https://' + baseUrl;
+    return { baseUrl: baseUrl.replace(/\/+$/, ''), token: row.uazapi_token, caixaId: row.id, caixaNome: row.nome };
+  };
+  if (caixaId) {
+    const { data } = await supabase.from('whatsapp_caixas').select('id,nome,uazapi_url,uazapi_token').eq('id', caixaId).eq('ativo', true).maybeSingle();
+    if (data) return toCreds(data);
+  }
+  if (funcao && unidadeId) {
+    const { data } = await supabase.from('whatsapp_caixas').select('id,nome,uazapi_url,uazapi_token,funcao').eq('ativo', true).eq('unidade_id', unidadeId).in('funcao', [funcao, 'ambos']).limit(1).maybeSingle();
+    if (data) return toCreds(data);
+  }
+  if (funcao) {
+    const { data } = await supabase.from('whatsapp_caixas').select('id,nome,uazapi_url,uazapi_token,funcao').eq('ativo', true).in('funcao', [funcao, 'ambos']).limit(1).maybeSingle();
+    if (data) return toCreds(data);
+  }
+  const { data } = await supabase.from('whatsapp_caixas').select('id,nome,uazapi_url,uazapi_token').eq('ativo', true).limit(1).maybeSingle();
+  if (data) return toCreds(data);
+  throw new Error(`Nenhuma caixa UAZAPI ativa encontrada (funcao=${funcao || 'any'}, unidade=${unidadeId || 'any'})`);
+}
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -43,10 +68,10 @@ serve(async (req: Request) => {
     }
 
     if (!mensagens || mensagens.length === 0) {
-      // Mesmo sem mensagens CRM, processar fila do agente IA
       const agenteFilaProcessadas = await processarFilaAgente(supabase);
+      const relatoriosEnviados = await processarFilaRelatorios(supabase);
       return new Response(
-        JSON.stringify({ ok: true, processadas: 0, mensagem: 'Nenhuma mensagem pendente', agente_fila: agenteFilaProcessadas }),
+        JSON.stringify({ ok: true, processadas: 0, mensagem: 'Nenhuma mensagem pendente', agente_fila: agenteFilaProcessadas, relatorios: relatoriosEnviados }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -112,8 +137,14 @@ serve(async (req: Request) => {
       console.log(`[processar-agendadas] 🤖 ${agenteFilaProcessadas} msg(s) da fila do agente processadas`);
     }
 
+    // ─── Processar fila de relatórios WhatsApp ────────────────────────────────
+    const relatoriosEnviados = await processarFilaRelatorios(supabase);
+    if (relatoriosEnviados > 0) {
+      console.log(`[processar-agendadas] 📋 ${relatoriosEnviados} relatório(s) enviado(s)`);
+    }
+
     return new Response(
-      JSON.stringify({ ok: true, processadas: mensagens.length, enviadas, erros, agente_fila: agenteFilaProcessadas }),
+      JSON.stringify({ ok: true, processadas: mensagens.length, enviadas, erros, agente_fila: agenteFilaProcessadas, relatorios: relatoriosEnviados }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (err) {
@@ -124,6 +155,69 @@ serve(async (req: Request) => {
     );
   }
 });
+
+// ─── Processar fila de relatórios WhatsApp ────────────────────────────────────
+
+async function processarFilaRelatorios(supabase: any): Promise<number> {
+  const agora = new Date().toISOString();
+
+  const { data: itens, error } = await supabase
+    .from('fila_relatorios_whatsapp')
+    .select('id, unidade_id, unidade_nome, jid, grupo_nome, texto')
+    .eq('status', 'pendente')
+    .lte('agendada_para', agora)
+    .order('agendada_para', { ascending: true })
+    .limit(1); // 1 por vez — cron roda a cada minuto
+
+  if (error) {
+    console.error('[processar-agendadas] Erro ao buscar fila de relatórios:', error.message);
+    return 0;
+  }
+  if (!itens?.length) return 0;
+
+  const item = itens[0];
+
+  await supabase
+    .from('fila_relatorios_whatsapp')
+    .update({ status: 'enviando' })
+    .eq('id', item.id);
+
+  try {
+    const creds = await getUazapiCredentials(supabase, { funcao: 'sistema', unidadeId: item.unidade_id });
+
+    const response = await fetch(`${creds.baseUrl}/send/text`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'token': creds.token },
+      body: JSON.stringify({ number: item.jid, text: item.texto, delay: 0, readchat: true }),
+    });
+
+    const data = await response.json();
+    const success = response.ok && !data.error;
+
+    if (success) {
+      await supabase
+        .from('fila_relatorios_whatsapp')
+        .update({ status: 'enviada', enviada_em: new Date().toISOString() })
+        .eq('id', item.id);
+      console.log(`[processar-agendadas] ✅ Relatório enviado: ${item.unidade_nome} → ${item.grupo_nome}`);
+    } else {
+      const errMsg = typeof data.error === 'string' ? data.error : JSON.stringify(data);
+      await supabase
+        .from('fila_relatorios_whatsapp')
+        .update({ status: 'erro', erro: errMsg })
+        .eq('id', item.id);
+      console.error(`[processar-agendadas] ❌ Erro ao enviar relatório ${item.unidade_nome}:`, errMsg);
+    }
+  } catch (err) {
+    await supabase
+      .from('fila_relatorios_whatsapp')
+      .update({ status: 'erro', erro: String(err) })
+      .eq('id', item.id);
+    console.error(`[processar-agendadas] ❌ Exceção ao enviar relatório ${item.unidade_nome}:`, err);
+  }
+
+  return 1;
+}
 
 // ─── Processar fila do agente IA (debounce) ──────────────────────────────────
 

@@ -5,7 +5,31 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { getUazapiCredentials } from '../_shared/uazapi.ts';
+// Inline: _shared/uazapi.ts
+interface UazapiCredentials { baseUrl: string; token: string; caixaId: number; caixaNome: string; }
+async function getUazapiCredentials(supabase: any, opts: { funcao?: string; caixaId?: number; unidadeId?: string } = {}): Promise<UazapiCredentials> {
+  const { funcao, caixaId, unidadeId } = opts;
+  const toCreds = (row: any): UazapiCredentials => {
+    let baseUrl = row.uazapi_url;
+    if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) baseUrl = 'https://' + baseUrl;
+    return { baseUrl: baseUrl.replace(/\/+$/, ''), token: row.uazapi_token, caixaId: row.id, caixaNome: row.nome };
+  };
+  if (caixaId) {
+    const { data } = await supabase.from('whatsapp_caixas').select('id,nome,uazapi_url,uazapi_token').eq('id', caixaId).eq('ativo', true).maybeSingle();
+    if (data) return toCreds(data);
+  }
+  if (funcao && unidadeId) {
+    const { data } = await supabase.from('whatsapp_caixas').select('id,nome,uazapi_url,uazapi_token,funcao').eq('ativo', true).eq('unidade_id', unidadeId).in('funcao', [funcao, 'ambos']).limit(1).maybeSingle();
+    if (data) return toCreds(data);
+  }
+  if (funcao) {
+    const { data } = await supabase.from('whatsapp_caixas').select('id,nome,uazapi_url,uazapi_token,funcao').eq('ativo', true).in('funcao', [funcao, 'ambos']).limit(1).maybeSingle();
+    if (data) return toCreds(data);
+  }
+  const { data } = await supabase.from('whatsapp_caixas').select('id,nome,uazapi_url,uazapi_token').eq('ativo', true).limit(1).maybeSingle();
+  if (data) return toCreds(data);
+  throw new Error(`Nenhuma caixa UAZAPI ativa encontrada (funcao=${funcao || 'any'}, unidade=${unidadeId || 'any'})`);
+}
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -356,33 +380,34 @@ async function gerarRelatorioDiario(
 }
 
 /**
- * Modo CRON: gera e envia relatório para todas as unidades com cron ativo
+ * Modo CRON: gera relatórios e enfileira na fila_relatorios_whatsapp com 1 min de intervalo
+ * O processamento real é feito pelo cron processar-mensagens-agendadas (a cada minuto)
  */
 async function processarCron(
   supabase: ReturnType<typeof createClient>
 ): Promise<{ unidades_processadas: number; resultados: any[] }> {
-  console.log('[relatorio-admin-whatsapp] 🕐 Modo CRON iniciado');
+  console.log('[relatorio-admin-whatsapp] 🕐 Modo CRON iniciado — enfileirando');
 
-  // Buscar unidades com cron ativo
   const { data: unidades } = await supabase
     .from('unidades')
     .select('id, nome')
-    .eq('relatorio_diario_cron_ativo', true);
+    .eq('relatorio_diario_cron_ativo', true)
+    .order('nome');
 
   if (!unidades || unidades.length === 0) {
     console.log('[relatorio-admin-whatsapp] Nenhuma unidade com cron ativo');
     return { unidades_processadas: 0, resultados: [] };
   }
 
-  console.log(`[relatorio-admin-whatsapp] ${unidades.length} unidade(s) com cron ativo`);
+  console.log(`[relatorio-admin-whatsapp] ${unidades.length} unidade(s) — gerando e enfileirando`);
 
+  const agora = new Date();
   const resultados: any[] = [];
 
-  for (const unidade of unidades) {
-    console.log(`[relatorio-admin-whatsapp] Processando: ${unidade.nome}`);
+  for (let i = 0; i < unidades.length; i++) {
+    const unidade = unidades[i];
 
     try {
-      // Buscar destinatários
       const { data: destinatarios } = await supabase
         .from('whatsapp_destinatarios_relatorio')
         .select('jid, nome')
@@ -391,28 +416,35 @@ async function processarCron(
         .eq('unidade_id', unidade.id);
 
       if (!destinatarios || destinatarios.length === 0) {
-        console.warn(`[relatorio-admin-whatsapp] ⚠️ ${unidade.nome}: sem destinatários configurados, pulando`);
+        console.warn(`[relatorio-admin-whatsapp] ⚠️ ${unidade.nome}: sem destinatários, pulando`);
         resultados.push({ unidade: unidade.nome, status: 'skip', motivo: 'sem_destinatarios' });
         continue;
       }
 
-      // Gerar relatório
       const texto = await gerarRelatorioDiario(supabase, unidade.id);
 
-      // Resolver credenciais UAZAPI por unidade
-      const creds = await getUazapiCredentials(supabase, { funcao: 'sistema', unidadeId: unidade.id });
+      // Escalonar: unidade 0 = agora, unidade 1 = agora+1min, unidade 2 = agora+2min, ...
+      const agendadaPara = new Date(agora.getTime() + i * 60_000);
 
-      // Enviar para cada grupo
       for (const dest of destinatarios) {
-        const resultado = await enviarWhatsAppGrupo(dest.jid, texto, creds);
-        resultados.push({
-          unidade: unidade.nome,
-          grupo: dest.nome,
-          ...resultado,
-        });
+        const { error } = await supabase
+          .from('fila_relatorios_whatsapp')
+          .insert({
+            unidade_id: unidade.id,
+            unidade_nome: unidade.nome,
+            jid: dest.jid,
+            grupo_nome: dest.nome,
+            texto,
+            status: 'pendente',
+            agendada_para: agendadaPara.toISOString(),
+          });
 
-        if (destinatarios.length > 1) {
-          await new Promise(resolve => setTimeout(resolve, 500));
+        if (error) {
+          console.error(`[relatorio-admin-whatsapp] ❌ Erro ao enfileirar ${unidade.nome}:`, error.message);
+          resultados.push({ unidade: unidade.nome, grupo: dest.nome, status: 'erro_fila', error: error.message });
+        } else {
+          console.log(`[relatorio-admin-whatsapp] ✅ ${unidade.nome} → ${dest.nome} enfileirado para ${agendadaPara.toISOString()}`);
+          resultados.push({ unidade: unidade.nome, grupo: dest.nome, status: 'enfileirado', agendada_para: agendadaPara.toISOString() });
         }
       }
     } catch (error) {
@@ -425,7 +457,7 @@ async function processarCron(
     }
   }
 
-  console.log(`[relatorio-admin-whatsapp] 🕐 Modo CRON finalizado. ${resultados.length} envio(s)`);
+  console.log(`[relatorio-admin-whatsapp] 🕐 Modo CRON finalizado. ${resultados.length} item(ns) enfileirado(s)`);
   return { unidades_processadas: unidades.length, resultados };
 }
 
