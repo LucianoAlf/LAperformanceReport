@@ -366,13 +366,23 @@ export function ModalRelatorio({
     // Evasões
     texto += `🚪 *EVASÕES (Saíram esse mês)*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `• Total de evasões: *${evasoes.length}*\n`;
-    texto += `• Interrompido: *${evasoes.filter(e => (e.tipo_evasao || 'interrompido') === 'interrompido').length}*\n`;
-    texto += `• Interrompido 2º Curso: *${evasoes.filter(e => e.tipo_evasao === 'interrompido_2_curso').length}*\n`;
-    texto += `• Interrompido Bolsista: *${evasoes.filter(e => e.tipo_evasao === 'interrompido_bolsista').length}*\n`;
-    texto += `• Interrompido Banda: *${evasoes.filter(e => e.tipo_evasao === 'interrompido_banda').length}*\n`;
+    const getTipoEvasao = (e: any): string => {
+      const aluno = e.alunos;
+      if (aluno) {
+        if (aluno.tipo_matricula_id === 5) return 'interrompido_banda';
+        if (aluno.is_segundo_curso || aluno.tipo_matricula_id === 2) return 'interrompido_2_curso';
+        if ([3, 4].includes(aluno.tipo_matricula_id)) return 'interrompido_bolsista';
+        return 'interrompido';
+      }
+      return e.tipo_evasao || 'interrompido';
+    };
+    texto += `• Total de evasões: *${evasoes.length + naoRenovacoes.length}*\n`;
+    texto += `• Interrompido: *${evasoes.filter(e => getTipoEvasao(e) === 'interrompido').length}*\n`;
+    texto += `• Interrompido 2º Curso: *${evasoes.filter(e => getTipoEvasao(e) === 'interrompido_2_curso').length}*\n`;
+    texto += `• Interrompido Bolsista: *${evasoes.filter(e => getTipoEvasao(e) === 'interrompido_bolsista').length}*\n`;
+    texto += `• Interrompido Banda: *${evasoes.filter(e => getTipoEvasao(e) === 'interrompido_banda').length}*\n`;
     texto += `• Não Renovou: *${naoRenovacoes.length}*\n`;
-    texto += `• Transferência: *${evasoes.filter(e => e.tipo_evasao === 'transferencia').length}*\n\n`;
+    texto += `• Transferência: *${evasoes.filter(e => getTipoEvasao(e) === 'transferencia').length}*\n\n`;
 
     if (evasoesHoje.length > 0) {
       texto += `Evasões do dia: *${evasoesHoje.length}*\n\n`;
