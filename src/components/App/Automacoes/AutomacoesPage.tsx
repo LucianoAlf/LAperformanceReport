@@ -1,13 +1,14 @@
 // src/components/App/Automacoes/AutomacoesPage.tsx
 import { useState } from 'react';
-import { Activity, GitBranch, List, Search } from 'lucide-react';
+import { Activity, GitBranch, List, Search, Clock } from 'lucide-react';
 import type { Filtros } from '@/hooks/useAutomacoesData';
 import { defaultFiltros } from '@/hooks/useAutomacoesData';
 import { TabJornadas } from './TabJornadas';
 import { TabFeedEventos } from './TabFeedEventos';
+import { TabSaudeCrons } from './TabSaudeCrons';
 import { BotaoRodarAuditoria } from './BotaoRodarAuditoria';
 
-type Aba = 'jornadas' | 'feed';
+type Aba = 'jornadas' | 'feed' | 'crons';
 
 const PRESETS_PERIODO: Array<{ label: string; dias: number }> = [
   { label: 'Hoje', dias: 0 },
@@ -135,9 +136,21 @@ export function AutomacoesPage() {
         >
           <List className="w-4 h-4" /> Feed de eventos
         </button>
+        <button
+          onClick={() => setAba('crons')}
+          className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+            aba === 'crons'
+              ? 'text-cyan-400 border-cyan-400'
+              : 'text-gray-400 border-transparent hover:text-white'
+          }`}
+        >
+          <Clock className="w-4 h-4" /> Crons
+        </button>
       </div>
 
-      {aba === 'jornadas' ? <TabJornadas filtros={filtros} /> : <TabFeedEventos filtros={filtros} />}
+      {aba === 'jornadas' && <TabJornadas filtros={filtros} />}
+      {aba === 'feed' && <TabFeedEventos filtros={filtros} />}
+      {aba === 'crons' && <TabSaudeCrons />}
     </div>
   );
 }
