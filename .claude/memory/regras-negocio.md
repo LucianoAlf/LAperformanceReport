@@ -140,6 +140,21 @@ Implementado em 2026-05-07: edge function v12 + RPC `get_historico_ltv` + `Modal
 - Identidade da pessoa = `nome + unidade_id`.
 - Sempre 1 matrícula com `is_segundo_curso=false` + N com `is_segundo_curso=true`. Edge function v11+ já cobre.
 
+### Regras do segundo curso (`is_segundo_curso=true`)
+- Segundo curso = a pessoa faz **outro curso, DIFERENTE** do principal (ex: Canto + Power Kids; Contrabaixo + GarageBand). Cada linha tem seu próprio `curso_id`, professor, turma e presenças.
+- **Dois registros com o MESMO curso NÃO são segundo curso — são duplicata.** Ninguém se matricula 2x no mesmo curso. Ex: 2 linhas "Bateria" da mesma pessoa = 1 é duplicata.
+- A linha principal (`is_segundo_curso=false`) é única por pessoa. As demais são `true`.
+- Para validar: se 2 linhas têm `curso_id` igual + mesma pessoa (`nome`+`unidade_id`) → duplicata. Se `curso_id` diferente → provável segundo curso legítimo (confirmar pela aula real em `aulas_emusys`, ver [[integracao-infra]]).
+- `is_projeto_banda` em `cursos`: curso de banda é excluído de médias de turma, carteira e score do professor.
+
+### Duplicatas de matrícula — causas e limpeza
+Ver memória de operação detalhada em `limpeza-duplicatas-recreio` (auto-memory, não versionada). Resumo das **3 fontes que criam `alunos` keyando por nome sem deduplicar entre si**:
+1. Webhook `matricula_nova/inserido` (Emusys) — curso vem do `nome_curso` do payload; pode estar errado. `emusys_matricula_id` só gravado a partir da v12 (2026-05-07).
+2. Importação em lote direto no banco (ex: 2026-03-31, leads marcados `convertido` + alunos `is_segundo_curso=true`, sem `created_by`/`execution_id`).
+3. Inserção manual na UI (sem dedup).
+- **Lixeira oficial: `alunos_arquivados`** (espelha `alunos` + `arquivado_em/por/motivo`). Arquivar = mover a linha p/ lá + `DELETE FROM alunos`. **Não criar mais tabelas `*_backup_<data>`.** Tirar de `alunos` é o único jeito de parar o sync de presença (que ignora status).
+- Merge de duplicata: migrar `leads` + presenças únicas (dedupe por `aula_emusys_id`) + contatos p/ o registro que fica, corrigir `curso_id` se o rótulo estiver errado, então arquivar a duplicata. Audit_log já guarda `dados_antigos` no DELETE (reversível).
+
 ### Quando o aluno conta como saída (regra "saiu de tudo")
 - Tempo de permanência só é contabilizado quando o aluno encerra **TODAS** as matrículas.
 - Se cancelou só 1 curso e continua em outro → NÃO grava em `alunos_historico`, NÃO aparece na tela.

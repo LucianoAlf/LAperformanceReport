@@ -16,6 +16,14 @@
 - `aviso_previo` — vai sair (intervenção possivel)
 - `evadido` — saiu (evasao confirmada)
 - `nao_renovou` — contrato venceu sem renovacao
+- ⚠️ **Status NAO esconde o aluno do banco.** O sync de presenca ignora status (ver integracao-infra.md) e varias queries leem `aluno_presenca` direto. Soft-delete via status é leaky.
+
+## Arquivamento (lixeira) — `alunos_arquivados`
+- Criada 2026-05-27 como lixeira **permanente e oficial** para remover matriculas duplicadas/erradas sem perder o dado. Espelha `alunos` (`LIKE alunos INCLUDING DEFAULTS`) + colunas `arquivado_em`, `arquivado_por`, `motivo`.
+- **Arquivar** = `INSERT INTO alunos_arquivados SELECT a.*, now(), 'quem', 'motivo' FROM alunos a WHERE id=X` + `DELETE FROM alunos WHERE id=X`.
+- **Restaurar** = `INSERT INTO alunos (<cols>) SELECT <cols> FROM alunos_arquivados WHERE id=X`.
+- Tirar a linha de `alunos` é o que de fato para o sync de presenca de alimentar o registro. Audit_log tambem guarda `dados_antigos` no DELETE (rede extra).
+- **Nao criar mais tabelas `*_backup_<data>`** — usar essa. (As antigas alunos_backup_* e staging_alunos_recreio foram dropadas em 2026-05-27.)
 
 ## Gestao de Turmas
 - `src/components/App/Alunos/GestaoTurmas.tsx`

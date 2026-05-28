@@ -556,6 +556,27 @@ export function ModalFichaAluno({
 
     setSalvandoSegundoCurso(true);
     try {
+      // Guarda anti-duplicata: a pessoa não pode ter 2 matrículas ativas/trancadas no MESMO curso.
+      // Curso diferente = segundo curso legítimo; curso igual = duplicata. Usa ilike (case-insensitive)
+      // pra pegar variações de caixa do nome que o .eq() de outrosCursos não cobre (ex: "Moura"/"moura").
+      const nomePessoa = (dadosCompletos?.nome || '').trim();
+      if (nomePessoa) {
+        const { data: jaTem } = await supabase
+          .from('alunos')
+          .select('id, status, cursos:curso_id(nome)')
+          .eq('unidade_id', aluno.unidade_id)
+          .eq('curso_id', segundoCursoData.curso_id)
+          .ilike('nome', nomePessoa)
+          .in('status', ['ativo', 'trancado']);
+
+        if (jaTem && jaTem.length > 0) {
+          const nomeCurso = (jaTem[0] as any).cursos?.nome || 'esse curso';
+          toast.error(`${nomePessoa} já tem matrícula ativa em ${nomeCurso}. Não dá para adicionar o mesmo curso duas vezes — isso geraria uma duplicata. Segundo curso só vale para um curso diferente.`);
+          setSalvandoSegundoCurso(false);
+          return;
+        }
+      }
+
       const dataHoje = new Date().toISOString().split('T')[0];
       const dataFimContrato = new Date();
       dataFimContrato.setFullYear(dataFimContrato.getFullYear() + 1);
@@ -1428,7 +1449,14 @@ export function ModalFichaAluno({
       </DialogContent>
 
       {/* Modal de Segundo Curso */}
-      {modalSegundoCurso && (
+      {modalSegundoCurso && (() => {
+        // Cursos que a pessoa já tem (principal + outros cursos ativos/trancados)
+        const idsCursosExistentes = new Set<number>();
+        if (dadosCompletos?.curso_id) idsCursosExistentes.add(dadosCompletos.curso_id);
+        outrosCursos.forEach((o: any) => { if (o.curso_id) idsCursosExistentes.add(o.curso_id); });
+        const cursoDuplicado = segundoCursoData.curso_id != null && idsCursosExistentes.has(segundoCursoData.curso_id);
+        const nomeCursoDuplicado = cursos.find((c: any) => c.id === segundoCursoData.curso_id)?.nome || 'esse curso';
+        return (
         <Dialog open onOpenChange={() => setModalSegundoCurso(false)}>
           <DialogContent className="max-w-lg">
             <DialogHeader>
@@ -1459,6 +1487,15 @@ export function ModalFichaAluno({
                     ))}
                   </SelectContent>
                 </Select>
+                {cursoDuplicado && (
+                  <div className="mt-2 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-400 flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                    <span>
+                      <strong>{dadosCompletos?.nome}</strong> já tem matrícula em <strong>{nomeCursoDuplicado}</strong>.
+                      Adicionar o mesmo curso cria uma duplicata — escolha um curso diferente.
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div>
@@ -1583,7 +1620,7 @@ export function ModalFichaAluno({
               <Button variant="outline" onClick={() => setModalSegundoCurso(false)} disabled={salvandoSegundoCurso}>
                 Cancelar
               </Button>
-              <Button onClick={handleCriarSegundoCurso} disabled={salvandoSegundoCurso} className="bg-purple-600 hover:bg-purple-500">
+              <Button onClick={handleCriarSegundoCurso} disabled={salvandoSegundoCurso || cursoDuplicado} className="bg-purple-600 hover:bg-purple-500">
                 {salvandoSegundoCurso ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -1599,7 +1636,8 @@ export function ModalFichaAluno({
             </div>
           </DialogContent>
         </Dialog>
-      )}
+        );
+      })()}
     </Dialog>
   );
 }

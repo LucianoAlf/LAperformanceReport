@@ -56,6 +56,8 @@ Path alias: `@/` = `./src/`
 - RPC functions para queries complexas (ex: `get_kpis_consolidados`, `get_kpis_professor_periodo`)
 - Tipos gerados: `src/types/database.types.ts`
 - `motivos_saida`: tabela com campo `conta_score_professor` (bool) — controla quais motivos penalizam o professor no score. NULL sem match = não conta.
+- **`alunos` = matrículas, não pessoas** (pessoa = `nome`+`unidade_id`; 2 cursos = 2 linhas, 1 `is_segundo_curso=false` + N `true`). 2 linhas com mesmo `curso_id` da mesma pessoa = duplicata, não segundo curso. Detalhes e limpeza em `regras-negocio.md`.
+- **`alunos_arquivados`**: lixeira oficial para arquivar matrículas duplicadas/erradas (move a linha + DELETE de `alunos`). Não criar `*_backup_<data>`. ⚠️ Sync de presença ignora `status` — só sair de `alunos` para o sync. Ver `dominio-alunos.md` / `integracao-infra.md`.
 
 ## Integrações
 
