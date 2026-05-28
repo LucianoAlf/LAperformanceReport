@@ -13,6 +13,7 @@
 - [modulo-saude-automacoes.md](modulo-saude-automacoes.md) — Monitoramento de webhooks Emusys (edge auditor, helper invariantes, automacao_log/invariantes, frontend)
 - [todos-pendentes.md](todos-pendentes.md) — Problemas conhecidos sem fix aplicado (priorizados por severidade)
 - [pendencias-emusys.md](pendencias-emusys.md) — Limitações do lado do Emusys (API/cadastro) que não podem ser resolvidas no nosso código
+- [mapa-metricas-fluxos.md](mapa-metricas-fluxos.md) — Mapa completo: quais dados cada tela consome, fontes (view/RPC/tabela/hook), cálculos banco vs frontend, bugs conhecidos de filtro
 
 ## Unidades
 - CG (Campo Grande): `2ec861f6-023f-4d7b-9927-3960ad8c2a92`

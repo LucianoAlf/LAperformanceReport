@@ -2218,9 +2218,9 @@ export function ComercialPage() {
     const visitasDiaTotal = visitasDia?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
 
     // Matrículas: usar state já enriquecido, filtrar novos alunos (sem 2º curso e sem banda)
-    const matriculasNovas = matriculasMes.filter((m: any) =>
-      !m.is_segundo_curso && !m.is_banda
-    );
+    const matriculasNovas = matriculasMes
+      .filter((m: any) => !m.is_segundo_curso && !m.is_banda)
+      .sort((a: any, b: any) => (a.data_matricula || '').localeCompare(b.data_matricula || ''));
 
     const totalExpAgendadas = (experimentaisAgendadasHoje || []).reduce((acc: number, e: any) => acc + e.quantidade, 0);
 
@@ -2255,7 +2255,8 @@ export function ComercialPage() {
         texto += `📱 Canal: ${mat.canal_nome || 'Não informado'}\n`;
         texto += `👤 Hunter: ${hunterNome}\n`;
         texto += `💵 Pass: R$ ${(mat.valor_passaporte || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
-        texto += `💵 Parc: R$ ${(mat.valor_parcela || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n\n`;
+        texto += `💵 Parc: R$ ${(mat.valor_parcela || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
+        texto += `💳 Pag: ${mat.forma_pagamento_nome || 'Não informado'}\n\n`;
       });
     }
 
