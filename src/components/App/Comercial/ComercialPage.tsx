@@ -3138,7 +3138,7 @@ export function ComercialPage() {
         ano={competencia.filtro.ano}
         mes={competencia.filtro.mes}
         resumoLeads={resumo}
-        totalMatriculasMes={matriculasMes.length}
+        totalMatriculasMes={matriculasMes.filter((m: any) => !m.is_segundo_curso && !m.is_banda).length}
       />
 
       {/* ═══════════════════════════════════════════════════════════════ */}
