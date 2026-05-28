@@ -1,0 +1,543 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Assistente IA — Data Console</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --slate-950: #020617;
+      --slate-900: #0f172a;
+      --slate-850: #131c30;
+      --slate-800: #1e293b;
+      --slate-750: #283447;
+      --slate-700: #334155;
+      --slate-600: #475569;
+      --slate-500: #64748b;
+      --slate-400: #94a3b8;
+      --slate-300: #cbd5e1;
+      --slate-200: #e2e8f0;
+      --slate-100: #f1f5f9;
+      --violet-700: #6d28d9;
+      --violet-600: #7c3aed;
+      --violet-500: #8b5cf6;
+      --violet-400: #a78bfa;
+      --violet-300: #c4b5fd;
+      --emerald-500: #10b981;
+      --emerald-400: #34d399;
+      --emerald-300: #6ee7b7;
+      --amber-400: #fbbf24;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: 'Geist', system-ui, sans-serif;
+      background: var(--slate-950);
+      color: var(--slate-200);
+      display: flex; align-items: center; justify-content: center;
+      padding: 40px;
+      min-height: 100vh;
+    }
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image:
+        linear-gradient(rgba(148,163,184,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148,163,184,0.04) 1px, transparent 1px);
+      background-size: 56px 56px;
+      mask-image: radial-gradient(closest-side at 50% 40%, #000 30%, transparent 80%);
+      -webkit-mask-image: radial-gradient(closest-side at 50% 40%, #000 30%, transparent 80%);
+      pointer-events: none;
+    }
+
+    .dialog {
+      width: 500px;
+      max-width: 100%;
+      background: var(--slate-900);
+      color: var(--slate-200);
+      border: 1px solid var(--slate-700);
+      border-radius: 14px;
+      display: flex;
+      flex-direction: column;
+      max-height: 780px;
+      position: relative;
+      overflow: hidden;
+      box-shadow:
+        0 30px 60px -20px rgba(0,0,0,0.6),
+        0 8px 24px -12px rgba(0,0,0,0.5);
+    }
+
+    /* Header — compact with status line */
+    .topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 14px;
+      background: var(--slate-850);
+      border-bottom: 1px solid var(--slate-700);
+    }
+    .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .avatar {
+      width: 30px; height: 30px;
+      border-radius: 8px;
+      background: linear-gradient(140deg, var(--violet-500), var(--violet-700));
+      display: grid; place-items: center;
+      box-shadow: 0 0 0 1px rgba(196,181,253,0.15) inset;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .avatar svg { width: 14px; height: 14px; color: #fff; }
+    .avatar::after {
+      content: '';
+      position: absolute; bottom: -2px; right: -2px;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--emerald-500);
+      border: 2px solid var(--slate-850);
+    }
+    .brand-text { display: flex; flex-direction: column; min-width: 0; line-height: 1.1; }
+    .brand-text .name { font-size: 13px; font-weight: 600; color: var(--slate-100); letter-spacing: -0.005em; }
+    .brand-text .sub {
+      font-family: 'Geist Mono', monospace;
+      font-size: 10.5px;
+      color: var(--slate-500);
+      margin-top: 3px;
+      letter-spacing: 0;
+    }
+    .brand-text .sub .v { color: var(--emerald-400); }
+
+    .actions { display: flex; gap: 2px; }
+    .icon-btn {
+      width: 28px; height: 28px;
+      display: grid; place-items: center;
+      border-radius: 6px;
+      color: var(--slate-400);
+      transition: background .15s, color .15s;
+      cursor: pointer;
+      background: transparent;
+      border: 0;
+    }
+    .icon-btn:hover { background: var(--slate-800); color: var(--slate-100); }
+    .ic { width: 15px; height: 15px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+    /* Status row with scope + tabs */
+    .scope-row {
+      display: flex; align-items: stretch; gap: 0;
+      background: var(--slate-900);
+      border-bottom: 1px solid var(--slate-700);
+      padding: 0 14px;
+    }
+    .scope-pill {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 8px 10px;
+      font-size: 11.5px;
+      font-family: 'Geist Mono', monospace;
+      color: var(--slate-400);
+      border-right: 1px solid var(--slate-700);
+      margin-right: 8px;
+    }
+    .scope-pill .k { color: var(--slate-500); }
+    .scope-pill .v {
+      color: var(--violet-300);
+      background: rgba(139,92,246,0.12);
+      padding: 1px 6px;
+      border-radius: 3px;
+    }
+    .scope-pill .v.unit {
+      background: rgba(16,185,129,0.12);
+      color: var(--emerald-300);
+    }
+
+    /* Transcript */
+    .transcript {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .welcome {
+      padding: 12px 14px;
+      background: var(--slate-850);
+      border: 1px solid var(--slate-700);
+      border-left: 2px solid var(--violet-500);
+      border-radius: 0 8px 8px 0;
+      font-size: 13px;
+      color: var(--slate-300);
+    }
+    .welcome .head {
+      font-family: 'Geist Mono', monospace;
+      font-size: 10.5px;
+      color: var(--slate-500);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .welcome ul { list-style: none; display: flex; flex-direction: column; gap: 5px; }
+    .welcome li {
+      padding-left: 16px;
+      position: relative;
+      font-size: 12.5px;
+      color: var(--slate-200);
+    }
+    .welcome li::before {
+      content: '◆';
+      position: absolute; left: 0; top: 0;
+      color: var(--violet-400);
+      font-size: 7px;
+      top: 5px;
+    }
+
+    /* User question */
+    .question {
+      align-self: flex-end;
+      max-width: 86%;
+      padding: 9px 13px;
+      background: var(--violet-600);
+      color: #fff;
+      font-size: 14px;
+      line-height: 1.45;
+      border-radius: 10px 10px 4px 10px;
+      box-shadow: 0 4px 12px -4px rgba(124,58,237,0.45);
+    }
+
+    /* AI answer header */
+    .answer-meta {
+      display: flex; align-items: center; gap: 8px;
+      font-family: 'Geist Mono', monospace;
+      font-size: 10.5px;
+      color: var(--slate-500);
+      padding: 0 2px;
+    }
+    .answer-meta .ts { color: var(--slate-400); }
+    .answer-meta .badge {
+      padding: 1px 6px;
+      background: var(--slate-800);
+      border: 1px solid var(--slate-700);
+      border-radius: 3px;
+      color: var(--slate-300);
+    }
+    .answer-meta .badge.warn {
+      color: var(--amber-400);
+      border-color: rgba(251,191,36,0.3);
+      background: rgba(251,191,36,0.06);
+    }
+
+    .answer-card {
+      background: var(--slate-800);
+      border: 1px solid var(--slate-700);
+      border-radius: 10px;
+      overflow: hidden;
+      margin-top: 4px;
+    }
+    .answer-card .lede {
+      padding: 14px 14px 12px;
+      font-size: 14.5px;
+      line-height: 1.45;
+      color: var(--slate-100);
+      font-weight: 500;
+      letter-spacing: -0.005em;
+    }
+    .answer-card .lede .em { color: var(--violet-300); }
+
+    /* Fact card — the data exposed */
+    .fact {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 14px;
+      padding: 14px;
+      background: var(--slate-850);
+      border-top: 1px solid var(--slate-700);
+      align-items: center;
+    }
+    .fact .num {
+      font-family: 'Geist Mono', monospace;
+      font-size: 38px;
+      font-weight: 600;
+      line-height: 1;
+      color: var(--violet-300);
+      letter-spacing: -0.02em;
+      text-shadow: 0 0 24px rgba(139,92,246,0.3);
+    }
+    .fact .num .unit {
+      font-size: 14px;
+      color: var(--slate-500);
+      font-weight: 400;
+      margin-left: 4px;
+      letter-spacing: 0;
+    }
+    .fact .desc {
+      font-size: 13px;
+      color: var(--slate-300);
+      line-height: 1.45;
+    }
+    .fact .desc .label {
+      display: block;
+      font-family: 'Geist Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--slate-500);
+      margin-bottom: 3px;
+    }
+    .fact .desc .missing {
+      display: inline-flex; align-items: center; gap: 5px;
+      margin-top: 4px;
+      padding: 2px 7px;
+      font-family: 'Geist Mono', monospace;
+      font-size: 11px;
+      background: rgba(251,191,36,0.08);
+      border: 1px solid rgba(251,191,36,0.25);
+      color: var(--amber-400);
+      border-radius: 4px;
+    }
+    .fact .desc .missing::before {
+      content: '!';
+      font-weight: 700;
+    }
+
+    /* Criterio block */
+    .criterio {
+      padding: 12px 14px;
+      border-top: 1px solid var(--slate-700);
+      background: var(--slate-800);
+      font-size: 12.5px;
+      color: var(--slate-300);
+      line-height: 1.5;
+    }
+    .criterio .k {
+      font-family: 'Geist Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--slate-500);
+      margin-bottom: 4px;
+    }
+
+    /* Reactions */
+    .reactions {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      padding: 10px 14px;
+      border-top: 1px solid var(--slate-700);
+      background: var(--slate-850);
+    }
+    .reactions .left { display: flex; gap: 4px; }
+    .reaction {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-family: 'Geist', sans-serif;
+      font-size: 11.5px;
+      padding: 4px 9px;
+      background: transparent;
+      border: 1px solid var(--slate-700);
+      border-radius: 6px;
+      color: var(--slate-400);
+      cursor: pointer;
+      transition: all .15s;
+      font-weight: 500;
+    }
+    .reaction:hover {
+      color: var(--emerald-400);
+      border-color: rgba(52,211,153,0.3);
+      background: rgba(16,185,129,0.06);
+    }
+    .reaction.neutral:hover {
+      color: var(--slate-100);
+      border-color: var(--slate-500);
+      background: var(--slate-750);
+    }
+    .reaction svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+    .meta-right {
+      font-family: 'Geist Mono', monospace;
+      font-size: 10.5px;
+      color: var(--slate-500);
+    }
+
+    /* Composer */
+    .composer {
+      border-top: 1px solid var(--slate-700);
+      padding: 12px 14px 10px;
+      background: var(--slate-850);
+    }
+    .input-shell {
+      display: flex; align-items: flex-end; gap: 8px;
+      padding: 8px 10px;
+      background: var(--slate-900);
+      border: 1px solid var(--slate-700);
+      border-radius: 10px;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    .input-shell:focus-within {
+      border-color: var(--violet-500);
+      box-shadow: 0 0 0 3px rgba(139,92,246,0.15);
+    }
+    .input-shell textarea {
+      flex: 1;
+      background: transparent;
+      border: 0;
+      color: var(--slate-100);
+      font-family: 'Geist', sans-serif;
+      font-size: 13.5px;
+      line-height: 1.45;
+      outline: none;
+      resize: none;
+      min-height: 22px;
+      max-height: 120px;
+      padding: 3px 0;
+    }
+    .input-shell textarea::placeholder { color: var(--slate-500); }
+    .input-shell .icon-btn { width: 28px; height: 28px; }
+    .input-shell .send {
+      background: var(--violet-600);
+      color: #fff;
+      width: 30px; height: 30px;
+      border-radius: 8px;
+    }
+    .input-shell .send:hover { background: var(--violet-500); }
+
+    /* Status bar (data-tool feel) */
+    .statusbar {
+      display: flex; align-items: center; gap: 0;
+      font-family: 'Geist Mono', monospace;
+      font-size: 10.5px;
+      background: var(--slate-900);
+      border-top: 1px solid var(--slate-700);
+    }
+    .seg { padding: 5px 10px; }
+    .seg.primary { background: var(--violet-600); color: #fff; font-weight: 600; letter-spacing: 0.04em; }
+    .seg.unit {
+      color: var(--emerald-300);
+      background: rgba(16,185,129,0.1);
+      border-right: 1px solid var(--slate-700);
+    }
+    .seg.spacer {
+      flex: 1;
+      color: var(--slate-500);
+      display: flex; gap: 14px; align-items: center;
+      padding-left: 12px;
+    }
+    .seg.model { color: var(--violet-300); }
+    .seg.spacer kbd {
+      font-family: 'Geist Mono', monospace;
+      font-size: 9.5px;
+      padding: 0 4px;
+      background: var(--slate-800);
+      border: 1px solid var(--slate-700);
+      border-radius: 3px;
+      color: var(--slate-300);
+    }
+  </style>
+</head>
+<body>
+  <div class="dialog" role="dialog" aria-label="Assistente IA LA Music">
+    <header class="topbar">
+      <div class="brand">
+        <div class="avatar" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M12 2L13.5 8.5L20 10L13.5 11.5L12 18L10.5 11.5L4 10L10.5 8.5L12 2Z" fill="currentColor"/></svg>
+        </div>
+        <div class="brand-text">
+          <span class="name">Assistente IA LA Music</span>
+          <span class="sub">bi · auditoria · <span class="v">online</span></span>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="icon-btn" title="Histórico">
+          <svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><polyline points="12 7 12 12 16 14"/></svg>
+        </button>
+        <button class="icon-btn" title="Nova conversa">
+          <svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+        </button>
+        <button class="icon-btn" title="Expandir">
+          <svg class="ic" viewBox="0 0 24 24"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>
+        </button>
+        <button class="icon-btn" title="Fechar">
+          <svg class="ic" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="scope-row">
+      <span class="scope-pill"><span class="k">unidade</span><span class="v unit">Recreio</span></span>
+      <span class="scope-pill"><span class="k">modo</span><span class="v">auditoria_db</span></span>
+    </div>
+
+    <main class="transcript">
+      <div class="welcome">
+        <div class="head">Como posso ajudar</div>
+        <ul>
+          <li>Consultar dados do banco — turmas, professores, evasões, loja…</li>
+          <li>Auditoria — anexe arquivos do Emusys para comparar com a base.</li>
+        </ul>
+      </div>
+
+      <div class="question">quantos bolsistas tem no recreio?</div>
+
+      <div class="answer-meta">
+        <span class="ts">14:32:09</span>
+        <span class="badge">resposta</span>
+        <span class="badge warn">contexto insuficiente</span>
+      </div>
+
+      <div class="answer-card">
+        <div class="lede">
+          Não há informação suficiente para responder com <span class="em">segurança</span>.
+        </div>
+        <div class="fact">
+          <div class="num">398<span class="unit">alunos</span></div>
+          <div class="desc">
+            <span class="label">no contexto · status ativo</span>
+            Total trazido da unidade Recreio.
+            <span class="missing">campo "bolsista" ausente no contexto</span>
+          </div>
+        </div>
+        <div class="criterio">
+          <div class="k">critério</div>
+          Usei somente os dados autorizados enviados no contexto.
+        </div>
+        <div class="reactions">
+          <div class="left">
+            <button class="reaction">
+              <svg viewBox="0 0 24 24"><path d="M7 11v8M3 11h4l4-7c1 0 2 1 2 2v3h5a2 2 0 0 1 2 2l-1 6a2 2 0 0 1-2 2H7"/></svg>
+              útil
+            </button>
+            <button class="reaction neutral">
+              <svg viewBox="0 0 24 24"><path d="M17 13V5M21 13h-4l-4 7c-1 0-2-1-2-2v-3H6a2 2 0 0 1-2-2l1-6a2 2 0 0 1 2-2h10"/></svg>
+              não foi
+            </button>
+            <button class="reaction neutral">
+              <svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 4 21 10 15 10"/></svg>
+              tentar
+            </button>
+          </div>
+          <span class="meta-right">142 tokens · 0.8s</span>
+        </div>
+      </div>
+    </main>
+
+    <footer class="composer">
+      <div class="input-shell">
+        <button class="icon-btn" title="Anexar">
+          <svg class="ic" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 0 1-7.7 8.4 8.5 8.5 0 0 1-8.7-8.4V6a4 4 0 0 1 8 0v9.5a2 2 0 0 1-4 0V6"/></svg>
+        </button>
+        <textarea placeholder="Pergunte sobre alunos, turmas, evasões…"></textarea>
+        <button class="icon-btn send" title="Enviar">
+          <svg class="ic" viewBox="0 0 24 24"><path d="M22 2L11 13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+        </button>
+      </div>
+    </footer>
+
+    <div class="statusbar">
+      <span class="seg primary">BI</span>
+      <span class="seg unit">Recreio</span>
+      <span class="seg spacer">
+        <span><kbd>↵</kbd> enviar</span>
+        <span><kbd>⇧</kbd>+<kbd>↵</kbd> quebra</span>
+        <span><kbd>/</kbd> comandos</span>
+      </span>
+      <span class="seg model">gpt-4o-mini</span>
+    </div>
+  </div>
+</body>
+</html>

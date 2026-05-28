@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mockups — Assistente IA LA Music</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --slate-950: #020617;
+      --slate-900: #0f172a;
+      --slate-850: #131c30;
+      --slate-800: #1e293b;
+      --slate-700: #334155;
+      --slate-500: #64748b;
+      --slate-400: #94a3b8;
+      --slate-300: #cbd5e1;
+      --slate-200: #e2e8f0;
+      --slate-100: #f1f5f9;
+      --violet-500: #8b5cf6;
+      --violet-400: #a78bfa;
+      --violet-300: #c4b5fd;
+      --emerald-400: #34d399;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      font-family: 'Geist', system-ui, sans-serif;
+      background: var(--slate-950);
+      color: var(--slate-200);
+      min-height: 100vh;
+      padding: 48px 32px 80px;
+    }
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image:
+        linear-gradient(rgba(148,163,184,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(148,163,184,0.04) 1px, transparent 1px);
+      background-size: 64px 64px;
+      mask-image: radial-gradient(circle at 50% 30%, #000 30%, transparent 80%);
+      -webkit-mask-image: radial-gradient(circle at 50% 30%, #000 30%, transparent 80%);
+      pointer-events: none;
+    }
+
+    .header {
+      max-width: 1280px;
+      margin: 0 auto 40px;
+      display: flex; align-items: baseline; justify-content: space-between;
+      gap: 40px;
+      flex-wrap: wrap;
+    }
+    .header h1 {
+      font-family: 'Instrument Serif', serif;
+      font-style: italic;
+      font-weight: 400;
+      font-size: clamp(34px, 5vw, 52px);
+      line-height: 1;
+      letter-spacing: -0.01em;
+      color: var(--slate-100);
+    }
+    .header h1 em { color: var(--violet-400); font-style: italic; }
+    .header .sub {
+      max-width: 480px;
+      color: var(--slate-400);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+    .header .sub strong { color: var(--slate-200); font-weight: 500; }
+
+    .grid {
+      max-width: 1280px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 22px;
+    }
+    @media (max-width: 1100px) { .grid { grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--slate-900);
+      border: 1px solid var(--slate-700);
+      border-radius: 14px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: transform .25s, border-color .25s, box-shadow .25s;
+    }
+    .card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(139,92,246,0.4);
+      box-shadow: 0 20px 40px -16px rgba(0,0,0,0.6);
+    }
+
+    .preview {
+      position: relative;
+      aspect-ratio: 1 / 1.05;
+      overflow: hidden;
+      background: var(--slate-950);
+      border-bottom: 1px solid var(--slate-700);
+    }
+    .preview iframe {
+      width: 167%;
+      height: 167%;
+      border: 0;
+      transform: scale(0.6);
+      transform-origin: top left;
+      pointer-events: none;
+    }
+    .preview .overlay {
+      position: absolute; inset: 0;
+      background: linear-gradient(180deg, transparent 55%, rgba(2,6,23,0.75));
+      display: flex; align-items: flex-end; justify-content: flex-start;
+      padding: 16px 18px;
+    }
+    .preview .num {
+      font-family: 'Instrument Serif', serif;
+      font-weight: 400;
+      font-style: italic;
+      font-size: 60px;
+      color: var(--slate-100);
+      line-height: 0.85;
+      text-shadow: 0 4px 12px rgba(0,0,0,0.6);
+    }
+
+    .meta {
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .meta h2 {
+      font-family: 'Geist', sans-serif;
+      font-weight: 600;
+      font-size: 19px;
+      line-height: 1.2;
+      letter-spacing: -0.01em;
+      color: var(--slate-100);
+    }
+    .meta h2 .label {
+      display: block;
+      font-family: 'Geist', sans-serif;
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--violet-400);
+      font-weight: 500;
+      margin-bottom: 6px;
+    }
+    .meta p {
+      color: var(--slate-400);
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .specs {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 7px 14px;
+      font-size: 12px;
+      padding-top: 12px;
+      border-top: 1px solid var(--slate-700);
+    }
+    .specs dt {
+      color: var(--slate-500);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-size: 10px;
+      padding-top: 2px;
+      font-weight: 500;
+    }
+    .specs dd {
+      color: var(--slate-200);
+      font-size: 12.5px;
+    }
+    .specs dd em { color: var(--violet-300); font-style: normal; font-weight: 500; }
+
+    .open-btn {
+      margin-top: 8px;
+      display: inline-flex; align-items: center; justify-content: space-between;
+      padding: 11px 14px;
+      background: var(--slate-800);
+      border: 1px solid var(--slate-700);
+      color: var(--slate-100);
+      font-family: 'Geist', sans-serif;
+      font-size: 12.5px;
+      font-weight: 500;
+      text-decoration: none;
+      border-radius: 8px;
+      transition: all .15s;
+    }
+    .open-btn:hover {
+      background: var(--violet-500);
+      border-color: var(--violet-500);
+      color: #fff;
+    }
+    .open-btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+
+    .footnote {
+      max-width: 1280px;
+      margin: 60px auto 0;
+      text-align: center;
+      font-family: 'Instrument Serif', serif;
+      font-style: italic;
+      color: var(--slate-500);
+      font-size: 15px;
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <h1>Assistente IA<br/>— <em>três caminhos</em></h1>
+    <p class="sub">Três variações <strong>dentro do tema do app</strong> (slate + violet + emerald, dark mode, Tailwind). Diferenciam-se por <strong>densidade de informação, tipografia secundária e estrutura da resposta</strong> — não pela paleta. Clique pra abrir em tela cheia.</p>
+  </header>
+
+  <section class="grid">
+
+    <article class="card">
+      <div class="preview">
+        <iframe src="1-editorial.html" title="Refined Sober preview" loading="lazy" scrolling="no"></iframe>
+        <div class="overlay"><span class="num">01</span></div>
+      </div>
+      <div class="meta">
+        <h2><span class="label">opção 01</span>Refined Sober</h2>
+        <p>Tom Linear/Vercel. Borda fina, espaçamento controlado, foco em hierarquia clara. <strong>Resultado</strong> e <strong>Critério</strong> viram campos rotulados com chave/valor, número em mono dentro de chip violeta. Sem floreio.</p>
+        <dl class="specs">
+          <dt>Tipo</dt><dd>Geist + Geist Mono</dd>
+          <dt>Cor</dt><dd>slate-900 base · <em>violet-600 acento</em> · emerald p/ status</dd>
+          <dt>Vibe</dt><dd>profissional, denso, refinado</dd>
+        </dl>
+        <a class="open-btn" href="1-editorial.html" target="_blank">
+          Abrir em tela cheia
+          <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </a>
+      </div>
+    </article>
+
+    <article class="card">
+      <div class="preview">
+        <iframe src="2-terminal.html" title="Data Console preview" loading="lazy" scrolling="no"></iframe>
+        <div class="overlay"><span class="num">02</span></div>
+      </div>
+      <div class="meta">
+        <h2><span class="label">opção 02</span>Data Console</h2>
+        <p>Para usuário power. Pílulas de escopo no topo (unidade, modo), <strong>card de fato com o número 398 grande em mono</strong>, badge de "contexto insuficiente", statusbar tipo Supabase Studio. Os dados saltam, não ficam escondidos no texto.</p>
+        <dl class="specs">
+          <dt>Tipo</dt><dd>Geist + <em>Geist Mono em destaque</em></dd>
+          <dt>Cor</dt><dd>slate base · violet número-chave · âmbar p/ aviso</dd>
+          <dt>Vibe</dt><dd>BI tool · dados em primeiro plano</dd>
+        </dl>
+        <a class="open-btn" href="2-terminal.html" target="_blank">
+          Abrir em tela cheia
+          <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </a>
+        <a class="open-btn" href="2-states.html" target="_blank" style="background: var(--violet-500); border-color: var(--violet-500); color: #fff;">
+          ✓ ESCOLHIDO · ver 8 estados
+          <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </a>
+      </div>
+    </article>
+
+    <article class="card">
+      <div class="preview">
+        <iframe src="3-ember.html" title="Conversation-led preview" loading="lazy" scrolling="no"></iframe>
+        <div class="overlay"><span class="num">03</span></div>
+      </div>
+      <div class="meta">
+        <h2><span class="label">opção 03</span>Conversation-led</h2>
+        <p>Mais respiro e personalidade — sem fugir do tema. Cantos generosos (rounded-3xl), bolha do usuário em vidro violeta, e <strong>um toque de Instrument Serif itálico só na frase de abertura da IA</strong> (com drop cap). Conversacional, premium, mas ainda LA Music.</p>
+        <dl class="specs">
+          <dt>Tipo</dt><dd>Geist + <em>Instrument Serif pontual</em></dd>
+          <dt>Cor</dt><dd>slate base · violet glassy bubble · drop cap violeta</dd>
+          <dt>Vibe</dt><dd>calma, com personalidade editorial</dd>
+        </dl>
+        <a class="open-btn" href="3-ember.html" target="_blank">
+          Abrir em tela cheia
+          <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+        </a>
+      </div>
+    </article>
+
+  </section>
+
+  <p class="footnote">todos no tema do app — depois de escolher uma direção, refinamos os detalhes e migramos pros componentes React.</p>
+</body>
+</html>
