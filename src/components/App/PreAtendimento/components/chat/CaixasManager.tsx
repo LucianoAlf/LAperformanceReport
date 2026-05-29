@@ -179,61 +179,75 @@ export function CaixasManager() {
     });
   };
 
-  const handleTestarConexao = async (caixaId?: number, url?: string, token?: string) => {
-    const uazapiUrl = url || '';
-    const uazapiToken = token || '';
+  const handleTestarConexao = async (
+    caixaId?: number,
+    url?: string,
+    token?: string,
+    provedor: ProvedorWhatsApp = 'uazapi',
+    wahaUrl?: string,
+    wahaSession?: string,
+  ) => {
+    const setResult = (r: TestResult) => caixaId
+      ? setTestResults(prev => ({ ...prev, [caixaId]: r }))
+      : setNewTestResult(r);
 
-    if (!uazapiUrl || !uazapiToken) {
-      if (caixaId) {
-        setTestResults(prev => ({ ...prev, [caixaId]: { status: 'error', message: 'URL e Token são obrigatórios' } }));
-      } else {
-        setNewTestResult({ status: 'error', message: 'URL e Token são obrigatórios' });
+    // Validação por provedor
+    if (provedor === 'waha') {
+      if (!wahaUrl || !wahaSession) {
+        setResult({ status: 'error', message: 'WAHA URL e Session são obrigatórios' });
+        return;
       }
-      return;
+    } else {
+      if (!url || !token) {
+        setResult({ status: 'error', message: 'URL e Token são obrigatórios' });
+        return;
+      }
     }
 
-    if (caixaId) {
-      setTestResults(prev => ({ ...prev, [caixaId]: { status: 'testing' } }));
-    } else {
-      setNewTestResult({ status: 'testing' });
-    }
+    setResult({ status: 'testing' });
 
     try {
-      const { data, error } = await supabase.functions.invoke('whatsapp-status', {
-        body: { action: 'status', ...(caixaId ? { caixa_id: caixaId } : {}) },
-      });
+      let testResult: TestResult;
 
-      if (error) throw error;
-
-      // Se não tem caixa_id, testar diretamente via fetch
-      let result = data;
-      if (!caixaId) {
-        let baseUrl = uazapiUrl;
-        if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) {
-          baseUrl = 'https://' + baseUrl;
-        }
-        const resp = await fetch(`${baseUrl}/status`, {
+      if (provedor === 'waha') {
+        // WAHA: GET /api/sessions/{session}
+        const base = (wahaUrl!).replace(/\/+$/, '');
+        const resp = await fetch(`${base}/api/sessions/${wahaSession}`, {
           method: 'GET',
-          headers: { 'token': uazapiToken },
+          headers: { 'Content-Type': 'application/json' },
         });
-        result = await resp.json();
-      }
-
-      const connected = result?.connected === true;
-
-      const phone = result?.phone || result?.number;
-
-      const instanceName = result?.instanceName;
-
-      const testResult: TestResult = connected
-        ? { status: 'success', message: phone ? `Conectado (${phone})` : 'Conectado', phone, instanceName }
-        : { status: 'error', message: 'Sem número conectado' };
-
-      if (caixaId) {
-        setTestResults(prev => ({ ...prev, [caixaId]: testResult }));
+        const data = await resp.json();
+        const connected = data?.status === 'WORKING';
+        const phone = data?.me?.id?.replace(/@.+/, '') || data?.me?.pushName;
+        testResult = connected
+          ? { status: 'success', message: phone ? `Conectado (${phone})` : 'Conectado', phone }
+          : { status: 'error', message: `Sem número conectado (${data?.status || 'desconhecido'})` };
       } else {
-        setNewTestResult(testResult);
+        // UAZAPI: chama edge function para caixas existentes, direto para novas
+        if (caixaId) {
+          const { data, error } = await supabase.functions.invoke('whatsapp-status', {
+            body: { action: 'status', caixa_id: caixaId },
+          });
+          if (error) throw error;
+          const connected = data?.connected === true;
+          const phone = data?.phone || data?.number;
+          testResult = connected
+            ? { status: 'success', message: phone ? `Conectado (${phone})` : 'Conectado', phone, instanceName: data?.instanceName }
+            : { status: 'error', message: 'Sem número conectado' };
+        } else {
+          let baseUrl = url!;
+          if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) baseUrl = 'https://' + baseUrl;
+          const resp = await fetch(`${baseUrl}/status`, { method: 'GET', headers: { 'token': token! } });
+          const data = await resp.json();
+          const connected = data?.connected === true;
+          const phone = data?.phone || data?.number;
+          testResult = connected
+            ? { status: 'success', message: phone ? `Conectado (${phone})` : 'Conectado', phone, instanceName: data?.instanceName }
+            : { status: 'error', message: 'Sem número conectado' };
+        }
       }
+
+      setResult(testResult);
     } catch (err: any) {
       const testResult: TestResult = { status: 'error', message: err.message || 'Erro ao testar' };
       if (caixaId) {
@@ -734,8 +748,8 @@ export function CaixasManager() {
           {/* Teste de conexão */}
           <div className="flex items-center gap-3 pt-2 border-t border-slate-700/50">
             <button
-              onClick={() => handleTestarConexao(editando.id, editando.uazapi_url, editando.uazapi_token)}
-              disabled={newTestResult.status === 'testing' || !editando.uazapi_url || !editando.uazapi_token}
+              onClick={() => handleTestarConexao(editando.id, editando.uazapi_url, editando.uazapi_token, editando.provedor, editando.waha_url, editando.waha_session)}
+              disabled={newTestResult.status === 'testing' || (editando.provedor === 'waha' ? !editando.waha_url || !editando.waha_session : !editando.uazapi_url || !editando.uazapi_token)}
               className="flex items-center gap-2 px-4 py-2 bg-cyan-600/20 border border-cyan-500/30 hover:bg-cyan-600/30 text-cyan-300 text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
             >
               {newTestResult.status === 'testing' ? (
@@ -858,7 +872,7 @@ export function CaixasManager() {
 
                   <div className="flex items-center gap-1">
                     <button
-                      onClick={() => handleTestarConexao(caixa.id, caixa.uazapi_url, caixa.uazapi_token)}
+                      onClick={() => handleTestarConexao(caixa.id, caixa.uazapi_url, caixa.uazapi_token, caixa.provedor || 'uazapi', caixa.waha_url || '', caixa.waha_session || '')}
                       disabled={test.status === 'testing'}
                       className="p-2 hover:bg-slate-700/50 rounded-lg transition-colors"
                       title="Testar conexão"
@@ -928,7 +942,7 @@ export function CaixasManager() {
         caixa={caixaReconectar}
         onReconectado={() => {
           if (caixaReconectar) {
-            handleTestarConexao(caixaReconectar.id, caixaReconectar.uazapi_url, caixaReconectar.uazapi_token);
+            handleTestarConexao(caixaReconectar.id, caixaReconectar.uazapi_url, caixaReconectar.uazapi_token, caixaReconectar.provedor || 'uazapi', caixaReconectar.waha_url || '', caixaReconectar.waha_session || '');
           }
         }}
       />
