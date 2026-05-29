@@ -18,6 +18,8 @@ function normalizeAgentMarkdown(text: string): string {
     return text
         // headers ## / ### / #### que não estão no início de linha
         .replace(/([^\n])\s*(#{2,4}\s+)/g, '$1\n\n$2')
+        // linhas de tabela coladas: "| cell | | next row |" → "| cell |\n| next row |"
+        .replace(/\| \|/g, '|\n|')
         // bullets " - Label" onde Label começa com letra maiúscula/acentuada
         .replace(/\s-\s+(?=[A-ZÀ-Ý])/g, '\n- ')
         // bullets que ainda continuam inline com lowercase "label:" (raros mas
