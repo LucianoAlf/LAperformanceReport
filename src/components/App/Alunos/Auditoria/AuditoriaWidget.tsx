@@ -16,20 +16,17 @@ import { BIVisualization } from './BIVisualization';
 function normalizeAgentMarkdown(text: string): string {
     if (!text) return text;
     return text
-        // headers ## / ### / #### que não estão no início de linha
-        .replace(/([^\n])\s*(#{2,4}\s+)/g, '$1\n\n$2')
-        // linhas de tabela coladas: "| cell | | next row |" → "| cell |\n| next row |"
+        // 1. Quebra linhas de tabela coladas PRIMEIRO: "| cell | | next row |" → "| cell |\n| next row |"
         .replace(/\|\s+\|/g, '|\n|')
-        // normaliza header de tabela sem pipe inicial: "Col A | Col B |" → "| Col A | Col B |"
-        .replace(/^([^|\n][^\n]+\|[^\n]+)$/gm, (_, row) =>
-            row.trimStart().startsWith('|') ? row : '| ' + row
-        )
-        // bullets " - Label" onde Label começa com letra maiúscula/acentuada
+        // 2. Remove marcadores ## soltos dentro de células: "| ## Col |" → "| Col |"
+        .replace(/^(\|\s*)#{1,4}\s+/gm, '$1')
+        // 3. Headers ## / ### fora de linha própria — exige char não-pipe/não-espaço antes
+        .replace(/([^|\n\s])\s*(#{2,4}\s+)/g, '$1\n\n$2')
+        // 4. Bullets " - Label" onde Label começa com maiúscula/acentuada
         .replace(/\s-\s+(?=[A-ZÀ-Ý])/g, '\n- ')
-        // bullets que ainda continuam inline com lowercase "label:" (raros mas
-        // acontecem em listas de critério tipo " - tipo: 'evasao'")
+        // 5. Bullets inline lowercase "label:"
         .replace(/\.\s+-\s+(?=[a-zà-ÿ])/g, '.\n- ')
-        // compacta múltiplas quebras
+        // 6. Compacta múltiplas quebras
         .replace(/\n{3,}/g, '\n\n')
         .trim();
 }
