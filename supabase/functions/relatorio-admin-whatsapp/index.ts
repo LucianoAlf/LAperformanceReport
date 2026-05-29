@@ -1,34 +1,57 @@
 // Edge Function: relatorio-admin-whatsapp
 // Envia relatórios administrativos via WhatsApp para grupos das Farmers
 // Suporta modo manual (texto pronto) e modo cron (gera + envia automaticamente)
-// Integração com UAZAPI
+// Suporta UAZAPI e WAHA (detectado via campo provedor em whatsapp_caixas)
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-// Inline: _shared/uazapi.ts
-interface UazapiCredentials { baseUrl: string; token: string; caixaId: number; caixaNome: string; }
-async function getUazapiCredentials(supabase: any, opts: { funcao?: string; caixaId?: number; unidadeId?: string } = {}): Promise<UazapiCredentials> {
+
+const FIELDS = 'id,nome,provedor,uazapi_url,uazapi_token,waha_url,waha_session,waha_api_key';
+
+interface WhatsAppCreds {
+  caixaId: number;
+  caixaNome: string;
+  provedor: 'uazapi' | 'waha';
+  // UAZAPI
+  baseUrl: string;
+  token: string;
+  // WAHA
+  wahaUrl?: string;
+  wahaSession?: string;
+  wahaApiKey?: string;
+}
+
+async function getWhatsAppCredentials(supabase: any, opts: { funcao?: string; caixaId?: number; unidadeId?: string } = {}): Promise<WhatsAppCreds> {
   const { funcao, caixaId, unidadeId } = opts;
-  const toCreds = (row: any): UazapiCredentials => {
-    let baseUrl = row.uazapi_url;
-    if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) baseUrl = 'https://' + baseUrl;
-    return { baseUrl: baseUrl.replace(/\/+$/, ''), token: row.uazapi_token, caixaId: row.id, caixaNome: row.nome };
+  const toCreds = (row: any): WhatsAppCreds => {
+    let baseUrl = row.uazapi_url || '';
+    if (baseUrl && !baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) baseUrl = 'https://' + baseUrl;
+    return {
+      caixaId: row.id,
+      caixaNome: row.nome,
+      provedor: row.provedor || 'uazapi',
+      baseUrl: baseUrl.replace(/\/+$/, ''),
+      token: row.uazapi_token || '',
+      wahaUrl: row.waha_url ? row.waha_url.replace(/\/+$/, '') : undefined,
+      wahaSession: row.waha_session || undefined,
+      wahaApiKey: row.waha_api_key || undefined,
+    };
   };
   if (caixaId) {
-    const { data } = await supabase.from('whatsapp_caixas').select('id,nome,uazapi_url,uazapi_token').eq('id', caixaId).eq('ativo', true).maybeSingle();
+    const { data } = await supabase.from('whatsapp_caixas').select(FIELDS).eq('id', caixaId).eq('ativo', true).maybeSingle();
     if (data) return toCreds(data);
   }
   if (funcao && unidadeId) {
-    const { data } = await supabase.from('whatsapp_caixas').select('id,nome,uazapi_url,uazapi_token,funcao').eq('ativo', true).eq('unidade_id', unidadeId).in('funcao', [funcao, 'ambos']).limit(1).maybeSingle();
+    const { data } = await supabase.from('whatsapp_caixas').select(FIELDS).eq('ativo', true).eq('unidade_id', unidadeId).in('funcao', [funcao, 'ambos']).limit(1).maybeSingle();
     if (data) return toCreds(data);
   }
   if (funcao) {
-    const { data } = await supabase.from('whatsapp_caixas').select('id,nome,uazapi_url,uazapi_token,funcao').eq('ativo', true).in('funcao', [funcao, 'ambos']).limit(1).maybeSingle();
+    const { data } = await supabase.from('whatsapp_caixas').select(FIELDS).eq('ativo', true).in('funcao', [funcao, 'ambos']).limit(1).maybeSingle();
     if (data) return toCreds(data);
   }
-  const { data } = await supabase.from('whatsapp_caixas').select('id,nome,uazapi_url,uazapi_token').eq('ativo', true).limit(1).maybeSingle();
+  const { data } = await supabase.from('whatsapp_caixas').select(FIELDS).eq('ativo', true).limit(1).maybeSingle();
   if (data) return toCreds(data);
-  throw new Error(`Nenhuma caixa UAZAPI ativa encontrada (funcao=${funcao || 'any'}, unidade=${unidadeId || 'any'})`);
+  throw new Error(`Nenhuma caixa WhatsApp ativa encontrada (funcao=${funcao || 'any'}, unidade=${unidadeId || 'any'})`);
 }
 
 const corsHeaders = {
@@ -45,50 +68,46 @@ interface RelatorioPayload {
   modo?: 'cron'; // Modo automático: gera + envia para unidades com cron ativo
 }
 
-/**
- * Envia mensagem via UAZAPI para um grupo
- */
 async function enviarWhatsAppGrupo(
   grupoJid: string,
   mensagem: string,
-  creds: { baseUrl: string; token: string }
+  creds: WhatsAppCreds
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  console.log(`[relatorio-admin-whatsapp] Enviando para grupo: ${grupoJid}`);
+  console.log(`[relatorio-admin-whatsapp] Enviando para ${grupoJid} via ${creds.provedor}`);
 
   try {
-    const response = await fetch(`${creds.baseUrl}/send/text`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'token': creds.token,
-      },
-      body: JSON.stringify({
-        number: grupoJid,
-        text: mensagem,
-        delay: 0,
-        readchat: true,
-      }),
-    });
+    let response: Response;
 
-    const data = await response.json();
+    if (creds.provedor === 'waha') {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (creds.wahaApiKey) headers['X-Api-Key'] = creds.wahaApiKey;
+      response = await fetch(`${creds.wahaUrl}/api/sendText`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ session: creds.wahaSession, chatId: grupoJid, text: mensagem }),
+      });
+    } else {
+      response = await fetch(`${creds.baseUrl}/send/text`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'token': creds.token },
+        body: JSON.stringify({ number: grupoJid, text: mensagem, delay: 0, readchat: true }),
+      });
+    }
+
+    const data = await response.json().catch(() => ({}));
 
     if (response.ok && !data.error) {
       const messageId = data.id || data.messageid || data.key?.id;
       console.log(`[relatorio-admin-whatsapp] ✅ Mensagem enviada! ID: ${messageId}`);
       return { success: true, messageId };
     } else {
-      console.error(`[relatorio-admin-whatsapp] ❌ Erro UAZAPI:`, data);
-      return {
-        success: false,
-        error: (typeof data.error === 'string' ? data.error : null) || data.message || JSON.stringify(data)
-      };
+      const errMsg = (typeof data.error === 'string' ? data.error : null) || data.message || data.detail || `HTTP ${response.status}`;
+      console.error(`[relatorio-admin-whatsapp] ❌ Erro ${creds.provedor}:`, errMsg);
+      return { success: false, error: errMsg };
     }
   } catch (error) {
     console.error(`[relatorio-admin-whatsapp] ❌ Erro de conexão:`, error);
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Erro de conexão'
-    };
+    return { success: false, error: error instanceof Error ? error.message : 'Erro de conexão' };
   }
 }
 
@@ -492,7 +511,7 @@ serve(async (req) => {
       );
     }
 
-    const creds = await getUazapiCredentials(supabase, { funcao: 'sistema' });
+    const creds = await getWhatsAppCredentials(supabase, { funcao: 'sistema' });
 
     // Modo teste
     if (payload.numero_teste) {

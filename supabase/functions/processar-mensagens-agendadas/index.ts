@@ -7,29 +7,30 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-// Inline: _shared/uazapi.ts
-async function getUazapiCredentials(supabase: any, opts: { funcao?: string; caixaId?: number; unidadeId?: string } = {}): Promise<{ baseUrl: string; token: string; caixaId: number; caixaNome: string }> {
+const WA_FIELDS = 'id,nome,provedor,uazapi_url,uazapi_token,waha_url,waha_session,waha_api_key';
+interface WhatsAppCreds { caixaId: number; caixaNome: string; provedor: string; baseUrl: string; token: string; wahaUrl?: string; wahaSession?: string; wahaApiKey?: string; }
+async function getWhatsAppCredentials(supabase: any, opts: { funcao?: string; caixaId?: number; unidadeId?: string } = {}): Promise<WhatsAppCreds> {
   const { funcao, caixaId, unidadeId } = opts;
-  const toCreds = (row: any) => {
-    let baseUrl = row.uazapi_url;
-    if (!baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) baseUrl = 'https://' + baseUrl;
-    return { baseUrl: baseUrl.replace(/\/+$/, ''), token: row.uazapi_token, caixaId: row.id, caixaNome: row.nome };
+  const toCreds = (row: any): WhatsAppCreds => {
+    let baseUrl = row.uazapi_url || '';
+    if (baseUrl && !baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) baseUrl = 'https://' + baseUrl;
+    return { caixaId: row.id, caixaNome: row.nome, provedor: row.provedor || 'uazapi', baseUrl: baseUrl.replace(/\/+$/, ''), token: row.uazapi_token || '', wahaUrl: row.waha_url ? row.waha_url.replace(/\/+$/, '') : undefined, wahaSession: row.waha_session || undefined, wahaApiKey: row.waha_api_key || undefined };
   };
   if (caixaId) {
-    const { data } = await supabase.from('whatsapp_caixas').select('id,nome,uazapi_url,uazapi_token').eq('id', caixaId).eq('ativo', true).maybeSingle();
+    const { data } = await supabase.from('whatsapp_caixas').select(WA_FIELDS).eq('id', caixaId).eq('ativo', true).maybeSingle();
     if (data) return toCreds(data);
   }
   if (funcao && unidadeId) {
-    const { data } = await supabase.from('whatsapp_caixas').select('id,nome,uazapi_url,uazapi_token,funcao').eq('ativo', true).eq('unidade_id', unidadeId).in('funcao', [funcao, 'ambos']).limit(1).maybeSingle();
+    const { data } = await supabase.from('whatsapp_caixas').select(WA_FIELDS).eq('ativo', true).eq('unidade_id', unidadeId).in('funcao', [funcao, 'ambos']).limit(1).maybeSingle();
     if (data) return toCreds(data);
   }
   if (funcao) {
-    const { data } = await supabase.from('whatsapp_caixas').select('id,nome,uazapi_url,uazapi_token,funcao').eq('ativo', true).in('funcao', [funcao, 'ambos']).limit(1).maybeSingle();
+    const { data } = await supabase.from('whatsapp_caixas').select(WA_FIELDS).eq('ativo', true).in('funcao', [funcao, 'ambos']).limit(1).maybeSingle();
     if (data) return toCreds(data);
   }
-  const { data } = await supabase.from('whatsapp_caixas').select('id,nome,uazapi_url,uazapi_token').eq('ativo', true).limit(1).maybeSingle();
+  const { data } = await supabase.from('whatsapp_caixas').select(WA_FIELDS).eq('ativo', true).limit(1).maybeSingle();
   if (data) return toCreds(data);
-  throw new Error(`Nenhuma caixa UAZAPI ativa encontrada (funcao=${funcao || 'any'}, unidade=${unidadeId || 'any'})`);
+  throw new Error(`Nenhuma caixa WhatsApp ativa encontrada (funcao=${funcao || 'any'}, unidade=${unidadeId || 'any'})`);
 }
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
@@ -183,15 +184,26 @@ async function processarFilaRelatorios(supabase: any): Promise<number> {
     .eq('id', item.id);
 
   try {
-    const creds = await getUazapiCredentials(supabase, { funcao: 'sistema', unidadeId: item.unidade_id });
+    const creds = await getWhatsAppCredentials(supabase, { funcao: 'sistema', unidadeId: item.unidade_id });
 
-    const response = await fetch(`${creds.baseUrl}/send/text`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'token': creds.token },
-      body: JSON.stringify({ number: item.jid, text: item.texto, delay: 0, readchat: true }),
-    });
+    let response: Response;
+    if (creds.provedor === 'waha') {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (creds.wahaApiKey) headers['X-Api-Key'] = creds.wahaApiKey;
+      response = await fetch(`${creds.wahaUrl}/api/sendText`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ session: creds.wahaSession, chatId: item.jid, text: item.texto }),
+      });
+    } else {
+      response = await fetch(`${creds.baseUrl}/send/text`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'token': creds.token },
+        body: JSON.stringify({ number: item.jid, text: item.texto, delay: 0, readchat: true }),
+      });
+    }
 
-    const data = await response.json();
+    const data = await response.json().catch(() => ({}));
     const success = response.ok && !data.error;
 
     if (success) {
