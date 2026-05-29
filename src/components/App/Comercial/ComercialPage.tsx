@@ -975,7 +975,7 @@ export function ComercialPage() {
       // Alinhar resumo/conversão à fonte real (alunos): conta matrículas primárias
       // (sem segundo curso/banda). No modo "Hoje" mantém o acumulado do mês via leads.
       if (!isFiltroHoje) {
-        const totalMatPrimarias = matriculasDoMes.filter((m: any) => !m.is_segundo_curso && !m.is_banda).length;
+        const totalMatPrimarias = matriculasDoMes.filter((m: any) => !m.is_segundo_curso && !m.is_banda && (m.valor_passaporte || 0) > 0).length;
         setResumo(prev => ({
           ...prev,
           matriculas: totalMatPrimarias,
@@ -2219,7 +2219,7 @@ export function ComercialPage() {
 
     // Matrículas: usar state já enriquecido, filtrar novos alunos (sem 2º curso e sem banda)
     const matriculasNovas = matriculasMes
-      .filter((m: any) => !m.is_segundo_curso && !m.is_banda)
+      .filter((m: any) => !m.is_segundo_curso && !m.is_banda && (m.valor_passaporte || 0) > 0)
       .sort((a: any, b: any) => (a.data_matricula || '').localeCompare(b.data_matricula || ''));
 
     const totalExpAgendadas = (experimentaisAgendadasHoje || []).reduce((acc: number, e: any) => acc + e.quantidade, 0);
@@ -3138,7 +3138,7 @@ export function ComercialPage() {
         ano={competencia.filtro.ano}
         mes={competencia.filtro.mes}
         resumoLeads={resumo}
-        totalMatriculasMes={matriculasMes.filter((m: any) => !m.is_segundo_curso && !m.is_banda).length}
+        totalMatriculasMes={matriculasMes.filter((m: any) => !m.is_segundo_curso && !m.is_banda && (m.valor_passaporte || 0) > 0).length}
       />
 
       {/* ═══════════════════════════════════════════════════════════════ */}
@@ -3483,7 +3483,7 @@ export function ComercialPage() {
                   return experimentaisDetalhadas.filter((e: any) => filtroTipoExp === 'leads_novos' ? !e.lead_aluno_id : filtroTipoExp === 'alunos' ? !!e.lead_aluno_id : true).length;
                 })(), icon: Guitar, color: '#a855f7', gradient: 'from-purple-500 to-violet-500' },
                 { key: 'visita', label: 'Visitas', count: visitasMes.length, icon: Building2, color: '#f59e0b', gradient: 'from-amber-500 to-orange-500' },
-                { key: 'matricula', label: 'Matrículas', count: matriculasMes.filter((m: any) => { const banda = m.is_banda || m.curso_nome?.toLowerCase().includes('banda'); if (filtroTipoMat === 'novos_alunos') return !m.is_segundo_curso && !banda; if (filtroTipoMat === 'segundo_curso') return m.is_segundo_curso || banda; return true; }).length, icon: GraduationCap, color: '#10b981', gradient: 'from-emerald-500 to-teal-500' },
+                { key: 'matricula', label: 'Matrículas', count: matriculasMes.filter((m: any) => { const banda = m.is_banda || m.curso_nome?.toLowerCase().includes('banda'); if (filtroTipoMat === 'novos_alunos') return !m.is_segundo_curso && !banda && (m.valor_passaporte || 0) > 0; if (filtroTipoMat === 'segundo_curso') return m.is_segundo_curso || banda; return true; }).length, icon: GraduationCap, color: '#10b981', gradient: 'from-emerald-500 to-teal-500' },
               ]}
               totalLeads={leadsMes.length}
               activeStage={abaDetalhamento}
@@ -3612,7 +3612,7 @@ export function ComercialPage() {
                   <SelectItem value="novos_alunos">
                     <div>
                       <span>Novos alunos</span>
-                      <p className="text-[10px] text-slate-400 leading-tight">Sem segundo curso ou banda</p>
+                      <p className="text-[10px] text-slate-400 leading-tight">Sem segundo curso, banda ou bolsistas</p>
                     </div>
                   </SelectItem>
                   <SelectItem value="todos">
@@ -4996,7 +4996,7 @@ export function ComercialPage() {
           const ehBanda = (l: any) => l.is_banda || (l.curso_nome || '').toLowerCase().includes('banda');
           const matriculasFiltradasRaw = matriculasMes.filter((l: any) => {
             // Filtro por tipo (novos alunos vs segundo curso/banda)
-            if (filtroTipoMat === 'novos_alunos' && (l.is_segundo_curso || ehBanda(l))) return false;
+            if (filtroTipoMat === 'novos_alunos' && (l.is_segundo_curso || ehBanda(l) || (l.valor_passaporte || 0) === 0)) return false;
             if (filtroTipoMat === 'segundo_curso' && !l.is_segundo_curso && !ehBanda(l)) return false;
             // 'todos': mostra tudo sem filtro de tipo
             if (buscaFunil) {
