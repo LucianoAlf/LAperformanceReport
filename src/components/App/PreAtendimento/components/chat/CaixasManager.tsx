@@ -56,6 +56,7 @@ interface CaixaForm {
   provedor: ProvedorWhatsApp;
   waha_url: string;
   waha_session: string;
+  waha_api_key: string;
 }
 
 interface TestResult {
@@ -87,6 +88,7 @@ const emptyCaixa: CaixaForm = {
   provedor: 'uazapi',
   waha_url: '',
   waha_session: '',
+  waha_api_key: '',
 };
 
 export function CaixasManager() {
@@ -218,9 +220,18 @@ export function CaixasManager() {
           if (error) throw error;
           const connected = data?.connected === true;
           const phone = data?.phone || data?.number;
+          const rawStatus = data?.raw?.status;
+          const rawBody = data?.raw?._rawBody?.slice(0, 80);
+          const rawError = data?.raw?.error || data?.raw?.message || data?.raw?.detail || data?.error;
+          const httpStatus = data?.httpStatus;
+          let errMsg = 'Sem número conectado';
+          if (rawError) errMsg = `Erro WAHA: ${rawError}`;
+          else if (rawBody) errMsg = `HTTP ${httpStatus}: ${rawBody}`;
+          else if (rawStatus) errMsg = `Status: ${rawStatus}`;
+          else if (httpStatus && httpStatus !== 200) errMsg = `HTTP ${httpStatus}`;
           testResult = connected
             ? { status: 'success', message: phone ? `Conectado (${phone})` : 'Conectado', phone }
-            : { status: 'error', message: 'Sem número conectado' };
+            : { status: 'error', message: errMsg };
         } else {
           // Nova caixa (ainda não salva): fetch direto
           const base = (wahaUrl!).replace(/\/+$/, '');
@@ -304,6 +315,7 @@ export function CaixasManager() {
         provedor: editando.provedor,
         waha_url: editando.waha_url || null,
         waha_session: editando.waha_session || null,
+        waha_api_key: editando.waha_api_key || null,
       };
 
       if (editando.id) {
@@ -658,6 +670,18 @@ export function CaixasManager() {
                 className="w-full px-3 py-2 bg-slate-900/60 border border-slate-700/50 rounded-lg text-sm text-white placeholder-slate-500 focus:border-emerald-500/50 focus:outline-none font-mono text-xs"
               />
             </div>
+            <div>
+              <label className="text-xs text-slate-400 mb-1 flex items-center gap-1">
+                <Key className="w-3 h-3" /> WAHA API Key
+              </label>
+              <input
+                type="password"
+                value={editando.waha_api_key}
+                onChange={e => setEditando({ ...editando, waha_api_key: e.target.value })}
+                placeholder="Chave de autenticação do servidor WAHA"
+                className="w-full px-3 py-2 bg-slate-900/60 border border-slate-700/50 rounded-lg text-sm text-white placeholder-slate-500 focus:border-emerald-500/50 focus:outline-none font-mono text-xs"
+              />
+            </div>
             </>)}
 
             {/* Função */}
@@ -925,6 +949,7 @@ export function CaixasManager() {
                           provedor: caixa.provedor || 'uazapi',
                           waha_url: caixa.waha_url || '',
                           waha_session: caixa.waha_session || '',
+                          waha_api_key: (caixa as any).waha_api_key || '',
                         });
                         setNewTestResult({ status: 'idle' });
                         resetSeletorInstancias();

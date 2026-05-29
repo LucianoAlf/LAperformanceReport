@@ -92,10 +92,10 @@ export function ModalRelatorio({
     if (!unidade || unidade === 'todos') return;
     setLoadingCron(true);
     const novoValor = !cronAtivo;
-    const { error } = await supabase
-      .from('unidades')
-      .update({ relatorio_diario_cron_ativo: novoValor })
-      .eq('id', unidade);
+    const { error } = await supabase.rpc('toggle_relatorio_cron', {
+      p_unidade_id: unidade,
+      p_ativo: novoValor,
+    });
     setLoadingCron(false);
     if (error) {
       toast.error('Erro ao atualizar configuração');

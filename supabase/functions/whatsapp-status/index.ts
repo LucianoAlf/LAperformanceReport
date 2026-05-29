@@ -1,11 +1,10 @@
-// Edge Function: whatsapp-status
-// Verifica status da conexao UAZAPI e envia mensagens de teste
-// Agora resolve credenciais da tabela whatsapp_caixas via caixa_id
+// Edge Function: whatsapp-status v15
+// Verifica status de conexão e envia mensagens de teste
+// Suporta UAZAPI e WAHA (provedor detectado via tabela whatsapp_caixas)
 // @ts-nocheck
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { getUazapiCredentials } from '../_shared/uazapi.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -16,15 +15,16 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-function formatPhoneNumber(phone: string): string {
-  let cleaned = phone.replace(/\D/g, '');
-  if (cleaned.startsWith('0')) cleaned = cleaned.substring(1);
-  if (!cleaned.startsWith('55')) cleaned = '55' + cleaned;
-  return cleaned;
+function formatPhone(phone: string): string {
+  let c = phone.replace(/\D/g, '');
+  if (c.startsWith('0')) c = c.substring(1);
+  if (!c.startsWith('55')) c = '55' + c;
+  return c;
 }
 
-// Detectar se esta conectado baseado no formato real da UAZAPI
-function isConnected(data: any): boolean {
+// ─── UAZAPI ───────────────────────────────────────────────────────────────────
+
+function isConnectedUazapi(data: any): boolean {
   if (data?.status?.checked_instance?.connection_status === 'connected') return true;
   if (data?.status === 'connected') return true;
   if (data?.connected === true) return true;
@@ -33,72 +33,93 @@ function isConnected(data: any): boolean {
   return false;
 }
 
-function extractPhone(data: any): string | undefined {
-  return data?.phone || data?.number || data?.wid?.user || data?.me?.user || data?.status?.checked_instance?.name;
-}
-
-function extractInstance(data: any): string | undefined {
-  return data?.instanceName || data?.instance || data?.status?.checked_instance?.name;
-}
-
-async function checkStatus(baseUrl: string, token: string) {
+async function checkStatusUazapi(baseUrl: string, token: string) {
   try {
-    console.log('[whatsapp-status] Verificando status em:', baseUrl);
-
-    const response = await fetch(`${baseUrl}/status`, {
+    const resp = await fetch(`${baseUrl}/status`, {
       method: 'GET',
-      headers: { 'token': token },
+      headers: { token },
     });
-
-    const data = await response.json();
-    console.log('[whatsapp-status] Resposta:', JSON.stringify(data).substring(0, 500));
-
-    if (response.ok) {
-      const connected = isConnected(data);
-      return {
-        connected,
-        phone: extractPhone(data),
-        instanceName: extractInstance(data),
-        raw: data,
-      };
-    } else {
-      return { connected: false, error: data.error || data.message || 'Erro ao verificar status' };
-    }
-  } catch (error) {
-    console.error('[whatsapp-status] Erro:', error);
-    return { connected: false, error: error instanceof Error ? error.message : 'Erro de conexao' };
+    const data = await resp.json();
+    console.log('[uazapi status]', resp.status, JSON.stringify(data).slice(0, 300));
+    return {
+      connected: isConnectedUazapi(data),
+      phone: data?.phone || data?.number || data?.wid?.user || data?.status?.checked_instance?.name,
+      instanceName: data?.instanceName || data?.instance,
+      raw: data,
+    };
+  } catch (e: any) {
+    console.error('[uazapi status] fetch error:', e.message);
+    return { connected: false, error: e.message };
   }
 }
 
-async function sendTestMessage(phone: string, baseUrl: string, token: string) {
+async function sendTestUazapi(phone: string, baseUrl: string, token: string) {
+  const formatted = formatPhone(phone);
+  const resp = await fetch(`${baseUrl}/send/text`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', token },
+    body: JSON.stringify({
+      number: formatted,
+      text: '✅ *Teste de Integração LA Music Report*\n\nWhatsApp conectado com sucesso!\n\n_Mensagem automática de teste._',
+      delay: 0,
+      readchat: true,
+    }),
+  });
+  const data = await resp.json();
+  if (resp.ok && !data.error) {
+    return { success: true, messageId: data.id || data.messageid || data.key?.id, phone: formatted };
+  }
+  return { success: false, error: data.error || data.message || 'Erro ao enviar' };
+}
+
+// ─── WAHA ─────────────────────────────────────────────────────────────────────
+
+async function checkStatusWaha(wahaUrl: string, wahaSession: string, apiKey?: string) {
+  const url = `${wahaUrl.replace(/\/+$/, '')}/api/sessions/${wahaSession}`;
+  console.log('[waha status] GET', url, apiKey ? '(com X-Api-Key)' : '(sem auth)');
   try {
-    const formattedPhone = formatPhoneNumber(phone);
-    console.log('[whatsapp-status] Enviando teste para:', formattedPhone);
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (apiKey) headers['X-Api-Key'] = apiKey;
 
-    const response = await fetch(`${baseUrl}/send/text`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'token': token },
-      body: JSON.stringify({
-        number: formattedPhone,
-        text: '✅ *Teste de Integracao LA Music Report*\n\nWhatsApp conectado com sucesso!\n\n_Esta e uma mensagem automatica de teste._',
-        delay: 0,
-        readchat: true,
-      }),
-    });
+    const resp = await fetch(url, { method: 'GET', headers });
+    const httpStatus = resp.status;
+    let data: any;
+    const bodyText = await resp.text();
+    try { data = JSON.parse(bodyText); } catch { data = { _rawBody: bodyText.slice(0, 200) }; }
+    console.log('[waha status] HTTP', httpStatus, JSON.stringify(data).slice(0, 300));
 
-    const data = await response.json();
-    console.log('[whatsapp-status] Resposta envio:', JSON.stringify(data).substring(0, 300));
-
-    if (response.ok && !data.error) {
-      return { success: true, messageId: data.id || data.messageid || data.key?.id, phone: formattedPhone };
-    } else {
-      return { success: false, error: data.error || data.message || 'Erro ao enviar mensagem' };
-    }
-  } catch (error) {
-    console.error('[whatsapp-status] Erro ao enviar:', error);
-    return { success: false, error: error instanceof Error ? error.message : 'Erro de conexao' };
+    const connected = data?.status === 'WORKING';
+    const phone = data?.me?.id ? data.me.id.split('@')[0] : undefined;
+    return { connected, phone, instanceName: data?.name, httpStatus, raw: data };
+  } catch (e: any) {
+    console.error('[waha status] fetch error:', e.message);
+    return { connected: false, httpStatus: 0, error: e.message };
   }
 }
+
+async function sendTestWaha(phone: string, wahaUrl: string, wahaSession: string, apiKey?: string) {
+  const formatted = formatPhone(phone);
+  const url = `${wahaUrl.replace(/\/+$/, '')}/api/sendText`;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (apiKey) headers['X-Api-Key'] = apiKey;
+
+  const resp = await fetch(url, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      session: wahaSession,
+      chatId: `${formatted}@c.us`,
+      text: '✅ *Teste de Integração LA Music Report*\n\nWhatsApp conectado com sucesso!\n\n_Mensagem automática de teste._',
+    }),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (resp.ok) {
+    return { success: true, messageId: data?.id || data?.key?.id, phone: formatted };
+  }
+  return { success: false, error: data?.error || data?.message || `HTTP ${resp.status}` };
+}
+
+// ─── Handler ──────────────────────────────────────────────────────────────────
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -108,44 +129,85 @@ serve(async (req) => {
   try {
     const { action, phone, caixa_id } = await req.json();
 
-    // Resolver credenciais da caixa
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-    const creds = await getUazapiCredentials(supabase, {
-      caixaId: caixa_id ?? undefined,
-    });
-    console.log(`[whatsapp-status] Usando caixa: ${creds.caixaNome} (ID: ${creds.caixaId})`);
 
-    let result;
+    const { data: caixa, error: caixaErr } = await supabase
+      .from('whatsapp_caixas')
+      .select('id, nome, provedor, uazapi_url, uazapi_token, waha_url, waha_session, waha_api_key')
+      .eq('id', caixa_id)
+      .eq('ativo', true)
+      .maybeSingle();
 
-    switch (action) {
-      case 'status':
-        result = await checkStatus(creds.baseUrl, creds.token);
-        break;
-      case 'test':
+    if (caixaErr || !caixa) {
+      return new Response(
+        JSON.stringify({ connected: false, error: `Caixa ${caixa_id} não encontrada` }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      );
+    }
+
+    console.log(`[whatsapp-status] Caixa: ${caixa.nome} (provedor=${caixa.provedor})`);
+
+    let result: any;
+    const provedor = caixa.provedor || 'uazapi';
+
+    if (provedor === 'waha') {
+      const wahaUrl = caixa.waha_url;
+      const wahaSession = caixa.waha_session;
+      // uazapi_token reaproveitado como API key para WAHA quando preenchido
+      const apiKey = caixa.waha_api_key || undefined;
+
+      if (!wahaUrl || !wahaSession) {
+        return new Response(
+          JSON.stringify({ connected: false, error: 'waha_url ou waha_session não configurados' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        );
+      }
+
+      if (action === 'status') {
+        result = await checkStatusWaha(wahaUrl, wahaSession, apiKey);
+      } else if (action === 'test') {
         if (!phone) {
           return new Response(
-            JSON.stringify({ success: false, error: 'Numero de telefone e obrigatorio' }),
-            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+            JSON.stringify({ success: false, error: 'Número de telefone obrigatório' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 },
           );
         }
-        result = await sendTestMessage(phone, creds.baseUrl, creds.token);
-        break;
-      default:
+        result = await sendTestWaha(phone, wahaUrl, wahaSession, apiKey);
+      }
+    } else {
+      // UAZAPI
+      let baseUrl = caixa.uazapi_url || '';
+      if (!baseUrl.startsWith('http')) baseUrl = 'https://' + baseUrl;
+      baseUrl = baseUrl.replace(/\/+$/, '');
+      const token = caixa.uazapi_token;
+
+      if (action === 'status') {
+        result = await checkStatusUazapi(baseUrl, token);
+      } else if (action === 'test') {
+        if (!phone) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Número de telefone obrigatório' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 },
+          );
+        }
+        result = await sendTestUazapi(phone, baseUrl, token);
+      } else {
         return new Response(
-          JSON.stringify({ error: 'Action invalida. Use: status, test' }),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+          JSON.stringify({ error: 'Action inválida. Use: status, test' }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 },
         );
+      }
     }
 
     return new Response(
-      JSON.stringify({ success: true, ...result, caixa: creds.caixaNome, timestamp: new Date().toISOString() }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ success: true, ...result, caixa: caixa.nome, timestamp: new Date().toISOString() }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   } catch (error) {
     console.error('[whatsapp-status] Erro:', error);
     return new Response(
       JSON.stringify({ success: false, error: String(error) }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 },
     );
   }
 });

@@ -341,6 +341,7 @@ export interface WhatsAppCaixa {
   provedor: ProvedorWhatsApp;
   waha_url: string | null;
   waha_session: string | null;
+  waha_api_key: string | null;
   created_at: string;
   updated_at: string;
 }
