@@ -19,7 +19,11 @@ function normalizeAgentMarkdown(text: string): string {
         // headers ## / ### / #### que não estão no início de linha
         .replace(/([^\n])\s*(#{2,4}\s+)/g, '$1\n\n$2')
         // linhas de tabela coladas: "| cell | | next row |" → "| cell |\n| next row |"
-        .replace(/\| \|/g, '|\n|')
+        .replace(/\|\s+\|/g, '|\n|')
+        // normaliza header de tabela sem pipe inicial: "Col A | Col B |" → "| Col A | Col B |"
+        .replace(/^([^|\n][^\n]+\|[^\n]+)$/gm, (_, row) =>
+            row.trimStart().startsWith('|') ? row : '| ' + row
+        )
         // bullets " - Label" onde Label começa com letra maiúscula/acentuada
         .replace(/\s-\s+(?=[A-ZÀ-Ý])/g, '\n- ')
         // bullets que ainda continuam inline com lowercase "label:" (raros mas
