@@ -30,18 +30,25 @@ function normalizeAgentMarkdown(text: string): string {
         // 6. Compacta múltiplas quebras
         .replace(/\n{3,}/g, '\n\n');
 
-    // 7. Corrige separador com menos colunas que o cabeçalho (remarkGfm rejeita tabela se não bater)
+    // 7. Corrige problemas de tabela linha a linha
     const lines = result.split('\n');
-    const fixed = lines.map((line, i) => {
-        if (i === 0 || !/^\|(?:[-: ]+\|)+$/.test(line.trim())) return line;
-        const prevPipes = (lines[i - 1].match(/\|/g) || []).length;
-        const curPipes = (line.match(/\|/g) || []).length;
-        if (curPipes < prevPipes)
-            return line.trimEnd().replace(/\|$/, '') + '|---|'.repeat(prevPipes - curPipes);
-        return line;
-    });
+    for (let i = 1; i < lines.length; i++) {
+        const isSep = /^\|(?:[-: ]+\|)+$/.test(lines[i].trim());
+        if (!isSep) continue;
 
-    return fixed.join('\n').trim();
+        // 7a. Se o header (linha anterior) não começa com |, adiciona
+        if (!lines[i - 1].trimStart().startsWith('|')) {
+            lines[i - 1] = '| ' + lines[i - 1].trimStart();
+        }
+
+        // 7b. Se o separador tem menos colunas que o header, completa
+        const prevPipes = (lines[i - 1].match(/\|/g) || []).length;
+        const curPipes = (lines[i].match(/\|/g) || []).length;
+        if (curPipes < prevPipes)
+            lines[i] = lines[i].trimEnd().replace(/\|$/, '') + '|---|'.repeat(prevPipes - curPipes);
+    }
+
+    return lines.join('\n').trim();
 }
 
 const isImageFile = (file: File) =>
