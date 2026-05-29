@@ -34,7 +34,7 @@ function iniciaisDe(nome: string): string {
 }
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
-import type { WhatsAppCaixa, FuncaoCaixa } from '../../types';
+import type { WhatsAppCaixa, FuncaoCaixa, ProvedorWhatsApp } from '../../types';
 import { ModalReconectarWhatsApp } from './ModalReconectarWhatsApp';
 
 interface UnidadeOption {
@@ -53,6 +53,9 @@ interface CaixaForm {
   webhook_url: string;
   ativo: boolean;
   funcao: FuncaoCaixa;
+  provedor: ProvedorWhatsApp;
+  waha_url: string;
+  waha_session: string;
 }
 
 interface TestResult {
@@ -81,6 +84,9 @@ const emptyCaixa: CaixaForm = {
   webhook_url: '',
   ativo: true,
   funcao: 'agente',
+  provedor: 'uazapi',
+  waha_url: '',
+  waha_session: '',
 };
 
 export function CaixasManager() {
@@ -240,8 +246,13 @@ export function CaixasManager() {
 
   const handleSalvar = async () => {
     if (!editando) return;
-    if (!editando.nome || !editando.uazapi_url || !editando.uazapi_token) {
-      setErro('Nome, URL e Token são obrigatórios');
+    const camposVazios = editando.provedor === 'waha'
+      ? !editando.nome || !editando.waha_url || !editando.waha_session
+      : !editando.nome || !editando.uazapi_url || !editando.uazapi_token;
+    if (camposVazios) {
+      setErro(editando.provedor === 'waha'
+        ? 'Nome, WAHA URL e Session são obrigatórios'
+        : 'Nome, URL e Token são obrigatórios');
       return;
     }
 
@@ -263,6 +274,9 @@ export function CaixasManager() {
         webhook_url: editando.webhook_url,
         ativo: editando.ativo,
         funcao: editando.funcao,
+        provedor: editando.provedor,
+        waha_url: editando.waha_url || null,
+        waha_session: editando.waha_session || null,
       };
 
       if (editando.id) {
@@ -333,7 +347,7 @@ export function CaixasManager() {
             Caixas WhatsApp
           </h3>
           <p className="text-xs text-slate-400 mt-1">
-            Gerencie os números WhatsApp conectados via UAZAPI
+            Gerencie os números WhatsApp conectados via UAZAPI ou WAHA
           </p>
         </div>
         <button
@@ -380,7 +394,30 @@ export function CaixasManager() {
             )}
           </h4>
 
+          {/* Seletor de provedor */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400 mr-1">Provedor:</span>
+            {(['uazapi', 'waha'] as ProvedorWhatsApp[]).map(p => (
+              <button
+                key={p}
+                type="button"
+                onClick={() => setEditando({ ...editando, provedor: p })}
+                className={cn(
+                  'px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
+                  editando.provedor === p
+                    ? p === 'uazapi'
+                      ? 'bg-cyan-500/20 border-cyan-400/50 text-cyan-200'
+                      : 'bg-emerald-500/20 border-emerald-400/50 text-emerald-200'
+                    : 'bg-slate-900/40 border-slate-700/30 text-slate-400 hover:text-white',
+                )}
+              >
+                {p === 'uazapi' ? 'UAZAPI' : 'WAHA'}
+              </button>
+            ))}
+          </div>
+
           {/* Seletor de instância UAZAPI: puxa lista do servidor e preenche token + número */}
+          {editando.provedor === 'uazapi' && (
           <div className="bg-cyan-500/5 border border-cyan-500/20 rounded-xl p-4 space-y-3">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-start gap-2">
@@ -509,6 +546,7 @@ export function CaixasManager() {
               );
             })()}
           </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Nome */}
@@ -539,7 +577,8 @@ export function CaixasManager() {
               />
             </div>
 
-            {/* UAZAPI URL */}
+            {/* Campos UAZAPI */}
+            {editando.provedor === 'uazapi' && (<>
             <div>
               <label className="text-xs text-slate-400 mb-1 flex items-center gap-1">
                 <Globe className="w-3 h-3" /> UAZAPI URL *
@@ -552,8 +591,6 @@ export function CaixasManager() {
                 className="w-full px-3 py-2 bg-slate-900/60 border border-slate-700/50 rounded-lg text-sm text-white placeholder-slate-500 focus:border-violet-500/50 focus:outline-none"
               />
             </div>
-
-            {/* UAZAPI Token */}
             <div>
               <label className="text-xs text-slate-400 mb-1 flex items-center gap-1">
                 <Key className="w-3 h-3" /> UAZAPI Token *
@@ -566,6 +603,35 @@ export function CaixasManager() {
                 className="w-full px-3 py-2 bg-slate-900/60 border border-slate-700/50 rounded-lg text-sm text-white placeholder-slate-500 focus:border-violet-500/50 focus:outline-none font-mono text-xs"
               />
             </div>
+            </>)}
+
+            {/* Campos WAHA */}
+            {editando.provedor === 'waha' && (<>
+            <div>
+              <label className="text-xs text-slate-400 mb-1 flex items-center gap-1">
+                <Globe className="w-3 h-3" /> WAHA URL *
+              </label>
+              <input
+                type="text"
+                value={editando.waha_url}
+                onChange={e => setEditando({ ...editando, waha_url: e.target.value })}
+                placeholder="https://waha.seuservidor.com"
+                className="w-full px-3 py-2 bg-slate-900/60 border border-slate-700/50 rounded-lg text-sm text-white placeholder-slate-500 focus:border-emerald-500/50 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-400 mb-1 flex items-center gap-1">
+                <Key className="w-3 h-3" /> WAHA Session *
+              </label>
+              <input
+                type="text"
+                value={editando.waha_session}
+                onChange={e => setEditando({ ...editando, waha_session: e.target.value })}
+                placeholder="nome-da-sessao"
+                className="w-full px-3 py-2 bg-slate-900/60 border border-slate-700/50 rounded-lg text-sm text-white placeholder-slate-500 focus:border-emerald-500/50 focus:outline-none font-mono text-xs"
+              />
+            </div>
+            </>)}
 
             {/* Função */}
             <div>
@@ -761,6 +827,11 @@ export function CaixasManager() {
                           {caixa.funcao === 'agente' ? 'Agente' : caixa.funcao === 'sistema' ? 'Sistema' : caixa.funcao === 'administrativo' ? 'Admin' : 'Ambos'}
                         </span>
                       )}
+                      {caixa.provedor === 'waha' && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-emerald-500/15 text-emerald-400">
+                          WAHA
+                        </span>
+                      )}
                       {test.status === 'success' && (
                         <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-400 flex items-center gap-1">
                           <Wifi className="w-3 h-3" /> Conectado
@@ -824,6 +895,9 @@ export function CaixasManager() {
                           webhook_url: caixa.webhook_url || '',
                           ativo: caixa.ativo,
                           funcao: caixa.funcao || 'agente',
+                          provedor: caixa.provedor || 'uazapi',
+                          waha_url: caixa.waha_url || '',
+                          waha_session: caixa.waha_session || '',
                         });
                         setNewTestResult({ status: 'idle' });
                         resetSeletorInstancias();
