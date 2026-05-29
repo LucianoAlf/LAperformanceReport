@@ -15,20 +15,33 @@ import { BIVisualization } from './BIVisualization';
 // de " - Maiúscula" (padrão clássico de bullet do agente). Mantém prose intacta.
 function normalizeAgentMarkdown(text: string): string {
     if (!text) return text;
-    return text
-        // 1. Quebra linhas de tabela coladas PRIMEIRO: "| cell | | next row |" → "| cell |\n| next row |"
+
+    let result = text
+        // 1. Quebra linhas de tabela coladas: "| cell | | next row |" → "| cell |\n| next row |"
         .replace(/\|\s+\|/g, '|\n|')
-        // 2. Remove marcadores ## soltos dentro de células: "| ## Col |" → "| Col |"
+        // 2. Remove marcadores ## dentro de células: "| ## Col |" → "| Col |"
         .replace(/^(\|\s*)#{1,4}\s+/gm, '$1')
-        // 3. Headers ## / ### fora de linha própria — exige char não-pipe/não-espaço antes
+        // 3. Headers fora de linha própria (não após pipe/espaço)
         .replace(/([^|\n\s])\s*(#{2,4}\s+)/g, '$1\n\n$2')
-        // 4. Bullets " - Label" onde Label começa com maiúscula/acentuada
+        // 4. Bullets " - Label" maiúscula/acentuada
         .replace(/\s-\s+(?=[A-ZÀ-Ý])/g, '\n- ')
-        // 5. Bullets inline lowercase "label:"
+        // 5. Bullets inline lowercase
         .replace(/\.\s+-\s+(?=[a-zà-ÿ])/g, '.\n- ')
         // 6. Compacta múltiplas quebras
-        .replace(/\n{3,}/g, '\n\n')
-        .trim();
+        .replace(/\n{3,}/g, '\n\n');
+
+    // 7. Corrige separador com menos colunas que o cabeçalho (remarkGfm rejeita tabela se não bater)
+    const lines = result.split('\n');
+    const fixed = lines.map((line, i) => {
+        if (i === 0 || !/^\|(?:[-: ]+\|)+$/.test(line.trim())) return line;
+        const prevPipes = (lines[i - 1].match(/\|/g) || []).length;
+        const curPipes = (line.match(/\|/g) || []).length;
+        if (curPipes < prevPipes)
+            return line.trimEnd().replace(/\|$/, '') + '|---|'.repeat(prevPipes - curPipes);
+        return line;
+    });
+
+    return fixed.join('\n').trim();
 }
 
 const isImageFile = (file: File) =>
