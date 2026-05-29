@@ -4,7 +4,7 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { getUazapiCredentials, type UazapiCredentials } from '../_shared/uazapi.ts';
+import { getWhatsAppCredentials, type WhatsAppCreds } from '../_shared/uazapi.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -74,29 +74,28 @@ function getPhoneNumber(destinatario: any): string | null {
   }
 }
 
-async function sendWhatsApp(phone: string, message: string, creds: UazapiCredentials): Promise<boolean> {
+async function sendWhatsApp(phone: string, message: string, creds: WhatsAppCreds): Promise<boolean> {
   try {
-    // Formatar número (remover caracteres não numéricos, adicionar 55 se necessário)
     let formattedPhone = phone.replace(/\D/g, '');
-    if (!formattedPhone.startsWith('55')) {
-      formattedPhone = '55' + formattedPhone;
+    if (!formattedPhone.startsWith('55')) formattedPhone = '55' + formattedPhone;
+
+    console.log('[sendWhatsApp] Enviando para:', formattedPhone, 'provedor:', creds.provedor);
+
+    let response: Response;
+    if (creds.provedor === 'waha') {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (creds.wahaApiKey) headers['X-Api-Key'] = creds.wahaApiKey;
+      response = await fetch(`${creds.wahaUrl}/api/sendText`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ session: creds.wahaSession, chatId: `${formattedPhone}@c.us`, text: message }),
+      });
+    } else {
+      response = await fetch(`${creds.baseUrl}/send/text`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'token': creds.token },
+        body: JSON.stringify({ number: formattedPhone, text: message, delay: 0, readchat: true }),
+      });
     }
-
-    console.log('[sendWhatsApp] Enviando para:', formattedPhone, 'via', creds.baseUrl);
-
-    const response = await fetch(`${creds.baseUrl}/send/text`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'token': creds.token,
-      },
-      body: JSON.stringify({
-        number: formattedPhone,
-        text: message,
-        delay: 0,
-        readchat: true,
-      }),
-    });
     return response.ok;
   } catch (error) {
     console.error('[WhatsApp] Erro ao enviar:', error);
@@ -134,7 +133,7 @@ async function logNotificacao(params: {
 // 1. TAREFAS ATRASADAS
 // ============================================
 
-async function checkTarefasAtrasadas(creds: UazapiCredentials) {
+async function checkTarefasAtrasadas(creds: WhatsAppCreds) {
   const config = await getConfig('tarefa_atrasada');
   console.log('[checkTarefasAtrasadas] Config:', config);
   if (!config?.ativo) return { skipped: true, reason: 'Config desativada' };
@@ -210,7 +209,7 @@ async function checkTarefasAtrasadas(creds: UazapiCredentials) {
 // 2. TAREFAS VENCENDO
 // ============================================
 
-async function checkTarefasVencendo(creds: UazapiCredentials) {
+async function checkTarefasVencendo(creds: WhatsAppCreds) {
   const config = await getConfig('tarefa_vencendo');
   if (!config?.ativo) return { skipped: true, reason: 'Config desativada' };
 
@@ -279,7 +278,7 @@ async function checkTarefasVencendo(creds: UazapiCredentials) {
 // 3. PROJETOS PARADOS
 // ============================================
 
-async function checkProjetosParados(creds: UazapiCredentials) {
+async function checkProjetosParados(creds: WhatsAppCreds) {
   const config = await getConfig('projeto_parado');
   if (!config?.ativo) return { skipped: true, reason: 'Config desativada' };
 
@@ -359,7 +358,7 @@ async function checkProjetosParados(creds: UazapiCredentials) {
 // 4. RESUMO SEMANAL
 // ============================================
 
-async function enviarResumoSemanal(creds: UazapiCredentials) {
+async function enviarResumoSemanal(creds: WhatsAppCreds) {
   const config = await getConfig('resumo_semanal');
   if (!config?.ativo) return { skipped: true, reason: 'Config desativada' };
 
@@ -457,7 +456,7 @@ serve(async (req) => {
   }
 
   try {
-    const creds = await getUazapiCredentials(supabase, { funcao: 'sistema' });
+    const creds = await getWhatsAppCredentials(supabase, { funcao: 'sistema' });
     const { action } = await req.json();
 
     let result;

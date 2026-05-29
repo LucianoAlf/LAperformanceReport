@@ -4,7 +4,7 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
-import { getUazapiCredentials } from '../_shared/uazapi.ts';
+import { getWhatsAppCredentials, type WhatsAppCreds } from '../_shared/uazapi.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -120,53 +120,52 @@ function montarMensagem(dados: {
   return mensagem;
 }
 
-/**
- * Envia mensagem via UAZAPI
- */
 async function enviarWhatsApp(
   telefone: string,
   mensagem: string,
-  creds: { baseUrl: string; token: string }
+  creds: WhatsAppCreds
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const formattedPhone = formatPhoneNumber(telefone);
 
   console.log(`[lojinha-relatorio-professor] Enviando para: ${formattedPhone}`);
 
   try {
-    const response = await fetch(`${creds.baseUrl}/send/text`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'token': creds.token,
-      },
-      body: JSON.stringify({
-        number: formattedPhone,
-        text: mensagem,
-        delay: 0,
-        readchat: true,
-      }),
-    });
+    let response: Response;
+    if (creds.provedor === 'waha') {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (creds.wahaApiKey) headers['X-Api-Key'] = creds.wahaApiKey;
+      response = await fetch(`${creds.wahaUrl}/api/sendText`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ session: creds.wahaSession, chatId: `${formattedPhone}@c.us`, text: mensagem }),
+      });
+    } else {
+      response = await fetch(`${creds.baseUrl}/send/text`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'token': creds.token },
+        body: JSON.stringify({ number: formattedPhone, text: mensagem, delay: 0, readchat: true }),
+      });
+    }
 
     const data = await response.json();
 
     if (response.ok && !data.error) {
       console.log(`[lojinha-relatorio-professor] ✅ Mensagem enviada! ID: ${data.id || data.messageid || data.key?.id}`);
-      return { 
-        success: true, 
-        messageId: data.id || data.messageid || data.key?.id 
+      return {
+        success: true,
+        messageId: data.id || data.messageid || data.key?.id
       };
     } else {
-      console.error(`[lojinha-relatorio-professor] ❌ Erro UAZAPI:`, data);
-      return { 
-        success: false, 
-        error: data.error || data.message || 'Erro ao enviar mensagem' 
+      console.error(`[lojinha-relatorio-professor] ❌ Erro WhatsApp:`, data);
+      return {
+        success: false,
+        error: data.error || data.message || 'Erro ao enviar mensagem'
       };
     }
   } catch (error) {
     console.error(`[lojinha-relatorio-professor] ❌ Erro de conexão:`, error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Erro de conexão' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Erro de conexão'
     };
   }
 }
@@ -190,7 +189,7 @@ serve(async (req) => {
 
     // Criar cliente Supabase
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
-    const creds = await getUazapiCredentials(supabase, { funcao: 'sistema' });
+    const creds = await getWhatsAppCredentials(supabase, { funcao: 'sistema' });
 
     // Buscar dados do professor
     const { data: professor, error: profError } = await supabase

@@ -5,7 +5,7 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { getUazapiCredentials } from '../_shared/uazapi.ts';
+import { getWhatsAppCredentials, type WhatsAppCreds } from '../_shared/uazapi.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -23,24 +23,26 @@ interface RelatorioPayload {
 async function enviarWhatsAppGrupo(
   grupoJid: string,
   mensagem: string,
-  creds: { baseUrl: string; token: string }
+  creds: WhatsAppCreds
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
   console.log(`[relatorio-coordenacao-whatsapp] Enviando para: ${grupoJid}`);
 
   try {
-    const response = await fetch(`${creds.baseUrl}/send/text`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'token': creds.token,
-      },
-      body: JSON.stringify({
-        number: grupoJid,
-        text: mensagem,
-        delay: 0,
-        readchat: true,
-      }),
-    });
+    let response: Response;
+    if (creds.provedor === 'waha') {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (creds.wahaApiKey) headers['X-Api-Key'] = creds.wahaApiKey;
+      response = await fetch(`${creds.wahaUrl}/api/sendText`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ session: creds.wahaSession, chatId: grupoJid, text: mensagem }),
+      });
+    } else {
+      response = await fetch(`${creds.baseUrl}/send/text`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'token': creds.token },
+        body: JSON.stringify({ number: grupoJid, text: mensagem, delay: 0, readchat: true }),
+      });
+    }
 
     const data = await response.json();
 
@@ -49,7 +51,7 @@ async function enviarWhatsAppGrupo(
       console.log(`[relatorio-coordenacao-whatsapp] ✅ Mensagem enviada! ID: ${messageId}`);
       return { success: true, messageId };
     } else {
-      console.error(`[relatorio-coordenacao-whatsapp] ❌ Erro UAZAPI:`, data);
+      console.error(`[relatorio-coordenacao-whatsapp] ❌ Erro WhatsApp:`, data);
       return {
         success: false,
         error: (typeof data.error === 'string' ? data.error : null) || data.message || JSON.stringify(data)
@@ -85,7 +87,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
-    const creds = await getUazapiCredentials(supabase, { funcao: 'sistema' });
+    const creds = await getWhatsAppCredentials(supabase, { funcao: 'sistema' });
 
     // Modo teste: enviar para número específico ao invés dos grupos
     if (payload.numero_teste) {

@@ -117,3 +117,61 @@ function toCreds(row: { id: number; nome: string; uazapi_url: string; uazapi_tok
     caixaNome: row.nome,
   };
 }
+
+// ─── Multi-provider credentials (UAZAPI + WAHA) ───────────────────────────────
+
+export interface WhatsAppCreds {
+  caixaId: number;
+  caixaNome: string;
+  provedor: 'uazapi' | 'waha';
+  baseUrl: string;
+  token: string;
+  wahaUrl?: string;
+  wahaSession?: string;
+  wahaApiKey?: string;
+}
+
+const WA_FIELDS = 'id,nome,provedor,uazapi_url,uazapi_token,waha_url,waha_session,waha_api_key';
+
+function toWhatsAppCreds(row: any): WhatsAppCreds {
+  let baseUrl = row.uazapi_url || '';
+  if (baseUrl && !baseUrl.startsWith('http://') && !baseUrl.startsWith('https://')) baseUrl = 'https://' + baseUrl;
+  return {
+    caixaId: row.id,
+    caixaNome: row.nome,
+    provedor: row.provedor || 'uazapi',
+    baseUrl: baseUrl.replace(/\/+$/, ''),
+    token: row.uazapi_token || '',
+    wahaUrl: row.waha_url ? row.waha_url.replace(/\/+$/, '') : undefined,
+    wahaSession: row.waha_session || undefined,
+    wahaApiKey: row.waha_api_key || undefined,
+  };
+}
+
+export async function getWhatsAppCredentials(
+  supabase: SupabaseClient,
+  opts: GetCredentialsOptions = {}
+): Promise<WhatsAppCreds> {
+  const { funcao, caixaId, unidadeId } = opts;
+
+  if (caixaId) {
+    const { data } = await supabase.from('whatsapp_caixas').select(WA_FIELDS).eq('id', caixaId).eq('ativo', true).maybeSingle();
+    if (data) return toWhatsAppCreds(data);
+  }
+  if (funcao && unidadeId) {
+    const { data } = await supabase.from('whatsapp_caixas').select(WA_FIELDS).eq('ativo', true).eq('unidade_id', unidadeId).in('funcao', [funcao, 'ambos']).limit(1).maybeSingle();
+    if (data) return toWhatsAppCreds(data);
+  }
+  if (funcao) {
+    const { data } = await supabase.from('whatsapp_caixas').select(WA_FIELDS).eq('ativo', true).in('funcao', [funcao, 'ambos']).limit(1).maybeSingle();
+    if (data) return toWhatsAppCreds(data);
+  }
+  const { data } = await supabase.from('whatsapp_caixas').select(WA_FIELDS).eq('ativo', true).limit(1).maybeSingle();
+  if (data) return toWhatsAppCreds(data);
+  throw new Error(`Nenhuma caixa WhatsApp ativa encontrada (funcao=${funcao || 'any'}, unidade=${unidadeId || 'any'})`);
+}
+
+/** Formata número para chatId WAHA (individual). Se já tem @, retorna como está. */
+export function toWahaJid(numero: string): string {
+  return numero.includes('@') ? numero : `${numero}@c.us`;
+}

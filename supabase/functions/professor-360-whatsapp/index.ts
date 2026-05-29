@@ -4,7 +4,7 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { getUazapiCredentials } from '../_shared/uazapi.ts';
+import { getWhatsAppCredentials, type WhatsAppCreds } from '../_shared/uazapi.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -131,13 +131,10 @@ function montarMensagem(dados: NotificacaoPayload): string {
   return mensagem;
 }
 
-/**
- * Envia mensagem via UAZAPI com timeout
- */
 async function enviarWhatsApp(
   telefone: string,
   mensagem: string,
-  creds: { baseUrl: string; token: string }
+  creds: WhatsAppCreds
 ): Promise<{ success: boolean; messageId?: string; error?: string }> {
   const formattedPhone = formatPhoneNumber(telefone);
 
@@ -147,20 +144,23 @@ async function enviarWhatsApp(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
 
-    const response = await fetch(`${creds.baseUrl}/send/text`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'token': creds.token,
-      },
-      body: JSON.stringify({
-        number: formattedPhone,
-        text: mensagem,
-        delay: 0,
-        readchat: true,
-      }),
-      signal: controller.signal,
-    });
+    let response: Response;
+    if (creds.provedor === 'waha') {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (creds.wahaApiKey) headers['X-Api-Key'] = creds.wahaApiKey;
+      response = await fetch(`${creds.wahaUrl}/api/sendText`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ session: creds.wahaSession, chatId: `${formattedPhone}@c.us`, text: mensagem }),
+        signal: controller.signal,
+      });
+    } else {
+      response = await fetch(`${creds.baseUrl}/send/text`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'token': creds.token },
+        body: JSON.stringify({ number: formattedPhone, text: mensagem, delay: 0, readchat: true }),
+        signal: controller.signal,
+      });
+    }
 
     clearTimeout(timeoutId);
 
@@ -174,13 +174,13 @@ async function enviarWhatsApp(
       };
     } else {
       const errorMsg = (typeof data.error === 'string' ? data.error : null) || data.message || JSON.stringify(data);
-      console.error(`[professor-360-whatsapp] Erro UAZAPI (${response.status}):`, errorMsg);
-      return { success: false, error: `UAZAPI: ${errorMsg}` };
+      console.error(`[professor-360-whatsapp] Erro WhatsApp (${response.status}):`, errorMsg);
+      return { success: false, error: errorMsg };
     }
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
       console.error(`[professor-360-whatsapp] Timeout ao enviar para ${formattedPhone}`);
-      return { success: false, error: 'Timeout: UAZAPI não respondeu em 10s' };
+      return { success: false, error: 'Timeout: WhatsApp não respondeu em 10s' };
     }
     console.error(`[professor-360-whatsapp] Erro de conexão:`, error);
     return {
@@ -244,7 +244,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_URL')!,
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     );
-    creds = await getUazapiCredentials(supabase, { funcao: 'sistema' });
+    creds = await getWhatsAppCredentials(supabase, { funcao: 'sistema' });
   } catch (error) {
     console.error('[professor-360-whatsapp] Erro ao buscar credenciais UAZAPI:', error);
     return new Response(

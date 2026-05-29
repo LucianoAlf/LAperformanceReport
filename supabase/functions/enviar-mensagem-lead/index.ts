@@ -5,7 +5,7 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { getUazapiCredentials } from '../_shared/uazapi.ts';
+import { getWhatsAppCredentials } from '../_shared/uazapi.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -119,82 +119,95 @@ serve(async (req: Request) => {
 
     console.log(`[enviar-mensagem-lead] Mensagem ${mensagem.id} inserida. Enviando para ${numero}...`);
 
-    // 3. Resolver credenciais UAZAPI da caixa correta
-    const creds = await getUazapiCredentials(supabase, {
+    // 3. Resolver credenciais WhatsApp da caixa correta
+    const creds = await getWhatsAppCredentials(supabase, {
       funcao: 'agente',
       caixaId: conversa.caixa_id ?? undefined,
       unidadeId: conversa.unidade_id ?? undefined,
     });
-    console.log(`[enviar-mensagem-lead] Usando caixa: ${creds.caixaNome} (ID: ${creds.caixaId})`);
+    console.log(`[enviar-mensagem-lead] Usando caixa: ${creds.caixaNome} (ID: ${creds.caixaId}, provedor: ${creds.provedor})`);
 
-    // Montar payload e endpoint baseado no tipo
-    let endpoint = '/send/text';
-    let uazapiBody: Record<string, any> = {
-      number: numero,
-      delay: 2000,
-      readchat: true,
-    };
-
-    // UAZAPI usa /send/media unificado para todos os tipos de mídia
-    // e /send/text apenas para texto puro
-    if (tipo === 'texto') {
-      endpoint = '/send/text';
-      uazapiBody.text = conteudo;
-      uazapiBody.linkPreview = true;
-    } else {
-      endpoint = '/send/media';
-      uazapiBody.file = midia_url;
-      uazapiBody.text = conteudo || '';
-
-      switch (tipo) {
-        case 'imagem':
-          uazapiBody.type = 'image';
-          break;
-        case 'audio':
-          uazapiBody.type = 'ptt'; // Push-to-Talk (mensagem de voz)
-          break;
-        case 'video':
-          uazapiBody.type = 'video';
-          break;
-        case 'documento':
-          uazapiBody.type = 'document';
-          uazapiBody.docName = midia_nome || 'documento';
-          if (midia_mimetype) uazapiBody.mimetype = midia_mimetype;
-          break;
-        default:
-          uazapiBody.type = 'document';
-          uazapiBody.docName = midia_nome || 'arquivo';
-          break;
-      }
-    }
-
-    // Se tem reply_to_id, buscar o whatsapp_message_id da mensagem original para o replyid da UAZAPI
+    // Replyid (UAZAPI apenas)
+    let replyid: string | undefined;
     if (reply_to_id) {
       const { data: msgOriginal } = await supabase
         .from('crm_mensagens')
         .select('whatsapp_message_id')
         .eq('id', reply_to_id)
         .maybeSingle();
-      if (msgOriginal?.whatsapp_message_id) {
-        uazapiBody.replyid = msgOriginal.whatsapp_message_id;
-      }
+      if (msgOriginal?.whatsapp_message_id) replyid = msgOriginal.whatsapp_message_id;
     }
 
-    console.log(`[enviar-mensagem-lead] Endpoint: ${endpoint}, tipo: ${tipo}, body:`, JSON.stringify(uazapiBody).substring(0, 500));
+    let waResponse: Response;
 
-    const uazapiResponse = await fetch(`${creds.baseUrl}${endpoint}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'token': creds.token,
-      },
-      body: JSON.stringify(uazapiBody),
-    });
+    if (creds.provedor === 'waha') {
+      const chatId = numero.includes('@') ? numero : `${numero}@c.us`;
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (creds.wahaApiKey) headers['X-Api-Key'] = creds.wahaApiKey;
 
-    const uazapiData = await uazapiResponse.json();
-    console.log('[enviar-mensagem-lead] Resposta UAZAPI:', JSON.stringify(uazapiData).substring(0, 300));
+      let wahaEndpoint: string;
+      let wahaBody: Record<string, any> = { session: creds.wahaSession, chatId };
 
-    if (uazapiResponse.ok && !uazapiData.error) {
+      if (tipo === 'texto') {
+        wahaEndpoint = '/api/sendText';
+        wahaBody.text = conteudo;
+      } else if (tipo === 'imagem') {
+        wahaEndpoint = '/api/sendImage';
+        wahaBody.file = { url: midia_url };
+        wahaBody.caption = conteudo || '';
+      } else if (tipo === 'audio') {
+        wahaEndpoint = '/api/sendVoice';
+        wahaBody.file = { url: midia_url };
+      } else if (tipo === 'video') {
+        wahaEndpoint = '/api/sendVideo';
+        wahaBody.file = { url: midia_url };
+        wahaBody.caption = conteudo || '';
+      } else {
+        wahaEndpoint = '/api/sendFile';
+        wahaBody.file = { url: midia_url };
+        wahaBody.filename = midia_nome || 'arquivo';
+      }
+
+      console.log(`[enviar-mensagem-lead] WAHA endpoint: ${wahaEndpoint}, tipo: ${tipo}`);
+      waResponse = await fetch(`${creds.wahaUrl}${wahaEndpoint}`, { method: 'POST', headers, body: JSON.stringify(wahaBody) });
+    } else {
+      // UAZAPI
+      let endpoint = '/send/text';
+      let uazapiBody: Record<string, any> = { number: numero, delay: 2000, readchat: true };
+
+      if (tipo === 'texto') {
+        uazapiBody.text = conteudo;
+        uazapiBody.linkPreview = true;
+        if (replyid) uazapiBody.replyid = replyid;
+      } else {
+        endpoint = '/send/media';
+        uazapiBody.file = midia_url;
+        uazapiBody.text = conteudo || '';
+        switch (tipo) {
+          case 'imagem': uazapiBody.type = 'image'; break;
+          case 'audio': uazapiBody.type = 'ptt'; break;
+          case 'video': uazapiBody.type = 'video'; break;
+          case 'documento':
+            uazapiBody.type = 'document';
+            uazapiBody.docName = midia_nome || 'documento';
+            if (midia_mimetype) uazapiBody.mimetype = midia_mimetype;
+            break;
+          default: uazapiBody.type = 'document'; uazapiBody.docName = midia_nome || 'arquivo';
+        }
+      }
+
+      console.log(`[enviar-mensagem-lead] UAZAPI endpoint: ${endpoint}, tipo: ${tipo}, body:`, JSON.stringify(uazapiBody).substring(0, 500));
+      waResponse = await fetch(`${creds.baseUrl}${endpoint}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'token': creds.token },
+        body: JSON.stringify(uazapiBody),
+      });
+    }
+
+    const uazapiData = await waResponse.json();
+    console.log('[enviar-mensagem-lead] Resposta WhatsApp:', JSON.stringify(uazapiData).substring(0, 300));
+
+    if (waResponse.ok && !uazapiData.error) {
       const whatsappMessageId = uazapiData.id || uazapiData.messageid || uazapiData.key?.id;
 
       // 4. Atualizar mensagem com ID do WhatsApp e status enviada
@@ -226,8 +239,8 @@ serve(async (req: Request) => {
       );
     } else {
       // Erro no envio — marcar mensagem como erro
-      const errorMsg = uazapiData.error || uazapiData.message || 'Erro ao enviar via UAZAPI';
-      console.error('[enviar-mensagem-lead] ❌ Erro UAZAPI:', errorMsg);
+      const errorMsg = uazapiData.error || uazapiData.message || 'Erro ao enviar via WhatsApp';
+      console.error('[enviar-mensagem-lead] ❌ Erro WhatsApp:', errorMsg);
 
       await supabase
         .from('crm_mensagens')

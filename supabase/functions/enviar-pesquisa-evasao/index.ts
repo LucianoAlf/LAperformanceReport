@@ -3,7 +3,7 @@
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
-import { getUazapiCredentials } from '../_shared/uazapi.ts';
+import { getWhatsAppCredentials } from '../_shared/uazapi.ts';
 
 interface EnviarPesquisaRequest {
   evasao_id: number;
@@ -26,7 +26,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     );
-    const creds = await getUazapiCredentials(supabase, { funcao: 'sistema' });
+    const creds = await getWhatsAppCredentials(supabase, { funcao: 'sistema' });
 
     const body: EnviarPesquisaRequest = await req.json();
     const { evasao_id, operador = 'sistema' } = body;
@@ -252,27 +252,26 @@ serve(async (req) => {
       ].join("\n");
     }
 
-    // Enviar mensagem via UAZAPI
-    const uazapiResponse = await fetch(
-      `${creds.baseUrl}/send/text`,
-      {
+    // Enviar mensagem via WhatsApp (UAZAPI ou WAHA)
+    let waResponse: Response;
+    if (creds.provedor === 'waha') {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (creds.wahaApiKey) headers['X-Api-Key'] = creds.wahaApiKey;
+      waResponse = await fetch(`${creds.wahaUrl}/api/sendText`, {
+        method: 'POST', headers,
+        body: JSON.stringify({ session: creds.wahaSession, chatId: `${telefone}@c.us`, text: mensagem }),
+      });
+    } else {
+      waResponse = await fetch(`${creds.baseUrl}/send/text`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'token': creds.token,
-        },
-        body: JSON.stringify({
-          number: telefone,
-          text: mensagem,
-          delay: 2000,
-          readchat: true
-        })
-      }
-    );
+        headers: { 'Content-Type': 'application/json', 'token': creds.token },
+        body: JSON.stringify({ number: telefone, text: mensagem, delay: 2000, readchat: true }),
+      });
+    }
 
-    if (!uazapiResponse.ok) {
-      const uazapiError = await uazapiResponse.text();
-      
+    if (!waResponse.ok) {
+      const waError = await waResponse.text();
+
       // Marcar como falha
       await supabase
         .from('pesquisa_evasao')
@@ -280,18 +279,19 @@ serve(async (req) => {
         .eq('id', pesquisa.id);
 
       return new Response(
-        JSON.stringify({ error: 'Falha ao enviar mensagem UAZAPI', details: uazapiError }),
+        JSON.stringify({ error: 'Falha ao enviar mensagem WhatsApp', details: waError }),
         { status: 502, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const uazapiData = await uazapiResponse.json();
+    const waData = await waResponse.json();
+    const messageId = waData.id || waData.messageId || waData.key?.id || null;
 
-    // Atualizar com ID da mensagem UAZAPI
+    // Atualizar com ID da mensagem
     await supabase
       .from('pesquisa_evasao')
-      .update({ 
-        mensagem_uazapi_id: uazapiData.id || uazapiData.messageId || null,
+      .update({
+        mensagem_uazapi_id: messageId,
         updated_at: new Date().toISOString()
       })
       .eq('id', pesquisa.id);
@@ -301,7 +301,7 @@ serve(async (req) => {
         success: true,
         pesquisa_id: pesquisa.id,
         mensagem_enviada: true,
-        uazapi_message_id: uazapiData.id || uazapiData.messageId
+        uazapi_message_id: messageId
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
