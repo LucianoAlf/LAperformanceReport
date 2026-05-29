@@ -210,18 +210,31 @@ export function CaixasManager() {
       let testResult: TestResult;
 
       if (provedor === 'waha') {
-        // WAHA: GET /api/sessions/{session}
-        const base = (wahaUrl!).replace(/\/+$/, '');
-        const resp = await fetch(`${base}/api/sessions/${wahaSession}`, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-        });
-        const data = await resp.json();
-        const connected = data?.status === 'WORKING';
-        const phone = data?.me?.id?.replace(/@.+/, '') || data?.me?.pushName;
-        testResult = connected
-          ? { status: 'success', message: phone ? `Conectado (${phone})` : 'Conectado', phone }
-          : { status: 'error', message: `Sem número conectado (${data?.status || 'desconhecido'})` };
+        if (caixaId) {
+          // Caixa existente: roteia pelo edge function (evita CORS)
+          const { data, error } = await supabase.functions.invoke('whatsapp-status', {
+            body: { action: 'status', caixa_id: caixaId },
+          });
+          if (error) throw error;
+          const connected = data?.connected === true;
+          const phone = data?.phone || data?.number;
+          testResult = connected
+            ? { status: 'success', message: phone ? `Conectado (${phone})` : 'Conectado', phone }
+            : { status: 'error', message: 'Sem número conectado' };
+        } else {
+          // Nova caixa (ainda não salva): fetch direto
+          const base = (wahaUrl!).replace(/\/+$/, '');
+          const resp = await fetch(`${base}/api/sessions/${wahaSession}`, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' },
+          });
+          const data = await resp.json();
+          const connected = data?.status === 'WORKING';
+          const phone = data?.me?.id?.replace(/@.+/, '') || data?.me?.pushName;
+          testResult = connected
+            ? { status: 'success', message: phone ? `Conectado (${phone})` : 'Conectado', phone }
+            : { status: 'error', message: `Sem número conectado (${data?.status || 'desconhecido'})` };
+        }
       } else {
         // UAZAPI: chama edge function para caixas existentes, direto para novas
         if (caixaId) {
