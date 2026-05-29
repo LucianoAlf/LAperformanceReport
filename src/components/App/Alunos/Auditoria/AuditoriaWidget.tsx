@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, useCallback, KeyboardEvent } from 'react';
 import {
     X, FileSpreadsheet, Upload, Loader2, Send, Minimize2, Maximize2,
-    Bot, Paperclip, MessageSquarePlus, History, ThumbsUp, ThumbsDown, ChevronLeft
+    Bot, Paperclip, MessageSquarePlus, History, ThumbsUp, ThumbsDown, ChevronLeft, Image
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -27,6 +27,9 @@ function normalizeAgentMarkdown(text: string): string {
         .replace(/\n{3,}/g, '\n\n')
         .trim();
 }
+
+const isImageFile = (file: File) =>
+    file.type.startsWith('image/') || !!file.name.match(/\.(png|jpg|jpeg|gif|webp)$/i);
 
 interface Unidade {
     id: string;
@@ -173,7 +176,7 @@ export function AuditoriaWidget({ onClose, widgetsHidden = false }: AuditoriaWid
 
         if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
             const newFiles = Array.from(e.dataTransfer.files).filter((f: File) =>
-                f.name.match(/\.(xlsx|xls|csv)$/i)
+                f.name.match(/\.(xlsx|xls|csv|png|jpg|jpeg|gif|webp)$/i) || f.type.startsWith('image/')
             );
             if (newFiles.length > 0) {
                 setAttachments(prev => [...prev, ...newFiles].slice(0, 2)); // limitar 2 anexos max para evitar sobrecarga (alunos e matrículas)
@@ -192,6 +195,17 @@ export function AuditoriaWidget({ onClose, widgetsHidden = false }: AuditoriaWid
         }
         // reseta o file input
         if (fileInputRef.current) fileInputRef.current.value = '';
+    };
+
+    const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+        const items = Array.from(e.clipboardData.items);
+        const imageItems = items.filter(item => item.type.startsWith('image/'));
+        if (imageItems.length > 0) {
+            const files = imageItems.map(item => item.getAsFile()).filter(Boolean) as File[];
+            if (files.length > 0) {
+                setAttachments(prev => [...prev, ...files].slice(0, 2));
+            }
+        }
     };
 
     // --- Função Envio (Workflow do Agente) ---
@@ -227,6 +241,7 @@ export function AuditoriaWidget({ onClose, widgetsHidden = false }: AuditoriaWid
 
                 const fileUrls: string[] = [];
                 const fileNames: string[] = [];
+                const fileIsImage: boolean[] = [];
 
                 for (const file of currentAttachments) {
                     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
@@ -244,15 +259,18 @@ export function AuditoriaWidget({ onClose, widgetsHidden = false }: AuditoriaWid
 
                     if (signedData?.signedUrl) fileUrls.push(signedData.signedUrl);
                     fileNames.push(file.name);
+                    fileIsImage.push(isImageFile(file));
                 }
 
-                const userText = txt || 'Analise o arquivo enviado e me dê um resumo.';
+                const isImg = fileIsImage[0] ?? false;
+                const userText = txt || (isImg ? 'Analise a imagem enviada.' : 'Analise o arquivo enviado e me dê um resumo.');
                 newUserMsg.content = `📎 ${fileNames.join(', ')} — ${userText}`;
 
                 messageToSend = JSON.stringify({
                     text: userText,
-                    file_url: fileUrls[0],
-                    file_name: fileNames[0],
+                    ...(isImg
+                        ? { image_url: fileUrls[0], image_name: fileNames[0] }
+                        : { file_url: fileUrls[0], file_name: fileNames[0] }),
                 });
             } else {
                 messageToSend = txt;
@@ -351,8 +369,8 @@ export function AuditoriaWidget({ onClose, widgetsHidden = false }: AuditoriaWid
                 {dragActive && (
                     <div className="absolute inset-0 z-50 bg-slate-900/90 backdrop-blur-md border-[3px] border-violet-500 border-dashed rounded-2xl flex flex-col items-center justify-center text-violet-300 pointer-events-none transition-all">
                         <Upload className="w-14 h-14 mb-3 animate-bounce" />
-                        <p className="font-bold text-lg">Solte ficheiros xlsx para auditar</p>
-                        <p className="text-sm opacity-70 mt-1">(Alunos Ativos e Matrículas)</p>
+                        <p className="font-bold text-lg">Solte arquivos aqui</p>
+                        <p className="text-sm opacity-70 mt-1">(xlsx para auditoria • imagens para análise)</p>
                     </div>
                 )}
 
@@ -518,7 +536,7 @@ export function AuditoriaWidget({ onClose, widgetsHidden = false }: AuditoriaWid
                                             <div className="flex flex-wrap gap-1.5 mt-2 pt-2 border-t border-violet-500/40">
                                                 {msg.attachments.map((f, i) => (
                                                     <div key={i} className="flex items-center gap-1.5 px-2 py-1 rounded text-[11px] font-mono bg-violet-700/50 text-violet-100">
-                                                        <FileSpreadsheet className="w-3 h-3 shrink-0" />
+                                                        {isImageFile(f) ? <Image className="w-3 h-3 shrink-0" /> : <FileSpreadsheet className="w-3 h-3 shrink-0" />}
                                                         <span className="truncate max-w-[120px]">{f.name}</span>
                                                     </div>
                                                 ))}
@@ -636,7 +654,7 @@ export function AuditoriaWidget({ onClose, widgetsHidden = false }: AuditoriaWid
                         <div className="flex flex-wrap gap-1.5 mb-2">
                             {attachments.map((file, i) => (
                                 <div key={i} className="inline-flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-md bg-emerald-500/10 border border-emerald-500/25 text-[11px] font-mono text-emerald-300">
-                                    <FileSpreadsheet className="w-3 h-3 text-emerald-400 shrink-0" />
+                                    {isImageFile(file) ? <Image className="w-3 h-3 text-emerald-400 shrink-0" /> : <FileSpreadsheet className="w-3 h-3 text-emerald-400 shrink-0" />}
                                     <span className="truncate max-w-[140px]">{file.name}</span>
                                     <span className="text-slate-500 text-[10px]">{(file.size / 1024).toFixed(0)} KB</span>
                                     <button
@@ -658,13 +676,13 @@ export function AuditoriaWidget({ onClose, widgetsHidden = false }: AuditoriaWid
                             ref={fileInputRef}
                             onChange={handleFileSelect}
                             multiple
-                            accept=".xlsx,.xls,.csv"
+                            accept=".xlsx,.xls,.csv,.png,.jpg,.jpeg,.gif,.webp"
                             onClick={(e) => { (e.target as HTMLInputElement).value = ''; }}
                         />
                         <button
                             onClick={() => fileInputRef.current?.click()}
                             className="w-7 h-7 grid place-items-center rounded-md text-slate-400 hover:text-slate-100 hover:bg-slate-800 transition-colors shrink-0"
-                            title="Anexar arquivo de auditoria"
+                            title="Anexar arquivo ou imagem"
                         >
                             <Paperclip className="w-[15px] h-[15px]" />
                         </button>
@@ -673,6 +691,7 @@ export function AuditoriaWidget({ onClose, widgetsHidden = false }: AuditoriaWid
                             value={inputText}
                             onChange={e => setInputText(e.target.value)}
                             onKeyDown={handleKeyDown}
+                            onPaste={handlePaste}
                             placeholder="Pergunte sobre alunos, turmas, evasões…"
                             className="flex-1 bg-transparent text-slate-100 text-[13.5px] leading-snug placeholder:text-slate-500 focus:outline-none resize-none py-1 min-h-[22px] max-h-[120px]"
                             rows={1}
