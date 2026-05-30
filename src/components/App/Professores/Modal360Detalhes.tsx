@@ -303,6 +303,11 @@ export function Modal360Detalhes({
                                     </span>
                                   )}
                                 </div>
+                                {oc.minutos_atraso != null && (
+                                  <p className="text-xs text-amber-400 mt-0.5">
+                                    ⏱️ Atraso: {oc.minutos_atraso >= 60 ? '1h ou mais' : `${oc.minutos_atraso} min`}
+                                  </p>
+                                )}
                                 {oc.descricao && (
                                   <p className="text-xs text-slate-400 break-words mt-0.5">{oc.descricao}</p>
                                 )}

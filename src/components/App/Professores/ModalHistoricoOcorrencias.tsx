@@ -207,6 +207,14 @@ export default function ModalHistoricoOcorrencias({
                     </div>
                     <div className="flex items-center gap-3 mt-1 text-sm text-slate-400">
                       <span>{formatarDataCurta(ocorrencia.data_ocorrencia)}</span>
+                      {ocorrencia.minutos_atraso != null && (
+                        <>
+                          <span>•</span>
+                          <span className="text-amber-400">
+                            ⏱️ {ocorrencia.minutos_atraso >= 60 ? '1h ou mais' : `${ocorrencia.minutos_atraso} min`}
+                          </span>
+                        </>
+                      )}
                       {ocorrencia.descricao && (
                         <>
                           <span>•</span>
