@@ -634,6 +634,51 @@ GROUP BY acao;
 
 ---
 
+### K. Divergências de dados em `alunos` (snapshot via RPC)
+
+A RPC `public.get_divergencias_alunos()` (SECURITY DEFINER, 2026-05-29) retorna 5 categorias de inconsistências em tempo real, agregando em um único JSON. **Sempre live, sem cron** — também consumida pela aba "Divergências" em `/app/automacoes`.
+
+```sql
+-- Visão agregada (contadores)
+SELECT
+  jsonb_array_length(r->'orphans_antigas')         AS orphans,
+  jsonb_array_length(r->'inativo_com_presenca')    AS inativo_com_aulas,
+  jsonb_array_length(r->'ativo_sem_presenca')      AS ativo_sem_presenca,
+  jsonb_array_length(r->'inativo_sem_data_saida')  AS sem_data_saida,
+  jsonb_array_length(r->'duplicatas_curso')        AS duplicatas
+FROM (SELECT public.get_divergencias_alunos() AS r) x;
+
+-- Detalhe de uma categoria
+SELECT jsonb_array_elements(public.get_divergencias_alunos()->'inativo_com_presenca');
+```
+
+**Categorias (limite 200 linhas cada):**
+
+| Categoria | Severidade | Critério |
+|-----------|-----------|----------|
+| `orphans_antigas` | aviso | `is_segundo_curso=true AND emusys_matricula_id IS NULL AND status='ativo' AND created_at < hoje-30d AND NOT EXISTS (autoritativa ativa para mesma pessoa+unidade)` |
+| `inativo_com_presenca` | **crítico** | Status `inativo`/`evadido`/`trancado` mas ≥3 aulas em `aluno_presenca` nos últimos 30d |
+| `ativo_sem_presenca` | aviso | Status `ativo`, `data_matricula < hoje-60d`, zero aulas nos últimos 60d |
+| `inativo_sem_data_saida` | aviso | Status terminal (`inativo`/`evadido`/`trancado`) com `data_saida IS NULL` |
+| `duplicatas_curso` | **crítico** | Mesma pessoa+unidade+curso aparece 2+ vezes em `alunos` |
+
+**Quando reportar:**
+- `inativo_com_presenca` > 0 → **CRÍTICO**: status do banco diverge da realidade (aluno frequentando aulas apesar de marcado inativo). Investigar caso a caso.
+- `duplicatas_curso` > 0 → **CRÍTICO**: viola invariante "1 pessoa × 1 curso = 1 matrícula". Risco real (`buscarAluno` em `processar-matricula-emusys` Camada 2 usa `.find()` que retorna 1 linha não determinística entre duplicatas).
+- `orphans_antigas` > 50 → **ATENÇÃO**: backlog crescendo. Volume normal observado: ~5-15 órfãs/mês criadas, ~30-90d de janela antes da coordenação resolver.
+- `ativo_sem_presenca` > 100 → **ATENÇÃO**: possível evasão silenciosa em massa (webhook do Emusys não chegou).
+- `inativo_sem_data_saida` > 50 → **ATENÇÃO**: indica updates manuais (UI admin/SQL) que pularam o fluxo do webhook. Backfill manual possível.
+
+**O que NÃO é divergência:**
+- Órfã com `created_at < 30d` é esperada — admin pré-cadastrou aluno antes do Emusys formalizar a matrícula. Webhook chega em janela típica de 1-15 dias.
+- Ativo com `data_matricula < 60d` mas presença recente é normal (aluno em curso).
+- Inativo com presença esporádica (1-2 aulas nos últimos 30d pode ser período de saída em curso, não diverge necessariamente).
+
+**Causa raiz comum dos orphans antigos (decisão de produto):**
+Manual insertion de segundo curso é fluxo legítimo — o admin cadastra antes do Emusys porque o ID só existe depois da matrícula formalizada. Backfill seria automático via webhook `matricula_nova` (a edge function inclui `emusys_matricula_id: p.matriculaIdEmusys || undefined` no UPDATE quando `fonte='nome_curso'`). Se a órfã envelhece, significa que o webhook nunca chegou — provável que o aluno foi adicionado no nosso sistema mas a matrícula nunca foi formalizada no Emusys. Coordenação resolve manualmente.
+
+---
+
 ## Step 4: Output Format
 
 Sempre estruture a resposta assim:
