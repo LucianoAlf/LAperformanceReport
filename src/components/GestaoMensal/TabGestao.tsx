@@ -692,7 +692,8 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           let alunosAtivosQuery = supabase
             .from('alunos')
             .select('idade_atual, unidade_id')
-            .in('status', ['ativo', 'trancado']);
+            .in('status', ['ativo', 'trancado'])
+            .or('is_segundo_curso.is.null,is_segundo_curso.eq.false');
 
           if (unidade !== 'todos') {
             alunosAtivosQuery = alunosAtivosQuery.eq('unidade_id', unidade);
