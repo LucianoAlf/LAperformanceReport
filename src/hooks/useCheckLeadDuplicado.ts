@@ -112,7 +112,10 @@ export function useCheckLeadDuplicado() {
 
 /**
  * Verificacao em lote para batch inserts.
- * Recebe lista de telefones e retorna quais ja existem na unidade.
+ * Recebe lista de telefones e retorna quais ja existem na unidade —
+ * tanto em `leads` quanto em `alunos` (matriculas). Detectar telefone que ja
+ * pertence a um aluno evita criar lead manual duplicado de quem ja e matricula
+ * (ex.: cadastro vindo da automacao Emusys). Alunos sao marcados com status 'aluno'.
  */
 export async function verificarDuplicadosEmLote(
   telefones: string[],
@@ -121,7 +124,10 @@ export async function verificarDuplicadosEmLote(
   const telefonesValidos = telefones.filter(t => t.trim());
   if (telefonesValidos.length === 0 || !unidadeId) return new Map();
 
-  const { data, error } = await supabase
+  const mapa = new Map<string, LeadDuplicado>();
+
+  // 1. Leads existentes na unidade
+  const { data: leadsData, error: leadsErr } = await supabase
     .from('leads')
     .select('id, nome, telefone, whatsapp, status, etapa_pipeline_id, created_at')
     .eq('unidade_id', unidadeId)
@@ -129,16 +135,39 @@ export async function verificarDuplicadosEmLote(
     .in('telefone', telefonesValidos)
     .limit(100);
 
-  if (error) {
-    console.error('Erro ao verificar duplicatas em lote:', error);
-    return new Map();
-  }
-
-  const mapa = new Map<string, LeadDuplicado>();
-  for (const lead of data || []) {
-    if (lead.telefone) {
-      mapa.set(lead.telefone, lead);
+  if (leadsErr) {
+    console.error('Erro ao verificar duplicatas (leads) em lote:', leadsErr);
+  } else {
+    for (const lead of leadsData || []) {
+      if (lead.telefone && !mapa.has(lead.telefone)) mapa.set(lead.telefone, lead);
     }
   }
+
+  // 2. Alunos/matriculas existentes na unidade (telefone ja pertence a uma pessoa matriculada)
+  const { data: alunosData, error: alunosErr } = await supabase
+    .from('alunos')
+    .select('id, nome, telefone, status, created_at')
+    .eq('unidade_id', unidadeId)
+    .in('telefone', telefonesValidos)
+    .limit(100);
+
+  if (alunosErr) {
+    console.error('Erro ao verificar duplicatas (alunos) em lote:', alunosErr);
+  } else {
+    for (const aluno of alunosData || []) {
+      if (aluno.telefone && !mapa.has(aluno.telefone)) {
+        mapa.set(aluno.telefone, {
+          id: aluno.id,
+          nome: aluno.nome,
+          telefone: aluno.telefone,
+          whatsapp: null,
+          status: aluno.status || 'aluno',
+          etapa_pipeline_id: null,
+          created_at: aluno.created_at,
+        });
+      }
+    }
+  }
+
   return mapa;
 }

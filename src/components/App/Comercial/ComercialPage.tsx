@@ -854,7 +854,7 @@ export function ComercialPage() {
       // ════════════════════════════════════════════════════════════════
       let alunosMatQuery = supabase
         .from('alunos')
-        .select('id, nome, telefone, responsavel_telefone, data_nascimento, idade_atual, curso_id, professor_atual_id, professor_experimental_id, tipo_matricula_id, tipo_aluno, forma_pagamento_id, valor_parcela, valor_passaporte, data_matricula, is_segundo_curso, modalidade, unidade_id, status, canal_origem_id, cursos:curso_id(nome, is_projeto_banda), canais_origem:canal_origem_id(nome), unidades:unidade_id(codigo)')
+        .select('id, nome, telefone, responsavel_telefone, data_nascimento, idade_atual, curso_id, professor_atual_id, professor_experimental_id, tipo_matricula_id, tipo_aluno, forma_pagamento_id, valor_parcela, valor_passaporte, data_matricula, is_segundo_curso, modalidade, unidade_id, status, canal_origem_id, emusys_matricula_id, cursos:curso_id(nome, is_projeto_banda), canais_origem:canal_origem_id(nome), unidades:unidade_id(codigo)')
         .not('data_matricula', 'is', null)
         .limit(10000);
 
@@ -1423,6 +1423,58 @@ export function ComercialPage() {
     }
   }, [canais, cursos, professores]);
 
+  // Edição inline das abas de LEADS / Experimentais / Visitas — grava SEMPRE na tabela `leads`.
+  // (Diferente de salvarCampoMatricula, que é da aba Matrículas e grava em `alunos`.)
+  const LEAD_FIELD_MAP: Record<string, string> = {
+    data_contato: 'data_contato', nome: 'nome', telefone: 'telefone',
+    canal_origem_id: 'canal_origem_id', curso_interesse_id: 'curso_interesse_id',
+    quantidade: 'quantidade',
+  };
+  const salvarCampoLead = useCallback(async (leadId: number, campo: string, valor: string | number | null) => {
+    const col = LEAD_FIELD_MAP[campo];
+    if (!col) { toast.error('Campo não editável'); return; }
+    try {
+      const { error } = await supabase.from('leads').update({ [col]: valor }).eq('id', leadId);
+      if (error) throw error;
+
+      // Patch para states "rasos" (abas Leads e Visitas — id é o próprio lead)
+      const patchRaso = (row: any) => {
+        if (row.id !== leadId) return row;
+        const updated: any = { ...row, [campo]: valor };
+        if (campo === 'canal_origem_id') updated.canal_nome = canais.find(c => c.value === valor)?.label || '';
+        if (campo === 'curso_interesse_id') { updated.curso_id = valor; updated.curso_nome = cursos.find(c => c.value === valor)?.label || ''; }
+        return updated;
+      };
+      setLeadsMes(prev => prev.map(patchRaso));
+      setVisitasMes(prev => prev.map(patchRaso));
+      setExperimentaisMes(prev => prev.map(patchRaso));
+
+      // Patch para a aba Experimentais (estrutura aninhada: lead_nome / lead_telefone / leads.canal_origem_id)
+      const patchExp = (row: any) => {
+        if (row.lead_id !== leadId) return row;
+        const updated: any = { ...row };
+        if (campo === 'nome') updated.lead_nome = valor;
+        else if (campo === 'telefone') updated.lead_telefone = valor;
+        else if (campo === 'data_contato') updated.data_contato = valor;
+        else if (campo === 'canal_origem_id') {
+          updated.leads = { ...(row.leads || {}), canal_origem_id: valor };
+          updated.canal_nome = canais.find(c => c.value === valor)?.label || '';
+        } else if (campo === 'curso_interesse_id') {
+          updated.curso_interesse_id = valor;
+          updated.curso_nome = cursos.find(c => c.value === valor)?.label || '';
+        }
+        return updated;
+      };
+      setExperimentaisDetalhadas(prev => prev.map(patchExp));
+      setExperimentaisHojeOutros(prev => prev.map(patchExp));
+
+      toast.success('Atualizado');
+    } catch (error: any) {
+      console.error('Erro ao atualizar lead:', error);
+      toast.error('Erro ao atualizar');
+    }
+  }, [canais, cursos]);
+
   // Salvar campo na tabela lead_experimentais (professor, status)
   const salvarCampoExperimental = useCallback(async (expId: number, campo: string, valor: string | number | null) => {
     try {
@@ -1448,8 +1500,54 @@ export function ComercialPage() {
     }
   }, [professores]);
 
+  // === Proteção contra exclusão de registros vindos do webhook Emusys ===
+  // Lead/experimental com emusys_lead_id e matrícula com emusys_matricula_id são
+  // da automação e não podem ser excluídos manualmente (corrigir na origem).
+  const MSG_BLOQUEIO_EMUSYS = 'Veio da automação (Emusys) e não pode ser excluído. Se está duplicado ou errado, contate o time de TI para corrigir na origem.';
+
+  const leadVeioDoEmusys = (id: number): boolean => {
+    const l = [...leadsMes, ...experimentaisMes, ...visitasMes].find((x: any) => x.id === id) as any;
+    return !!l?.emusys_lead_id;
+  };
+
+  const registrarExclusaoBloqueada = async (
+    tipo: 'lead' | 'matricula',
+    registros: { id: number; nome?: string | null }[]
+  ) => {
+    try {
+      const base = {
+        evento: 'exclusao_bloqueada',
+        acao: 'bloqueado_origem_emusys',
+        workflow_id: 'comercial-ui',
+        execution_id: new Date().toISOString(),
+      };
+      const tentadoPor = (usuario as any)?.email ?? (usuario as any)?.nome ?? (usuario as any)?.id ?? null;
+      if (tipo === 'lead') {
+        await supabase.from('leads_automacao_log').insert(
+          registros.map(r => ({ ...base, lead_id: r.id, lead_nome: r.nome ?? null,
+            detalhes: { motivo: 'Veio do webhook Emusys — exclusão bloqueada', tentado_por: tentadoPor } }))
+        );
+      } else {
+        await supabase.from('automacao_log').insert(
+          registros.map(r => ({ ...base, aluno_id: r.id, aluno_nome: r.nome ?? null,
+            detalhes: { motivo: 'Matrícula veio do Emusys — exclusão bloqueada', tentado_por: tentadoPor } }))
+        );
+      }
+    } catch (e) {
+      console.error('[exclusao-bloqueada] falha ao registrar log:', e);
+    }
+  };
+
   const confirmDelete = async () => {
     if (!deleteId) return;
+
+    if (leadVeioDoEmusys(deleteId)) {
+      const l = [...leadsMes, ...experimentaisMes, ...visitasMes].find((x: any) => x.id === deleteId) as any;
+      await registrarExclusaoBloqueada('lead', [{ id: deleteId, nome: l?.nome }]);
+      toast.error(MSG_BLOQUEIO_EMUSYS);
+      setDeleteId(null);
+      return;
+    }
 
     try {
       const { error } = await supabase
@@ -1475,6 +1573,15 @@ export function ComercialPage() {
   // Estado separado de `deleteId` (que apaga LEADS nas outras abas).
   const confirmDeleteMatricula = async () => {
     if (!deleteMatriculaId) return;
+
+    const mat = matriculasMes.find((x: any) => x.id === deleteMatriculaId) as any;
+    if (mat?.emusys_matricula_id) {
+      await registrarExclusaoBloqueada('matricula', [{ id: deleteMatriculaId, nome: mat?.nome }]);
+      toast.error('Esta matrícula ' + MSG_BLOQUEIO_EMUSYS.charAt(0).toLowerCase() + MSG_BLOQUEIO_EMUSYS.slice(1));
+      setDeleteMatriculaId(null);
+      return;
+    }
+
     try {
       const { error } = await supabase.from('alunos').delete().eq('id', deleteMatriculaId);
       if (error) throw error;
@@ -1511,13 +1618,34 @@ export function ComercialPage() {
     setExcluindoEmLote(true);
     try {
       const ids = Array.from(selecionadosFunil);
-      const { error } = await supabase.from('leads').delete().in('id', ids);
+      const bloqueados = ids.filter(id => leadVeioDoEmusys(id));
+      const liberados = ids.filter(id => !leadVeioDoEmusys(id));
+
+      if (bloqueados.length > 0) {
+        const todos = [...leadsMes, ...experimentaisMes, ...visitasMes];
+        await registrarExclusaoBloqueada('lead', bloqueados.map(id => {
+          const l = todos.find((x: any) => x.id === id) as any;
+          return { id, nome: l?.nome };
+        }));
+      }
+
+      if (liberados.length === 0) {
+        toast.error(`${bloqueados.length} registro${bloqueados.length > 1 ? 's vieram' : ' veio'} da automação (Emusys) e não ${bloqueados.length > 1 ? 'podem' : 'pode'} ser excluído${bloqueados.length > 1 ? 's' : ''}. Contate o time de TI.`);
+        setShowBulkDeleteDialog(false);
+        return;
+      }
+
+      const { error } = await supabase.from('leads').delete().in('id', liberados);
       if (error) throw error;
 
-      toast.success(`${ids.length} lead${ids.length > 1 ? 's' : ''} excluído${ids.length > 1 ? 's' : ''}!`);
+      if (bloqueados.length > 0) {
+        toast.warning(`${liberados.length} excluído${liberados.length > 1 ? 's' : ''}. ${bloqueados.length} bloqueado${bloqueados.length > 1 ? 's' : ''} por vir${bloqueados.length > 1 ? 'em' : ''} da automação (Emusys).`);
+      } else {
+        toast.success(`${liberados.length} lead${liberados.length > 1 ? 's' : ''} excluído${liberados.length > 1 ? 's' : ''}!`);
+      }
       setShowBulkDeleteDialog(false);
-      // Update otimista
-      const idsSet = selecionadosFunil;
+      // Update otimista (só os efetivamente removidos)
+      const idsSet = new Set(liberados);
       setLeadsMes(prev => prev.filter(l => !idsSet.has(l.id!)));
       setExperimentaisMes(prev => prev.filter(l => !idsSet.has(l.id!)));
       setVisitasMes(prev => prev.filter(l => !idsSet.has(l.id!)));
@@ -1685,7 +1813,7 @@ export function ComercialPage() {
       const duplicatas = await verificarDuplicadosEmLote(telefonesNormalizados, unidadeParaSalvar);
       if (duplicatas.size > 0) {
         const nomes = Array.from(duplicatas.values()).map(d => d.nome).join(', ');
-        toast.warning(`${duplicatas.size} lead(s) com telefone duplicado: ${nomes}. Clique em salvar novamente para confirmar.`, { duration: 6000 });
+        toast.warning(`${duplicatas.size} telefone(s) já cadastrado(s) (lead ou aluno): ${nomes}. Clique em salvar novamente para confirmar mesmo assim.`, { duration: 6000 });
         setConfirmouDuplicataLote(true);
         return;
       }
@@ -3906,7 +4034,7 @@ export function ComercialPage() {
                       <td className="py-3 px-2 border-r border-slate-700/30">
                         <CelulaEditavelInline
                           value={lead.data_contato}
-                          onChange={async (valor) => lead.id && salvarCampoMatricula(lead.id, 'data_contato', valor)}
+                          onChange={async (valor) => lead.id && salvarCampoLead(lead.id,'data_contato', valor)}
                           tipo="data"
                           textClassName="text-slate-300"
                         />
@@ -3914,7 +4042,7 @@ export function ComercialPage() {
                       <td className="py-3 px-2 border-r border-slate-700/30">
                         <CelulaEditavelInline
                           value={lead.nome}
-                          onChange={async (valor) => lead.id && salvarCampoMatricula(lead.id, 'nome', valor)}
+                          onChange={async (valor) => lead.id && salvarCampoLead(lead.id,'nome', valor)}
                           tipo="texto"
                           textClassName="text-white font-medium"
                           placeholder="-"
@@ -3923,7 +4051,7 @@ export function ComercialPage() {
                       <td className="py-3 px-2 border-r border-slate-700/30">
                         <CelulaEditavelInline
                           value={(lead as any).telefone}
-                          onChange={async (valor) => lead.id && salvarCampoMatricula(lead.id, 'telefone', valor)}
+                          onChange={async (valor) => lead.id && salvarCampoLead(lead.id,'telefone', valor)}
                           tipo="texto"
                           textClassName="text-emerald-400"
                           placeholder="-"
@@ -3932,7 +4060,7 @@ export function ComercialPage() {
                       <td className="py-3 px-2 border-r border-slate-700/30">
                         <CelulaEditavelInline
                           value={lead.canal_origem_id}
-                          onChange={async (valor) => lead.id && salvarCampoMatricula(lead.id, 'canal_origem_id', valor ? Number(valor) : null)}
+                          onChange={async (valor) => lead.id && salvarCampoLead(lead.id,'canal_origem_id', valor ? Number(valor) : null)}
                           tipo="select"
                           opcoes={canais.map(c => ({ value: c.value, label: c.label }))}
                           placeholder="-"
@@ -3942,7 +4070,7 @@ export function ComercialPage() {
                       <td className="py-3 px-2 border-r border-slate-700/30">
                         <CelulaEditavelInline
                           value={lead.curso_interesse_id}
-                          onChange={async (valor) => lead.id && salvarCampoMatricula(lead.id, 'curso_interesse_id', valor ? Number(valor) : null)}
+                          onChange={async (valor) => lead.id && salvarCampoLead(lead.id,'curso_interesse_id', valor ? Number(valor) : null)}
                           tipo="select"
                           opcoes={cursos.map(c => ({ value: c.value, label: c.label }))}
                           placeholder="-"
@@ -4163,7 +4291,7 @@ export function ComercialPage() {
                           <td className="py-3 px-2 border-r border-slate-700/30">
                             <CelulaEditavelInline
                               value={lead.data_contato}
-                              onChange={async (valor) => lead.id && salvarCampoMatricula(lead.id, 'data_contato', valor)}
+                              onChange={async (valor) => lead.id && salvarCampoLead(lead.id,'data_contato', valor)}
                               tipo="data"
                               textClassName="text-slate-300"
                             />
@@ -4495,7 +4623,7 @@ export function ComercialPage() {
                             <td className="py-3 px-2 border-r border-slate-700/30">
                               <CelulaEditavelInline
                                 value={first.lead_nome || first.nome_aluno}
-                                onChange={async (valor) => first.lead_id && salvarCampoMatricula(first.lead_id, 'nome', valor)}
+                                onChange={async (valor) => first.lead_id && salvarCampoLead(first.lead_id,'nome', valor)}
                                 tipo="texto"
                                 textClassName="text-white font-medium"
                                 placeholder="-"
@@ -4505,7 +4633,7 @@ export function ComercialPage() {
                             <td className="py-3 px-2 border-r border-slate-700/30">
                               <CelulaEditavelInline
                                 value={first.lead_telefone}
-                                onChange={async (valor) => first.lead_id && salvarCampoMatricula(first.lead_id, 'telefone', valor)}
+                                onChange={async (valor) => first.lead_id && salvarCampoLead(first.lead_id,'telefone', valor)}
                                 tipo="texto"
                                 textClassName="text-emerald-400"
                                 placeholder="-"
@@ -4524,7 +4652,7 @@ export function ComercialPage() {
                             <td className="py-3 px-2 border-r border-slate-700/30" onClick={(e) => e.stopPropagation()}>
                               <CelulaEditavelInline
                                 value={first.leads?.canal_origem_id}
-                                onChange={async (valor) => first.lead_id && salvarCampoMatricula(first.lead_id, 'canal_origem_id', valor ? Number(valor) : null)}
+                                onChange={async (valor) => first.lead_id && salvarCampoLead(first.lead_id,'canal_origem_id', valor ? Number(valor) : null)}
                                 tipo="select"
                                 opcoes={canais.map(c => ({ value: c.value, label: c.label }))}
                                 placeholder="-"
@@ -4534,7 +4662,7 @@ export function ComercialPage() {
                             <td className="py-3 px-2 border-r border-slate-700/30" onClick={(e) => e.stopPropagation()}>
                               <CelulaEditavelInline
                                 value={first.curso_interesse_id}
-                                onChange={async (valor) => first.lead_id && salvarCampoMatricula(first.lead_id, 'curso_interesse_id', valor ? Number(valor) : null)}
+                                onChange={async (valor) => first.lead_id && salvarCampoLead(first.lead_id,'curso_interesse_id', valor ? Number(valor) : null)}
                                 tipo="select"
                                 opcoes={cursos.map(c => ({ value: c.value, label: c.label }))}
                                 placeholder="-"
@@ -4585,7 +4713,7 @@ export function ComercialPage() {
                           <td className="py-3 px-2 border-r border-slate-700/30" onClick={(e) => e.stopPropagation()}>
                             <CelulaEditavelInline
                               value={first.lead_telefone}
-                              onChange={async (valor) => first.lead_id && salvarCampoMatricula(first.lead_id, 'telefone', valor)}
+                              onChange={async (valor) => first.lead_id && salvarCampoLead(first.lead_id,'telefone', valor)}
                               tipo="texto"
                               textClassName="text-emerald-400"
                               placeholder="-"
@@ -4604,7 +4732,7 @@ export function ComercialPage() {
                           <td className="py-3 px-2 border-r border-slate-700/30" onClick={(e) => e.stopPropagation()}>
                             <CelulaEditavelInline
                               value={first.leads?.canal_origem_id}
-                              onChange={async (valor) => first.lead_id && salvarCampoMatricula(first.lead_id, 'canal_origem_id', valor ? Number(valor) : null)}
+                              onChange={async (valor) => first.lead_id && salvarCampoLead(first.lead_id,'canal_origem_id', valor ? Number(valor) : null)}
                               tipo="select"
                               opcoes={canais.map(c => ({ value: c.value, label: c.label }))}
                               placeholder="-"
@@ -4614,7 +4742,7 @@ export function ComercialPage() {
                           <td className="py-3 px-2 border-r border-slate-700/30" onClick={(e) => e.stopPropagation()}>
                             <CelulaEditavelInline
                               value={first.curso_interesse_id}
-                              onChange={async (valor) => first.lead_id && salvarCampoMatricula(first.lead_id, 'curso_interesse_id', valor ? Number(valor) : null)}
+                              onChange={async (valor) => first.lead_id && salvarCampoLead(first.lead_id,'curso_interesse_id', valor ? Number(valor) : null)}
                               tipo="select"
                               opcoes={cursos.map(c => ({ value: c.value, label: c.label }))}
                               placeholder="-"
@@ -4859,7 +4987,7 @@ export function ComercialPage() {
                       <td className="py-3 px-2 border-r border-slate-700/30">
                         <CelulaEditavelInline
                           value={visita.data_contato}
-                          onChange={async (valor) => visita.id && salvarCampoMatricula(visita.id, 'data_contato', valor)}
+                          onChange={async (valor) => visita.id && salvarCampoLead(visita.id,'data_contato', valor)}
                           tipo="data"
                           textClassName="text-slate-300"
                         />
@@ -4867,7 +4995,7 @@ export function ComercialPage() {
                       <td className="py-3 px-2 border-r border-slate-700/30">
                         <CelulaEditavelInline
                           value={(visita as any).nome}
-                          onChange={async (valor) => visita.id && salvarCampoMatricula(visita.id, 'nome', valor)}
+                          onChange={async (valor) => visita.id && salvarCampoLead(visita.id,'nome', valor)}
                           tipo="texto"
                           textClassName="text-white font-medium"
                           placeholder="-"
@@ -4876,7 +5004,7 @@ export function ComercialPage() {
                       <td className="py-3 px-2 border-r border-slate-700/30">
                         <CelulaEditavelInline
                           value={(visita as any).telefone}
-                          onChange={async (valor) => visita.id && salvarCampoMatricula(visita.id, 'telefone', valor)}
+                          onChange={async (valor) => visita.id && salvarCampoLead(visita.id,'telefone', valor)}
                           tipo="texto"
                           textClassName="text-emerald-400"
                           placeholder="-"
@@ -4885,7 +5013,7 @@ export function ComercialPage() {
                       <td className="py-3 px-2 border-r border-slate-700/30">
                         <CelulaEditavelInline
                           value={visita.canal_origem_id}
-                          onChange={async (valor) => visita.id && salvarCampoMatricula(visita.id, 'canal_origem_id', valor ? Number(valor) : null)}
+                          onChange={async (valor) => visita.id && salvarCampoLead(visita.id,'canal_origem_id', valor ? Number(valor) : null)}
                           tipo="select"
                           opcoes={canais.map(c => ({ value: c.value, label: c.label }))}
                           placeholder="-"
@@ -4895,7 +5023,7 @@ export function ComercialPage() {
                       <td className="py-3 px-2 border-r border-slate-700/30">
                         <CelulaEditavelInline
                           value={visita.curso_id}
-                          onChange={async (valor) => visita.id && salvarCampoMatricula(visita.id, 'curso_interesse_id', valor ? Number(valor) : null)}
+                          onChange={async (valor) => visita.id && salvarCampoLead(visita.id,'curso_interesse_id', valor ? Number(valor) : null)}
                           tipo="select"
                           opcoes={cursos.map(c => ({ value: c.value, label: c.label }))}
                           placeholder="-"
@@ -4905,7 +5033,7 @@ export function ComercialPage() {
                       <td className="py-3 px-2 border-r border-slate-700/30">
                         <CelulaEditavelInline
                           value={visita.quantidade}
-                          onChange={async (valor) => visita.id && salvarCampoMatricula(visita.id, 'quantidade', valor ? Number(valor) : 1)}
+                          onChange={async (valor) => visita.id && salvarCampoLead(visita.id,'quantidade', valor ? Number(valor) : 1)}
                           tipo="numero"
                           textClassName="text-amber-400 font-medium"
                         />
@@ -6527,30 +6655,51 @@ export function ComercialPage() {
       {/* AlertDialog de exclusão em lote */}
       <AlertDialog open={showBulkDeleteDialog} onOpenChange={(open) => !open && setShowBulkDeleteDialog(false)}>
         <AlertDialogContent className="bg-slate-900 border-slate-700">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="text-white">
-              Excluir {selecionadosFunil.size} lead{selecionadosFunil.size > 1 ? 's' : ''} permanentemente?
-            </AlertDialogTitle>
-            <AlertDialogDescription className="text-slate-400">
-              Esta ação não pode ser desfeita. Todos os registros selecionados serão removidos permanentemente.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={excluindoEmLote} className="bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600">
-              Cancelar
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={confirmDeleteEmLote}
-              disabled={excluindoEmLote}
-              className="bg-red-600 hover:bg-red-500 text-white"
-            >
-              {excluindoEmLote ? (
-                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Excluindo...</>
-              ) : (
-                <><Trash2 className="w-4 h-4 mr-2" /> Excluir {selecionadosFunil.size}</>
-              )}
-            </AlertDialogAction>
-          </AlertDialogFooter>
+          {(() => {
+            const ids = Array.from(selecionadosFunil);
+            const bloqueados = ids.filter(id => leadVeioDoEmusys(id)).length;
+            const livres = ids.length - bloqueados;
+            return (
+              <>
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="text-white">
+                    {livres === 0
+                      ? 'Nenhum desses registros pode ser excluído'
+                      : `Excluir ${livres} lead${livres > 1 ? 's' : ''} permanentemente?`}
+                  </AlertDialogTitle>
+                  <AlertDialogDescription className="text-slate-400">
+                    {bloqueados > 0 ? (
+                      <>
+                        🔒 {bloqueados} {bloqueados > 1 ? 'vieram' : 'veio'} da automação (Emusys) e {bloqueados > 1 ? 'serão mantidos' : 'será mantido'}.
+                        {livres > 0 && <> Só {livres} registro{livres > 1 ? 's' : ''} manual{livres > 1 ? 'is' : ''} {livres > 1 ? 'serão excluídos' : 'será excluído'}.</>}
+                        {' '}Se algum registro do Emusys está duplicado ou errado, contate o time de TI para corrigir na origem.
+                      </>
+                    ) : (
+                      'Esta ação não pode ser desfeita. Todos os registros selecionados serão removidos permanentemente.'
+                    )}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={excluindoEmLote} className="bg-slate-700 border-slate-600 text-slate-300 hover:bg-slate-600">
+                    {livres === 0 ? 'Fechar' : 'Cancelar'}
+                  </AlertDialogCancel>
+                  {livres > 0 && (
+                    <AlertDialogAction
+                      onClick={confirmDeleteEmLote}
+                      disabled={excluindoEmLote}
+                      className="bg-red-600 hover:bg-red-500 text-white"
+                    >
+                      {excluindoEmLote ? (
+                        <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Excluindo...</>
+                      ) : (
+                        <><Trash2 className="w-4 h-4 mr-2" /> Excluir {livres}</>
+                      )}
+                    </AlertDialogAction>
+                  )}
+                </AlertDialogFooter>
+              </>
+            );
+          })()}
         </AlertDialogContent>
       </AlertDialog>
         </>
