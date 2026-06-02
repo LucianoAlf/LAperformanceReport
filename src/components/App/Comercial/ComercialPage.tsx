@@ -2353,44 +2353,47 @@ export function ComercialPage() {
 
   // Gerar relatório mensal completo
   const gerarRelatorioMensal = async () => {
-    const hoje = new Date();
+    const { dataInicio, dataFim, dataInicioObj, dataFimObj } = calcularRangeDatas();
+    const hoje = dataFimObj;
     const dia = hoje.getDate().toString().padStart(2, '0');
     const mesNome = hoje.toLocaleString('pt-BR', { month: 'long' });
     const mesNomeUpper = mesNome.toUpperCase();
     const ano = hoje.getFullYear();
-    
+    const periodoLabel = relatorioPeriodo === 'personalizado'
+      ? `${format(dataInicioObj, 'dd/MM/yyyy')} - ${format(dataFimObj, 'dd/MM/yyyy')}`
+      : `${mesNomeUpper}/${ano}`;
+
     // Buscar informações da unidade incluindo o Hunter
     const unidadeId = filtroAtivo || usuario?.unidade_id;
     let unidadeNome = 'Unidade';
     let hunterNome = usuario?.nome || 'Usuário';
-    
+
     if (unidadeId) {
       const { data: unidadeData } = await supabase
         .from('unidades')
         .select('nome, hunter_nome')
         .eq('id', unidadeId)
         .single();
-      
+
       if (unidadeData) {
         unidadeNome = unidadeData.nome;
         hunterNome = unidadeData.hunter_nome || usuario?.nome || 'Usuário';
       }
     }
 
-    // Buscar dados do mês completo
-    const primeiroDiaMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+    // Buscar dados do período selecionado
     const { data: registrosMes } = await supabase
       .from('leads')
       .select('status, quantidade, canal_origem_id, curso_interesse_id, experimental_agendada, canais_origem(nome), cursos(nome)')
       .eq('unidade_id', unidadeId)
-      .gte('data_contato', primeiroDiaMes.toISOString().split('T')[0])
-      .lte('data_contato', hoje.toISOString().split('T')[0]);
+      .gte('data_contato', dataInicio)
+      .lte('data_contato', dataFim);
 
     const leadsMes = registrosMes?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const experimentaisMes = registrosMes?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const visitasMes = registrosMes?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
     // Matrículas: fonte = alunos por data_matricula (inclui matrículas sem lead)
-    const matAlunosMes = await buscarMatriculasAlunos(unidadeId, primeiroDiaMes.toISOString().split('T')[0], hoje.toISOString().split('T')[0]);
+    const matAlunosMes = await buscarMatriculasAlunos(unidadeId, dataInicio, dataFim);
     const matriculasMes = matAlunosMes.length;
 
     // Calcular conversões
@@ -2457,7 +2460,7 @@ export function ComercialPage() {
     let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
     texto += `📊 *RELATÓRIO MENSAL COMERCIAL*\n`;
     texto += `🏢 *${unidadeNome.toUpperCase()}*\n`;
-    texto += `📅 *${mesNomeUpper}/${ano}*\n`;
+    texto += `📅 *${periodoLabel}*\n`;
     texto += `👤 ${hunterNome}\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
