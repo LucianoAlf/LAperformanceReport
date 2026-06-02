@@ -854,7 +854,7 @@ export function ComercialPage() {
       // ════════════════════════════════════════════════════════════════
       let alunosMatQuery = supabase
         .from('alunos')
-        .select('id, nome, telefone, responsavel_telefone, data_nascimento, idade_atual, curso_id, professor_atual_id, professor_experimental_id, tipo_matricula_id, tipo_aluno, forma_pagamento_id, valor_parcela, valor_passaporte, data_matricula, is_segundo_curso, modalidade, unidade_id, status, cursos:curso_id(nome, is_projeto_banda), unidades:unidade_id(codigo)')
+        .select('id, nome, telefone, responsavel_telefone, data_nascimento, idade_atual, curso_id, professor_atual_id, professor_experimental_id, tipo_matricula_id, tipo_aluno, forma_pagamento_id, valor_parcela, valor_passaporte, data_matricula, is_segundo_curso, modalidade, unidade_id, status, canal_origem_id, cursos:curso_id(nome, is_projeto_banda), canais_origem:canal_origem_id(nome), unidades:unidade_id(codigo)')
         .not('data_matricula', 'is', null)
         .limit(10000);
 
@@ -882,8 +882,9 @@ export function ComercialPage() {
         is_banda: (a.cursos as any)?.is_projeto_banda || false,
         // preenchidos abaixo (professores / forma / lead vinculado)
         data_contato: null,
-        canal_origem_id: null,
-        canal_nome: '',
+        // origem própria do aluno (matrícula direta usa esta; com lead, o lead sobrescreve abaixo)
+        canal_origem_id: a.canal_origem_id ?? null,
+        canal_nome: (a.canais_origem as any)?.nome || '',
         professor_fixo_nome: '',
         professor_exp_nome: '',
         forma_pagamento_nome: '',
@@ -939,35 +940,6 @@ export function ComercialPage() {
             m.canal_nome = (lead.canais_origem as any)?.nome || '';
           }
         });
-
-        // Herança de origem por TELEFONE: matrículas órfãs (sem lead direto) de
-        // irmãos/família herdam o canal do lead que compartilha o telefone do responsável.
-        const orfaos = matriculasDoMes.filter((m: any) => m.is_orfao);
-        const telsOrfaos = new Set<string>();
-        orfaos.forEach((m: any) => {
-          if (m.telefone) telsOrfaos.add(m.telefone);
-          if (m.responsavel_telefone) telsOrfaos.add(m.responsavel_telefone);
-        });
-        if (telsOrfaos.size > 0) {
-          const { data: leadsTel } = await supabase
-            .from('leads')
-            .select('id, nome, telefone, canal_origem_id, canais_origem(nome)')
-            .in('telefone', Array.from(telsOrfaos))
-            .eq('arquivado', false);
-          const leadPorTel = new Map<string, any>();
-          ((leadsTel as any[]) || []).forEach(l => {
-            if (l.telefone && !leadPorTel.has(l.telefone)) leadPorTel.set(l.telefone, l);
-          });
-          orfaos.forEach((m: any) => {
-            const lead = leadPorTel.get(m.telefone) || leadPorTel.get(m.responsavel_telefone);
-            if (lead) {
-              m.origem_familia = true;
-              m.lead_familia_nome = lead.nome;
-              m.canal_origem_id = lead.canal_origem_id || null;
-              m.canal_nome = (lead.canais_origem as any)?.nome || '';
-            }
-          });
-        }
       }
 
       setMatriculasMes(matriculasDoMes as any);
@@ -1413,7 +1385,16 @@ export function ComercialPage() {
   };
   const salvarCampoMatricula = useCallback(async (matriculaId: number, campo: string, valor: string | number | null, leadId?: number | null) => {
     try {
-      if (campo in LEAD_COL_MAP) {
+      if (campo === 'canal_origem_id') {
+        // Origem: grava no lead se vinculado; senão (matrícula direta) grava no próprio aluno
+        if (leadId) {
+          const { error } = await supabase.from('leads').update({ canal_origem_id: valor }).eq('id', leadId);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase.from('alunos').update({ canal_origem_id: valor }).eq('id', matriculaId);
+          if (error) throw error;
+        }
+      } else if (campo in LEAD_COL_MAP) {
         if (!leadId) { toast.error('Matrícula direta (sem lead) — este campo não é editável aqui'); return; }
         const { error } = await supabase.from('leads').update({ [LEAD_COL_MAP[campo]]: valor }).eq('id', leadId);
         if (error) throw error;
@@ -1855,6 +1836,8 @@ export function ComercialPage() {
       const hoje = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
       const telNormalized = expForm.telefone ? normalizePhone(expForm.telefone) : null;
       let leadId: number;
+      let alunoVinculadoId: number | null = null;
+      let matchAmbiguo = false;
 
       if (expLeadEncontrado) {
         // Atualizar lead existente
@@ -1870,13 +1853,42 @@ export function ComercialPage() {
         if (error) throw error;
         leadId = expLeadEncontrado.id;
       } else {
-        // Criar lead novo
+        // Sem lead vinculado: tentar ligar a uma matrícula já existente (evita lead órfão duplicado).
+        // Match por telefone próprio na unidade → fallback por nome exato na unidade.
+        let alunosMatch: any[] = [];
+        if (telNormalized) {
+          const { data } = await supabase
+            .from('alunos')
+            .select('id, is_segundo_curso')
+            .eq('unidade_id', unidadeParaSalvar)
+            .eq('telefone', telNormalized);
+          alunosMatch = data || [];
+        }
+        if (alunosMatch.length === 0) {
+          const { data } = await supabase
+            .from('alunos')
+            .select('id, is_segundo_curso')
+            .eq('unidade_id', unidadeParaSalvar)
+            .ilike('nome', expForm.nome.trim());
+          alunosMatch = data || [];
+        }
+        if (alunosMatch.length === 1) {
+          alunoVinculadoId = alunosMatch[0].id;
+        } else if (alunosMatch.length > 1) {
+          // Desambiguar pela matrícula primária; se ainda houver mais de uma, não adivinhar
+          const primarias = alunosMatch.filter((a: any) => !a.is_segundo_curso);
+          if (primarias.length === 1) alunoVinculadoId = primarias[0].id;
+          else matchAmbiguo = true;
+        }
+
+        // Criar lead novo — vinculado à matrícula existente quando houver match único
         const { data: newLead, error } = await supabase.from('leads').insert({
           nome: expForm.nome.trim(),
           telefone: telNormalized,
           canal_origem_id: expForm.canal_origem_id,
           curso_interesse_id: expForm.curso_interesse_id,
           unidade_id: unidadeParaSalvar,
+          aluno_id: alunoVinculadoId,
           data_contato: hoje,
           status: 'experimental_agendada',
           etapa_pipeline_id: 5,
@@ -1892,7 +1904,9 @@ export function ComercialPage() {
       }
 
       // Criar registro em lead_experimentais
-      await supabase.from('lead_experimentais').upsert({
+      // onConflict precisa bater com a constraint real UNIQUE (lead_id, data_experimental);
+      // o erro é propagado (catch) para não falhar silenciosamente como antes.
+      const { error: expErr } = await supabase.from('lead_experimentais').upsert({
         lead_id: leadId,
         nome_aluno: expForm.nome.trim(),
         unidade_id: unidadeParaSalvar,
@@ -1902,9 +1916,18 @@ export function ComercialPage() {
         horario_experimental: expForm.horario_experimental || null,
         professor_experimental_id: expForm.professor_experimental_id,
         curso_interesse_id: expForm.curso_interesse_id,
-      }, { onConflict: 'lead_id,data_experimental,nome_aluno' });
+      }, { onConflict: 'lead_id,data_experimental' });
+      if (expErr) throw expErr;
 
-      toast.success(expLeadEncontrado ? 'Experimental agendada!' : 'Lead criado + experimental agendada!');
+      if (matchAmbiguo) {
+        toast.warning('Experimental criada, mas há mais de uma matrícula com esses dados — não foi vinculada a nenhuma. Verifique manualmente.');
+      } else {
+        toast.success(
+          alunoVinculadoId ? 'Experimental vinculada à matrícula existente!'
+          : expLeadEncontrado ? 'Experimental agendada!'
+          : 'Lead criado + experimental agendada!'
+        );
+      }
       setModalOpen(null);
       setExpForm({ telefone: '', nome: '', canal_origem_id: null, curso_interesse_id: null, data_experimental: '', horario_experimental: '', professor_experimental_id: null });
       setExpLeadEncontrado(null);
@@ -5091,8 +5114,6 @@ export function ComercialPage() {
                         ) : (
                           <span className="text-slate-400 text-xs">{(mat as any).lead_nome || '-'}</span>
                         )
-                      ) : (mat as any).origem_familia ? (
-                        <span className="px-2 py-0.5 rounded text-xs font-medium bg-cyan-500/15 text-cyan-400 whitespace-nowrap" title={`Origem herdada do lead "${(mat as any).lead_familia_nome}" (mesmo telefone do responsável)`}>via família</span>
                       ) : (
                         <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-600/30 text-slate-400 whitespace-nowrap">Matrícula direta</span>
                       )}
@@ -5133,25 +5154,17 @@ export function ComercialPage() {
                       />
                     </td>
                     
-                    {/* Canal - Edição inline (grava no lead vinculado; órfão herda da família ou "—") */}
+                    {/* Canal - Edição inline. Com lead grava no lead; matrícula direta grava em alunos.canal_origem_id */}
                     <td className="py-3 px-2 border-r border-slate-700/30">
-                      {(mat as any).is_orfao ? (
-                        ((mat as any).origem_familia && mat.canal_nome) ? (
-                          <CanalOrigemBadge canal={mat.canal_nome} />
-                        ) : (
-                          <span className="text-slate-500 text-xs">—</span>
-                        )
-                      ) : (
-                        <CelulaEditavelInline
-                          value={mat.canal_origem_id}
-                          onChange={async (valor) => mat.id && salvarCampoMatricula(mat.id, 'canal_origem_id', valor ? Number(valor) : null, (mat as any).lead_id)}
-                          tipo="select"
-                          opcoes={canais.map(c => ({ value: c.value, label: c.label }))}
-                          placeholder="-"
-                          formatarExibicao={() => <CanalOrigemBadge canal={mat.canal_nome || '-'} />}
-                          textClassName="text-blue-400"
-                        />
-                      )}
+                      <CelulaEditavelInline
+                        value={mat.canal_origem_id}
+                        onChange={async (valor) => mat.id && salvarCampoMatricula(mat.id, 'canal_origem_id', valor ? Number(valor) : null, (mat as any).lead_id)}
+                        tipo="select"
+                        opcoes={canais.map(c => ({ value: c.value, label: c.label }))}
+                        placeholder="-"
+                        formatarExibicao={() => <CanalOrigemBadge canal={mat.canal_nome || '-'} />}
+                        textClassName="text-blue-400"
+                      />
                     </td>
                     
                     {/* Prof. Exp. - Edição inline */}
