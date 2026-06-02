@@ -8,6 +8,7 @@ import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useAuth } from '@/contexts/AuthContext';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { useToast } from '@/hooks/useToast';
 import { ModalFichaAluno } from './ModalFichaAluno';
 import {
   DropdownMenu,
@@ -49,7 +50,7 @@ interface TabelaAlunosProps {
   setFiltros: (filtros: Filtros) => void;
   limparFiltros: () => void;
   professores: {id: number, nome: string}[];
-  cursos: {id: number, nome: string}[];
+  cursos: {id: number, nome: string, is_projeto_banda?: boolean}[];
   tiposMatricula: {id: number, nome: string}[];
   salas: {id: number, nome: string, capacidade_maxima: number}[];
   horarios: {id: number, nome: string, hora_inicio: string}[];
@@ -147,8 +148,10 @@ export function TabelaAlunos({
   const sentinelRef = useWidgetOverlapSentinel();
 
   // Estado local para permitir edição otimista
+  const toast = useToast();
+
   const [alunosLocal, setAlunosLocal] = useState<Aluno[]>(alunosProp);
-  
+
   // Sincronizar com props quando mudarem
   React.useEffect(() => {
     setAlunosLocal(alunosProp);
@@ -498,16 +501,43 @@ export function TabelaAlunos({
 
   async function confirmarExclusao() {
     if (!alunoParaExcluir) return;
-    
+
     const { error } = await supabase
       .from('alunos')
       .delete()
       .eq('id', alunoParaExcluir.id);
 
-    if (!error) {
+    if (error) {
+      console.error('Erro ao excluir aluno:', error);
+      toast.addToast(
+        'Não foi possível excluir',
+        'error',
+        error.code === '23503'
+          ? 'Este registro está vinculado a outros dados (leads, movimentações, etc.). Use "Remover curso" para inativar em vez de excluir.'
+          : error.message,
+        8000
+      );
+    } else {
+      toast.addToast('Aluno excluído com sucesso', 'success');
       onRecarregar();
     }
     setAlunoParaExcluir(null);
+  }
+
+  // Remove segundo curso alterando status para 'cancelado' (evita constraint NO ACTION)
+  async function removerSegundoCurso(outroCurso: Aluno) {
+    const { error } = await supabase
+      .from('alunos')
+      .update({ status: 'cancelado', updated_at: new Date().toISOString() })
+      .eq('id', outroCurso.id);
+
+    if (error) {
+      console.error('Erro ao remover curso:', error);
+      toast.addToast('Erro ao remover curso', 'error', error.message, 6000);
+    } else {
+      toast.addToast('Curso removido com sucesso', 'success');
+      onRecarregar();
+    }
   }
 
   // Função para carregar histórico do aluno
@@ -1719,24 +1749,40 @@ export function TabelaAlunos({
                   )}
 
                   {/* Parcela - Edição inline com cor baseada no status de pagamento */}
-                  {col('parcela') && (
-                  <td className="px-4 py-2">
-                    <div className={`rounded-md ${
-                      aluno.status_pagamento === 'inadimplente' ? 'text-red-400' :
-                      aluno.status_pagamento === 'em_dia' ? 'text-emerald-400' :
-                      aluno.status_pagamento === 'parcial' ? 'text-yellow-400' :
-                      ''
-                    }`}>
-                      <CelulaEditavel
-                        value={aluno.valor_parcela}
-                        onChange={async (valor) => salvarCampo(aluno.id, 'valor_parcela', valor)}
-                        tipo="moeda"
-                        placeholder="-"
-                        className="min-w-[80px]"
-                      />
-                    </div>
-                  </td>
-                  )}
+                  {col('parcela') && (() => {
+                    const principal = aluno.valor_parcela;
+                    const outrosPagantes = aluno.outros_cursos?.filter(oc => oc.valor_parcela && oc.valor_parcela > 0) || [];
+                    const valorExibido = (principal && principal > 0)
+                      ? principal
+                      : (outrosPagantes.length === 1
+                          ? outrosPagantes[0].valor_parcela
+                          : (outrosPagantes.length > 1
+                              ? aluno.valor_total
+                              : null));
+                    const vemDeOutroCurso = !(principal && principal > 0) && outrosPagantes.length > 0;
+
+                    return (
+                      <td className="px-4 py-2">
+                        <div className={`rounded-md ${
+                          aluno.status_pagamento === 'inadimplente' ? 'text-red-400' :
+                          aluno.status_pagamento === 'em_dia' ? 'text-emerald-400' :
+                          aluno.status_pagamento === 'parcial' ? 'text-yellow-400' :
+                          ''
+                        }`}>
+                          <CelulaEditavel
+                            value={valorExibido}
+                            onChange={async (valor) => salvarCampo(aluno.id, 'valor_parcela', valor)}
+                            tipo="moeda"
+                            placeholder="-"
+                            className="min-w-[80px]"
+                          />
+                          {vemDeOutroCurso && (
+                            <span className="text-[10px] text-purple-400 ml-1" title="Valor do segundo curso">2º</span>
+                          )}
+                        </div>
+                      </td>
+                    );
+                  })()}
 
                   {/* Status Pagamento - Edição inline com ícone de forma de pagamento */}
                   {col('pago') && (
@@ -1941,10 +1987,10 @@ export function TabelaAlunos({
                           Editar
                         </button>
                         <button
-                          onClick={() => setAlunoParaExcluir(outroCurso)}
+                          onClick={() => removerSegundoCurso(outroCurso)}
                           className="text-red-400 hover:text-red-300 hover:underline text-sm"
                         >
-                          Excluir
+                          Remover curso
                         </button>
                       </div>
                     </td>

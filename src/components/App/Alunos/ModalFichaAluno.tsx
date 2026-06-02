@@ -26,7 +26,7 @@ interface ModalFichaAlunoProps {
   onClose: () => void;
   onSalvar: () => void;
   professores: { id: number; nome: string }[];
-  cursos: { id: number; nome: string }[];
+  cursos: { id: number; nome: string; is_projeto_banda?: boolean }[];
   tiposMatricula: { id: number; nome: string }[];
   onAbrirOutroCurso?: (aluno: Aluno) => void;
 }
@@ -581,13 +581,17 @@ export function ModalFichaAluno({
       const dataFimContrato = new Date();
       dataFimContrato.setFullYear(dataFimContrato.getFullYear() + 1);
 
+      const cursoSelecionadoEhBanda = cursos.find(c => c.id === segundoCursoData.curso_id)?.is_projeto_banda;
+      const tipoMatriculaId = cursoSelecionadoEhBanda ? 5 : 2;
+      const isSegundoCurso = cursoSelecionadoEhBanda ? null : true;
+
       const { error } = await supabase.from('alunos').insert({
         nome: dadosCompletos?.nome,
         unidade_id: aluno.unidade_id,
         data_nascimento: dadosCompletos?.data_nascimento,
         status: 'ativo',
         tipo_aluno: formData.tipo_aluno,
-        tipo_matricula_id: 2, // Segundo curso sempre usa tipo "Segundo Curso"
+        tipo_matricula_id: tipoMatriculaId,
         valor_parcela: segundoCursoData.valor_parcela !== null ? segundoCursoData.valor_parcela : formData.valor_parcela,
         forma_pagamento_id: formData.forma_pagamento_id,
         dia_vencimento: formData.dia_vencimento,
@@ -600,7 +604,7 @@ export function ModalFichaAluno({
         horario_aula: segundoCursoData.horario_aula || null,
         canal_origem_id: formData.canal_origem_id,
         agente_comercial: user?.email || null,
-        is_segundo_curso: true,
+        is_segundo_curso: isSegundoCurso,
         is_ex_aluno: false,
         is_aluno_retorno: false,
       });
@@ -795,7 +799,16 @@ export function ModalFichaAluno({
                   <Label className="mb-2 block">Curso</Label>
                   <Select
                     value={formData.curso_id?.toString() || ''}
-                    onValueChange={(value) => setFormData({ ...formData, curso_id: value ? parseInt(value) : null })}
+                    onValueChange={(value) => {
+                      const cursoId = value ? parseInt(value) : null;
+                      const cursoEhBanda = cursoId ? cursos.find(c => c.id === cursoId)?.is_projeto_banda : false;
+                      setFormData({
+                        ...formData,
+                        curso_id: cursoId,
+                        is_segundo_curso: cursoEhBanda ? false : formData.is_segundo_curso,
+                        tipo_matricula_id: cursoEhBanda ? 5 : (formData.tipo_matricula_id === 5 ? 1 : formData.tipo_matricula_id),
+                      });
+                    }}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione o curso..." />
@@ -936,9 +949,19 @@ export function ModalFichaAluno({
                     {outrosCursos.map((outro) => (
                       <div key={outro.id} className="flex items-center justify-between p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
                         <div className="flex-1 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
-                          <div>
+                          <div className="flex items-center gap-2">
                             <span className="text-slate-400">Curso: </span>
                             <span className="text-white font-medium">{outro.curso_nome || '-'}</span>
+                            {(() => {
+                              const ehBanda = cursos.find(c => c.id === outro.curso_id)?.is_projeto_banda;
+                              if (ehBanda) {
+                                return <span className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded text-[10px] font-medium">Projeto / Banda</span>;
+                              }
+                              if (outro.is_segundo_curso) {
+                                return <span className="bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2 py-0.5 rounded text-[10px] font-medium">2º curso</span>;
+                              }
+                              return null;
+                            })()}
                           </div>
                           <div>
                             <span className="text-slate-400">Professor: </span>
@@ -981,14 +1004,29 @@ export function ModalFichaAluno({
               )}
 
               <div className="border-t border-slate-700 pt-4 flex items-center justify-between">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <Checkbox
-                    checked={formData.is_segundo_curso}
-                    onCheckedChange={(checked) => setFormData({ ...formData, is_segundo_curso: !!checked })}
-                  />
-                  <span className="text-sm">É segundo curso (aluno já faz outro instrumento)</span>
-                </label>
-                
+                {(() => {
+                  const cursoEhBanda = formData.curso_id ? cursos.find(c => c.id === formData.curso_id)?.is_projeto_banda : false;
+                  if (cursoEhBanda) {
+                    return (
+                      <div className="flex items-center gap-2">
+                        <span className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-3 py-1 rounded-full text-xs font-medium">
+                          Projeto / Banda
+                        </span>
+                        <span className="text-xs text-slate-400">Categoria especial — não é segundo curso financeiro</span>
+                      </div>
+                    );
+                  }
+                  return (
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <Checkbox
+                        checked={formData.is_segundo_curso}
+                        onCheckedChange={(checked) => setFormData({ ...formData, is_segundo_curso: !!checked, tipo_matricula_id: !!checked ? 2 : 1 })}
+                      />
+                      <span className="text-sm">É segundo curso (aluno já faz outro instrumento)</span>
+                    </label>
+                  );
+                })()}
+
                 <Button
                   type="button"
                   variant="outline"

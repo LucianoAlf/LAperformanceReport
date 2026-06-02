@@ -348,11 +348,11 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               unidade_nome: d.unidades?.nome || 'N/A',
               ano: d.ano,
               mes: d.mes,
-              total_alunos_ativos: d.alunos_pagantes || 0,
+              total_alunos_ativos: d.alunos_ativos || 0,
               total_alunos_pagantes: d.alunos_pagantes || 0,
-              total_bolsistas_integrais: 0,
-              total_bolsistas_parciais: 0,
-              total_banda: 0,
+              total_bolsistas_integrais: d.bolsistas_integrais || 0,
+              total_bolsistas_parciais: d.bolsistas_parciais || 0,
+              total_banda: d.matriculas_banda || 0,
               ticket_medio: Number(d.ticket_medio) || 0,
               mrr: Number(d.faturamento_estimado) || 0,
               arr: (Number(d.faturamento_estimado) || 0) * 12,
@@ -421,15 +421,20 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             ]);
 
             const alunosData = alunosRes.data || [];
-            const totalAtivos = alunosData.filter((a: any) => !a.is_segundo_curso).length;
-            const pagantes = alunosData.filter((a: any) => 
-              (a.tipos_matricula as any)?.conta_como_pagante && !a.is_segundo_curso
+            // Pessoa-level: alunos ativos (qualquer registro ativo/trancado = 1 pessoa)
+            const nomesAtivos = new Set(alunosData.map((a: any) => a.nome));
+            const totalAtivos = nomesAtivos.size;
+
+            // Pessoa-level: pagantes (conta_como_pagante + valor_parcela > 0)
+            // Não usa is_segundo_curso porque banda/projeto pode estar marcado como segundo
+            // curso na UI (única opção disponível para "outro curso").
+            const pagantesRecords = alunosData.filter((a: any) =>
+              (a.tipos_matricula as any)?.conta_como_pagante && (a.valor_parcela || 0) > 0
             );
-            const totalPagantes = pagantes.length;
-            const ticketMedio = pagantes.length > 0 
-              ? pagantes.reduce((sum: number, a: any) => sum + (Number(a.valor_parcela) || 0), 0) / pagantes.length 
-              : 0;
-            const faturamento = pagantes.reduce((sum: number, a: any) => sum + (Number(a.valor_parcela) || 0), 0);
+            const nomesPagantes = new Set(pagantesRecords.map((a: any) => a.nome));
+            const totalPagantes = nomesPagantes.size;
+            const faturamento = pagantesRecords.reduce((sum: number, a: any) => sum + (Number(a.valor_parcela) || 0), 0);
+            const ticketMedio = totalPagantes > 0 ? faturamento / totalPagantes : 0;
             const novasMatriculas = matriculasRes.data?.length || 0;
             const totalEvasoes = (evasoesHistorico?.length || 0);
             
@@ -689,9 +694,10 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           });
 
           // Buscar distribuição LA Kids vs LA (12+) dos alunos ativos
+          // Regra: mesma base de Total Alunos Ativos (pessoas distintas, exclui banda/projeto e 2º curso)
           let alunosAtivosQuery = supabase
             .from('alunos')
-            .select('idade_atual, unidade_id')
+            .select('nome, idade_atual, data_matricula, data_saida, cursos:curso_id!left(is_projeto_banda)')
             .in('status', ['ativo', 'trancado'])
             .or('is_segundo_curso.is.null,is_segundo_curso.eq.false');
 
@@ -701,9 +707,25 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
 
           const { data: alunosAtivosData } = await alunosAtivosQuery;
 
-          // Calcular LA Kids (até 11 anos) vs LA (12+)
-          const totalLaKids = alunosAtivosData?.filter(a => a.idade_atual !== null && a.idade_atual <= 11).length || 0;
-          const totalLaAdultos = alunosAtivosData?.filter(a => a.idade_atual !== null && a.idade_atual >= 12).length || 0;
+          // Filtrar por competência (já matriculado até o fim do período, não saiu antes)
+          // e excluir banda/projeto; depois deduplicar por pessoa (nome)
+          const alunosFiltrados = (alunosAtivosData || []).filter((a: any) => {
+            if (a.cursos?.is_projeto_banda) return false;
+            if (a.data_matricula > endDate) return false;
+            if (a.data_saida && a.data_saida <= endDate) return false;
+            return true;
+          });
+
+          const nomesVistos = new Set<string>();
+          const alunosUnicos = alunosFiltrados.filter((a: any) => {
+            if (nomesVistos.has(a.nome)) return false;
+            nomesVistos.add(a.nome);
+            return true;
+          });
+
+          // Calcular LA Kids (até 11 anos) vs LA (12+))
+          const totalLaKids = alunosUnicos.filter(a => a.idade_atual !== null && a.idade_atual <= 11).length;
+          const totalLaAdultos = alunosUnicos.filter(a => a.idade_atual !== null && a.idade_atual >= 12).length;
 
           // Matrículas por Curso e Professor (via tabela alunos — mesma fonte do card)
           const cursoMatMap = new Map<string, number>();

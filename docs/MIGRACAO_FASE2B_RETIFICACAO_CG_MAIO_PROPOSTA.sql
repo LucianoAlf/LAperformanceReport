@@ -1,0 +1,309 @@
+-- =============================================================================
+-- MIGRACAO_FASE2B_RETIFICACAO_CG_MAIO_PROPOSTA.sql
+--
+-- FASE 2B — RETIFICAÇÃO CONTROLADA: CG/MAIO/2026 (PROPOSTA)
+--
+-- Fonte confiável: old_record do audit_log do cron job às 03:00 de 01/06/2026
+--
+-- Snapshot validado (restaurar):
+--   alunos_ativos: 496, alunos_pagantes: 470, matriculas_ativas: 561,
+--   matriculas_banda: 41, matriculas_2_curso: 27, novas_matriculas: 23,
+--   evasoes: 13, churn_rate: 2.77
+--
+-- Snapshot atual (preservado para rollback):
+--   alunos_ativos: 489, alunos_pagantes: 463, matriculas_ativas: 552,
+--   matriculas_banda: 40, matriculas_2_curso: 27, novas_matriculas: 23,
+--   evasoes: 13, churn_rate: 2.81
+--
+-- IMPORTANTE
+--   - Modo proposta: NÃO executar sem aprovação explícita.
+--   - Esta proposta NÃO altera dados_mensais até ser aprovada.
+--   - Esta proposta NÃO faz backfill.
+--   - Esta proposta NÃO afeta Barra/Recreio.
+--   - Campos financeiros são PRESERVADOS, não sobrescritos.
+-- =============================================================================
+
+
+-- =============================================================================
+-- 1) CONSTANTES DA RETIFICAÇÃO
+-- =============================================================================
+
+-- DO NOT EDIT: IDs fixos para esta retificação
+-- unidade_id Campo Grande
+-- ano 2026, mes 5
+
+
+-- =============================================================================
+-- 2) PRE-CHECK — Estado antes da retificação
+-- =============================================================================
+
+-- RODAR ANTES de qualquer operação. Guardar resultado para comparar depois.
+
+-- SELECT
+--   id,
+--   unidade_id,
+--   ano,
+--   mes,
+--   alunos_ativos,
+--   alunos_pagantes,
+--   matriculas_ativas,
+--   matriculas_banda,
+--   matriculas_2_curso,
+--   novas_matriculas,
+--   evasoes,
+--   churn_rate,
+--   ticket_medio,
+--   faturamento_estimado,
+--   saldo_liquido,
+--   inadimplencia,
+--   taxa_renovacao,
+--   tempo_permanencia,
+--   reajuste_parcelas,
+--   updated_at
+-- FROM public.dados_mensais
+-- WHERE unidade_id = '2ec861f6-023f-4d7b-9927-3960ad8c2a92'
+--   AND ano = 2026
+--   AND mes = 5;
+
+
+-- =============================================================================
+-- 3) REGISTRO EM AUDITORIA (dados_mensais_retificacoes)
+--
+-- Finalidade: Registrar o antes, o depois e a justificativa antes de alterar.
+-- A tabela dados_mensais_retificacoes deve existir (criada na Fase 2).
+-- =============================================================================
+
+-- INSERT INTO public.dados_mensais_retificacoes (
+--   unidade_id,
+--   ano,
+--   mes,
+--   motivo,
+--   solicitado_por,
+--   aprovado_por,
+--   origem,
+--   snapshot_antes,
+--   snapshot_depois,
+--   diff,
+--   observacoes
+-- ) VALUES (
+--   '2ec861f6-023f-4d7b-9927-3960ad8c2a92',
+--   2026,
+--   5,
+--   'Restauração de snapshot validado de Maio/2026 após contaminação pelo cron job legado snapshot_dados_mensais_mensal às 03:00 de 01/06/2026. Fonte: old_record do audit_log.',
+--   '<solicitante>',
+--   '<aprovador>',
+--   'retificacao_controlada',
+--   jsonb_build_object(
+--     'scope', 'ALUNOS_MATRICULAS_ONLY',
+--     'ano', 2026,
+--     'mes', 5,
+--     'unidade_id', '2ec861f6-023f-4d7b-9927-3960ad8c2a92',
+--     'alunos_ativos', 489,
+--     'alunos_pagantes', 463,
+--     'matriculas_ativas', 552,
+--     'matriculas_banda', 40,
+--     'matriculas_2_curso', 27,
+--     'novas_matriculas', 23,
+--     'evasoes', 13,
+--     'churn_rate', 2.81,
+--     'financeiro_alterado', false
+--   ),
+--   jsonb_build_object(
+--     'scope', 'ALUNOS_MATRICULAS_ONLY',
+--     'ano', 2026,
+--     'mes', 5,
+--     'unidade_id', '2ec861f6-023f-4d7b-9927-3960ad8c2a92',
+--     'alunos_ativos', 496,
+--     'alunos_pagantes', 470,
+--     'matriculas_ativas', 561,
+--     'matriculas_banda', 41,
+--     'matriculas_2_curso', 27,
+--     'novas_matriculas', 23,
+--     'evasoes', 13,
+--     'churn_rate', 2.77,
+--     'financeiro_alterado', false
+--   ),
+--   jsonb_build_object(
+--     'alunos_ativos', jsonb_build_object('antes', 489, 'depois', 496),
+--     'alunos_pagantes', jsonb_build_object('antes', 463, 'depois', 470),
+--     'matriculas_ativas', jsonb_build_object('antes', 552, 'depois', 561),
+--     'matriculas_banda', jsonb_build_object('antes', 40, 'depois', 41),
+--     'churn_rate', jsonb_build_object('antes', 2.81, 'depois', 2.77)
+--   ),
+--   'Campos financeiros preservados: ticket_medio, faturamento_estimado, saldo_liquido, inadimplencia, taxa_renovacao, tempo_permanencia, reajuste_parcelas.'
+-- );
+
+
+-- =============================================================================
+-- 4) UPDATE CONTROLADO EM dados_mensais
+--
+-- REGRA: Atualizar APENAS campos do bloco alunos/matrículas/churn.
+-- NÃO TOCAR em campos financeiros.
+-- NÃO TOCAR em id, created_at, updated_at.
+-- =============================================================================
+
+-- UPDATE public.dados_mensais
+-- SET
+--   alunos_ativos = 496,
+--   alunos_pagantes = 470,
+--   matriculas_ativas = 561,
+--   matriculas_banda = 41,
+--   matriculas_2_curso = 27,
+--   novas_matriculas = 23,
+--   evasoes = 13,
+--   churn_rate = 2.77
+--   -- NOTA: NÃO atualizar:
+--   -- ticket_medio (preservado: 368.66 ou outro valor atual)
+--   -- faturamento_estimado (preservado)
+--   -- saldo_liquido (preservado)
+--   -- inadimplencia (preservado)
+--   -- taxa_renovacao (preservado)
+--   -- tempo_permanencia (preservado)
+--   -- reajuste_parcelas (preservado)
+--   -- updated_at (deixar o trigger ou NOW() se necessário)
+-- WHERE unidade_id = '2ec861f6-023f-4d7b-9927-3960ad8c2a92'
+--   AND ano = 2026
+--   AND mes = 5;
+
+
+-- =============================================================================
+-- 5) POST-CHECK — Confirmar estado após retificação
+-- =============================================================================
+
+-- RODAR DEPOIS do UPDATE. Comparar com PRE-CHECK.
+
+-- SELECT
+--   id,
+--   unidade_id,
+--   ano,
+--   mes,
+--   alunos_ativos,
+--   alunos_pagantes,
+--   matriculas_ativas,
+--   matriculas_banda,
+--   matriculas_2_curso,
+--   novas_matriculas,
+--   evasoes,
+--   churn_rate,
+--   ticket_medio,
+--   faturamento_estimado,
+--   saldo_liquido,
+--   inadimplencia,
+--   taxa_renovacao,
+--   tempo_permanencia,
+--   reajuste_parcelas,
+--   updated_at
+-- FROM public.dados_mensais
+-- WHERE unidade_id = '2ec861f6-023f-4d7b-9927-3960ad8c2a92'
+--   AND ano = 2026
+--   AND mes = 5;
+
+
+-- =============================================================================
+-- 6) VALIDAÇÃO MANUAL DO POST-CHECK
+--
+-- Confirmar que:
+--   [ ] alunos_ativos = 496
+--   [ ] alunos_pagantes = 470
+--   [ ] matriculas_ativas = 561
+--   [ ] matriculas_banda = 41
+--   [ ] matriculas_2_curso = 27
+--   [ ] novas_matriculas = 23
+--   [ ] evasoes = 13
+--   [ ] churn_rate = 2.77
+--   [ ] ticket_medio NÃO mudou (preservado)
+--   [ ] faturamento_estimado NÃO mudou (preservado)
+--   [ ] saldo_liquido NÃO mudou (preservado)
+--   [ ] inadimplencia NÃO mudou (preservado)
+--   [ ] taxa_renovacao NÃO mudou (preservado)
+--   [ ] tempo_permanencia NÃO mudou (preservado)
+--   [ ] reajuste_parcelas NÃO mudou (preservado)
+--   [ ] updated_at mudou (esperado, se houver trigger)
+-- =============================================================================
+
+
+-- =============================================================================
+-- 7) ROLLBACK — Restaurar estado atual se necessário
+--
+-- Se algo der errado, restaurar para o snapshot contaminado atual:
+--   alunos_ativos: 489, alunos_pagantes: 463, matriculas_ativas: 552,
+--   matriculas_banda: 40, matriculas_2_curso: 27, novas_matriculas: 23,
+--   evasoes: 13, churn_rate: 2.81
+-- =============================================================================
+
+-- ROLLBACK SQL (executar somente se necessário):
+--
+-- UPDATE public.dados_mensais
+-- SET
+--   alunos_ativos = 489,
+--   alunos_pagantes = 463,
+--   matriculas_ativas = 552,
+--   matriculas_banda = 40,
+--   matriculas_2_curso = 27,
+--   novas_matriculas = 23,
+--   evasoes = 13,
+--   churn_rate = 2.81
+-- WHERE unidade_id = '2ec861f6-023f-4d7b-9927-3960ad8c2a92'
+--   AND ano = 2026
+--   AND mes = 5;
+--
+-- -- Registrar rollback na auditoria
+-- INSERT INTO public.dados_mensais_retificacoes (
+--   unidade_id, ano, mes, motivo, solicitado_por, aprovado_por, origem,
+--   snapshot_antes, snapshot_depois, diff, observacoes
+-- ) VALUES (
+--   '2ec861f6-023f-4d7b-9927-3960ad8c2a92', 2026, 5,
+--   'Rollback da retificação de Maio/2026 CG. Restaurado para estado pré-retificação.',
+--   '<solicitante>', '<aprovador>', 'rollback',
+--   jsonb_build_object('alunos_ativos', 496, 'alunos_pagantes', 470, 'matriculas_ativas', 561),
+--   jsonb_build_object('alunos_ativos', 489, 'alunos_pagantes', 463, 'matriculas_ativas', 552),
+--   jsonb_build_object('alunos_ativos', jsonb_build_object('antes', 496, 'depois', 489)),
+--   'Rollback executado manualmente após decisão administrativa.'
+-- );
+
+
+-- =============================================================================
+-- 8) RISCOS E MITIGAÇÕES
+-- =============================================================================
+
+-- Risco 1: Campos financeiros podem estar desatualizados.
+--   Mitigação: NÃO sobrescrever. Preservar valores atuais.
+--
+-- Risco 2: Outras unidades (Barra/Recreio) podem ter sido contaminadas.
+--   Mitigação: Esta proposta afeta APENAS CG/Maio. Barra/Recreio devem
+--   ser auditados separadamente.
+--
+-- Risco 3: O snapshot 496/470/561 pode não ser 100% exato.
+--   Mitigação: Fonte é o próprio banco (old_record do audit_log), não planilha
+--   manual. É a melhor evidência disponível.
+--
+-- Risco 4: Se o cron job legado não foi totalmente desativado, pode haver
+--   nova contaminação.
+--   Mitigação: Verificar pg_cron e confirmar que snapshot_dados_mensais_mensal
+--   foi desagendado (Fase 1 já fez isso).
+
+
+-- =============================================================================
+-- 9) CHECKLIST DE EXECUÇÃO (quando aprovado)
+-- =============================================================================
+
+-- [ ] 1. Rodar PRE-CHECK e guardar resultado
+-- [ ] 2. Verificar que dados_mensais_retificacoes existe
+-- [ ] 3. Executar INSERT na tabela de auditoria
+-- [ ] 4. Executar UPDATE em dados_mensais (apenas campos alunos/matrículas)
+-- [ ] 5. Rodar POST-CHECK e comparar com PRE-CHECK
+-- [ ] 6. Validar que campos financeiros NÃO mudaram
+-- [ ] 7. Validar que Barra/Recreio NÃO foram afetados
+-- [ ] 8. Documentar resultado
+
+
+-- =============================================================================
+-- CHECKLIST DE REVISÃO HUMANA
+--
+-- [ ] Arquivo marcado como PROPOSTA
+-- [ ] Só afeta CG/Maio/2026
+-- [ ] Campos financeiros preservados
+-- [ ] Rollback documentado
+-- [ ] Não faz backfill
+-- [ ] Não afeta Barra/Recreio
+-- =============================================================================

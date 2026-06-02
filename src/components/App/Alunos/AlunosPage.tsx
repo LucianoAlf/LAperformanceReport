@@ -43,6 +43,7 @@ export interface Aluno {
   professor_nome?: string;
   curso_id: number | null;
   curso_nome?: string;
+  curso_is_projeto_banda?: boolean;
   modalidade?: string;
   anamnese_preenchida?: boolean;
   anamnese_preenchida_em?: string | null;
@@ -430,6 +431,7 @@ export function AlunosPage() {
           ...a,
           professor_nome: a.professores?.nome || '',
           curso_nome: a.cursos?.nome || '',
+          curso_is_projeto_banda: a.cursos?.is_projeto_banda || false,
           tipo_matricula_nome: a.tipos_matricula?.nome || '',
           unidade_codigo: a.unidades?.codigo || '',
           forma_pagamento_nome: a.formas_pagamento?.nome || null,
@@ -456,11 +458,31 @@ export function AlunosPage() {
         if (grupo.length === 1) {
           alunosComSegundoCurso.push(grupo[0]);
         } else {
-          const ordenado = grupo.sort((a, b) => {
+          let ordenado = grupo.sort((a, b) => {
             if (a.is_segundo_curso && !b.is_segundo_curso) return 1;
             if (!a.is_segundo_curso && b.is_segundo_curso) return -1;
             return 0;
           });
+
+          // Regra: se principal é banda/projeto com parcela NULL/0 e existe curso pagante, promover o pagante
+          const possivelPrincipal = ordenado[0];
+          const parcelaNula = possivelPrincipal.valor_parcela === null || possivelPrincipal.valor_parcela === 0;
+          if (possivelPrincipal.curso_is_projeto_banda && parcelaNula) {
+            const idxPagante = ordenado.findIndex(
+              (a, i) => i > 0 && a.valor_parcela && a.valor_parcela > 0
+            );
+            if (idxPagante > 0) {
+              const pagante = ordenado[idxPagante];
+              const banda = possivelPrincipal;
+              ordenado = [
+                pagante,
+                ...ordenado.slice(1, idxPagante),
+                banda,
+                ...ordenado.slice(idxPagante + 1)
+              ];
+            }
+          }
+
           const principal = ordenado[0];
           const outrosCursos = ordenado.slice(1).map(oc => {
             // Calcular turma para cada segundo curso
@@ -520,9 +542,13 @@ export function AlunosPage() {
         a.cursos?.is_projeto_banda !== true &&
         !cursosCoral.some(nome => a.cursos?.nome?.toLowerCase().includes(nome))
       ).length;
-      const totalPagantes = naoSegundoCurso.filter((a: any) =>
-        a.tipos_matricula?.conta_como_pagante === true
-      ).length;
+      // Pessoa-level: pagantes (qualquer registro com conta_como_pagante e valor_parcela > 0)
+      // Não usa naoSegundoCurso porque banda/projeto pode estar marcado como segundo curso.
+      const pagantesRecords = ativosETrancados.filter((a: any) =>
+        a.tipos_matricula?.conta_como_pagante === true && (a.valor_parcela || 0) > 0
+      );
+      const nomesPagantes = new Set(pagantesRecords.map((a: any) => a.nome));
+      const totalPagantes = nomesPagantes.size;
       const totalBolsistas = naoSegundoCurso.filter((a: any) => {
         const codigo = a.tipos_matricula?.codigo;
         return codigo === 'BOLSISTA_INT' || codigo === 'BOLSISTA_PARC';

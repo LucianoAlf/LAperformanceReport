@@ -615,10 +615,12 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
         const presencaMedia = profsComPresenca.length > 0 ? profsComPresenca.reduce((acc, p) => acc + p.media_presenca, 0) / profsComPresenca.length : 0;
         
         // CORREÇÃO: Ticket Médio Geral = SUM(valor_parcela de TODOS pagantes) / COUNT(alunos únicos pagantes)
-        // Segundo curso contribui pro faturamento mas não conta como pessoa separada no denominador
+        // Pessoa-level: usa nome único, não is_segundo_curso, porque banda/projeto pode ser marcado
+        // erroneamente como segundo curso na UI (única opção disponível para "outro curso").
         const alunosPagantes = alunosReais.filter((a: any) => (a.valor_parcela || 0) > 0);
         const faturamentoTotal = alunosPagantes.reduce((acc: number, a: any) => acc + (Number(a.valor_parcela) || 0), 0);
-        const alunosUnicosPagantes = alunosPagantes.filter((a: any) => !a.is_segundo_curso).length;
+        const nomesPagantes = new Set(alunosPagantes.map((a: any) => a.nome));
+        const alunosUnicosPagantes = nomesPagantes.size;
         const ticketMedioGeral = alunosUnicosPagantes > 0 ? faturamentoTotal / alunosUnicosPagantes : 0;
         
         const profsComTurma = professoresKPIs.filter(p => p.media_alunos_turma > 0);

@@ -27,7 +27,7 @@ interface ModalNovoAlunoProps {
   onClose: () => void;
   onSalvar: (alunoId?: number) => void;
   professores: {id: number, nome: string}[];
-  cursos: {id: number, nome: string}[];
+  cursos: {id: number, nome: string, is_projeto_banda?: boolean}[];
   tiposMatricula: {id: number, nome: string}[];
   salas: {id: number, nome: string, capacidade_maxima: number}[];
   horarios: {id: number, nome: string, hora_inicio: string}[];
@@ -113,6 +113,7 @@ export function ModalNovoAluno({
     unidade_id: dadosIniciais?.unidade_id || unidadeAtual || unidadeId || '',
     aluno_data_nascimento: null as Date | null,
     tipo_aluno: 'pagante',
+    tipo_matricula_id: 1,
     modalidade: 'turma' as string,
     curso_id: dadosIniciais?.curso_id ?? null as number | null,
     canal_origem_id: dadosIniciais?.canal_origem_id ?? null as number | null,
@@ -324,12 +325,15 @@ export function ModalNovoAluno({
       const idade = Math.floor((new Date().getTime() - formData.aluno_data_nascimento.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
       const classificacao = idade < 12 ? 'LAMK' : 'EMLA';
 
-      // Determinar tipo_matricula_id baseado em tipo_aluno
+      // Determinar tipo_matricula_id baseado em tipo_aluno ou curso banda
       // IDs: 1=Regular, 2=Segundo Curso, 3=Bolsista Integral, 4=Bolsista Parcial, 5=Banda
-      let tipo_matricula_id = 1; // Regular por padrão
-      if (formData.tipo_aluno === 'bolsista_integral') tipo_matricula_id = 3;
-      else if (formData.tipo_aluno === 'bolsista_parcial') tipo_matricula_id = 4;
-      else if (formData.tipo_aluno === 'nao_pagante') tipo_matricula_id = 3;
+      let tipo_matricula_id = (formData as any).tipo_matricula_id || 1;
+      // Se não for banda (5), derivar do tipo_aluno
+      if (tipo_matricula_id !== 5) {
+        if (formData.tipo_aluno === 'bolsista_integral') tipo_matricula_id = 3;
+        else if (formData.tipo_aluno === 'bolsista_parcial') tipo_matricula_id = 4;
+        else if (formData.tipo_aluno === 'nao_pagante') tipo_matricula_id = 3;
+      }
 
       const { data, error } = await supabase
         .from('alunos')
@@ -618,7 +622,15 @@ export function ModalNovoAluno({
                 <Label className="mb-2 block">Curso</Label>
                 <Select
                   value={formData.curso_id?.toString() || ''}
-                  onValueChange={(value) => setFormData({ ...formData, curso_id: parseInt(value) || null })}
+                  onValueChange={(value) => {
+                    const cursoId = parseInt(value) || null;
+                    const cursoEhBanda = cursoId ? cursos.find(c => c.id === cursoId)?.is_projeto_banda : false;
+                    setFormData({
+                      ...formData,
+                      curso_id: cursoId,
+                      tipo_matricula_id: cursoEhBanda ? 5 : (formData.tipo_matricula_id === 5 ? 1 : formData.tipo_matricula_id),
+                    });
+                  }}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder={formData.professor_fixo_id ? "Selecione..." : "Selecione o professor primeiro"} />

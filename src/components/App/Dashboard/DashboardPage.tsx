@@ -394,7 +394,7 @@ export function DashboardPage() {
           const { data } = await historicoQuery;
           if (data && data.length > 0) {
             gestaoData = data.map((d: any) => ({
-              total_alunos_ativos: d.alunos_pagantes || 0,
+              total_alunos_ativos: d.alunos_ativos || 0,
               total_alunos_pagantes: d.alunos_pagantes || 0,
               novas_matriculas: d.novas_matriculas || 0,
               evasoes: d.evasoes || 0,
@@ -850,6 +850,7 @@ export function DashboardPage() {
             if (dadosMensaisUnidades && dadosMensaisUnidades.length > 0) {
               const resumo: ResumoUnidade[] = unidadesData.map((u: any) => {
                 const dadosUnidade = dadosMensaisUnidades.filter((d: any) => d.unidade_id === u.id);
+                const alunosAtivos = dadosUnidade.reduce((acc: number, d: any) => acc + (d.alunos_ativos || 0), 0);
                 const alunosPagantes = dadosUnidade.reduce((acc: number, d: any) => acc + (d.alunos_pagantes || 0), 0);
                 const ticketTotal = dadosUnidade.reduce((acc: number, d: any) => acc + parseFloat(d.ticket_medio || 0), 0);
                 const ticketMedio = dadosUnidade.length > 0 ? ticketTotal / dadosUnidade.length : 0;
@@ -858,7 +859,7 @@ export function DashboardPage() {
                 return {
                   unidade: u.nome,
                   unidade_id: u.id,
-                  alunos_ativos: alunosPagantes,
+                  alunos_ativos: alunosAtivos,
                   alunos_pagantes: alunosPagantes,
                   ticket_medio: ticketMedio,
                   faturamento_previsto: faturamento,
