@@ -749,19 +749,6 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           const totalLaAdultos = pessoasComRegular.filter(p => p.idade !== null && p.idade >= 12).length;
           const totalSomenteBandaSegundo = Array.from(pessoasMap.values()).filter(p => !p.temRegular).length;
 
-          // DEBUG: log para identificar divergência
-          console.log('[DEBUG CG]', {
-            dataCorte,
-            totalPessoas: pessoasMap.size,
-            totalComRegular: pessoasComRegular.length,
-            totalLaKids,
-            totalLaAdultos,
-            totalSomenteBandaSegundo,
-            soma: totalLaKids + totalLaAdultos + totalSomenteBandaSegundo,
-            pessoasSemIdade: Array.from(pessoasMap.entries()).filter(([,p]) => p.idade === null).map(([nome]) => nome),
-            pessoasBandaSegundo: Array.from(pessoasMap.entries()).filter(([,p]) => !p.temRegular).map(([nome, p]) => ({ nome, idade: p.idade })),
-          });
-
           // Matrículas por Curso e Professor (via tabela alunos — mesma fonte do card)
           const cursoMatMap = new Map<string, number>();
           const profMatMap = new Map<string, { id: number; count: number }>();
