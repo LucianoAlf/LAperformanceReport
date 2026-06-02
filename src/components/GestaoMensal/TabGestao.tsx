@@ -1416,7 +1416,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             <KPICard
               icon={Music}
               label="Banda/2º Curso"
-              tooltip="Pessoas que possuem apenas matrículas de banda ou 2º curso (sem matrícula regular)."
+              tooltip="Matrículas extras de banda ou 2º curso (além da matrícula principal regular)."
               value={dados.total_somente_banda_segundo}
               variant="amber"
             />
