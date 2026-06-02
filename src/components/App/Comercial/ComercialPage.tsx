@@ -285,6 +285,60 @@ const ehMatriculaNova = (m: any): boolean => {
 const fmtBRL = (n: number): string =>
   (n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+// Item normalizado da busca GLOBAL (registros que batem com a busca mas estão FORA
+// do período selecionado) — usado pela seção de aviso em cada aba do funil.
+interface ItemForaPeriodo {
+  id: number;
+  nome: string;
+  telefone: string;
+  dataLabel: string;
+  statusLabel: string;
+  detalhe: string;
+  unidade?: string;
+}
+
+// Seção de aviso exibida abaixo da lista de cada aba quando a busca encontra
+// registros fora do período selecionado. Retorna null se não houver nada.
+function ResultadosForaPeriodo({ itens, periodoLabel, isAdmin }: { itens: ItemForaPeriodo[]; periodoLabel: string; isAdmin: boolean }) {
+  if (!itens.length) return null;
+  return (
+    <div className="mt-6">
+      <div className="flex items-center gap-2">
+        <div className="h-px flex-1 bg-amber-500/30" />
+        <span className="text-xs text-amber-400 font-medium whitespace-nowrap">⚠️ Encontrados em outro período ({itens.length})</span>
+        <div className="h-px flex-1 bg-amber-500/30" />
+      </div>
+      <p className="text-[11px] text-amber-300/70 text-center mt-1 mb-2">
+        Estes registros batem com a busca, mas estão <span className="font-medium">fora de {periodoLabel}</span>. Mude o período para editá-los.
+      </p>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-slate-400 border-b border-slate-700/50">
+            <th className="pb-2 px-2 font-medium">Quando</th>
+            <th className="pb-2 px-2 font-medium">Nome</th>
+            <th className="pb-2 px-2 font-medium">Telefone</th>
+            <th className="pb-2 px-2 font-medium">Status</th>
+            <th className="pb-2 px-2 font-medium">Detalhe</th>
+            {isAdmin && <th className="pb-2 px-2 font-medium">Unidade</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {itens.map(it => (
+            <tr key={it.id} className="border-b border-slate-700/40 bg-amber-500/[0.04]">
+              <td className="py-2 px-2"><span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-500/20 text-amber-400 whitespace-nowrap">{it.dataLabel}</span></td>
+              <td className="py-2 px-2 text-white font-medium">{it.nome || '-'}</td>
+              <td className="py-2 px-2 text-emerald-400">{it.telefone || '-'}</td>
+              <td className="py-2 px-2 text-slate-300">{it.statusLabel}</td>
+              <td className="py-2 px-2 text-slate-400">{it.detalhe || '-'}</td>
+              {isAdmin && <td className="py-2 px-2 text-slate-400">{it.unidade || '-'}</td>}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function ComercialPage() {
   useSetPageTitle({
     titulo: 'Comercial',
@@ -391,18 +445,21 @@ export function ComercialPage() {
   const [visitasMes, setVisitasMes] = useState<(LeadDiario & { canal_nome?: string; curso_nome?: string })[]>([]);
   const [experimentaisHojeOutros, setExperimentaisHojeOutros] = useState<(LeadDiario & { canal_nome?: string; curso_nome?: string; professor_nome?: string; unidade_codigo?: string })[]>([]);
 
-  const [mostrarExpOutros, setMostrarExpOutros] = useState(false);
   const [gruposExpandidos, setGruposExpandidos] = useState<Set<number>>(new Set());
 
   // Aba selecionada no detalhamento
   const [abaDetalhamento, setAbaDetalhamento] = useState<'leads' | 'experimental' | 'visita' | 'matricula'>('matricula');
   const [buscaFunil, setBuscaFunil] = useState('');
+  // Resultados da busca GLOBAL ao banco (registros que batem com a busca mas estão fora do período)
+  const [buscaFora, setBuscaFora] = useState<{ leads: ItemForaPeriodo[]; experimentais: ItemForaPeriodo[]; visitas: ItemForaPeriodo[]; matriculas: ItemForaPeriodo[] }>({ leads: [], experimentais: [], visitas: [], matriculas: [] });
   const [filtroTelefoneFunil, setFiltroTelefoneFunil] = useState<'todos' | 'com' | 'sem'>('todos');
   const [filtroIncompletoFunil, setFiltroIncompletoFunil] = useState<string>('todos');
   const [filtroCanalFunil, setFiltroCanalFunil] = useState<string>('todos');
   const [filtroCursoFunil, setFiltroCursoFunil] = useState<string>('todos');
   const [filtroProfessorFunil, setFiltroProfessorFunil] = useState<string>('todos');
   const [filtroTipoExp, setFiltroTipoExp] = useState<'leads_novos' | 'todos' | 'alunos' | 'agendadas_periodo'>('leads_novos');
+  // Filtro de presença na aba Experimentais: compareceram (vieram) vs faltaram
+  const [filtroPresencaExp, setFiltroPresencaExp] = useState<'todas' | 'compareceram' | 'faltaram'>('todas');
   const [filtroTipoMat, setFiltroTipoMat] = useState<'novos_alunos' | 'segundo_curso' | 'todos'>('novos_alunos');
   const [selecionadosFunil, setSelecionadosFunil] = useState<Set<number>>(new Set());
   const [excluindoEmLote, setExcluindoEmLote] = useState(false);
@@ -1025,9 +1082,10 @@ export function ComercialPage() {
           .neq('status', 'cancelada')
           .order('data_experimental', { ascending: false });
 
-        // Filtrar pelo data_contato do lead (via join inner)
-        if (startDate) expQuery = expQuery.gte('leads.data_contato', startDate);
-        if (endDate) expQuery = expQuery.lte('leads.data_contato', endDate);
+        // Filtrar pela data da AULA experimental (data_experimental), não pelo data_contato
+        // do lead — assim a experimental aparece no mês em que a aula aconteceu.
+        if (startDate) expQuery = expQuery.gte('data_experimental', startDate);
+        if (endDate) expQuery = expQuery.lte('data_experimental', endDate);
 
         if (isAdmin) {
           if (context?.unidadeSelecionada && context.unidadeSelecionada !== 'todos') {
@@ -1062,48 +1120,52 @@ export function ComercialPage() {
       setVisitasMes(visitasDoMes);
 
       // Experimentais AGENDADAS dentro do período (filtra por created_at do agendamento),
-      // mas só as cujo lead tem data_contato FORA do range (pra não duplicar com a lista principal)
-      if (startDate && endDate) {
-        // created_at é timestamptz: converter range BRT (00:00 a 23:59:59) para UTC bounds
-        const createdAtStart = `${startDate}T00:00:00-03:00`;
-        const createdAtEnd = `${endDate}T23:59:59.999-03:00`;
+      // mas só as cuja AULA (data_experimental) cai FORA do range — pra não duplicar com a
+      // lista principal, que agora filtra justamente por data_experimental.
+      {
+        const { startDate, endDate } = competencia.range;
+        if (startDate && endDate) {
+          // created_at é timestamptz: converter range BRT (00:00 a 23:59:59) para UTC bounds
+          const createdAtStart = `${startDate}T00:00:00-03:00`;
+          const createdAtEnd = `${endDate}T23:59:59.999-03:00`;
 
-        let expOutrosQuery = supabase
-          .from('lead_experimentais')
-          .select(`
-            *,
-            leads!inner(id, nome, telefone, canal_origem_id, unidade_id, data_contato, canais_origem(nome), unidades(codigo)),
-            professores:professor_experimental_id(nome),
-            cursos:curso_interesse_id(nome)
-          `)
-          .gte('created_at', createdAtStart)
-          .lte('created_at', createdAtEnd)
-          .neq('status', 'cancelada')
-          .or(`data_contato.lt.${startDate},data_contato.gt.${endDate},data_contato.is.null`, { referencedTable: 'leads' });
+          let expOutrosQuery = supabase
+            .from('lead_experimentais')
+            .select(`
+              *,
+              leads!inner(id, nome, telefone, canal_origem_id, unidade_id, data_contato, canais_origem(nome), unidades(codigo)),
+              professores:professor_experimental_id(nome),
+              cursos:curso_interesse_id(nome)
+            `)
+            .gte('created_at', createdAtStart)
+            .lte('created_at', createdAtEnd)
+            .neq('status', 'cancelada')
+            .or(`data_experimental.lt.${startDate},data_experimental.gt.${endDate},data_experimental.is.null`);
 
-        if (isAdmin) {
-          if (context?.unidadeSelecionada && context.unidadeSelecionada !== 'todos') {
-            expOutrosQuery = expOutrosQuery.eq('unidade_id', context.unidadeSelecionada);
+          if (isAdmin) {
+            if (context?.unidadeSelecionada && context.unidadeSelecionada !== 'todos') {
+              expOutrosQuery = expOutrosQuery.eq('unidade_id', context.unidadeSelecionada);
+            }
+          } else if (usuario?.unidade_id) {
+            expOutrosQuery = expOutrosQuery.eq('unidade_id', usuario.unidade_id);
           }
-        } else if (usuario?.unidade_id) {
-          expOutrosQuery = expOutrosQuery.eq('unidade_id', usuario.unidade_id);
+
+          const { data: expOutrosData } = await expOutrosQuery.order('created_at', { ascending: true });
+
+          const expOutrosMapped = (expOutrosData || []).map((e: any) => ({
+            ...e,
+            lead_nome: e.leads?.nome || e.nome_aluno,
+            lead_telefone: e.leads?.telefone || '',
+            canal_nome: e.leads?.canais_origem?.nome || '',
+            curso_nome: e.cursos?.nome || '',
+            professor_nome: e.professores?.nome || '',
+            unidade_codigo: e.leads?.unidades?.codigo || '',
+            data_contato: e.leads?.data_contato || '',
+          }));
+          setExperimentaisHojeOutros(expOutrosMapped);
+        } else {
+          setExperimentaisHojeOutros([]);
         }
-
-        const { data: expOutrosData } = await expOutrosQuery.order('created_at', { ascending: true });
-
-        const expOutrosMapped = (expOutrosData || []).map((e: any) => ({
-          ...e,
-          lead_nome: e.leads?.nome || e.nome_aluno,
-          lead_telefone: e.leads?.telefone || '',
-          canal_nome: e.leads?.canais_origem?.nome || '',
-          curso_nome: e.cursos?.nome || '',
-          professor_nome: e.professores?.nome || '',
-          unidade_codigo: e.leads?.unidades?.codigo || '',
-          data_contato: e.leads?.data_contato || '',
-        }));
-        setExperimentaisHojeOutros(expOutrosMapped);
-      } else {
-        setExperimentaisHojeOutros([]);
       }
 
     } catch (error) {
@@ -1117,6 +1179,79 @@ export function ComercialPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  // Busca GLOBAL ao banco: quando há texto na busca, traz registros que batem mas estão
+  // FORA do período selecionado (qualquer mês), pra encontrar lead/experimental/matrícula
+  // de outro período. Cada aba exibe esses resultados numa seção de aviso separada.
+  useEffect(() => {
+    const termo = buscaFunil.trim();
+    const { startDate, endDate } = competencia.range;
+    // Sem texto suficiente, ou modo "todos" (sem range) — a busca normal já cobre tudo.
+    if (termo.length < 2 || !startDate || !endDate) {
+      setBuscaFora({ leads: [], experimentais: [], visitas: [], matriculas: [] });
+      return;
+    }
+    const unidadeBusca = isAdmin
+      ? (context?.unidadeSelecionada && context.unidadeSelecionada !== 'todos' ? context.unidadeSelecionada : null)
+      : usuario?.unidade_id;
+    const tel = termo.replace(/\D/g, '');
+    const orNomeTel = tel.length >= 3 ? `nome.ilike.%${termo}%,telefone.ilike.%${tel}%` : `nome.ilike.%${termo}%`;
+    const uni = (q: any) => unidadeBusca ? q.eq('unidade_id', unidadeBusca) : q;
+    const fmtMes = (iso: string | null) => iso ? new Date(iso + 'T12:00:00').toLocaleDateString('pt-BR', { day: 'numeric', month: 'short', year: 'numeric' }) : '-';
+    const labelStatus = (s: string) => (({
+      novo: 'Novo', agendado: 'Agendado', experimental_agendada: 'Exp. agendada', experimental_realizada: 'Exp. realizada',
+      experimental_faltou: 'Faltou', visita_escola: 'Visita', convertido: 'Convertido', matriculado: 'Matriculado',
+      perdido: 'Perdido', ativo: 'Ativo', evadido: 'Evadido', trancado: 'Trancado',
+    } as Record<string, string>)[s] || s || '-');
+
+    let cancelado = false;
+    const handle = setTimeout(async () => {
+      try {
+        const [leadsR, expR, matR] = await Promise.all([
+          uni(supabase.from('leads')
+            .select('id, nome, telefone, data_contato, status, cursos:curso_interesse_id(nome), unidades(codigo)')
+            .eq('arquivado', false)
+            .or(orNomeTel)
+            .or(`data_contato.lt.${startDate},data_contato.gt.${endDate}`)
+            .limit(30)),
+          uni(supabase.from('lead_experimentais')
+            .select('id, nome_aluno, data_experimental, status, lead_id, leads!inner(nome, telefone, unidades(codigo)), professores:professor_experimental_id(nome), cursos:curso_interesse_id(nome)')
+            .neq('status', 'cancelada')
+            .or(`data_experimental.lt.${startDate},data_experimental.gt.${endDate}`)
+            .or(orNomeTel, { referencedTable: 'leads' })
+            .limit(30)),
+          uni(supabase.from('alunos')
+            .select('id, nome, telefone, data_matricula, status, cursos:curso_id(nome), unidades:unidade_id(codigo)')
+            .not('data_matricula', 'is', null)
+            .or(orNomeTel)
+            .or(`data_matricula.lt.${startDate},data_matricula.gt.${endDate}`)
+            .limit(30)),
+        ]);
+        if (cancelado) return;
+        const leadsData = (leadsR.data || []) as any[];
+        const mapLead = (l: any): ItemForaPeriodo => ({
+          id: l.id, nome: l.nome, telefone: l.telefone || '', dataLabel: fmtMes(l.data_contato),
+          statusLabel: labelStatus(l.status), detalhe: l.cursos?.nome || '', unidade: l.unidades?.codigo,
+        });
+        setBuscaFora({
+          leads: leadsData.filter(l => l.status !== 'visita_escola').map(mapLead),
+          visitas: leadsData.filter(l => l.status === 'visita_escola').map(mapLead),
+          experimentais: ((expR.data || []) as any[]).map((e: any): ItemForaPeriodo => ({
+            id: e.id, nome: e.nome_aluno || e.leads?.nome || '', telefone: e.leads?.telefone || '',
+            dataLabel: fmtMes(e.data_experimental), statusLabel: labelStatus(e.status),
+            detalhe: [e.cursos?.nome, e.professores?.nome].filter(Boolean).join(' · '), unidade: e.leads?.unidades?.codigo,
+          })),
+          matriculas: ((matR.data || []) as any[]).map((a: any): ItemForaPeriodo => ({
+            id: a.id, nome: a.nome, telefone: a.telefone || '', dataLabel: fmtMes(a.data_matricula),
+            statusLabel: labelStatus(a.status), detalhe: a.cursos?.nome || '', unidade: a.unidades?.codigo,
+          })),
+        });
+      } catch (e) {
+        console.error('Erro na busca global fora do período:', e);
+      }
+    }, 350);
+    return () => { cancelado = true; clearTimeout(handle); };
+  }, [buscaFunil, competencia.range, isAdmin, context?.unidadeSelecionada, usuario?.unidade_id]);
 
   // Carregar sugestões de leads para autocomplete
   const loadSugestoesLeads = useCallback(async () => {
@@ -1481,7 +1616,6 @@ export function ComercialPage() {
         return updated;
       };
       setExperimentaisDetalhadas(prev => prev.map(patchExp));
-      setExperimentaisHojeOutros(prev => prev.map(patchExp));
 
       toast.success('Atualizado');
     } catch (error: any) {
@@ -2556,7 +2690,17 @@ export function ComercialPage() {
       .lte('data_contato', dataFim);
 
     const leadsMes = registrosMes?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const experimentaisMes = registrosMes?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    // Experimentais do RELATÓRIO MENSAL = as que COMPARECERAM (realizadas), por data da aula.
+    // Faltas e agendadas-não-realizadas não contam (regra do consultor).
+    let expRealizadasQ = supabase
+      .from('lead_experimentais')
+      .select('id', { count: 'exact', head: true })
+      .gte('data_experimental', dataInicio)
+      .lte('data_experimental', dataFim)
+      .in('status', ['experimental_realizada', 'convertido']);
+    if (unidadeId) expRealizadasQ = expRealizadasQ.eq('unidade_id', unidadeId);
+    const { count: expRealizadasCount } = await expRealizadasQ;
+    const experimentaisMes = expRealizadasCount || 0;
     const visitasMes = registrosMes?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
     // Matrículas: fonte = alunos por data_matricula (inclui matrículas sem lead).
     // Conta apenas matrículas novas (exclui 2º curso, banda e passaporte zerado),
@@ -3647,12 +3791,20 @@ export function ComercialPage() {
                   if (filtroTipoExp === 'agendadas_periodo') {
                     const { startDate, endDate } = competencia.range;
                     const toDateBRT = (ts: string) => ts ? new Date(ts).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }) : '';
-                    const fromMain = experimentaisDetalhadas.filter((e: any) => { const d = toDateBRT(e.created_at); return d >= (startDate || '') && d <= (endDate || ''); });
-                    const fromOutros = experimentaisHojeOutros.filter((e: any) => { const d = toDateBRT(e.created_at); return d >= (startDate || '') && d <= (endDate || ''); });
+                    const noPeriodo = (e: any) => { const d = toDateBRT(e.created_at); return d >= (startDate || '') && d <= (endDate || ''); };
+                    const presencaOk = (e: any) => filtroPresencaExp === 'compareceram' ? ['experimental_realizada', 'convertido'].includes(e.status) : filtroPresencaExp === 'faltaram' ? e.status === 'experimental_faltou' : true;
+                    const fromMain = experimentaisDetalhadas.filter(noPeriodo).filter(presencaOk);
                     const ids = new Set(fromMain.map((e: any) => e.id));
-                    return fromMain.length + fromOutros.filter((e: any) => !ids.has(e.id)).length;
+                    const fromOutros = experimentaisHojeOutros.filter(noPeriodo).filter(presencaOk).filter((e: any) => !ids.has(e.id));
+                    return fromMain.length + fromOutros.length;
                   }
-                  return experimentaisDetalhadas.filter((e: any) => filtroTipoExp === 'leads_novos' ? !e.lead_aluno_id : filtroTipoExp === 'alunos' ? !!e.lead_aluno_id : true).length;
+                  return experimentaisDetalhadas.filter((e: any) => {
+                    if (filtroTipoExp === 'leads_novos' && e.lead_aluno_id) return false;
+                    if (filtroTipoExp === 'alunos' && !e.lead_aluno_id) return false;
+                    if (filtroPresencaExp === 'compareceram' && !['experimental_realizada', 'convertido'].includes(e.status)) return false;
+                    if (filtroPresencaExp === 'faltaram' && e.status !== 'experimental_faltou') return false;
+                    return true;
+                  }).length;
                 })(), icon: Guitar, color: '#a855f7', gradient: 'from-purple-500 to-violet-500' },
                 { key: 'visita', label: 'Visitas', count: visitasMes.length, icon: Building2, color: '#f59e0b', gradient: 'from-amber-500 to-orange-500' },
                 { key: 'matricula', label: 'Matrículas', count: matriculasMes.filter((m: any) => { const banda = m.is_banda || m.curso_nome?.toLowerCase().includes('banda'); if (filtroTipoMat === 'novos_alunos') return ehMatriculaNova(m); if (filtroTipoMat === 'segundo_curso') return m.is_segundo_curso || banda; return true; }).length, icon: GraduationCap, color: '#10b981', gradient: 'from-emerald-500 to-teal-500' },
@@ -3774,6 +3926,29 @@ export function ComercialPage() {
                   <SelectItem value="agendadas_periodo">Agendadas no período</SelectItem>
                 </SelectContent>
               </Select>
+            )}
+            {abaDetalhamento === 'experimental' && (
+              <Select value={filtroPresencaExp} onValueChange={v => setFiltroPresencaExp(v as any)}>
+                <SelectTrigger className="w-[160px] bg-slate-800/50 border-slate-700 h-9 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todas">Toda presença</SelectItem>
+                  <SelectItem value="compareceram">Compareceram</SelectItem>
+                  <SelectItem value="faltaram">Faltaram</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
+            {abaDetalhamento === 'experimental' && (
+              <div
+                className="flex items-center gap-1.5 h-9 px-2.5 rounded-md bg-slate-800/30 border border-slate-700/50 text-[11px] text-slate-400"
+                title={filtroTipoExp === 'agendadas_periodo'
+                  ? 'Mostrando as experimentais marcadas (agendadas) dentro do período, pela data de agendamento.'
+                  : 'O filtro de período considera a data da aula experimental, não a data em que foi agendada.'}
+              >
+                <CalendarDays className="w-3.5 h-3.5 text-slate-500" />
+                <span>Período: <span className="text-slate-300 font-medium">{filtroTipoExp === 'agendadas_periodo' ? 'data de agendamento' : 'data da aula'}</span></span>
+              </div>
             )}
             {abaDetalhamento === 'matricula' && (
               <Select value={filtroTipoMat} onValueChange={v => setFiltroTipoMat(v as any)}>
@@ -4441,6 +4616,7 @@ export function ComercialPage() {
               </div>
             )}
 
+            <ResultadosForaPeriodo itens={buscaFora.leads} periodoLabel={competencia.range.label} isAdmin={isAdmin} />
           </div>
           );
         })()}
@@ -4449,14 +4625,16 @@ export function ComercialPage() {
         {/* TABELA DE EXPERIMENTAIS */}
         {/* ══════════════════════════════════════════════════════════════ */}
         {abaDetalhamento === 'experimental' && (() => {
-          // Quando filtro "agendadas_periodo", filtrar por created_at (data de marcação) no período
+          // Quando "Agendadas no período": fonte = todas marcadas (created_at) no período,
+          // combinando a lista principal (aula no período) com as de aula fora do período.
           const expBase = (() => {
             if (filtroTipoExp === 'agendadas_periodo') {
               const { startDate, endDate } = competencia.range;
               const toDateBRT = (ts: string) => ts ? new Date(ts).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }) : '';
-              const fromMain = experimentaisDetalhadas.filter((e: any) => { const d = toDateBRT(e.created_at); return d >= (startDate || '') && d <= (endDate || ''); });
+              const noPeriodo = (e: any) => { const d = toDateBRT(e.created_at); return d >= (startDate || '') && d <= (endDate || ''); };
+              const fromMain = experimentaisDetalhadas.filter(noPeriodo);
               const ids = new Set(fromMain.map((e: any) => e.id));
-              const fromOutros = experimentaisHojeOutros.filter((e: any) => { const d = toDateBRT(e.created_at); return d >= (startDate || '') && d <= (endDate || ''); }).filter((e: any) => !ids.has(e.id));
+              const fromOutros = experimentaisHojeOutros.filter(noPeriodo).filter((e: any) => !ids.has(e.id));
               return [...fromMain, ...fromOutros];
             }
             return experimentaisDetalhadas;
@@ -4465,6 +4643,9 @@ export function ComercialPage() {
             // Filtro por tipo (leads novos vs alunos)
             if (filtroTipoExp === 'leads_novos' && l.lead_aluno_id) return false;
             if (filtroTipoExp === 'alunos' && !l.lead_aluno_id) return false;
+            // Filtro por presença (compareceram = realizada/convertido; faltaram = faltou)
+            if (filtroPresencaExp === 'compareceram' && !['experimental_realizada', 'convertido'].includes(l.status)) return false;
+            if (filtroPresencaExp === 'faltaram' && l.status !== 'experimental_faltou') return false;
             if (buscaFunil) {
               const termo = buscaFunil.toLowerCase();
               if (!(l.nome_aluno || '').toLowerCase().includes(termo) && !(l.lead_nome || '').toLowerCase().includes(termo) && !(l.lead_telefone || '').includes(buscaFunil.replace(/\D/g, ''))) return false;
@@ -4636,8 +4817,24 @@ export function ComercialPage() {
                         return [(
                           <tr key={first.id} className="border-b border-slate-700/50 hover:bg-slate-700/20 transition-colors cursor-pointer" onClick={() => abrirLead(first)}>
                             <td className="py-3 px-2 text-slate-500 font-medium border-r border-slate-700/30">{rowIndex}</td>
-                            <td className="py-3 px-2 border-r border-slate-700/30"><span className="px-1.5 py-0.5 rounded text-xs font-medium bg-slate-500/20 text-slate-400">{fmtAgendada(first)}</span></td>
-                            <td className="py-3 px-2 border-r border-slate-700/30"><span className="px-1.5 py-0.5 rounded text-xs font-medium bg-violet-500/20 text-violet-400">{fmtData(first)}</span></td>
+                            <td className="py-3 px-2 border-r border-slate-700/30" onClick={(e) => e.stopPropagation()}>
+                              <CelulaEditavelInline
+                                value={(first.created_at || '').slice(0, 10) || null}
+                                onChange={async (valor) => first.id && salvarCampoExperimental(first.id, 'created_at', valor ? valor + 'T12:00:00-03:00' : null)}
+                                tipo="data"
+                                placeholder="-"
+                                formatarExibicao={() => <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-slate-500/20 text-slate-400">{fmtAgendada(first)}</span>}
+                              />
+                            </td>
+                            <td className="py-3 px-2 border-r border-slate-700/30" onClick={(e) => e.stopPropagation()}>
+                              <CelulaEditavelInline
+                                value={first.data_experimental || null}
+                                onChange={async (valor) => first.id && salvarCampoExperimental(first.id, 'data_experimental', valor)}
+                                tipo="data"
+                                placeholder="-"
+                                formatarExibicao={() => <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-violet-500/20 text-violet-400">{fmtData(first)}</span>}
+                              />
+                            </td>
                             <td className="py-3 px-2 border-r border-slate-700/30">
                               <CelulaEditavelInline
                                 value={first.lead_nome || first.nome_aluno}
@@ -4718,8 +4915,24 @@ export function ComercialPage() {
                           }}
                         >
                           <td className="py-3 px-2 text-slate-500 font-medium border-r border-slate-700/30">{rowIndex}</td>
-                          <td className="py-3 px-2 border-r border-slate-700/30"><span className="px-1.5 py-0.5 rounded text-xs font-medium bg-slate-500/20 text-slate-400">{fmtAgendada(first)}</span></td>
-                          <td className="py-3 px-2 border-r border-slate-700/30"><span className="px-1.5 py-0.5 rounded text-xs font-medium bg-violet-500/20 text-violet-400">{fmtData(first)}</span></td>
+                          <td className="py-3 px-2 border-r border-slate-700/30" onClick={(e) => e.stopPropagation()}>
+                            <CelulaEditavelInline
+                              value={(first.created_at || '').slice(0, 10) || null}
+                              onChange={async (valor) => first.id && salvarCampoExperimental(first.id, 'created_at', valor ? valor + 'T12:00:00-03:00' : null)}
+                              tipo="data"
+                              placeholder="-"
+                              formatarExibicao={() => <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-slate-500/20 text-slate-400">{fmtAgendada(first)}</span>}
+                            />
+                          </td>
+                          <td className="py-3 px-2 border-r border-slate-700/30" onClick={(e) => e.stopPropagation()}>
+                            <CelulaEditavelInline
+                              value={first.data_experimental || null}
+                              onChange={async (valor) => first.id && salvarCampoExperimental(first.id, 'data_experimental', valor)}
+                              tipo="data"
+                              placeholder="-"
+                              formatarExibicao={() => <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-violet-500/20 text-violet-400">{fmtData(first)}</span>}
+                            />
+                          </td>
                           <td className="py-3 px-2 border-r border-slate-700/30">
                             <div className="flex items-center gap-1.5">
                               {isExpanded ? <ChevronDown className="w-3.5 h-3.5 text-violet-400" /> : <ChevronRight className="w-3.5 h-3.5 text-violet-400" />}
@@ -4787,8 +5000,24 @@ export function ComercialPage() {
                           rows.push(
                             <tr key={exp.id} className="border-b border-slate-700/50 bg-slate-800/30 hover:bg-slate-700/20 transition-colors cursor-pointer" onClick={() => abrirLead(exp)}>
                               <td className="py-3 px-2 text-slate-600 border-r border-slate-700/30"></td>
-                              <td className="py-3 px-2 border-r border-slate-700/30"><span className="px-1.5 py-0.5 rounded text-xs font-medium bg-slate-500/20 text-slate-400">{fmtAgendada(exp)}</span></td>
-                              <td className="py-3 px-2 border-r border-slate-700/30"><span className="px-1.5 py-0.5 rounded text-xs font-medium bg-violet-500/20 text-violet-400">{fmtData(exp)}</span></td>
+                              <td className="py-3 px-2 border-r border-slate-700/30" onClick={(e) => e.stopPropagation()}>
+                                <CelulaEditavelInline
+                                  value={(exp.created_at || '').slice(0, 10) || null}
+                                  onChange={async (valor) => exp.id && salvarCampoExperimental(exp.id, 'created_at', valor ? valor + 'T12:00:00-03:00' : null)}
+                                  tipo="data"
+                                  placeholder="-"
+                                  formatarExibicao={() => <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-slate-500/20 text-slate-400">{fmtAgendada(exp)}</span>}
+                                />
+                              </td>
+                              <td className="py-3 px-2 border-r border-slate-700/30" onClick={(e) => e.stopPropagation()}>
+                                <CelulaEditavelInline
+                                  value={exp.data_experimental || null}
+                                  onChange={async (valor) => exp.id && salvarCampoExperimental(exp.id, 'data_experimental', valor)}
+                                  tipo="data"
+                                  placeholder="-"
+                                  formatarExibicao={() => <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-violet-500/20 text-violet-400">{fmtData(exp)}</span>}
+                                />
+                              </td>
                               <td className="py-3 px-2 border-r border-slate-700/30">
                                 <div className="flex items-center gap-1.5 pl-5">
                                   <span className="text-slate-600 text-xs">└</span>
@@ -4840,113 +5069,7 @@ export function ComercialPage() {
               </div>
             )}
 
-            {/* Experimentais agendadas durante o período (created_at no range), de leads de outros períodos */}
-            {experimentaisHojeOutros.length > 0 && (
-              <div className="mt-4">
-                <button
-                  onClick={() => setMostrarExpOutros(prev => !prev)}
-                  className="flex items-center gap-2 w-full group"
-                >
-                  <div className="h-px flex-1 bg-amber-500/30" />
-                  <span className="text-xs text-amber-400 font-medium whitespace-nowrap flex items-center gap-1.5 group-hover:text-amber-300 transition-colors">
-                    {mostrarExpOutros ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-                    Experimentais agendadas no período ({experimentaisHojeOutros.length})
-                  </span>
-                  <div className="h-px flex-1 bg-amber-500/30" />
-                </button>
-                {mostrarExpOutros && (
-                <table className="w-full text-sm mt-2">
-                  <thead>
-                    <tr className="text-left text-slate-400 border-b border-slate-700">
-                      <th className="pb-3 px-2 font-medium border-r border-slate-700/30">#</th>
-                      <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Agendada em</th>
-                      <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Aula em</th>
-                      <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Aluno</th>
-                      <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Telefone</th>
-                      <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Status</th>
-                      <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Canal</th>
-                      <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Curso</th>
-                      <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Professor</th>
-                      {isAdmin && <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Unidade</th>}
-                      <th className="pb-3 px-2 font-medium text-right">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {experimentaisHojeOutros.map((exp: any, index) => {
-                      const createdAt = exp.created_at ? new Date(exp.created_at) : null;
-                      const agendadaLabel = createdAt
-                        ? createdAt.toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' })
-                        : '-';
-                      const aulaLabel = exp.data_experimental
-                        ? new Date(exp.data_experimental + 'T12:00:00').toLocaleDateString('pt-BR', { day: 'numeric', month: 'short' }) + (exp.horario_experimental ? ' ' + exp.horario_experimental.slice(0, 5) : '')
-                        : '-';
-                      return (
-                        <tr
-                          key={exp.id}
-                          className="border-b border-slate-700/50 bg-amber-500/5 hover:bg-amber-500/10 transition-colors cursor-pointer"
-                          onClick={() => {
-                            startEditing(exp as LeadDiario);
-                          }}
-                        >
-                          <td className="py-3 px-2 text-slate-500 font-medium border-r border-slate-700/30">{index + 1}</td>
-                          <td className="py-3 px-2 border-r border-slate-700/30">
-                            <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-500/20 text-amber-400">
-                              {agendadaLabel}
-                            </span>
-                          </td>
-                          <td className="py-3 px-2 border-r border-slate-700/30">
-                            <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-violet-500/20 text-violet-400">
-                              {aulaLabel}
-                            </span>
-                          </td>
-                          <td className="py-3 px-2 border-r border-slate-700/30">
-                            <span className="text-white font-medium">{exp.nome_aluno || exp.lead_nome || '-'}</span>
-                          </td>
-                          <td className="py-3 px-2 border-r border-slate-700/30">
-                            <span className="text-emerald-400">{exp.lead_telefone || '-'}</span>
-                          </td>
-                          <td className="py-3 px-2 border-r border-slate-700/30">
-                            {(() => {
-                              const st = exp.status === 'experimental_agendada' ? { label: 'Agendada', color: 'bg-amber-500/20 text-amber-400' }
-                                : exp.status === 'experimental_realizada' ? { label: 'Realizada', color: 'bg-emerald-500/20 text-emerald-400' }
-                                : exp.status === 'experimental_faltou' ? { label: 'Faltou', color: 'bg-red-500/20 text-red-400' }
-                                : { label: exp.status || '-', color: 'bg-slate-500/20 text-slate-400' };
-                              return <span className={cn('px-1.5 py-0.5 rounded text-xs font-medium', st.color)}>{st.label}</span>;
-                            })()}
-                          </td>
-                          <td className="py-3 px-2 border-r border-slate-700/30">
-                            <CanalOrigemBadge canal={exp.canal_nome || '-'} />
-                          </td>
-                          <td className="py-3 px-2 border-r border-slate-700/30">
-                            <span className="text-purple-400">{exp.curso_nome || '-'}</span>
-                          </td>
-                          <td className="py-3 px-2 border-r border-slate-700/30">
-                            <span className="text-violet-400">{(exp as any).professor_nome || '-'}</span>
-                          </td>
-                          {isAdmin && (
-                            <td className="py-3 px-2 border-r border-slate-700/30">
-                              <span className="px-2 py-0.5 rounded text-xs font-medium bg-slate-600/30 text-slate-300">
-                                {exp.unidade_codigo || '-'}
-                              </span>
-                            </td>
-                          )}
-                          <td className="py-3 px-2 text-right">
-                            <button
-                              onClick={(e) => { e.stopPropagation(); exp.id && setDeleteId(exp.id); }}
-                              className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded transition-colors"
-                              title="Excluir"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-                )}
-              </div>
-            )}
+            <ResultadosForaPeriodo itens={buscaFora.experimentais} periodoLabel={competencia.range.label} isAdmin={isAdmin} />
           </div>
           );
         })()}
@@ -5139,6 +5262,7 @@ export function ComercialPage() {
                 {!buscaFunil && <p className="text-slate-500 text-sm mt-1">Clique no card "Visita" acima para adicionar</p>}
               </div>
             )}
+            <ResultadosForaPeriodo itens={buscaFora.visitas} periodoLabel={competencia.range.label} isAdmin={isAdmin} />
           </div>
           );
         })()}
@@ -5431,6 +5555,8 @@ export function ComercialPage() {
             </div>
           )}
         </div>
+
+        <div className="px-6"><ResultadosForaPeriodo itens={buscaFora.matriculas} periodoLabel={competencia.range.label} isAdmin={isAdmin} /></div>
 
         {/* Resumo financeiro */}
         {matriculasMes.length > 0 && (
