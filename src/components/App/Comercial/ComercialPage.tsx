@@ -270,6 +270,21 @@ const TIPOS_ALUNO = [
 // Tipos que dispensam forma de pagamento e valores obrigatórios
 const TIPOS_SEM_PAGAMENTO = ['bolsista_integral', 'nao_pagante'];
 
+// Fonte única da regra "matrícula nova" (primária paga): exclui 2º curso, banda e
+// passaporte zerado (re-matrícula / bolsista integral). Usado por resumo, funil,
+// relatórios e cards para nunca divergirem. Aceita tanto o objeto do state
+// (campos planos is_banda/curso_nome) quanto o do relatório (aninhado em cursos).
+const ehMatriculaNova = (m: any): boolean => {
+  const nomeCurso = (m.curso_nome || (m.cursos as any)?.nome || '').toLowerCase();
+  const ehBanda = m.is_banda === true || (m.cursos as any)?.is_projeto_banda === true || nomeCurso.includes('banda');
+  return !m.is_segundo_curso && !ehBanda && (Number(m.valor_passaporte) || 0) > 0;
+};
+
+// Formatação monetária BRL com exatamente 2 casas (evita o bug de 3 decimais do
+// toLocaleString quando só se define minimumFractionDigits).
+const fmtBRL = (n: number): string =>
+  (n || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 export function ComercialPage() {
   useSetPageTitle({
     titulo: 'Comercial',
@@ -947,7 +962,7 @@ export function ComercialPage() {
       // Alinhar resumo/conversão à fonte real (alunos): conta matrículas primárias
       // (sem segundo curso/banda). No modo "Hoje" mantém o acumulado do mês via leads.
       if (!isFiltroHoje) {
-        const totalMatPrimarias = matriculasDoMes.filter((m: any) => !m.is_segundo_curso && !m.is_banda && (m.valor_passaporte || 0) > 0).length;
+        const totalMatPrimarias = matriculasDoMes.filter(ehMatriculaNova).length;
         setResumo(prev => ({
           ...prev,
           matriculas: totalMatPrimarias,
@@ -2370,7 +2385,7 @@ export function ComercialPage() {
 
     // Matrículas: usar state já enriquecido, filtrar novos alunos (sem 2º curso e sem banda)
     const matriculasNovas = matriculasMes
-      .filter((m: any) => !m.is_segundo_curso && !m.is_banda && (m.valor_passaporte || 0) > 0)
+      .filter(ehMatriculaNova)
       .sort((a: any, b: any) => (a.data_matricula || '').localeCompare(b.data_matricula || ''));
 
     const totalExpAgendadas = (experimentaisAgendadasHoje || []).reduce((acc: number, e: any) => acc + e.quantidade, 0);
@@ -2454,8 +2469,8 @@ export function ComercialPage() {
     const leadsSemana = registrosSemana?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const experimentaisSemana = registrosSemana?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const visitasSemana = registrosSemana?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    // Matrículas: fonte = alunos por data_matricula
-    const matriculasSemana = (await buscarMatriculasAlunos(unidadeId, seteDiasAtras.toISOString().split('T')[0], hoje.toISOString().split('T')[0])).length;
+    // Matrículas: fonte = alunos por data_matricula (apenas matrículas novas)
+    const matriculasSemana = (await buscarMatriculasAlunos(unidadeId, seteDiasAtras.toISOString().split('T')[0], hoje.toISOString().split('T')[0])).filter(ehMatriculaNova).length;
 
     // Calcular conversões
     const conversaoLeadExp = leadsSemana > 0 ? (experimentaisSemana / leadsSemana) * 100 : 0;
@@ -2543,8 +2558,10 @@ export function ComercialPage() {
     const leadsMes = registrosMes?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const experimentaisMes = registrosMes?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const visitasMes = registrosMes?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    // Matrículas: fonte = alunos por data_matricula (inclui matrículas sem lead)
-    const matAlunosMes = await buscarMatriculasAlunos(unidadeId, dataInicio, dataFim);
+    // Matrículas: fonte = alunos por data_matricula (inclui matrículas sem lead).
+    // Conta apenas matrículas novas (exclui 2º curso, banda e passaporte zerado),
+    // alinhando com o resumo/funil da tela.
+    const matAlunosMes = (await buscarMatriculasAlunos(unidadeId, dataInicio, dataFim)).filter(ehMatriculaNova);
     const matriculasMes = matAlunosMes.length;
 
     // Calcular conversões
@@ -2639,10 +2656,10 @@ export function ComercialPage() {
     // Valores financeiros
     texto += `💰 *VALORES FINANCEIROS*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `Total Passaportes: *R$ ${totalPassaporte.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n`;
-    texto += `Total Parcelas: *R$ ${totalParcela.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n`;
-    texto += `Ticket Médio Pass.: *R$ ${ticketMedioPass.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n`;
-    texto += `Ticket Médio Parc.: *R$ ${ticketMedioPar.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n\n`;
+    texto += `Total Passaportes: *R$ ${fmtBRL(totalPassaporte)}*\n`;
+    texto += `Total Parcelas: *R$ ${fmtBRL(totalParcela)}*\n`;
+    texto += `Ticket Médio Pass.: *R$ ${fmtBRL(ticketMedioPass)}*\n`;
+    texto += `Ticket Médio Parc.: *R$ ${fmtBRL(ticketMedioPar)}*\n\n`;
 
     // Leads por Canal - sempre mostrar
     texto += `📲 *LEADS POR CANAIS*\n`;
@@ -2750,30 +2767,31 @@ export function ComercialPage() {
       }
     }
 
-    // Calcular totais e estatísticas
-    const totalMatriculas = matriculasMes.length;
-    const lamkCount = matriculasMes.filter(m => m.idade != null ? m.idade <= 11 : m.tipo_matricula === 'LAMK').length;
-    const emlaCount = matriculasMes.filter(m => m.idade != null ? m.idade > 11 : m.tipo_matricula === 'EMLA').length;
-    
+    // Calcular totais e estatísticas — apenas matrículas novas (exclui 2º curso/banda/passaporte zerado)
+    const matriculasNovas = matriculasMes.filter(ehMatriculaNova);
+    const totalMatriculas = matriculasNovas.length;
+    const lamkCount = matriculasNovas.filter(m => m.idade != null ? m.idade <= 11 : m.tipo_matricula === 'LAMK').length;
+    const emlaCount = matriculasNovas.filter(m => m.idade != null ? m.idade > 11 : m.tipo_matricula === 'EMLA').length;
+
     // Regra de negócio: matrículas com passaporte zerado (ex: re-matrícula) não entram no ticket médio
-    const matriculasComPassaporte = matriculasMes.filter(m => (m.valor_passaporte || 0) > 0);
-    const totalPassaporte = matriculasComPassaporte.reduce((acc, m) => acc + (m.valor_passaporte || 0), 0);
+    const matriculasComPassaporte = matriculasNovas.filter(m => (Number(m.valor_passaporte) || 0) > 0);
+    const totalPassaporte = matriculasComPassaporte.reduce((acc, m) => acc + (Number(m.valor_passaporte) || 0), 0);
     // Regra de negócio: bolsistas não entram no ticket médio da parcela
-    const matriculasPagantes = matriculasMes.filter(m => !TIPOS_SEM_PAGAMENTO.includes(m.tipo_aluno));
-    const totalParcela = matriculasPagantes.reduce((acc, m) => acc + (m.valor_parcela || 0), 0);
+    const matriculasPagantes = matriculasNovas.filter(m => !TIPOS_SEM_PAGAMENTO.includes(m.tipo_aluno) && (Number(m.valor_parcela) || 0) > 0);
+    const totalParcela = matriculasPagantes.reduce((acc, m) => acc + (Number(m.valor_parcela) || 0), 0);
     const ticketMedioPass = matriculasComPassaporte.length > 0 ? totalPassaporte / matriculasComPassaporte.length : 0;
     const ticketMedioPar = matriculasPagantes.length > 0 ? totalParcela / matriculasPagantes.length : 0;
 
     // Agrupar por canal
     const matriculasPorCanal: { [key: string]: number } = {};
-    matriculasMes.forEach(m => {
+    matriculasNovas.forEach(m => {
       const canal = m.canal_nome || 'Não informado';
       matriculasPorCanal[canal] = (matriculasPorCanal[canal] || 0) + 1;
     });
 
     // Agrupar por curso
     const matriculasPorCurso: { [key: string]: number } = {};
-    matriculasMes.forEach(m => {
+    matriculasNovas.forEach(m => {
       const curso = m.curso_nome || 'Não informado';
       matriculasPorCurso[curso] = (matriculasPorCurso[curso] || 0) + 1;
     });
@@ -2796,10 +2814,10 @@ export function ComercialPage() {
     // Valores Financeiros
     texto += `💰 *VALORES FINANCEIROS*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `Total Passaportes: *R$ ${totalPassaporte.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n`;
-    texto += `Total Parcelas: *R$ ${totalParcela.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n`;
-    texto += `Ticket Médio Pass.: *R$ ${ticketMedioPass.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n`;
-    texto += `Ticket Médio Parc.: *R$ ${ticketMedioPar.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n\n`;
+    texto += `Total Passaportes: *R$ ${fmtBRL(totalPassaporte)}*\n`;
+    texto += `Total Parcelas: *R$ ${fmtBRL(totalParcela)}*\n`;
+    texto += `Ticket Médio Pass.: *R$ ${fmtBRL(ticketMedioPass)}*\n`;
+    texto += `Ticket Médio Parc.: *R$ ${fmtBRL(ticketMedioPar)}*\n\n`;
 
     // Estatísticas
     texto += `📊 *ESTATÍSTICAS*\n`;
@@ -3292,7 +3310,7 @@ export function ComercialPage() {
         ano={competencia.filtro.ano}
         mes={competencia.filtro.mes}
         resumoLeads={resumo}
-        totalMatriculasMes={matriculasMes.filter((m: any) => !m.is_segundo_curso && !m.is_banda && (m.valor_passaporte || 0) > 0).length}
+        totalMatriculasMes={matriculasMes.filter(ehMatriculaNova).length}
       />
 
       {/* ═══════════════════════════════════════════════════════════════ */}
@@ -3637,7 +3655,7 @@ export function ComercialPage() {
                   return experimentaisDetalhadas.filter((e: any) => filtroTipoExp === 'leads_novos' ? !e.lead_aluno_id : filtroTipoExp === 'alunos' ? !!e.lead_aluno_id : true).length;
                 })(), icon: Guitar, color: '#a855f7', gradient: 'from-purple-500 to-violet-500' },
                 { key: 'visita', label: 'Visitas', count: visitasMes.length, icon: Building2, color: '#f59e0b', gradient: 'from-amber-500 to-orange-500' },
-                { key: 'matricula', label: 'Matrículas', count: matriculasMes.filter((m: any) => { const banda = m.is_banda || m.curso_nome?.toLowerCase().includes('banda'); if (filtroTipoMat === 'novos_alunos') return !m.is_segundo_curso && !banda && (m.valor_passaporte || 0) > 0; if (filtroTipoMat === 'segundo_curso') return m.is_segundo_curso || banda; return true; }).length, icon: GraduationCap, color: '#10b981', gradient: 'from-emerald-500 to-teal-500' },
+                { key: 'matricula', label: 'Matrículas', count: matriculasMes.filter((m: any) => { const banda = m.is_banda || m.curso_nome?.toLowerCase().includes('banda'); if (filtroTipoMat === 'novos_alunos') return ehMatriculaNova(m); if (filtroTipoMat === 'segundo_curso') return m.is_segundo_curso || banda; return true; }).length, icon: GraduationCap, color: '#10b981', gradient: 'from-emerald-500 to-teal-500' },
               ]}
               totalLeads={leadsMes.length}
               activeStage={abaDetalhamento}
@@ -5150,7 +5168,7 @@ export function ComercialPage() {
           const ehBanda = (l: any) => l.is_banda || (l.curso_nome || '').toLowerCase().includes('banda');
           const matriculasFiltradasRaw = matriculasMes.filter((l: any) => {
             // Filtro por tipo (novos alunos vs segundo curso/banda)
-            if (filtroTipoMat === 'novos_alunos' && (l.is_segundo_curso || ehBanda(l) || (l.valor_passaporte || 0) === 0)) return false;
+            if (filtroTipoMat === 'novos_alunos' && !ehMatriculaNova(l)) return false;
             if (filtroTipoMat === 'segundo_curso' && !l.is_segundo_curso && !ehBanda(l)) return false;
             // 'todos': mostra tudo sem filtro de tipo
             if (buscaFunil) {
@@ -5421,38 +5439,37 @@ export function ComercialPage() {
               <div className="text-center">
                 <p className="text-slate-400 text-xs mb-1">LAMK (Kids)</p>
                 <p className="text-xl font-bold text-pink-400">
-                  {matriculasMes.filter(m => m.idade != null ? m.idade <= 11 : m.tipo_matricula === 'LAMK').length}
+                  {matriculasMes.filter(ehMatriculaNova).filter(m => m.idade != null ? m.idade <= 11 : m.tipo_matricula === 'LAMK').length}
                 </p>
               </div>
               <div className="text-center">
                 <p className="text-slate-400 text-xs mb-1">EMLA (Adulto)</p>
                 <p className="text-xl font-bold text-blue-400">
-                  {matriculasMes.filter(m => m.idade != null ? m.idade > 11 : m.tipo_matricula === 'EMLA').length}
+                  {matriculasMes.filter(ehMatriculaNova).filter(m => m.idade != null ? m.idade > 11 : m.tipo_matricula === 'EMLA').length}
                 </p>
               </div>
               <div className="text-center">
                 <p className="text-slate-400 text-xs mb-1">Ticket Médio Pass.</p>
                 <p className="text-xl font-bold text-emerald-400">
                   R$ {(() => {
-                    // Regra de negócio: matrículas com passaporte zerado (ex: re-matrícula) não entram no ticket médio
-                    const matriculasComPassaporte = matriculasMes.filter(m => (m.valor_passaporte || 0) > 0);
-                    return matriculasComPassaporte.length > 0 
-                      ? (matriculasComPassaporte.reduce((acc, m) => acc + (m.valor_passaporte || 0), 0) / matriculasComPassaporte.length).toLocaleString('pt-BR', { minimumFractionDigits: 2 })
+                    // Apenas matrículas novas (já excluem passaporte zerado por definição)
+                    const novas = matriculasMes.filter(ehMatriculaNova);
+                    return novas.length > 0
+                      ? fmtBRL(novas.reduce((acc, m) => acc + (Number(m.valor_passaporte) || 0), 0) / novas.length)
                       : '0,00';
                   })()}
                 </p>
-                {matriculasMes.filter(m => (m.valor_passaporte || 0) === 0).length > 0 && (
-                  <p className="text-xs text-slate-500 mt-1">
-                    {matriculasMes.filter(m => (m.valor_passaporte || 0) === 0).length} com valor zerado
-                  </p>
-                )}
               </div>
               <div className="text-center">
                 <p className="text-slate-400 text-xs mb-1">Ticket Médio Parc.</p>
                 <p className="text-xl font-bold text-cyan-400">
-                  R$ {matriculasMes.length > 0 
-                    ? (matriculasMes.reduce((acc, m) => acc + (m.valor_parcela || 0), 0) / matriculasMes.length).toLocaleString('pt-BR', { minimumFractionDigits: 2 })
-                    : '0,00'}
+                  R$ {(() => {
+                    // Apenas matrículas novas pagantes (com parcela > 0)
+                    const novasPagantes = matriculasMes.filter(m => ehMatriculaNova(m) && !TIPOS_SEM_PAGAMENTO.includes(m.tipo_aluno) && (Number(m.valor_parcela) || 0) > 0);
+                    return novasPagantes.length > 0
+                      ? fmtBRL(novasPagantes.reduce((acc, m) => acc + (Number(m.valor_parcela) || 0), 0) / novasPagantes.length)
+                      : '0,00';
+                  })()}
                 </p>
               </div>
             </div>
