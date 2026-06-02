@@ -348,7 +348,7 @@ export function AdministrativoPage() {
         if (kpisData.length === 0 && unidade !== 'todos') {
           let alunosQuery = supabase
             .from('alunos')
-            .select('id, status, tipo_matricula_id, is_segundo_curso, valor_parcela, tipos_matricula(codigo, conta_como_pagante)')
+            .select('id, status, tipo_matricula_id, is_segundo_curso, valor_parcela, tipos_matricula(codigo, conta_como_pagante), cursos:curso_id!left(is_projeto_banda)')
             .in('status', ['ativo', 'trancado'])
             .eq('unidade_id', unidade);
 
@@ -360,11 +360,12 @@ export function AdministrativoPage() {
               (a.tipos_matricula as any)?.conta_como_pagante && !a.is_segundo_curso
             );
             const totalPagantes = pagantes.length;
+            // Bolsista real = exclui projeto banda e 2º curso (esses são categorias próprias)
             const bolsistasInt = alunosData.filter((a: any) =>
-              (a.tipos_matricula as any)?.codigo === 'BOLSISTA_INT' && !a.is_segundo_curso
+              (a.tipos_matricula as any)?.codigo === 'BOLSISTA_INT' && !a.is_segundo_curso && (a.cursos as any)?.is_projeto_banda !== true
             ).length;
             const bolsistasParciais = alunosData.filter((a: any) =>
-              (a.tipos_matricula as any)?.codigo === 'BOLSISTA_PARC' && !a.is_segundo_curso
+              (a.tipos_matricula as any)?.codigo === 'BOLSISTA_PARC' && !a.is_segundo_curso && (a.cursos as any)?.is_projeto_banda !== true
             ).length;
             const ticketMedio = pagantes.length > 0
               ? pagantes.reduce((sum: number, a: any) => sum + (Number(a.valor_parcela) || 0), 0) / pagantes.length
@@ -419,7 +420,7 @@ export function AdministrativoPage() {
           // Buscar alunos ativos/pagantes/bolsistas do período
           let alunosQuery = supabase
             .from('alunos')
-            .select('id, status, tipo_matricula_id, is_segundo_curso, valor_parcela, tipos_matricula(codigo, conta_como_pagante)')
+            .select('id, status, tipo_matricula_id, is_segundo_curso, valor_parcela, tipos_matricula(codigo, conta_como_pagante), cursos:curso_id!left(is_projeto_banda)')
             .in('status', ['ativo', 'trancado']);
 
           if (unidade !== 'todos') {
@@ -427,18 +428,19 @@ export function AdministrativoPage() {
           }
 
           const { data: alunosData } = await alunosQuery;
-          
+
           if (alunosData && alunosData.length > 0) {
             const totalAtivos = alunosData.filter((a: any) => !a.is_segundo_curso).length;
-            const pagantes = alunosData.filter((a: any) => 
+            const pagantes = alunosData.filter((a: any) =>
               (a.tipos_matricula as any)?.conta_como_pagante && !a.is_segundo_curso
             );
             const totalPagantes = pagantes.length;
-            const bolsistasInt = alunosData.filter((a: any) => 
-              (a.tipos_matricula as any)?.codigo === 'BOLSISTA_INT' && !a.is_segundo_curso
+            // Bolsista real = exclui projeto banda e 2º curso (esses são categorias próprias)
+            const bolsistasInt = alunosData.filter((a: any) =>
+              (a.tipos_matricula as any)?.codigo === 'BOLSISTA_INT' && !a.is_segundo_curso && (a.cursos as any)?.is_projeto_banda !== true
             ).length;
-            const bolsistasParciais = alunosData.filter((a: any) => 
-              (a.tipos_matricula as any)?.codigo === 'BOLSISTA_PARC' && !a.is_segundo_curso
+            const bolsistasParciais = alunosData.filter((a: any) =>
+              (a.tipos_matricula as any)?.codigo === 'BOLSISTA_PARC' && !a.is_segundo_curso && (a.cursos as any)?.is_projeto_banda !== true
             ).length;
             const ticketMedio = pagantes.length > 0 
               ? pagantes.reduce((sum: number, a: any) => sum + (Number(a.valor_parcela) || 0), 0) / pagantes.length 

@@ -549,9 +549,10 @@ export function AlunosPage() {
       );
       const nomesPagantes = new Set(pagantesRecords.map((a: any) => a.nome));
       const totalPagantes = nomesPagantes.size;
+      // Bolsista real = exclui projeto banda (banda tem categoria própria, mesmo marcada como bolsista)
       const totalBolsistas = naoSegundoCurso.filter((a: any) => {
         const codigo = a.tipos_matricula?.codigo;
-        return codigo === 'BOLSISTA_INT' || codigo === 'BOLSISTA_PARC';
+        return (codigo === 'BOLSISTA_INT' || codigo === 'BOLSISTA_PARC') && a.cursos?.is_projeto_banda !== true;
       }).length;
 
       // Ticket médio — TODOS os alunos pagantes (ativos + trancados)
