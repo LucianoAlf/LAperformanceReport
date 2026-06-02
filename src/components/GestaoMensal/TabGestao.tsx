@@ -42,6 +42,7 @@ interface DadosGestao {
   saldo_liquido: number;
   total_la_kids: number;
   total_la_adultos: number;
+  total_somente_banda_segundo: number;
   distribuicao_faixa_etaria: { name: string; value: number }[];
   
   // Financeiro
@@ -694,12 +695,18 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           });
 
           // Buscar distribuição LA Kids vs LA (12+) dos alunos ativos
-          // Regra: mesma base de Total Alunos Ativos (pessoas distintas, exclui banda/projeto e 2º curso)
+          // CORREÇÃO: buscar TODAS as matrículas ativas (incluindo banda/2º curso),
+          // depois agrupar por pessoa e verificar se tem pelo menos uma matrícula regular
+          // Isso evita excluir pessoas que têm banda/2º curso + curso regular
+          // CORREÇÃO: mês corrente usa CURRENT_DATE como corte, não fim do mês
+          const dataCorte = isPeriodoAtual
+            ? new Date().toISOString().split('T')[0]
+            : endDate;
+
           let alunosAtivosQuery = supabase
             .from('alunos')
-            .select('nome, idade_atual, data_matricula, data_saida, cursos:curso_id!left(is_projeto_banda)')
-            .in('status', ['ativo', 'trancado'])
-            .or('is_segundo_curso.is.null,is_segundo_curso.eq.false');
+            .select('nome, idade_atual, data_matricula, data_saida, is_segundo_curso, cursos:curso_id!left(is_projeto_banda)')
+            .in('status', ['ativo', 'trancado']);
 
           if (unidade !== 'todos') {
             alunosAtivosQuery = alunosAtivosQuery.eq('unidade_id', unidade);
@@ -707,25 +714,40 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
 
           const { data: alunosAtivosData } = await alunosAtivosQuery;
 
-          // Filtrar por competência (já matriculado até o fim do período, não saiu antes)
-          // e excluir banda/projeto; depois deduplicar por pessoa (nome)
-          const alunosFiltrados = (alunosAtivosData || []).filter((a: any) => {
-            if (a.cursos?.is_projeto_banda) return false;
-            if (a.data_matricula > endDate) return false;
-            if (a.data_saida && a.data_saida <= endDate) return false;
-            return true;
+          // Agrupar matrículas por pessoa (nome)
+          // Para cada pessoa, verificar se tem PELO MENOS UMA matrícula regular
+          // (não banda, não 2º curso, dentro do período)
+          const pessoasMap = new Map<string, {
+            idade: number | null;
+            temRegular: boolean;
+            matriculas: any[];
+          }>();
+
+          (alunosAtivosData || []).forEach((a: any) => {
+            // Filtro de período
+            if (a.data_matricula > dataCorte) return;
+            if (a.data_saida && a.data_saida <= dataCorte) return;
+
+            const isBanda = a.cursos?.is_projeto_banda === true;
+            const isSegundoCurso = a.is_segundo_curso === true;
+            const isRegular = !isBanda && !isSegundoCurso;
+
+            const pessoa = pessoasMap.get(a.nome) || {
+              idade: a.idade_atual,
+              temRegular: false,
+              matriculas: [],
+            };
+
+            if (isRegular) pessoa.temRegular = true;
+            pessoa.matriculas.push({ isBanda, isSegundoCurso, isRegular });
+            pessoasMap.set(a.nome, pessoa);
           });
 
-          const nomesVistos = new Set<string>();
-          const alunosUnicos = alunosFiltrados.filter((a: any) => {
-            if (nomesVistos.has(a.nome)) return false;
-            nomesVistos.add(a.nome);
-            return true;
-          });
-
-          // Calcular LA Kids (até 11 anos) vs LA (12+))
-          const totalLaKids = alunosUnicos.filter(a => a.idade_atual !== null && a.idade_atual <= 11).length;
-          const totalLaAdultos = alunosUnicos.filter(a => a.idade_atual !== null && a.idade_atual >= 12).length;
+          // Calcular Kids/School apenas para pessoas com matrícula regular
+          const pessoasComRegular = Array.from(pessoasMap.values()).filter(p => p.temRegular);
+          const totalLaKids = pessoasComRegular.filter(p => p.idade !== null && p.idade <= 11).length;
+          const totalLaAdultos = pessoasComRegular.filter(p => p.idade !== null && p.idade >= 12).length;
+          const totalSomenteBandaSegundo = Array.from(pessoasMap.values()).filter(p => !p.temRegular).length;
 
           // Matrículas por Curso e Professor (via tabela alunos — mesma fonte do card)
           const cursoMatMap = new Map<string, number>();
@@ -819,9 +841,11 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             saldo_liquido: novasMatriculas - evasoes,
             total_la_kids: totalLaKids,
             total_la_adultos: totalLaAdultos,
+            total_somente_banda_segundo: totalSomenteBandaSegundo,
             distribuicao_faixa_etaria: [
               { name: 'LA Music Kids (até 11)', value: totalLaKids },
               { name: 'LA Music School (12+)', value: totalLaAdultos },
+              ...(totalSomenteBandaSegundo > 0 ? [{ name: 'Banda/2º Curso', value: totalSomenteBandaSegundo }] : []),
             ],
             
             // Financeiro - ticket/taxas = MÉDIA, faturamento = SOMA
@@ -1350,7 +1374,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             <KPICard
               icon={Users}
               label="Total Alunos Ativos"
-              tooltip="Total de alunos com status ativo, excluindo segundo curso. Inclui pagantes e bolsistas."
+              tooltip="Total de pessoas com status ativo/trancado. Inclui matrículas regulares, banda e 2º curso."
               value={dados.total_alunos_ativos}
               variant="cyan"
             />
@@ -1370,7 +1394,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               label="LA Music Kids"
               tooltip="Alunos com classificação LAMK (até 12 anos)."
               value={dados.total_la_kids}
-              subvalue={`${dados.total_alunos_ativos > 0 ? ((dados.total_la_kids / dados.total_alunos_ativos) * 100).toFixed(0) : 0}% do total`}
+              subvalue={`${(dados.total_la_kids + dados.total_la_adultos) > 0 ? ((dados.total_la_kids / (dados.total_la_kids + dados.total_la_adultos)) * 100).toFixed(0) : 0}% do classificável`}
               variant="rose"
             />
             <KPICard
@@ -1378,16 +1402,15 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               label="LA Music School"
               tooltip="Alunos com classificação EMLA (acima de 12 anos)."
               value={dados.total_la_adultos}
-              subvalue={`${dados.total_alunos_ativos > 0 ? ((dados.total_la_adultos / dados.total_alunos_ativos) * 100).toFixed(0) : 0}% do total`}
+              subvalue={`${(dados.total_la_kids + dados.total_la_adultos) > 0 ? ((dados.total_la_adultos / (dados.total_la_kids + dados.total_la_adultos)) * 100).toFixed(0) : 0}% do classificável`}
               variant="violet"
             />
             <KPICard
               icon={Music}
-              label="Banda"
-              tooltip="Alunos matriculados em projetos de banda (Minha Banda, Power Kids, etc.). Clique para ver a lista."
-              value={dados.total_banda}
-              variant="violet"
-              onClick={() => { fetchModalAlunos('banda'); setModalAberto('banda'); }}
+              label="Banda/2º Curso"
+              tooltip="Pessoas que possuem apenas matrículas de banda ou 2º curso (sem matrícula regular)."
+              value={dados.total_somente_banda_segundo}
+              variant="amber"
             />
           </div>
 

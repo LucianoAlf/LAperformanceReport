@@ -1979,19 +1979,32 @@ export function TabelaAlunos({
                     <td className="px-4 py-2 text-slate-500 text-xs">↳</td>
                     <td className="px-4 py-2">
                       <div className="flex items-center gap-2 pl-6">
-                        <span className="text-slate-400 text-sm italic">2º curso</span>
+                        {outroCurso.curso_is_projeto_banda ? (
+                          <span className="text-amber-400 text-sm italic">Projeto / Banda</span>
+                        ) : (
+                          <span className="text-slate-400 text-sm italic">2º curso</span>
+                        )}
                         <button
                           onClick={() => setAlunoFicha(outroCurso)}
                           className="text-purple-400 hover:text-purple-300 hover:underline text-sm"
                         >
                           Editar
                         </button>
-                        <button
-                          onClick={() => removerSegundoCurso(outroCurso)}
-                          className="text-red-400 hover:text-red-300 hover:underline text-sm"
-                        >
-                          Remover curso
-                        </button>
+                        {outroCurso.curso_is_projeto_banda ? (
+                          <button
+                            onClick={() => removerSegundoCurso(outroCurso)}
+                            className="text-red-400 hover:text-red-300 hover:underline text-sm"
+                          >
+                            Remover banda
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => removerSegundoCurso(outroCurso)}
+                            className="text-red-400 hover:text-red-300 hover:underline text-sm"
+                          >
+                            Remover curso
+                          </button>
+                        )}
                       </div>
                     </td>
                     {col('telefone') && <td className="px-4 py-2"></td>}
