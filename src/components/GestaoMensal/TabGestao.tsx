@@ -720,6 +720,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           const pessoasMap = new Map<string, {
             idade: number | null;
             temRegular: boolean;
+            temAtivo: boolean;
             matriculas: any[];
           }>();
 
@@ -735,19 +736,26 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             const pessoa = pessoasMap.get(a.nome) || {
               idade: a.idade_atual,
               temRegular: false,
+              temAtivo: false,
               matriculas: [],
             };
 
             if (isRegular) pessoa.temRegular = true;
+            pessoa.temAtivo = true;
             pessoa.matriculas.push({ isBanda, isSegundoCurso, isRegular });
             pessoasMap.set(a.nome, pessoa);
           });
 
-          // Calcular Kids/School apenas para pessoas com matrícula regular
-          const pessoasComRegular = Array.from(pessoasMap.values()).filter(p => p.temRegular);
-          const totalLaKids = pessoasComRegular.filter(p => p.idade !== null && p.idade <= 11).length;
-          const totalLaAdultos = pessoasComRegular.filter(p => p.idade !== null && p.idade >= 12).length;
-          const totalSomenteBandaSegundo = Array.from(pessoasMap.values()).filter(p => !p.temRegular).length;
+          // Calcular Kids/School:
+          // 1. Pessoas com matrícula regular ativa → Kids/School normal
+          // 2. Pessoas sem regular ativo mas com matrícula ativa (banda/2º) → promover para Kids/School
+          const pessoasComClassificacao = Array.from(pessoasMap.values()).filter(p => p.temRegular || p.temAtivo);
+          const totalLaKids = pessoasComClassificacao.filter(p => p.idade !== null && p.idade <= 11).length;
+          const totalLaAdultos = pessoasComClassificacao.filter(p => p.idade !== null && p.idade >= 12).length;
+          // Banda/2º Curso = matrículas extras (pessoas que têm regular + banda/2º adicional)
+          const totalSomenteBandaSegundo = Array.from(pessoasMap.values())
+            .filter(p => p.temRegular)
+            .reduce((acc, p) => acc + p.matriculas.filter((m: any) => !m.isRegular).length, 0);
 
           // Matrículas por Curso e Professor (via tabela alunos — mesma fonte do card)
           const cursoMatMap = new Map<string, number>();
