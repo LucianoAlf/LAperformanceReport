@@ -747,15 +747,15 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           });
 
           // Calcular Kids/School:
-          // 1. Pessoas com matrícula regular ativa → Kids/School normal
-          // 2. Pessoas sem regular ativo mas com matrícula ativa (banda/2º) → promover para Kids/School
+          // Kids/School: qualquer pessoa com matrícula ativa (regular, 2o ou banda)
+          // is_segundo_curso é promovido automaticamente para classificação
           const pessoasComClassificacao = Array.from(pessoasMap.values()).filter(p => p.temRegular || p.temAtivo);
           const totalLaKids = pessoasComClassificacao.filter(p => p.idade !== null && p.idade <= 11).length;
           const totalLaAdultos = pessoasComClassificacao.filter(p => p.idade !== null && p.idade >= 12).length;
-          // Banda/2º Curso = matrículas extras (pessoas que têm regular + banda/2º adicional)
-          const totalSomenteBandaSegundo = Array.from(pessoasMap.values())
-            .filter(p => p.temRegular)
-            .reduce((acc, p) => acc + p.matriculas.filter((m: any) => !m.isRegular).length, 0);
+          // Total de matrículas de banda (para card Banda)
+          const totalBanda = (alunosAtivosData || []).filter((a: any) =>
+            a.cursos?.is_projeto_banda === true
+          ).length;
 
           // Matrículas por Curso e Professor (via tabela alunos — mesma fonte do card)
           const cursoMatMap = new Map<string, number>();
@@ -849,11 +849,10 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             saldo_liquido: novasMatriculas - evasoes,
             total_la_kids: totalLaKids,
             total_la_adultos: totalLaAdultos,
-            total_somente_banda_segundo: totalSomenteBandaSegundo,
+            total_somente_banda_segundo: totalBanda,
             distribuicao_faixa_etaria: [
               { name: 'LA Music Kids (até 11)', value: totalLaKids },
               { name: 'LA Music School (12+)', value: totalLaAdultos },
-              ...(totalSomenteBandaSegundo > 0 ? [{ name: 'Banda/2º Curso', value: totalSomenteBandaSegundo }] : []),
             ],
             
             // Financeiro - ticket/taxas = MÉDIA, faturamento = SOMA
@@ -1415,9 +1414,9 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             />
             <KPICard
               icon={Music}
-              label="Banda/2º Curso"
-              tooltip="Matrículas extras de banda ou 2º curso (além da matrícula principal regular)."
-              value={dados.total_somente_banda_segundo}
+              label="Banda"
+              tooltip="Total de matrículas em projetos de banda (Minha Banda, GarageBand, Power Kids, etc.)."
+              value={dados.total_banda}
               variant="amber"
             />
           </div>
