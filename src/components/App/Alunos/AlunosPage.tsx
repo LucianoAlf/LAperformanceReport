@@ -517,11 +517,15 @@ export function AlunosPage() {
       const ativosETrancados = alunosParaKPIs.filter((a: any) =>
         (a.status === 'ativo' || a.status === 'trancado' || a.status === 'aviso_previo')
       );
-      const naoSegundoCurso = ativosETrancados.filter((a: any) =>
-        !a.is_segundo_curso
-      );
 
-      const totalAtivos = naoSegundoCurso.length;
+      // Mesma régua da view vw_kpis_gestao_mensal: pessoas distintas (ativo+trancado),
+      // sem filtrar is_segundo_curso (COUNT DISTINCT nome já deduplicaela)
+      const totalAtivos = new Set(
+        alunosParaKPIs
+          .filter((a: any) => a.status === 'ativo' || a.status === 'trancado')
+          .map((a: any) => (a.nome ?? '').toLowerCase().trim())
+          .filter(Boolean)
+      ).size;
       const totalMatriculasAtivas = ativosETrancados.length; // inclui segundo curso + banda
 
       // Separar banda, coral e segundo curso
@@ -550,7 +554,7 @@ export function AlunosPage() {
       const nomesPagantes = new Set(pagantesRecords.map((a: any) => a.nome));
       const totalPagantes = nomesPagantes.size;
       // Bolsista real = exclui projeto banda (banda tem categoria própria, mesmo marcada como bolsista)
-      const totalBolsistas = naoSegundoCurso.filter((a: any) => {
+      const totalBolsistas = ativosETrancados.filter((a: any) => {
         const codigo = a.tipos_matricula?.codigo;
         return (codigo === 'BOLSISTA_INT' || codigo === 'BOLSISTA_PARC') && a.cursos?.is_projeto_banda !== true;
       }).length;

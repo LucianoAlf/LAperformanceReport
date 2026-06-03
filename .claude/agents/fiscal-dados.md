@@ -679,6 +679,29 @@ Manual insertion de segundo curso é fluxo legítimo — o admin cadastra antes 
 
 ---
 
+### K2. Invariante `ativo_trancado_com_data_saida` (garantido por trigger desde 2026-06-03)
+
+Regra de negócio: **aluno `ativo` ou `trancado` NÃO pode ter `data_saida` preenchida** (ativo/trancado = ainda na escola; data de saída só faz sentido em status terminal). É o INVERSO do `inativo_sem_data_saida` da Seção K.
+
+**Garantia:** trigger `trg_aluno_ativo_sem_data_saida` (função `fn_aluno_ativo_sem_data_saida`) — `BEFORE INSERT OR UPDATE ON alunos`, `WHEN (NEW.status IN ('ativo','trancado') AND NEW.data_saida IS NOT NULL)` → zera `data_saida`. Tapa o furo de `handleMatriculaNova`/`handleRenovacao` (em `processar-matricula-emusys`), que setam `status='ativo'` mas **não limpam** `data_saida` — resíduo de evasão anterior ficava grudado em aluno-retorno (caso Marcela dos Santos Leite, id 1346, jun/2026: `data_saida` antiga `18/01` < `data_matricula` `24/02`, `tempo_permanencia_meses=-1`).
+
+**Efeito da inconsistência (pré-trigger):** a view `vw_kpis_gestao_mensal` (card "Alunos Ativos" da Administrativo) exige `data_saida IS NULL OR data_saida > fim_mes` → o aluno some da contagem silenciosamente apesar de `status='ativo'`. Sintoma visível na tela: `tempo_permanencia_meses` negativo.
+
+```sql
+-- Resíduos do invariante (deve ser 0 com a trigger ativa; >0 = trigger ausente/dropada ou bypass por SQL direto sem passar pela trigger)
+SELECT u.codigo, a.id, a.nome, a.status, a.data_matricula, a.data_saida, a.tempo_permanencia_meses
+FROM alunos a JOIN unidades u ON u.id = a.unidade_id
+WHERE a.status IN ('ativo','trancado') AND a.data_saida IS NOT NULL
+ORDER BY u.codigo, a.data_saida;
+
+-- Saúde da trigger: confirmar que ainda existe e está habilitada
+SELECT tgname, tgenabled FROM pg_trigger WHERE tgname = 'trg_aluno_ativo_sem_data_saida';
+```
+
+**Quando reportar:** qualquer linha na 1ª query = **ATENÇÃO** (a trigger deveria ter zerado; investigar se foi dropada numa migration ou se há caminho de escrita que a contorna). 2ª query sem resultado = **CRÍTICO** (a guarda sumiu).
+
+---
+
 ## Step 4: Output Format
 
 Sempre estruture a resposta assim:
@@ -779,6 +802,27 @@ Estes são pontos de falha já documentados que você deve sempre considerar:
     ORDER BY lal.created_at DESC LIMIT 20;
     ```
     **Correlação n8n obrigatória quando encontrar regressão:** use `mcp__n8n__n8n_executions` no workflow `j41tPbyjGXUQUxrN` com filtro de data para confirmar qual execution processou o webhook. Verifique se o payload continha `aula_experimental_criada` para um lead que já era `convertido` na época — prova que o guard ainda não estava ativo (antes do fix) ou que o guard foi bypassado (se regressão pós-fix).
+
+19. **Status misto entre matrículas da mesma pessoa (trancamento parcial / reversões manuais)** — a automação de matrícula/trancamento É ativa: workflow **`WF_Matricula_Funcional` (`ZzuR9slRx8UqXg9N`)** → edge `processar-matricula-emusys` (`handleTrancamento` grava `status='trancado'` + movimentação tipo `trancamento`). Mas o status pode ficar **misto entre as matrículas da mesma pessoa** por: (a) trancamento aplicado matrícula a matrícula deixando algumas `ativo`; (b) **reversões/edições manuais na UI** que reativam parte das matrículas (origem `manual` no `audit_log`). Caso Thiago Sandes (CG, jun/2026): `system` trancou em 07/05 e evadiu em 23/05, depois gabi@ reativou manual em 25/05 → Canto/Guitarra ficaram `ativo` até trancamento manual em 03/06; Banda seguiu `trancado`. **Não afeta o card "Alunos Ativos"** (ativo e trancado contam igual), mas distorce relatórios que separem frequentando × pausado.
+    - **Rastro de cada mudança:** trigger `trg_audit` grava em `audit_log` (`tabela='alunos'`) com `dados_antigos`/`dados_novos` (status, data_saida, etc.), `usuario`, `origem` (`manual`|`system`), `created_at`. Use para reconstruir quem/quando trancou — `updated_at`/`updated_by` em `alunos` só guardam a última alteração.
+    ```sql
+    -- Pessoas com matrículas em status misto ativo+trancado (sinal de trancamento parcial / reversão)
+    SELECT a.unidade_id, a.nome,
+           array_agg(DISTINCT a.status) AS status_distintos, count(*) AS qtd_matriculas
+    FROM alunos a WHERE a.status IN ('ativo','trancado')
+    GROUP BY a.unidade_id, a.nome HAVING count(DISTINCT a.status) > 1
+    ORDER BY a.unidade_id, a.nome;
+
+    -- Histórico de mudanças de status de um aluno (auditoria)
+    SELECT created_at, usuario, origem,
+           dados_antigos->>'status' AS de, dados_novos->>'status' AS para,
+           dados_antigos->>'data_saida' AS saida_de, dados_novos->>'data_saida' AS saida_para
+    FROM audit_log
+    WHERE tabela='alunos' AND registro_id_text = '<id>'
+      AND dados_antigos->>'status' IS DISTINCT FROM dados_novos->>'status'
+    ORDER BY created_at DESC;
+    ```
+    Confirmação definitiva do estado "verdadeiro" exige cruzar com o Emusys (CSV de ativos ou API). Reportar como **ATENÇÃO** (higiene de classificação), não crítico.
 
 ---
 
