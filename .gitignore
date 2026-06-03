@@ -34,3 +34,16 @@ dist-ssr
 
 # Supabase CLI temp files (atualizam a cada upgrade da CLI)
 supabase/.temp/
+
+# Documentos de auditoria e diagnóstico (gerados localmente)
+docs/AUDITORIA_*.md
+docs/DIAGNOSTICO_*.md
+docs/PROPOSTA_*.md
+docs/CORRECAO_*.md
+docs/CONCILIACAO_*.md
+docs/MATRIZ_*.md
+docs/ORIGEM_*.md
+docs/PARALISACAO_*.md
+docs/PLANO_*.md
+docs/RETIFICACAO_*.sql
+docs/PROPOSTA_*.sql
