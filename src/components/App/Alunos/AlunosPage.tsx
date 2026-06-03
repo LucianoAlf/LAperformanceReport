@@ -546,13 +546,14 @@ export function AlunosPage() {
         a.cursos?.is_projeto_banda !== true &&
         !cursosCoral.some(nome => a.cursos?.nome?.toLowerCase().includes(nome))
       ).length;
-      // Pessoa-level: pagantes (qualquer registro com conta_como_pagante e valor_parcela > 0)
-      // Não usa naoSegundoCurso porque banda/projeto pode estar marcado como segundo curso.
+      // Pagantes = conta_como_pagante AND NOT is_segundo_curso AND status ativo/trancado
+      // aviso_previo fica em ativosETrancados mas NÃO entra na base de pagantes (mesma régua da view)
       const pagantesRecords = ativosETrancados.filter((a: any) =>
-        a.tipos_matricula?.conta_como_pagante === true && (a.valor_parcela || 0) > 0
+        a.tipos_matricula?.conta_como_pagante === true &&
+        !a.is_segundo_curso &&
+        (a.status === 'ativo' || a.status === 'trancado')
       );
-      const nomesPagantes = new Set(pagantesRecords.map((a: any) => a.nome));
-      const totalPagantes = nomesPagantes.size;
+      const totalPagantes = pagantesRecords.length;
       // Bolsista real = exclui projeto banda (banda tem categoria própria, mesmo marcada como bolsista)
       const totalBolsistas = ativosETrancados.filter((a: any) => {
         const codigo = a.tipos_matricula?.codigo;
