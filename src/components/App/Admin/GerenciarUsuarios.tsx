@@ -179,6 +179,19 @@ export function GerenciarUsuarios() {
       };
 
       if (editingUser) {
+        // Se email mudou, atualizar também no Supabase Auth
+        if (emailNormalizado !== editingUser.email) {
+          const { data: emailData, error: emailError } = await supabase.functions.invoke('admin-update-email', {
+            body: {
+              userId: editingUser.id,
+              authUserId: editingUser.auth_user_id,
+              newEmail: emailNormalizado,
+            },
+          });
+          if (emailError) throw emailError;
+          if (emailData?.error) throw new Error(emailData.error);
+        }
+
         // Atualizar usuário existente
         const { error } = await supabase
           .from('usuarios')
@@ -428,8 +441,7 @@ export function GerenciarUsuarios() {
                   type="email"
                   value={formEmail}
                   onChange={(e) => setFormEmail(e.target.value)}
-                  disabled={!!editingUser}
-                  className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50 disabled:opacity-50"
+                  className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-cyan-500/50"
                   placeholder="email@lamusic.com.br"
                 />
               </div>
