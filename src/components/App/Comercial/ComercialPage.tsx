@@ -85,6 +85,7 @@ import { TabProgramaMatriculador } from './TabProgramaMatriculador';
 import { ModalMatricular } from '../PreAtendimento/components/ModalMatricular';
 import { ModalArquivar } from '../PreAtendimento/components/ModalArquivar';
 import { ModalEditarLead } from '../PreAtendimento/components/ModalEditarLead';
+import type { LeadEditPatch } from '../PreAtendimento/components/ModalEditarLead';
 import type { LeadCRM } from '../PreAtendimento/types';
 
 // Helpers de ordenação (3 estados: asc -> desc -> null)
@@ -6932,7 +6933,13 @@ export function ComercialPage() {
       <ModalEditarLead
         aberto={!!leadParaEditar}
         onClose={() => setLeadParaEditar(null)}
-        onSalvo={() => { setLeadParaEditar(null); loadData(); }}
+        onSalvo={(patch: LeadEditPatch) => {
+          setLeadParaEditar(null);
+          const apply = (l: any) => l.id === patch.id ? { ...l, ...patch } : l;
+          setLeadsMes(prev => prev.map(apply));
+          setExperimentaisMes(prev => prev.map(apply));
+          setVisitasMes(prev => prev.map(apply));
+        }}
         lead={leadParaEditar?.lead ?? null}
         experimentalId={leadParaEditar?.experimentalId}
       />

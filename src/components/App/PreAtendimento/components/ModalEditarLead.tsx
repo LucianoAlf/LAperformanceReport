@@ -19,10 +19,25 @@ import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
 import type { LeadCRM } from '../types';
 
+export type LeadEditPatch = {
+  id: number;
+  nome: string | null;
+  telefone: string | null;
+  canal_origem_id: number | null;
+  canal_nome: string | null;
+  curso_interesse_id: number | null;
+  curso_nome: string | null;
+  professor_experimental_id: number | null;
+  professor_nome: string | null;
+  data_experimental: string | null;
+  horario_experimental: string | null;
+  observacoes: string | null;
+};
+
 interface ModalEditarLeadProps {
   aberto: boolean;
   onClose: () => void;
-  onSalvo?: () => void;
+  onSalvo?: (patch: LeadEditPatch) => void;
   lead: LeadCRM | null;
   experimentalId?: number | null;
 }
@@ -126,8 +141,22 @@ export function ModalEditarLead({ aberto, onClose, onSalvo, lead, experimentalId
       }
 
       toast.success('Lead atualizado.');
+      const patch: LeadEditPatch = {
+        id: lead.id,
+        nome: form.nome.trim() || null,
+        telefone: form.telefone.trim() || null,
+        canal_origem_id: form.canal_origem_id ? parseInt(form.canal_origem_id) : null,
+        canal_nome: canais.find(c => c.id.toString() === form.canal_origem_id)?.nome ?? null,
+        curso_interesse_id: form.curso_interesse_id ? parseInt(form.curso_interesse_id) : null,
+        curso_nome: cursos.find(c => c.id.toString() === form.curso_interesse_id)?.nome ?? null,
+        professor_experimental_id: form.professor_experimental_id ? parseInt(form.professor_experimental_id) : null,
+        professor_nome: professores.find(p => p.id.toString() === form.professor_experimental_id)?.nome ?? null,
+        data_experimental: form.data_experimental || null,
+        horario_experimental: form.horario_experimental ? `${form.horario_experimental}:00` : null,
+        observacoes: form.observacoes.trim() || null,
+      };
       handleClose();
-      onSalvo?.();
+      onSalvo?.(patch);
     } catch (err) {
       console.error('Erro ao salvar lead:', err);
       toast.error('Erro ao salvar alterações.');
