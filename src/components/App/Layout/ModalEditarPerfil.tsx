@@ -33,6 +33,10 @@ export function ModalEditarPerfil({ open, onOpenChange }: ModalEditarPerfilProps
   const [cropModalOpen, setCropModalOpen] = useState(false);
   const [imageToCrop, setImageToCrop] = useState<string | null>(null);
 
+  // Campos de email
+  const [novoEmail, setNovoEmail] = useState('');
+  const [alterandoEmail, setAlterandoEmail] = useState(false);
+
   // Campos de senha
   const [senhaAtual, setSenhaAtual] = useState('');
   const [novaSenha, setNovaSenha] = useState('');
@@ -45,6 +49,7 @@ export function ModalEditarPerfil({ open, onOpenChange }: ModalEditarPerfilProps
       setTelefone(usuario.telefone || '');
       setAvatarUrl(usuario.avatar_url || null);
       setAvatarPreview(null);
+      setNovoEmail('');
       setMessage(null);
     }
   }, [open, usuario]);
@@ -155,6 +160,40 @@ export function ModalEditarPerfil({ open, onOpenChange }: ModalEditarPerfilProps
       setMessage({ type: 'error', text: 'Erro ao atualizar perfil. Tente novamente.' });
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleAlterarEmail = async () => {
+    const emailNorm = novoEmail.trim().toLowerCase();
+    if (!emailNorm) {
+      setMessage({ type: 'error', text: 'Digite o novo email.' });
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(emailNorm)) {
+      setMessage({ type: 'error', text: 'Formato de email inválido.' });
+      return;
+    }
+    if (emailNorm === (usuario?.email || '').toLowerCase()) {
+      setMessage({ type: 'error', text: 'O novo email é igual ao atual.' });
+      return;
+    }
+
+    setAlterandoEmail(true);
+    setMessage(null);
+    try {
+      const { error } = await supabase.auth.updateUser({ email: emailNorm });
+      if (error) throw error;
+
+      // Atualiza tabela usuarios para manter em sincronia
+      await supabase.from('usuarios').update({ email: emailNorm }).eq('id', usuario!.id);
+
+      setMessage({ type: 'success', text: `Confirmação enviada para ${emailNorm}. Verifique sua caixa de entrada.` });
+      setNovoEmail('');
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message || 'Erro ao solicitar alteração de email.' });
+    } finally {
+      setAlterandoEmail(false);
     }
   };
 
@@ -332,14 +371,32 @@ export function ModalEditarPerfil({ open, onOpenChange }: ModalEditarPerfilProps
               />
             </div>
 
-            <div className="space-y-2">
-              <Label>Email</Label>
+            <div className="space-y-2 pt-3 border-t border-slate-700">
+              <Label>Email atual</Label>
               <Input
                 value={usuario?.email || ''}
                 disabled
                 className="bg-slate-900/50 border-slate-600 text-slate-400"
               />
-              <p className="text-xs text-slate-500">O email não pode ser alterado.</p>
+              <Label>Novo email</Label>
+              <div className="flex gap-2">
+                <Input
+                  type="email"
+                  value={novoEmail}
+                  onChange={(e) => setNovoEmail(e.target.value)}
+                  placeholder="novo@lamusic.com.br"
+                  className="bg-slate-900 border-slate-600"
+                />
+                <Button
+                  onClick={handleAlterarEmail}
+                  disabled={alterandoEmail || !novoEmail.trim()}
+                  variant="outline"
+                  className="shrink-0"
+                >
+                  {alterandoEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Alterar'}
+                </Button>
+              </div>
+              <p className="text-xs text-slate-500">Um link de confirmação será enviado para o novo email.</p>
             </div>
 
             {message && (
