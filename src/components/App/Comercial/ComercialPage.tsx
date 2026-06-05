@@ -4655,7 +4655,7 @@ export function ComercialPage() {
               </div>
             )}
 
-            <ResultadosForaPeriodo itens={buscaFora.leads} periodoLabel={competencia.range.label} isAdmin={isAdmin} onEditar={handleEditarForaPeriodo} semCabecalho={!!buscaFunil} />
+            <ResultadosForaPeriodo itens={buscaFora.leads.filter(it => !leadsFiltrados.some(l => l.id === it.leadId))} periodoLabel={competencia.range.label} isAdmin={isAdmin} onEditar={handleEditarForaPeriodo} semCabecalho={!!buscaFunil} />
           </div>
           );
         })()}
@@ -5117,7 +5117,7 @@ export function ComercialPage() {
               </div>
             )}
 
-            <ResultadosForaPeriodo itens={buscaFora.experimentais} periodoLabel={competencia.range.label} isAdmin={isAdmin} onEditar={handleEditarForaPeriodo} semCabecalho={!!buscaFunil} />
+            <ResultadosForaPeriodo itens={buscaFora.experimentais.filter(it => !expFiltradas.some((e: any) => e.id === it.experimentalId))} periodoLabel={competencia.range.label} isAdmin={isAdmin} onEditar={handleEditarForaPeriodo} semCabecalho={!!buscaFunil} />
           </div>
           );
         })()}
@@ -5319,7 +5319,7 @@ export function ComercialPage() {
                 {!buscaFunil && <p className="text-slate-500 text-sm mt-1">Clique no card "Visita" acima para adicionar</p>}
               </div>
             )}
-            <ResultadosForaPeriodo itens={buscaFora.visitas} periodoLabel={competencia.range.label} isAdmin={isAdmin} onEditar={handleEditarForaPeriodo} semCabecalho={!!buscaFunil} />
+            <ResultadosForaPeriodo itens={buscaFora.visitas.filter(it => !visitasFiltradas.some((v: any) => v.id === it.leadId))} periodoLabel={competencia.range.label} isAdmin={isAdmin} onEditar={handleEditarForaPeriodo} semCabecalho={!!buscaFunil} />
           </div>
           );
         })()}
