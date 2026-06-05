@@ -4684,7 +4684,10 @@ export function ComercialPage() {
             if (filtroPresencaExp === 'faltaram' && l.status !== 'experimental_faltou') return false;
             if (buscaFunil) {
               const termo = buscaFunil.toLowerCase();
-              if (!(l.nome_aluno || '').toLowerCase().includes(termo) && !(l.lead_nome || '').toLowerCase().includes(termo) && !(l.lead_telefone || '').includes(buscaFunil.replace(/\D/g, ''))) return false;
+              const digits = buscaFunil.replace(/\D/g, '');
+              const matchNome = (l.nome_aluno || '').toLowerCase().includes(termo) || (l.lead_nome || '').toLowerCase().includes(termo);
+              const matchTel = digits.length > 0 && (l.lead_telefone || '').includes(digits);
+              if (!matchNome && !matchTel) return false;
             }
             if (filtroCanalFunil !== 'todos' && String(l.leads?.canal_origem_id) !== filtroCanalFunil) return false;
             if (filtroCursoFunil !== 'todos' && String(l.curso_interesse_id) !== filtroCursoFunil) return false;
