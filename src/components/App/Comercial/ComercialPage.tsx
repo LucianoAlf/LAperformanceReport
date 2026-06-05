@@ -4639,13 +4639,21 @@ export function ComercialPage() {
                             </td>
                           )}
                           <td className="py-3 px-2 text-right">
-                            <button
-                              onClick={() => lead.id && setDeleteId(lead.id)}
-                              className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded transition-colors"
-                              title="Excluir"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => setLeadParaEditar({ lead: lead as any })}
+                                className="px-2 py-1 text-xs rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors"
+                              >
+                                Editar
+                              </button>
+                              <button
+                                onClick={() => lead.id && setDeleteId(lead.id)}
+                                className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded transition-colors"
+                                title="Excluir"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       );
@@ -4655,7 +4663,6 @@ export function ComercialPage() {
               </div>
             )}
 
-            <ResultadosForaPeriodo itens={buscaFora.leads.filter(it => !leadsFiltrados.some(l => l.id === it.leadId))} periodoLabel={competencia.range.label} isAdmin={isAdmin} onEditar={handleEditarForaPeriodo} semCabecalho={!!buscaFunil} />
           </div>
           );
         })()}
