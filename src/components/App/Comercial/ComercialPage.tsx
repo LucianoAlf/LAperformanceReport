@@ -84,6 +84,7 @@ import { PlanoAcaoComercial } from './PlanoAcaoComercial';
 import { TabProgramaMatriculador } from './TabProgramaMatriculador';
 import { ModalMatricular } from '../PreAtendimento/components/ModalMatricular';
 import { ModalArquivar } from '../PreAtendimento/components/ModalArquivar';
+import { ModalEditarLead } from '../PreAtendimento/components/ModalEditarLead';
 import type { LeadCRM } from '../PreAtendimento/types';
 
 // Helpers de ordenação (3 estados: asc -> desc -> null)
@@ -289,6 +290,8 @@ const fmtBRL = (n: number): string =>
 // do período selecionado) — usado pela seção de aviso em cada aba do funil.
 interface ItemForaPeriodo {
   id: number;
+  leadId: number;
+  experimentalId?: number;
   nome: string;
   telefone: string;
   dataLabel: string;
@@ -299,18 +302,23 @@ interface ItemForaPeriodo {
 
 // Seção de aviso exibida abaixo da lista de cada aba quando a busca encontra
 // registros fora do período selecionado. Retorna null se não houver nada.
-function ResultadosForaPeriodo({ itens, periodoLabel, isAdmin }: { itens: ItemForaPeriodo[]; periodoLabel: string; isAdmin: boolean }) {
+// semCabecalho=true: suprime separador âmbar (usado quando há busca ativa — tudo fica numa lista unificada).
+function ResultadosForaPeriodo({ itens, periodoLabel, isAdmin, onEditar, semCabecalho }: { itens: ItemForaPeriodo[]; periodoLabel: string; isAdmin: boolean; onEditar?: (item: ItemForaPeriodo) => void; semCabecalho?: boolean }) {
   if (!itens.length) return null;
   return (
-    <div className="mt-6">
-      <div className="flex items-center gap-2">
-        <div className="h-px flex-1 bg-amber-500/30" />
-        <span className="text-xs text-amber-400 font-medium whitespace-nowrap">⚠️ Encontrados em outro período ({itens.length})</span>
-        <div className="h-px flex-1 bg-amber-500/30" />
-      </div>
-      <p className="text-[11px] text-amber-300/70 text-center mt-1 mb-2">
-        Estes registros batem com a busca, mas estão <span className="font-medium">fora de {periodoLabel}</span>. Mude o período para editá-los.
-      </p>
+    <div className={semCabecalho ? 'mt-0' : 'mt-6'}>
+      {!semCabecalho && (
+        <>
+          <div className="flex items-center gap-2">
+            <div className="h-px flex-1 bg-amber-500/30" />
+            <span className="text-xs text-amber-400 font-medium whitespace-nowrap">⚠️ Encontrados em outro período ({itens.length})</span>
+            <div className="h-px flex-1 bg-amber-500/30" />
+          </div>
+          <p className="text-[11px] text-amber-300/70 text-center mt-1 mb-2">
+            Estes registros batem com a busca, mas estão <span className="font-medium">fora de {periodoLabel}</span>.
+          </p>
+        </>
+      )}
       <table className="w-full text-sm">
         <thead>
           <tr className="text-left text-slate-400 border-b border-slate-700/50">
@@ -320,6 +328,7 @@ function ResultadosForaPeriodo({ itens, periodoLabel, isAdmin }: { itens: ItemFo
             <th className="pb-2 px-2 font-medium">Status</th>
             <th className="pb-2 px-2 font-medium">Detalhe</th>
             {isAdmin && <th className="pb-2 px-2 font-medium">Unidade</th>}
+            {onEditar && <th className="pb-2 px-2 font-medium">Ações</th>}
           </tr>
         </thead>
         <tbody>
@@ -331,6 +340,16 @@ function ResultadosForaPeriodo({ itens, periodoLabel, isAdmin }: { itens: ItemFo
               <td className="py-2 px-2 text-slate-300">{it.statusLabel}</td>
               <td className="py-2 px-2 text-slate-400">{it.detalhe || '-'}</td>
               {isAdmin && <td className="py-2 px-2 text-slate-400">{it.unidade || '-'}</td>}
+              {onEditar && (
+                <td className="py-2 px-2">
+                  <button
+                    onClick={() => onEditar(it)}
+                    className="px-2 py-1 text-xs rounded bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors"
+                  >
+                    Editar
+                  </button>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
@@ -509,9 +528,19 @@ export function ComercialPage() {
     dataExp: string;
   } | null>(null);
 
-  // State para modais de matricular/arquivar via etapa
+  // State para modais de matricular/arquivar/editar via etapa
   const [leadParaMatricular, setLeadParaMatricular] = useState<LeadCRM | null>(null);
   const [leadParaArquivar, setLeadParaArquivar] = useState<LeadCRM | null>(null);
+  const [leadParaEditar, setLeadParaEditar] = useState<{ lead: LeadCRM; experimentalId?: number } | null>(null);
+
+  const handleEditarForaPeriodo = async (item: ItemForaPeriodo) => {
+    const { data } = await supabase
+      .from('leads')
+      .select('*, canais_origem(nome), cursos:curso_interesse_id(nome), unidades(nome, codigo), professores:professor_experimental_id(nome)')
+      .eq('id', item.leadId)
+      .single();
+    if (data) setLeadParaEditar({ lead: data as LeadCRM, experimentalId: item.experimentalId });
+  };
 
   // State para form experimental em bulk
   const [bulkExpForm, setBulkExpForm] = useState<{ professorId: string; dataExp: string } | null>(null);
@@ -1230,19 +1259,20 @@ export function ComercialPage() {
         if (cancelado) return;
         const leadsData = (leadsR.data || []) as any[];
         const mapLead = (l: any): ItemForaPeriodo => ({
-          id: l.id, nome: l.nome, telefone: l.telefone || '', dataLabel: fmtMes(l.data_contato),
+          id: l.id, leadId: l.id, nome: l.nome, telefone: l.telefone || '', dataLabel: fmtMes(l.data_contato),
           statusLabel: labelStatus(l.status), detalhe: l.cursos?.nome || '', unidade: l.unidades?.codigo,
         });
         setBuscaFora({
           leads: leadsData.filter(l => l.status !== 'visita_escola').map(mapLead),
           visitas: leadsData.filter(l => l.status === 'visita_escola').map(mapLead),
           experimentais: ((expR.data || []) as any[]).map((e: any): ItemForaPeriodo => ({
-            id: e.id, nome: e.nome_aluno || e.leads?.nome || '', telefone: e.leads?.telefone || '',
+            id: e.id, leadId: e.lead_id, experimentalId: e.id,
+            nome: e.nome_aluno || e.leads?.nome || '', telefone: e.leads?.telefone || '',
             dataLabel: fmtMes(e.data_experimental), statusLabel: labelStatus(e.status),
             detalhe: [e.cursos?.nome, e.professores?.nome].filter(Boolean).join(' · '), unidade: e.leads?.unidades?.codigo,
           })),
           matriculas: ((matR.data || []) as any[]).map((a: any): ItemForaPeriodo => ({
-            id: a.id, nome: a.nome, telefone: a.telefone || '', dataLabel: fmtMes(a.data_matricula),
+            id: a.id, leadId: a.id, nome: a.nome, telefone: a.telefone || '', dataLabel: fmtMes(a.data_matricula),
             statusLabel: labelStatus(a.status), detalhe: a.cursos?.nome || '', unidade: a.unidades?.codigo,
           })),
         });
@@ -4370,6 +4400,12 @@ export function ComercialPage() {
                                         {/* Arquivar sempre disponível */}
                                         <div className="border-t border-slate-700/50 mt-1 pt-1">
                                           <button
+                                            onClick={() => setLeadParaEditar({ lead: toLeadCRM(lead) })}
+                                            className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-blue-500/20 text-blue-400 transition-colors"
+                                          >
+                                            Editar
+                                          </button>
+                                          <button
                                             onClick={() => setLeadParaArquivar(toLeadCRM(lead))}
                                             className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-rose-500/20 text-rose-400 transition-colors"
                                           >
@@ -4616,7 +4652,7 @@ export function ComercialPage() {
               </div>
             )}
 
-            <ResultadosForaPeriodo itens={buscaFora.leads} periodoLabel={competencia.range.label} isAdmin={isAdmin} />
+            <ResultadosForaPeriodo itens={buscaFora.leads} periodoLabel={competencia.range.label} isAdmin={isAdmin} onEditar={handleEditarForaPeriodo} semCabecalho={!!buscaFunil} />
           </div>
           );
         })()}
@@ -4781,6 +4817,12 @@ export function ComercialPage() {
                                     </button>
                                   ))}
                                   <div className="border-t border-slate-700/50 mt-1 pt-1">
+                                    <button
+                                      onClick={() => setLeadParaEditar({ lead: expToLeadCRM(exp), experimentalId: exp.id })}
+                                      className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-blue-500/20 text-blue-400 transition-colors"
+                                    >
+                                      Editar
+                                    </button>
                                     <button
                                       onClick={() => setLeadParaArquivar(expToLeadCRM(exp))}
                                       className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-rose-500/20 text-rose-400 transition-colors"
@@ -5069,7 +5111,7 @@ export function ComercialPage() {
               </div>
             )}
 
-            <ResultadosForaPeriodo itens={buscaFora.experimentais} periodoLabel={competencia.range.label} isAdmin={isAdmin} />
+            <ResultadosForaPeriodo itens={buscaFora.experimentais} periodoLabel={competencia.range.label} isAdmin={isAdmin} onEditar={handleEditarForaPeriodo} semCabecalho={!!buscaFunil} />
           </div>
           );
         })()}
@@ -5219,6 +5261,12 @@ export function ComercialPage() {
                                     ))}
                                     <div className="border-t border-slate-700/50 mt-1 pt-1">
                                       <button
+                                        onClick={() => setLeadParaEditar({ lead: toLeadCRM(visita as any) })}
+                                        className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-blue-500/20 text-blue-400 transition-colors"
+                                      >
+                                        Editar
+                                      </button>
+                                      <button
                                         onClick={() => setLeadParaArquivar(toLeadCRM(visita as any))}
                                         className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-rose-500/20 text-rose-400 transition-colors"
                                       >
@@ -5262,7 +5310,7 @@ export function ComercialPage() {
                 {!buscaFunil && <p className="text-slate-500 text-sm mt-1">Clique no card "Visita" acima para adicionar</p>}
               </div>
             )}
-            <ResultadosForaPeriodo itens={buscaFora.visitas} periodoLabel={competencia.range.label} isAdmin={isAdmin} />
+            <ResultadosForaPeriodo itens={buscaFora.visitas} periodoLabel={competencia.range.label} isAdmin={isAdmin} onEditar={handleEditarForaPeriodo} semCabecalho={!!buscaFunil} />
           </div>
           );
         })()}
@@ -5556,7 +5604,7 @@ export function ComercialPage() {
           )}
         </div>
 
-        <div className="px-6"><ResultadosForaPeriodo itens={buscaFora.matriculas} periodoLabel={competencia.range.label} isAdmin={isAdmin} /></div>
+        <div className="px-6"><ResultadosForaPeriodo itens={buscaFora.matriculas} periodoLabel={competencia.range.label} isAdmin={isAdmin} semCabecalho={!!buscaFunil} /></div>
 
         {/* Resumo financeiro */}
         {matriculasMes.length > 0 && (
@@ -6862,6 +6910,15 @@ export function ComercialPage() {
         onClose={() => setLeadParaArquivar(null)}
         onSalvo={() => { setLeadParaArquivar(null); loadData(); }}
         lead={leadParaArquivar}
+      />
+
+      {/* Modal Editar Lead */}
+      <ModalEditarLead
+        aberto={!!leadParaEditar}
+        onClose={() => setLeadParaEditar(null)}
+        onSalvo={() => { setLeadParaEditar(null); loadData(); }}
+        lead={leadParaEditar?.lead ?? null}
+        experimentalId={leadParaEditar?.experimentalId}
       />
 
 
