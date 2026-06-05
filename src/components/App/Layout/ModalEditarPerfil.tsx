@@ -182,16 +182,17 @@ export function ModalEditarPerfil({ open, onOpenChange }: ModalEditarPerfilProps
     setAlterandoEmail(true);
     setMessage(null);
     try {
-      const { error } = await supabase.auth.updateUser({ email: emailNorm });
+      const { data, error } = await supabase.functions.invoke('self-update-email', {
+        body: { newEmail: emailNorm },
+      });
       if (error) throw error;
+      if (data?.error) throw new Error(data.error);
 
-      // Atualiza tabela usuarios para manter em sincronia
-      await supabase.from('usuarios').update({ email: emailNorm }).eq('id', usuario!.id);
-
-      setMessage({ type: 'success', text: `Confirmação enviada para ${emailNorm}. Verifique sua caixa de entrada.` });
+      setMessage({ type: 'success', text: 'Email atualizado com sucesso!' });
       setNovoEmail('');
+      if (refreshUser) await refreshUser();
     } catch (error: any) {
-      setMessage({ type: 'error', text: error.message || 'Erro ao solicitar alteração de email.' });
+      setMessage({ type: 'error', text: error.message || 'Erro ao alterar email.' });
     } finally {
       setAlterandoEmail(false);
     }
@@ -396,7 +397,7 @@ export function ModalEditarPerfil({ open, onOpenChange }: ModalEditarPerfilProps
                   {alterandoEmail ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Alterar'}
                 </Button>
               </div>
-              <p className="text-xs text-slate-500">Um link de confirmação será enviado para o novo email.</p>
+              <p className="text-xs text-slate-500">O email é alterado imediatamente.</p>
             </div>
 
             {message && (
