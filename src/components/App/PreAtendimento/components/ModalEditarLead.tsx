@@ -39,6 +39,7 @@ export function ModalEditarLead({ aberto, onClose, onSalvo, lead, experimentalId
     canal_origem_id: '',
     curso_interesse_id: '',
     professor_experimental_id: '',
+    data_agendamento: '',
     data_experimental: '',
     horario_experimental: '',
     observacoes: '',
@@ -46,7 +47,8 @@ export function ModalEditarLead({ aberto, onClose, onSalvo, lead, experimentalId
 
   useEffect(() => {
     if (aberto && lead) {
-      setForm({
+      setForm(f => ({
+        ...f,
         nome: lead.nome || '',
         telefone: lead.telefone || '',
         canal_origem_id: lead.canal_origem_id?.toString() || '',
@@ -55,22 +57,32 @@ export function ModalEditarLead({ aberto, onClose, onSalvo, lead, experimentalId
         data_experimental: lead.data_experimental || '',
         horario_experimental: lead.horario_experimental?.slice(0, 5) || '',
         observacoes: lead.observacoes || '',
-      });
+      }));
     }
   }, [aberto, lead]);
 
   useEffect(() => {
     if (!aberto) return;
-    Promise.all([
+    const queries: Promise<any>[] = [
       supabase.from('cursos').select('id, nome').eq('ativo', true).order('nome'),
       supabase.from('professores').select('id, nome').eq('ativo', true).order('nome'),
       supabase.from('canais_origem').select('id, nome').order('nome'),
-    ]).then(([c, p, ca]) => {
+    ];
+    if (experimentalId) {
+      queries.push(
+        supabase.from('lead_experimentais').select('created_at').eq('id', experimentalId).single()
+      );
+    }
+    Promise.all(queries).then(([c, p, ca, exp]) => {
       if (c.data) setCursos(c.data);
       if (p.data) setProfessores(p.data);
       if (ca.data) setCanais(ca.data);
+      if (exp?.data?.created_at) {
+        const d = new Date(exp.data.created_at).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+        setForm(f => ({ ...f, data_agendamento: d }));
+      }
     });
-  }, [aberto]);
+  }, [aberto, experimentalId]);
 
   const handleClose = () => onClose();
 
@@ -102,6 +114,7 @@ export function ModalEditarLead({ aberto, onClose, onSalvo, lead, experimentalId
             professor_experimental_id: form.professor_experimental_id ? parseInt(form.professor_experimental_id) : null,
             data_experimental: form.data_experimental || null,
             horario_experimental: form.horario_experimental ? `${form.horario_experimental}:00` : null,
+            ...(form.data_agendamento ? { created_at: `${form.data_agendamento}T12:00:00-03:00` } : {}),
           })
           .eq('id', experimentalId);
       }
@@ -173,9 +186,21 @@ export function ModalEditarLead({ aberto, onClose, onSalvo, lead, experimentalId
             </div>
           </div>
 
+          {experimentalId && (
+            <div>
+              <label className="text-xs text-slate-400 mb-1 block">Agendada em</label>
+              <input
+                type="date"
+                value={form.data_agendamento}
+                onChange={e => setForm(f => ({ ...f, data_agendamento: e.target.value }))}
+                className="w-full rounded-md bg-slate-800/50 border border-slate-700 text-sm text-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-slate-400 mb-1 block">Data da Experimental</label>
+              <label className="text-xs text-slate-400 mb-1 block">Data da Aula</label>
               <input
                 type="date"
                 value={form.data_experimental}
