@@ -300,6 +300,8 @@ interface ItemForaPeriodo {
   unidade?: string;
 }
 
+const normalizar = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
 // Seção de aviso exibida abaixo da lista de cada aba quando a busca encontra
 // registros fora do período selecionado. Retorna null se não houver nada.
 // semCabecalho=true: suprime separador âmbar (usado quando há busca ativa — tudo fica numa lista unificada).
@@ -4036,10 +4038,11 @@ export function ComercialPage() {
 
           const leadsFiltrados = leadsMes.filter(l => {
             if (buscaFunil) {
-              const termo = buscaFunil.toLowerCase();
-              const nome = (l.nome || '').toLowerCase();
-              const tel = ((l as any).telefone || '').toLowerCase();
-              if (!nome.includes(termo) && !tel.includes(termo)) return false;
+              const termo = normalizar(buscaFunil);
+              const digits = buscaFunil.replace(/\D/g, '');
+              const matchNome = normalizar(l.nome || '').includes(termo);
+              const matchTel = digits.length > 0 && ((l as any).telefone || '').includes(digits);
+              if (!matchNome && !matchTel) return false;
             }
             if (filtroTelefoneFunil === 'sem') {
               const tel = ((l as any).telefone || '').trim();
@@ -4683,9 +4686,9 @@ export function ComercialPage() {
             if (filtroPresencaExp === 'compareceram' && !['experimental_realizada', 'convertido'].includes(l.status)) return false;
             if (filtroPresencaExp === 'faltaram' && l.status !== 'experimental_faltou') return false;
             if (buscaFunil) {
-              const termo = buscaFunil.toLowerCase();
+              const termo = normalizar(buscaFunil);
               const digits = buscaFunil.replace(/\D/g, '');
-              const matchNome = (l.nome_aluno || '').toLowerCase().includes(termo) || (l.lead_nome || '').toLowerCase().includes(termo);
+              const matchNome = normalizar(l.nome_aluno || '').includes(termo) || normalizar(l.lead_nome || '').includes(termo);
               const matchTel = digits.length > 0 && (l.lead_telefone || '').includes(digits);
               if (!matchNome && !matchTel) return false;
             }
@@ -5125,8 +5128,11 @@ export function ComercialPage() {
         {abaDetalhamento === 'visita' && (() => {
           const visitasFiltradasRaw = visitasMes.filter(l => {
             if (buscaFunil) {
-              const termo = buscaFunil.toLowerCase();
-              if (!(l.nome || '').toLowerCase().includes(termo)) return false;
+              const termo = normalizar(buscaFunil);
+              const digits = buscaFunil.replace(/\D/g, '');
+              const matchNome = normalizar(l.nome || '').includes(termo);
+              const matchTel = digits.length > 0 && ((l as any).telefone || '').includes(digits);
+              if (!matchNome && !matchTel) return false;
             }
             if (filtroCanalFunil !== 'todos' && String(l.canal_origem_id) !== filtroCanalFunil) return false;
             if (filtroCursoFunil !== 'todos' && String(l.curso_interesse_id) !== filtroCursoFunil) return false;
