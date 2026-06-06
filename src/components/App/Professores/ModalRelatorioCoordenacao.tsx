@@ -97,7 +97,22 @@ export function ModalRelatorioCoordenacao({
 
       if (errorIA) {
         console.error('Erro na Edge Function:', errorIA);
-        throw new Error('Erro ao gerar relatório com IA');
+        // Extrair detalhe e origem do corpo da resposta de erro (status non-2xx)
+        let detalhe = errorIA.message || 'Erro ao gerar relatório com IA';
+        let origem = '';
+        try {
+          const corpo = await (errorIA as any).context?.json?.();
+          if (corpo?.error) detalhe = corpo.error;
+          if (corpo?.origem) origem = corpo.origem;
+        } catch { /* corpo não-JSON, mantém mensagem padrão */ }
+        const origemLabel: Record<string, string> = {
+          api_gemini: 'API Gemini',
+          api_openai: 'API OpenAI',
+          config: 'Configuração',
+          interno: 'Interno',
+        };
+        const prefixo = origem ? `[${origemLabel[origem] || origem}] ` : '';
+        throw new Error(`${prefixo}${detalhe}`);
       }
 
       if (responseIA?.success && responseIA?.relatorio) {

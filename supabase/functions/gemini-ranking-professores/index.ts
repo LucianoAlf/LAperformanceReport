@@ -129,6 +129,8 @@ function formatarVariacao(valor: number, media: number): string {
   return diff >= 0 ? `+${pct}%` : `${pct}%`;
 }
 
+const GEMINI_MODEL = 'gemini-3-flash-preview';
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -310,9 +312,9 @@ Deno.serve(async (req) => {
         const matriculas = p.matriculas || 0;
         relatorioTemplate += `${i + 1}. ${p.professor_nome} - ${matriculas} matrícula${matriculas > 1 ? 's' : ''}\n`;
       });
-      const semMatriculas = totalProfessores - rankingMatriculas.length;
-      if (semMatriculas > 0) {
-        relatorioTemplate += `\n🚨 *${semMatriculas} professores* sem matrículas no mês\n`;
+      const semMatriculasR = totalProfessores - rankingMatriculas.length;
+      if (semMatriculasR > 0) {
+        relatorioTemplate += `\n🚨 *${semMatriculasR} professores* sem matrículas no mês\n`;
       }
     } else {
       relatorioTemplate += `🚨 Nenhum professor realizou matrículas no mês\n`;
@@ -421,7 +423,7 @@ IMPORTANTE: Seja direto, use nomes dos professores, foque em ações práticas.`
 
     // Chamar API do Gemini
     const response = await fetchGeminiComRetry(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -436,7 +438,9 @@ IMPORTANTE: Seja direto, use nomes dos professores, foque em ações práticas.`
     );
 
     if (!response.ok) {
-      throw new Error(`Erro na API Gemini: ${response.status}`);
+      const detalheErro = await response.text();
+      console.error(`[gemini-ranking] Gemini retornou ${response.status}:`, detalheErro);
+      throw new Error(`API Gemini retornou ${response.status}: ${detalheErro}`);
     }
 
     const geminiResponse = await response.json();
@@ -503,10 +507,16 @@ IMPORTANTE: Seja direto, use nomes dos professores, foque em ações práticas.`
 
   } catch (error) {
     console.error('Erro:', error);
+    const msg = error instanceof Error ? error.message : 'Erro desconhecido';
+    const origem = msg.includes('API Gemini') ? 'api_gemini'
+      : msg.includes('GEMINI_API_KEY') ? 'config'
+      : 'interno';
     return new Response(
       JSON.stringify({
         success: false,
-        error: error instanceof Error ? error.message : 'Erro desconhecido'
+        error: msg,
+        origem,
+        funcao: 'gemini-ranking-professores'
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
