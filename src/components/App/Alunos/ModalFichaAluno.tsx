@@ -6,7 +6,7 @@ const parseLocalDate = (s: string | null | undefined): Date | null =>
 const formatLocalDate = (d: Date | null | undefined): string | null =>
   d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : null;
 import { supabase } from '@/lib/supabase';
-import { X, Loader2, Save, User, GraduationCap, DollarSign, TrendingUp, History, AlertCircle, Plus, Users, Pencil, Brain, ExternalLink, MessageCircle } from 'lucide-react';
+import { X, Loader2, Save, User, GraduationCap, DollarSign, TrendingUp, History, AlertCircle, Plus, Users, Pencil, Brain, ExternalLink, MessageCircle, Search } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -286,6 +286,12 @@ export function ModalFichaAluno({
   const [salvandoSegundoCurso, setSalvandoSegundoCurso] = useState(false);
   const [turmaSegundoCurso, setTurmaSegundoCurso] = useState<any>(null);
   const [carregandoTurma, setCarregandoTurma] = useState(false);
+
+  // Estado para busca de anamnese pendente
+  const [modalBuscaAnamnese, setModalBuscaAnamnese] = useState(false);
+  const [buscandoAnamnese, setBuscandoAnamnese] = useState(false);
+  const [candidatosAnamnese, setCandidatosAnamnese] = useState<any[]>([]);
+  const [vinculandoAnamnese, setVinculandoAnamnese] = useState(false);
 
   const perfisAtivos = perfis.map((perfil) => perfil.perfil_nome.toLowerCase());
   const podeReenviarWhatsapp = usuario?.perfil === 'admin' || perfisAtivos.includes('admin') || perfisAtivos.includes('gerente');
@@ -582,7 +588,13 @@ export function ModalFichaAluno({
       dataFimContrato.setFullYear(dataFimContrato.getFullYear() + 1);
 
       const cursoSelecionadoEhBanda = cursos.find(c => c.id === segundoCursoData.curso_id)?.is_projeto_banda;
-      const tipoMatriculaId = cursoSelecionadoEhBanda ? 5 : 2;
+      // Preservar tipo_matricula_id se for bolsista (3=Integral, 4=Parcial)
+      // Só força 2 (Segundo Curso) se for pagante regular (1)
+      const tipoMatriculaId = cursoSelecionadoEhBanda
+        ? 5  // Banda
+        : ([3, 4].includes(formData.tipo_matricula_id)
+            ? formData.tipo_matricula_id  // Preserva bolsista integral/parcial
+            : 2);  // Segundo Curso (só para pagante regular)
       const isSegundoCurso = cursoSelecionadoEhBanda ? null : true;
 
       const { error } = await supabase.from('alunos').insert({
@@ -650,6 +662,67 @@ export function ModalFichaAluno({
     const link = `https://anamnese-la-music.vercel.app/perfil/${anamnese.share_token}`;
     const mensagem = encodeURIComponent(`Olá! Segue o link da anamnese de ${dadosCompletos?.nome || aluno.nome}: ${link}`);
     window.open(`https://wa.me/${telefoneWhatsapp}?text=${mensagem}`, '_blank', 'noopener,noreferrer');
+  }
+
+  async function handleBuscarAnamnese() {
+    setBuscandoAnamnese(true);
+    try {
+      const { data, error } = await supabase
+        .rpc('buscar_anamneses_pendentes', { p_aluno_id: aluno.id });
+
+      if (error) throw error;
+
+      if (!data || data.length === 0) {
+        toast.info('Nenhuma anamnese pendente encontrada para este aluno.');
+        setModalBuscaAnamnese(false);
+      } else {
+        setCandidatosAnamnese(data);
+        setModalBuscaAnamnese(true);
+      }
+    } catch (error: any) {
+      console.error('Erro ao buscar anamneses pendentes:', error);
+      toast.error(`Erro ao buscar anamneses: ${error.message}`);
+    } finally {
+      setBuscandoAnamnese(false);
+    }
+  }
+
+  async function handleVincularAnamnese(anamneseId: number) {
+    setVinculandoAnamnese(true);
+    try {
+      const { data, error } = await supabase
+        .rpc('vincular_anamnese_aluno', {
+          p_anamnese_id: anamneseId,
+          p_aluno_id: aluno.id,
+        });
+
+      if (error) throw error;
+
+      if (data?.ok) {
+        toast.success('Anamnese vinculada com sucesso!');
+        setModalBuscaAnamnese(false);
+        setCandidatosAnamnese([]);
+        // Recarregar anamnese do aluno
+        const { data: anamneseData } = await supabase
+          .from('anamneses')
+          .select('*, anamnese_respostas_perfil(*)')
+          .eq('aluno_id', aluno.id)
+          .eq('status', 'completa')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        setAnamnese((anamneseData as AnamneseAluno | null) || null);
+        // Recarregar dados completos do aluno para atualizar temperamento
+        carregarDadosCompletos();
+      } else {
+        toast.error(data?.erro || 'Erro ao vincular anamnese');
+      }
+    } catch (error: any) {
+      console.error('Erro ao vincular anamnese:', error);
+      toast.error(`Erro ao vincular: ${error.message}`);
+    } finally {
+      setVinculandoAnamnese(false);
+    }
   }
 
   const diagnosticos = toArray(anamnese?.diagnosticos);
@@ -1361,6 +1434,25 @@ export function ModalFichaAluno({
                   <p className="mt-2 text-sm text-slate-400 max-w-lg mx-auto">
                     Este aluno ainda não possui anamnese. A anamnese é preenchida pelo responsável no tablet da recepção durante a matrícula.
                   </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="mt-4"
+                    onClick={handleBuscarAnamnese}
+                    disabled={buscandoAnamnese}
+                  >
+                    {buscandoAnamnese ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Buscando...
+                      </>
+                    ) : (
+                      <>
+                        <Search className="w-4 h-4 mr-2" />
+                        Buscar anamnese
+                      </>
+                    )}
+                  </Button>
                 </div>
               )}
             </TabsContent>
@@ -1676,6 +1768,85 @@ export function ModalFichaAluno({
         </Dialog>
         );
       })()}
+
+      {/* Modal de Busca de Anamnese */}
+      {modalBuscaAnamnese && (
+        <Dialog open onOpenChange={() => setModalBuscaAnamnese(false)}>
+          <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Brain className="w-5 h-5 text-purple-400" />
+                Anamneses Pendentes
+              </DialogTitle>
+            </DialogHeader>
+
+            <div className="flex-1 overflow-y-auto py-4 space-y-3">
+              {candidatosAnamnese.map((candidato) => (
+                <div key={candidato.anamnese_id} className="rounded-xl border border-slate-700 bg-slate-800/50 p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className={`px-2 py-0.5 rounded text-xs font-semibold ${
+                          candidato.tipo_formulario === 'EMLA'
+                            ? 'bg-emerald-500/20 text-emerald-400'
+                            : 'bg-blue-500/20 text-blue-400'
+                        }`}>
+                          {candidato.tipo_formulario}
+                        </span>
+                        {candidato.temperamento_codinome && (
+                          <span className="px-2 py-0.5 rounded text-xs font-semibold bg-purple-500/20 text-purple-400">
+                            {candidato.temperamento_codinome}
+                          </span>
+                        )}
+                      </div>
+                      <h5 className="text-base font-medium text-white">{candidato.nome_aluno}</h5>
+                      <p className="text-sm text-slate-400">{candidato.unidade_nome}</p>
+                    </div>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => handleVincularAnamnese(candidato.anamnese_id)}
+                      disabled={vinculandoAnamnese}
+                      className="bg-purple-600 hover:bg-purple-500"
+                    >
+                      {vinculandoAnamnese ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Vinculando...
+                        </>
+                      ) : (
+                        <>
+                          <Plus className="w-4 h-4 mr-2" />
+                          Vincular
+                        </>
+                      )}
+                    </Button>
+                  </div>
+
+                  <div className="flex items-center gap-4 text-sm text-slate-400">
+                    <span>📅 {formatarDataHora(candidato.created_at)}</span>
+                    <span className={`px-2 py-0.5 rounded text-xs ${
+                      candidato.match_label === 'Nome e unidade conferem'
+                        ? 'bg-emerald-500/20 text-emerald-400'
+                        : candidato.match_label === 'Mesmo nome (outra unidade)'
+                        ? 'bg-amber-500/20 text-amber-400'
+                        : 'bg-slate-500/20 text-slate-400'
+                    }`}>
+                      {candidato.match_label}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="p-6 border-t border-slate-700 flex justify-end">
+              <Button variant="outline" onClick={() => setModalBuscaAnamnese(false)}>
+                Fechar
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </Dialog>
   );
 }
