@@ -26,6 +26,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { useWidgetOverlapSentinel } from '@/contexts/WidgetVisibilityContext';
 import {
   Popover,
@@ -42,6 +45,16 @@ import {
 } from '@/components/ui/command';
 import { ContatoPopover } from './ContatoPopover';
 import type { Aluno, Filtros } from './AlunosPage';
+import {
+  analisarMudancaParaSemParcela,
+  buscarContextosStatusPagamento,
+  deveExigirConfirmacaoDigitada,
+  getConfirmacaoSemParcela,
+  getStatusPagamentoLabel,
+  registrarAuditoriaStatusPagamento,
+  type ContextoStatusPagamento,
+  type OrigemGovernancaStatusPagamento,
+} from './statusPagamentoGovernanca';
 
 interface TabelaAlunosProps {
   alunos: Aluno[];
@@ -59,6 +72,13 @@ interface TabelaAlunosProps {
   onRecarregar: () => void;
   verificarTurmaAoSalvar: (aluno: Aluno) => Promise<boolean>;
   onAbrirModalTurma?: (professor_id: number, dia: string, horario: string) => void;
+}
+
+interface GovernancaSemParcelaState {
+  origem: OrigemGovernancaStatusPagamento;
+  alunoIds: number[];
+  alunos: ContextoStatusPagamento[];
+  salvando: boolean;
 }
 
 const DIAS_SEMANA = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
@@ -194,6 +214,9 @@ export function TabelaAlunos({
   const [alunosExpandidos, setAlunosExpandidos] = useState<Set<number>>(new Set());
   const [alertaInadimplenciaDismissed, setAlertaInadimplenciaDismissed] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
+  const [governancaSemParcela, setGovernancaSemParcela] = useState<GovernancaSemParcelaState | null>(null);
+  const [justificativaSemParcela, setJustificativaSemParcela] = useState('');
+  const [confirmacaoSemParcela, setConfirmacaoSemParcela] = useState('');
   const itensPorPagina = 30;
 
   const toggleColuna = useCallback((id: string) => {
@@ -287,6 +310,128 @@ export function TabelaAlunos({
       default: return null;
     }
   };
+
+  const fecharGovernancaSemParcela = useCallback(() => {
+    setGovernancaSemParcela(null);
+    setJustificativaSemParcela('');
+    setConfirmacaoSemParcela('');
+  }, []);
+
+  const abrirGovernancaSemParcela = useCallback(async (
+    alunoIds: number[],
+    origem: 'tabela_inline' | 'acao_massa'
+  ) => {
+    if (alunoIds.length === 0) return;
+
+    if (origem === 'acao_massa') {
+      setProcessandoMassa(true);
+    }
+
+    try {
+      const contextos = await buscarContextosStatusPagamento(alunoIds);
+      const pendentes = contextos.filter(aluno => aluno.status_pagamento !== 'sem_parcela');
+
+      if (pendentes.length === 0) {
+        toast.addToast('Nenhuma alteração pendente', 'info', 'Os alunos selecionados já estão como "Sem Parcela".');
+        return;
+      }
+
+      setGovernancaSemParcela({
+        origem,
+        alunoIds: pendentes.map(aluno => aluno.id),
+        alunos: pendentes,
+        salvando: false,
+      });
+    } catch (error: any) {
+      console.error('Erro ao carregar governança de status_pagamento:', error);
+      toast.addToast('Erro ao abrir confirmação', 'error', error.message || 'Não foi possível validar a mudança para "Sem Parcela".');
+    } finally {
+      if (origem === 'acao_massa') {
+        setProcessandoMassa(false);
+      }
+    }
+  }, [toast]);
+
+  const confirmarGovernancaSemParcela = useCallback(async () => {
+    if (!governancaSemParcela) return;
+
+    const ator = usuario?.email || usuario?.nome || 'sistema';
+    const motivo = justificativaSemParcela.trim();
+    const exigeConfirmacaoDigitada = governancaSemParcela.alunos.some((aluno) =>
+      deveExigirConfirmacaoDigitada(governancaSemParcela.origem, analisarMudancaParaSemParcela(aluno))
+    );
+    if (motivo.length < 12) {
+      toast.addToast('Justificativa obrigatória', 'error', 'Descreva o motivo com pelo menos 12 caracteres.');
+      return;
+    }
+    if (
+      exigeConfirmacaoDigitada &&
+      confirmacaoSemParcela.trim().toUpperCase() !== getConfirmacaoSemParcela()
+    ) {
+      toast.addToast('Confirmação pendente', 'error', `Digite ${getConfirmacaoSemParcela()} para liberar a alteração.`);
+      return;
+    }
+
+    setGovernancaSemParcela(prev => prev ? { ...prev, salvando: true } : prev);
+    try {
+      const ids = governancaSemParcela.alunoIds;
+      const { error } = await supabase
+        .from('alunos')
+        .update({
+          status_pagamento: 'sem_parcela',
+          updated_at: new Date().toISOString(),
+          updated_by: ator,
+        })
+        .in('id', ids);
+
+      if (error) throw error;
+
+      const auditoriaResultados = await Promise.allSettled(
+        governancaSemParcela.alunos.map((aluno) =>
+          registrarAuditoriaStatusPagamento({
+            alunoId: aluno.id,
+            alunoNome: aluno.nome,
+            ator,
+            antes: aluno.status_pagamento,
+            depois: 'sem_parcela',
+            motivo,
+            origem: governancaSemParcela.origem,
+          })
+        )
+      );
+      const falhasAuditoria = auditoriaResultados.filter((resultado) => resultado.status === 'rejected').length;
+
+      setAlunosSelecionados(new Set());
+      fecharGovernancaSemParcela();
+      onRecarregar();
+      if (falhasAuditoria > 0) {
+        toast.addToast(
+          'Status atualizado com alerta',
+          'warning',
+          `${ids.length} aluno(s) foram atualizados, mas ${falhasAuditoria} trilha(s) de auditoria falharam.`
+        );
+      } else {
+        toast.addToast(
+          'Status atualizado com governança',
+          'success',
+          `${ids.length} aluno(s) marcados como "Sem Parcela" com justificativa e trilha em anotações.`
+        );
+      }
+    } catch (error: any) {
+      console.error('Erro ao confirmar governança de status_pagamento:', error);
+      toast.addToast('Erro ao salvar governança', 'error', error.message || 'Não foi possível concluir a alteração.');
+      setGovernancaSemParcela(prev => prev ? { ...prev, salvando: false } : prev);
+    }
+  }, [
+    confirmacaoSemParcela,
+    fecharGovernancaSemParcela,
+    governancaSemParcela,
+    justificativaSemParcela,
+    onRecarregar,
+    toast,
+    usuario?.email,
+    usuario?.nome,
+  ]);
 
   // Toggle expansão de aluno com segundo curso
   const toggleExpandirAluno = (alunoId: number) => {
@@ -423,6 +568,11 @@ export function TabelaAlunos({
 
   // Função para salvar campo individual do aluno
   const salvarCampo = useCallback(async (alunoId: number, campo: string, valor: string | number | null) => {
+    if (campo === 'status_pagamento' && valor === 'sem_parcela') {
+      await abrirGovernancaSemParcela([alunoId], 'tabela_inline');
+      return;
+    }
+
     // Atualização otimista - atualiza UI imediatamente
     // Busca tanto no top-level quanto em outros_cursos (segundo curso)
     setAlunosLocal(prev => prev.map(aluno => {
@@ -443,7 +593,8 @@ export function TabelaAlunos({
 
     // Preparar dados para o banco
     const updateData: Record<string, any> = {
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
+      updated_by: usuario?.email || usuario?.nome || 'sistema',
     };
 
     switch (campo) {
@@ -497,7 +648,7 @@ export function TabelaAlunos({
       setAlunosLocal(alunosProp);
       throw error;
     }
-  }, [aplicarUpdateLocal, alunosProp]);
+  }, [abrirGovernancaSemParcela, aplicarUpdateLocal, alunosProp, usuario?.email, usuario?.nome]);
 
   async function confirmarExclusao() {
     if (!alunoParaExcluir) return;
@@ -524,16 +675,40 @@ export function TabelaAlunos({
     setAlunoParaExcluir(null);
   }
 
-  // Remove segundo curso alterando status para 'cancelado' (evita constraint NO ACTION)
+  // Remove segundo curso arquivando em alunos_arquivados + DELETE de alunos
   async function removerSegundoCurso(outroCurso: Aluno) {
-    const { error } = await supabase
+    const { error: archiveError } = await supabase
+      .from('alunos_arquivados')
+      .insert({
+        id: outroCurso.id,
+        nome: outroCurso.nome,
+        unidade_id: outroCurso.unidade_id,
+        curso_id: outroCurso.curso_id,
+        tipo_matricula_id: outroCurso.tipo_matricula_id,
+        data_matricula: outroCurso.data_matricula,
+        valor_parcela: outroCurso.valor_parcela,
+        status: outroCurso.status,
+        is_segundo_curso: outroCurso.is_segundo_curso,
+        created_at: outroCurso.created_at,
+        arquivado_em: new Date().toISOString(),
+        arquivado_por: 'ui-remover-segundo-curso',
+        motivo: 'Segundo curso removido manualmente pela interface',
+      });
+
+    if (archiveError) {
+      console.error('Erro ao arquivar curso:', archiveError);
+      toast.addToast('Erro ao remover curso', 'error', archiveError.message, 6000);
+      return;
+    }
+
+    const { error: deleteError } = await supabase
       .from('alunos')
-      .update({ status: 'cancelado', updated_at: new Date().toISOString() })
+      .delete()
       .eq('id', outroCurso.id);
 
-    if (error) {
-      console.error('Erro ao remover curso:', error);
-      toast.addToast('Erro ao remover curso', 'error', error.message, 6000);
+    if (deleteError) {
+      console.error('Erro ao deletar curso:', deleteError);
+      toast.addToast('Erro ao remover curso', 'error', deleteError.message, 6000);
     } else {
       toast.addToast('Curso removido com sucesso', 'success');
       onRecarregar();
@@ -809,7 +984,11 @@ export function TabelaAlunos({
     try {
       const { error } = await supabase
         .from('alunos')
-        .update({ status_pagamento: 'em_dia' })
+        .update({
+          status_pagamento: 'em_dia',
+          updated_at: new Date().toISOString(),
+          updated_by: usuario?.email || usuario?.nome || 'sistema',
+        })
         .in('id', Array.from(alunosSelecionados));
 
       if (error) throw error;
@@ -832,7 +1011,11 @@ export function TabelaAlunos({
     try {
       const { error } = await supabase
         .from('alunos')
-        .update({ status_pagamento: 'inadimplente' })
+        .update({
+          status_pagamento: 'inadimplente',
+          updated_at: new Date().toISOString(),
+          updated_by: usuario?.email || usuario?.nome || 'sistema',
+        })
         .in('id', Array.from(alunosSelecionados));
 
       if (error) throw error;
@@ -845,6 +1028,11 @@ export function TabelaAlunos({
     } finally {
       setProcessandoMassa(false);
     }
+  }
+
+  async function marcarSelecionadosComoSemParcela() {
+    if (alunosSelecionados.size === 0) return;
+    await abrirGovernancaSemParcela(Array.from(alunosSelecionados), 'acao_massa');
   }
 
   // Função para resetar mês (Admin) - grava snapshot antes de resetar
@@ -1427,6 +1615,123 @@ export function TabelaAlunos({
         )}
       </div>
 
+      <AlertDialog open={!!governancaSemParcela} onOpenChange={(open) => !open && fecharGovernancaSemParcela()}>
+        <AlertDialogContent className="max-w-3xl">
+          {(() => {
+            const exigeConfirmacaoDigitada = governancaSemParcela?.alunos.some((aluno) =>
+              deveExigirConfirmacaoDigitada(governancaSemParcela.origem, analisarMudancaParaSemParcela(aluno))
+            ) ?? false;
+
+            return (
+              <>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-blue-300">
+              <AlertTriangle className="w-5 h-5" />
+              Confirmar mudança para "Sem Parcela"
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3 text-slate-300">
+              <p>
+                Esta ação exige justificativa e gera trilha em <code>anotacoes_alunos</code> com usuário, antes/depois,
+                motivo e origem.
+              </p>
+              <p>
+                Revise a lista nominal antes de confirmar. Matrículas regulares/segundo curso ativas com contrato vigente
+                ou aula recente aparecem destacadas como risco alto.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="space-y-4">
+            <div className="max-h-64 space-y-2 overflow-y-auto rounded-lg border border-slate-700 bg-slate-900/60 p-3">
+              {governancaSemParcela?.alunos.map((aluno) => {
+                const analise = analisarMudancaParaSemParcela(aluno);
+                return (
+                  <div
+                    key={aluno.id}
+                    className={`rounded-lg border p-3 ${
+                      analise.exigeConfirmacaoForte
+                        ? 'border-red-500/40 bg-red-500/10'
+                        : 'border-slate-700 bg-slate-800/70'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="font-medium text-white">{aluno.nome}</p>
+                        <p className="text-xs text-slate-400">
+                          {getStatusPagamentoLabel(aluno.status_pagamento)} → {getStatusPagamentoLabel('sem_parcela')}
+                        </p>
+                      </div>
+                      <span
+                        className={`rounded-full px-2 py-1 text-[11px] font-semibold ${
+                          analise.exigeConfirmacaoForte
+                            ? 'bg-red-500/20 text-red-200'
+                            : 'bg-blue-500/20 text-blue-200'
+                        }`}
+                      >
+                        {analise.exigeConfirmacaoForte ? 'Risco alto' : 'Com justificativa'}
+                      </span>
+                    </div>
+                    <ul className="mt-2 space-y-1 text-xs text-slate-300">
+                      {analise.motivos.length > 0 ? (
+                        analise.motivos.map((motivo) => (
+                          <li key={`${aluno.id}-${motivo}`}>• {motivo}</li>
+                        ))
+                      ) : (
+                        <li>• Sem sinais ativos adicionais; ainda assim exige motivo.</li>
+                      )}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="grid gap-3">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-white">Justificativa obrigatória</label>
+                <Textarea
+                  value={justificativaSemParcela}
+                  onChange={(e) => setJustificativaSemParcela(e.target.value)}
+                  placeholder="Ex.: aluno migrou para bolsa integral sem cobrança neste mês; validado com ADM em 07/06."
+                  className="min-h-[96px]"
+                />
+              </div>
+
+              {exigeConfirmacaoDigitada ? (
+                <div className="space-y-2">
+                  <label className="text-sm font-medium text-white">
+                    Digite <code>{getConfirmacaoSemParcela()}</code> para confirmar
+                  </label>
+                  <Input
+                    value={confirmacaoSemParcela}
+                    onChange={(e) => setConfirmacaoSemParcela(e.target.value)}
+                    placeholder={getConfirmacaoSemParcela()}
+                  />
+                </div>
+              ) : (
+                <div className="rounded-lg border border-blue-500/20 bg-blue-500/10 px-3 py-2 text-xs text-blue-100">
+                  Caso individual sensível sem risco alto: alerta + justificativa já liberam a alteração.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={fecharGovernancaSemParcela}>Cancelar</AlertDialogCancel>
+            <Button
+              type="button"
+              onClick={confirmarGovernancaSemParcela}
+              disabled={!!governancaSemParcela?.salvando}
+              className="bg-blue-600 hover:bg-blue-500"
+            >
+              {governancaSemParcela?.salvando ? 'Salvando...' : 'Confirmar com justificativa'}
+            </Button>
+          </AlertDialogFooter>
+              </>
+            );
+          })()}
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Alerta de Inadimplência — Banner fino esticado */}
       {inadimplenciaInfo.vencimentoPassou && (inadimplenciaInfo.total > 0 || inadimplenciaInfo.pendentes > 0) && !alertaInadimplenciaDismissed && (
         <div className="flex items-center gap-3 px-4 py-2.5 bg-red-500/15 border border-red-500/30 rounded-xl text-sm">
@@ -1482,6 +1787,14 @@ export function TabelaAlunos({
           >
             <AlertTriangle className="w-4 h-4" />
             {processandoMassa ? 'Processando...' : 'Marcar como Inadimplentes'}
+          </button>
+          <button
+            onClick={marcarSelecionadosComoSemParcela}
+            disabled={processandoMassa}
+            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 text-white rounded-lg text-sm font-medium transition-colors flex items-center gap-2"
+          >
+            <Circle className="w-4 h-4" />
+            {processandoMassa ? 'Processando...' : 'Marcar sem parcela'}
           </button>
           <button
             onClick={() => setAlunosSelecionados(new Set())}

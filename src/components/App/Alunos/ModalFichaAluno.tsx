@@ -8,6 +8,15 @@ const formatLocalDate = (d: Date | null | undefined): string | null =>
 import { supabase } from '@/lib/supabase';
 import { X, Loader2, Save, User, GraduationCap, DollarSign, TrendingUp, History, AlertCircle, Plus, Users, Pencil, Brain, ExternalLink, MessageCircle, Search } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { DatePicker } from '@/components/ui/date-picker';
@@ -16,10 +25,21 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import type { Aluno } from './AlunosPage';
 import { ContatosAluno } from './ContatosAluno';
+import {
+  analisarMudancaParaSemParcela,
+  buscarContextosStatusPagamento,
+  deveExigirConfirmacaoDigitada,
+  getConfirmacaoSemParcela,
+  getStatusPagamentoLabel,
+  registrarAuditoriaStatusPagamento,
+  type ContextoStatusPagamento,
+  type OrigemGovernancaStatusPagamento,
+} from './statusPagamentoGovernanca';
 
 interface ModalFichaAlunoProps {
   aluno: Aluno;
@@ -72,6 +92,12 @@ interface Anotacao {
   criado_por: string;
   created_at: string;
   resolvido: boolean;
+}
+
+interface GovernancaSemParcelaFichaState {
+  contexto: ContextoStatusPagamento;
+  origem: OrigemGovernancaStatusPagamento;
+  salvando: boolean;
 }
 
 interface AnamneseRespostaPerfil {
@@ -286,6 +312,9 @@ export function ModalFichaAluno({
   const [salvandoSegundoCurso, setSalvandoSegundoCurso] = useState(false);
   const [turmaSegundoCurso, setTurmaSegundoCurso] = useState<any>(null);
   const [carregandoTurma, setCarregandoTurma] = useState(false);
+  const [governancaSemParcela, setGovernancaSemParcela] = useState<GovernancaSemParcelaFichaState | null>(null);
+  const [justificativaSemParcela, setJustificativaSemParcela] = useState('');
+  const [confirmacaoSemParcela, setConfirmacaoSemParcela] = useState('');
 
   // Estado para busca de anamnese pendente
   const [modalBuscaAnamnese, setModalBuscaAnamnese] = useState(false);
@@ -437,7 +466,13 @@ export function ModalFichaAluno({
     }
   }
 
-  async function handleSalvar() {
+  function fecharGovernancaSemParcela() {
+    setGovernancaSemParcela(null);
+    setJustificativaSemParcela('');
+    setConfirmacaoSemParcela('');
+  }
+
+  async function persistirAluno(motivoGovernanca?: string) {
     if (!formData.nome.trim()) {
       toast.error('Nome é obrigatório');
       return;
@@ -512,7 +547,25 @@ export function ModalFichaAluno({
         }
       }
 
+      if (motivoGovernanca && governancaSemParcela?.contexto) {
+        try {
+          await registrarAuditoriaStatusPagamento({
+            alunoId: aluno.id,
+            alunoNome: formData.nome.trim(),
+            ator: user?.email || usuario?.nome || 'sistema',
+            antes: governancaSemParcela.contexto.status_pagamento,
+            depois: 'sem_parcela',
+            motivo: motivoGovernanca,
+            origem: 'ficha_aluno',
+          });
+        } catch (auditError) {
+          console.error('Erro ao registrar auditoria de status_pagamento:', auditError);
+          toast.warning('Aluno salvo, mas a anotação de auditoria falhou.');
+        }
+      }
+
       toast.success('Dados salvos com sucesso!');
+      fecharGovernancaSemParcela();
       onSalvar();
       onClose();
     } catch (error: any) {
@@ -520,6 +573,57 @@ export function ModalFichaAluno({
       toast.error(`Erro ao salvar: ${error.message}`);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleSalvar() {
+    if (
+      dadosCompletos?.status_pagamento !== 'sem_parcela' &&
+      formData.status_pagamento === 'sem_parcela'
+    ) {
+      try {
+        const [contexto] = await buscarContextosStatusPagamento([aluno.id]);
+        if (!contexto) {
+          toast.error('Não foi possível validar a governança deste aluno.');
+          return;
+        }
+        setGovernancaSemParcela({ contexto, origem: 'ficha_aluno', salvando: false });
+        return;
+      } catch (error: any) {
+        console.error('Erro ao validar governança de status_pagamento:', error);
+        toast.error(error.message || 'Erro ao validar mudança para "Sem Parcela".');
+        return;
+      }
+    }
+
+    await persistirAluno();
+  }
+
+  async function confirmarGovernancaSemParcela() {
+    if (!governancaSemParcela) return;
+
+    const motivo = justificativaSemParcela.trim();
+    const exigeConfirmacaoDigitada = deveExigirConfirmacaoDigitada(
+      governancaSemParcela.origem,
+      analisarMudancaParaSemParcela(governancaSemParcela.contexto)
+    );
+    if (motivo.length < 12) {
+      toast.error('Descreva uma justificativa com pelo menos 12 caracteres.');
+      return;
+    }
+    if (
+      exigeConfirmacaoDigitada &&
+      confirmacaoSemParcela.trim().toUpperCase() !== getConfirmacaoSemParcela()
+    ) {
+      toast.error(`Digite ${getConfirmacaoSemParcela()} para confirmar.`);
+      return;
+    }
+
+    setGovernancaSemParcela(prev => prev ? { ...prev, salvando: true } : prev);
+    try {
+      await persistirAluno(motivo);
+    } finally {
+      setGovernancaSemParcela(prev => prev ? { ...prev, salvando: false } : prev);
     }
   }
 
@@ -1238,6 +1342,10 @@ export function ModalFichaAluno({
                       <SelectItem value="sem_parcela">○ Sem Parcela</SelectItem>
                     </SelectContent>
                   </Select>
+                  <p className="mt-2 text-xs text-slate-400">
+                    Marcar como <strong className="text-slate-200">Sem Parcela</strong> exige justificativa e confirmação forte
+                    quando a matrícula regular/2º curso estiver ativa com contrato vigente ou aula recente.
+                  </p>
                 </div>
               </div>
             </TabsContent>
@@ -1577,6 +1685,95 @@ export function ModalFichaAluno({
           </Button>
         </div>
       </DialogContent>
+
+      <AlertDialog open={!!governancaSemParcela} onOpenChange={(open) => !open && fecharGovernancaSemParcela()}>
+        <AlertDialogContent className="max-w-2xl">
+          {(() => {
+            const exigeConfirmacaoDigitada = governancaSemParcela
+              ? deveExigirConfirmacaoDigitada(
+                  governancaSemParcela.origem,
+                  analisarMudancaParaSemParcela(governancaSemParcela.contexto)
+                )
+              : false;
+
+            return (
+              <>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-amber-300">
+              <AlertCircle className="w-5 h-5" />
+              Confirmar "Sem Parcela" na ficha
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3 text-slate-300">
+              <p>
+                Esta alteração será gravada com rastreio de usuário, antes/depois, motivo e origem em
+                <code> anotacoes_alunos</code>.
+              </p>
+              {governancaSemParcela && (() => {
+                const analise = analisarMudancaParaSemParcela(governancaSemParcela.contexto);
+                return (
+                  <div className={`rounded-lg border p-3 ${
+                    analise.exigeConfirmacaoForte
+                      ? 'border-red-500/40 bg-red-500/10'
+                      : 'border-slate-700 bg-slate-800/70'
+                  }`}>
+                    <p className="font-medium text-white">
+                      {governancaSemParcela.contexto.nome}: {getStatusPagamentoLabel(governancaSemParcela.contexto.status_pagamento)} → {getStatusPagamentoLabel('sem_parcela')}
+                    </p>
+                    <ul className="mt-2 space-y-1 text-xs text-slate-300">
+                      {analise.motivos.length > 0 ? (
+                        analise.motivos.map((motivo) => <li key={motivo}>• {motivo}</li>)
+                      ) : (
+                        <li>• Sem sinais ativos adicionais; ainda assim exige justificativa.</li>
+                      )}
+                    </ul>
+                  </div>
+                );
+              })()}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Justificativa obrigatória</Label>
+              <Textarea
+                value={justificativaSemParcela}
+                onChange={(e) => setJustificativaSemParcela(e.target.value)}
+                placeholder="Ex.: cobrança suspensa após validação com ADM; matrícula continua ativa para frequência."
+                className="min-h-[96px]"
+              />
+            </div>
+            {exigeConfirmacaoDigitada ? (
+              <div className="space-y-2">
+                <Label>Digite {getConfirmacaoSemParcela()} para confirmar</Label>
+                <Input
+                  value={confirmacaoSemParcela}
+                  onChange={(e) => setConfirmacaoSemParcela(e.target.value)}
+                  placeholder={getConfirmacaoSemParcela()}
+                />
+              </div>
+            ) : (
+              <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+                Caso individual sensível sem risco alto: alerta + justificativa já liberam a alteração.
+              </div>
+            )}
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={fecharGovernancaSemParcela}>Cancelar</AlertDialogCancel>
+            <Button
+              type="button"
+              onClick={confirmarGovernancaSemParcela}
+              disabled={!!governancaSemParcela?.salvando}
+              className="bg-amber-600 hover:bg-amber-500"
+            >
+              {governancaSemParcela?.salvando ? 'Salvando...' : 'Confirmar com justificativa'}
+            </Button>
+          </AlertDialogFooter>
+              </>
+            );
+          })()}
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Modal de Segundo Curso */}
       {modalSegundoCurso && (() => {
