@@ -114,6 +114,13 @@ const tabs: { id: TabId; label: string; icon: React.ComponentType<{ className?: 
   { id: 'alunos_novos', label: 'Alunos Novos', icon: UserPlus },
 ];
 
+function getTrimestreLabelFromMes(mes: number): string {
+  if (mes >= 1 && mes <= 3) return 'Q1 - Janeiro, Fevereiro e Marco';
+  if (mes >= 4 && mes <= 6) return 'Q2 - Abril, Maio e Junho';
+  if (mes >= 7 && mes <= 9) return 'Q3 - Julho, Agosto e Setembro';
+  return 'Q4 - Outubro, Novembro e Dezembro';
+}
+
 export function AdministrativoPage() {
   useSetPageTitle({
     titulo: 'Administrativo',
@@ -134,17 +141,23 @@ export function AdministrativoPage() {
 
   // Hook de filtro de competência (período)
   const competenciaFiltro = useCompetenciaFiltro();
+  const periodoFideliza = getTrimestreLabelFromMes(competenciaFiltro.filtro.mes);
 
-  // Sincronizar badge do header com o filtro local
-  useEffect(() => {
-    context?.setPeriodoLabel?.(competenciaFiltro.range.label);
-    return () => { context?.setPeriodoLabel?.(null); };
-  }, [competenciaFiltro.range.label]);
-  
   // Estado
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>('renovacoes');
   const [mainTab, setMainTab] = useState<'lancamentos' | 'fideliza' | 'lojinha' | 'farmer' | 'caixa_entrada'>('lancamentos');
+
+  // Sincronizar badge do header com o filtro local
+  useEffect(() => {
+    if (mainTab === 'fideliza') {
+      context?.setPeriodoLabel?.(periodoFideliza);
+      return () => { context?.setPeriodoLabel?.(null); };
+    }
+
+    context?.setPeriodoLabel?.(competenciaFiltro.range.label);
+    return () => { context?.setPeriodoLabel?.(null); };
+  }, [competenciaFiltro.range.label, context, mainTab, periodoFideliza]);
   
   // Dados
   const [resumo, setResumo] = useState<ResumoMes | null>(null);
@@ -864,7 +877,8 @@ export function AdministrativoPage() {
       ) : mainTab === 'fideliza' ? (
         <TabProgramaFideliza 
           unidadeSelecionada={unidade} 
-          ano={competenciaFiltro.filtro.ano} 
+          ano={competenciaFiltro.filtro.ano}
+          onPeriodoLabelChange={context?.setPeriodoLabel}
         />
       ) : mainTab === 'lojinha' ? (
         <TabLojinha unidadeId={unidade} />

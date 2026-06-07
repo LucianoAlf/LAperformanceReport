@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Trophy,
   AlertTriangle,
@@ -61,6 +61,13 @@ const TRIMESTRES = [
   { value: 3, label: 'Q3 (Jul-Set)' },
   { value: 4, label: 'Q4 (Out-Dez)' },
 ];
+
+function getTrimestrePeriodoLabel(trimestre: number): string {
+  if (trimestre === 1) return 'Q1 - Janeiro, Fevereiro e Marco';
+  if (trimestre === 2) return 'Q2 - Abril, Maio e Junho';
+  if (trimestre === 3) return 'Q3 - Julho, Agosto e Setembro';
+  return 'Q4 - Outubro, Novembro e Dezembro';
+}
 
 // Configuracao das abas (padrao cockpit)
 const ABAS_CONFIG = [
@@ -177,9 +184,10 @@ function ConfigInput({ value, campo, ano, tipo = 'numero', onSaved, className }:
 interface TabProgramaFidelizaProps {
   unidadeSelecionada?: string;
   ano?: number;
+  onPeriodoLabelChange?: (label: string | null) => void;
 }
 
-export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026 }: TabProgramaFidelizaProps) {
+export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoLabelChange }: TabProgramaFidelizaProps) {
   const { user, isAdmin } = useAuth();
   
   // Determinar se e visao admin (consolidado) ou individual (unidade especifica)
@@ -226,6 +234,12 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026 }: TabProgr
 
   // Trimestre efetivo (selecionado ou atual)
   const trimestreEfetivo = trimestreSelecionado || trimestreAtual;
+  const periodoTrimestralLabel = getTrimestrePeriodoLabel(trimestreEfetivo);
+
+  useEffect(() => {
+    onPeriodoLabelChange?.(periodoTrimestralLabel);
+    return () => onPeriodoLabelChange?.(null);
+  }, [onPeriodoLabelChange, periodoTrimestralLabel]);
   
   // Farmer atual (para visao individual)
   const farmerAtual = farmers?.find(f => f.unidade_id === unidadeSelecionada);
@@ -1779,6 +1793,9 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026 }: TabProgr
               <p className="text-slate-400">
                 {farmerAtual.unidade_nome} • Programa Fideliza+ LA {ano}
               </p>
+              <div className="mt-2 inline-flex items-center rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-xs font-medium text-cyan-300">
+                Visao trimestral • {periodoTrimestralLabel}
+              </div>
             </div>
           </div>
           <div className="text-right">
