@@ -1,0 +1,6 @@
+140: '### 2.12 Inadimplência\n'
+141: '- ✅ **Canônica (Alf 2026-06-04):** `qtd_inadimplentes / alunos_pagantes * 100` — percentual de **PESSOAS** (cabças), NÃO de valor.\n'
+142: '- 📋 **View 20260531:** já implementa `qtd_inadimplentes / alunos_pagantes * 100` → ALINHADO.\n'
+143: '- � **Validação V5:** `mrr_inadimplente / mrr_contratual * 100` (percentual de VALOR) — REJEITADA pelo Alf.\n'
+144: '- 🚫 **Documento `KPIs_LA_MUSIC_PERFORMANCE_REPORT.md` (legado):** `(faturamento_previsto - faturamento_realizado) / faturamento_previsto * 100` — NÃO USAR.\n'
+145: '\n'

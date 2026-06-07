@@ -1,0 +1,13 @@
+=== CANONICO ===
+Broken chars: 0
+Bolsista duplicado: False
+Sec 6 (Validated): True
+Sec 7 (Pending): True
+Canto coral legado: True
+Conversao >100% bug: True
+P8/P11 decision: True
+
+=== SKILL ===
+P8/P11 decision: True
+Canto coral updated: True
+Pending has validated: False

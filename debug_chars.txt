@@ -1,0 +1,2 @@
+pos=2456: ['"Banda" próprio).\n- � **Legado temporári']
+pos=13935: ['s.is_coral = true`. � Legado: filtros po']
