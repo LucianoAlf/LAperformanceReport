@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Phone, Calendar, UserPlus, Percent, DollarSign, TrendingUp, Archive, XCircle, Music, Clock, Users, Target, Baby, GraduationCap, AlertTriangle, Info } from 'lucide-react';
+import { Phone, Calendar, UserPlus, Percent, DollarSign, TrendingUp, Archive, XCircle, Music, Clock, Users, Target, Baby, GraduationCap, AlertTriangle, Info, Lock, Unlock } from 'lucide-react';
 import { KPICard } from '@/components/ui/KPICard';
 import { FunnelChart } from '@/components/ui/FunnelChart';
 import { DistributionChart } from '@/components/ui/DistributionChart';
@@ -8,6 +8,7 @@ import { formatCurrency, getMesNomeCurto } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { useMetasKPI } from '@/hooks/useMetasKPI';
+import { getCompetenciaAbertaAlertCopy, useCompetenciaMensalStatus } from '@/hooks/useCompetenciaMensalStatus';
 
 interface TabComercialProps {
   ano: number;
@@ -80,7 +81,16 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
   // Buscar metas do período
   const unidadeIdParaMetas = unidade === 'todos' ? null : unidade;
   const { metas } = useMetasKPI(unidadeIdParaMetas, ano, mes);
-  const [mesFechado, setMesFechado] = useState(false);
+  const competenciaMensal = useCompetenciaMensalStatus({
+    unidadeId: unidade,
+    ano,
+    mes,
+  });
+  const mesFechado = competenciaMensal.bloqueiaEscrita;
+  const alertaCompetenciaAberta = getCompetenciaAbertaAlertCopy(ano, mes);
+  const competenciaBadgeClasses = competenciaMensal.bloqueiaEscrita
+    ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-200'
+    : 'bg-slate-800/70 border-slate-600 text-slate-300';
   
   // Estados para comparativos históricos
   const [dadosMesAnterior, setDadosMesAnterior] = useState<DadosComparativo | null>(null);
@@ -334,8 +344,6 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             cursosMatMap.set(c.curso, (cursosMatMap.get(c.curso) || 0) + (c.quantidade || 0));
           });
 
-          setMesFechado(true); // Dados históricos são sempre "fechados"
-
           setDados({
             // Leads
             total_leads: totalLeads,
@@ -422,11 +430,6 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
         }
 
         const { data: dadosMensaisData } = await dadosMensaisQuery;
-
-        // Verificar se o mês está fechado (tem dados em dados_mensais)
-        const temDadosMes = dadosMensaisData && dadosMensaisData.length > 0 && 
-          dadosMensaisData.some(d => d.ticket_medio_passaporte !== null && d.ticket_medio_passaporte > 0);
-        setMesFechado(temDadosMes);
 
         // Buscar matrículas do mês
         let matriculasQuery = supabase
@@ -659,22 +662,31 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
   return (
     <div className="space-y-6">
       {/* Sub-abas */}
-      <div className="bg-slate-800/50 p-1 rounded-lg inline-flex gap-1 flex-wrap">
-        {subTabs.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveSubTab(tab.id)}
-            className={cn(
-              'flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all',
-              activeSubTab === tab.id
-                ? 'bg-emerald-600 text-white shadow-sm'
-                : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
-            )}
-          >
-            <tab.icon size={16} />
-            {tab.label}
-          </button>
-        ))}
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <div className="bg-slate-800/50 p-1 rounded-lg inline-flex gap-1 flex-wrap">
+          {subTabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveSubTab(tab.id)}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all',
+                activeSubTab === tab.id
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+              )}
+            >
+              <tab.icon size={16} />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+        <div
+          className={`min-h-9 px-3 py-1.5 rounded-xl border text-xs font-medium flex items-center gap-1.5 max-w-full ${competenciaBadgeClasses}`}
+          title={competenciaMensal.tooltip}
+        >
+          {competenciaMensal.bloqueiaEscrita ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+          <span className="min-w-0 truncate">{competenciaMensal.loading ? 'Validando competência' : competenciaMensal.badgeLabel}</span>
+        </div>
       </div>
 
       {/* Sub-aba: Leads */}
@@ -685,7 +697,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-center gap-3">
               <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
               <p className="text-amber-200 text-sm">
-                <strong>Mês não fechado:</strong> Os dados de {getMesNomeCurto(mes)}/{ano} ainda não foram populados. Novas Matrículas, Evasões e Saldo Líquido mostram dados do mês atual em andamento.
+                <strong>{alertaCompetenciaAberta.titulo}:</strong> {alertaCompetenciaAberta.descricao}
               </p>
             </div>
           )}
@@ -769,7 +781,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-center gap-3">
               <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
               <p className="text-amber-200 text-sm">
-                <strong>Mês não fechado:</strong> Os dados de {getMesNomeCurto(mes)}/{ano} ainda não foram populados. Novas Matrículas, Evasões e Saldo Líquido mostram dados do mês atual em andamento.
+                <strong>{alertaCompetenciaAberta.titulo}:</strong> {alertaCompetenciaAberta.descricao}
               </p>
             </div>
           )}
@@ -860,7 +872,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 flex items-center gap-3">
               <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
               <p className="text-amber-200 text-sm">
-                <strong>Mês não fechado:</strong> Os dados de {getMesNomeCurto(mes)}/{ano} ainda não foram populados. Novas Matrículas, Evasões e Saldo Líquido mostram dados do mês atual em andamento.
+                <strong>{alertaCompetenciaAberta.titulo}:</strong> {alertaCompetenciaAberta.descricao}
               </p>
             </div>
           )}

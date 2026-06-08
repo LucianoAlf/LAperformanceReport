@@ -1,0 +1,400 @@
+import { useCallback, useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase';
+
+export type FonteKPIAlunos = 'dados_mensais' | 'vivo' | 'preliminar' | 'indisponivel';
+
+export interface KPIsAlunosCanonicosPorUnidade {
+  unidade_id: string;
+  unidade_nome: string;
+  ano: number;
+  mes: number;
+  alunosAtivos: number;
+  alunosPagantes: number;
+  ticketMedio: number;
+  mrr: number;
+  arr: number;
+  churnRate: number;
+  evasoes: number;
+  inadimplencia: number;
+  tempoPermanencia: number;
+  ltv: number;
+  matriculasAtivas: number;
+  matriculasBanda: number;
+  matriculasSegundoCurso: number;
+  novasMatriculas: number;
+  bolsistasIntegrais: number;
+  bolsistasParciais: number;
+  kids: number;
+  school: number;
+  faturamentoPrevisto: number;
+  faturamentoRealizado: number;
+  reajustePct: number;
+}
+
+export interface KPIsAlunosCanonicos {
+  fonte: FonteKPIAlunos;
+  fonteLabel: string;
+  competenciaFechada: boolean;
+  competenciaParcial: boolean;
+  alertasFonte: string[];
+  unidade_id: string;
+  unidade_nome: string;
+  ano: number;
+  mes: number;
+  alunosAtivos: number;
+  alunosPagantes: number;
+  ticketMedio: number;
+  mrr: number;
+  arr: number;
+  churnRate: number;
+  evasoes: number;
+  inadimplencia: number;
+  tempoPermanencia: number;
+  ltv: number;
+  matriculasAtivas: number;
+  matriculasBanda: number;
+  matriculasSegundoCurso: number;
+  novasMatriculas: number;
+  bolsistasIntegrais: number;
+  bolsistasParciais: number;
+  kids: number;
+  school: number;
+  faturamentoPrevisto: number;
+  faturamentoRealizado: number;
+  reajustePct: number;
+  porUnidade: KPIsAlunosCanonicosPorUnidade[];
+}
+
+interface FetchKPIsAlunosCanonicosParams {
+  unidadeId?: string | 'todos' | null;
+  ano: number;
+  mes: number;
+  mesFim?: number;
+}
+
+interface UseKPIsAlunosCanonicosResult {
+  data: KPIsAlunosCanonicos | null;
+  isLoading: boolean;
+  error: Error | null;
+  refetch: () => Promise<void>;
+}
+
+const ZERO_KPIS = {
+  alunosAtivos: 0,
+  alunosPagantes: 0,
+  ticketMedio: 0,
+  mrr: 0,
+  arr: 0,
+  churnRate: 0,
+  evasoes: 0,
+  inadimplencia: 0,
+  tempoPermanencia: 0,
+  ltv: 0,
+  matriculasAtivas: 0,
+  matriculasBanda: 0,
+  matriculasSegundoCurso: 0,
+  novasMatriculas: 0,
+  bolsistasIntegrais: 0,
+  bolsistasParciais: 0,
+  kids: 0,
+  school: 0,
+  faturamentoPrevisto: 0,
+  faturamentoRealizado: 0,
+  reajustePct: 0,
+};
+
+function n(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function isMesAtual(ano: number, mes: number) {
+  const hoje = new Date();
+  return ano === hoje.getFullYear() && mes === hoje.getMonth() + 1;
+}
+
+function fonteLabel(fonte: FonteKPIAlunos): string {
+  if (fonte === 'dados_mensais') return 'Snapshot fechado';
+  if (fonte === 'vivo') return 'Cálculo vivo';
+  if (fonte === 'preliminar') return 'Preliminar';
+  return 'Indisponível';
+}
+
+function mapDadosMensais(row: any): KPIsAlunosCanonicosPorUnidade {
+  const mrr = n(row.faturamento_estimado);
+  const ticketMedio = n(row.ticket_medio);
+  const tempoPermanencia = n(row.tempo_permanencia);
+
+  return {
+    unidade_id: String(row.unidade_id || ''),
+    unidade_nome: row.unidades?.nome || row.unidade_nome || 'Unidade',
+    ano: n(row.ano),
+    mes: n(row.mes),
+    alunosAtivos: n(row.alunos_ativos),
+    alunosPagantes: n(row.alunos_pagantes),
+    ticketMedio,
+    mrr,
+    arr: mrr * 12,
+    churnRate: n(row.churn_rate),
+    evasoes: n(row.evasoes),
+    inadimplencia: n(row.inadimplencia),
+    tempoPermanencia,
+    ltv: ticketMedio * tempoPermanencia,
+    matriculasAtivas: n(row.matriculas_ativas),
+    matriculasBanda: n(row.matriculas_banda),
+    matriculasSegundoCurso: n(row.matriculas_2_curso),
+    novasMatriculas: n(row.novas_matriculas),
+    bolsistasIntegrais: n(row.bolsistas_integrais),
+    bolsistasParciais: n(row.bolsistas_parciais),
+    kids: n(row.la_music_kids || row.total_la_kids),
+    school: n(row.la_music_school || row.total_la_adultos),
+    faturamentoPrevisto: mrr,
+    faturamentoRealizado: mrr * (1 - n(row.inadimplencia) / 100),
+    reajustePct: n(row.reajuste_parcelas),
+  };
+}
+
+function mapViewGestao(row: any): KPIsAlunosCanonicosPorUnidade {
+  const mrr = n(row.mrr || row.faturamento_previsto);
+  const ticketMedio = n(row.ticket_medio);
+  const tempoPermanencia = n(row.tempo_permanencia_medio);
+
+  return {
+    unidade_id: String(row.unidade_id || ''),
+    unidade_nome: row.unidade_nome || row.unidades?.nome || 'Unidade',
+    ano: n(row.ano),
+    mes: n(row.mes),
+    alunosAtivos: n(row.total_alunos_ativos),
+    alunosPagantes: n(row.total_alunos_pagantes),
+    ticketMedio,
+    mrr,
+    arr: n(row.arr) || mrr * 12,
+    churnRate: n(row.churn_rate),
+    evasoes: n(row.total_evasoes || row.evasoes),
+    inadimplencia: n(row.inadimplencia_pct),
+    tempoPermanencia,
+    ltv: n(row.ltv_medio) || ticketMedio * tempoPermanencia,
+    matriculasAtivas: n(row.total_matriculas_ativas || row.matriculas_ativas),
+    matriculasBanda: n(row.total_banda || row.matriculas_banda),
+    matriculasSegundoCurso: n(row.total_segundo_curso || row.matriculas_2_curso),
+    novasMatriculas: n(row.novas_matriculas),
+    bolsistasIntegrais: n(row.total_bolsistas_integrais),
+    bolsistasParciais: n(row.total_bolsistas_parciais),
+    kids: n(row.total_la_kids),
+    school: n(row.total_la_adultos),
+    faturamentoPrevisto: n(row.faturamento_previsto) || mrr,
+    faturamentoRealizado: n(row.faturamento_realizado),
+    reajustePct: n(row.reajuste_medio || row.reajuste_pct),
+  };
+}
+
+export function consolidarKPIsAlunosCanonicos(
+  rows: KPIsAlunosCanonicosPorUnidade[],
+  base: Pick<KPIsAlunosCanonicos, 'fonte' | 'competenciaFechada' | 'competenciaParcial' | 'alertasFonte' | 'ano' | 'mes'>,
+  unidadeId: string | 'todos' = 'todos'
+): KPIsAlunosCanonicos {
+  const totalPagantes = rows.reduce((acc, row) => acc + row.alunosPagantes, 0);
+  const totalMrr = rows.reduce((acc, row) => acc + row.mrr, 0);
+  const totalAtivos = rows.reduce((acc, row) => acc + row.alunosAtivos, 0);
+  const totalEvasoes = rows.reduce((acc, row) => acc + row.evasoes, 0);
+  const count = rows.length || 1;
+  const unidadeNome = unidadeId === 'todos'
+    ? 'Consolidado'
+    : rows[0]?.unidade_nome || 'Unidade';
+
+  return {
+    ...base,
+    fonteLabel: fonteLabel(base.fonte),
+    unidade_id: unidadeId,
+    unidade_nome: unidadeNome,
+    alunosAtivos: totalAtivos,
+    alunosPagantes: totalPagantes,
+    ticketMedio: totalPagantes > 0 ? totalMrr / totalPagantes : 0,
+    mrr: totalMrr,
+    arr: totalMrr * 12,
+    churnRate: rows.length === 1 ? rows[0].churnRate : rows.reduce((acc, row) => acc + row.churnRate, 0) / count,
+    evasoes: totalEvasoes,
+    inadimplencia: rows.reduce((acc, row) => acc + row.inadimplencia, 0) / count,
+    tempoPermanencia: rows.reduce((acc, row) => acc + row.tempoPermanencia, 0) / count,
+    ltv: rows.reduce((acc, row) => acc + row.ltv, 0) / count,
+    matriculasAtivas: rows.reduce((acc, row) => acc + row.matriculasAtivas, 0),
+    matriculasBanda: rows.reduce((acc, row) => acc + row.matriculasBanda, 0),
+    matriculasSegundoCurso: rows.reduce((acc, row) => acc + row.matriculasSegundoCurso, 0),
+    novasMatriculas: rows.reduce((acc, row) => acc + row.novasMatriculas, 0),
+    bolsistasIntegrais: rows.reduce((acc, row) => acc + row.bolsistasIntegrais, 0),
+    bolsistasParciais: rows.reduce((acc, row) => acc + row.bolsistasParciais, 0),
+    kids: rows.reduce((acc, row) => acc + row.kids, 0),
+    school: rows.reduce((acc, row) => acc + row.school, 0),
+    faturamentoPrevisto: rows.reduce((acc, row) => acc + row.faturamentoPrevisto, 0),
+    faturamentoRealizado: rows.reduce((acc, row) => acc + row.faturamentoRealizado, 0),
+    reajustePct: rows.reduce((acc, row) => acc + row.reajustePct, 0) / count,
+    porUnidade: rows,
+  };
+}
+
+export async function fetchKPIsAlunosCanonicos({
+  unidadeId = 'todos',
+  ano,
+  mes,
+  mesFim = mes,
+}: FetchKPIsAlunosCanonicosParams): Promise<KPIsAlunosCanonicos> {
+  const unidadeFiltro = unidadeId && unidadeId !== 'todos' ? unidadeId : null;
+  const periodoAtualUnico = mes === mesFim && isMesAtual(ano, mes);
+
+  let competenciasQuery = supabase
+    .from('competencias_mensais')
+    .select('unidade_id, status')
+    .eq('ano', ano)
+    .gte('mes', mes)
+    .lte('mes', mesFim);
+
+  if (unidadeFiltro) {
+    competenciasQuery = competenciasQuery.eq('unidade_id', unidadeFiltro);
+  }
+
+  const { data: competencias, error: competenciasError } = await competenciasQuery;
+  if (competenciasError) throw competenciasError;
+
+  const fechadas = (competencias || []).filter((row: any) => row.status === 'fechado' || row.status === 'retificacao_pendente');
+  const competenciaFechada = unidadeFiltro
+    ? fechadas.length > 0
+    : (competencias || []).length > 0 && fechadas.length === (competencias || []).length;
+  const competenciaParcial = !unidadeFiltro && fechadas.length > 0 && !competenciaFechada;
+
+  if (periodoAtualUnico && fechadas.length === 0) {
+    let viewQuery = supabase
+      .from('vw_kpis_gestao_mensal')
+      .select('*')
+      .eq('ano', ano)
+      .eq('mes', mes);
+
+    if (unidadeFiltro) {
+      viewQuery = viewQuery.eq('unidade_id', unidadeFiltro);
+    }
+
+    const { data: viewData, error: viewError } = await viewQuery;
+    if (viewError) throw viewError;
+
+    const rows = (viewData || []).map(mapViewGestao);
+    return consolidarKPIsAlunosCanonicos(rows, {
+      fonte: rows.length > 0 ? 'vivo' : 'indisponivel',
+      competenciaFechada: false,
+      competenciaParcial: false,
+      alertasFonte: rows.length > 0
+        ? ['Mês atual aberto: KPIs executivos lidos da view viva.']
+        : ['Mês atual sem dados na view viva.'],
+      ano,
+      mes,
+    }, unidadeId || 'todos');
+  }
+
+  let dadosQuery = supabase
+    .from('dados_mensais')
+    .select('*, unidades:unidade_id(nome)')
+    .eq('ano', ano)
+    .gte('mes', mes)
+    .lte('mes', mesFim);
+
+  if (unidadeFiltro) {
+    dadosQuery = dadosQuery.eq('unidade_id', unidadeFiltro);
+  }
+
+  const { data: dadosMensais, error: dadosMensaisError } = await dadosQuery;
+  if (dadosMensaisError) throw dadosMensaisError;
+
+  if (dadosMensais && dadosMensais.length > 0) {
+    const rows = dadosMensais.map(mapDadosMensais);
+    return consolidarKPIsAlunosCanonicos(rows, {
+      fonte: competenciaFechada || competenciaParcial ? 'dados_mensais' : 'preliminar',
+      competenciaFechada,
+      competenciaParcial,
+      alertasFonte: competenciaFechada || competenciaParcial
+        ? ['Competência fechada: KPIs executivos lidos de dados_mensais.']
+        : ['Competência aberta com snapshot existente: exibir como preliminar até fechamento formal.'],
+      ano,
+      mes,
+    }, unidadeId || 'todos');
+  }
+
+  if (periodoAtualUnico && fechadas.length === 0) {
+    let viewQuery = supabase
+      .from('vw_kpis_gestao_mensal')
+      .select('*')
+      .eq('ano', ano)
+      .eq('mes', mes);
+
+    if (unidadeFiltro) {
+      viewQuery = viewQuery.eq('unidade_id', unidadeFiltro);
+    }
+
+    const { data: viewData, error: viewError } = await viewQuery;
+    if (viewError) throw viewError;
+
+    const rows = (viewData || []).map(mapViewGestao);
+    return consolidarKPIsAlunosCanonicos(rows, {
+      fonte: rows.length > 0 ? 'vivo' : 'indisponivel',
+      competenciaFechada: false,
+      competenciaParcial: false,
+      alertasFonte: rows.length > 0
+        ? ['Mês atual aberto: KPIs executivos lidos da view viva.']
+        : ['Mês atual sem dados na view viva.'],
+      ano,
+      mes,
+    }, unidadeId || 'todos');
+  }
+
+  return consolidarKPIsAlunosCanonicos([], {
+    fonte: 'indisponivel',
+    competenciaFechada: false,
+    competenciaParcial: false,
+    alertasFonte: ['Competência sem snapshot em dados_mensais. Recalcular silenciosamente a partir de alunos está bloqueado.'],
+    ano,
+    mes,
+  }, unidadeId || 'todos');
+}
+
+export function emptyKPIsAlunosCanonicos(ano: number, mes: number): KPIsAlunosCanonicos {
+  return {
+    fonte: 'indisponivel',
+    fonteLabel: fonteLabel('indisponivel'),
+    competenciaFechada: false,
+    competenciaParcial: false,
+    alertasFonte: ['Competência indisponível.'],
+    unidade_id: 'todos',
+    unidade_nome: 'Consolidado',
+    ano,
+    mes,
+    ...ZERO_KPIS,
+    porUnidade: [],
+  };
+}
+
+export function useKPIsAlunosCanonicos(params: FetchKPIsAlunosCanonicosParams): UseKPIsAlunosCanonicosResult {
+  const [data, setData] = useState<KPIsAlunosCanonicos | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+
+  const fetchData = useCallback(async () => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const result = await fetchKPIsAlunosCanonicos(params);
+      setData(result);
+    } catch (err) {
+      console.error('Erro ao buscar KPIs canônicos de alunos:', err);
+      setError(err as Error);
+      setData(emptyKPIsAlunosCanonicos(params.ano, params.mes));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [params.unidadeId, params.ano, params.mes, params.mesFim]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  return { data, isLoading, error, refetch: fetchData };
+}
+
+export default useKPIsAlunosCanonicos;

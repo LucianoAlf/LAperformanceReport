@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { fetchKPIsAlunosCanonicos } from '@/hooks/useKPIsAlunosCanonicos';
 
 export interface KPIsRetencao {
   unidade_id: string;
@@ -64,6 +65,62 @@ export function useKPIsRetencao(
     setError(null);
 
     try {
+      const canonical = await fetchKPIsAlunosCanonicos({
+        unidadeId,
+        ano: currentYear,
+        mes: currentMonth,
+      });
+
+      if (canonical.fonte === 'dados_mensais' || canonical.fonte === 'preliminar' || canonical.fonte === 'indisponivel') {
+        const rows = canonical.porUnidade.map(row => ({
+          unidade_id: row.unidade_id,
+          unidade_nome: row.unidade_nome,
+          ano: row.ano,
+          mes: row.mes,
+          total_evasoes: row.evasoes,
+          evasoes_interrompidas: row.evasoes,
+          avisos_previos: 0,
+          transferencias: 0,
+          taxa_evasao: row.churnRate,
+          mrr_perdido: 0,
+          renovacoes_previstas: 0,
+          renovacoes_realizadas: 0,
+          nao_renovacoes: 0,
+          renovacoes_pendentes: 0,
+          renovacoes_atrasadas: 0,
+          taxa_renovacao: 0,
+          taxa_nao_renovacao: 0,
+          evasoes_por_motivo: {},
+          evasoes_por_professor: {},
+        }));
+
+        setDataByUnidade(rows);
+        setMotivosSaida([]);
+        setEvasoesPorProfessor([]);
+        setData({
+          unidade_id: canonical.unidade_id,
+          unidade_nome: canonical.unidade_nome,
+          ano: canonical.ano,
+          mes: canonical.mes,
+          total_evasoes: canonical.evasoes,
+          evasoes_interrompidas: canonical.evasoes,
+          avisos_previos: 0,
+          transferencias: 0,
+          taxa_evasao: canonical.churnRate,
+          mrr_perdido: 0,
+          renovacoes_previstas: 0,
+          renovacoes_realizadas: 0,
+          nao_renovacoes: 0,
+          renovacoes_pendentes: 0,
+          renovacoes_atrasadas: 0,
+          taxa_renovacao: 0,
+          taxa_nao_renovacao: 0,
+          evasoes_por_motivo: {},
+          evasoes_por_professor: {},
+        });
+        return;
+      }
+
       // Tentar buscar da view primeiro (filtrar por ano/mes)
       let query = supabase
         .from('vw_kpis_retencao_mensal')

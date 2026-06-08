@@ -8,12 +8,14 @@ import { ptBR } from 'date-fns/locale';
 import {
   Users, DollarSign, BarChart3, Clock, Layers, AlertTriangle, BookOpen,
   Plus, Search, RotateCcw, Edit2, Trash2, Check, X, History,
-  Calendar, Upload, Heart, Zap, RefreshCw
+  Calendar, Upload, Heart, Zap, RefreshCw, Lock, Unlock
 } from 'lucide-react';
 import { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
+import { COMPETENCIA_FECHADA_MESSAGE, useCompetenciaMensalStatus } from '@/hooks/useCompetenciaMensalStatus';
 import { CompetenciaFilter } from '@/components/ui/CompetenciaFilter';
 import { PageFilterBar } from '@/components/ui/page-filter-bar';
 import { KPICard } from '@/components/ui/KPICard';
+import { Tooltip } from '@/components/ui/Tooltip';
 import { ModalPermanenciaDetalhe } from '@/components/GestaoMensal/ModalPermanenciaDetalhe';
 import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -82,6 +84,11 @@ export interface Aluno {
   forma_pagamento_nome?: string | null;
   responsavel_telefone?: string | null;
   data_saida?: string | null;
+  arquivado_em?: string | null;
+  arquivado_por?: string | null;
+  arquivado_motivo?: string | null;
+  arquivado_origem?: string | null;
+  arquivado_aluno_principal_id?: number | null;
   foto_url?: string | null;
   instagram?: string | null;
   anamnese_diagnosticos?: string[];
@@ -232,6 +239,55 @@ export function AlunosPage() {
   const [confirmRecalcular, setConfirmRecalcular] = useState(false);
   const [recalculando, setRecalculando] = useState(false);
   const [modalNovoAluno, setModalNovoAluno] = useState(false);
+  const competenciaMensal = useCompetenciaMensalStatus({
+    unidadeId: unidadeAtual,
+    ano: competenciaFiltro.ano,
+    mes: competenciaFiltro.mes,
+  });
+  const recalcBloqueado = competenciaMensal.loading || competenciaMensal.bloqueiaEscrita;
+  const competenciaBadgeClasses = competenciaMensal.bloqueiaEscrita
+    ? 'bg-emerald-500/10 border-emerald-500/40 text-emerald-200'
+    : 'bg-slate-800/70 border-slate-600 text-slate-300';
+
+  function avisarCompetenciaBloqueada() {
+    toast.error(COMPETENCIA_FECHADA_MESSAGE);
+  }
+
+  function solicitarRecalculoDadosMensais() {
+    if (competenciaMensal.loading) {
+      toast.info('Validando competência', 'Aguarde a confirmação do status antes de recalcular.');
+      return;
+    }
+
+    if (competenciaMensal.bloqueiaEscrita) {
+      avisarCompetenciaBloqueada();
+      return;
+    }
+
+    setConfirmRecalcular(true);
+  }
+
+  async function confirmarRecalculoDadosMensais() {
+    if (competenciaMensal.bloqueiaEscrita) {
+      setConfirmRecalcular(false);
+      avisarCompetenciaBloqueada();
+      return;
+    }
+
+    setRecalculando(true);
+    try {
+      const { data, error } = await supabase.rpc('recalcular_dados_mensais', {
+        p_ano: competenciaFiltro.ano, p_mes: competenciaFiltro.mes, p_unidade_id: unidadeAtual
+      });
+      if (error) throw error;
+      toast.success('Dados recalculados!', `${data?.alunos_ativos || 0} ativos, ${data?.novas_matriculas || 0} matrículas, ${data?.evasoes || 0} evasões`);
+    } catch (err: any) {
+      toast.error('Erro ao recalcular', err.message);
+    } finally {
+      setRecalculando(false);
+      setConfirmRecalcular(false);
+    }
+  }
 
   // Calcular alunos sem lançamento de pagamento (após dia 15)
   const alertaPagamentos = useMemo(() => {
@@ -260,6 +316,12 @@ export function AlunosPage() {
   useEffect(() => {
     carregarDados();
   }, [unidadeAtual, competenciaRange.startDate, competenciaRange.endDate]);
+
+  useEffect(() => {
+    if (competenciaMensal.bloqueiaEscrita) {
+      setConfirmRecalcular(false);
+    }
+  }, [competenciaMensal.bloqueiaEscrita]);
 
   // Listener para navegação de turma
   useEffect(() => {
@@ -309,7 +371,9 @@ export function AlunosPage() {
       id, nome, classificacao, idade_atual, professor_atual_id, curso_id, modalidade,
       dia_aula, horario_aula, valor_parcela, tempo_permanencia_meses,
       status, status_pagamento, dia_vencimento, tipo_matricula_id, unidade_id, data_matricula,
-      is_segundo_curso, data_nascimento, forma_pagamento_id, telefone, whatsapp, responsavel_telefone, data_saida, foto_url, instagram,
+      is_segundo_curso, data_nascimento, forma_pagamento_id, telefone, whatsapp, responsavel_telefone, data_saida,
+      arquivado_em, arquivado_por, arquivado_motivo, arquivado_origem, arquivado_aluno_principal_id,
+      foto_url, instagram,
       anamnese_preenchida, anamnese_preenchida_em, temperamento_codinome,
       professores:professor_atual_id!left(nome),
       cursos:curso_id!left(nome, is_projeto_banda),
@@ -320,7 +384,7 @@ export function AlunosPage() {
 
     // Builder da query principal (reutilizado pela paginação)
     const buildMainQuery = () => {
-      let q = supabase.from('alunos').select(selectFields).order('nome');
+      let q = supabase.from('alunos').select(selectFields).is('arquivado_em', null).order('nome');
       if (unidadeAtual && unidadeAtual !== 'todos') q = q.eq('unidade_id', unidadeAtual);
       if (competenciaRange.startDate) q = q.gte('data_matricula', competenciaRange.startDate);
       if (competenciaRange.endDate) q = q.lte('data_matricula', competenciaRange.endDate);
@@ -331,6 +395,7 @@ export function AlunosPage() {
     const buildSaidaQuery = (competenciaRange.startDate && competenciaRange.endDate)
       ? () => {
           let q = supabase.from('alunos').select(selectFields).not('data_saida', 'is', null)
+            .is('arquivado_em', null)
             .gte('data_saida', competenciaRange.startDate)
             .lte('data_saida', competenciaRange.endDate)
             .order('nome');
@@ -1393,28 +1458,22 @@ export function AlunosPage() {
             onDataFimChange={setCompetenciaDataFim}
           />
 
+          <div
+            className={`min-h-8 px-3 py-1.5 rounded-lg border text-xs font-medium flex items-center gap-1.5 max-w-full ${competenciaBadgeClasses}`}
+            title={competenciaMensal.tooltip}
+          >
+            {competenciaMensal.bloqueiaEscrita ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+            <span className="min-w-0 truncate">{competenciaMensal.loading ? 'Validando competência' : competenciaMensal.badgeLabel}</span>
+          </div>
+
           {unidadeAtual && unidadeAtual !== 'todos' ? (
-            confirmRecalcular ? (
+            confirmRecalcular && !recalcBloqueado ? (
               <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-800 border border-slate-600 rounded-lg">
                 <span className="text-xs text-slate-300">
                   Recalcular {competenciaFiltro.mes}/{competenciaFiltro.ano}?
                 </span>
                 <button
-                  onClick={async () => {
-                    setRecalculando(true);
-                    try {
-                      const { data, error } = await supabase.rpc('recalcular_dados_mensais', {
-                        p_ano: competenciaFiltro.ano, p_mes: competenciaFiltro.mes, p_unidade_id: unidadeAtual
-                      });
-                      if (error) throw error;
-                      toast.success('Dados recalculados!', `${data?.alunos_ativos || 0} ativos, ${data?.novas_matriculas || 0} matrículas, ${data?.evasoes || 0} evasões`);
-                    } catch (err: any) {
-                      toast.error('Erro ao recalcular', err.message);
-                    } finally {
-                      setRecalculando(false);
-                      setConfirmRecalcular(false);
-                    }
-                  }}
+                  onClick={confirmarRecalculoDadosMensais}
                   disabled={recalculando}
                   className="h-6 px-2 bg-violet-600 hover:bg-violet-700 disabled:bg-slate-600 rounded text-xs text-white font-medium transition"
                 >
@@ -1428,14 +1487,27 @@ export function AlunosPage() {
                 </button>
               </div>
             ) : (
-              <button
-                onClick={() => setConfirmRecalcular(true)}
-                className="h-8 px-3 bg-slate-700 hover:bg-slate-600 rounded-lg text-xs text-slate-300 transition flex items-center gap-1.5 whitespace-nowrap"
-                title="Recalcular snapshot de dados mensais para a unidade selecionada"
+              <Tooltip
+                side="top"
+                content={
+                  recalcBloqueado
+                    ? COMPETENCIA_FECHADA_MESSAGE
+                    : 'Recalcular snapshot de dados mensais para a unidade selecionada'
+                }
               >
-                <RefreshCw className="w-3.5 h-3.5" />
-                Recalcular Dados Mensais
-              </button>
+                <button
+                  onClick={solicitarRecalculoDadosMensais}
+                  className={`h-8 px-3 rounded-lg text-xs transition flex items-center gap-1.5 whitespace-nowrap ${
+                    recalcBloqueado
+                      ? 'bg-slate-800/70 border border-slate-700 text-slate-500 cursor-not-allowed'
+                      : 'bg-slate-700 hover:bg-slate-600 text-slate-300'
+                  }`}
+                  aria-disabled={recalcBloqueado}
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Recalcular Dados Mensais
+                </button>
+              </Tooltip>
             )
           ) : null}
         </div>
@@ -1458,6 +1530,11 @@ export function AlunosPage() {
             </span>
           </button>
         )}
+      </div>
+
+      <div className="inline-flex max-w-full items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-medium text-cyan-200">
+        <BarChart3 className="h-3.5 w-3.5 shrink-0" />
+        <span className="truncate">Dados operacionais — carteira ao vivo</span>
       </div>
 
       {/* KPI Cards */}

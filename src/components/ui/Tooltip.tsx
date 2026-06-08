@@ -24,7 +24,8 @@ export function Tooltip({ children, content, side = 'right', enabled = true }: T
           <TooltipPrimitive.Content
             side={side}
             sideOffset={8}
-            className="z-[100] px-3 py-2 text-sm font-medium text-white bg-slate-800 rounded-lg shadow-lg border border-slate-700 animate-in fade-in-0 zoom-in-95"
+            collisionPadding={12}
+            className="z-[999999] max-w-[320px] px-3 py-2 text-sm font-medium leading-snug text-left text-white whitespace-normal bg-slate-800 rounded-lg shadow-2xl border border-slate-700 animate-in fade-in-0 zoom-in-95"
           >
             {content}
             <TooltipPrimitive.Arrow className="fill-slate-800" />

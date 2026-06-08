@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { fetchKPIsAlunosCanonicos, type FonteKPIAlunos } from '@/hooks/useKPIsAlunosCanonicos';
 
 export interface KPIsGestao {
   unidade_id: string;
@@ -21,10 +22,12 @@ export interface KPIsGestao {
   faturamento_realizado: number;
   churn_rate: number;
   total_evasoes: number;
+  fonte?: FonteKPIAlunos;
+  fonte_label?: string;
+  alertas_fonte?: string[];
 }
 
 export interface KPIsGestaoConsolidado extends KPIsGestao {
-  // Valores do mês anterior para cálculo de tendência
   anterior?: {
     total_alunos_ativos: number;
     total_alunos_pagantes: number;
@@ -40,6 +43,33 @@ interface UseKPIsGestaoResult {
   isLoading: boolean;
   error: Error | null;
   refetch: () => Promise<void>;
+}
+
+function mapCanonicalToGestao(kpi: any): KPIsGestao {
+  return {
+    unidade_id: kpi.unidade_id,
+    unidade_nome: kpi.unidade_nome,
+    ano: kpi.ano,
+    mes: kpi.mes,
+    total_alunos_ativos: kpi.alunosAtivos,
+    total_alunos_pagantes: kpi.alunosPagantes,
+    total_bolsistas_integrais: kpi.bolsistasIntegrais,
+    total_bolsistas_parciais: kpi.bolsistasParciais,
+    total_banda: kpi.matriculasBanda,
+    ticket_medio: kpi.ticketMedio,
+    mrr: kpi.mrr,
+    arr: kpi.arr,
+    tempo_permanencia_medio: kpi.tempoPermanencia,
+    ltv_medio: kpi.ltv,
+    inadimplencia_pct: kpi.inadimplencia,
+    faturamento_previsto: kpi.faturamentoPrevisto,
+    faturamento_realizado: kpi.faturamentoRealizado,
+    churn_rate: kpi.churnRate,
+    total_evasoes: kpi.evasoes,
+    fonte: kpi.fonte,
+    fonte_label: kpi.fonteLabel,
+    alertas_fonte: kpi.alertasFonte,
+  };
 }
 
 export function useKPIsGestao(
@@ -60,119 +90,59 @@ export function useKPIsGestao(
     setError(null);
 
     try {
-      // Buscar dados da view
-      let query = supabase
-        .from('vw_kpis_gestao_mensal')
-        .select('*')
-        .eq('ano', currentYear)
-        .eq('mes', currentMonth);
+      const canonical = await fetchKPIsAlunosCanonicos({
+        unidadeId,
+        ano: currentYear,
+        mes: currentMonth,
+      });
 
-      if (unidadeId !== 'todos') {
-        query = query.eq('unidade_id', unidadeId);
-      }
+      const consolidado = mapCanonicalToGestao(canonical) as KPIsGestaoConsolidado;
+      const porUnidade = canonical.porUnidade.map(row => mapCanonicalToGestao({
+        ...row,
+        fonte: canonical.fonte,
+        fonteLabel: canonical.fonteLabel,
+        alertasFonte: canonical.alertasFonte,
+      }));
 
-      const { data: kpisData, error: kpisError } = await query;
+      setDataByUnidade(porUnidade);
+      setData(consolidado);
 
-      if (kpisError) throw kpisError;
-
-      if (kpisData && kpisData.length > 0) {
-        setDataByUnidade(kpisData);
-
-        // Consolidar dados se for "todos"
-        if (unidadeId === 'todos') {
-          const consolidado: KPIsGestaoConsolidado = {
-            unidade_id: 'todos',
-            unidade_nome: 'Consolidado',
-            ano: currentYear,
-            mes: currentMonth,
-            total_alunos_ativos: kpisData.reduce((acc, k) => acc + (k.total_alunos_ativos || 0), 0),
-            total_alunos_pagantes: kpisData.reduce((acc, k) => acc + (k.total_alunos_pagantes || 0), 0),
-            total_bolsistas_integrais: kpisData.reduce((acc, k) => acc + (k.total_bolsistas_integrais || 0), 0),
-            total_bolsistas_parciais: kpisData.reduce((acc, k) => acc + (k.total_bolsistas_parciais || 0), 0),
-            total_banda: kpisData.reduce((acc, k) => acc + (k.total_banda || 0), 0),
-            ticket_medio: kpisData.reduce((acc, k) => acc + (k.ticket_medio || 0), 0) / kpisData.length,
-            mrr: kpisData.reduce((acc, k) => acc + (k.mrr || 0), 0),
-            arr: kpisData.reduce((acc, k) => acc + (k.arr || 0), 0),
-            tempo_permanencia_medio: (() => {
-              const comDados = kpisData.filter(k => (k.tempo_permanencia_medio || 0) > 0);
-              return comDados.length > 0 ? comDados.reduce((acc, k) => acc + (k.tempo_permanencia_medio || 0), 0) / comDados.length : 0;
-            })(),
-            ltv_medio: (() => {
-              const comDados = kpisData.filter(k => (k.ltv_medio || 0) > 0);
-              return comDados.length > 0 ? comDados.reduce((acc, k) => acc + (k.ltv_medio || 0), 0) / comDados.length : 0;
-            })(),
-            inadimplencia_pct: kpisData.reduce((acc, k) => acc + (k.inadimplencia_pct || 0), 0) / kpisData.length,
-            faturamento_previsto: kpisData.reduce((acc, k) => acc + (k.faturamento_previsto || 0), 0),
-            faturamento_realizado: kpisData.reduce((acc, k) => acc + (k.faturamento_realizado || 0), 0),
-            churn_rate: kpisData.reduce((acc, k) => acc + (k.churn_rate || 0), 0) / kpisData.length,
-            total_evasoes: kpisData.reduce((acc, k) => acc + (k.total_evasoes || 0), 0),
-          };
-          setData(consolidado);
-        } else {
-          setData(kpisData[0] as KPIsGestaoConsolidado);
-        }
-      } else {
-        // Fallback para dados_mensais se a view não existir
-        const { data: dadosMensais, error: dmError } = await supabase
-          .from('dados_mensais')
-          .select('*')
-          .eq('ano', currentYear)
-          .eq('mes', currentMonth);
-
-        if (dmError) throw dmError;
-
-        if (dadosMensais && dadosMensais.length > 0) {
-          const consolidado: KPIsGestaoConsolidado = {
-            unidade_id: 'todos',
-            unidade_nome: 'Consolidado',
-            ano: currentYear,
-            mes: currentMonth,
-            total_alunos_ativos: dadosMensais.reduce((acc, d) => acc + (d.alunos_ativos || 0), 0),
-            total_alunos_pagantes: dadosMensais.reduce((acc, d) => acc + (d.alunos_pagantes || 0), 0),
-            total_bolsistas_integrais: dadosMensais.reduce((acc, d) => acc + (d.bolsistas_integrais || 0), 0),
-            total_bolsistas_parciais: dadosMensais.reduce((acc, d) => acc + (d.bolsistas_parciais || 0), 0),
-            total_banda: dadosMensais.reduce((acc, d) => acc + (d.matriculas_banda || 0), 0),
-            ticket_medio: dadosMensais.reduce((acc, d) => acc + (d.ticket_medio || 0), 0) / dadosMensais.length,
-            mrr: dadosMensais.reduce((acc, d) => acc + (d.alunos_pagantes * d.ticket_medio || 0), 0),
-            arr: dadosMensais.reduce((acc, d) => acc + (d.alunos_pagantes * d.ticket_medio * 12 || 0), 0),
-            tempo_permanencia_medio: dadosMensais.reduce((acc, d) => acc + (d.tempo_permanencia || 0), 0) / dadosMensais.length,
-            ltv_medio: 0,
-            inadimplencia_pct: dadosMensais.reduce((acc, d) => acc + (d.inadimplencia || 0), 0) / dadosMensais.length,
-            faturamento_previsto: dadosMensais.reduce((acc, d) => acc + (d.faturamento_estimado || 0), 0),
-            faturamento_realizado: dadosMensais.reduce((acc, d) => acc + (d.faturamento_estimado * (1 - d.inadimplencia/100) || 0), 0),
-            churn_rate: dadosMensais.reduce((acc, d) => acc + (d.churn_rate || 0), 0) / dadosMensais.length,
-            total_evasoes: dadosMensais.reduce((acc, d) => acc + (d.evasoes || 0), 0),
-          };
-          setData(consolidado);
-        }
-      }
-
-      // Buscar dados do mês anterior para tendência
       const mesAnterior = currentMonth === 1 ? 12 : currentMonth - 1;
       const anoAnterior = currentMonth === 1 ? currentYear - 1 : currentYear;
 
-      const { data: dadosAnteriores } = await supabase
+      let anterioresQuery = supabase
         .from('dados_mensais')
         .select('*')
         .eq('ano', anoAnterior)
         .eq('mes', mesAnterior);
 
-      if (dadosAnteriores && dadosAnteriores.length > 0 && data) {
+      if (unidadeId !== 'todos') {
+        anterioresQuery = anterioresQuery.eq('unidade_id', unidadeId);
+      }
+
+      const { data: dadosAnteriores } = await anterioresQuery;
+
+      if (dadosAnteriores && dadosAnteriores.length > 0) {
+        const totalPagantes = dadosAnteriores.reduce((acc, d) => acc + (Number(d.alunos_pagantes) || 0), 0);
+        const mrr = dadosAnteriores.reduce((acc, d) => acc + (Number(d.faturamento_estimado) || 0), 0);
+        const count = dadosAnteriores.length || 1;
+
         setData(prev => prev ? {
           ...prev,
           anterior: {
-            total_alunos_ativos: dadosAnteriores.reduce((acc, d) => acc + (d.alunos_ativos || 0), 0),
-            total_alunos_pagantes: dadosAnteriores.reduce((acc, d) => acc + (d.alunos_pagantes || 0), 0),
-            ticket_medio: dadosAnteriores.reduce((acc, d) => acc + (d.ticket_medio || 0), 0) / dadosAnteriores.length,
-            mrr: dadosAnteriores.reduce((acc, d) => acc + (d.alunos_pagantes * d.ticket_medio || 0), 0),
-            churn_rate: dadosAnteriores.reduce((acc, d) => acc + (d.churn_rate || 0), 0) / dadosAnteriores.length,
-          }
+            total_alunos_ativos: dadosAnteriores.reduce((acc, d) => acc + (Number(d.alunos_ativos) || 0), 0),
+            total_alunos_pagantes: totalPagantes,
+            ticket_medio: totalPagantes > 0 ? mrr / totalPagantes : 0,
+            mrr,
+            churn_rate: dadosAnteriores.reduce((acc, d) => acc + (Number(d.churn_rate) || 0), 0) / count,
+          },
         } : null);
       }
-
     } catch (err) {
       console.error('Erro ao buscar KPIs de Gestão:', err);
       setError(err as Error);
+      setData(null);
+      setDataByUnidade([]);
     } finally {
       setIsLoading(false);
     }

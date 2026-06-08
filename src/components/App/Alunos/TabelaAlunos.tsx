@@ -653,66 +653,109 @@ export function TabelaAlunos({
   async function confirmarExclusao() {
     if (!alunoParaExcluir) return;
 
-    const { error } = await supabase
-      .from('alunos')
-      .delete()
-      .eq('id', alunoParaExcluir.id);
+    const ator = usuario?.email || usuario?.nome || 'sistema';
+    const agora = new Date().toISOString();
 
-    if (error) {
-      console.error('Erro ao excluir aluno:', error);
+    const { data: alunoArquivado, error } = await supabase
+      .from('alunos')
+      .update({
+        status: 'inativo',
+        arquivado_em: agora,
+        arquivado_por: ator,
+        arquivado_motivo: 'Aluno arquivado pela interface sem exclusao fisica.',
+        arquivado_origem: 'ui-arquivar-aluno',
+        arquivado_aluno_principal_id: null,
+        updated_at: agora,
+        updated_by: ator,
+      })
+      .eq('id', alunoParaExcluir.id)
+      .is('arquivado_em', null)
+      .select('id')
+      .single();
+
+    if (error || !alunoArquivado) {
+      console.error('Erro ao arquivar aluno:', error);
       toast.addToast(
-        'Não foi possível excluir',
+        'Não foi possível arquivar',
         'error',
         error.code === '23503'
-          ? 'Este registro está vinculado a outros dados (leads, movimentações, etc.). Use "Remover curso" para inativar em vez de excluir.'
+          ? 'Este registro está vinculado a outros dados, mas deve ser arquivado sem exclusão física.'
           : error.message,
         8000
       );
     } else {
-      toast.addToast('Aluno excluído com sucesso', 'success');
+      toast.addToast('Aluno arquivado com segurança', 'success');
       onRecarregar();
     }
     setAlunoParaExcluir(null);
   }
 
-  // Remove segundo curso arquivando em alunos_arquivados + DELETE de alunos
-  async function removerSegundoCurso(outroCurso: Aluno) {
-    const { error: archiveError } = await supabase
-      .from('alunos_arquivados')
-      .insert({
-        id: outroCurso.id,
-        nome: outroCurso.nome,
-        unidade_id: outroCurso.unidade_id,
-        curso_id: outroCurso.curso_id,
-        tipo_matricula_id: outroCurso.tipo_matricula_id,
-        data_matricula: outroCurso.data_matricula,
-        valor_parcela: outroCurso.valor_parcela,
-        status: outroCurso.status,
-        is_segundo_curso: outroCurso.is_segundo_curso,
-        created_at: outroCurso.created_at,
-        arquivado_em: new Date().toISOString(),
-        arquivado_por: 'ui-remover-segundo-curso',
-        motivo: 'Segundo curso removido manualmente pela interface',
-      });
+  async function arquivarVinculoAluno(outroCurso: Aluno, alunoPrincipal: Aluno) {
+    const ehBanda = outroCurso.curso_is_projeto_banda === true;
+    const tipoLabel = ehBanda ? 'banda' : 'curso';
+    const origem = ehBanda ? 'ui-remover-banda' : 'ui-remover-segundo-curso';
+    const ator = usuario?.email || usuario?.nome || 'sistema';
+    const agora = new Date().toISOString();
+    const motivo = ehBanda
+      ? 'Vinculo de projeto/banda removido pela interface sem exclusao fisica.'
+      : 'Segundo curso removido pela interface sem exclusao fisica.';
 
-    if (archiveError) {
-      console.error('Erro ao arquivar curso:', archiveError);
-      toast.addToast('Erro ao remover curso', 'error', archiveError.message, 6000);
+    const { data: alunoArquivado, error: updateError } = await supabase
+      .from('alunos')
+      .update({
+        status: 'inativo',
+        arquivado_em: agora,
+        arquivado_por: ator,
+        arquivado_motivo: motivo,
+        arquivado_origem: origem,
+        arquivado_aluno_principal_id: alunoPrincipal.id !== outroCurso.id ? alunoPrincipal.id : null,
+        updated_at: agora,
+        updated_by: ator,
+      })
+      .eq('id', outroCurso.id)
+      .is('arquivado_em', null)
+      .select('id')
+      .single();
+
+    if (updateError || !alunoArquivado) {
+      console.error(`Erro ao arquivar ${tipoLabel}:`, updateError);
+      toast.addToast(
+        `Erro ao remover ${tipoLabel}`,
+        'error',
+        updateError?.message || 'Nenhuma linha ativa foi arquivada. O vinculo pode ja ter sido removido.',
+        8000
+      );
       return;
     }
 
-    const { error: deleteError } = await supabase
-      .from('alunos')
-      .delete()
-      .eq('id', outroCurso.id);
+    const { error: anotacaoError } = await supabase
+      .from('anotacoes_alunos')
+      .insert({
+        aluno_id: outroCurso.id,
+        texto: [
+          `Arquivamento logico de ${tipoLabel} pela interface.`,
+          `Aluno principal mantido: ${alunoPrincipal.id} - ${alunoPrincipal.nome}.`,
+          `Registro arquivado: ${outroCurso.id} - ${outroCurso.curso_nome || 'curso sem nome'} / ${outroCurso.professor_nome || 'professor sem nome'}.`,
+          'Preservado sem DELETE fisico para manter presencas, renovacoes, movimentacoes e historico.',
+        ].join(' '),
+        categoria: 'arquivamento',
+        criado_por: ator,
+        resolvido: true,
+      });
 
-    if (deleteError) {
-      console.error('Erro ao deletar curso:', deleteError);
-      toast.addToast('Erro ao remover curso', 'error', deleteError.message, 6000);
+    if (anotacaoError) {
+      console.warn(`Arquivamento de ${tipoLabel} concluido, mas anotacao falhou:`, anotacaoError);
+      toast.addToast(
+        `${ehBanda ? 'Banda removida' : 'Curso removido'} com alerta`,
+        'warning',
+        `O vinculo foi arquivado, mas a anotacao de auditoria falhou: ${anotacaoError.message}`,
+        9000
+      );
     } else {
-      toast.addToast('Curso removido com sucesso', 'success');
-      onRecarregar();
+      toast.addToast(ehBanda ? 'Banda removida com seguranca' : 'Curso removido com seguranca', 'success');
     }
+
+    onRecarregar();
   }
 
   // Função para carregar histórico do aluno
@@ -2272,7 +2315,7 @@ export function TabelaAlunos({
                           className="cursor-pointer text-red-400 focus:text-red-400 focus:bg-red-500/10"
                         >
                           <Trash2 className="w-4 h-4 mr-2" />
-                          Excluir
+                          Arquivar
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -2305,14 +2348,14 @@ export function TabelaAlunos({
                         </button>
                         {outroCurso.curso_is_projeto_banda ? (
                           <button
-                            onClick={() => removerSegundoCurso(outroCurso)}
+                            onClick={() => arquivarVinculoAluno(outroCurso, aluno)}
                             className="text-red-400 hover:text-red-300 hover:underline text-sm"
                           >
                             Remover banda
                           </button>
                         ) : (
                           <button
-                            onClick={() => removerSegundoCurso(outroCurso)}
+                            onClick={() => arquivarVinculoAluno(outroCurso, aluno)}
                             className="text-red-400 hover:text-red-300 hover:underline text-sm"
                           >
                             Remover curso
@@ -2593,17 +2636,17 @@ export function TabelaAlunos({
       <AlertDialog open={!!alunoParaExcluir} onOpenChange={() => setAlunoParaExcluir(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir aluno</AlertDialogTitle>
+            <AlertDialogTitle>Arquivar aluno</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja excluir o aluno <strong className="text-white">{alunoParaExcluir?.nome}</strong>?
+              Tem certeza que deseja arquivar o aluno <strong className="text-white">{alunoParaExcluir?.nome}</strong>?
               <br />
-              Esta ação não pode ser desfeita.
+              A linha sairá das listas operacionais, mas presenças, renovações, movimentações e histórico serão preservados.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction onClick={confirmarExclusao}>
-              Excluir
+              Arquivar
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

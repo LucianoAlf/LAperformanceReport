@@ -757,6 +757,11 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
       {/* Sub-aba: Visão Geral */}
       {activeSubTab === 'visao_geral' && (
         <div className="space-y-6">
+          <div className="inline-flex max-w-full items-center gap-2 rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-medium text-cyan-200">
+            <BarChart3 className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">Carteira ao vivo - dados operacionais de alunos e turmas</span>
+          </div>
+
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
             <KPICard
               icon={Users}
@@ -769,8 +774,9 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
               icon={Users}
               label="Total Alunos"
               value={dados.alunos_total}
+              subvalue="carteira ao vivo"
               variant="cyan"
-              tooltip="Alunos com status ativo ou trancado na unidade (tabela alunos)"
+              tooltip="Carteira operacional ao vivo: alunos com status ativo ou trancado na unidade. Não é snapshot histórico fechado."
               comparativoMesAnterior={dadosMesAnterior && dadosMesAnterior.alunos_total > 0 ? { valor: dadosMesAnterior.alunos_total, label: dadosMesAnterior.label } : undefined}
               comparativoAnoAnterior={dadosAnoAnterior && dadosAnoAnterior.alunos_total > 0 ? { valor: dadosAnoAnterior.alunos_total, label: dadosAnoAnterior.label } : undefined}
             />
@@ -778,9 +784,9 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
               icon={Target}
               label="Média de Alunos"
               value={dados.carteira_media.toFixed(1)}
-              subvalue="alunos por professor"
+              subvalue="carteira ao vivo"
               variant="emerald"
-              tooltip="Total de alunos ÷ total de professores ativos"
+              tooltip="Carteira operacional ao vivo: total de alunos dividido por professores ativos. Não comparar diretamente com dados_mensais."
             />
             <KPICard
               icon={Users}
@@ -795,8 +801,9 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
               label="Ticket Médio"
               value={dados.ticket_medio_geral}
               format="currency"
+              subvalue="carteira ao vivo"
               variant="amber"
-              tooltip="Soma das parcelas de todos os alunos pagantes ÷ total de alunos únicos (segundo curso conta no faturamento mas não no denominador)"
+              tooltip="Carteira operacional ao vivo: soma das parcelas de alunos pagantes dividida por alunos únicos. Não é snapshot histórico fechado."
               comparativoMesAnterior={dadosMesAnterior && dadosMesAnterior.ticket_medio_geral > 0 ? { valor: dadosMesAnterior.ticket_medio_geral, label: dadosMesAnterior.label } : undefined}
               comparativoAnoAnterior={dadosAnoAnterior && dadosAnoAnterior.ticket_medio_geral > 0 ? { valor: dadosAnoAnterior.ticket_medio_geral, label: dadosAnoAnterior.label } : undefined}
             />

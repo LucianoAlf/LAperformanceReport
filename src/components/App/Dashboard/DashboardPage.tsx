@@ -29,6 +29,7 @@ import { TipoCompetencia, CompetenciaFiltro, CompetenciaRange } from '@/hooks/us
 import { useMetasKPI } from '@/hooks/useMetasKPI';
 import { KPICard } from '@/components/ui/KPICard';
 import { ModalDetalheKPI, BadgeUnidade, BadgeTipo, ValorParcela, TextoCurso } from './ModalDetalheKPI';
+import { fetchKPIsAlunosCanonicos, type FonteKPIAlunos } from '@/hooks/useKPIsAlunosCanonicos';
 
 
 interface OutletContextType {
@@ -100,6 +101,12 @@ interface ResumoUnidade {
   tempo_medio: number;
 }
 
+interface FonteKPIAlunosState {
+  fonte: FonteKPIAlunos;
+  label: string;
+  alertas: string[];
+}
+
 export function DashboardPage() {
   useSetPageTitle({
     titulo: 'Dashboard',
@@ -113,6 +120,7 @@ export function DashboardPage() {
   const [alertas, setAlertas] = useState<Alerta[]>([]);
   const [loading, setLoading] = useState(true);
   const [dadosGestao, setDadosGestao] = useState<DadosGestao | null>(null);
+  const [fonteKpisAlunos, setFonteKpisAlunos] = useState<FonteKPIAlunosState | null>(null);
   const [dadosComercial, setDadosComercial] = useState<DadosComercial | null>(null);
   const [dadosProfessores, setDadosProfessores] = useState<DadosProfessores | null>(null);
   const [evolucaoAlunos, setEvolucaoAlunos] = useState<{ mes: string; valor: number }[]>([]);
@@ -379,7 +387,7 @@ export function DashboardPage() {
           const { data } = await gestaoQuery;
           gestaoData = data || [];
         } else {
-          // PERÍODO HISTÓRICO: tentar dados_mensais primeiro, senão calcular das tabelas base
+          // PERÍODO HISTÓRICO: tentar dados_mensais primeiro; sem snapshot, não recalcular por tabelas base.
           let historicoQuery = supabase
             .from('dados_mensais')
             .select('*')
@@ -403,67 +411,7 @@ export function DashboardPage() {
               mes: d.mes,
             }));
           } else {
-            // FALLBACK: calcular KPIs diretamente das tabelas base
-            // Buscar alunos ativos/pagantes
-            let alunosQuery = supabase
-              .from('alunos')
-              .select('id, status, tipo_matricula_id, is_segundo_curso, valor_parcela, tipos_matricula(codigo, conta_como_pagante)')
-              .in('status', ['ativo', 'trancado']);
-
-            if (unidade !== 'todos') {
-              alunosQuery = alunosQuery.eq('unidade_id', unidade);
-            }
-
-            // Buscar matrículas do período
-            let matriculasQuery = supabase
-              .from('alunos')
-              .select('id')
-              .gte('data_matricula', `${ano}-${String(mesInicio).padStart(2, '0')}-01`)
-              .lt('data_matricula', `${ano}-${String(mesFim + 1).padStart(2, '0')}-01`);
-
-            if (unidade !== 'todos') {
-              matriculasQuery = matriculasQuery.eq('unidade_id', unidade);
-            }
-
-            // Buscar evasões do período via vw_kpis_retencao_mensal
-            let evasoesQuery = supabase
-              .from('vw_kpis_retencao_mensal')
-              .select('total_evasoes')
-              .eq('ano', ano)
-              .gte('mes', mesInicio)
-              .lte('mes', mesFim);
-
-            if (unidade !== 'todos') {
-              evasoesQuery = evasoesQuery.eq('unidade_id', unidade);
-            }
-
-            const [alunosRes, matriculasRes, evasoesRes] = await Promise.all([
-              alunosQuery,
-              matriculasQuery,
-              evasoesQuery
-            ]);
-
-            const alunosData = alunosRes.data || [];
-            const totalAtivos = alunosData.filter((a: any) => !a.is_segundo_curso).length;
-            const pagantes = alunosData.filter((a: any) => 
-              (a.tipos_matricula as any)?.conta_como_pagante && !a.is_segundo_curso
-            );
-            const totalPagantes = pagantes.length;
-            const ticketMedio = pagantes.length > 0 
-              ? pagantes.reduce((sum: number, a: any) => sum + (Number(a.valor_parcela) || 0), 0) / pagantes.length 
-              : 0;
-            const novasMatriculas = matriculasRes.data?.length || 0;
-            const totalEvasoes = (evasoesRes.data || []).reduce((sum: number, e: any) => sum + (e.total_evasoes || 0), 0);
-
-            gestaoData = [{
-              total_alunos_ativos: totalAtivos,
-              total_alunos_pagantes: totalPagantes,
-              novas_matriculas: novasMatriculas,
-              total_evasoes: totalEvasoes,
-              ticket_medio: Math.round(ticketMedio),
-              ano: ano,
-              mes: mesInicio,
-            }];
+            gestaoData = [];
           }
         }
         
@@ -493,6 +441,34 @@ export function DashboardPage() {
           });
         } else {
           setDadosGestao(null);
+        }
+
+        const kpisAlunos = await fetchKPIsAlunosCanonicos({
+          unidadeId: unidade,
+          ano,
+          mes: mesInicio,
+          mesFim,
+        });
+
+        setFonteKpisAlunos({
+          fonte: kpisAlunos.fonte,
+          label: kpisAlunos.fonteLabel,
+          alertas: kpisAlunos.alertasFonte,
+        });
+
+        if (kpisAlunos.fonte !== 'indisponivel') {
+          setDadosGestao({
+            alunos_ativos: Math.round(kpisAlunos.alunosAtivos),
+            alunos_pagantes: Math.round(kpisAlunos.alunosPagantes),
+            matriculas_mes: kpisAlunos.novasMatriculas,
+            evasoes_mes: kpisAlunos.evasoes,
+            ticket_medio: kpisAlunos.ticketMedio,
+          });
+        } else {
+          setDadosGestao(null);
+          if (!isPeriodoAtual) {
+            setDados([]);
+          }
         }
 
         // ===== DADOS COMERCIAIS =====
@@ -852,9 +828,8 @@ export function DashboardPage() {
                 const dadosUnidade = dadosMensaisUnidades.filter((d: any) => d.unidade_id === u.id);
                 const alunosAtivos = dadosUnidade.reduce((acc: number, d: any) => acc + (d.alunos_ativos || 0), 0);
                 const alunosPagantes = dadosUnidade.reduce((acc: number, d: any) => acc + (d.alunos_pagantes || 0), 0);
-                const ticketTotal = dadosUnidade.reduce((acc: number, d: any) => acc + parseFloat(d.ticket_medio || 0), 0);
-                const ticketMedio = dadosUnidade.length > 0 ? ticketTotal / dadosUnidade.length : 0;
-                const faturamento = alunosPagantes * ticketMedio;
+                const faturamento = dadosUnidade.reduce((acc: number, d: any) => acc + parseFloat(d.faturamento_estimado || 0), 0);
+                const ticketMedio = alunosPagantes > 0 ? faturamento / alunosPagantes : 0;
 
                 return {
                   unidade: u.nome,
@@ -868,29 +843,7 @@ export function DashboardPage() {
               });
               setResumoUnidades(resumo);
             } else {
-              // Sem dados históricos, usar dados em tempo real como fallback
-              let fallbackQuery = supabase
-                .from('vw_dashboard_unidade')
-                .select('*');
-              
-              if (unidade !== 'todos') {
-                fallbackQuery = fallbackQuery.eq('unidade_id', unidade);
-              }
-              
-              const { data: dashboardUnidades } = await fallbackQuery;
-
-              if (dashboardUnidades) {
-                const resumo: ResumoUnidade[] = dashboardUnidades.map((d: any) => ({
-                  unidade: d.unidade_nome,
-                  unidade_id: d.unidade_id,
-                  alunos_ativos: d.alunos_ativos || 0,
-                  alunos_pagantes: d.alunos_pagantes || 0,
-                  ticket_medio: parseFloat(d.ticket_medio || 0),
-                  faturamento_previsto: parseFloat(d.mrr || 0),
-                  tempo_medio: parseFloat(d.tempo_permanencia || 0)
-                }));
-                setResumoUnidades(resumo);
-              }
+              setResumoUnidades([]);
             }
           }
         }
@@ -953,13 +906,29 @@ export function DashboardPage() {
           <BarChart3 className="w-5 h-5 text-cyan-400" />
           <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wide">Gestão</h3>
         </div>
+        {fonteKpisAlunos && (
+          <div className={`mb-3 inline-flex max-w-full items-center gap-2 rounded-lg border px-3 py-1.5 text-xs font-medium ${
+            fonteKpisAlunos.fonte === 'dados_mensais'
+              ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
+              : fonteKpisAlunos.fonte === 'vivo'
+                ? 'border-cyan-500/40 bg-cyan-500/10 text-cyan-200'
+                : 'border-amber-500/40 bg-amber-500/10 text-amber-200'
+          }`}>
+            <BarChart3 className="h-3.5 w-3.5 shrink-0" />
+            <span className="truncate">
+              KPIs de alunos: {fonteKpisAlunos.label}
+              {fonteKpisAlunos.alertas[0] ? ` · ${fonteKpisAlunos.alertas[0]}` : ''}
+            </span>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           <KPICard
             dataTour="card-alunos"
             icon={Users}
             label="Pagantes"
             tooltip="Total de alunos ativos com tipo de matrícula pagante (exclui bolsistas integrais). Não conta segundo curso."
-            value={dadosGestao?.alunos_pagantes || totais.alunosPagantes}
+            value={dadosGestao?.alunos_pagantes ?? '--'}
             target={metas.alunos_pagantes}
             format="number"
             variant="cyan"
@@ -992,7 +961,7 @@ export function DashboardPage() {
             icon={DollarSign}
             label="Ticket Médio Parcelas"
             tooltip="Média do valor total pago por aluno (soma parcelas de todos os cursos). Média ponderada pelo número de pagantes de cada unidade."
-            value={dadosGestao?.ticket_medio ?? ticketMedioGeral}
+            value={dadosGestao?.ticket_medio ?? '--'}
             target={metas.ticket_medio}
             format="currency"
             variant="amber"
@@ -1278,7 +1247,11 @@ export function DashboardPage() {
                 </td>
                 <td className="py-3 text-right text-white font-bold">
                   {resumoUnidades.length > 0 
-                    ? formatCurrency(resumoUnidades.reduce((acc, d) => acc + d.ticket_medio, 0) / resumoUnidades.length)
+                    ? formatCurrency(
+                        resumoUnidades.reduce((acc, d) => acc + d.alunos_pagantes, 0) > 0
+                          ? resumoUnidades.reduce((acc, d) => acc + d.faturamento_previsto, 0) / resumoUnidades.reduce((acc, d) => acc + d.alunos_pagantes, 0)
+                          : 0
+                      )
                     : `R$ ${ticketMedioGeral.toFixed(0)}`}
                 </td>
                 <td className="py-3 text-right text-emerald-400 font-bold">
