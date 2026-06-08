@@ -375,6 +375,60 @@ const REGRAS: Regra[] = [
       unidade_nome: row.unidade_nome ?? null,
     }),
   },
+
+  // ============================================================
+  // INTEGRIDADE DE DATAS — afeta o recalculo historico de dados_mensais.
+  // Aluno com status de saida mas SEM data_saida e contado como ativo em
+  // TODOS os meses passados (infla o historico). Divergencia entre
+  // data_saida e a movimentacao joga a evasao no mes errado.
+  // Severidade: aviso (saneamento manual — revisar e preencher a data real
+  // caso a caso; NAO preencher automaticamente, dado nao confiavel).
+  // ============================================================
+  {
+    regra: 'aluno_saida_sem_data_saida',
+    severidade: 'aviso',
+    evento: 'auditoria_alunos',
+    acao: 'divergencia_detectada',
+    sql: `
+      SELECT a.id, a.nome, a.status, a.unidade_id, u.nome as unidade_nome,
+             a.data_matricula, a.updated_at
+      FROM alunos a
+      LEFT JOIN unidades u ON u.id = a.unidade_id
+      WHERE a.status IN ('evadido','inativo','trancado')
+        AND a.data_saida IS NULL
+    `,
+    construirMensagem: (row) =>
+      `aluno_id=${row.id} nome="${row.nome}" status=${row.status} SEM data_saida (distorce historico mensal — revisar e preencher a data real da saida)`,
+    construirIdempotencyKey: (row) => `audit:aluno_saida_sem_data_saida:${row.id}`,
+    construirLog: (row) => ({
+      aluno_nome: row.nome ?? '(sem nome)',
+      aluno_id: row.id,
+      unidade_nome: row.unidade_nome ?? null,
+    }),
+  },
+  {
+    regra: 'evasao_data_saida_divergente',
+    severidade: 'aviso',
+    evento: 'auditoria_alunos',
+    acao: 'divergencia_detectada',
+    sql: `
+      SELECT a.id, a.nome, a.unidade_id, u.nome as unidade_nome,
+             a.data_saida, m.data as data_movimentacao
+      FROM alunos a
+      JOIN movimentacoes_admin m ON m.aluno_id = a.id AND m.tipo IN ('evasao','nao_renovacao')
+      LEFT JOIN unidades u ON u.id = a.unidade_id
+      WHERE a.data_saida IS NOT NULL
+        AND date_trunc('month', a.data_saida) <> date_trunc('month', m.data)
+    `,
+    construirMensagem: (row) =>
+      `aluno_id=${row.id} nome="${row.nome}" data_saida=${row.data_saida} cai em mes diferente da movimentacao=${row.data_movimentacao} (evasao contada no mes errado)`,
+    construirIdempotencyKey: (row) => `audit:evasao_data_saida_divergente:${row.id}`,
+    construirLog: (row) => ({
+      aluno_nome: row.nome ?? '(sem nome)',
+      aluno_id: row.id,
+      unidade_nome: row.unidade_nome ?? null,
+    }),
+  },
 ];
 
 serve(async (req) => {

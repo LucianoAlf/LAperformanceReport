@@ -56,6 +56,8 @@ matricula_sem_aluno_nome, matricula_sem_emusys_matricula_id, matricula_sem_disci
 - **Leads (5):** lead_sem_nome, lead_sem_telefone, lead_telefone_invalido, lead_sem_unidade, lead_duplicado_mesmo_dia
 - **Experimentais (5):** experimental_sem_professor, experimental_data_passada, experimental_realizada_e_faltou, experimental_realizada_data_futura, experimental_faltou_data_futura
 - **Alunos (3):** matricula_sem_professor_no_banco, matricula_sem_curso_no_banco, matricula_sem_lead_origem_no_banco
+- **Grade (1):** professor_divergente_das_aulas
+- **Integridade de datas (2, add 2026-06-06):** `aluno_saida_sem_data_saida` (status evadido/inativo/trancado sem `data_saida` — distorce o recálculo histórico de `dados_mensais`, conta como ativo em todo mês passado), `evasao_data_saida_divergente` (`alunos.data_saida` em mês diferente da `movimentacoes_admin.data` — joga a evasão no mês errado). Ambas severidade `aviso`, evento `auditoria_alunos`. Baseline 2026-06-06: 64 + 7 casos. Saneamento MANUAL (preencher a data real caso a caso; não auto-preencher — dado não confiável).
 
 ## Frontend
 
