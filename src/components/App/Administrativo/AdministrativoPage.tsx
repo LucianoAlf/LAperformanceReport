@@ -43,6 +43,7 @@ import { Trophy, ShoppingBag, ClipboardList, MessageSquare } from 'lucide-react'
 import { CaixaEntradaTab } from './CaixaEntrada';
 import { ModalPermanenciaDetalhe } from '@/components/GestaoMensal/ModalPermanenciaDetalhe';
 import { ModalDetalheKPI, BadgeUnidade, ValorParcela, TextoCurso } from '@/components/App/Dashboard/ModalDetalheKPI';
+import { fetchKPIsAlunosCanonicos } from '@/hooks/useKPIsAlunosCanonicos';
 
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 
@@ -257,7 +258,7 @@ export function AdministrativoPage() {
       // Carregar movimentações + avisos retroativos + professores + formas pgto em PARALELO
       let query = supabase
         .from('movimentacoes_admin')
-        .select('*, unidades(codigo)')
+        .select('*, unidades!movimentacoes_admin_unidade_id_fkey(codigo)')
         .gte('data', startDate)
         .lte('data', endDate)
         .order('data', { ascending: false });
@@ -266,7 +267,7 @@ export function AdministrativoPage() {
       const mesSaidaEnd = `${ano}-${String(mes).padStart(2, '0')}-28`;
       let queryAvisos = supabase
         .from('movimentacoes_admin')
-        .select('*, unidades(codigo)')
+        .select('*, unidades!movimentacoes_admin_unidade_id_fkey(codigo)')
         .eq('tipo', 'aviso_previo')
         .gte('mes_saida', mesSaidaStart)
         .lte('mes_saida', mesSaidaEnd)
@@ -341,143 +342,32 @@ export function AdministrativoPage() {
 
       let kpisData: any[] = [];
 
-      if (isPeriodoAtual) {
-        // PERÍODO ATUAL: usar view em tempo real
-        let kpisQuery = supabase
-          .from('vw_kpis_gestao_mensal')
-          .select('*')
-          .eq('ano', ano)
-          .eq('mes', mes);
+      const kpisAlunosCanonicos = await fetchKPIsAlunosCanonicos({
+        unidadeId: unidade,
+        ano,
+        mes,
+      });
 
-        if (unidade !== 'todos') {
-          kpisQuery = kpisQuery.eq('unidade_id', unidade);
-        }
-
-        const { data } = await kpisQuery;
-        kpisData = data || [];
-
-        // FALLBACK: view pode retornar vazio para unidades sem leads no mês
-        // (a view usa leads para calcular ano/mes, então unidades sem leads ficam invisíveis)
-        if (kpisData.length === 0 && unidade !== 'todos') {
-          let alunosQuery = supabase
-            .from('alunos')
-            .select('id, status, tipo_matricula_id, is_segundo_curso, valor_parcela, tipos_matricula(codigo, conta_como_pagante), cursos:curso_id!left(is_projeto_banda)')
-            .in('status', ['ativo', 'trancado'])
-            .eq('unidade_id', unidade);
-
-          const { data: alunosData } = await alunosQuery;
-
-          if (alunosData && alunosData.length > 0) {
-            const totalAtivos = alunosData.filter((a: any) => !a.is_segundo_curso).length;
-            const pagantes = alunosData.filter((a: any) =>
-              (a.tipos_matricula as any)?.conta_como_pagante && !a.is_segundo_curso
-            );
-            const totalPagantes = pagantes.length;
-            // Bolsista real = exclui projeto banda e 2º curso (esses são categorias próprias)
-            const bolsistasInt = alunosData.filter((a: any) =>
-              (a.tipos_matricula as any)?.codigo === 'BOLSISTA_INT' && !a.is_segundo_curso && (a.cursos as any)?.is_projeto_banda !== true
-            ).length;
-            const bolsistasParciais = alunosData.filter((a: any) =>
-              (a.tipos_matricula as any)?.codigo === 'BOLSISTA_PARC' && !a.is_segundo_curso && (a.cursos as any)?.is_projeto_banda !== true
-            ).length;
-            const ticketMedio = pagantes.length > 0
-              ? pagantes.reduce((sum: number, a: any) => sum + (Number(a.valor_parcela) || 0), 0) / pagantes.length
-              : 0;
-            const faturamento = pagantes.reduce((sum: number, a: any) => sum + (Number(a.valor_parcela) || 0), 0);
-
-            kpisData = [{
-              unidade_id: unidade,
-              total_alunos_ativos: totalAtivos,
-              total_alunos_pagantes: totalPagantes,
-              total_bolsistas_integrais: bolsistasInt,
-              total_bolsistas_parciais: bolsistasParciais,
-              ticket_medio: Math.round(ticketMedio),
-              faturamento_previsto: faturamento,
-              churn_rate: 0,
-              tempo_permanencia_medio: 0,
-            }];
-          }
-        }
-      } else {
-        // PERÍODO HISTÓRICO: tentar dados_mensais primeiro, senão calcular das tabelas base
-        let historicoQuery = supabase
-          .from('dados_mensais')
-          .select('*')
-          .eq('ano', ano)
-          .eq('mes', mes);
-
-        if (unidade !== 'todos') {
-          historicoQuery = historicoQuery.eq('unidade_id', unidade);
-        }
-
-        const { data } = await historicoQuery;
-        if (data && data.length > 0) {
-          // Transformar dados históricos para o formato esperado
-          kpisData = data.map((d: any) => ({
-            unidade_id: d.unidade_id,
-            total_alunos_ativos: d.alunos_ativos || d.alunos_pagantes || 0,
-            total_alunos_pagantes: d.alunos_pagantes || 0,
-            total_bolsistas_integrais: 0,
-            total_bolsistas_parciais: 0,
-            ticket_medio: Number(d.ticket_medio) || 0,
-            faturamento_previsto: Number(d.faturamento_estimado) || 0,
-            churn_rate: Number(d.churn_rate) || 0,
-            tempo_permanencia_medio: Number(d.tempo_permanencia) || 0,
-            // Snapshot de matrículas do dados_mensais (campos novos)
-            _matriculas_ativas: d.matriculas_ativas,
-            _matriculas_banda: d.matriculas_banda,
-            _matriculas_2_curso: d.matriculas_2_curso,
-          }));
-        } else {
-          // FALLBACK: calcular KPIs diretamente das tabelas base
-          // Buscar alunos ativos/pagantes/bolsistas do período
-          let alunosQuery = supabase
-            .from('alunos')
-            .select('id, status, tipo_matricula_id, is_segundo_curso, valor_parcela, tipos_matricula(codigo, conta_como_pagante), cursos:curso_id!left(is_projeto_banda)')
-            .in('status', ['ativo', 'trancado']);
-
-          if (unidade !== 'todos') {
-            alunosQuery = alunosQuery.eq('unidade_id', unidade);
-          }
-
-          const { data: alunosData } = await alunosQuery;
-
-          if (alunosData && alunosData.length > 0) {
-            const totalAtivos = alunosData.filter((a: any) => !a.is_segundo_curso).length;
-            const pagantes = alunosData.filter((a: any) =>
-              (a.tipos_matricula as any)?.conta_como_pagante && !a.is_segundo_curso
-            );
-            const totalPagantes = pagantes.length;
-            // Bolsista real = exclui projeto banda e 2º curso (esses são categorias próprias)
-            const bolsistasInt = alunosData.filter((a: any) =>
-              (a.tipos_matricula as any)?.codigo === 'BOLSISTA_INT' && !a.is_segundo_curso && (a.cursos as any)?.is_projeto_banda !== true
-            ).length;
-            const bolsistasParciais = alunosData.filter((a: any) =>
-              (a.tipos_matricula as any)?.codigo === 'BOLSISTA_PARC' && !a.is_segundo_curso && (a.cursos as any)?.is_projeto_banda !== true
-            ).length;
-            const ticketMedio = pagantes.length > 0 
-              ? pagantes.reduce((sum: number, a: any) => sum + (Number(a.valor_parcela) || 0), 0) / pagantes.length 
-              : 0;
-            const faturamento = pagantes.reduce((sum: number, a: any) => sum + (Number(a.valor_parcela) || 0), 0);
-
-            kpisData = [{
-              unidade_id: unidade !== 'todos' ? unidade : null,
-              total_alunos_ativos: totalAtivos,
-              total_alunos_pagantes: totalPagantes,
-              total_bolsistas_integrais: bolsistasInt,
-              total_bolsistas_parciais: bolsistasParciais,
-              ticket_medio: Math.round(ticketMedio),
-              faturamento_previsto: faturamento,
-              churn_rate: 0,
-              tempo_permanencia_medio: 0,
-            }];
-          }
-        }
+      if (kpisAlunosCanonicos.fonte !== 'indisponivel') {
+        kpisData = kpisAlunosCanonicos.porUnidade.map(row => ({
+          unidade_id: row.unidade_id,
+          total_alunos_ativos: row.alunosAtivos,
+          total_alunos_pagantes: row.alunosPagantes,
+          total_bolsistas_integrais: row.bolsistasIntegrais,
+          total_bolsistas_parciais: row.bolsistasParciais,
+          ticket_medio: row.ticketMedio,
+          faturamento_previsto: row.faturamentoPrevisto,
+          churn_rate: row.churnRate,
+          tempo_permanencia_medio: row.tempoPermanencia,
+          _matriculas_ativas: row.matriculasAtivas,
+          _matriculas_banda: row.matriculasBanda,
+          _matriculas_2_curso: row.matriculasSegundoCurso,
+          _alunos_coral: row.matriculasCoral,
+        }));
       }
-
       // Buscar matrículas ativas, banda e 2º curso
       // Para período histórico com snapshot disponível, usar dados do dados_mensais
-      const snapshotMatriculas = !isPeriodoAtual && kpisData?.length > 0 && kpisData[0]._matriculas_ativas != null;
+      const snapshotMatriculas = kpisData?.length > 0 && kpisData[0]._matriculas_ativas != null;
 
       let matriculasAtivas = 0;
       let matriculasBanda = 0;
@@ -490,7 +380,7 @@ export function AdministrativoPage() {
         matriculasBanda = kpisData.reduce((acc: number, k: any) => acc + (k._matriculas_banda || 0), 0);
         matriculas2Curso = kpisData.reduce((acc: number, k: any) => acc + (k._matriculas_2_curso || 0), 0);
         alunosCoral = kpisData.reduce((acc: number, k: any) => acc + (k._alunos_coral || 0), 0);
-      } else {
+      } else if (isPeriodoAtual) {
         // Query ao vivo (período atual ou sem snapshot)
         let matriculasQuery = supabase
           .from('alunos')

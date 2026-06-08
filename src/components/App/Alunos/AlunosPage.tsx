@@ -33,6 +33,7 @@ import { TabAutomacao } from './Automacao/TabAutomacao';
 import { TabHistoricoLTV } from './TabHistoricoLTV';
 import { ToastContainer } from '@/components/ui/toast';
 import { useToast } from '@/hooks/useToast';
+import { fetchKPIsAlunosCanonicos } from '@/hooks/useKPIsAlunosCanonicos';
 
 
 // Interfaces
@@ -661,16 +662,26 @@ export function AlunosPage() {
         : 0;
       const turmasSozinhos = turmasViewData.filter((t: any) => t.total_alunos === 1).length;
 
+      const kpisCanonicos = await fetchKPIsAlunosCanonicos({
+        unidadeId: unidadeAtual,
+        ano: competenciaFiltro.ano,
+        mes: competenciaFiltro.mes,
+      });
+
+      const usarKpisCanonicos = kpisCanonicos.fonte !== 'indisponivel';
+
       setKpis({
-        totalAtivos,
-        totalMatriculasAtivas,
-        matriculasSegundoCurso,
-        matriculasBanda,
-        matriculasCoral,
-        totalPagantes,
-        totalBolsistas,
+        totalAtivos: usarKpisCanonicos ? Math.round(kpisCanonicos.alunosAtivos) : totalAtivos,
+        totalMatriculasAtivas: usarKpisCanonicos ? Math.round(kpisCanonicos.matriculasAtivas) : totalMatriculasAtivas,
+        matriculasSegundoCurso: usarKpisCanonicos ? Math.round(kpisCanonicos.matriculasSegundoCurso) : matriculasSegundoCurso,
+        matriculasBanda: usarKpisCanonicos ? Math.round(kpisCanonicos.matriculasBanda) : matriculasBanda,
+        matriculasCoral: usarKpisCanonicos ? Math.round(kpisCanonicos.matriculasCoral) : matriculasCoral,
+        totalPagantes: usarKpisCanonicos ? Math.round(kpisCanonicos.alunosPagantes) : totalPagantes,
+        totalBolsistas: usarKpisCanonicos
+          ? Math.round(kpisCanonicos.bolsistasIntegrais + kpisCanonicos.bolsistasParciais)
+          : totalBolsistas,
         mediaAlunosTurma: Math.round(mediaAlunosTurma * 100) / 100,
-        ticketMedio: Math.round(ticketMedio),
+        ticketMedio: usarKpisCanonicos ? Math.round(kpisCanonicos.ticketMedio) : Math.round(ticketMedio),
         ltvMedio: Math.round(ltvMedio * 10) / 10,
         totalTurmas,
         turmasSozinhos

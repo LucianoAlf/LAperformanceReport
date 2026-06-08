@@ -725,23 +725,10 @@ export function DashboardPage() {
           evolucaoQuery = evolucaoQuery.eq('unidade_id', unidade);
         }
 
-        let realtimeAtualQuery = supabase
-          .from('vw_dashboard_unidade')
-          .select('alunos_pagantes, unidade_id');
-
-        if (unidade !== 'todos') {
-          realtimeAtualQuery = realtimeAtualQuery.eq('unidade_id', unidade);
-        }
-
-        const [{ data: evolucaoData }, { data: realtimeAtualData }] = await Promise.all([
-          evolucaoQuery,
-          realtimeAtualQuery,
-        ]);
-
-        const pagantesAtual = (realtimeAtualData || []).reduce(
-          (acc: number, d: any) => acc + (Number(d.alunos_pagantes) || 0),
-          0
-        );
+        const { data: evolucaoData } = await evolucaoQuery;
+        const pagantesAtual = kpisAlunos.fonte !== 'indisponivel'
+          ? Math.round(kpisAlunos.alunosPagantes)
+          : 0;
 
         if (evolucaoData) {
           const mesesNomes = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
@@ -772,28 +759,16 @@ export function DashboardPage() {
 
         if (isPeriodoAtual) {
           // Para período atual, usar vw_dashboard_unidade (dados em tempo real)
-          let resumoQuery = supabase
-            .from('vw_dashboard_unidade')
-            .select('*');
-          
-          if (unidade !== 'todos') {
-            resumoQuery = resumoQuery.eq('unidade_id', unidade);
-          }
-          
-          const { data: dashboardUnidades } = await resumoQuery;
-
-          if (dashboardUnidades) {
-            const resumo: ResumoUnidade[] = dashboardUnidades.map((d: any) => ({
-              unidade: d.unidade_nome,
-              unidade_id: d.unidade_id,
-              alunos_ativos: d.alunos_ativos || 0,
-              alunos_pagantes: d.alunos_pagantes || 0,
-              ticket_medio: parseFloat(d.ticket_medio || 0),
-              faturamento_previsto: parseFloat(d.mrr || 0),
-              tempo_medio: parseFloat(d.tempo_permanencia || 0)
-            }));
-            setResumoUnidades(resumo);
-          }
+          const resumo: ResumoUnidade[] = kpisAlunos.porUnidade.map(row => ({
+            unidade: row.unidade_nome,
+            unidade_id: row.unidade_id,
+            alunos_ativos: Math.round(row.alunosAtivos),
+            alunos_pagantes: Math.round(row.alunosPagantes),
+            ticket_medio: row.ticketMedio,
+            faturamento_previsto: row.faturamentoPrevisto,
+            tempo_medio: row.tempoPermanencia,
+          }));
+          setResumoUnidades(resumo);
         } else {
           // Para períodos históricos, usar dados_mensais
           // Filtrar unidades se não for consolidado

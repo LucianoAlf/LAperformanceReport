@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { fetchKPIsAlunosVivosCanonicos } from '@/lib/kpisAlunosVivosCanonicos';
 
 export type FonteKPIAlunos = 'dados_mensais' | 'vivo' | 'preliminar' | 'indisponivel';
 
@@ -21,11 +22,13 @@ export interface KPIsAlunosCanonicosPorUnidade {
   matriculasAtivas: number;
   matriculasBanda: number;
   matriculasSegundoCurso: number;
+  matriculasCoral: number;
   novasMatriculas: number;
   bolsistasIntegrais: number;
   bolsistasParciais: number;
   kids: number;
   school: number;
+  semClassificacao: number;
   faturamentoPrevisto: number;
   faturamentoRealizado: number;
   reajustePct: number;
@@ -54,11 +57,13 @@ export interface KPIsAlunosCanonicos {
   matriculasAtivas: number;
   matriculasBanda: number;
   matriculasSegundoCurso: number;
+  matriculasCoral: number;
   novasMatriculas: number;
   bolsistasIntegrais: number;
   bolsistasParciais: number;
   kids: number;
   school: number;
+  semClassificacao: number;
   faturamentoPrevisto: number;
   faturamentoRealizado: number;
   reajustePct: number;
@@ -93,11 +98,13 @@ const ZERO_KPIS = {
   matriculasAtivas: 0,
   matriculasBanda: 0,
   matriculasSegundoCurso: 0,
+  matriculasCoral: 0,
   novasMatriculas: 0,
   bolsistasIntegrais: 0,
   bolsistasParciais: 0,
   kids: 0,
   school: 0,
+  semClassificacao: 0,
   faturamentoPrevisto: 0,
   faturamentoRealizado: 0,
   reajustePct: 0,
@@ -143,11 +150,13 @@ function mapDadosMensais(row: any): KPIsAlunosCanonicosPorUnidade {
     matriculasAtivas: n(row.matriculas_ativas),
     matriculasBanda: n(row.matriculas_banda),
     matriculasSegundoCurso: n(row.matriculas_2_curso),
+    matriculasCoral: n(row.matriculas_coral || row.alunos_coral),
     novasMatriculas: n(row.novas_matriculas),
     bolsistasIntegrais: n(row.bolsistas_integrais),
     bolsistasParciais: n(row.bolsistas_parciais),
     kids: n(row.la_music_kids || row.total_la_kids),
     school: n(row.la_music_school || row.total_la_adultos),
+    semClassificacao: n(row.la_music_sem_classificacao || row.total_la_sem_classificacao),
     faturamentoPrevisto: mrr,
     faturamentoRealizado: mrr * (1 - n(row.inadimplencia) / 100),
     reajustePct: n(row.reajuste_parcelas),
@@ -177,11 +186,13 @@ function mapViewGestao(row: any): KPIsAlunosCanonicosPorUnidade {
     matriculasAtivas: n(row.total_matriculas_ativas || row.matriculas_ativas),
     matriculasBanda: n(row.total_banda || row.matriculas_banda),
     matriculasSegundoCurso: n(row.total_segundo_curso || row.matriculas_2_curso),
+    matriculasCoral: n(row.total_coral || row.matriculas_coral || row.alunos_coral),
     novasMatriculas: n(row.novas_matriculas),
     bolsistasIntegrais: n(row.total_bolsistas_integrais),
     bolsistasParciais: n(row.total_bolsistas_parciais),
     kids: n(row.total_la_kids),
     school: n(row.total_la_adultos),
+    semClassificacao: n(row.total_la_sem_classificacao),
     faturamentoPrevisto: n(row.faturamento_previsto) || mrr,
     faturamentoRealizado: n(row.faturamento_realizado),
     reajustePct: n(row.reajuste_medio || row.reajuste_pct),
@@ -220,11 +231,13 @@ export function consolidarKPIsAlunosCanonicos(
     matriculasAtivas: rows.reduce((acc, row) => acc + row.matriculasAtivas, 0),
     matriculasBanda: rows.reduce((acc, row) => acc + row.matriculasBanda, 0),
     matriculasSegundoCurso: rows.reduce((acc, row) => acc + row.matriculasSegundoCurso, 0),
+    matriculasCoral: rows.reduce((acc, row) => acc + row.matriculasCoral, 0),
     novasMatriculas: rows.reduce((acc, row) => acc + row.novasMatriculas, 0),
     bolsistasIntegrais: rows.reduce((acc, row) => acc + row.bolsistasIntegrais, 0),
     bolsistasParciais: rows.reduce((acc, row) => acc + row.bolsistasParciais, 0),
     kids: rows.reduce((acc, row) => acc + row.kids, 0),
     school: rows.reduce((acc, row) => acc + row.school, 0),
+    semClassificacao: rows.reduce((acc, row) => acc + row.semClassificacao, 0),
     faturamentoPrevisto: rows.reduce((acc, row) => acc + row.faturamentoPrevisto, 0),
     faturamentoRealizado: rows.reduce((acc, row) => acc + row.faturamentoRealizado, 0),
     reajustePct: rows.reduce((acc, row) => acc + row.reajustePct, 0) / count,
@@ -262,27 +275,14 @@ export async function fetchKPIsAlunosCanonicos({
   const competenciaParcial = !unidadeFiltro && fechadas.length > 0 && !competenciaFechada;
 
   if (periodoAtualUnico && fechadas.length === 0) {
-    let viewQuery = supabase
-      .from('vw_kpis_gestao_mensal')
-      .select('*')
-      .eq('ano', ano)
-      .eq('mes', mes);
-
-    if (unidadeFiltro) {
-      viewQuery = viewQuery.eq('unidade_id', unidadeFiltro);
-    }
-
-    const { data: viewData, error: viewError } = await viewQuery;
-    if (viewError) throw viewError;
-
-    const rows = (viewData || []).map(mapViewGestao);
+    const rows = await fetchKPIsAlunosVivosCanonicos({ unidadeId, ano, mes });
     return consolidarKPIsAlunosCanonicos(rows, {
       fonte: rows.length > 0 ? 'vivo' : 'indisponivel',
       competenciaFechada: false,
       competenciaParcial: false,
       alertasFonte: rows.length > 0
-        ? ['Mês atual aberto: KPIs executivos lidos da view viva.']
-        : ['Mês atual sem dados na view viva.'],
+        ? ['Mês atual aberto: KPIs executivos de alunos calculados pela fonte viva canônica.']
+        : ['Mês atual sem dados na fonte viva canônica.'],
       ano,
       mes,
     }, unidadeId || 'todos');
@@ -311,33 +311,6 @@ export async function fetchKPIsAlunosCanonicos({
       alertasFonte: competenciaFechada || competenciaParcial
         ? ['Competência fechada: KPIs executivos lidos de dados_mensais.']
         : ['Competência aberta com snapshot existente: exibir como preliminar até fechamento formal.'],
-      ano,
-      mes,
-    }, unidadeId || 'todos');
-  }
-
-  if (periodoAtualUnico && fechadas.length === 0) {
-    let viewQuery = supabase
-      .from('vw_kpis_gestao_mensal')
-      .select('*')
-      .eq('ano', ano)
-      .eq('mes', mes);
-
-    if (unidadeFiltro) {
-      viewQuery = viewQuery.eq('unidade_id', unidadeFiltro);
-    }
-
-    const { data: viewData, error: viewError } = await viewQuery;
-    if (viewError) throw viewError;
-
-    const rows = (viewData || []).map(mapViewGestao);
-    return consolidarKPIsAlunosCanonicos(rows, {
-      fonte: rows.length > 0 ? 'vivo' : 'indisponivel',
-      competenciaFechada: false,
-      competenciaParcial: false,
-      alertasFonte: rows.length > 0
-        ? ['Mês atual aberto: KPIs executivos lidos da view viva.']
-        : ['Mês atual sem dados na view viva.'],
       ano,
       mes,
     }, unidadeId || 'todos');
