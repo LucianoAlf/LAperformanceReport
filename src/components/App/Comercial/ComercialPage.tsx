@@ -3285,23 +3285,28 @@ export function ComercialPage() {
         texto = await gerarRelatorioMensal();
     }
     
-    // Usar método mais compatível com webviews/IDEs
+    // Clipboard API primeiro (confiável em HTTPS / dentro de modais)
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      try {
+        await navigator.clipboard.writeText(texto);
+        toast.success('Relatório copiado!');
+        return;
+      } catch (err) {
+        console.error('Clipboard API falhou, tentando fallback:', err);
+      }
+    }
+
+    // Fallback execCommand (navegadores antigos / contexto não-seguro)
     const textarea = document.createElement('textarea');
     textarea.value = texto;
     textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
     textarea.style.top = '0';
-    textarea.style.left = '0';
-    textarea.style.width = '2em';
-    textarea.style.height = '2em';
-    textarea.style.padding = '0';
-    textarea.style.border = 'none';
-    textarea.style.outline = 'none';
-    textarea.style.boxShadow = 'none';
-    textarea.style.background = 'transparent';
+    textarea.setAttribute('readonly', '');
     document.body.appendChild(textarea);
     textarea.focus();
     textarea.select();
-    
+
     try {
       const successful = document.execCommand('copy');
       if (successful) {
@@ -3314,7 +3319,7 @@ export function ComercialPage() {
       console.error('Erro ao copiar:', err);
       toast.error('Erro ao copiar. Tente selecionar e copiar manualmente.');
     }
-    
+
     document.body.removeChild(textarea);
   };
 
@@ -6719,25 +6724,30 @@ export function ComercialPage() {
             
             <div className="flex gap-3">
               <Button
-                onClick={() => {
+                onClick={async () => {
                   if (relatorioTexto) {
-                    // Usar método mais compatível com webviews/IDEs
+                    // Clipboard API primeiro (confiável em HTTPS / dentro de modais)
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                      try {
+                        await navigator.clipboard.writeText(relatorioTexto);
+                        toast.success('Relatório copiado!');
+                        return;
+                      } catch (err) {
+                        console.error('Clipboard API falhou, tentando fallback:', err);
+                      }
+                    }
+
+                    // Fallback execCommand (navegadores antigos / contexto não-seguro)
                     const textarea = document.createElement('textarea');
                     textarea.value = relatorioTexto;
                     textarea.style.position = 'fixed';
+                    textarea.style.left = '-9999px';
                     textarea.style.top = '0';
-                    textarea.style.left = '0';
-                    textarea.style.width = '2em';
-                    textarea.style.height = '2em';
-                    textarea.style.padding = '0';
-                    textarea.style.border = 'none';
-                    textarea.style.outline = 'none';
-                    textarea.style.boxShadow = 'none';
-                    textarea.style.background = 'transparent';
+                    textarea.setAttribute('readonly', '');
                     document.body.appendChild(textarea);
                     textarea.focus();
                     textarea.select();
-                    
+
                     try {
                       const successful = document.execCommand('copy');
                       if (successful) {
@@ -6750,7 +6760,7 @@ export function ComercialPage() {
                       console.error('Erro ao copiar:', err);
                       toast.error('Erro ao copiar. Tente selecionar e copiar manualmente.');
                     }
-                    
+
                     document.body.removeChild(textarea);
                   } else {
                     toast.error('Aguarde o relatório ser gerado');

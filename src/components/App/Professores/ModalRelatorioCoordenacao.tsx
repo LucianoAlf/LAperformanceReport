@@ -137,39 +137,7 @@ export function ModalRelatorioCoordenacao({
     if (!textoRelatorio) return;
 
     try {
-      // Método 1: execCommand com textarea visível (mais compatível com IDEs)
-      const textarea = document.createElement('textarea');
-      textarea.value = textoRelatorio;
-      textarea.style.position = 'absolute';
-      textarea.style.left = '0';
-      textarea.style.top = '0';
-      textarea.style.opacity = '0';
-      textarea.style.pointerEvents = 'none';
-      textarea.setAttribute('readonly', '');
-      document.body.appendChild(textarea);
-      
-      // Forçar foco e seleção
-      textarea.focus();
-      textarea.select();
-      textarea.setSelectionRange(0, textoRelatorio.length);
-      
-      let success = false;
-      try {
-        success = document.execCommand('copy');
-      } catch (e) {
-        console.error('execCommand falhou:', e);
-      }
-      
-      document.body.removeChild(textarea);
-      
-      if (success) {
-        setCopiado(true);
-        toast.success('Copiado!', 'Relatório copiado para a área de transferência');
-        setTimeout(() => setCopiado(false), 2000);
-        return;
-      }
-      
-      // Método 2: Clipboard API
+      // Método 1: Clipboard API (confiável em HTTPS; funciona dentro de modais)
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(textoRelatorio);
         setCopiado(true);
@@ -177,12 +145,40 @@ export function ModalRelatorioCoordenacao({
         setTimeout(() => setCopiado(false), 2000);
         return;
       }
-      
-      // Método 3: Fallback com prompt
+
+      // Método 2: fallback execCommand (navegadores antigos / contexto não-seguro)
+      const textarea = document.createElement('textarea');
+      textarea.value = textoRelatorio;
+      textarea.style.position = 'fixed';
+      textarea.style.left = '-9999px';
+      textarea.style.top = '0';
+      textarea.setAttribute('readonly', '');
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      textarea.setSelectionRange(0, textoRelatorio.length);
+
+      let success = false;
+      try {
+        success = document.execCommand('copy');
+      } catch (e) {
+        console.error('execCommand falhou:', e);
+      }
+
+      document.body.removeChild(textarea);
+
+      if (success) {
+        setCopiado(true);
+        toast.success('Copiado!', 'Relatório copiado para a área de transferência');
+        setTimeout(() => setCopiado(false), 2000);
+        return;
+      }
+
+      // Método 3: instrução manual
       const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
       const tecla = isMac ? '⌘+C' : 'Ctrl+C';
       toast.info('Copie manualmente', `Selecione o texto e pressione ${tecla}`);
-      
+
     } catch (error) {
       console.error('Erro ao copiar:', error);
       const isMac = navigator.platform.toUpperCase().indexOf('MAC') >= 0;
