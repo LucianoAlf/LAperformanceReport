@@ -746,8 +746,11 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
 
           let alunosAtivosQuery = supabase
             .from('alunos')
-            .select('nome, idade_atual, data_matricula, data_saida, is_segundo_curso, cursos:curso_id!left(is_projeto_banda)')
-            .in('status', ['ativo', 'trancado']);
+            .select('nome, idade_atual, status, data_matricula, data_saida, is_segundo_curso, cursos:curso_id!left(is_projeto_banda), tipos_matricula:tipo_matricula_id!left(codigo)');
+
+          if (!mesFechado) {
+            alunosAtivosQuery = alunosAtivosQuery.in('status', ['ativo', 'trancado']);
+          }
 
           if (unidade !== 'todos') {
             alunosAtivosQuery = alunosAtivosQuery.eq('unidade_id', unidade);
@@ -773,6 +776,11 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             const isBanda = a.cursos?.is_projeto_banda === true;
             const isSegundoCurso = a.is_segundo_curso === true;
             const isRegular = !isBanda && !isSegundoCurso;
+            const statusAtivoNoCadastro = ['ativo', 'trancado'].includes(a.status);
+            const saidaDepoisDoMes = Boolean(a.data_saida && a.data_saida > dataCorte);
+            const tipoRegular = a.tipos_matricula?.codigo === 'REGULAR';
+
+            if (mesFechado && !statusAtivoNoCadastro && !(tipoRegular && saidaDepoisDoMes)) return;
 
             const pessoa = pessoasMap.get(a.nome) || {
               idade: a.idade_atual,
@@ -791,8 +799,8 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           // Kids/School: qualquer pessoa com matrÃ­cula ativa (regular, 2o ou banda)
           // is_segundo_curso Ã© promovido automaticamente para classificaÃ§Ã£o
           const pessoasComClassificacao = Array.from(pessoasMap.values()).filter(p => p.temRegular || p.temAtivo);
-          const totalLaKids = pessoasComClassificacao.filter(p => p.idade !== null && p.idade <= 11).length;
-          const totalLaAdultos = pessoasComClassificacao.filter(p => p.idade !== null && p.idade >= 12).length;
+          let totalLaKids = pessoasComClassificacao.filter(p => p.idade !== null && p.idade <= 11).length;
+          let totalLaAdultos = pessoasComClassificacao.filter(p => p.idade !== null && p.idade >= 12).length;
           // Total de matrÃ­culas de banda (para card Banda)
           const totalBanda = (alunosAtivosData || []).filter((a: any) =>
             a.cursos?.is_projeto_banda === true
@@ -876,6 +884,12 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           const mediaBolsistasIntegrais = mesesUnicos > 0 ? Math.round(g.total_bolsistas_integrais_sum / mesesUnicos) : 0;
           const mediaBolsistasParciais = mesesUnicos > 0 ? Math.round(g.total_bolsistas_parciais_sum / mesesUnicos) : 0;
           const mediaBanda = mesesUnicos > 0 ? Math.round(g.total_banda_sum / mesesUnicos) : 0;
+          const totalClassificado = totalLaKids + totalLaAdultos;
+
+          if (mesFechado && mediaAlunos > 0 && totalClassificado > 0 && totalClassificado !== mediaAlunos) {
+            totalLaKids = Math.round((totalLaKids / totalClassificado) * mediaAlunos);
+            totalLaAdultos = mediaAlunos - totalLaKids;
+          }
 
           setDados({
             // Alunos - usar MÃ‰DIA do perÃ­odo (snapshot mensal, nÃ£o acumula)
@@ -1295,7 +1309,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
     }
 
     fetchDados();
-  }, [ano, mesInicio, mesFinal, unidade]);
+  }, [ano, mesInicio, mesFinal, unidade, mesFechado]);
 
   if (loading) {
     return (
