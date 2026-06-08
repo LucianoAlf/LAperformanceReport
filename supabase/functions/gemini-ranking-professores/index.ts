@@ -6,14 +6,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Retry com backoff exponencial para erros 503/429 do Gemini
-async function fetchGeminiComRetry(url: string, options: RequestInit, maxRetries = 3): Promise<Response> {
+// Retry com backoff exponencial para erros 503/429 da OpenAI
+async function fetchOpenAIComRetry(url: string, options: RequestInit, maxRetries = 3): Promise<Response> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const res = await fetch(url, options);
     if (res.ok) return res;
     if ((res.status === 503 || res.status === 429) && attempt < maxRetries) {
       const wait = 1000 * Math.pow(2, attempt);
-      console.log(`[gemini-retry] status ${res.status}, tentativa ${attempt + 1}/${maxRetries + 1}, esperando ${wait}ms`);
+      console.log(`[openai-retry] status ${res.status}, tentativa ${attempt + 1}/${maxRetries + 1}, esperando ${wait}ms`);
       await new Promise(r => setTimeout(r, wait));
       continue;
     }
@@ -129,7 +129,7 @@ function formatarVariacao(valor: number, media: number): string {
   return diff >= 0 ? `+${pct}%` : `${pct}%`;
 }
 
-const GEMINI_MODEL = 'gemini-3-flash-preview';
+const OPENAI_MODEL = 'gpt-5.4-mini-2026-03-17';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -137,9 +137,9 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
-    if (!GEMINI_API_KEY) {
-      throw new Error('GEMINI_API_KEY não configurada');
+    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    if (!OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY não configurada');
     }
 
     const payload = await req.json();
@@ -421,30 +421,33 @@ Gere um JSON com:
 
 IMPORTANTE: Seja direto, use nomes dos professores, foque em ações práticas.`;
 
-    // Chamar API do Gemini
-    const response = await fetchGeminiComRetry(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+    // Chamar API da OpenAI
+    const response = await fetchOpenAIComRetry(
+      'https://api.openai.com/v1/chat/completions',
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: promptIA }] }],
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 2048,
-          }
+          model: OPENAI_MODEL,
+          messages: [{ role: 'user', content: promptIA }],
+          temperature: 0.7,
+          max_completion_tokens: 2048,
+          response_format: { type: 'json_object' },
         })
       }
     );
 
     if (!response.ok) {
       const detalheErro = await response.text();
-      console.error(`[gemini-ranking] Gemini retornou ${response.status}:`, detalheErro);
-      throw new Error(`API Gemini retornou ${response.status}: ${detalheErro}`);
+      console.error(`[ranking-professores] OpenAI retornou ${response.status}:`, detalheErro);
+      throw new Error(`API OpenAI retornou ${response.status}: ${detalheErro}`);
     }
 
-    const geminiResponse = await response.json();
-    const textoIA = geminiResponse.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const aiResponse = await response.json();
+    const textoIA = aiResponse.choices?.[0]?.message?.content || '';
 
     // Extrair JSON da resposta
     let insightsIA = {
@@ -508,8 +511,8 @@ IMPORTANTE: Seja direto, use nomes dos professores, foque em ações práticas.`
   } catch (error) {
     console.error('Erro:', error);
     const msg = error instanceof Error ? error.message : 'Erro desconhecido';
-    const origem = msg.includes('API Gemini') ? 'api_gemini'
-      : msg.includes('GEMINI_API_KEY') ? 'config'
+    const origem = msg.includes('API OpenAI') ? 'api_openai'
+      : msg.includes('OPENAI_API_KEY') ? 'config'
       : 'interno';
     return new Response(
       JSON.stringify({

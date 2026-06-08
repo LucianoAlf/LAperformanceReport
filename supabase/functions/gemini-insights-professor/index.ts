@@ -3,22 +3,22 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
-const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY");
-const GEMINI_MODEL = "gemini-3-flash-preview";
+const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+const OPENAI_MODEL = "gpt-5.4-mini-2026-03-17";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-// Retry com backoff exponencial para erros 503/429 do Gemini
-async function fetchGeminiComRetry(url: string, options: RequestInit, maxRetries = 3): Promise<Response> {
+// Retry com backoff exponencial para erros 503/429 da OpenAI
+async function fetchOpenAIComRetry(url: string, options: RequestInit, maxRetries = 3): Promise<Response> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const res = await fetch(url, options);
     if (res.ok) return res;
     if ((res.status === 503 || res.status === 429) && attempt < maxRetries) {
       const wait = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s
-      console.log(`[gemini-retry] status ${res.status}, tentativa ${attempt + 1}/${maxRetries + 1}, esperando ${wait}ms`);
+      console.log(`[openai-retry] status ${res.status}, tentativa ${attempt + 1}/${maxRetries + 1}, esperando ${wait}ms`);
       await new Promise(r => setTimeout(r, wait));
       continue;
     }
@@ -351,55 +351,46 @@ serve(async (req) => {
   }
 
   try {
-    if (!GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY não configurada");
+    if (!OPENAI_API_KEY) {
+      throw new Error("OPENAI_API_KEY não configurada");
     }
 
     const dados: ProfessorInsightsRequest = await req.json();
 
     const userPrompt = montarPromptUsuario(dados);
 
-    // Chamar Gemini API
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
-
-    const geminiResponse = await fetchGeminiComRetry(geminiUrl, {
+    // Chamar OpenAI API
+    const aiResponse = await fetchOpenAIComRetry("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "Authorization": `Bearer ${OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: userPrompt }],
-          },
+        model: OPENAI_MODEL,
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: userPrompt },
         ],
-        systemInstruction: {
-          parts: [{ text: SYSTEM_PROMPT }],
-        },
-        generationConfig: {
-          temperature: 0.7,
-          topK: 40,
-          topP: 0.95,
-          maxOutputTokens: 4096,
-          responseMimeType: "application/json",
-        },
+        temperature: 0.7,
+        max_completion_tokens: 4096,
+        response_format: { type: "json_object" },
       }),
     });
 
-    if (!geminiResponse.ok) {
-      const errorText = await geminiResponse.text();
-      console.error("Erro Gemini:", errorText);
-      throw new Error(`Erro na API Gemini: ${geminiResponse.status}`);
+    if (!aiResponse.ok) {
+      const errorText = await aiResponse.text();
+      console.error("Erro OpenAI:", errorText);
+      throw new Error(`Erro na API OpenAI: ${aiResponse.status}`);
     }
 
-    const geminiData = await geminiResponse.json();
-    
+    const aiData = await aiResponse.json();
+
     // Extrair o texto da resposta
-    const responseText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
-    
+    const responseText = aiData.choices?.[0]?.message?.content;
+
     if (!responseText) {
-      throw new Error("Resposta vazia do Gemini");
+      throw new Error("Resposta vazia da OpenAI");
     }
 
     // Tentar parsear o JSON
@@ -410,7 +401,7 @@ serve(async (req) => {
       planoAcao = JSON.parse(cleanJson);
     } catch (parseError) {
       console.error("Erro ao parsear JSON:", responseText);
-      throw new Error("Resposta do Gemini não é um JSON válido");
+      throw new Error("Resposta da OpenAI não é um JSON válido");
     }
 
     return new Response(JSON.stringify(planoAcao), {

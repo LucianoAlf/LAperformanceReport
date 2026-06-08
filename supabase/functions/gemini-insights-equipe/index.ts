@@ -5,14 +5,14 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Retry com backoff exponencial para erros 503/429 do Gemini
-async function fetchGeminiComRetry(url: string, options: RequestInit, maxRetries = 3): Promise<Response> {
+// Retry com backoff exponencial para erros 503/429 da OpenAI
+async function fetchOpenAIComRetry(url: string, options: RequestInit, maxRetries = 3): Promise<Response> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const res = await fetch(url, options);
     if (res.ok) return res;
     if ((res.status === 503 || res.status === 429) && attempt < maxRetries) {
       const wait = 1000 * Math.pow(2, attempt);
-      console.log(`[gemini-retry] status ${res.status}, tentativa ${attempt + 1}/${maxRetries + 1}, esperando ${wait}ms`);
+      console.log(`[openai-retry] status ${res.status}, tentativa ${attempt + 1}/${maxRetries + 1}, esperando ${wait}ms`);
       await new Promise(r => setTimeout(r, wait));
       continue;
     }
@@ -68,9 +68,9 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
-    if (!GEMINI_API_KEY) {
-      throw new Error('GEMINI_API_KEY não configurada');
+    const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY');
+    if (!OPENAI_API_KEY) {
+      throw new Error('OPENAI_API_KEY não configurada');
     }
 
     const payload: InsightsEquipeRequest = await req.json();
@@ -227,40 +227,39 @@ ${healthSaudaveis.slice(0, 5).map(p => `- ${p.nome}: Health ${(p.health_score ||
 
 Gere um plano de ação estratégico para a coordenação pedagógica, priorizando os professores com Health Score mais baixo.`;
 
-    // Chamar Gemini API
-    const response = await fetchGeminiComRetry(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${GEMINI_API_KEY}`,
+    // Chamar OpenAI API
+    const response = await fetchOpenAIComRetry(
+      'https://api.openai.com/v1/chat/completions',
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        },
         body: JSON.stringify({
-          contents: [
-            {
-              role: 'user',
-              parts: [{ text: systemPrompt + '\n\n' + userPrompt }]
-            }
+          model: 'gpt-5.4-mini-2026-03-17',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
           ],
-          generationConfig: {
-            temperature: 0.7,
-            topK: 40,
-            topP: 0.95,
-            maxOutputTokens: 4096,
-          }
+          temperature: 0.7,
+          max_completion_tokens: 4096,
+          response_format: { type: 'json_object' },
         })
       }
     );
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Erro Gemini:', errorText);
-      throw new Error(`Erro na API Gemini: ${response.status}`);
+      console.error('Erro OpenAI:', errorText);
+      throw new Error(`Erro na API OpenAI: ${response.status}`);
     }
 
-    const geminiResponse = await response.json();
-    const textResponse = geminiResponse.candidates?.[0]?.content?.parts?.[0]?.text;
+    const aiResponse = await response.json();
+    const textResponse = aiResponse.choices?.[0]?.message?.content;
 
     if (!textResponse) {
-      throw new Error('Resposta vazia da API Gemini');
+      throw new Error('Resposta vazia da API OpenAI');
     }
 
     // Limpar e parsear JSON
