@@ -69,6 +69,20 @@ function getTrimestrePeriodoLabel(trimestre: number): string {
   return 'Q4 - Outubro, Novembro e Dezembro';
 }
 
+function FidelizaFonteBadge() {
+  return (
+    <Tooltip
+      side="top"
+      content="Fideliza+ ainda usa RPC trimestral propria. P0.2 deve alinhar churn, inadimplencia, renovacao e reajuste com a fonte canonica antes de qualquer deprecacao."
+    >
+      <div className="inline-flex max-w-full items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-100">
+        <Info className="h-3.5 w-3.5 shrink-0 text-amber-300" />
+        <span className="truncate">Fonte trimestral propria - P0.2 pendente</span>
+      </div>
+    </Tooltip>
+  );
+}
+
 // Configuracao das abas (padrao cockpit)
 const ABAS_CONFIG = [
   { id: 'ranking' as const, label: 'Ranking', icon: Trophy, bgColor: 'bg-emerald-600' },
@@ -507,6 +521,8 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoL
             Registrar Penalidade
           </Button>
         </div>
+
+        <FidelizaFonteBadge />
 
         {/* Abas internas (padrao cockpit) */}
         <div className="flex gap-2 border-b border-slate-700 pb-2">
@@ -1772,6 +1788,9 @@ export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoL
           ? "from-emerald-900/30 to-emerald-600/10 border-emerald-500/30"
           : "from-amber-900/30 to-amber-600/10 border-amber-500/30"
       )}>
+        <div className="mb-4">
+          <FidelizaFonteBadge />
+        </div>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="flex -space-x-3">

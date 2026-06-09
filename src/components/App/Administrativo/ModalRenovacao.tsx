@@ -40,8 +40,9 @@ export function ModalRenovacao({ open, onOpenChange, onSave, editingItem, formas
         setFormData({
           data: new Date(editingItem.data),
           aluno_nome: editingItem.aluno_nome,
+          aluno_id: (editingItem as any).aluno_id || null,
           curso_id: editingItem.curso_id?.toString() || '',
-          valor_parcela_anterior: editingItem.valor_parcela_anterior?.toString() || '',
+          valor_parcela_anterior: (editingItem.valor_parcela_anterior ?? editingItem.alunos?.valor_parcela ?? '').toString(),
           valor_parcela_novo: editingItem.valor_parcela_novo?.toString() || '',
           forma_pagamento_id: editingItem.forma_pagamento_id?.toString() || '',
           agente_comercial: editingItem.agente_comercial || '',

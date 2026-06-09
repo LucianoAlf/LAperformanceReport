@@ -1273,6 +1273,50 @@ export function TabelaAlunos({
     return badges;
   }
 
+  function getBadgeTipoMatriculaVinculo(aluno: Aluno) {
+    const nome = aluno.tipo_matricula_nome || '';
+    const nomeNormalizado = nome.toLowerCase();
+    const codigo = String(aluno.tipo_matricula_codigo || '').toLowerCase();
+    const tipoAluno = String(aluno.tipo_aluno || '').toLowerCase();
+    const tipoId = aluno.tipo_matricula_id;
+
+    if (
+      tipoId === 3 ||
+      nomeNormalizado.includes('bolsista integral') ||
+      codigo === 'bolsista_int' ||
+      tipoAluno === 'bolsista_integral'
+    ) {
+      return (
+        <span className="text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded">
+          Bolsista integral
+        </span>
+      );
+    }
+
+    if (
+      tipoId === 4 ||
+      nomeNormalizado.includes('bolsista parcial') ||
+      codigo === 'bolsista_parc' ||
+      tipoAluno === 'bolsista_parcial'
+    ) {
+      return (
+        <span className="text-[10px] bg-yellow-500/20 text-yellow-300 border border-yellow-500/30 px-2 py-0.5 rounded">
+          Bolsista parcial
+        </span>
+      );
+    }
+
+    if (tipoId === 5 || nomeNormalizado.includes('banda') || codigo === 'banda') {
+      return (
+        <span className="text-[10px] bg-orange-500/20 text-orange-300 border border-orange-500/30 px-2 py-0.5 rounded">
+          Banda
+        </span>
+      );
+    }
+
+    return null;
+  }
+
   return (
     <>
       {/* Filtros */}
@@ -2340,6 +2384,7 @@ export function TabelaAlunos({
                         ) : (
                           <span className="text-slate-400 text-sm italic">2º curso</span>
                         )}
+                        {getBadgeTipoMatriculaVinculo(outroCurso)}
                         <button
                           onClick={() => setAlunoFicha(outroCurso)}
                           className="text-purple-400 hover:text-purple-300 hover:underline text-sm"

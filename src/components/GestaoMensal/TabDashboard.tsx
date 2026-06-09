@@ -12,6 +12,9 @@ import { useMetasKPI } from '@/hooks/useMetasKPI';
 import { supabase } from '@/lib/supabase';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 
+// LEGADO: esta aba nao e renderizada pela GestaoMensalPage atual e nao e mais reexportada no barrel.
+// Mantida temporariamente para referencia ate a deprecacao/remocao formal de vw_dashboard_unidade.
+
 interface TabDashboardProps {
   ano: number;
   mes: number;

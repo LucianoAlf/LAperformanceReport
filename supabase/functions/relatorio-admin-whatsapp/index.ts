@@ -1,3 +1,5 @@
+/// <reference lib="deno.ns" />
+
 // Edge Function: relatorio-admin-whatsapp
 // Envia relatórios administrativos via WhatsApp para grupos das Farmers
 // Suporta modo manual (texto pronto) e modo cron (gera + envia automaticamente)
@@ -68,6 +70,131 @@ interface RelatorioPayload {
   modo?: 'cron'; // Modo automático: gera + envia para unidades com cron ativo
 }
 
+function n(value: unknown): number {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+  if (typeof value === 'string') {
+    const parsed = Number(value.replace(',', '.'));
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+function normalizeText(value: unknown): string {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+}
+
+function isRenovacaoAutomaticaEmusys(mov: any): boolean {
+  if (mov?.tipo !== 'renovacao') return false;
+  const texto = normalizeText(`${mov?.motivo || ''} ${mov?.observacoes || ''}`);
+  const pareceAutomacao = texto.includes('renovacao automatica via emusys')
+    || (texto.includes('automatic') && texto.includes('emusys'));
+  return pareceAutomacao || !isRenovacaoConfirmadaOperacional(mov);
+}
+
+function isRenovacaoConfirmadaOperacional(mov: any): boolean {
+  if (mov?.tipo !== 'renovacao') return false;
+
+  const agente = String(mov?.agente_comercial || mov?.agente || '').trim();
+  if (!agente) return false;
+
+  const valorAnteriorInformado = mov?.valor_parcela_anterior !== null && mov?.valor_parcela_anterior !== undefined;
+  const valorNovoInformado = mov?.valor_parcela_novo !== null && mov?.valor_parcela_novo !== undefined;
+
+  return valorAnteriorInformado || valorNovoInformado || Boolean(mov?.forma_pagamento_id);
+}
+
+function numero(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function valorPerdidoMovimentacao(mov: any): number {
+  return numero(
+    mov?.valor_parcela_evasao
+      ?? mov?.valor_parcela_anterior
+      ?? mov?.valor_parcela_novo
+      ?? mov?.alunos?.valor_parcela
+  );
+}
+
+function parseDateOnly(value: string | null | undefined): Date | null {
+  if (!value) return null;
+  const [year, month, day] = value.split('T')[0].split('-').map(Number);
+  if (!year || !month || !day) return null;
+  const date = new Date(year, month - 1, day);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function diffMesesCompletos(inicio: Date, fim: Date): number {
+  let meses = (fim.getFullYear() - inicio.getFullYear()) * 12 + (fim.getMonth() - inicio.getMonth());
+  if (fim.getDate() < inicio.getDate()) meses -= 1;
+  return Math.max(0, meses);
+}
+
+function calcularTempoPermanenciaMovimentacao(mov: any): number {
+  if (mov?.tempo_permanencia_meses !== null && mov?.tempo_permanencia_meses !== undefined) {
+    return numero(mov.tempo_permanencia_meses);
+  }
+
+  const inicio = parseDateOnly(mov?.alunos?.data_matricula);
+  const fim = parseDateOnly(mov?.data || mov?.alunos?.data_saida || null);
+  if (!inicio || !fim) return 0;
+
+  return diffMesesCompletos(inicio, fim);
+}
+
+function aplicarFallbacksRetencao(mov: any): any {
+  if (mov?.tipo !== 'evasao' && mov?.tipo !== 'nao_renovacao') {
+    return mov;
+  }
+
+  const valor = valorPerdidoMovimentacao(mov);
+  const tempo = calcularTempoPermanenciaMovimentacao(mov);
+
+  return {
+    ...mov,
+    valor_parcela_evasao: mov?.valor_parcela_evasao ?? (valor > 0 ? valor : mov?.valor_parcela_evasao),
+    tempo_permanencia_meses: mov?.tempo_permanencia_meses ?? (tempo > 0 ? tempo : mov?.tempo_permanencia_meses),
+  };
+}
+
+async function fetchKPIsAlunosRelatorioAdmin(
+  supabase: any,
+  unidadeId: string,
+  ano: number,
+  mes: number
+) {
+  const { data, error } = await supabase.rpc('get_kpis_alunos_canonicos', {
+    p_unidade_id: unidadeId,
+    p_ano: ano,
+    p_mes: mes,
+  });
+
+  if (error) throw error;
+
+  const totais = data?.totais || data?.por_unidade?.[0] || {};
+  const alunosAtivos = n(totais.alunos_ativos ?? totais.total_alunos_ativos);
+  const alunosPagantes = n(totais.alunos_pagantes ?? totais.total_alunos_pagantes);
+
+  return {
+    alunosAtivos,
+    alunosPagantes,
+    alunosNaoPagantes: n(totais.alunos_nao_pagantes) || Math.max(alunosAtivos - alunosPagantes, 0),
+    bolsistasIntegrais: n(totais.bolsistas_integrais ?? totais.total_bolsistas_integrais),
+    bolsistasParciais: n(totais.bolsistas_parciais ?? totais.total_bolsistas_parciais),
+    trancados: n(totais.alunos_trancados),
+    novosAlunos: n(totais.novas_matriculas),
+    matriculasAtivas: n(totais.matriculas_ativas),
+    matriculasBanda: n(totais.matriculas_banda),
+    matriculas2Curso: n(totais.matriculas_2_curso),
+    alunosCoral: n(totais.matriculas_coral),
+    evasoes: n(totais.evasoes ?? totais.total_evasoes),
+  };
+}
+
 async function enviarWhatsAppGrupo(
   grupoJid: string,
   mensagem: string,
@@ -117,7 +244,7 @@ async function enviarWhatsAppGrupo(
  * Usa as mesmas views e queries que o AdministrativoPage usa
  */
 async function gerarRelatorioDiario(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   unidadeId: string
 ): Promise<string> {
   // Calcular datas em BRT (UTC-3)
@@ -138,7 +265,7 @@ async function gerarRelatorioDiario(
   const ultimoDiaProximoMes = new Date(proximoMesDate.getFullYear(), proximoMesDate.getMonth() + 1, 0).getDate();
   const mesSaidaEnd = `${proximoMesDate.getFullYear()}-${String(proximoMesDate.getMonth() + 1).padStart(2, '0')}-${String(ultimoDiaProximoMes).padStart(2, '0')}`;
 
-  // === 1. BUSCAR DADOS (mesmas queries do frontend) ===
+  // === 1. BUSCAR DADOS ===
 
   // Unidade info
   const { data: unidadeInfo } = await supabase
@@ -149,71 +276,26 @@ async function gerarRelatorioDiario(
   const unidadeNome = unidadeInfo?.nome || 'Unidade';
   const farmersNomes = unidadeInfo?.farmers_nomes?.join(' e ') || 'Equipe Administrativa';
 
-  // KPIs via view (MESMA view que o frontend usa)
-  const { data: kpisData } = await supabase
-    .from('vw_kpis_gestao_mensal')
-    .select('*')
-    .eq('ano', ano)
-    .eq('mes', mes)
-    .eq('unidade_id', unidadeId);
+  // KPIs de alunos/matriculas pela RPC canonica P0.1G.
+  const kpisAlunos = await fetchKPIsAlunosRelatorioAdmin(supabase, unidadeId, ano, mes);
+  const alunosAtivos = kpisAlunos.alunosAtivos;
+  const alunosPagantes = kpisAlunos.alunosPagantes;
+  const alunosNaoPagantes = kpisAlunos.alunosNaoPagantes;
+  const bolsistasIntegrais = kpisAlunos.bolsistasIntegrais;
+  const bolsistasParciais = kpisAlunos.bolsistasParciais;
 
-  const kpis = kpisData?.[0] || {};
-  const alunosAtivos = kpis.total_alunos_ativos || 0;
-  const alunosPagantes = kpis.total_alunos_pagantes || 0;
-  const alunosNaoPagantes = alunosAtivos - alunosPagantes;
-  const bolsistasIntegrais = kpis.total_bolsistas_integrais || 0;
-  const bolsistasParciais = kpis.total_bolsistas_parciais || 0;
+  const trancados = kpisAlunos.trancados;
 
-  // Trancados (contagem direta)
-  const { count: trancados } = await supabase
-    .from('alunos')
-    .select('id', { count: 'exact', head: true })
-    .eq('unidade_id', unidadeId)
-    .eq('status', 'trancado');
+  // Novos no mes: pessoas pagantes novas, sem 2o curso, banda/coral ou bolsista.
+  const novosAlunos = kpisAlunos.novosAlunos;
 
-  // Novos no mês (mesma lógica: data_matricula, excluir 2º curso e bolsistas/banda)
-  const { data: novosData } = await supabase
-    .from('alunos')
-    .select('id, is_segundo_curso, tipo_matricula_id')
-    .eq('unidade_id', unidadeId)
-    .gte('data_matricula', primeiroDiaMes)
-    .lte('data_matricula', hoje);
+  // Matriculas: vinculos ativos/trancados, com banda/2o curso/coral separados.
+  const matriculasAtivas = kpisAlunos.matriculasAtivas;
+  const matriculasBanda = kpisAlunos.matriculasBanda;
+  const matriculas2Curso = kpisAlunos.matriculas2Curso;
+  const alunosCoral = kpisAlunos.alunosCoral;
 
-  const novosAlunos = (novosData || []).filter((a: any) =>
-    !a.is_segundo_curso && a.tipo_matricula_id && ![3, 4, 5].includes(a.tipo_matricula_id)
-  );
-
-  // Matrículas (mesma lógica: join cursos para banda/coral)
-  const { data: matriculasData } = await supabase
-    .from('alunos')
-    .select('id, is_segundo_curso, curso_id, cursos:curso_id!left(nome, is_projeto_banda)')
-    .eq('unidade_id', unidadeId)
-    .in('status', ['ativo', 'aviso_previo', 'trancado']);
-
-  const matriculasAtivas = matriculasData?.length || 0;
-  const matriculasBanda = matriculasData?.filter((m: any) =>
-    m.cursos?.is_projeto_banda
-  ).length || 0;
-  const matriculas2Curso = matriculasData?.filter((m: any) =>
-    m.is_segundo_curso &&
-    !m.cursos?.is_projeto_banda &&
-    !m.cursos?.nome?.toLowerCase()?.includes('canto coral')
-  ).length || 0;
-  const alunosCoral = matriculasData?.filter((m: any) =>
-    m.cursos?.nome?.toLowerCase()?.includes('canto coral')
-  ).length || 0;
-
-  // Retencao view (renovações — MESMA view que o frontend usa)
-  const { data: retData } = await supabase
-    .from('vw_kpis_retencao_mensal')
-    .select('*')
-    .eq('ano', ano)
-    .eq('mes', mes)
-    .eq('unidade_id', unidadeId);
-
-  const ret = retData?.[0] || {};
-
-  // Movimentações do mês (sem join professor — enriquecer depois, como o frontend faz)
+  // Movimentacoes do mes para retencao operacional viva.
   const { data: movData } = await supabase
     .from('movimentacoes_admin')
     .select('*, unidades(codigo)')
@@ -222,8 +304,23 @@ async function gerarRelatorioDiario(
     .lte('data', hoje)
     .order('data', { ascending: false });
 
-  const movimentacoes = movData || [];
-  const renovacoesMov = movimentacoes.filter((m: any) => m.tipo === 'renovacao');
+  const alunoIdsMovimentacoes = [...new Set((movData || []).map((m: any) => m.aluno_id).filter(Boolean))];
+  const alunosRetencaoMap = new Map<number, any>();
+  if (alunoIdsMovimentacoes.length > 0) {
+    const { data: alunosRetencaoData } = await supabase
+      .from('alunos')
+      .select('id, valor_parcela, data_matricula, data_saida, tipo_matricula_id, is_segundo_curso')
+      .in('id', alunoIdsMovimentacoes);
+    (alunosRetencaoData || []).forEach((a: any) => alunosRetencaoMap.set(a.id, a));
+  }
+
+  const movimentacoes = (movData || []).map((m: any) => aplicarFallbacksRetencao({
+    ...m,
+    alunos: m.aluno_id ? alunosRetencaoMap.get(m.aluno_id) || null : null,
+  }));
+  const renovacoesMovTodas = movimentacoes.filter((m: any) => m.tipo === 'renovacao');
+  const renovacoesMov = renovacoesMovTodas.filter(isRenovacaoConfirmadaOperacional);
+  const renovacoesAutomaticas = renovacoesMovTodas.filter((m: any) => !isRenovacaoConfirmadaOperacional(m));
   const naoRenovacoesMov = movimentacoes.filter((m: any) => m.tipo === 'nao_renovacao');
   const evasoesMov = movimentacoes.filter((m: any) => m.tipo === 'evasao');
 
@@ -239,10 +336,10 @@ async function gerarRelatorioDiario(
   const naoRenovacoes = naoRenovacoesMov.map(enriquecer);
   const evasoes = evasoesMov.map(enriquecer);
 
-  // Combinar view + movimentacoes (Math.max, como o frontend faz)
-  const naoRenovacoesCount = Math.max(ret.nao_renovacoes || 0, naoRenovacoes.length);
-  const renovacoesRealizadasCount = Math.max(ret.renovacoes_realizadas || 0, renovacoes.length);
-  const renovacoesPendentesCount = ret.renovacoes_pendentes || 0;
+  // Retencao operacional viva: sem view legada e sem Math.max silencioso.
+  const naoRenovacoesCount = naoRenovacoes.length;
+  const renovacoesRealizadasCount = renovacoes.length;
+  const renovacoesPendentesCount = renovacoesAutomaticas.length;
   const renovacoesPrevistas = renovacoesRealizadasCount + naoRenovacoesCount + renovacoesPendentesCount;
   const taxaRenovacao = renovacoesPrevistas > 0 ? (renovacoesRealizadasCount / renovacoesPrevistas * 100) : 0;
 
@@ -287,7 +384,7 @@ async function gerarRelatorioDiario(
   texto += `• Bolsistas Integrais: *${bolsistasIntegrais}*\n`;
   texto += `• Bolsistas Parciais: *${bolsistasParciais}*\n`;
   texto += `• Trancados: *${trancados || 0}*\n`;
-  texto += `• Novos no mês: *${novosAlunos.length}*\n\n`;
+  texto += `• Novos no mês: *${novosAlunos}*\n\n`;
 
   texto += `📚 *MATRÍCULAS*\n`;
   texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
@@ -403,7 +500,7 @@ async function gerarRelatorioDiario(
  * O processamento real é feito pelo cron processar-mensagens-agendadas (a cada minuto)
  */
 async function processarCron(
-  supabase: ReturnType<typeof createClient>
+  supabase: any
 ): Promise<{ unidades_processadas: number; resultados: any[] }> {
   console.log('[relatorio-admin-whatsapp] 🕐 Modo CRON iniciado — enfileirando');
 

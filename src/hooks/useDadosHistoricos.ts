@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { DadosAtuais, DadosHistoricos } from '@/lib/simulador/tipos';
+import { fetchKPIsAlunosCanonicos } from '@/hooks/useKPIsAlunosCanonicos';
 
 interface UseDadosHistoricosResult {
   dadosAtuais: DadosAtuais | null;
@@ -35,22 +36,39 @@ export function useDadosHistoricos(
 
       try {
         // Buscar dados atuais da unidade
-        const { data: dadosGestao, error: errorGestao } = await supabase
-          .from('vw_kpis_gestao_mensal')
-          .select('*')
-          .eq('unidade_id', unidadeId)
-          .eq('ano', ano)
-          .eq('mes', mes)
-          .single();
+        const dadosCanonicos = await fetchKPIsAlunosCanonicos({ unidadeId, ano, mes });
+        let taxaRenovacaoAtual = 0;
 
-        if (errorGestao && errorGestao.code !== 'PGRST116') {
-          console.error('Erro ao buscar dados de gestão:', errorGestao);
+        if (dadosCanonicos.fonte === 'dados_mensais') {
+          const { data: dadosMensaisAtual } = await supabase
+            .from('dados_mensais')
+            .select('taxa_renovacao')
+            .eq('unidade_id', unidadeId)
+            .eq('ano', ano)
+            .eq('mes', mes)
+            .maybeSingle();
+
+          taxaRenovacaoAtual = Number(dadosMensaisAtual?.taxa_renovacao) || 0;
+        } else if (dadosCanonicos.fonte === 'vivo') {
+          const inicioMes = `${ano}-${String(mes).padStart(2, '0')}-01`;
+          const fimMes = `${ano}-${String(mes).padStart(2, '0')}-${String(new Date(ano, mes, 0).getDate()).padStart(2, '0')}`;
+          const { data: movimentosRenovacao } = await supabase
+            .from('movimentacoes_admin')
+            .select('tipo')
+            .eq('unidade_id', unidadeId)
+            .in('tipo', ['renovacao', 'nao_renovacao'])
+            .gte('data', inicioMes)
+            .lte('data', fimMes);
+
+          const renovacoes = (movimentosRenovacao || []).filter((mov: any) => mov.tipo === 'renovacao').length;
+          const totalContratos = movimentosRenovacao?.length || 0;
+          taxaRenovacaoAtual = totalContratos > 0 ? (renovacoes / totalContratos) * 100 : 0;
         }
 
         // Buscar histórico dos últimos 12 meses
         const dataInicio = new Date(ano, mes - 13, 1); // 12 meses atrás
         const { data: historicoGestao, error: errorHistorico } = await supabase
-          .from('vw_kpis_gestao_mensal')
+          .from('dados_mensais')
           .select('*')
           .eq('unidade_id', unidadeId)
           .gte('ano', dataInicio.getFullYear())
@@ -98,17 +116,18 @@ export function useDadosHistoricos(
         }
 
         // Processar dados atuais
-        if (dadosGestao) {
-          const alunosPagantes = dadosGestao.total_alunos_pagantes || dadosGestao.alunos_pagantes || 0;
-          const ticketMedio = parseFloat(dadosGestao.ticket_medio) || 0;
+        const dadosAtuaisCanonicos = dadosCanonicos.porUnidade[0] || dadosCanonicos;
+        if (dadosAtuaisCanonicos && dadosCanonicos.fonte !== 'indisponivel') {
+          const alunosPagantes = dadosAtuaisCanonicos.alunosPagantes || 0;
+          const ticketMedio = Number(dadosAtuaisCanonicos.ticketMedio) || 0;
           setDadosAtuais({
-            alunosAtivos: dadosGestao.total_alunos_ativos || 0,
+            alunosAtivos: dadosAtuaisCanonicos.alunosAtivos || 0,
             alunosPagantes,
             ticketMedio,
-            churnRate: parseFloat(dadosGestao.churn_rate) || 0,
-            taxaRenovacao: parseFloat(dadosGestao.taxa_renovacao) || 0,
-            mrr: parseFloat(dadosGestao.mrr) || (alunosPagantes * ticketMedio),
-            inadimplencia: parseFloat(dadosGestao.inadimplencia_pct) || 0,
+            churnRate: Number(dadosAtuaisCanonicos.churnRate) || 0,
+            taxaRenovacao: taxaRenovacaoAtual,
+            mrr: Number(dadosAtuaisCanonicos.mrr) || (alunosPagantes * ticketMedio),
+            inadimplencia: Number(dadosAtuaisCanonicos.inadimplencia) || 0,
           });
         }
 

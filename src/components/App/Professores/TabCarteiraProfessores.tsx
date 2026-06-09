@@ -279,27 +279,19 @@ export function TabCarteiraProfessores({ unidadeAtual, healthWeights }: Props) {
     return resultado;
   }, [carteiras, filtroBusca, filtroCurso, ordenacao, direcao]);
 
-  // KPIs consolidados - usando mesma lógica do Analytics (TabGestao.tsx)
-  // MRR = soma de TODOS os pagantes (incluindo segundo curso)
-  // Pagantes = COUNT de pagantes únicos (sem segundo curso)
-  // Ticket = MRR / Pagantes
+  // KPIs consolidados da carteira operacional.
+  // P0.1: nao derivar "alunos pagantes" por MRR/ticket nesta tela.
+  // Carteira de professor e operacional e pode divergir dos KPIs executivos fechados.
   const kpis = useMemo(() => {
     const dados = carteirasFiltradas;
     const totalProfs = dados.length;
     const totalAlunos = dados.reduce((acc, c) => acc + c.total_alunos, 0);
     const mrrTotal = dados.reduce((acc, c) => acc + c.mrr_total, 0);
-    // Pagantes únicos = derivado de MRR / ticket_medio por professor
-    const totalPagantes = dados.reduce((acc, c) => {
-      if (c.ticket_medio > 0) {
-        return acc + Math.round(c.mrr_total / c.ticket_medio);
-      }
-      return acc;
-    }, 0);
-    // Ticket médio = MRR total / pagantes únicos totais
-    const ticketMedio = totalPagantes > 0 ? mrrTotal / totalPagantes : 0;
+    // Ticket operacional da carteira = MRR / linhas da carteira.
+    const ticketMedio = totalAlunos > 0 ? mrrTotal / totalAlunos : 0;
     const mediaAlunos = totalProfs > 0 ? totalAlunos / totalProfs : 0;
 
-    return { totalProfs, totalAlunos, totalPagantes, mrrTotal, ticketMedio, mediaAlunos };
+    return { totalProfs, totalAlunos, mrrTotal, ticketMedio, mediaAlunos };
   }, [carteirasFiltradas]);
 
   // Cor do indicador de média/turma
@@ -339,8 +331,13 @@ export function TabCarteiraProfessores({ unidadeAtual, healthWeights }: Props) {
 
   return (
     <div className="space-y-6">
+      <div className="inline-flex items-center gap-2 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-3 py-1.5 text-xs font-medium text-cyan-300">
+        <Users className="h-3.5 w-3.5" />
+        Carteira operacional ao vivo - nao compara com competencia fechada
+      </div>
+
       {/* KPIs Consolidados */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
         <KPICard
           icon={Users}
           label="Professores"
@@ -350,17 +347,10 @@ export function TabCarteiraProfessores({ unidadeAtual, healthWeights }: Props) {
         />
         <KPICard
           icon={GraduationCap}
-          label="Alunos Ativos"
+          label="Alunos na Carteira"
           value={kpis.totalAlunos}
-          subvalue="na carteira"
+          subvalue="linhas operacionais"
           variant="emerald"
-        />
-        <KPICard
-          icon={GraduationCap}
-          label="Alunos Pagantes"
-          value={kpis.totalPagantes}
-          subvalue="com mensalidade"
-          variant="cyan"
         />
         <KPICard
           icon={Wallet}
@@ -372,10 +362,10 @@ export function TabCarteiraProfessores({ unidadeAtual, healthWeights }: Props) {
         />
         <KPICard
           icon={TrendingUp}
-          label="Ticket Médio"
+          label="Ticket Carteira"
           value={kpis.ticketMedio}
           format="currency"
-          subvalue="por aluno"
+          subvalue="MRR / carteira"
           variant="amber"
         />
         <KPICard

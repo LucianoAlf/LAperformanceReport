@@ -61,6 +61,8 @@ export interface Aluno {
   dia_vencimento?: number;
   tipo_matricula_id: number | null;
   tipo_matricula_nome?: string;
+  tipo_matricula_codigo?: string | null;
+  tipo_aluno?: string | null;
   unidade_id: string;
   unidade_codigo?: string;
   data_matricula: string | null;
@@ -371,7 +373,7 @@ export function AlunosPage() {
     const selectFields = `
       id, nome, classificacao, idade_atual, professor_atual_id, curso_id, modalidade,
       dia_aula, horario_aula, valor_parcela, tempo_permanencia_meses,
-      status, status_pagamento, dia_vencimento, tipo_matricula_id, unidade_id, data_matricula,
+      status, status_pagamento, dia_vencimento, tipo_matricula_id, tipo_aluno, unidade_id, data_matricula,
       is_segundo_curso, data_nascimento, forma_pagamento_id, telefone, whatsapp, responsavel_telefone, data_saida,
       arquivado_em, arquivado_por, arquivado_motivo, arquivado_origem, arquivado_aluno_principal_id,
       foto_url, instagram,
@@ -499,6 +501,7 @@ export function AlunosPage() {
           curso_nome: a.cursos?.nome || '',
           curso_is_projeto_banda: a.cursos?.is_projeto_banda || false,
           tipo_matricula_nome: a.tipos_matricula?.nome || '',
+          tipo_matricula_codigo: a.tipos_matricula?.codigo || null,
           unidade_codigo: a.unidades?.codigo || '',
           forma_pagamento_nome: a.formas_pagamento?.nome || null,
           anamnese_diagnosticos: diagnosticosPorAluno.get(a.id) || [],
@@ -584,7 +587,7 @@ export function AlunosPage() {
         (a.status === 'ativo' || a.status === 'trancado' || a.status === 'aviso_previo')
       );
 
-      // Mesma régua da view vw_kpis_gestao_mensal: pessoas distintas (ativo+trancado),
+      // Mesma régua canônica viva: pessoas distintas (ativo+trancado),
       // sem filtrar is_segundo_curso (COUNT DISTINCT nome já deduplicaela)
       const totalAtivos = new Set(
         alunosParaKPIs
@@ -1779,4 +1782,3 @@ export function AlunosPage() {
     </div>
   );
 }
-

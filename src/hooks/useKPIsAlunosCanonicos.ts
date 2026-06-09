@@ -163,42 +163,6 @@ function mapDadosMensais(row: any): KPIsAlunosCanonicosPorUnidade {
   };
 }
 
-function mapViewGestao(row: any): KPIsAlunosCanonicosPorUnidade {
-  const mrr = n(row.mrr || row.faturamento_previsto);
-  const ticketMedio = n(row.ticket_medio);
-  const tempoPermanencia = n(row.tempo_permanencia_medio);
-
-  return {
-    unidade_id: String(row.unidade_id || ''),
-    unidade_nome: row.unidade_nome || row.unidades?.nome || 'Unidade',
-    ano: n(row.ano),
-    mes: n(row.mes),
-    alunosAtivos: n(row.total_alunos_ativos),
-    alunosPagantes: n(row.total_alunos_pagantes),
-    ticketMedio,
-    mrr,
-    arr: n(row.arr) || mrr * 12,
-    churnRate: n(row.churn_rate),
-    evasoes: n(row.total_evasoes || row.evasoes),
-    inadimplencia: n(row.inadimplencia_pct),
-    tempoPermanencia,
-    ltv: n(row.ltv_medio) || ticketMedio * tempoPermanencia,
-    matriculasAtivas: n(row.total_matriculas_ativas || row.matriculas_ativas),
-    matriculasBanda: n(row.total_banda || row.matriculas_banda),
-    matriculasSegundoCurso: n(row.total_segundo_curso || row.matriculas_2_curso),
-    matriculasCoral: n(row.total_coral || row.matriculas_coral || row.alunos_coral),
-    novasMatriculas: n(row.novas_matriculas),
-    bolsistasIntegrais: n(row.total_bolsistas_integrais),
-    bolsistasParciais: n(row.total_bolsistas_parciais),
-    kids: n(row.total_la_kids),
-    school: n(row.total_la_adultos),
-    semClassificacao: n(row.total_la_sem_classificacao),
-    faturamentoPrevisto: n(row.faturamento_previsto) || mrr,
-    faturamentoRealizado: n(row.faturamento_realizado),
-    reajustePct: n(row.reajuste_medio || row.reajuste_pct),
-  };
-}
-
 export function consolidarKPIsAlunosCanonicos(
   rows: KPIsAlunosCanonicosPorUnidade[],
   base: Pick<KPIsAlunosCanonicos, 'fonte' | 'competenciaFechada' | 'competenciaParcial' | 'alertasFonte' | 'ano' | 'mes'>,

@@ -59,6 +59,11 @@ type MovimentoRow = {
   data: string | null;
 };
 
+type TempoPermanenciaRow = {
+  unidade_id: string | null;
+  tempo_permanencia_medio: number | string | null;
+};
+
 const PAGE_SIZE = 1000;
 
 function n(value: unknown): number {
@@ -166,7 +171,11 @@ export function calcularKPIsAlunosVivosCanonicos(
   alunos: AlunoRow[],
   movimentacoes: MovimentoRow[],
   unidades: Array<{ id: string; nome: string }>,
-  { ano, mes }: { ano: number; mes: number }
+  {
+    ano,
+    mes,
+    temposPermanenciaPorUnidade = new Map<string, number>(),
+  }: { ano: number; mes: number; temposPermanenciaPorUnidade?: Map<string, number> }
 ): KPIsAlunosVivosPorUnidade[] {
   const dataCorte = dataCorteParaCompetenciaAtual(ano, mes);
   const inicioMes = dataInicioMes(ano, mes);
@@ -229,7 +238,7 @@ export function calcularKPIsAlunosVivosCanonicos(
         .filter(Boolean)
     );
 
-    const tempoPermanencia = 0;
+    const tempoPermanencia = temposPermanenciaPorUnidade.get(unidadeId) || 0;
     const ticketMedio = alunosPagantes > 0 ? mrr / alunosPagantes : 0;
 
     return {
@@ -329,5 +338,26 @@ export async function fetchKPIsAlunosVivosCanonicos({
     return query;
   });
 
-  return calcularKPIsAlunosVivosCanonicos(alunos, movimentacoes, unidades, { ano, mes });
+  const temposPermanenciaPorUnidade = new Map<string, number>();
+  const { data: tempoData, error: tempoError } = await supabase.rpc('get_tempo_permanencia', {
+    p_unidade_id: unidadeFiltro,
+    p_ano: ano,
+    p_mes: mes,
+  });
+
+  if (tempoError) {
+    console.warn('Falha ao carregar tempo de permanencia canonico', tempoError);
+  } else {
+    ((tempoData || []) as TempoPermanenciaRow[]).forEach(row => {
+      const unidadeId = String(row.unidade_id || '');
+      if (!unidadeId) return;
+      temposPermanenciaPorUnidade.set(unidadeId, n(row.tempo_permanencia_medio));
+    });
+  }
+
+  return calcularKPIsAlunosVivosCanonicos(alunos, movimentacoes, unidades, {
+    ano,
+    mes,
+    temposPermanenciaPorUnidade,
+  });
 }

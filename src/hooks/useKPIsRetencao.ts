@@ -1,28 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { fetchKPIsAlunosCanonicos } from '@/hooks/useKPIsAlunosCanonicos';
+import {
+  aplicarFallbacksRetencao,
+  calcularRetencaoOperacionalCanonica,
+  consolidarRetencaoOperacional,
+  pagantesMapFromKPIsCanonicos,
+  unidadesFromKPIsCanonicos,
+  type MovimentacaoRetencaoRow,
+  type RetencaoOperacionalPorUnidade,
+} from '@/lib/retencaoOperacionalCanonica';
 
-export interface KPIsRetencao {
-  unidade_id: string;
-  unidade_nome: string;
-  ano: number;
-  mes: number;
-  total_evasoes: number;
-  evasoes_interrompidas: number;
-  avisos_previos: number;
-  transferencias: number;
-  taxa_evasao: number;
-  mrr_perdido: number;
-  renovacoes_previstas: number;
-  renovacoes_realizadas: number;
-  nao_renovacoes: number;
-  renovacoes_pendentes: number;
-  renovacoes_atrasadas: number;
-  taxa_renovacao: number;
-  taxa_nao_renovacao: number;
-  evasoes_por_motivo: Record<string, number>;
-  evasoes_por_professor: Record<string, number>;
-}
+export interface KPIsRetencao extends RetencaoOperacionalPorUnidade {}
 
 export interface MotivoSaida {
   name: string;
@@ -43,6 +32,126 @@ interface UseKPIsRetencaoResult {
   isLoading: boolean;
   error: Error | null;
   refetch: () => Promise<void>;
+}
+
+function inicioMes(ano: number, mes: number): string {
+  return `${ano}-${String(mes).padStart(2, '0')}-01`;
+}
+
+function fimMes(ano: number, mes: number): string {
+  const dia = new Date(ano, mes, 0).getDate();
+  return `${ano}-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`;
+}
+
+async function fetchMovimentacoesRetencao(
+  unidadeId: string | 'todos',
+  ano: number,
+  mes: number
+): Promise<MovimentacaoRetencaoRow[]> {
+  const startDate = inicioMes(ano, mes);
+  const endDate = fimMes(ano, mes);
+  const avisoAno = mes === 12 ? ano + 1 : ano;
+  const avisoMes = mes === 12 ? 1 : mes + 1;
+  const avisoStartDate = inicioMes(avisoAno, avisoMes);
+  const avisoEndDate = fimMes(avisoAno, avisoMes);
+
+  const selectFields = `
+    id, aluno_id, aluno_nome, unidade_id, tipo, data, mes_saida,
+    valor_parcela_evasao, valor_parcela_anterior, valor_parcela_novo,
+    tempo_permanencia_meses,
+    forma_pagamento_id, agente_comercial,
+    tipo_evasao, motivo, observacoes, professor_id
+  `;
+
+  let query = supabase
+    .from('movimentacoes_admin')
+    .select(selectFields)
+    .in('tipo', ['renovacao', 'nao_renovacao', 'aviso_previo', 'evasao', 'trancamento'])
+    .gte('data', startDate)
+    .lte('data', endDate)
+    .order('data', { ascending: false });
+
+  let avisosRetroativosQuery = supabase
+    .from('movimentacoes_admin')
+    .select(selectFields)
+    .eq('tipo', 'aviso_previo')
+    .gte('mes_saida', avisoStartDate)
+    .lte('mes_saida', avisoEndDate)
+    .order('data', { ascending: false });
+
+  if (unidadeId !== 'todos') {
+    query = query.eq('unidade_id', unidadeId);
+    avisosRetroativosQuery = avisosRetroativosQuery.eq('unidade_id', unidadeId);
+  }
+
+  const [movResult, avisosResult] = await Promise.all([query, avisosRetroativosQuery]);
+  if (movResult.error) throw movResult.error;
+  if (avisosResult.error) throw avisosResult.error;
+
+  const ids = new Set((movResult.data || []).map(row => row.id));
+  const movimentacoes = [
+    ...((movResult.data || []) as MovimentacaoRetencaoRow[]),
+    ...((avisosResult.data || []) as MovimentacaoRetencaoRow[]).filter(row => !ids.has(row.id)),
+  ];
+  const alunoIds = Array.from(new Set(
+    movimentacoes
+      .map(row => row.aluno_id)
+      .filter(Boolean)
+      .map(String)
+  ));
+  let alunosMap = new Map<string, any>();
+
+  if (alunoIds.length > 0) {
+    const { data: alunosData, error: alunosError } = await supabase
+      .from('alunos')
+      .select('id, valor_parcela, data_matricula, data_saida, tipo_matricula_id, is_segundo_curso')
+      .in('id', alunoIds);
+    if (alunosError) throw alunosError;
+
+    alunosMap = new Map((alunosData || []).map((aluno: any) => [String(aluno.id), aluno]));
+  }
+
+  return movimentacoes.map(row => aplicarFallbacksRetencao({
+    ...row,
+    alunos: row.aluno_id ? alunosMap.get(String(row.aluno_id)) || null : null,
+  }));
+}
+
+function rowsFromSnapshot(canonical: Awaited<ReturnType<typeof fetchKPIsAlunosCanonicos>>): KPIsRetencao[] {
+  return canonical.porUnidade.map(row => ({
+    unidade_id: row.unidade_id,
+    unidade_nome: row.unidade_nome,
+    ano: row.ano,
+    mes: row.mes,
+    total_evasoes: row.evasoes,
+    evasoes_interrompidas: row.evasoes,
+    avisos_previos: 0,
+    transferencias: 0,
+    taxa_evasao: row.churnRate,
+    mrr_perdido: 0,
+    renovacoes_previstas: 0,
+    renovacoes_realizadas: 0,
+    nao_renovacoes: 0,
+    renovacoes_pendentes: 0,
+    renovacoes_atrasadas: 0,
+    taxa_renovacao: 0,
+    taxa_nao_renovacao: 0,
+    evasoes_por_motivo: {},
+    evasoes_por_professor: {},
+    base_alunos_pagantes: row.alunosPagantes,
+  }));
+}
+
+function motivosFromRetencao(data: KPIsRetencao): MotivoSaida[] {
+  return Object.entries(data.evasoes_por_motivo || {})
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value);
+}
+
+function professoresFromRetencao(data: KPIsRetencao): EvasaoPorProfessor[] {
+  return Object.entries(data.evasoes_por_professor || {})
+    .map(([nome, valor], index) => ({ id: index, nome, valor }))
+    .sort((a, b) => b.valor - a.valor);
 }
 
 export function useKPIsRetencao(
@@ -71,265 +180,33 @@ export function useKPIsRetencao(
         mes: currentMonth,
       });
 
-      if (canonical.fonte === 'dados_mensais' || canonical.fonte === 'preliminar' || canonical.fonte === 'indisponivel') {
-        const rows = canonical.porUnidade.map(row => ({
-          unidade_id: row.unidade_id,
-          unidade_nome: row.unidade_nome,
-          ano: row.ano,
-          mes: row.mes,
-          total_evasoes: row.evasoes,
-          evasoes_interrompidas: row.evasoes,
-          avisos_previos: 0,
-          transferencias: 0,
-          taxa_evasao: row.churnRate,
-          mrr_perdido: 0,
-          renovacoes_previstas: 0,
-          renovacoes_realizadas: 0,
-          nao_renovacoes: 0,
-          renovacoes_pendentes: 0,
-          renovacoes_atrasadas: 0,
-          taxa_renovacao: 0,
-          taxa_nao_renovacao: 0,
-          evasoes_por_motivo: {},
-          evasoes_por_professor: {},
-        }));
+      const rows = canonical.fonte === 'vivo'
+        ? calcularRetencaoOperacionalCanonica({
+            movimentacoes: await fetchMovimentacoesRetencao(unidadeId, currentYear, currentMonth),
+            unidades: unidadesFromKPIsCanonicos(canonical.porUnidade),
+            alunosPagantesPorUnidade: pagantesMapFromKPIsCanonicos(canonical.porUnidade),
+            ano: currentYear,
+            mes: currentMonth,
+          })
+        : rowsFromSnapshot(canonical);
 
-        setDataByUnidade(rows);
-        setMotivosSaida([]);
-        setEvasoesPorProfessor([]);
-        setData({
-          unidade_id: canonical.unidade_id,
-          unidade_nome: canonical.unidade_nome,
-          ano: canonical.ano,
-          mes: canonical.mes,
-          total_evasoes: canonical.evasoes,
-          evasoes_interrompidas: canonical.evasoes,
-          avisos_previos: 0,
-          transferencias: 0,
-          taxa_evasao: canonical.churnRate,
-          mrr_perdido: 0,
-          renovacoes_previstas: 0,
-          renovacoes_realizadas: 0,
-          nao_renovacoes: 0,
-          renovacoes_pendentes: 0,
-          renovacoes_atrasadas: 0,
-          taxa_renovacao: 0,
-          taxa_nao_renovacao: 0,
-          evasoes_por_motivo: {},
-          evasoes_por_professor: {},
-        });
-        return;
-      }
+      const consolidado = consolidarRetencaoOperacional(rows, unidadeId, currentYear, currentMonth);
 
-      // Tentar buscar da view primeiro (filtrar por ano/mes)
-      let query = supabase
-        .from('vw_kpis_retencao_mensal')
-        .select('*')
-        .eq('ano', currentYear)
-        .eq('mes', currentMonth);
-
-      if (unidadeId !== 'todos') {
-        query = query.eq('unidade_id', unidadeId);
-      }
-
-      const { data: kpisData, error: kpisError } = await query;
-
-      if (kpisError) {
-        // Fallback: buscar dados diretamente das tabelas
-        await fetchFromTables();
-        return;
-      }
-
-      if (kpisData && kpisData.length > 0) {
-        setDataByUnidade(kpisData);
-
-        // Consolidar dados
-        const consolidado: KPIsRetencao = {
-          unidade_id: unidadeId === 'todos' ? 'todos' : kpisData[0].unidade_id,
-          unidade_nome: unidadeId === 'todos' ? 'Consolidado' : kpisData[0].unidade_nome,
-          ano: currentYear,
-          mes: currentMonth,
-          total_evasoes: kpisData.reduce((acc, k) => acc + (k.total_evasoes || 0), 0),
-          evasoes_interrompidas: kpisData.reduce((acc, k) => acc + (k.evasoes_interrompidas || 0), 0),
-          avisos_previos: kpisData.reduce((acc, k) => acc + (k.avisos_previos || 0), 0),
-          transferencias: kpisData.reduce((acc, k) => acc + (k.transferencias || 0), 0),
-          taxa_evasao: kpisData.reduce((acc, k) => acc + (k.taxa_evasao || 0), 0) / kpisData.length,
-          mrr_perdido: kpisData.reduce((acc, k) => acc + (k.mrr_perdido || 0), 0),
-          renovacoes_previstas: kpisData.reduce((acc, k) => acc + (k.renovacoes_previstas || 0), 0),
-          renovacoes_realizadas: kpisData.reduce((acc, k) => acc + (k.renovacoes_realizadas || 0), 0),
-          nao_renovacoes: kpisData.reduce((acc, k) => acc + (k.nao_renovacoes || 0), 0),
-          renovacoes_pendentes: kpisData.reduce((acc, k) => acc + (k.renovacoes_pendentes || 0), 0),
-          renovacoes_atrasadas: kpisData.reduce((acc, k) => acc + (k.renovacoes_atrasadas || 0), 0),
-          taxa_renovacao: kpisData.reduce((acc, k) => acc + (k.taxa_renovacao || 0), 0) / kpisData.length,
-          taxa_nao_renovacao: kpisData.reduce((acc, k) => acc + (k.taxa_nao_renovacao || 0), 0) / kpisData.length,
-          evasoes_por_motivo: {},
-          evasoes_por_professor: {},
-        };
-
-        // Consolidar evasões por motivo
-        const motivosMap = new Map<string, number>();
-        kpisData.forEach(k => {
-          if (k.evasoes_por_motivo) {
-            Object.entries(k.evasoes_por_motivo).forEach(([motivo, count]) => {
-              motivosMap.set(motivo, (motivosMap.get(motivo) || 0) + (count as number));
-            });
-          }
-        });
-        consolidado.evasoes_por_motivo = Object.fromEntries(motivosMap);
-
-        // Consolidar evasões por professor
-        const profsMap = new Map<string, number>();
-        kpisData.forEach(k => {
-          if (k.evasoes_por_professor) {
-            Object.entries(k.evasoes_por_professor).forEach(([prof, count]) => {
-              profsMap.set(prof, (profsMap.get(prof) || 0) + (count as number));
-            });
-          }
-        });
-        consolidado.evasoes_por_professor = Object.fromEntries(profsMap);
-
-        setData(consolidado);
-
-        // Formatar dados para gráficos
-        setMotivosSaida(
-          Array.from(motivosMap.entries())
-            .map(([name, value]) => ({ name, value }))
-            .sort((a, b) => b.value - a.value)
-        );
-
-        setEvasoesPorProfessor(
-          Array.from(profsMap.entries())
-            .map(([nome, valor], index) => ({ id: index, nome, valor }))
-            .sort((a, b) => b.valor - a.valor)
-        );
-      } else {
-        await fetchFromTables();
-      }
-
+      setDataByUnidade(rows);
+      setData(consolidado);
+      setMotivosSaida(motivosFromRetencao(consolidado));
+      setEvasoesPorProfessor(professoresFromRetencao(consolidado));
     } catch (err) {
-      console.error('Erro ao buscar KPIs de Retenção:', err);
+      console.error('Erro ao buscar KPIs de Retencao:', err);
       setError(err as Error);
+      setData(null);
+      setDataByUnidade([]);
+      setMotivosSaida([]);
+      setEvasoesPorProfessor([]);
     } finally {
       setIsLoading(false);
     }
   }, [unidadeId, currentYear, currentMonth]);
-
-  // Fallback: buscar dados diretamente das tabelas
-  const fetchFromTables = async () => {
-    try {
-      const startDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`;
-      const endDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-31`;
-
-      // Buscar evasões de movimentacoes_admin
-      let evasoesQuery = supabase
-        .from('movimentacoes_admin')
-        .select('*')
-        .in('tipo', ['evasao', 'nao_renovacao', 'aviso_previo'])
-        .gte('data', startDate)
-        .lte('data', endDate);
-
-      if (unidadeId !== 'todos') {
-        evasoesQuery = evasoesQuery.eq('unidade_id', unidadeId);
-      }
-
-      const { data: evasoesData } = await evasoesQuery;
-
-      // Buscar renovações
-      let renovacoesQuery = supabase
-        .from('renovacoes')
-        .select('*')
-        .gte('data_vencimento', startDate)
-        .lte('data_vencimento', endDate);
-
-      if (unidadeId !== 'todos') {
-        renovacoesQuery = renovacoesQuery.eq('unidade_id', unidadeId);
-      }
-
-      const { data: renovacoesData } = await renovacoesQuery;
-
-      // Buscar total de alunos ativos (inclui trancados — consistente com aba Alunos e Dashboard)
-      let alunosQuery = supabase
-        .from('alunos')
-        .select('*', { count: 'exact', head: true })
-        .in('status', ['ativo', 'trancado']);
-
-      if (unidadeId !== 'todos') {
-        alunosQuery = alunosQuery.eq('unidade_id', unidadeId);
-      }
-
-      const { count: totalAlunos } = await alunosQuery;
-
-      const evasoes = evasoesData || [];
-      const renovacoes = renovacoesData || [];
-
-      const totalEvasoes = evasoes.length;
-      // Simplificado - sem joins, usar tipo_saida_id diretamente
-      const evasoesInterrompidas = evasoes.filter((e: any) => e.tipo_saida_id === 1).length;
-      const avisosPrevios = evasoes.filter((e: any) => e.tipo_saida_id === 2).length;
-      const transferencias = evasoes.filter((e: any) => e.tipo_saida_id === 3).length;
-      const mrrPerdido = evasoes.reduce((acc: number, e: any) => acc + (e.valor_parcela || 0), 0);
-
-      const renovacoesRealizadas = renovacoes.filter(r => r.status === 'renovado').length;
-      const naoRenovacoes = renovacoes.filter(r => r.status === 'nao_renovou').length;
-      const renovacoesPendentes = renovacoes.filter(r => r.status === 'pendente').length;
-      const renovacoesAtrasadas = renovacoes.filter(r => r.status === 'pendente' && new Date(r.data_vencimento) < new Date()).length;
-
-      const consolidado: KPIsRetencao = {
-        unidade_id: unidadeId === 'todos' ? 'todos' : unidadeId,
-        unidade_nome: unidadeId === 'todos' ? 'Consolidado' : '',
-        ano: currentYear,
-        mes: currentMonth,
-        total_evasoes: totalEvasoes,
-        evasoes_interrompidas: evasoesInterrompidas,
-        avisos_previos: avisosPrevios,
-        transferencias: transferencias,
-        taxa_evasao: totalAlunos && totalAlunos > 0 ? ((totalEvasoes - transferencias) / totalAlunos) * 100 : 0,
-        mrr_perdido: mrrPerdido,
-        renovacoes_previstas: renovacoes.length,
-        renovacoes_realizadas: renovacoesRealizadas,
-        nao_renovacoes: naoRenovacoes,
-        renovacoes_pendentes: renovacoesPendentes,
-        renovacoes_atrasadas: renovacoesAtrasadas,
-        taxa_renovacao: renovacoes.length > 0 ? (renovacoesRealizadas / renovacoes.length) * 100 : 0,
-        taxa_nao_renovacao: renovacoes.length > 0 ? (naoRenovacoes / renovacoes.length) * 100 : 0,
-        evasoes_por_motivo: {},
-        evasoes_por_professor: {},
-      };
-
-      // Agrupar evasões por motivo (usando ID por enquanto)
-      const motivosMap = new Map<string, number>();
-      evasoes.forEach((e: any) => {
-        const motivo = `Motivo ${e.motivo_saida_id || 'N/A'}`;
-        motivosMap.set(motivo, (motivosMap.get(motivo) || 0) + 1);
-      });
-      consolidado.evasoes_por_motivo = Object.fromEntries(motivosMap);
-
-      // Agrupar evasões por professor (usando ID por enquanto)
-      const profsMap = new Map<string, number>();
-      evasoes.forEach((e: any) => {
-        const prof = `Professor ${e.professor_id || 'N/A'}`;
-        profsMap.set(prof, (profsMap.get(prof) || 0) + 1);
-      });
-      consolidado.evasoes_por_professor = Object.fromEntries(profsMap);
-
-      setData(consolidado);
-
-      setMotivosSaida(
-        Array.from(motivosMap.entries())
-          .map(([name, value]) => ({ name, value }))
-          .sort((a, b) => b.value - a.value)
-      );
-
-      setEvasoesPorProfessor(
-        Array.from(profsMap.entries())
-          .map(([nome, valor], index) => ({ id: index, nome, valor }))
-          .sort((a, b) => b.valor - a.valor)
-      );
-
-    } catch (err) {
-      console.error('Erro no fallback de KPIs Retenção:', err);
-    }
-  };
 
   useEffect(() => {
     fetchData();

@@ -44,6 +44,16 @@ import { CaixaEntradaTab } from './CaixaEntrada';
 import { ModalPermanenciaDetalhe } from '@/components/GestaoMensal/ModalPermanenciaDetalhe';
 import { ModalDetalheKPI, BadgeUnidade, ValorParcela, TextoCurso } from '@/components/App/Dashboard/ModalDetalheKPI';
 import { fetchKPIsAlunosCanonicos } from '@/hooks/useKPIsAlunosCanonicos';
+import {
+  aplicarFallbacksRetencao,
+  calcularRetencaoOperacionalCanonica,
+  consolidarRetencaoOperacional,
+  isRenovacaoConfirmadaOperacional,
+  pagantesMapFromKPIsCanonicos,
+  unidadesFromKPIsCanonicos,
+  valorPerdidoMovimentacao,
+  type RetencaoOperacionalPorUnidade,
+} from '@/lib/retencaoOperacionalCanonica';
 
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 
@@ -72,7 +82,14 @@ export interface MovimentacaoAdmin {
   observacoes?: string | null;
   created_at?: string;
   unidades?: { codigo: string };
-  alunos?: { classificacao: string };
+  alunos?: {
+    classificacao?: string | null;
+    valor_parcela?: number | string | null;
+    data_matricula?: string | null;
+    data_saida?: string | null;
+    tipo_matricula_id?: number | string | null;
+    is_segundo_curso?: boolean | null;
+  } | null;
 }
 
 export interface ResumoMes {
@@ -104,10 +121,11 @@ export interface ResumoMes {
   novos_bolsistas: number;
 }
 
-type TabId = 'renovacoes' | 'nao_renovacoes' | 'avisos' | 'cancelamentos' | 'trancamentos' | 'alunos_novos';
+type TabId = 'renovacoes' | 'renovacoes_pendentes' | 'nao_renovacoes' | 'avisos' | 'cancelamentos' | 'trancamentos' | 'alunos_novos';
 
 const tabs: { id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: 'renovacoes', label: 'Renovações', icon: CheckCircle },
+  { id: 'renovacoes_pendentes', label: 'Renovações pendentes', icon: AlertTriangle },
   { id: 'nao_renovacoes', label: 'Não Renovação', icon: XCircle },
   { id: 'avisos', label: 'Avisos Prévios', icon: AlertTriangle },
   { id: 'cancelamentos', label: 'Cancelamentos', icon: DoorOpen },
@@ -263,15 +281,17 @@ export function AdministrativoPage() {
         .lte('data', endDate)
         .order('data', { ascending: false });
 
-      const mesSaidaStart = `${ano}-${String(mes).padStart(2, '0')}-01`;
-      const mesSaidaEnd = `${ano}-${String(mes).padStart(2, '0')}-28`;
+      const mesSaidaDate = new Date(ano, mes, 1);
+      const mesSaidaAno = mesSaidaDate.getFullYear();
+      const mesSaidaMes = mesSaidaDate.getMonth() + 1;
+      const mesSaidaStart = `${mesSaidaAno}-${String(mesSaidaMes).padStart(2, '0')}-01`;
+      const mesSaidaEnd = `${mesSaidaAno}-${String(mesSaidaMes).padStart(2, '0')}-${String(new Date(mesSaidaAno, mesSaidaMes, 0).getDate()).padStart(2, '0')}`;
       let queryAvisos = supabase
         .from('movimentacoes_admin')
         .select('*, unidades!movimentacoes_admin_unidade_id_fkey(codigo)')
         .eq('tipo', 'aviso_previo')
         .gte('mes_saida', mesSaidaStart)
         .lte('mes_saida', mesSaidaEnd)
-        .lt('data', startDate)
         .order('data', { ascending: false });
 
       if (unidade !== 'todos') {
@@ -279,23 +299,12 @@ export function AdministrativoPage() {
         queryAvisos = queryAvisos.eq('unidade_id', unidade);
       }
 
-      // 5 queries em paralelo — inclui view de retenção para KPIs consistentes com Analytics
-      let retencaoQuery = supabase
-        .from('vw_kpis_retencao_mensal')
-        .select('*')
-        .eq('ano', ano)
-        .eq('mes', mes);
-      if (unidade !== 'todos') {
-        retencaoQuery = retencaoQuery.eq('unidade_id', unidade);
-      }
-
-      const [movResult, avisosResult, profsResult, fpResult, cursosResult, retencaoResult] = await Promise.all([
+      const [movResult, avisosResult, profsResult, fpResult, cursosResult] = await Promise.all([
         query,
         queryAvisos,
         supabase.from('professores').select('id, nome').eq('ativo', true).order('nome'),
         supabase.from('formas_pagamento').select('id, nome, sigla').order('nome'),
         supabase.from('cursos').select('id, nome').order('nome'),
-        retencaoQuery,
       ]);
 
       const { data: movData, error: movError } = movResult;
@@ -304,7 +313,6 @@ export function AdministrativoPage() {
       const profData = profsResult.data;
       const fpData = fpResult.data;
       const cursosData = cursosResult.data;
-      const retencaoData = retencaoResult.data;
 
       // Combinar resultados sem duplicatas
       const idsJaPresentes = new Set((movData || []).map(m => m.id));
@@ -320,17 +328,17 @@ export function AdministrativoPage() {
       if (alunosIds.length > 0) {
         const { data: alunosData } = await supabase
           .from('alunos')
-          .select('id, classificacao, tipo_matricula_id, is_segundo_curso')
+          .select('id, classificacao, valor_parcela, data_matricula, data_saida, tipo_matricula_id, is_segundo_curso')
           .in('id', alunosIds);
         
-        alunosMap = new Map(alunosData?.map(a => [a.id, a]) || []);
+        alunosMap = new Map(alunosData?.map(a => [String(a.id), a]) || []);
       }
 
       // Enriquecer movimentações com classificação dos alunos e nome do curso
       const cursosMap = new Map((cursosData || []).map(c => [c.id, c.nome]));
-      const movDataComAlunos = movCombinado.map(m => ({
+      const movDataComAlunos = movCombinado.map(m => aplicarFallbacksRetencao({
         ...m,
-        alunos: m.aluno_id ? alunosMap.get(m.aluno_id) : null,
+        alunos: m.aluno_id ? alunosMap.get(String(m.aluno_id)) : null,
         curso_nome: m.curso_id ? cursosMap.get(m.curso_id) || null : null,
       }));
 
@@ -424,7 +432,8 @@ export function AdministrativoPage() {
       }), {} as any) || {};
 
       // Contar movimentações por tipo
-      const renovacoes = movDataComAlunos?.filter(m => m.tipo === 'renovacao') || [];
+      const renovacoesTodas = movDataComAlunos?.filter(m => m.tipo === 'renovacao') || [];
+      const renovacoes = renovacoesTodas.filter(isRenovacaoConfirmadaOperacional);
       const naoRenovacoes = movDataComAlunos?.filter(m => m.tipo === 'nao_renovacao') || [];
       const avisosPrevios = movDataComAlunos?.filter(m => m.tipo === 'aviso_previo') || [];
       const evasoes = movDataComAlunos?.filter(m => m.tipo === 'evasao') || [];
@@ -471,23 +480,40 @@ export function AdministrativoPage() {
         a.tipo_matricula_id && [3, 4, 5].includes(a.tipo_matricula_id)
       ).length;
 
-      // Consolidar dados de retenção da view (fonte de verdade = mesma do Analytics)
-      const retConsolidado = retencaoData?.reduce((acc: any, r: any) => ({
-        total_evasoes: (acc.total_evasoes || 0) + (r.total_evasoes || 0),
-        evasoes_interrompidas: (acc.evasoes_interrompidas || 0) + (r.evasoes_interrompidas || 0),
-        nao_renovacoes: (acc.nao_renovacoes || 0) + (r.nao_renovacoes || 0),
-        avisos_previos: (acc.avisos_previos || 0) + (r.avisos_previos || 0),
-        mrr_perdido: (acc.mrr_perdido || 0) + (Number(r.mrr_perdido) || 0),
-        renovacoes_previstas: (acc.renovacoes_previstas || 0) + (r.renovacoes_previstas || 0),
-        renovacoes_realizadas: (acc.renovacoes_realizadas || 0) + (r.renovacoes_realizadas || 0),
-        renovacoes_pendentes: (acc.renovacoes_pendentes || 0) + (r.renovacoes_pendentes || 0),
-      }), {}) || {};
+      const retencaoRows: RetencaoOperacionalPorUnidade[] = kpisAlunosCanonicos.fonte === 'vivo'
+        ? calcularRetencaoOperacionalCanonica({
+            movimentacoes: movDataComAlunos,
+            unidades: unidadesFromKPIsCanonicos(kpisAlunosCanonicos.porUnidade),
+            alunosPagantesPorUnidade: pagantesMapFromKPIsCanonicos(kpisAlunosCanonicos.porUnidade),
+            ano,
+            mes,
+          })
+        : kpisAlunosCanonicos.porUnidade.map(row => ({
+            unidade_id: row.unidade_id,
+            unidade_nome: row.unidade_nome,
+            ano: row.ano,
+            mes: row.mes,
+            total_evasoes: row.evasoes,
+            evasoes_interrompidas: row.evasoes,
+            avisos_previos: 0,
+            transferencias: 0,
+            taxa_evasao: row.churnRate,
+            mrr_perdido: 0,
+            renovacoes_previstas: 0,
+            renovacoes_realizadas: 0,
+            nao_renovacoes: 0,
+            renovacoes_pendentes: 0,
+            renovacoes_atrasadas: 0,
+            taxa_renovacao: 0,
+            taxa_nao_renovacao: 0,
+            evasoes_por_motivo: {},
+            evasoes_por_professor: {},
+            base_alunos_pagantes: row.alunosPagantes,
+          }));
 
-      // Montar resumo — combinar view + movimentacoes_admin para dados completos
-      // A view só conta registros da tabela `renovacoes` (que só tem renovados).
-      // Não renovações vêm de movimentacoes_admin, então usamos Math.max para pegar o maior.
-      const naoRenovacoesCount = Math.max(retConsolidado.nao_renovacoes || 0, naoRenovacoes.length);
-      const renovacoesRealizadasCount = Math.max(retConsolidado.renovacoes_realizadas || 0, renovacoes.length);
+      const retConsolidado = consolidarRetencaoOperacional(retencaoRows, unidade, ano, mes);
+      const naoRenovacoesCount = retConsolidado.nao_renovacoes || 0;
+      const renovacoesRealizadasCount = retConsolidado.renovacoes_realizadas || 0;
       const renovacoesPendentesCount = retConsolidado.renovacoes_pendentes || 0;
 
       setResumo({
@@ -501,9 +527,9 @@ export function AdministrativoPage() {
         renovacoes_realizadas: renovacoesRealizadasCount,
         renovacoes_pendentes: renovacoesPendentesCount,
         nao_renovacoes: naoRenovacoesCount,
-        avisos_previos: avisosPrevios.length,
-        evasoes_total: evasoes.length,
-        evasoes_interrompido: evasoes.length,
+        avisos_previos: retConsolidado.avisos_previos || avisosPrevios.length,
+        evasoes_total: retConsolidado.total_evasoes || 0,
+        evasoes_interrompido: retConsolidado.evasoes_interrompidas || 0,
         evasoes_nao_renovou: naoRenovacoesCount,
         mrr_perdido: retConsolidado.mrr_perdido || 0,
       });
@@ -590,6 +616,58 @@ export function AdministrativoPage() {
     } catch (error) {
       console.error('Erro ao salvar:', error);
       toastError('Erro ao salvar', 'Ocorreu um erro ao salvar o registro. Tente novamente.');
+      return false;
+    }
+  }
+
+  async function handleSaveRenovacaoInline(
+    item: MovimentacaoAdmin,
+    patch: Partial<MovimentacaoAdmin>,
+    options: { atualizarLista?: boolean } = {}
+  ) {
+    if (!item.id) return false;
+
+    try {
+      const valorAnterior = Number(
+        patch.valor_parcela_anterior
+          ?? item.valor_parcela_anterior
+          ?? item.alunos?.valor_parcela
+          ?? 0
+      );
+
+      const payload = {
+        ...patch,
+        tipo: 'renovacao' as const,
+        valor_parcela_anterior: valorAnterior > 0 ? valorAnterior : null,
+      };
+
+      const { error } = await supabase
+        .from('movimentacoes_admin')
+        .update(payload)
+        .eq('id', item.id);
+
+      if (error) throw error;
+
+      if (options.atualizarLista) {
+        const formaPagamentoNome = payload.forma_pagamento_id
+          ? formasPagamento.find(fp => fp.id === payload.forma_pagamento_id)?.sigla
+          : undefined;
+
+        setMovimentacoes(prev => prev.map(m => (
+          m.id === item.id
+            ? {
+                ...m,
+                ...payload,
+                forma_pagamento_nome: formaPagamentoNome ?? m.forma_pagamento_nome,
+              }
+            : m
+        )));
+      }
+
+      return true;
+    } catch (error) {
+      console.error('Erro ao salvar renovacao inline:', error);
+      toastError('Erro ao salvar renovacao', 'Nao foi possivel atualizar a renovacao pendente.');
       return false;
     }
   }
@@ -696,7 +774,8 @@ export function AdministrativoPage() {
   }
 
   // Filtrar movimentações por tipo
-  const renovacoes = movimentacoes.filter(m => m.tipo === 'renovacao');
+  const renovacoes = movimentacoes.filter(m => isRenovacaoConfirmadaOperacional(m));
+  const renovacoesPendentesConfirmacao = movimentacoes.filter(m => m.tipo === 'renovacao' && !isRenovacaoConfirmadaOperacional(m));
   const avisosPrevios = movimentacoes.filter(m => m.tipo === 'aviso_previo');
   const evasoes = movimentacoes.filter(m => m.tipo === 'evasao');
   const naoRenovacoes = movimentacoes.filter(m => m.tipo === 'nao_renovacao');
@@ -789,11 +868,11 @@ export function AdministrativoPage() {
           ? ((((resumo?.evasoes_interrompido || 0) + (resumo?.evasoes_nao_renovou || 0)) / resumo.alunos_pagantes) * 100)
           : 0}
         taxaRenovacao={(() => {
-          const totalVenc = (resumo?.renovacoes_realizadas || 0) + (resumo?.nao_renovacoes || 0);
+          const totalVenc = (resumo?.renovacoes_realizadas || 0) + (resumo?.nao_renovacoes || 0) + (resumo?.renovacoes_pendentes || 0);
           return totalVenc > 0 ? ((resumo?.renovacoes_realizadas || 0) / totalVenc) * 100 : undefined;
         })()}
         totalRenovacoes={resumo?.renovacoes_realizadas || 0}
-        totalVencimentos={(resumo?.renovacoes_realizadas || 0) + (resumo?.nao_renovacoes || 0)}
+        totalVencimentos={(resumo?.renovacoes_realizadas || 0) + (resumo?.nao_renovacoes || 0) + (resumo?.renovacoes_pendentes || 0)}
         totalEvasoes={(resumo?.evasoes_interrompido || 0) + (resumo?.evasoes_nao_renovou || 0)}
         alunosAtivos={resumo?.alunos_ativos || 0}
       />
@@ -952,13 +1031,13 @@ export function AdministrativoPage() {
                 <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Taxa de Renovação</p>
                 <p className="text-3xl font-bold text-emerald-400">
                   {(() => {
-                    const totalVencimentos = (resumo?.renovacoes_realizadas || 0) + (resumo?.nao_renovacoes || 0);
+                    const totalVencimentos = (resumo?.renovacoes_realizadas || 0) + (resumo?.nao_renovacoes || 0) + (resumo?.renovacoes_pendentes || 0);
                     if (totalVencimentos === 0) return '0.0';
                     return (((resumo?.renovacoes_realizadas || 0) / totalVencimentos) * 100).toFixed(1);
                   })()}%
                 </p>
                 <p className="text-xs text-slate-500 mt-1">
-                  {resumo?.renovacoes_realizadas || 0} de {(resumo?.renovacoes_realizadas || 0) + (resumo?.nao_renovacoes || 0)} vencimentos
+                  {resumo?.renovacoes_realizadas || 0} de {(resumo?.renovacoes_realizadas || 0) + (resumo?.nao_renovacoes || 0) + (resumo?.renovacoes_pendentes || 0)} vencimentos
                 </p>
               </div>
               
@@ -1159,7 +1238,7 @@ export function AdministrativoPage() {
                     const mrrView = resumo?.mrr_perdido || 0;
                     if (mrrView > 0) return Number(mrrView).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
                     // Fallback: calcular das movimentações
-                    const total = [...naoRenovacoes, ...evasoes].reduce((acc, m) => acc + (m.valor_parcela_evasao || 0), 0);
+                    const total = [...naoRenovacoes, ...evasoes].reduce((acc, m) => acc + valorPerdidoMovimentacao(m), 0);
                     return total.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
                   })()}
                 </p>
@@ -1168,9 +1247,9 @@ export function AdministrativoPage() {
                     const mrrView = resumo?.mrr_perdido || 0;
                     const totalEv = resumo?.evasoes_total || 0;
                     if (mrrView > 0 && totalEv > 0) return (mrrView / totalEv).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
-                    const todos = [...naoRenovacoes, ...evasoes].filter(m => m.valor_parcela_evasao);
+                    const todos = [...naoRenovacoes, ...evasoes].map(valorPerdidoMovimentacao).filter(valor => valor > 0);
                     if (todos.length === 0) return '0,00';
-                    const media = todos.reduce((acc, m) => acc + (m.valor_parcela_evasao || 0), 0) / todos.length;
+                    const media = todos.reduce((acc, valor) => acc + valor, 0) / todos.length;
                     return media.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
                   })()} ticket médio
                 </p>
@@ -1186,9 +1265,9 @@ export function AdministrativoPage() {
                   R$ {(() => {
                     // Usar tempo de permanência global (da view) × ticket médio das evasões do mês
                     const tempoGlobal = resumo?.ltv_meses ? Number(resumo.ltv_meses) : 0;
-                    const todos = [...naoRenovacoes, ...evasoes].filter(m => m.valor_parcela_evasao);
+                    const todos = [...naoRenovacoes, ...evasoes].map(valorPerdidoMovimentacao).filter(valor => valor > 0);
                     if (tempoGlobal === 0 || todos.length === 0) return '0,00';
-                    const ticketMedio = todos.reduce((acc, m) => acc + (m.valor_parcela_evasao || 0), 0) / todos.length;
+                    const ticketMedio = todos.reduce((acc, valor) => acc + valor, 0) / todos.length;
                     const ltv = tempoGlobal * ticketMedio;
                     return ltv.toLocaleString('pt-BR', { minimumFractionDigits: 2 });
                   })()}
@@ -1196,9 +1275,9 @@ export function AdministrativoPage() {
                 <p className="text-xs text-emerald-300/70 mt-1">
                   {(() => {
                     const tempoGlobal = resumo?.ltv_meses ? Number(resumo.ltv_meses) : 0;
-                    const todos = [...naoRenovacoes, ...evasoes].filter(m => m.valor_parcela_evasao);
+                    const todos = [...naoRenovacoes, ...evasoes].map(valorPerdidoMovimentacao).filter(valor => valor > 0);
                     if (tempoGlobal === 0 || todos.length === 0) return '- meses × R$ -';
-                    const ticketMedio = todos.reduce((acc, m) => acc + (m.valor_parcela_evasao || 0), 0) / todos.length;
+                    const ticketMedio = todos.reduce((acc, valor) => acc + valor, 0) / todos.length;
                     return `${tempoGlobal.toFixed(1)}m × R$ ${ticketMedio.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
                   })()}
                 </p>
@@ -1218,7 +1297,7 @@ export function AdministrativoPage() {
             </div>
             <div>
               <h2 className="text-lg font-bold text-white">Detalhamento do Mês</h2>
-              <p className="text-sm text-emerald-400">{renovacoes.length + avisosPrevios.length + evasoes.length + naoRenovacoes.length + trancamentos.length + alunosNovos.filter(a => !a.is_segundo_curso && !(a.tipo_matricula_id && [3, 4, 5].includes(a.tipo_matricula_id))).length} movimentações</p>
+              <p className="text-sm text-emerald-400">{renovacoes.length + renovacoesPendentesConfirmacao.length + avisosPrevios.length + evasoes.length + naoRenovacoes.length + trancamentos.length + alunosNovos.filter(a => !a.is_segundo_curso && !(a.tipo_matricula_id && [3, 4, 5].includes(a.tipo_matricula_id))).length} movimentações</p>
             </div>
           </div>
         </div>
@@ -1228,6 +1307,7 @@ export function AdministrativoPage() {
         <div className="flex gap-2 mb-4">
           {tabs.map(tab => {
             const count = tab.id === 'renovacoes' ? renovacoes.length
+              : tab.id === 'renovacoes_pendentes' ? renovacoesPendentesConfirmacao.length
               : tab.id === 'nao_renovacoes' ? naoRenovacoes.length
               : tab.id === 'avisos' ? avisosPrevios.length
               : tab.id === 'cancelamentos' ? evasoes.length
@@ -1259,6 +1339,16 @@ export function AdministrativoPage() {
               data={renovacoes} 
               onEdit={handleEdit}
               onDelete={handleDeleteMovimentacao}
+            />
+          )}
+          {activeTab === 'renovacoes_pendentes' && (
+            <TabelaRenovacoes
+              data={renovacoesPendentesConfirmacao}
+              onEdit={handleEdit}
+              onDelete={handleDeleteMovimentacao}
+              onSaveInline={handleSaveRenovacaoInline}
+              formasPagamento={formasPagamento}
+              status="pendente"
             />
           )}
           {activeTab === 'nao_renovacoes' && (
@@ -1482,6 +1572,8 @@ export function AdministrativoPage() {
         onOpenChange={setModalPermanenciaOpen}
         unidadeId={unidade || 'todos'}
         mediaAtual={resumo?.ltv_meses ? Number(resumo.ltv_meses) : 0}
+        modo="ltv_evasoes"
+        movimentacoesEvasao={[...naoRenovacoes, ...evasoes]}
       />
 
 

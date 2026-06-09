@@ -17,6 +17,12 @@ import { COMPETENCIA_FECHADA_MESSAGE, getCompetenciaAbertaAlertCopy, useCompeten
 import { fetchKPIsAlunosCanonicos } from '@/hooks/useKPIsAlunosCanonicos';
 import { ModalPermanenciaDetalhe } from './ModalPermanenciaDetalhe';
 import { ModalDetalheKPI, BadgeUnidade, TextoCurso, ValorParcela, BadgeTipo } from '@/components/App/Dashboard/ModalDetalheKPI';
+import {
+  aplicarFallbacksRetencao,
+  calcularRetencaoOperacionalCanonica,
+  pagantesMapFromKPIsCanonicos,
+  unidadesFromKPIsCanonicos,
+} from '@/lib/retencaoOperacionalCanonica';
 
 interface TabGestaoProps {
   ano: number;
@@ -313,17 +319,18 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
 
         let gestaoData: any[] = [];
         let retencaoData: any[] = [];
+        let kpisAlunosCanonicosAtual: any = null;
 
         if (isPeriodoAtual) {
           // PERIODO ATUAL: KPIs executivos de alunos vêm da fonte viva canônica.
-          const kpisAlunosCanonicos = await fetchKPIsAlunosCanonicos({
+          kpisAlunosCanonicosAtual = await fetchKPIsAlunosCanonicos({
             unidadeId: unidade,
             ano: anoAtual,
             mes: mesAtual,
           });
 
-          gestaoData = kpisAlunosCanonicos.fonte !== 'indisponivel'
-            ? kpisAlunosCanonicos.porUnidade.map(row => ({
+          gestaoData = kpisAlunosCanonicosAtual.fonte !== 'indisponivel'
+            ? kpisAlunosCanonicosAtual.porUnidade.map((row: any) => ({
                 unidade_id: row.unidade_id,
                 unidade_nome: row.unidade_nome,
                 ano: row.ano,
@@ -354,23 +361,87 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               }))
             : [];
 
-          // Buscar dados de retenção (filtrar por ano e range de meses)
-          let retencaoQuery = supabase
-            .from('vw_kpis_retencao_mensal')
-            .select('*')
-            .eq('ano', ano)
-            .gte('mes', mesInicio)
-            .lte('mes', mesFinal);
+          const retencaoStartDate = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
+          const retencaoEndDate = `${ano}-${String(mesFinal).padStart(2, '0')}-${String(new Date(ano, mesFinal, 0).getDate()).padStart(2, '0')}`;
+          const avisoSaidaDate = new Date(ano, mesFinal, 1);
+          const avisoSaidaAno = avisoSaidaDate.getFullYear();
+          const avisoSaidaMes = avisoSaidaDate.getMonth() + 1;
+          const avisoSaidaStartDate = `${avisoSaidaAno}-${String(avisoSaidaMes).padStart(2, '0')}-01`;
+          const avisoSaidaEndDate = `${avisoSaidaAno}-${String(avisoSaidaMes).padStart(2, '0')}-${String(new Date(avisoSaidaAno, avisoSaidaMes, 0).getDate()).padStart(2, '0')}`;
+          const selectRetencao = `
+            id, aluno_id, aluno_nome, unidade_id, tipo, data, mes_saida,
+            valor_parcela_evasao, valor_parcela_anterior, valor_parcela_novo,
+            tempo_permanencia_meses,
+            forma_pagamento_id, agente_comercial,
+            tipo_evasao, motivo, observacoes, professor_id
+          `;
+
+          let movimentacoesRetencaoQuery = supabase
+            .from('movimentacoes_admin')
+            .select(selectRetencao)
+            .in('tipo', ['renovacao', 'nao_renovacao', 'aviso_previo', 'evasao', 'trancamento'])
+            .gte('data', retencaoStartDate)
+            .lte('data', retencaoEndDate);
+
+          let avisosRetroativosQuery = supabase
+            .from('movimentacoes_admin')
+            .select(selectRetencao)
+            .eq('tipo', 'aviso_previo')
+            .gte('mes_saida', avisoSaidaStartDate)
+            .lte('mes_saida', avisoSaidaEndDate);
 
           if (unidade !== 'todos') {
-            retencaoQuery = retencaoQuery.eq('unidade_id', unidade);
+            movimentacoesRetencaoQuery = movimentacoesRetencaoQuery.eq('unidade_id', unidade);
+            avisosRetroativosQuery = avisosRetroativosQuery.eq('unidade_id', unidade);
           }
 
-          const { data: retData, error: retencaoError } = await retencaoQuery;
-          if (retencaoError) throw retencaoError;
-          retencaoData = retData || [];
+          const [movRetencaoResult, avisosRetencaoResult] = await Promise.all([
+            movimentacoesRetencaoQuery,
+            avisosRetroativosQuery,
+          ]);
+          if (movRetencaoResult.error) throw movRetencaoResult.error;
+          if (avisosRetencaoResult.error) throw avisosRetencaoResult.error;
+
+          const idsRetencao = new Set((movRetencaoResult.data || []).map((row: any) => row.id));
+          const movimentacoesRetencao = [
+            ...(movRetencaoResult.data || []),
+            ...(avisosRetencaoResult.data || []).filter((row: any) => !idsRetencao.has(row.id)),
+          ];
+          const alunoIdsRetencao = Array.from(new Set(
+            movimentacoesRetencao
+              .map((row: any) => row.aluno_id)
+              .filter(Boolean)
+              .map(String)
+          ));
+          let alunosRetencaoMap = new Map<string, any>();
+
+          if (alunoIdsRetencao.length > 0) {
+            const { data: alunosRetencaoData, error: alunosRetencaoError } = await supabase
+              .from('alunos')
+              .select('id, valor_parcela, data_matricula, data_saida, tipo_matricula_id, is_segundo_curso')
+              .in('id', alunoIdsRetencao);
+            if (alunosRetencaoError) throw alunosRetencaoError;
+
+            alunosRetencaoMap = new Map(
+              (alunosRetencaoData || []).map((aluno: any) => [String(aluno.id), aluno])
+            );
+          }
+
+          const movimentacoesRetencaoEnriquecidas = movimentacoesRetencao.map((row: any) => aplicarFallbacksRetencao({
+            ...row,
+            alunos: row.aluno_id ? alunosRetencaoMap.get(String(row.aluno_id)) || null : null,
+          }));
+
+          retencaoData = calcularRetencaoOperacionalCanonica({
+            movimentacoes: movimentacoesRetencaoEnriquecidas,
+            unidades: unidadesFromKPIsCanonicos(kpisAlunosCanonicosAtual.porUnidade),
+            alunosPagantesPorUnidade: pagantesMapFromKPIsCanonicos(kpisAlunosCanonicosAtual.porUnidade),
+            ano,
+            mes: mesInicio,
+            mesFim: mesFinal,
+          });
         } else {
-          // PERÍODO HISTÓRICO: usar dados_mensais + vw_kpis_gestao_mensal como fallback para reajuste
+          // PERÍODO HISTÓRICO: usar dados_mensais. Sem fallback vivo para mês histórico.
           let historicoQuery = supabase
             .from('dados_mensais')
             .select('*, unidades(nome)')
@@ -382,34 +453,8 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             historicoQuery = historicoQuery.eq('unidade_id', unidade);
           }
 
-          // Buscar view em paralelo para ter reajuste_medio real como fallback
-          let viewQuery = supabase
-            .from('vw_kpis_gestao_mensal')
-            .select('unidade_id, ano, mes, reajuste_medio')
-            .eq('ano', ano)
-            .gte('mes', mesInicio)
-            .lte('mes', mesFinal);
-
-          if (unidade !== 'todos') {
-            viewQuery = viewQuery.eq('unidade_id', unidade);
-          }
-
-          const [{ data: historicoData, error: historicoError }, { data: viewData }] = await Promise.all([
-            historicoQuery,
-            viewQuery,
-          ]);
+          const { data: historicoData, error: historicoError } = await historicoQuery;
           if (historicoError) throw historicoError;
-
-          // Mapa de reajuste_medio real da view por (unidade_id, ano, mes)
-          const reajusteViewMap = new Map<string, number>();
-          (viewData || []).forEach((v: any) => {
-            const key = `${v.unidade_id}-${v.ano}-${v.mes}`;
-            const val = Number(v.reajuste_medio);
-            if (val > 0) reajusteViewMap.set(key, val);
-          });
-          console.log('[DEBUG Reajuste] viewData=', viewData);
-          console.log('[DEBUG Reajuste] reajusteViewMap=', Array.from(reajusteViewMap.entries()));
-          console.log('[DEBUG Reajuste] historicoData reajuste_parcelas=', historicoData?.map((d: any) => ({ uid: d.unidade_id, rp: d.reajuste_parcelas })));
 
           // Buscar dados de evasões detalhados de movimentacoes_admin
           const startDate = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
@@ -457,7 +502,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               churn_rate: Number(d.churn_rate) || 0,
               total_evasoes: d.evasoes || 0,
               novas_matriculas: d.novas_matriculas || 0,
-              reajuste_pct: Number(reajusteViewMap.get(`${d.unidade_id}-${d.ano}-${d.mes}`) ?? d.reajuste_parcelas) || 0,
+              reajuste_pct: Number(d.reajuste_parcelas) || 0,
             }));
 
             // Dados de retenção do histórico
@@ -478,109 +523,6 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             gestaoData = [];
             retencaoData = [];
             console.warn('Competencia sem snapshot em dados_mensais. KPIs historicos indisponiveis ate fechamento formal.');
-
-            if (false) {
-            // FALLBACK: dados_mensais não tem dados, calcular das tabelas base
-            // Buscar alunos ativos/pagantes
-            let alunosQuery = supabase
-              .from('alunos')
-              .select('id, status, tipo_matricula_id, is_segundo_curso, valor_parcela, tipos_matricula(codigo, conta_como_pagante)')
-              .in('status', ['ativo', 'trancado']);
-
-            if (unidade !== 'todos') {
-              alunosQuery = alunosQuery.eq('unidade_id', unidade);
-            }
-
-            // Buscar matrículas do período
-            let matriculasQuery = supabase
-              .from('alunos')
-              .select('id')
-              .gte('data_matricula', startDate)
-              .lte('data_matricula', endDate);
-
-            if (unidade !== 'todos') {
-              matriculasQuery = matriculasQuery.eq('unidade_id', unidade);
-            }
-
-            // Buscar renovações do período
-            let renovacoesQuery = supabase
-              .from('renovacoes')
-              .select('id, status, percentual_reajuste')
-              .gte('data_renovacao', startDate)
-              .lte('data_renovacao', endDate);
-
-            if (unidade !== 'todos') {
-              renovacoesQuery = renovacoesQuery.eq('unidade_id', unidade);
-            }
-
-            const [alunosRes, matriculasRes, renovacoesRes] = await Promise.all([
-              alunosQuery,
-              matriculasQuery,
-              renovacoesQuery
-            ]);
-
-            const alunosData = alunosRes.data || [];
-            // Pessoa-level: alunos ativos (qualquer registro ativo/trancado = 1 pessoa)
-            const nomesAtivos = new Set(alunosData.map((a: any) => a.nome));
-            const totalAtivos = nomesAtivos.size;
-
-            // Pessoa-level: pagantes (conta_como_pagante + valor_parcela > 0)
-            // Não usa is_segundo_curso porque banda/projeto pode estar marcado como segundo
-            // curso na UI (única opção disponível para "outro curso").
-            const pagantesRecords = alunosData.filter((a: any) =>
-              (a.tipos_matricula as any)?.conta_como_pagante && (a.valor_parcela || 0) > 0
-            );
-            const nomesPagantes = new Set(pagantesRecords.map((a: any) => a.nome));
-            const totalPagantes = nomesPagantes.size;
-            const faturamento = pagantesRecords.reduce((sum: number, a: any) => sum + (Number(a.valor_parcela) || 0), 0);
-            const ticketMedio = totalPagantes > 0 ? faturamento / totalPagantes : 0;
-            const novasMatriculas = matriculasRes.data?.length || 0;
-            const totalEvasoes = (evasoesHistorico?.length || 0);
-            
-            const renovacoesData = renovacoesRes.data || [];
-            const renovacoesRealizadas = renovacoesData.filter((r: any) => r.status === 'renovado').length;
-            const taxaRenovacao = renovacoesData.length > 0 ? (renovacoesRealizadas / renovacoesData.length) * 100 : 0;
-            const reajusteRenovados = renovacoesData.filter((r: any) => r.status === 'renovado' && r.percentual_reajuste != null);
-            const reajusteMedioFallback = reajusteRenovados.length > 0
-              ? reajusteRenovados.reduce((sum: number, r: any) => sum + Number(r.percentual_reajuste), 0) / reajusteRenovados.length
-              : 0;
-
-            gestaoData = [{
-              unidade_id: unidade !== 'todos' ? unidade : null,
-              unidade_nome: 'N/A',
-              ano: ano,
-              mes: mesInicio,
-              total_alunos_ativos: totalAtivos,
-              total_alunos_pagantes: totalPagantes,
-              total_bolsistas_integrais: 0,
-              total_bolsistas_parciais: 0,
-              total_banda: 0,
-              ticket_medio: Math.round(ticketMedio),
-              mrr: faturamento,
-              arr: faturamento * 12,
-              tempo_permanencia_medio: 0,
-              ltv_medio: 0,
-              inadimplencia_pct: 0,
-              faturamento_previsto: faturamento,
-              faturamento_realizado: faturamento,
-              churn_rate: totalPagantes > 0 ? (totalEvasoes / totalPagantes) * 100 : 0,
-              total_evasoes: totalEvasoes,
-              novas_matriculas: novasMatriculas,
-              reajuste_pct: Math.round(reajusteMedioFallback * 100) / 100,
-            }];
-
-            retencaoData = [{
-              unidade_id: unidade !== 'todos' ? unidade : null,
-              total_evasoes: totalEvasoes,
-              evasoes_interrompidas: cancelamentos,
-              avisos_previos: 0,
-              mrr_perdido: mrrPerdidoTotal,
-              renovacoes_realizadas: renovacoesRealizadas,
-              nao_renovacoes: naoRenovacoes,
-              renovacoes_pendentes: 0,
-              taxa_renovacao: taxaRenovacao,
-            }];
-            }
           }
         }
 
@@ -741,13 +683,11 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           }) || { total_evasoes: 0, evasoes_interrompidas: 0, avisos_previos: 0, mrr_perdido: 0,
             renovacoes_realizadas: 0, nao_renovacoes: 0, renovacoes_pendentes: 0, taxa_renovacao: 0, count: 1 };
 
-          // Usar dados consolidados da view (período atual) ou dados_mensais (histórico)
+          // Usar fonte canônica viva (período atual) ou dados_mensais (histórico)
           let novasMatriculas = g.novas_matriculas || 0;
           let evasoes = g.total_evasoes || 0;
           
-          if (isPeriodoAtual) {
-            // novasMatriculas e evasoes ja vem da view vw_kpis_gestao_mensal (fonte unificada)
-          }
+          // novasMatriculas e evasoes ja chegam consolidadas na fonte selecionada.
 
           // Buscar matrículas via tabela ALUNOS (mesma fonte do card e da view)
           const startDate = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
@@ -1002,8 +942,8 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             churn_rate: g.count > 0 ? g.churn_rate_sum / g.count : 0,
             renovacoes: r.renovacoes_realizadas,
             nao_renovacoes: r.nao_renovacoes,
-            renovacoes_pct: (r.renovacoes_realizadas + r.nao_renovacoes) > 0
-              ? (r.renovacoes_realizadas / (r.renovacoes_realizadas + r.nao_renovacoes)) * 100
+            renovacoes_pct: (r.renovacoes_realizadas + r.nao_renovacoes + r.renovacoes_pendentes) > 0
+              ? (r.renovacoes_realizadas / (r.renovacoes_realizadas + r.nao_renovacoes + r.renovacoes_pendentes)) * 100
               : 0,
             cancelamentos: r.evasoes_interrompidas,
             cancelamento_pct: mediaAlunos > 0 ? (r.evasoes_interrompidas / mediaAlunos) * 100 : 0,
@@ -1109,36 +1049,50 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
         console.log('🔍 Dados financeiros brutos:', financeiroData?.length, 'registros');
         console.log('🔍 Primeiros 3 registros:', financeiroData?.slice(0, 3));
 
-        // Buscar dados em tempo real do mês atual para complementar dados_mensais
+        // Complementar o mês atual com a fonte canônica viva, sem usar view legada.
         const currentDate = new Date();
         const currentYear = currentDate.getFullYear();
         const currentMonth = currentDate.getMonth() + 1;
+        const currentKey = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
+        const selectedKey = `${ano}-${String(mesFinal).padStart(2, '0')}`;
 
-        let gestaoAtualQuery = supabase
-          .from('vw_kpis_gestao_mensal')
-          .select('unidade_id, inadimplencia_pct, churn_rate, ticket_medio, faturamento_previsto, faturamento_realizado')
-          .eq('ano', currentYear)
-          .eq('mes', currentMonth);
-
-        if (unidade !== 'todos') {
-          gestaoAtualQuery = gestaoAtualQuery.eq('unidade_id', unidade);
-        }
-
-        const { data: gestaoAtualData } = await gestaoAtualQuery;
-
-        // Substituir dados do mês atual em financeiroData com valores em tempo real
-        if (financeiroData && gestaoAtualData && gestaoAtualData.length > 0) {
-          gestaoAtualData.forEach((gestao: any) => {
-            const idx = financeiroData.findIndex((f: any) =>
-              f.ano === currentYear && f.mes === currentMonth && f.unidade_id === gestao.unidade_id
-            );
-            if (idx >= 0) {
-              financeiroData[idx].inadimplencia = Number(gestao.inadimplencia_pct) || 0;
-              financeiroData[idx].churn_rate = Number(gestao.churn_rate) || 0;
-              financeiroData[idx].ticket_medio = Number(gestao.ticket_medio) || 0;
-              financeiroData[idx].faturamento_estimado = Number(gestao.faturamento_previsto) || 0;
-            }
+        if (financeiroData && currentKey <= selectedKey) {
+          const kpisFinanceirosAtual = kpisAlunosCanonicosAtual || await fetchKPIsAlunosCanonicos({
+            unidadeId: unidade,
+            ano: currentYear,
+            mes: currentMonth,
           });
+
+          if (kpisFinanceirosAtual.fonte !== 'indisponivel') {
+            kpisFinanceirosAtual.porUnidade.forEach((row: any) => {
+              const retencaoAtual = (retencaoData || []).find((r: any) =>
+                r.ano === currentYear &&
+                r.mes === currentMonth &&
+                r.unidade_id === row.unidade_id
+              );
+
+              const financeiroAtual = {
+                unidade_id: row.unidade_id,
+                ano: currentYear,
+                mes: currentMonth,
+                inadimplencia: row.inadimplencia,
+                churn_rate: row.churnRate,
+                ticket_medio: row.ticketMedio,
+                faturamento_estimado: row.faturamentoPrevisto,
+                taxa_renovacao: Number(retencaoAtual?.taxa_renovacao) || 0,
+                reajuste_parcelas: row.reajustePct,
+              };
+
+              const idx = financeiroData.findIndex((f: any) =>
+                f.ano === currentYear && f.mes === currentMonth && f.unidade_id === row.unidade_id
+              );
+              if (idx >= 0) {
+                Object.assign(financeiroData[idx], financeiroAtual);
+              } else {
+                financeiroData.push(financeiroAtual);
+              }
+            });
+          }
         }
 
         // Buscar nomes das unidades para o gráfico de receita por unidade
@@ -1764,10 +1718,10 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             />
             <KPICard
               icon={TrendingUp}
-              label="LTV Médio"
-              tooltip="Lifetime Value. Receita total gerada por um aluno durante sua permanencia. Calculado: ticket medio x tempo medio de permanencia."
+              label="LTV Executivo"
+              tooltip="Lifetime Value executivo. Calculado com a fonte canonica: ticket medio dos pagantes ativos x tempo medio historico de permanencia. Nao e o mesmo indicador de impacto financeiro das evasoes."
               value={formatCurrency(dados.ltv_medio)}
-              subvalue="Lifetime Value"
+              subvalue="Ticket ativo x permanencia"
               variant="violet"
             />
             <KPICard

@@ -2,6 +2,7 @@ import { Pencil, Trash2, Info } from 'lucide-react';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
+import { valorPerdidoMovimentacao } from '@/lib/retencaoOperacionalCanonica';
 import type { MovimentacaoAdmin } from './AdministrativoPage';
 
 interface TabelaNaoRenovacoesProps {
@@ -15,7 +16,7 @@ export function TabelaNaoRenovacoes({ data, onEdit, onDelete }: TabelaNaoRenovac
   const isAdmin = usuario?.perfil === 'admin' && usuario?.unidade_id === null;
 
   // Calcular MRR perdido total
-  const mrrPerdido = data.reduce((acc, item) => acc + (item.valor_parcela_evasao || item.valor_parcela_anterior || 0), 0);
+  const mrrPerdido = data.reduce((acc, item) => acc + valorPerdidoMovimentacao(item), 0);
 
   return (
     <div className="overflow-x-auto">
@@ -65,7 +66,7 @@ export function TabelaNaoRenovacoes({ data, onEdit, onDelete }: TabelaNaoRenovac
                   </div>
                 </td>
                 <td className="py-3 px-4 text-right text-amber-400 font-medium">
-                  R$ {(item.valor_parcela_evasao || item.valor_parcela_anterior || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  R$ {valorPerdidoMovimentacao(item).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                 </td>
                 <td className="py-3 px-4 text-center">
                   {item.tempo_permanencia_meses ? (

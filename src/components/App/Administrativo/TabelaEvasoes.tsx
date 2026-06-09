@@ -2,6 +2,7 @@ import { Pencil, Trash2, Info } from 'lucide-react';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/contexts/AuthContext';
+import { calcularTempoPermanenciaMovimentacao } from '@/lib/retencaoOperacionalCanonica';
 import type { MovimentacaoAdmin } from './AdministrativoPage';
 
 interface TabelaEvasoesProps {
@@ -55,6 +56,7 @@ export function TabelaEvasoes({ data, onEdit, onDelete }: TabelaEvasoesProps) {
           ) : (
             data.map((item, index) => {
               const tipoInfo = tipoCancelamentoLabels[item.tipo_evasao || 'interrompido'] || tipoCancelamentoLabels.interrompido;
+              const permanenciaMeses = calcularTempoPermanenciaMovimentacao(item);
               return (
                 <tr key={item.id} className="border-t border-slate-700/30 hover:bg-slate-800/30">
                   <td className="py-3 px-4 text-slate-500">{index + 1}</td>
@@ -84,7 +86,7 @@ export function TabelaEvasoes({ data, onEdit, onDelete }: TabelaEvasoesProps) {
                     </span>
                   </td>
                   <td className="py-3 px-4 text-center">
-                    {item.tempo_permanencia_meses ? (
+                    {permanenciaMeses ? (
                       <span className="text-slate-300 font-medium">
                         {item.tempo_permanencia_meses} {item.tempo_permanencia_meses === 1 ? 'mês' : 'meses'}
                       </span>
