@@ -9,6 +9,11 @@ import { OnboardingProvider } from './src/contexts/OnboardingContext';
 import { ErrorBoundary } from './src/components/App/Auth/ErrorBoundary';
 import './src/index.css';
 
+// Chunk hash muda a cada build. Se o browser tenta carregar URL antiga → reload silencioso.
+window.addEventListener('vite:preloadError', () => {
+  window.location.reload();
+});
+
 const rootElement = document.getElementById('root');
 if (!rootElement) {
   throw new Error("Could not find root element to mount to");

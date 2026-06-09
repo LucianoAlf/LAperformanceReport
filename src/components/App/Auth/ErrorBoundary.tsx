@@ -25,6 +25,13 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     console.error('ErrorBoundary capturou erro:', error, errorInfo);
+    const isChunkError =
+      error.message?.includes('Failed to fetch dynamically imported module') ||
+      error.message?.includes('Importing a module script failed') ||
+      error.name === 'ChunkLoadError';
+    if (isChunkError) {
+      window.location.reload();
+    }
   }
 
   render(): React.ReactNode {
