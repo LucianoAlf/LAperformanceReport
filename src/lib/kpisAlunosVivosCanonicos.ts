@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabase';
+import { isRenovacaoConfirmadaOperacional } from '@/lib/retencaoOperacionalCanonica';
 
 export interface KPIsAlunosVivosPorUnidade {
   unidade_id: string;
@@ -45,6 +46,7 @@ type AlunoRow = {
   data_saida: string | null;
   unidade_id: string | null;
   valor_parcela: number | string | null;
+  status_pagamento: string | null;
   is_segundo_curso: boolean | null;
   cursos?: any;
   tipos_matricula?: any;
@@ -57,6 +59,10 @@ type MovimentoRow = {
   unidade_id: string | null;
   tipo: string | null;
   data: string | null;
+  valor_parcela_anterior?: number | string | null;
+  valor_parcela_novo?: number | string | null;
+  forma_pagamento_id?: number | string | null;
+  agente_comercial?: string | null;
 };
 
 type TempoPermanenciaRow = {
@@ -140,6 +146,10 @@ function isParcelaRecorrentePagante(row: AlunoRow): boolean {
   return tipoRow(row)?.entra_ticket_medio === true && n(row.valor_parcela) > 0;
 }
 
+function isParcelaInadimplente(row: AlunoRow): boolean {
+  return String(row.status_pagamento || '').toLowerCase() === 'inadimplente' && n(row.valor_parcela) > 0;
+}
+
 function isNovaMatriculaExecutiva(row: AlunoRow, inicioMes: string, dataCorte: string): boolean {
   const tipo = tipoRow(row);
   if (!row.data_matricula || row.data_matricula < inicioMes || row.data_matricula > dataCorte) return false;
@@ -190,6 +200,8 @@ export function calcularKPIsAlunosVivosCanonicos(
     const pessoas = new Map<string, {
       idade: number | null;
       mrr: number;
+      inadimplente: boolean;
+      valorInadimplente: number;
       bolsistaIntegral: boolean;
       bolsistaParcial: boolean;
     }>();
@@ -201,6 +213,8 @@ export function calcularKPIsAlunosVivosCanonicos(
       const pessoa = pessoas.get(key) || {
         idade: null,
         mrr: 0,
+        inadimplente: false,
+        valorInadimplente: 0,
         bolsistaIntegral: false,
         bolsistaParcial: false,
       };
@@ -213,6 +227,11 @@ export function calcularKPIsAlunosVivosCanonicos(
         pessoa.mrr += n(row.valor_parcela);
       }
 
+      if (isParcelaInadimplente(row)) {
+        pessoa.inadimplente = true;
+        pessoa.valorInadimplente += n(row.valor_parcela);
+      }
+
       pessoa.bolsistaIntegral = pessoa.bolsistaIntegral || isBolsaIntegral(row);
       pessoa.bolsistaParcial = pessoa.bolsistaParcial || isBolsaParcial(row);
       pessoas.set(key, pessoa);
@@ -221,6 +240,9 @@ export function calcularKPIsAlunosVivosCanonicos(
     const pessoasArray = Array.from(pessoas.values());
     const alunosPagantes = pessoasArray.filter(pessoa => pessoa.mrr > 0).length;
     const mrr = pessoasArray.reduce((acc, pessoa) => acc + pessoa.mrr, 0);
+    const inadimplentes = pessoasArray.filter(pessoa => pessoa.inadimplente).length;
+    const valorInadimplente = pessoasArray.reduce((acc, pessoa) => acc + pessoa.valorInadimplente, 0);
+    const inadimplenciaPct = alunosPagantes > 0 ? (inadimplentes / alunosPagantes) * 100 : 0;
 
     const novasMatriculasKeys = new Set(
       alunosUnidade
@@ -240,6 +262,21 @@ export function calcularKPIsAlunosVivosCanonicos(
 
     const tempoPermanencia = temposPermanenciaPorUnidade.get(unidadeId) || 0;
     const ticketMedio = alunosPagantes > 0 ? mrr / alunosPagantes : 0;
+    const reajustesConfirmados = movimentacoes
+      .filter(mov => String(mov.unidade_id || '') === unidadeId)
+      .filter(mov => mov.data && mov.data >= inicioMes && mov.data <= dataCorte)
+      .filter(mov => mov.tipo === 'renovacao')
+      .filter(isRenovacaoConfirmadaOperacional)
+      .map(mov => {
+        const anterior = n(mov.valor_parcela_anterior);
+        const novo = n(mov.valor_parcela_novo);
+        if (anterior <= 0 || novo <= anterior) return null;
+        return ((novo - anterior) / anterior) * 100;
+      })
+      .filter((valor): valor is number => valor !== null);
+    const reajustePct = reajustesConfirmados.length > 0
+      ? reajustesConfirmados.reduce((acc, valor) => acc + valor, 0) / reajustesConfirmados.length
+      : 0;
 
     return {
       unidade_id: unidadeId,
@@ -253,7 +290,7 @@ export function calcularKPIsAlunosVivosCanonicos(
       arr: mrr * 12,
       churnRate: alunosPagantes > 0 ? (evasoesKeys.size / alunosPagantes) * 100 : 0,
       evasoes: evasoesKeys.size,
-      inadimplencia: 0,
+      inadimplencia: inadimplenciaPct,
       tempoPermanencia,
       ltv: ticketMedio * tempoPermanencia,
       matriculasAtivas: alunosUnidade.length,
@@ -267,8 +304,8 @@ export function calcularKPIsAlunosVivosCanonicos(
       school: pessoasArray.filter(pessoa => pessoa.idade !== null && pessoa.idade >= 12).length,
       semClassificacao: pessoasArray.filter(pessoa => pessoa.idade === null).length,
       faturamentoPrevisto: mrr,
-      faturamentoRealizado: mrr,
-      reajustePct: 0,
+      faturamentoRealizado: Math.max(mrr - valorInadimplente, 0),
+      reajustePct,
     };
   });
 }
@@ -302,7 +339,7 @@ export async function fetchKPIsAlunosVivosCanonicos({
 
   const selectAlunos = `
     id, nome, idade_atual, status, data_matricula, data_saida, unidade_id,
-    valor_parcela, is_segundo_curso, arquivado_em,
+    valor_parcela, status_pagamento, is_segundo_curso, arquivado_em,
     cursos:curso_id!left(nome, is_projeto_banda),
     tipos_matricula:tipo_matricula_id!left(codigo, conta_como_pagante, entra_ticket_medio)
   `;
@@ -325,8 +362,8 @@ export async function fetchKPIsAlunosVivosCanonicos({
   const movimentacoes = await fetchAllPages<MovimentoRow>(() => {
     let query = supabase
       .from('movimentacoes_admin')
-      .select('id, aluno_id, aluno_nome, unidade_id, tipo, data')
-      .in('tipo', ['evasao', 'nao_renovacao'])
+      .select('id, aluno_id, aluno_nome, unidade_id, tipo, data, valor_parcela_anterior, valor_parcela_novo, forma_pagamento_id, agente_comercial')
+      .in('tipo', ['evasao', 'nao_renovacao', 'renovacao'])
       .gte('data', inicioMes)
       .lte('data', dataCorte)
       .order('data', { ascending: false });
