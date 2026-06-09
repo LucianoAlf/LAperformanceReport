@@ -298,7 +298,7 @@ async function gerarRelatorioDiario(
   // Movimentacoes do mes para retencao operacional viva.
   const { data: movData } = await supabase
     .from('movimentacoes_admin')
-    .select('*, unidades(codigo)')
+    .select('*')
     .eq('unidade_id', unidadeId)
     .gte('data', primeiroDiaMes)
     .lte('data', hoje)
