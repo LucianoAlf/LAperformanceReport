@@ -11,6 +11,7 @@ import { format } from 'date-fns';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import type { MovimentacaoAdmin, ResumoMes } from './AdministrativoPage';
+import { calcularReajusteMedioCanonico } from '@/lib/retencaoOperacionalCanonica';
 
 // Mapeamento de UUIDs para nomes de unidade
 const UUID_NOME_MAP: Record<string, string> = {
@@ -443,14 +444,7 @@ export function ModalRelatorio({
     });
     
     // Calcular KPIs
-    const reajusteMedio = renovacoes.length > 0
-      ? renovacoes.reduce((acc, r) => {
-          if (r.valor_parcela_anterior && r.valor_parcela_novo) {
-            return acc + ((r.valor_parcela_novo - r.valor_parcela_anterior) / r.valor_parcela_anterior) * 100;
-          }
-          return acc;
-        }, 0) / renovacoes.length
-      : 0;
+    const reajusteMedio = calcularReajusteMedioCanonico(renovacoes).media;
 
     const totalBolsistas = (resumo?.bolsistas_integrais || 0) + (resumo?.bolsistas_parciais || 0);
     const taxaInadimplencia = resumo?.alunos_ativos 
@@ -646,14 +640,7 @@ export function ModalRelatorio({
   function gerarRelatorioRenovacoes(): string {
     const mesNomeUpper = new Date(ano, mes - 1).toLocaleString('pt-BR', { month: 'long' }).toUpperCase();
     
-    const reajusteMedio = renovacoes.length > 0
-      ? renovacoes.reduce((acc, r) => {
-          if (r.valor_parcela_anterior && r.valor_parcela_novo) {
-            return acc + ((r.valor_parcela_novo - r.valor_parcela_anterior) / r.valor_parcela_anterior) * 100;
-          }
-          return acc;
-        }, 0) / renovacoes.length
-      : 0;
+    const reajusteMedio = calcularReajusteMedioCanonico(renovacoes).media;
 
     let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
     texto += `✅ *RELATÓRIO DE RENOVAÇÕES*\n`;

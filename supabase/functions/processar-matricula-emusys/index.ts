@@ -1,4 +1,4 @@
-// Edge Function: processar-matricula-emusys v18
+// Edge Function: processar-matricula-emusys v19
 // Processa webhooks de matrícula do Emusys: nova, renovação, trancamento, evasão
 //
 // MUDANÇAS v18 (2026-05-21):
@@ -53,7 +53,7 @@ import {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-const VERSAO = 'v18';
+const VERSAO = 'v19';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -382,6 +382,11 @@ async function converterLead(supabase: any, p: Payload, alunoId: number | null):
 async function registrarMovimentacao(
   supabase: any, tipo: string, p: Payload,
   alunoId: number | null, professorId: number | null, cursoId: number | null, motivo: string,
+  valores: {
+    valorParcelaAnterior?: number | null;
+    valorParcelaNovo?: number | null;
+    valorParcelaEvasao?: number | null;
+  } = {},
 ): Promise<boolean> {
   const inicioMes = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
 
@@ -407,7 +412,7 @@ async function registrarMovimentacao(
     motivoSaidaId = motivoMatch?.id || null;
   }
 
-  await supabase.from('movimentacoes_admin').insert({
+  const payload: any = {
     unidade_id: p.unidadeId,
     data: new Date().toISOString().split('T')[0],
     tipo,
@@ -418,7 +423,19 @@ async function registrarMovimentacao(
     motivo,
     motivo_saida_id: motivoSaidaId,
     created_at: new Date().toISOString(),
-  });
+  };
+
+  if (tipo === 'renovacao') {
+    payload.valor_parcela_anterior = valores.valorParcelaAnterior ?? null;
+    payload.valor_parcela_novo = valores.valorParcelaNovo ?? null;
+  }
+
+  if (tipo === 'evasao' || tipo === 'nao_renovacao') {
+    payload.valor_parcela_evasao = valores.valorParcelaEvasao ?? valores.valorParcelaAnterior ?? null;
+    payload.valor_parcela_anterior = valores.valorParcelaAnterior ?? null;
+  }
+
+  await supabase.from('movimentacoes_admin').insert(payload);
   return true;
 }
 
@@ -666,11 +683,6 @@ async function handleRenovacao(supabase: any, p: Payload) {
 
     await supabase.from('alunos').update(alunoUpdate).eq('id', aluno.id);
 
-    await supabase.rpc('execute_bi_query_lamusic', {
-      query_text: `UPDATE alunos SET numero_renovacoes = COALESCE(numero_renovacoes, 0) + 1 WHERE id = ${aluno.id}`,
-      p_unidade_id: null, max_rows: 1,
-    });
-
     const inicioMes = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];
     const { data: existente } = await supabase.from('renovacoes')
       .select('id')
@@ -678,36 +690,41 @@ async function handleRenovacao(supabase: any, p: Payload) {
       .gte('data_renovacao', inicioMes)
       .limit(1);
 
-    let renovacaoInserida = false;
+    let renovacaoLegadaPendente = false;
     if (!existente?.length) {
       await supabase.from('renovacoes').insert({
         aluno_id: aluno.id,
         unidade_id: p.unidadeId,
         data_renovacao: hoje,
         valor_parcela_anterior: aluno.valor_parcela || null,
-        status: 'renovado',
+        valor_parcela_novo: p.valorMensalidade || null,
+        status: 'pendente',
         professor_id: professorId || aluno.professor_atual_id || null,
-        observacoes: `Automático via Emusys — ${p.nomeCurso || 'curso não informado'}`,
+        observacoes: `Pendente de validação DM via Emusys — ${p.nomeCurso || 'curso não informado'}`,
       });
-      renovacaoInserida = true;
+      renovacaoLegadaPendente = true;
     }
 
     const movRegistrada = await registrarMovimentacao(
       supabase, 'renovacao', p, aluno.id,
       professorId || aluno.professor_atual_id || null,
       cursoId || aluno.curso_id || null,
-      `Renovação automática via Emusys — ${p.nomeCurso || 'curso não informado'}`
+      `Renovação automática via Emusys — ${p.nomeCurso || 'curso não informado'}`,
+      {
+        valorParcelaAnterior: aluno.valor_parcela || null,
+        valorParcelaNovo: p.valorMensalidade || null,
+      }
     );
 
     const result = {
-      action: 'renovado',
+      action: 'renovacao_pendente_validacao_dm',
       aluno_id: aluno.id,
       matched_via: found.fonte,
       professor_id: professorId,
       curso_id: cursoId,
-      renovacao_inserida: renovacaoInserida,
+      renovacao_legada_pendente: renovacaoLegadaPendente,
       movimentacao_registrada: movRegistrada,
-      dedup: !renovacaoInserida,
+      dedup: !renovacaoLegadaPendente,
     };
 
     const resultado: ResultadoMatricula = {

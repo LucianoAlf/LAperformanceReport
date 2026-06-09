@@ -5,6 +5,7 @@ import { CelulaEditavelInline } from '@/components/ui/CelulaEditavelInline';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import type { MovimentacaoAdmin } from './AdministrativoPage';
+import { calcularReajusteMedioCanonico } from '@/lib/retencaoOperacionalCanonica';
 
 interface TabelaRenovacoesProps {
   data: MovimentacaoAdmin[];
@@ -171,17 +172,7 @@ export function TabelaRenovacoes({
     }
   }
 
-  const reajustesValidos = data
-    .map(item => {
-      const anterior = valorAnteriorOperacional(item);
-      const novo = toNumber(item.valor_parcela_novo);
-      return anterior > 0 && novo > 0 ? ((novo - anterior) / anterior) * 100 : null;
-    })
-    .filter((value): value is number => value !== null);
-
-  const reajusteMedio = reajustesValidos.length > 0
-    ? reajustesValidos.reduce((acc, value) => acc + value, 0) / reajustesValidos.length
-    : 0;
+  const reajusteCanonico = calcularReajusteMedioCanonico(data);
 
   return (
     <div className="overflow-x-auto">
@@ -405,10 +396,10 @@ export function TabelaRenovacoes({
           <tfoot className="bg-slate-800/50">
             <tr className="border-t border-slate-600">
               <td colSpan={6} className="px-4 py-3 text-right font-medium text-slate-400">
-                Totais: {data.length} renovações
+                Totais: {data.length} renovações - {reajusteCanonico.total} válidas para reajuste
               </td>
               <td className="px-4 py-3 text-center font-bold text-emerald-400">
-                +{reajusteMedio.toFixed(1)}%
+                +{reajusteCanonico.media.toFixed(1)}%
               </td>
               <td colSpan={4} className="px-4 py-3 text-slate-400">Reajuste médio</td>
             </tr>
@@ -418,3 +409,4 @@ export function TabelaRenovacoes({
     </div>
   );
 }
+

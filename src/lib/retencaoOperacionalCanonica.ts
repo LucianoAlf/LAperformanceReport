@@ -24,6 +24,9 @@ export interface MovimentacaoRetencaoRow {
   motivo?: string | null;
   observacoes?: string | null;
   agente_comercial?: string | null;
+  curso_id?: number | string | null;
+  curso_nome?: string | null;
+  cursos?: any;
   professor_id?: number | string | null;
   professor_nome?: string | null;
   motivos_saida?: any;
@@ -35,6 +38,8 @@ export interface MovimentacaoRetencaoRow {
     tipo_matricula_id?: number | string | null;
     is_segundo_curso?: boolean | null;
     classificacao?: string | null;
+    cursos?: any;
+    tipos_matricula?: any;
   } | null;
 }
 
@@ -185,6 +190,66 @@ export function isRenovacaoConfirmadaOperacional(mov: MovimentacaoRetencaoRow): 
   const valorNovoInformado = mov.valor_parcela_novo !== null && mov.valor_parcela_novo !== undefined;
 
   return valorAnteriorInformado || valorNovoInformado || Boolean(mov.forma_pagamento_id);
+}
+
+function cursoRenovacao(mov: MovimentacaoRetencaoRow) {
+  const cursoMov = firstRelation((mov as any).cursos);
+  const cursoAluno = firstRelation((mov.alunos as any)?.cursos);
+  return {
+    nome: String(mov.curso_nome || cursoMov?.nome || cursoAluno?.nome || ''),
+    isProjetoBanda: Boolean(cursoMov?.is_projeto_banda || cursoAluno?.is_projeto_banda),
+  };
+}
+
+function isCursoExcluidoReajuste(mov: MovimentacaoRetencaoRow): boolean {
+  const curso = cursoRenovacao(mov);
+  const nome = normalizeText(curso.nome);
+
+  return curso.isProjetoBanda
+    || nome.includes('banda')
+    || nome.includes('garage')
+    || nome.includes('projeto')
+    || nome.includes('coral');
+}
+
+function isBolsistaOuBandaReajuste(mov: MovimentacaoRetencaoRow): boolean {
+  const tipoMatricula = firstRelation((mov.alunos as any)?.tipos_matricula);
+  const tipoCodigo = normalizeText(tipoMatricula?.codigo);
+  const classificacao = normalizeText(mov.alunos?.classificacao);
+  const tipoMatriculaId = String(mov.alunos?.tipo_matricula_id ?? '').trim();
+
+  return ['3', '4', '5'].includes(tipoMatriculaId)
+    || tipoCodigo.includes('bolsista')
+    || tipoCodigo.includes('banda')
+    || classificacao.includes('bolsista')
+    || classificacao.includes('bolsa');
+}
+
+export function percentualReajusteMedioCanonico(mov: MovimentacaoRetencaoRow): number | null {
+  if (!isRenovacaoConfirmadaOperacional(mov)) return null;
+  if (isCursoExcluidoReajuste(mov)) return null;
+  if (isBolsistaOuBandaReajuste(mov)) return null;
+
+  const anterior = n(mov.valor_parcela_anterior ?? mov.alunos?.valor_parcela);
+  const novo = n(mov.valor_parcela_novo);
+
+  if (anterior <= 0) return null;
+  if (novo <= anterior) return null;
+
+  return ((novo - anterior) / anterior) * 100;
+}
+
+export function calcularReajusteMedioCanonico(movimentacoes: MovimentacaoRetencaoRow[]) {
+  const reajustes = movimentacoes
+    .map(percentualReajusteMedioCanonico)
+    .filter((valor): valor is number => valor !== null);
+
+  return {
+    total: reajustes.length,
+    media: reajustes.length > 0
+      ? reajustes.reduce((acc, valor) => acc + valor, 0) / reajustes.length
+      : 0,
+  };
 }
 
 function motivoSaida(mov: MovimentacaoRetencaoRow): string {

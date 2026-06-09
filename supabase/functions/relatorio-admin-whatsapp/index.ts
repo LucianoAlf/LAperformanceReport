@@ -67,7 +67,7 @@ interface RelatorioPayload {
   unidade?: string;
   competencia?: string;
   numero_teste?: string;
-  modo?: 'cron'; // Modo automático: gera + envia para unidades com cron ativo
+  modo?: 'cron' | 'dry_run'; // dry_run gera o texto real sem enfileirar/enviar
 }
 
 function n(value: unknown): number {
@@ -590,6 +590,22 @@ serve(async (req) => {
     );
 
     const payload: RelatorioPayload = await req.json();
+
+    // === MODO DRY RUN ===
+    if (payload.modo === 'dry_run') {
+      if (!payload.unidade || payload.unidade === 'todos') {
+        return new Response(
+          JSON.stringify({ success: false, error: 'Unidade obrigatória para dry_run' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const texto = await gerarRelatorioDiario(supabase, payload.unidade);
+      return new Response(
+        JSON.stringify({ success: true, dry_run: true, unidade: payload.unidade, texto }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // === MODO CRON ===
     if (payload.modo === 'cron') {

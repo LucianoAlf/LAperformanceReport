@@ -32,6 +32,7 @@ export interface KPIsAlunosCanonicosPorUnidade {
   faturamentoPrevisto: number;
   faturamentoRealizado: number;
   reajustePct: number;
+  reajustesValidos: number;
 }
 
 export interface KPIsAlunosCanonicos {
@@ -67,6 +68,7 @@ export interface KPIsAlunosCanonicos {
   faturamentoPrevisto: number;
   faturamentoRealizado: number;
   reajustePct: number;
+  reajustesValidos: number;
   porUnidade: KPIsAlunosCanonicosPorUnidade[];
 }
 
@@ -108,6 +110,7 @@ const ZERO_KPIS = {
   faturamentoPrevisto: 0,
   faturamentoRealizado: 0,
   reajustePct: 0,
+  reajustesValidos: 0,
 };
 
 function n(value: unknown): number {
@@ -160,6 +163,7 @@ function mapDadosMensais(row: any): KPIsAlunosCanonicosPorUnidade {
     faturamentoPrevisto: mrr,
     faturamentoRealizado: mrr * (1 - n(row.inadimplencia) / 100),
     reajustePct: n(row.reajuste_parcelas),
+    reajustesValidos: n(row.reajustes_validos),
   };
 }
 
@@ -172,10 +176,14 @@ export function consolidarKPIsAlunosCanonicos(
   const totalMrr = rows.reduce((acc, row) => acc + row.mrr, 0);
   const totalAtivos = rows.reduce((acc, row) => acc + row.alunosAtivos, 0);
   const totalEvasoes = rows.reduce((acc, row) => acc + row.evasoes, 0);
+  const totalReajustesValidos = rows.reduce((acc, row) => acc + row.reajustesValidos, 0);
   const count = rows.length || 1;
   const unidadeNome = unidadeId === 'todos'
     ? 'Consolidado'
     : rows[0]?.unidade_nome || 'Unidade';
+  const reajustePct = totalReajustesValidos > 0
+    ? rows.reduce((acc, row) => acc + (row.reajustePct * row.reajustesValidos), 0) / totalReajustesValidos
+    : rows.reduce((acc, row) => acc + row.reajustePct, 0) / count;
 
   return {
     ...base,
@@ -204,7 +212,8 @@ export function consolidarKPIsAlunosCanonicos(
     semClassificacao: rows.reduce((acc, row) => acc + row.semClassificacao, 0),
     faturamentoPrevisto: rows.reduce((acc, row) => acc + row.faturamentoPrevisto, 0),
     faturamentoRealizado: rows.reduce((acc, row) => acc + row.faturamentoRealizado, 0),
-    reajustePct: rows.reduce((acc, row) => acc + row.reajustePct, 0) / count,
+    reajustePct,
+    reajustesValidos: totalReajustesValidos,
     porUnidade: rows,
   };
 }

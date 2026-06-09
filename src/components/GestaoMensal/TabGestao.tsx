@@ -358,6 +358,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
                 total_evasoes: row.evasoes,
                 novas_matriculas: row.novasMatriculas,
                 reajuste_pct: row.reajustePct,
+                reajustes_validos: row.reajustesValidos,
               }))
             : [];
 
@@ -654,6 +655,8 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             total_evasoes: acc.total_evasoes + (item.total_evasoes || 0),
             novas_matriculas: acc.novas_matriculas + (item.novas_matriculas || 0),
             reajuste_pct_sum: acc.reajuste_pct_sum + (Number(item.reajuste_medio || item.reajuste_pct) || 0),
+            reajuste_pct_ponderado_sum: acc.reajuste_pct_ponderado_sum + ((Number(item.reajuste_medio || item.reajuste_pct) || 0) * (Number(item.reajustes_validos) || 0)),
+            reajustes_validos_sum: acc.reajustes_validos_sum + (Number(item.reajustes_validos) || 0),
             count: acc.count + 1,
           }), {
             total_alunos_ativos_sum: 0, total_alunos_pagantes_sum: 0, total_bolsistas_integrais_sum: 0,
@@ -661,7 +664,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             total_la_adultos_sum: 0, total_la_sem_classificação_sum: 0, ticket_medio_sum: 0, mrr_sum: 0, arr_sum: 0,
             tempo_permanencia_medio_sum: 0, ltv_medio_sum: 0, inadimplencia_pct_sum: 0,
             faturamento_previsto: 0, faturamento_realizado: 0, churn_rate_sum: 0, total_evasoes: 0, 
-            novas_matriculas: 0, reajuste_pct_sum: 0, count: 0
+            novas_matriculas: 0, reajuste_pct_sum: 0, reajuste_pct_ponderado_sum: 0, reajustes_validos_sum: 0, count: 0
           });
           
           // Calcular número de meses únicos no período (para média correta)
@@ -936,7 +939,9 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             inadimplencia_pct: g.count > 0 ? g.inadimplencia_pct_sum / g.count : 0,
             ltv_medio: g.count > 0 ? g.ltv_medio_sum / g.count : 0,
             ticket_medio_passaporte: 0, // TODO: buscar de outra fonte
-            reajuste_pct: g.count > 0 ? g.reajuste_pct_sum / g.count : 0,
+            reajuste_pct: g.reajustes_validos_sum > 0
+              ? g.reajuste_pct_ponderado_sum / g.reajustes_validos_sum
+              : (g.count > 0 ? g.reajuste_pct_sum / g.count : 0),
             
             // Retenção - taxas = MÉDIA
             churn_rate: g.count > 0 ? g.churn_rate_sum / g.count : 0,
@@ -1045,9 +1050,6 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
         }
 
         const { data: financeiroData } = await financeiroQuery;
-
-        console.log('🔍 Dados financeiros brutos:', financeiroData?.length, 'registros');
-        console.log('🔍 Primeiros 3 registros:', financeiroData?.slice(0, 3));
 
         // Complementar o mês atual com a fonte canônica viva, sem usar view legada.
         const currentDate = new Date();
@@ -1254,9 +1256,15 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             .slice(-12)
             .map(([key, valores]) => {
               const [anoStr, mesStr] = key.split('-');
+              const reajusteCanonicoAtual = key === mesAtualKey
+                ? Number(kpisAlunosCanonicosAtual?.reajustePct)
+                : NaN;
+
               return {
                 name: `${getMesNomeCurto(parseInt(mesStr))}/${anoStr.slice(2)}`,
-                reajuste: valores.count > 0 ? valores.total / valores.count : 0,
+                reajuste: Number.isFinite(reajusteCanonicoAtual)
+                  ? reajusteCanonicoAtual
+                  : valores.count > 0 ? valores.total / valores.count : 0,
               };
             });
           setEvolucaoReajuste(reajusteArray);
@@ -1869,7 +1877,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
                   <h3 className="text-lg font-semibold text-white">📊 Reajustes Aplicados</h3>
                   {mediaReajusteAnual > 0 && (
                     <span className="text-sm text-slate-400">
-                      Média: <span className="text-cyan-400 font-bold">{mediaReajusteAnual.toFixed(1)}%</span>
+                      Média 12m: <span className="text-cyan-400 font-bold">{mediaReajusteAnual.toFixed(1)}%</span>
                     </span>
                   )}
                 </div>

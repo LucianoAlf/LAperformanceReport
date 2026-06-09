@@ -73,6 +73,7 @@ export interface MovimentacaoAdmin {
   agente_comercial?: string | null;
   curso_id?: number | null;
   curso_nome?: string;
+  cursos?: { nome?: string | null; is_projeto_banda?: boolean | null } | null;
   motivo?: string | null;
   mes_saida?: string | null;
   tipo_evasao?: string | null;
@@ -304,7 +305,7 @@ export function AdministrativoPage() {
         queryAvisos,
         supabase.from('professores').select('id, nome').eq('ativo', true).order('nome'),
         supabase.from('formas_pagamento').select('id, nome, sigla').order('nome'),
-        supabase.from('cursos').select('id, nome').order('nome'),
+        supabase.from('cursos').select('id, nome, is_projeto_banda').order('nome'),
       ]);
 
       const { data: movData, error: movError } = movResult;
@@ -335,12 +336,17 @@ export function AdministrativoPage() {
       }
 
       // Enriquecer movimentações com classificação dos alunos e nome do curso
-      const cursosMap = new Map((cursosData || []).map(c => [c.id, c.nome]));
-      const movDataComAlunos = movCombinado.map(m => aplicarFallbacksRetencao({
-        ...m,
-        alunos: m.aluno_id ? alunosMap.get(String(m.aluno_id)) : null,
-        curso_nome: m.curso_id ? cursosMap.get(m.curso_id) || null : null,
-      }));
+      const cursosMap = new Map((cursosData || []).map(c => [c.id, c]));
+      const movDataComAlunos = movCombinado.map(m => {
+        const curso = m.curso_id ? cursosMap.get(m.curso_id) : null;
+
+        return aplicarFallbacksRetencao({
+          ...m,
+          alunos: m.aluno_id ? alunosMap.get(String(m.aluno_id)) : null,
+          curso_nome: curso?.nome || null,
+          cursos: curso ? { nome: curso.nome, is_projeto_banda: curso.is_projeto_banda } : null,
+        });
+      });
 
       // Verificar se é período atual ou histórico
       const hoje = new Date();

@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabase';
-import { isRenovacaoConfirmadaOperacional } from '@/lib/retencaoOperacionalCanonica';
+import { percentualReajusteMedioCanonico } from '@/lib/retencaoOperacionalCanonica';
 
 export interface KPIsAlunosVivosPorUnidade {
   unidade_id: string;
@@ -29,6 +29,7 @@ export interface KPIsAlunosVivosPorUnidade {
   faturamentoPrevisto: number;
   faturamentoRealizado: number;
   reajustePct: number;
+  reajustesValidos: number;
 }
 
 interface FetchKPIsAlunosVivosParams {
@@ -63,6 +64,10 @@ type MovimentoRow = {
   valor_parcela_novo?: number | string | null;
   forma_pagamento_id?: number | string | null;
   agente_comercial?: string | null;
+  curso_id?: number | string | null;
+  curso_nome?: string | null;
+  cursos?: any;
+  alunos?: any;
 };
 
 type TempoPermanenciaRow = {
@@ -265,14 +270,7 @@ export function calcularKPIsAlunosVivosCanonicos(
     const reajustesConfirmados = movimentacoes
       .filter(mov => String(mov.unidade_id || '') === unidadeId)
       .filter(mov => mov.data && mov.data >= inicioMes && mov.data <= dataCorte)
-      .filter(mov => mov.tipo === 'renovacao')
-      .filter(isRenovacaoConfirmadaOperacional)
-      .map(mov => {
-        const anterior = n(mov.valor_parcela_anterior);
-        const novo = n(mov.valor_parcela_novo);
-        if (anterior <= 0 || novo <= anterior) return null;
-        return ((novo - anterior) / anterior) * 100;
-      })
+      .map(percentualReajusteMedioCanonico)
       .filter((valor): valor is number => valor !== null);
     const reajustePct = reajustesConfirmados.length > 0
       ? reajustesConfirmados.reduce((acc, valor) => acc + valor, 0) / reajustesConfirmados.length
@@ -306,6 +304,7 @@ export function calcularKPIsAlunosVivosCanonicos(
       faturamentoPrevisto: mrr,
       faturamentoRealizado: Math.max(mrr - valorInadimplente, 0),
       reajustePct,
+      reajustesValidos: reajustesConfirmados.length,
     };
   });
 }
@@ -362,7 +361,10 @@ export async function fetchKPIsAlunosVivosCanonicos({
   const movimentacoes = await fetchAllPages<MovimentoRow>(() => {
     let query = supabase
       .from('movimentacoes_admin')
-      .select('id, aluno_id, aluno_nome, unidade_id, tipo, data, valor_parcela_anterior, valor_parcela_novo, forma_pagamento_id, agente_comercial')
+      .select(`
+        id, aluno_id, aluno_nome, unidade_id, tipo, data,
+        curso_id, valor_parcela_anterior, valor_parcela_novo, forma_pagamento_id, agente_comercial
+      `)
       .in('tipo', ['evasao', 'nao_renovacao', 'renovacao'])
       .gte('data', inicioMes)
       .lte('data', dataCorte)
@@ -373,6 +375,53 @@ export async function fetchKPIsAlunosVivosCanonicos({
     }
 
     return query;
+  });
+
+  const movAlunoIds = [...new Set(
+    movimentacoes
+      .map(mov => mov.aluno_id)
+      .filter((id): id is number => id !== null && id !== undefined)
+  )];
+  const movCursoIds = [...new Set(
+    movimentacoes
+      .map(mov => mov.curso_id)
+      .filter((id): id is number | string => id !== null && id !== undefined)
+  )];
+
+  const alunosMovimentacoes = movAlunoIds.length > 0
+    ? await fetchAllPages<any>(() => supabase
+        .from('alunos')
+        .select(`
+          id, tipo_matricula_id, is_segundo_curso, classificacao, curso_id,
+          cursos:curso_id!left(nome, is_projeto_banda),
+          tipos_matricula:tipo_matricula_id!left(codigo)
+        `)
+        .in('id', movAlunoIds))
+    : [];
+
+  const cursosMovimentacoes = movCursoIds.length > 0
+    ? await fetchAllPages<any>(() => supabase
+        .from('cursos')
+        .select('id, nome, is_projeto_banda')
+        .in('id', movCursoIds))
+    : [];
+
+  const alunosMovimentacoesMap = new Map(alunosMovimentacoes.map(row => [String(row.id), row]));
+  const cursosMovimentacoesMap = new Map(cursosMovimentacoes.map(row => [String(row.id), row]));
+  const movimentacoesEnriquecidas = movimentacoes.map(mov => {
+    const aluno = mov.aluno_id !== null && mov.aluno_id !== undefined
+      ? alunosMovimentacoesMap.get(String(mov.aluno_id)) || null
+      : null;
+    const curso = mov.curso_id !== null && mov.curso_id !== undefined
+      ? cursosMovimentacoesMap.get(String(mov.curso_id)) || null
+      : null;
+
+    return {
+      ...mov,
+      alunos: aluno,
+      cursos: curso,
+      curso_nome: curso?.nome || null,
+    };
   });
 
   const temposPermanenciaPorUnidade = new Map<string, number>();
@@ -392,7 +441,7 @@ export async function fetchKPIsAlunosVivosCanonicos({
     });
   }
 
-  return calcularKPIsAlunosVivosCanonicos(alunos, movimentacoes, unidades, {
+  return calcularKPIsAlunosVivosCanonicos(alunos, movimentacoesEnriquecidas, unidades, {
     ano,
     mes,
     temposPermanenciaPorUnidade,
