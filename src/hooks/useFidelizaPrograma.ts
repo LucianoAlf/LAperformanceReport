@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import { aplicarMetricasFidelizaCanonicas } from '@/lib/fidelizaCanonico';
 
 // Tipos
 export interface ConfigFideliza {
@@ -249,7 +250,15 @@ export function useFidelizaPrograma(ano: number = 2026, trimestre?: number, unid
 
       // Calcular pontuação e ordenar farmers
       if (dados.farmers && dados.config) {
-        const farmersComPontuacao = dados.farmers
+        const trimestreReferencia = trimestre || dados.trimestre_atual;
+        const farmersCanonicos = await aplicarMetricasFidelizaCanonicas({
+          farmers: dados.farmers,
+          ano,
+          trimestre: trimestreReferencia,
+          unidadeId,
+        });
+
+        const farmersComPontuacao = farmersCanonicos
           .map(f => calcularPontuacao(f, dados.config))
           .sort((a, b) => (b.pontuacao?.total || 0) - (a.pontuacao?.total || 0))
           .map((f, idx) => ({ ...f, posicao: idx + 1 }));

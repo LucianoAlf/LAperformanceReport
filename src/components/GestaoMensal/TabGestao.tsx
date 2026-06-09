@@ -1039,7 +1039,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
         // Buscar dados históricos para gráficos financeiros e retenção (tabela dados_mensais - histórico completo 2023-2026)
         let financeiroQuery = supabase
           .from('dados_mensais')
-          .select('mes, ano, ticket_medio, faturamento_estimado, inadimplencia, reajuste_parcelas, churn_rate, taxa_renovacao, unidade_id')
+          .select('mes, ano, alunos_pagantes, ticket_medio, faturamento_estimado, inadimplencia, reajuste_parcelas, churn_rate, taxa_renovacao, unidade_id')
           .gte('ano', 2023)
           .order('ano', { ascending: true })
           .order('mes', { ascending: true });
@@ -1079,6 +1079,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
                 mes: currentMonth,
                 inadimplencia: row.inadimplencia,
                 churn_rate: row.churnRate,
+                alunos_pagantes: row.alunosPagantes,
                 ticket_medio: row.ticketMedio,
                 faturamento_estimado: row.faturamentoPrevisto,
                 taxa_renovacao: Number(retencaoAtual?.taxa_renovacao) || 0,
@@ -1209,12 +1210,14 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           setEvolucaoInadimplencia(inadimplenciaArray);
 
           // 5. Evolução do Ticket Médio (últimos 12 meses até o mês selecionado)
-          const ticketPorMes = new Map<string, { total: number; count: number }>();
+          const ticketPorMes = new Map<string, { faturamento: number; pagantes: number; total: number; count: number }>();
           financeiroData.forEach((item: any) => {
             const key = `${item.ano}-${String(item.mes).padStart(2, '0')}`;
             // Incluir apenas dados até o mês selecionado
             if (key <= mesAtualKey) {
-              const atual = ticketPorMes.get(key) || { total: 0, count: 0 };
+              const atual = ticketPorMes.get(key) || { faturamento: 0, pagantes: 0, total: 0, count: 0 };
+              atual.faturamento += Number(item.faturamento_estimado) || 0;
+              atual.pagantes += Number(item.alunos_pagantes) || 0;
               atual.total += Number(item.ticket_medio) || 0;
               atual.count += 1;
               ticketPorMes.set(key, atual);
@@ -1228,7 +1231,9 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               const [anoStr, mesStr] = key.split('-');
               return {
                 name: `${getMesNomeCurto(parseInt(mesStr))}/${anoStr.slice(2)}`,
-                ticket: valores.count > 0 ? valores.total / valores.count : 0,
+                ticket: valores.pagantes > 0
+                  ? valores.faturamento / valores.pagantes
+                  : valores.count > 0 ? valores.total / valores.count : 0,
               };
             });
           setEvolucaoTicketMedio(ticketArray);

@@ -134,3 +134,153 @@ So aprovar deprecacao quando todos os itens abaixo forem verdadeiros:
 - Status dos cards executivos de alunos: validado nas telas principais.
 - Status de todos os graficos/relatorios/RPCs: ainda nao validado.
 - Proxima acao segura: P0.1C, auditar e corrigir graficos/relatorios de alunos antes de qualquer deprecacao de view/tabela.
+
+## 9. Atualizacao 2026-06-09 - Fideliza+, Professores, IA/Gemini e graficos financeiros
+
+### Regras financeiras canonicas confirmadas
+
+- `banda/projeto` nao entra no ticket executivo.
+- `bolsista_integral` e `bolsista_parcial` nao entram no ticket executivo.
+- Ticket Medio executivo = MRR recorrente elegivel / pessoas pagantes.
+- Segundo curso pago entra no MRR, mas nao duplica pessoa pagante.
+- Reajuste Medio canonico exclui:
+  - banda/projeto/coral;
+  - bolsistas;
+  - renovacoes zeradas;
+  - reducao de valor;
+  - renovacao sem confirmacao operacional/agente.
+
+### Validado em banco
+
+Objeto validado: `public.get_kpis_alunos_financeiro_vivo_canonico`.
+
+Evidencia:
+
+- Usa `tipos_matricula.entra_ticket_medio = true` para MRR/ticket.
+- Exclui `BOLSISTA_INT`, `BOLSISTA_PARC` e `BANDA` do reajuste.
+- Exclui curso/projeto/banda/coral do reajuste por `is_projeto_banda` e nome do curso.
+- Exclui valores zerados e reducoes de reajuste.
+
+Campo consolidado Junho/2026 retornado por `public.get_kpis_alunos_canonicos(null, 2026, 6)`:
+
+| KPI | Valor |
+|---|---:|
+| Alunos ativos | 1035 |
+| Alunos pagantes | 990 |
+| Matriculas ativas | 1211 |
+| MRR | R$ 414.103,80 |
+| Ticket medio | R$ 418,29 |
+| Inadimplencia | 1,21% |
+| Inadimplencia valor | R$ 4.418,60 |
+| Reajuste medio | 11,53% |
+| Reajustes validos | 24 |
+
+### Fideliza+
+
+Status: parcialmente saneado no frontend.
+
+O que mudou:
+
+- `useFidelizaPrograma` continua chamando `get_programa_fideliza_dados` para configuracao, penalidades e estrutura do programa.
+- Antes de pontuar/rankear, aplica overlay canonico em `src/lib/fidelizaCanonico.ts`.
+- O overlay recalcula por unidade/trimestre:
+  - churn;
+  - inadimplencia;
+  - taxa de renovacao;
+  - reajuste medio.
+
+Validacao visual local:
+
+| Unidade | Churn | Inadimplencia | Renovacao | Reajuste |
+|---|---:|---:|---:|---:|
+| Campo Grande | 2,2% | 0,6% | 76% | 12,1% |
+| Barra | 3,6% | 0,0% | 81% | 9,8% |
+| Recreio | 3,9% | 0,4% | 56% | 10,4% |
+
+Risco restante:
+
+- A RPC `get_programa_fideliza_dados` ainda possui logica legada interna baseada em `renovacoes`.
+- Nao deprecar `renovacoes` nem a RPC antes de migrar a origem do programa ou transformar esse overlay em funcao/RPC canonica.
+
+### Graficos financeiros da Analytics
+
+Status: ajustado para ticket consolidado ponderado.
+
+O que mudou:
+
+- `TabGestao.tsx` passou a buscar `alunos_pagantes` junto com `ticket_medio` e `faturamento_estimado`.
+- Grafico "Evolucao do Ticket Medio" deixou de usar media simples por unidade.
+- Agora calcula, quando possivel:
+  - `SUM(faturamento_estimado) / SUM(alunos_pagantes)`.
+- Para mes atual aberto, o ponto atual vem do KPI canonico vivo.
+
+Validacao visual local:
+
+- Analytics / Financeiro / Consolidado / Jun/2026:
+  - Ticket Medio: R$ 418.
+  - MRR: R$ 414.104.
+  - Inadimplencia: 1,0%.
+  - Reajuste Medio: 11,5%.
+  - Grafico "Evolucao do Ticket Medio" mostra atual R$ 418.
+
+### Relatorios IA/Gemini
+
+Status: payload saneado para KPIs de alunos, sem disparar geracao de IA nesta validacao.
+
+Evidencia em codigo:
+
+- `ModalRelatorio.tsx` chama `get_dados_relatorio_gerencial` antes de `gemini-relatorio-gerencial`.
+- `PlanoAcaoRetencao.tsx` chama `get_dados_retencao_ia` antes de `gemini-insights-retencao`.
+
+Evidencia em banco:
+
+- `get_dados_relatorio_gerencial` chama `get_dados_relatorio_gerencial_legacy_p01g`, mas sobrescreve:
+  - `kpis_gestao`;
+  - `kpis_alunos_canonicos`;
+  - `dados_mes_atual`;
+  - matriculas/banda/2o curso/bolsistas.
+- `get_dados_retencao_ia` chama `get_dados_retencao_ia_legacy_p01g`, mas sobrescreve:
+  - `kpis_gestao`;
+  - `kpis_alunos_canonicos`.
+
+Risco restante:
+
+- O texto gerado pela IA pode ainda interpretar campos legados se o prompt usar partes antigas do JSON.
+- Proxima validacao deve gerar um relatorio controlado e conferir se o texto cita os campos canonicos.
+
+### Professores / Carteira
+
+Status: classificado como operacional ao vivo, nao KPI executivo historico.
+
+Evidencia:
+
+- `TabCarteiraProfessores.tsx` usa `get_carteira_professores`.
+- A tela mostra badge: "Carteira operacional ao vivo - nao compara com competencia fechada".
+- A RPC conta linhas operacionais da carteira por professor, nao snapshot historico.
+
+Risco restante:
+
+- `get_carteira_professores` ainda e fonte operacional propria.
+- Nao deprecar antes de decidir se a carteira continua linha operacional ou se ganha uma funcao canonica propria.
+
+## 10. Status atual para deprecacao
+
+Ainda nao aprovar limpeza de banco.
+
+Pode ser candidato futuro, mas nao agora:
+
+| Objeto | Status atualizado | Bloqueio |
+|---|---|---|
+| `renovacoes` | Legado ainda referenciado por backend/RPC | `get_programa_fideliza_dados` ainda usa internamente |
+| `get_programa_fideliza_dados` | Parcialmente saneada no frontend por overlay | Migrar logica para canonico no banco antes de deprecar |
+| `get_carteira_professores` | Operacional valida, nao historica | Decidir contrato canonico de carteira |
+| `vw_dashboard_unidade` | Residual em aba legada | Confirmar que `TabDashboard` nao e rota ativa antes de remover |
+| `vw_kpis_comercial_mensal` | Fora do P0.1 | Depende da frente Comercial/Leads |
+| `vw_kpis_comercial_historico` | Fora do P0.1 | Depende da frente Comercial/Leads |
+
+Proximo passo seguro:
+
+1. Gerar relatorio IA/Gemini controlado e conferir texto contra payload canonico.
+2. Migrar `get_programa_fideliza_dados` no banco ou criar RPC canonica substituta.
+3. Definir contrato canonico de Professores/Carteira.
+4. So depois iniciar plano de deprecacao com zero referencias.
