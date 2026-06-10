@@ -175,23 +175,42 @@ async function fetchKPIsAlunosRelatorioAdmin(
 
   if (error) throw error;
 
-  const totais = data?.totais || data?.por_unidade?.[0] || {};
-  const alunosAtivos = n(totais.alunos_ativos ?? totais.total_alunos_ativos);
-  const alunosPagantes = n(totais.alunos_pagantes ?? totais.total_alunos_pagantes);
+  const porUnidade = data?.por_unidade?.[0] || {};
+  const totais = data?.totais || porUnidade;
+  const totalCampo = (...campos: string[]) => {
+    for (const campo of campos) {
+      if (totais[campo] !== null && totais[campo] !== undefined) return totais[campo];
+      if (porUnidade[campo] !== null && porUnidade[campo] !== undefined) return porUnidade[campo];
+    }
+    return undefined;
+  };
+
+  const alunosAtivos = n(totalCampo('alunos_ativos', 'total_alunos_ativos'));
+  const alunosPagantes = n(totalCampo('alunos_pagantes', 'total_alunos_pagantes'));
+  const matriculasBaseAlunosAtivos = n(totalCampo('matriculas_base_alunos_ativos')) || alunosAtivos;
+  const matriculasBanda = n(totalCampo('matriculas_banda'));
+  const matriculas2Curso = n(totalCampo('matriculas_2_curso'));
+  const alunosCoral = n(totalCampo('matriculas_coral'));
+  const matriculasAtivas = matriculasBaseAlunosAtivos + matriculasBanda + matriculas2Curso + alunosCoral;
 
   return {
     alunosAtivos,
     alunosPagantes,
-    alunosNaoPagantes: n(totais.alunos_nao_pagantes) || Math.max(alunosAtivos - alunosPagantes, 0),
-    bolsistasIntegrais: n(totais.bolsistas_integrais ?? totais.total_bolsistas_integrais),
-    bolsistasParciais: n(totais.bolsistas_parciais ?? totais.total_bolsistas_parciais),
-    trancados: n(totais.alunos_trancados),
-    novosAlunos: n(totais.novas_matriculas),
-    matriculasAtivas: n(totais.matriculas_ativas),
-    matriculasBanda: n(totais.matriculas_banda),
-    matriculas2Curso: n(totais.matriculas_2_curso),
-    alunosCoral: n(totais.matriculas_coral),
-    evasoes: n(totais.evasoes ?? totais.total_evasoes),
+    alunosNaoPagantes: n(totalCampo('alunos_nao_pagantes')) || Math.max(alunosAtivos - alunosPagantes, 0),
+    bolsistasIntegrais: n(totalCampo('bolsistas_integrais', 'total_bolsistas_integrais')),
+    bolsistasIntegraisRegulares: n(totalCampo('bolsistas_integrais_regulares', 'total_bolsistas_integrais_regulares')),
+    bolsistasIntegraisSegundoCurso: n(totalCampo('bolsistas_integrais_segundo_curso', 'total_bolsistas_integrais_segundo_curso')),
+    bolsistasParciais: n(totalCampo('bolsistas_parciais', 'total_bolsistas_parciais')),
+    trancados: n(totalCampo('alunos_trancados', 'total_alunos_trancados')),
+    novosAlunos: n(totalCampo('novas_matriculas')),
+    matriculasAtivas,
+    matriculasBaseAlunosAtivos,
+    matriculasBanda,
+    matriculas2Curso,
+    alunosCom2Curso: n(totalCampo('alunos_com_2_curso')),
+    matriculas2CursoExtras: n(totalCampo('matriculas_2_curso_extras')),
+    alunosCoral,
+    evasoes: n(totalCampo('evasoes', 'total_evasoes')),
   };
 }
 
@@ -282,6 +301,8 @@ async function gerarRelatorioDiario(
   const alunosPagantes = kpisAlunos.alunosPagantes;
   const alunosNaoPagantes = kpisAlunos.alunosNaoPagantes;
   const bolsistasIntegrais = kpisAlunos.bolsistasIntegrais;
+  const bolsistasIntegraisRegulares = kpisAlunos.bolsistasIntegraisRegulares;
+  const bolsistasIntegraisSegundoCurso = kpisAlunos.bolsistasIntegraisSegundoCurso;
   const bolsistasParciais = kpisAlunos.bolsistasParciais;
 
   const trancados = kpisAlunos.trancados;
@@ -291,8 +312,11 @@ async function gerarRelatorioDiario(
 
   // Matriculas: vinculos ativos/trancados, com banda/2o curso/coral separados.
   const matriculasAtivas = kpisAlunos.matriculasAtivas;
+  const matriculasBaseAlunosAtivos = kpisAlunos.matriculasBaseAlunosAtivos;
   const matriculasBanda = kpisAlunos.matriculasBanda;
   const matriculas2Curso = kpisAlunos.matriculas2Curso;
+  const alunosCom2Curso = kpisAlunos.alunosCom2Curso;
+  const matriculas2CursoExtras = kpisAlunos.matriculas2CursoExtras;
   const alunosCoral = kpisAlunos.alunosCoral;
 
   // Movimentacoes do mes para retencao operacional viva.
@@ -367,6 +391,15 @@ async function gerarRelatorioDiario(
 
   // === 2. MONTAR TEXTO (idêntico ao frontend) ===
   const taxaInadimplencia = alunosAtivos > 0 ? (alunosNaoPagantes / alunosAtivos * 100) : 0;
+  const bolsistasIntegraisTexto = bolsistasIntegraisRegulares || bolsistasIntegraisSegundoCurso
+    ? `*${bolsistasIntegrais}* (${bolsistasIntegraisRegulares} regulares + ${bolsistasIntegraisSegundoCurso} em 2o curso)`
+    : `*${bolsistasIntegrais}*`;
+  const matriculas2CursoTexto = alunosCom2Curso || matriculas2CursoExtras
+    ? `*${matriculas2Curso}* (${alunosCom2Curso} alunos${matriculas2CursoExtras ? ` + ${matriculas2CursoExtras} extras` : ''})`
+    : `*${matriculas2Curso}*`;
+  const matriculasAtivasTexto = matriculasBaseAlunosAtivos || matriculasBanda || matriculas2Curso
+    ? `*${matriculasAtivas}* (${matriculasBaseAlunosAtivos} base alunos + ${matriculasBanda} banda + ${matriculas2Curso} 2o curso)`
+    : `*${matriculasAtivas}*`;
 
   let texto = '';
   texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
@@ -381,16 +414,16 @@ async function gerarRelatorioDiario(
   texto += `• Ativos: *${alunosAtivos}*\n`;
   texto += `• Pagantes: *${alunosPagantes}*\n`;
   texto += `• Não Pagantes: *${alunosNaoPagantes}* (${taxaInadimplencia.toFixed(1)}%)\n`;
-  texto += `• Bolsistas Integrais: *${bolsistasIntegrais}*\n`;
+  texto += `- Bolsistas Integrais: ${bolsistasIntegraisTexto}\n`;
   texto += `• Bolsistas Parciais: *${bolsistasParciais}*\n`;
   texto += `• Trancados: *${trancados || 0}*\n`;
   texto += `• Novos no mês: *${novosAlunos}*\n\n`;
 
   texto += `📚 *MATRÍCULAS*\n`;
   texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-  texto += `• Matrículas Ativas: *${matriculasAtivas}*\n`;
+  texto += `• Matrículas Ativas: ${matriculasAtivasTexto}\n`;
   texto += `• Matrículas em Banda: *${matriculasBanda}*\n`;
-  texto += `• Matrículas de 2º Curso: *${matriculas2Curso}*\n`;
+  texto += `- Matriculas de 2o Curso: ${matriculas2CursoTexto}\n`;
   texto += `• Alunos no Coral: *${alunosCoral}*\n\n`;
 
   texto += `🔄 *RENOVAÇÕES DO MÊS*\n`;

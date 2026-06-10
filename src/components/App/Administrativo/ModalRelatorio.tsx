@@ -64,6 +64,43 @@ export function ModalRelatorio({
   const [erroWhatsApp, setErroWhatsApp] = useState<string | null>(null);
   const [numeroTeste, setNumeroTeste] = useState('');
   const { usuario } = useAuth();
+
+  const formatarBolsistasIntegrais = () => {
+    const total = resumo?.bolsistas_integrais || 0;
+    const regulares = resumo?.bolsistas_integrais_regulares || 0;
+    const segundoCurso = resumo?.bolsistas_integrais_segundo_curso || 0;
+    return regulares || segundoCurso
+      ? `*${total}* (${regulares} regulares + ${segundoCurso} em 2o curso)`
+      : `*${total}*`;
+  };
+
+  const formatarBolsistasIntegraisTexto = () => {
+    const total = resumo?.bolsistas_integrais || 0;
+    const regulares = resumo?.bolsistas_integrais_regulares || 0;
+    const segundoCurso = resumo?.bolsistas_integrais_segundo_curso || 0;
+    return regulares || segundoCurso
+      ? `${total} integrais (${regulares} regulares + ${segundoCurso} em 2o curso)`
+      : `${total} integrais`;
+  };
+
+  const formatarMatriculasSegundoCurso = () => {
+    const total = resumo?.matriculas_2_curso || 0;
+    const alunos = resumo?.alunos_com_2_curso || 0;
+    const extras = resumo?.matriculas_2_curso_extras || 0;
+    return alunos || extras
+      ? `*${total}* (${alunos} alunos${extras ? ` + ${extras} extras` : ''})`
+      : `*${total}*`;
+  };
+
+  const formatarMatriculasAtivas = () => {
+    const total = resumo?.matriculas_ativas || 0;
+    const baseAlunos = resumo?.matriculas_base_alunos_ativos || resumo?.alunos_ativos || 0;
+    const banda = resumo?.matriculas_banda || 0;
+    const segundoCurso = resumo?.matriculas_2_curso || 0;
+    return baseAlunos || banda || segundoCurso
+      ? `*${total}* (${baseAlunos} base alunos + ${banda} banda + ${segundoCurso} 2o curso)`
+      : `*${total}*`;
+  };
   
   // Estado para período do relatório
   const [relatorioPeriodo, setRelatorioPeriodo] = useState<'hoje' | 'ontem' | 'semana' | 'mes' | 'personalizado'>('hoje');
@@ -262,16 +299,16 @@ export function ModalRelatorio({
     texto += `• Ativos: *${resumo?.alunos_ativos || 0}*\n`;
     texto += `• Pagantes: *${resumo?.alunos_pagantes || 0}*\n`;
     texto += `• Não Pagantes: *${resumo?.alunos_nao_pagantes || 0}* (${taxaInadimplencia.toFixed(1)}%)\n`;
-    texto += `• Bolsistas Integrais: *${resumo?.bolsistas_integrais || 0}*\n`;
+    texto += `- Bolsistas Integrais: ${formatarBolsistasIntegrais()}\n`;
     texto += `• Bolsistas Parciais: *${resumo?.bolsistas_parciais || 0}*\n`;
     texto += `• Trancados: *${resumo?.alunos_trancados || 0}*\n`;
     texto += `• Novos no mês: *${resumo?.alunos_novos || 0}*\n\n`;
 
     texto += `📚 *MATRÍCULAS*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `• Matrículas Ativas: *${resumo?.matriculas_ativas || 0}*\n`;
+    texto += `• Matrículas Ativas: ${formatarMatriculasAtivas()}\n`;
     texto += `• Matrículas em Banda: *${resumo?.matriculas_banda || 0}*\n`;
-    texto += `• Matrículas de 2º Curso: *${resumo?.matriculas_2_curso || 0}*\n`;
+    texto += `- Matriculas de 2o Curso: ${formatarMatriculasSegundoCurso()}\n`;
     texto += `• Alunos no Coral: *${resumo?.alunos_coral || 0}*\n\n`;
 
     texto += `🔄 *RENOVAÇÕES DO MÊS*\n`;
@@ -483,16 +520,16 @@ export function ModalRelatorio({
     texto += `• Ativos: *${resumo?.alunos_ativos || 0}*\n`;
     texto += `• Pagantes: *${resumo?.alunos_pagantes || 0}*\n`;
     texto += `• Não Pagantes: *${resumo?.alunos_nao_pagantes || 0}*\n`;
-    texto += `• Bolsistas: *${totalBolsistas}*\n`;
+    texto += `- Bolsistas: *${totalBolsistas}* (${formatarBolsistasIntegraisTexto()} + ${resumo?.bolsistas_parciais || 0} parciais)\n`;
     texto += `• Trancados: *${resumo?.alunos_trancados || 0}*\n`;
     texto += `• Novos no mês: *${resumo?.alunos_novos || 0}*\n\n`;
 
     // SEÇÃO 2: MATRÍCULAS
     texto += `📚 *MATRÍCULAS*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `• Matrículas Ativas: *${resumo?.matriculas_ativas || 0}*\n`;
+    texto += `• Matrículas Ativas: ${formatarMatriculasAtivas()}\n`;
     texto += `• Matrículas em Banda: *${resumo?.matriculas_banda || 0}*\n`;
-    texto += `• Matrículas de 2º Curso: *${resumo?.matriculas_2_curso || 0}*\n\n`;
+    texto += `- Matriculas de 2o Curso: ${formatarMatriculasSegundoCurso()}\n`;
 
     // SEÇÃO 3: KPIs FINANCEIROS
     texto += `💰 *KPIs FINANCEIROS*\n`;

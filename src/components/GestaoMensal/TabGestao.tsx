@@ -54,8 +54,13 @@ interface DadosGestao {
   total_alunos_ativos: number;
   total_alunos_pagantes: number;
   total_bolsistas_integrais: number;
+  total_bolsistas_integrais_regulares: number;
+  total_bolsistas_integrais_segundo_curso: number;
   total_bolsistas_parciais: number;
   total_banda: number;
+  matriculas_2_curso: number;
+  alunos_com_2_curso: number;
+  matriculas_2_curso_extras: number;
   novas_matriculas: number;
   evasoes: number;
   saldo_liquido: number;
@@ -338,10 +343,14 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
                 total_alunos_ativos: row.alunosAtivos,
                 total_alunos_pagantes: row.alunosPagantes,
                 total_bolsistas_integrais: row.bolsistasIntegrais,
+                total_bolsistas_integrais_regulares: row.bolsistasIntegraisRegulares,
+                total_bolsistas_integrais_segundo_curso: row.bolsistasIntegraisSegundoCurso,
                 total_bolsistas_parciais: row.bolsistasParciais,
                 total_banda: row.matriculasBanda,
                 total_matriculas_ativas: row.matriculasAtivas,
                 total_segundo_curso: row.matriculasSegundoCurso,
+                alunos_com_2_curso: row.alunosComSegundoCurso,
+                matriculas_2_curso_extras: row.matriculasSegundoCursoExtras,
                 total_coral: row.matriculasCoral,
                 total_la_kids: row.kids,
                 total_la_adultos: row.school,
@@ -638,8 +647,13 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             total_alunos_ativos_sum: acc.total_alunos_ativos_sum + (item.total_alunos_ativos || 0),
             total_alunos_pagantes_sum: acc.total_alunos_pagantes_sum + (item.total_alunos_pagantes || 0),
             total_bolsistas_integrais_sum: acc.total_bolsistas_integrais_sum + (item.total_bolsistas_integrais || 0),
+            total_bolsistas_integrais_regulares_sum: acc.total_bolsistas_integrais_regulares_sum + (item.total_bolsistas_integrais_regulares || 0),
+            total_bolsistas_integrais_segundo_curso_sum: acc.total_bolsistas_integrais_segundo_curso_sum + (item.total_bolsistas_integrais_segundo_curso || 0),
             total_bolsistas_parciais_sum: acc.total_bolsistas_parciais_sum + (item.total_bolsistas_parciais || 0),
             total_banda_sum: acc.total_banda_sum + (item.total_banda || 0),
+            matriculas_2_curso_sum: acc.matriculas_2_curso_sum + (item.total_segundo_curso || item.matriculas_2_curso || 0),
+            alunos_com_2_curso_sum: acc.alunos_com_2_curso_sum + (item.alunos_com_2_curso || 0),
+            matriculas_2_curso_extras_sum: acc.matriculas_2_curso_extras_sum + (item.matriculas_2_curso_extras || 0),
             total_la_kids_sum: acc.total_la_kids_sum + (item.total_la_kids || 0),
             total_la_adultos_sum: acc.total_la_adultos_sum + (item.total_la_adultos || 0),
             total_la_sem_classificação_sum: acc.total_la_sem_classificação_sum + (item.total_la_sem_classificação || 0),
@@ -660,7 +674,9 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             count: acc.count + 1,
           }), {
             total_alunos_ativos_sum: 0, total_alunos_pagantes_sum: 0, total_bolsistas_integrais_sum: 0,
-            total_bolsistas_parciais_sum: 0, total_banda_sum: 0, total_la_kids_sum: 0,
+            total_bolsistas_integrais_regulares_sum: 0, total_bolsistas_integrais_segundo_curso_sum: 0,
+            total_bolsistas_parciais_sum: 0, total_banda_sum: 0, matriculas_2_curso_sum: 0,
+            alunos_com_2_curso_sum: 0, matriculas_2_curso_extras_sum: 0, total_la_kids_sum: 0,
             total_la_adultos_sum: 0, total_la_sem_classificação_sum: 0, ticket_medio_sum: 0, mrr_sum: 0, arr_sum: 0,
             tempo_permanencia_medio_sum: 0, ltv_medio_sum: 0, inadimplencia_pct_sum: 0,
             faturamento_previsto: 0, faturamento_realizado: 0, churn_rate_sum: 0, total_evasoes: 0, 
@@ -875,8 +891,13 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           const mediaAlunos = mesesUnicos > 0 ? Math.round(g.total_alunos_ativos_sum / mesesUnicos) : 0;
           const mediaPagantes = mesesUnicos > 0 ? Math.round(g.total_alunos_pagantes_sum / mesesUnicos) : 0;
           const mediaBolsistasIntegrais = mesesUnicos > 0 ? Math.round(g.total_bolsistas_integrais_sum / mesesUnicos) : 0;
+          const mediaBolsistasIntegraisRegulares = mesesUnicos > 0 ? Math.round(g.total_bolsistas_integrais_regulares_sum / mesesUnicos) : 0;
+          const mediaBolsistasIntegraisSegundoCurso = mesesUnicos > 0 ? Math.round(g.total_bolsistas_integrais_segundo_curso_sum / mesesUnicos) : 0;
           const mediaBolsistasParciais = mesesUnicos > 0 ? Math.round(g.total_bolsistas_parciais_sum / mesesUnicos) : 0;
           const mediaBanda = mesesUnicos > 0 ? Math.round(g.total_banda_sum / mesesUnicos) : 0;
+          const mediaMatriculas2Curso = mesesUnicos > 0 ? Math.round(g.matriculas_2_curso_sum / mesesUnicos) : 0;
+          const mediaAlunosCom2Curso = mesesUnicos > 0 ? Math.round(g.alunos_com_2_curso_sum / mesesUnicos) : 0;
+          const mediaMatriculas2CursoExtras = mesesUnicos > 0 ? Math.round(g.matriculas_2_curso_extras_sum / mesesUnicos) : 0;
           const mediaKidsCanonicos = mesesUnicos > 0 ? Math.round(g.total_la_kids_sum / mesesUnicos) : 0;
           const mediaSchoolCanonicos = mesesUnicos > 0 ? Math.round(g.total_la_adultos_sum / mesesUnicos) : 0;
           const mediaSemClassificacaoCanonica = mesesUnicos > 0 ? Math.round(g.total_la_sem_classificação_sum / mesesUnicos) : 0;
@@ -913,8 +934,13 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
             total_alunos_ativos: totalAlunosAtivosCanonico,
             total_alunos_pagantes: mediaPagantes,
             total_bolsistas_integrais: mediaBolsistasIntegrais,
+            total_bolsistas_integrais_regulares: mediaBolsistasIntegraisRegulares,
+            total_bolsistas_integrais_segundo_curso: mediaBolsistasIntegraisSegundoCurso,
             total_bolsistas_parciais: mediaBolsistasParciais,
             total_banda: mediaBanda,
+            matriculas_2_curso: mediaMatriculas2Curso,
+            alunos_com_2_curso: mediaAlunosCom2Curso,
+            matriculas_2_curso_extras: mediaMatriculas2CursoExtras,
             // Matrículas/Evasões - usar SOMA (eventos acumulam no período)
             novas_matriculas: novasMatriculas,
             evasoes: evasoes,
@@ -1575,6 +1601,11 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
               label="Bolsistas Integrais"
               tooltip="Alunos com tipo de matrícula bolsista integral (100% de desconto). Clique para ver a lista."
               value={dados.total_bolsistas_integrais}
+              subvalue={
+                dados.total_bolsistas_integrais_regulares || dados.total_bolsistas_integrais_segundo_curso
+                  ? `${dados.total_bolsistas_integrais_regulares} reg. + ${dados.total_bolsistas_integrais_segundo_curso} 2o curso`
+                  : undefined
+              }
               variant="amber"
               onClick={() => { fetchModalAlunos('bolsista_int'); setModalAberto('bolsista_int'); }}
             />

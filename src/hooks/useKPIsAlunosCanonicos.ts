@@ -20,11 +20,16 @@ export interface KPIsAlunosCanonicosPorUnidade {
   tempoPermanencia: number;
   ltv: number;
   matriculasAtivas: number;
+  matriculasBaseAlunosAtivos: number;
   matriculasBanda: number;
   matriculasSegundoCurso: number;
+  alunosComSegundoCurso: number;
+  matriculasSegundoCursoExtras: number;
   matriculasCoral: number;
   novasMatriculas: number;
   bolsistasIntegrais: number;
+  bolsistasIntegraisRegulares: number;
+  bolsistasIntegraisSegundoCurso: number;
   bolsistasParciais: number;
   kids: number;
   school: number;
@@ -56,6 +61,7 @@ export interface KPIsAlunosCanonicos {
   tempoPermanencia: number;
   ltv: number;
   matriculasAtivas: number;
+  matriculasBaseAlunosAtivos: number;
   matriculasBanda: number;
   matriculasSegundoCurso: number;
   matriculasCoral: number;
@@ -98,11 +104,16 @@ const ZERO_KPIS = {
   tempoPermanencia: 0,
   ltv: 0,
   matriculasAtivas: 0,
+  matriculasBaseAlunosAtivos: 0,
   matriculasBanda: 0,
   matriculasSegundoCurso: 0,
+  alunosComSegundoCurso: 0,
+  matriculasSegundoCursoExtras: 0,
   matriculasCoral: 0,
   novasMatriculas: 0,
   bolsistasIntegrais: 0,
+  bolsistasIntegraisRegulares: 0,
+  bolsistasIntegraisSegundoCurso: 0,
   bolsistasParciais: 0,
   kids: 0,
   school: 0,
@@ -134,6 +145,10 @@ function mapDadosMensais(row: any): KPIsAlunosCanonicosPorUnidade {
   const mrr = n(row.faturamento_estimado);
   const ticketMedio = n(row.ticket_medio);
   const tempoPermanencia = n(row.tempo_permanencia);
+  const matriculasAtivas = n(row.matriculas_ativas);
+  const matriculasBanda = n(row.matriculas_banda);
+  const matriculasSegundoCurso = n(row.matriculas_2_curso);
+  const matriculasCoral = n(row.matriculas_coral || row.alunos_coral);
 
   return {
     unidade_id: String(row.unidade_id || ''),
@@ -150,12 +165,17 @@ function mapDadosMensais(row: any): KPIsAlunosCanonicosPorUnidade {
     inadimplencia: n(row.inadimplencia),
     tempoPermanencia,
     ltv: ticketMedio * tempoPermanencia,
-    matriculasAtivas: n(row.matriculas_ativas),
-    matriculasBanda: n(row.matriculas_banda),
-    matriculasSegundoCurso: n(row.matriculas_2_curso),
-    matriculasCoral: n(row.matriculas_coral || row.alunos_coral),
+    matriculasAtivas,
+    matriculasBaseAlunosAtivos: n(row.matriculas_base_alunos_ativos) || n(row.alunos_ativos),
+    matriculasBanda,
+    matriculasSegundoCurso,
+    alunosComSegundoCurso: n(row.alunos_com_2_curso),
+    matriculasSegundoCursoExtras: n(row.matriculas_2_curso_extras),
+    matriculasCoral,
     novasMatriculas: n(row.novas_matriculas),
     bolsistasIntegrais: n(row.bolsistas_integrais),
+    bolsistasIntegraisRegulares: n(row.bolsistas_integrais_regulares),
+    bolsistasIntegraisSegundoCurso: n(row.bolsistas_integrais_segundo_curso),
     bolsistasParciais: n(row.bolsistas_parciais),
     kids: n(row.la_music_kids || row.total_la_kids),
     school: n(row.la_music_school || row.total_la_adultos),
@@ -201,11 +221,16 @@ export function consolidarKPIsAlunosCanonicos(
     tempoPermanencia: rows.reduce((acc, row) => acc + row.tempoPermanencia, 0) / count,
     ltv: rows.reduce((acc, row) => acc + row.ltv, 0) / count,
     matriculasAtivas: rows.reduce((acc, row) => acc + row.matriculasAtivas, 0),
+    matriculasBaseAlunosAtivos: rows.reduce((acc, row) => acc + row.matriculasBaseAlunosAtivos, 0),
     matriculasBanda: rows.reduce((acc, row) => acc + row.matriculasBanda, 0),
     matriculasSegundoCurso: rows.reduce((acc, row) => acc + row.matriculasSegundoCurso, 0),
+    alunosComSegundoCurso: rows.reduce((acc, row) => acc + row.alunosComSegundoCurso, 0),
+    matriculasSegundoCursoExtras: rows.reduce((acc, row) => acc + row.matriculasSegundoCursoExtras, 0),
     matriculasCoral: rows.reduce((acc, row) => acc + row.matriculasCoral, 0),
     novasMatriculas: rows.reduce((acc, row) => acc + row.novasMatriculas, 0),
     bolsistasIntegrais: rows.reduce((acc, row) => acc + row.bolsistasIntegrais, 0),
+    bolsistasIntegraisRegulares: rows.reduce((acc, row) => acc + row.bolsistasIntegraisRegulares, 0),
+    bolsistasIntegraisSegundoCurso: rows.reduce((acc, row) => acc + row.bolsistasIntegraisSegundoCurso, 0),
     bolsistasParciais: rows.reduce((acc, row) => acc + row.bolsistasParciais, 0),
     kids: rows.reduce((acc, row) => acc + row.kids, 0),
     school: rows.reduce((acc, row) => acc + row.school, 0),

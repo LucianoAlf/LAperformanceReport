@@ -17,11 +17,16 @@ export interface KPIsAlunosVivosPorUnidade {
   tempoPermanencia: number;
   ltv: number;
   matriculasAtivas: number;
+  matriculasBaseAlunosAtivos: number;
   matriculasBanda: number;
   matriculasSegundoCurso: number;
+  alunosComSegundoCurso: number;
+  matriculasSegundoCursoExtras: number;
   matriculasCoral: number;
   novasMatriculas: number;
   bolsistasIntegrais: number;
+  bolsistasIntegraisRegulares: number;
+  bolsistasIntegraisSegundoCurso: number;
   bolsistasParciais: number;
   kids: number;
   school: number;
@@ -143,6 +148,14 @@ function isBolsaIntegral(row: AlunoRow): boolean {
   return tipoRow(row)?.codigo === 'BOLSISTA_INT' && !isBanda(row);
 }
 
+function isBolsaIntegralRegular(row: AlunoRow): boolean {
+  return isBolsaIntegral(row) && row.is_segundo_curso !== true;
+}
+
+function isBolsaIntegralSegundoCurso(row: AlunoRow): boolean {
+  return isBolsaIntegral(row) && row.is_segundo_curso === true;
+}
+
 function isBolsaParcial(row: AlunoRow): boolean {
   return tipoRow(row)?.codigo === 'BOLSISTA_PARC' && !isBanda(row);
 }
@@ -208,7 +221,10 @@ export function calcularKPIsAlunosVivosCanonicos(
       inadimplente: boolean;
       valorInadimplente: number;
       bolsistaIntegral: boolean;
+      bolsistaIntegralRegular: boolean;
+      bolsistaIntegralSegundoCurso: boolean;
       bolsistaParcial: boolean;
+      segundosCursos: number;
     }>();
 
     alunosUnidade.forEach(row => {
@@ -221,7 +237,10 @@ export function calcularKPIsAlunosVivosCanonicos(
         inadimplente: false,
         valorInadimplente: 0,
         bolsistaIntegral: false,
+        bolsistaIntegralRegular: false,
+        bolsistaIntegralSegundoCurso: false,
         bolsistaParcial: false,
+        segundosCursos: 0,
       };
 
       if (row.idade_atual !== null && row.idade_atual !== undefined) {
@@ -238,7 +257,12 @@ export function calcularKPIsAlunosVivosCanonicos(
       }
 
       pessoa.bolsistaIntegral = pessoa.bolsistaIntegral || isBolsaIntegral(row);
+      pessoa.bolsistaIntegralRegular = pessoa.bolsistaIntegralRegular || isBolsaIntegralRegular(row);
+      pessoa.bolsistaIntegralSegundoCurso = pessoa.bolsistaIntegralSegundoCurso || isBolsaIntegralSegundoCurso(row);
       pessoa.bolsistaParcial = pessoa.bolsistaParcial || isBolsaParcial(row);
+      if (isSegundoCursoExecutivo(row)) {
+        pessoa.segundosCursos += 1;
+      }
       pessoas.set(key, pessoa);
     });
 
@@ -248,6 +272,12 @@ export function calcularKPIsAlunosVivosCanonicos(
     const inadimplentes = pessoasArray.filter(pessoa => pessoa.inadimplente).length;
     const valorInadimplente = pessoasArray.reduce((acc, pessoa) => acc + pessoa.valorInadimplente, 0);
     const inadimplenciaPct = alunosPagantes > 0 ? (inadimplentes / alunosPagantes) * 100 : 0;
+    const alunosAtivos = pessoasArray.length;
+    const matriculasBanda = alunosUnidade.filter(isBanda).length;
+    const matriculasSegundoCurso = alunosUnidade.filter(isSegundoCursoExecutivo).length;
+    const alunosComSegundoCurso = pessoasArray.filter(pessoa => pessoa.segundosCursos > 0).length;
+    const matriculasCoral = alunosUnidade.filter(isCoral).length;
+    const matriculasAtivas = alunosAtivos + matriculasBanda + matriculasSegundoCurso + matriculasCoral;
 
     const novasMatriculasKeys = new Set(
       alunosUnidade
@@ -281,7 +311,7 @@ export function calcularKPIsAlunosVivosCanonicos(
       unidade_nome: unidadesMap.get(unidadeId) || unidade.nome || 'Unidade',
       ano,
       mes,
-      alunosAtivos: pessoasArray.length,
+      alunosAtivos,
       alunosPagantes,
       ticketMedio,
       mrr,
@@ -291,12 +321,19 @@ export function calcularKPIsAlunosVivosCanonicos(
       inadimplencia: inadimplenciaPct,
       tempoPermanencia,
       ltv: ticketMedio * tempoPermanencia,
-      matriculasAtivas: alunosUnidade.length,
-      matriculasBanda: alunosUnidade.filter(isBanda).length,
-      matriculasSegundoCurso: alunosUnidade.filter(isSegundoCursoExecutivo).length,
-      matriculasCoral: alunosUnidade.filter(isCoral).length,
+      matriculasAtivas,
+      matriculasBaseAlunosAtivos: alunosAtivos,
+      matriculasBanda,
+      matriculasSegundoCurso,
+      alunosComSegundoCurso,
+      matriculasSegundoCursoExtras: Math.max(matriculasSegundoCurso - alunosComSegundoCurso, 0),
+      matriculasCoral,
       novasMatriculas: novasMatriculasKeys.size,
       bolsistasIntegrais: pessoasArray.filter(pessoa => pessoa.bolsistaIntegral).length,
+      bolsistasIntegraisRegulares: pessoasArray.filter(pessoa => pessoa.bolsistaIntegralRegular).length,
+      bolsistasIntegraisSegundoCurso: pessoasArray.filter(pessoa =>
+        pessoa.bolsistaIntegralSegundoCurso && !pessoa.bolsistaIntegralRegular
+      ).length,
       bolsistasParciais: pessoasArray.filter(pessoa => pessoa.bolsistaParcial).length,
       kids: pessoasArray.filter(pessoa => pessoa.idade !== null && pessoa.idade <= 11).length,
       school: pessoasArray.filter(pessoa => pessoa.idade !== null && pessoa.idade >= 12).length,

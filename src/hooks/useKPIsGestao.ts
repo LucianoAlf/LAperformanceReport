@@ -10,8 +10,14 @@ export interface KPIsGestao {
   total_alunos_ativos: number;
   total_alunos_pagantes: number;
   total_bolsistas_integrais: number;
+  total_bolsistas_integrais_regulares?: number;
+  total_bolsistas_integrais_segundo_curso?: number;
   total_bolsistas_parciais: number;
+  total_matriculas_base_alunos_ativos?: number;
   total_banda: number;
+  matriculas_2_curso?: number;
+  alunos_com_2_curso?: number;
+  matriculas_2_curso_extras?: number;
   ticket_medio: number;
   mrr: number;
   arr: number;
@@ -54,8 +60,14 @@ function mapCanonicalToGestao(kpi: any): KPIsGestao {
     total_alunos_ativos: kpi.alunosAtivos,
     total_alunos_pagantes: kpi.alunosPagantes,
     total_bolsistas_integrais: kpi.bolsistasIntegrais,
+    total_bolsistas_integrais_regulares: kpi.bolsistasIntegraisRegulares,
+    total_bolsistas_integrais_segundo_curso: kpi.bolsistasIntegraisSegundoCurso,
     total_bolsistas_parciais: kpi.bolsistasParciais,
+    total_matriculas_base_alunos_ativos: kpi.matriculasBaseAlunosAtivos,
     total_banda: kpi.matriculasBanda,
+    matriculas_2_curso: kpi.matriculasSegundoCurso,
+    alunos_com_2_curso: kpi.alunosComSegundoCurso,
+    matriculas_2_curso_extras: kpi.matriculasSegundoCursoExtras,
     ticket_medio: kpi.ticketMedio,
     mrr: kpi.mrr,
     arr: kpi.arr,

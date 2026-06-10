@@ -99,11 +99,16 @@ export interface ResumoMes {
   alunos_nao_pagantes: number;
   alunos_trancados: number;
   bolsistas_integrais: number;
+  bolsistas_integrais_regulares: number;
+  bolsistas_integrais_segundo_curso: number;
   bolsistas_parciais: number;
   alunos_novos: number;
   matriculas_ativas: number;
+  matriculas_base_alunos_ativos: number;
   matriculas_banda: number;
   matriculas_2_curso: number;
+  alunos_com_2_curso: number;
+  matriculas_2_curso_extras: number;
   alunos_coral: number;
   renovacoes_previstas: number;
   renovacoes_realizadas: number;
@@ -368,14 +373,19 @@ export function AdministrativoPage() {
           total_alunos_ativos: row.alunosAtivos,
           total_alunos_pagantes: row.alunosPagantes,
           total_bolsistas_integrais: row.bolsistasIntegrais,
+          total_bolsistas_integrais_regulares: row.bolsistasIntegraisRegulares,
+          total_bolsistas_integrais_segundo_curso: row.bolsistasIntegraisSegundoCurso,
           total_bolsistas_parciais: row.bolsistasParciais,
           ticket_medio: row.ticketMedio,
           faturamento_previsto: row.faturamentoPrevisto,
           churn_rate: row.churnRate,
           tempo_permanencia_medio: row.tempoPermanencia,
           _matriculas_ativas: row.matriculasAtivas,
+          _matriculas_base_alunos_ativos: row.matriculasBaseAlunosAtivos,
           _matriculas_banda: row.matriculasBanda,
           _matriculas_2_curso: row.matriculasSegundoCurso,
+          _alunos_com_2_curso: row.alunosComSegundoCurso,
+          _matriculas_2_curso_extras: row.matriculasSegundoCursoExtras,
           _alunos_coral: row.matriculasCoral,
         }));
       }
@@ -427,9 +437,14 @@ export function AdministrativoPage() {
         alunos_pagantes: (acc.alunos_pagantes || 0) + (k.total_alunos_pagantes || 0),
         alunos_nao_pagantes: (acc.alunos_nao_pagantes || 0) + ((k.total_alunos_ativos || 0) - (k.total_alunos_pagantes || 0)),
         bolsistas_integrais: (acc.bolsistas_integrais || 0) + (k.total_bolsistas_integrais || 0),
+        bolsistas_integrais_regulares: (acc.bolsistas_integrais_regulares || 0) + (k.total_bolsistas_integrais_regulares || 0),
+        bolsistas_integrais_segundo_curso: (acc.bolsistas_integrais_segundo_curso || 0) + (k.total_bolsistas_integrais_segundo_curso || 0),
         bolsistas_parciais: (acc.bolsistas_parciais || 0) + (k.total_bolsistas_parciais || 0),
         matriculas_banda: matriculasBanda,
+        matriculas_base_alunos_ativos: (acc.matriculas_base_alunos_ativos || 0) + (k._matriculas_base_alunos_ativos || 0),
         matriculas_2_curso: matriculas2Curso,
+        alunos_com_2_curso: (acc.alunos_com_2_curso || 0) + (k._alunos_com_2_curso || 0),
+        matriculas_2_curso_extras: (acc.matriculas_2_curso_extras || 0) + (k._matriculas_2_curso_extras || 0),
         alunos_coral: alunosCoral,
         ticket_medio: k.ticket_medio || acc.ticket_medio || 0,
         faturamento: (acc.faturamento || 0) + (Number(k.faturamento_previsto) || 0),
@@ -918,7 +933,11 @@ export function AdministrativoPage() {
             label="Matrículas Ativas"
             tooltip="Total de matriculas ativas incluindo primeiro curso, segundo curso, banda e coral."
             value={resumo?.matriculas_ativas || 0}
-            subvalue={`${resumo?.matriculas_banda || 0} banda | ${resumo?.matriculas_2_curso || 0} 2º curso`}
+            subvalue={`${resumo?.matriculas_base_alunos_ativos || 0} base alunos | ${resumo?.matriculas_banda || 0} banda | ${resumo?.matriculas_2_curso || 0} 2o curso${
+              resumo?.alunos_com_2_curso
+                ? ` (${resumo.alunos_com_2_curso} alunos${resumo.matriculas_2_curso_extras ? ` + ${resumo.matriculas_2_curso_extras} extras` : ''})`
+                : ''
+            }`}
             variant="violet"
             onClick={() => { fetchMatriculasAtivas(); setModalMatriculasAtivas(true); }}
           />
@@ -927,7 +946,11 @@ export function AdministrativoPage() {
             label="Bolsistas"
             tooltip="Alunos com bolsa integral (valor zero) ou parcial (desconto). Nao entram no calculo de pagantes."
             value={(resumo?.bolsistas_integrais || 0) + (resumo?.bolsistas_parciais || 0)}
-            subvalue={`${resumo?.bolsistas_integrais || 0} integrais | ${resumo?.bolsistas_parciais || 0} parciais`}
+            subvalue={`${resumo?.bolsistas_integrais || 0} integrais${
+              resumo?.bolsistas_integrais_regulares || resumo?.bolsistas_integrais_segundo_curso
+                ? ` (${resumo.bolsistas_integrais_regulares || 0} reg. + ${resumo.bolsistas_integrais_segundo_curso || 0} 2o)`
+                : ''
+            } | ${resumo?.bolsistas_parciais || 0} parciais`}
             variant="amber"
           />
           <KPICard
