@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { DadosAtuais, DadosHistoricos } from '@/lib/simulador/tipos';
 import { fetchKPIsAlunosCanonicos } from '@/hooks/useKPIsAlunosCanonicos';
+import { isRenovacaoConfirmadaOperacional } from '@/lib/retencaoOperacionalCanonica';
 
 interface UseDadosHistoricosResult {
   dadosAtuais: DadosAtuais | null;
@@ -54,14 +55,19 @@ export function useDadosHistoricos(
           const fimMes = `${ano}-${String(mes).padStart(2, '0')}-${String(new Date(ano, mes, 0).getDate()).padStart(2, '0')}`;
           const { data: movimentosRenovacao } = await supabase
             .from('movimentacoes_admin')
-            .select('tipo')
+            .select('tipo, data, competencia_referencia, renovacao_status, renovacao_antecipada, valor_parcela_anterior, valor_parcela_novo, forma_pagamento_id, agente_comercial')
             .eq('unidade_id', unidadeId)
             .in('tipo', ['renovacao', 'nao_renovacao'])
-            .gte('data', inicioMes)
-            .lte('data', fimMes);
+            .or(`and(data.gte.${inicioMes},data.lte.${fimMes}),and(competencia_referencia.gte.${inicioMes},competencia_referencia.lte.${fimMes})`);
 
-          const renovacoes = (movimentosRenovacao || []).filter((mov: any) => mov.tipo === 'renovacao').length;
-          const totalContratos = movimentosRenovacao?.length || 0;
+          const movimentosDaCompetencia = (movimentosRenovacao || []).filter((mov: any) => {
+            const competencia = String(mov.competencia_referencia || mov.data || '').slice(0, 7);
+            return competencia === inicioMes.slice(0, 7);
+          });
+          const renovacoes = movimentosDaCompetencia.filter((mov: any) => (
+            mov.tipo === 'renovacao' && isRenovacaoConfirmadaOperacional(mov)
+          )).length;
+          const totalContratos = movimentosDaCompetencia.length;
           taxaRenovacaoAtual = totalContratos > 0 ? (renovacoes / totalContratos) * 100 : 0;
         }
 

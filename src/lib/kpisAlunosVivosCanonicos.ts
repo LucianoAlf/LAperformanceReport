@@ -1,5 +1,6 @@
 import { supabase } from '@/lib/supabase';
 import { percentualReajusteMedioCanonico } from '@/lib/retencaoOperacionalCanonica';
+import { isCompetenciaNoPeriodo } from '@/lib/renovacoesAntecipadas';
 
 export interface KPIsAlunosVivosPorUnidade {
   unidade_id: string;
@@ -65,6 +66,10 @@ type MovimentoRow = {
   unidade_id: string | null;
   tipo: string | null;
   data: string | null;
+  competencia_referencia?: string | null;
+  renovacao_primeira_aula_novo_ciclo?: string | null;
+  renovacao_status?: 'pendente_validacao' | 'confirmada' | 'antecipada_pendente' | 'antecipada_confirmada' | null;
+  renovacao_antecipada?: boolean | null;
   valor_parcela_anterior?: number | string | null;
   valor_parcela_novo?: number | string | null;
   forma_pagamento_id?: number | string | null;
@@ -299,7 +304,7 @@ export function calcularKPIsAlunosVivosCanonicos(
     const ticketMedio = alunosPagantes > 0 ? mrr / alunosPagantes : 0;
     const reajustesConfirmados = movimentacoes
       .filter(mov => String(mov.unidade_id || '') === unidadeId)
-      .filter(mov => mov.data && mov.data >= inicioMes && mov.data <= dataCorte)
+      .filter(mov => isCompetenciaNoPeriodo(mov, inicioMes, dataCorte))
       .map(percentualReajusteMedioCanonico)
       .filter((valor): valor is number => valor !== null);
     const reajustePct = reajustesConfirmados.length > 0
@@ -400,11 +405,12 @@ export async function fetchKPIsAlunosVivosCanonicos({
       .from('movimentacoes_admin')
       .select(`
         id, aluno_id, aluno_nome, unidade_id, tipo, data,
+        competencia_referencia, renovacao_primeira_aula_novo_ciclo,
+        renovacao_status, renovacao_antecipada,
         curso_id, valor_parcela_anterior, valor_parcela_novo, forma_pagamento_id, agente_comercial
       `)
       .in('tipo', ['evasao', 'nao_renovacao', 'renovacao'])
-      .gte('data', inicioMes)
-      .lte('data', dataCorte)
+      .or(`and(data.gte.${inicioMes},data.lte.${dataCorte}),and(competencia_referencia.gte.${inicioMes},competencia_referencia.lte.${dataCorte})`)
       .order('data', { ascending: false });
 
     if (unidadeFiltro) {

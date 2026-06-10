@@ -17,7 +17,7 @@ interface TabelaRenovacoesProps {
     options?: { atualizarLista?: boolean }
   ) => Promise<boolean>;
   formasPagamento?: { id: number; nome: string; sigla: string }[];
-  status?: 'confirmada' | 'pendente';
+  status?: 'confirmada' | 'pendente' | 'antecipada';
 }
 
 interface DraftRenovacao {
@@ -87,7 +87,8 @@ export function TabelaRenovacoes({
 }: TabelaRenovacoesProps) {
   const { usuario } = useAuth();
   const isAdmin = usuario?.perfil === 'admin' && usuario?.unidade_id === null;
-  const isPendente = status === 'pendente';
+  const isAntecipada = status === 'antecipada';
+  const isPendente = status === 'pendente' || isAntecipada;
   const [drafts, setDrafts] = useState<Record<string, DraftRenovacao>>({});
   const [validatingKey, setValidatingKey] = useState<string | null>(null);
 
@@ -166,6 +167,8 @@ export function TabelaRenovacoes({
         valor_parcela_novo: valorNovo,
         forma_pagamento_id: formaPagamento,
         agente_comercial: agente,
+        renovacao_status: isAntecipada ? 'antecipada_confirmada' : 'confirmada',
+        renovacao_antecipada: isAntecipada || item.renovacao_antecipada || false,
       }, key, { atualizarLista: true });
     } finally {
       setValidatingKey(null);
@@ -178,7 +181,9 @@ export function TabelaRenovacoes({
     <div className="overflow-x-auto">
       {isPendente && data.length > 0 && (
         <div className="border-b border-amber-500/15 bg-amber-500/[0.03] px-4 py-2 text-xs text-amber-100/80">
-          Renovações importadas do Emusys ficam pendentes até a DM validar valor novo e agente. Itens sem parcela recorrente ficam marcados como sem valor.
+          {isAntecipada
+            ? 'Renovações antecipadas foram capturadas agora, mas só contam na competência da primeira aula do novo ciclo.'
+            : 'Renovações importadas do Emusys ficam pendentes até a DM validar valor novo e agente. Itens sem parcela recorrente ficam marcados como sem valor.'}
         </div>
       )}
 
@@ -204,7 +209,9 @@ export function TabelaRenovacoes({
             <tr>
               <td colSpan={isPendente ? 12 : 11} className="py-8 text-center text-slate-500">
                 {isPendente
-                  ? 'Nenhuma renovação pendente neste período'
+                  ? isAntecipada
+                    ? 'Nenhuma renovação antecipada registrada neste período'
+                    : 'Nenhuma renovação pendente neste período'
                   : 'Nenhuma renovação registrada neste período'}
               </td>
             </tr>
@@ -240,7 +247,7 @@ export function TabelaRenovacoes({
                   {isPendente && (
                     <td className="px-3 py-2.5 text-center">
                       <span className="inline-flex items-center rounded-full border border-amber-400/30 bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-300">
-                        Pendente
+                        {isAntecipada ? 'Antecipada' : 'Pendente'}
                       </span>
                     </td>
                   )}

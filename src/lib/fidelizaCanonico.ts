@@ -60,15 +60,15 @@ async function fetchMovimentacoesTrimestre(
   let query = supabase
     .from('movimentacoes_admin')
     .select(`
-      id, aluno_id, aluno_nome, unidade_id, tipo, data, mes_saida,
+      id, aluno_id, aluno_nome, unidade_id, tipo, data, competencia_referencia,
+      renovacao_primeira_aula_novo_ciclo, renovacao_status, renovacao_antecipada, mes_saida,
       valor_parcela_evasao, valor_parcela_anterior, valor_parcela_novo,
       tempo_permanencia_meses,
       forma_pagamento_id, agente_comercial,
       tipo_evasao, motivo, observacoes, professor_id, curso_id
     `)
     .in('tipo', ['renovacao', 'nao_renovacao', 'aviso_previo', 'evasao', 'trancamento'])
-    .gte('data', inicio)
-    .lte('data', fim)
+    .or(`and(data.gte.${inicio},data.lte.${fim}),and(competencia_referencia.gte.${inicio},competencia_referencia.lte.${fim})`)
     .order('data', { ascending: false });
 
   if (unidadeId) query = query.eq('unidade_id', unidadeId);

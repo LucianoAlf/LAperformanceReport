@@ -97,6 +97,14 @@ function isRenovacaoAutomaticaEmusys(mov: any): boolean {
 function isRenovacaoConfirmadaOperacional(mov: any): boolean {
   if (mov?.tipo !== 'renovacao') return false;
 
+  if (mov?.renovacao_status === 'confirmada' || mov?.renovacao_status === 'antecipada_confirmada') {
+    return true;
+  }
+
+  if (mov?.renovacao_status === 'pendente_validacao' || mov?.renovacao_status === 'antecipada_pendente') {
+    return false;
+  }
+
   const agente = String(mov?.agente_comercial || mov?.agente || '').trim();
   if (!agente) return false;
 
@@ -104,6 +112,26 @@ function isRenovacaoConfirmadaOperacional(mov: any): boolean {
   const valorNovoInformado = mov?.valor_parcela_novo !== null && mov?.valor_parcela_novo !== undefined;
 
   return valorAnteriorInformado || valorNovoInformado || Boolean(mov?.forma_pagamento_id);
+}
+
+function inicioMesISO(value: string | null | undefined): string {
+  const raw = String(value || new Date().toISOString()).split('T')[0];
+  const [year, month] = raw.split('-');
+  return `${year}-${month}-01`;
+}
+
+function competenciaReferenciaMovimento(mov: any): string {
+  return inicioMesISO(mov?.competencia_referencia || mov?.data);
+}
+
+function isCompetenciaNoPeriodo(mov: any, inicio: string, fim: string): boolean {
+  const competencia = competenciaReferenciaMovimento(mov);
+  return competencia >= inicio && competencia <= fim;
+}
+
+function isRenovacaoAntecipada(mov: any): boolean {
+  if (mov?.renovacao_antecipada) return true;
+  return competenciaReferenciaMovimento(mov) > inicioMesISO(mov?.data);
 }
 
 function numero(value: unknown): number {
@@ -274,6 +302,7 @@ async function gerarRelatorioDiario(
   const mes = brt.getMonth() + 1;
   const dia = brt.getDate();
   const primeiroDiaMes = `${ano}-${String(mes).padStart(2, '0')}-01`;
+  const ultimoDiaMes = `${ano}-${String(mes).padStart(2, '0')}-${String(new Date(ano, mes, 0).getDate()).padStart(2, '0')}`;
   const mesNome = brt.toLocaleString('pt-BR', { month: 'long' });
   const horaStr = `${String(brt.getHours()).padStart(2, '0')}:${String(brt.getMinutes()).padStart(2, '0')}`;
 
@@ -324,8 +353,7 @@ async function gerarRelatorioDiario(
     .from('movimentacoes_admin')
     .select('*')
     .eq('unidade_id', unidadeId)
-    .gte('data', primeiroDiaMes)
-    .lte('data', hoje)
+    .or(`and(data.gte.${primeiroDiaMes},data.lte.${hoje}),and(competencia_referencia.gte.${primeiroDiaMes},competencia_referencia.lte.${ultimoDiaMes})`)
     .order('data', { ascending: false });
 
   const alunoIdsMovimentacoes = [...new Set((movData || []).map((m: any) => m.aluno_id).filter(Boolean))];
@@ -343,8 +371,12 @@ async function gerarRelatorioDiario(
     alunos: m.aluno_id ? alunosRetencaoMap.get(m.aluno_id) || null : null,
   }));
   const renovacoesMovTodas = movimentacoes.filter((m: any) => m.tipo === 'renovacao');
-  const renovacoesMov = renovacoesMovTodas.filter(isRenovacaoConfirmadaOperacional);
-  const renovacoesAutomaticas = renovacoesMovTodas.filter((m: any) => !isRenovacaoConfirmadaOperacional(m));
+  const renovacoesDaCompetencia = renovacoesMovTodas.filter((m: any) => isCompetenciaNoPeriodo(m, primeiroDiaMes, ultimoDiaMes));
+  const renovacoesMov = renovacoesDaCompetencia.filter(isRenovacaoConfirmadaOperacional);
+  const renovacoesAutomaticas = renovacoesDaCompetencia.filter((m: any) => !isRenovacaoConfirmadaOperacional(m));
+  const renovacoesAntecipadas = renovacoesMovTodas
+    .filter((m: any) => m.data >= primeiroDiaMes && m.data <= hoje)
+    .filter((m: any) => isRenovacaoAntecipada(m) && competenciaReferenciaMovimento(m) > ultimoDiaMes);
   const naoRenovacoesMov = movimentacoes.filter((m: any) => m.tipo === 'nao_renovacao');
   const evasoesMov = movimentacoes.filter((m: any) => m.tipo === 'evasao');
 
@@ -447,6 +479,18 @@ async function gerarRelatorioDiario(
     });
   } else {
     texto += `✅ *RENOVAÇÕES DO DIA: 0*\n\n`;
+  }
+
+  if (renovacoesAntecipadas.length > 0) {
+    texto += `🟡 *RENOVAÇÕES ANTECIPADAS (${renovacoesAntecipadas.length})*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    texto += `Registradas agora, mas contam apenas na competência da primeira aula do novo ciclo.\n`;
+    renovacoesAntecipadas.forEach((r: any, i: number) => {
+      const competencia = competenciaReferenciaMovimento(r).slice(0, 7);
+      texto += `${i + 1}) Nome: *${r.aluno_nome}*\n`;
+      texto += `   Competência efetiva: *${competencia}*\n`;
+      texto += `   Curso: ${r.curso_nome || 'N/A'}\n\n`;
+    });
   }
 
   if (naoRenovacoesHoje.length > 0) {

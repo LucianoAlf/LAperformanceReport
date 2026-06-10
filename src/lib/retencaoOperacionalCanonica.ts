@@ -1,4 +1,10 @@
 import type { KPIsAlunosCanonicosPorUnidade } from '@/hooks/useKPIsAlunosCanonicos';
+import {
+  competenciaReferenciaMovimento,
+  isCompetenciaNoPeriodo,
+  isRenovacaoAntecipada,
+  type RenovacaoStatusOperacional,
+} from '@/lib/renovacoesAntecipadas';
 
 export type TipoMovimentacaoRetencao =
   | 'renovacao'
@@ -14,6 +20,10 @@ export interface MovimentacaoRetencaoRow {
   unidade_id?: string | null;
   tipo?: string | null;
   data?: string | null;
+  competencia_referencia?: string | null;
+  renovacao_primeira_aula_novo_ciclo?: string | null;
+  renovacao_status?: RenovacaoStatusOperacional | null;
+  renovacao_antecipada?: boolean | null;
   mes_saida?: string | null;
   valor_parcela_evasao?: number | string | null;
   valor_parcela_anterior?: number | string | null;
@@ -183,6 +193,14 @@ export function isRenovacaoAutomaticaEmusys(mov: MovimentacaoRetencaoRow): boole
 export function isRenovacaoConfirmadaOperacional(mov: MovimentacaoRetencaoRow): boolean {
   if (mov.tipo !== 'renovacao') return false;
 
+  if (mov.renovacao_status === 'confirmada' || mov.renovacao_status === 'antecipada_confirmada') {
+    return true;
+  }
+
+  if (mov.renovacao_status === 'pendente_validacao' || mov.renovacao_status === 'antecipada_pendente') {
+    return false;
+  }
+
   const agente = String(mov.agente_comercial || '').trim();
   if (!agente) return false;
 
@@ -275,6 +293,11 @@ function estaNoPeriodoPorData(mov: MovimentacaoRetencaoRow, inicio: string, fim:
   return Boolean(mov.data && mov.data >= inicio && mov.data <= fim);
 }
 
+function estaNoPeriodoOperacional(mov: MovimentacaoRetencaoRow, inicio: string, fim: string): boolean {
+  if (mov.tipo === 'renovacao') return isCompetenciaNoPeriodo(mov, inicio, fim);
+  return estaNoPeriodoPorData(mov, inicio, fim);
+}
+
 function avisoNoPeriodo(mov: MovimentacaoRetencaoRow, inicio: string, fim: string): boolean {
   return Boolean(mov.mes_saida && mov.mes_saida >= inicio && mov.mes_saida <= fim);
 }
@@ -300,10 +323,13 @@ export function calcularRetencaoOperacionalCanonica({
     const movimentosUnidade = movimentacoes.filter(mov => String(mov.unidade_id || '') === unidadeId);
     const movimentosNoPeriodo = movimentosUnidade.filter(mov => {
       if (mov.tipo === 'aviso_previo') return avisoNoPeriodo(mov, saidaAviso.inicio, saidaAviso.fim);
-      return estaNoPeriodoPorData(mov, inicio, fim);
+      return estaNoPeriodoOperacional(mov, inicio, fim);
     });
 
-    const renovacoes = movimentosNoPeriodo.filter(mov => mov.tipo === 'renovacao');
+    const renovacoes = movimentosNoPeriodo
+      .filter(mov => mov.tipo === 'renovacao')
+      .filter(mov => competenciaReferenciaMovimento(mov) <= fim)
+      .filter(mov => !isRenovacaoAntecipada(mov) || isCompetenciaNoPeriodo(mov, inicio, fim));
     const renovacoesConfirmadas = renovacoes.filter(isRenovacaoConfirmadaOperacional);
     const renovacoesPendentesConfirmacao = renovacoes.filter(mov => !isRenovacaoConfirmadaOperacional(mov));
     const avisosPrevios = new Set(

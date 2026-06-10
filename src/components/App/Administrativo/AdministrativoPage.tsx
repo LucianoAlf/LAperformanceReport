@@ -8,7 +8,7 @@ import { useToast } from '@/hooks/useToast';
 import { 
   Users, DollarSign, BookOpen, GraduationCap, UserPlus,
   FileText, Calendar, Plus, Pause, RefreshCw, XCircle, AlertTriangle, LogOut,
-  Zap, BarChart3, CheckCircle, DoorOpen, PauseCircle, Search
+  Zap, BarChart3, CheckCircle, DoorOpen, PauseCircle, Search, Clock
 } from 'lucide-react';
 
 import { supabase } from '@/lib/supabase';
@@ -54,6 +54,11 @@ import {
   valorPerdidoMovimentacao,
   type RetencaoOperacionalPorUnidade,
 } from '@/lib/retencaoOperacionalCanonica';
+import {
+  competenciaReferenciaMovimento,
+  isCompetenciaNoPeriodo,
+  isRenovacaoAntecipada,
+} from '@/lib/renovacoesAntecipadas';
 
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 
@@ -63,6 +68,10 @@ export interface MovimentacaoAdmin {
   unidade_id?: string | null;
   tipo: 'renovacao' | 'nao_renovacao' | 'aviso_previo' | 'evasao' | 'trancamento';
   data: string;
+  competencia_referencia?: string | null;
+  renovacao_primeira_aula_novo_ciclo?: string | null;
+  renovacao_status?: 'pendente_validacao' | 'confirmada' | 'antecipada_pendente' | 'antecipada_confirmada' | null;
+  renovacao_antecipada?: boolean | null;
   aluno_nome: string;
   professor_id?: number | null;
   professor_nome?: string;
@@ -127,11 +136,12 @@ export interface ResumoMes {
   novos_bolsistas: number;
 }
 
-type TabId = 'renovacoes' | 'renovacoes_pendentes' | 'nao_renovacoes' | 'avisos' | 'cancelamentos' | 'trancamentos' | 'alunos_novos';
+type TabId = 'renovacoes' | 'renovacoes_pendentes' | 'renovacoes_antecipadas' | 'nao_renovacoes' | 'avisos' | 'cancelamentos' | 'trancamentos' | 'alunos_novos';
 
 const tabs: { id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: 'renovacoes', label: 'Renovações', icon: CheckCircle },
   { id: 'renovacoes_pendentes', label: 'Renovações pendentes', icon: AlertTriangle },
+  { id: 'renovacoes_antecipadas', label: 'Renovações antecipadas', icon: Clock },
   { id: 'nao_renovacoes', label: 'Não Renovação', icon: XCircle },
   { id: 'avisos', label: 'Avisos Prévios', icon: AlertTriangle },
   { id: 'cancelamentos', label: 'Cancelamentos', icon: DoorOpen },
@@ -283,8 +293,7 @@ export function AdministrativoPage() {
       let query = supabase
         .from('movimentacoes_admin')
         .select('*, unidades!movimentacoes_admin_unidade_id_fkey(codigo)')
-        .gte('data', startDate)
-        .lte('data', endDate)
+        .or(`and(data.gte.${startDate},data.lte.${endDate}),and(competencia_referencia.gte.${startDate},competencia_referencia.lte.${endDate})`)
         .order('data', { ascending: false });
 
       const mesSaidaDate = new Date(ano, mes, 1);
@@ -565,10 +574,25 @@ export function AdministrativoPage() {
   // Handlers para salvar
   async function handleSaveMovimentacao(data: Partial<MovimentacaoAdmin>) {
     try {
+      const dataMovimento = data.data || editingItem?.data || new Date().toISOString().split('T')[0];
+      const competenciaReferencia = data.competencia_referencia
+        || editingItem?.competencia_referencia
+        || `${dataMovimento.slice(0, 7)}-01`;
+      const isRenovacao = (data.tipo || editingItem?.tipo) === 'renovacao';
+      const isAntecipada = Boolean(data.renovacao_antecipada ?? editingItem?.renovacao_antecipada)
+        || competenciaReferencia > `${dataMovimento.slice(0, 7)}-01`;
+
       const payload = {
         ...data,
         unidade_id: unidade === 'todos' ? null : unidade,
+        competencia_referencia: competenciaReferencia,
       };
+
+      if (isRenovacao && !payload.renovacao_status) {
+        payload.renovacao_status = editingItem?.renovacao_status
+          || (isAntecipada ? 'antecipada_confirmada' : 'confirmada');
+        payload.renovacao_antecipada = isAntecipada;
+      }
 
       if (editingItem?.id) {
         const { error } = await supabase
@@ -794,9 +818,19 @@ export function AdministrativoPage() {
     }
   }
 
+  const isLancadaNoPeriodo = (m: MovimentacaoAdmin) => Boolean(m.data && m.data >= startDate && m.data <= endDate);
+  const isRenovacaoDaCompetencia = (m: MovimentacaoAdmin) => (
+    m.tipo === 'renovacao' && isCompetenciaNoPeriodo(m, startDate, endDate)
+  );
+
   // Filtrar movimentações por tipo
-  const renovacoes = movimentacoes.filter(m => isRenovacaoConfirmadaOperacional(m));
-  const renovacoesPendentesConfirmacao = movimentacoes.filter(m => m.tipo === 'renovacao' && !isRenovacaoConfirmadaOperacional(m));
+  const renovacoesDaCompetencia = movimentacoes.filter(isRenovacaoDaCompetencia);
+  const renovacoes = renovacoesDaCompetencia.filter(m => isRenovacaoConfirmadaOperacional(m));
+  const renovacoesPendentesConfirmacao = renovacoesDaCompetencia.filter(m => !isRenovacaoConfirmadaOperacional(m));
+  const renovacoesAntecipadas = movimentacoes
+    .filter(m => m.tipo === 'renovacao')
+    .filter(isLancadaNoPeriodo)
+    .filter(m => isRenovacaoAntecipada(m) && competenciaReferenciaMovimento(m) > endDate);
   const avisosPrevios = movimentacoes.filter(m => m.tipo === 'aviso_previo');
   const evasoes = movimentacoes.filter(m => m.tipo === 'evasao');
   const naoRenovacoes = movimentacoes.filter(m => m.tipo === 'nao_renovacao');
@@ -1326,7 +1360,7 @@ export function AdministrativoPage() {
             </div>
             <div>
               <h2 className="text-lg font-bold text-white">Detalhamento do Mês</h2>
-              <p className="text-sm text-emerald-400">{renovacoes.length + renovacoesPendentesConfirmacao.length + avisosPrevios.length + evasoes.length + naoRenovacoes.length + trancamentos.length + alunosNovos.filter(a => !a.is_segundo_curso && !(a.tipo_matricula_id && [3, 4, 5].includes(a.tipo_matricula_id))).length} movimentações</p>
+              <p className="text-sm text-emerald-400">{renovacoes.length + renovacoesPendentesConfirmacao.length + renovacoesAntecipadas.length + avisosPrevios.length + evasoes.length + naoRenovacoes.length + trancamentos.length + alunosNovos.filter(a => !a.is_segundo_curso && !(a.tipo_matricula_id && [3, 4, 5].includes(a.tipo_matricula_id))).length} movimentações</p>
             </div>
           </div>
         </div>
@@ -1337,6 +1371,7 @@ export function AdministrativoPage() {
           {tabs.map(tab => {
             const count = tab.id === 'renovacoes' ? renovacoes.length
               : tab.id === 'renovacoes_pendentes' ? renovacoesPendentesConfirmacao.length
+              : tab.id === 'renovacoes_antecipadas' ? renovacoesAntecipadas.length
               : tab.id === 'nao_renovacoes' ? naoRenovacoes.length
               : tab.id === 'avisos' ? avisosPrevios.length
               : tab.id === 'cancelamentos' ? evasoes.length
@@ -1378,6 +1413,16 @@ export function AdministrativoPage() {
               onSaveInline={handleSaveRenovacaoInline}
               formasPagamento={formasPagamento}
               status="pendente"
+            />
+          )}
+          {activeTab === 'renovacoes_antecipadas' && (
+            <TabelaRenovacoes
+              data={renovacoesAntecipadas}
+              onEdit={handleEdit}
+              onDelete={handleDeleteMovimentacao}
+              onSaveInline={handleSaveRenovacaoInline}
+              formasPagamento={formasPagamento}
+              status="antecipada"
             />
           )}
           {activeTab === 'nao_renovacoes' && (

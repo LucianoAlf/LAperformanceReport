@@ -56,7 +56,8 @@ async function fetchMovimentacoesRetencao(
   const avisoEndDate = fimMes(avisoAno, avisoMes);
 
   const selectFields = `
-    id, aluno_id, aluno_nome, unidade_id, tipo, data, mes_saida,
+    id, aluno_id, aluno_nome, unidade_id, tipo, data, competencia_referencia,
+    renovacao_primeira_aula_novo_ciclo, renovacao_status, renovacao_antecipada, mes_saida,
     valor_parcela_evasao, valor_parcela_anterior, valor_parcela_novo,
     tempo_permanencia_meses,
     forma_pagamento_id, agente_comercial,
@@ -67,8 +68,7 @@ async function fetchMovimentacoesRetencao(
     .from('movimentacoes_admin')
     .select(selectFields)
     .in('tipo', ['renovacao', 'nao_renovacao', 'aviso_previo', 'evasao', 'trancamento'])
-    .gte('data', startDate)
-    .lte('data', endDate)
+    .or(`and(data.gte.${startDate},data.lte.${endDate}),and(competencia_referencia.gte.${startDate},competencia_referencia.lte.${endDate})`)
     .order('data', { ascending: false });
 
   let avisosRetroativosQuery = supabase
