@@ -40,30 +40,9 @@ function normalizarCurso(nome: string): string {
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .replace(/\s+para\s+instrumento$/, '')
-    .replace(/\s+t$/, '')
+    .replace(/\s+(t|ind)$/, '') // remove sufixo de visao: " t" (turma) e " ind" (individual)
     .replace(/\s+/g, ' ')
     .trim();
-}
-
-// Extrair dia da semana em portugues sem sufixo "-feira" (BRT)
-function extrairDiaSemana(isoDate: string): string {
-  const dia = new Date(isoDate).toLocaleDateString('pt-BR', {
-    weekday: 'long',
-    timeZone: 'America/Sao_Paulo',
-  });
-  const cap = dia.charAt(0).toUpperCase() + dia.slice(1);
-  return cap.replace('-feira', '');
-}
-
-// Extrair horario HH:MM:SS em BRT
-function extrairHorarioBRT(isoDate: string): string {
-  return new Intl.DateTimeFormat('pt-BR', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hour12: false,
-    timeZone: 'America/Sao_Paulo',
-  }).format(new Date(isoDate));
 }
 
 interface AlunoEmusys {
@@ -710,7 +689,16 @@ serve(async (req: Request) => {
 
             totalPresencas++;
             const nomeNorm = normalizarNome(nome);
-            const alunoId = mapaAlunos.get(nomeNorm);
+            // Resolver a matricula pelo CURSO da aula (matricula exata, evita embaralhar
+            // alunos com 2+ cursos). Fallback ao nome quando o curso nao resolve ou ha
+            // ambiguidade (ex: 2 matriculas do mesmo curso, homonimos).
+            let alunoId: number | undefined;
+            if (cursoIdAula != null) {
+              const chave = `${nomeNorm}|${aluno.data_nascimento_aluno ?? ''}|${cursoIdAula}`;
+              const candidatos = mapaAlunosComposto.get(chave) ?? [];
+              if (candidatos.length === 1) alunoId = candidatos[0];
+            }
+            if (alunoId == null) alunoId = mapaAlunos.get(nomeNorm);
 
             if (!alunoId) {
               naoEncontrados++;
@@ -763,27 +751,9 @@ serve(async (req: Request) => {
             if (upsertError) {
               console.error(`[sync-presenca] Upsert presença ${nome} aula ${aula.id}:`, upsertError.message);
             }
-
-            // 2c. Atualizar dia_aula/horario_aula do aluno — so se aula recorrente
-            // (categoria 'normal', nunca reposicao/experimental/extra/avulsa) e match composto inequivoco
-            if (aula.categoria === 'normal') {
-              const chaveComposta = `${nomeNorm}|${aluno.data_nascimento_aluno ?? ''}|${cursoIdAula ?? ''}`;
-              const candidatos = mapaAlunosComposto.get(chaveComposta) ?? [];
-              if (candidatos.length === 1) {
-                const alunoIdUnico = candidatos[0];
-                const diaAula = extrairDiaSemana(aula.data_hora_inicio);
-                const horarioAula = extrairHorarioBRT(aula.data_hora_inicio);
-                const { error: updErr } = await supabase
-                  .from('alunos')
-                  .update({ dia_aula: diaAula, horario_aula: horarioAula })
-                  .eq('id', alunoIdUnico);
-                if (updErr) {
-                  console.error(`[sync-presenca] Update horario ${nome} aluno ${alunoIdUnico}:`, updErr.message);
-                }
-              }
-              // Se candidatos.length !== 1 (ambiguo ou nao encontrado na chave composta):
-              // preserva horario atual para evitar sobrescrever aluno errado (caso de 2o curso sem curso_id mapeado).
-            }
+            // O calculo de dia_aula/horario_aula foi movido para a funcao SQL
+            // sincronizar_grade_horaria_alunos (deriva por pessoa+curso a partir de
+            // aluno_presenca, robusta a homonimos/multi-curso). O edge so registra presenca.
           }
         }
 

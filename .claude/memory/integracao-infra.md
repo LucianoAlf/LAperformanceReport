@@ -59,8 +59,10 @@
 - `lojinha-relatorio-vendas` — relatorio de vendas
 
 ### Presenca / Sync Emusys
-- `sync-presenca-emusys` (v24) — sync aulas/presenca do Emusys (pg_cron diario 22h BRT)
-- **GOTCHA (provado 2026-05-27): o sync de presenca IGNORA o `status` do aluno.** Casa aula→aluno só por nome+curso. 64 alunos inativo/evadido/trancado receberam 176 presencas nos ultimos 30 dias. Consequencia: marcar `status='inativo'` NAO para o sync nem tira o aluno de metricas que leem `aluno_presenca` direto (score professor, frequencia). Para um aluno realmente sumir, a linha tem que SAIR de `alunos` (mover p/ `alunos_arquivados`). Soft-delete via status é leaky.
+- `sync-presenca-emusys` (v31, 2026-06-09) — sync aulas/presenca do Emusys (pg_cron diario 22h BRT). **Só registra presença; NÃO calcula mais `dia_aula`/`horario_aula`** (movido para a função SQL `sincronizar_grade_horaria_alunos`).
+- **Vínculo de presença POR CURSO (v31):** o `aluno_id` de `aluno_presenca` passou a ser resolvido pela matrícula do **curso da aula** (`mapaAlunosComposto` chave `nome|nascimento|curso_id`), com fallback ao nome quando ambíguo/sem curso. Antes resolvia só por nome → embaralhava alunos com 2+ cursos. `normalizarCurso` agora remove sufixos `" t"`/`" ind"` (turma/individual) do `curso_nome` do Emusys.
+- **`sincronizar_grade_horaria_alunos` (reescrita 2026-06-09) — fonte ÚNICA do `dia_aula`/`horario_aula`.** Deriva por **pessoa (nome+unidade) + curso da aula** a partir de `aluno_presenca` (moda do dia/horário, 30d com fallback 60d, ≥3 ocorrências), `UPDATE` só quando muda. Robusta a homônimos/multi-curso e ao histórico embaralhado (reagrupa pelo curso da aula). Cron `sincronizar-grade-horaria` 01:30 UTC. Roda em <1s. Helpers `grade_norm_nome`/`grade_norm_curso` (espelham o TS). **Resolveu o flapping** (horários trocados entre matrículas de aluno multi-curso, oscilando 2×/noite — ex: Mateus K. Paulino com Canto/Power Kids/Canto Coral). Forward-only: histórico de `aluno_presenca` (~60d) não foi saneado.
+- **GOTCHA (provado 2026-05-27): o sync de presenca IGNORA o `status` do aluno.** Casa aula→aluno por nome+curso. 64 alunos inativo/evadido/trancado receberam 176 presencas nos ultimos 30 dias. Consequencia: marcar `status='inativo'` NAO para o sync nem tira o aluno de metricas que leem `aluno_presenca` direto (score professor, frequencia). Para um aluno realmente sumir, a linha tem que SAIR de `alunos` (mover p/ `alunos_arquivados`). Soft-delete via status é leaky.
 - **Curso real vem da aula, nao do cadastro.** `aulas_emusys` (espelho do endpoint de aula) tem `curso_nome`/`turma_nome`/`professor_nome` corretos. O `alunos.curso_id` (rotulo da matricula via webhook) pode estar errado. Para saber o curso real de um aluno: `aluno_presenca` → `aulas_emusys.curso_nome`. Constraint `uq_presenca_aluno_aula (aluno_id, aula_emusys_id)` garante integridade ao migrar presenca (dedupe obrigatorio por aula_emusys_id, ou por data_aula quando aula_emusys_id IS NULL via indice legado).
 - `sync-professores-emusys` (v1, 2026-05-20) — sync semanal de professores. Auto-cura `emusys_id` por nome, cria professores novos, vincula a unidades existentes, loga "sumiu da lista" sem desativar. Cron `sync-professores-emusys-semanal`: Domingo 04:00 BRT. Audita em `professores_sync_log`.
 - `sync-students-studio` — sync alunos com LA Studio (projeto separado)
@@ -103,7 +105,8 @@
 | Job | Schedule | Descricao |
 |-----|----------|-----------|
 | `processar-mensagens-agendadas` | `* * * * *` (cada minuto) | Processa fila de mensagens WhatsApp |
-| `sync-presenca-emusys` | `0 1 * * *` (diario 22h BRT) | Sync presenca do Emusys |
+| `sync-presenca-cg` / `-barra` / `-recreio` | `0/20/40 1 * * *` (22h/22h20/22h40 BRT) | Sync presenca do Emusys por unidade (CG `dias:5`, Barra/Recreio `dias:7`) |
+| `sincronizar-grade-horaria` | `30 1 * * *` (22h30 BRT) | `sincronizar_grade_horaria_alunos()` — deriva dia_aula/horario_aula por pessoa+curso |
 | `alertas-diarios` | `0 11 * * *` (diario 8h BRT) | Alertas de projetos via WhatsApp |
 | `alertas-tarefas-atrasadas` | a cada 2h (11-23 UTC) | Alertas tarefas atrasadas |
 | `resumo-semanal` | `0 12 * * 1` (segunda 9h BRT) | Resumo semanal via WhatsApp |
@@ -114,11 +117,15 @@
 
 ## n8n Workflows
 
+> **Mapa canônico do ciclo Emusys:** `docs/MAPA-INTEGRACAO-EMUSYS.md` (verificado na fonte 2026-06-08, exaustivo). Consultar antes de afirmar como um fluxo Emusys funciona.
+> ⚠️ **NocoDB NÃO alimenta mais o Supabase/Performance Report.** Os ramos NocoDB no EB0 e no [Nocodb] leads estão **desconectados/`disabled`**. O NocoDB segue como CRM paralelo (escrito direto pelos agentes Mila), mas fora do nosso ciclo.
+
 ### Emusys Webhook — `EB0LibpOJCLhKp7M` ("[ Emusys] WBHK - leads criados")
 - Webhook: `POST /webhook/lead_criado` (recebe lead_criado, lead_editado, lead_arquivado)
 - Switch "Filtro Evento": case 0 = lead_criado, case 1 = lead_arquivado, case 2 = lead_editado
-- **Branch lead_criado:** Preparar Dados Lead → Upsert Lead (Supabase) → Preparar NocoDB → Criar Lead NocoDB
-- **Branch lead_editado:** Preparar Dados Arquivamento1 → manda pro dash do rayan3 → Upsert Lead Editado (Supabase) → Preparar Update NocoDB → Buscar Lead NocoDB → Atualizar Lead NocoDB
+- **Branch lead_criado:** Preparar Dados Lead → `upsert_lead()` (Supabase). (Nós "Preparar NocoDB" existem mas terminam num IF **sem nó de escrita** → NocoDB NÃO é gravado.)
+- **Branch lead_editado:** preparar dados → `upsert_lead()` (Supabase). (Ramo NocoDB desconectado, igual ao criado.)
+- **Branch lead_arquivado:** `UPDATE leads SET arquivado=true, status='arquivado', etapa_pipeline_id=11` (Supabase). Preserva leads já `convertido`/`matriculado`.
 - Lead criado no NocoDB recebe `Observacoes: "emusys"`
 - **`data_contato` (fix 2026-05-25):** `upsert_lead()` passou a re-alinhar `data_contato` no UPDATE (`COALESCE(p_data_contato, data_contato)`), não só no INSERT. Origem: `body.lead.data_hora_criacao`. Antes era write-once → leads migrados (26/03, ~2053) ficavam com data congelada/divergente do Emusys (ex: lead 4522 Renato `05/12/2025` vs Emusys `25/04/2026`). Overload legado `(...,date,boolean)` DROPADO em 2026-05-25 (duplicata morta, sem callers). Validação no agente fiscal-dados (Seção J). Limitação: leads já convertidos/arquivados não recebem mais webhook → não se auto-corrigem (precisariam backfill via API Emusys).
 
