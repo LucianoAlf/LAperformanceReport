@@ -68,6 +68,18 @@ function formatPercent(value: number): string {
   return `${value > 0 ? '+' : ''}${value.toFixed(0)}%`;
 }
 
+function formatDateShort(value?: string | null): string {
+  if (!value) return '-';
+  return new Date(`${value}T00:00:00`).toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+  });
+}
+
+function dataEfetivaRenovacao(item: MovimentacaoAdmin): string | null {
+  return item.renovacao_primeira_aula_novo_ciclo || item.competencia_referencia || item.data || null;
+}
+
 function campoInlineClass(tone: 'neutral' | 'success' = 'neutral'): string {
   return cn(
     'inline-flex h-7 min-w-[84px] items-center justify-center rounded-md border px-2 text-xs transition-colors',
@@ -191,7 +203,7 @@ export function TabelaRenovacoes({
         <thead className="bg-slate-800/50">
           <tr className="text-xs uppercase tracking-wider text-slate-400">
             <th className="px-3 py-2.5 text-left">#</th>
-            <th className="px-3 py-2.5 text-left">Data</th>
+            <th className="px-3 py-2.5 text-left">{isAntecipada ? 'Efetiva' : 'Data'}</th>
             {isPendente && <th className="px-3 py-2.5 text-center">Status</th>}
             <th className="px-3 py-2.5 text-left">Aluno</th>
             <th className="px-3 py-2.5 text-left">Curso</th>
@@ -242,7 +254,18 @@ export function TabelaRenovacoes({
                 >
                   <td className="px-3 py-2.5 text-slate-500">{index + 1}</td>
                   <td className="px-3 py-2.5 text-slate-300">
-                    {new Date(item.data + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}
+                    {isAntecipada ? (
+                      <div className="flex flex-col leading-tight">
+                        <span className="font-medium text-amber-100">
+                          {formatDateShort(dataEfetivaRenovacao(item))}
+                        </span>
+                        <span className="mt-0.5 text-[10px] uppercase tracking-wide text-slate-500">
+                          capt. {formatDateShort(item.data)}
+                        </span>
+                      </div>
+                    ) : (
+                      formatDateShort(item.data)
+                    )}
                   </td>
                   {isPendente && (
                     <td className="px-3 py-2.5 text-center">

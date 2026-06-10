@@ -1,0 +1,1 @@
+export { CaixaFinanceiroTab } from './CaixaFinanceiroTab';

@@ -39,8 +39,9 @@ import { PlanoAcaoRetencao } from './PlanoAcaoRetencao';
 import { TabProgramaFideliza } from './TabProgramaFideliza';
 import { TabLojinha } from '../Lojinha';
 import { PainelFarmer } from './PainelFarmer';
-import { Trophy, ShoppingBag, ClipboardList, MessageSquare } from 'lucide-react';
+import { Trophy, ShoppingBag, ClipboardList, MessageSquare, Wallet } from 'lucide-react';
 import { CaixaEntradaTab } from './CaixaEntrada';
+import { CaixaFinanceiroTab } from './CaixaFinanceiro';
 import { ModalPermanenciaDetalhe } from '@/components/GestaoMensal/ModalPermanenciaDetalhe';
 import { ModalDetalheKPI, BadgeUnidade, ValorParcela, TextoCurso } from '@/components/App/Dashboard/ModalDetalheKPI';
 import { fetchKPIsAlunosCanonicos } from '@/hooks/useKPIsAlunosCanonicos';
@@ -181,7 +182,7 @@ export function AdministrativoPage() {
   // Estado
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabId>('renovacoes');
-  const [mainTab, setMainTab] = useState<'lancamentos' | 'fideliza' | 'lojinha' | 'farmer' | 'caixa_entrada'>('lancamentos');
+  const [mainTab, setMainTab] = useState<'lancamentos' | 'fideliza' | 'lojinha' | 'farmer' | 'caixa_financeiro' | 'caixa_entrada'>('lancamentos');
 
   // Sincronizar badge do header com o filtro local
   useEffect(() => {
@@ -201,6 +202,10 @@ export function AdministrativoPage() {
   const [formasPagamento, setFormasPagamento] = useState<{ id: number; nome: string; sigla: string }[]>([]);
   const [cursos, setCursos] = useState<{ id: number; nome: string }[]>([]);
   const [alunosNovos, setAlunosNovos] = useState<any[]>([]);
+  const [unidadeCaixaInfo, setUnidadeCaixaInfo] = useState<{ nome: string; codigo: string }>({
+    nome: 'Unidade',
+    codigo: 'LA',
+  });
   
   // Modais
   const [modalRenovacao, setModalRenovacao] = useState(false);
@@ -227,9 +232,43 @@ export function AdministrativoPage() {
   const ano = competenciaFiltro.filtro.ano;
   const mes = competenciaFiltro.filtro.mes;
   const { startDate, endDate } = competenciaFiltro.range;
+  const hojeCaixa = new Date();
+  const isCompetenciaAtualCaixa = ano === hojeCaixa.getFullYear() && mes === hojeCaixa.getMonth() + 1;
+  const dataCaixaISO = isCompetenciaAtualCaixa
+    ? hojeCaixa.toISOString().slice(0, 10)
+    : `${ano}-${String(mes).padStart(2, '0')}-01`;
   
   // Competência formatada para os modais (YYYY-MM)
   const competencia = `${ano}-${String(mes).padStart(2, '0')}`;
+
+  useEffect(() => {
+    let cancelado = false;
+
+    async function carregarUnidadeCaixa() {
+      if (!unidade || unidade === 'todos') {
+        setUnidadeCaixaInfo({ nome: 'Consolidado', codigo: 'LA' });
+        return;
+      }
+
+      const { data } = await supabase
+        .from('unidades')
+        .select('nome, codigo')
+        .eq('id', unidade)
+        .maybeSingle();
+
+      if (!cancelado && data) {
+        setUnidadeCaixaInfo({
+          nome: data.nome || 'Unidade',
+          codigo: data.codigo || 'LA',
+        });
+      }
+    }
+
+    void carregarUnidadeCaixa();
+    return () => {
+      cancelado = true;
+    };
+  }, [unidade]);
 
   // Fetch matrículas ativas para o modal
   const fetchMatriculasAtivas = async () => {
@@ -889,14 +928,23 @@ export function AdministrativoPage() {
           { id: 'fideliza' as const, label: 'Programa Fideliza+ LA', shortLabel: 'Fideliza+', icon: Trophy, activeGradient: 'from-yellow-500 to-orange-500', activeShadow: 'shadow-yellow-500/20' },
           { id: 'lojinha' as const, label: 'Lojinha', shortLabel: 'Lojinha', icon: ShoppingBag, activeGradient: 'from-sky-500 to-cyan-500', activeShadow: 'shadow-sky-500/20' },
           { id: 'farmer' as const, label: 'Painel Farmer', shortLabel: 'Farmer', icon: ClipboardList, activeGradient: 'from-violet-500 to-purple-500', activeShadow: 'shadow-violet-500/20' },
-          { id: 'caixa_entrada' as const, label: 'Caixa de Entrada', shortLabel: 'Caixa', icon: MessageSquare, activeGradient: 'from-emerald-500 to-teal-500', activeShadow: 'shadow-emerald-500/20' },
+          { id: 'caixa_financeiro' as const, label: 'Caixa', shortLabel: 'Caixa', icon: Wallet, activeGradient: 'from-emerald-500 to-teal-500', activeShadow: 'shadow-emerald-500/20' },
+          { id: 'caixa_entrada' as const, label: 'Entrada', shortLabel: 'Entrada', icon: MessageSquare, activeGradient: 'from-slate-500 to-slate-600', activeShadow: 'shadow-slate-500/20' },
         ]}
         activeTab={mainTab}
         onTabChange={setMainTab}
       />
 
       {/* Conteúdo baseado na tab principal */}
-      {mainTab === 'caixa_entrada' ? (
+      {mainTab === 'caixa_financeiro' ? (
+        <CaixaFinanceiroTab
+          unidadeId={unidade}
+          unidadeNome={unidadeCaixaInfo.nome}
+          unidadeCodigo={unidadeCaixaInfo.codigo}
+          dataCaixa={dataCaixaISO}
+          isCompetenciaAtual={isCompetenciaAtualCaixa}
+        />
+      ) : mainTab === 'caixa_entrada' ? (
         <CaixaEntradaTab unidadeId={unidade} />
       ) : mainTab === 'fideliza' ? (
         <TabProgramaFideliza 
