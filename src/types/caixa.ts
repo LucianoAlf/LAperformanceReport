@@ -2,7 +2,7 @@ export type CaixaStatus = 'aberto' | 'fechado';
 export type CaixaAmbiente = 'cofre' | 'venda';
 export type CaixaTipoMovimento = 'entrada' | 'saida';
 export type CaixaFormaPagamento = 'dinheiro' | 'pix' | 'cartao' | 'cheque' | 'transferencia' | 'outro';
-export type CaixaCategoria = 'lojinha' | 'seguranca' | 'troco' | 'retirada' | 'despesa' | 'outro';
+export type CaixaCategoria = string;
 
 export interface CaixaDiario {
   id: string;

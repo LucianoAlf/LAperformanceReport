@@ -15,6 +15,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext';
+import { useCaixaCategorias } from '@/hooks/useCaixaCategorias';
 import { useCaixaDiario } from '@/hooks/useCaixaDiario';
 import {
   formatarDataCaixa,
@@ -53,6 +54,12 @@ export function CaixaFinanceiroTab({
   const [saldoConferido, setSaldoConferido] = useState('');
   const [observacoes, setObservacoes] = useState('');
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  const {
+    categorias,
+    error: categoriasError,
+    criarCategoria,
+  } = useCaixaCategorias();
 
   const {
     caixa,
@@ -247,15 +254,15 @@ export function CaixaFinanceiroTab({
         </div>
       )}
 
-      {(error || statusMessage) && (
+      {(error || categoriasError || statusMessage) && (
         <div className={`rounded-xl border px-4 py-3 text-sm ${
-          error || statusMessage?.type === 'error'
+          error || categoriasError || statusMessage?.type === 'error'
             ? 'border-rose-500/25 bg-rose-500/10 text-rose-200'
             : statusMessage?.type === 'success'
               ? 'border-emerald-500/25 bg-emerald-500/10 text-emerald-200'
               : 'border-cyan-500/25 bg-cyan-500/10 text-cyan-200'
         }`}>
-          {error || statusMessage?.text}
+          {error || categoriasError || statusMessage?.text}
         </div>
       )}
 
@@ -304,7 +311,9 @@ export function CaixaFinanceiroTab({
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
             <CaixaMovimentacoesTable
               movimentos={movimentos}
+              categorias={categorias}
               disabled={saving || caixaFechado}
+              onCreateCategoria={async (nome) => criarCategoria(nome, 'ambos', usuario?.nome || usuario?.email || null)}
               onDelete={async (id) => {
                 try {
                   await excluirMovimento(id);
@@ -326,6 +335,8 @@ export function CaixaFinanceiroTab({
             <CaixaMovimentacaoForm
               disabled={saving || caixaFechado}
               saving={saving}
+              categorias={categorias}
+              onCreateCategoria={(nome, ambiente) => criarCategoria(nome, ambiente, usuario?.nome || usuario?.email || null)}
               onSubmit={async (input) => {
                 try {
                   await adicionarMovimento({ ...input, criado_por: usuario?.nome || usuario?.email || undefined });

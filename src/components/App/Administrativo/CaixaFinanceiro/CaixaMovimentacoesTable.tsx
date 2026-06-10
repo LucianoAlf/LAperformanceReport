@@ -9,13 +9,16 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { obterNomeCategoriaCaixa, type CaixaCategoria as CaixaCategoriaRecord } from '@/lib/caixaCategorias';
 import { formatarMoedaCaixa } from '@/lib/caixaFinanceiro';
 import type { CaixaMovimentacao, NovaCaixaMovimentacaoInput } from '@/types/caixa';
 import { CaixaMovimentacaoForm } from './CaixaMovimentacaoForm';
 
 interface CaixaMovimentacoesTableProps {
   movimentos: CaixaMovimentacao[];
+  categorias: CaixaCategoriaRecord[];
   disabled?: boolean;
+  onCreateCategoria: (nome: string) => Promise<CaixaCategoriaRecord>;
   onDelete: (id: string) => Promise<void>;
   onUpdate: (id: string, input: NovaCaixaMovimentacaoInput) => Promise<void>;
 }
@@ -28,7 +31,9 @@ function badgeClass(tipo: CaixaMovimentacao['tipo']) {
 
 export function CaixaMovimentacoesTable({
   movimentos,
+  categorias,
   disabled = false,
+  onCreateCategoria,
   onDelete,
   onUpdate,
 }: CaixaMovimentacoesTableProps) {
@@ -82,7 +87,7 @@ export function CaixaMovimentacoesTable({
                     <td className="px-4 py-3 capitalize text-slate-400">{mov.ambiente}</td>
                     <td className="px-4 py-3 font-medium text-white">{mov.descricao}</td>
                     <td className="px-4 py-3 capitalize text-slate-400">{mov.forma_pagamento}</td>
-                    <td className="px-4 py-3 capitalize text-slate-400">{mov.categoria}</td>
+                    <td className="px-4 py-3 text-slate-400">{obterNomeCategoriaCaixa(mov.categoria, categorias)}</td>
                     <td className="px-4 py-3 text-right font-semibold text-white">{formatarMoedaCaixa(Number(mov.valor))}</td>
                     <td className="px-4 py-3 text-slate-400">{mov.responsavel || '-'}</td>
                     <td className="px-4 py-3 text-right">
@@ -142,6 +147,8 @@ export function CaixaMovimentacoesTable({
                 valor: Number(movimentoEditando.valor),
                 responsavel: movimentoEditando.responsavel || undefined,
               }}
+              categorias={categorias}
+              onCreateCategoria={onCreateCategoria}
               onCancel={() => setMovimentoEditando(null)}
               onSubmit={handleUpdate}
             />

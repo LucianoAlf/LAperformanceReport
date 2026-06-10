@@ -1,11 +1,20 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { Plus, Save } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import {
   Select,
   SelectContent,
   SelectItem,
+  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -14,6 +23,12 @@ import {
   formatarNumeroComoInputMoedaCaixa,
   parseMoedaCaixa,
 } from '@/lib/caixaFinanceiro';
+import {
+  CATEGORIAS_CAIXA_PADRAO,
+  filtrarCategoriasCaixaPorAmbiente,
+  type CaixaCategoria as CaixaCategoriaRecord,
+  type CaixaCategoriaAmbiente,
+} from '@/lib/caixaCategorias';
 import { cn } from '@/lib/utils';
 import type {
   CaixaAmbiente,
@@ -30,6 +45,8 @@ interface CaixaMovimentacaoFormProps {
   description?: string;
   submitLabel?: string;
   initialValues?: Partial<NovaCaixaMovimentacaoInput>;
+  categorias?: CaixaCategoriaRecord[];
+  onCreateCategoria?: (nome: string, ambiente: CaixaCategoriaAmbiente) => Promise<CaixaCategoriaRecord>;
   onCancel?: () => void;
   onSubmit: (input: NovaCaixaMovimentacaoInput) => Promise<void>;
 }
@@ -43,15 +60,6 @@ const formas: { value: CaixaFormaPagamento; label: string }[] = [
   { value: 'outro', label: 'Outro' },
 ];
 
-const categorias: { value: CaixaCategoria; label: string }[] = [
-  { value: 'lojinha', label: 'Lojinha' },
-  { value: 'seguranca', label: 'Seguranca' },
-  { value: 'troco', label: 'Troco' },
-  { value: 'retirada', label: 'Retirada' },
-  { value: 'despesa', label: 'Despesa' },
-  { value: 'outro', label: 'Outro' },
-];
-
 export function CaixaMovimentacaoForm({
   disabled = false,
   saving = false,
@@ -59,6 +67,8 @@ export function CaixaMovimentacaoForm({
   description = 'Entradas, saidas e vendas do dia.',
   submitLabel = 'Adicionar movimentacao',
   initialValues,
+  categorias = CATEGORIAS_CAIXA_PADRAO,
+  onCreateCategoria,
   onCancel,
   onSubmit,
 }: CaixaMovimentacaoFormProps) {
@@ -70,12 +80,29 @@ export function CaixaMovimentacaoForm({
   const [valor, setValor] = useState(formatarNumeroComoInputMoedaCaixa(initialValues?.valor));
   const [responsavel, setResponsavel] = useState(initialValues?.responsavel || '');
   const [erro, setErro] = useState<string | null>(null);
+  const [novaCategoriaOpen, setNovaCategoriaOpen] = useState(false);
+  const [novaCategoriaNome, setNovaCategoriaNome] = useState('');
+  const [criandoCategoria, setCriandoCategoria] = useState(false);
+  const [erroCategoria, setErroCategoria] = useState<string | null>(null);
+
+  const categoriasDisponiveis = useMemo(
+    () => filtrarCategoriasCaixaPorAmbiente(categorias, ambiente),
+    [ambiente, categorias],
+  );
 
   useEffect(() => {
     if (ambiente === 'venda') {
       setTipo('entrada');
     }
   }, [ambiente]);
+
+  useEffect(() => {
+    if (!categoriasDisponiveis.length) return;
+    const categoriaAtualExiste = categoriasDisponiveis.some((item) => item.slug === categoria);
+    if (!categoriaAtualExiste) {
+      setCategoria(categoriasDisponiveis[0].slug);
+    }
+  }, [categoria, categoriasDisponiveis]);
 
   useEffect(() => {
     setAmbiente(initialValues?.ambiente || 'cofre');
@@ -87,6 +114,23 @@ export function CaixaMovimentacaoForm({
     setResponsavel(initialValues?.responsavel || '');
     setErro(null);
   }, [initialValues]);
+
+  async function handleCriarCategoria() {
+    if (!onCreateCategoria) return;
+    setErroCategoria(null);
+    setCriandoCategoria(true);
+
+    try {
+      const categoriaCriada = await onCreateCategoria(novaCategoriaNome, 'ambos');
+      setCategoria(categoriaCriada.slug);
+      setNovaCategoriaNome('');
+      setNovaCategoriaOpen(false);
+    } catch (err: any) {
+      setErroCategoria(err?.message || 'Falha ao criar categoria.');
+    } finally {
+      setCriandoCategoria(false);
+    }
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -120,6 +164,7 @@ export function CaixaMovimentacaoForm({
   }
 
   return (
+    <>
     <form onSubmit={handleSubmit} className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
       <div className="mb-4 flex items-center gap-2">
         <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/15 text-emerald-300">
@@ -203,15 +248,29 @@ export function CaixaMovimentacaoForm({
           <Select
             value={categoria}
             disabled={disabled}
-            onValueChange={(value) => setCategoria(value as CaixaCategoria)}
+            onValueChange={(value) => {
+              if (value === '__nova_categoria__') {
+                setNovaCategoriaOpen(true);
+                return;
+              }
+              setCategoria(value as CaixaCategoria);
+            }}
           >
             <SelectTrigger className="h-10 rounded-lg bg-slate-950/70">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {categorias.map((item) => (
-                <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
+              {categoriasDisponiveis.map((item) => (
+                <SelectItem key={item.slug} value={item.slug}>{item.nome}</SelectItem>
               ))}
+              {onCreateCategoria && (
+                <>
+                  <SelectSeparator />
+                  <SelectItem value="__nova_categoria__" className="text-emerald-300">
+                    + Nova categoria
+                  </SelectItem>
+                </>
+              )}
             </SelectContent>
           </Select>
         </label>
@@ -257,5 +316,54 @@ export function CaixaMovimentacaoForm({
         </Button>
       </div>
     </form>
+
+    <Dialog open={novaCategoriaOpen} onOpenChange={setNovaCategoriaOpen}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Nova categoria do caixa</DialogTitle>
+          <DialogDescription>
+            A categoria fica salva para os proximos lancamentos. Use nomes curtos, como Passaporte ou Uniforme.
+          </DialogDescription>
+        </DialogHeader>
+
+        <label className="block space-y-1 text-xs text-slate-400">
+          Nome da categoria
+          <Input
+            value={novaCategoriaNome}
+            disabled={criandoCategoria}
+            autoFocus
+            onChange={(event) => setNovaCategoriaNome(event.target.value)}
+            placeholder="Ex: Passaporte"
+            className="rounded-lg bg-slate-950/70"
+          />
+        </label>
+
+        {erroCategoria && (
+          <p className="rounded-lg border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
+            {erroCategoria}
+          </p>
+        )}
+
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={criandoCategoria}
+            onClick={() => setNovaCategoriaOpen(false)}
+          >
+            Cancelar
+          </Button>
+          <Button
+            type="button"
+            disabled={criandoCategoria || novaCategoriaNome.trim().length < 2}
+            onClick={() => void handleCriarCategoria()}
+          >
+            <Plus className="h-4 w-4" />
+            Criar categoria
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
