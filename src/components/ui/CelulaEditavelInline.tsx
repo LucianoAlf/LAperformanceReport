@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { cn } from '@/lib/utils';
+import { cn, formatBRLInput, parseBRL } from '@/lib/utils';
 import { Check, Loader2, Calendar as CalendarIcon } from 'lucide-react';
 import {
   Select,
@@ -147,6 +147,8 @@ export function CelulaEditavelInline({
     // Mostra valor puro ao editar
     if (tipo === 'data') {
       // Para data, não precisa setar inputValue
+    } else if (tipo === 'moeda' && typeof value === 'number') {
+      setInputValue(formatBRLInput(value));
     } else if (value !== null) {
       setInputValue(String(value));
     } else {
@@ -183,12 +185,9 @@ export function CelulaEditavelInline({
     
     // Converter para número se necessário
     if ((tipo === 'numero' || tipo === 'moeda') && novoValor !== null) {
-      const limpo = String(novoValor)
-        .replace(/R\$\s*/g, '')
-        .replace(/\./g, '')
-        .replace(',', '.')
-        .trim();
-      novoValor = parseFloat(limpo) || null;
+      novoValor = tipo === 'moeda'
+        ? parseBRL(String(novoValor)) || null
+        : parseFloat(String(novoValor).replace(',', '.')) || null;
     }
     
     await salvar(novoValor);
@@ -310,7 +309,8 @@ export function CelulaEditavelInline({
     return (
       <input
         ref={inputRef}
-        type={tipo === 'numero' || tipo === 'moeda' ? 'number' : 'text'}
+        type={tipo === 'numero' ? 'number' : 'text'}
+        inputMode={tipo === 'moeda' || tipo === 'numero' ? 'decimal' : undefined}
         step={tipo === 'moeda' ? '0.01' : undefined}
         value={inputValue}
         onChange={handleChange}

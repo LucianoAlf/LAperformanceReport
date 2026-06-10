@@ -1,9 +1,28 @@
 import { FormEvent, useMemo, useState } from 'react';
-import { AlertTriangle, CalendarDays, CheckCircle2, Lock, Unlock, Wallet } from 'lucide-react';
+import { AlertTriangle, CalendarDays, CheckCircle2, Lock, RotateCcw, Unlock, Wallet } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCaixaDiario } from '@/hooks/useCaixaDiario';
-import { formatarDataCaixa, formatarMoedaCaixa } from '@/lib/caixaFinanceiro';
+import {
+  formatarDataCaixa,
+  formatarInputMoedaCaixa,
+  formatarMoedaCaixa,
+  formatarNumeroComoInputMoedaCaixa,
+  parseMoedaCaixa,
+} from '@/lib/caixaFinanceiro';
 import { CaixaMovimentacaoForm } from './CaixaMovimentacaoForm';
 import { CaixaMovimentacoesTable } from './CaixaMovimentacoesTable';
 import { CaixaResumoCards } from './CaixaResumoCards';
@@ -17,12 +36,6 @@ interface CaixaFinanceiroTabProps {
   isCompetenciaAtual?: boolean;
 }
 
-function parseMoney(value: string): number {
-  const normalized = value.replace(/\./g, '').replace(',', '.').replace(/[^\d.]/g, '');
-  const parsed = Number(normalized);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
 export function CaixaFinanceiroTab({
   unidadeId,
   unidadeNome,
@@ -34,6 +47,9 @@ export function CaixaFinanceiroTab({
   const [saldoInicial, setSaldoInicial] = useState('');
   const [abertoPor, setAbertoPor] = useState(usuario?.nome || '');
   const [fechadoPor, setFechadoPor] = useState(usuario?.nome || '');
+  const [reabertoPor, setReabertoPor] = useState(usuario?.nome || '');
+  const [motivoReabertura, setMotivoReabertura] = useState('');
+  const [reabrirDialogOpen, setReabrirDialogOpen] = useState(false);
   const [saldoConferido, setSaldoConferido] = useState('');
   const [observacoes, setObservacoes] = useState('');
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -47,13 +63,18 @@ export function CaixaFinanceiroTab({
     error,
     abrirCaixa,
     adicionarMovimento,
+    atualizarMovimento,
     excluirMovimento,
     fecharCaixa,
+    reabrirCaixa,
   } = useCaixaDiario({ unidadeId, dataCaixa });
 
   const unidadeValida = Boolean(unidadeId && unidadeId !== 'todos');
   const caixaFechado = caixa?.status === 'fechado';
   const dataLabel = useMemo(() => formatarDataCaixa(dataCaixa), [dataCaixa]);
+  const saldoConferidoValue = caixa?.saldo_final_conferido != null
+    ? formatarNumeroComoInputMoedaCaixa(Number(caixa.saldo_final_conferido))
+    : saldoConferido;
 
   function setMensagem(text: string, type: 'success' | 'error' | 'info' = 'info') {
     setStatusMessage({ text, type });
@@ -62,7 +83,7 @@ export function CaixaFinanceiroTab({
   async function handleAbrir(event: FormEvent) {
     event.preventDefault();
     try {
-      const saldo = parseMoney(saldoInicial);
+      const saldo = parseMoedaCaixa(saldoInicial);
       await abrirCaixa(saldo, abertoPor.trim() || usuario?.nome || usuario?.email || 'Operacional');
       setMensagem('Caixa diario aberto.', 'success');
     } catch (err: any) {
@@ -70,13 +91,29 @@ export function CaixaFinanceiroTab({
     }
   }
 
-  async function handleFechar(event: FormEvent) {
-    event.preventDefault();
+  async function fecharCaixaConfirmado() {
     try {
-      await fecharCaixa(parseMoney(saldoConferido), fechadoPor.trim(), observacoes);
+      if (!saldoConferido.trim()) {
+        setMensagem('Informe o saldo final conferido antes de fechar o caixa.', 'error');
+        return;
+      }
+
+      await fecharCaixa(parseMoedaCaixa(saldoConferido), fechadoPor.trim(), observacoes);
       setMensagem('Caixa fechado com conferencia registrada.', 'success');
     } catch (err: any) {
       setMensagem(err?.message || 'Falha ao fechar caixa.', 'error');
+    }
+  }
+
+  async function reabrirCaixaConfirmado() {
+    try {
+      await reabrirCaixa(motivoReabertura, reabertoPor.trim() || usuario?.nome || usuario?.email || 'Operacional');
+      setSaldoConferido('');
+      setReabrirDialogOpen(false);
+      setMotivoReabertura('');
+      setMensagem('Caixa reaberto com log de auditoria. Revise os lancamentos e faca novo fechamento.', 'success');
+    } catch (err: any) {
+      setMensagem(err?.message || 'Falha ao reabrir caixa.', 'error');
     }
   }
 
@@ -124,6 +161,92 @@ export function CaixaFinanceiroTab({
         </div>
       </div>
 
+      {caixaFechado && (
+        <div className="animate-in fade-in-0 zoom-in-95 flex flex-wrap items-start justify-between gap-3 rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-4 text-sm text-emerald-100 shadow-[0_0_0_1px_rgba(16,185,129,0.10),0_18px_60px_rgba(16,185,129,0.08)]">
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/20 text-emerald-300">
+              <CheckCircle2 className="h-4 w-4" />
+            </span>
+            <div>
+              <p className="font-semibold text-white">Caixa fechado e conferencia registrada.</p>
+              <p className="mt-1 text-xs text-emerald-100/80">
+                Edicoes estao bloqueadas. Para corrigir um erro, reabra com motivo; o sistema grava snapshot e log de auditoria antes de liberar ajustes.
+              </p>
+            </div>
+          </div>
+          <AlertDialog open={reabrirDialogOpen} onOpenChange={setReabrirDialogOpen}>
+            <AlertDialogTrigger asChild>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="border-amber-400/35 bg-amber-400/10 text-amber-100 hover:bg-amber-400/20 hover:text-white"
+              >
+                <RotateCcw className="h-4 w-4" />
+                Reabrir caixa
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent className="border-amber-500/20 bg-slate-950">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Reabrir caixa de {unidadeNome}?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  A reabertura libera edicao dos lancamentos, mas fica registrada com motivo, operador e snapshot do fechamento anterior.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+
+              <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/80 p-4">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Data do caixa</p>
+                    <p className="font-semibold text-white">{dataLabel}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-slate-500">Saldo conferido</p>
+                    <p className="font-semibold text-emerald-300">
+                      {caixa?.saldo_final_conferido != null ? formatarMoedaCaixa(Number(caixa.saldo_final_conferido)) : '-'}
+                    </p>
+                  </div>
+                </div>
+
+                <label className="block space-y-1 text-xs text-slate-400">
+                  Reaberto por
+                  <Input
+                    value={reabertoPor}
+                    onChange={(event) => setReabertoPor(event.target.value)}
+                    placeholder="Nome"
+                    className="rounded-lg bg-slate-950/70"
+                  />
+                </label>
+
+                <label className="block space-y-1 text-xs text-slate-400">
+                  Motivo da reabertura
+                  <Textarea
+                    value={motivoReabertura}
+                    onChange={(event) => setMotivoReabertura(event.target.value)}
+                    rows={3}
+                    placeholder="Ex.: corrigir lancamento de venda informado com valor errado."
+                    className="rounded-lg bg-slate-950/70"
+                  />
+                </label>
+              </div>
+
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <Button
+                  type="button"
+                  disabled={saving || motivoReabertura.trim().length < 8 || !reabertoPor.trim()}
+                  className="bg-amber-600 hover:bg-amber-500 focus:ring-amber-500"
+                  onClick={() => void reabrirCaixaConfirmado()}
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Confirmar reabertura
+                </Button>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      )}
+
       {(error || statusMessage) && (
         <div className={`rounded-xl border px-4 py-3 text-sm ${
           error || statusMessage?.type === 'error'
@@ -152,20 +275,21 @@ export function CaixaFinanceiroTab({
           <div className="grid gap-3 md:grid-cols-3">
             <label className="space-y-1 text-xs text-slate-400">
               Saldo inicial cofre
-              <input
+              <Input
                 value={saldoInicial}
-                onChange={(e) => setSaldoInicial(e.target.value)}
+                inputMode="numeric"
+                onChange={(e) => setSaldoInicial(formatarInputMoedaCaixa(e.target.value))}
                 placeholder="R$ 0,00"
-                className="h-10 w-full rounded-lg border border-slate-700 bg-slate-950/70 px-3 text-sm text-white outline-none focus:border-emerald-500"
+                className="rounded-lg bg-slate-950/70 font-semibold"
               />
             </label>
             <label className="space-y-1 text-xs text-slate-400 md:col-span-2">
               Aberto por
-              <input
+              <Input
                 value={abertoPor}
                 onChange={(e) => setAbertoPor(e.target.value)}
                 placeholder="Nome"
-                className="h-10 w-full rounded-lg border border-slate-700 bg-slate-950/70 px-3 text-sm text-white outline-none focus:border-emerald-500"
+                className="rounded-lg bg-slate-950/70"
               />
             </label>
           </div>
@@ -178,7 +302,27 @@ export function CaixaFinanceiroTab({
           <CaixaResumoCards resumo={resumo} />
 
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
-            <CaixaMovimentacoesTable movimentos={movimentos} disabled={saving || caixaFechado} onDelete={excluirMovimento} />
+            <CaixaMovimentacoesTable
+              movimentos={movimentos}
+              disabled={saving || caixaFechado}
+              onDelete={async (id) => {
+                try {
+                  await excluirMovimento(id);
+                  setMensagem('Movimentacao excluida.', 'success');
+                } catch (err: any) {
+                  setMensagem(err?.message || 'Falha ao excluir movimentacao.', 'error');
+                }
+              }}
+              onUpdate={async (id, input) => {
+                try {
+                  await atualizarMovimento(id, { ...input, criado_por: usuario?.nome || usuario?.email || undefined });
+                  setMensagem('Movimentacao atualizada.', 'success');
+                } catch (err: any) {
+                  setMensagem(err?.message || 'Falha ao atualizar movimentacao.', 'error');
+                  throw err;
+                }
+              }}
+            />
             <CaixaMovimentacaoForm
               disabled={saving || caixaFechado}
               saving={saving}
@@ -204,7 +348,7 @@ export function CaixaFinanceiroTab({
               onStatus={setMensagem}
             />
 
-            <form onSubmit={handleFechar} className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
+            <form onSubmit={(event) => event.preventDefault()} className="rounded-xl border border-slate-800 bg-slate-900/70 p-4">
               <div className="mb-4 flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5 text-amber-300" />
                 <div>
@@ -215,41 +359,85 @@ export function CaixaFinanceiroTab({
 
               <label className="block space-y-1 text-xs text-slate-400">
                 Saldo final conferido
-                <input
-                  value={caixa.saldo_final_conferido ?? saldoConferido}
+                <Input
+                  value={saldoConferidoValue}
                   disabled={caixaFechado}
-                  onChange={(e) => setSaldoConferido(e.target.value)}
+                  inputMode="numeric"
+                  onChange={(e) => setSaldoConferido(formatarInputMoedaCaixa(e.target.value))}
                   placeholder="R$ 0,00"
-                  className="h-10 w-full rounded-lg border border-slate-700 bg-slate-950/70 px-3 text-sm text-white outline-none focus:border-emerald-500"
+                  className="rounded-lg bg-slate-950/70 font-semibold"
                 />
               </label>
 
               <label className="mt-3 block space-y-1 text-xs text-slate-400">
                 Conferido por
-                <input
+                <Input
                   value={caixa.fechado_por ?? fechadoPor}
                   disabled={caixaFechado}
                   onChange={(e) => setFechadoPor(e.target.value)}
                   placeholder="Nome"
-                  className="h-10 w-full rounded-lg border border-slate-700 bg-slate-950/70 px-3 text-sm text-white outline-none focus:border-emerald-500"
+                  className="rounded-lg bg-slate-950/70"
                 />
               </label>
 
               <label className="mt-3 block space-y-1 text-xs text-slate-400">
                 Observacoes
-                <textarea
+                <Textarea
                   value={caixa.observacoes ?? observacoes}
                   disabled={caixaFechado}
                   onChange={(e) => setObservacoes(e.target.value)}
                   rows={3}
-                  className="w-full rounded-lg border border-slate-700 bg-slate-950/70 px-3 py-2 text-sm text-white outline-none focus:border-emerald-500"
+                  className="rounded-lg bg-slate-950/70"
                 />
               </label>
 
-              <Button type="submit" disabled={saving || caixaFechado} className="mt-4 w-full">
-                <Lock className="h-4 w-4" />
-                Fechar caixa
-              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button type="button" disabled={saving || caixaFechado} className="mt-4 w-full">
+                    <Lock className="h-4 w-4" />
+                    Fechar caixa
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent className="border-emerald-500/20 bg-slate-950">
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Fechar caixa de {unidadeNome}?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Depois do fechamento, os lancamentos ficam bloqueados para edicao ate existir reabertura auditada.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+
+                  <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-4 text-sm text-slate-300">
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-slate-500">Saldo previsto</p>
+                        <p className="font-semibold text-white">{formatarMoedaCaixa(resumo.saldoFinalCalculado)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-slate-500">Saldo conferido</p>
+                        <p className="font-semibold text-emerald-300">{saldoConferidoValue || 'Nao informado'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-slate-500">Conferido por</p>
+                        <p className="font-semibold text-white">{fechadoPor || '-'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs uppercase tracking-wide text-slate-500">Data</p>
+                        <p className="font-semibold text-white">{dataLabel}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                    <AlertDialogAction
+                      className="bg-emerald-600 hover:bg-emerald-500 focus:ring-emerald-500"
+                      onClick={() => void fecharCaixaConfirmado()}
+                    >
+                      Confirmar fechamento
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </form>
           </div>
         </>

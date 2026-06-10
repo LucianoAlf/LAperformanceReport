@@ -42,6 +42,24 @@ export interface CaixaMovimentacao {
   updated_at: string;
 }
 
+export interface CaixaReaberturaLog {
+  id: string;
+  caixa_diario_id: string;
+  unidade_id: string;
+  data_caixa: string;
+  motivo: string;
+  reaberto_por: string;
+  reaberto_em: string;
+  fechado_em_anterior: string | null;
+  fechado_por_anterior: string | null;
+  saldo_final_conferido_anterior: number | null;
+  saldo_final_calculado_anterior: number | null;
+  observacoes_anteriores: string | null;
+  caixa_snapshot: Record<string, unknown>;
+  movimentacoes_snapshot: Record<string, unknown>[];
+  created_at: string;
+}
+
 export interface NovaCaixaMovimentacaoInput {
   ambiente: CaixaAmbiente;
   tipo: CaixaTipoMovimento;

@@ -10,6 +10,25 @@ export function formatarMoedaCaixa(value: number): string {
   return brl.format(Number.isFinite(value) ? value : 0);
 }
 
+export function formatarInputMoedaCaixa(value: string): string {
+  const cents = Number(value.replace(/\D/g, '') || 0);
+  return brl.format(cents / 100);
+}
+
+export function formatarNumeroComoInputMoedaCaixa(value?: number | null): string {
+  const cents = Math.round(Number(value || 0) * 100);
+  return brl.format(cents / 100);
+}
+
+export function parseMoedaCaixa(value: string | number | null | undefined): number {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  const cents = Number(String(value || '').replace(/\D/g, '') || 0);
+  return cents / 100;
+}
+
 function parseLocalDate(value: string): Date {
   const [year, month, day] = value.split('-').map(Number);
   return new Date(year, month - 1, day);

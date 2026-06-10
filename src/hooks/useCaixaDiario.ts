@@ -161,6 +161,47 @@ export function useCaixaDiario({ unidadeId, dataCaixa }: UseCaixaDiarioParams) {
     }
   }, [atualizarSaldoCalculado, caixa, movimentos]);
 
+  const atualizarMovimento = useCallback(async (movimentoId: string, input: NovaCaixaMovimentacaoInput) => {
+    if (!caixa || !unidadeId || unidadeId === 'todos') {
+      throw new Error('Caixa nao carregado.');
+    }
+    if (caixa.status === 'fechado') {
+      throw new Error('Caixa fechado nao permite edicao.');
+    }
+
+    setSaving(true);
+    try {
+      const { data, error: updateError } = await supabase
+        .from('caixa_movimentacoes')
+        .update({
+          ambiente: input.ambiente,
+          tipo: input.tipo,
+          forma_pagamento: input.forma_pagamento,
+          categoria: input.categoria,
+          descricao: input.descricao,
+          valor: input.valor,
+          responsavel: input.responsavel || null,
+          criado_por: input.criado_por || null,
+        })
+        .eq('id', movimentoId)
+        .eq('caixa_diario_id', caixa.id)
+        .select('*')
+        .single();
+
+      if (updateError) throw updateError;
+
+      const movimentoAtualizado = data as CaixaMovimentacao;
+      const nextMovimentos = movimentos.map((mov) => (
+        mov.id === movimentoId ? movimentoAtualizado : mov
+      ));
+      setMovimentos(nextMovimentos);
+      await atualizarSaldoCalculado(caixa, nextMovimentos);
+      return movimentoAtualizado;
+    } finally {
+      setSaving(false);
+    }
+  }, [atualizarSaldoCalculado, caixa, movimentos, unidadeId]);
+
   const fecharCaixa = useCallback(async (saldoFinalConferido: number, fechadoPor: string, observacoes?: string) => {
     if (!caixa) throw new Error('Caixa nao carregado.');
     if (!fechadoPor.trim()) throw new Error('Informe quem conferiu o caixa.');
@@ -190,6 +231,29 @@ export function useCaixaDiario({ unidadeId, dataCaixa }: UseCaixaDiarioParams) {
     }
   }, [caixa, movimentos]);
 
+  const reabrirCaixa = useCallback(async (motivo: string, reabertoPor: string) => {
+    if (!caixa) throw new Error('Caixa nao carregado.');
+    if (caixa.status !== 'fechado') throw new Error('Apenas caixas fechados podem ser reabertos.');
+    if (motivo.trim().length < 8) throw new Error('Informe um motivo de reabertura com pelo menos 8 caracteres.');
+    if (!reabertoPor.trim()) throw new Error('Informe quem esta reabrindo o caixa.');
+
+    setSaving(true);
+    try {
+      const { data, error: rpcError } = await supabase.rpc('reabrir_caixa_diario', {
+        p_caixa_diario_id: caixa.id,
+        p_motivo: motivo.trim(),
+        p_reaberto_por: reabertoPor.trim(),
+      });
+
+      if (rpcError) throw rpcError;
+      const caixaReaberto = data as CaixaDiario;
+      setCaixa(caixaReaberto);
+      return caixaReaberto;
+    } finally {
+      setSaving(false);
+    }
+  }, [caixa]);
+
   return {
     caixa,
     movimentos,
@@ -200,7 +264,9 @@ export function useCaixaDiario({ unidadeId, dataCaixa }: UseCaixaDiarioParams) {
     carregar,
     abrirCaixa,
     adicionarMovimento,
+    atualizarMovimento,
     excluirMovimento,
     fecharCaixa,
+    reabrirCaixa,
   };
 }

@@ -1,7 +1,18 @@
 import { Copy, Send, Smartphone } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { invokeWithRetry } from '@/lib/supabase';
-import { formatarRelatorioCaixaWhatsApp } from '@/lib/caixaFinanceiro';
+import { formatarDataCaixa, formatarMoedaCaixa, formatarRelatorioCaixaWhatsApp } from '@/lib/caixaFinanceiro';
 import type { CaixaDiario, CaixaMovimentacao } from '@/types/caixa';
 
 interface CaixaWhatsAppPreviewProps {
@@ -50,15 +61,12 @@ export function CaixaWhatsAppPreview({
     onStatus('Edge Function validada em dry-run. Nenhuma mensagem foi enviada.', 'success');
   }
 
-  async function enviarWhatsApp() {
+  async function enviarWhatsAppConfirmado() {
     if (!caixa) return;
     if (!caixaFechado) {
       onStatus('Feche o caixa antes de enviar o relatorio ao financeiro.', 'error');
       return;
     }
-
-    const confirmado = window.confirm('Enviar o fechamento de caixa para o grupo financeiro desta unidade?');
-    if (!confirmado) return;
 
     const { data, error } = await invokeWithRetry<{ ok: boolean; error?: string }>('caixa-financeiro-whatsapp', {
       body: {
@@ -96,15 +104,57 @@ export function CaixaWhatsAppPreview({
             <Send className="h-4 w-4" />
             Testar envio
           </Button>
-          <Button
-            type="button"
-            size="sm"
-            disabled={!caixa || !caixaFechado || disabled}
-            onClick={() => void enviarWhatsApp()}
-          >
-            <Send className="h-4 w-4" />
-            Enviar WhatsApp
-          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                type="button"
+                size="sm"
+                disabled={!caixa || !caixaFechado || disabled}
+              >
+                <Send className="h-4 w-4" />
+                Enviar WhatsApp
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent className="border-emerald-500/20 bg-slate-950">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Enviar fechamento para o financeiro?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  O relatorio sera enviado para o grupo financeiro configurado desta unidade.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+
+              {caixa && (
+                <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-4 text-sm text-slate-300">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-slate-500">Unidade</p>
+                      <p className="font-semibold text-white">{unidadeNome}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-slate-500">Data</p>
+                      <p className="font-semibold text-white">{formatarDataCaixa(caixa.data_caixa)}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-slate-500">Saldo final</p>
+                      <p className="font-semibold text-emerald-300">
+                        {formatarMoedaCaixa(caixa.saldo_final_calculado)}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  className="bg-emerald-600 hover:bg-emerald-500 focus:ring-emerald-500"
+                  onClick={() => void enviarWhatsAppConfirmado()}
+                >
+                  Enviar ao grupo
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
 
