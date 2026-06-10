@@ -86,7 +86,29 @@ export function CaixaMovimentacoesTable({
                     </td>
                     <td className="px-4 py-3 capitalize text-slate-400">{mov.ambiente}</td>
                     <td className="px-4 py-3 font-medium text-white">{mov.descricao}</td>
-                    <td className="px-4 py-3 capitalize text-slate-400">{mov.forma_pagamento}</td>
+                    <td className="px-4 py-3 text-slate-400">
+                      <span className="capitalize">{mov.forma_pagamento}</span>
+                      {mov.forma_pagamento === 'cartao' && (mov.cartao_modalidade || mov.link_pagamento) && (
+                        <span className="mt-0.5 block text-[11px] text-slate-500">
+                          {mov.cartao_modalidade === 'debito' && 'Debito'}
+                          {mov.cartao_modalidade === 'credito' &&
+                            `Credito${mov.cartao_parcelas ? ` ${mov.cartao_parcelas}x` : ''}`}
+                          {mov.link_pagamento && (
+                            <>
+                              {mov.cartao_modalidade ? ' · ' : ''}
+                              <a
+                                href={mov.link_pagamento && !/^https?:\/\//i.test(mov.link_pagamento) ? `https://${mov.link_pagamento}` : (mov.link_pagamento ?? '')}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-cyan-400 hover:underline"
+                              >
+                                link
+                              </a>
+                            </>
+                          )}
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-slate-400">{obterNomeCategoriaCaixa(mov.categoria, categorias)}</td>
                     <td className="px-4 py-3 text-right font-semibold text-white">{formatarMoedaCaixa(Number(mov.valor))}</td>
                     <td className="px-4 py-3 text-slate-400">{mov.responsavel || '-'}</td>
@@ -145,6 +167,9 @@ export function CaixaMovimentacoesTable({
                 categoria: movimentoEditando.categoria,
                 descricao: movimentoEditando.descricao,
                 valor: Number(movimentoEditando.valor),
+                cartao_modalidade: movimentoEditando.cartao_modalidade,
+                cartao_parcelas: movimentoEditando.cartao_parcelas,
+                link_pagamento: movimentoEditando.link_pagamento,
                 responsavel: movimentoEditando.responsavel || undefined,
               }}
               categorias={categorias}

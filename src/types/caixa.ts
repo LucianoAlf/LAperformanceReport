@@ -2,6 +2,7 @@ export type CaixaStatus = 'aberto' | 'fechado';
 export type CaixaAmbiente = 'cofre' | 'venda';
 export type CaixaTipoMovimento = 'entrada' | 'saida';
 export type CaixaFormaPagamento = 'dinheiro' | 'pix' | 'cartao' | 'cheque' | 'transferencia' | 'outro';
+export type CaixaCartaoModalidade = 'debito' | 'credito';
 export type CaixaCategoria = string;
 
 export interface CaixaDiario {
@@ -36,6 +37,9 @@ export interface CaixaMovimentacao {
   categoria: CaixaCategoria;
   descricao: string;
   valor: number;
+  cartao_modalidade: CaixaCartaoModalidade | null;
+  cartao_parcelas: number | null;
+  link_pagamento: string | null;
   responsavel: string | null;
   criado_por: string | null;
   created_at: string;
@@ -67,6 +71,9 @@ export interface NovaCaixaMovimentacaoInput {
   categoria: CaixaCategoria;
   descricao: string;
   valor: number;
+  cartao_modalidade?: CaixaCartaoModalidade | null;
+  cartao_parcelas?: number | null;
+  link_pagamento?: string | null;
   responsavel?: string;
   criado_por?: string;
 }

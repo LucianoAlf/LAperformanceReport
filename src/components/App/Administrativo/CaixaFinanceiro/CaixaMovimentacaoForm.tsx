@@ -32,6 +32,7 @@ import {
 import { cn } from '@/lib/utils';
 import type {
   CaixaAmbiente,
+  CaixaCartaoModalidade,
   CaixaCategoria,
   CaixaFormaPagamento,
   CaixaTipoMovimento,
@@ -76,10 +77,13 @@ export function CaixaMovimentacaoForm({
   const [tipo, setTipo] = useState<CaixaTipoMovimento>(initialValues?.tipo || 'entrada');
   const [formaPagamento, setFormaPagamento] = useState<CaixaFormaPagamento>(initialValues?.forma_pagamento || 'dinheiro');
   const [categoria, setCategoria] = useState<CaixaCategoria>(initialValues?.categoria || 'lojinha');
+  const [cartaoModalidade, setCartaoModalidade] = useState<CaixaCartaoModalidade>(initialValues?.cartao_modalidade || 'credito');
+  const [cartaoParcelas, setCartaoParcelas] = useState(String(initialValues?.cartao_parcelas || 1));
+  const [linkPagamento, setLinkPagamento] = useState(initialValues?.link_pagamento || '');
   const [descricao, setDescricao] = useState(initialValues?.descricao || '');
   const [valor, setValor] = useState(formatarNumeroComoInputMoedaCaixa(initialValues?.valor));
   const [responsavel, setResponsavel] = useState(initialValues?.responsavel || '');
-  const [erro, setErro] = useState<string | null>(null);
+  const [erro, setErro] = useState<{ campo: 'valor' | 'descricao' | 'parcelas' | null; msg: string } | null>(null);
   const [novaCategoriaOpen, setNovaCategoriaOpen] = useState(false);
   const [novaCategoriaNome, setNovaCategoriaNome] = useState('');
   const [criandoCategoria, setCriandoCategoria] = useState(false);
@@ -109,10 +113,14 @@ export function CaixaMovimentacaoForm({
     setTipo(initialValues?.tipo || 'entrada');
     setFormaPagamento(initialValues?.forma_pagamento || 'dinheiro');
     setCategoria(initialValues?.categoria || 'lojinha');
+    setCartaoModalidade(initialValues?.cartao_modalidade || 'credito');
+    setCartaoParcelas(String(initialValues?.cartao_parcelas || 1));
+    setLinkPagamento(initialValues?.link_pagamento || '');
     setDescricao(initialValues?.descricao || '');
     setValor(formatarNumeroComoInputMoedaCaixa(initialValues?.valor));
     setResponsavel(initialValues?.responsavel || '');
     setErro(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialValues]);
 
   async function handleCriarCategoria() {
@@ -138,13 +146,21 @@ export function CaixaMovimentacaoForm({
 
     const valorNumerico = parseMoedaCaixa(valor);
     if (valorNumerico <= 0) {
-      setErro('Informe um valor maior que zero.');
+      setErro({ campo: 'valor', msg: 'Informe um valor maior que zero.' });
       return;
     }
     if (descricao.trim().length < 3) {
-      setErro('Descreva o motivo da movimentacao.');
+      setErro({ campo: 'descricao', msg: 'Descreva o motivo da movimentacao.' });
       return;
     }
+
+    const ehCartao = formaPagamento === 'cartao';
+    const parcelasNum = Number(cartaoParcelas) || 1;
+    if (ehCartao && cartaoModalidade === 'credito' && parcelasNum < 1) {
+      setErro({ campo: 'parcelas', msg: 'Informe um numero de parcelas valido.' });
+      return;
+    }
+
     await onSubmit({
       ambiente,
       tipo,
@@ -152,6 +168,9 @@ export function CaixaMovimentacaoForm({
       categoria,
       descricao: descricao.trim(),
       valor: valorNumerico,
+      cartao_modalidade: ehCartao ? cartaoModalidade : null,
+      cartao_parcelas: ehCartao && cartaoModalidade === 'credito' ? parcelasNum : null,
+      link_pagamento: ehCartao ? (linkPagamento.trim() || null) : null,
       responsavel: responsavel.trim() || undefined,
     });
 
@@ -159,6 +178,9 @@ export function CaixaMovimentacaoForm({
       setDescricao('');
       setValor(formatarNumeroComoInputMoedaCaixa(0));
       setResponsavel('');
+      setCartaoModalidade('credito');
+      setCartaoParcelas('1');
+      setLinkPagamento('');
     }
     setErro(null);
   }
@@ -237,9 +259,9 @@ export function CaixaMovimentacaoForm({
             value={valor}
             disabled={disabled}
             inputMode="numeric"
-            onChange={(e) => setValor(formatarInputMoedaCaixa(e.target.value))}
+            onChange={(e) => { setValor(formatarInputMoedaCaixa(e.target.value)); if (erro?.campo === 'valor') setErro(null); }}
             placeholder="R$ 0,00"
-            className="rounded-lg bg-slate-950/70 font-semibold"
+            className={cn('rounded-lg bg-slate-950/70 font-semibold', erro?.campo === 'valor' && 'border-rose-500 ring-1 ring-rose-500/50')}
           />
         </label>
 
@@ -276,14 +298,62 @@ export function CaixaMovimentacaoForm({
         </label>
       </div>
 
+      {formaPagamento === 'cartao' && (
+        <div className="mt-3 space-y-3 rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+          <div className="grid grid-cols-2 gap-3">
+            <label className="space-y-1 text-xs text-slate-400">
+              Modalidade
+              <Select
+                value={cartaoModalidade}
+                disabled={disabled}
+                onValueChange={(value) => setCartaoModalidade(value as CaixaCartaoModalidade)}
+              >
+                <SelectTrigger className="h-10 rounded-lg bg-slate-950/70">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="debito">Debito</SelectItem>
+                  <SelectItem value="credito">Credito</SelectItem>
+                </SelectContent>
+              </Select>
+            </label>
+
+            {cartaoModalidade === 'credito' && (
+              <label className="space-y-1 text-xs text-slate-400">
+                Parcelas
+                <Input
+                  value={cartaoParcelas}
+                  disabled={disabled}
+                  inputMode="numeric"
+                  onChange={(e) => { setCartaoParcelas(e.target.value.replace(/\D/g, '')); if (erro?.campo === 'parcelas') setErro(null); }}
+                  placeholder="1"
+                  className={cn('rounded-lg bg-slate-950/70', erro?.campo === 'parcelas' && 'border-rose-500 ring-1 ring-rose-500/50')}
+                />
+              </label>
+            )}
+          </div>
+
+          <label className="block space-y-1 text-xs text-slate-400">
+            Link de pagamento
+            <Input
+              value={linkPagamento}
+              disabled={disabled}
+              onChange={(e) => setLinkPagamento(e.target.value)}
+              placeholder="https://..."
+              className="rounded-lg bg-slate-950/70"
+            />
+          </label>
+        </div>
+      )}
+
       <label className="mt-3 block space-y-1 text-xs text-slate-400">
         Descricao / motivo
         <Input
           value={descricao}
           disabled={disabled}
-          onChange={(e) => setDescricao(e.target.value)}
+          onChange={(e) => { setDescricao(e.target.value); if (erro?.campo === 'descricao') setErro(null); }}
           placeholder="Ex: venda lojinha - camiseta"
-          className="rounded-lg bg-slate-950/70"
+          className={cn('rounded-lg bg-slate-950/70', erro?.campo === 'descricao' && 'border-rose-500 ring-1 ring-rose-500/50')}
         />
       </label>
 
@@ -300,7 +370,7 @@ export function CaixaMovimentacaoForm({
 
       {erro && (
         <p className="mt-3 rounded-lg border border-rose-500/25 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
-          {erro}
+          {erro.msg}
         </p>
       )}
 

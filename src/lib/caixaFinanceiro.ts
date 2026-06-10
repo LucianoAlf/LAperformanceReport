@@ -87,6 +87,27 @@ function linhasMovimentos(movimentos: CaixaMovimentacao[], tipo: 'entrada' | 'sa
   return linhas.length > 0 ? linhas.join('\n') : '- R$ 0,00 -';
 }
 
+function linhasDetalheCartao(movimentos: CaixaMovimentacao[]): string[] {
+  const cartoes = movimentos.filter(
+    (m) => m.forma_pagamento === 'cartao' && (m.cartao_modalidade || m.link_pagamento),
+  );
+  if (cartoes.length === 0) return [];
+
+  const linhas = cartoes.map((m) => {
+    const partes: string[] = [formatarMoedaCaixa(Number(m.valor))];
+    if (m.cartao_modalidade === 'debito') partes.push('Debito');
+    if (m.cartao_modalidade === 'credito') {
+      partes.push(`Credito${m.cartao_parcelas ? ` ${m.cartao_parcelas}x` : ''}`);
+    }
+    if (m.descricao) partes.push(m.descricao);
+    let linha = `- ${partes.join(' - ')}`;
+    if (m.link_pagamento) linha += `\n  🔗 ${m.link_pagamento}`;
+    return linha;
+  });
+
+  return ['', '💳 *Cartao (detalhe):*', ...linhas];
+}
+
 export function formatarRelatorioCaixaWhatsApp(params: {
   caixa: Pick<CaixaDiario, 'data_caixa' | 'saldo_inicial_cofre'>;
   movimentos: CaixaMovimentacao[];
@@ -118,6 +139,7 @@ export function formatarRelatorioCaixaWhatsApp(params: {
     `- Cartao: ${formatarMoedaCaixa(resumo.vendasCartao)}`,
     `- Cheque: ${formatarMoedaCaixa(resumo.vendasCheque)}`,
     `- Transferencia: ${formatarMoedaCaixa(resumo.vendasTransferencia)}`,
+    ...linhasDetalheCartao(movimentos),
     '',
     `✅ *Saldo final caixa dia ${data}:* ${formatarMoedaCaixa(resumo.saldoFinalCalculado)}`,
     '',

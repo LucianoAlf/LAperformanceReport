@@ -180,6 +180,9 @@ export function useCaixaDiario({ unidadeId, dataCaixa }: UseCaixaDiarioParams) {
           categoria: input.categoria,
           descricao: input.descricao,
           valor: input.valor,
+          cartao_modalidade: input.cartao_modalidade ?? null,
+          cartao_parcelas: input.cartao_parcelas ?? null,
+          link_pagamento: input.link_pagamento ?? null,
           responsavel: input.responsavel || null,
           criado_por: input.criado_por || null,
         })

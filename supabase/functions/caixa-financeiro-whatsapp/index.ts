@@ -92,6 +92,27 @@ function linhasCofre(movimentos: any[], tipo: 'entrada' | 'saida'): string {
   return linhas.length ? linhas.join('\n') : '- R$ 0,00 -';
 }
 
+function linhasDetalheCartao(movimentos: any[]): string[] {
+  const cartoes = movimentos.filter(
+    (m) => m.forma_pagamento === 'cartao' && (m.cartao_modalidade || m.link_pagamento)
+  );
+  if (!cartoes.length) return [];
+
+  const linhas = cartoes.map((m) => {
+    const partes: string[] = [moeda(n(m.valor))];
+    if (m.cartao_modalidade === 'debito') partes.push('Debito');
+    if (m.cartao_modalidade === 'credito') {
+      partes.push(`Credito${m.cartao_parcelas ? ` ${m.cartao_parcelas}x` : ''}`);
+    }
+    if (m.descricao) partes.push(m.descricao);
+    let linha = `- ${partes.join(' - ')}`;
+    if (m.link_pagamento) linha += `\n  🔗 ${m.link_pagamento}`;
+    return linha;
+  });
+
+  return ['', '💳 *Cartao (detalhe):*', ...linhas];
+}
+
 function formatarRelatorioCaixaWhatsApp(params: {
   caixa: any;
   movimentos: any[];
@@ -123,6 +144,7 @@ function formatarRelatorioCaixaWhatsApp(params: {
     `- Cartao: ${moeda(resumo.vendasCartao)}`,
     `- Cheque: ${moeda(resumo.vendasCheque)}`,
     `- Transferencia: ${moeda(resumo.vendasTransferencia)}`,
+    ...linhasDetalheCartao(movimentos),
     '',
     `✅ *Saldo final caixa dia ${data}:* ${moeda(resumo.saldoFinalCalculado)}`,
     '',
