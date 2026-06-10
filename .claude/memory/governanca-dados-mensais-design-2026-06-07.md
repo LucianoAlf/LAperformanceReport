@@ -8,8 +8,67 @@ metadata:
 # P0.0 — Governança de `dados_mensais`: Design Técnico
 
 Data: 2026-06-07  
-Status: **DESENHO — nada executado**  
+Status: **DESENHO original — substituído pela implementação real (ver seção 0-REAL abaixo)**  
 Restrições: SELECT-only durante elaboração. Nenhum ALTER, CREATE, UPDATE executado.
+
+---
+
+## 0-REAL. Estado Implementado no Banco (verificado 2026-06-08)
+
+⚠️ A implementação final **divergiu deste design**. O controle NÃO ficou em coluna
+`status_fechamento` de `dados_mensais` — ficou em **tabela separada `competencias_mensais`**.
+Aplicado via migrations `p00_governanca_competencia_mensal_fase1` (192438) e
+`...fase2b_wrappers_alfredo_final` (205515), ambas de 2026-06-07.
+
+### Tabela de controle: `competencias_mensais`
+Colunas: `id, unidade_id, ano, mes, status, fechamento_lote_id, fechado_em, fechado_por, motivo, created_at, updated_at`.
+`status` ∈ `aberto` | `fechado` | `retificacao_pendente`. **1 linha por (unidade, ano, mes)**.
+Ausência de linha = tratado como `aberto`. `fechamento_lote_id` agrupa fechamentos feitos juntos.
+
+### Trava: `assert_competencia_aberta(p_unidade_id, p_ano, p_mes)`
+Lê `competencias_mensais`. Se status NULL ou `aberto` → retorna (permite).
+Se `fechado` ou `retificacao_pendente` → `RAISE EXCEPTION` "Competencia bloqueada... Use retificacao formal."
+
+### Plugagem da trava nas 5 portas de escrita (estado em 2026-06-08)
+| Função | Trava? |
+|---|---|
+| `recalcular_dados_mensais` | ✅ |
+| `fechar_dados_mensais` | ✅ |
+| `upsert_dados_mensais` | ✅ |
+| `snapshot_dados_mensais` | ❌ **buraco aberto** |
+| `sync_evasao_to_dados_mensais` (trigger) | ❌ **buraco aberto — o mais grave** |
+
+O trigger sem trava significa: evasão/movimentação com `data` retroativa em mês fechado
+**ainda reescreve** o snapshot fechado. Premiação não está 100% protegida.
+
+### Funções auxiliares existentes
+- `fechar_competencia(unidade, ano, mes, fechado_por, motivo)` — marca `fechado`.
+- `fechar_dados_mensais_unguarded(ano, mes)` — versão SEM trava (bypass controlado p/ admin).
+- `log_competencia_bloqueio(...)` — registra tentativas bloqueadas.
+
+### Retificação: estrutura sim, código não
+Tabela `dados_mensais_retificacoes` existe (`snapshot_antes/depois`, `diff`, `solicitado_por`,
+`aprovado_por`, `status`, `rollback_de`, `aplicada_em/por`). **MAS** as funções
+`criar/aprovar/aplicar/reverter_retificacao` **NÃO existem ainda** — fluxo formal não codificado.
+Hoje retificar = UPDATE manual via `_unguarded` ou direto, sem o workflow aprovador.
+
+### Frontend
+Hook `useCompetenciaMensalStatus` (`src/hooks/`) lê `competencias_mensais`, deriva
+`aberto`/`fechado`/`retificacao_pendente`/`parcial_fechado`/`indisponivel`, expõe `bloqueiaEscrita`
++ badge + tooltip. Consolidado ("todos"): qualquer unidade fechada → `parcial_fechado`.
+Mensagem: `COMPETENCIA_FECHADA_MESSAGE = "Competência fechada: alterações exigem retificação formal."`
+Mês atual é rotulado "calculados em tempo real".
+
+### Dados hoje
+**Maio/2026 fechado nas 3 unidades** (Barra, CG, Recreio) por `alf/admin-master` em 2026-06-07.
+Demais meses = sem linha = abertos. Dashboard ainda lê de `dados_mensais`
+(`get_kpis_consolidados`, `get_kpis_evolucao_mensal`): mês aberto = recalculável; mês fechado = snapshot protegido.
+
+### Gaps abertos (pendentes de decisão com o Alf)
+1. Plugar trava em `snapshot_dados_mensais` (CONTINUE/pula) e no trigger `sync_evasao` (RETURN+WARNING).
+2. Codificar as 4 funções de retificação (hoje só a tabela existe).
+3. Saneamento das datas de saída (64 alunos sem `data_saida`) antes de fechar Jun/2026 — alimentado pelas
+   regras `aluno_saida_sem_data_saida` / `evasao_data_saida_divergente` do auditor (ver [[modulo-saude-automacoes]]).
 
 ---
 

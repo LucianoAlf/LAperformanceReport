@@ -11,6 +11,7 @@
 - [emusys-api.md](emusys-api.md) — API Emusys (tokens, endpoints, convenções, webhooks)
 - [chatwoot.md](chatwoot.md) — Chatwoot CRM (inboxes, agentes, labels, endpoints, filtros, quirks de timezone)
 - [modulo-saude-automacoes.md](modulo-saude-automacoes.md) — Monitoramento de webhooks Emusys (edge auditor, helper invariantes, automacao_log/invariantes, frontend)
+- [governanca-dados-mensais-design-2026-06-07.md](governanca-dados-mensais-design-2026-06-07.md) — Governança de mês fechado (P0.0 do Alf). Seção 0-REAL = estado implementado: tabela `competencias_mensais`, trava `assert_competencia_aberta`, Maio/2026 fechado, 2 buracos de trava abertos (snapshot + trigger sync_evasao)
 - [todos-pendentes.md](todos-pendentes.md) — Problemas conhecidos sem fix aplicado (priorizados por severidade)
 - [pendencias-emusys.md](pendencias-emusys.md) — Limitações do lado do Emusys (API/cadastro) que não podem ser resolvidas no nosso código
 - [mapa-metricas-fluxos.md](mapa-metricas-fluxos.md) — Mapa completo: quais dados cada tela consome, fontes (view/RPC/tabela/hook), cálculos banco vs frontend, bugs conhecidos de filtro
