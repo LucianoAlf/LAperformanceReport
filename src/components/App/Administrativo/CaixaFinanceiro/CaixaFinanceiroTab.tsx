@@ -24,6 +24,7 @@ import {
   formatarNumeroComoInputMoedaCaixa,
   parseMoedaCaixa,
 } from '@/lib/caixaFinanceiro';
+import { CaixaHistoricoButton } from './CaixaHistorico';
 import { CaixaMovimentacaoForm } from './CaixaMovimentacaoForm';
 import { CaixaMovimentacoesTable } from './CaixaMovimentacoesTable';
 import { CaixaResumoCards } from './CaixaResumoCards';
@@ -153,6 +154,7 @@ export function CaixaFinanceiroTab({
           </div>
         </div>
         <div className="flex items-center gap-2">
+          <CaixaHistoricoButton unidadeId={unidadeId} dataCaixaAtual={dataCaixa} />
           <span className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950/50 px-3 py-2 text-xs text-slate-300">
             <CalendarDays className="h-4 w-4 text-slate-400" />
             {dataLabel}
