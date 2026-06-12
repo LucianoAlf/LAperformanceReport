@@ -1,5 +1,5 @@
 import { FormEvent, useMemo, useState } from 'react';
-import { AlertTriangle, CalendarDays, CheckCircle2, Lock, RotateCcw, Unlock, Wallet } from 'lucide-react';
+import { AlertTriangle, CalendarDays, CheckCircle2, History, Lock, RotateCcw, Unlock, Wallet } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,7 +24,7 @@ import {
   formatarNumeroComoInputMoedaCaixa,
   parseMoedaCaixa,
 } from '@/lib/caixaFinanceiro';
-import { CaixaHistoricoButton } from './CaixaHistorico';
+import { CaixaHistoricoPanel } from './CaixaHistorico';
 import { CaixaMovimentacaoForm } from './CaixaMovimentacaoForm';
 import { CaixaMovimentacoesTable } from './CaixaMovimentacoesTable';
 import { CaixaResumoCards } from './CaixaResumoCards';
@@ -77,6 +77,7 @@ export function CaixaFinanceiroTab({
     reabrirCaixa,
   } = useCaixaDiario({ unidadeId, dataCaixa });
 
+  const [historicoAberto, setHistoricoAberto] = useState(false);
   const unidadeValida = Boolean(unidadeId && unidadeId !== 'todos');
   const caixaFechado = caixa?.status === 'fechado';
   const dataLabel = useMemo(() => formatarDataCaixa(dataCaixa), [dataCaixa]);
@@ -154,7 +155,16 @@ export function CaixaFinanceiroTab({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <CaixaHistoricoButton unidadeId={unidadeId} dataCaixaAtual={dataCaixa} />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1.5 border-slate-700 text-slate-300 hover:text-white"
+            onClick={() => setHistoricoAberto((v) => !v)}
+          >
+            <History className="h-4 w-4" />
+            Histórico
+          </Button>
           <span className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950/50 px-3 py-2 text-xs text-slate-300">
             <CalendarDays className="h-4 w-4 text-slate-400" />
             {dataLabel}
@@ -169,6 +179,10 @@ export function CaixaFinanceiroTab({
           </span>
         </div>
       </div>
+
+      {historicoAberto && (
+        <CaixaHistoricoPanel unidadeId={unidadeId} dataCaixaAtual={dataCaixa} />
+      )}
 
       {caixaFechado && (
         <div className="animate-in fade-in-0 zoom-in-95 flex flex-wrap items-start justify-between gap-3 rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-4 text-sm text-emerald-100 shadow-[0_0_0_1px_rgba(16,185,129,0.10),0_18px_60px_rgba(16,185,129,0.08)]">
