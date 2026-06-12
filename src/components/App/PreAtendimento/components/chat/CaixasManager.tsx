@@ -34,7 +34,8 @@ function iniciaisDe(nome: string): string {
 }
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
-import type { WhatsAppCaixa, FuncaoCaixa, ProvedorWhatsApp } from '../../types';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
+import type { WhatsAppCaixa, FuncaoCaixa, ProvedorWhatsApp, DepartamentoCaixa } from '../../types';
 import { ModalReconectarWhatsApp } from './ModalReconectarWhatsApp';
 
 interface UnidadeOption {
@@ -53,6 +54,7 @@ interface CaixaForm {
   webhook_url: string;
   ativo: boolean;
   funcao: FuncaoCaixa;
+  departamento: DepartamentoCaixa;
   provedor: ProvedorWhatsApp;
   waha_url: string;
   waha_session: string;
@@ -85,6 +87,7 @@ const emptyCaixa: CaixaForm = {
   webhook_url: '',
   ativo: true,
   funcao: 'agente',
+  departamento: 'administrativo',
   provedor: 'uazapi',
   waha_url: '',
   waha_session: '',
@@ -308,10 +311,13 @@ export function CaixasManager() {
         numero: editando.numero,
         uazapi_url: editando.uazapi_url,
         uazapi_token: editando.uazapi_token,
-        unidade_id: editando.unidade_id || null,
+        // 'todas' (caixa admin sem unidade fixa) → null no banco
+        unidade_id: editando.unidade_id === 'todas' ? null : (editando.unidade_id || null),
         webhook_url: editando.webhook_url,
         ativo: editando.ativo,
         funcao: editando.funcao,
+        // Departamento só faz sentido em caixa administrativa; demais resetam para o default
+        departamento: editando.funcao === 'administrativo' ? editando.departamento : 'administrativo',
         provedor: editando.provedor,
         waha_url: editando.waha_url || null,
         waha_session: editando.waha_session || null,
@@ -417,7 +423,12 @@ export function CaixasManager() {
       )}
 
       {/* Formulário de edição/criação */}
-      {editando && (
+      {editando && (() => {
+        // Caixa existente grava em testResults[id]; nova caixa em newTestResult
+        const formTestResult: TestResult = editando.id
+          ? (testResults[editando.id] ?? { status: 'idle' })
+          : newTestResult;
+        return (
         <div className="bg-slate-800/80 border border-violet-500/30 rounded-2xl p-6 space-y-4">
           <h4 className="text-sm font-semibold text-white flex items-center gap-2">
             {editando.id ? (
@@ -689,24 +700,29 @@ export function CaixasManager() {
               <label className="text-xs text-slate-400 mb-1 flex items-center gap-1">
                 <Zap className="w-3 h-3" /> Função da Caixa *
               </label>
-              <select
+              <Select
                 value={editando.funcao}
-                onChange={e => {
-                  const novaFuncao = e.target.value as FuncaoCaixa;
+                onValueChange={value => {
+                  const novaFuncao = value as FuncaoCaixa;
+                  // 'todas' só é válido para admin; ao sair de admin, limpa o sentinel
+                  const unidadeAtual = (novaFuncao !== 'administrativo' && editando.unidade_id === 'todas') ? '' : editando.unidade_id;
                   setEditando({
                     ...editando,
                     funcao: novaFuncao,
-                    unidade_id: novaFuncao === 'sistema' ? '' : editando.unidade_id,
+                    unidade_id: novaFuncao === 'sistema' ? '' : unidadeAtual,
                   });
-                  // Nota: 'administrativo' também requer unidade, análogo ao 'agente'
                 }}
-                className="w-full px-3 py-2 bg-slate-900/60 border border-slate-700/50 rounded-lg text-sm text-white focus:border-violet-500/50 focus:outline-none"
               >
-                <option value="agente">Agente (CRM — Mila + Andreza)</option>
-                <option value="sistema">Sistema (Relatórios e Alertas)</option>
-                <option value="ambos">Ambos (Caixa única)</option>
-                <option value="administrativo">Administrativo (Caixa de Entrada por Unidade)</option>
-              </select>
+                <SelectTrigger className="rounded-lg bg-slate-900/60 border-slate-700/50 focus:ring-violet-500/40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="agente">Agente (CRM — Mila + Andreza)</SelectItem>
+                  <SelectItem value="sistema">Sistema (Relatórios e Alertas)</SelectItem>
+                  <SelectItem value="ambos">Ambos (Caixa única)</SelectItem>
+                  <SelectItem value="administrativo">Administrativo (Caixa de Entrada por Unidade)</SelectItem>
+                </SelectContent>
+              </Select>
               <p className="text-[10px] text-slate-500 mt-1">
                 {editando.funcao === 'administrativo'
                   ? 'Administrativo: comunicação direta com alunos da unidade (cobranças, recados).'
@@ -720,26 +736,64 @@ export function CaixasManager() {
                 <label className="text-xs text-slate-400 mb-1 flex items-center gap-1">
                   <Building2 className="w-3 h-3" /> Unidade {(editando.funcao === 'agente' || editando.funcao === 'administrativo') && <span className="text-red-400">*</span>}
                 </label>
-                <select
-                  value={editando.unidade_id}
-                  onChange={e => setEditando({ ...editando, unidade_id: e.target.value })}
-                  className="w-full px-3 py-2 bg-slate-900/60 border border-slate-700/50 rounded-lg text-sm text-white focus:border-violet-500/50 focus:outline-none"
+                <Select
+                  value={editando.unidade_id || undefined}
+                  onValueChange={value => setEditando({ ...editando, unidade_id: value === '__nenhuma__' ? '' : value })}
                 >
-                  <option value="">{(editando.funcao === 'agente' || editando.funcao === 'administrativo') ? 'Selecione a unidade...' : 'Nenhuma (todas)'}</option>
-                  {unidades.map(u => (
-                    <option key={u.id} value={u.id}>{u.nome} ({u.codigo})</option>
-                  ))}
-                </select>
+                  <SelectTrigger className="rounded-lg bg-slate-900/60 border-slate-700/50 focus:ring-violet-500/40">
+                    <SelectValue placeholder={(editando.funcao === 'agente' || editando.funcao === 'administrativo') ? 'Selecione a unidade...' : 'Nenhuma (todas)'} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {editando.funcao === 'ambos' && (
+                      <SelectItem value="__nenhuma__">Nenhuma (todas)</SelectItem>
+                    )}
+                    {editando.funcao === 'administrativo' && (
+                      <SelectItem value="todas">🌐 Todas as unidades</SelectItem>
+                    )}
+                    {unidades.map(u => (
+                      <SelectItem key={u.id} value={u.id}>{u.nome} ({u.codigo})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 {editando.funcao === 'agente' && (
                   <p className="text-[10px] text-amber-400/70 mt-1">
                     Leads criados automaticamente serão vinculados a esta unidade.
                   </p>
                 )}
-                {editando.funcao === 'administrativo' && (
+                {editando.funcao === 'administrativo' && editando.unidade_id !== 'todas' && (
                   <p className="text-[10px] text-amber-400/70 mt-1">
                     Mensagens recebidas nesta caixa serão roteadas para a caixa de entrada administrativa da unidade.
                   </p>
                 )}
+                {editando.funcao === 'administrativo' && editando.unidade_id === 'todas' && (
+                  <p className="text-[10px] text-amber-400/70 mt-1">
+                    Recebe mensagens de alunos de qualquer unidade; cada conversa é roteada para a unidade do aluno. Contatos não cadastrados ficam visíveis apenas na visão "Todas as unidades" da Caixa de Entrada.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Departamento (só para caixas administrativas) */}
+            {editando.funcao === 'administrativo' && (
+              <div>
+                <label className="text-xs text-slate-400 mb-1 flex items-center gap-1">
+                  <Building2 className="w-3 h-3" /> Departamento <span className="text-red-400">*</span>
+                </label>
+                <Select
+                  value={editando.departamento}
+                  onValueChange={value => setEditando({ ...editando, departamento: value as DepartamentoCaixa })}
+                >
+                  <SelectTrigger className="rounded-lg bg-slate-900/60 border-slate-700/50 focus:ring-violet-500/40">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="administrativo">Administrativo (cobrança, secretaria)</SelectItem>
+                    <SelectItem value="sucesso_aluno">Sucesso do Aluno</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-amber-400/70 mt-1">
+                  Separa as conversas por área na Caixa de Entrada. O mesmo aluno pode ter uma conversa em cada departamento.
+                </p>
               </div>
             )}
 
@@ -786,10 +840,10 @@ export function CaixasManager() {
           <div className="flex items-center gap-3 pt-2 border-t border-slate-700/50">
             <button
               onClick={() => handleTestarConexao(editando.id, editando.uazapi_url, editando.uazapi_token, editando.provedor, editando.waha_url, editando.waha_session)}
-              disabled={newTestResult.status === 'testing' || (editando.provedor === 'waha' ? !editando.waha_url || !editando.waha_session : !editando.uazapi_url || !editando.uazapi_token)}
+              disabled={formTestResult.status === 'testing' || (editando.provedor === 'waha' ? !editando.waha_url || !editando.waha_session : !editando.uazapi_url || !editando.uazapi_token)}
               className="flex items-center gap-2 px-4 py-2 bg-cyan-600/20 border border-cyan-500/30 hover:bg-cyan-600/30 text-cyan-300 text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
             >
-              {newTestResult.status === 'testing' ? (
+              {formTestResult.status === 'testing' ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <TestTube className="w-4 h-4" />
@@ -797,19 +851,19 @@ export function CaixasManager() {
               Testar Conexão
             </button>
 
-            {newTestResult.status === 'success' && (
+            {formTestResult.status === 'success' && (
               <div className="flex items-center gap-2 text-emerald-400 text-sm">
                 <Wifi className="w-4 h-4" />
-                <span>{newTestResult.message}</span>
-                {newTestResult.instanceName && (
-                  <span className="text-xs text-slate-400">({newTestResult.instanceName})</span>
+                <span>{formTestResult.message}</span>
+                {formTestResult.instanceName && (
+                  <span className="text-xs text-slate-400">({formTestResult.instanceName})</span>
                 )}
               </div>
             )}
-            {newTestResult.status === 'error' && (
+            {formTestResult.status === 'error' && (
               <div className="flex items-center gap-2 text-red-400 text-sm">
                 <WifiOff className="w-4 h-4" />
-                <span>{newTestResult.message}</span>
+                <span>{formTestResult.message}</span>
               </div>
             )}
           </div>
@@ -832,7 +886,8 @@ export function CaixasManager() {
             </button>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* Lista de caixas */}
       {caixas.length === 0 && !editando ? (
@@ -876,6 +931,11 @@ export function CaixasManager() {
                           caixa.funcao === 'administrativo' && 'bg-teal-500/15 text-teal-400',
                         )}>
                           {caixa.funcao === 'agente' ? 'Agente' : caixa.funcao === 'sistema' ? 'Sistema' : caixa.funcao === 'administrativo' ? 'Admin' : 'Ambos'}
+                        </span>
+                      )}
+                      {caixa.funcao === 'administrativo' && caixa.departamento === 'sucesso_aluno' && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded font-medium bg-pink-500/15 text-pink-400">
+                          Sucesso do Aluno
                         </span>
                       )}
                       {caixa.provedor === 'waha' && (
@@ -942,10 +1002,12 @@ export function CaixasManager() {
                           numero: caixa.numero || '',
                           uazapi_url: caixa.uazapi_url,
                           uazapi_token: caixa.uazapi_token,
-                          unidade_id: caixa.unidade_id || '',
+                          // Caixa admin sem unidade = "Todas as unidades" (sentinel 'todas' no select)
+                          unidade_id: caixa.unidade_id || (caixa.funcao === 'administrativo' ? 'todas' : ''),
                           webhook_url: caixa.webhook_url || '',
                           ativo: caixa.ativo,
                           funcao: caixa.funcao || 'agente',
+                          departamento: caixa.departamento || 'administrativo',
                           provedor: caixa.provedor || 'uazapi',
                           waha_url: caixa.waha_url || '',
                           waha_session: caixa.waha_session || '',

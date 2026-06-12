@@ -1,4 +1,4 @@
-import { Search, Loader2, Inbox, Plus, GraduationCap, Phone } from 'lucide-react';
+import { Search, Loader2, Inbox, Plus, GraduationCap, Phone, Building2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { AdminConversa, AlunoInbox, FiltroAdminInbox } from './types';
 
@@ -9,6 +9,8 @@ interface AdminInboxListProps {
   filtro: FiltroAdminInbox;
   busca: string;
   totalNaoLidas: number;
+  /** Inbox unificada (todas as unidades): exibe badge da unidade em cada conversa */
+  mostrarUnidade?: boolean;
   onSelecionarConversa: (conversa: AdminConversa) => void;
   onFiltroChange: (filtro: FiltroAdminInbox) => void;
   onBuscaChange: (busca: string) => void;
@@ -80,9 +82,10 @@ function getStatusAlunoTag(status: string | null | undefined) {
   return map[status] || null;
 }
 
-function AdminInboxItem({ conversa, ativa, onClick }: { conversa: AdminConversa; ativa: boolean; onClick: () => void }) {
+function AdminInboxItem({ conversa, ativa, mostrarUnidade, onClick }: { conversa: AdminConversa; ativa: boolean; mostrarUnidade?: boolean; onClick: () => void }) {
   const aluno = conversa.aluno as AlunoInbox | undefined;
   const isExterno = conversa.aluno_id === null;
+  const unidadeCodigo = (conversa as any).unidade?.codigo || aluno?.unidades?.codigo || null;
   const nome = isExterno
     ? (conversa.nome_externo || conversa.telefone_externo || 'Contato desconhecido')
     : (aluno?.nome || 'Aluno sem nome');
@@ -133,6 +136,17 @@ function AdminInboxItem({ conversa, ativa, onClick }: { conversa: AdminConversa;
               )}>
                 {nome}
               </span>
+              {mostrarUnidade && unidadeCodigo && (
+                <span className="text-[8px] px-1.5 py-0.5 rounded font-bold uppercase flex-shrink-0 bg-violet-500/20 text-violet-300 flex items-center gap-0.5">
+                  <Building2 className="w-2.5 h-2.5" />
+                  {unidadeCodigo}
+                </span>
+              )}
+              {mostrarUnidade && isExterno && !unidadeCodigo && (
+                <span className="text-[8px] px-1.5 py-0.5 rounded font-bold uppercase flex-shrink-0 bg-amber-500/20 text-amber-300">
+                  Sem unidade
+                </span>
+              )}
               {isExterno && (
                 <span className="text-[8px] px-1.5 py-0.5 rounded font-bold uppercase flex-shrink-0 bg-slate-600/30 text-slate-400">
                   Externo
@@ -207,6 +221,7 @@ export function AdminInboxList({
   filtro,
   busca,
   totalNaoLidas,
+  mostrarUnidade,
   onSelecionarConversa,
   onFiltroChange,
   onBuscaChange,
@@ -301,6 +316,7 @@ export function AdminInboxList({
               key={conversa.id}
               conversa={conversa}
               ativa={conversaSelecionada?.id === conversa.id}
+              mostrarUnidade={mostrarUnidade}
               onClick={() => onSelecionarConversa(conversa)}
             />
           ))

@@ -327,6 +327,8 @@ export interface CursoCRM {
 // Caixa WhatsApp (UAZAPI / WAHA)
 export type FuncaoCaixa = 'agente' | 'sistema' | 'ambos' | 'administrativo';
 export type ProvedorWhatsApp = 'uazapi' | 'waha';
+// Departamento de atendimento (só relevante para funcao 'administrativo')
+export type DepartamentoCaixa = 'administrativo' | 'sucesso_aluno';
 
 export interface WhatsAppCaixa {
   id: number;
@@ -338,6 +340,7 @@ export interface WhatsAppCaixa {
   webhook_url: string | null;
   ativo: boolean;
   funcao: FuncaoCaixa;
+  departamento: DepartamentoCaixa;
   provedor: ProvedorWhatsApp;
   waha_url: string | null;
   waha_session: string | null;

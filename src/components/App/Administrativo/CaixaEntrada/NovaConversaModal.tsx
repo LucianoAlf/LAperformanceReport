@@ -17,6 +17,7 @@ interface NovaConversaModalProps {
   onClose: () => void;
   onIniciarConversa: (contato: ContatoInbox) => void;
   unidadeId: string;
+  departamento: 'administrativo' | 'sucesso_aluno';
 }
 
 type ModoModal = 'aluno' | 'numero';
@@ -50,7 +51,7 @@ function formatPhoneDisplay(phone: string): string {
   return phone;
 }
 
-export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeId }: NovaConversaModalProps) {
+export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeId, departamento }: NovaConversaModalProps) {
   const [modo, setModo] = useState<ModoModal>('aluno');
   const [busca, setBusca] = useState('');
   const [alunos, setAlunos] = useState<AlunoInbox[]>([]);
@@ -164,6 +165,7 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
         .select('id')
         .eq('aluno_id', aluno.id)
         .eq('unidade_id', unidadeId)
+        .eq('departamento', departamento)
         .maybeSingle();
 
       if (existente) {
@@ -172,12 +174,14 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
           .update({ status: 'aberta' })
           .eq('id', existente.id);
       } else {
+        // Caixa do departamento que atende esta unidade (própria ou "todas as unidades")
         const { data: caixa } = await supabase
           .from('whatsapp_caixas')
           .select('id')
-          .eq('unidade_id', unidadeId)
           .eq('funcao', 'administrativo')
+          .eq('departamento', departamento)
           .eq('ativo', true)
+          .or(`unidade_id.eq.${unidadeId},unidade_id.is.null`)
           .maybeSingle();
 
         await supabase
@@ -185,6 +189,7 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
           .insert({
             aluno_id: aluno.id,
             unidade_id: unidadeId,
+            departamento,
             caixa_id: caixa?.id || null,
             status: 'aberta',
           });
@@ -197,7 +202,7 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
     } finally {
       setCriando(false);
     }
-  }, [unidadeId, criando, onIniciarConversa, onClose]);
+  }, [unidadeId, departamento, criando, onIniciarConversa, onClose]);
 
   const handleSelecionarExterno = useCallback(async () => {
     const digits = telefone.replace(/\D/g, '');
@@ -219,6 +224,7 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
         .select('id')
         .eq('telefone_externo', phoneFormatted)
         .eq('unidade_id', unidadeId)
+        .eq('departamento', departamento)
         .is('aluno_id', null)
         .maybeSingle();
 
@@ -231,9 +237,10 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
         const { data: caixa } = await supabase
           .from('whatsapp_caixas')
           .select('id')
-          .eq('unidade_id', unidadeId)
           .eq('funcao', 'administrativo')
+          .eq('departamento', departamento)
           .eq('ativo', true)
+          .or(`unidade_id.eq.${unidadeId},unidade_id.is.null`)
           .maybeSingle();
 
         await supabase
@@ -243,6 +250,7 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
             telefone_externo: phoneFormatted,
             nome_externo: nomeExterno || null,
             unidade_id: unidadeId,
+            departamento,
             caixa_id: caixa?.id || null,
             status: 'aberta',
           });
@@ -259,7 +267,7 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
     } finally {
       setCriando(false);
     }
-  }, [telefone, nomeExterno, alunoEncontrado, criando, unidadeId, onIniciarConversa, onClose, handleSelecionarAluno]);
+  }, [telefone, nomeExterno, alunoEncontrado, criando, unidadeId, departamento, onIniciarConversa, onClose, handleSelecionarAluno]);
 
   if (!aberto) return null;
 

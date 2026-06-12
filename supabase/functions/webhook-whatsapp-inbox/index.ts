@@ -217,7 +217,8 @@ function detectMessageType(message: any): { tipo: string; conteudo: string | nul
 async function handleRespostaEvasao(
   msg: any,
   phone: string,
-  supabase: any
+  supabase: any,
+  caixaIdFromUrl: number | null
 ): Promise<{ handled: boolean; pesquisa_id?: string }> {
   try {
     // Ignorar mensagens enviadas por nós (fromMe = true)
@@ -486,7 +487,8 @@ async function handleAdminInboxMessage(
   phone: string,
   whatsappMessageId: string | null,
   caixaId: number,
-  unidadeId: string,
+  unidadeId: string | null,
+  departamento: string,
   supabase: any,
   uazapiCreds: { baseUrl: string; token: string } | null = null
 ): Promise<boolean> {
@@ -508,16 +510,23 @@ async function handleAdminInboxMessage(
     // Buscar aluno pelo telefone (whatsapp ou telefone)
     // Tenta match com e sem prefixo 55
     const phoneSuffix = phone.slice(-11); // DDD + número
-    const { data: aluno } = await supabase
-      .from('alunos')
-      .select('id, nome, unidade_id, telefone, whatsapp')
-      .or(`telefone.like.%${phoneSuffix},whatsapp.like.%${phoneSuffix}`)
-      .eq('unidade_id', unidadeId)
-      .limit(1)
-      .maybeSingle();
+
+    // Caixa "Todas as unidades" (unidadeId null): pula a busca filtrada e vai direto à global.
+    // Caixa de unidade fixa: prioriza aluno da unidade, com fallback global.
+    let aluno = null;
+    if (unidadeId) {
+      const { data } = await supabase
+        .from('alunos')
+        .select('id, nome, unidade_id, telefone, whatsapp')
+        .or(`telefone.like.%${phoneSuffix},whatsapp.like.%${phoneSuffix}`)
+        .eq('unidade_id', unidadeId)
+        .limit(1)
+        .maybeSingle();
+      aluno = data;
+    }
 
     if (!aluno) {
-      // Tentar sem filtro de unidade (pode ser aluno de outra unidade)
+      // Tentar sem filtro de unidade (caixa "todas" ou aluno de outra unidade)
       const { data: alunoGlobal } = await supabase
         .from('alunos')
         .select('id, nome, unidade_id, telefone, whatsapp')
@@ -526,16 +535,17 @@ async function handleAdminInboxMessage(
         .maybeSingle();
 
       if (!alunoGlobal) {
-        // Nao é aluno cadastrado — criar conversa como contato externo
-        console.log(`[webhook-admin] Aluno não encontrado para ${phone}, criando contato externo`);
-        return await processExternalAdminMessage(msg, phone, whatsappMessageId, caixaId, unidadeId, supabase, uazapiCreds);
+        // Nao é aluno cadastrado — criar conversa como contato externo.
+        // Em caixa "todas", unidadeId é null: conversa fica sem unidade (visível só p/ admin).
+        console.log(`[webhook-admin] Aluno não encontrado para ${phone}, criando contato externo (unidade=${unidadeId || 'nenhuma'})`);
+        return await processExternalAdminMessage(msg, phone, whatsappMessageId, caixaId, unidadeId, departamento, supabase, uazapiCreds);
       }
 
       // Aluno encontrado em outra unidade — usar a unidade do aluno
-      return await processAdminMessage(msg, phone, whatsappMessageId, caixaId, alunoGlobal, supabase, uazapiCreds);
+      return await processAdminMessage(msg, phone, whatsappMessageId, caixaId, alunoGlobal, departamento, supabase, uazapiCreds);
     }
 
-    return await processAdminMessage(msg, phone, whatsappMessageId, caixaId, aluno, supabase, uazapiCreds);
+    return await processAdminMessage(msg, phone, whatsappMessageId, caixaId, aluno, departamento, supabase, uazapiCreds);
   } catch (err) {
     console.error('[webhook-admin] Erro:', err);
     return false;
@@ -548,15 +558,17 @@ async function processAdminMessage(
   whatsappMessageId: string | null,
   caixaId: number,
   aluno: { id: number; nome: string; unidade_id: string },
+  departamento: string,
   supabase: any,
   uazapiCreds: { baseUrl: string; token: string } | null = null
 ): Promise<boolean> {
-  // Buscar ou criar admin_conversa
+  // Buscar ou criar admin_conversa (separada por departamento)
   let { data: conversa } = await supabase
     .from('admin_conversas')
     .select('id')
     .eq('aluno_id', aluno.id)
     .eq('unidade_id', aluno.unidade_id)
+    .eq('departamento', departamento)
     .maybeSingle();
 
   if (!conversa) {
@@ -565,6 +577,7 @@ async function processAdminMessage(
       .insert({
         aluno_id: aluno.id,
         unidade_id: aluno.unidade_id,
+        departamento,
         caixa_id: caixaId,
         whatsapp_jid: phone,
         status: 'aberta',
@@ -634,18 +647,23 @@ async function processExternalAdminMessage(
   phone: string,
   whatsappMessageId: string | null,
   caixaId: number,
-  unidadeId: string,
+  unidadeId: string | null,
+  departamento: string,
   supabase: any,
   uazapiCreds: { baseUrl: string; token: string } | null = null
 ): Promise<boolean> {
-  // Buscar ou criar conversa externa por telefone_externo + unidade
-  let { data: conversa } = await supabase
+  // Buscar ou criar conversa externa por telefone_externo + unidade + departamento.
+  // Caixa "todas": unidadeId null → conversa externa sem unidade (IS NULL, não eq).
+  let conversaQuery = supabase
     .from('admin_conversas')
     .select('id')
     .eq('telefone_externo', phone)
-    .eq('unidade_id', unidadeId)
-    .is('aluno_id', null)
-    .maybeSingle();
+    .eq('departamento', departamento)
+    .is('aluno_id', null);
+  conversaQuery = unidadeId
+    ? conversaQuery.eq('unidade_id', unidadeId)
+    : conversaQuery.is('unidade_id', null);
+  let { data: conversa } = await conversaQuery.maybeSingle();
 
   if (!conversa) {
     const { data: novaConversa, error: criarErr } = await supabase
@@ -655,6 +673,7 @@ async function processExternalAdminMessage(
         telefone_externo: phone,
         nome_externo: msg.pushName || null,
         unidade_id: unidadeId,
+        departamento,
         caixa_id: caixaId,
         whatsapp_jid: phone,
         status: 'aberta',
@@ -775,16 +794,19 @@ serve(async (req: Request) => {
     // Verificar se a caixa é administrativa (rotear para admin inbox)
     let isAdminCaixa = false;
     let adminCaixaUnidadeId: string | null = null;
+    let adminCaixaDepartamento = 'administrativo';
     if (caixaIdFromUrl) {
       const { data: caixaInfo } = await supabase
         .from('whatsapp_caixas')
-        .select('funcao, unidade_id')
+        .select('funcao, unidade_id, departamento')
         .eq('id', caixaIdFromUrl)
         .maybeSingle();
       if (caixaInfo?.funcao === 'administrativo') {
         isAdminCaixa = true;
+        // unidade_id null = caixa "Todas as unidades": roteia para a unidade real do aluno.
         adminCaixaUnidadeId = caixaInfo.unidade_id;
-        console.log(`[webhook] Caixa ${caixaIdFromUrl} é ADMINISTRATIVA (unidade: ${adminCaixaUnidadeId})`);
+        adminCaixaDepartamento = caixaInfo.departamento || 'administrativo';
+        console.log(`[webhook] Caixa ${caixaIdFromUrl} é ADMINISTRATIVA (unidade: ${adminCaixaUnidadeId || 'TODAS'}, depto: ${adminCaixaDepartamento})`);
       }
     }
 
@@ -843,7 +865,7 @@ serve(async (req: Request) => {
 
         // Verificar se é resposta de pesquisa de evasão ANTES de filtrar fromMe
         // (porque o usuário pode responder do mesmo dispositivo)
-        const evasaoResult = await handleRespostaEvasao(msg, phone, supabase);
+        const evasaoResult = await handleRespostaEvasao(msg, phone, supabase, caixaIdFromUrl);
         if (evasaoResult.handled) {
           console.log(`[webhook-inbox] Resposta de evasão processada: ${evasaoResult.pesquisa_id}`);
           processadas++;
@@ -909,10 +931,11 @@ serve(async (req: Request) => {
         }
 
         // ========== ROTEAMENTO ADMIN ==========
-        // Se a caixa é administrativa, rotear para admin inbox
-        if (isAdminCaixa && adminCaixaUnidadeId && caixaIdFromUrl) {
+        // Se a caixa é administrativa, rotear para admin inbox.
+        // adminCaixaUnidadeId pode ser null (caixa "Todas as unidades") — o handler resolve a unidade pelo aluno.
+        if (isAdminCaixa && caixaIdFromUrl) {
           const adminHandled = await handleAdminInboxMessage(
-            msg, phone, whatsappMessageId, caixaIdFromUrl, adminCaixaUnidadeId, supabase, uazapiCreds
+            msg, phone, whatsappMessageId, caixaIdFromUrl, adminCaixaUnidadeId, adminCaixaDepartamento, supabase, uazapiCreds
           );
           if (adminHandled) {
             processadas++;

@@ -218,7 +218,9 @@
 - Servico: `src/services/whatsapp.ts` (sendWhatsAppMessage, getWhatsAppConnectionStatus)
 
 ## Caixa de Entrada Administrativa
-- Tabelas: `admin_conversas` (1 por aluno por unidade, RLS por unidade) + `admin_mensagens` (CASCADE)
+- Tabelas: `admin_conversas` (1 por aluno por unidade, RLS por unidade; `unidade_id` é NULLABLE desde 2026-06-12) + `admin_mensagens` (CASCADE)
+- **Caixa "Todas as unidades"** (2026-06-12): caixa admin com `whatsapp_caixas.unidade_id=NULL` (select grava sentinel `'todas'` → null). Webhook roteia admin mesmo sem unidade fixa, busca aluno GLOBAL e grava conversa na unidade real do aluno. Contato não-aluno → conversa com `unidade_id=NULL` + `aluno_id=NULL` (não-cadastrado); RLS (`NULL IN (...)`=falso) deixa visível só p/ admin. Inbox unificada quando filtro global='todos': `useAdminConversas` não filtra unidade, `AdminInboxList` mostra badge de unidade / "Sem unidade". Nova conversa bloqueada no modo todos.
+- **Departamento** (2026-06-12, webhook v39): `whatsapp_caixas.departamento` + `admin_conversas.departamento` ('administrativo' | 'sucesso_aluno', CHECK). Índices únicos da conversa agora incluem departamento: `idx_admin_conversas_aluno_unidade_depto (aluno_id,unidade_id,departamento) WHERE aluno_id NOT NULL` e `idx_admin_conversas_externo_unidade_depto (telefone_externo,unidade_id,departamento) NULLS NOT DISTINCT WHERE aluno_id NULL`. Mesmo aluno pode ter 1 conversa por departamento. CaixasManager: select Departamento aparece quando funcao='administrativo' (dropdowns migrados p/ Radix `@/components/ui/select`). Caixa de Entrada: abas `[Administrativo][Sucesso do Aluno]` filtram `useAdminConversas` por departamento. **Fase 2 PENDENTE**: liga/desliga robô por botão (flag no banco + Sol na VPS respeitar, via la-agents). Sucesso do Aluno = Sol + humano; todas as caixas devem poder ter robô.
 - RPC: `admin_conversa_nova_mensagem(p_conversa_id, p_preview, p_whatsapp_jid)` — incrementa nao_lidas atomicamente
 - Caixas com `funcao='administrativo'` roteiam msgs do webhook para admin_conversas/admin_mensagens
 - Edge Function: `enviar-mensagem-admin` (texto+midia via UAZAPI)

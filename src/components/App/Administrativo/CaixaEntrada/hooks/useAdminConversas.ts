@@ -4,22 +4,26 @@ import type { AdminConversa, FiltroAdminInbox } from '../types';
 
 interface UseAdminConversasParams {
   unidadeId?: string | null;
+  departamento?: string;
   filtro?: FiltroAdminInbox;
   busca?: string;
 }
 
-export function useAdminConversas({ unidadeId, filtro = 'todas', busca }: UseAdminConversasParams = {}) {
+export function useAdminConversas({ unidadeId, departamento = 'administrativo', filtro = 'todas', busca }: UseAdminConversasParams = {}) {
   const [conversas, setConversas] = useState<AdminConversa[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [totalNaoLidas, setTotalNaoLidas] = useState(0);
 
   const fetchConversas = useCallback(async () => {
-    if (!unidadeId || unidadeId === 'todos') {
+    // null = sem seleção ainda. 'todos' = inbox unificada (todas as unidades; RLS restringe a admin).
+    if (!unidadeId) {
       setConversas([]);
       setLoading(false);
       return;
     }
+
+    const todasUnidades = unidadeId === 'todos';
 
     try {
       setError(null);
@@ -36,11 +40,17 @@ export function useAdminConversas({ unidadeId, filtro = 'todas', busca }: UseAdm
             professores:professor_atual_id(nome),
             unidades:unidade_id(nome, codigo)
           ),
+          unidade:unidade_id(nome, codigo),
           caixa:caixa_id(id, nome, numero)
         `)
-        .eq('unidade_id', unidadeId)
         .eq('status', 'aberta')
+        .eq('departamento', departamento)
         .order('ultima_mensagem_at', { ascending: false, nullsFirst: false });
+
+      // Inbox unificada não filtra por unidade; modo unidade fixa filtra.
+      if (!todasUnidades) {
+        query = query.eq('unidade_id', unidadeId);
+      }
 
       if (filtro === 'nao_lidas') {
         query = query.gt('nao_lidas', 0);
@@ -79,7 +89,7 @@ export function useAdminConversas({ unidadeId, filtro = 'todas', busca }: UseAdm
     } finally {
       setLoading(false);
     }
-  }, [unidadeId, filtro, busca]);
+  }, [unidadeId, departamento, filtro, busca]);
 
   useEffect(() => {
     fetchConversas();
