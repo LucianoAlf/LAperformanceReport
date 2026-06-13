@@ -24,7 +24,7 @@ import { QuickInputCard } from './QuickInputCard';
 import { TabelaRenovacoes } from './TabelaRenovacoes';
 import { TabelaAvisosPrevios } from './TabelaAvisosPrevios';
 import { TabelaEvasoes } from './TabelaEvasoes';
-import { ModalRenovacao } from './ModalRenovacao';
+import { ModalRenovacao, type ModoRenovacao } from './ModalRenovacao';
 import { ModalNaoRenovacao } from './ModalNaoRenovacao';
 import { ModalAvisoPrevio } from './ModalAvisoPrevio';
 import { ModalEvasao } from './ModalEvasao';
@@ -209,6 +209,7 @@ export function AdministrativoPage() {
   
   // Modais
   const [modalRenovacao, setModalRenovacao] = useState(false);
+  const [modalRenovacaoModo, setModalRenovacaoModo] = useState<ModoRenovacao>('confirmada');
   const [modalNaoRenovacao, setModalNaoRenovacao] = useState(false);
   const [modalAvisoPrevio, setModalAvisoPrevio] = useState(false);
   const [modalEvasao, setModalEvasao] = useState(false);
@@ -610,6 +611,22 @@ export function AdministrativoPage() {
     }
   }
 
+  function modoRenovacaoFromItem(item: MovimentacaoAdmin): ModoRenovacao {
+    if (item.renovacao_status === 'antecipada_pendente' || item.renovacao_status === 'antecipada_confirmada' || item.renovacao_antecipada) {
+      return 'antecipada_pendente';
+    }
+    if (item.renovacao_status === 'pendente_validacao') {
+      return 'pendente_validacao';
+    }
+    return 'confirmada';
+  }
+
+  function openModalRenovacao(modo: ModoRenovacao, item: MovimentacaoAdmin | null = null) {
+    setEditingItem(item);
+    setModalRenovacaoModo(modo);
+    setModalRenovacao(true);
+  }
+
   // Handlers para salvar
   async function handleSaveMovimentacao(data: Partial<MovimentacaoAdmin>) {
     try {
@@ -631,6 +648,37 @@ export function AdministrativoPage() {
         payload.renovacao_status = editingItem?.renovacao_status
           || (isAntecipada ? 'antecipada_confirmada' : 'confirmada');
         payload.renovacao_antecipada = isAntecipada;
+      }
+
+      if (isRenovacao && !editingItem?.id && data.aluno_nome) {
+        let duplicidadeQuery = supabase
+          .from('movimentacoes_admin')
+          .select('id, renovacao_status, renovacao_antecipada')
+          .eq('tipo', 'renovacao')
+          .eq('aluno_nome', data.aluno_nome.trim())
+          .eq('competencia_referencia', competenciaReferencia)
+          .limit(1);
+
+        if (unidade === 'todos') {
+          duplicidadeQuery = duplicidadeQuery.is('unidade_id', null);
+        } else {
+          duplicidadeQuery = duplicidadeQuery.eq('unidade_id', unidade);
+        }
+
+        if (data.curso_id) {
+          duplicidadeQuery = duplicidadeQuery.eq('curso_id', data.curso_id);
+        }
+
+        const { data: duplicadas, error: duplicidadeError } = await duplicidadeQuery;
+        if (duplicidadeError) throw duplicidadeError;
+
+        if (duplicadas && duplicadas.length > 0) {
+          toastError(
+            'Renovação já registrada',
+            'Já existe uma renovação para este aluno, curso e competência. Edite o registro existente para evitar duplicidade.'
+          );
+          return false;
+        }
       }
 
       if (editingItem?.id) {
@@ -840,7 +888,7 @@ export function AdministrativoPage() {
     setEditingItem(item);
     switch (item.tipo) {
       case 'renovacao':
-        setModalRenovacao(true);
+        openModalRenovacao(modoRenovacaoFromItem(item), item);
         break;
       case 'nao_renovacao':
         setModalNaoRenovacao(true);
@@ -1075,13 +1123,27 @@ export function AdministrativoPage() {
           <Plus className="w-4 h-4" />
           Clique para adicionar um novo registro
         </p>
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-7 gap-4">
           <QuickInputCard
             icon={RefreshCw}
             title="Renovação"
             count={resumo?.renovacoes_realizadas || 0}
             variant="emerald"
-            onClick={() => { setEditingItem(null); setModalRenovacao(true); }}
+            onClick={() => openModalRenovacao('confirmada')}
+          />
+          <QuickInputCard
+            icon={AlertTriangle}
+            title="Renovação Pendente"
+            count={renovacoesPendentesConfirmacao.length}
+            variant="amber"
+            onClick={() => openModalRenovacao('pendente_validacao')}
+          />
+          <QuickInputCard
+            icon={Clock}
+            title="Renovação Antecipada"
+            count={renovacoesAntecipadas.length}
+            variant="cyan"
+            onClick={() => openModalRenovacao('antecipada_pendente')}
           />
           <QuickInputCard
             icon={XCircle}
@@ -1539,6 +1601,7 @@ export function AdministrativoPage() {
         cursos={cursos}
         competencia={competencia}
         unidadeId={unidade === 'todos' ? null : unidade}
+        modo={modalRenovacaoModo}
       />
       <ModalNaoRenovacao
         open={modalNaoRenovacao}

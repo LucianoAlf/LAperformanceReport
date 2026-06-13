@@ -5,7 +5,7 @@ interface QuickInputCardProps {
   icon: LucideIcon;
   title: string;
   count: number;
-  variant: 'emerald' | 'amber' | 'orange' | 'rose';
+  variant: 'emerald' | 'amber' | 'orange' | 'rose' | 'cyan' | 'violet';
   onClick: () => void;
 }
 
@@ -34,6 +34,18 @@ const variantStyles = {
     text: 'text-rose-400',
     iconBg: 'from-rose-500 to-pink-500',
   },
+  cyan: {
+    bg: 'bg-cyan-500/10',
+    border: 'border-cyan-500/30',
+    text: 'text-cyan-400',
+    iconBg: 'from-cyan-500 to-blue-500',
+  },
+  violet: {
+    bg: 'bg-violet-500/10',
+    border: 'border-violet-500/30',
+    text: 'text-violet-400',
+    iconBg: 'from-violet-500 to-purple-500',
+  },
 };
 
 export function QuickInputCard({ icon: Icon, title, count, variant, onClick }: QuickInputCardProps) {
@@ -43,7 +55,7 @@ export function QuickInputCard({ icon: Icon, title, count, variant, onClick }: Q
     <button
       onClick={onClick}
       className={cn(
-        'group relative p-5 rounded-2xl border-2 transition-all hover:scale-[1.02] hover:shadow-xl text-left',
+        'group relative p-4 rounded-2xl border-2 transition-all hover:scale-[1.02] hover:shadow-xl text-left',
         styles.bg,
         styles.border,
         'hover:border-opacity-60'
@@ -61,8 +73,8 @@ export function QuickInputCard({ icon: Icon, title, count, variant, onClick }: Q
         </div>
       </div>
       <div className="text-left">
-        <p className={cn('text-3xl font-bold mb-0.5', styles.text)}>{count}</p>
-        <p className="text-slate-400 text-sm font-medium">{title}</p>
+        <p className={cn('text-2xl font-bold mb-0.5', styles.text)}>{count}</p>
+        <p className="text-slate-400 text-sm font-medium leading-tight">{title}</p>
       </div>
     </button>
   );
