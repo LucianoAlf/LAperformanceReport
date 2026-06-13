@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
@@ -147,11 +147,31 @@ export function ModalRelatorio({
   const mesNome = new Date(ano, mes - 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
   const hoje = new Date().toLocaleDateString('pt-BR');
 
+  const obterCompetenciaGerencial = () => {
+    if (relatorioPeriodo !== 'personalizado') {
+      return { anoRelatorio: ano, mesRelatorio: mes };
+    }
+
+    const mesmoMes = relatorioDataInicio.getFullYear() === relatorioDataFim.getFullYear()
+      && relatorioDataInicio.getMonth() === relatorioDataFim.getMonth();
+
+    if (!mesmoMes) {
+      throw new Error('O relatorio gerencial e mensal. Selecione um periodo personalizado dentro do mesmo mes.');
+    }
+
+    return {
+      anoRelatorio: relatorioDataInicio.getFullYear(),
+      mesRelatorio: relatorioDataInicio.getMonth() + 1,
+    };
+  };
+
   async function gerarRelatorioGerencialIA(): Promise<string> {
     setLoadingIA(true);
     setErroIA(null);
     
     try {
+      const { anoRelatorio, mesRelatorio } = obterCompetenciaGerencial();
+
       // Converter unidade para UUID se necessário
       let unidadeUUID: string | null = null;
       if (unidade && unidade !== 'todos') {
@@ -162,14 +182,14 @@ export function ModalRelatorio({
       console.log('[ModalRelatorio] Gerando relatório gerencial IA');
       console.log('[ModalRelatorio] unidade recebida:', unidade);
       console.log('[ModalRelatorio] unidadeUUID:', unidadeUUID);
-      console.log('[ModalRelatorio] ano:', ano, 'mes:', mes);
+      console.log('[ModalRelatorio] ano:', anoRelatorio, 'mes:', mesRelatorio);
 
       // Buscar dados via função SQL
       const { data: dadosRelatorio, error: errorDados } = await supabase
         .rpc('get_dados_relatorio_gerencial', {
           p_unidade_id: unidadeUUID,
-          p_ano: ano,
-          p_mes: mes
+          p_ano: anoRelatorio,
+          p_mes: mesRelatorio
         });
 
       if (errorDados) {
@@ -946,6 +966,9 @@ export function ModalRelatorio({
             <FileText className="w-5 h-5 text-cyan-400" />
             {tipoSelecionado ? tiposRelatorio.find(t => t.id === tipoSelecionado)?.label : 'Gerar Relatório'}
           </DialogTitle>
+          <DialogDescription className="sr-only">
+            Gere, revise, copie ou envie relatorios administrativos da competencia selecionada.
+          </DialogDescription>
         </DialogHeader>
 
         {!tipoSelecionado ? (
@@ -1016,11 +1039,19 @@ export function ModalRelatorio({
 
             <p className="text-slate-400 text-sm">Escolha o tipo de relatório:</p>
             {tiposRelatorio.map((tipo) => (
-              <button
+              <div
+                role="button"
+                tabIndex={0}
                 key={tipo.id}
                 onClick={() => handleSelecionarTipo(tipo.id)}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    handleSelecionarTipo(tipo.id);
+                  }
+                }}
                 className={cn(
-                  "w-full flex items-center gap-4 p-4 rounded-xl transition-all text-left",
+                  "w-full flex items-center gap-4 p-4 rounded-xl transition-all text-left cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400",
                   tipo.destaque 
                     ? "bg-gradient-to-r from-violet-600/20 to-cyan-600/20 hover:from-violet-600/30 hover:to-cyan-600/30 border border-violet-500/50 hover:border-violet-400"
                     : "bg-slate-800/50 hover:bg-slate-800 border border-slate-700 hover:border-slate-600"
@@ -1060,7 +1091,7 @@ export function ModalRelatorio({
                   )}
                 </div>
                 <span className={tipo.destaque ? "text-violet-400" : "text-slate-500"}>→</span>
-              </button>
+              </div>
             ))}
           </div>
         ) : (
