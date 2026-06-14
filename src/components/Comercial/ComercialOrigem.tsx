@@ -7,7 +7,7 @@ import { ChartTooltip } from './ChartTooltip';
 
 export function ComercialOrigem() {
   const [unidade, setUnidade] = useState<UnidadeComercial>('Consolidado');
-  const { origem, loading } = useOrigemData(2025, unidade);
+  const { origem, loading, error } = useOrigemData(2025, unidade);
 
   if (loading) {
     return (
@@ -17,7 +17,25 @@ export function ComercialOrigem() {
     );
   }
 
+  if (error) {
+    return (
+      <div className="p-8 min-h-screen">
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-5">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-400 mt-0.5" />
+            <div>
+              <div className="text-red-300 font-medium mb-1">Erro ao carregar origem dos leads</div>
+              <p className="text-gray-300 text-sm">{error}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const totalLeads = origem.reduce((sum, o) => sum + o.leads, 0);
+  const maiorCanal = origem[0];
+  const segundoCanal = origem[1];
   const cores = ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ef4444', '#06b6d4', '#ec4899', '#14b8a6'];
 
   const pieData = origem.slice(0, 6).map((o) => ({
@@ -79,12 +97,12 @@ export function ComercialOrigem() {
                 </div>
             </div>
           </div>
-          <div className="text-3xl font-grotesk font-bold text-white mb-1">{origem[0]?.canal}</div>
+          <div className="text-3xl font-grotesk font-bold text-white mb-1">{maiorCanal?.canal || 'Sem dados'}</div>
           <div className="text-2xl font-grotesk font-bold text-blue-400">
-            {origem[0]?.leads.toLocaleString('pt-BR')} leads
+            {(maiorCanal?.leads || 0).toLocaleString('pt-BR')} leads
           </div>
           <div className="text-sm text-gray-400 mt-2">
-            {((origem[0]?.leads / totalLeads) * 100).toFixed(1)}% do total
+            {totalLeads > 0 ? (((maiorCanal?.leads || 0) / totalLeads) * 100).toFixed(1) : '0.0'}% do total
           </div>
         </div>
 
@@ -102,12 +120,12 @@ export function ComercialOrigem() {
                 </div>
             </div>
           </div>
-          <div className="text-3xl font-grotesk font-bold text-white mb-1">{origem[1]?.canal}</div>
+          <div className="text-3xl font-grotesk font-bold text-white mb-1">{segundoCanal?.canal || 'Sem dados'}</div>
           <div className="text-2xl font-grotesk font-bold text-emerald-400">
-            {origem[1]?.leads.toLocaleString('pt-BR')} leads
+            {(segundoCanal?.leads || 0).toLocaleString('pt-BR')} leads
           </div>
           <div className="text-sm text-gray-400 mt-2">
-            {origem[1]?.percentual.toFixed(1)}% do total
+            {(segundoCanal?.percentual || 0).toFixed(1)}% do total
           </div>
         </div>
       </div>
@@ -217,10 +235,10 @@ export function ComercialOrigem() {
           <div>
             <div className="text-amber-400 font-medium mb-1">Concentração de Canais</div>
             <p className="text-gray-300 text-sm">
-              <strong>{origem[0]?.canal}</strong> gera {totalLeads > 0 ? ((origem[0]?.leads / totalLeads) * 100).toFixed(0) : 0}% dos leads
+              <strong>{maiorCanal?.canal || 'Sem dados'}</strong> gera {totalLeads > 0 ? (((maiorCanal?.leads || 0) / totalLeads) * 100).toFixed(0) : 0}% dos leads
               {unidade !== 'Consolidado' && ` em ${unidade}`} - alta dependência de um único canal.
               <br />
-              <strong>{origem[1]?.canal}</strong> é o segundo maior canal com {origem[1]?.percentual.toFixed(1)}% dos leads.
+              <strong>{segundoCanal?.canal || 'Sem dados'}</strong> é o segundo maior canal com {(segundoCanal?.percentual || 0).toFixed(1)}% dos leads.
               <br />
               <span className="text-gray-400">
                 {unidade === 'Consolidado' 
