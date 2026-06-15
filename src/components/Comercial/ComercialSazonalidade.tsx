@@ -1,10 +1,7 @@
-import { useState } from 'react';
 import { useComercialSeriesMensaisV2, ordenarSeriesPorMetrica } from '../../hooks/useComercialSeriesMensaisV2';
-import { TrendingUp, TrendingDown, AlertTriangle, Calendar } from 'lucide-react';
+import { AlertTriangle, Calendar, TrendingUp } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { ChartTooltip } from './ChartTooltip';
-
-type MetricaAtual = 'leads' | 'matriculas';
 
 function formatarInteiro(valor: number): string {
   return valor.toLocaleString('pt-BR');
@@ -21,7 +18,6 @@ function getHeatmapColor(valor: number, maximo: number) {
 }
 
 export function ComercialSazonalidade() {
-  const [metrica, setMetrica] = useState<MetricaAtual>('matriculas');
   const { series: dadosPorMes, loading, error } = useComercialSeriesMensaisV2(2025);
 
   if (loading) {
@@ -51,28 +47,21 @@ export function ComercialSazonalidade() {
   const chartData = dadosPorMes.map((d) => ({
     mes: d.mes,
     'Leads Entrantes': d.total_leads,
-    'Matrículas Comerciais': d.total_mat,
   }));
 
-  const mesesPorMatriculas = ordenarSeriesPorMetrica(dadosPorMes, 'matriculas');
-  const melhoresMeses = mesesPorMatriculas.slice(0, 3);
-  const pioresMeses = [...mesesPorMatriculas].reverse().slice(0, 3);
-  const maiorLead = ordenarSeriesPorMetrica(dadosPorMes, 'leads')[0];
-  const maiorMatricula = mesesPorMatriculas[0];
-  const metricaLabel = metrica === 'leads' ? 'Leads Entrantes' : 'Matrículas Comerciais';
+  const mesesPorLeads = ordenarSeriesPorMetrica(dadosPorMes, 'leads');
+  const maiorLead = mesesPorLeads[0];
+  const menorLead = [...mesesPorLeads].reverse()[0];
+  const totalLeads = dadosPorMes.reduce((total, mes) => total + mes.total_leads, 0);
+  const totalMatriculasDiagnostico = dadosPorMes.reduce((total, mes) => total + mes.total_mat, 0);
 
-  const valoresUnidade = dadosPorMes.flatMap((d) => (
-    metrica === 'leads'
-      ? [d.cg_leads, d.rec_leads, d.barra_leads]
-      : [d.cg_mat, d.rec_mat, d.barra_mat]
-  ));
-  const valoresTotais = dadosPorMes.map((d) => (metrica === 'leads' ? d.total_leads : d.total_mat));
+  const valoresUnidade = dadosPorMes.flatMap((d) => [d.cg_leads, d.rec_leads, d.barra_leads]);
+  const valoresTotais = dadosPorMes.map((d) => d.total_leads);
   const maxUnidade = Math.max(...valoresUnidade, 0);
   const maxTotal = Math.max(...valoresTotais, 0);
 
   return (
     <div className="p-8 min-h-screen">
-      {/* Header */}
       <div className="mb-8">
         <span className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-400 text-sm font-medium px-3 py-1 rounded-full mb-4">
           <Calendar className="w-4 h-4" /> Sazonalidade
@@ -81,70 +70,58 @@ export function ComercialSazonalidade() {
           Padrões <span className="text-emerald-400">Calculados</span>
         </h1>
         <p className="text-gray-400">
-          Série mensal comercial v2 baseada em leads entrantes e matrículas comerciais
+          Série mensal comercial v2 com foco em leads entrantes.
         </p>
       </div>
 
-      {/* Cards de Meses */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 bg-emerald-500/20 rounded-lg">
               <TrendingUp className="w-5 h-5 text-emerald-400" />
             </div>
-            <h3 className="text-lg font-semibold text-emerald-400">Maior Matrícula Comercial</h3>
+            <h3 className="text-lg font-semibold text-emerald-400">Leads Entrantes</h3>
           </div>
-
-          <div className="grid grid-cols-3 gap-4">
-            {melhoresMeses.map((m, idx) => (
-              <div key={m.mes} className="text-center">
-                <div className="text-3xl font-grotesk font-bold text-white">{m.mes.toUpperCase()}</div>
-                <div className="text-emerald-400 font-semibold">{m.total_mat} mat.</div>
-                {idx === 0 && <div className="text-yellow-400 text-xs mt-1">Maior mês</div>}
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-4 text-sm text-gray-400">
-            O maior volume de matrículas comerciais em 2025 aparece em{' '}
-            <strong>{maiorMatricula?.mes || '-'}</strong>, com{' '}
-            <strong>{formatarInteiro(maiorMatricula?.total_mat || 0)}</strong> matrículas comerciais.
-          </div>
+          <div className="text-4xl font-grotesk font-bold text-white">{formatarInteiro(totalLeads)}</div>
+          <p className="mt-3 text-sm text-gray-400">
+            Total consolidado de 2025 pela fonte canônica v2.
+          </p>
         </div>
 
-        <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-6">
+        <div className="bg-blue-500/10 border border-blue-500/30 rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 bg-red-500/20 rounded-lg">
-              <TrendingDown className="w-5 h-5 text-red-400" />
+            <div className="p-2 bg-blue-500/20 rounded-lg">
+              <Calendar className="w-5 h-5 text-blue-400" />
             </div>
-            <h3 className="text-lg font-semibold text-red-400">Menor Matrícula Comercial</h3>
+            <h3 className="text-lg font-semibold text-blue-400">Maior Mês de Leads</h3>
           </div>
+          <div className="text-4xl font-grotesk font-bold text-white">{maiorLead?.mes?.toUpperCase() || '-'}</div>
+          <p className="mt-3 text-sm text-gray-400">
+            {formatarInteiro(maiorLead?.total_leads || 0)} leads entrantes no maior mês.
+          </p>
+        </div>
 
-          <div className="grid grid-cols-3 gap-4">
-            {pioresMeses.map((m, idx) => (
-              <div key={m.mes} className="text-center">
-                <div className="text-3xl font-grotesk font-bold text-white">{m.mes.toUpperCase()}</div>
-                <div className="text-red-400 font-semibold">{m.total_mat} mat.</div>
-                {idx === 0 && (
-                  <div className="text-red-400 text-xs mt-1 flex items-center justify-center gap-1">
-                    <AlertTriangle className="w-3 h-3" /> Menor mês
-                  </div>
-                )}
-              </div>
-            ))}
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 bg-amber-500/20 rounded-lg">
+              <AlertTriangle className="w-5 h-5 text-amber-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-amber-400">
+              Matrículas comerciais — critério atual em validação
+            </h3>
           </div>
-
-          <div className="mt-4 text-sm text-gray-400">
-            Menor volume não define causa sozinho. Use este bloco como sinal para investigação comercial,
-            sem assumir sazonalidade ou foco operacional sem validação.
+          <div className="text-4xl font-grotesk font-bold text-white">
+            {formatarInteiro(totalMatriculasDiagnostico)}
           </div>
+          <p className="mt-3 text-sm text-gray-400">
+            Total consolidado exibido apenas como diagnóstico. Distribuição por unidade em validação semântica.
+          </p>
         </div>
       </div>
 
-      {/* Gráfico de Linha */}
       <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 mb-8">
         <h3 className="text-lg font-semibold text-white mb-6">
-          Evolução Mensal: Leads Entrantes vs Matrículas Comerciais
+          Evolução Mensal: Leads Entrantes
         </h3>
 
         <div className="h-[300px]">
@@ -165,45 +142,20 @@ export function ComercialSazonalidade() {
                 strokeWidth={2}
                 dot={{ fill: '#3b82f6' }}
               />
-              <Line
-                type="monotone"
-                dataKey="Matrículas Comerciais"
-                stroke="#00d4ff"
-                strokeWidth={2}
-                dot={{ fill: '#00d4ff' }}
-              />
             </LineChart>
           </ResponsiveContainer>
         </div>
       </div>
 
-      {/* Heatmap */}
       <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 mb-8">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-lg font-semibold text-white">
-            Heatmap de {metricaLabel} 2025
-          </h3>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setMetrica('leads')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                metrica === 'leads'
-                  ? 'bg-emerald-500 text-slate-900'
-                  : 'bg-slate-700 text-gray-400 hover:bg-slate-600'
-              }`}
-            >
-              Leads Entrantes
-            </button>
-            <button
-              onClick={() => setMetrica('matriculas')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                metrica === 'matriculas'
-                  ? 'bg-emerald-500 text-slate-900'
-                  : 'bg-slate-700 text-gray-400 hover:bg-slate-600'
-              }`}
-            >
-              Matrículas Comerciais
-            </button>
+        <div className="flex items-center justify-between gap-4 mb-6">
+          <div>
+            <h3 className="text-lg font-semibold text-white">
+              Heatmap de Leads Entrantes 2025
+            </h3>
+            <p className="text-sm text-gray-400 mt-1">
+              Distribuição de matrículas por unidade em validação semântica. Leads já usam fonte canônica v2.
+            </p>
           </div>
         </div>
 
@@ -215,56 +167,44 @@ export function ComercialSazonalidade() {
             ))}
 
             <div className="flex items-center text-sm font-bold text-slate-300">Campo Grande</div>
-            {dadosPorMes.map((d) => {
-              const valor = metrica === 'leads' ? d.cg_leads : d.cg_mat;
-              return (
-                <div
-                  key={d.mes}
-                  className={`aspect-square flex items-center justify-center rounded-lg text-xs font-black transition-transform hover:scale-110 cursor-default ${getHeatmapColor(valor, maxUnidade)}`}
-                >
-                  {valor}
-                </div>
-              );
-            })}
+            {dadosPorMes.map((d) => (
+              <div
+                key={d.mes}
+                className={`aspect-square flex items-center justify-center rounded-lg text-xs font-black transition-transform hover:scale-110 cursor-default ${getHeatmapColor(d.cg_leads, maxUnidade)}`}
+              >
+                {d.cg_leads}
+              </div>
+            ))}
 
             <div className="flex items-center text-sm font-bold text-slate-300">Recreio</div>
-            {dadosPorMes.map((d) => {
-              const valor = metrica === 'leads' ? d.rec_leads : d.rec_mat;
-              return (
-                <div
-                  key={d.mes}
-                  className={`aspect-square flex items-center justify-center rounded-lg text-xs font-black transition-transform hover:scale-110 cursor-default ${getHeatmapColor(valor, maxUnidade)}`}
-                >
-                  {valor}
-                </div>
-              );
-            })}
+            {dadosPorMes.map((d) => (
+              <div
+                key={d.mes}
+                className={`aspect-square flex items-center justify-center rounded-lg text-xs font-black transition-transform hover:scale-110 cursor-default ${getHeatmapColor(d.rec_leads, maxUnidade)}`}
+              >
+                {d.rec_leads}
+              </div>
+            ))}
 
             <div className="flex items-center text-sm font-bold text-slate-300">Barra</div>
-            {dadosPorMes.map((d) => {
-              const valor = metrica === 'leads' ? d.barra_leads : d.barra_mat;
-              return (
-                <div
-                  key={d.mes}
-                  className={`aspect-square flex items-center justify-center rounded-lg text-xs font-black transition-transform hover:scale-110 cursor-default ${getHeatmapColor(valor, maxUnidade)}`}
-                >
-                  {valor}
-                </div>
-              );
-            })}
+            {dadosPorMes.map((d) => (
+              <div
+                key={d.mes}
+                className={`aspect-square flex items-center justify-center rounded-lg text-xs font-black transition-transform hover:scale-110 cursor-default ${getHeatmapColor(d.barra_leads, maxUnidade)}`}
+              >
+                {d.barra_leads}
+              </div>
+            ))}
 
             <div className="flex items-center text-sm font-black text-emerald-400">TOTAL</div>
-            {dadosPorMes.map((d) => {
-              const valor = metrica === 'leads' ? d.total_leads : d.total_mat;
-              return (
-                <div
-                  key={d.mes}
-                  className={`aspect-square flex items-center justify-center rounded-lg text-xs font-black transition-transform hover:scale-110 cursor-default border-2 border-emerald-500/50 ${getHeatmapColor(valor, maxTotal)}`}
-                >
-                  {valor}
-                </div>
-              );
-            })}
+            {dadosPorMes.map((d) => (
+              <div
+                key={d.mes}
+                className={`aspect-square flex items-center justify-center rounded-lg text-xs font-black transition-transform hover:scale-110 cursor-default border-2 border-emerald-500/50 ${getHeatmapColor(d.total_leads, maxTotal)}`}
+              >
+                {d.total_leads}
+              </div>
+            ))}
           </div>
 
           <div className="mt-8 space-y-3">
@@ -275,14 +215,12 @@ export function ComercialSazonalidade() {
               <div className="flex items-center gap-2"><div className="w-4 h-4 rounded bg-accent-green/80" /> Maior faixa</div>
             </div>
             <div className="text-center text-xs text-slate-600 italic">
-              Escala relativa ao maior valor exibido para {metricaLabel.toLocaleLowerCase('pt-BR')}.
-              A linha TOTAL usa escala própria.
+              Escala relativa ao maior valor exibido para leads entrantes. A linha TOTAL usa escala própria.
             </div>
           </div>
         </div>
       </div>
 
-      {/* Insight */}
       <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4">
         <div className="flex items-start gap-3">
           <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5" />
@@ -290,11 +228,11 @@ export function ComercialSazonalidade() {
             <div className="text-amber-400 font-medium mb-1">Leitura Calculada</div>
             <p className="text-gray-300 text-sm">
               Maior volume de <strong>Leads Entrantes</strong>: {maiorLead?.mes || '-'} ({formatarInteiro(maiorLead?.total_leads || 0)}).
-              Maior volume de <strong> Matrículas Comerciais</strong>: {maiorMatricula?.mes || '-'} ({formatarInteiro(maiorMatricula?.total_mat || 0)}).
+              Menor volume de <strong> Leads Entrantes</strong>: {menorLead?.mes || '-'} ({formatarInteiro(menorLead?.total_leads || 0)}).
               <br />
               <span className="text-gray-400">
-                Padrão calculado com base nos dados comerciais v2 de 2025. A causa de cada pico ou queda
-                ainda precisa ser validada fora deste gráfico.
+                Padrão calculado com base nos dados comerciais v2 de 2025. Matrículas comerciais seguem como
+                diagnóstico consolidado até a validação da regra canônica por unidade.
               </span>
             </p>
           </div>
