@@ -84,6 +84,7 @@ const AdministrativoPage = lazy(() => import('./components/App/Administrativo').
 // Saúde das Automações (admin)
 const AutomacoesPage = lazy(() => import('./components/App/Automacoes').then(m => ({ default: m.AutomacoesPage })));
 const AlunosPage = lazy(() => import('./components/App/Alunos').then(m => ({ default: m.AlunosPage })));
+const SucessoClientePage = lazy(() => import('./components/App/SucessoCliente').then(m => ({ default: m.SucessoClientePage })));
 const SalasPage = lazy(() => import('./components/App/Salas').then(m => ({ default: m.SalasPage })));
 const ProjetosPage = lazy(() => import('./components/App/Projetos').then(m => ({ default: m.ProjetosPage })));
 const PreAtendimentoPage = lazy(() => import('./components/App/PreAtendimento').then(m => ({ default: m.PreAtendimentoPage })));
@@ -247,6 +248,10 @@ export const router = createBrowserRouter([
           {
             path: 'alunos',
             element: <Suspense fallback={<PageLoader />}><AlunosPage /></Suspense>,
+          },
+          {
+            path: 'sucesso-aluno',
+            element: <Suspense fallback={<PageLoader />}><SucessoClientePage /></Suspense>,
           },
           {
             path: 'professores',

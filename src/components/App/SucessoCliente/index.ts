@@ -1,3 +1,4 @@
+export { SucessoClientePage } from './SucessoClientePage';
 export { TabSucessoAluno } from './TabSucessoAluno';
 export { ModalDetalhesSucessoAluno } from './ModalDetalhesSucessoAluno';
 export { JornadaAlunoKanban } from './JornadaAlunoKanban';
