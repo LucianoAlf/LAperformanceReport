@@ -1,12 +1,24 @@
-import { TrendingUp, Users, Target, ArrowRight, BarChart3 } from 'lucide-react';
-import { useComercialData } from '../../hooks/useComercialData';
+import { TrendingUp, Target, Percent, ArrowRight, BarChart3 } from 'lucide-react';
+import { useComercialResumoV2 } from '../../hooks/useComercialResumoV2';
 
 interface ComercialInicioProps {
   onStart: () => void;
 }
 
 export function ComercialInicio({ onStart }: ComercialInicioProps) {
-  const { kpis, loading } = useComercialData(2025, 'Consolidado');
+  const { resumo, loading, error } = useComercialResumoV2(2025, 'Consolidado');
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-8 bg-slate-950">
+        <div className="bg-red-500/10 border border-red-500/30 rounded-2xl p-6 text-center max-w-lg">
+          <div className="text-red-400 font-semibold mb-2">Erro ao carregar resumo comercial</div>
+          <div className="text-sm text-gray-400">{error}</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 relative overflow-hidden">
       {/* Background decorativo */}
@@ -51,25 +63,25 @@ export function ComercialInicio({ onStart }: ComercialInicioProps) {
           <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-6 text-center min-w-[180px] hover:border-emerald-500/30 transition-all">
             <TrendingUp className="w-8 h-8 text-emerald-400 mx-auto mb-3" />
             <div className="text-4xl font-grotesk font-bold text-white">
-              {loading ? '...' : kpis?.totalLeads.toLocaleString('pt-BR') || '0'}
+              {loading ? '...' : resumo.leadsEntrantes.toLocaleString('pt-BR')}
             </div>
-            <div className="text-sm text-gray-400">Leads Gerados</div>
-          </div>
-
-          <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-6 text-center min-w-[180px] hover:border-cyan-500/30 transition-all">
-            <Users className="w-8 h-8 text-cyan-400 mx-auto mb-3" />
-            <div className="text-4xl font-grotesk font-bold text-white">
-              {loading ? '...' : kpis?.aulasExperimentais.toLocaleString('pt-BR') || '0'}
-            </div>
-            <div className="text-sm text-gray-400">Aulas Experimentais</div>
+            <div className="text-sm text-gray-400">Leads Entrantes</div>
           </div>
 
           <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-6 text-center min-w-[180px] hover:border-green-500/30 transition-all">
             <Target className="w-8 h-8 text-green-400 mx-auto mb-3" />
             <div className="text-4xl font-grotesk font-bold text-white">
-              {loading ? '...' : kpis?.novasMatriculas.toLocaleString('pt-BR') || '0'}
+              {loading ? '...' : resumo.matriculasComerciais.toLocaleString('pt-BR')}
             </div>
-            <div className="text-sm text-gray-400">Novas Matrículas</div>
+            <div className="text-sm text-gray-400">Matrículas Comerciais</div>
+          </div>
+
+          <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-6 text-center min-w-[180px] hover:border-cyan-500/30 transition-all">
+            <Percent className="w-8 h-8 text-cyan-400 mx-auto mb-3" />
+            <div className="text-4xl font-grotesk font-bold text-white">
+              {loading ? '...' : `${resumo.taxaMatriculaComercial.toFixed(1)}%`}
+            </div>
+            <div className="text-sm text-gray-400">Taxa de Matrícula Comercial</div>
           </div>
         </div>
 
@@ -92,13 +104,6 @@ export function ComercialInicio({ onStart }: ComercialInicioProps) {
           <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
         </button>
 
-        {/* Taxa de conversão */}
-        <div className="mt-8 text-center">
-          <div className="text-4xl font-grotesk font-bold text-emerald-400">
-            {loading ? '...' : `${kpis?.taxaConversaoTotal.toFixed(1) || '0'}%`}
-          </div>
-          <div className="text-sm text-gray-500">Taxa de Conversão Total</div>
-        </div>
       </div>
     </div>
   );
