@@ -30,6 +30,7 @@ import { useMetasKPI } from '@/hooks/useMetasKPI';
 import { KPICard } from '@/components/ui/KPICard';
 import { ModalDetalheKPI, BadgeUnidade, BadgeTipo, ValorParcela, TextoCurso } from './ModalDetalheKPI';
 import { fetchKPIsAlunosCanonicos, type FonteKPIAlunos } from '@/hooks/useKPIsAlunosCanonicos';
+import { useComercialOperacionalResumoV2 } from '@/hooks/useComercialOperacionalResumoV2';
 
 
 interface OutletContextType {
@@ -153,6 +154,16 @@ export function DashboardPage() {
   const setSemestre = competencia?.setSemestre;
   const setDataInicio = competencia?.setDataInicio;
   const setDataFim = competencia?.setDataFim;
+  const {
+    leadsEntrantes: leadsComercialV2,
+    loading: loadingLeadsComercialV2,
+    error: errorLeadsComercialV2,
+  } = useComercialOperacionalResumoV2({
+    unidadeId: unidade,
+    ano,
+    mesInicio,
+    mesFim,
+  });
 
   // Fetch matrículas do período para o modal
   const fetchMatriculas = async () => {
@@ -843,10 +854,16 @@ export function DashboardPage() {
             icon={Phone}
             label={`Leads (${labelPeriodo})`}
             tooltip="Total de novos leads (contatos) recebidos no período. Inclui leads novos e agendados."
-            value={dadosComercial?.leads_mes ?? '--'}
+            value={loadingLeadsComercialV2 ? '--' : leadsComercialV2 ?? '--'}
             target={metas.leads}
             format="number"
-            subvalue={!dadosComercial ? 'Aguardando dados' : undefined}
+            subvalue={
+              errorLeadsComercialV2
+                ? 'Erro na fonte v2'
+                : loadingLeadsComercialV2
+                  ? 'Aguardando fonte v2'
+                  : 'Fonte v2'
+            }
             variant="cyan"
           />
           <KPICard
