@@ -18,6 +18,8 @@ interface NovaConversaModalProps {
   onIniciarConversa: (contato: ContatoInbox) => void;
   unidadeId: string;
   departamento: 'administrativo' | 'sucesso_aluno';
+  /** Caixa multi-unidade: contato externo fica sem unidade (igual ao webhook), evitando duplicar conversa */
+  multiUnidade?: boolean;
 }
 
 type ModoModal = 'aluno' | 'numero';
@@ -51,7 +53,7 @@ function formatPhoneDisplay(phone: string): string {
   return phone;
 }
 
-export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeId, departamento }: NovaConversaModalProps) {
+export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeId, departamento, multiUnidade = false }: NovaConversaModalProps) {
   const [modo, setModo] = useState<ModoModal>('aluno');
   const [busca, setBusca] = useState('');
   const [alunos, setAlunos] = useState<AlunoInbox[]>([]);
@@ -102,6 +104,43 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
     }
   }, [aberto, fetchAlunos]);
 
+  // Caixa multi-unidade (Consolidado): busca alunos de QUALQUER unidade conforme o usuário digita
+  useEffect(() => {
+    if (!aberto || modo !== 'aluno' || unidadeId !== 'todos') return;
+    const termo = busca.trim();
+    if (termo.length < 2) {
+      setAlunos([]);
+      return;
+    }
+    const timeout = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const digits = termo.replace(/\D/g, '');
+        let q = supabase
+          .from('alunos')
+          .select(`
+            id, nome, telefone, whatsapp, email,
+            curso_id, professor_atual_id, unidade_id,
+            status, classificacao, status_pagamento,
+            cursos:curso_id(nome),
+            professores:professor_atual_id(nome),
+            unidades:unidade_id(nome, codigo)
+          `);
+        q = digits.length >= 4
+          ? q.or(`nome.ilike.%${termo}%,telefone.like.%${digits}%,whatsapp.like.%${digits}%`)
+          : q.ilike('nome', `%${termo}%`);
+        const { data, error } = await q.order('nome').limit(30);
+        if (error) throw error;
+        setAlunos((data || []) as AlunoInbox[]);
+      } catch (err) {
+        console.error('[NovaConversaModal] Erro na busca multi-unidade:', err);
+      } finally {
+        setLoading(false);
+      }
+    }, 400);
+    return () => clearTimeout(timeout);
+  }, [busca, modo, unidadeId, aberto]);
+
   // Auto-buscar aluno pelo telefone digitado (debounced)
   useEffect(() => {
     if (modo !== 'numero') return;
@@ -115,7 +154,7 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
       setBuscandoTelefone(true);
       try {
         const suffix = digits.slice(-11);
-        const { data } = await supabase
+        let q = supabase
           .from('alunos')
           .select(`
             id, nome, telefone, whatsapp, email,
@@ -125,10 +164,10 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
             professores:professor_atual_id(nome),
             unidades:unidade_id(nome, codigo)
           `)
-          .eq('unidade_id', unidadeId)
-          .or(`telefone.like.%${suffix},whatsapp.like.%${suffix}`)
-          .limit(1)
-          .maybeSingle();
+          .or(`telefone.like.%${suffix},whatsapp.like.%${suffix}`);
+        // Caixa multi-unidade (Consolidado): busca o aluno em qualquer unidade
+        if (unidadeId !== 'todos') q = q.eq('unidade_id', unidadeId);
+        const { data } = await q.limit(1).maybeSingle();
 
         setAlunoEncontrado(data as AlunoInbox | null);
       } catch {
@@ -141,14 +180,17 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
     return () => clearTimeout(timeout);
   }, [telefone, modo, unidadeId]);
 
-  const alunosFiltrados = busca.trim()
-    ? alunos.filter(a => {
-        const termo = busca.toLowerCase();
-        return (a.nome || '').toLowerCase().includes(termo) ||
-               (a.telefone || '').includes(termo) ||
-               (a.whatsapp || '').includes(termo);
-      })
-    : alunos;
+  // Multi-unidade: a lista já vem filtrada do servidor. Unidade fixa: filtra localmente.
+  const alunosFiltrados = unidadeId === 'todos'
+    ? alunos
+    : busca.trim()
+      ? alunos.filter(a => {
+          const termo = busca.toLowerCase();
+          return (a.nome || '').toLowerCase().includes(termo) ||
+                 (a.telefone || '').includes(termo) ||
+                 (a.whatsapp || '').includes(termo);
+        })
+      : alunos;
 
   const handleSelecionarAluno = useCallback(async (aluno: AlunoInbox) => {
     if (criando) return;
@@ -160,11 +202,14 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
 
     setCriando(true);
     try {
+      // A conversa pertence à unidade REAL do aluno (essencial p/ caixa multi-unidade em Consolidado)
+      const unidadeConversa = aluno.unidade_id;
+
       const { data: existente } = await supabase
         .from('admin_conversas')
         .select('id')
         .eq('aluno_id', aluno.id)
-        .eq('unidade_id', unidadeId)
+        .eq('unidade_id', unidadeConversa)
         .eq('departamento', departamento)
         .maybeSingle();
 
@@ -174,21 +219,21 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
           .update({ status: 'aberta' })
           .eq('id', existente.id);
       } else {
-        // Caixa do departamento que atende esta unidade (própria ou "todas as unidades")
+        // Caixa do departamento que atende a unidade do aluno (própria ou "todas as unidades")
         const { data: caixa } = await supabase
           .from('whatsapp_caixas')
           .select('id')
           .eq('funcao', 'administrativo')
           .eq('departamento', departamento)
           .eq('ativo', true)
-          .or(`unidade_id.eq.${unidadeId},unidade_id.is.null`)
+          .or(`unidade_id.eq.${unidadeConversa},unidade_id.is.null`)
           .maybeSingle();
 
         await supabase
           .from('admin_conversas')
           .insert({
             aluno_id: aluno.id,
-            unidade_id: unidadeId,
+            unidade_id: unidadeConversa,
             departamento,
             caixa_id: caixa?.id || null,
             status: 'aberta',
@@ -217,16 +262,21 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
     setCriando(true);
     try {
       const phoneFormatted = formatPhoneForStorage(telefone);
+      // Caixa multi-unidade (ou Consolidado): contato externo fica SEM unidade — igual ao webhook,
+      // evitando criar uma conversa "presa" numa unidade que depois duplica com a do webhook.
+      const unidadeConversa = (multiUnidade || unidadeId === 'todos') ? null : unidadeId;
 
       // Verificar se conversa externa ja existe
-      const { data: existente } = await supabase
+      let existenteQuery = supabase
         .from('admin_conversas')
         .select('id')
         .eq('telefone_externo', phoneFormatted)
-        .eq('unidade_id', unidadeId)
         .eq('departamento', departamento)
-        .is('aluno_id', null)
-        .maybeSingle();
+        .is('aluno_id', null);
+      existenteQuery = unidadeConversa
+        ? existenteQuery.eq('unidade_id', unidadeConversa)
+        : existenteQuery.is('unidade_id', null);
+      const { data: existente } = await existenteQuery.maybeSingle();
 
       if (existente) {
         await supabase
@@ -234,14 +284,16 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
           .update({ status: 'aberta', nome_externo: nomeExterno || null })
           .eq('id', existente.id);
       } else {
-        const { data: caixa } = await supabase
+        let caixaQuery = supabase
           .from('whatsapp_caixas')
           .select('id')
           .eq('funcao', 'administrativo')
           .eq('departamento', departamento)
-          .eq('ativo', true)
-          .or(`unidade_id.eq.${unidadeId},unidade_id.is.null`)
-          .maybeSingle();
+          .eq('ativo', true);
+        caixaQuery = unidadeConversa
+          ? caixaQuery.or(`unidade_id.eq.${unidadeConversa},unidade_id.is.null`)
+          : caixaQuery.is('unidade_id', null);
+        const { data: caixa } = await caixaQuery.maybeSingle();
 
         await supabase
           .from('admin_conversas')
@@ -249,7 +301,7 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
             aluno_id: null,
             telefone_externo: phoneFormatted,
             nome_externo: nomeExterno || null,
-            unidade_id: unidadeId,
+            unidade_id: unidadeConversa,
             departamento,
             caixa_id: caixa?.id || null,
             status: 'aberta',
@@ -339,7 +391,11 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
                 <div className="flex flex-col items-center justify-center py-12 text-center px-6">
                   <User className="w-10 h-10 text-slate-600 mb-2" />
                   <p className="text-sm text-slate-400">
-                    {busca ? 'Nenhum aluno encontrado' : 'Nenhum aluno nesta unidade'}
+                    {busca
+                      ? 'Nenhum aluno encontrado'
+                      : unidadeId === 'todos'
+                        ? 'Digite o nome ou telefone para buscar'
+                        : 'Nenhum aluno nesta unidade'}
                   </p>
                   {busca && (
                     <button

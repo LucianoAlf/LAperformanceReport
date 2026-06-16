@@ -993,7 +993,7 @@ export function AdministrativoPage() {
           isCompetenciaAtual={isCompetenciaAtualCaixa}
         />
       ) : mainTab === 'caixa_entrada' ? (
-        <CaixaEntradaTab unidadeId={unidade} />
+        <CaixaEntradaTab unidadeId={unidade} departamento="administrativo" />
       ) : mainTab === 'fideliza' ? (
         <TabProgramaFideliza 
           unidadeSelecionada={unidade} 

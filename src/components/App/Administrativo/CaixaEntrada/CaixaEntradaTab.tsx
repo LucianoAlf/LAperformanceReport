@@ -21,13 +21,16 @@ interface NotificacaoToast {
 
 interface CaixaEntradaTabProps {
   unidadeId: string | null;
+  /** Departamento atendido por esta caixa. Cada uso (Administrativo, Sucesso do Aluno) fixa o seu. */
+  departamento?: 'administrativo' | 'sucesso_aluno';
+  /** Caixa multi-unidade (número geral): permite iniciar conversa mesmo em Consolidado, buscando aluno em qualquer unidade. */
+  multiUnidade?: boolean;
 }
 
-export function CaixaEntradaTab({ unidadeId }: CaixaEntradaTabProps) {
+export function CaixaEntradaTab({ unidadeId, departamento = 'administrativo', multiUnidade = false }: CaixaEntradaTabProps) {
   const { usuario } = useAuth();
   const sentinelRef = useWidgetOverlapSentinel();
   const [conversaSelecionada, setConversaSelecionada] = useState<AdminConversa | null>(null);
-  const [departamento, setDepartamento] = useState<'administrativo' | 'sucesso_aluno'>('administrativo');
   const [filtro, setFiltro] = useState<FiltroAdminInbox>('todas');
   const [busca, setBusca] = useState('');
   const [modalNovaConversa, setModalNovaConversa] = useState(false);
@@ -87,36 +90,8 @@ export function CaixaEntradaTab({ unidadeId }: CaixaEntradaTabProps) {
     );
   }
 
-  const departamentos: { id: 'administrativo' | 'sucesso_aluno'; label: string }[] = [
-    { id: 'administrativo', label: 'Administrativo' },
-    { id: 'sucesso_aluno', label: 'Sucesso do Aluno' },
-  ];
-
-  const trocarDepartamento = (dep: 'administrativo' | 'sucesso_aluno') => {
-    setDepartamento(dep);
-    setConversaSelecionada(null); // conversa de outro depto não deve continuar aberta
-  };
-
   return (
     <div ref={sentinelRef} className="flex flex-col -mx-6 -mt-2" style={{ height: 'calc(100vh - 220px)' }}>
-      {/* Abas de Departamento */}
-      <div className="flex items-center gap-1 px-1 pb-2">
-        {departamentos.map(dep => (
-          <button
-            key={dep.id}
-            onClick={() => trocarDepartamento(dep.id)}
-            className={
-              'px-4 py-1.5 text-sm font-medium rounded-lg transition ' +
-              (departamento === dep.id
-                ? 'bg-violet-500/20 text-violet-300 border border-violet-500/40'
-                : 'text-slate-400 hover:bg-slate-700/40 border border-transparent')
-            }
-          >
-            {dep.label}
-          </button>
-        ))}
-      </div>
-
       {/* Split Panel: Inbox + Chat */}
       <div className="flex flex-1 overflow-hidden rounded-xl border border-slate-700/50">
         {/* Coluna 1: Inbox */}
@@ -132,7 +107,8 @@ export function CaixaEntradaTab({ unidadeId }: CaixaEntradaTabProps) {
           onFiltroChange={setFiltro}
           onBuscaChange={setBusca}
           onNovaConversa={() => {
-            if (todasUnidades) {
+            // Caixa por unidade exige uma unidade selecionada; caixa multi-unidade pode iniciar em Consolidado.
+            if (todasUnidades && !multiUnidade) {
               toast.warning('Selecione uma unidade específica para iniciar uma nova conversa.');
               return;
             }
@@ -186,6 +162,7 @@ export function CaixaEntradaTab({ unidadeId }: CaixaEntradaTabProps) {
         onIniciarConversa={handleNovaConversaCriada}
         unidadeId={unidadeId}
         departamento={departamento}
+        multiUnidade={multiUnidade}
       />
 
       {/* Toasts */}
