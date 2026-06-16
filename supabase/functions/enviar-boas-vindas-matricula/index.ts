@@ -44,15 +44,6 @@ function normalizarChave(s) {
   return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
 }
 
-// Mapeia o nome da unidade (texto do payload) para o unidade_id (mesma logica do n8n).
-function mapearUnidadeId(unidade) {
-  const u = String(unidade || '').toLowerCase();
-  if (u.includes('campo')) return '2ec861f6-023f-4d7b-9927-3960ad8c2a92'; // Campo Grande
-  if (u.includes('recreio')) return '95553e96-971b-4590-a6eb-0201d013c14d'; // Recreio
-  if (u.includes('barra')) return '368d47f5-2d88-4475-bc14-ba084a9a348e'; // Barra
-  return null;
-}
-
 async function enviarUazapi(baseUrl, token, body) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 45000);
@@ -76,7 +67,7 @@ async function enviarUazapi(baseUrl, token, body) {
 
 // Registra a mensagem enviada na Caixa de Entrada (admin_conversas/admin_mensagens).
 // Se achar aluno pelo telefone, vincula a conversa ao aluno; senao cria conversa externa.
-async function registrarNaCaixa(supabase, { numero, tipo, conteudo, midiaUrl, midiaMimetype, whatsappMessageId, status, nomeContatoFallback, remetenteNome, unidadeIdFallback = null }) {
+async function registrarNaCaixa(supabase, { numero, tipo, conteudo, midiaUrl, midiaMimetype, whatsappMessageId, status, nomeContatoFallback, remetenteNome }) {
   try {
     const phoneSuffix = numero.slice(-11);
     const { data: aluno } = await supabase
@@ -109,23 +100,22 @@ async function registrarNaCaixa(supabase, { numero, tipo, conteudo, midiaUrl, mi
         conversaId = nova?.id || null;
       }
     } else {
+      // unidade_id = null: a caixa e consolidada e o webhook-whatsapp-inbox so casa
+      // conversa externa com unidade_id NULL. Setar unidade aqui faria o webhook nao
+      // reconhecer a conversa e DUPLICAR quando o contato respondesse.
       const { data: conv } = await supabase
         .from('admin_conversas')
-        .select('id, unidade_id')
+        .select('id')
         .eq('telefone_externo', numero)
         .eq('departamento', DEPARTAMENTO)
         .is('aluno_id', null)
         .maybeSingle();
       if (conv) {
         conversaId = conv.id;
-        // Preenche a unidade se a conversa externa ainda nao tiver e o payload trouxe.
-        if (!conv.unidade_id && unidadeIdFallback) {
-          await supabase.from('admin_conversas').update({ unidade_id: unidadeIdFallback }).eq('id', conv.id);
-        }
       } else {
         const { data: nova } = await supabase
           .from('admin_conversas')
-          .insert({ aluno_id: null, telefone_externo: numero, nome_externo: nomeContatoFallback || numero, unidade_id: unidadeIdFallback, departamento: DEPARTAMENTO, caixa_id: CAIXA_SUCESSO_ID, whatsapp_jid: numero, status: 'aberta' })
+          .insert({ aluno_id: null, telefone_externo: numero, nome_externo: nomeContatoFallback || numero, unidade_id: null, departamento: DEPARTAMENTO, caixa_id: CAIXA_SUCESSO_ID, whatsapp_jid: numero, status: 'aberta' })
           .select('id')
           .single();
         conversaId = nova?.id || null;
@@ -224,7 +214,6 @@ serve(async (req) => {
     const numeroReal = formatPhoneNumber(telefone_responsavel);
     const numeroDestino = MODO_TESTE ? NUMERO_TESTE : numeroReal;
     const numeroFabiDestino = MODO_TESTE ? NUMERO_TESTE : NUMERO_FABI;
-    const unidadeIdPayload = mapearUnidadeId(unidade);
 
     // Busca video do professor (mesma regra do n8n)
     const { data: videoUrl } = await supabase.rpc('buscar_video_professor', {
@@ -264,7 +253,6 @@ serve(async (req) => {
       status: resultBoasVindas.ok ? 'enviada' : 'erro',
       nomeContatoFallback: nome_responsavel || nome_aluno,
       remetenteNome: 'Boas-vindas (automático)',
-      unidadeIdFallback: unidadeIdPayload,
     });
 
     // Idempotencia: se a boas-vindas falhou, libera a reserva para permitir nova tentativa.
