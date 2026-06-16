@@ -40,6 +40,10 @@ function primeiroNome(nome) {
   return String(nome || '').trim().split(' ')[0] || '';
 }
 
+function normalizarChave(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();
+}
+
 // Mapeia o nome da unidade (texto do payload) para o unidade_id (mesma logica do n8n).
 function mapearUnidadeId(unidade) {
   const u = String(unidade || '').toLowerCase();
@@ -177,6 +181,30 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    // ===== IDEMPOTENCIA: reserva ANTES de enviar =====
+    // Garante que cada matricula receba a boas-vindas UMA unica vez.
+    // Chave: id_externo (ex: emusys_matricula_id) se vier; senao telefone+aluno+curso+tipo.
+    // body.forcar=true pula a checagem (uso em testes).
+    const telefoneChave = formatPhoneNumber(telefone_responsavel);
+    const chaveIdempotencia = body.id_externo
+      ? `ext:${normalizarChave(body.id_externo)}`
+      : `bv:${telefoneChave}|${normalizarChave(nome_aluno)}|${normalizarChave(nome_curso)}|${normalizarChave(tipo)}`;
+
+    if (!body.forcar) {
+      const { error: reservaError } = await supabase
+        .from('boas_vindas_enviadas')
+        .insert({ chave_idempotencia: chaveIdempotencia, telefone: telefoneChave, nome_aluno, nome_curso, tipo, unidade });
+      if (reservaError) {
+        if (reservaError.code === '23505') {
+          console.log(`[boas-vindas] DUPLICATA bloqueada: ${chaveIdempotencia}`);
+          return new Response(JSON.stringify({ success: true, ignorado: true, motivo: 'boas_vindas_ja_enviada', chave: chaveIdempotencia }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+        }
+        // Erro diferente de conflito: aborta para nao arriscar envio sem registro de controle.
+        console.error('[boas-vindas] erro ao reservar idempotencia:', reservaError);
+        return new Response(JSON.stringify({ error: 'Falha ao reservar idempotencia: ' + reservaError.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+    }
+
     // Credenciais da caixa Sol - Sucesso do Aluno
     const { data: caixa, error: caixaError } = await supabase
       .from('whatsapp_caixas')
@@ -238,6 +266,17 @@ serve(async (req) => {
       remetenteNome: 'Boas-vindas (automático)',
       unidadeIdFallback: unidadeIdPayload,
     });
+
+    // Idempotencia: se a boas-vindas falhou, libera a reserva para permitir nova tentativa.
+    // Se enviou ok, marca como enviada (a chave permanece e bloqueia reenvio).
+    if (!body.forcar) {
+      if (resultBoasVindas.ok) {
+        await supabase.from('boas_vindas_enviadas').update({ enviado_ok: true }).eq('chave_idempotencia', chaveIdempotencia);
+      } else {
+        await supabase.from('boas_vindas_enviadas').delete().eq('chave_idempotencia', chaveIdempotencia);
+        console.log(`[boas-vindas] reserva liberada (envio falhou): ${chaveIdempotencia}`);
+      }
+    }
 
     // Notifica Fabi (em modo teste vai para NUMERO_TESTE) + registra na caixa
     const cabecalhoFabi = MODO_TESTE
