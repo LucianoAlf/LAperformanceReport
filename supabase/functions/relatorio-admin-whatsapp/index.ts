@@ -56,6 +56,32 @@ async function getWhatsAppCredentials(supabase: any, opts: { funcao?: string; ca
   throw new Error(`Nenhuma caixa WhatsApp ativa encontrada (funcao=${funcao || 'any'}, unidade=${unidadeId || 'any'})`);
 }
 
+
+function normalizarTexto(value: unknown): string {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}
+
+function isAtividadeExtraAcademica(row: any): boolean {
+  const curso = row?.cursos || null;
+  const nome = normalizarTexto(curso?.nome || row?.curso_nome);
+  return (
+    curso?.is_projeto_banda === true ||
+    nome.includes('canto coral') ||
+    nome.includes('power kids') ||
+    nome.includes('minha banda') ||
+    nome.includes('garageband') ||
+    nome.includes('percussion kids')
+  );
+}
+
+function filtrarRetencaoCanonica<T extends any>(rows: T[] | null | undefined): T[] {
+  return (rows || []).filter(row => !isAtividadeExtraAcademica(row));
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -351,7 +377,7 @@ async function gerarRelatorioDiario(
   // Movimentacoes do mes para retencao operacional viva.
   const { data: movData } = await supabase
     .from('movimentacoes_admin')
-    .select('*')
+    .select('*, unidades(codigo), cursos:curso_id!left(nome, is_projeto_banda)')
     .eq('unidade_id', unidadeId)
     .or(`and(data.gte.${primeiroDiaMes},data.lte.${hoje}),and(competencia_referencia.gte.${primeiroDiaMes},competencia_referencia.lte.${ultimoDiaMes})`)
     .order('data', { ascending: false });
@@ -366,10 +392,10 @@ async function gerarRelatorioDiario(
     (alunosRetencaoData || []).forEach((a: any) => alunosRetencaoMap.set(a.id, a));
   }
 
-  const movimentacoes = (movData || []).map((m: any) => aplicarFallbacksRetencao({
+  const movimentacoes = filtrarRetencaoCanonica((movData || []).map((m: any) => aplicarFallbacksRetencao({
     ...m,
     alunos: m.aluno_id ? alunosRetencaoMap.get(m.aluno_id) || null : null,
-  }));
+  })));
   const renovacoesMovTodas = movimentacoes.filter((m: any) => m.tipo === 'renovacao');
   const renovacoesDaCompetencia = renovacoesMovTodas.filter((m: any) => isCompetenciaNoPeriodo(m, primeiroDiaMes, ultimoDiaMes));
   const renovacoesMov = renovacoesDaCompetencia.filter(isRenovacaoConfirmadaOperacional);
@@ -407,7 +433,7 @@ async function gerarRelatorioDiario(
   // Avisos prévios (mes_saida do mês seguinte — mesma lógica do fix no frontend)
   const { data: avisosData } = await supabase
     .from('movimentacoes_admin')
-    .select('*')
+    .select('*, cursos:curso_id!left(nome, is_projeto_banda)')
     .eq('unidade_id', unidadeId)
     .eq('tipo', 'aviso_previo')
     .gte('mes_saida', mesSaidaStart)
@@ -419,7 +445,7 @@ async function gerarRelatorioDiario(
     const { data: profs } = await supabase.from('professores').select('id, nome').in('id', avisosProfIds);
     (profs || []).forEach((p: any) => profMap.set(p.id, p.nome));
   }
-  const avisosPrevios = (avisosData || []).map(enriquecer);
+  const avisosPrevios = filtrarRetencaoCanonica(avisosData || []).map(enriquecer);
 
   // === 2. MONTAR TEXTO (idêntico ao frontend) ===
   const taxaInadimplencia = alunosAtivos > 0 ? (alunosNaoPagantes / alunosAtivos * 100) : 0;
