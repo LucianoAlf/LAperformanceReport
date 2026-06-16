@@ -57,6 +57,12 @@ Definidas em `ComercialPage.tsx` (~linha 764):
 - Tipos de aluno: `pagante`, `bolsista_integral`, `bolsista_parcial`, `nao_pagante`
 - Bolsistas integrais e nao-pagantes nao entram no pipeline comercial
 - Matricula pode ser: regular, banda, 2o_curso
+- **Boas-vindas (1x por matricula)**: nova matricula dispara mensagem de boas-vindas pela caixa "Sol - Sucesso do Aluno" (edge `enviar-boas-vindas-matricula`). Envia video do professor (se houver) ou texto + notifica a Fabi. Deve ser enviada UMA unica vez por matricula (idempotencia via `boas_vindas_enviadas`). Em `MODO_TESTE` no momento. Ver `integracao-infra.md`.
+
+## Caixa de Entrada — elo é o NÚMERO
+- A conversa na Caixa de Entrada (admin/sucesso_aluno) é única por **número de telefone** + departamento. Nunca duplicar: mesma pessoa = mesma conversa.
+- O nome do contato exibido é o **pushName do WhatsApp** (atualizado a cada mensagem). Se a pessoa troca o nome no WhatsApp, atualiza — não cria conversa nova.
+- A **unidade** da conversa vem do aluno cadastrado (match por telefone). Contato externo (número não cadastrado) fica sem unidade — não inferir unidade em conversa externa (quebra o matching do webhook e duplica).
 
 ## Renovacao
 - Rastreada em `movimentacoes_admin` com `tipo = 'renovacao'`

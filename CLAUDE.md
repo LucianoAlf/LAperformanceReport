@@ -63,7 +63,8 @@ Path alias: `@/` = `./src/`
 
 - **OpenAI:** assistente IA em `src/components/App/Alunos/Auditoria/` (agent tools, function calling)
 - **n8n:** automações via webhooks (leads, aulas experimentais)
-- **WhatsApp (UAZAPI):** pré-atendimento de leads
+- **WhatsApp (UAZAPI):** pré-atendimento de leads, caixas de entrada por departamento (admin, sucesso do aluno)
+- **Boas-vindas de matrícula:** edge function `enviar-boas-vindas-matricula` envia a mensagem de boas-vindas (vídeo do professor ou texto) pela caixa "Sol - Sucesso do Aluno" (UAZAPI) e registra na Caixa de Entrada. Substitui o workflow n8n antigo (WAHA). Idempotente (não duplica por matrícula). Em `MODO_TESTE` enquanto valida; gatilho de produção pendente. Detalhes em `.claude/memory/integracao-infra.md`.
 
 ## Variáveis de Ambiente
 

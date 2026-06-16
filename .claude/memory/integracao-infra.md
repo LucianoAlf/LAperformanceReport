@@ -9,7 +9,8 @@
 ## Edge Functions (por categoria)
 
 ### WhatsApp / CRM
-- `webhook-whatsapp-inbox` — router UAZAPI (messages + messages_update)
+- `webhook-whatsapp-inbox` — router UAZAPI (messages + messages_update). Captura nome do contato (pushName) de `message.senderName`/`chat.name`/`chat.wa_name` e atualiza `nome_externo` a cada msg (reflete troca de nome, sem duplicar — elo da conversa é o NÚMERO). Conversa externa em caixa consolidada é casada por telefone+departamento+`aluno_id NULL`+`unidade_id NULL`. Deploy via Supabase CLI (1118 linhas + `_shared/uazapi.ts`), NÃO via MCP inline.
+- `enviar-boas-vindas-matricula` — boas-vindas de nova matrícula pela caixa UAZAPI "Sol - Sucesso do Aluno" (id=3). Substitui o workflow n8n `4fohyKMFRE7QFE9S` (que usava WAHA). Busca vídeo do professor (RPC `buscar_video_professor`), envia vídeo+caption ou texto, notifica a Fabi, e registra os envios em `admin_conversas`/`admin_mensagens` (departamento `sucesso_aluno`, `direcao=saida`, `remetente=admin`). Idempotência anti-duplicata via tabela `boas_vindas_enviadas` (UNIQUE) reservada antes do envio. `MODO_TESTE` (constante no topo) redireciona tudo para número de teste. `verify_jwt:false`. Gatilho de produção pendente (conectar na `processar-matricula-emusys` com `id_externo`=emusys_matricula_id).
 - `webhook-whatsapp-status` — status de entrega (enviada/entregue/lida)
 - `whatsapp-status` — verifica conexao da instancia UAZAPI
 - `whatsapp-connect` — conecta instancia UAZAPI
