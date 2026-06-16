@@ -64,6 +64,7 @@
 - **`sincronizar_grade_horaria_alunos` (reescrita 2026-06-09) — fonte ÚNICA do `dia_aula`/`horario_aula`.** Deriva por **pessoa (nome+unidade) + curso da aula** a partir de `aluno_presenca` (moda do dia/horário, 30d com fallback 60d, ≥3 ocorrências), `UPDATE` só quando muda. Robusta a homônimos/multi-curso e ao histórico embaralhado (reagrupa pelo curso da aula). Cron `sincronizar-grade-horaria` 01:30 UTC. Roda em <1s. Helpers `grade_norm_nome`/`grade_norm_curso` (espelham o TS). **Resolveu o flapping** (horários trocados entre matrículas de aluno multi-curso, oscilando 2×/noite — ex: Mateus K. Paulino com Canto/Power Kids/Canto Coral). Forward-only: histórico de `aluno_presenca` (~60d) não foi saneado.
 - **GOTCHA (provado 2026-05-27): o sync de presenca IGNORA o `status` do aluno.** Casa aula→aluno por nome+curso. 64 alunos inativo/evadido/trancado receberam 176 presencas nos ultimos 30 dias. Consequencia: marcar `status='inativo'` NAO para o sync nem tira o aluno de metricas que leem `aluno_presenca` direto (score professor, frequencia). Para um aluno realmente sumir, a linha tem que SAIR de `alunos` (mover p/ `alunos_arquivados`). Soft-delete via status é leaky.
 - **Curso real vem da aula, nao do cadastro.** `aulas_emusys` (espelho do endpoint de aula) tem `curso_nome`/`turma_nome`/`professor_nome` corretos. O `alunos.curso_id` (rotulo da matricula via webhook) pode estar errado. Para saber o curso real de um aluno: `aluno_presenca` → `aulas_emusys.curso_nome`. Constraint `uq_presenca_aluno_aula (aluno_id, aula_emusys_id)` garante integridade ao migrar presenca (dedupe obrigatorio por aula_emusys_id, ou por data_aula quando aula_emusys_id IS NULL via indice legado).
+- `marcos-jornada` (v1, 2026-06-15) — **on-demand** (chamada pelo front, sem cron). Busca `/v1/aulas/` **FUTURAS** (hoje..hoje+janela, default 7d) por unidade, deduplica individual+turma, resolve `aluno_id` reusando o matching do `sync-presenca-emusys` (copiado: `normalizarNome`/`normalizarCurso` + chave `nome|nasc|curso_id`). Retorna `primeiras_aulas` (nr=1 + matrícula recente) e `marco_aula` (nr=nr_alvo + `numero_renovacoes=0`), ambos excl. projeto banda. **Ignora presença** (Emusys pré-marca futuro como 'ausente'). Aulas futuras NÃO entram em `aluno_presenca`. Aba: Sucesso do Aluno → Acompanhamento → Marcos. Ver [[dominio-alunos.md]].
 - `sync-professores-emusys` (v1, 2026-05-20) — sync semanal de professores. Auto-cura `emusys_id` por nome, cria professores novos, vincula a unidades existentes, loga "sumiu da lista" sem desativar. Cron `sync-professores-emusys-semanal`: Domingo 04:00 BRT. Audita em `professores_sync_log`.
 - `sync-students-studio` — sync alunos com LA Studio (projeto separado)
 - `sync-feriados` — sincroniza feriados (via BrasilAPI) para agenda
@@ -216,6 +217,12 @@
 - Atribuicao: mila (IA), andreza (humano), nao_atribuido
 - Hooks: `useWhatsAppStatus()`, `useWhatsAppCaixas()`, `useMensagens()`, `useConversas()`
 - Servico: `src/services/whatsapp.ts` (sendWhatsAppMessage, getWhatsAppConnectionStatus)
+
+## Webhook UAZAPI — auto-configuração (2026-06-15)
+- Edge `configurar-webhook-caixa(caixa_id)`: resolve url+token da caixa e faz `POST {uazapi_url}/webhook` com `{enabled:true, url:".../webhook-whatsapp-inbox?caixa_id=<id>", events:["messages","messages_update"], excludeMessages:["wasSentByApi"]}`. UAZAPI only (WAHA retorna não-suportado).
+- **GOTCHA**: `POST /webhook` da UAZAPI cria o webhook com `enabled:false` por padrão — SEMPRE incluir `enabled:true`. Conferir com `GET /webhook` (retorna array; `null` = sem webhook = não recebe nada).
+- `CaixasManager`: ao salvar caixa UAZAPI ativa, invoca a edge automaticamente (conecta o recebimento sem colar URL manual). Botão Zap por caixa = "Reconectar webhook".
+- Sintoma de webhook ausente: `webhook_debug_log` sem linhas + recebidas não aparecem (envio funciona, recebimento não). `admin_conversas`/`admin_mensagens` já estão na publication `supabase_realtime` (realtime OK no banco).
 
 ## Caixa de Entrada Administrativa
 - Tabelas: `admin_conversas` (1 por aluno por unidade, RLS por unidade; `unidade_id` é NULLABLE desde 2026-06-12) + `admin_mensagens` (CASCADE)
