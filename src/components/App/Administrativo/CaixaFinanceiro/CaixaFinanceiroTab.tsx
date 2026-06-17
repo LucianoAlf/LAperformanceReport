@@ -1,5 +1,5 @@
 import { FormEvent, useMemo, useState } from 'react';
-import { AlertTriangle, CalendarDays, CheckCircle2, History, Lock, RotateCcw, Unlock, Wallet } from 'lucide-react';
+import { AlertTriangle, CalendarDays, CheckCircle2, History, Lock, Pencil, RotateCcw, Unlock, Wallet } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -52,6 +52,8 @@ export function CaixaFinanceiroTab({
   const [reabertoPor, setReabertoPor] = useState(usuario?.nome || '');
   const [motivoReabertura, setMotivoReabertura] = useState('');
   const [reabrirDialogOpen, setReabrirDialogOpen] = useState(false);
+  const [editandoSaldoInicial, setEditandoSaldoInicial] = useState(false);
+  const [saldoInicialEdit, setSaldoInicialEdit] = useState('');
   const [saldoConferido, setSaldoConferido] = useState('');
   const [observacoes, setObservacoes] = useState('');
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -75,6 +77,7 @@ export function CaixaFinanceiroTab({
     excluirMovimento,
     fecharCaixa,
     reabrirCaixa,
+    atualizarSaldoInicial,
   } = useCaixaDiario({ unidadeId, dataCaixa });
 
   const [historicoAberto, setHistoricoAberto] = useState(false);
@@ -97,6 +100,22 @@ export function CaixaFinanceiroTab({
       setMensagem('Caixa diario aberto.', 'success');
     } catch (err: any) {
       setMensagem(err?.message || 'Falha ao abrir caixa.', 'error');
+    }
+  }
+
+  function abrirEditSaldoInicial() {
+    if (!caixa) return;
+    setSaldoInicialEdit(formatarNumeroComoInputMoedaCaixa(Number(caixa.saldo_inicial_cofre)));
+    setEditandoSaldoInicial(true);
+  }
+
+  async function handleSalvarSaldoInicial() {
+    try {
+      await atualizarSaldoInicial(parseMoedaCaixa(saldoInicialEdit));
+      setEditandoSaldoInicial(false);
+      setMensagem('Saldo inicial atualizado.', 'success');
+    } catch (err: any) {
+      setMensagem(err?.message || 'Falha ao atualizar saldo inicial.', 'error');
     }
   }
 
@@ -322,7 +341,37 @@ export function CaixaFinanceiroTab({
         </form>
       ) : (
         <>
-          <CaixaResumoCards resumo={resumo} />
+          <CaixaResumoCards
+            resumo={resumo}
+            onEditSaldoInicial={!caixaFechado ? abrirEditSaldoInicial : undefined}
+          />
+
+          {editandoSaldoInicial && (
+            <div className="animate-in fade-in-0 zoom-in-95 flex flex-wrap items-end gap-3 rounded-xl border border-amber-500/25 bg-amber-500/10 p-4">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/20 text-amber-300">
+                <Pencil className="h-4 w-4" />
+              </span>
+              <label className="flex-1 space-y-1 text-xs text-slate-400" style={{ minWidth: 160 }}>
+                Corrigir saldo inicial cofre
+                <Input
+                  autoFocus
+                  value={saldoInicialEdit}
+                  inputMode="numeric"
+                  onChange={(e) => setSaldoInicialEdit(formatarInputMoedaCaixa(e.target.value))}
+                  placeholder="R$ 0,00"
+                  className="rounded-lg bg-slate-950/70 font-semibold"
+                />
+              </label>
+              <div className="flex gap-2">
+                <Button type="button" disabled={saving} onClick={() => void handleSalvarSaldoInicial()}>
+                  Salvar
+                </Button>
+                <Button type="button" variant="outline" className="border-slate-700" onClick={() => setEditandoSaldoInicial(false)}>
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          )}
 
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
             <CaixaMovimentacoesTable

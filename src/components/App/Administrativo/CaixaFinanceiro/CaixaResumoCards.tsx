@@ -1,10 +1,11 @@
-import { ArrowDownCircle, ArrowUpCircle, CheckCircle2, Receipt, Wallet } from 'lucide-react';
+import { ArrowDownCircle, ArrowUpCircle, CheckCircle2, Pencil, Receipt, Wallet } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatarMoedaCaixa } from '@/lib/caixaFinanceiro';
 import type { CaixaResumo } from '@/types/caixa';
 
 interface CaixaResumoCardsProps {
   resumo: CaixaResumo;
+  onEditSaldoInicial?: () => void;
 }
 
 const cards = [
@@ -48,20 +49,33 @@ const toneClasses = {
   violet: 'border-violet-500/25 bg-violet-500/10 text-violet-300',
 };
 
-export function CaixaResumoCards({ resumo }: CaixaResumoCardsProps) {
+export function CaixaResumoCards({ resumo, onEditSaldoInicial }: CaixaResumoCardsProps) {
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
       {cards.map((card) => {
         const Icon = card.icon;
         const value = resumo[card.key];
+        const isEditavel = card.key === 'saldoInicialCofre' && onEditSaldoInicial;
 
         return (
           <div key={card.key} className={cn('rounded-xl border p-4', toneClasses[card.tone])}>
             <div className="flex items-center justify-between gap-3">
               <span className="text-xs font-medium text-slate-400">{card.label}</span>
-              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-950/40">
-                <Icon className="h-4 w-4" />
-              </span>
+              <div className="flex items-center gap-1">
+                {isEditavel && (
+                  <button
+                    type="button"
+                    onClick={onEditSaldoInicial}
+                    className="flex h-6 w-6 items-center justify-center rounded-md text-slate-500 transition-colors hover:bg-slate-700/60 hover:text-slate-200"
+                    title="Editar saldo inicial"
+                  >
+                    <Pencil className="h-3 w-3" />
+                  </button>
+                )}
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-950/40">
+                  <Icon className="h-4 w-4" />
+                </span>
+              </div>
             </div>
             <p className="mt-3 text-2xl font-bold text-white">{formatarMoedaCaixa(value)}</p>
           </div>
