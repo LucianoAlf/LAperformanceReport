@@ -405,6 +405,7 @@ export async function fetchKPIsAlunosVivosCanonicos({
 
   const movimentacoes = await fetchAllPages<MovimentoRow>(() => {
     let query = supabase
+      .from('movimentacoes_admin')
       .select(`
         id, aluno_id, aluno_nome, unidade_id, tipo, data,
         competencia_referencia, renovacao_primeira_aula_novo_ciclo,
