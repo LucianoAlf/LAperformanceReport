@@ -6,10 +6,13 @@ import {
   Sparkles, Target, RefreshCw, Loader2, Copy, Phone, RotateCcw,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Tooltip } from '@/components/ui/Tooltip';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import { useWidgetOverlapSentinel } from '@/contexts/WidgetVisibilityContext';
 import { useMarcosJornada, type MarcoAluno } from './hooks/useMarcosJornada';
+
+const fmtISO = (d: Date | undefined) => (d ? format(d, 'yyyy-MM-dd') : null);
 
 interface Props {
   unidadeAtual: UnidadeId;
@@ -98,21 +101,37 @@ const STATUS_RENOV: Record<string, { label: string; cls: string }> = {
 
 export function MarcosJornadaSection({ unidadeAtual }: Props) {
   const sentinelRef = useWidgetOverlapSentinel();
+  const [modoData, setModoData] = useState<'proximos' | 'periodo'>('proximos');
   const [janelaDias, setJanelaDias] = useState(7);
+  const [periodoIni, setPeriodoIni] = useState<Date | undefined>(undefined);
+  const [periodoFim, setPeriodoFim] = useState<Date | undefined>(undefined);
   const [nrAlvo, setNrAlvo] = useState(15);
   const [nrInput, setNrInput] = useState('15');
   const [janelaRenov, setJanelaRenov] = useState(30);
 
+  const usaPeriodo = modoData === 'periodo' && !!periodoIni && !!periodoFim;
+
   const { primeirasAulas, marcoAula, renovacoes, loading, error, refetch } = useMarcosJornada({
     unidadeId: unidadeAtual,
     janelaDias,
-    nrAlvo,
+    dataInicio: usaPeriodo ? fmtISO(periodoIni) : null,
+    dataFim: usaPeriodo ? fmtISO(periodoFim) : null,
   });
+
+  // O marco vem com todos os calouros + nr de cada aula; filtra pelo "Nº da aula" no client (sem rebuscar).
+  const marcoAulaFiltrado = useMemo(
+    () => marcoAula.filter(m => m.nr === nrAlvo),
+    [marcoAula, nrAlvo]
+  );
 
   const renovacoesFiltradas = useMemo(
     () => renovacoes.filter(r => (r.dias_ate_vencimento ?? 999) <= janelaRenov),
     [renovacoes, janelaRenov]
   );
+
+  const periodoLabel = usaPeriodo
+    ? `${format(periodoIni!, 'dd/MM/yy')} – ${format(periodoFim!, 'dd/MM/yy')}`
+    : `próximos ${janelaDias} dias`;
 
   const aplicarNrAlvo = () => {
     const n = parseInt(nrInput, 10);
@@ -124,25 +143,57 @@ export function MarcosJornadaSection({ unidadeAtual }: Props) {
     <div className="space-y-5" ref={sentinelRef}>
       {/* Controles globais */}
       <div className="flex flex-wrap items-center gap-3 bg-slate-800/50 rounded-2xl p-4 border border-slate-700/50">
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-slate-400">Janela:</span>
-          <div className="flex items-center bg-slate-900 border border-slate-600 rounded-md overflow-hidden text-xs">
-            {JANELAS.map(j => (
-              <button
-                key={j}
-                onClick={() => setJanelaDias(j)}
-                className={`px-2.5 py-1.5 transition ${janelaDias === j ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'}`}
-              >
-                {j} dias
-              </button>
-            ))}
-          </div>
+        {/* Toggle: próximos dias x período customizado (retroativo) */}
+        <div className="flex items-center bg-slate-900 border border-slate-600 rounded-md overflow-hidden text-xs">
+          <button
+            onClick={() => setModoData('proximos')}
+            className={`px-2.5 py-1.5 transition ${modoData === 'proximos' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'}`}
+          >
+            Próximos dias
+          </button>
+          <button
+            onClick={() => setModoData('periodo')}
+            className={`px-2.5 py-1.5 transition ${modoData === 'periodo' ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'}`}
+          >
+            Período
+          </button>
         </div>
+
+        {modoData === 'proximos' ? (
+          <div className="flex items-center gap-1.5">
+            <span className="text-xs text-slate-400">Janela:</span>
+            <div className="flex items-center bg-slate-900 border border-slate-600 rounded-md overflow-hidden text-xs">
+              {JANELAS.map(j => (
+                <button
+                  key={j}
+                  onClick={() => setJanelaDias(j)}
+                  className={`px-2.5 py-1.5 transition ${janelaDias === j ? 'bg-violet-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                >
+                  {j} dias
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400">De:</span>
+            <DatePicker date={periodoIni} onDateChange={setPeriodoIni} placeholder="Início" className="h-8 w-36 text-xs" maxDate={periodoFim} />
+            <span className="text-xs text-slate-400">Até:</span>
+            <DatePicker date={periodoFim} onDateChange={setPeriodoFim} placeholder="Fim" className="h-8 w-36 text-xs" minDate={periodoIni} />
+          </div>
+        )}
+
         <Button variant="outline" size="sm" onClick={refetch} disabled={loading} className="h-8 border-slate-700 text-xs ml-auto">
           <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${loading ? 'animate-spin' : ''}`} />
           Atualizar
         </Button>
       </div>
+
+      {modoData === 'periodo' && !usaPeriodo && (
+        <div className="bg-sky-500/10 border border-sky-500/30 rounded-xl p-3 text-sm text-sky-300">
+          Selecione as datas de início e fim para buscar as aulas do período (inclui retroativo).
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-sm text-red-300">
@@ -158,12 +209,12 @@ export function MarcosJornadaSection({ unidadeAtual }: Props) {
           <span className="text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
             {primeirasAulas.length}
           </span>
-          <span className="text-xs text-slate-500">· 1ª aula agendada nos próximos {janelaDias} dias — pesquisa de boas-vindas</span>
+          <span className="text-xs text-slate-500">· 1ª aula agendada · {periodoLabel} — pesquisa de boas-vindas</span>
         </div>
         {loading ? (
           <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-violet-500" /></div>
         ) : (
-          <TabelaAula itens={primeirasAulas} vazio={`Nenhum aluno com 1ª aula nos próximos ${janelaDias} dias.`} />
+          <TabelaAula itens={primeirasAulas} vazio={`Nenhum aluno com 1ª aula — ${periodoLabel}.`} />
         )}
       </div>
 
@@ -173,7 +224,7 @@ export function MarcosJornadaSection({ unidadeAtual }: Props) {
           <Target className="w-5 h-5 text-violet-400" />
           <h2 className="font-semibold text-white">Marco de aula</h2>
           <span className="text-xs px-2 py-0.5 rounded-full bg-violet-500/20 text-violet-400 border border-violet-500/30">
-            {marcoAula.length}
+            {marcoAulaFiltrado.length}
           </span>
           {/* Selo + explicação "só calouros" */}
           <Tooltip
@@ -181,13 +232,13 @@ export function MarcosJornadaSection({ unidadeAtual }: Props) {
             content={
               <p className="max-w-[260px] text-slate-200">
                 O nº da aula <b>reinicia</b> quando o aluno renova o contrato. Por isso este marco mostra
-                <b> apenas calouros (1º contrato)</b> — assim a "{nrAlvo}ª aula" significa de fato ~{Math.round(nrAlvo / 4)} meses
-                de escola, e não o meio do ciclo de um veterano.
+                <b> apenas calouros (matriculados há menos de 12 meses)</b> — assim a "{nrAlvo}ª aula" significa de fato
+                ~{Math.round(nrAlvo / 4)} meses de escola, e não o meio do ciclo de um veterano.
               </p>
             }
           >
             <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 border border-amber-500/30 cursor-help">
-              Apenas calouros (1º contrato) ⓘ
+              Apenas calouros (1º ano de casa) ⓘ
             </span>
           </Tooltip>
           <div className="flex items-center gap-1.5 ml-auto">
@@ -206,7 +257,7 @@ export function MarcosJornadaSection({ unidadeAtual }: Props) {
         {loading ? (
           <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-violet-500" /></div>
         ) : (
-          <TabelaAula itens={marcoAula} vazio={`Nenhum calouro na ${nrAlvo}ª aula nos próximos ${janelaDias} dias.`} />
+          <TabelaAula itens={marcoAulaFiltrado} vazio={`Nenhum calouro na ${nrAlvo}ª aula — ${periodoLabel}.`} />
         )}
       </div>
 

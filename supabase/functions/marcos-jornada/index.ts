@@ -1,8 +1,12 @@
 // Edge Function: marcos-jornada
 // Retorna grupos de alunos em marcos da jornada (para envio de pesquisas), olhando
-// as aulas AGENDADAS (futuras) no Emusys:
+// as aulas AGENDADAS no Emusys, na janela informada (futura por padrão, OU período customizado
+// retroativo via data_inicio/data_fim no body):
 //   - primeiras_aulas: aluno com 1a aula (nr_da_aula=1) na janela + matricula recente + ativo + nao-banda
-//   - marco_aula (so calouros): aula nr=nr_alvo na janela + numero_renovacoes=0 + ativo + nao-banda
+//   - marco_aula (so calouros): TODOS os calouros com aula na janela, COM o nr de cada aula.
+//     calouro = matriculado ate 12 meses antes da data da aula (alinhado ao selo "Veterano" >=12m da
+//     TabelaAlunos; trocado de numero_renovacoes=0, que vinha furado pois o webhook nunca incrementava).
+//     O filtro do "Nº da aula" alvo é aplicado no CLIENT — mudar o alvo não rebusca o Emusys.
 // Ignora a presenca (o Emusys pre-marca futuro como 'ausente'); usa so a existencia da aula + nr_da_aula.
 // A duplicata individual+turma do Emusys e deduplicada por (aluno, dia, curso) priorizando individual.
 
@@ -80,9 +84,17 @@ interface MarcoItem {
   professor_nome: string | null;
   data_marco: string;
   horario: string | null;
+  nr: number | null;
   telefone: string | null;
   whatsapp: string | null;
   responsavel_telefone: string | null;
+}
+
+// data (YYYY-MM-DD) menos N meses, em YYYY-MM-DD
+function subtrairMeses(dataISO: string, meses: number): string {
+  const d = new Date(`${dataISO}T00:00:00Z`);
+  d.setUTCMonth(d.getUTCMonth() - meses);
+  return d.toISOString().split('T')[0];
 }
 
 serve(async (req: Request) => {
@@ -93,19 +105,31 @@ serve(async (req: Request) => {
 
     let unidadeIdReq: string | null = null;
     let janelaDias = 7;
-    let nrAlvo = 15;
+    let dataInicioReq: string | null = null;
+    let dataFimReq: string | null = null;
     try {
       const body = await req.json();
       unidadeIdReq = body.unidade_id ?? null;
       janelaDias = Math.min(Math.max(body.janela_dias ?? 7, 1), 30);
-      nrAlvo = Math.max(body.nr_alvo ?? 15, 2);
+      // Periodo customizado (aceita retroativo): YYYY-MM-DD. Sobrescreve a janela "pra frente".
+      dataInicioReq = typeof body.data_inicio === 'string' ? body.data_inicio.slice(0, 10) : null;
+      dataFimReq = typeof body.data_fim === 'string' ? body.data_fim.slice(0, 10) : null;
     } catch { /* defaults */ }
 
     // Datas em BRT (UTC-3)
     const brt = new Date(Date.now() - 3 * 60 * 60 * 1000);
     const hoje = brt.toISOString().split('T')[0];
-    const dataFim = new Date(brt.getTime() + janelaDias * 86400000).toISOString().split('T')[0];
-    const matriculaLimite = new Date(brt.getTime() - 45 * 86400000).toISOString().split('T')[0];
+    // Range de busca de aulas: periodo customizado (se válido) ou hoje → hoje+janela
+    const usaPeriodo = !!(dataInicioReq && dataFimReq && dataInicioReq <= dataFimReq);
+    const dataIni = usaPeriodo ? dataInicioReq! : hoje;
+    const dataFim = usaPeriodo
+      ? dataFimReq!
+      : new Date(brt.getTime() + janelaDias * 86400000).toISOString().split('T')[0];
+    // "1a aula" só conta se a matrícula é recente: até 45 dias antes do início do período buscado
+    // (evita pegar aula 1 reagendada muito depois da matrícula). Relativo ao período, funciona retroativo.
+    const matriculaLimite = new Date(
+      new Date(`${dataIni}T00:00:00Z`).getTime() - 45 * 86400000
+    ).toISOString().split('T')[0];
 
     const unidades = unidadeIdReq ? UNIDADES.filter(u => u.id === unidadeIdReq) : UNIDADES;
     if (unidades.length === 0) {
@@ -154,7 +178,7 @@ serve(async (req: Request) => {
         mapaSimples.set(nomeNorm, a.id);
       }
 
-      const aulas = await fetchAulasRange(unidade.token, hoje, dataFim);
+      const aulas = await fetchAulasRange(unidade.token, dataIni, dataFim);
 
       // Dedup individual+turma: 1 candidato por (aluno_id, data, curso), priorizando individual
       const cands = new Map<string, { aluno_id: number; data: string; curso: string; nr: number | null; tipo: string; horario: string | null; prof: string | null }>();
@@ -201,6 +225,7 @@ serve(async (req: Request) => {
           professor_nome: cand.prof,
           data_marco: cand.data,
           horario: cand.horario,
+          nr: cand.nr,
           telefone: a.telefone,
           whatsapp: a.whatsapp,
           responsavel_telefone: a.responsavel_telefone,
@@ -210,8 +235,9 @@ serve(async (req: Request) => {
         if (cand.nr === 1 && a.data_matricula && a.data_matricula >= matriculaLimite) {
           primeiras_aulas.push(item);
         }
-        // marco de aula (so calouros): nr=nr_alvo + nunca renovou
-        if (cand.nr === nrAlvo && (a.numero_renovacoes ?? 0) === 0) {
+        // marco de aula: todos os calouros (matriculado até 12 meses antes da data da aula) com aula
+        // na janela, COM o nr. O filtro do "Nº da aula" alvo é aplicado no client (evita rebuscar o Emusys).
+        if (cand.nr != null && a.data_matricula && a.data_matricula >= subtrairMeses(cand.data, 12)) {
           marco_aula.push(item);
         }
       }
@@ -221,8 +247,7 @@ serve(async (req: Request) => {
 
     return new Response(
       JSON.stringify({
-        janela: { inicio: hoje, fim: dataFim, dias: janelaDias },
-        nr_alvo: nrAlvo,
+        janela: { inicio: dataIni, fim: dataFim, dias: janelaDias, periodo: usaPeriodo },
         primeiras_aulas: ordenar(primeiras_aulas),
         marco_aula: ordenar(marco_aula),
       }),

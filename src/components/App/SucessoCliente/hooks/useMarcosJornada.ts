@@ -9,6 +9,7 @@ export interface MarcoAluno {
   professor_nome: string | null;
   data_marco: string;
   horario: string | null;
+  nr: number | null;
   telefone: string | null;
   whatsapp: string | null;
   responsavel_telefone: string | null;
@@ -33,15 +34,18 @@ const STATUS_A_RENOVAR = ['vencido', 'urgente_7_dias', 'atencao_15_dias', 'proxi
 interface Params {
   unidadeId: UnidadeId;
   janelaDias: number;
-  nrAlvo: number;
+  /** Período customizado (retroativo). Quando ambos preenchidos, sobrescrevem a janela "pra frente". */
+  dataInicio?: string | null;
+  dataFim?: string | null;
 }
 
 /**
  * Marcos da jornada para envio de pesquisas:
- * - primeiras aulas + marco de aula (calouros): edge `marcos-jornada` (aulas agendadas no Emusys)
+ * - primeiras aulas + marco de aula (calouros): edge `marcos-jornada` (aulas agendadas no Emusys).
+ *   O marco vem com TODOS os calouros + o `nr` de cada aula; o filtro do "Nº da aula" é feito no client.
  * - prestes a renovar: view `vw_renovacoes_proximas` (já classifica por janela de vencimento)
  */
-export function useMarcosJornada({ unidadeId, janelaDias, nrAlvo }: Params) {
+export function useMarcosJornada({ unidadeId, janelaDias, dataInicio, dataFim }: Params) {
   const [primeirasAulas, setPrimeirasAulas] = useState<MarcoAluno[]>([]);
   const [marcoAula, setMarcoAula] = useState<MarcoAluno[]>([]);
   const [renovacoes, setRenovacoes] = useState<RenovacaoAluno[]>([]);
@@ -60,9 +64,14 @@ export function useMarcosJornada({ unidadeId, janelaDias, nrAlvo }: Params) {
       .order('dias_ate_vencimento', { ascending: true });
     if (unidadeId !== 'todos') qRenov = qRenov.eq('unidade_id', unidadeId);
 
+    const usaPeriodo = !!(dataInicio && dataFim && dataInicio <= dataFim);
     const [edge, renov] = await Promise.all([
       supabase.functions.invoke('marcos-jornada', {
-        body: { unidade_id: unidadeId === 'todos' ? null : unidadeId, janela_dias: janelaDias, nr_alvo: nrAlvo },
+        body: {
+          unidade_id: unidadeId === 'todos' ? null : unidadeId,
+          janela_dias: janelaDias,
+          ...(usaPeriodo ? { data_inicio: dataInicio, data_fim: dataFim } : {}),
+        },
       }),
       qRenov,
     ]);
@@ -83,7 +92,7 @@ export function useMarcosJornada({ unidadeId, janelaDias, nrAlvo }: Params) {
     }
 
     setLoading(false);
-  }, [unidadeId, janelaDias, nrAlvo]);
+  }, [unidadeId, janelaDias, dataInicio, dataFim]);
 
   useEffect(() => {
     carregar();
