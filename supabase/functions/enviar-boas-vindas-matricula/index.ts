@@ -15,7 +15,7 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 //  - a boas-vindas NAO vai para o telefone real do responsavel, vai para NUMERO_TESTE;
 //  - a notificacao da Fabi tambem e redirecionada para NUMERO_TESTE (a Fabi nao recebe nada).
 // Trocar para false quando for liberar em producao.
-const MODO_TESTE = true;
+const MODO_TESTE = false;
 const NUMERO_TESTE = '5521966583325'; // mesmo chatId de teste do workflow n8n
 const NUMERO_FABI = '5521994696489';
 

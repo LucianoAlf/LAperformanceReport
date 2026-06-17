@@ -116,7 +116,9 @@ Resultado: leads como o "Carlos Yan" (ex: matriculou 15/04, experimental marcada
 
 ---
 
-## 💡 [FEATURE] Sucesso do Aluno: mensagem de boas-vindas automática na matrícula
+## ✅ [CONCLUÍDO 2026-06-17] Sucesso do Aluno: mensagem de boas-vindas automática na matrícula
+
+**Implementado:** edge `enviar-boas-vindas-matricula` (v10, `MODO_TESTE=false`) disparada por `processar-matricula-emusys` v21 (deploy v26) no fim de `handleMatriculaNova` via `fetch`, só `matricula_nova`. Idempotência por `ext:<emusys_matricula_id>` em `boas_vindas_enviadas`. Registra na Caixa (admin_conversas/admin_mensagens) + notifica Fabi. Detalhes em `regras-negocio.md` / `integracao-infra.md`. Histórico do pedido abaixo.
 
 **Pedido em:** 2026-06-15
 
