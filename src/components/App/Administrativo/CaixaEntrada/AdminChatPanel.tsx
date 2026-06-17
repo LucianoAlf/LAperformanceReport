@@ -3,6 +3,7 @@ import { Send, Paperclip, Image, FileText, Music, Video, Loader2, ChevronUp, Che
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { formatarWhatsApp } from '@/lib/whatsappFormat';
 import type { AdminConversa, AdminMensagem, AlunoInbox } from './types';
 
 function getStatusAlunoTag(status: string | null | undefined) {
@@ -227,7 +228,7 @@ function ChatBubble({ msg }: { msg: AdminMensagem }) {
 
         {/* Texto */}
         {msg.conteudo && (
-          <p className="text-sm whitespace-pre-wrap break-words">{msg.conteudo}</p>
+          <p className="text-sm whitespace-pre-wrap break-words">{formatarWhatsApp(msg.conteudo)}</p>
         )}
 
         {/* Hora + Status */}

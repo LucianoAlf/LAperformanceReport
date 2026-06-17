@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Check, CheckCheck, AlertCircle, Clock, Image, FileText, Download, Play, MapPin, User, Reply, Pencil, Trash2, Ban, FileAudio2, Loader2, SmilePlus } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatarWhatsApp } from '@/lib/whatsappFormat';
 import type { MensagemCRM } from '../../types';
 
 interface ChatBubbleProps {
@@ -91,7 +92,7 @@ function MidiaContent({ mensagem }: { mensagem: MensagemCRM }) {
             </div>
           )}
           {conteudo && (
-            <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap break-words">{conteudo}</p>
+            <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap break-words">{formatarWhatsApp(conteudo)}</p>
           )}
         </div>
       );
@@ -132,7 +133,7 @@ function MidiaContent({ mensagem }: { mensagem: MensagemCRM }) {
             </div>
           )}
           {conteudo && (
-            <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap break-words">{conteudo}</p>
+            <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap break-words">{formatarWhatsApp(conteudo)}</p>
           )}
         </div>
       );
@@ -163,7 +164,7 @@ function MidiaContent({ mensagem }: { mensagem: MensagemCRM }) {
             </div>
           )}
           {conteudo && (
-            <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap break-words">{conteudo}</p>
+            <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap break-words">{formatarWhatsApp(conteudo)}</p>
           )}
         </div>
       );
@@ -195,7 +196,7 @@ function MidiaContent({ mensagem }: { mensagem: MensagemCRM }) {
       // Texto
       return (
         <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap break-words">
-          {conteudo || ''}
+          {formatarWhatsApp(conteudo) || ''}
         </p>
       );
   }

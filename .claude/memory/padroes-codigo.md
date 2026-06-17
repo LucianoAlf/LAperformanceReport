@@ -99,3 +99,7 @@ serve(async (req) => {
 - Variaveis, funcoes, comentarios em portugues
 - Componentes: PascalCase, Hooks: `use` + camelCase
 - Paginas: `*Page.tsx`, Modais: `Modal*.tsx`, Tabs: `Tab*.tsx`
+
+## Formatação de mensagens WhatsApp
+- `formatarWhatsApp(texto)` em `src/lib/whatsappFormat.tsx` converte marcação do WhatsApp (`*negrito*` `_itálico_` `~tachado~` ` ```mono``` `) em JSX, para o painel mostrar a mensagem como o cliente recebe (não os asteriscos crus). Parser recursivo tolerante, suporta aninhamento.
+- Usado nos painéis de chat de cliente: AdminChatPanel, PreAtendimento/chat/ChatBubble, Campanhas/ConversasTab (no ramo sem busca; com `searchTerm` mantém HighlightText).

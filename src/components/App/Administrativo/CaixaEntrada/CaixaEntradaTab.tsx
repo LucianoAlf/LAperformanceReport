@@ -2,7 +2,7 @@ import { useState, useCallback } from 'react';
 import { toast } from 'sonner';
 import { MessageSquare, X, MessageCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useWidgetOverlapSentinel } from '@/contexts/WidgetVisibilityContext';
+import { useWidgetOverlapSentinel, useForceHideWidgets } from '@/contexts/WidgetVisibilityContext';
 import { useAdminConversas } from './hooks/useAdminConversas';
 import { useAdminMensagens } from './hooks/useAdminMensagens';
 import { AdminInboxList } from './AdminInboxList';
@@ -31,6 +31,8 @@ export function CaixaEntradaTab({ unidadeId, departamento = 'administrativo', mu
   const { usuario } = useAuth();
   const sentinelRef = useWidgetOverlapSentinel();
   const [conversaSelecionada, setConversaSelecionada] = useState<AdminConversa | null>(null);
+  // Esconde o widget flutuante (Assistente IA) enquanto uma conversa estiver aberta — ele sobrepõe o input do chat.
+  useForceHideWidgets(!!conversaSelecionada);
   const [filtro, setFiltro] = useState<FiltroAdminInbox>('todas');
   const [busca, setBusca] = useState('');
   const [modalNovaConversa, setModalNovaConversa] = useState(false);

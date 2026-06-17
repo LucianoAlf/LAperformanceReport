@@ -3,15 +3,20 @@ import { createContext, useContext, useState, useCallback, useEffect, useRef, ty
 interface WidgetVisibilityContextType {
   widgetsHidden: boolean;
   registerSentinel: (el: HTMLElement | null) => void;
+  pushForceHide: () => void;
+  popForceHide: () => void;
 }
 
 const WidgetVisibilityContext = createContext<WidgetVisibilityContextType>({
   widgetsHidden: false,
   registerSentinel: () => {},
+  pushForceHide: () => {},
+  popForceHide: () => {},
 });
 
 export function WidgetVisibilityProvider({ children }: { children: ReactNode }) {
-  const [widgetsHidden, setWidgetsHidden] = useState(false);
+  const [sentinelIntersecting, setSentinelIntersecting] = useState(false);
+  const [forceHideCount, setForceHideCount] = useState(0);
   const observerRef = useRef<IntersectionObserver | null>(null);
 
   const registerSentinel = useCallback((el: HTMLElement | null) => {
@@ -20,13 +25,13 @@ export function WidgetVisibilityProvider({ children }: { children: ReactNode }) 
     }
 
     if (!el) {
-      setWidgetsHidden(false);
+      setSentinelIntersecting(false);
       return;
     }
 
     const observer = new IntersectionObserver(
       ([entry]) => {
-        setWidgetsHidden(entry.isIntersecting);
+        setSentinelIntersecting(entry.isIntersecting);
       },
       { threshold: 0 }
     );
@@ -35,14 +40,20 @@ export function WidgetVisibilityProvider({ children }: { children: ReactNode }) 
     observerRef.current = observer;
   }, []);
 
+  const pushForceHide = useCallback(() => setForceHideCount(n => n + 1), []);
+  const popForceHide = useCallback(() => setForceHideCount(n => Math.max(0, n - 1)), []);
+
   useEffect(() => {
     return () => {
       observerRef.current?.disconnect();
     };
   }, []);
 
+  // Widgets somem quando o sentinela está visível OU quando alguém forçou esconder (ex: chat aberto).
+  const widgetsHidden = sentinelIntersecting || forceHideCount > 0;
+
   return (
-    <WidgetVisibilityContext.Provider value={{ widgetsHidden, registerSentinel }}>
+    <WidgetVisibilityContext.Provider value={{ widgetsHidden, registerSentinel, pushForceHide, popForceHide }}>
       {children}
     </WidgetVisibilityContext.Provider>
   );
@@ -51,6 +62,19 @@ export function WidgetVisibilityProvider({ children }: { children: ReactNode }) 
 /** Hook consumidor: widgets usam para saber se devem se esconder */
 export function useWidgetsHidden() {
   return useContext(WidgetVisibilityContext).widgetsHidden;
+}
+
+/**
+ * Esconde os widgets flutuantes enquanto `ativo` for true (ex: conversa de chat aberta
+ * sobrepondo o input). Confiável: não depende de quem ganhou a corrida de sentinelas.
+ */
+export function useForceHideWidgets(ativo: boolean) {
+  const { pushForceHide, popForceHide } = useContext(WidgetVisibilityContext);
+  useEffect(() => {
+    if (!ativo) return;
+    pushForceHide();
+    return () => popForceHide();
+  }, [ativo, pushForceHide, popForceHide]);
 }
 
 /** Hook produtor: páginas chamam para obter ref do elemento sentinela (paginação) */

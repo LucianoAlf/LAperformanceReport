@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { Search, Send, Bot, Image, FileText, Mic, Video, Music, Paperclip, RefreshCw, MessageSquare, Power, PowerOff, X, Play, Pause, Check, CheckCheck, Clock, AlertCircle, Loader2, Lock, Ban, PanelRightOpen, RotateCcw, Bug, Megaphone } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
+import { formatarWhatsApp } from '@/lib/whatsappFormat'
 import { supabase } from '@/lib/supabase'
 import { useConversasCampanha, useMensagensCampanha, type MensagemCampanha } from '../hooks/useConversasCampanha'
 import { useNumerosMeta } from '../hooks/useNumerosMeta'
@@ -294,7 +295,7 @@ function BolhaMensagem({ msg, onReagir, searchTerm, onImageClick }: { msg: Mensa
           <div className="flex items-center gap-1.5 text-[10px] text-purple-400 mb-0.5">
             <Lock className="w-3 h-3" /> Nota interna
           </div>
-          {msg.texto && <p className="text-sm text-purple-200/80 whitespace-pre-wrap">{searchTerm ? <HighlightText text={msg.texto} highlight={searchTerm} /> : msg.texto}</p>}
+          {msg.texto && <p className="text-sm text-purple-200/80 whitespace-pre-wrap">{searchTerm ? <HighlightText text={msg.texto} highlight={searchTerm} /> : formatarWhatsApp(msg.texto)}</p>}
           <span className="text-[10px] text-purple-400/40 mt-0.5 block">{formatarHora(msg.created_at)}</span>
         </div>
       </div>
@@ -325,7 +326,7 @@ function BolhaMensagem({ msg, onReagir, searchTerm, onImageClick }: { msg: Mensa
             <div className="px-3.5 pb-1.5">
               {msg.texto && (
                 <p className="text-sm whitespace-pre-wrap break-words mt-1.5">
-                  {searchTerm ? <HighlightText text={msg.texto} highlight={searchTerm} /> : msg.texto}
+                  {searchTerm ? <HighlightText text={msg.texto} highlight={searchTerm} /> : formatarWhatsApp(msg.texto)}
                 </p>
               )}
               <div className="flex items-center gap-1 mt-1 justify-end">
@@ -359,7 +360,7 @@ function BolhaMensagem({ msg, onReagir, searchTerm, onImageClick }: { msg: Mensa
           <div className="px-3.5 pb-1.5">
             {msg.texto && (
               <p className={cn('text-sm whitespace-pre-wrap break-words', hasMedia ? 'mt-1' : '')}>
-                {searchTerm ? <HighlightText text={msg.texto} highlight={searchTerm} /> : msg.texto}
+                {searchTerm ? <HighlightText text={msg.texto} highlight={searchTerm} /> : formatarWhatsApp(msg.texto)}
               </p>
             )}
             <div className={cn('flex items-center gap-1 mt-0.5', isInbound ? 'justify-start' : 'justify-end')}>
