@@ -103,3 +103,9 @@ serve(async (req) => {
 ## Formatação de mensagens WhatsApp
 - `formatarWhatsApp(texto)` em `src/lib/whatsappFormat.tsx` converte marcação do WhatsApp (`*negrito*` `_itálico_` `~tachado~` ` ```mono``` `) em JSX, para o painel mostrar a mensagem como o cliente recebe (não os asteriscos crus). Parser recursivo tolerante, suporta aninhamento.
 - Usado nos painéis de chat de cliente: AdminChatPanel, PreAtendimento/chat/ChatBubble, Campanhas/ConversasTab (no ramo sem busca; com `searchTerm` mantém HighlightText).
+
+## Avatar com fallback de foto (React)
+- **NUNCA** manipular DOM direto no `onError` da `<img>` (`style.display`, `classList.remove`). Quebra com re-render (ex: listas com Realtime), causando avatares de tamanho/alinhamento inconsistente.
+- Padrão correto: componente com `useState(imgError)` que renderiza **OU** a foto **OU** o fallback (iniciais/ícone), nunca os dois. Garante tamanho fixo e alinhamento estável. Ref: `AvatarContato` em `AdminInboxList.tsx`.
+- URLs de foto de perfil do WhatsApp/UAZAPI expiram → o `onError` precisa ser robusto.
+- `bg-gradient-to-br` sem `from-`/`to-` definidos = gradiente sem cor; só aplicar a classe quando houver as cores do gradiente.
