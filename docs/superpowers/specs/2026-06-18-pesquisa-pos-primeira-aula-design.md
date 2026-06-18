@@ -122,53 +122,54 @@ O campo exato de telefone em `alunos` deve ser confirmado no schema antes da imp
 
 **Registro na Caixa de Entrada:** cada envio registrado em `admin_conversas` + `admin_mensagens` (departamento `sucesso_aluno`), seguindo padrão de `enviar-boas-vindas-matricula`.
 
-**Template da mensagem:**
+**Formato da mensagem — interactive buttons (UAZAPI):**
+
+Mensagem com 3 botões de resposta rápida:
 ```
 Olá, {nome}! 🎵 Como foi sua primeira aula na LA Music?
-
-Dá uma nota de 1 a 5 pra gente:
-1 — Não gostei
-2 — Regular
-3 — Boa
-4 — Muito boa
-5 — Excelente
-
-Responda com o número (1, 2, 3, 4 ou 5) e, se quiser, conta um pouco mais! 😊
 ```
+
+| Botão | ID (payload) | Nota armazenada |
+|-------|-------------|----------------|
+| 😞 Ruim | `ruim` | 1 |
+| 😐 Regular | `regular` | 3 |
+| 😊 Gostei | `gostei` | 5 |
+
+O aluno toca o botão — sem digitar nada. A resposta chega como mensagem estruturada com o `buttonId` no webhook UAZAPI.
 
 ---
 
-## Captura de Resposta (n8n)
+## Captura de Resposta (edge function — sem n8n)
 
-**Trigger:** webhook UAZAPI de mensagem entrante na caixa "Sol - Sucesso do Aluno"
+**Trigger:** webhook UAZAPI de mensagem entrante na caixa "Sol - Sucesso do Aluno" aponta para a edge function `processar-resposta-pesquisa`.
+
+**Parsing da nota:**
+- Lê `buttonId` do payload UAZAPI (campo da mensagem interativa)
+- Mapeamento: `ruim` → 1, `regular` → 3, `gostei` → 5
+- Se a mensagem não tiver `buttonId` (texto livre, áudio, etc.) → ignorada pela edge
 
 **Lookup da pesquisa pendente:**
 ```sql
 SELECT * FROM pesquisas_whatsapp
 WHERE remote_jid = :jid_remetente
-  AND unidade_id = :unidade_da_caixa       -- evita cruzar unidades
+  AND unidade_id = :unidade_da_caixa
   AND tipo = 'pos_primeira_aula'
   AND enviado_ok = true
   AND nota IS NULL
-  AND enviado_em > NOW() - INTERVAL '7 days'  -- janela de resposta: ignora pesquisas antigas
+  AND enviado_em > NOW() - INTERVAL '7 days'
 ORDER BY created_at DESC
 LIMIT 1
 ```
 
-Se não encontrar resultado → mensagem ignorada pelo workflow (não é resposta de pesquisa).
+Se não encontrar → edge encerra sem erro (botão é de outra caixa ou pesquisa já respondida).
 
-**Parsing da nota:**
-- Regex `/\b([1-5])\b/` aplicada no texto da mensagem
-- Se encontrar: `nota = dígito`; restante do texto (sem o dígito) → `comentario`
-- Se não encontrar (áudio, texto ambíguo, emoji): `nota = NULL`, texto completo → `comentario`, campo `erro_detalhes = 'nota_nao_identificada'`; gerente recebe a mensagem original para classificar manualmente
-
-**Após parsing:** atualiza `pesquisas_whatsapp` com `nota`, `comentario`, `respondido_em = now()`
+**Após parsing:** atualiza `pesquisas_whatsapp` com `nota`, `respondido_em = now()`
 
 **Notificação ao gerente:**
-- Lookup do número do gerente: `unidades.telefone_gerente` (ou equivalente — confirmar campo em `unidades` durante implementação; se não existir, criar coluna)
-- Conteúdo da mensagem: `"Feedback de {nome_aluno} ({curso}): nota {nota}/5. {comentario}"`
-- Se `nota IS NULL` (não identificada): `"Feedback de {nome_aluno} ({curso}) não identificado automaticamente. Resposta original: {comentario}"`
-- Se `telefone_gerente` não estiver cadastrado: registrar log de erro, não travar o workflow
+- Lookup do número do gerente: `unidades.telefone_gerente` (confirmar campo durante implementação; criar se não existir)
+- Conteúdo: `"Feedback de {nome_aluno} ({curso}): {label_botao}"` (ex: "Feedback de João (Violão): 😊 Gostei")
+- Se `telefone_gerente` não cadastrado: log de erro, edge não trava
+- Sem captura de comentário por ora
 
 ---
 
@@ -224,11 +225,13 @@ Fabíola revisa, desmarca falsos positivos
 Edge enviar-pesquisa-pos-primeira-aula
     ↓ upsert pesquisas_whatsapp + UAZAPI por unidade
     ↓ salva remote_jid + enviado_ok=true
-Aluno responde no WhatsApp (dentro de 7 dias)
-    ↓ mensagem entra em admin_conversas (fluxo normal)
-    ↓ n8n webhook: lookup por remote_jid + unidade_id + nota IS NULL + janela 7 dias
+Aluno toca botão no WhatsApp (dentro de 7 dias)
+    ↓ UAZAPI webhook → edge processar-resposta-pesquisa
+    ↓ lê buttonId do payload
+    ↓ se sem buttonId: ignora (texto livre, áudio, etc.)
+    ↓ lookup por remote_jid + unidade_id + nota IS NULL + janela 7 dias
     ↓ se não encontrar pesquisa: ignora
-    ↓ parsing nota (regex) + comentário
+    ↓ mapeia buttonId → nota (ruim=1, regular=3, gostei=5)
     ↓ atualiza pesquisas_whatsapp
     ↓ notifica gerente da unidade via WhatsApp
 ```
@@ -241,11 +244,12 @@ Aluno responde no WhatsApp (dentro de 7 dias)
 |---------|------|
 | `supabase/migrations/YYYYMMDD_pesquisas_whatsapp.sql` | Criar tabela + RPC |
 | `supabase/functions/enviar-pesquisa-pos-primeira-aula/index.ts` | Nova edge function |
+| `supabase/functions/processar-resposta-pesquisa/index.ts` | Nova edge function (webhook UAZAPI entrada) |
 | `src/components/App/SucessoCliente/PesquisasTab.tsx` | Renomear + sub-nav (wrapper) |
 | `src/components/App/SucessoCliente/PesquisaPrimeiraAulaTab.tsx` | Novo componente |
 | `src/components/App/SucessoCliente/hooks/usePesquisaPrimeiraAula.ts` | Novo hook |
 | `src/components/App/SucessoCliente/TabSucessoAluno.tsx` | Atualizar referência da aba |
-| n8n (novo workflow) | Captura resposta + notifica gerente |
+| n8n | ~~Não usado para captura de resposta~~ — substituído por edge function |
 
 ---
 
