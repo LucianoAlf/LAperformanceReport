@@ -10,6 +10,8 @@ interface TemplateSelectorProps {
   modo?: 'bar' | 'dropdown';
   /** Filtro inicial (texto após /) */
   filtroInicial?: string;
+  /** Caixa à qual os templates pertencem. Cada caixa só vê os seus. */
+  contexto?: string;
 }
 
 const CORES_TEMPLATE: Record<string, string> = {
@@ -40,32 +42,36 @@ const EMOJIS_TEMPLATE: Record<string, string> = {
   tentativa_sem_resposta: '📵',
 };
 
-// Cache global de templates para evitar fetch repetido
-let templatesCache: TemplateWhatsApp[] | null = null;
+// Cache de templates por contexto para evitar fetch repetido
+const templatesCache: Map<string, TemplateWhatsApp[]> = new Map();
 
-export function TemplateSelector({ onSelecionar, onFechar, modo = 'bar', filtroInicial = '' }: TemplateSelectorProps) {
-  const [templates, setTemplates] = useState<TemplateWhatsApp[]>(templatesCache || []);
-  const [loading, setLoading] = useState(!templatesCache);
+export function TemplateSelector({ onSelecionar, onFechar, modo = 'bar', filtroInicial = '', contexto = 'pre_atendimento' }: TemplateSelectorProps) {
+  const cacheInicial = templatesCache.get(contexto) || null;
+  const [templates, setTemplates] = useState<TemplateWhatsApp[]>(cacheInicial || []);
+  const [loading, setLoading] = useState(!cacheInicial);
   const [filtro, setFiltro] = useState(filtroInicial);
   const [indiceSelecionado, setIndiceSelecionado] = useState(0);
   const listaRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (templatesCache) {
-      setTemplates(templatesCache);
+    const cached = templatesCache.get(contexto);
+    if (cached) {
+      setTemplates(cached);
       setLoading(false);
       return;
     }
+    setLoading(true);
     async function fetchTemplates() {
       try {
         const { data } = await supabase
           .from('crm_templates_whatsapp')
           .select('*')
           .eq('ativo', true)
+          .eq('contexto', contexto)
           .order('nome');
         const result = (data || []) as TemplateWhatsApp[];
-        templatesCache = result;
+        templatesCache.set(contexto, result);
         setTemplates(result);
       } catch (err) {
         console.error('[TemplateSelector] Erro:', err);
@@ -74,7 +80,7 @@ export function TemplateSelector({ onSelecionar, onFechar, modo = 'bar', filtroI
       }
     }
     fetchTemplates();
-  }, []);
+  }, [contexto]);
 
   // Focar input no modo dropdown
   useEffect(() => {
@@ -233,7 +239,8 @@ export function TemplateSelector({ onSelecionar, onFechar, modo = 'bar', filtroI
   );
 }
 
-/** Invalidar cache de templates (chamar após CRUD) */
-export function invalidarCacheTemplates() {
-  templatesCache = null;
+/** Invalidar cache de templates (chamar após CRUD). Sem contexto, limpa tudo. */
+export function invalidarCacheTemplates(contexto?: string) {
+  if (contexto) templatesCache.delete(contexto);
+  else templatesCache.clear();
 }

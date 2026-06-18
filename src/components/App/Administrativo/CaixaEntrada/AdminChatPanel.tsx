@@ -1,9 +1,11 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Paperclip, Image, FileText, Music, Video, Loader2, ChevronUp, Check, CheckCheck, Clock, AlertCircle, User, Phone, Mic, X, Play, Pause } from 'lucide-react';
+import { Send, Paperclip, Image, FileText, Music, Video, Loader2, ChevronUp, Check, CheckCheck, Clock, AlertCircle, User, Phone, Mic, X, Play, Pause, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { formatarWhatsApp } from '@/lib/whatsappFormat';
+import { TemplateSelector } from '@/components/App/PreAtendimento/components/chat/TemplateSelector';
+import { ModalGerenciarTemplates } from '@/components/App/PreAtendimento/components/chat/ModalGerenciarTemplates';
 import type { AdminConversa, AdminMensagem, AlunoInbox } from './types';
 
 function getStatusAlunoTag(status: string | null | undefined) {
@@ -26,6 +28,8 @@ interface AdminChatPanelProps {
   onCarregarMais: () => void;
   onEnviarMensagem: (conteudo: string) => Promise<any>;
   onEnviarMidia: (arquivo: File, tipo: 'imagem' | 'audio' | 'video' | 'documento', caption?: string) => Promise<any>;
+  /** Caixa de templates a usar (cada caixa tem suas mensagens prontas). */
+  contexto?: string;
 }
 
 function StatusIcon({ status }: { status: string }) {
@@ -273,9 +277,14 @@ export function AdminChatPanel({
   onCarregarMais,
   onEnviarMensagem,
   onEnviarMidia,
+  contexto = 'administrativo',
 }: AdminChatPanelProps) {
   const [texto, setTexto] = useState('');
   const [menuAnexoAberto, setMenuAnexoAberto] = useState(false);
+  const [templateAberto, setTemplateAberto] = useState(false);
+  const [templateDropdownAberto, setTemplateDropdownAberto] = useState(false);
+  const [templateFiltroInicial, setTemplateFiltroInicial] = useState('');
+  const [modalTemplatesAberto, setModalTemplatesAberto] = useState(false);
   const [fotoPerfil, setFotoPerfil] = useState<string | null>(conversa.foto_perfil_url || null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -324,12 +333,41 @@ export function AdminChatPanel({
     await onEnviarMensagem(msg);
   }, [texto, enviando, onEnviarMensagem]);
 
+  // Detectar / no início do texto para abrir dropdown de templates
+  const handleTextoChange = useCallback((novoTexto: string) => {
+    setTexto(novoTexto);
+    if (novoTexto.startsWith('/')) {
+      setTemplateFiltroInicial(novoTexto.slice(1));
+      setTemplateDropdownAberto(true);
+    } else if (templateDropdownAberto) {
+      setTemplateDropdownAberto(false);
+    }
+  }, [templateDropdownAberto]);
+
+  // Aplicar template: substitui placeholders com dados do aluno/contato
+  const handleUsarTemplate = useCallback((conteudo: string) => {
+    const nome = aluno?.nome || conversa.nome_externo || 'aluno';
+    const textoFinal = conteudo
+      .replace(/\{nome\}/g, nome)
+      .replace(/\{curso\}/g, aluno?.cursos?.nome || 'seu curso')
+      .replace(/\{unidade\}/g, aluno?.unidades?.nome || 'LA Music');
+
+    setTexto(textoFinal);
+    setTemplateDropdownAberto(false);
+    setTemplateAberto(false);
+    textareaRef.current?.focus();
+  }, [aluno, conversa.nome_externo]);
+
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    // Se o dropdown de templates está aberto, deixa ele capturar as teclas de navegação
+    if (templateDropdownAberto && ['ArrowDown', 'ArrowUp', 'Enter', 'Tab', 'Escape'].includes(e.key)) {
+      return;
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleEnviar();
     }
-  }, [handleEnviar]);
+  }, [handleEnviar, templateDropdownAberto]);
 
   const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -558,6 +596,16 @@ export function AdminChatPanel({
 
       {/* Input */}
       <div className="px-4 py-3 border-t border-slate-700/50">
+        {/* Barra de templates (botões) */}
+        {!gravando && templateAberto && (
+          <div className="mb-2">
+            <TemplateSelector
+              contexto={contexto}
+              onSelecionar={handleUsarTemplate}
+              onFechar={() => setTemplateAberto(false)}
+            />
+          </div>
+        )}
         {gravando ? (
           /* === Modo Gravação === */
           <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/30 rounded-xl px-4 py-2.5">
@@ -617,16 +665,52 @@ export function AdminChatPanel({
               />
             </div>
 
-            {/* Textarea */}
-            <textarea
-              ref={textareaRef}
-              value={texto}
-              onChange={e => setTexto(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Digite uma mensagem..."
-              rows={1}
-              className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none resize-none"
-            />
+            {/* Botão templates rápidos */}
+            <Tooltip content="Mensagens prontas" side="top">
+              <button
+                onClick={() => setTemplateAberto(prev => !prev)}
+                className={cn(
+                  'p-2 rounded-lg transition',
+                  templateAberto
+                    ? 'text-violet-400 bg-slate-700/50'
+                    : 'text-slate-400 hover:text-violet-400 hover:bg-slate-700/50'
+                )}
+              >
+                <FileText className="w-5 h-5" />
+              </button>
+            </Tooltip>
+
+            {/* Botão gerenciar mensagens prontas */}
+            <Tooltip content="Gerenciar mensagens prontas" side="top">
+              <button
+                onClick={() => setModalTemplatesAberto(true)}
+                className="p-2 rounded-lg text-slate-400 hover:text-violet-400 hover:bg-slate-700/50 transition"
+              >
+                <Settings className="w-5 h-5" />
+              </button>
+            </Tooltip>
+
+            {/* Textarea + dropdown de templates */}
+            <div className="flex-1 relative">
+              {templateDropdownAberto && (
+                <TemplateSelector
+                  modo="dropdown"
+                  contexto={contexto}
+                  filtroInicial={templateFiltroInicial}
+                  onSelecionar={handleUsarTemplate}
+                  onFechar={() => { setTemplateDropdownAberto(false); setTexto(''); textareaRef.current?.focus(); }}
+                />
+              )}
+              <textarea
+                ref={textareaRef}
+                value={texto}
+                onChange={e => handleTextoChange(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="Digite uma mensagem... (/ para mensagens prontas)"
+                rows={1}
+                className="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none resize-none"
+              />
+            </div>
 
             {/* Botão mic ou enviar */}
             {texto.trim() ? (
@@ -653,6 +737,13 @@ export function AdminChatPanel({
           </div>
         )}
       </div>
+
+      {/* Modal de gerenciamento de mensagens prontas (filtrado pela caixa) */}
+      <ModalGerenciarTemplates
+        aberto={modalTemplatesAberto}
+        onFechar={() => setModalTemplatesAberto(false)}
+        contexto={contexto}
+      />
     </div>
   );
 }

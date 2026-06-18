@@ -28,6 +28,8 @@ import { invalidarCacheTemplates } from './TemplateSelector';
 interface ModalGerenciarTemplatesProps {
   aberto: boolean;
   onFechar: () => void;
+  /** Caixa à qual os templates pertencem. Novos templates são criados neste contexto. */
+  contexto?: string;
 }
 
 const EMOJIS_TIPO: Record<string, string> = {
@@ -71,7 +73,7 @@ interface FormData {
 
 const formVazio: FormData = { nome: '', slug: '', conteudo: '', tipo: 'personalizado' };
 
-export function ModalGerenciarTemplates({ aberto, onFechar }: ModalGerenciarTemplatesProps) {
+export function ModalGerenciarTemplates({ aberto, onFechar, contexto = 'pre_atendimento' }: ModalGerenciarTemplatesProps) {
   const [templates, setTemplates] = useState<TemplateWhatsApp[]>([]);
   const [loading, setLoading] = useState(true);
   const [salvando, setSalvando] = useState(false);
@@ -88,6 +90,7 @@ export function ModalGerenciarTemplates({ aberto, onFechar }: ModalGerenciarTemp
       const { data } = await supabase
         .from('crm_templates_whatsapp')
         .select('*')
+        .eq('contexto', contexto)
         .order('nome');
       setTemplates((data || []) as TemplateWhatsApp[]);
     } catch (err) {
@@ -95,7 +98,7 @@ export function ModalGerenciarTemplates({ aberto, onFechar }: ModalGerenciarTemp
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [contexto]);
 
   useEffect(() => {
     if (aberto) fetchTemplates();
@@ -165,12 +168,13 @@ export function ModalGerenciarTemplates({ aberto, onFechar }: ModalGerenciarTemp
             conteudo: form.conteudo.trim(),
             tipo: form.tipo,
             ativo: true,
+            contexto,
           });
 
         if (error) throw error;
       }
 
-      invalidarCacheTemplates();
+      invalidarCacheTemplates(contexto);
       await fetchTemplates();
       setTela('lista');
     } catch (err: unknown) {
@@ -194,7 +198,7 @@ export function ModalGerenciarTemplates({ aberto, onFechar }: ModalGerenciarTemp
 
       if (error) throw error;
 
-      invalidarCacheTemplates();
+      invalidarCacheTemplates(contexto);
       await fetchTemplates();
     } catch (err) {
       console.error('[ModalTemplates] Erro ao excluir:', err);
@@ -213,7 +217,7 @@ export function ModalGerenciarTemplates({ aberto, onFechar }: ModalGerenciarTemp
 
       if (error) throw error;
 
-      invalidarCacheTemplates();
+      invalidarCacheTemplates(contexto);
       await fetchTemplates();
     } catch (err) {
       console.error('[ModalTemplates] Erro ao reativar:', err);

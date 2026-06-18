@@ -130,6 +130,7 @@ export function CaixaEntradaTab({ unidadeId, departamento = 'administrativo', mu
             onCarregarMais={carregarMais}
             onEnviarMensagem={enviarMensagem}
             onEnviarMidia={enviarMidia}
+            contexto={departamento}
           />
         ) : (
           <div className="flex-1 flex items-center justify-center" style={{ background: 'linear-gradient(180deg, #0f172a 0%, #0d1424 100%)' }}>
