@@ -1,0 +1,204 @@
+import { useState, useEffect } from 'react';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
+import { Send, Loader2, RefreshCw, Phone } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import type { UnidadeId } from '@/components/ui/UnidadeFilter';
+import { usePesquisaPrimeiraAula, type CandidatoPesquisa } from './hooks/usePesquisaPrimeiraAula';
+
+interface Props {
+  unidadeAtual: UnidadeId;
+}
+
+function formatarJid(jid: string | null): string {
+  if (!jid) return '—';
+  const numero = jid.replace('@s.whatsapp.net', '');
+  const d = numero.replace(/\D/g, '');
+  if (d.length === 13) return `(${d.slice(2, 4)}) ${d.slice(4, 9)}-${d.slice(9)}`;
+  if (d.length === 12) return `(${d.slice(2, 4)}) ${d.slice(4, 8)}-${d.slice(8)}`;
+  return numero;
+}
+
+export function PesquisaPrimeiraAulaTab({ unidadeAtual }: Props) {
+  const [janelaDias, setJanelaDias] = useState<number>(7);
+  const [selecionados, setSelecionados] = useState<Set<number>>(new Set());
+  const { candidatos, loading, enviando, resultados, buscarCandidatos, enviar } =
+    usePesquisaPrimeiraAula(unidadeAtual);
+
+  useEffect(() => {
+    setSelecionados(new Set(candidatos.filter(c => c.whatsapp_jid).map(c => c.aluno_id)));
+  }, [candidatos]);
+
+  useEffect(() => {
+    if (unidadeAtual !== 'todos') {
+      buscarCandidatos(janelaDias);
+    }
+  }, [janelaDias, unidadeAtual]);
+
+  const toggleSelecionado = (alunoId: number) => {
+    setSelecionados(prev => {
+      const next = new Set(prev);
+      next.has(alunoId) ? next.delete(alunoId) : next.add(alunoId);
+      return next;
+    });
+  };
+
+  const candidatosComContato = candidatos.filter(c => c.whatsapp_jid);
+  const todosSelecionados =
+    candidatosComContato.length > 0 &&
+    candidatosComContato.every(c => selecionados.has(c.aluno_id));
+  const selecionadosList = candidatos.filter(c => selecionados.has(c.aluno_id));
+  const resultadoPorId = new Map(resultados.map(r => [r.aluno_id, r]));
+
+  if (unidadeAtual === 'todos') {
+    return (
+      <div className="flex items-center justify-center py-20 text-slate-400">
+        Selecione uma unidade para gerenciar pesquisas
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-3">
+          <Select value={String(janelaDias)} onValueChange={v => setJanelaDias(Number(v))}>
+            <SelectTrigger className="w-[160px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="7">Últimos 7 dias</SelectItem>
+              <SelectItem value="14">Últimos 14 dias</SelectItem>
+              <SelectItem value="30">Últimos 30 dias</SelectItem>
+            </SelectContent>
+          </Select>
+          <span className="text-sm text-slate-400">
+            {loading
+              ? 'Buscando...'
+              : `${candidatos.length} candidato${candidatos.length !== 1 ? 's' : ''} encontrado${candidatos.length !== 1 ? 's' : ''}`}
+          </span>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => buscarCandidatos(janelaDias)}
+            disabled={loading}
+            className="text-slate-400"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          </Button>
+        </div>
+        <Button
+          onClick={() => enviar(selecionadosList)}
+          disabled={enviando || selecionadosList.length === 0}
+          className="bg-violet-500 hover:bg-violet-600 text-white"
+        >
+          {enviando ? (
+            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+          ) : (
+            <Send className="w-4 h-4 mr-2" />
+          )}
+          Enviar pesquisa ({selecionadosList.length})
+        </Button>
+      </div>
+
+      <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-slate-900/80 border-b border-slate-700">
+              <tr>
+                <th className="w-10 px-4 py-3">
+                  <input
+                    type="checkbox"
+                    checked={todosSelecionados}
+                    onChange={e =>
+                      setSelecionados(
+                        e.target.checked
+                          ? new Set(candidatosComContato.map(c => c.aluno_id))
+                          : new Set()
+                      )
+                    }
+                    className="w-4 h-4 accent-violet-500"
+                  />
+                </th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-slate-400">Nome</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-slate-400">Curso</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-slate-400">Professor</th>
+                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">1ª Aula</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-slate-400">Contato</th>
+                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Status</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-700/50">
+              {loading ? (
+                <tr>
+                  <td colSpan={7} className="py-10 text-center">
+                    <Loader2 className="w-6 h-6 animate-spin text-violet-500 mx-auto" />
+                  </td>
+                </tr>
+              ) : candidatos.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="py-10 text-center text-slate-500">
+                    Nenhum calouro com primeira aula nos últimos {janelaDias} dias pendente de pesquisa
+                  </td>
+                </tr>
+              ) : (
+                candidatos.map(c => {
+                  const resultado = resultadoPorId.get(c.aluno_id);
+                  const semContato = !c.whatsapp_jid;
+                  return (
+                    <tr
+                      key={c.aluno_id}
+                      className={`transition-colors ${resultado?.erro ? 'bg-red-900/10' : 'hover:bg-slate-700/30'}`}
+                    >
+                      <td className="px-4 py-3">
+                        <input
+                          type="checkbox"
+                          checked={selecionados.has(c.aluno_id) && !semContato}
+                          disabled={semContato}
+                          onChange={() => !semContato && toggleSelecionado(c.aluno_id)}
+                          className="w-4 h-4 accent-violet-500 disabled:opacity-40"
+                        />
+                      </td>
+                      <td className="px-4 py-3 text-white font-medium">{c.nome}</td>
+                      <td className="px-4 py-3 text-slate-300">{c.curso_nome || '—'}</td>
+                      <td className="px-4 py-3 text-slate-300">{c.professor_nome || '—'}</td>
+                      <td className="px-4 py-3 text-center text-slate-300">
+                        {format(new Date(c.data_primeira_aula + 'T00:00:00'), 'dd/MM/yyyy', { locale: ptBR })}
+                      </td>
+                      <td className="px-4 py-3">
+                        {semContato ? (
+                          <span className="text-xs text-red-400 flex items-center gap-1">
+                            <Phone className="w-3 h-3" />
+                            Sem contato
+                          </span>
+                        ) : (
+                          <span className="text-sm text-slate-300 font-mono">{formatarJid(c.whatsapp_jid)}</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {resultado ? (
+                          resultado.ok ? (
+                            <span className="text-xs text-green-400">Enviado ✓</span>
+                          ) : (
+                            <span className="text-xs text-red-400" title={resultado.erro}>
+                              Erro ✗
+                            </span>
+                          )
+                        ) : semContato ? (
+                          <span className="text-xs text-slate-500">—</span>
+                        ) : (
+                          <span className="text-xs text-slate-500">Pendente</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}

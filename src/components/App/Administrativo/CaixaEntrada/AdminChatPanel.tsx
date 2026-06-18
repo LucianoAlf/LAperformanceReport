@@ -197,6 +197,11 @@ function ChatBubble({ msg }: { msg: AdminMensagem }) {
   const isSaida = msg.direcao === 'saida';
   const isSistema = msg.remetente === 'sistema';
 
+  let interativoData: { texto: string; opcoes: { id: string; label: string }[] } | null = null;
+  if (msg.tipo === 'interativo' && msg.conteudo) {
+    try { interativoData = JSON.parse(msg.conteudo); } catch { /* fallback texto */ }
+  }
+
   if (isSistema) {
     return (
       <div className="flex justify-center my-2">
@@ -230,10 +235,29 @@ function ChatBubble({ msg }: { msg: AdminMensagem }) {
         {/* Mídia */}
         <MidiaRender msg={msg} isSaida={isSaida} />
 
-        {/* Texto */}
-        {msg.conteudo && (
+        {/* Conteúdo */}
+        {interativoData ? (
+          <div className="flex flex-col gap-2">
+            <p className="text-sm">{interativoData.texto}</p>
+            <div className="flex flex-wrap gap-1.5 mt-0.5">
+              {interativoData.opcoes.map((op) => (
+                <span
+                  key={op.id}
+                  className={cn(
+                    'text-xs px-3 py-1.5 rounded-full border cursor-default select-none',
+                    isSaida
+                      ? 'border-white/30 bg-white/10 text-violet-100'
+                      : 'border-slate-500/50 bg-slate-600/40 text-slate-300'
+                  )}
+                >
+                  {op.label}
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : msg.conteudo ? (
           <p className="text-sm whitespace-pre-wrap break-words">{formatarWhatsApp(msg.conteudo)}</p>
-        )}
+        ) : null}
 
         {/* Hora + Status */}
         <div className={cn('flex items-center gap-1 mt-1', isSaida ? 'justify-end' : 'justify-start')}>

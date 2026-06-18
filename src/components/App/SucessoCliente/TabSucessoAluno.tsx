@@ -15,7 +15,7 @@ import { useToast } from '@/hooks/useToast';
 import { ModalDetalhesSucessoAluno } from './ModalDetalhesSucessoAluno';
 import { JornadaAlunoKanban } from './JornadaAlunoKanban';
 import { ModalEnviarFeedback } from './ModalEnviarFeedback';
-import { PesquisaEvasaoTab } from './PesquisaEvasaoTab';
+import { PesquisasTab } from './PesquisasTab';
 import { PresencaTab } from './PresencaTab';
 import { AnaliseTurmasTab } from './AnaliseTurmasTab';
 import { FaltasMesSection } from './FaltasMesSection';
@@ -411,7 +411,7 @@ export function TabSucessoAluno({ unidadeAtual }: Props) {
           }`}
         >
           <FileQuestion className="w-4 h-4" />
-          Pesquisa Evasão
+          Pesquisas
         </button>
         <button
           onClick={() => setSubAba('presenca')}
@@ -694,9 +694,9 @@ export function TabSucessoAluno({ unidadeAtual }: Props) {
         </>
       )}
 
-      {/* Conteúdo da Subaba PESQUISA EVASÃO */}
+      {/* Conteúdo da Subaba PESQUISAS */}
       {subAba === 'pesquisa' && (
-        <PesquisaEvasaoTab unidadeAtual={unidadeAtual} />
+        <PesquisasTab unidadeAtual={unidadeAtual} />
       )}
 
       {/* Conteúdo da Subaba JORNADA */}
