@@ -202,7 +202,11 @@ function ChatBubble({ msg, onApagar }: { msg: AdminMensagem; onApagar?: (id: str
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
-    setMenuPos({ x: e.clientX, y: e.clientY });
+    const MENU_W = 180;
+    const MENU_H = 48;
+    const x = Math.min(e.clientX, window.innerWidth - MENU_W - 8);
+    const y = Math.min(e.clientY, window.innerHeight - MENU_H - 8);
+    setMenuPos({ x: Math.max(8, x), y: Math.max(8, y) });
   }, []);
 
   const handleApagar = useCallback(() => {
