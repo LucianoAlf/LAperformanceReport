@@ -5,6 +5,16 @@ import type { AdminMensagem } from '../types';
 
 const MENSAGENS_POR_PAGINA = 50;
 
+function gerarUUID(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return gerarUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
+
 interface UseAdminMensagensParams {
   conversaId: string | null;
   alunoId: number | null;
@@ -136,7 +146,7 @@ export function useAdminMensagens({ conversaId, alunoId, remetenteNome = 'Admin'
     if (!conversaId || !conteudo.trim()) return null;
 
     const msgOtimista: AdminMensagem = {
-      id: crypto.randomUUID(),
+      id: gerarUUID(),
       conversa_id: conversaId,
       aluno_id: alunoId ?? null,
       direcao: 'saida',
@@ -199,7 +209,7 @@ export function useAdminMensagens({ conversaId, alunoId, remetenteNome = 'Admin'
     try {
       // Upload precisa ser sincrono (precisa da URL para a edge function)
       const extensao = arquivo.name.split('.').pop() || 'bin';
-      const nomeArquivo = `admin/${conversaId}/${Date.now()}_${crypto.randomUUID().slice(0, 8)}.${extensao}`;
+      const nomeArquivo = `admin/${conversaId}/${Date.now()}_${gerarUUID().slice(0, 8)}.${extensao}`;
 
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('crm-midia')
@@ -217,7 +227,7 @@ export function useAdminMensagens({ conversaId, alunoId, remetenteNome = 'Admin'
       const midiaUrl = urlData.publicUrl;
 
       const msgOtimista: AdminMensagem = {
-        id: crypto.randomUUID(),
+        id: gerarUUID(),
         conversa_id: conversaId,
         aluno_id: alunoId ?? null,
         direcao: 'saida',
