@@ -534,6 +534,30 @@ async function handleAdminInboxMessage(
       }
     }
 
+    // Se já existe conversa carimbada com ESTE número e vinculada a um aluno, roteia direto
+    // por ela — mesmo que o número não esteja (mais) no cadastro do aluno. Garante que a
+    // conversa daquele número continua recebendo, sem duplicar nem virar externo.
+    {
+      const { data: convNumero } = await supabase
+        .from('admin_conversas')
+        .select('aluno_id')
+        .eq('whatsapp_jid', phone)
+        .eq('departamento', departamento)
+        .not('aluno_id', 'is', null)
+        .limit(1)
+        .maybeSingle();
+      if (convNumero?.aluno_id) {
+        const { data: alunoConv } = await supabase
+          .from('alunos')
+          .select('id, nome, unidade_id')
+          .eq('id', convNumero.aluno_id)
+          .maybeSingle();
+        if (alunoConv) {
+          return await processAdminMessage(msg, phone, whatsappMessageId, caixaId, alunoConv, departamento, supabase, uazapiCreds);
+        }
+      }
+    }
+
     // Buscar aluno pelo telefone (whatsapp ou telefone)
     // Tenta match com e sem prefixo 55
     const phoneSuffix = phone.slice(-11); // DDD + número
@@ -589,14 +613,45 @@ async function processAdminMessage(
   supabase: any,
   uazapiCreds: { baseUrl: string; token: string } | null = null
 ): Promise<boolean> {
-  // Buscar ou criar admin_conversa (separada por departamento)
+  // Busca de conversa em camadas — suporta múltiplos números por aluno sem misturar:
+  //  1) conversa que já carrega ESTE número (vinculada ao aluno OU externa a vincular);
+  //  2) conversa antiga do aluno ainda sem número carimbado → reaproveita (não duplica);
+  //  3) cria nova conversa para este número.
   let { data: conversa } = await supabase
     .from('admin_conversas')
-    .select('id')
-    .eq('aluno_id', aluno.id)
-    .eq('unidade_id', aluno.unidade_id)
+    .select('id, aluno_id')
+    .eq('whatsapp_jid', phone)
     .eq('departamento', departamento)
+    .order('created_at', { ascending: true })
+    .limit(1)
     .maybeSingle();
+
+  // Conversa externa com este número → vincular ao aluno (só preenche dono, nunca troca)
+  if (conversa && !conversa.aluno_id) {
+    await supabase
+      .from('admin_conversas')
+      .update({ aluno_id: aluno.id, unidade_id: aluno.unidade_id })
+      .eq('id', conversa.id);
+  }
+
+  if (!conversa) {
+    const { data: semJid } = await supabase
+      .from('admin_conversas')
+      .select('id')
+      .eq('aluno_id', aluno.id)
+      .eq('departamento', departamento)
+      .is('whatsapp_jid', null)
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (semJid) {
+      await supabase
+        .from('admin_conversas')
+        .update({ whatsapp_jid: phone, unidade_id: aluno.unidade_id })
+        .eq('id', semJid.id);
+      conversa = semJid;
+    }
+  }
 
   if (!conversa) {
     const { data: novaConversa, error: criarErr } = await supabase

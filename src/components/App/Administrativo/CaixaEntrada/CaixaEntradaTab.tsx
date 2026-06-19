@@ -65,7 +65,11 @@ export function CaixaEntradaTab({ unidadeId, departamento = 'administrativo', mu
       setTimeout(() => {
         let conversa: AdminConversa | undefined;
         if (contato.tipo === 'aluno' && contato.aluno) {
-          conversa = conversas.find(c => c.aluno_id === contato.aluno!.id);
+          // Com múltiplos números por aluno, achar a conversa do número escolhido
+          conversa = (contato.whatsapp_jid
+            ? conversas.find(c => c.aluno_id === contato.aluno!.id && c.whatsapp_jid === contato.whatsapp_jid)
+            : undefined)
+            || conversas.find(c => c.aluno_id === contato.aluno!.id);
         } else if (contato.tipo === 'externo' && contato.telefone_externo) {
           conversa = conversas.find(c => c.telefone_externo === contato.telefone_externo && c.aluno_id === null);
         }
