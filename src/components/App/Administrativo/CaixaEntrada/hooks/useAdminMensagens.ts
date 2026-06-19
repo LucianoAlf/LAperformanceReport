@@ -302,6 +302,20 @@ export function useAdminMensagens({ conversaId, alunoId, remetenteNome = 'Admin'
     }
   }, [fetchMensagens]);
 
+  const editarMensagem = useCallback(async (id: string, novoConteudo: string) => {
+    const texto = novoConteudo.trim();
+    if (!texto) return;
+    setMensagens(prev => prev.map(m => m.id === id ? { ...m, conteudo: texto, editada: true } : m));
+    const { data, error } = await supabase.functions.invoke('editar-mensagem-admin', {
+      body: { mensagem_id: id, novo_conteudo: texto },
+    });
+    if (error || data?.success === false) {
+      console.error('[useAdminMensagens] Erro ao editar:', error || data?.error);
+      toast.error(data?.error || 'Não foi possível editar a mensagem (limite de tempo do WhatsApp?)');
+      fetchMensagens(0);
+    }
+  }, [fetchMensagens]);
+
   return {
     mensagens,
     loading,
@@ -311,6 +325,7 @@ export function useAdminMensagens({ conversaId, alunoId, remetenteNome = 'Admin'
     enviarMensagem,
     enviarMidia,
     apagarMensagem,
+    editarMensagem,
     refetch: () => fetchMensagens(0),
   };
 }

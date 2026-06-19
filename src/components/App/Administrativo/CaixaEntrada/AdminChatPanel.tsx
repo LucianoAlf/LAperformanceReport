@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Paperclip, Image, FileText, Music, Video, Loader2, ChevronUp, Check, CheckCheck, Clock, AlertCircle, User, Phone, Mic, X, Play, Pause, Settings, Trash2 } from 'lucide-react';
+import { Send, Paperclip, Image, FileText, Music, Video, Loader2, ChevronUp, Check, CheckCheck, Clock, AlertCircle, User, Phone, Mic, X, Play, Pause, Settings, Trash2, Pencil } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -30,6 +30,7 @@ interface AdminChatPanelProps {
   onEnviarMensagem: (conteudo: string) => Promise<any>;
   onEnviarMidia: (arquivo: File, tipo: 'imagem' | 'audio' | 'video' | 'documento', caption?: string) => Promise<any>;
   onApagarMensagem?: (id: string) => void;
+  onEditarMensagem?: (id: string, novoConteudo: string) => void;
   /** Caixa de templates a usar (cada caixa tem suas mensagens prontas). */
   contexto?: string;
 }
@@ -195,24 +196,30 @@ function MidiaRender({ msg, isSaida }: { msg: AdminMensagem; isSaida: boolean })
   return null;
 }
 
-function ChatBubble({ msg, onApagar }: { msg: AdminMensagem; onApagar?: (id: string) => void }) {
+function ChatBubble({ msg, onApagar, onEditar }: { msg: AdminMensagem; onApagar?: (id: string) => void; onEditar?: (msg: AdminMensagem) => void }) {
   const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
   const isSaida = msg.direcao === 'saida';
   const isSistema = msg.remetente === 'sistema';
+  const podeEditar = isSaida && msg.tipo === 'texto' && !!msg.whatsapp_message_id;
 
   const handleContextMenu = useCallback((e: React.MouseEvent) => {
     e.preventDefault();
     const MENU_W = 180;
-    const MENU_H = 48;
+    const MENU_H = podeEditar ? 88 : 48;
     const x = Math.min(e.clientX, window.innerWidth - MENU_W - 8);
     const y = Math.min(e.clientY, window.innerHeight - MENU_H - 8);
     setMenuPos({ x: Math.max(8, x), y: Math.max(8, y) });
-  }, []);
+  }, [podeEditar]);
 
   const handleApagar = useCallback(() => {
     setMenuPos(null);
     onApagar?.(msg.id);
   }, [msg.id, onApagar]);
+
+  const handleEditar = useCallback(() => {
+    setMenuPos(null);
+    onEditar?.(msg);
+  }, [msg, onEditar]);
 
   useEffect(() => {
     if (!menuPos) return;
@@ -265,6 +272,15 @@ function ChatBubble({ msg, onApagar }: { msg: AdminMensagem; onApagar?: (id: str
           style={{ top: menuPos.y, left: menuPos.x }}
           onMouseDown={e => e.stopPropagation()}
         >
+          {podeEditar && (
+            <button
+              onMouseDown={e => { e.stopPropagation(); handleEditar(); }}
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-200 hover:bg-slate-700/50 transition"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+              Editar mensagem
+            </button>
+          )}
           <button
             onMouseDown={e => { e.stopPropagation(); handleApagar(); }}
             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 transition"
@@ -323,6 +339,11 @@ function ChatBubble({ msg, onApagar }: { msg: AdminMensagem; onApagar?: (id: str
 
         {/* Hora + Status */}
         <div className={cn('flex items-center gap-1 mt-1', isSaida ? 'justify-end' : 'justify-start')}>
+          {msg.editada && (
+            <span className={cn('text-[10px] italic', isSaida ? 'text-violet-200/40' : 'text-slate-600')}>
+              editada
+            </span>
+          )}
           <span className={cn('text-[10px]', isSaida ? 'text-violet-200/50' : 'text-slate-500')}>
             {formatarHoraMsg(msg.created_at)}
           </span>
@@ -365,9 +386,11 @@ export function AdminChatPanel({
   onEnviarMensagem,
   onEnviarMidia,
   onApagarMensagem,
+  onEditarMensagem,
   contexto = 'administrativo',
 }: AdminChatPanelProps) {
   const [texto, setTexto] = useState('');
+  const [editandoMsg, setEditandoMsg] = useState<AdminMensagem | null>(null);
   const [menuAnexoAberto, setMenuAnexoAberto] = useState(false);
   const [templateAberto, setTemplateAberto] = useState(false);
   const [templateDropdownAberto, setTemplateDropdownAberto] = useState(false);
@@ -417,9 +440,29 @@ export function AdminChatPanel({
   const handleEnviar = useCallback(async () => {
     if (!texto.trim() || enviando) return;
     const msg = texto;
+    if (editandoMsg) {
+      const id = editandoMsg.id;
+      setEditandoMsg(null);
+      setTexto('');
+      onEditarMensagem?.(id, msg);
+      return;
+    }
     setTexto('');
     await onEnviarMensagem(msg);
-  }, [texto, enviando, onEnviarMensagem]);
+  }, [texto, enviando, onEnviarMensagem, editandoMsg, onEditarMensagem]);
+
+  const handleIniciarEdicao = useCallback((m: AdminMensagem) => {
+    setEditandoMsg(m);
+    setTexto(m.conteudo || '');
+    setTemplateAberto(false);
+    setTemplateDropdownAberto(false);
+    setTimeout(() => textareaRef.current?.focus(), 50);
+  }, []);
+
+  const handleCancelarEdicao = useCallback(() => {
+    setEditandoMsg(null);
+    setTexto('');
+  }, []);
 
   // Detectar / no início do texto para abrir dropdown de templates
   const handleTextoChange = useCallback((novoTexto: string) => {
@@ -676,7 +719,7 @@ export function AdminChatPanel({
             <p className="text-xs text-slate-600 mt-1">Envie a primeira mensagem para {aluno?.nome?.split(' ')[0] || conversa.nome_externo?.split(' ')[0] || 'este contato'}</p>
           </div>
         ) : (
-          mensagens.map(msg => <ChatBubble key={msg.id} msg={msg} onApagar={onApagarMensagem} />)
+          mensagens.map(msg => <ChatBubble key={msg.id} msg={msg} onApagar={onApagarMensagem} onEditar={handleIniciarEdicao} />)
         )}
 
         <div ref={messagesEndRef} />
@@ -684,6 +727,22 @@ export function AdminChatPanel({
 
       {/* Input */}
       <div className="px-4 py-3 border-t border-slate-700/50">
+        {/* Banner de edição */}
+        {editandoMsg && (
+          <div className="mb-2 flex items-center gap-2 bg-violet-500/10 border-l-2 border-violet-500 rounded px-3 py-2">
+            <Pencil className="w-3.5 h-3.5 text-violet-400 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] font-semibold text-violet-400">Editando mensagem</p>
+              <p className="text-xs text-slate-400 truncate">{editandoMsg.conteudo}</p>
+            </div>
+            <button
+              onClick={handleCancelarEdicao}
+              className="p-1 rounded text-slate-400 hover:text-red-400 hover:bg-slate-700/50 transition flex-shrink-0"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
         {/* Barra de templates (botões) */}
         {!gravando && templateAberto && (
           <div className="mb-2">

@@ -47,7 +47,7 @@ export function CaixaEntradaTab({ unidadeId, departamento = 'administrativo', mu
 
   const alunoSelecionado = conversaSelecionada?.aluno as AlunoInbox | null;
 
-  const { mensagens, loading: loadingMensagens, enviando, temMais, carregarMais, enviarMensagem, enviarMidia, apagarMensagem } = useAdminMensagens({
+  const { mensagens, loading: loadingMensagens, enviando, temMais, carregarMais, enviarMensagem, enviarMidia, apagarMensagem, editarMensagem } = useAdminMensagens({
     conversaId: conversaSelecionada?.id || null,
     alunoId: alunoSelecionado?.id || null,
     remetenteNome: usuario?.nome || usuario?.apelido || 'Admin',
@@ -131,6 +131,7 @@ export function CaixaEntradaTab({ unidadeId, departamento = 'administrativo', mu
             onEnviarMensagem={enviarMensagem}
             onEnviarMidia={enviarMidia}
             onApagarMensagem={apagarMensagem}
+            onEditarMensagem={editarMensagem}
             contexto={departamento}
           />
         ) : (

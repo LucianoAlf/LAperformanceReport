@@ -64,6 +64,7 @@ export interface AdminMensagem {
   whatsapp_message_id: string | null;
   reacoes?: { emoji: string; de: string; timestamp?: number }[];
   deletada?: boolean;
+  editada?: boolean;
   created_at: string;
 }
 
