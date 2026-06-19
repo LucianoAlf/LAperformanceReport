@@ -36,6 +36,16 @@ async function downloadMedia(
   }
 }
 
+// Tipos de mídia que precisam de URL persistente (a URL crua do WhatsApp é
+// criptografada/expira). Se a URL já for do servidor UAZAPI, não precisa rebaixar.
+const TIPOS_MIDIA = ['imagem', 'audio', 'video', 'documento', 'sticker'];
+function precisaBaixarMidia(tipo: string, url: string | null): boolean {
+  if (!TIPOS_MIDIA.includes(tipo)) return false;
+  if (!url) return true;
+  // URL crua do WhatsApp (expira) ou criptografada → rebaixar
+  return /whatsapp\.net|\.enc(\?|$)/i.test(url);
+}
+
 // Extrair numero limpo do JID ou remoteJid
 function extractPhone(jidOrPhone: string): string {
   if (!jidOrPhone) return '';
@@ -613,13 +623,13 @@ async function processAdminMessage(
   // Detectar tipo de mensagem
   const { tipo, conteudo, midia_url, midia_mimetype, midia_nome } = detectMessageType(msg);
 
-  // Baixar mídia persistente para stickers (URL do WhatsApp é criptografada e expira)
+  // Baixar mídia persistente (URL crua do WhatsApp é criptografada e expira)
   let midiaUrlFinal = midia_url;
-  if (tipo === 'sticker' && whatsappMessageId && uazapiCreds) {
+  if (precisaBaixarMidia(tipo, midia_url) && whatsappMessageId && uazapiCreds) {
     const persistentUrl = await downloadMedia(whatsappMessageId, uazapiCreds);
     if (persistentUrl) {
       midiaUrlFinal = persistentUrl;
-      console.log(`[webhook-admin] Sticker baixado: ${persistentUrl.substring(0, 80)}...`);
+      console.log(`[webhook-admin] Mídia (${tipo}) baixada: ${persistentUrl.substring(0, 80)}...`);
     }
   }
 
@@ -720,13 +730,13 @@ async function processExternalAdminMessage(
   // Detectar tipo de mensagem
   const { tipo, conteudo, midia_url, midia_mimetype, midia_nome } = detectMessageType(msg);
 
-  // Baixar mídia persistente para stickers (URL do WhatsApp é criptografada e expira)
+  // Baixar mídia persistente (URL crua do WhatsApp é criptografada e expira)
   let midiaUrlFinal = midia_url;
-  if (tipo === 'sticker' && whatsappMessageId && uazapiCreds) {
+  if (precisaBaixarMidia(tipo, midia_url) && whatsappMessageId && uazapiCreds) {
     const persistentUrl = await downloadMedia(whatsappMessageId, uazapiCreds);
     if (persistentUrl) {
       midiaUrlFinal = persistentUrl;
-      console.log(`[webhook-admin] Sticker externo baixado: ${persistentUrl.substring(0, 80)}...`);
+      console.log(`[webhook-admin] Mídia externa (${tipo}) baixada: ${persistentUrl.substring(0, 80)}...`);
     }
   }
 
@@ -1043,13 +1053,13 @@ serve(async (req: Request) => {
         // Detectar tipo de mensagem
         const { tipo, conteudo, midia_url, midia_mimetype, midia_nome } = detectMessageType(msg);
 
-        // Baixar mídia persistente para stickers (URL do WhatsApp é criptografada e expira)
+        // Baixar mídia persistente (URL crua do WhatsApp é criptografada e expira)
         let midiaUrlFinal = midia_url;
-        if (tipo === 'sticker' && whatsappMessageId && uazapiCreds) {
+        if (precisaBaixarMidia(tipo, midia_url) && whatsappMessageId && uazapiCreds) {
           const persistentUrl = await downloadMedia(whatsappMessageId, uazapiCreds);
           if (persistentUrl) {
             midiaUrlFinal = persistentUrl;
-            console.log(`[webhook-inbox] Sticker CRM baixado: ${persistentUrl.substring(0, 80)}...`);
+            console.log(`[webhook-inbox] Mídia CRM (${tipo}) baixada: ${persistentUrl.substring(0, 80)}...`);
           }
         }
 
