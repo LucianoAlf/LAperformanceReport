@@ -3,12 +3,14 @@ import { Phone, Calendar, UserPlus, Percent, DollarSign, TrendingUp, Archive, XC
 import { KPICard } from '@/components/ui/KPICard';
 import { FunnelChart } from '@/components/ui/FunnelChart';
 import { DistributionChart } from '@/components/ui/DistributionChart';
+import { EvolutionChart } from '@/components/ui/EvolutionChart';
 import { RankingTable } from '@/components/ui/RankingTable';
 import { formatCurrency, getMesNomeCurto } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { useMetasKPI } from '@/hooks/useMetasKPI';
 import { getCompetenciaAbertaAlertCopy, useCompetenciaMensalStatus } from '@/hooks/useCompetenciaMensalStatus';
+import { fetchComercialOperacionalResumoV2 } from '@/hooks/useComercialOperacionalResumoV2';
 
 interface TabComercialProps {
   ano: number;
@@ -33,6 +35,7 @@ interface DadosComercial {
   taxa_conversao_lead_exp: number;
   leads_por_canal: { name: string; value: number }[];
   leads_por_curso: { name: string; value: number }[];
+  leads_serie_mensal: { name: string; leads: number }[];
   motivos_arquivamento: { name: string; value: number }[];
   
   // Experimentais
@@ -114,6 +117,20 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
         const currentYear = currentDate.getFullYear();
         const currentMonth = currentDate.getMonth() + 1;
         const isHistorico = ano < currentYear || (ano === currentYear && mesFinal < currentMonth);
+        const resumoLeadsV2 = await fetchComercialOperacionalResumoV2({
+          unidadeId: unidade,
+          ano,
+          mesInicio,
+          mesFim: mesFinal,
+        });
+        const leadsPorCanalV2 = resumoLeadsV2.origemCanal.map((item) => ({
+          name: item.canal,
+          value: item.leads,
+        }));
+        const leadsSerieMensalV2 = resumoLeadsV2.seriesMensais.map((item) => ({
+          name: getMesNomeCurto(item.mes),
+          leads: item.leadsEntrantes,
+        }));
 
         // ========== BUSCAR DADOS COMPARATIVOS (Mês Anterior e Ano Anterior) ==========
         const mesAnterior = mes === 1 ? 12 : mes - 1;
@@ -306,7 +323,8 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           const cursosMat = cursosMatResult.data || [];
 
           // Consolidar dados históricos
-          const totalLeads = historico.reduce((acc, h) => acc + (h.total_leads || 0), 0);
+          const totalLeadsLegado = historico.reduce((acc, h) => acc + (h.total_leads || 0), 0);
+          const totalLeads = resumoLeadsV2.leadsEntrantes;
           const expRealizadas = historico.reduce((acc, h) => acc + (h.experimentais_realizadas || 0), 0);
           const novasMatriculas = historico.reduce((acc, h) => acc + (h.novas_matriculas_total || 0), 0);
           const matriculasLamk = historico.reduce((acc, h) => acc + (h.novas_matriculas_lamk || 0), 0);
@@ -320,11 +338,9 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           const faturamentoPassaportes = historico.reduce((acc, h) => acc + (Number(h.faturamento_passaporte) || 0), 0);
 
           // Processar origem dos leads
-          const leadsCanaisMap = new Map<string, number>();
           const expCanaisMap = new Map<string, number>();
           const matCanaisMap = new Map<string, number>();
           origemLeads.forEach(o => {
-            if (o.tipo === 'leads') leadsCanaisMap.set(o.canal, (leadsCanaisMap.get(o.canal) || 0) + (o.quantidade || 0));
             if (o.tipo === 'experimentais') expCanaisMap.set(o.canal, (expCanaisMap.get(o.canal) || 0) + (o.quantidade || 0));
             if (o.tipo === 'matriculas') matCanaisMap.set(o.canal, (matCanaisMap.get(o.canal) || 0) + (o.quantidade || 0));
           });
@@ -349,9 +365,10 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             total_leads: totalLeads,
             leads_arquivados: 0, // Não disponível no histórico
             leads_ativos: totalLeads,
-            taxa_conversao_lead_exp: totalLeads > 0 ? (expRealizadas / totalLeads) * 100 : 0,
-            leads_por_canal: Array.from(leadsCanaisMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+            taxa_conversao_lead_exp: totalLeadsLegado > 0 ? (expRealizadas / totalLeadsLegado) * 100 : 0,
+            leads_por_canal: leadsPorCanalV2,
             leads_por_curso: [], // Não disponível no histórico
+            leads_serie_mensal: leadsSerieMensalV2,
             motivos_arquivamento: [], // Não disponível no histórico
             
             // Experimentais
@@ -455,20 +472,14 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
         const matriculas = matriculasData || [];
 
         // Processar Leads
-        const totalLeads = leads.reduce((acc, l) => acc + (l.quantidade || 1), 0);
+        const totalLeadsLegado = leads.reduce((acc, l) => acc + (l.quantidade || 1), 0);
+        const totalLeads = resumoLeadsV2.leadsEntrantes;
         const leadsArquivados = leads.filter(l => l.arquivado === true).reduce((acc, l) => acc + (l.quantidade || 1), 0);
         const expMarcadas = leads.filter(l => l.status === 'experimental_agendada').reduce((acc, l) => acc + (l.quantidade || 1), 0);
         // REGRA DE NEGÓCIO: Exp/Visita = realizada + visita_escola (não inclui agendada/faltou)
         const expRealizadas = leads.filter(l => ['experimental_realizada','compareceu','visita_escola'].includes(l.status)).reduce((acc, l) => acc + (l.quantidade || 1), 0);
         const faltaram = leads.filter(l => l.status === 'experimental_faltou').reduce((acc, l) => acc + (l.quantidade || 1), 0);
         const novasMatriculas = leads.filter(l => ['matriculado','convertido'].includes(l.status)).reduce((acc, l) => acc + (l.quantidade || 1), 0) || matriculas.length;
-
-        // Leads por Canal
-        const canaisMap = new Map<string, number>();
-        leads.forEach(l => {
-          const canal = (l.canais_origem as any)?.nome || 'Outros';
-          canaisMap.set(canal, (canaisMap.get(canal) || 0) + (l.quantidade || 1));
-        });
 
         // Leads por Curso
         const cursosLeadMap = new Map<string, number>();
@@ -578,10 +589,11 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           // Leads
           total_leads: totalLeads,
           leads_arquivados: leadsArquivados,
-          leads_ativos: totalLeads - leadsArquivados - expMarcadas,
-          taxa_conversao_lead_exp: totalLeads > 0 ? (expRealizadas / totalLeads) * 100 : 0,
-          leads_por_canal: Array.from(canaisMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+          leads_ativos: totalLeadsLegado - leadsArquivados - expMarcadas,
+          taxa_conversao_lead_exp: totalLeadsLegado > 0 ? (expRealizadas / totalLeadsLegado) * 100 : 0,
+          leads_por_canal: leadsPorCanalV2,
           leads_por_curso: Array.from(cursosLeadMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+          leads_serie_mensal: leadsSerieMensalV2,
           motivos_arquivamento: Array.from(motivosArqMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
           
           // Experimentais
@@ -704,7 +716,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             <KPICard
               icon={Phone}
-              label="Total Leads"
+              label="Leads Entrantes"
               value={dados.total_leads}
               target={metas.leads}
               format="number"
@@ -734,6 +746,24 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
               variant="violet"
             />
           </div>
+
+          <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-4 flex items-start gap-3">
+            <Info className="w-5 h-5 text-cyan-300 flex-shrink-0 mt-0.5" />
+            <p className="text-cyan-100 text-sm">
+              <strong>Fonte canônica v2:</strong> Leads Entrantes, Leads por Canal e Série Mensal.
+              Arquivados, ativos, curso de interesse e conversão Lead → Exp seguem como legado/pendente.
+            </p>
+          </div>
+
+          {dados.leads_serie_mensal.length > 0 && (
+            <EvolutionChart
+              data={dados.leads_serie_mensal}
+              lines={[
+                { dataKey: 'leads', color: '#06b6d4', name: 'Leads Entrantes' },
+              ]}
+              title="Série Mensal de Leads Entrantes"
+            />
+          )}
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {dados.leads_por_canal.length > 0 ? (

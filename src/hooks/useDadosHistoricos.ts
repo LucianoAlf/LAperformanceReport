@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { DadosAtuais, DadosHistoricos } from '@/lib/simulador/tipos';
 import { fetchKPIsAlunosCanonicos } from '@/hooks/useKPIsAlunosCanonicos';
 import { isRenovacaoConfirmadaOperacional } from '@/lib/retencaoOperacionalCanonica';
+import { fetchComercialOperacionalResumoV2 } from '@/hooks/useComercialOperacionalResumoV2';
 
 interface UseDadosHistoricosResult {
   dadosAtuais: DadosAtuais | null;
@@ -99,6 +100,13 @@ export function useDadosHistoricos(
           console.error('Erro ao buscar histórico comercial:', errorComercial);
         }
 
+        const resumoComercialV2 = await fetchComercialOperacionalResumoV2({
+          unidadeId,
+          ano: ano - 1,
+          mesInicio: 1,
+          mesFim: 12,
+        });
+
         // Buscar nome da unidade primeiro
         const { data: unidadeData } = await supabase
           .from('unidades')
@@ -145,13 +153,14 @@ export function useDadosHistoricos(
           const mediaEvasoes = historicoGestao.reduce((sum, h) => sum + (h.evasoes || 0), 0) / mesesAnalisados;
           
           // Calcular médias comerciais
-          let mediaLeads = 0;
+          let mediaLeads = resumoComercialV2.seriesMensais.length > 0
+            ? resumoComercialV2.leadsEntrantes / resumoComercialV2.seriesMensais.length
+            : 0;
           let mediaExperimentais = 0;
           let mediaMatriculas = 0;
           
           if (historicoComercial && historicoComercial.length > 0) {
             // Campos corretos da view vw_kpis_comercial_historico
-            mediaLeads = historicoComercial.reduce((sum, h) => sum + (h.total_leads || 0), 0) / historicoComercial.length;
             mediaExperimentais = historicoComercial.reduce((sum, h) => sum + (h.experimentais_realizadas || 0), 0) / historicoComercial.length;
             mediaMatriculas = historicoComercial.reduce((sum, h) => sum + (h.novas_matriculas_total || 0), 0) / historicoComercial.length;
           } else {
