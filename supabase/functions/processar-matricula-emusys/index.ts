@@ -1,7 +1,17 @@
 /// <reference lib="deno.ns" />
 
-// Edge Function: processar-matricula-emusys v20
+// Edge Function: processar-matricula-emusys v22
 // Processa webhooks de matrícula do Emusys: nova, renovação, trancamento, evasão
+//
+// MUDANÇAS v22 (2026-06-17):
+// - handleRenovacao agora incrementa alunos.numero_renovacoes (campo antes nunca era escrito,
+//   ficava sempre 0 mesmo após renovar). Incremento condicionado a NÃO ser reentrega do webhook
+//   (dedup por aluno+unidade+competência já existente) para não inflar o contador. Sem backfill.
+//
+// MUDANÇAS v21 (2026-06-17):
+// - handleMatriculaNova dispara a edge enviar-boas-vindas-matricula ao final (gatilho de
+//   produção). Roda só em matricula_nova; idempotência por id_externo (emusys_matricula_id)
+//   na própria edge de boas-vindas. try/catch isolado: falha de WhatsApp não derruba a matrícula.
 //
 // MUDANÇAS v18 (2026-05-21):
 // - Corrige falsos positivos nas invariantes checarMatricula/Renovacao/Trancamento/Finalizacao
@@ -55,7 +65,7 @@ import {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-const VERSAO = 'v20';
+const VERSAO = 'v22';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -673,6 +683,34 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
       execution_id: new Date().toISOString(),
     });
 
+    // Dispara boas-vindas de matrícula nova pela caixa Sucesso do Aluno.
+    // Só roda em matricula_nova (este handler). Idempotente por id_externo na própria
+    // edge (boas_vindas_enviadas), então reprocessamento do webhook não duplica.
+    // try/catch isolado: falha de WhatsApp não pode derrubar o processamento da matrícula.
+    try {
+      const respBV = await fetch(`${SUPABASE_URL}/functions/v1/enviar-boas-vindas-matricula`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        },
+        body: JSON.stringify({
+          telefone_responsavel: p.telefoneResponsavel || p.telefoneAluno,
+          nome_responsavel: p.nomeResponsavel,
+          nome_aluno: p.nomeAluno,
+          nome_professor: p.professorNome,
+          nome_curso: p.nomeCurso,
+          unidade: p.unidadeNome,
+          id_externo: p.matriculaIdEmusys,
+          tipo: 'matricula',
+        }),
+      });
+      const dataBV = await respBV.json().catch(() => ({}));
+      console.log(`[${VERSAO}] boas-vindas matricula_nova aluno=${p.nomeAluno} ok=${respBV.ok}`, dataBV?.ignorado ? '(ja enviada)' : (dataBV?.error || ''));
+    } catch (e: any) {
+      console.error(`[${VERSAO}] Falha ao disparar boas-vindas:`, e?.message ?? e);
+    }
+
     return result;
   } catch (e: any) {
     await gravarLog(supabase, {
@@ -745,11 +783,23 @@ async function handleRenovacao(supabase: any, p: Payload) {
 
     await backfillMatriculaId(supabase, aluno.id, p.matriculaIdEmusys, aluno.emusys_matricula_id);
 
+    // Dedup: ja existe renovacao para este aluno/unidade/competencia? (protege contra reentrega de webhook)
+    const inicioMes = classificacaoCompetencia.competenciaReferencia;
+    const { data: existente } = await supabase.from('renovacoes')
+      .select('id')
+      .eq('aluno_id', aluno.id)
+      .eq('unidade_id', p.unidadeId)
+      .eq('data_renovacao', inicioMes)
+      .limit(1);
+    const renovacaoDuplicada = !!existente?.length;
+
     const alunoUpdate: any = {
       status: 'ativo',
       data_ultima_renovacao: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
+    // Incrementa o contador so na 1a vez — idempotente, nao infla em reentrega do webhook
+    if (!renovacaoDuplicada) alunoUpdate.numero_renovacoes = (aluno.numero_renovacoes ?? 0) + 1;
     if (professorId) alunoUpdate.professor_atual_id = professorId;
     if (cursoId) alunoUpdate.curso_id = cursoId;
     if (p.diaAula) alunoUpdate.dia_aula = p.diaAula;
@@ -761,16 +811,8 @@ async function handleRenovacao(supabase: any, p: Payload) {
 
     await supabase.from('alunos').update(alunoUpdate).eq('id', aluno.id);
 
-    const inicioMes = classificacaoCompetencia.competenciaReferencia;
-    const { data: existente } = await supabase.from('renovacoes')
-      .select('id')
-      .eq('aluno_id', aluno.id)
-      .eq('unidade_id', p.unidadeId)
-      .eq('data_renovacao', inicioMes)
-      .limit(1);
-
     let renovacaoLegadaPendente = false;
-    if (!existente?.length) {
+    if (!renovacaoDuplicada) {
       await supabase.from('renovacoes').insert({
         aluno_id: aluno.id,
         unidade_id: p.unidadeId,

@@ -1,0 +1,245 @@
+// @ts-nocheck
+import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+const DEPARTAMENTO = 'sucesso_aluno';
+
+const TEXTO_MENSAGEM = 'Me conta como foi sua primeira aula na LA?';
+const FOOTER_MENSAGEM = 'Sua opinião ajuda a gente a cuidar melhor da sua jornada musical desde o começo.';
+
+// Formato UAZAPI /send/menu com type=button: choices = ["label|id", ...]
+const CHOICES = [
+  '⭐ Esperava mais|esperava_mais',
+  '⭐⭐⭐ Foi ok|foi_ok',
+  '⭐⭐⭐⭐⭐ Amei|amei',
+];
+
+const OPCOES_INTERATIVO = [
+  { id: 'esperava_mais', label: '⭐ Esperava mais' },
+  { id: 'foi_ok',        label: '⭐⭐⭐ Foi ok' },
+  { id: 'amei',          label: '⭐⭐⭐⭐⭐ Amei' },
+];
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+};
+
+async function enviarBotoes(baseUrl, token, numero) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 45000);
+  try {
+    const body = {
+      number: numero,
+      type: 'button',
+      text: TEXTO_MENSAGEM,
+      footerText: FOOTER_MENSAGEM,
+      choices: CHOICES,
+      delay: 500,
+      readchat: true,
+    };
+    const resp = await fetch(`${baseUrl}/send/menu`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', token },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+    const data = await resp.json().catch(() => ({}));
+    const messageId = data.id || data.messageid || data.key?.id || null;
+    return { ok: resp.ok && !data.error, data, messageId };
+  } catch (e) {
+    return { ok: false, data: { error: e instanceof Error ? e.message : String(e) }, messageId: null };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function registrarNaCaixa(supabase, { alunoId, unidadeId, jid, caixaId, messageId, status }) {
+  try {
+    let conversaId = null;
+
+    const { data: conv } = await supabase
+      .from('admin_conversas')
+      .select('id')
+      .eq('aluno_id', alunoId)
+      .eq('departamento', DEPARTAMENTO)
+      .maybeSingle();
+
+    if (conv) {
+      conversaId = conv.id;
+    } else {
+      const { data: nova } = await supabase
+        .from('admin_conversas')
+        .insert({
+          aluno_id: alunoId,
+          unidade_id: unidadeId,
+          departamento: DEPARTAMENTO,
+          caixa_id: caixaId,
+          whatsapp_jid: jid,
+          status: 'aberta',
+        })
+        .select('id')
+        .single();
+      conversaId = nova?.id || null;
+    }
+
+    if (!conversaId) return;
+
+    const conteudoInterativo = JSON.stringify({
+      texto: TEXTO_MENSAGEM,
+      opcoes: OPCOES_INTERATIVO,
+    });
+
+    await supabase.from('admin_mensagens').insert({
+      conversa_id: conversaId,
+      aluno_id: alunoId,
+      direcao: 'saida',
+      tipo: 'interativo',
+      conteudo: conteudoInterativo,
+      remetente: 'admin',
+      remetente_nome: 'Sol',
+      status_entrega: status,
+      whatsapp_message_id: messageId || null,
+    });
+
+    await supabase.from('admin_conversas')
+      .update({
+        ultima_mensagem_at: new Date().toISOString(),
+        ultima_mensagem_preview: TEXTO_MENSAGEM,
+        whatsapp_jid: jid,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', conversaId);
+  } catch (e) {
+    console.error('[enviar-pesquisa] erro ao registrar na caixa:', e);
+  }
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+
+  try {
+    const { alunos } = await req.json();
+    if (!Array.isArray(alunos) || alunos.length === 0) {
+      return new Response(JSON.stringify({ error: 'alunos obrigatorio e nao pode ser vazio' }), {
+        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    const resultados = [];
+
+    // Agrupar por unidade para minimizar lookups de caixa
+    const porUnidade = {};
+    for (const aluno of alunos) {
+      if (!porUnidade[aluno.unidade_id]) porUnidade[aluno.unidade_id] = [];
+      porUnidade[aluno.unidade_id].push(aluno);
+    }
+
+    for (const [unidadeId, grupo] of Object.entries(porUnidade)) {
+      let caixa = null;
+
+      const { data: caixaUnidade } = await supabase
+        .from('whatsapp_caixas')
+        .select('id, uazapi_url, uazapi_token')
+        .eq('departamento', DEPARTAMENTO)
+        .eq('unidade_id', unidadeId)
+        .eq('ativo', true)
+        .maybeSingle();
+
+      if (caixaUnidade) {
+        caixa = caixaUnidade;
+      } else {
+        const { data: caixaGeral } = await supabase
+          .from('whatsapp_caixas')
+          .select('id, uazapi_url, uazapi_token')
+          .eq('departamento', DEPARTAMENTO)
+          .eq('ativo', true)
+          .limit(1)
+          .maybeSingle();
+        caixa = caixaGeral;
+      }
+
+      if (!caixa) {
+        for (const a of grupo) {
+          resultados.push({ aluno_id: a.aluno_id, ok: false, erro: 'caixa_sucesso_aluno_nao_encontrada' });
+        }
+        continue;
+      }
+
+      let baseUrl = caixa.uazapi_url || '';
+      if (baseUrl && !baseUrl.startsWith('http')) baseUrl = 'https://' + baseUrl;
+      baseUrl = baseUrl.replace(/\/+$/, '');
+      const token = caixa.uazapi_token;
+
+      for (let i = 0; i < grupo.length; i++) {
+        if (i > 0) await new Promise(r => setTimeout(r, 10000));
+        const aluno = grupo[i];
+        const { aluno_id, unidade_id, whatsapp_jid, data_matricula } = aluno;
+
+        if (!whatsapp_jid) {
+          resultados.push({ aluno_id, ok: false, erro: 'sem_contato' });
+          continue;
+        }
+
+        // Upsert idempotente — reutiliza linha de tentativa anterior
+        const { error: upsertErr } = await supabase
+          .from('pesquisas_whatsapp')
+          .upsert(
+            { aluno_id, unidade_id, tipo: 'pos_primeira_aula', data_matricula, enviado_ok: false, erro_detalhes: null },
+            { onConflict: 'aluno_id,tipo,data_matricula' }
+          );
+
+        if (upsertErr) {
+          console.error('[enviar-pesquisa] upsert erro:', upsertErr);
+          resultados.push({ aluno_id, ok: false, erro: upsertErr.message });
+          continue;
+        }
+
+        const numero = whatsapp_jid.replace('@s.whatsapp.net', '');
+        const resultado = await enviarBotoes(baseUrl, token, numero);
+
+        if (resultado.ok) {
+          await supabase
+            .from('pesquisas_whatsapp')
+            .update({ enviado_ok: true, enviado_em: new Date().toISOString(), remote_jid: whatsapp_jid })
+            .eq('aluno_id', aluno_id)
+            .eq('tipo', 'pos_primeira_aula')
+            .eq('data_matricula', data_matricula);
+
+          await registrarNaCaixa(supabase, {
+            alunoId: aluno_id,
+            unidadeId: unidade_id,
+            jid: whatsapp_jid,
+            caixaId: caixa.id,
+            messageId: resultado.messageId,
+            status: 'enviada',
+          });
+
+          resultados.push({ aluno_id, ok: true });
+        } else {
+          await supabase
+            .from('pesquisas_whatsapp')
+            .update({ erro_detalhes: JSON.stringify(resultado.data) })
+            .eq('aluno_id', aluno_id)
+            .eq('tipo', 'pos_primeira_aula')
+            .eq('data_matricula', data_matricula);
+
+          resultados.push({ aluno_id, ok: false, erro: resultado.data?.error || 'falha_envio' });
+        }
+      }
+    }
+
+    return new Response(JSON.stringify({ resultados }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  } catch (error) {
+    console.error('[enviar-pesquisa] erro:', error);
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Erro interno' }), {
+      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+});

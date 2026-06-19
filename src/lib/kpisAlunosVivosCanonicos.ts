@@ -1,6 +1,7 @@
 import { supabase } from '@/lib/supabase';
 import { percentualReajusteMedioCanonico } from '@/lib/retencaoOperacionalCanonica';
 import { isCompetenciaNoPeriodo } from '@/lib/renovacoesAntecipadas';
+import { isAtividadeExtraAcademica } from '@/lib/atividadesExtras';
 
 export interface KPIsAlunosVivosPorUnidade {
   unidade_id: string;
@@ -142,7 +143,8 @@ function isBanda(row: AlunoRow): boolean {
 }
 
 function isCoral(row: AlunoRow): boolean {
-  return String(cursoRow(row)?.nome || '').toLowerCase().includes('canto coral');
+  const curso = cursoRow(row);
+  return String(curso?.nome || '').toLowerCase().includes('canto coral');
 }
 
 function isSegundoCursoExecutivo(row: AlunoRow): boolean {
@@ -296,6 +298,7 @@ export function calcularKPIsAlunosVivosCanonicos(
         .filter(mov => String(mov.unidade_id || '') === unidadeId)
         .filter(mov => mov.data && mov.data >= inicioMes && mov.data <= dataCorte)
         .filter(mov => mov.tipo === 'evasao' || mov.tipo === 'nao_renovacao')
+        .filter(mov => !isAtividadeExtraAcademica(mov))
         .map(mov => mov.aluno_id ? String(mov.aluno_id) : String(mov.aluno_nome || '').trim().toLowerCase())
         .filter(Boolean)
     );

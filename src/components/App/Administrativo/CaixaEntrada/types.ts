@@ -42,7 +42,7 @@ export interface AdminConversa {
 }
 
 // Mensagem administrativa
-export type TipoMensagemAdmin = 'texto' | 'imagem' | 'audio' | 'video' | 'documento' | 'sticker' | 'sistema';
+export type TipoMensagemAdmin = 'texto' | 'imagem' | 'audio' | 'video' | 'documento' | 'sticker' | 'sistema' | 'interativo';
 export type DirecaoMensagem = 'entrada' | 'saida';
 export type RemetenteAdmin = 'aluno' | 'admin' | 'sistema' | 'externo';
 export type StatusEntrega = 'enviando' | 'enviada' | 'entregue' | 'lida' | 'erro';
@@ -63,6 +63,8 @@ export interface AdminMensagem {
   erro_motivo?: string;
   whatsapp_message_id: string | null;
   reacoes?: { emoji: string; de: string; timestamp?: number }[];
+  deletada?: boolean;
+  editada?: boolean;
   created_at: string;
 }
 

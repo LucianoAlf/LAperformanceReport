@@ -49,6 +49,7 @@ export interface TemplateWhatsApp {
   conteudo: string;
   tipo: string;
   ativo: boolean;
+  contexto: string;
 }
 
 // Meta da Andreza por unidade/mês

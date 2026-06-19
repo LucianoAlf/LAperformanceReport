@@ -30,6 +30,8 @@ import { useMetasKPI } from '@/hooks/useMetasKPI';
 import { KPICard } from '@/components/ui/KPICard';
 import { ModalDetalheKPI, BadgeUnidade, BadgeTipo, ValorParcela, TextoCurso } from './ModalDetalheKPI';
 import { fetchKPIsAlunosCanonicos, type FonteKPIAlunos } from '@/hooks/useKPIsAlunosCanonicos';
+import { useComercialOperacionalResumoV2 } from '@/hooks/useComercialOperacionalResumoV2';
+import { filtrarRetencaoCanonica } from '@/lib/atividadesExtras';
 
 
 interface OutletContextType {
@@ -153,6 +155,16 @@ export function DashboardPage() {
   const setSemestre = competencia?.setSemestre;
   const setDataInicio = competencia?.setDataInicio;
   const setDataFim = competencia?.setDataFim;
+  const {
+    leadsEntrantes: leadsComercialV2,
+    loading: loadingLeadsComercialV2,
+    error: errorLeadsComercialV2,
+  } = useComercialOperacionalResumoV2({
+    unidadeId: unidade,
+    ano,
+    mesInicio,
+    mesFim,
+  });
 
   // Fetch matrículas do período para o modal
   const fetchMatriculas = async () => {
@@ -208,8 +220,9 @@ export function DashboardPage() {
       let query = supabase
         .from('movimentacoes_admin')
         .select(`
-          aluno_nome, data, motivo, tipo,
-          unidades:unidade_id!inner(nome)
+          aluno_nome, data, motivo, tipo, curso_id,
+          unidades:unidade_id!inner(nome),
+          cursos:curso_id!left(nome, is_projeto_banda)
         `)
         .in('tipo', ['evasao', 'nao_renovacao'])
         .gte('data', dataInicio)
@@ -221,7 +234,7 @@ export function DashboardPage() {
       }
 
       const { data } = await query;
-      setDadosModalEvasoes((data || []).map((m: any) => ({
+      setDadosModalEvasoes(filtrarRetencaoCanonica(data || []).map((m: any) => ({
         nome: m.aluno_nome || '—',
         unidade: m.unidades?.nome || '—',
         data_evasao: m.data ? new Date(m.data + 'T12:00:00').toLocaleDateString('pt-BR') : '—',
@@ -505,7 +518,7 @@ export function DashboardPage() {
         // Buscar renovações e não renovações de movimentacoes_admin (fonte de verdade)
         let renovacoesQuery = supabase
           .from('movimentacoes_admin')
-          .select('tipo, unidade_id')
+          .select('tipo, unidade_id, curso_id, cursos:curso_id!left(nome, is_projeto_banda)')
           .in('tipo', ['renovacao', 'nao_renovacao'])
           .gte('data', startDate)
           .lte('data', endDate);
@@ -584,8 +597,9 @@ export function DashboardPage() {
 
         // Taxa de renovação: usar movimentacoes_admin (fonte de verdade)
         if (renovacoesData && renovacoesData.length > 0) {
-          const totalRenovacoes = renovacoesData.filter((r: any) => r.tipo === 'renovacao').length;
-          const totalContratos = renovacoesData.length; // renovacao + nao_renovacao
+          const renovacoesCanonicas = filtrarRetencaoCanonica(renovacoesData);
+          const totalRenovacoes = renovacoesCanonicas.filter((r: any) => r.tipo === 'renovacao').length;
+          const totalContratos = renovacoesCanonicas.length; // renovacao + nao_renovacao sem atividades extras
           taxaRenovacao = totalContratos > 0 ? (totalRenovacoes / totalContratos) * 100 : 0;
         } else if (performanceData && performanceData.length > 0) {
           // Fallback: professores_performance (dados históricos)
@@ -843,10 +857,16 @@ export function DashboardPage() {
             icon={Phone}
             label={`Leads (${labelPeriodo})`}
             tooltip="Total de novos leads (contatos) recebidos no período. Inclui leads novos e agendados."
-            value={dadosComercial?.leads_mes ?? '--'}
+            value={loadingLeadsComercialV2 ? '--' : leadsComercialV2 ?? '--'}
             target={metas.leads}
             format="number"
-            subvalue={!dadosComercial ? 'Aguardando dados' : undefined}
+            subvalue={
+              errorLeadsComercialV2
+                ? 'Erro na fonte v2'
+                : loadingLeadsComercialV2
+                  ? 'Aguardando fonte v2'
+                  : 'Fonte v2'
+            }
             variant="cyan"
           />
           <KPICard

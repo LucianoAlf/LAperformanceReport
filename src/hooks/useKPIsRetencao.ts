@@ -10,6 +10,7 @@ import {
   type MovimentacaoRetencaoRow,
   type RetencaoOperacionalPorUnidade,
 } from '@/lib/retencaoOperacionalCanonica';
+import { filtrarRetencaoCanonica } from '@/lib/atividadesExtras';
 
 export interface KPIsRetencao extends RetencaoOperacionalPorUnidade {}
 
@@ -61,7 +62,8 @@ async function fetchMovimentacoesRetencao(
     valor_parcela_evasao, valor_parcela_anterior, valor_parcela_novo,
     tempo_permanencia_meses,
     forma_pagamento_id, agente_comercial,
-    tipo_evasao, motivo, observacoes, professor_id
+    tipo_evasao, motivo, observacoes, professor_id, curso_id,
+    cursos:curso_id!left(nome, is_projeto_banda)
   `;
 
   let query = supabase
@@ -111,10 +113,12 @@ async function fetchMovimentacoesRetencao(
     alunosMap = new Map((alunosData || []).map((aluno: any) => [String(aluno.id), aluno]));
   }
 
-  return movimentacoes.map(row => aplicarFallbacksRetencao({
+  const enriquecidas = movimentacoes.map(row => aplicarFallbacksRetencao({
     ...row,
     alunos: row.aluno_id ? alunosMap.get(String(row.aluno_id)) || null : null,
   }));
+
+  return filtrarRetencaoCanonica(enriquecidas) as MovimentacaoRetencaoRow[];
 }
 
 function rowsFromSnapshot(canonical: Awaited<ReturnType<typeof fetchKPIsAlunosCanonicos>>): KPIsRetencao[] {
@@ -207,6 +211,7 @@ export function useKPIsRetencao(
       setIsLoading(false);
     }
   }, [unidadeId, currentYear, currentMonth]);
+
 
   useEffect(() => {
     fetchData();

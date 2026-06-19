@@ -115,5 +115,7 @@
       "mcp__obsidian__list_allowed_directories",
       "Bash(wmic process *)"
     ]
-  }
+  },
+  "disabledMcpjsonServers": [],
+  "enableAllProjectMcpServers": true
 }

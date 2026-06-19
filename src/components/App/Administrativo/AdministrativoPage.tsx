@@ -60,6 +60,7 @@ import {
   isCompetenciaNoPeriodo,
   isRenovacaoAntecipada,
 } from '@/lib/renovacoesAntecipadas';
+import { filtrarRetencaoCanonica } from '@/lib/atividadesExtras';
 
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 
@@ -502,11 +503,12 @@ export function AdministrativoPage() {
       }), {} as any) || {};
 
       // Contar movimentações por tipo
-      const renovacoesTodas = movDataComAlunos?.filter(m => m.tipo === 'renovacao') || [];
+      const movRetencaoCanonicas = filtrarRetencaoCanonica(movDataComAlunos);
+      const renovacoesTodas = movRetencaoCanonicas?.filter(m => m.tipo === 'renovacao') || [];
       const renovacoes = renovacoesTodas.filter(isRenovacaoConfirmadaOperacional);
-      const naoRenovacoes = movDataComAlunos?.filter(m => m.tipo === 'nao_renovacao') || [];
-      const avisosPrevios = movDataComAlunos?.filter(m => m.tipo === 'aviso_previo') || [];
-      const evasoes = movDataComAlunos?.filter(m => m.tipo === 'evasao') || [];
+      const naoRenovacoes = movRetencaoCanonicas?.filter(m => m.tipo === 'nao_renovacao') || [];
+      const avisosPrevios = movRetencaoCanonicas?.filter(m => m.tipo === 'aviso_previo') || [];
+      const evasoes = movRetencaoCanonicas?.filter(m => m.tipo === 'evasao') || [];
       const trancamentos = movDataComAlunos?.filter(m => m.tipo === 'trancamento') || [];
 
       // Enriquecer movimentações com nomes
@@ -993,7 +995,7 @@ export function AdministrativoPage() {
           isCompetenciaAtual={isCompetenciaAtualCaixa}
         />
       ) : mainTab === 'caixa_entrada' ? (
-        <CaixaEntradaTab unidadeId={unidade} />
+        <CaixaEntradaTab unidadeId={unidade} departamento="administrativo" />
       ) : mainTab === 'fideliza' ? (
         <TabProgramaFideliza 
           unidadeSelecionada={unidade} 

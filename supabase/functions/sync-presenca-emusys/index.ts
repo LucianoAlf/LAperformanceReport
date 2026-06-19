@@ -203,7 +203,7 @@ async function reconciliarExperimentaisOrfas(
       // Verificar se já existe registro na lead_experimentais para esse aluno+data
       const { data: expExistente } = await supabase
         .from('lead_experimentais')
-        .select('id, status')
+        .select('id, status, lead_id')
         .eq('nome_aluno', nomeAluno)
         .eq('data_experimental', exp.dataAula)
         .eq('unidade_id', exp.unidadeId)
@@ -219,6 +219,18 @@ async function reconciliarExperimentaisOrfas(
             etapa_pipeline_id: presente ? 7 : 9,
             updated_at: new Date().toISOString()
           }).eq('id', expExistente.id);
+
+          // Propagar para leads (não sobrescrever leads já convertidos/matriculados)
+          if (expExistente.lead_id) {
+            await supabase.from('leads').update({
+              experimental_realizada: presente,
+              faltou_experimental: !presente,
+              status: novoStatus,
+              etapa_pipeline_id: presente ? 7 : 9,
+              updated_at: new Date().toISOString()
+            }).eq('id', expExistente.lead_id)
+              .not('status', 'in', '("convertido","matriculado")');
+          }
         }
         continue;
       }
@@ -275,6 +287,18 @@ async function reconciliarExperimentaisOrfas(
           status,
           etapa_pipeline_id: presente ? 7 : 9,
         });
+
+      if (!error) {
+        // Propagar para leads (não sobrescrever leads já convertidos/matriculados)
+        await supabase.from('leads').update({
+          experimental_realizada: presente,
+          faltou_experimental: !presente,
+          status: novoStatus,
+          etapa_pipeline_id: presente ? 7 : 9,
+          updated_at: new Date().toISOString()
+        }).eq('id', leadId)
+          .not('status', 'in', '("convertido","matriculado")');
+      }
 
       logs.push({
         lead_id: leadId,

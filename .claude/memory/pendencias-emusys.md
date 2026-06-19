@@ -40,6 +40,10 @@ Problemas/limitações **do lado do Emusys** (API ou plataforma) que afetam noss
 
 **Hipótese:** são 2 sistemas de marcação independentes — `turma` = comparecimento físico ("o aluno apareceu na sala?"), `individual` = consumo do contrato ("a aula dele foi contabilizada?").
 
+**Magnitude (medida 2026-06-15, mês 05/2026, todas as unidades):** dos 9.924 registros de presença gravados, só **4.638 aluno+dia reais** — **4.854 pares** `(aluno+dia+curso)` coexistem como `turma` + `individual` (mesma aula 2×). Destes, **920 (19%) têm status divergente** entre as duas visões: 528 com `turma=ausente`/`individual=presente` e 392 com `turma=presente`/`individual=ausente` (≈50/50 — confirma que **nenhuma das visões é a "default ausente"**, a contradição é real dos dois lados). Prova de que nasce na API e não no sync: a mesma aula vem com `emusys_id` distintos (ex. Adriana 02/05: `618137` individual + `515497` turma), e o `sync-presenca-emusys` v31 grava `status` direto de `aluno.presenca` por `emusys_id` — não há lógica que duplique.
+
+**Impacto:** qualquer contagem absoluta (nº de faltas, nº de aulas) sai **dobrada** se ler `aluno_presenca` cru. Workaround no nosso lado: deduplicar por `(aluno_id, data_aula, curso_nome)` adotando a visão `individual` como canônica.
+
 **Solicitação ideal (Emusys):** sincronizar os 2 sistemas de marcação OU manter só um (turma ou individual).
 
 ---
@@ -91,6 +95,24 @@ Problemas/limitações **do lado do Emusys** (API ou plataforma) que afetam noss
 **Limite:** a API não expõe o histórico de contratos, então não dá pra ver **quando** a troca ocorreu — só que as aulas seguem com o curso antigo.
 
 **Solicitação ideal (Emusys):** ao trocar o curso de um contrato, repropagar para a turma/aulas futuras — **ou** expor o curso do **contrato** no payload do `/aulas`, não só o da turma.
+
+---
+
+## 🚨 [API] Aluno aparece em `/aulas` com `presenca: presente` mas sem vínculo via `pessoa_id`
+
+**Identificado em:** 2026-06-18
+
+**Descrição:** O endpoint `/aulas` lista um aluno com `presenca: "presente"` no array `alunos[]`, mas ao filtrar o mesmo endpoint com `pessoa_id` do aluno o resultado é **vazio** (`items: []`). Indica que a aula existe e o nome aparece, mas sem vínculo correto com o cadastro de pessoa. A UI do Emusys, por sua vez, mostra a experimental desse aluno como "não realizada" — três fontes (API sem filtro, API com `pessoa_id`, UI) em estados distintos para o mesmo registro.
+
+**Evidência:**
+- Aluno: Alexandre Vasconcellos de Medeiros — `pessoa_id: 1206`, `emusys_matricula_id: 807` (Barra)
+- Aula: `id: 251901`, `2026-06-17 13:00–14:00`, `categoria: experimental`, `curso: Aula Experimental`, professor Jeyson Gaia Ramos
+- `GET /aulas/?data_hora_inicial=2026-06-17T00:00:00&data_hora_final=2026-06-17T23:59:59` → aula retorna com `aluno.presenca: "presente"` ✅
+- `GET /aulas/?data_hora_inicial=2026-06-17T10:00&data_hora_final=2026-06-17T21:00&pessoa_id=1206` → `items: []` ❌
+- UI Emusys: experimental marcada como "não realizada" ❌
+- **Impacto no nosso sistema:** `sync-presenca-emusys` gravou `aluno_presenca` com `status='presente'` para esse aluno (criado às 01:20 UTC de 18/06), fazendo ele aparecer como "calouro com primeira aula hoje" na pesquisa pós-1ª aula quando não havia realizado nenhuma aula regular.
+
+**Solicitação ideal (Emusys):** garantir consistência entre (a) o que aparece em `alunos[]` no `/aulas` sem filtro, (b) o que retorna ao filtrar por `pessoa_id`, e (c) o status exibido na UI.
 
 ---
 
