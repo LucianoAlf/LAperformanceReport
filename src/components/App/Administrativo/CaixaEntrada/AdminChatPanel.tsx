@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Send, Paperclip, Image, FileText, Music, Video, Loader2, ChevronUp, Check, CheckCheck, Clock, AlertCircle, User, Phone, Mic, X, Play, Pause, Settings } from 'lucide-react';
+import { Send, Paperclip, Image, FileText, Music, Video, Loader2, ChevronUp, Check, CheckCheck, Clock, AlertCircle, User, Phone, Mic, X, Play, Pause, Settings, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -28,6 +28,7 @@ interface AdminChatPanelProps {
   onCarregarMais: () => void;
   onEnviarMensagem: (conteudo: string) => Promise<any>;
   onEnviarMidia: (arquivo: File, tipo: 'imagem' | 'audio' | 'video' | 'documento', caption?: string) => Promise<any>;
+  onApagarMensagem?: (id: string) => void;
   /** Caixa de templates a usar (cada caixa tem suas mensagens prontas). */
   contexto?: string;
 }
@@ -193,9 +194,31 @@ function MidiaRender({ msg, isSaida }: { msg: AdminMensagem; isSaida: boolean })
   return null;
 }
 
-function ChatBubble({ msg }: { msg: AdminMensagem }) {
+function ChatBubble({ msg, onApagar }: { msg: AdminMensagem; onApagar?: (id: string) => void }) {
+  const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
   const isSaida = msg.direcao === 'saida';
   const isSistema = msg.remetente === 'sistema';
+
+  const handleContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setMenuPos({ x: e.clientX, y: e.clientY });
+  }, []);
+
+  const handleApagar = useCallback(() => {
+    setMenuPos(null);
+    onApagar?.(msg.id);
+  }, [msg.id, onApagar]);
+
+  useEffect(() => {
+    if (!menuPos) return;
+    const fechar = () => setMenuPos(null);
+    document.addEventListener('click', fechar);
+    document.addEventListener('contextmenu', fechar);
+    return () => {
+      document.removeEventListener('click', fechar);
+      document.removeEventListener('contextmenu', fechar);
+    };
+  }, [menuPos]);
 
   let interativoData: { texto: string; opcoes: { id: string; label: string }[] } | null = null;
   if (msg.tipo === 'interativo' && msg.conteudo) {
@@ -213,7 +236,23 @@ function ChatBubble({ msg }: { msg: AdminMensagem }) {
   }
 
   return (
-    <div className={cn('flex mb-2', isSaida ? 'justify-end' : 'justify-start')}>
+    <>
+      {menuPos && (
+        <div
+          className="fixed z-50 bg-slate-800 border border-slate-700 rounded-lg shadow-2xl py-1 min-w-[160px]"
+          style={{ top: menuPos.y, left: menuPos.x }}
+          onClick={e => e.stopPropagation()}
+        >
+          <button
+            onClick={handleApagar}
+            className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 transition"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            Apagar mensagem
+          </button>
+        </div>
+      )}
+    <div className={cn('flex mb-2', isSaida ? 'justify-end' : 'justify-start')} onContextMenu={handleContextMenu}>
       <div className={cn(
         'max-w-[70%] rounded-2xl px-3.5 py-2',
         isSaida
@@ -288,6 +327,7 @@ function ChatBubble({ msg }: { msg: AdminMensagem }) {
         )}
       </div>
     </div>
+    </>
   );
 }
 
@@ -301,6 +341,7 @@ export function AdminChatPanel({
   onCarregarMais,
   onEnviarMensagem,
   onEnviarMidia,
+  onApagarMensagem,
   contexto = 'administrativo',
 }: AdminChatPanelProps) {
   const [texto, setTexto] = useState('');
@@ -612,7 +653,7 @@ export function AdminChatPanel({
             <p className="text-xs text-slate-600 mt-1">Envie a primeira mensagem para {aluno?.nome?.split(' ')[0] || conversa.nome_externo?.split(' ')[0] || 'este contato'}</p>
           </div>
         ) : (
-          mensagens.map(msg => <ChatBubble key={msg.id} msg={msg} />)
+          mensagens.map(msg => <ChatBubble key={msg.id} msg={msg} onApagar={onApagarMensagem} />)
         )}
 
         <div ref={messagesEndRef} />

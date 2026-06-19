@@ -282,6 +282,16 @@ export function useAdminMensagens({ conversaId, alunoId, remetenteNome = 'Admin'
     }
   }, [conversaId, alunoId, remetenteNome]);
 
+  const apagarMensagem = useCallback(async (id: string) => {
+    setMensagens(prev => prev.filter(m => m.id !== id));
+    const { error } = await supabase.from('admin_mensagens').delete().eq('id', id);
+    if (error) {
+      console.error('[useAdminMensagens] Erro ao apagar:', error);
+      toast.error('Não foi possível apagar a mensagem');
+      fetchMensagens(0);
+    }
+  }, [fetchMensagens]);
+
   return {
     mensagens,
     loading,
@@ -290,6 +300,7 @@ export function useAdminMensagens({ conversaId, alunoId, remetenteNome = 'Admin'
     carregarMais,
     enviarMensagem,
     enviarMidia,
+    apagarMensagem,
     refetch: () => fetchMensagens(0),
   };
 }
