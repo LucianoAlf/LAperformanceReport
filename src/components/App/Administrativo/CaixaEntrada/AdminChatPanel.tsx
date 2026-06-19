@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { Send, Paperclip, Image, FileText, Music, Video, Loader2, ChevronUp, Check, CheckCheck, Clock, AlertCircle, User, Phone, Mic, X, Play, Pause, Settings, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
@@ -212,11 +213,12 @@ function ChatBubble({ msg, onApagar }: { msg: AdminMensagem; onApagar?: (id: str
   useEffect(() => {
     if (!menuPos) return;
     const fechar = () => setMenuPos(null);
-    document.addEventListener('click', fechar);
-    document.addEventListener('contextmenu', fechar);
+    const t = setTimeout(() => {
+      document.addEventListener('mousedown', fechar);
+    }, 0);
     return () => {
-      document.removeEventListener('click', fechar);
-      document.removeEventListener('contextmenu', fechar);
+      clearTimeout(t);
+      document.removeEventListener('mousedown', fechar);
     };
   }, [menuPos]);
 
@@ -237,20 +239,21 @@ function ChatBubble({ msg, onApagar }: { msg: AdminMensagem; onApagar?: (id: str
 
   return (
     <>
-      {menuPos && (
+      {menuPos && createPortal(
         <div
-          className="fixed z-50 bg-slate-800 border border-slate-700 rounded-lg shadow-2xl py-1 min-w-[160px]"
+          className="fixed z-[9999] bg-slate-800 border border-slate-700 rounded-lg shadow-2xl py-1 min-w-[160px]"
           style={{ top: menuPos.y, left: menuPos.x }}
-          onClick={e => e.stopPropagation()}
+          onMouseDown={e => e.stopPropagation()}
         >
           <button
-            onClick={handleApagar}
+            onMouseDown={e => { e.stopPropagation(); handleApagar(); }}
             className="w-full flex items-center gap-2 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10 transition"
           >
             <Trash2 className="w-3.5 h-3.5" />
             Apagar mensagem
           </button>
-        </div>
+        </div>,
+        document.body
       )}
     <div className={cn('flex mb-2', isSaida ? 'justify-end' : 'justify-start')} onContextMenu={handleContextMenu}>
       <div className={cn(
