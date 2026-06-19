@@ -56,6 +56,7 @@ export function usePesquisaPrimeiraAula(unidadeAtual: UnidadeId) {
             unidade_id: a.unidade_id,
             whatsapp_jid: a.whatsapp_jid,
             nome: a.nome,
+            curso: a.curso_nome,
             data_matricula: a.data_matricula,
           })),
         },

@@ -6,8 +6,26 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 const DEPARTAMENTO = 'sucesso_aluno';
 
-const TEXTO_MENSAGEM = 'Me conta como foi sua primeira aula na LA?';
-const FOOTER_MENSAGEM = 'Sua opinião ajuda a gente a cuidar melhor da sua jornada musical desde o começo.';
+const FOOTER_MENSAGEM = 'Toque em uma das opções abaixo 👇 — e, se quiser, me conta também o que mais gostou!';
+
+function primeiroNome(nome) {
+  if (!nome) return '';
+  return String(nome).trim().split(/\s+/)[0];
+}
+
+// Monta o texto personalizado da pesquisa (tom acolhedor da Fabi).
+function montarTexto(nome, curso) {
+  const pnome = primeiroNome(nome);
+  const saudacao = pnome ? `Olá, ${pnome}! 😊` : 'Olá! 😊';
+  const trechoCurso = curso ? ` de ${curso}` : '';
+  return (
+    `${saudacao}\n\n` +
+    `Sou a Fabi, da equipe de *Sucesso do Cliente da LA* 🤩\n\n` +
+    `Passando para saber como têm sido suas aulas${trechoCurso}. ` +
+    `Esse é um momento muito especial, cheio de expectativas, e para nós é muito importante entender como você tem se sentido nesse comecinho da sua jornada musical.\n\n` +
+    `*Como você avalia suas primeiras aulas?*`
+  );
+}
 
 // Formato UAZAPI /send/menu com type=button: choices = ["label|id", ...]
 const CHOICES = [
@@ -28,14 +46,14 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-async function enviarBotoes(baseUrl, token, numero) {
+async function enviarBotoes(baseUrl, token, numero, texto) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 45000);
   try {
     const body = {
       number: numero,
       type: 'button',
-      text: TEXTO_MENSAGEM,
+      text: texto,
       footerText: FOOTER_MENSAGEM,
       choices: CHOICES,
       delay: 500,
@@ -57,7 +75,7 @@ async function enviarBotoes(baseUrl, token, numero) {
   }
 }
 
-async function registrarNaCaixa(supabase, { alunoId, unidadeId, jid, caixaId, messageId, status }) {
+async function registrarNaCaixa(supabase, { alunoId, unidadeId, jid, caixaId, messageId, status, texto }) {
   try {
     let conversaId = null;
 
@@ -89,7 +107,7 @@ async function registrarNaCaixa(supabase, { alunoId, unidadeId, jid, caixaId, me
     if (!conversaId) return;
 
     const conteudoInterativo = JSON.stringify({
-      texto: TEXTO_MENSAGEM,
+      texto,
       opcoes: OPCOES_INTERATIVO,
     });
 
@@ -100,7 +118,7 @@ async function registrarNaCaixa(supabase, { alunoId, unidadeId, jid, caixaId, me
       tipo: 'interativo',
       conteudo: conteudoInterativo,
       remetente: 'admin',
-      remetente_nome: 'Sol',
+      remetente_nome: 'Fabi',
       status_entrega: status,
       whatsapp_message_id: messageId || null,
     });
@@ -108,7 +126,7 @@ async function registrarNaCaixa(supabase, { alunoId, unidadeId, jid, caixaId, me
     await supabase.from('admin_conversas')
       .update({
         ultima_mensagem_at: new Date().toISOString(),
-        ultima_mensagem_preview: TEXTO_MENSAGEM,
+        ultima_mensagem_preview: 'Como você avalia suas primeiras aulas?',
         whatsapp_jid: jid,
         updated_at: new Date().toISOString(),
       })
@@ -178,7 +196,8 @@ serve(async (req) => {
       for (let i = 0; i < grupo.length; i++) {
         if (i > 0) await new Promise(r => setTimeout(r, 10000));
         const aluno = grupo[i];
-        const { aluno_id, unidade_id, whatsapp_jid, data_matricula } = aluno;
+        const { aluno_id, unidade_id, whatsapp_jid, data_matricula, nome, curso } = aluno;
+        const textoMsg = montarTexto(nome, curso);
 
         if (!whatsapp_jid) {
           resultados.push({ aluno_id, ok: false, erro: 'sem_contato' });
@@ -200,7 +219,7 @@ serve(async (req) => {
         }
 
         const numero = whatsapp_jid.replace('@s.whatsapp.net', '');
-        const resultado = await enviarBotoes(baseUrl, token, numero);
+        const resultado = await enviarBotoes(baseUrl, token, numero, textoMsg);
 
         if (resultado.ok) {
           await supabase
@@ -217,6 +236,7 @@ serve(async (req) => {
             caixaId: caixa.id,
             messageId: resultado.messageId,
             status: 'enviada',
+            texto: textoMsg,
           });
 
           resultados.push({ aluno_id, ok: true });
