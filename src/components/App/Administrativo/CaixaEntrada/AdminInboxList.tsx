@@ -112,6 +112,15 @@ function AvatarContato({ foto, nome, isExterno, semConversa }: { foto: string | 
   );
 }
 
+function formatTelefoneBR(raw: string | null | undefined): string {
+  if (!raw) return '';
+  let d = raw.replace(/\D/g, '');
+  if (d.startsWith('55') && d.length > 11) d = d.slice(2);
+  if (d.length === 11) return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
+  if (d.length === 10) return `(${d.slice(0, 2)}) ${d.slice(2, 6)}-${d.slice(6)}`;
+  return raw;
+}
+
 function AdminInboxItem({ conversa, ativa, mostrarUnidade, onClick }: { conversa: AdminConversa; ativa: boolean; mostrarUnidade?: boolean; onClick: () => void }) {
   const aluno = conversa.aluno as AlunoInbox | undefined;
   const isExterno = conversa.aluno_id === null;
@@ -210,7 +219,13 @@ function AdminInboxItem({ conversa, ativa, mostrarUnidade, onClick }: { conversa
             {isExterno && conversa.telefone_externo && (
               <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-400 font-medium flex items-center gap-0.5">
                 <Phone className="w-2.5 h-2.5" />
-                {conversa.telefone_externo}
+                {formatTelefoneBR(conversa.telefone_externo)}
+              </span>
+            )}
+            {!isExterno && conversa.whatsapp_jid && (
+              <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-400 font-medium flex items-center gap-0.5">
+                <Phone className="w-2.5 h-2.5" />
+                {formatTelefoneBR(conversa.whatsapp_jid)}
               </span>
             )}
             {curso && (

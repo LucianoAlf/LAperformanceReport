@@ -10,6 +10,8 @@ export interface ContatoInbox {
   aluno?: AlunoInbox;
   telefone_externo?: string;
   nome_externo?: string;
+  /** Número (jid normalizado) escolhido para a conversa — permite múltiplas conversas por aluno */
+  whatsapp_jid?: string;
 }
 
 interface NovaConversaModalProps {
@@ -66,6 +68,10 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
   const [alunoEncontrado, setAlunoEncontrado] = useState<AlunoInbox | null>(null);
   const [buscandoTelefone, setBuscandoTelefone] = useState(false);
 
+  // Etapa de escolha de número (quando um aluno é selecionado)
+  const [alunoNumero, setAlunoNumero] = useState<AlunoInbox | null>(null);
+  const [numeroCustom, setNumeroCustom] = useState('');
+
   const fetchAlunos = useCallback(async () => {
     if (!unidadeId || unidadeId === 'todos') return;
 
@@ -100,6 +106,8 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
       setTelefone('');
       setNomeExterno('');
       setAlunoEncontrado(null);
+      setAlunoNumero(null);
+      setNumeroCustom('');
       setModo('aluno');
     }
   }, [aberto, fetchAlunos]);
@@ -192,34 +200,47 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
         })
       : alunos;
 
-  const handleSelecionarAluno = useCallback(async (aluno: AlunoInbox) => {
+  // Selecionar aluno na lista → abrir etapa de escolha de número (permite vários números)
+  const handleSelecionarAluno = useCallback((aluno: AlunoInbox) => {
     if (criando) return;
+    setNumeroCustom('');
+    setAlunoNumero(aluno);
+  }, [criando]);
 
-    if (!aluno.telefone && !aluno.whatsapp) {
-      alert('Este aluno nao tem telefone cadastrado.');
+  // Cria (ou reabre) a conversa do aluno PARA UM NÚMERO específico.
+  const criarConversaComNumero = useCallback(async (aluno: AlunoInbox, numeroRaw: string) => {
+    if (criando) return;
+    const jid = formatPhoneForStorage(numeroRaw);
+    if (jid.replace(/\D/g, '').length < 12) {
+      alert('Número inválido. Use DDD + número (ex: 21 99999-9999).');
       return;
     }
 
     setCriando(true);
     try {
-      // A conversa pertence à unidade REAL do aluno (essencial p/ caixa multi-unidade em Consolidado)
       const unidadeConversa = aluno.unidade_id;
 
+      // Já existe conversa desse aluno com esse número? Reabre.
       const { data: existente } = await supabase
         .from('admin_conversas')
         .select('id')
         .eq('aluno_id', aluno.id)
-        .eq('unidade_id', unidadeConversa)
         .eq('departamento', departamento)
+        .eq('whatsapp_jid', jid)
         .maybeSingle();
 
       if (existente) {
-        await supabase
-          .from('admin_conversas')
-          .update({ status: 'aberta' })
-          .eq('id', existente.id);
+        await supabase.from('admin_conversas').update({ status: 'aberta' }).eq('id', existente.id);
       } else {
-        // Caixa do departamento que atende a unidade do aluno (própria ou "todas as unidades")
+        // Conversa solta (externa) com esse número? Vincula ao aluno em vez de duplicar.
+        const { data: solta } = await supabase
+          .from('admin_conversas')
+          .select('id')
+          .is('aluno_id', null)
+          .eq('departamento', departamento)
+          .or(`whatsapp_jid.eq.${jid},telefone_externo.eq.${jid}`)
+          .maybeSingle();
+
         const { data: caixa } = await supabase
           .from('whatsapp_caixas')
           .select('id')
@@ -229,33 +250,41 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
           .or(`unidade_id.eq.${unidadeConversa},unidade_id.is.null`)
           .maybeSingle();
 
-        await supabase
-          .from('admin_conversas')
-          .insert({
-            aluno_id: aluno.id,
-            unidade_id: unidadeConversa,
-            departamento,
-            caixa_id: caixa?.id || null,
-            status: 'aberta',
-          });
+        if (solta) {
+          await supabase
+            .from('admin_conversas')
+            .update({ aluno_id: aluno.id, unidade_id: unidadeConversa, whatsapp_jid: jid, status: 'aberta', caixa_id: caixa?.id || null })
+            .eq('id', solta.id);
+        } else {
+          await supabase
+            .from('admin_conversas')
+            .insert({
+              aluno_id: aluno.id,
+              unidade_id: unidadeConversa,
+              departamento,
+              caixa_id: caixa?.id || null,
+              whatsapp_jid: jid,
+              status: 'aberta',
+            });
+        }
       }
 
-      onIniciarConversa({ tipo: 'aluno', aluno });
+      onIniciarConversa({ tipo: 'aluno', aluno, whatsapp_jid: jid });
       onClose();
     } catch (err) {
       console.error('[NovaConversaModal] Erro ao criar conversa:', err);
     } finally {
       setCriando(false);
     }
-  }, [unidadeId, departamento, criando, onIniciarConversa, onClose]);
+  }, [departamento, criando, onIniciarConversa, onClose]);
 
   const handleSelecionarExterno = useCallback(async () => {
     const digits = telefone.replace(/\D/g, '');
     if (digits.length < 10 || criando) return;
 
-    // Se encontrou aluno, redirecionar para selecao de aluno
+    // Se encontrou aluno, cria a conversa já com o número digitado
     if (alunoEncontrado) {
-      await handleSelecionarAluno(alunoEncontrado);
+      await criarConversaComNumero(alunoEncontrado, telefone);
       return;
     }
 
@@ -319,11 +348,15 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
     } finally {
       setCriando(false);
     }
-  }, [telefone, nomeExterno, alunoEncontrado, criando, unidadeId, departamento, onIniciarConversa, onClose, handleSelecionarAluno]);
+  }, [telefone, nomeExterno, alunoEncontrado, criando, unidadeId, multiUnidade, departamento, onIniciarConversa, onClose, criarConversaComNumero]);
 
   if (!aberto) return null;
 
   const digitsCount = telefone.replace(/\D/g, '').length;
+  const numerosDoAluno = alunoNumero
+    ? Array.from(new Set([alunoNumero.telefone, alunoNumero.whatsapp].filter(Boolean).map(n => (n as string).replace(/\D/g, ''))))
+    : [];
+  const numeroCustomDigits = numeroCustom.replace(/\D/g, '').length;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
@@ -336,6 +369,73 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
           </button>
         </div>
 
+        {alunoNumero ? (
+          /* Etapa: escolher o número para conversar com o aluno */
+          <div className="flex-1 flex flex-col min-h-0">
+            <div className="px-5 py-3 border-b border-slate-700/30 flex items-center gap-2">
+              <button
+                onClick={() => setAlunoNumero(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 transition flex-shrink-0"
+              >
+                <X className="w-4 h-4 rotate-45" />
+              </button>
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-white truncate">{alunoNumero.nome}</p>
+                <p className="text-[11px] text-slate-500">Escolha o número para conversar</p>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
+              {numerosDoAluno.length > 0 ? (
+                <>
+                  <p className="text-[11px] font-medium text-slate-400">Números cadastrados</p>
+                  {numerosDoAluno.map(num => (
+                    <button
+                      key={num}
+                      onClick={() => criarConversaComNumero(alunoNumero, num)}
+                      disabled={criando}
+                      className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-slate-800/60 border border-slate-700/50 hover:bg-slate-800 transition text-left disabled:opacity-50"
+                    >
+                      <div className="w-9 h-9 rounded-full bg-violet-500/15 flex items-center justify-center flex-shrink-0">
+                        <Phone className="w-4 h-4 text-violet-400" />
+                      </div>
+                      <span className="text-sm text-slate-200">{formatPhoneDisplay(num)}</span>
+                    </button>
+                  ))}
+                </>
+              ) : (
+                <p className="text-xs text-slate-500">Este aluno não tem número cadastrado. Digite um número abaixo.</p>
+              )}
+
+              <div className="pt-3 border-t border-slate-700/30 mt-3">
+                <label className="text-[11px] font-medium text-slate-400 mb-1 block">Outro número</label>
+                <div className="relative">
+                  <Phone className="w-4 h-4 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="tel"
+                    placeholder="(21) 99999-9999"
+                    value={numeroCustom}
+                    onChange={e => setNumeroCustom(e.target.value)}
+                    className="w-full bg-slate-800 border border-slate-700 rounded-lg pl-9 pr-3 py-2.5 text-sm text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none"
+                  />
+                </div>
+                <button
+                  onClick={() => criarConversaComNumero(alunoNumero, numeroCustom)}
+                  disabled={criando || numeroCustomDigits < 10}
+                  className={cn(
+                    'w-full mt-2 py-2.5 rounded-lg text-sm font-medium transition',
+                    numeroCustomDigits >= 10 && !criando
+                      ? 'bg-violet-600 text-white hover:bg-violet-500'
+                      : 'bg-slate-700 text-slate-500 cursor-not-allowed'
+                  )}
+                >
+                  {criando ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : 'Conversar com este número'}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+        <>
         {/* Tabs */}
         <div className="flex px-5 pt-3 gap-1">
           <button
@@ -502,7 +602,7 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
                     </p>
                   </div>
                   <button
-                    onClick={() => handleSelecionarAluno(alunoEncontrado)}
+                    onClick={() => criarConversaComNumero(alunoEncontrado, telefone)}
                     disabled={criando}
                     className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-slate-800/60 border border-slate-700/50 hover:bg-slate-800 transition text-left"
                   >
@@ -582,6 +682,8 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
               </button>
             </div>
           </>
+        )}
+        </>
         )}
       </div>
     </div>
