@@ -71,6 +71,8 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
   // Etapa de escolha de número (quando um aluno é selecionado)
   const [alunoNumero, setAlunoNumero] = useState<AlunoInbox | null>(null);
   const [numeroCustom, setNumeroCustom] = useState('');
+  const [contatosAluno, setContatosAluno] = useState<{ telefone: string | null; nome: string | null; parentesco: string | null; principal: boolean }[]>([]);
+  const [carregandoContatos, setCarregandoContatos] = useState(false);
 
   const fetchAlunos = useCallback(async () => {
     if (!unidadeId || unidadeId === 'todos') return;
@@ -201,10 +203,24 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
       : alunos;
 
   // Selecionar aluno na lista → abrir etapa de escolha de número (permite vários números)
-  const handleSelecionarAluno = useCallback((aluno: AlunoInbox) => {
+  const handleSelecionarAluno = useCallback(async (aluno: AlunoInbox) => {
     if (criando) return;
     setNumeroCustom('');
+    setContatosAluno([]);
     setAlunoNumero(aluno);
+    setCarregandoContatos(true);
+    try {
+      const { data } = await supabase
+        .from('aluno_contatos')
+        .select('telefone, nome, parentesco, principal')
+        .eq('aluno_id', aluno.id)
+        .order('principal', { ascending: false });
+      setContatosAluno((data || []).filter(c => c.telefone));
+    } catch {
+      setContatosAluno([]);
+    } finally {
+      setCarregandoContatos(false);
+    }
   }, [criando]);
 
   // Cria (ou reabre) a conversa do aluno PARA UM NÚMERO específico.
@@ -353,9 +369,26 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
   if (!aberto) return null;
 
   const digitsCount = telefone.replace(/\D/g, '').length;
-  const numerosDoAluno = alunoNumero
-    ? Array.from(new Set([alunoNumero.telefone, alunoNumero.whatsapp].filter(Boolean).map(n => (n as string).replace(/\D/g, ''))))
-    : [];
+  // Combina os contatos (aluno_contatos) + números do cadastro, deduplicados por dígitos.
+  const numerosDoAluno: { numero: string; label: string; principal: boolean }[] = [];
+  if (alunoNumero) {
+    const vistos = new Set<string>();
+    for (const c of contatosAluno) {
+      const d = (c.telefone || '').replace(/\D/g, '');
+      if (d.length >= 10 && !vistos.has(d)) {
+        vistos.add(d);
+        const parente = c.parentesco && c.parentesco !== 'proprio' ? ` · ${c.parentesco}` : '';
+        numerosDoAluno.push({ numero: d, label: (c.nome || 'Contato') + parente, principal: c.principal });
+      }
+    }
+    for (const n of [alunoNumero.telefone, alunoNumero.whatsapp]) {
+      const d = (n || '').replace(/\D/g, '');
+      if (d.length >= 10 && !vistos.has(d)) {
+        vistos.add(d);
+        numerosDoAluno.push({ numero: d, label: 'Cadastro', principal: false });
+      }
+    }
+  }
   const numeroCustomDigits = numeroCustom.replace(/\D/g, '').length;
 
   return (
@@ -386,20 +419,30 @@ export function NovaConversaModal({ aberto, onClose, onIniciarConversa, unidadeI
             </div>
 
             <div className="flex-1 overflow-y-auto px-5 py-4 space-y-2">
-              {numerosDoAluno.length > 0 ? (
+              {carregandoContatos ? (
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 className="w-4 h-4 text-slate-500 animate-spin" />
+                </div>
+              ) : numerosDoAluno.length > 0 ? (
                 <>
                   <p className="text-[11px] font-medium text-slate-400">Números cadastrados</p>
-                  {numerosDoAluno.map(num => (
+                  {numerosDoAluno.map(item => (
                     <button
-                      key={num}
-                      onClick={() => criarConversaComNumero(alunoNumero, num)}
+                      key={item.numero}
+                      onClick={() => criarConversaComNumero(alunoNumero, item.numero)}
                       disabled={criando}
                       className="w-full flex items-center gap-3 px-4 py-3 rounded-xl bg-slate-800/60 border border-slate-700/50 hover:bg-slate-800 transition text-left disabled:opacity-50"
                     >
                       <div className="w-9 h-9 rounded-full bg-violet-500/15 flex items-center justify-center flex-shrink-0">
                         <Phone className="w-4 h-4 text-violet-400" />
                       </div>
-                      <span className="text-sm text-slate-200">{formatPhoneDisplay(num)}</span>
+                      <div className="min-w-0">
+                        <p className="text-sm text-slate-200 flex items-center gap-1.5">
+                          {formatPhoneDisplay(item.numero)}
+                          {item.principal && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 font-semibold">Principal</span>}
+                        </p>
+                        <p className="text-[11px] text-slate-500 truncate">{item.label}</p>
+                      </div>
                     </button>
                   ))}
                 </>
