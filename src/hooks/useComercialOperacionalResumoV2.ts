@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
+import {
+  buildComercialOperacionalRpcParamsV2,
+  type ComercialOperacionalMesV2,
+  type ComercialOperacionalPayloadV2,
+  type ComercialOperacionalResumoDadosV2,
+  normalizarMesRange,
+  normalizarPayloadMensalComercialV2,
+  somarSeriesMensaisComercialV2,
+} from '../lib/comercialOperacionalV2';
 import { supabase } from '../lib/supabase';
-
-interface KPIsComercialCanonicosV2Payload {
-  kpis?: {
-    leads_entrantes?: number | string | null;
-  };
-}
 
 interface FetchLeadsComercialV2Params {
   unidadeId: string | 'todos';
@@ -25,36 +28,24 @@ export interface ComercialOperacionalResumoV2 {
   refetch: () => Promise<void>;
 }
 
-function toNumber(valor: unknown): number {
-  const numero = Number(valor);
-  return Number.isFinite(numero) ? numero : 0;
-}
-
-function normalizarMesRange(mesInicio: number, mesFim: number): number[] {
-  const inicio = Math.max(1, Math.min(12, Math.trunc(mesInicio)));
-  const fim = Math.max(inicio, Math.min(12, Math.trunc(mesFim)));
-
-  return Array.from({ length: fim - inicio + 1 }, (_, index) => inicio + index);
-}
-
-export async function fetchLeadsEntrantesComercialV2({
+export async function fetchComercialOperacionalResumoV2({
   unidadeId,
   ano,
   mesInicio,
   mesFim,
-}: FetchLeadsComercialV2Params): Promise<number> {
-  const unidadeParam = unidadeId === 'todos' ? null : unidadeId;
+}: FetchLeadsComercialV2Params): Promise<ComercialOperacionalResumoDadosV2> {
   const meses = normalizarMesRange(mesInicio, mesFim);
-  let totalLeads = 0;
+  const seriesMensais: ComercialOperacionalMesV2[] = [];
 
   for (const mes of meses) {
-    const { data, error } = await supabase.rpc('get_kpis_comercial_canonicos_v2', {
-      p_unidade_id: unidadeParam,
-      p_ano: ano,
-      p_mes: mes,
-      p_periodo: 'mensal',
-      p_data: null,
-    });
+    const { data, error } = await supabase.rpc(
+      'get_kpis_comercial_canonicos_v2',
+      buildComercialOperacionalRpcParamsV2({
+        unidadeId,
+        ano,
+        mes,
+      }),
+    );
 
     if (error) {
       throw new Error(
@@ -62,11 +53,19 @@ export async function fetchLeadsEntrantesComercialV2({
       );
     }
 
-    const payload = data as KPIsComercialCanonicosV2Payload | null;
-    totalLeads += toNumber(payload?.kpis?.leads_entrantes);
+    seriesMensais.push(
+      normalizarPayloadMensalComercialV2(mes, data as ComercialOperacionalPayloadV2 | null),
+    );
   }
 
-  return totalLeads;
+  return somarSeriesMensaisComercialV2(seriesMensais);
+}
+
+export async function fetchLeadsEntrantesComercialV2(
+  params: FetchLeadsComercialV2Params,
+): Promise<number> {
+  const resumo = await fetchComercialOperacionalResumoV2(params);
+  return resumo.leadsEntrantes;
 }
 
 export function useComercialOperacionalResumoV2({
