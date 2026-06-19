@@ -854,6 +854,13 @@ serve(async (req: Request) => {
     const caixaIdParam = url.searchParams.get('caixa_id');
     const caixaIdFromUrl = caixaIdParam ? parseInt(caixaIdParam) : null;
 
+    // Health check — monitor de saúde chama ?_health=1 sem auth para testar se verify_jwt está correto
+    if (url.searchParams.get('_health') === '1') {
+      return new Response(JSON.stringify({ ok: true, caixa_id: caixaIdFromUrl }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const payload = await req.json();
     console.log(`[webhook] Payload recebido (caixa_id=${caixaIdFromUrl}):`, JSON.stringify(payload).substring(0, 800));
 
