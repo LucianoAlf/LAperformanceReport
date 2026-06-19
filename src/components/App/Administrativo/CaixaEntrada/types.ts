@@ -63,6 +63,7 @@ export interface AdminMensagem {
   erro_motivo?: string;
   whatsapp_message_id: string | null;
   reacoes?: { emoji: string; de: string; timestamp?: number }[];
+  deletada?: boolean;
   created_at: string;
 }
 

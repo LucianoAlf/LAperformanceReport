@@ -237,6 +237,22 @@ function ChatBubble({ msg, onApagar }: { msg: AdminMensagem; onApagar?: (id: str
     );
   }
 
+  if (msg.deletada) {
+    return (
+      <div className={cn('flex mb-2', isSaida ? 'justify-end' : 'justify-start')}>
+        <div className={cn(
+          'flex items-center gap-1.5 px-3.5 py-2 rounded-2xl border border-dashed text-xs italic',
+          isSaida
+            ? 'border-violet-500/30 text-violet-300/40 rounded-br-md'
+            : 'border-slate-600/40 text-slate-600 rounded-bl-md'
+        )}>
+          <Trash2 className="w-3 h-3 opacity-50" />
+          Mensagem apagada
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       {menuPos && createPortal(

@@ -6,9 +6,9 @@ import type { AdminMensagem } from '../types';
 const MENSAGENS_POR_PAGINA = 50;
 
 function gerarUUID(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return gerarUUID();
-  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fn = (crypto as any)?.randomUUID;
+  if (typeof fn === 'function') return fn.call(crypto);
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
     const r = Math.random() * 16 | 0;
     return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16);
@@ -293,8 +293,8 @@ export function useAdminMensagens({ conversaId, alunoId, remetenteNome = 'Admin'
   }, [conversaId, alunoId, remetenteNome]);
 
   const apagarMensagem = useCallback(async (id: string) => {
-    setMensagens(prev => prev.filter(m => m.id !== id));
-    const { error } = await supabase.from('admin_mensagens').delete().eq('id', id);
+    setMensagens(prev => prev.map(m => m.id === id ? { ...m, deletada: true, conteudo: null } : m));
+    const { error } = await supabase.functions.invoke('deletar-mensagem-admin', { body: { mensagem_id: id } });
     if (error) {
       console.error('[useAdminMensagens] Erro ao apagar:', error);
       toast.error('Não foi possível apagar a mensagem');
