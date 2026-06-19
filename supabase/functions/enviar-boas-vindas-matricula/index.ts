@@ -17,7 +17,11 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 // Trocar para false quando for liberar em producao.
 const MODO_TESTE = false;
 const NUMERO_TESTE = '5521966583325'; // mesmo chatId de teste do workflow n8n
-const NUMERO_FABI = '5521994696489';
+// Equipe que recebe a notificacao de nova matricula (em modo teste, todos viram NUMERO_TESTE)
+const NOTIFICAR_EQUIPE = [
+  { nome: 'Fabi', numero: '5521994696489' },
+  { nome: 'Jessyca', numero: '5521984695110' },
+];
 
 // Caixa "Sol - Sucesso do Aluno"
 const CAIXA_SUCESSO_ID = 3;
@@ -210,10 +214,9 @@ serve(async (req) => {
     baseUrl = baseUrl.replace(/\/+$/, '');
     const token = caixa.uazapi_token;
 
-    // Numeros de destino (modo teste sobrescreve ambos para NUMERO_TESTE)
+    // Numeros de destino (modo teste sobrescreve para NUMERO_TESTE)
     const numeroReal = formatPhoneNumber(telefone_responsavel);
     const numeroDestino = MODO_TESTE ? NUMERO_TESTE : numeroReal;
-    const numeroFabiDestino = MODO_TESTE ? NUMERO_TESTE : NUMERO_FABI;
 
     // Busca video do professor (mesma regra do n8n)
     const { data: videoUrl } = await supabase.rpc('buscar_video_professor', {
@@ -266,33 +269,37 @@ serve(async (req) => {
       }
     }
 
-    // Notifica Fabi (em modo teste vai para NUMERO_TESTE) + registra na caixa
-    const cabecalhoFabi = MODO_TESTE
-      ? '🧪 *TESTE — NÃO É UMA MATRÍCULA REAL* 🧪\n_Preview da notificação que a Fabi receberia em produção._\n\n'
+    // Notifica a equipe (Fabi + Jessyca). Em modo teste, todos viram NUMERO_TESTE.
+    const cabecalhoNotif = MODO_TESTE
+      ? '🧪 *TESTE — NÃO É UMA MATRÍCULA REAL* 🧪\n_Preview da notificação que a equipe receberia em produção._\n\n'
       : '';
-    const textoFabi = `${cabecalhoFabi}🎓 *Nova matrícula!*\n\n*Aluno:* ${nome_aluno}\n*Responsável:* ${nome_responsavel}\n*Telefone:* ${telefone_responsavel}\n*Curso:* ${nome_curso}\n*Professor:* ${nome_professor}\n*Unidade:* ${unidade}`;
-    const resultFabi = await enviarUazapi(baseUrl, token, { number: numeroFabiDestino, text: textoFabi, delay: 500, readchat: true });
-    console.log(`[boas-vindas] notificar-fabi destino=${numeroFabiDestino} ok=${resultFabi.ok}`, resultFabi.data?.error || '');
-    await registrarNaCaixa(supabase, {
-      numero: numeroFabiDestino,
-      tipo: 'texto',
-      conteudo: textoFabi,
-      whatsappMessageId: resultFabi.messageId,
-      status: resultFabi.ok ? 'enviada' : 'erro',
-      nomeContatoFallback: MODO_TESTE ? 'Teste (Fabi)' : 'Fabi',
-      remetenteNome: 'Notificação (automático)',
-    });
+    const textoNotif = `${cabecalhoNotif}🎓 *Nova matrícula!*\n\n*Aluno:* ${nome_aluno}\n*Responsável:* ${nome_responsavel}\n*Telefone:* ${telefone_responsavel}\n*Curso:* ${nome_curso}\n*Professor:* ${nome_professor}\n*Unidade:* ${unidade}`;
+
+    const notificacoes = [];
+    for (const membro of NOTIFICAR_EQUIPE) {
+      const destino = MODO_TESTE ? NUMERO_TESTE : membro.numero;
+      const result = await enviarUazapi(baseUrl, token, { number: destino, text: textoNotif, delay: 500, readchat: true });
+      console.log(`[boas-vindas] notificar-${membro.nome} destino=${destino} ok=${result.ok}`, result.data?.error || '');
+      await registrarNaCaixa(supabase, {
+        numero: destino,
+        tipo: 'texto',
+        conteudo: textoNotif,
+        whatsappMessageId: result.messageId,
+        status: result.ok ? 'enviada' : 'erro',
+        nomeContatoFallback: MODO_TESTE ? `Teste (${membro.nome})` : membro.nome,
+        remetenteNome: 'Notificação (automático)',
+      });
+      notificacoes.push({ nome: membro.nome, destino, ok: result.ok, erro: result.ok ? null : result.data?.error });
+    }
 
     return new Response(JSON.stringify({
       success: true,
       modo_teste: MODO_TESTE,
       destino_boas_vindas: numeroDestino,
-      destino_notificacao: numeroFabiDestino,
       enviou_video: !!videoUrl,
       boas_vindas_ok: resultBoasVindas.ok,
       boas_vindas_erro: resultBoasVindas.ok ? null : resultBoasVindas.data?.error,
-      fabi_ok: resultFabi.ok,
-      fabi_erro: resultFabi.ok ? null : resultFabi.data?.error,
+      notificacoes,
     }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
   } catch (error) {
     console.error('[boas-vindas] erro:', error);
