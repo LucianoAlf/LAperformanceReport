@@ -32,7 +32,9 @@ interface OutletContextType {
 
 export function SimuladorPage() {
   const { unidadeSelecionada, competencia } = useOutletContext<OutletContextType>();
-  const unidadeId = unidadeSelecionada;
+  const unidadeId = unidadeSelecionada && !['consolidado', 'todas'].includes(unidadeSelecionada)
+    ? unidadeSelecionada
+    : null;
   const ano = competencia?.ano || new Date().getFullYear();
   const mes = competencia?.mes || new Date().getMonth() + 1;
   
@@ -77,10 +79,14 @@ export function SimuladorPage() {
 
   // Carregar cenários e metas aplicadas ao montar
   useEffect(() => {
-    if (unidadeId) {
-      carregarCenarios();
-      carregarMetasAplicadas();
+    if (!unidadeId) {
+      setMetasAplicadas(null);
+      setLoadingMetas(false);
+      return;
     }
+
+    carregarCenarios();
+    carregarMetasAplicadas();
   }, [unidadeId, carregarCenarios]);
 
   // Função para carregar metas aplicadas da tabela metas_kpi
