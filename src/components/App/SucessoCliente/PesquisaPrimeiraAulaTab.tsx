@@ -21,7 +21,7 @@ function formatarJid(jid: string | null): string {
 }
 
 export function PesquisaPrimeiraAulaTab({ unidadeAtual }: Props) {
-  const [janelaDias, setJanelaDias] = useState<number>(7);
+  const [janelaDias, setJanelaDias] = useState<number>(1);
   const [selecionados, setSelecionados] = useState<Set<number>>(new Set());
   const { candidatos, loading, enviando, resultados, buscarCandidatos, enviar } =
     usePesquisaPrimeiraAula(unidadeAtual);
@@ -51,14 +51,6 @@ export function PesquisaPrimeiraAulaTab({ unidadeAtual }: Props) {
   const selecionadosList = candidatos.filter(c => selecionados.has(c.aluno_id));
   const resultadoPorId = new Map(resultados.map(r => [r.aluno_id, r]));
 
-  if (unidadeAtual === 'todos') {
-    return (
-      <div className="flex items-center justify-center py-20 text-slate-400">
-        Selecione uma unidade para gerenciar pesquisas
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
@@ -68,9 +60,9 @@ export function PesquisaPrimeiraAulaTab({ unidadeAtual }: Props) {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="1">Hoje</SelectItem>
+              <SelectItem value="3">Últimos 3 dias</SelectItem>
               <SelectItem value="7">Últimos 7 dias</SelectItem>
-              <SelectItem value="14">Últimos 14 dias</SelectItem>
-              <SelectItem value="30">Últimos 30 dias</SelectItem>
             </SelectContent>
           </Select>
           <span className="text-sm text-slate-400">
@@ -122,6 +114,7 @@ export function PesquisaPrimeiraAulaTab({ unidadeAtual }: Props) {
                   />
                 </th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-400">Nome</th>
+                <th className="text-left px-4 py-3 text-xs font-medium text-slate-400">Unidade</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-400">Curso</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-400">Professor</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">1ª Aula</th>
@@ -132,13 +125,13 @@ export function PesquisaPrimeiraAulaTab({ unidadeAtual }: Props) {
             <tbody className="divide-y divide-slate-700/50">
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="py-10 text-center">
+                  <td colSpan={8} className="py-10 text-center">
                     <Loader2 className="w-6 h-6 animate-spin text-violet-500 mx-auto" />
                   </td>
                 </tr>
               ) : candidatos.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-10 text-center text-slate-500">
+                  <td colSpan={8} className="py-10 text-center text-slate-500">
                     Nenhum calouro com primeira aula nos últimos {janelaDias} dias pendente de pesquisa
                   </td>
                 </tr>
@@ -161,6 +154,7 @@ export function PesquisaPrimeiraAulaTab({ unidadeAtual }: Props) {
                         />
                       </td>
                       <td className="px-4 py-3 text-white font-medium">{c.nome}</td>
+                      <td className="px-4 py-3 text-slate-300">{c.unidade_nome || '—'}</td>
                       <td className="px-4 py-3 text-slate-300">{c.curso_nome || '—'}</td>
                       <td className="px-4 py-3 text-slate-300">{c.professor_nome || '—'}</td>
                       <td className="px-4 py-3 text-center text-slate-300">

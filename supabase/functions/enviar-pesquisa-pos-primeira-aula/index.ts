@@ -175,7 +175,9 @@ serve(async (req) => {
       baseUrl = baseUrl.replace(/\/+$/, '');
       const token = caixa.uazapi_token;
 
-      for (const aluno of grupo) {
+      for (let i = 0; i < grupo.length; i++) {
+        if (i > 0) await new Promise(r => setTimeout(r, 10000));
+        const aluno = grupo[i];
         const { aluno_id, unidade_id, whatsapp_jid, data_matricula } = aluno;
 
         if (!whatsapp_jid) {

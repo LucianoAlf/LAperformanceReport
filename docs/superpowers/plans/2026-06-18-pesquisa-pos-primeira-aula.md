@@ -15,7 +15,10 @@
 - `aluno_presenca` NÃO tem coluna `nr_da_aula` — usar `MIN(data_aula)` com `status = 'presente'` para detectar primeira aula
 - Caixa UAZAPI da pesquisa: lookup por `departamento = 'sucesso_aluno'` em `whatsapp_caixas`
 - Nunca deletar `pesquisas_whatsapp` — falhas ficam em `erro_detalhes`, `enviado_ok = false`
-- Botões: `{ id: 'ruim', text: '😞 Ruim' }`, `{ id: 'regular', text: '😐 Regular' }`, `{ id: 'gostei', text: '😊 Gostei' }` → nota interna: 1, 3, 5
+- Botões: `{ id: 'esperava_mais', text: '⭐ Esperava mais' }`, `{ id: 'foi_ok', text: '⭐⭐⭐ Foi ok' }`, `{ id: 'amei', text: '⭐⭐⭐⭐⭐ Amei' }` → nota interna: 1, 3, 5
+- Texto da mensagem (tom de voz da empresa — não alterar):
+  - Linha 1: `Me conta como foi sua primeira aula na LA?`
+  - Linha 2 (subtext): `Sua opinião ajuda a gente a cuidar melhor da sua jornada musical desde o começo.`
 - Timezone BRT (UTC-3) — datas de negócio sempre comparadas em BRT
 - Idioma do código: variáveis e comentários em português
 - Edge functions: `@ts-nocheck`, Deno std `0.177.0`, supabase-js `@2`, env vars `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`
@@ -247,9 +250,9 @@ Recebe lista de alunos do frontend, faz upsert em `pesquisas_whatsapp`, envia me
   const ENDPOINT_BOTOES = '/send/buttons';
 
   const BOTOES = [
-    { id: 'ruim',    text: '😞 Ruim' },
-    { id: 'regular', text: '😐 Regular' },
-    { id: 'gostei',  text: '😊 Gostei' },
+    { id: 'esperava_mais', text: '⭐ Esperava mais' },
+    { id: 'foi_ok',        text: '⭐⭐⭐ Foi ok' },
+    { id: 'amei',          text: '⭐⭐⭐⭐⭐ Amei' },
   ];
 
   const corsHeaders = {
@@ -265,7 +268,7 @@ Recebe lista de alunos do frontend, faz upsert em `pesquisas_whatsapp`, envia me
       const primeiroNome = String(nomeAluno || '').trim().split(' ')[0] || 'aluno';
       const body = {
         number: numero,
-        text: `Olá, ${primeiroNome}! 🎵 Como foi sua primeira aula na LA Music?`,
+        text: `Me conta como foi sua primeira aula na LA?\n\nSua opinião ajuda a gente a cuidar melhor da sua jornada musical desde o começo.`,
         buttons: BOTOES,
         delay: 500,
         readchat: true,
@@ -543,8 +546,8 @@ Recebe webhook UAZAPI de mensagem entrante, detecta se é resposta de botão de 
   const JANELA_RESPOSTA_DIAS = 7;
 
   // Mapeamento botao → nota armazenada
-  const NOTA_POR_BOTAO = { ruim: 1, regular: 3, gostei: 5 };
-  const LABEL_POR_BOTAO = { ruim: '😞 Ruim', regular: '😐 Regular', gostei: '😊 Gostei' };
+  const NOTA_POR_BOTAO = { esperava_mais: 1, foi_ok: 3, amei: 5 };
+  const LABEL_POR_BOTAO = { esperava_mais: '⭐ Esperava mais', foi_ok: '⭐⭐⭐ Foi ok', amei: '⭐⭐⭐⭐⭐ Amei' };
 
   const corsHeaders = {
     'Access-Control-Allow-Origin': '*',

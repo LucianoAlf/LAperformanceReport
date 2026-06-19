@@ -28,15 +28,11 @@ export function usePesquisaPrimeiraAula(unidadeAtual: UnidadeId) {
   const [resultados, setResultados] = useState<ResultadoEnvio[]>([]);
 
   const buscarCandidatos = useCallback(async (janelaDias: number) => {
-    if (unidadeAtual === 'todos') {
-      toast.error('Selecione uma unidade para buscar candidatos');
-      return;
-    }
     setLoading(true);
     setResultados([]);
     try {
       const { data, error } = await supabase.rpc('get_candidatos_pesquisa_primeira_aula', {
-        p_unidade_id: unidadeAtual,
+        p_unidade_id: unidadeAtual === 'todos' ? null : unidadeAtual,
         p_janela_dias: janelaDias,
       });
       if (error) throw error;

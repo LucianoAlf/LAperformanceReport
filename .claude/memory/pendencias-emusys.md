@@ -98,6 +98,24 @@ Problemas/limitações **do lado do Emusys** (API ou plataforma) que afetam noss
 
 ---
 
+## 🚨 [API] Aluno aparece em `/aulas` com `presenca: presente` mas sem vínculo via `pessoa_id`
+
+**Identificado em:** 2026-06-18
+
+**Descrição:** O endpoint `/aulas` lista um aluno com `presenca: "presente"` no array `alunos[]`, mas ao filtrar o mesmo endpoint com `pessoa_id` do aluno o resultado é **vazio** (`items: []`). Indica que a aula existe e o nome aparece, mas sem vínculo correto com o cadastro de pessoa. A UI do Emusys, por sua vez, mostra a experimental desse aluno como "não realizada" — três fontes (API sem filtro, API com `pessoa_id`, UI) em estados distintos para o mesmo registro.
+
+**Evidência:**
+- Aluno: Alexandre Vasconcellos de Medeiros — `pessoa_id: 1206`, `emusys_matricula_id: 807` (Barra)
+- Aula: `id: 251901`, `2026-06-17 13:00–14:00`, `categoria: experimental`, `curso: Aula Experimental`, professor Jeyson Gaia Ramos
+- `GET /aulas/?data_hora_inicial=2026-06-17T00:00:00&data_hora_final=2026-06-17T23:59:59` → aula retorna com `aluno.presenca: "presente"` ✅
+- `GET /aulas/?data_hora_inicial=2026-06-17T10:00&data_hora_final=2026-06-17T21:00&pessoa_id=1206` → `items: []` ❌
+- UI Emusys: experimental marcada como "não realizada" ❌
+- **Impacto no nosso sistema:** `sync-presenca-emusys` gravou `aluno_presenca` com `status='presente'` para esse aluno (criado às 01:20 UTC de 18/06), fazendo ele aparecer como "calouro com primeira aula hoje" na pesquisa pós-1ª aula quando não havia realizado nenhuma aula regular.
+
+**Solicitação ideal (Emusys):** garantir consistência entre (a) o que aparece em `alunos[]` no `/aulas` sem filtro, (b) o que retorna ao filtrar por `pessoa_id`, e (c) o status exibido na UI.
+
+---
+
 ## Resolvidos (histórico)
 
 (nenhum ainda — Emusys responde lentamente a feedbacks)
