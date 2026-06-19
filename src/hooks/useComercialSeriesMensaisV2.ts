@@ -5,13 +5,11 @@ const MESES_ABREV = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Se
 
 interface KPIsComercialCanonicosV2 {
   leads_entrantes?: number;
-  matriculas_comerciais_principais?: number;
 }
 
 interface KPIsComercialPorUnidadeV2 {
   unidade_nome?: string;
   leads_entrantes?: number;
-  matriculas_comerciais_principais?: number;
 }
 
 interface KPIsComercialCanonicosV2Payload {
@@ -28,28 +26,18 @@ export interface ComercialSerieMensalV2 {
   mesNumero: number;
   mes: string;
   cg_leads: number;
-  cg_mat: number;
   rec_leads: number;
-  rec_mat: number;
   barra_leads: number;
-  barra_mat: number;
   total_leads: number;
-  total_mat: number;
 }
-
-export type MetricaSazonalidadeV2 = 'leads' | 'matriculas';
 
 const SERIE_VAZIA: ComercialSerieMensalV2[] = MESES_ABREV.map((mes, index) => ({
   mesNumero: index + 1,
   mes,
   cg_leads: 0,
-  cg_mat: 0,
   rec_leads: 0,
-  rec_mat: 0,
   barra_leads: 0,
-  barra_mat: 0,
   total_leads: 0,
-  total_mat: 0,
 }));
 
 function normalizarTexto(valor: string): string {
@@ -84,13 +72,9 @@ function normalizarMes({ mes, payload }: PayloadMensalV2): ComercialSerieMensalV
     mesNumero: mes,
     mes: MESES_ABREV[mes - 1] || String(mes),
     cg_leads: toNumber(campoGrande?.leads_entrantes),
-    cg_mat: toNumber(campoGrande?.matriculas_comerciais_principais),
     rec_leads: toNumber(recreio?.leads_entrantes),
-    rec_mat: toNumber(recreio?.matriculas_comerciais_principais),
     barra_leads: toNumber(barra?.leads_entrantes),
-    barra_mat: toNumber(barra?.matriculas_comerciais_principais),
     total_leads: toNumber(payload?.kpis?.leads_entrantes),
-    total_mat: toNumber(payload?.kpis?.matriculas_comerciais_principais),
   };
 }
 
@@ -106,18 +90,8 @@ export function normalizarSeriesMensaisComercialV2(payloads: PayloadMensalV2[]):
   });
 }
 
-export function valorDaMetricaSazonalidade(
-  serie: ComercialSerieMensalV2,
-  metrica: MetricaSazonalidadeV2,
-): number {
-  return metrica === 'leads' ? serie.total_leads : serie.total_mat;
-}
-
-export function ordenarSeriesPorMetrica(
-  series: ComercialSerieMensalV2[],
-  metrica: MetricaSazonalidadeV2,
-): ComercialSerieMensalV2[] {
-  return [...series].sort((a, b) => valorDaMetricaSazonalidade(b, metrica) - valorDaMetricaSazonalidade(a, metrica));
+export function ordenarSeriesPorLeads(series: ComercialSerieMensalV2[]): ComercialSerieMensalV2[] {
+  return [...series].sort((a, b) => b.total_leads - a.total_leads);
 }
 
 export function useComercialSeriesMensaisV2(ano: number = 2025) {

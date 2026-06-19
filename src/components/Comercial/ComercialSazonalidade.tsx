@@ -1,4 +1,4 @@
-import { useComercialSeriesMensaisV2, ordenarSeriesPorMetrica } from '../../hooks/useComercialSeriesMensaisV2';
+import { useComercialSeriesMensaisV2, ordenarSeriesPorLeads } from '../../hooks/useComercialSeriesMensaisV2';
 import { AlertTriangle, Calendar, TrendingUp } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { ChartTooltip } from './ChartTooltip';
@@ -49,11 +49,10 @@ export function ComercialSazonalidade() {
     'Leads Entrantes': d.total_leads,
   }));
 
-  const mesesPorLeads = ordenarSeriesPorMetrica(dadosPorMes, 'leads');
+  const mesesPorLeads = ordenarSeriesPorLeads(dadosPorMes);
   const maiorLead = mesesPorLeads[0];
   const menorLead = [...mesesPorLeads].reverse()[0];
   const totalLeads = dadosPorMes.reduce((total, mes) => total + mes.total_leads, 0);
-  const totalMatriculasDiagnostico = dadosPorMes.reduce((total, mes) => total + mes.total_mat, 0);
 
   const valoresUnidade = dadosPorMes.flatMap((d) => [d.cg_leads, d.rec_leads, d.barra_leads]);
   const valoresTotais = dadosPorMes.map((d) => d.total_leads);
@@ -74,7 +73,7 @@ export function ComercialSazonalidade() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 bg-emerald-500/20 rounded-lg">
@@ -100,23 +99,10 @@ export function ComercialSazonalidade() {
             {formatarInteiro(maiorLead?.total_leads || 0)} leads entrantes no maior mês.
           </p>
         </div>
+      </div>
 
-        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 bg-amber-500/20 rounded-lg">
-              <AlertTriangle className="w-5 h-5 text-amber-400" />
-            </div>
-            <h3 className="text-lg font-semibold text-amber-400">
-              Matrículas comerciais — critério atual em validação
-            </h3>
-          </div>
-          <div className="text-4xl font-grotesk font-bold text-white">
-            {formatarInteiro(totalMatriculasDiagnostico)}
-          </div>
-          <p className="mt-3 text-sm text-gray-400">
-            Total consolidado exibido apenas como diagnóstico. Distribuição por unidade em validação semântica.
-          </p>
-        </div>
+      <div className="mb-8 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+        Matrículas comerciais por unidade aguardam regra canônica.
       </div>
 
       <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 mb-8">
@@ -154,7 +140,7 @@ export function ComercialSazonalidade() {
               Heatmap de Leads Entrantes 2025
             </h3>
             <p className="text-sm text-gray-400 mt-1">
-              Distribuição de matrículas por unidade em validação semântica. Leads já usam fonte canônica v2.
+              Distribuição mensal de leads por unidade pela fonte canônica v2.
             </p>
           </div>
         </div>
@@ -231,8 +217,8 @@ export function ComercialSazonalidade() {
               Menor volume de <strong> Leads Entrantes</strong>: {menorLead?.mes || '-'} ({formatarInteiro(menorLead?.total_leads || 0)}).
               <br />
               <span className="text-gray-400">
-                Padrão calculado com base nos dados comerciais v2 de 2025. Matrículas comerciais seguem como
-                diagnóstico consolidado até a validação da regra canônica por unidade.
+                Padrao calculado com base nos dados comerciais v2 de 2025. Matriculas comerciais por unidade aguardam
+                regra canonica e nao sao publicadas nesta tela.
               </span>
             </p>
           </div>
