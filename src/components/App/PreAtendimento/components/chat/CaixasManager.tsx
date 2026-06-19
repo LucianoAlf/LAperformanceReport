@@ -324,6 +324,7 @@ export function CaixasManager() {
         waha_api_key: editando.waha_api_key || null,
       };
 
+      let caixaIdSalva = editando.id;
       if (editando.id) {
         const { error } = await supabase
           .from('whatsapp_caixas')
@@ -332,11 +333,32 @@ export function CaixasManager() {
         if (error) throw error;
         setSucesso('Caixa atualizada com sucesso!');
       } else {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('whatsapp_caixas')
-          .insert(payload);
+          .insert(payload)
+          .select('id')
+          .single();
         if (error) throw error;
+        caixaIdSalva = data.id;
         setSucesso('Caixa criada com sucesso!');
+      }
+
+      // Conecta o webhook de recebimento automaticamente (UAZAPI ativa) — sem configuração manual
+      if (caixaIdSalva && editando.provedor === 'uazapi' && editando.ativo) {
+        try {
+          const { data: wh, error: whErr } = await supabase.functions.invoke('configurar-webhook-caixa', {
+            body: { caixa_id: caixaIdSalva },
+          });
+          if (whErr || (wh && wh.error)) {
+            setErro('Caixa salva, mas o webhook não conectou automaticamente. Use "Reconectar webhook" na caixa.');
+            setSucesso(null);
+          } else {
+            setSucesso('Caixa salva e webhook conectado automaticamente!');
+          }
+        } catch {
+          setErro('Caixa salva, mas o webhook não conectou. Use "Reconectar webhook" na caixa.');
+          setSucesso(null);
+        }
       }
 
       setEditando(null);
@@ -360,6 +382,27 @@ export function CaixasManager() {
     } else {
       setSucesso('Caixa excluída!');
       await fetchCaixas();
+    }
+  };
+
+  const [reconectandoWebhook, setReconectandoWebhook] = useState<number | null>(null);
+  const handleReconectarWebhook = async (caixaId: number) => {
+    setReconectandoWebhook(caixaId);
+    try {
+      const { data, error } = await supabase.functions.invoke('configurar-webhook-caixa', {
+        body: { caixa_id: caixaId },
+      });
+      if (error || (data && data.error)) {
+        setErro('Falha ao conectar o webhook: ' + (data?.error || error?.message || 'erro desconhecido'));
+      } else if (data?.success === false) {
+        setErro(data?.message || 'Webhook não conectado.');
+      } else {
+        setSucesso('Webhook conectado! As mensagens recebidas já chegam nesta caixa.');
+      }
+    } catch (e: any) {
+      setErro('Falha ao conectar o webhook: ' + (e?.message || 'erro'));
+    } finally {
+      setReconectandoWebhook(null);
     }
   };
 
@@ -994,6 +1037,20 @@ export function CaixasManager() {
                     >
                       <Copy className="w-4 h-4 text-slate-400" />
                     </button>
+                    {(caixa.provedor || 'uazapi') === 'uazapi' && (
+                      <button
+                        onClick={() => handleReconectarWebhook(caixa.id)}
+                        disabled={reconectandoWebhook === caixa.id}
+                        className="p-2 hover:bg-violet-500/10 rounded-lg transition-colors disabled:opacity-50"
+                        title="Conectar webhook (recebimento de mensagens)"
+                      >
+                        {reconectandoWebhook === caixa.id ? (
+                          <Loader2 className="w-4 h-4 animate-spin text-violet-400" />
+                        ) : (
+                          <Zap className="w-4 h-4 text-violet-400" />
+                        )}
+                      </button>
+                    )}
                     <button
                       onClick={() => {
                         setEditando({

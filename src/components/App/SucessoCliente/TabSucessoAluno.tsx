@@ -6,7 +6,7 @@ import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import {
   AlertTriangle, Heart, Search, MessageSquare,
   Loader2, RefreshCw, ChevronLeft, ChevronRight,
-  Table2, Kanban, FileQuestion, CalendarDays, BarChart3
+  Table2, Kanban, FileQuestion, CalendarDays, BarChart3, UserX, Flag
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -15,9 +15,11 @@ import { useToast } from '@/hooks/useToast';
 import { ModalDetalhesSucessoAluno } from './ModalDetalhesSucessoAluno';
 import { JornadaAlunoKanban } from './JornadaAlunoKanban';
 import { ModalEnviarFeedback } from './ModalEnviarFeedback';
-import { PesquisaEvasaoTab } from './PesquisaEvasaoTab';
+import { PesquisasTab } from './PesquisasTab';
 import { PresencaTab } from './PresencaTab';
 import { AnaliseTurmasTab } from './AnaliseTurmasTab';
+import { FaltasMesSection } from './FaltasMesSection';
+import { MarcosJornadaSection } from './MarcosJornadaSection';
 import { useWidgetOverlapSentinel } from '@/contexts/WidgetVisibilityContext';
 
 interface AlunoSucesso {
@@ -69,7 +71,7 @@ export function TabSucessoAluno({ unidadeAtual }: Props) {
   const [recalculando, setRecalculando] = useState(false);
   const [modalAluno, setModalAluno] = useState<{ open: boolean; aluno: AlunoSucesso | null }>({ open: false, aluno: null });
   const [modalFeedback, setModalFeedback] = useState(false);
-  const [subAba, setSubAba] = useState<'tabela' | 'jornada' | 'pesquisa' | 'presenca' | 'analise'>('tabela');
+  const [subAba, setSubAba] = useState<'tabela' | 'jornada' | 'pesquisa' | 'presenca' | 'faltas' | 'marcos' | 'analise'>('tabela');
   const [paginaAtual, setPaginaAtual] = useState(1);
   const itensPorPagina = 30;
 
@@ -409,7 +411,7 @@ export function TabSucessoAluno({ unidadeAtual }: Props) {
           }`}
         >
           <FileQuestion className="w-4 h-4" />
-          Pesquisa Evasão
+          Pesquisas
         </button>
         <button
           onClick={() => setSubAba('presenca')}
@@ -421,6 +423,28 @@ export function TabSucessoAluno({ unidadeAtual }: Props) {
         >
           <CalendarDays className="w-4 h-4" />
           Presença
+        </button>
+        <button
+          onClick={() => setSubAba('faltas')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            subAba === 'faltas'
+              ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30'
+              : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+          }`}
+        >
+          <UserX className="w-4 h-4" />
+          Faltas
+        </button>
+        <button
+          onClick={() => setSubAba('marcos')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+            subAba === 'marcos'
+              ? 'bg-violet-500/20 text-violet-300 border border-violet-500/30'
+              : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+          }`}
+        >
+          <Flag className="w-4 h-4" />
+          Marcos
         </button>
         <button
           onClick={() => setSubAba('analise')}
@@ -670,9 +694,9 @@ export function TabSucessoAluno({ unidadeAtual }: Props) {
         </>
       )}
 
-      {/* Conteúdo da Subaba PESQUISA EVASÃO */}
+      {/* Conteúdo da Subaba PESQUISAS */}
       {subAba === 'pesquisa' && (
-        <PesquisaEvasaoTab unidadeAtual={unidadeAtual} />
+        <PesquisasTab unidadeAtual={unidadeAtual} />
       )}
 
       {/* Conteúdo da Subaba JORNADA */}
@@ -704,6 +728,16 @@ export function TabSucessoAluno({ unidadeAtual }: Props) {
       {/* Conteúdo da Subaba PRESENÇA */}
       {subAba === 'presenca' && (
         <PresencaTab unidadeAtual={unidadeAtual} />
+      )}
+
+      {/* Conteúdo da Subaba FALTAS */}
+      {subAba === 'faltas' && (
+        <FaltasMesSection unidadeAtual={unidadeAtual} />
+      )}
+
+      {/* Conteúdo da Subaba MARCOS */}
+      {subAba === 'marcos' && (
+        <MarcosJornadaSection unidadeAtual={unidadeAtual} />
       )}
 
       {subAba === 'analise' && (

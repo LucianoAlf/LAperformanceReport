@@ -40,6 +40,10 @@ Problemas/limitações **do lado do Emusys** (API ou plataforma) que afetam noss
 
 **Hipótese:** são 2 sistemas de marcação independentes — `turma` = comparecimento físico ("o aluno apareceu na sala?"), `individual` = consumo do contrato ("a aula dele foi contabilizada?").
 
+**Magnitude (medida 2026-06-15, mês 05/2026, todas as unidades):** dos 9.924 registros de presença gravados, só **4.638 aluno+dia reais** — **4.854 pares** `(aluno+dia+curso)` coexistem como `turma` + `individual` (mesma aula 2×). Destes, **920 (19%) têm status divergente** entre as duas visões: 528 com `turma=ausente`/`individual=presente` e 392 com `turma=presente`/`individual=ausente` (≈50/50 — confirma que **nenhuma das visões é a "default ausente"**, a contradição é real dos dois lados). Prova de que nasce na API e não no sync: a mesma aula vem com `emusys_id` distintos (ex. Adriana 02/05: `618137` individual + `515497` turma), e o `sync-presenca-emusys` v31 grava `status` direto de `aluno.presenca` por `emusys_id` — não há lógica que duplique.
+
+**Impacto:** qualquer contagem absoluta (nº de faltas, nº de aulas) sai **dobrada** se ler `aluno_presenca` cru. Workaround no nosso lado: deduplicar por `(aluno_id, data_aula, curso_nome)` adotando a visão `individual` como canônica.
+
 **Solicitação ideal (Emusys):** sincronizar os 2 sistemas de marcação OU manter só um (turma ou individual).
 
 ---

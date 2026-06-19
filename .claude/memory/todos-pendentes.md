@@ -116,6 +116,46 @@ Resultado: leads como o "Carlos Yan" (ex: matriculou 15/04, experimental marcada
 
 ---
 
+## ✅ [CONCLUÍDO 2026-06-17] Sucesso do Aluno: mensagem de boas-vindas automática na matrícula
+
+**Implementado:** edge `enviar-boas-vindas-matricula` (v10, `MODO_TESTE=false`) disparada por `processar-matricula-emusys` v21 (deploy v26) no fim de `handleMatriculaNova` via `fetch`, só `matricula_nova`. Idempotência por `ext:<emusys_matricula_id>` em `boas_vindas_enviadas`. Registra na Caixa (admin_conversas/admin_mensagens) + notifica Fabi. Detalhes em `regras-negocio.md` / `integracao-infra.md`. Histórico do pedido abaixo.
+
+**Pedido em:** 2026-06-15
+
+**Descrição:** Ao chegar um aluno **novo** (webhook de matrículas), disparar automaticamente uma mensagem de **boas-vindas via WhatsApp pela caixa do Sucesso do Aluno** (departamento `sucesso_aluno`).
+
+**Esboço de implementação:**
+- **Gatilho:** webhook de matrícula — `handleMatricula` da edge `processar-matricula-emusys` (apenas matrícula **nova**, NÃO renovação/trancamento) ou o workflow n8n WF_Matricula.
+- **Envio:** reusar `enviar-mensagem-admin` com `funcao=administrativo` + `departamento=sucesso_aluno` (o `getWhatsAppCredentials` resolve a caixa certa). Cria/usa conversa em `admin_conversas` (departamento `sucesso_aluno`).
+- **Idempotência:** enviar só 1x por aluno (checar/flag). Definir o **template** da mensagem.
+- **Guard:** aluno sem telefone (ver seção "Telefones ausentes em alunos antigos") → não enviar.
+
+---
+
+## 💡 [FEATURE] Caixa de Entrada Fase 2: liga/desliga do robô (Sol) por caixa
+
+**Pedido em:** 2026-06-15 (adiado de propósito)
+
+**Descrição:** Botão no frontend para ligar/desligar o agente **Sol** por caixa, coordenado com o agente da VPS (skill `la-agents`). Cada caixa (administrativo/sucesso_aluno) controla se a IA responde ou só humano.
+
+---
+
+## ⚠️ [BAIXA] Marco "15ª aula" (aba Marcos) assume ritmo semanal
+
+**Identificado em:** 2026-06-15
+
+**Descrição:** A aba **Marcos** do Sucesso do Aluno usa `nr_da_aula = N` (edge `marcos-jornada`) como proxy de "~N/4 meses de escola", só para calouros (`numero_renovacoes=0`). Para aluno de ritmo irregular (muitas faltas/reposições) o nº não bate com o tempo real (ex: matriculado há tempo mas só na 15ª aula). Raro; refinar (cruzar com tempo de casa) se incomodar.
+
+---
+
+## ⚠️ [BAIXA] `marcos-jornada` on-demand pode ficar lento
+
+**Identificado em:** 2026-06-15
+
+**Descrição:** A edge `marcos-jornada` busca aulas futuras na API Emusys **a cada abertura** da aba (on-demand). Para `unidade='todos'` são ~3 unidades × janela paginada. Se ficar lento, migrar para **cron diário + tabela espelho** da agenda futura. Ver `integracao-infra.md`.
+
+---
+
 ## Resolvidos (histórico)
 
 - **2026-05-02 — Edge functions Gemini com placeholder "deploy":** 10 funções redeployadas com código correto. Adicionado retry com backoff exponencial para erros 503/429.

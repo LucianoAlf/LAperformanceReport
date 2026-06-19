@@ -9,7 +9,8 @@
 ## Edge Functions (por categoria)
 
 ### WhatsApp / CRM
-- `webhook-whatsapp-inbox` — router UAZAPI (messages + messages_update)
+- `webhook-whatsapp-inbox` — router UAZAPI (messages + messages_update). Captura nome do contato (pushName) de `message.senderName`/`chat.name`/`chat.wa_name` e atualiza `nome_externo` a cada msg (reflete troca de nome, sem duplicar — elo da conversa é o NÚMERO). Conversa externa em caixa consolidada é casada por telefone+departamento+`aluno_id NULL`+`unidade_id NULL`. Deploy via Supabase CLI (1118 linhas + `_shared/uazapi.ts`), NÃO via MCP inline.
+- `enviar-boas-vindas-matricula` — boas-vindas de nova matrícula pela caixa UAZAPI "Sol - Sucesso do Aluno" (id=3). Substitui o workflow n8n `4fohyKMFRE7QFE9S` (que usava WAHA). Busca vídeo do professor (RPC `buscar_video_professor`), envia vídeo+caption ou texto, notifica a Fabi, e registra os envios em `admin_conversas`/`admin_mensagens` (departamento `sucesso_aluno`, `direcao=saida`, `remetente=admin`). Idempotência anti-duplicata via tabela `boas_vindas_enviadas` (UNIQUE) reservada antes do envio. `MODO_TESTE` (constante no topo) redireciona tudo para número de teste. `verify_jwt:false`. **EM PRODUCAO desde 2026-06-17 (`MODO_TESTE=false`, edge v10)**. Gatilho: `processar-matricula-emusys` v21 (deploy v26) chama via `fetch` no fim de `handleMatriculaNova`, passando `id_externo=p.matriculaIdEmusys` — só `matricula_nova`, try/catch isolado (falha de WhatsApp não derruba a matrícula). Segundo curso também dispara (sem filtro por `action`); reprocessamento da mesma matrícula = ignorado pela idempotência.
 - `webhook-whatsapp-status` — status de entrega (enviada/entregue/lida)
 - `whatsapp-status` — verifica conexao da instancia UAZAPI
 - `whatsapp-connect` — conecta instancia UAZAPI
@@ -64,6 +65,7 @@
 - **`sincronizar_grade_horaria_alunos` (reescrita 2026-06-09) — fonte ÚNICA do `dia_aula`/`horario_aula`.** Deriva por **pessoa (nome+unidade) + curso da aula** a partir de `aluno_presenca` (moda do dia/horário, 30d com fallback 60d, ≥3 ocorrências), `UPDATE` só quando muda. Robusta a homônimos/multi-curso e ao histórico embaralhado (reagrupa pelo curso da aula). Cron `sincronizar-grade-horaria` 01:30 UTC. Roda em <1s. Helpers `grade_norm_nome`/`grade_norm_curso` (espelham o TS). **Resolveu o flapping** (horários trocados entre matrículas de aluno multi-curso, oscilando 2×/noite — ex: Mateus K. Paulino com Canto/Power Kids/Canto Coral). Forward-only: histórico de `aluno_presenca` (~60d) não foi saneado.
 - **GOTCHA (provado 2026-05-27): o sync de presenca IGNORA o `status` do aluno.** Casa aula→aluno por nome+curso. 64 alunos inativo/evadido/trancado receberam 176 presencas nos ultimos 30 dias. Consequencia: marcar `status='inativo'` NAO para o sync nem tira o aluno de metricas que leem `aluno_presenca` direto (score professor, frequencia). Para um aluno realmente sumir, a linha tem que SAIR de `alunos` (mover p/ `alunos_arquivados`). Soft-delete via status é leaky.
 - **Curso real vem da aula, nao do cadastro.** `aulas_emusys` (espelho do endpoint de aula) tem `curso_nome`/`turma_nome`/`professor_nome` corretos. O `alunos.curso_id` (rotulo da matricula via webhook) pode estar errado. Para saber o curso real de um aluno: `aluno_presenca` → `aulas_emusys.curso_nome`. Constraint `uq_presenca_aluno_aula (aluno_id, aula_emusys_id)` garante integridade ao migrar presenca (dedupe obrigatorio por aula_emusys_id, ou por data_aula quando aula_emusys_id IS NULL via indice legado).
+- `marcos-jornada` (v1, 2026-06-15) — **on-demand** (chamada pelo front, sem cron). Busca `/v1/aulas/` **FUTURAS** (hoje..hoje+janela, default 7d) por unidade, deduplica individual+turma, resolve `aluno_id` reusando o matching do `sync-presenca-emusys` (copiado: `normalizarNome`/`normalizarCurso` + chave `nome|nasc|curso_id`). Retorna `primeiras_aulas` (nr=1 + matrícula recente) e `marco_aula` (nr=nr_alvo + `numero_renovacoes=0`), ambos excl. projeto banda. **Ignora presença** (Emusys pré-marca futuro como 'ausente'). Aulas futuras NÃO entram em `aluno_presenca`. Aba: Sucesso do Aluno → Acompanhamento → Marcos. Ver [[dominio-alunos.md]].
 - `sync-professores-emusys` (v1, 2026-05-20) — sync semanal de professores. Auto-cura `emusys_id` por nome, cria professores novos, vincula a unidades existentes, loga "sumiu da lista" sem desativar. Cron `sync-professores-emusys-semanal`: Domingo 04:00 BRT. Audita em `professores_sync_log`.
 - `sync-students-studio` — sync alunos com LA Studio (projeto separado)
 - `sync-feriados` — sincroniza feriados (via BrasilAPI) para agenda
@@ -217,6 +219,12 @@
 - Hooks: `useWhatsAppStatus()`, `useWhatsAppCaixas()`, `useMensagens()`, `useConversas()`
 - Servico: `src/services/whatsapp.ts` (sendWhatsAppMessage, getWhatsAppConnectionStatus)
 
+## Webhook UAZAPI — auto-configuração (2026-06-15)
+- Edge `configurar-webhook-caixa(caixa_id)`: resolve url+token da caixa e faz `POST {uazapi_url}/webhook` com `{enabled:true, url:".../webhook-whatsapp-inbox?caixa_id=<id>", events:["messages","messages_update"], excludeMessages:["wasSentByApi"]}`. UAZAPI only (WAHA retorna não-suportado).
+- **GOTCHA**: `POST /webhook` da UAZAPI cria o webhook com `enabled:false` por padrão — SEMPRE incluir `enabled:true`. Conferir com `GET /webhook` (retorna array; `null` = sem webhook = não recebe nada).
+- `CaixasManager`: ao salvar caixa UAZAPI ativa, invoca a edge automaticamente (conecta o recebimento sem colar URL manual). Botão Zap por caixa = "Reconectar webhook".
+- Sintoma de webhook ausente: `webhook_debug_log` sem linhas + recebidas não aparecem (envio funciona, recebimento não). `admin_conversas`/`admin_mensagens` já estão na publication `supabase_realtime` (realtime OK no banco).
+
 ## Caixa de Entrada Administrativa
 - Tabelas: `admin_conversas` (1 por aluno por unidade, RLS por unidade; `unidade_id` é NULLABLE desde 2026-06-12) + `admin_mensagens` (CASCADE)
 - **Caixa "Todas as unidades"** (2026-06-12): caixa admin com `whatsapp_caixas.unidade_id=NULL` (select grava sentinel `'todas'` → null). Webhook roteia admin mesmo sem unidade fixa, busca aluno GLOBAL e grava conversa na unidade real do aluno. Contato não-aluno → conversa com `unidade_id=NULL` + `aluno_id=NULL` (não-cadastrado); RLS (`NULL IN (...)`=falso) deixa visível só p/ admin. Inbox unificada quando filtro global='todos': `useAdminConversas` não filtra unidade, `AdminInboxList` mostra badge de unidade / "Sem unidade". Nova conversa bloqueada no modo todos.
@@ -228,5 +236,5 @@
 - Hooks: `useAdminConversas()`, `useAdminMensagens()` (com Realtime)
 - Componentes: `src/components/App/Administrativo/CaixaEntrada/` (CaixaEntradaTab, AdminInboxList, AdminChatPanel, NovaConversaModal)
 - Gravacao de audio: botao Mic (quando textarea vazio) → MediaRecorder API → envia como `tipo: 'audio'` → ptt no WhatsApp
-- Widget sentinel: `CaixaEntradaTab` registra `useWidgetOverlapSentinel()` para esconder AdminToolsHub/AuditoriaWidget
+- Widget sentinel: `useWidgetOverlapSentinel()` esconde AdminToolsHub/AuditoriaWidget quando o elemento entra na viewport. ⚠️ `registerSentinel` é singleton (observa 1 elemento) — `BottomSentinel` global do AppLayout compete e geralmente vence, furando o sentinel das páginas. Para esconder de forma confiável use `useForceHideWidgets(ativo)` (imperativo, contador). `CaixaEntradaTab` usa `useForceHideWidgets(!!conversaSelecionada)`.
 - Permissao: `administrativo.caixa-entrada`

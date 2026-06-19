@@ -35,11 +35,25 @@
 - `src/components/App/Alunos/ImportarAlunos.tsx` — bulk import do Emusys
 
 ## Presenca (Attendance)
-- `src/components/App/Alunos/SucessoCliente/PresencaTab.tsx`
+- `src/components/App/SucessoCliente/PresencaTab.tsx` (modulo Sucesso do Aluno → aba Acompanhamento → subaba Presenca)
 - Grade semanal (seg-sab) por aluno com cards por dia
 - Status: presente (check), ausente (X), justificado (warning)
 - **Filtro por data**: permite selecionar semana especifica
+- **Filtro tipo registro** (todas/turma/individual): exibe as 2 visoes da aula (NAO deduplica — proposital, transparencia)
 - Sync log com paginacao (tabela `emusys_sync_log`)
+
+### Painel de Faltas do Mes (`FaltasMesSection.tsx` + hook `useFaltasPeriodo.ts`)
+- Subaba propria "Faltas" em `TabSucessoAluno` (Acompanhamento). Ranking de alunos faltosos no mes (default: mes passado), alerta por faixa: 2 (amarelo), 3 (laranja), 4+ (vermelho). Filtro min de faltas (default 2), busca, KPIs clicaveis, contato (telefone/whatsapp/responsavel) com copiar.
+- **RPC `get_faltas_periodo(p_unidade_id, p_data_inicio, p_data_fim)`**: deduplica a aula duplicada do Emusys via `DISTINCT ON (aluno_id, data_aula, curso_nome)` priorizando `tipo=individual` (fallback turma). Sem dedup a falta CONTA EM DOBRO (cru maio CG 1623 → dedup 893). Filtra `categoria='normal'`, alunos `ativo`/`aviso_previo`. Projeto banda **é incluído** mas retorna flag `is_projeto_banda` → front mostra badge "Banda" (decisão do usuario: sinalizar, nao esconder). Ver [[pendencias-emusys.md]] p/ origem da duplicata.
+- Contexto real (maio/Barra, 251 ativos): ~34% com 2+ faltas, 63% com 0–1. Numero alto é dado real (media ~4.8 aulas/mes), nao bug.
+
+### Marcos da Jornada (`MarcosJornadaSection.tsx` + hook `useMarcosJornada.ts`)
+- Subaba "Marcos" em `TabSucessoAluno` (Acompanhamento). Segmenta alunos p/ envio de pesquisas (so lista + contato, sem envio integrado). 3 blocos:
+  1. **Primeiras aulas**: aluno com `nr_da_aula=1` agendada na janela + `data_matricula >= hoje-45d` + ativo + nao-banda (boas-vindas).
+  2. **Marco de aula (so calouros)**: aula `nr=nr_alvo` (input, default 15) na janela + `numero_renovacoes=0` + nao-banda. Selo "Apenas calouros" no front — `nr_da_aula` **reinicia a cada renovação/temporada de banda**, entao so 1º contrato representa "~N/4 meses de escola".
+  3. **Prestes a renovar**: le view `vw_renovacoes_proximas` (status_renovacao: vencido/urgente_7/atencao_15/proximo_30), reusa infra de [[regras-negocio.md]].
+- **Edge `marcos-jornada`** (v1): busca `/v1/aulas/` FUTURAS (hoje..hoje+janela) on-demand, deduplica individual+turma, resolve aluno reusando matching do `sync-presenca-emusys`. Ignora presença (Emusys pre-marca futuro como 'ausente'). Aulas futuras NAO entram em aluno_presenca (so passado) — ver [[integracao-infra.md]].
+- **Exibir != contar**: a grade mostra as 2 visoes; o ranking usa 1 numero deduplicado.
 
 ### Fluxo de Sync
 1. **Emusys API** (`GET /v1/aulas/`) retorna aulas com presenca individual

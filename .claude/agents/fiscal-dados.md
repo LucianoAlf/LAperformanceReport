@@ -728,6 +728,46 @@ Sempre estruture a resposta assim:
 <2-3 frases com o veredito geral e prioridade de ação>
 ```
 
+### L. Relatório Diário WhatsApp — `fila_relatorios_whatsapp`
+
+Relatório diário ADM: pg_cron (`relatorio-diario-20h` seg-sab 23h UTC = 20h BRT, `relatorio-diario-sabado-16h` sáb 19h UTC = 16h BRT) → `net.http_post` → edge `relatorio-admin-whatsapp` → `fila_relatorios_whatsapp` → `processar-mensagens-agendadas` (cada minuto) → UAZAPI → WhatsApp.
+
+**Schema de `fila_relatorios_whatsapp`:** `id`, `unidade_id`, `unidade_nome`, `jid`, `grupo_nome`, `texto`, `status` (pendente|enviando|enviada|erro), `agendada_para` (timestamptz), `data_dia` (date, BRT), `enviada_em`, `erro`, `created_at`.
+
+**Constraint de idempotência (desde 2026-06-15):** índice único `idx_fila_relatorio_dia(unidade_id, jid, data_dia)` — impede segunda inserção do mesmo relatório no mesmo dia. A edge usa `upsert + ignoreDuplicates: true`.
+
+```sql
+-- Relatórios enviados hoje (deve ser 1 por unidade ativa)
+SELECT unidade_nome, jid, status, agendada_para, enviada_em, erro
+FROM fila_relatorios_whatsapp
+WHERE data_dia = CURRENT_DATE AT TIME ZONE 'America/Sao_Paulo'
+ORDER BY unidade_nome;
+
+-- Duplicatas na fila (deve ser 0 com o índice ativo)
+SELECT unidade_id, jid, data_dia, COUNT(*) AS qtd
+FROM fila_relatorios_whatsapp
+GROUP BY unidade_id, jid, data_dia
+HAVING COUNT(*) > 1
+ORDER BY data_dia DESC;
+
+-- Relatórios com erro nos últimos 7 dias
+SELECT data_dia, unidade_nome, status, erro, agendada_para
+FROM fila_relatorios_whatsapp
+WHERE data_dia >= CURRENT_DATE - 7
+  AND status = 'erro'
+ORDER BY data_dia DESC;
+
+-- Confirmar que índice de idempotência existe
+SELECT indexname FROM pg_indexes
+WHERE tablename = 'fila_relatorios_whatsapp' AND indexname = 'idx_fila_relatorio_dia';
+```
+
+**Quando reportar:**
+- Mais de 1 linha por `(unidade_id, jid, data_dia)` = **CRÍTICO**: constraint ausente ou bypassada
+- `status = 'erro'` → ver coluna `erro` e logs da edge `relatorio-admin-whatsapp` via `mcp__supabase__get_logs`
+- Nenhuma linha do dia para unidade com `relatorio_diario_cron_ativo = true` → edge falhou silenciosamente (fire-and-forget — verificar logs)
+- `unidades WHERE relatorio_diario_cron_ativo = true`: Barra (`368d47f5`) e Recreio (`95553e96`). CG (`2ec861f6`) está desativada.
+
 ---
 
 ## Boundaries (regras inegociáveis)

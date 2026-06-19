@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
+import { filtrarRetencaoCanonica } from '@/lib/atividadesExtras';
 
 export interface ProfessorPerformance {
   id: number;
@@ -63,7 +64,7 @@ export function useProfessoresPerformance(ano: number = new Date().getFullYear()
       if (idsMotivosQueContam && idsMotivosQueContam.length > 0) {
         let evasaoQuery = supabase
           .from('movimentacoes_admin')
-          .select('professor_id')
+          .select('professor_id, curso_id, cursos:curso_id!left(nome, is_projeto_banda)')
           .in('tipo', ['evasao', 'nao_renovacao'])
           .not('professor_id', 'is', null)
           .gte('data', `${ano}-01-01`)
@@ -76,7 +77,7 @@ export function useProfessoresPerformance(ano: number = new Date().getFullYear()
 
         if (evasaoData) {
           evasoesFiltradas = {};
-          for (const row of evasaoData) {
+          for (const row of filtrarRetencaoCanonica(evasaoData)) {
             const pid = row.professor_id as number;
             evasoesFiltradas[pid] = (evasoesFiltradas[pid] || 0) + 1;
           }

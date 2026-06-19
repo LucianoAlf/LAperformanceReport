@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Search, Loader2, Inbox, Plus, GraduationCap, Phone, Building2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { AdminConversa, AlunoInbox, FiltroAdminInbox } from './types';
@@ -82,6 +83,35 @@ function getStatusAlunoTag(status: string | null | undefined) {
   return map[status] || null;
 }
 
+function AvatarContato({ foto, nome, isExterno, semConversa }: { foto: string | null; nome: string; isExterno: boolean; semConversa: boolean }) {
+  const [imgError, setImgError] = useState(false);
+
+  // Renderiza OU a foto OU o fallback — nunca os dois, garantindo 44px e alinhamento consistente.
+  if (foto && !imgError) {
+    return (
+      <img
+        src={foto}
+        alt={nome}
+        className="w-11 h-11 rounded-full object-cover flex-shrink-0"
+        onError={() => setImgError(true)}
+      />
+    );
+  }
+
+  return (
+    <div className={cn(
+      'w-11 h-11 rounded-full flex items-center justify-center text-white font-bold text-sm flex-shrink-0',
+      semConversa
+        ? 'bg-slate-700'
+        : isExterno
+          ? 'bg-gradient-to-br from-slate-400 to-slate-500'
+          : cn('bg-gradient-to-br', getCorAvatar(nome))
+    )}>
+      {isExterno ? <Phone className="w-4 h-4" /> : getIniciais(nome)}
+    </div>
+  );
+}
+
 function AdminInboxItem({ conversa, ativa, mostrarUnidade, onClick }: { conversa: AdminConversa; ativa: boolean; mostrarUnidade?: boolean; onClick: () => void }) {
   const aluno = conversa.aluno as AlunoInbox | undefined;
   const isExterno = conversa.aluno_id === null;
@@ -106,90 +136,77 @@ function AdminInboxItem({ conversa, ativa, mostrarUnidade, onClick }: { conversa
         semConversa && 'opacity-60'
       )}
     >
-      <div className="flex gap-3">
+      <div className="flex items-center gap-3">
         {/* Avatar */}
-        <div className="relative flex-shrink-0">
-          {conversa.foto_perfil_url ? (
-            <img
-              src={conversa.foto_perfil_url}
-              alt={nome}
-              className="w-11 h-11 rounded-full object-cover"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; (e.target as HTMLImageElement).nextElementSibling?.classList.remove('hidden'); }}
-            />
-          ) : null}
-          <div className={cn(
-            'w-11 h-11 rounded-full flex items-center justify-center text-white font-bold text-sm bg-gradient-to-br',
-            semConversa ? 'bg-slate-700' : isExterno ? 'from-slate-400 to-slate-500' : getCorAvatar(nome),
-            conversa.foto_perfil_url && 'hidden'
-          )}>
-            {isExterno ? <Phone className="w-4 h-4" /> : getIniciais(nome)}
-          </div>
-        </div>
+        <AvatarContato
+          foto={conversa.foto_perfil_url}
+          nome={nome}
+          isExterno={isExterno}
+          semConversa={semConversa}
+        />
 
         <div className="flex-1 min-w-0">
-          {/* Nome + hora */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className={cn(
-                'font-semibold text-sm truncate',
-                ativa ? 'text-white' : conversa.nao_lidas > 0 ? 'text-white' : 'text-slate-300'
-              )}>
-                {nome}
-              </span>
-              {mostrarUnidade && unidadeCodigo && (
-                <span className="text-[8px] px-1.5 py-0.5 rounded font-bold uppercase flex-shrink-0 bg-violet-500/20 text-violet-300 flex items-center gap-0.5">
-                  <Building2 className="w-2.5 h-2.5" />
-                  {unidadeCodigo}
-                </span>
-              )}
-              {mostrarUnidade && isExterno && !unidadeCodigo && (
-                <span className="text-[8px] px-1.5 py-0.5 rounded font-bold uppercase flex-shrink-0 bg-amber-500/20 text-amber-300">
-                  Sem unidade
-                </span>
-              )}
-              {isExterno && (
-                <span className="text-[8px] px-1.5 py-0.5 rounded font-bold uppercase flex-shrink-0 bg-slate-600/30 text-slate-400">
-                  Externo
-                </span>
-              )}
-              {statusAluno && (
-                <span className={cn('text-[8px] px-1.5 py-0.5 rounded font-bold uppercase flex-shrink-0', statusAluno.classes)}>
-                  {statusAluno.label}
-                </span>
-              )}
-              {statusPag && (
-                <span className={cn('text-[8px] px-1.5 py-0.5 rounded font-bold uppercase flex-shrink-0', statusPag.classes)}>
-                  {statusPag.label}
-                </span>
-              )}
-            </div>
-            <div className="flex items-center gap-1.5 flex-shrink-0 ml-1">
-              <span className={cn(
-                'text-[10px]',
-                conversa.nao_lidas > 0 ? 'text-violet-400 font-medium' : 'text-slate-500'
-              )}>
-                {formatarHora(conversa.ultima_mensagem_at)}
-              </span>
-              {conversa.nao_lidas > 0 && (
-                <span className="bg-violet-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">
-                  {conversa.nao_lidas}
-                </span>
-              )}
-            </div>
+          {/* Linha 1: nome + hora (estilo WhatsApp) */}
+          <div className="flex items-center justify-between gap-2">
+            <span className={cn(
+              'font-semibold text-sm truncate',
+              ativa ? 'text-white' : conversa.nao_lidas > 0 ? 'text-white' : 'text-slate-300'
+            )}>
+              {nome}
+            </span>
+            <span className={cn(
+              'text-[10px] flex-shrink-0',
+              conversa.nao_lidas > 0 ? 'text-violet-400 font-medium' : 'text-slate-500'
+            )}>
+              {formatarHora(conversa.ultima_mensagem_at)}
+            </span>
           </div>
 
-          {/* Preview */}
-          <p className={cn(
-            'text-xs truncate mt-0.5',
-            semConversa ? 'text-slate-600 italic' : conversa.nao_lidas > 0 ? 'text-slate-400' : 'text-slate-500'
-          )}>
-            {semConversa
-              ? 'Nenhuma mensagem ainda'
-              : conversa.ultima_mensagem_preview || '...'}
-          </p>
+          {/* Linha 2: preview + badge nao lidas */}
+          <div className="flex items-center justify-between gap-2 mt-0.5">
+            <p className={cn(
+              'text-xs truncate',
+              semConversa ? 'text-slate-600 italic' : conversa.nao_lidas > 0 ? 'text-slate-400' : 'text-slate-500'
+            )}>
+              {semConversa
+                ? 'Nenhuma mensagem ainda'
+                : conversa.ultima_mensagem_preview || '...'}
+            </p>
+            {conversa.nao_lidas > 0 && (
+              <span className="bg-violet-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0">
+                {conversa.nao_lidas}
+              </span>
+            )}
+          </div>
 
-          {/* Tags */}
+          {/* Linha 3: tags de contexto */}
           <div className="flex items-center gap-1 mt-1.5 flex-wrap">
+            {mostrarUnidade && unidadeCodigo && (
+              <span className="text-[8px] px-1.5 py-0.5 rounded font-bold uppercase bg-violet-500/20 text-violet-300 flex items-center gap-0.5">
+                <Building2 className="w-2.5 h-2.5" />
+                {unidadeCodigo}
+              </span>
+            )}
+            {mostrarUnidade && isExterno && !unidadeCodigo && (
+              <span className="text-[8px] px-1.5 py-0.5 rounded font-bold uppercase bg-amber-500/20 text-amber-300">
+                Sem unidade
+              </span>
+            )}
+            {isExterno && (
+              <span className="text-[8px] px-1.5 py-0.5 rounded font-bold uppercase bg-slate-600/30 text-slate-400">
+                Externo
+              </span>
+            )}
+            {statusAluno && (
+              <span className={cn('text-[8px] px-1.5 py-0.5 rounded font-bold uppercase', statusAluno.classes)}>
+                {statusAluno.label}
+              </span>
+            )}
+            {statusPag && (
+              <span className={cn('text-[8px] px-1.5 py-0.5 rounded font-bold uppercase', statusPag.classes)}>
+                {statusPag.label}
+              </span>
+            )}
             {isExterno && conversa.telefone_externo && (
               <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-700/60 text-slate-400 font-medium flex items-center gap-0.5">
                 <Phone className="w-2.5 h-2.5" />

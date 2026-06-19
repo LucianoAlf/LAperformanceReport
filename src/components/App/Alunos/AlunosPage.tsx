@@ -8,7 +8,7 @@ import { ptBR } from 'date-fns/locale';
 import {
   Users, DollarSign, BarChart3, Clock, Layers, AlertTriangle, BookOpen,
   Plus, Search, RotateCcw, Edit2, Trash2, Check, X, History,
-  Calendar, Upload, Heart, Zap, RefreshCw, Lock, Unlock
+  Calendar, Upload, Zap, RefreshCw, Lock, Unlock
 } from 'lucide-react';
 import { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
 import { COMPETENCIA_FECHADA_MESSAGE, useCompetenciaMensalStatus } from '@/hooks/useCompetenciaMensalStatus';
@@ -28,7 +28,6 @@ import { ModalNovaTurma } from './ModalNovaTurma';
 import { ModalAdicionarAlunoTurma } from './ModalAdicionarAlunoTurma';
 import { AlertaTurma } from './AlertaTurma';
 import { GradeHoraria } from '../Turmas/GradeHoraria';
-import { TabSucessoAluno } from './SucessoCliente';
 import { TabAutomacao } from './Automacao/TabAutomacao';
 import { TabHistoricoLTV } from './TabHistoricoLTV';
 import { ToastContainer } from '@/components/ui/toast';
@@ -152,14 +151,13 @@ export interface Filtros {
   sem_telefone: boolean;
 }
 
-type TabAtiva = 'lista' | 'turmas' | 'grade' | 'distribuicao' | 'importar' | 'sucesso' | 'automacao' | 'historico';
+type TabAtiva = 'lista' | 'turmas' | 'grade' | 'distribuicao' | 'importar' | 'automacao' | 'historico';
 
 const alunosTabs: PageTab<TabAtiva>[] = [
   { id: 'lista', label: 'Lista de Alunos', shortLabel: 'Lista', icon: Users },
   { id: 'turmas', label: 'Gestão de Turmas', shortLabel: 'Turmas', icon: Calendar },
   { id: 'grade', label: 'Grade Horária', shortLabel: 'Grade', icon: Clock },
   { id: 'distribuicao', label: 'Distribuição', shortLabel: 'Distrib.', icon: BarChart3 },
-  { id: 'sucesso', label: 'Sucesso do Cliente', shortLabel: 'Sucesso', icon: Heart },
   { id: 'historico', label: 'Histórico LTV', shortLabel: 'LTV', icon: History },
   { id: 'importar', label: 'Importar Alunos', shortLabel: 'Importar', icon: Upload, disabled: true, disabledTitle: 'Em breve — funcionalidade em desenvolvimento' },
   { id: 'automacao', label: 'Automacao', shortLabel: 'Automacao', icon: Zap },
@@ -1628,9 +1626,7 @@ export function AlunosPage() {
       />
 
       {/* Conteúdo das Tabs */}
-      {tabAtiva === 'sucesso' ? (
-        <TabSucessoAluno unidadeAtual={unidadeAtual} />
-      ) : tabAtiva === 'automacao' ? (
+      {tabAtiva === 'automacao' ? (
         <TabAutomacao unidadeAtual={unidadeAtual} />
       ) : tabAtiva === 'historico' ? (
         <TabHistoricoLTV unidadeAtual={unidadeAtual} />

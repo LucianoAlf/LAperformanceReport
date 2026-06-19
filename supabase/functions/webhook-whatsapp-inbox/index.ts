@@ -104,10 +104,13 @@ function normalizeUazapiPayload(payload: any): { key: any; message: any; message
           text: msg.text || content?.text || ''
         } : null,
       },
-      messageTimestamp: msg.messageTimestamp || Date.now()
+      messageTimestamp: msg.messageTimestamp || Date.now(),
+      // Nome do contato configurado no WhatsApp (pushName). UAZAPI envia em senderName
+      // (no message) e chat.name/chat.wa_name. Sem isto a caixa mostra so o numero.
+      pushName: msg.senderName || payload.chat?.name || payload.chat?.wa_name || null
     };
   }
-  
+
   return null;
 }
 
@@ -688,13 +691,13 @@ async function processExternalAdminMessage(
     conversa = novaConversa;
     console.log(`[webhook-admin] Conversa externa criada: ${conversa.id} para telefone ${phone}`);
   } else {
-    // Atualizar pushName se disponivel
+    // Mantem o nome do contato sempre igual ao configurado no WhatsApp (pushName).
+    // Atualiza sempre que vier, refletindo trocas de nome — sem criar nova conversa.
     if (msg.pushName) {
       await supabase
         .from('admin_conversas')
         .update({ nome_externo: msg.pushName })
-        .eq('id', conversa.id)
-        .is('nome_externo', null);
+        .eq('id', conversa.id);
     }
   }
 

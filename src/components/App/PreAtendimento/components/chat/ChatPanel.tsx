@@ -1033,6 +1033,7 @@ export function ChatPanel({
       {/* Barra de templates */}
       {templateAberto && (
         <TemplateSelector
+          contexto="pre_atendimento"
           onSelecionar={handleUsarTemplateDropdown}
           onFechar={() => setTemplateAberto(false)}
         />
@@ -1179,6 +1180,7 @@ export function ChatPanel({
                 {templateDropdownAberto && (
                   <TemplateSelector
                     modo="dropdown"
+                    contexto="pre_atendimento"
                     filtroInicial={templateFiltroInicial}
                     onSelecionar={handleUsarTemplateDropdown}
                     onFechar={() => { setTemplateDropdownAberto(false); setTexto(''); textareaRef.current?.focus(); }}
@@ -1406,6 +1408,7 @@ export function ChatPanel({
       <ModalGerenciarTemplates
         aberto={modalTemplatesAberto}
         onFechar={() => setModalTemplatesAberto(false)}
+        contexto="pre_atendimento"
       />
 
       {/* AlertDialog Confirmar Exclusão */}

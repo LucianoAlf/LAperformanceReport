@@ -24,7 +24,8 @@ import {
   Camera,
   TrendingUp,
   Megaphone,
-  Activity
+  Activity,
+  Heart
 } from 'lucide-react';
 import { useAuth } from '../../../contexts/AuthContext';
 import { supabase } from '@/lib/supabase';
@@ -50,6 +51,7 @@ const prefetchMap: Record<string, () => Promise<any>> = {
   '/app/campanhas': () => import('@/components/App/Campanhas'),
   '/app/administrativo': () => import('@/components/App/Administrativo'),
   '/app/alunos': () => import('@/components/App/Alunos'),
+  '/app/sucesso-aluno': () => import('@/components/App/SucessoCliente'),
   '/app/professores': () => import('@/components/App/Professores'),
   '/app/projetos': () => import('@/components/App/Projetos'),
   '/app/salas': () => import('@/components/App/Salas'),
@@ -74,6 +76,7 @@ const operacional = [
   { path: '/app/comercial', label: 'Comercial', icon: Briefcase },
   { path: '/app/administrativo', label: 'Administrativo', icon: ClipboardList },
   { path: '/app/alunos', label: 'Alunos', icon: Users },
+  { path: '/app/sucesso-aluno', label: 'Sucesso do Aluno', icon: Heart },
   { path: '/app/professores', label: 'Professores', icon: GraduationCap },
   { path: '/app/salas', label: 'Salas', icon: Building2 },
   { path: '/app/projetos', label: 'Projetos', icon: FolderKanban },

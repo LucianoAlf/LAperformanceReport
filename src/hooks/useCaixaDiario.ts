@@ -234,6 +234,33 @@ export function useCaixaDiario({ unidadeId, dataCaixa }: UseCaixaDiarioParams) {
     }
   }, [caixa, movimentos]);
 
+  const atualizarSaldoInicial = useCallback(async (novoSaldo: number) => {
+    if (!caixa) throw new Error('Caixa nao carregado.');
+    if (caixa.status === 'fechado') throw new Error('Caixa fechado nao permite edicao do saldo inicial.');
+
+    setSaving(true);
+    try {
+      const caixaAtualizado = { ...caixa, saldo_inicial_cofre: novoSaldo };
+      const resumo = calcularResumoCaixa(caixaAtualizado, movimentos);
+
+      const { data, error: updateError } = await supabase
+        .from('caixas_diarios')
+        .update({
+          saldo_inicial_cofre: novoSaldo,
+          saldo_final_calculado: resumo.saldoFinalCalculado,
+        })
+        .eq('id', caixa.id)
+        .select('*')
+        .single();
+
+      if (updateError) throw updateError;
+      setCaixa(data as CaixaDiario);
+      return data as CaixaDiario;
+    } finally {
+      setSaving(false);
+    }
+  }, [caixa, movimentos]);
+
   const reabrirCaixa = useCallback(async (motivo: string, reabertoPor: string) => {
     if (!caixa) throw new Error('Caixa nao carregado.');
     if (caixa.status !== 'fechado') throw new Error('Apenas caixas fechados podem ser reabertos.');
@@ -271,5 +298,6 @@ export function useCaixaDiario({ unidadeId, dataCaixa }: UseCaixaDiarioParams) {
     excluirMovimento,
     fecharCaixa,
     reabrirCaixa,
+    atualizarSaldoInicial,
   };
 }
