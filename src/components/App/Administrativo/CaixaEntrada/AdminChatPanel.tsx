@@ -1,12 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Paperclip, Image, FileText, Music, Video, Loader2, ChevronUp, Check, CheckCheck, Clock, AlertCircle, User, Phone, Mic, X, Play, Pause, Settings, Trash2, Pencil } from 'lucide-react';
+import { Send, Paperclip, Image, FileText, Music, Video, Loader2, ChevronUp, Check, CheckCheck, Clock, AlertCircle, User, Phone, Mic, X, Play, Pause, Settings, Trash2, Pencil, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { formatarWhatsApp } from '@/lib/whatsappFormat';
-import { TemplateSelector } from '@/components/App/PreAtendimento/components/chat/TemplateSelector';
+import { TemplateSelector, isTemplateAutomacao } from '@/components/App/PreAtendimento/components/chat/TemplateSelector';
 import { ModalGerenciarTemplates } from '@/components/App/PreAtendimento/components/chat/ModalGerenciarTemplates';
+import type { TemplateWhatsApp } from '@/components/App/PreAtendimento/types';
+import { toast } from 'sonner';
 import type { AdminConversa, AdminMensagem, AlunoInbox } from './types';
 
 function getStatusAlunoTag(status: string | null | undefined) {
@@ -401,6 +403,8 @@ export function AdminChatPanel({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [tipoUpload, setTipoUpload] = useState<'imagem' | 'audio' | 'video' | 'documento'>('imagem');
+  const [automacaoConfirmar, setAutomacaoConfirmar] = useState<TemplateWhatsApp | null>(null);
+  const [disparandoAutomacao, setDisparandoAutomacao] = useState(false);
 
   // Sync foto from conversa prop
   useEffect(() => {
@@ -488,6 +492,64 @@ export function AdminChatPanel({
     setTemplateAberto(false);
     textareaRef.current?.focus();
   }, [aluno, conversa.nome_externo]);
+
+  // Roteia a seleção de mensagem pronta: automação dispara ação; texto comum preenche o campo.
+  const handleSelecionarTemplate = useCallback((t: TemplateWhatsApp) => {
+    setTemplateDropdownAberto(false);
+    setTemplateAberto(false);
+    if (isTemplateAutomacao(t.tipo)) {
+      setTexto('');
+      setAutomacaoConfirmar(t);
+    } else {
+      handleUsarTemplate(t.conteudo);
+    }
+  }, [handleUsarTemplate]);
+
+  // Dispara a automação confirmada (hoje: pesquisa pós-1ª aula com botões).
+  const dispararAutomacao = useCallback(async () => {
+    if (!automacaoConfirmar || !aluno) return;
+    setDisparandoAutomacao(true);
+    try {
+      // data_matricula é usada pela edge para idempotência/registro
+      const { data: alunoRow } = await supabase
+        .from('alunos')
+        .select('data_matricula')
+        .eq('id', aluno.id)
+        .maybeSingle();
+
+      let jid = conversa.whatsapp_jid;
+      if (!jid) {
+        const tel = (aluno.whatsapp || aluno.telefone || '').replace(/\D/g, '');
+        if (!tel) { toast.error('Aluno sem telefone para envio'); setDisparandoAutomacao(false); return; }
+        jid = `${tel.startsWith('55') ? tel : '55' + tel}@s.whatsapp.net`;
+      }
+
+      const { data, error } = await supabase.functions.invoke('enviar-pesquisa-pos-primeira-aula', {
+        body: {
+          alunos: [{
+            aluno_id: aluno.id,
+            unidade_id: aluno.unidade_id || conversa.unidade_id,
+            whatsapp_jid: jid,
+            nome: aluno.nome,
+            curso: aluno.cursos?.nome || null,
+            data_matricula: alunoRow?.data_matricula || new Date().toISOString().slice(0, 10),
+          }],
+        },
+      });
+
+      const resultado = (data as any)?.resultados?.[0];
+      if (error || (resultado && !resultado.ok)) {
+        toast.error('Falha ao enviar a pesquisa: ' + (resultado?.erro || error?.message || 'erro desconhecido'));
+      } else {
+        toast.success('Pesquisa de 1ª aula enviada');
+      }
+    } catch (err: any) {
+      toast.error('Erro ao disparar a pesquisa: ' + (err?.message || 'desconhecido'));
+    } finally {
+      setDisparandoAutomacao(false);
+      setAutomacaoConfirmar(null);
+    }
+  }, [automacaoConfirmar, aluno, conversa.whatsapp_jid, conversa.unidade_id]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     // Se o dropdown de templates está aberto, deixa ele capturar as teclas de navegação
@@ -749,6 +811,7 @@ export function AdminChatPanel({
             <TemplateSelector
               contexto={contexto}
               onSelecionar={handleUsarTemplate}
+              onSelecionarTemplate={handleSelecionarTemplate}
               onFechar={() => setTemplateAberto(false)}
             />
           </div>
@@ -845,6 +908,7 @@ export function AdminChatPanel({
                   contexto={contexto}
                   filtroInicial={templateFiltroInicial}
                   onSelecionar={handleUsarTemplate}
+                  onSelecionarTemplate={handleSelecionarTemplate}
                   onFechar={() => { setTemplateDropdownAberto(false); setTexto(''); textareaRef.current?.focus(); }}
                 />
               )}
@@ -891,6 +955,47 @@ export function AdminChatPanel({
         onFechar={() => setModalTemplatesAberto(false)}
         contexto={contexto}
       />
+
+      {/* Confirmação de automação (ex: pesquisa pós-1ª aula com botões) */}
+      {automacaoConfirmar && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-4" onClick={() => !disparandoAutomacao && setAutomacaoConfirmar(null)}>
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl shadow-2xl max-w-sm w-full p-5" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center gap-2 mb-3">
+              <span className="w-8 h-8 rounded-lg bg-amber-500/15 flex items-center justify-center">
+                <Zap className="w-4 h-4 text-amber-400" />
+              </span>
+              <h3 className="text-sm font-semibold text-white">{automacaoConfirmar.nome}</h3>
+            </div>
+            {aluno ? (
+              <p className="text-sm text-slate-300 mb-4">
+                Enviar a <strong>pesquisa de 1ª aula com botões</strong> para <strong>{aluno.nome}</strong>
+                {aluno.cursos?.nome ? <> ({aluno.cursos.nome})</> : null}? O nome e o curso são preenchidos automaticamente e a resposta fica registrada.
+              </p>
+            ) : (
+              <p className="text-sm text-amber-400 mb-4">
+                Esta mensagem só pode ser enviada para um aluno cadastrado. Esta conversa é de um contato externo.
+              </p>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setAutomacaoConfirmar(null)}
+                disabled={disparandoAutomacao}
+                className="px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-slate-700/50 transition"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={dispararAutomacao}
+                disabled={disparandoAutomacao || !aluno}
+                className="px-3 py-2 rounded-lg text-sm font-medium bg-amber-600 text-white hover:bg-amber-500 transition disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
+              >
+                {disparandoAutomacao ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
+                Enviar pesquisa
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

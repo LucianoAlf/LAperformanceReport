@@ -1,11 +1,18 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Loader2, Search } from 'lucide-react';
+import { X, Loader2, Search, Zap } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { TemplateWhatsApp } from '../../types';
+
+/** Templates de automação disparam uma ação do sistema (ex: pesquisa com botões) em vez de virar texto. */
+export function isTemplateAutomacao(tipo: string | undefined | null): boolean {
+  return !!tipo && tipo.startsWith('automacao');
+}
 
 interface TemplateSelectorProps {
   onSelecionar: (conteudo: string) => void;
   onFechar: () => void;
+  /** Quando fornecido, recebe o template completo ao selecionar (pai decide texto vs automação). */
+  onSelecionarTemplate?: (template: TemplateWhatsApp) => void;
   /** 'bar' = botões horizontais (padrão), 'dropdown' = lista vertical com busca (atalho /) */
   modo?: 'bar' | 'dropdown';
   /** Filtro inicial (texto após /) */
@@ -45,7 +52,14 @@ const EMOJIS_TEMPLATE: Record<string, string> = {
 // Cache de templates por contexto para evitar fetch repetido
 const templatesCache: Map<string, TemplateWhatsApp[]> = new Map();
 
-export function TemplateSelector({ onSelecionar, onFechar, modo = 'bar', filtroInicial = '', contexto = 'pre_atendimento' }: TemplateSelectorProps) {
+export function TemplateSelector({ onSelecionar, onSelecionarTemplate, onFechar, modo = 'bar', filtroInicial = '', contexto = 'pre_atendimento' }: TemplateSelectorProps) {
+  // Roteia a seleção: se o pai forneceu onSelecionarTemplate, ele decide (texto vs automação);
+  // senão, mantém o comportamento antigo de preencher o textarea com o conteúdo.
+  const selecionar = useCallback((t: TemplateWhatsApp) => {
+    if (onSelecionarTemplate) onSelecionarTemplate(t);
+    else onSelecionar(t.conteudo);
+  }, [onSelecionarTemplate, onSelecionar]);
+
   const cacheInicial = templatesCache.get(contexto) || null;
   const [templates, setTemplates] = useState<TemplateWhatsApp[]>(cacheInicial || []);
   const [loading, setLoading] = useState(!cacheInicial);
@@ -123,16 +137,16 @@ export function TemplateSelector({ onSelecionar, onFechar, modo = 'bar', filtroI
     } else if (e.key === 'Enter') {
       e.preventDefault();
       const t = templatesFiltrados[indiceSelecionado];
-      if (t) onSelecionar(t.conteudo);
+      if (t) selecionar(t);
     } else if (e.key === 'Escape') {
       e.preventDefault();
       onFechar();
     } else if (e.key === 'Tab') {
       e.preventDefault();
       const t = templatesFiltrados[indiceSelecionado];
-      if (t) onSelecionar(t.conteudo);
+      if (t) selecionar(t);
     }
-  }, [modo, templatesFiltrados, indiceSelecionado, onSelecionar, onFechar]);
+  }, [modo, templatesFiltrados, indiceSelecionado, selecionar, onFechar]);
 
   // Modo dropdown (ativado por /)
   if (modo === 'dropdown') {
@@ -168,6 +182,7 @@ export function TemplateSelector({ onSelecionar, onFechar, modo = 'bar', filtroI
         ) : (
           <div ref={listaRef} className="overflow-y-auto">
             {templatesFiltrados.map((t, idx) => {
+              const automacao = isTemplateAutomacao(t.tipo);
               const emoji = EMOJIS_TEMPLATE[t.slug] || '📝';
               const isSelected = idx === indiceSelecionado;
               // Preview curto do conteúdo (primeira linha, max 80 chars)
@@ -176,7 +191,7 @@ export function TemplateSelector({ onSelecionar, onFechar, modo = 'bar', filtroI
               return (
                 <button
                   key={t.id}
-                  onClick={() => onSelecionar(t.conteudo)}
+                  onClick={() => selecionar(t)}
                   onMouseEnter={() => setIndiceSelecionado(idx)}
                   className={`w-full text-left px-3 py-2.5 transition flex items-start gap-3 ${
                     isSelected
@@ -184,10 +199,19 @@ export function TemplateSelector({ onSelecionar, onFechar, modo = 'bar', filtroI
                       : 'text-slate-300 hover:bg-slate-700/50'
                   }`}
                 >
-                  <span className="text-base flex-shrink-0 mt-0.5">{emoji}</span>
+                  {automacao ? (
+                    <Zap className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-400" />
+                  ) : (
+                    <span className="text-base flex-shrink-0 mt-0.5">{emoji}</span>
+                  )}
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium truncate">{t.nome}</span>
+                      {automacao && (
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold uppercase bg-amber-500/15 text-amber-400 border border-amber-500/25 flex-shrink-0">
+                          Automação
+                        </span>
+                      )}
                       <span className="text-[10px] text-slate-500 flex-shrink-0">/{t.slug}</span>
                     </div>
                     <p className="text-[11px] text-slate-400 truncate mt-0.5">{preview}</p>
@@ -221,15 +245,19 @@ export function TemplateSelector({ onSelecionar, onFechar, modo = 'bar', filtroI
       ) : (
         <div className="flex flex-wrap gap-1.5">
           {templates.map(t => {
-            const cor = CORES_TEMPLATE[t.slug] || 'bg-slate-500/10 text-slate-400 border-slate-500/20 hover:bg-slate-500/20';
+            const automacao = isTemplateAutomacao(t.tipo);
+            const cor = automacao
+              ? 'bg-amber-500/10 text-amber-400 border-amber-500/25 hover:bg-amber-500/20'
+              : (CORES_TEMPLATE[t.slug] || 'bg-slate-500/10 text-slate-400 border-slate-500/20 hover:bg-slate-500/20');
             const emoji = EMOJIS_TEMPLATE[t.slug] || '📝';
             return (
               <button
                 key={t.id}
-                onClick={() => onSelecionar(t.conteudo)}
-                className={`px-3 py-1.5 text-[11px] border rounded-lg transition font-medium ${cor}`}
+                onClick={() => selecionar(t)}
+                className={`px-3 py-1.5 text-[11px] border rounded-lg transition font-medium inline-flex items-center gap-1.5 ${cor}`}
               >
-                {emoji} {t.nome}
+                {automacao ? <Zap className="w-3 h-3" /> : <span>{emoji}</span>}
+                {t.nome}
               </button>
             );
           })}

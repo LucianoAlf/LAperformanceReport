@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Plus, Pencil, Trash2, Loader2, Save, ArrowLeft } from 'lucide-react';
+import { Plus, Pencil, Trash2, Loader2, Save, ArrowLeft, Zap } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -266,8 +266,9 @@ export function ModalGerenciarTemplates({ aberto, onFechar, contexto = 'pre_aten
                 </div>
               ) : (
                 templates.map(t => {
+                  const automacao = !!t.tipo && t.tipo.startsWith('automacao');
                   const emoji = EMOJIS_TIPO[t.slug] || EMOJIS_TIPO[t.tipo] || '📝';
-                  const cor = CORES_TIPO[t.slug] || CORES_TIPO[t.tipo] || 'text-slate-400';
+                  const cor = automacao ? 'text-amber-400' : (CORES_TIPO[t.slug] || CORES_TIPO[t.tipo] || 'text-slate-400');
                   const preview = t.conteudo.split('\n')[0].slice(0, 60) + (t.conteudo.length > 60 ? '...' : '');
 
                   return (
@@ -279,10 +280,15 @@ export function ModalGerenciarTemplates({ aberto, onFechar, contexto = 'pre_aten
                           : 'border-slate-700/30 bg-slate-800/20 opacity-50'
                       }`}
                     >
-                      <span className="text-lg mt-0.5">{emoji}</span>
+                      {automacao ? <Zap className="w-4 h-4 mt-1 text-amber-400" /> : <span className="text-lg mt-0.5">{emoji}</span>}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className={`text-sm font-medium ${cor}`}>{t.nome}</span>
+                          {automacao && (
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold uppercase bg-amber-500/15 text-amber-400 border border-amber-500/25">
+                              Automação
+                            </span>
+                          )}
                           <span className="text-[10px] text-slate-500">/{t.slug}</span>
                           {!t.ativo && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">
