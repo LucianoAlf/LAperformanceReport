@@ -481,7 +481,7 @@ export function ComercialPage() {
   const [filtroProfessorFunil, setFiltroProfessorFunil] = useState<string>('todos');
   const [filtroTipoExp, setFiltroTipoExp] = useState<'leads_novos' | 'todos' | 'alunos' | 'agendadas_periodo'>('leads_novos');
   // Filtro de presença na aba Experimentais: compareceram (vieram) vs faltaram
-  const [filtroPresencaExp, setFiltroPresencaExp] = useState<'todas' | 'compareceram' | 'faltaram'>('todas');
+  const [filtroPresencaExp, setFiltroPresencaExp] = useState<'todas' | 'compareceram' | 'faltaram'>('compareceram');
   const [filtroTipoMat, setFiltroTipoMat] = useState<'novos_alunos' | 'segundo_curso' | 'todos'>('novos_alunos');
   const [selecionadosFunil, setSelecionadosFunil] = useState<Set<number>>(new Set());
   const [excluindoEmLote, setExcluindoEmLote] = useState(false);
