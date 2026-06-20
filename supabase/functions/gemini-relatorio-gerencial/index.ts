@@ -56,13 +56,20 @@ function barra(percentual: number, tamanho = 10): string {
 }
 
 function statusMeta(percentual: number, invertido = false): string {
-  if (invertido) return percentual <= 100 ? "✅" : percentual <= 130 ? "⚠️" : "❌";
+  if (invertido) return percentual >= 100 ? "✅" : percentual >= 70 ? "⚠️" : "❌";
   return percentual >= 100 ? "✅" : percentual >= 70 ? "⚠️" : "❌";
+}
+
+function metaPercentual(atual: number, meta: number, invertido = false): number {
+  if (!meta) return 0;
+  if (!invertido) return (atual / meta) * 100;
+  if (atual <= meta) return 100;
+  return Math.max(0, 100 - ((atual - meta) / Math.max(meta, 0.01)) * 100);
 }
 
 function linhaMeta(label: string, atual: number, meta: number, sufixo = "", invertido = false): string {
   if (!meta) return `• ${label}: sem meta cadastrada\n`;
-  const percentual = invertido ? (meta / Math.max(atual, 0.01)) * 100 : (atual / meta) * 100;
+  const percentual = metaPercentual(atual, meta, invertido);
   return `${barra(Math.min(percentual, 100))} ${Math.round(percentual)}% ${label} (${sufixo}${formatValor(atual, sufixo)}/${sufixo}${formatValor(meta, sufixo)}) ${statusMeta(percentual, invertido)}\n`;
 }
 
@@ -138,6 +145,7 @@ Voce e um consultor de gestao especializado em escolas de musica.
 Gere apenas JSON valido com resumo_executivo, conquistas, pontos_atencao, plano_acao e mensagem_final.
 Nunca publique Taxa Experimental -> Matricula como KPI oficial.
 Se mencionar essa taxa, diga que esta BLOQUEADA aguardando regra canonica de presenca/vinculo.
+Quando falar de experimentais, diferencie status operacional de presenca confirmada.
 Use linguagem profissional, direta e pronta para WhatsApp.
 
 DADOS:
@@ -195,16 +203,16 @@ async function montarRelatorio(dados: any): Promise<string> {
   const ticketMedio = n(kpiGestao.ticket_medio);
   const mrr = n(kpiGestao.mrr);
   const churnRate = n(kpiGestao.churn_rate);
-  const inadimplencia = n(kpiGestao.inadimplencia_pct);
-  const tempoPermanencia = n(kpiGestao.tempo_permanencia_medio);
+  const inadimplencia = n(kpiGestao.inadimplencia_pct ?? kpiGestao.inadimplencia);
+  const tempoPermanencia = n(kpiGestao.tempo_permanencia_medio ?? kpiGestao.tempo_permanencia);
   const ltvMedio = n(kpiGestao.ltv_medio);
-  const reajusteMedio = n(kpiGestao.reajuste_medio);
+  const reajusteMedio = n(kpiGestao.reajuste_medio ?? kpiGestao.reajuste_pct);
 
-  const totalEvasoes = n(kpiRetencao.total_evasoes);
+  const totalEvasoes = n(kpiRetencao.total_evasoes ?? kpiGestao.total_evasoes ?? kpiGestao.evasoes);
   const mrrPerdido = n(kpiRetencao.mrr_perdido);
   const renovacoesPrevistas = n(kpiRetencao.renovacoes_previstas);
   const renovacoesRealizadas = n(kpiRetencao.renovacoes_realizadas);
-  const taxaRenovacao = renovacoesPrevistas > 0 ? (renovacoesRealizadas / renovacoesPrevistas) * 100 : 0;
+  const taxaRenovacao = renovacoesPrevistas > 0 ? (renovacoesRealizadas / renovacoesPrevistas) * 100 : n(kpiGestao.taxa_renovacao);
   const naoRenovacoes = n(kpiRetencao.nao_renovacoes);
 
   const totalLeads = n(kpiComercial.total_leads ?? kpiComercial.leads_entrantes);
@@ -217,6 +225,7 @@ async function montarRelatorio(dados: any): Promise<string> {
   const experimentaisSemPresenca = n(kpiComercial.experimentais_status_operacional_sem_presenca);
   const novasMatriculas = n(
     kpiComercial.novas_matriculas ??
+      kpiGestao.novas_matriculas ??
       kpiComercial.matriculas_comerciais_principais ??
       kpiComercial.matriculas_academicas,
   );
@@ -441,7 +450,8 @@ async function montarRelatorio(dados: any): Promise<string> {
   relatorio += `${ia.mensagem_final}\n\n`;
 
   relatorio += "⚠️ *Nota de controle*\n";
-  relatorio += `Taxa Experimental → Matrícula: ${TAXA_EXP_MAT_BLOQUEADA_LABEL}.\n\n`;
+  relatorio += `Taxa Experimental → Matrícula: ${TAXA_EXP_MAT_BLOQUEADA_LABEL}.\n`;
+  relatorio += `Experimentais operacionais usam status do funil; presença confirmada usa aluno vinculado + presença individual + aula Emusys experimental.\n\n`;
   relatorio += "━━━━━━━━━━━━━━━━━━━━━━\n";
   relatorio += `📅 Gerado em: ${new Date().toLocaleDateString("pt-BR")} às ${new Date().getHours()}:${String(new Date().getMinutes()).padStart(2, "0")}\n`;
   relatorio += "━━━━━━━━━━━━━━━━━━━━━━";
