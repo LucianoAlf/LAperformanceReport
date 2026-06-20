@@ -16,7 +16,8 @@ import {
   ChevronDown,
   ChevronUp,
   Plane,
-  BarChart3
+  BarChart3,
+  Lock
 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useMatriculadorPrograma, HunterDados, Penalidade } from '@/hooks/useMatriculadorPrograma';
@@ -482,18 +483,13 @@ export function TabProgramaMatriculador({ unidadeId, ano = 2026 }: TabProgramaMa
                     </tr>
                     <tr className="border-b border-slate-800">
                       <td className="py-3 font-medium">Taxa Experimental → Matrícula</td>
-                      <td className="text-center text-slate-400">{config.metas.taxa_experimental_matricula}%</td>
+                      <td className="text-center text-yellow-300">Bloqueada</td>
                       {hunters.map(h => (
-                        <td key={h.unidade_id} className={cn(
-                          "text-center",
-                          h.metricas.taxa_exp_mat >= config.metas.taxa_experimental_matricula 
-                            ? "text-emerald-400" : "text-red-400"
-                        )}>
-                          {h.metricas.taxa_exp_mat.toFixed(1)}% 
-                          {h.metricas.taxa_exp_mat >= config.metas.taxa_experimental_matricula ? ' ✓' : ' ✗'}
+                        <td key={h.unidade_id} className="text-center text-yellow-300">
+                          Bloqueada
                         </td>
                       ))}
-                      <td className="text-center text-slate-400">{config.pontuacao.taxa_exp_mat} pts</td>
+                      <td className="text-center text-slate-400">0 pts</td>
                     </tr>
                     <tr className="border-b border-slate-800">
                       <td className="py-3 font-medium">Taxa Lead → Matrícula (Geral)</td>
@@ -757,9 +753,8 @@ export function TabProgramaMatriculador({ unidadeId, ano = 2026 }: TabProgramaMa
                   </div>
                   <div>
                     <Label className="text-slate-400">Taxa Experimental → Matrícula</Label>
-                    <div className="flex gap-2 mt-1">
-                      <ConfigInput value={config.metas.taxa_experimental_matricula} campo="meta_taxa_experimental_matricula" ano={ano} />
-                      <span className="flex items-center text-slate-400">%</span>
+                    <div className="mt-1 rounded-lg border border-yellow-500/20 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-200">
+                      Bloqueada até regra canônica de presença/vínculo.
                     </div>
                   </div>
                   <div>
@@ -840,8 +835,8 @@ export function TabProgramaMatriculador({ unidadeId, ano = 2026 }: TabProgramaMa
                   </div>
                   <div>
                     <Label className="text-slate-400">Pontos - Taxa Exp → Matrícula</Label>
-                    <div className="mt-1">
-                      <ConfigInput value={config.pontuacao.taxa_exp_mat} campo="pontos_taxa_exp_mat" ano={ano} />
+                    <div className="mt-1 rounded-lg border border-yellow-500/20 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-200">
+                      0 pts neste ciclo.
                     </div>
                   </div>
                   <div>
@@ -1160,39 +1155,22 @@ export function TabProgramaMatriculador({ unidadeId, ano = 2026 }: TabProgramaMa
         </div>
 
         {/* Taxa Experimental → Matrícula */}
-        <div className="bg-slate-900 rounded-xl p-5">
+        <div className="bg-slate-900 rounded-xl p-5 border border-yellow-500/30">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h4 className="font-medium">Taxa Experimental → Matrícula</h4>
-              <p className="text-sm text-slate-400">Meta: {config.metas.taxa_experimental_matricula}%</p>
+              <h4 className="font-medium flex items-center gap-2">
+                <Lock className="h-4 w-4 text-yellow-400" />
+                Taxa Experimental → Matrícula
+              </h4>
+              <p className="text-sm text-yellow-300">Bloqueada até regra canônica de presença/vínculo</p>
             </div>
             <div className="text-right">
-              <span className={cn(
-                "text-2xl font-bold",
-                hunterAtual.metricas.taxa_exp_mat >= config.metas.taxa_experimental_matricula 
-                  ? "text-emerald-400" : "text-red-400"
-              )}>
-                {hunterAtual.metricas.taxa_exp_mat.toFixed(1)}%
-              </span>
-              <span className={cn(
-                "text-sm block",
-                hunterAtual.pontuacao?.taxa_exp_mat ? "text-emerald-400" : "text-slate-400"
-              )}>
-                {hunterAtual.pontuacao?.taxa_exp_mat ? `+${hunterAtual.pontuacao.taxa_exp_mat} pts ✓` : '0 pts'}
-              </span>
+              <span className="text-2xl font-bold text-yellow-300">Bloqueada</span>
+              <span className="text-sm block text-slate-400">0 pts</span>
             </div>
           </div>
-          <div className="w-full bg-slate-700 rounded-full h-3">
-            <div 
-              className={cn(
-                "h-3 rounded-full transition-all",
-                hunterAtual.metricas.taxa_exp_mat >= config.metas.taxa_experimental_matricula 
-                  ? "bg-emerald-500" : "bg-amber-500"
-              )}
-              style={{ 
-                width: `${Math.min(100, (hunterAtual.metricas.taxa_exp_mat / config.metas.taxa_experimental_matricula) * 100)}%` 
-              }}
-            />
+          <div className="rounded-lg bg-yellow-500/10 border border-yellow-500/20 px-3 py-2 text-xs text-yellow-100">
+            Não usar como critério de pontuação oficial neste ciclo. Aguardando presença individual + vínculo canônico.
           </div>
         </div>
 
@@ -1520,7 +1498,7 @@ function HistoricoMensal({ historico, mediaGrupo, config, metaVolume, metaTicket
                   <th className="text-center py-3">Exp.</th>
                   <th className="text-center py-3">Mat.</th>
                   <th className="text-center py-3">Taxa Showup</th>
-                  <th className="text-center py-3">Taxa Exp→Mat</th>
+                  <th className="text-center py-3">Exp→Mat</th>
                   <th className="text-center py-3 bg-yellow-500/10">Taxa Geral</th>
                   <th className="text-center py-3">Ticket</th>
                 </tr>
@@ -1539,8 +1517,8 @@ function HistoricoMensal({ historico, mediaGrupo, config, metaVolume, metaTicket
                       <td className={cn("text-center", h.taxa_showup >= config.metas.taxa_showup_experimental ? "text-emerald-400" : "text-red-400")}>
                         {h.taxa_showup}% {h.taxa_showup >= config.metas.taxa_showup_experimental ? <Check className="inline w-3 h-3" /> : <X className="inline w-3 h-3" />}
                       </td>
-                      <td className={cn("text-center", h.taxa_exp_mat >= config.metas.taxa_experimental_matricula ? "text-emerald-400" : "text-red-400")}>
-                        {h.taxa_exp_mat}% {h.taxa_exp_mat >= config.metas.taxa_experimental_matricula ? <Check className="inline w-3 h-3" /> : <X className="inline w-3 h-3" />}
+                      <td className="text-center text-yellow-300">
+                        Bloqueada
                       </td>
                       <td className={cn("text-center bg-yellow-500/10 font-bold", h.taxa_geral >= config.metas.taxa_lead_matricula ? "text-emerald-400" : "text-red-400")}>
                         {h.taxa_geral}% {h.taxa_geral >= config.metas.taxa_lead_matricula ? <Check className="inline w-3 h-3" /> : <X className="inline w-3 h-3" />}
@@ -1560,8 +1538,8 @@ function HistoricoMensal({ historico, mediaGrupo, config, metaVolume, metaTicket
                   <td className={cn("text-center", Number(mediasAnuais.taxa_showup) >= config.metas.taxa_showup_experimental ? "text-emerald-400" : "text-red-400")}>
                     {mediasAnuais.taxa_showup}%
                   </td>
-                  <td className={cn("text-center", Number(mediasAnuais.taxa_exp_mat) >= config.metas.taxa_experimental_matricula ? "text-emerald-400" : "text-red-400")}>
-                    {mediasAnuais.taxa_exp_mat}%
+                  <td className="text-center text-yellow-300">
+                    Bloqueada
                   </td>
                   <td className={cn("text-center bg-yellow-500/10", Number(mediasAnuais.taxa_geral) >= config.metas.taxa_lead_matricula ? "text-emerald-400" : "text-red-400")}>
                     {mediasAnuais.taxa_geral}%
