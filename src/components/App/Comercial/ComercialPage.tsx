@@ -2471,10 +2471,23 @@ export function ComercialPage() {
   // Gerar relatório diário
   // Helper: matrículas reais do período (fonte = alunos por data_matricula).
   // Usado pelos relatórios para alinhar com a aba/funil (que também lê de alunos).
+  const formatarDataCurtaRelatorio = (valor?: string | null) => {
+    if (!valor) return '-';
+    const texto = String(valor).trim();
+    if (!texto) return '-';
+    const iso = texto.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (iso) return `${iso[3]}/${iso[2]}`;
+    const br = texto.match(/^(\d{1,2})\/(\d{1,2})(?:\/\d{2,4})?$/);
+    if (br) return `${br[1].padStart(2, '0')}/${br[2].padStart(2, '0')}`;
+    const data = new Date(texto);
+    if (Number.isNaN(data.getTime())) return '-';
+    return data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+  };
+
   const buscarMatriculasAlunos = async (uid: string | null | undefined, dataInicio: string, dataFim: string) => {
     let q = supabase
       .from('alunos')
-      .select('id, nome, idade_atual, tipo_aluno, valor_passaporte, valor_parcela, is_segundo_curso, curso_id, professor_atual_id, cursos:curso_id(nome, is_projeto_banda)')
+      .select('id, nome, idade_atual, data_matricula, tipo_aluno, valor_passaporte, valor_parcela, is_segundo_curso, curso_id, professor_atual_id, cursos:curso_id(nome, is_projeto_banda)')
       .not('data_matricula', 'is', null)
       .gte('data_matricula', dataInicio)
       .lte('data_matricula', dataFim);
@@ -2577,7 +2590,7 @@ export function ComercialPage() {
       texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
       matriculasNovas.forEach((mat: any, i: number) => {
         const dataMat = mat.data_matricula || mat.data_contato;
-        const dataFormatada = dataMat ? new Date(dataMat + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '-';
+        const dataFormatada = formatarDataCurtaRelatorio(dataMat);
         texto += `MAT. ${(i + 1).toString().padStart(2, '0')}\n`;
         texto += `📅 Data: ${dataFormatada}\n`;
         texto += `👤 Aluno: ${mat.nome || 'Não informado'}`;
@@ -2751,6 +2764,7 @@ export function ComercialPage() {
     const matriculasDetalhadas = matAlunosMes.map((a: any) => ({
       nome: a.nome,
       idade: a.idade_atual,
+      data_matricula: a.data_matricula,
       data_contato: a.data_matricula,
       tipo_matricula: null,
       tipo_aluno: a.tipo_aluno,
@@ -2900,7 +2914,7 @@ export function ComercialPage() {
       texto += `📋 *LISTA DE MATRÍCULAS*\n`;
       texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
       matriculasDetalhadas.forEach((mat, i) => {
-        const dataFormatada = new Date(mat.data_contato + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
+        const dataFormatada = formatarDataCurtaRelatorio(mat.data_matricula || mat.data_contato);
         texto += `${i + 1}. ${mat.nome}`;
         if (mat.idade) texto += ` (${mat.idade} anos)`;
         texto += `\n   📅 ${dataFormatada}`;
@@ -3034,7 +3048,7 @@ export function ComercialPage() {
 
     matriculasMes.forEach((mat, i) => {
       const dataMat = (mat as any).data_matricula || mat.data_contato;
-      const dataFormatada = dataMat ? new Date(dataMat + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }) : '-';
+      const dataFormatada = formatarDataCurtaRelatorio(dataMat);
 
       texto += `MAT. ${(i + 1).toString().padStart(2, '0')}\n`;
       texto += `📅 Data: ${dataFormatada}\n`;
