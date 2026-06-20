@@ -140,9 +140,10 @@ export function SimuladorPage() {
           churnProjetado: round1(metasAplicadas.churn_rate) || dadosAtuais.churnRate || 4,
           mrrObjetivo: Math.round(metasAplicadas.mrr || mrrAtual * 1.1),
           inadimplenciaPct: dadosAtuais.inadimplencia || 3,
-          // Taxas de conversão das metas aplicadas (arredondadas)
+          // Taxas de conversão das metas aplicadas (arredondadas).
+          // Exp -> Mat é apenas parâmetro de simulação; histórico oficial segue bloqueado.
           taxaLeadExp: round1(metasAplicadas.taxa_lead_exp) || round1(dadosHistoricos?.taxaConversaoLeadExp) || 20,
-          taxaExpMat: round1(metasAplicadas.taxa_exp_mat) || round1(dadosHistoricos?.taxaConversaoExpMat) || 60,
+          taxaExpMat: round1(metasAplicadas.taxa_exp_mat) || 60,
         });
       } else {
         // Sem metas aplicadas, usar valores padrão (+10%)
@@ -153,9 +154,9 @@ export function SimuladorPage() {
           churnProjetado: dadosAtuais.churnRate || 4,
           mrrObjetivo: Math.round(mrrAtual * 1.1),
           inadimplenciaPct: dadosAtuais.inadimplencia || 3,
-          // Taxas do histórico (arredondadas)
+          // Taxa Lead -> Exp vem do histórico; Exp -> Mat não usa histórico legado.
           taxaLeadExp: round1(dadosHistoricos?.taxaConversaoLeadExp) || 20,
-          taxaExpMat: round1(dadosHistoricos?.taxaConversaoExpMat) || 60,
+          taxaExpMat: 60,
         });
       }
     }
@@ -256,7 +257,7 @@ export function SimuladorPage() {
         ticketAtual={inputs.ticketMedio}
         churnAtual={inputs.churnProjetado}
         historicoLeadExp={dadosHistoricos?.taxaConversaoLeadExp || 20}
-        historicoExpMat={dadosHistoricos?.taxaConversaoExpMat || 60}
+        historicoExpMat={60}
         onAplicarTemplate={(valores) => {
           console.log('Template aplicado:', valores);
           setTemplateAplicado(true);

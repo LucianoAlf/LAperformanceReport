@@ -18,7 +18,8 @@ import {
   Award,
   Phone,
   GraduationCap,
-  RefreshCw
+  RefreshCw,
+  Lock
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
 import { formatCurrency } from '@/lib/utils';
@@ -881,14 +882,12 @@ export function DashboardPage() {
             onClick={() => { fetchExperimentais(); setModalExperimentais(true); }}
           />
           <KPICard
-            icon={Percent}
-            label="Taxa Conversão"
-            tooltip="Dos alunos que fizeram aula experimental no período, quantos matricularam. Fórmula: leads que fizeram exp E matricularam / leads que fizeram exp × 100. Exclui matrícula direta. Clique para ver a lista."
-            value={dadosComercial?.taxa_conversao ?? '--'}
-            format="percent"
-            subvalue={!dadosComercial ? 'Aguardando dados' : undefined}
-            variant="emerald"
-            onClick={() => { fetchConversao(); setModalConversao(true); }}
+            icon={Lock}
+            label="Taxa Exp → Mat"
+            tooltip="KPI bloqueado: aguarda regra canônica de vínculo lead → aluno → presença experimental individual."
+            value="Bloqueada"
+            subvalue="Aguardando regra canônica"
+            variant="amber"
           />
           <KPICard
             icon={Ticket}

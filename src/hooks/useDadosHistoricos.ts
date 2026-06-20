@@ -168,19 +168,19 @@ export function useDadosHistoricos(
             mediaMatriculas = historicoGestao.reduce((sum, h) => sum + (h.novas_matriculas || 0), 0) / mesesAnalisados;
           }
 
-          // Calcular taxas de conversão a partir dos dados históricos
+          // Calcular taxas de conversão a partir dos dados históricos.
+          // Exp -> Mat permanece bloqueada como KPI oficial: não alimentar simulador
+          // com snapshot legado até a regra canônica de presença/vínculo fechar.
           let taxaConversaoLeadExp = 60; // default
-          let taxaConversaoExpMat = 50; // default
+          const taxaConversaoExpMat = 0;
           
           if (historicoComercial && historicoComercial.length > 0) {
             // Usar as taxas já calculadas na view (média das taxas mensais)
             const taxasLeadExp = historicoComercial.map(h => parseFloat(h.taxa_lead_exp) || 0);
-            const taxasExpMat = historicoComercial.map(h => parseFloat(h.taxa_exp_mat) || 0);
             taxaConversaoLeadExp = taxasLeadExp.reduce((a, b) => a + b, 0) / taxasLeadExp.length;
-            taxaConversaoExpMat = taxasExpMat.reduce((a, b) => a + b, 0) / taxasExpMat.length;
           }
           
-          const taxaConversaoTotal = (taxaConversaoLeadExp / 100) * (taxaConversaoExpMat / 100) * 100;
+          const taxaConversaoTotal = 0;
           
           // Usar churn da view vw_unidade_anual (dados consolidados de 2025)
           const churnHistorico = dadosAnuais 

@@ -345,6 +345,7 @@ export function InsightsIA({ inputs, resultado, alertas, historico, unidadeId, u
         churnProjetado: inputs.churnProjetado,
         taxaLeadExp: inputs.taxaLeadExp,
         taxaExpMat: inputs.taxaExpMat,
+        taxaExpMatStatus: 'parametro_de_simulacao_nao_kpi_oficial',
         
         // Cálculos
         matriculasNecessarias: resultado?.matriculasTotais || 0,

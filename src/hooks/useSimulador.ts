@@ -55,7 +55,8 @@ export function useSimulador(
     churnProjetado: churnAtual || DEFAULTS_SIMULACAO.churnProjetado || 4,
     ticketMedio: ticketMedioAtual || 285,
     taxaLeadExp: dadosHistoricos?.taxaConversaoLeadExp || DEFAULTS_SIMULACAO.taxaLeadExp || 60,
-    taxaExpMat: dadosHistoricos?.taxaConversaoExpMat || DEFAULTS_SIMULACAO.taxaExpMat || 50,
+    // Exp -> Mat é parâmetro de simulação, não histórico oficial enquanto a regra canônica está bloqueada.
+    taxaExpMat: DEFAULTS_SIMULACAO.taxaExpMat || 50,
     inadimplenciaPct: DEFAULTS_SIMULACAO.inadimplenciaPct || 3,
   }));
 
@@ -105,7 +106,7 @@ export function useSimulador(
       churnProjetado: churnAtual || 4,
       ticketMedio: ticketMedioAtual || 285,
       taxaLeadExp: dadosHistoricos?.taxaConversaoLeadExp || 60,
-      taxaExpMat: dadosHistoricos?.taxaConversaoExpMat || 50,
+      taxaExpMat: DEFAULTS_SIMULACAO.taxaExpMat || 50,
       inadimplenciaPct: 3,
     });
     setCenarioAtivo(null);

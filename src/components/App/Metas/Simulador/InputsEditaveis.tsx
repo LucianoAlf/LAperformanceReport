@@ -114,7 +114,7 @@ export function InputsEditaveis({ inputs, historico, tipoObjetivo, onChange }: I
         <div>
           <label className="text-xs text-slate-500 mb-1 flex items-center gap-1">
             <Percent className="w-3 h-3" />
-            Exp → Mat
+            Exp → Mat (simulação)
           </label>
           <div className="relative">
             <input
@@ -130,29 +130,25 @@ export function InputsEditaveis({ inputs, historico, tipoObjetivo, onChange }: I
             />
             <span className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500">%</span>
           </div>
-          {historico && (
-            <div className="text-[10px] text-slate-500 mt-1 text-center">
-              Histórico: {historico.taxaConversaoExpMat.toFixed(1)}%
-            </div>
-          )}
+          <div className="text-[10px] text-amber-400/80 mt-1 text-center">
+            Histórico oficial bloqueado
+          </div>
         </div>
 
         {/* Conversão Total (somente leitura) */}
         <div>
           <label className="text-xs text-slate-500 mb-1 flex items-center gap-1">
             <Percent className="w-3 h-3" />
-            Conversão Total
+            Conversão simulada
           </label>
           <div className="bg-slate-700/50 border border-slate-600 rounded-lg p-2 text-center">
             <span className="text-lg font-bold text-cyan-400">
               {((inputs.taxaLeadExp / 100) * (inputs.taxaExpMat / 100) * 100).toFixed(1)}%
             </span>
           </div>
-          {historico && (
-            <div className="text-[10px] text-slate-500 mt-1 text-center">
-              Histórico: {historico.taxaConversaoTotal?.toFixed(1) || '?'}%
-            </div>
-          )}
+          <div className="text-[10px] text-amber-400/80 mt-1 text-center">
+            Não é KPI oficial
+          </div>
         </div>
 
         {/* Inadimplência - apenas no modo MRR */}

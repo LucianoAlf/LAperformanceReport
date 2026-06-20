@@ -62,7 +62,7 @@ const KPIS_COMERCIAL: KPIConfig[] = [
   { id: 'experimentais', label: 'Aulas Experimentais', icon: Star, formato: 'numero', cor: 'amber', descricao: 'Aulas experimentais agendadas', agregacao: 'soma' },
   { id: 'matriculas', label: 'Matrículas', icon: UserCheck, formato: 'numero', cor: 'emerald', descricao: 'Novas matrículas no mês', agregacao: 'soma' },
   { id: 'taxa_lead_exp', label: 'Taxa Lead → Exp (%)', icon: Percent, formato: 'percentual', cor: 'cyan', descricao: 'Conversão de lead para experimental', agregacao: 'media' },
-  { id: 'taxa_exp_mat', label: 'Taxa Exp → Mat (%)', icon: Percent, formato: 'percentual', cor: 'emerald', descricao: 'Conversão de experimental para matrícula', agregacao: 'media' },
+  { id: 'taxa_exp_mat', label: 'Taxa Exp → Mat bloqueada (%)', icon: Percent, formato: 'percentual', cor: 'emerald', descricao: 'KPI bloqueado até regra canônica de presença/vínculo', agregacao: 'media' },
   { id: 'taxa_conversao', label: 'Taxa Conversão Total (%)', icon: TrendingUp, formato: 'percentual', cor: 'violet', descricao: 'Conversão total do funil', agregacao: 'media' },
   { id: 'ticket_parcela', label: 'Ticket Parcela', icon: DollarSign, formato: 'moeda', cor: 'emerald', descricao: 'Valor médio da parcela de matrícula', agregacao: 'media' },
 ];
