@@ -4,8 +4,13 @@ import {
   type ComercialOperacionalMesV2,
   type ComercialOperacionalPayloadV2,
   type ComercialOperacionalResumoDadosV2,
+  type ExperimentaisDiagnosticoMesV2,
+  type ExperimentaisDiagnosticoPayloadV2,
+  type ExperimentaisDiagnosticoResumoV2,
   normalizarMesRange,
+  normalizarPayloadMensalExperimentaisDiagnosticoV2,
   normalizarPayloadMensalComercialV2,
+  somarSeriesMensaisExperimentaisDiagnosticoV2,
   somarSeriesMensaisComercialV2,
 } from '../lib/comercialOperacionalV2';
 import { supabase } from '../lib/supabase';
@@ -66,6 +71,42 @@ export async function fetchLeadsEntrantesComercialV2(
 ): Promise<number> {
   const resumo = await fetchComercialOperacionalResumoV2(params);
   return resumo.leadsEntrantes;
+}
+
+export async function fetchExperimentaisDiagnosticoComercialV2({
+  unidadeId,
+  ano,
+  mesInicio,
+  mesFim,
+}: FetchLeadsComercialV2Params): Promise<ExperimentaisDiagnosticoResumoV2> {
+  const meses = normalizarMesRange(mesInicio, mesFim);
+  const seriesMensais: ExperimentaisDiagnosticoMesV2[] = [];
+
+  for (const mes of meses) {
+    const { data, error } = await supabase.rpc(
+      'get_experimentais_comercial_diagnostico_v2',
+      buildComercialOperacionalRpcParamsV2({
+        unidadeId,
+        ano,
+        mes,
+      }),
+    );
+
+    if (error) {
+      throw new Error(
+        `Erro ao buscar diagnóstico de experimentais v2 ${ano}-${String(mes).padStart(2, '0')}: ${error.message}`,
+      );
+    }
+
+    seriesMensais.push(
+      normalizarPayloadMensalExperimentaisDiagnosticoV2(
+        mes,
+        data as ExperimentaisDiagnosticoPayloadV2 | null,
+      ),
+    );
+  }
+
+  return somarSeriesMensaisExperimentaisDiagnosticoV2(seriesMensais);
 }
 
 export function useComercialOperacionalResumoV2({
