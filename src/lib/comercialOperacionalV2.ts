@@ -33,6 +33,23 @@ export interface ComercialOperacionalPayloadV2 {
   por_unidade?: PorUnidadePayloadV2[] | null;
 }
 
+export interface ExperimentaisDiagnosticoTotaisPayloadV2 {
+  experimentais_agendadas_eventos?: number | string | null;
+  experimentais_canceladas?: number | string | null;
+  no_show_status_operacional?: number | string | null;
+  experimentais_realizadas_status_operacional?: number | string | null;
+  experimentais_realizadas_presenca_confirmada?: number | string | null;
+  experimentais_status_operacional_sem_presenca?: number | string | null;
+  experimentais_sem_aluno_id?: number | string | null;
+  presencas_emusys_experimentais_presentes?: number | string | null;
+  presencas_emusys_com_funil?: number | string | null;
+  presencas_emusys_sem_funil?: number | string | null;
+}
+
+export interface ExperimentaisDiagnosticoPayloadV2 {
+  totais?: ExperimentaisDiagnosticoTotaisPayloadV2 | null;
+}
+
 export interface OrigemCanalOperacionalV2 {
   canal: string;
   leads: number;
@@ -55,6 +72,25 @@ export interface ComercialOperacionalResumoDadosV2 {
   leadsEntrantes: number;
   origemCanal: OrigemCanalOperacionalV2[];
   seriesMensais: ComercialOperacionalMesV2[];
+}
+
+export interface ExperimentaisDiagnosticoMesV2 {
+  mes: number;
+  agendadasEventos: number;
+  canceladas: number;
+  noShowStatusOperacional: number;
+  realizadasStatusOperacional: number;
+  realizadasPresencaConfirmada: number;
+  statusOperacionalSemPresenca: number;
+  semAlunoId: number;
+  presencasEmusysExperimentaisPresentes: number;
+  presencasEmusysComFunil: number;
+  presencasEmusysSemFunil: number;
+}
+
+export interface ExperimentaisDiagnosticoResumoV2
+  extends Omit<ExperimentaisDiagnosticoMesV2, 'mes'> {
+  seriesMensais: ExperimentaisDiagnosticoMesV2[];
 }
 
 export function toComercialNumber(valor: unknown): number {
@@ -126,6 +162,35 @@ export function normalizarPayloadMensalComercialV2(
   };
 }
 
+export function normalizarPayloadMensalExperimentaisDiagnosticoV2(
+  mes: number,
+  payload: ExperimentaisDiagnosticoPayloadV2 | null,
+): ExperimentaisDiagnosticoMesV2 {
+  const totais = payload?.totais;
+
+  return {
+    mes,
+    agendadasEventos: toComercialNumber(totais?.experimentais_agendadas_eventos),
+    canceladas: toComercialNumber(totais?.experimentais_canceladas),
+    noShowStatusOperacional: toComercialNumber(totais?.no_show_status_operacional),
+    realizadasStatusOperacional: toComercialNumber(
+      totais?.experimentais_realizadas_status_operacional,
+    ),
+    realizadasPresencaConfirmada: toComercialNumber(
+      totais?.experimentais_realizadas_presenca_confirmada,
+    ),
+    statusOperacionalSemPresenca: toComercialNumber(
+      totais?.experimentais_status_operacional_sem_presenca,
+    ),
+    semAlunoId: toComercialNumber(totais?.experimentais_sem_aluno_id),
+    presencasEmusysExperimentaisPresentes: toComercialNumber(
+      totais?.presencas_emusys_experimentais_presentes,
+    ),
+    presencasEmusysComFunil: toComercialNumber(totais?.presencas_emusys_com_funil),
+    presencasEmusysSemFunil: toComercialNumber(totais?.presencas_emusys_sem_funil),
+  };
+}
+
 export function somarSeriesMensaisComercialV2(
   seriesMensais: ComercialOperacionalMesV2[],
 ): ComercialOperacionalResumoDadosV2 {
@@ -159,4 +224,42 @@ export function somarSeriesMensaisComercialV2(
     origemCanal,
     seriesMensais,
   };
+}
+
+export function somarSeriesMensaisExperimentaisDiagnosticoV2(
+  seriesMensais: ExperimentaisDiagnosticoMesV2[],
+): ExperimentaisDiagnosticoResumoV2 {
+  return seriesMensais.reduce<ExperimentaisDiagnosticoResumoV2>(
+    (acc, mes) => ({
+      agendadasEventos: acc.agendadasEventos + mes.agendadasEventos,
+      canceladas: acc.canceladas + mes.canceladas,
+      noShowStatusOperacional: acc.noShowStatusOperacional + mes.noShowStatusOperacional,
+      realizadasStatusOperacional:
+        acc.realizadasStatusOperacional + mes.realizadasStatusOperacional,
+      realizadasPresencaConfirmada:
+        acc.realizadasPresencaConfirmada + mes.realizadasPresencaConfirmada,
+      statusOperacionalSemPresenca:
+        acc.statusOperacionalSemPresenca + mes.statusOperacionalSemPresenca,
+      semAlunoId: acc.semAlunoId + mes.semAlunoId,
+      presencasEmusysExperimentaisPresentes:
+        acc.presencasEmusysExperimentaisPresentes +
+        mes.presencasEmusysExperimentaisPresentes,
+      presencasEmusysComFunil: acc.presencasEmusysComFunil + mes.presencasEmusysComFunil,
+      presencasEmusysSemFunil: acc.presencasEmusysSemFunil + mes.presencasEmusysSemFunil,
+      seriesMensais: [...acc.seriesMensais, mes],
+    }),
+    {
+      agendadasEventos: 0,
+      canceladas: 0,
+      noShowStatusOperacional: 0,
+      realizadasStatusOperacional: 0,
+      realizadasPresencaConfirmada: 0,
+      statusOperacionalSemPresenca: 0,
+      semAlunoId: 0,
+      presencasEmusysExperimentaisPresentes: 0,
+      presencasEmusysComFunil: 0,
+      presencasEmusysSemFunil: 0,
+      seriesMensais: [],
+    },
+  );
 }

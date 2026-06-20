@@ -10,7 +10,10 @@ import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { useMetasKPI } from '@/hooks/useMetasKPI';
 import { getCompetenciaAbertaAlertCopy, useCompetenciaMensalStatus } from '@/hooks/useCompetenciaMensalStatus';
-import { fetchComercialOperacionalResumoV2 } from '@/hooks/useComercialOperacionalResumoV2';
+import {
+  fetchComercialOperacionalResumoV2,
+  fetchExperimentaisDiagnosticoComercialV2,
+} from '@/hooks/useComercialOperacionalResumoV2';
 
 interface TabComercialProps {
   ano: number;
@@ -46,6 +49,16 @@ interface DadosComercial {
   taxa_conversao_exp_mat: number;
   experimentais_por_professor: { id: number; nome: string; valor: number; subvalor?: string }[];
   experimentais_por_canal: { name: string; value: number }[];
+  experimentais_diagnostico_v2: {
+    agendadasEventos: number;
+    realizadasStatusOperacional: number;
+    realizadasPresencaConfirmada: number;
+    statusOperacionalSemPresenca: number;
+    semAlunoId: number;
+    presencasEmusysExperimentaisPresentes: number;
+    presencasEmusysComFunil: number;
+    presencasEmusysSemFunil: number;
+  };
   
   // Matrículas
   novas_matriculas: number;
@@ -75,6 +88,17 @@ interface DadosComparativo {
   ticket_medio_passaporte: number;
   label: string;
 }
+
+const experimentaisDiagnosticoVazio: DadosComercial['experimentais_diagnostico_v2'] = {
+  agendadasEventos: 0,
+  realizadasStatusOperacional: 0,
+  realizadasPresencaConfirmada: 0,
+  statusOperacionalSemPresenca: 0,
+  semAlunoId: 0,
+  presencasEmusysExperimentaisPresentes: 0,
+  presencasEmusysComFunil: 0,
+  presencasEmusysSemFunil: 0,
+};
 
 export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps) {
   const [activeSubTab, setActiveSubTab] = useState<SubTabId>('leads');
@@ -123,6 +147,23 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           mesInicio,
           mesFim: mesFinal,
         });
+        const diagnosticoExperimentaisV2 = await fetchExperimentaisDiagnosticoComercialV2({
+          unidadeId: unidade,
+          ano,
+          mesInicio,
+          mesFim: mesFinal,
+        });
+        const experimentaisDiagnosticoV2 = {
+          agendadasEventos: diagnosticoExperimentaisV2.agendadasEventos,
+          realizadasStatusOperacional: diagnosticoExperimentaisV2.realizadasStatusOperacional,
+          realizadasPresencaConfirmada: diagnosticoExperimentaisV2.realizadasPresencaConfirmada,
+          statusOperacionalSemPresenca: diagnosticoExperimentaisV2.statusOperacionalSemPresenca,
+          semAlunoId: diagnosticoExperimentaisV2.semAlunoId,
+          presencasEmusysExperimentaisPresentes:
+            diagnosticoExperimentaisV2.presencasEmusysExperimentaisPresentes,
+          presencasEmusysComFunil: diagnosticoExperimentaisV2.presencasEmusysComFunil,
+          presencasEmusysSemFunil: diagnosticoExperimentaisV2.presencasEmusysSemFunil,
+        };
         const leadsPorCanalV2 = resumoLeadsV2.origemCanal.map((item) => ({
           name: item.canal,
           value: item.leads,
@@ -384,6 +425,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
               subvalor: ''
             })).sort((a, b) => b.valor - a.valor),
             experimentais_por_canal: Array.from(expCanaisMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+            experimentais_diagnostico_v2: experimentaisDiagnosticoV2,
             
             // Matrículas
             novas_matriculas: novasMatriculas,
@@ -609,6 +651,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             subvalor: `${data.convertidas} matrículas (${data.total > 0 ? ((data.convertidas / data.total) * 100).toFixed(0) : 0}%)`
           })).sort((a, b) => b.valor - a.valor),
           experimentais_por_canal: Array.from(expCanalMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
+          experimentais_diagnostico_v2: experimentaisDiagnosticoV2,
           
           // Matrículas
           novas_matriculas: novasMatriculas || matriculas.length,
@@ -670,6 +713,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
       <p className="text-slate-400 text-sm">{mensagem}</p>
     </div>
   );
+  const experimentaisDiagnostico = dados.experimentais_diagnostico_v2 || experimentaisDiagnosticoVazio;
 
   return (
     <div className="space-y-6">
@@ -815,6 +859,38 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
               </p>
             </div>
           )}
+
+          <div className="border border-cyan-500/30 bg-cyan-500/10 rounded-xl p-4">
+            <div className="flex items-start gap-3 mb-4">
+              <Info className="w-5 h-5 text-cyan-300 flex-shrink-0 mt-0.5" />
+              <div>
+                <h4 className="text-cyan-100 font-semibold">Diagnóstico v2 de experimentais</h4>
+                <p className="text-cyan-100/80 text-sm">
+                  Presença confirmada usa aluno vinculado + presença individual + aula Emusys experimental.
+                  Status operacional e taxa Exp → Mat continuam como legado/bloqueados para KPI oficial.
+                </p>
+              </div>
+            </div>
+            <dl className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div>
+                <dt className="text-slate-400">Presença confirmada</dt>
+                <dd className="text-white text-2xl font-bold">{experimentaisDiagnostico.realizadasPresencaConfirmada}</dd>
+              </div>
+              <div>
+                <dt className="text-slate-400">Status operacional</dt>
+                <dd className="text-white text-2xl font-bold">{experimentaisDiagnostico.realizadasStatusOperacional}</dd>
+              </div>
+              <div>
+                <dt className="text-slate-400">Sem presença/vínculo</dt>
+                <dd className="text-white text-2xl font-bold">{experimentaisDiagnostico.statusOperacionalSemPresenca}</dd>
+              </div>
+              <div>
+                <dt className="text-slate-400">Emusys sem funil</dt>
+                <dd className="text-white text-2xl font-bold">{experimentaisDiagnostico.presencasEmusysSemFunil}</dd>
+              </div>
+            </dl>
+          </div>
+
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <KPICard
               icon={Calendar}
@@ -824,7 +900,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             />
             <KPICard
               icon={Calendar}
-              label="Aulas Realizadas"
+              label="Realizadas (legado)"
               value={dados.experimentais_realizadas}
               target={metas.experimentais}
               format="number"
@@ -847,7 +923,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             />
             <KPICard
               icon={Target}
-              label="Conversão Exp → Mat"
+              label="Taxa Exp → Mat (legado)"
               value={dados.taxa_conversao_exp_mat}
               target={metas.taxa_exp_mat}
               format="percent"
