@@ -213,6 +213,8 @@ async function montarRelatorio(dados: any): Promise<string> {
       kpiComercial.experimentais_realizadas_status_operacional ??
       kpiComercial.experimentais_realizadas_presenca_confirmada,
   );
+  const experimentaisPresencaConfirmada = n(kpiComercial.experimentais_realizadas_presenca_confirmada);
+  const experimentaisSemPresenca = n(kpiComercial.experimentais_status_operacional_sem_presenca);
   const novasMatriculas = n(
     kpiComercial.novas_matriculas ??
       kpiComercial.matriculas_comerciais_principais ??
@@ -253,7 +255,9 @@ async function montarRelatorio(dados: any): Promise<string> {
     evasoes: totalEvasoes,
     taxa_renovacao: taxaRenovacao,
     leads: totalLeads,
-    experimentais: totalExperimentais,
+    experimentais_status_operacional: totalExperimentais,
+    experimentais_presenca_confirmada: experimentaisPresencaConfirmada,
+    experimentais_sem_presenca_confirmada: experimentaisSemPresenca,
     taxa_lead_exp: taxaLeadExp,
     taxa_exp_mat: TAXA_EXP_MAT_BLOQUEADA_LABEL,
     taxa_conversao_geral: taxaConversaoGeral,
@@ -303,15 +307,16 @@ async function montarRelatorio(dados: any): Promise<string> {
 
   relatorio += "───────────────────────\n📈 *FUNIL COMERCIAL*\n───────────────────────\n";
   relatorio += `• Leads: *${totalLeads}*\n`;
-  relatorio += `• Experimentais: *${totalExperimentais}*\n`;
+  relatorio += `• Experimentais operacionais: *${totalExperimentais}*\n`;
+  relatorio += `• Presença experimental confirmada: *${experimentaisPresencaConfirmada}*\n`;
   relatorio += `• Matrículas: *${novasMatriculas}*\n`;
-  relatorio += `• Taxa Lead→Exp: *${pct(taxaLeadExp, 2)}*\n`;
+  relatorio += `• Taxa Lead→Exp operacional: *${pct(taxaLeadExp, 2)}*\n`;
   relatorio += `• Taxa Exp→Mat: *${TAXA_EXP_MAT_BLOQUEADA_LABEL}*\n`;
   relatorio += `• Conversão Geral: *${pct(taxaConversaoGeral, 2)}*\n\n`;
 
   relatorio += "🎯 *METAS COMERCIAIS*\n";
   relatorio += metasKpi.leads ? linhaMeta("Leads", totalLeads, n(metasKpi.leads)) : "• Leads: sem meta cadastrada\n";
-  relatorio += metasKpi.experimentais ? linhaMeta("Experimentais", totalExperimentais, n(metasKpi.experimentais)) : "• Experimentais: sem meta cadastrada\n";
+  relatorio += metasKpi.experimentais ? linhaMeta("Experimentais operacionais", totalExperimentais, n(metasKpi.experimentais)) : "• Experimentais operacionais: sem meta cadastrada\n";
   relatorio += metasKpi.matriculas ? linhaMeta("Matrículas", novasMatriculas, n(metasKpi.matriculas)) : "• Matrículas: sem meta cadastrada\n";
   relatorio += "\n";
 
@@ -398,9 +403,9 @@ async function montarRelatorio(dados: any): Promise<string> {
 
   relatorio += "\n📈 *COMERCIAL*\n\n";
   relatorio += metasKpi.leads ? linhaMeta("Leads", totalLeads, n(metasKpi.leads)) : "• Leads: sem meta cadastrada\n";
-  relatorio += metasKpi.experimentais ? linhaMeta("Experimentais", totalExperimentais, n(metasKpi.experimentais)) : "• Experimentais: sem meta cadastrada\n";
+  relatorio += metasKpi.experimentais ? linhaMeta("Experimentais operacionais", totalExperimentais, n(metasKpi.experimentais)) : "• Experimentais operacionais: sem meta cadastrada\n";
   relatorio += metasKpi.matriculas ? linhaMeta("Matrículas", novasMatriculas, n(metasKpi.matriculas)) : "• Matrículas: sem meta cadastrada\n";
-  relatorio += metasKpi.taxa_lead_exp ? linhaMeta("Lead→Exp", taxaLeadExp, n(metasKpi.taxa_lead_exp)) : "• Lead→Exp: sem meta cadastrada\n";
+  relatorio += metasKpi.taxa_lead_exp ? linhaMeta("Lead→Exp operacional", taxaLeadExp, n(metasKpi.taxa_lead_exp)) : "• Lead→Exp operacional: sem meta cadastrada\n";
   relatorio += `Exp→Mat: ${TAXA_EXP_MAT_BLOQUEADA_LABEL}\n`;
   relatorio += metasKpi.taxa_conversao ? linhaMeta("Conversão", taxaConversaoGeral, n(metasKpi.taxa_conversao)) : "• Conversão: sem meta cadastrada\n";
   relatorio += "\n";
@@ -414,7 +419,7 @@ async function montarRelatorio(dados: any): Promise<string> {
 
   relatorio += "───────────────────────\n🎯 *PROGRAMA MATRICULADOR+ LA*\n───────────────────────\n";
   relatorio += `*Hunter: ${hunterNome}*\n\n`;
-  relatorio += "📊 *TAXA SHOW-UP → EXP*\n";
+  relatorio += "📊 *TAXA LEAD → EXP OPERACIONAL*\n";
   relatorio += `Atual: ${pct(taxaLeadExp, 2)} | Meta: ${pct(metaTaxaShowup, 0)}\n\n`;
   relatorio += "📊 *TAXA EXP → MATRÍCULA*\n";
   relatorio += `${TAXA_EXP_MAT_BLOQUEADA_LABEL}\n`;
