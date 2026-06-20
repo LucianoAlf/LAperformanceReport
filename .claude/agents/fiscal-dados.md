@@ -770,6 +770,56 @@ WHERE tablename = 'fila_relatorios_whatsapp' AND indexname = 'idx_fila_relatorio
 
 ---
 
+### M. Raw event store — payloads brutos do Emusys (desde 2026-06-20)
+
+Todo webhook do Emusys passou a arquivar o payload **cru** (append-only) antes de processar, pra permitir reprocessamento/auditoria. Três origens, duas tabelas:
+
+| Origem | Tabela | Filtro | Quem grava |
+|---|---|---|---|
+| Matrícula | `automacao_log` | `acao = 'webhook_recebido'` | edge `processar-matricula-emusys` v23+ (INSERT no início do `serve()`) |
+| Lead | `leads_automacao_log` | `evento = 'webhook_lead_raw'` | n8n `EB0LibpOJCLhKp7M` (nó "Gravar Raw Lead", paralelo ao webhook, continue-on-error) |
+| Experimental | `leads_automacao_log` | `evento = 'webhook_experimental_raw'` | n8n `Fucq0bQwF4oeuWnv` (nó "Gravar Raw Experimental", idem) |
+
+O payload fica na coluna `payload_bruto` (jsonb). Captura é **best-effort** (continue-on-error / try-catch isolado): se a gravação falhar, o fluxo de produção segue — então a ausência de raw NÃO significa que o evento não foi processado, mas é sinal de investigação.
+
+```sql
+-- 1. Os 3 fluxos de raw estão chegando? (últimos 7 dias) — payload_bruto não pode ser NULL
+SELECT 'matricula' AS origem, COUNT(*) AS total, COUNT(payload_bruto) AS com_payload, MAX(created_at) AS ultimo
+FROM automacao_log WHERE acao = 'webhook_recebido' AND created_at >= NOW() - INTERVAL '7 days'
+UNION ALL
+SELECT 'lead', COUNT(*), COUNT(payload_bruto), MAX(created_at)
+FROM leads_automacao_log WHERE evento = 'webhook_lead_raw' AND created_at >= NOW() - INTERVAL '7 days'
+UNION ALL
+SELECT 'experimental', COUNT(*), COUNT(payload_bruto), MAX(created_at)
+FROM leads_automacao_log WHERE evento = 'webhook_experimental_raw' AND created_at >= NOW() - INTERVAL '7 days';
+
+-- 2. Matrícula: raw recebido deve cobrir 100% dos eventos processados (recebido >= processados)
+SELECT
+  COUNT(*) FILTER (WHERE acao = 'webhook_recebido') AS recebidos_raw,
+  COUNT(*) FILTER (WHERE evento IN ('matricula_nova','matricula_renovacao','matricula_trancamento','matricula_finalizacao')
+                   AND acao <> 'webhook_recebido') AS processados
+FROM automacao_log WHERE created_at >= NOW() - INTERVAL '7 days';
+
+-- 3. Gap de captura: dias sem nenhum raw de lead/experimental (sinal de nó n8n quebrado ou desligado)
+SELECT DATE(created_at AT TIME ZONE 'America/Sao_Paulo') AS dia,
+  COUNT(*) FILTER (WHERE evento = 'webhook_lead_raw') AS leads_raw,
+  COUNT(*) FILTER (WHERE evento = 'webhook_experimental_raw') AS exp_raw
+FROM leads_automacao_log
+WHERE evento IN ('webhook_lead_raw','webhook_experimental_raw')
+  AND created_at >= NOW() - INTERVAL '14 days'
+GROUP BY dia ORDER BY dia DESC;
+```
+
+**Quando reportar:**
+- `com_payload < total` em qualquer origem → **CRÍTICO**: raw gravado sem o JSON (bug no nó/edge).
+- Origem com `total = 0` nos últimos 7 dias (mas há eventos processados na mesma janela) → **ATENÇÃO**: nó de raw desligado/quebrado. Para matrícula, cruzar com `n8n_executions` de `WF_Matricula_Funcional`; para lead/exp, ver se o nó "Gravar Raw" foi desabilitado no n8n.
+- Query #2: `recebidos_raw < processados` → **ATENÇÃO**: a edge v23 está processando sem arquivar (regressão do INSERT inicial).
+- Dia zerado no meio de dias com volume (query #3) → nó n8n caiu naquele dia.
+
+> **Best-effort by design:** o nó/edge de raw tem continue-on-error. Ausência pontual de raw não invalida o processamento — mas ausência **sistemática** (origem inteira zerada) indica o ponto de captura quebrado.
+
+---
+
 ## Boundaries (regras inegociáveis)
 
 - **Read-only:** nunca rode `UPDATE`, `INSERT`, `DELETE`, `TRUNCATE`, `ALTER`, `DROP`, `CREATE`, `GRANT`, `REVOKE`. Se um achado exigir mutação, reporta — não faz.

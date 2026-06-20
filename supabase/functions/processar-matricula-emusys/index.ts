@@ -1,7 +1,14 @@
 /// <reference lib="deno.ns" />
 
-// Edge Function: processar-matricula-emusys v22
+// Edge Function: processar-matricula-emusys v23
 // Processa webhooks de matrícula do Emusys: nova, renovação, trancamento, evasão
+//
+// MUDANÇAS v23 (2026-06-20):
+// - Raw event store: grava o payload BRUTO em automacao_log (acao='webhook_recebido') no
+//   início do serve(), ANTES do parsePayload. Captura 100% dos eventos — inclusive os que
+//   falham no parse / escola não mapeada (antes só ~65% logava, no fim dos handlers).
+//   try/catch isolado (best-effort): falha ao arquivar nunca derruba o processamento.
+//   Client supabase movido pra antes do parsePayload.
 //
 // MUDANÇAS v22 (2026-06-17):
 // - handleRenovacao agora incrementa alunos.numero_renovacoes (campo antes nunca era escrito,
@@ -65,7 +72,7 @@ import {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-const VERSAO = 'v22';
+const VERSAO = 'v23';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -1253,14 +1260,30 @@ serve(async (req: Request) => {
 
   try {
     const body = await req.json();
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // Raw event store: arquiva o payload BRUTO antes de qualquer processamento.
+    // Captura 100% dos eventos (inclusive os que falham no parse / escola não mapeada).
+    // try/catch isolado (best-effort): falha ao arquivar nunca derruba a matrícula.
+    try {
+      await supabase.from('automacao_log').insert({
+        evento: body?.evento ?? 'matricula_desconhecido',
+        acao: 'webhook_recebido',
+        aluno_nome: body?.matricula?.nome_aluno ?? '(desconhecido)',
+        payload_bruto: body,
+        workflow_id: 'processar-matricula-emusys',
+        execution_id: new Date().toISOString(),
+      });
+    } catch (e: any) {
+      console.error(`[${VERSAO}] [raw] falha ao arquivar payload bruto:`, e?.message ?? e);
+    }
+
     const p = parsePayload(body);
 
     if (!p) {
       return new Response(JSON.stringify({ error: 'Payload inválido ou escola não mapeada', escola_id: body?.escola_id }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     console.log(`[${VERSAO}] ${p.evento} | Aluno: ${p.nomeAluno} | Unidade: ${p.unidadeNome} | matricula_id: ${p.matriculaIdEmusys}`);
 
