@@ -71,6 +71,9 @@ const MATRICULADOR_PLUS_CONFIG = {
 };
 
 // Função para obter info dos outros Hunters (concorrentes)
+const TAXA_EXP_MAT_BLOQUEADA_LABEL =
+  "BLOQUEADA - aguardando regra canonica de presenca/vinculo";
+
 function getOutrosHunters(unidadeId: string): Array<{ nome: string; apelido: string; unidade: string }> {
   const outros: Array<{ nome: string; apelido: string; unidade: string }> = [];
   for (const [uuid, hunter] of Object.entries(HUNTERS_MAP)) {
@@ -167,18 +170,25 @@ Deno.serve(async (req) => {
       
       // Calcular pontos por métrica
       const pontosTaxaShowup = taxaShowup >= metasPrograma.taxa_showup_experimental ? metasPrograma.taxa_showup : 0;
-      const pontosTaxaExpMat = taxaExpMat >= metasPrograma.taxa_experimental_matricula ? metasPrograma.taxa_exp_mat : 0;
+      const pontosTaxaExpMat = 0;
       const pontosTaxaGeral = taxaGeral >= metasPrograma.taxa_lead_matricula ? metasPrograma.taxa_geral : 0;
       const pontosVolume = matriculasAtuais >= metasPrograma.volume ? metasPrograma.volume_medio : 0;
       const pontosTicket = ticketAtual >= metasPrograma.ticket ? metasPrograma.ticket_medio : 0;
       
-      const totalPontos = pontosTaxaShowup + pontosTaxaExpMat + pontosTaxaGeral + pontosVolume + pontosTicket;
+      const totalPontos = pontosTaxaShowup + pontosTaxaGeral + pontosVolume + pontosTicket;
       const acimaCorte = totalPontos >= metasPrograma.nota_corte;
       
       progressoPrograma = {
         metricas: {
           taxa_showup: { atual: taxaShowup, meta: metasPrograma.taxa_showup_experimental, pontos: pontosTaxaShowup, bateu: taxaShowup >= metasPrograma.taxa_showup_experimental },
-          taxa_exp_mat: { atual: taxaExpMat, meta: metasPrograma.taxa_experimental_matricula, pontos: pontosTaxaExpMat, bateu: taxaExpMat >= metasPrograma.taxa_experimental_matricula },
+          taxa_exp_mat: {
+            atual: taxaExpMat,
+            meta: metasPrograma.taxa_experimental_matricula,
+            pontos: pontosTaxaExpMat,
+            bateu: false,
+            bloqueada: true,
+            motivo_bloqueio: TAXA_EXP_MAT_BLOQUEADA_LABEL,
+          },
           taxa_geral: { atual: taxaGeral, meta: metasPrograma.taxa_lead_matricula, pontos: pontosTaxaGeral, bateu: taxaGeral >= metasPrograma.taxa_lead_matricula, desempate: true },
           volume: { atual: matriculasAtuais, meta: metasPrograma.volume, pontos: pontosVolume, bateu: matriculasAtuais >= metasPrograma.volume },
           ticket: { atual: ticketAtual, meta: metasPrograma.ticket, pontos: pontosTicket, bateu: ticketAtual >= metasPrograma.ticket },
@@ -246,7 +256,7 @@ FUNIL COMERCIAL (o que você deve analisar):
 3. **Experimentais Realizadas**: Aulas que aconteceram (show-up)
 4. **Matrículas**: Conversões efetivas
 5. **Taxa Lead→Exp**: % de leads que agendam experimental
-6. **Taxa Exp→Mat**: % de experimentais que viram matrícula
+6. **Taxa Exp→Mat**: BLOQUEADA até regra canônica de presença/vínculo
 7. **Taxa Geral**: % de leads que viram matrícula (funil completo)
 8. **Ticket Médio Parcelas**: Valor médio das Parcelas das novas matrículas
 
@@ -265,7 +275,7 @@ Para ${nomeHunter} ganhar a VIAGEM COM ACOMPANHANTE:
 
 📊 METAS DE TAXAS (médias anuais Jan-Nov):
 - Taxa Show-up → Experimental: ${metasPrograma.taxa_showup_experimental}% = ${metasPrograma.taxa_showup} pts
-- Taxa Experimental → Matrícula: ${metasPrograma.taxa_experimental_matricula}% = ${metasPrograma.taxa_exp_mat} pts
+- Taxa Experimental → Matrícula: ${TAXA_EXP_MAT_BLOQUEADA_LABEL} = 0 pts
 - Taxa Lead → Matrícula (GERAL): ${metasPrograma.taxa_lead_matricula}% = ${metasPrograma.taxa_geral} pts ⭐ CRITÉRIO DE DESEMPATE!
 
 📈 METAS DE VOLUME E TICKET:
@@ -299,7 +309,7 @@ ${!isSuperAdmin ? `## HUNTER: ${nomeHunter} (${apelidoHunter})` : "## VISÃO CON
 - Experimentais Realizadas: ${kpis.experimentais_realizadas || 0}
 - Matrículas: ${matriculasAtuais}
 - Taxa Lead→Experimental: ${(kpis.taxa_conversao_lead_exp || 0).toFixed(1)}%
-- Taxa Experimental→Matrícula: ${(kpis.taxa_conversao_exp_mat || 0).toFixed(1)}%
+- Taxa Experimental→Matrícula: ${TAXA_EXP_MAT_BLOQUEADA_LABEL}
 - Taxa Geral (Lead→Matrícula): ${(kpis.taxa_conversao_geral || 0).toFixed(1)}%
 - Ticket Médio Parcela: R$ ${(kpis.ticket_medio_novos || 0).toFixed(2)}
 
@@ -318,7 +328,7 @@ ${!isSuperAdmin ? `## HUNTER: ${nomeHunter} (${apelidoHunter})` : "## VISÃO CON
 ${progressoPrograma ? `
 ## PROGRESSO MATRICULADOR+ LA 2026 (${progressoPrograma.total_pontos}/${100} pontos):
 📊 Taxa Show-up: ${progressoPrograma.metricas.taxa_showup.atual.toFixed(1)}% (meta: ${progressoPrograma.metricas.taxa_showup.meta}%) ${progressoPrograma.metricas.taxa_showup.bateu ? `✅ +${progressoPrograma.metricas.taxa_showup.pontos}pts` : "❌ 0pts"}
-📊 Taxa Exp→Mat: ${progressoPrograma.metricas.taxa_exp_mat.atual.toFixed(1)}% (meta: ${progressoPrograma.metricas.taxa_exp_mat.meta}%) ${progressoPrograma.metricas.taxa_exp_mat.bateu ? `✅ +${progressoPrograma.metricas.taxa_exp_mat.pontos}pts` : "❌ 0pts"}
+📊 Taxa Exp→Mat: ${progressoPrograma.metricas.taxa_exp_mat.motivo_bloqueio} (0pts)
 ⭐ Taxa Geral: ${progressoPrograma.metricas.taxa_geral.atual.toFixed(1)}% (meta: ${progressoPrograma.metricas.taxa_geral.meta}%) ${progressoPrograma.metricas.taxa_geral.bateu ? `✅ +${progressoPrograma.metricas.taxa_geral.pontos}pts` : "❌ 0pts"} [DESEMPATE!]
 📈 Volume: ${progressoPrograma.metricas.volume.atual} matrículas (meta: ${progressoPrograma.metricas.volume.meta}/mês) ${progressoPrograma.metricas.volume.bateu ? `✅ +${progressoPrograma.metricas.volume.pontos}pts` : "❌ 0pts"}
 💰 Ticket: R$ ${progressoPrograma.metricas.ticket.atual.toFixed(0)} (meta: R$ ${progressoPrograma.metricas.ticket.meta}) ${progressoPrograma.metricas.ticket.bateu ? `✅ +${progressoPrograma.metricas.ticket.pontos}pts` : "❌ 0pts"}

@@ -118,8 +118,7 @@ function calcularPontuacao(
   // Calcular pontos por métrica (só ganha se bater a meta)
   const pontosTaxaShowup = metricas.taxa_showup_exp >= metas.taxa_showup_experimental 
     ? pontosConfig.taxa_showup : 0;
-  const pontosTaxaExpMat = metricas.taxa_exp_mat >= metas.taxa_experimental_matricula 
-    ? pontosConfig.taxa_exp_mat : 0;
+  const pontosTaxaExpMat = 0;
   const pontosTaxaGeral = metricas.taxa_geral >= metas.taxa_lead_matricula 
     ? pontosConfig.taxa_geral : 0;
   const pontosVolume = metricas.media_matriculas_mes >= metaVolume 
@@ -137,11 +136,7 @@ function calcularPontuacao(
       const acima = metricas.taxa_showup_exp - metas.taxa_showup_experimental;
       bonus += Math.min(MAX_BONUS_POR_CATEGORIA, Math.floor(acima / 2) * config.bonus.taxa_showup_por_2pct);
     }
-    // Bônus taxa exp→mat: +5 pts a cada 5% acima (máx 20 pts)
-    if (metricas.taxa_exp_mat > metas.taxa_experimental_matricula) {
-      const acima = metricas.taxa_exp_mat - metas.taxa_experimental_matricula;
-      bonus += Math.min(MAX_BONUS_POR_CATEGORIA, Math.floor(acima / 5) * config.bonus.taxa_exp_mat_por_5pct);
-    }
+    // Taxa exp->mat segue bloqueada ate regra canonica de presenca/vinculo.
     // Bônus taxa geral: +10 pts a cada 1% acima (máx 20 pts)
     if (metricas.taxa_geral > metas.taxa_lead_matricula) {
       const acima = metricas.taxa_geral - metas.taxa_lead_matricula;
@@ -160,7 +155,7 @@ function calcularPontuacao(
   }
 
   // Total
-  const total = pontosTaxaShowup + pontosTaxaExpMat + pontosTaxaGeral + 
+  const total = pontosTaxaShowup + pontosTaxaGeral +
                 pontosVolume + pontosTicket + bonus - penalidades.total_pontos;
 
   return {

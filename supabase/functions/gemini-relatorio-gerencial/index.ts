@@ -6,6 +6,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const TAXA_EXP_MAT_BLOQUEADA_LABEL =
+  'BLOQUEADA - aguardando regra canonica de presenca/vinculo';
+
 // Retry com backoff exponencial para erros 503/429 do Gemini
 async function fetchGeminiComRetry(url: string, options: RequestInit, maxRetries = 3): Promise<Response> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -122,7 +125,6 @@ Deno.serve(async (req) => {
     const totalExperimentais = kpiComMesAtual.experimentais_realizadas || 0;
     const novasMatriculas = kpiComMesAtual.novas_matriculas || 0;
     const taxaLeadExp = kpiComMesAtual.taxa_conversao_lead_exp || kpiComMesAtual.taxa_lead_experimental || 0;
-    const taxaExpMat = kpiComMesAtual.taxa_conversao_exp_mat || kpiComMesAtual.taxa_experimental_matricula || 0;
     const taxaConversaoGeral = kpiComMesAtual.taxa_conversao_geral || 0;
 
     // Matrículas detalhadas
@@ -224,7 +226,7 @@ Deno.serve(async (req) => {
     relatorioTemplate += `• Experimentais: *${totalExperimentais}*\n`;
     relatorioTemplate += `• Matrículas: *${novasMatriculas}*\n`;
     relatorioTemplate += `• Taxa Lead→Exp: *${taxaLeadExp.toFixed(1).replace('.', ',')}%*\n`;
-    relatorioTemplate += `• Taxa Exp→Mat: *${taxaExpMat.toFixed(1).replace('.', ',')}%*\n`;
+    relatorioTemplate += `• Taxa Exp→Mat: *${TAXA_EXP_MAT_BLOQUEADA_LABEL}*\n`;
     relatorioTemplate += `• Conversão Geral: *${taxaConversaoGeral.toFixed(1).replace('.', ',')}%*\n\n`;
 
     // Metas comerciais
@@ -462,9 +464,7 @@ Deno.serve(async (req) => {
       }
       // Taxa Exp→Mat
       if (metasKpi.taxa_exp_mat) {
-        const pct = Math.min((taxaExpMat / metasKpi.taxa_exp_mat) * 100, 100);
-        const status = pct >= 100 ? '✅' : (pct >= 70 ? '⚠️' : '❌');
-        relatorioTemplate += `${criarBarraProgresso(pct)} ${pct.toFixed(0)}% Exp→Mat (${taxaExpMat.toFixed(1).replace('.', ',')}%/${metasKpi.taxa_exp_mat}%) ${status}\n`;
+        relatorioTemplate += `Exp→Mat: ${TAXA_EXP_MAT_BLOQUEADA_LABEL}\n`;
       }
       // Taxa Conversão Total
       if (metasKpi.taxa_conversao) {
@@ -559,12 +559,10 @@ Deno.serve(async (req) => {
     relatorioTemplate += `Atual: *${taxaLeadExp.toFixed(1).replace('.', ',')}%* | Meta: *${metaTaxaShowup}%* | Pts: *${pontosShowupAtual}*\n\n`;
 
     // ⭐ Taxa Experimental → Matrícula (meta: 75% → 25 pts)
-    const pctExpMatMat = Math.min((taxaExpMat / metaTaxaExpMat) * 100, 100);
-    const statusExpMatMat = taxaExpMat >= metaTaxaExpMat ? '✅ BATIDA 🎉' : (pctExpMatMat >= 80 ? '⚠️' : '❌');
-    const pontosExpMatAtual = taxaExpMat >= metaTaxaExpMat ? pontosExpMat : 0;
+    const pontosExpMatAtual = 0;
     relatorioTemplate += `📊 *TAXA EXP → MATRÍCULA* (meta: ${metaTaxaExpMat}% → ${pontosExpMat} pts)\n`;
-    relatorioTemplate += `${criarBarraProgresso(pctExpMatMat)} ${taxaExpMat.toFixed(1).replace('.', ',')}% ${statusExpMatMat}\n`;
-    relatorioTemplate += `Atual: *${taxaExpMat.toFixed(1).replace('.', ',')}%* | Meta: *${metaTaxaExpMat}%* | Pts: *${pontosExpMatAtual}*\n\n`;
+    relatorioTemplate += `${TAXA_EXP_MAT_BLOQUEADA_LABEL}\n`;
+    relatorioTemplate += `Atual: *BLOQUEADA* | Meta: *${metaTaxaExpMat}%* | Pts: *${pontosExpMatAtual}*\n\n`;
 
     // ⭐ Taxa Lead → Matrícula (Geral) - CRITÉRIO DE DESEMPATE (meta: 13.5% → 30 pts)
     const pctTaxaGeral = Math.min((taxaConversaoGeral / metaTaxaGeral) * 100, 100);
@@ -596,7 +594,7 @@ Deno.serve(async (req) => {
     relatorioTemplate += `Leads abandonados: *${leadsAbandonados}* | Penalidades: *-${penalidades} pts*\n\n`;
 
     // Total de pontos
-    const totalPontosMatriculador = pontosShowupAtual + pontosExpMatAtual + pontosTaxaGeralAtual + pontosVolumeAtual + pontosTicketAtual - penalidades;
+    const totalPontosMatriculador = pontosShowupAtual + pontosTaxaGeralAtual + pontosVolumeAtual + pontosTicketAtual - penalidades;
     const notaCorte = 80;
     const statusCorte = totalPontosMatriculador >= notaCorte ? '✅ Acima do corte' : '⚠️ Abaixo do corte';
     relatorioTemplate += `🏆 *TOTAL: ${totalPontosMatriculador} pts* (corte: ${notaCorte}) ${statusCorte}\n\n`;
