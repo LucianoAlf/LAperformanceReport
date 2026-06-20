@@ -38,10 +38,6 @@ function arr(value: unknown): any[] {
   return Array.isArray(value) ? value : [];
 }
 
-function pct(value: unknown): string {
-  return `${n(value).toFixed(1).replace(".", ",")}%`;
-}
-
 function moeda(value: unknown): string {
   return n(value).toLocaleString("pt-BR", {
     minimumFractionDigits: 2,
@@ -49,87 +45,103 @@ function moeda(value: unknown): string {
   });
 }
 
+function pct(value: unknown, casas = 1): string {
+  return `${n(value).toFixed(casas).replace(".", ",")}%`;
+}
+
+function barra(percentual: number, tamanho = 10): string {
+  const pctSeguro = Math.max(0, Math.min(100, n(percentual)));
+  const preenchido = Math.round((pctSeguro / 100) * tamanho);
+  return "▓".repeat(preenchido) + "░".repeat(tamanho - preenchido);
+}
+
+function statusMeta(percentual: number, invertido = false): string {
+  if (invertido) return percentual <= 100 ? "✅" : percentual <= 130 ? "⚠️" : "❌";
+  return percentual >= 100 ? "✅" : percentual >= 70 ? "⚠️" : "❌";
+}
+
+function linhaMeta(label: string, atual: number, meta: number, sufixo = "", invertido = false): string {
+  if (!meta) return `• ${label}: sem meta cadastrada\n`;
+  const percentual = invertido ? (meta / Math.max(atual, 0.01)) * 100 : (atual / meta) * 100;
+  return `${barra(Math.min(percentual, 100))} ${Math.round(percentual)}% ${label} (${sufixo}${formatValor(atual, sufixo)}/${sufixo}${formatValor(meta, sufixo)}) ${statusMeta(percentual, invertido)}\n`;
+}
+
+function formatValor(valor: number, sufixo: string): string {
+  if (sufixo === "R$ ") return moeda(valor);
+  return Number.isInteger(valor) ? String(valor) : valor.toFixed(1).replace(".", ",");
+}
+
 function mesAtual<T extends Record<string, any>>(lista: T[], ano: number, mes: number): T | Record<string, never> {
-  if (!Array.isArray(lista) || lista.length === 0) return {};
   return lista.find((item) => Number(item?.ano) === ano && Number(item?.mes) === mes) ||
     lista[lista.length - 1] ||
     {};
 }
 
-async function fetchGeminiComRetry(url: string, options: RequestInit, maxRetries = 3): Promise<Response> {
+function linhasRanking(lista: any[], label: string, valor: string, formatter?: (item: any) => string): string {
+  if (!lista.length) return "Sem dados suficientes.\n";
+  return lista.slice(0, 3).map((item, index) => {
+    const nome = item?.[label] || item?.professor || item?.professor_nome || item?.curso || item?.canal || item?.motivo || "N/D";
+    const detalhe = formatter ? formatter(item) : String(item?.[valor] ?? item?.quantidade ?? item?.total_alunos ?? "");
+    return `${index + 1}. ${nome} - ${detalhe}`;
+  }).join("\n") + "\n";
+}
+
+function listaIA(items: unknown, fallback: string[]): string {
+  const lista = arr(items).filter(Boolean).slice(0, 5);
+  const final = lista.length ? lista : fallback;
+  return final.map((item) => `* ${item}`).join("\n") + "\n";
+}
+
+async function fetchGeminiComRetry(url: string, options: RequestInit, maxRetries = 2): Promise<Response> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const res = await fetch(url, options);
     if (res.ok) return res;
-
     if ((res.status === 503 || res.status === 429) && attempt < maxRetries) {
-      const wait = 1000 * Math.pow(2, attempt);
-      console.log(`[gemini-retry] status ${res.status}, tentativa ${attempt + 1}/${maxRetries + 1}, aguardando ${wait}ms`);
-      await new Promise((resolve) => setTimeout(resolve, wait));
+      await new Promise((resolve) => setTimeout(resolve, 1000 * Math.pow(2, attempt)));
       continue;
     }
-
     return res;
   }
-
   return new Response(null, { status: 500 });
 }
 
-function buildFallbackIA(mesNome: string, unidadeNome: string) {
+function fallbackIA(mesNome: string, unidadeNome: string) {
   return {
     resumo_executivo:
-      `${unidadeNome} em ${mesNome} exige leitura cuidadosa: os indicadores principais foram consolidados, mas a taxa Experimental -> Matricula segue bloqueada ate validacao canonica de presenca/vinculo.`,
+      `A unidade ${unidadeNome} apresenta indicadores consolidados de ${mesNome}. O relatório mantém a taxa Experimental -> Matrícula bloqueada como KPI oficial até fechamento da regra canonica de presença/vínculo.`,
     conquistas: [
-      "Relatorio gerado com bloqueio seguro da taxa Experimental -> Matricula.",
-      "Leads, matriculas e indicadores financeiros permanecem disponiveis para acompanhamento gerencial.",
-      "Funil comercial segue monitorado sem publicar KPI nao canonico.",
+      "Indicadores financeiros, retenção, funil e rankings consolidados para leitura gerencial.",
+      "Taxa Experimental -> Matrícula bloqueada de forma segura, sem publicar KPI não canonico.",
+      "Relatório preserva metas, comparativos e programas internos para acompanhamento da equipe.",
     ],
     pontos_atencao: [
-      "Revisar experimentais sem presenca individual confirmada.",
-      "Priorizar reconciliacao lead -> aluno -> presenca.",
-      "Nao usar taxa Experimental -> Matricula em meta oficial ate fechamento da regra.",
+      "Revisar gargalos de Lead -> Experimental e evolução de matrículas.",
+      "Acompanhar churn, evasões e não renovações com leitura qualitativa.",
+      "Validar vínculos de experimental, presença e matrícula antes de liberar taxa oficial.",
     ],
     plano_acao: [
-      "Acompanhar leads e matriculas diariamente.",
-      "Validar casos de experimental com divergencia de presenca.",
-      "Separar taxa operacional legada de KPI canonico nos alinhamentos da equipe.",
+      "Acompanhar diariamente leads, experimentais e matrículas por unidade.",
+      "Priorizar follow-up dos leads e conferência de presença nas experimentais.",
+      "Separar métricas canonicas de métricas legadas nas reuniões de gestão.",
     ],
-    mensagem_final: "Seguimos com dados mais seguros e com a taxa critica bloqueada ate a regra ficar fechada.",
+    mensagem_final: "Relatório recomposto com leitura executiva completa e bloqueio seguro da taxa crítica.",
   };
 }
 
-function parseGeminiJson(text: string, fallback: ReturnType<typeof buildFallbackIA>) {
-  try {
-    const cleaned = text.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
-    const match = cleaned.match(/\{[\s\S]*\}/);
-    return match ? { ...fallback, ...JSON.parse(match[0]) } : fallback;
-  } catch (error) {
-    console.error("Erro ao parsear resposta Gemini:", error);
-    return fallback;
-  }
-}
-
-async function gerarAnaliseIA(dadosParaIA: any, mesNome: string, unidadeNome: string) {
-  const fallback = buildFallbackIA(mesNome, unidadeNome);
+async function gerarIA(dadosParaIA: any, mesNome: string, unidadeNome: string) {
+  const fallback = fallbackIA(mesNome, unidadeNome);
   const apiKey = Deno.env.get("GEMINI_API_KEY");
+  if (!apiKey) return fallback;
 
-  if (!apiKey) {
-    console.warn("GEMINI_API_KEY nao configurada; usando fallback gerencial.");
-    return fallback;
-  }
-
-  const systemPrompt = `
-Voce e um analista gerencial senior da LA Music.
-Gere uma analise curta, executiva e objetiva para WhatsApp.
-Nunca trate Taxa Experimental -> Matricula como KPI oficial.
+  const prompt = `
+Voce e um consultor de gestao especializado em escolas de musica.
+Gere apenas JSON valido com resumo_executivo, conquistas, pontos_atencao, plano_acao e mensagem_final.
+Nunca publique Taxa Experimental -> Matricula como KPI oficial.
 Se mencionar essa taxa, diga que esta BLOQUEADA aguardando regra canonica de presenca/vinculo.
-Responda somente JSON valido com:
-{
-  "resumo_executivo": "string",
-  "conquistas": ["string"],
-  "pontos_atencao": ["string"],
-  "plano_acao": ["string"],
-  "mensagem_final": "string"
-}`;
+Use linguagem profissional, direta e pronta para WhatsApp.
+
+DADOS:
+${JSON.stringify(dadosParaIA, null, 2)}`;
 
   const response = await fetchGeminiComRetry(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`,
@@ -137,16 +149,11 @@ Responda somente JSON valido com:
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        contents: [
-          {
-            role: "user",
-            parts: [{ text: `${systemPrompt}\n\nDADOS:\n${JSON.stringify(dadosParaIA, null, 2)}` }],
-          },
-        ],
+        contents: [{ role: "user", parts: [{ text: prompt }] }],
         generationConfig: {
-          temperature: 0.55,
+          temperature: 0.65,
           topK: 40,
-          topP: 0.9,
+          topP: 0.95,
           maxOutputTokens: 1800,
         },
       }),
@@ -154,37 +161,30 @@ Responda somente JSON valido com:
   );
 
   if (!response.ok) {
-    const errorText = await response.text();
-    console.error("Erro Gemini:", errorText);
+    console.error("Erro Gemini:", await response.text());
     return fallback;
   }
 
-  const geminiResponse = await response.json();
-  const responseText = geminiResponse.candidates?.[0]?.content?.parts?.[0]?.text || "";
-  return parseGeminiJson(responseText, fallback);
+  try {
+    const geminiResponse = await response.json();
+    const texto = geminiResponse.candidates?.[0]?.content?.parts?.[0]?.text || "";
+    const jsonText = texto.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+    const match = jsonText.match(/\{[\s\S]*\}/);
+    return match ? { ...fallback, ...JSON.parse(match[0]) } : fallback;
+  } catch (error) {
+    console.error("Erro ao parsear IA:", error);
+    return fallback;
+  }
 }
 
-function bullets(items: unknown): string {
-  const lista = arr(items).filter(Boolean).slice(0, 5);
-  if (lista.length === 0) return "• Sem apontamentos automaticos.\n";
-  return lista.map((item) => `• ${item}`).join("\n") + "\n";
-}
-
-function topLista(items: any[], label: string, valor: string, limite = 5): string {
-  const lista = arr(items).slice(0, limite);
-  if (lista.length === 0) return "• Sem dados suficientes.\n";
-  return lista
-    .map((item, index) => `• ${index + 1}. ${item?.[label] || item?.nome || item?.canal || item?.curso || item?.professor || "N/D"} - ${item?.[valor] ?? item?.quantidade ?? item?.total ?? ""}`)
-    .join("\n") + "\n";
-}
-
-async function montarRelatorio(dados: any) {
+async function montarRelatorio(dados: any): Promise<string> {
   const periodo = dados?.periodo || {};
   const ano = n(periodo.ano || new Date().getFullYear());
   const mes = n(periodo.mes || new Date().getMonth() + 1);
   const mesNome = mesesPorExtenso[mes] || String(mes);
   const unidadeNome = periodo.unidade_nome || dados?.unidade_nome || "Consolidado";
   const gerenteNome = dados?.gerente_nome || "N/D";
+  const hunterNome = dados?.hunter_nome || "N/D";
 
   const kpiGestao = mesAtual(arr(dados?.kpis_gestao), ano, mes);
   const kpiRetencao = mesAtual(arr(dados?.kpis_retencao), ano, mes);
@@ -205,6 +205,7 @@ async function montarRelatorio(dados: any) {
   const renovacoesPrevistas = n(kpiRetencao.renovacoes_previstas);
   const renovacoesRealizadas = n(kpiRetencao.renovacoes_realizadas);
   const taxaRenovacao = renovacoesPrevistas > 0 ? (renovacoesRealizadas / renovacoesPrevistas) * 100 : 0;
+  const naoRenovacoes = n(kpiRetencao.nao_renovacoes);
 
   const totalLeads = n(kpiComercial.total_leads ?? kpiComercial.leads_entrantes);
   const totalExperimentais = n(
@@ -220,92 +221,225 @@ async function montarRelatorio(dados: any) {
   const taxaLeadExp = n(kpiComercial.taxa_conversao_lead_exp ?? kpiComercial.taxa_lead_experimental);
   const taxaConversaoGeral = n(kpiComercial.taxa_conversao_geral ?? kpiComercial.taxa_lead_matricula);
 
-  const dadosParaIA = {
+  const matriculasAtivas = n(dados?.matriculas_ativas);
+  const matriculasBanda = n(dados?.matriculas_banda);
+  const matriculas2Curso = n(dados?.matriculas_2_curso);
+  const totalBolsistas = n(dados?.total_bolsistas);
+  const metasKpi = dados?.metas_kpi || {};
+
+  const mesAnterior = arr(dados?.mes_anterior);
+  const anoPassado = arr(dados?.mesmo_mes_ano_passado);
+  const sazonalidade = arr(dados?.sazonalidade);
+  const motivosEvasao = arr(dados?.motivos_evasao);
+  const cursosMaisProcurados = arr(dados?.cursos_mais_procurados);
+  const canaisMaiorConversao = arr(dados?.canais_maior_conversao);
+  const topRetencao = arr(dados?.top_professores_retencao);
+  const topMatriculadores = arr(dados?.top_professores_matriculadores);
+  const topPresenca = arr(dados?.top_professores_presenca);
+  const topMediaTurma = arr(dados?.top_professores_media_turma);
+
+  const ia = await gerarIA({
     unidade: unidadeNome,
     mes: mesNome,
     ano,
     gerente: gerenteNome,
-    financeiro: { mrr, ticketMedio, inadimplencia },
-    alunos: { totalAtivos, totalPagantes, novasMatriculas, tempoPermanencia, ltvMedio },
-    comercial: {
-      totalLeads,
-      totalExperimentais,
-      novasMatriculas,
-      taxaLeadExp,
-      taxaExpMat: TAXA_EXP_MAT_BLOQUEADA_LABEL,
-      taxaConversaoGeral,
-    },
-    retencao: { churnRate, totalEvasoes, mrrPerdido, taxaRenovacao, reajusteMedio },
-    bloqueios: ["Taxa Experimental -> Matricula bloqueada para KPI oficial."],
-  };
+    mrr,
+    ticket_medio: ticketMedio,
+    inadimplencia,
+    alunos_ativos: totalAtivos,
+    alunos_pagantes: totalPagantes,
+    novas_matriculas: novasMatriculas,
+    churn_rate: churnRate,
+    evasoes: totalEvasoes,
+    taxa_renovacao: taxaRenovacao,
+    leads: totalLeads,
+    experimentais: totalExperimentais,
+    taxa_lead_exp: taxaLeadExp,
+    taxa_exp_mat: TAXA_EXP_MAT_BLOQUEADA_LABEL,
+    taxa_conversao_geral: taxaConversaoGeral,
+    motivos_evasao: motivosEvasao.slice(0, 5),
+  }, mesNome, unidadeNome);
 
-  const ia = await gerarAnaliseIA(dadosParaIA, mesNome, unidadeNome);
+  const mesAnteriorLabel = mes === 1
+    ? `${mesesPorExtenso[12].substring(0, 3).toUpperCase()}/${String(ano - 1).slice(-2)}`
+    : `${mesesPorExtenso[mes - 1].substring(0, 3).toUpperCase()}/${String(ano).slice(-2)}`;
 
-  const relatorio = [
-    "━━━━━━━━━━━━━━━━━━━━━━",
-    "📊 *RELATÓRIO GERENCIAL - LA MUSIC*",
-    `🏢 *${String(unidadeNome).toUpperCase()}*`,
-    `📅 *${String(mesNome).toUpperCase()}/${ano}*`,
-    `👤 Gerente: ${gerenteNome}`,
-    "━━━━━━━━━━━━━━━━━━━━━━",
-    "",
-    "*Resumo executivo*",
-    ia.resumo_executivo,
-    "",
-    "💰 *FINANCEIRO*",
-    `• MRR Atual: *R$ ${moeda(mrr)}*`,
-    `• Ticket Médio: *R$ ${moeda(ticketMedio)}*`,
-    `• Inadimplência: *${pct(inadimplencia)}*`,
-    "",
-    "👥 *BASE DE ALUNOS*",
-    `• Ativos: *${totalAtivos}*`,
-    `• Pagantes: *${totalPagantes}*`,
-    `• Bolsistas: *${n(dados?.total_bolsistas)}*`,
-    `• Novos no mês: *${novasMatriculas}*`,
-    `• Permanência média: *${tempoPermanencia.toFixed(1).replace(".", ",")} meses*`,
-    `• LTV médio: *R$ ${moeda(ltvMedio)}*`,
-    "",
-    "📚 *MATRÍCULAS*",
-    `• Ativas: *${n(dados?.matriculas_ativas)}*`,
-    `• Em banda: *${n(dados?.matriculas_banda)}*`,
-    `• 2º curso: *${n(dados?.matriculas_2_curso)}*`,
-    "",
-    "📈 *FUNIL COMERCIAL*",
-    `• Leads: *${totalLeads}*`,
-    `• Experimentais: *${totalExperimentais}*`,
-    `• Matrículas: *${novasMatriculas}*`,
-    `• Taxa Lead→Exp: *${pct(taxaLeadExp)}*`,
-    `• Taxa Exp→Mat: *${TAXA_EXP_MAT_BLOQUEADA_LABEL}*`,
-    `• Conversão geral: *${pct(taxaConversaoGeral)}*`,
-    "",
-    "📉 *RETENÇÃO*",
-    `• Churn rate: *${pct(churnRate)}*`,
-    `• Evasões: *${totalEvasoes}*`,
-    `• MRR perdido: *R$ ${moeda(mrrPerdido)}*`,
-    `• Renovações realizadas: *${renovacoesRealizadas}*`,
-    `• Taxa renovação: *${pct(taxaRenovacao)}*`,
-    `• Reajuste médio: *${pct(reajusteMedio)}*`,
-    "",
-    "🏆 *CONQUISTAS*",
-    bullets(ia.conquistas).trimEnd(),
-    "",
-    "⚠️ *PONTOS DE ATENÇÃO*",
-    bullets(ia.pontos_atencao).trimEnd(),
-    "",
-    "🎯 *PLANO DE AÇÃO*",
-    bullets(ia.plano_acao).trimEnd(),
-    "",
-    "🎸 *CURSOS MAIS PROCURADOS*",
-    topLista(arr(dados?.cursos_mais_procurados), "curso", "total_alunos").trimEnd(),
-    "",
-    "📣 *CANAIS COM MAIOR CONVERSÃO*",
-    topLista(arr(dados?.canais_maior_conversao), "canal", "taxa_conversao").trimEnd(),
-    "",
-    "⚠️ *Nota de controle*",
-    `Taxa Experimental → Matrícula: ${TAXA_EXP_MAT_BLOQUEADA_LABEL}.`,
-    "",
-    ia.mensagem_final,
-  ].join("\n");
+  const metaVolumeMatriculas = unidadeNome === "Campo Grande" ? 25 : unidadeNome === "Recreio" ? 20 : 15;
+  const metaTicketMatriculador = unidadeNome === "Campo Grande" ? 387 : unidadeNome === "Recreio" ? 435 : 450;
+  const metaTaxaShowup = 18;
+  const metaTaxaGeral = 13.5;
+  const mediaMatriculasMes = n(dados?.meses_com_dados) > 0 ? novasMatriculas / n(dados?.meses_com_dados) : novasMatriculas;
+  const vendasLojinha = n(dados?.vendas_lojinha);
+  const metaLojinha = unidadeNome === "Campo Grande" ? 5000 : 3000;
+
+  let relatorio = "";
+
+  relatorio += "━━━━━━━━━━━━━━━━━━━━━━\n";
+  relatorio += "📊 *RELATÓRIO GERENCIAL - LA MUSIC*\n\n";
+  relatorio += `🏢 *${String(unidadeNome).toUpperCase()}*\n`;
+  relatorio += `📅 *${String(mesNome).toUpperCase()}/${ano}*\n`;
+  relatorio += `👤 *Gerente: ${gerenteNome}*\n`;
+  relatorio += "━━━━━━━━━━━━━━━━━━━━━━\n\n";
+
+  relatorio += `${ia.resumo_executivo}\n\n`;
+
+  relatorio += "───────────────────────\n💰 *FINANCEIRO*\n───────────────────────\n";
+  relatorio += `• MRR Atual: *R$ ${moeda(mrr)}*\n`;
+  relatorio += `• Ticket Médio: *R$ ${moeda(ticketMedio)}*\n`;
+  relatorio += `• Inadimplência: *${pct(inadimplencia)}*\n\n`;
+
+  relatorio += "───────────────────────\n👥 *BASE DE ALUNOS*\n───────────────────────\n";
+  relatorio += `• Ativos: *${totalAtivos}*\n`;
+  relatorio += `• Pagantes: *${totalPagantes}*\n`;
+  relatorio += `• Bolsistas: *${totalBolsistas}*\n`;
+  relatorio += `• Novos no Mês: *${novasMatriculas}*\n`;
+  relatorio += `• Permanência Média: *${tempoPermanencia.toFixed(1).replace(".", ",")} meses*\n`;
+  relatorio += `• LTV Médio: *R$ ${moeda(ltvMedio)}*\n\n`;
+
+  relatorio += "📚 *MATRÍCULAS*\n";
+  relatorio += `• Ativas: *${matriculasAtivas}*\n`;
+  relatorio += `• Em Banda: *${matriculasBanda}*\n`;
+  relatorio += `• 2º Curso: *${matriculas2Curso}*\n\n`;
+
+  relatorio += "───────────────────────\n📈 *FUNIL COMERCIAL*\n───────────────────────\n";
+  relatorio += `• Leads: *${totalLeads}*\n`;
+  relatorio += `• Experimentais: *${totalExperimentais}*\n`;
+  relatorio += `• Matrículas: *${novasMatriculas}*\n`;
+  relatorio += `• Taxa Lead→Exp: *${pct(taxaLeadExp, 2)}*\n`;
+  relatorio += `• Taxa Exp→Mat: *${TAXA_EXP_MAT_BLOQUEADA_LABEL}*\n`;
+  relatorio += `• Conversão Geral: *${pct(taxaConversaoGeral, 2)}*\n\n`;
+
+  relatorio += "🎯 *METAS COMERCIAIS*\n";
+  relatorio += metasKpi.leads ? linhaMeta("Leads", totalLeads, n(metasKpi.leads)) : "• Leads: sem meta cadastrada\n";
+  relatorio += metasKpi.experimentais ? linhaMeta("Experimentais", totalExperimentais, n(metasKpi.experimentais)) : "• Experimentais: sem meta cadastrada\n";
+  relatorio += metasKpi.matriculas ? linhaMeta("Matrículas", novasMatriculas, n(metasKpi.matriculas)) : "• Matrículas: sem meta cadastrada\n";
+  relatorio += "\n";
+
+  relatorio += "───────────────────────\n📉 *RETENÇÃO*\n───────────────────────\n";
+  relatorio += `• Churn Rate: *${pct(churnRate)}*\n`;
+  relatorio += `• Evasões: *${totalEvasoes}*\n`;
+  relatorio += `• Não Renovações: *${naoRenovacoes}*\n`;
+  relatorio += `• MRR Perdido: *R$ ${moeda(mrrPerdido)}*\n`;
+  relatorio += `• Taxa Renovação: *${pct(taxaRenovacao)}*\n`;
+  relatorio += `• Reajuste Médio: *${pct(reajusteMedio)}*\n\n`;
+
+  if (motivosEvasao.length) {
+    relatorio += "🔴 *TOP MOTIVOS DE EVASÃO*\n\n";
+    relatorio += motivosEvasao.slice(0, 5).map((m: any) => `${m.motivo || "N/D"}: ${m.quantidade ?? m.total ?? 0}`).join("\n");
+    relatorio += "\n\n";
+  }
+
+  relatorio += "───────────────────────\n🏆 *RANKINGS*\n───────────────────────\n";
+  relatorio += "🥇 *TOP PROFESSORES RETENÇÃO*\n";
+  relatorio += linhasRanking(topRetencao, "professor", "tempo_medio_permanencia", (p) => `${p.tempo_medio_permanencia ?? 0} meses`);
+  if (topMatriculadores.length) {
+    relatorio += "\n🎯 *TOP PROFESSORES MATRICULADORES*\n";
+    relatorio += linhasRanking(topMatriculadores, "professor_nome", "matriculas", (p) => `${p.matriculas ?? 0} matrícula${n(p.matriculas) === 1 ? "" : "s"}`);
+  }
+  relatorio += "\n📊 *TOP PRESENÇA MÉDIA*\n";
+  relatorio += linhasRanking(topPresenca, "professor", "presenca_media", (p) => `${p.presenca_media ?? 0}%`);
+  relatorio += "\n👥 *TOP MÉDIA DE ALUNOS POR TURMA*\n";
+  relatorio += linhasRanking(topMediaTurma, "professor", "media_alunos_turma", (p) => `${p.media_alunos_turma ?? 0} alunos/turma`);
+  relatorio += "\n";
+
+  relatorio += "───────────────────────\n🎸 *CURSOS MAIS PROCURADOS*\n───────────────────────\n";
+  relatorio += cursosMaisProcurados.length
+    ? cursosMaisProcurados.slice(0, 5).map((c: any, i: number) => `${i + 1}. ${c.curso || c.nome || "N/D"} - ${c.total_alunos ?? c.quantidade ?? 0}`).join("\n") + "\n\n"
+    : "Sem dados suficientes.\n\n";
+
+  relatorio += "───────────────────────\n📱 *CANAIS COM MAIOR CONVERSÃO*\n───────────────────────\n";
+  relatorio += canaisMaiorConversao.length
+    ? canaisMaiorConversao.slice(0, 3).map((c: any, i: number) => {
+      const canal = c.canal || c.origem || c.nome || "N/D";
+      const matriculas = c.matriculas != null ? `${c.matriculas} matrículas / ` : "";
+      const taxa = c.taxa_conversao != null ? `${pct(c.taxa_conversao, 2)}` : `${c.percentual ?? ""}`;
+      return `${i + 1}. ${canal} - ${matriculas}${taxa}`;
+    }).join("\n") + "\n\n"
+    : "Sem dados suficientes.\n\n";
+
+  relatorio += "───────────────────────\n⚖️ *COMPARATIVOS*\n───────────────────────\n";
+  relatorio += `📅 *VS MÊS ANTERIOR (${mesAnteriorLabel})*\n\n`;
+  if (mesAnterior.length) {
+    const a = mesAnterior[0] || {};
+    relatorio += `• Alunos: *${a.alunos_pagantes ?? "N/D"} → ${totalPagantes}*\n`;
+    relatorio += `• Ticket: *R$ ${moeda(a.ticket_medio)} → R$ ${moeda(ticketMedio)}*\n`;
+    relatorio += `• Churn: *${pct(a.churn_rate)} → ${pct(churnRate)}*\n`;
+    relatorio += `• Matrículas: *${a.novas_matriculas ?? "N/D"} → ${novasMatriculas}*\n`;
+    relatorio += `• Evasões: *${a.evasoes ?? "N/D"} → ${totalEvasoes}*\n\n`;
+  } else {
+    relatorio += "Sem dados do mês anterior.\n\n";
+  }
+
+  relatorio += "📅 *VS MESMO MÊS ANO PASSADO*\n\n";
+  if (anoPassado.length) {
+    const a = anoPassado[0] || {};
+    relatorio += `• Alunos: *${a.alunos_pagantes ?? "N/D"} → ${totalPagantes}*\n`;
+    relatorio += `• Churn: *${pct(a.churn_rate)} → ${pct(churnRate)}*\n`;
+    relatorio += `• Matrículas: *${a.novas_matriculas ?? "N/D"} → ${novasMatriculas}*\n`;
+    relatorio += `• Evasões: *${a.evasoes ?? "N/D"} → ${totalEvasoes}*\n`;
+    relatorio += `• Saldo Líquido: *${a.saldo_liquido ?? "N/D"} → ${novasMatriculas - totalEvasoes}*\n\n`;
+  } else {
+    relatorio += "Sem referência do ano anterior.\n\n";
+  }
+
+  relatorio += "📈 *ANÁLISE DE SAZONALIDADE*\n";
+  relatorio += sazonalidade.length
+    ? `Histórico disponível para ${sazonalidade.length} referência(s) desta competência.\n\n`
+    : "Histórico sazonal indisponível para esta competência.\n\n";
+
+  relatorio += "───────────────────────\n🎯 *METAS DO MÊS*\n───────────────────────\n";
+  relatorio += "📊 *GESTÃO*\n\n";
+  relatorio += metasKpi.alunos ? linhaMeta("Alunos", totalPagantes, n(metasKpi.alunos)) : "• Alunos: sem meta cadastrada\n";
+  relatorio += metasKpi.ticket_medio ? linhaMeta("Ticket", ticketMedio, n(metasKpi.ticket_medio), "R$ ") : "• Ticket: sem meta cadastrada\n";
+  relatorio += metasKpi.churn ? linhaMeta("Churn", churnRate, n(metasKpi.churn), "", true) : "• Churn: sem meta cadastrada\n";
+  relatorio += metasKpi.taxa_renovacao ? linhaMeta("Renovação", taxaRenovacao, n(metasKpi.taxa_renovacao)) : "• Renovação: sem meta cadastrada\n";
+  relatorio += metasKpi.inadimplencia ? linhaMeta("Inadimpl.", inadimplencia, n(metasKpi.inadimplencia), "", true) : "• Inadimpl.: sem meta cadastrada\n";
+  relatorio += metasKpi.reajuste ? linhaMeta("Reajuste", reajusteMedio, n(metasKpi.reajuste)) : "• Reajuste: sem meta cadastrada\n";
+
+  relatorio += "\n📈 *COMERCIAL*\n\n";
+  relatorio += metasKpi.leads ? linhaMeta("Leads", totalLeads, n(metasKpi.leads)) : "• Leads: sem meta cadastrada\n";
+  relatorio += metasKpi.experimentais ? linhaMeta("Experimentais", totalExperimentais, n(metasKpi.experimentais)) : "• Experimentais: sem meta cadastrada\n";
+  relatorio += metasKpi.matriculas ? linhaMeta("Matrículas", novasMatriculas, n(metasKpi.matriculas)) : "• Matrículas: sem meta cadastrada\n";
+  relatorio += metasKpi.taxa_lead_exp ? linhaMeta("Lead→Exp", taxaLeadExp, n(metasKpi.taxa_lead_exp)) : "• Lead→Exp: sem meta cadastrada\n";
+  relatorio += `Exp→Mat: ${TAXA_EXP_MAT_BLOQUEADA_LABEL}\n`;
+  relatorio += metasKpi.taxa_conversao ? linhaMeta("Conversão", taxaConversaoGeral, n(metasKpi.taxa_conversao)) : "• Conversão: sem meta cadastrada\n";
+  relatorio += "\n";
+
+  relatorio += "───────────────────────\n🏆 *PROGRAMA FIDELIZA+ LA* (Trimestral)\n───────────────────────\n";
+  relatorio += `⭐ *CHURN PREMIADO* (meta: ≤4%)\n${barra(churnRate <= 4 ? 100 : Math.max(0, 100 - (churnRate - 4) * 20))} ${pct(churnRate)} ${churnRate <= 4 ? "✅" : "❌"}\n\n`;
+  relatorio += `⭐ *INADIMPLÊNCIA* (meta: ≤1%)\n${barra(inadimplencia <= 1 ? 100 : Math.max(0, 100 - (inadimplencia - 1) * 20))} ${pct(inadimplencia)} ${inadimplencia <= 1 ? "✅" : "❌"}\n\n`;
+  relatorio += `⭐ *MAX RENOVAÇÃO* (meta: ≥90%)\n${barra((taxaRenovacao / 90) * 100)} ${pct(taxaRenovacao)} ${taxaRenovacao >= 90 ? "✅" : "❌"}\n\n`;
+  relatorio += `⭐ *REAJUSTE CAMPEÃO* (meta: ≥7%)\n${barra((reajusteMedio / 7) * 100)} ${pct(reajusteMedio)} ${reajusteMedio >= 7 ? "✅" : "❌"}\n\n`;
+  relatorio += `🛒 *MESTRES DA LOJINHA* (meta: R$ ${moeda(metaLojinha)})\n${barra((vendasLojinha / metaLojinha) * 100)} R$ ${moeda(vendasLojinha)} ${vendasLojinha >= metaLojinha ? "✅" : "❌"}\n\n`;
+
+  relatorio += "───────────────────────\n🎯 *PROGRAMA MATRICULADOR+ LA*\n───────────────────────\n";
+  relatorio += `*Hunter: ${hunterNome}*\n\n`;
+  relatorio += "📊 *TAXA SHOW-UP → EXP*\n";
+  relatorio += `Atual: ${pct(taxaLeadExp, 2)} | Meta: ${pct(metaTaxaShowup, 0)}\n\n`;
+  relatorio += "📊 *TAXA EXP → MATRÍCULA*\n";
+  relatorio += `${TAXA_EXP_MAT_BLOQUEADA_LABEL}\n`;
+  relatorio += "Atual: *BLOQUEADA* | Pts: *0*\n\n";
+  relatorio += "⭐ *TAXA GERAL*\n";
+  relatorio += `Atual: ${pct(taxaConversaoGeral, 2)} | Meta: ${pct(metaTaxaGeral, 1)}\n\n`;
+  relatorio += "📊 *VOLUME MÉDIO/MÊS*\n";
+  relatorio += `Atual: ${mediaMatriculasMes.toFixed(1).replace(".", ",")} matrículas | Meta: ${metaVolumeMatriculas}\n\n`;
+  relatorio += "📊 *TICKET MÉDIO*\n";
+  relatorio += `Atual: R$ ${moeda(ticketMedio)} | Meta: R$ ${moeda(metaTicketMatriculador)}\n\n`;
+
+  relatorio += "───────────────────────\n✅ *CONQUISTAS DO MÊS*\n───────────────────────\n";
+  relatorio += listaIA(ia.conquistas, fallbackIA(mesNome, unidadeNome).conquistas);
+  relatorio += "\n───────────────────────\n⚠️ *PONTOS DE ATENÇÃO*\n───────────────────────\n";
+  relatorio += listaIA(ia.pontos_atencao, fallbackIA(mesNome, unidadeNome).pontos_atencao);
+  relatorio += "\n───────────────────────\n🎯 *PLANO DE AÇÃO*\n───────────────────────\n";
+  relatorio += listaIA(ia.plano_acao, fallbackIA(mesNome, unidadeNome).plano_acao);
+  relatorio += "\n───────────────────────\n💬 *MENSAGEM FINAL*\n───────────────────────\n";
+  relatorio += `${ia.mensagem_final}\n\n`;
+
+  relatorio += "⚠️ *Nota de controle*\n";
+  relatorio += `Taxa Experimental → Matrícula: ${TAXA_EXP_MAT_BLOQUEADA_LABEL}.\n\n`;
+  relatorio += "━━━━━━━━━━━━━━━━━━━━━━\n";
+  relatorio += `📅 Gerado em: ${new Date().toLocaleDateString("pt-BR")} às ${new Date().getHours()}:${String(new Date().getMinutes()).padStart(2, "0")}\n`;
+  relatorio += "━━━━━━━━━━━━━━━━━━━━━━";
 
   return relatorio;
 }
