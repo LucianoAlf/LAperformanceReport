@@ -152,6 +152,7 @@ interface ExperimentalParaReconciliar {
   professorId: number | null;
   unidadeId: string;
   cancelada: boolean;
+  cursoId: number | null;
   alunos: AlunoEmusys[];
 }
 
@@ -203,7 +204,7 @@ async function reconciliarExperimentaisOrfas(
       // Verificar se já existe registro na lead_experimentais para esse aluno+data
       const { data: expExistente } = await supabase
         .from('lead_experimentais')
-        .select('id, status, lead_id')
+        .select('id, status, lead_id, curso_interesse_id')
         .eq('nome_aluno', nomeAluno)
         .eq('data_experimental', exp.dataAula)
         .eq('unidade_id', exp.unidadeId)
@@ -212,16 +213,21 @@ async function reconciliarExperimentaisOrfas(
         .maybeSingle();
 
       if (expExistente) {
-        // Reconciliação bidirecional: corrigir se status diverge do Emusys
-        if (expExistente.status !== novoStatus) {
-          await supabase.from('lead_experimentais').update({
-            status: novoStatus,
-            etapa_pipeline_id: presente ? 7 : 9,
-            updated_at: new Date().toISOString()
-          }).eq('id', expExistente.id);
+        const precisaCorrigirStatus = expExistente.status !== novoStatus;
+        const precisaPreencherCurso = !expExistente.curso_interesse_id && exp.cursoId != null;
 
-          // Propagar para leads (não sobrescrever leads já convertidos/matriculados)
-          if (expExistente.lead_id) {
+        // Reconciliação bidirecional: corrigir status divergente e/ou preencher curso faltante
+        if (precisaCorrigirStatus || precisaPreencherCurso) {
+          const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+          if (precisaCorrigirStatus) {
+            patch.status = novoStatus;
+            patch.etapa_pipeline_id = presente ? 7 : 9;
+          }
+          if (precisaPreencherCurso) patch.curso_interesse_id = exp.cursoId;
+          await supabase.from('lead_experimentais').update(patch).eq('id', expExistente.id);
+
+          // Propagar status para leads só quando o status mudou (não sobrescrever convertidos/matriculados)
+          if (precisaCorrigirStatus && expExistente.lead_id) {
             await supabase.from('leads').update({
               experimental_realizada: presente,
               faltou_experimental: !presente,
@@ -284,6 +290,7 @@ async function reconciliarExperimentaisOrfas(
           data_experimental: exp.dataAula,
           horario_experimental: exp.horario + ':00',
           professor_experimental_id: exp.professorId,
+          curso_interesse_id: exp.cursoId,
           status,
           etapa_pipeline_id: presente ? 7 : 9,
         });
@@ -343,19 +350,34 @@ async function confirmarExperimentais(
   const hoje = new Date();
   const hojeBRT = new Date(hoje.getTime() - 3 * 60 * 60 * 1000).toISOString().split('T')[0];
   const limiteAntiguidadeDias = 14;
-  const limiteAutoFaltouDias = 7;
+  const limiteAutoFaltouDias = 15; // > janela do cron (5-7d) p/ dar tempo da presença real chegar
   const dataLimite = new Date(hoje.getTime() - limiteAntiguidadeDias * 24 * 60 * 60 * 1000 - 3 * 60 * 60 * 1000).toISOString().split('T')[0];
   const dataAutoFaltou = new Date(hoje.getTime() - limiteAutoFaltouDias * 24 * 60 * 60 * 1000 - 3 * 60 * 60 * 1000).toISOString().split('T')[0];
 
-  // Auto-marcar como "faltou" experimentais com mais de 7 dias sem confirmação
+  // Auto-marcar "faltou" SUBORDINADO AO EMUSYS: só marca falta quando existe prova de
+  // que a aula aconteceu (aula_emusys experimental na data/unidade, não cancelada) e a
+  // reconciliação não registrou presença. Sem aula sincronizada => NÃO marca (o sync pode
+  // não ter alcançado aquele dia; marcar faltou por silêncio gera falta falsa — caso Rodolfo/José).
   const { data: expExpiradas } = await supabase
     .from('lead_experimentais')
-    .select('id, lead_id, nome_aluno, unidade_id')
+    .select('id, lead_id, nome_aluno, unidade_id, data_experimental')
     .eq('status', 'experimental_agendada')
     .lt('data_experimental', dataAutoFaltou);
 
+  let autoFaltouCount = 0;
   if (expExpiradas?.length) {
     for (const exp of expExpiradas) {
+      const { data: aulaProva } = await supabase
+        .from('aulas_emusys')
+        .select('id')
+        .eq('data_aula', exp.data_experimental)
+        .eq('unidade_id', exp.unidade_id)
+        .eq('categoria', 'experimental')
+        .eq('cancelada', false)
+        .limit(1)
+        .maybeSingle();
+      if (!aulaProva) continue; // sem prova no Emusys → não marca faltou, deixa 'agendada'
+
       await supabase.from('lead_experimentais').update({
         status: 'experimental_faltou', updated_at: new Date().toISOString()
       }).eq('id', exp.id);
@@ -363,8 +385,9 @@ async function confirmarExperimentais(
       await supabase.from('leads').update({
         faltou_experimental: true, status: 'experimental_faltou', etapa_pipeline_id: 9, updated_at: new Date().toISOString()
       }).eq('id', exp.lead_id).not('status', 'in', '("convertido","matriculado")');
+      autoFaltouCount++;
     }
-    console.log(`[sync-presenca] Auto-faltou: ${expExpiradas.length} experimentais com mais de ${limiteAutoFaltouDias} dias`);
+    console.log(`[sync-presenca] Auto-faltou: ${autoFaltouCount} de ${expExpiradas.length} expiradas (subordinado ao Emusys, +${limiteAutoFaltouDias}d)`);
   }
 
   // Buscar experimentais pendentes dos últimos 14 dias (não mais antigas)
@@ -648,13 +671,12 @@ serve(async (req: Request) => {
 
         // 2. Processar aula por aula (não mais agrupado por dia)
         for (const aula of aulas) {
-          if (aula.cancelada) continue;
-          aulasProcessadas++;
-
           const profNome = aula.professores?.[0]?.nome || null;
           const professorId = profNome ? matchProfessor(profNome, profMapa, profNomes) : null;
 
-          // Coletar aulas experimentais para reconciliação
+          // Coletar aulas experimentais para reconciliação ANTES de pular canceladas:
+          // a reconciliação precisa da aula cancelada p/ marcar status 'cancelada'
+          // (senão o auto-faltou a deixa como 'faltou'). Tambem carrega o curso da aula.
           if (aula.categoria === 'experimental') {
             const horario = aula.data_hora_inicio?.split(' ')[1] || '00:00';
             experimentaisColetadas.push({
@@ -663,9 +685,13 @@ serve(async (req: Request) => {
               professorId,
               unidadeId: unidade.id,
               cancelada: aula.cancelada,
+              cursoId: cursoMapa.get(normalizarCurso(aula.curso_nome || '')) ?? null,
               alunos: aula.alunos || [],
             });
           }
+
+          if (aula.cancelada) continue;
+          aulasProcessadas++;
 
           // 2a. UPSERT dados da aula na aulas_emusys
           const { data: aulaDB, error: aulaError } = await supabase

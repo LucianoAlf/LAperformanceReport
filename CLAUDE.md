@@ -77,6 +77,7 @@ VITE_GEMINI_API_KEY=...  # opcional
 ## Módulo de Professores
 
 - **`TabPerformanceProfessores`**: tabela de KPIs por professor, dados via RPC `get_kpis_professor_periodo`
+- **Taxa de conversão do professor (fonte = `lead_experimentais`, desde 2026-06-20)**: a RPC lê o CTE `experimentais` de `lead_experimentais` (1 linha por aula, presença real), **não mais de `leads`** (que agregava 1 por pessoa e subcontava realizadas → taxa inflada). Denominador = `status IN ('experimental_realizada','convertido')`; numerador (`matriculas_pos_exp`) = realizadas cujo lead converteu (join `leads.converteu`); matrícula direta sem experimental = 0. Experimental de aluno existente (2º instrumento) **conta**. A presença das experimentais é alimentada pela reconciliação da edge `sync-presenca-emusys` (auto-faltou subordinado ao `/aulas/`, grava `curso_interesse_id`). Detalhes: `docs/hugo/2026-06-20-regua-professor-fonte-lead-experimentais.md`.
 - **Modo Mensal vs Trimestral**: toggle local na aba Performance. Em Trimestral, agrega 3 meses (T1=Mar/Abr/Mai, T2=Jun/Jul/Ago, T3=Set/Out/Nov, "Período Não Considerado"=Dez/Jan/Fev) para diluir distorções estatísticas em professores com poucas experimentais. RPC aceita `p_data_inicio` + `p_data_fim` opcionais (sobrescrevem `p_ano + p_mes`).
 - **`ModalDetalhesPresenca`**: detalhe de presença por aluno, com paginação, busca e filtro por faixa
 - **`ModalDetalhesEvasoes`**: detalhe de evasões com coluna "Score" (Conta/Não conta), lookup em `motivos_saida` por FK ou texto, filtro por score, card "Contam no Score"
