@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Phone, Calendar, UserPlus, Percent, DollarSign, TrendingUp, Archive, XCircle, Music, Clock, Users, Target, Baby, GraduationCap, AlertTriangle, Info, Lock, Unlock } from 'lucide-react';
+import { Phone, Calendar, UserPlus, Percent, DollarSign, TrendingUp, Archive, XCircle, Music, Clock, Users, Baby, GraduationCap, AlertTriangle, Info, Lock, Unlock } from 'lucide-react';
 import { KPICard } from '@/components/ui/KPICard';
 import { FunnelChart } from '@/components/ui/FunnelChart';
 import { DistributionChart } from '@/components/ui/DistributionChart';
@@ -894,56 +894,55 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <KPICard
               icon={Calendar}
-              label="Aulas Marcadas"
+              label="Marcadas (legado)"
               value={dados.experimentais_marcadas}
               variant="cyan"
             />
             <KPICard
               icon={Calendar}
-              label="Realizadas (legado)"
-              value={dados.experimentais_realizadas}
-              target={metas.experimentais}
+              label="Presença Confirmada"
+              value={experimentaisDiagnostico.realizadasPresencaConfirmada}
               format="number"
               variant="emerald"
-              comparativoMesAnterior={dadosMesAnterior ? { valor: dadosMesAnterior.experimentais_realizadas, label: dadosMesAnterior.label } : undefined}
-              comparativoAnoAnterior={dadosAnoAnterior ? { valor: dadosAnoAnterior.experimentais_realizadas, label: dadosAnoAnterior.label } : undefined}
             />
             <KPICard
               icon={XCircle}
-              label="Faltaram"
+              label="Faltaram (legado)"
               value={dados.faltaram}
               variant="rose"
             />
             <KPICard
               icon={Percent}
-              label="Taxa Show-up"
+              label="Show-up (legado)"
               value={dados.taxa_showup}
               format="percent"
               variant="violet"
             />
-            <KPICard
-              icon={Target}
-              label="Taxa Exp → Mat (legado)"
-              value={dados.taxa_conversao_exp_mat}
-              target={metas.taxa_exp_mat}
-              format="percent"
-              variant="emerald"
-            />
+            <div className="bg-slate-800/70 border border-slate-700 rounded-xl p-4 min-h-[112px] flex flex-col justify-between">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs text-slate-400 font-medium">Taxa Exp → Mat</span>
+                <Lock className="w-4 h-4 text-amber-300" />
+              </div>
+              <div>
+                <div className="text-2xl font-bold text-amber-200">Bloqueada</div>
+                <p className="text-xs text-slate-400 mt-1">Aguardando regra canônica de vínculo e presença.</p>
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <FunnelChart
               steps={[
                 { label: 'Leads', value: dados.total_leads, color: '#06b6d4' },
-                { label: 'Experimentais/Visitas', value: dados.experimentais_realizadas, color: '#8b5cf6' },
+                { label: 'Presença confirmada', value: experimentaisDiagnostico.realizadasPresencaConfirmada, color: '#8b5cf6' },
                 { label: 'Matrículas', value: dados.novas_matriculas, color: '#10b981' },
               ]}
-              title="Funil de Conversão"
+              title="Funil Diagnóstico"
             />
             {dados.experimentais_por_canal.length > 0 ? (
               <DistributionChart
                 data={dados.experimentais_por_canal}
-                title="Experimentais/Visitas por Canal"
+                title="Experimentais/Visitas por Canal (legado)"
               />
             ) : (
               <EstadoVazio
@@ -957,7 +956,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             {dados.experimentais_por_professor.length > 0 ? (
               <RankingTable
                 data={dados.experimentais_por_professor}
-                title="Experimentais por Professor"
+                title="Experimentais por Professor (legado)"
                 valorLabel="Aulas"
               />
             ) : (
