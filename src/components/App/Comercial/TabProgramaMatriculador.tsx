@@ -482,7 +482,7 @@ export function TabProgramaMatriculador({ unidadeId, ano = 2026 }: TabProgramaMa
                       <td className="text-center text-slate-400">{config.pontuacao.taxa_showup} pts</td>
                     </tr>
                     <tr className="border-b border-slate-800">
-                      <td className="py-3 font-medium">Taxa Experimental → Matrícula</td>
+                      <td className="py-3 font-medium">Taxa Exp→Mat bloqueada</td>
                       <td className="text-center text-yellow-300">Bloqueada</td>
                       {hunters.map(h => (
                         <td key={h.unidade_id} className="text-center text-yellow-300">
@@ -740,9 +740,9 @@ export function TabProgramaMatriculador({ unidadeId, ano = 2026 }: TabProgramaMa
             </div>
 
             <div className="grid grid-cols-3 gap-4">
-              {/* Metas de Conversão */}
+              {/* Metas comerciais: Exp -> Mat segue bloqueada como KPI oficial. */}
               <div className="bg-slate-900 rounded-xl p-6">
-                <h3 className="text-lg font-semibold mb-4">Metas de Taxa de Conversão</h3>
+                <h3 className="text-lg font-semibold mb-4">Metas Comerciais Seguras</h3>
                 <div className="space-y-4">
                   <div>
                     <Label className="text-slate-400">Taxa Show-up → Experimental</Label>
@@ -752,7 +752,7 @@ export function TabProgramaMatriculador({ unidadeId, ano = 2026 }: TabProgramaMa
                     </div>
                   </div>
                   <div>
-                    <Label className="text-slate-400">Taxa Experimental → Matrícula</Label>
+                    <Label className="text-slate-400">Taxa Exp→Mat bloqueada</Label>
                     <div className="mt-1 rounded-lg border border-yellow-500/20 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-200">
                       Bloqueada até regra canônica de presença/vínculo.
                     </div>
@@ -834,7 +834,7 @@ export function TabProgramaMatriculador({ unidadeId, ano = 2026 }: TabProgramaMa
                     </div>
                   </div>
                   <div>
-                    <Label className="text-slate-400">Pontos - Taxa Exp → Matrícula</Label>
+                    <Label className="text-slate-400">Pontos - Exp→Mat bloqueada</Label>
                     <div className="mt-1 rounded-lg border border-yellow-500/20 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-200">
                       0 pts neste ciclo.
                     </div>
@@ -1154,13 +1154,13 @@ export function TabProgramaMatriculador({ unidadeId, ano = 2026 }: TabProgramaMa
           </div>
         </div>
 
-        {/* Taxa Experimental → Matrícula */}
+        {/* Taxa Experimental -> Matrícula bloqueada */}
         <div className="bg-slate-900 rounded-xl p-5 border border-yellow-500/30">
           <div className="flex items-center justify-between mb-3">
             <div>
               <h4 className="font-medium flex items-center gap-2">
                 <Lock className="h-4 w-4 text-yellow-400" />
-                Taxa Experimental → Matrícula
+                Taxa Exp→Mat bloqueada
               </h4>
               <p className="text-sm text-yellow-300">Bloqueada até regra canônica de presença/vínculo</p>
             </div>
