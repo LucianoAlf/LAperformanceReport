@@ -48,3 +48,15 @@ docs/PARALISACAO_*.md
 docs/PLANO_*.md
 docs/RETIFICACAO_*.sql
 docs/PROPOSTA_*.sql
+
+# Artefatos locais de auditoria/reconciliação comercial P02.
+# Não ignorar outputs/ inteiro: há pareceres versionados importantes nessa pasta.
+.tmp_auditoria.mjs
+outputs/la-report-p02k-validacao-2026-06-20/
+outputs/la-report-p02l-preview-apply-staging-2026-06-20/
+outputs/la-report-p02m-pos-p02l-2026-06-20/
+outputs/la-report-p02n-preview-presenca-2026-06-20/
+outputs/la-report-p02n1-apply-presenca-2026-06-20/
+outputs/la-report-p02o-lote-pendentes-2026-06-20/
+outputs/la-report-p02p-denominador-experimentais-2026-06-20/
+outputs/la-report-p02q-rpc-experimentais-v2-2026-06-20/
