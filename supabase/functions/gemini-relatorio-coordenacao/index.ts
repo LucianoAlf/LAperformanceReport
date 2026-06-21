@@ -294,12 +294,12 @@ Deno.serve(async (req) => {
     relatorioTemplate += `• Presença Média: *${mediaPresenca.toFixed(1)}%*\n`;
     relatorioTemplate += `• MRR Total: *R$ ${formatarMoeda(mrrTotal)}*\n\n`;
 
-    // RETENÇÃO & CONVERSÃO
+    // RETENÇÃO & DIAGNOSTICO COMERCIAL
     relatorioTemplate += `───────────────────────\n`;
-    relatorioTemplate += `🔄 *RETENÇÃO & CONVERSÃO*\n`;
+    relatorioTemplate += `🔄 *RETENÇÃO & DIAGNÓSTICO COMERCIAL*\n`;
     relatorioTemplate += `───────────────────────\n`;
     relatorioTemplate += `• Taxa Renovação Média: *${taxaRenovacaoMedia.toFixed(1)}%*\n`;
-    relatorioTemplate += `• Taxa Conversão Média: *${taxaConversaoMedia.toFixed(1)}%*\n`;
+    relatorioTemplate += `• Conversao Exp->Mat media (legado/bloqueada): *${taxaConversaoMedia.toFixed(1)}%* - nao usar como KPI oficial\n`;
     relatorioTemplate += `• Evasões no Mês: *${totalEvasoes}*\n`;
     relatorioTemplate += `• Matrículas no Mês: *${totalMatriculas}*\n`;
     relatorioTemplate += `• Saldo Líquido: *${totalMatriculas - totalEvasoes >= 0 ? '+' : ''}${totalMatriculas - totalEvasoes}*\n\n`;
@@ -611,7 +611,7 @@ Responda EXATAMENTE neste formato JSON:
         resumo_executivo: `${mesNome} apresentou resultados variados na equipe pedagógica. Análise detalhada nos indicadores.`,
         sugestoes_treinamento: [],
         conquistas: ['Equipe manteve foco nos objetivos', 'Processos pedagógicos em andamento', 'Base de alunos estável'],
-        pontos_atencao: ['Monitorar presença dos professores', 'Acompanhar conversão de experimentais', 'Revisar estratégias de engajamento'],
+        pontos_atencao: ['Monitorar presença dos professores', 'Acompanhar vinculo/presenca antes de liberar conversao experimental', 'Revisar estratégias de engajamento'],
         plano_acao: ['Realizar checkpoints individuais', 'Agendar treinamentos prioritários', 'Acompanhar professores críticos'],
         mensagem_final: `${coordenadores.join(' e ')}, vamos juntos elevar a qualidade pedagógica! 🎶`
       };

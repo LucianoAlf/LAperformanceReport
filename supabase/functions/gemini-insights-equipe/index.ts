@@ -109,12 +109,12 @@ IMPORTANTE:
 METAS DE REFERÊNCIA:
 - Média de alunos por turma: ≥ 1.5 (ideal), 1.3-1.5 (aceitável), < 1.3 (crítico)
 - Taxa de retenção: ≥ 95% (excelente), 70-95% (regular), < 70% (crítico)
-- Taxa de conversão: ≥ 90% (excelente), 70-90% (bom), < 70% (ruim)
+- Conversao Exp->Mat: BLOQUEADA como KPI oficial. Usar apenas como diagnostico legado ate regra canonica de presenca/vinculo.
 - NPS: ≥ 8.5 (excelente), 7-8.5 (regular), < 7 (ruim)
 
 HEALTH SCORE (Saúde do Professor):
 O Health Score é uma métrica composta de 0-100 que resume a saúde geral do professor.
-Pesos: Curso 10%, Média/Turma 20%, Retenção 20%, Conversão 15%, NPS 15%, Presença 10%, Evasões 10%
+Pesos: Curso 10%, Média/Turma 20%, Retenção 20%, Conversao legado 15%, NPS 15%, Presença 10%, Evasões 10%
 - 🟢 Saudável: 80-100 pontos
 - 🟡 Atenção: 60-79 pontos
 - 🔴 Crítico: 0-59 pontos
