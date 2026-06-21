@@ -46,7 +46,7 @@ export const dashboardTourSteps: Step[] = [
   {
     target: '[data-tour="secao-comercial"]',
     title: '🎯 Indicadores Comerciais',
-    content: 'Acompanhe o funil de vendas da unidade:\n\n• Leads: Contatos recebidos no mês\n• Experimentais: Aulas experimentais realizadas\n• Taxa Conversão: % de leads que viraram alunos\n• Ticket Passaporte: Valor médio das matrículas\n\n💡 Para detalhes e lançamentos, acesse a página Comercial.',
+    content: 'Acompanhe o funil de vendas da unidade:\n\n• Leads: contatos recebidos no mês pela fonte v2\n• Experimentais com Presença: presença individual confirmada\n• Taxa Exp→Mat: bloqueada até regra canônica\n• Ticket Passaporte: valor médio das matrículas\n\n💡 Para detalhes e lançamentos, acesse a página Comercial.',
     placement: 'top',
     disableBeacon: true,
   },

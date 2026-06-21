@@ -64,7 +64,7 @@ export const comercialTourSteps: Step[] = [
   {
     target: '[data-tour="comercial-funil"]',
     title: '📈 Funil de Conversão',
-    content: 'Visualize as taxas de conversão do seu funil:\n\n• Lead → Experimental: Quantos leads agendaram aula\n• Experimental → Matrícula: Taxa de fechamento\n• Lead → Matrícula: Conversão geral\n\n💡 Cores indicam se está acima ou abaixo da meta!',
+    content: 'Visualize o funil comercial:\n\n• Lead → Experimental: leitura operacional\n• Experimental → Matrícula: BLOQUEADA até regra canônica de presença/vínculo\n• Lead → Matrícula: conversão geral\n\n💡 Não use Exp→Mat como KPI oficial neste ciclo.',
     placement: 'top',
     disableBeacon: true,
   },
@@ -132,7 +132,7 @@ export const comercialTourSteps: Step[] = [
   {
     target: '[data-tour="aba-programa"]',
     title: '🏆 Programa Matriculador+ LA',
-    content: 'Acompanhe sua pontuação no programa de bonificação!\n\nCritérios (100 pts total):\n• Taxa Show-up → Experimental (20 pts)\n• Taxa Experimental → Matrícula (25 pts)\n• Taxa Lead → Matrícula Geral (30 pts)\n• Volume Médio Matrículas/Mês (15 pts)\n• Ticket Médio Anual (10 pts)\n\n🎁 Prêmio: Viagem com acompanhante!\n⚠️ Nota de corte: 80 pontos',
+    content: 'Acompanhe sua pontuação no programa de bonificação!\n\nCritérios ativos neste ciclo:\n• Taxa Show-up → Experimental\n• Taxa Lead → Matrícula Geral\n• Volume Médio Matrículas/Mês\n• Ticket Médio Anual\n\n⚠️ Taxa Experimental → Matrícula está bloqueada até regra canônica de presença/vínculo.',
     placement: 'bottom',
     disableBeacon: true,
   },
