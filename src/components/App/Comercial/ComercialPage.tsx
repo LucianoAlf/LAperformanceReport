@@ -1052,10 +1052,25 @@ export function ComercialPage() {
       // Alinhar resumo/conversão à fonte real (alunos): conta matrículas primárias
       // (sem segundo curso/banda). No modo "Hoje" mantém o acumulado do mês via leads.
       if (!isFiltroHoje) {
-        const totalMatPrimarias = matriculasDoMes.filter(ehMatriculaNova).length;
+        const matriculasPrimarias = matriculasDoMes.filter(ehMatriculaNova);
+        const totalMatPrimarias = matriculasPrimarias.length;
+        const matCanalMap = new Map<string, number>();
+        const matCursoMap = new Map<string, number>();
+        matriculasPrimarias.forEach((m: any) => {
+          const canal = m.canal_nome || 'Não informado';
+          const curso = m.curso_nome || 'Não informado';
+          matCanalMap.set(canal, (matCanalMap.get(canal) || 0) + 1);
+          matCursoMap.set(curso, (matCursoMap.get(curso) || 0) + 1);
+        });
         setResumo(prev => ({
           ...prev,
           matriculas: totalMatPrimarias,
+          matriculasPorCanal: Array.from(matCanalMap.entries())
+            .map(([canal, quantidade]) => ({ canal, quantidade }))
+            .sort((a, b) => b.quantidade - a.quantidade),
+          matriculasPorCurso: Array.from(matCursoMap.entries())
+            .map(([curso, quantidade]) => ({ curso, quantidade }))
+            .sort((a, b) => b.quantidade - a.quantidade),
           conversaoLeadMat: prev.leads > 0 ? (totalMatPrimarias / prev.leads) * 100 : 0,
           conversaoExpMat: prev.experimentais > 0 ? (totalMatPrimarias / prev.experimentais) * 100 : 0,
         }));
@@ -2487,7 +2502,7 @@ export function ComercialPage() {
   const buscarMatriculasAlunos = async (uid: string | null | undefined, dataInicio: string, dataFim: string) => {
     let q = supabase
       .from('alunos')
-      .select('id, nome, idade_atual, data_matricula, tipo_aluno, valor_passaporte, valor_parcela, is_segundo_curso, curso_id, professor_atual_id, cursos:curso_id(nome, is_projeto_banda)')
+      .select('id, nome, idade_atual, data_matricula, tipo_aluno, valor_passaporte, valor_parcela, is_segundo_curso, curso_id, canal_origem_id, professor_atual_id, cursos:curso_id(nome, is_projeto_banda), canais_origem:canal_origem_id(nome)')
       .not('data_matricula', 'is', null)
       .gte('data_matricula', dataInicio)
       .lte('data_matricula', dataFim);
@@ -2771,7 +2786,7 @@ export function ComercialPage() {
       valor_passaporte: a.valor_passaporte,
       valor_parcela: a.valor_parcela,
       cursos: a.cursos,
-      canais_origem: null,
+      canais_origem: a.canais_origem,
     }));
 
     // Agrupar leads por canal
@@ -2790,9 +2805,9 @@ export function ComercialPage() {
 
     // Agrupar matrículas por canal
     const matriculasPorCanal: { [key: string]: number } = {};
-    registrosMes?.filter(r => ['matriculado','convertido'].includes(r.status)).forEach(r => {
-      const canal = (r.canais_origem as any)?.nome || 'Não informado';
-      matriculasPorCanal[canal] = (matriculasPorCanal[canal] || 0) + r.quantidade;
+    matAlunosMes.forEach((a: any) => {
+      const canal = (a.canais_origem as any)?.nome || 'Não informado';
+      matriculasPorCanal[canal] = (matriculasPorCanal[canal] || 0) + 1;
     });
 
     // Agrupar matrículas por curso (fonte = alunos)
