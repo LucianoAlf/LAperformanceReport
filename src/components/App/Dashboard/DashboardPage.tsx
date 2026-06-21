@@ -31,7 +31,11 @@ import { useMetasKPI } from '@/hooks/useMetasKPI';
 import { KPICard } from '@/components/ui/KPICard';
 import { ModalDetalheKPI, BadgeUnidade, BadgeTipo, ValorParcela, TextoCurso } from './ModalDetalheKPI';
 import { fetchKPIsAlunosCanonicos, type FonteKPIAlunos } from '@/hooks/useKPIsAlunosCanonicos';
-import { useComercialOperacionalResumoV2 } from '@/hooks/useComercialOperacionalResumoV2';
+import {
+  fetchComercialOperacionalResumoV2,
+  fetchExperimentaisDiagnosticoComercialV2,
+  useComercialOperacionalResumoV2,
+} from '@/hooks/useComercialOperacionalResumoV2';
 import { filtrarRetencaoCanonica } from '@/lib/atividadesExtras';
 
 
@@ -62,6 +66,7 @@ interface DadosGestao {
 interface DadosComercial {
   leads_mes: number;
   experimentais_realizadas: number;
+  experimentais_status_operacional?: number;
   taxa_conversao: number;
   ticket_passaporte: number;
 }
@@ -248,7 +253,7 @@ export function DashboardPage() {
     }
   };
 
-  // Fetch experimentais realizadas do período para o modal
+  // Lista operacional para o modal; o KPI canônico usa a camada v2 de presença.
   const fetchExperimentais = async () => {
     setCarregandoModal(true);
     try {
@@ -503,6 +508,67 @@ export function DashboardPage() {
             { etapa: 'Exp/Visita', valor: expTotal, cor: '#8b5cf6' },
             { etapa: 'Matrículas', valor: novasMatriculas, cor: '#10b981' }
           ]);
+        }
+
+        try {
+          const startDateComercial = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
+          const endDateComercial = `${ano}-${String(mesFim).padStart(2, '0')}-${new Date(ano, mesFim, 0).getDate()}`;
+
+          const [resumoComercialV2, diagnosticoExperimentaisV2] = await Promise.all([
+            fetchComercialOperacionalResumoV2({
+              unidadeId: unidade,
+              ano,
+              mesInicio,
+              mesFim,
+            }),
+            fetchExperimentaisDiagnosticoComercialV2({
+              unidadeId: unidade,
+              ano,
+              mesInicio,
+              mesFim,
+            }),
+          ]);
+
+          let passaporteQueryV2 = supabase
+            .from('alunos')
+            .select('valor_passaporte')
+            .gte('data_matricula', startDateComercial)
+            .lte('data_matricula', endDateComercial)
+            .gt('valor_passaporte', 0);
+
+          if (unidade !== 'todos') {
+            passaporteQueryV2 = passaporteQueryV2.eq('unidade_id', unidade);
+          }
+
+          const { data: passaporteV2Data } = await passaporteQueryV2;
+          const ticketPassaporteV2 =
+            passaporteV2Data && passaporteV2Data.length > 0
+              ? passaporteV2Data.reduce((sum: number, a: any) => sum + Number(a.valor_passaporte), 0) /
+                passaporteV2Data.length
+              : 0;
+
+          const matriculasCanonicas =
+            kpisAlunos.fonte !== 'indisponivel' ? kpisAlunos.novasMatriculas : 0;
+
+          setDadosComercial({
+            leads_mes: resumoComercialV2.leadsEntrantes,
+            experimentais_realizadas: diagnosticoExperimentaisV2.realizadasPresencaConfirmada,
+            experimentais_status_operacional: diagnosticoExperimentaisV2.realizadasStatusOperacional,
+            taxa_conversao: 0,
+            ticket_passaporte: Math.round(ticketPassaporteV2),
+          });
+
+          setFunilComercial([
+            { etapa: 'Leads', valor: resumoComercialV2.leadsEntrantes, cor: '#3b82f6' },
+            {
+              etapa: 'Presença confirmada',
+              valor: diagnosticoExperimentaisV2.realizadasPresencaConfirmada,
+              cor: '#8b5cf6',
+            },
+            { etapa: 'Matrículas', valor: matriculasCanonicas, cor: '#10b981' },
+          ]);
+        } catch (err) {
+          console.error('Erro ao aplicar camada comercial v2 no Dashboard:', err);
         }
 
         // ===== DADOS DE PROFESSORES =====
@@ -872,12 +938,16 @@ export function DashboardPage() {
           />
           <KPICard
             icon={Calendar}
-            label="Experimentais Realizadas"
-            tooltip="Aulas experimentais que foram efetivamente realizadas (aluno compareceu) no período. Clique para ver a lista."
+            label="Experimentais com Presença"
+            tooltip="Presença experimental confirmada pela camada v2: aluno vinculado + presença individual + aula Emusys experimental. Clique para ver a lista operacional."
             value={dadosComercial?.experimentais_realizadas ?? '--'}
             target={metas.experimentais}
             format="number"
-            subvalue={!dadosComercial ? 'Aguardando dados' : undefined}
+            subvalue={
+              !dadosComercial
+                ? 'Aguardando dados'
+                : `Status operacional: ${dadosComercial.experimentais_status_operacional ?? 0}`
+            }
             variant="violet"
             onClick={() => { fetchExperimentais(); setModalExperimentais(true); }}
           />
@@ -1229,8 +1299,8 @@ export function DashboardPage() {
       <ModalDetalheKPI
         open={modalExperimentais}
         onClose={() => setModalExperimentais(false)}
-        titulo={`Experimentais Realizadas (${labelPeriodo})`}
-        descricao={`Aulas experimentais realizadas no período — ${unidade === 'todos' ? 'Consolidado' : 'Unidade selecionada'}`}
+        titulo={`Experimentais Operacionais (${labelPeriodo})`}
+        descricao={`Lista operacional/diagnóstica por status do funil. O card usa presença confirmada v2 — ${unidade === 'todos' ? 'Consolidado' : 'Unidade selecionada'}`}
         dados={dadosModalExperimentais}
         colunas={[
           { key: 'nome', label: 'Aluno' },
@@ -1248,7 +1318,7 @@ export function DashboardPage() {
           const cursos = new Set(dadosModalExperimentais.map(d => d.curso).filter(c => c !== '—'));
           return [
             { label: 'Total', valor: total, icone: <Calendar size={14} />, cor: 'text-sky-400', destaque: true },
-            { label: 'Realizadas', valor: realizadas, icone: <GraduationCap size={14} />, cor: 'text-emerald-400' },
+            { label: 'Operacionais', valor: realizadas, icone: <GraduationCap size={14} />, cor: 'text-emerald-400' },
             { label: 'Visitas', valor: visitas, icone: <Users size={14} />, cor: 'text-amber-400' },
             { label: 'Cursos', valor: cursos.size, icone: <Target size={14} />, cor: 'text-violet-400' },
           ];
