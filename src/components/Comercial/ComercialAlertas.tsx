@@ -1,181 +1,85 @@
-import { AlertTriangle, Lightbulb, Users, Target } from 'lucide-react';
-import { useComercialData } from '../../hooks/useComercialData';
+import { AlertTriangle, CheckCircle2, Lightbulb, LockKeyhole } from 'lucide-react';
+import { useComercialResumoV2 } from '../../hooks/useComercialResumoV2';
 
 export function ComercialAlertas() {
-  const { kpis: kpisGrupo } = useComercialData(2025, 'Consolidado');
-  const { kpis: kpisCG } = useComercialData(2025, 'Campo Grande');
-  const { kpis: kpisRec } = useComercialData(2025, 'Recreio');
-  const { kpis: kpisBarra } = useComercialData(2025, 'Barra');
+  const { resumo, loading, error } = useComercialResumoV2(2025, 'Consolidado');
 
-  if (!kpisGrupo || !kpisCG || !kpisRec || !kpisBarra) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center h-full min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500" />
       </div>
     );
   }
 
-  // Calcular potencial se CG tivesse a conversão do Recreio
-  const matriculasAdicionaisCG = Math.round(kpisCG.totalLeads * (kpisRec.taxaConversaoTotal / 100)) - kpisCG.novasMatriculas;
-  const faturamentoAdicional = matriculasAdicionaisCG * kpisCG.ticketMedioParcelas;
+  if (error) {
+    return (
+      <div className="p-8 text-center text-red-400">
+        <div className="text-xl mb-2">Erro ao carregar alertas</div>
+        <div className="text-sm">{error}</div>
+      </div>
+    );
+  }
 
   const alertas = [
     {
-      tipo: 'critico',
-      icone: AlertTriangle,
-      corIcone: 'text-red-400',
-      corBg: 'bg-red-500/10',
-      corBorda: 'border-red-500/30',
-      titulo: 'Alerta Crítico: Campo Grande',
-      conteudo: (
-        <>
-          <p className="text-gray-300 mb-3">
-            Campo Grande converte apenas <strong className="text-red-400">6,4%</strong> dos leads
-            enquanto Recreio converte <strong className="text-emerald-500">11,9%</strong> (quase o dobro).
-          </p>
-          <div className="bg-slate-800/50 rounded-lg p-3">
-            <div className="text-sm text-gray-400 mb-2">Se CG tivesse a mesma taxa do Recreio:</div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <div className="text-xl font-bold text-emerald-500">+{matriculasAdicionaisCG}</div>
-                <div className="text-xs text-gray-500">matrículas adicionais</div>
-              </div>
-              <div>
-                <div className="text-xl font-bold text-emerald-500">+R$ {Math.round(faturamentoAdicional / 1000)}k</div>
-                <div className="text-xs text-gray-500">faturamento anual</div>
-              </div>
-            </div>
-          </div>
-        </>
-      ),
-    },
-    {
-      tipo: 'oportunidade',
-      icone: Lightbulb,
-      corIcone: 'text-emerald-500',
+      icone: CheckCircle2,
+      corIcone: 'text-emerald-400',
       corBg: 'bg-emerald-500/10',
       corBorda: 'border-emerald-500/30',
-      titulo: 'Oportunidade: Programa de Indicação',
-      conteudo: (
-        <>
-          <p className="text-gray-300 mb-3">
-            Indicação tem <strong className="text-emerald-500">25,1%</strong> de conversão (vs 5,7% Instagram)
-            mas representa apenas <strong className="text-amber-400">5,5%</strong> dos leads.
-          </p>
-          <div className="bg-slate-800/50 rounded-lg p-3">
-            <div className="text-sm text-gray-400 mb-2">Se aumentar indicações para 20% dos leads:</div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <div className="text-xl font-bold text-emerald-500">+120</div>
-                <div className="text-xs text-gray-500">matrículas/ano</div>
-              </div>
-              <div>
-                <div className="text-xl font-bold text-emerald-500">R$ 50k</div>
-                <div className="text-xs text-gray-500">faturamento extra</div>
-              </div>
-            </div>
-          </div>
-        </>
-      ),
+      titulo: 'Fonte v2 ativa para Leads Entrantes',
+      descricao: `A apresentacao comercial ja usa a fonte canonica v2 para leads. Total consolidado 2025: ${resumo?.leadsEntrantes.toLocaleString('pt-BR') || 0} leads.`,
+      detalhe: 'Este numero vem da RPC comercial canonica v2, por competencia explicita.',
     },
     {
-      tipo: 'insight',
-      icone: Users,
-      corIcone: 'text-pink-400',
-      corBg: 'bg-pink-500/10',
-      corBorda: 'border-pink-500/30',
-      titulo: 'Insight: LA Music Kids',
-      conteudo: (
-        <>
-          <p className="text-gray-300 mb-3">
-            <strong className="text-pink-400">49%</strong> das matrículas são para LA Music Kids (até 11 anos).
-            Barra lidera com <strong className="text-emerald-500">59%</strong> de matrículas Kids.
-          </p>
-          <div className="bg-slate-800/50 rounded-lg p-3">
-            <div className="text-sm text-gray-400 mb-2">Distribuição por unidade:</div>
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-emerald-400">Barra</span>
-                <div className="flex-1 mx-4 h-2 bg-slate-700 rounded-full overflow-hidden">
-                  <div className="h-full bg-emerald-500 rounded-full" style={{ width: '59%' }}></div>
-                </div>
-                <span className="text-white">59%</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-purple-400">Recreio</span>
-                <div className="flex-1 mx-4 h-2 bg-slate-700 rounded-full overflow-hidden">
-                  <div className="h-full bg-purple-500 rounded-full" style={{ width: '53%' }}></div>
-                </div>
-                <span className="text-white">53%</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-cyan-400">C. Grande</span>
-                <div className="flex-1 mx-4 h-2 bg-slate-700 rounded-full overflow-hidden">
-                  <div className="h-full bg-cyan-500 rounded-full" style={{ width: '40%' }}></div>
-                </div>
-                <span className="text-white">40%</span>
-              </div>
-            </div>
-          </div>
-          <p className="text-gray-400 text-sm mt-3">
-            <strong>Ação:</strong> Expandir oferta de musicalização em Campo Grande (atualmente 40% Kids).
-          </p>
-        </>
-      ),
+      icone: AlertTriangle,
+      corIcone: 'text-yellow-300',
+      corBg: 'bg-yellow-500/10',
+      corBorda: 'border-yellow-500/30',
+      titulo: 'Matriculas comerciais seguem como diagnostico',
+      descricao: `Total diagnostico atual: ${resumo?.matriculasComerciais.toLocaleString('pt-BR') || 0} matriculas comerciais.`,
+      detalhe: 'A distribuicao por unidade ainda nao e canonica porque depende de regra de unidade comercial/origem.',
     },
     {
-      tipo: 'sazonalidade',
-      icone: Target,
-      corIcone: 'text-amber-400',
-      corBg: 'bg-amber-500/10',
-      corBorda: 'border-amber-500/30',
-      titulo: 'Sazonalidade: Concentração de Budget',
-      conteudo: (
-        <>
-          <p className="text-gray-300 mb-3">
-            Dezembro teve apenas <strong className="text-red-400">7 matrículas</strong> (vs 88 em Janeiro).
-            Queda de <strong className="text-red-400">92%</strong> - foco deve ser em renovações.
-          </p>
-          <div className="bg-slate-800/50 rounded-lg p-3">
-            <div className="text-sm text-gray-400 mb-2">Recomendação de alocação:</div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="text-center">
-                <div className="text-2xl font-grotesk font-bold text-emerald-500">60%</div>
-                <div className="text-xs text-gray-500">do budget em Jan/Ago</div>
-              </div>
-              <div className="text-center">
-                <div className="text-2xl font-grotesk font-bold text-red-400">0%</div>
-                <div className="text-xs text-gray-500">captação em Dezembro</div>
-              </div>
-            </div>
-          </div>
-        </>
-      ),
+      icone: LockKeyhole,
+      corIcone: 'text-red-300',
+      corBg: 'bg-red-500/10',
+      corBorda: 'border-red-500/30',
+      titulo: 'Taxa Experimental -> Matricula bloqueada',
+      descricao: 'Nao publicar como KPI oficial enquanto presenca individual + vinculo lead/aluno nao estiverem reconciliados.',
+      detalhe: 'A taxa pode aparecer apenas como diagnostico com aviso de bloqueio.',
+    },
+    {
+      icone: Lightbulb,
+      corIcone: 'text-blue-300',
+      corBg: 'bg-blue-500/10',
+      corBorda: 'border-blue-500/30',
+      titulo: 'Proximo foco tecnico',
+      descricao: 'Apos os blocos v2 de leads, o gargalo restante e reconciliar experimental -> aluno -> presenca.',
+      detalhe: 'Sem essa costura, relatórios de show-up, professor experimental e Exp->Mat continuam bloqueados.',
     },
   ];
 
   return (
     <div className="p-8 min-h-screen">
-      {/* Header */}
       <div className="mb-8">
         <span className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-400 text-sm font-medium px-3 py-1 rounded-full mb-4">
           <AlertTriangle className="w-4 h-4" /> Alertas e Insights
         </span>
         <h1 className="text-4xl lg:text-5xl font-grotesk font-bold text-white mb-2">
-          Pontos de <span className="text-emerald-400">Atenção</span>
+          Pontos de <span className="text-emerald-400">Controle</span>
         </h1>
         <p className="text-gray-400">
-          Insights inteligentes para tomada de decisão
+          Alertas baseados no estado canonico atual do comercial.
         </p>
       </div>
 
-      {/* Cards de Alertas */}
       <div className="space-y-6">
-        {alertas.map((alerta, idx) => {
+        {alertas.map((alerta) => {
           const Icone = alerta.icone;
           return (
-            <div 
-              key={idx}
+            <div
+              key={alerta.titulo}
               className={`${alerta.corBg} border ${alerta.corBorda} rounded-2xl p-6`}
             >
               <div className="flex items-start gap-4">
@@ -186,7 +90,10 @@ export function ComercialAlertas() {
                   <h3 className={`text-lg font-semibold ${alerta.corIcone} mb-3`}>
                     {alerta.titulo}
                   </h3>
-                  {alerta.conteudo}
+                  <p className="text-gray-300 mb-3">{alerta.descricao}</p>
+                  <div className="bg-slate-800/50 rounded-lg p-3 text-sm text-gray-400">
+                    {alerta.detalhe}
+                  </div>
                 </div>
               </div>
             </div>
