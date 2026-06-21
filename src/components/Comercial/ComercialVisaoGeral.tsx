@@ -1,19 +1,14 @@
-import React from 'react';
-import { 
-  TrendingUp, 
-  Users, 
-  Target, 
-  Percent, 
-  DollarSign, 
-  Baby,
-  ArrowUpRight,
-  ArrowDownRight,
-  BarChart3
+import React, { useMemo } from 'react';
+import {
+  BarChart3,
+  LockKeyhole,
+  Percent,
+  Target,
+  TrendingUp,
 } from 'lucide-react';
-import { useComercialData } from '../../hooks/useComercialData';
-import { UnidadeComercial, CORES_UNIDADES } from '../../types/comercial';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
-import { ChartTooltip } from './ChartTooltip';
+import { useComercialResumoV2 } from '../../hooks/useComercialResumoV2';
+import { useComercialSeriesMensaisV2 } from '../../hooks/useComercialSeriesMensaisV2';
+import { UnidadeComercial } from '../../types/comercial';
 
 interface Props {
   ano: number;
@@ -23,13 +18,35 @@ interface Props {
 }
 
 export function ComercialVisaoGeral({ ano, unidade, onAnoChange, onUnidadeChange }: Props) {
-  const { kpis, dadosPorUnidade, loading, error } = useComercialData(ano, unidade);
+  const { resumo, loading: loadingResumo, error: errorResumo } = useComercialResumoV2(ano, unidade);
+  const { series, loading: loadingSeries, error: errorSeries } = useComercialSeriesMensaisV2(ano);
+
+  const dadosPorUnidadeLeads = useMemo(() => {
+    const totais = series.reduce(
+      (acc, mes) => ({
+        campoGrande: acc.campoGrande + mes.cg_leads,
+        recreio: acc.recreio + mes.rec_leads,
+        barra: acc.barra + mes.barra_leads,
+      }),
+      { campoGrande: 0, recreio: 0, barra: 0 },
+    );
+
+    return [
+      { unidade: 'Campo Grande', leads: totais.campoGrande, color: '#10b981' },
+      { unidade: 'Recreio', leads: totais.recreio, color: '#3b82f6' },
+      { unidade: 'Barra', leads: totais.barra, color: '#f59e0b' },
+    ];
+  }, [series]);
+
+  const totalLeadsUnidades = dadosPorUnidadeLeads.reduce((sum, row) => sum + row.leads, 0);
+  const loading = loadingResumo || (unidade === 'Consolidado' && loadingSeries);
+  const error = errorResumo || (unidade === 'Consolidado' ? errorSeries : null);
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full min-h-screen">
         <div className="flex flex-col items-center gap-4">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500" />
           <span className="text-gray-400">Carregando dados...</span>
         </div>
       </div>
@@ -39,40 +56,29 @@ export function ComercialVisaoGeral({ ano, unidade, onAnoChange, onUnidadeChange
   if (error) {
     return (
       <div className="p-8 text-center text-red-400">
-        <div className="text-xl mb-2">❌ Erro ao carregar dados</div>
+        <div className="text-xl mb-2">Erro ao carregar dados</div>
         <div className="text-sm">{error}</div>
       </div>
     );
   }
 
-  // Dados para o gráfico de pizza
-  const pieData = dadosPorUnidade.map(u => ({
-    name: u.unidade,
-    value: u.novasMatriculas,
-    color: CORES_UNIDADES[u.unidade as keyof typeof CORES_UNIDADES] || '#6b7280',
-  }));
-
-  const totalMatriculas = dadosPorUnidade.reduce((sum, u) => sum + u.novasMatriculas, 0);
-
   return (
     <div className="p-8 min-h-screen">
-      {/* Header */}
       <div className="mb-8">
         <span className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-400 text-sm font-medium px-3 py-1 rounded-full mb-4">
-          <BarChart3 className="w-4 h-4" /> Visão Geral
+          <BarChart3 className="w-4 h-4" /> Visao Geral
         </span>
         <h1 className="text-4xl lg:text-5xl font-grotesk font-bold text-white mb-2">
-          O Ano de {ano} em <span className="text-emerald-400">Números</span>
+          O Ano de {ano} em <span className="text-emerald-400">Numeros</span>
         </h1>
         <p className="text-gray-400">
           Performance comercial {unidade === 'Consolidado' ? 'consolidada do Grupo LA Music' : `da unidade ${unidade}`}
         </p>
         <p className="text-xs text-yellow-300 mt-2">
-          Apresentação 2025 com fonte mista: leads/origem já migrados em blocos v2; experimentais, cursos e matrículas por unidade seguem em validação.
+          Fonte comercial v2 para leads. Matriculas comerciais aparecem apenas como diagnostico; distribuicao por unidade e taxa Exp-Mat seguem bloqueadas.
         </p>
       </div>
 
-      {/* Filtros */}
       <div className="flex flex-wrap gap-4 mb-8">
         <div className="flex gap-2 items-center">
           <span className="text-gray-400 text-sm">Ano:</span>
@@ -109,238 +115,154 @@ export function ComercialVisaoGeral({ ano, unidade, onAnoChange, onUnidadeChange
         </div>
       </div>
 
-      {/* KPI Cards */}
-      {kpis && (
+      {resumo && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {/* Total Leads */}
           <KPICard
             icon={TrendingUp}
             iconColor="text-blue-400"
             iconBg="bg-blue-500/20"
-            value={kpis.totalLeads.toLocaleString('pt-BR')}
-            label="Total de Leads"
+            value={resumo.leadsEntrantes.toLocaleString('pt-BR')}
+            label="Leads Entrantes"
+            helper="Fonte canonica v2"
           />
 
-          {/* Aulas Experimentais */}
-          <KPICard
-            icon={Users}
-            iconColor="text-cyan-400"
-            iconBg="bg-cyan-500/20"
-            value={kpis.aulasExperimentais.toLocaleString('pt-BR')}
-            label="Aulas Experimentais (legado)"
-            meta={1000}
-            metaLabel="Meta"
-          />
-
-          {/* Novas Matrículas */}
-          <KPICard
-            icon={Target}
-            iconColor="text-emerald-400"
-            iconBg="bg-emerald-500/20"
-            value={kpis.novasMatriculas.toLocaleString('pt-BR')}
-            label="Novas Matrículas (legado)"
-            meta={700}
-            metaLabel="Meta"
-          />
-
-          {/* Taxa Lead→Matrícula */}
-          <KPICard
-            icon={Percent}
-            iconColor="text-purple-400"
-            iconBg="bg-purple-500/20"
-            value={`${kpis.taxaConversaoTotal.toFixed(1)}%`}
-            label="Taxa Lead → Matrícula"
-            meta={10}
-            metaLabel="Meta %"
-            isPercent
-          />
-
-          {/* Taxa Lead→Exp */}
-          <KPICard
-            icon={TrendingUp}
-            iconColor="text-orange-400"
-            iconBg="bg-orange-500/20"
-            value={`${kpis.taxaLeadExp.toFixed(1)}%`}
-            label="Taxa Lead → Experimental"
-            meta={15}
-            metaLabel="Meta %"
-            isPercent
-          />
-
-          {/* Taxa Exp→Mat */}
           <KPICard
             icon={Target}
             iconColor="text-yellow-300"
             iconBg="bg-yellow-500/20"
-            value="Bloqueada"
-            label="Taxa Exp→Mat em validação"
+            value={resumo.matriculasComerciais.toLocaleString('pt-BR')}
+            label="Matriculas Comerciais"
+            helper="Diagnostico: criterio atual em validacao"
           />
 
-          {/* Ticket Médio */}
           <KPICard
-            icon={DollarSign}
-            iconColor="text-yellow-400"
+            icon={Percent}
+            iconColor="text-purple-400"
+            iconBg="bg-purple-500/20"
+            value={`${resumo.taxaMatriculaComercial.toFixed(1)}%`}
+            label="Taxa de Matricula Comercial"
+            helper="Matriculas comerciais / leads"
+          />
+
+          <KPICard
+            icon={LockKeyhole}
+            iconColor="text-yellow-300"
             iconBg="bg-yellow-500/20"
-            value={`R$ ${kpis.ticketMedioParcelas.toFixed(0)}`}
-            label="Ticket Médio Parcelas"
-            meta={400}
-            metaLabel="Meta R$"
-            isCurrency
-          />
-
-          {/* LA Music Kids */}
-          <KPICard
-            icon={Baby}
-            iconColor="text-pink-400"
-            iconBg="bg-pink-500/20"
-            value={`${kpis.novasMatriculas > 0 
-              ? ((kpis.matriculasLAMK / kpis.novasMatriculas) * 100).toFixed(0) 
-              : 0}%`}
-            label="Matrículas LA Music Kids"
+            value="Bloqueada"
+            label="Taxa Exp-Mat"
+            helper="Aguardando regra canonica de presenca/vinculo"
           />
         </div>
       )}
 
-      {/* Gráfico de Distribuição por Unidade */}
-      {unidade === 'Consolidado' && dadosPorUnidade.length > 0 && (
+      {unidade === 'Consolidado' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Donut Chart */}
           <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
-            <h3 className="text-lg font-semibold text-white mb-1">Matrículas por Unidade</h3>
-            <p className="text-xs text-yellow-300 mb-4">
-              Distribuição por unidade em validação semântica; não usar como KPI canônico.
+            <h3 className="text-lg font-semibold text-white mb-1">Leads Entrantes por Unidade</h3>
+            <p className="text-xs text-emerald-300 mb-6">
+              Distribuicao anual calculada pela fonte comercial v2.
             </p>
-            <div className="h-64">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={100}
-                    paddingAngle={2}
-                    dataKey="value"
-                  >
-                    {pieData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip 
-                    cursor={{fill: '#1e293b'}}
-                    content={<ChartTooltip suffix=" matrículas" />}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="flex justify-center gap-6 mt-4">
-              {pieData.map((item) => (
-                <div key={item.name} className="flex items-center gap-2">
-                  <div 
-                    className="w-3 h-3 rounded-full" 
-                    style={{ backgroundColor: item.color }}
-                  />
-                  <span className="text-sm text-gray-400">
-                    {item.name}: {((item.value / totalMatriculas) * 100).toFixed(1)}%
-                  </span>
-                </div>
-              ))}
+            <div className="space-y-5">
+              {dadosPorUnidadeLeads.map((item) => {
+                const percentual = totalLeadsUnidades > 0 ? (item.leads / totalLeadsUnidades) * 100 : 0;
+
+                return (
+                  <div key={item.unidade}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: item.color }} />
+                        <span className="text-sm text-gray-300">{item.unidade}</span>
+                      </div>
+                      <span className="text-sm font-semibold text-white">
+                        {item.leads.toLocaleString('pt-BR')} leads
+                      </span>
+                    </div>
+                    <div className="h-3 bg-slate-700/70 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full"
+                        style={{ width: `${percentual}%`, backgroundColor: item.color }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
-          {/* Tabela Resumo */}
           <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
-            <h3 className="text-lg font-semibold text-white mb-4">Resumo por Unidade</h3>
+            <h3 className="text-lg font-semibold text-white mb-1">Resumo Seguro por Unidade</h3>
+            <p className="text-xs text-yellow-300 mb-4">
+              Apenas leads por unidade estao publicados aqui. Matriculas por unidade aguardam regra canonica.
+            </p>
             <div className="overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="text-left text-gray-400 text-sm border-b border-slate-700">
                     <th className="pb-3">Unidade</th>
-                    <th className="pb-3 text-right">Leads</th>
-                    <th className="pb-3 text-right">Exp.</th>
-                    <th className="pb-3 text-right">Mat.</th>
-                    <th className="pb-3 text-right">Lead→Mat</th>
+                    <th className="pb-3 text-right">Leads Entrantes</th>
+                    <th className="pb-3 text-right">% do Total</th>
+                    <th className="pb-3 text-right">Matriculas</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {dadosPorUnidade.map((u) => (
-                    <tr key={u.unidade} className="border-b border-slate-700/50">
-                      <td className="py-3">
-                        <div className="flex items-center gap-2">
-                          <div 
-                            className="w-2 h-2 rounded-full"
-                            style={{ backgroundColor: CORES_UNIDADES[u.unidade as keyof typeof CORES_UNIDADES] }}
-                          />
-                          <span className="text-white">{u.unidade}</span>
-                        </div>
-                      </td>
-                      <td className="py-3 text-right text-gray-300">{u.totalLeads.toLocaleString('pt-BR')}</td>
-                      <td className="py-3 text-right text-gray-300">{u.aulasExperimentais}</td>
-                      <td className="py-3 text-right text-gray-300">{u.novasMatriculas}</td>
-                      <td className="py-3 text-right">
-                        <span className={`font-medium ${
-                          u.taxaConversaoTotal >= 10 ? 'text-green-400' :
-                          u.taxaConversaoTotal >= 8 ? 'text-yellow-400' :
-                          'text-red-400'
-                        }`}>
-                          {u.taxaConversaoTotal.toFixed(1)}%
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                  {dadosPorUnidadeLeads.map((row) => {
+                    const percentual = totalLeadsUnidades > 0 ? (row.leads / totalLeadsUnidades) * 100 : 0;
+
+                    return (
+                      <tr key={row.unidade} className="border-b border-slate-700/50">
+                        <td className="py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: row.color }} />
+                            <span className="text-white">{row.unidade}</span>
+                          </div>
+                        </td>
+                        <td className="py-3 text-right text-gray-300">{row.leads.toLocaleString('pt-BR')}</td>
+                        <td className="py-3 text-right text-gray-300">{percentual.toFixed(1)}%</td>
+                        <td className="py-3 text-right text-yellow-300">Bloqueado</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           </div>
         </div>
       )}
+
+      {unidade !== 'Consolidado' && (
+        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
+          <h3 className="text-lg font-semibold text-white mb-1">Leitura por Unidade</h3>
+          <p className="text-sm text-gray-400">
+            Esta aba usa a fonte v2 para leads da unidade selecionada. Matriculas comerciais por unidade e taxa Exp-Mat seguem em validacao semantica.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
 
-// Componente de Card KPI
 interface KPICardProps {
   icon: React.ComponentType<{ className?: string }>;
   iconColor: string;
   iconBg: string;
   value: string;
   label: string;
-  meta?: number;
-  metaLabel?: string;
-  isPercent?: boolean;
-  isCurrency?: boolean;
+  helper?: string;
 }
 
-function KPICard({ icon: Icon, iconColor, iconBg, value, label, meta, metaLabel, isPercent, isCurrency }: KPICardProps) {
-  const numericValue = parseFloat(value.replace(/[^0-9.,]/g, '').replace(',', '.'));
-  const atingimento = meta ? (numericValue / meta) * 100 : null;
-  
+function KPICard({ icon: Icon, iconColor, iconBg, value, label, helper }: KPICardProps) {
   return (
     <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 hover:border-slate-600/50 transition-all">
       <div className="flex items-start justify-between mb-4">
         <div className={`p-3 ${iconBg} rounded-xl`}>
           <Icon className={`w-6 h-6 ${iconColor}`} />
         </div>
-        {atingimento !== null && (
-          <div className={`flex items-center gap-1 text-sm ${
-            atingimento >= 100 ? 'text-green-400' :
-            atingimento >= 80 ? 'text-yellow-400' :
-            'text-red-400'
-          }`}>
-            {atingimento >= 100 ? (
-              <ArrowUpRight className="w-4 h-4" />
-            ) : (
-              <ArrowDownRight className="w-4 h-4" />
-            )}
-            {atingimento.toFixed(0)}%
-          </div>
-        )}
       </div>
       <div className="text-4xl font-grotesk font-bold text-white mb-1">{value}</div>
       <div className="text-sm text-gray-400">{label}</div>
-      {meta && metaLabel && (
+      {helper && (
         <div className="mt-2 text-xs text-gray-500">
-          Meta: {isCurrency ? 'R$ ' : ''}{meta}{isPercent ? '%' : ''}
+          {helper}
         </div>
       )}
     </div>
