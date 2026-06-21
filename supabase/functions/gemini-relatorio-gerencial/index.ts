@@ -232,9 +232,9 @@ async function montarRelatorio(dados: any): Promise<string> {
   const taxaLeadExp = n(kpiComercial.taxa_conversao_lead_exp ?? kpiComercial.taxa_lead_experimental);
   const taxaConversaoGeral = n(kpiComercial.taxa_conversao_geral ?? kpiComercial.taxa_lead_matricula);
 
-  const matriculasAtivas = n(dados?.matriculas_ativas);
-  const matriculasBanda = n(dados?.matriculas_banda);
-  const matriculas2Curso = n(dados?.matriculas_2_curso);
+  const matriculasAtivas = n(dados?.matriculas_ativas ?? kpiGestao.matriculas_ativas);
+  const matriculasBanda = n(dados?.matriculas_banda ?? kpiGestao.matriculas_banda);
+  const matriculas2Curso = n(dados?.matriculas_2_curso ?? kpiGestao.matriculas_2_curso);
   const totalBolsistas = n(dados?.total_bolsistas);
   const metasKpi = dados?.metas_kpi || {};
 
@@ -267,7 +267,7 @@ async function montarRelatorio(dados: any): Promise<string> {
     experimentais_status_operacional: totalExperimentais,
     experimentais_presenca_confirmada: experimentaisPresencaConfirmada,
     experimentais_sem_presenca_confirmada: experimentaisSemPresenca,
-    taxa_lead_exp: taxaLeadExp,
+    taxa_lead_exp_operacional: taxaLeadExp,
     taxa_exp_mat: TAXA_EXP_MAT_BLOQUEADA_LABEL,
     taxa_conversao_geral: taxaConversaoGeral,
     motivos_evasao: motivosEvasao.slice(0, 5),
@@ -321,7 +321,7 @@ async function montarRelatorio(dados: any): Promise<string> {
   relatorio += `• Matrículas: *${novasMatriculas}*\n`;
   relatorio += `• Taxa Lead→Exp operacional: *${pct(taxaLeadExp, 2)}*\n`;
   relatorio += `• Taxa Exp→Mat: *${TAXA_EXP_MAT_BLOQUEADA_LABEL}*\n`;
-  relatorio += `• Conversão Geral: *${pct(taxaConversaoGeral, 2)}*\n\n`;
+  relatorio += `• Taxa Lead→Matrícula: *${pct(taxaConversaoGeral, 2)}*\n\n`;
 
   relatorio += "🎯 *METAS COMERCIAIS*\n";
   relatorio += metasKpi.leads ? linhaMeta("Leads", totalLeads, n(metasKpi.leads)) : "• Leads: sem meta cadastrada\n";
@@ -361,7 +361,7 @@ async function montarRelatorio(dados: any): Promise<string> {
     ? cursosMaisProcurados.slice(0, 5).map((c: any, i: number) => `${i + 1}. ${c.curso || c.nome || "N/D"} - ${c.total_alunos ?? c.quantidade ?? 0}`).join("\n") + "\n\n"
     : "Sem dados suficientes.\n\n";
 
-  relatorio += "───────────────────────\n📱 *CANAIS COM MAIOR CONVERSÃO*\n───────────────────────\n";
+  relatorio += "───────────────────────\n📱 *CANAIS COM MAIOR LEAD→MATRÍCULA*\n───────────────────────\n";
   relatorio += canaisMaiorConversao.length
     ? canaisMaiorConversao.slice(0, 3).map((c: any, i: number) => {
       const canal = c.canal || c.origem || c.nome || "N/D";
@@ -416,7 +416,7 @@ async function montarRelatorio(dados: any): Promise<string> {
   relatorio += metasKpi.matriculas ? linhaMeta("Matrículas", novasMatriculas, n(metasKpi.matriculas)) : "• Matrículas: sem meta cadastrada\n";
   relatorio += metasKpi.taxa_lead_exp ? linhaMeta("Lead→Exp operacional", taxaLeadExp, n(metasKpi.taxa_lead_exp)) : "• Lead→Exp operacional: sem meta cadastrada\n";
   relatorio += `Exp→Mat: ${TAXA_EXP_MAT_BLOQUEADA_LABEL}\n`;
-  relatorio += metasKpi.taxa_conversao ? linhaMeta("Conversão", taxaConversaoGeral, n(metasKpi.taxa_conversao)) : "• Conversão: sem meta cadastrada\n";
+  relatorio += metasKpi.taxa_conversao ? linhaMeta("Lead→Matrícula", taxaConversaoGeral, n(metasKpi.taxa_conversao)) : "• Lead→Matrícula: sem meta cadastrada\n";
   relatorio += "\n";
 
   relatorio += "───────────────────────\n🏆 *PROGRAMA FIDELIZA+ LA* (Trimestral)\n───────────────────────\n";
@@ -433,7 +433,7 @@ async function montarRelatorio(dados: any): Promise<string> {
   relatorio += "📊 *TAXA EXP → MATRÍCULA*\n";
   relatorio += `${TAXA_EXP_MAT_BLOQUEADA_LABEL}\n`;
   relatorio += "Atual: *BLOQUEADA* | Pts: *0*\n\n";
-  relatorio += "⭐ *TAXA GERAL*\n";
+  relatorio += "⭐ *LEAD → MATRÍCULA*\n";
   relatorio += `Atual: ${pct(taxaConversaoGeral, 2)} | Meta: ${pct(metaTaxaGeral, 1)}\n\n`;
   relatorio += "📊 *VOLUME MÉDIO/MÊS*\n";
   relatorio += `Atual: ${mediaMatriculasMes.toFixed(1).replace(".", ",")} matrículas | Meta: ${metaVolumeMatriculas}\n\n`;
