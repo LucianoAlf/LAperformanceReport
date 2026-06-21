@@ -2791,14 +2791,14 @@ export function ComercialPage() {
 
     // Agrupar leads por canal
     const leadsPorCanal: { [key: string]: number } = {};
-    registrosMes?.filter(r => ['novo','agendado'].includes(r.status)).forEach(r => {
+    registrosMes?.forEach(r => {
       const canal = (r.canais_origem as any)?.nome || 'Não informado';
       leadsPorCanal[canal] = (leadsPorCanal[canal] || 0) + r.quantidade;
     });
 
     // Agrupar leads por curso
     const leadsPorCurso: { [key: string]: number } = {};
-    registrosMes?.filter(r => ['novo','agendado'].includes(r.status)).forEach(r => {
+    registrosMes?.forEach(r => {
       const curso = (r.cursos as any)?.nome || 'Não informado';
       leadsPorCurso[curso] = (leadsPorCurso[curso] || 0) + r.quantidade;
     });
