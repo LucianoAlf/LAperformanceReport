@@ -176,6 +176,20 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
         // ========== BUSCAR DADOS COMPARATIVOS (Mês Anterior e Ano Anterior) ==========
         const mesAnterior = mes === 1 ? 12 : mes - 1;
         const anoMesAnterior = mes === 1 ? ano - 1 : ano;
+        const [resumoMesAnteriorV2, resumoAnoAnteriorV2] = await Promise.all([
+          fetchComercialOperacionalResumoV2({
+            unidadeId: unidade,
+            ano: anoMesAnterior,
+            mesInicio: mesAnterior,
+            mesFim: mesAnterior,
+          }),
+          fetchComercialOperacionalResumoV2({
+            unidadeId: unidade,
+            ano: ano - 1,
+            mesInicio: mes,
+            mesFim: mes,
+          }),
+        ]);
         
         // Mapeamento de unidades para nomes
         const unidadeNomesMap: Record<string, string> = {
@@ -235,8 +249,8 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
         // Consolidar dados do mês anterior
         const dadosMesAnt = mesAnteriorResult.data || [];
         const dadosMesAntMensal = mesAnteriorMensalResult.data || [];
-        if (dadosMesAnt.length > 0 || dadosMesAntMensal.length > 0) {
-          const totalLeadsMesAnt = dadosMesAnt.reduce((acc, d) => acc + (d.total_leads || 0), 0);
+        if (resumoMesAnteriorV2.leadsEntrantes > 0 || dadosMesAnt.length > 0 || dadosMesAntMensal.length > 0) {
+          const totalLeadsMesAnt = resumoMesAnteriorV2.leadsEntrantes;
           const expMesAnt = dadosMesAnt.reduce((acc, d) => acc + (d.aulas_experimentais || 0), 0);
           const matMesAnt = dadosMesAnt.length > 0 
             ? dadosMesAnt.reduce((acc, d) => acc + (d.novas_matriculas_total || 0), 0)
@@ -265,8 +279,8 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
         // Consolidar dados do ano anterior
         const dadosAnoAnt = anoAnteriorResult.data || [];
         const dadosAnoAntMensal = anoAnteriorMensalResult.data || [];
-        if (dadosAnoAnt.length > 0 || dadosAnoAntMensal.length > 0) {
-          const totalLeadsAnoAnt = dadosAnoAnt.reduce((acc, d) => acc + (d.total_leads || 0), 0);
+        if (resumoAnoAnteriorV2.leadsEntrantes > 0 || dadosAnoAnt.length > 0 || dadosAnoAntMensal.length > 0) {
+          const totalLeadsAnoAnt = resumoAnoAnteriorV2.leadsEntrantes;
           const expAnoAnt = dadosAnoAnt.reduce((acc, d) => acc + (d.aulas_experimentais || 0), 0);
           const matAnoAnt = dadosAnoAnt.length > 0 
             ? dadosAnoAnt.reduce((acc, d) => acc + (d.novas_matriculas_total || 0), 0)
@@ -783,10 +797,11 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             />
             <KPICard
               icon={Percent}
-              label="Conversão Lead → Exp"
+              label="Lead → Exp (legado)"
               value={dados.taxa_conversao_lead_exp}
               target={metas.taxa_lead_exp}
               format="percent"
+              subvalue="Operacional; regra canônica em validação"
               variant="violet"
             />
           </div>
