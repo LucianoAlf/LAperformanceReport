@@ -493,7 +493,12 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
       <p className="text-slate-400 text-sm">{mensagem}</p>
     </div>
   );
-  const experimentaisDiagnostico = dados.experimentais_diagnostico_v2 || experimentaisDiagnosticoVazio;
+  const experimentaisDiagnostico = {
+    ...experimentaisDiagnosticoVazio,
+    ...(dados.experimentais_diagnostico_v2 || {}),
+  };
+  const formatTaxaDiagnostica = (valor: number | null | undefined) =>
+    typeof valor === 'number' && Number.isFinite(valor) ? `${valor.toFixed(1)}%` : '-';
 
   return (
     <div className="space-y-6">
@@ -676,13 +681,9 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
               <div>
                 <dt className="text-slate-400">Faixa diagnóstica</dt>
                 <dd className="text-amber-200 text-xl font-bold">
-                  {experimentaisDiagnostico.taxaExpMatMinimaCanonica === null
-                    ? '-'
-                    : `${experimentaisDiagnostico.taxaExpMatMinimaCanonica.toFixed(1)}%`}
+                  {formatTaxaDiagnostica(experimentaisDiagnostico.taxaExpMatMinimaCanonica)}
                   {' - '}
-                  {experimentaisDiagnostico.taxaExpMatMaximaAposRevisao === null
-                    ? '-'
-                    : `${experimentaisDiagnostico.taxaExpMatMaximaAposRevisao.toFixed(1)}%`}
+                  {formatTaxaDiagnostica(experimentaisDiagnostico.taxaExpMatMaximaAposRevisao)}
                 </dd>
                 <p className="text-[11px] text-amber-200/80">Não é KPI oficial</p>
               </div>
