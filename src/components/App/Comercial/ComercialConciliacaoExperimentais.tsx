@@ -528,7 +528,7 @@ export function ComercialConciliacaoExperimentais({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1280px] text-sm">
+            <table className="w-full min-w-[1320px] text-sm">
               <thead className="bg-slate-900/60 text-slate-400">
                 <tr>
                   <th className="text-left font-medium px-4 py-3">Data</th>
@@ -537,8 +537,8 @@ export function ComercialConciliacaoExperimentais({
                   <th className="text-left font-medium px-4 py-3">Problema</th>
                   <th className="text-left font-medium px-4 py-3">Professor / curso</th>
                   <th className="text-left font-medium px-4 py-3">Aluno sugerido</th>
-                  <th className="text-left font-medium px-4 py-3">Sinais</th>
-                  <th className="text-left font-medium px-4 py-3">Acao</th>
+                  <th className="text-left font-medium px-4 py-3">Evidencias</th>
+                  <th className="text-left font-medium px-4 py-3 w-[120px]">Acao</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700/50">
@@ -588,16 +588,21 @@ export function ComercialConciliacaoExperimentais({
                       )}
                     </td>
                     <td className="px-4 py-3 align-top">
-                      <div className="flex flex-col gap-1.5">
-                        <Sinal ativo={item.presenca_confirmada} label="Presenca" />
-                        <Sinal ativo={item.sinal_conversao} label="Conversao" />
-                        <Sinal ativo={Boolean(item.decisao_humana)} label="Decisao humana" />
+                      <div className="min-w-[150px] space-y-1.5">
+                        <Evidencia label="Presenca" ativo={item.presenca_confirmada} />
+                        <Evidencia label="Matricula" ativo={item.sinal_conversao} />
+                        <Evidencia
+                          label="Decisao"
+                          ativo={Boolean(item.decisao_humana)}
+                          ativoLabel="Feita"
+                          inativoLabel="Pendente"
+                        />
                       </div>
                     </td>
                     <td className="px-4 py-3 align-top">
                       <button
                         onClick={() => abrirDecisao(item)}
-                        className="inline-flex items-center gap-2 rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-3 py-2 text-xs font-semibold text-cyan-100 hover:bg-cyan-500/20"
+                        className="inline-flex min-w-[92px] items-center justify-center gap-2 whitespace-nowrap rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-3 py-2 text-xs font-semibold text-cyan-100 hover:bg-cyan-500/20"
                       >
                         <ClipboardCheck className="w-3.5 h-3.5" />
                         Decidir
@@ -731,18 +736,24 @@ function ResumoCard({ icon: Icon, label, value, tone }: ResumoCardProps) {
   );
 }
 
-function Sinal({ ativo, label }: { ativo: boolean; label: string }) {
+function Evidencia({
+  ativo,
+  label,
+  ativoLabel = 'Sim',
+  inativoLabel = 'Nao',
+}: {
+  ativo: boolean;
+  label: string;
+  ativoLabel?: string;
+  inativoLabel?: string;
+}) {
   return (
-    <span
-      className={cn(
-        'inline-flex w-fit items-center rounded-full border px-2 py-0.5 text-xs',
-        ativo
-          ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-200'
-          : 'border-slate-600 bg-slate-800/70 text-slate-500',
-      )}
-    >
-      {label}
-    </span>
+    <div className="flex items-center justify-between gap-3 whitespace-nowrap text-xs">
+      <span className="text-slate-500">{label}</span>
+      <span className={cn('font-semibold', ativo ? 'text-emerald-300' : 'text-slate-500')}>
+        {ativo ? ativoLabel : inativoLabel}
+      </span>
+    </div>
   );
 }
 
