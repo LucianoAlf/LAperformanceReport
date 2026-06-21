@@ -24,7 +24,8 @@ export function ComercialCursos() {
   
   const cores = ['#10b981', '#06b6d4', '#8b5cf6', '#f59e0b', '#ef4444', '#ec4899', '#14b8a6', '#6366f1', '#84cc16', '#f97316'];
 
-  // Usar dados corretos da tabela dados_comerciais
+  // Fonte mista em validação: cursos_matriculados + dados_comerciais.
+  // Não tratar distribuição por curso como fonte canônica comercial até migração v2.
   const totalKids = kpis?.matriculasLAMK || 0;
   const totalAdultos = kpis?.matriculasEMLA || 0;
   const totalGeral = totalKids + totalAdultos;
@@ -50,13 +51,13 @@ export function ComercialCursos() {
       {/* Header */}
       <div className="mb-8">
         <span className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-400 text-sm font-medium px-3 py-1 rounded-full mb-4">
-          <Guitar className="w-4 h-4" /> Cursos Matriculados
+          <Guitar className="w-4 h-4" /> Cursos Matriculados (diagnóstico)
         </span>
         <h1 className="text-4xl lg:text-5xl font-grotesk font-bold text-white mb-2">
           Cursos Mais <span className="text-emerald-400">Procurados</span>
         </h1>
         <p className="text-gray-400">
-          Distribuição de matrículas por instrumento/curso em 2025
+          Distribuição por instrumento/curso em 2025; métrica em validação semântica
           {unidade !== 'Consolidado' && (
             <span className="text-emerald-400"> - {unidade}</span>
           )}

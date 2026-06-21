@@ -59,7 +59,7 @@ export function ComercialFinanceiro({ ano, unidade, onAnoChange, onUnidadeChange
           Ticket Médio e <span className="text-emerald-500">Passaporte</span>
         </h1>
         <p className="text-gray-400">
-          Análise financeira das novas matrículas
+          Análise financeira das novas matrículas; fonte comercial histórica em validação
         </p>
       </div>
 

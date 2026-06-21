@@ -67,6 +67,9 @@ export function ComercialVisaoGeral({ ano, unidade, onAnoChange, onUnidadeChange
         <p className="text-gray-400">
           Performance comercial {unidade === 'Consolidado' ? 'consolidada do Grupo LA Music' : `da unidade ${unidade}`}
         </p>
+        <p className="text-xs text-yellow-300 mt-2">
+          Apresentação 2025 com fonte mista: leads/origem já migrados em blocos v2; experimentais, cursos e matrículas por unidade seguem em validação.
+        </p>
       </div>
 
       {/* Filtros */}
@@ -124,7 +127,7 @@ export function ComercialVisaoGeral({ ano, unidade, onAnoChange, onUnidadeChange
             iconColor="text-cyan-400"
             iconBg="bg-cyan-500/20"
             value={kpis.aulasExperimentais.toLocaleString('pt-BR')}
-            label="Aulas Experimentais"
+            label="Aulas Experimentais (legado)"
             meta={1000}
             metaLabel="Meta"
           />
@@ -135,7 +138,7 @@ export function ComercialVisaoGeral({ ano, unidade, onAnoChange, onUnidadeChange
             iconColor="text-emerald-400"
             iconBg="bg-emerald-500/20"
             value={kpis.novasMatriculas.toLocaleString('pt-BR')}
-            label="Novas Matrículas"
+            label="Novas Matrículas (legado)"
             meta={700}
             metaLabel="Meta"
           />
