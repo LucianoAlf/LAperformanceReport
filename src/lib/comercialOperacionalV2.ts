@@ -41,6 +41,12 @@ export interface ExperimentaisDiagnosticoTotaisPayloadV2 {
   experimentais_realizadas_presenca_confirmada?: number | string | null;
   experimentais_status_operacional_sem_presenca?: number | string | null;
   experimentais_sem_aluno_id?: number | string | null;
+  conversoes_canonicas_com_vinculo_presenca?: number | string | null;
+  conversoes_pendentes_vinculo?: number | string | null;
+  realizadas_sem_conversao_aparente?: number | string | null;
+  taxa_exp_mat_minima_canonica?: number | string | null;
+  taxa_exp_mat_maxima_apos_revisao?: number | string | null;
+  taxa_exp_mat_status?: string | null;
   presencas_emusys_experimentais_presentes?: number | string | null;
   presencas_emusys_com_funil?: number | string | null;
   presencas_emusys_sem_funil?: number | string | null;
@@ -83,6 +89,12 @@ export interface ExperimentaisDiagnosticoMesV2 {
   realizadasPresencaConfirmada: number;
   statusOperacionalSemPresenca: number;
   semAlunoId: number;
+  conversoesCanonicasComVinculoPresenca: number;
+  conversoesPendentesVinculo: number;
+  realizadasSemConversaoAparente: number;
+  taxaExpMatMinimaCanonica: number | null;
+  taxaExpMatMaximaAposRevisao: number | null;
+  taxaExpMatStatus: string;
   presencasEmusysExperimentaisPresentes: number;
   presencasEmusysComFunil: number;
   presencasEmusysSemFunil: number;
@@ -183,6 +195,24 @@ export function normalizarPayloadMensalExperimentaisDiagnosticoV2(
       totais?.experimentais_status_operacional_sem_presenca,
     ),
     semAlunoId: toComercialNumber(totais?.experimentais_sem_aluno_id),
+    conversoesCanonicasComVinculoPresenca: toComercialNumber(
+      totais?.conversoes_canonicas_com_vinculo_presenca,
+    ),
+    conversoesPendentesVinculo: toComercialNumber(totais?.conversoes_pendentes_vinculo),
+    realizadasSemConversaoAparente: toComercialNumber(
+      totais?.realizadas_sem_conversao_aparente,
+    ),
+    taxaExpMatMinimaCanonica:
+      totais?.taxa_exp_mat_minima_canonica === null ||
+      totais?.taxa_exp_mat_minima_canonica === undefined
+        ? null
+        : toComercialNumber(totais.taxa_exp_mat_minima_canonica),
+    taxaExpMatMaximaAposRevisao:
+      totais?.taxa_exp_mat_maxima_apos_revisao === null ||
+      totais?.taxa_exp_mat_maxima_apos_revisao === undefined
+        ? null
+        : toComercialNumber(totais.taxa_exp_mat_maxima_apos_revisao),
+    taxaExpMatStatus: totais?.taxa_exp_mat_status || 'bloqueada_regra_canonica',
     presencasEmusysExperimentaisPresentes: toComercialNumber(
       totais?.presencas_emusys_experimentais_presentes,
     ),
@@ -230,24 +260,48 @@ export function somarSeriesMensaisExperimentaisDiagnosticoV2(
   seriesMensais: ExperimentaisDiagnosticoMesV2[],
 ): ExperimentaisDiagnosticoResumoV2 {
   return seriesMensais.reduce<ExperimentaisDiagnosticoResumoV2>(
-    (acc, mes) => ({
-      agendadasEventos: acc.agendadasEventos + mes.agendadasEventos,
-      canceladas: acc.canceladas + mes.canceladas,
-      noShowStatusOperacional: acc.noShowStatusOperacional + mes.noShowStatusOperacional,
-      realizadasStatusOperacional:
-        acc.realizadasStatusOperacional + mes.realizadasStatusOperacional,
-      realizadasPresencaConfirmada:
-        acc.realizadasPresencaConfirmada + mes.realizadasPresencaConfirmada,
-      statusOperacionalSemPresenca:
-        acc.statusOperacionalSemPresenca + mes.statusOperacionalSemPresenca,
-      semAlunoId: acc.semAlunoId + mes.semAlunoId,
-      presencasEmusysExperimentaisPresentes:
-        acc.presencasEmusysExperimentaisPresentes +
-        mes.presencasEmusysExperimentaisPresentes,
-      presencasEmusysComFunil: acc.presencasEmusysComFunil + mes.presencasEmusysComFunil,
-      presencasEmusysSemFunil: acc.presencasEmusysSemFunil + mes.presencasEmusysSemFunil,
-      seriesMensais: [...acc.seriesMensais, mes],
-    }),
+    (acc, mes) => {
+      const realizadasStatusOperacional =
+        acc.realizadasStatusOperacional + mes.realizadasStatusOperacional;
+      const conversoesCanonicasComVinculoPresenca =
+        acc.conversoesCanonicasComVinculoPresenca +
+        mes.conversoesCanonicasComVinculoPresenca;
+      const conversoesPendentesVinculo =
+        acc.conversoesPendentesVinculo + mes.conversoesPendentesVinculo;
+
+      return {
+        agendadasEventos: acc.agendadasEventos + mes.agendadasEventos,
+        canceladas: acc.canceladas + mes.canceladas,
+        noShowStatusOperacional: acc.noShowStatusOperacional + mes.noShowStatusOperacional,
+        realizadasStatusOperacional,
+        realizadasPresencaConfirmada:
+          acc.realizadasPresencaConfirmada + mes.realizadasPresencaConfirmada,
+        statusOperacionalSemPresenca:
+          acc.statusOperacionalSemPresenca + mes.statusOperacionalSemPresenca,
+        semAlunoId: acc.semAlunoId + mes.semAlunoId,
+        conversoesCanonicasComVinculoPresenca,
+        conversoesPendentesVinculo,
+        realizadasSemConversaoAparente:
+          acc.realizadasSemConversaoAparente + mes.realizadasSemConversaoAparente,
+        taxaExpMatMinimaCanonica:
+          realizadasStatusOperacional > 0
+            ? (conversoesCanonicasComVinculoPresenca / realizadasStatusOperacional) * 100
+            : null,
+        taxaExpMatMaximaAposRevisao:
+          realizadasStatusOperacional > 0
+            ? ((conversoesCanonicasComVinculoPresenca + conversoesPendentesVinculo) /
+                realizadasStatusOperacional) *
+              100
+            : null,
+        taxaExpMatStatus: mes.taxaExpMatStatus || acc.taxaExpMatStatus,
+        presencasEmusysExperimentaisPresentes:
+          acc.presencasEmusysExperimentaisPresentes +
+          mes.presencasEmusysExperimentaisPresentes,
+        presencasEmusysComFunil: acc.presencasEmusysComFunil + mes.presencasEmusysComFunil,
+        presencasEmusysSemFunil: acc.presencasEmusysSemFunil + mes.presencasEmusysSemFunil,
+        seriesMensais: [...acc.seriesMensais, mes],
+      };
+    },
     {
       agendadasEventos: 0,
       canceladas: 0,
@@ -256,6 +310,12 @@ export function somarSeriesMensaisExperimentaisDiagnosticoV2(
       realizadasPresencaConfirmada: 0,
       statusOperacionalSemPresenca: 0,
       semAlunoId: 0,
+      conversoesCanonicasComVinculoPresenca: 0,
+      conversoesPendentesVinculo: 0,
+      realizadasSemConversaoAparente: 0,
+      taxaExpMatMinimaCanonica: null,
+      taxaExpMatMaximaAposRevisao: null,
+      taxaExpMatStatus: 'bloqueada_regra_canonica',
       presencasEmusysExperimentaisPresentes: 0,
       presencasEmusysComFunil: 0,
       presencasEmusysSemFunil: 0,

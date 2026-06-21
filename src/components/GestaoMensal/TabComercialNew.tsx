@@ -55,6 +55,12 @@ interface DadosComercial {
     realizadasPresencaConfirmada: number;
     statusOperacionalSemPresenca: number;
     semAlunoId: number;
+    conversoesCanonicasComVinculoPresenca: number;
+    conversoesPendentesVinculo: number;
+    realizadasSemConversaoAparente: number;
+    taxaExpMatMinimaCanonica: number | null;
+    taxaExpMatMaximaAposRevisao: number | null;
+    taxaExpMatStatus: string;
     presencasEmusysExperimentaisPresentes: number;
     presencasEmusysComFunil: number;
     presencasEmusysSemFunil: number;
@@ -95,6 +101,12 @@ const experimentaisDiagnosticoVazio: DadosComercial['experimentais_diagnostico_v
   realizadasPresencaConfirmada: 0,
   statusOperacionalSemPresenca: 0,
   semAlunoId: 0,
+  conversoesCanonicasComVinculoPresenca: 0,
+  conversoesPendentesVinculo: 0,
+  realizadasSemConversaoAparente: 0,
+  taxaExpMatMinimaCanonica: null,
+  taxaExpMatMaximaAposRevisao: null,
+  taxaExpMatStatus: 'bloqueada_regra_canonica',
   presencasEmusysExperimentaisPresentes: 0,
   presencasEmusysComFunil: 0,
   presencasEmusysSemFunil: 0,
@@ -154,6 +166,14 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           realizadasPresencaConfirmada: diagnosticoExperimentaisV2.realizadasPresencaConfirmada,
           statusOperacionalSemPresenca: diagnosticoExperimentaisV2.statusOperacionalSemPresenca,
           semAlunoId: diagnosticoExperimentaisV2.semAlunoId,
+          conversoesCanonicasComVinculoPresenca:
+            diagnosticoExperimentaisV2.conversoesCanonicasComVinculoPresenca,
+          conversoesPendentesVinculo: diagnosticoExperimentaisV2.conversoesPendentesVinculo,
+          realizadasSemConversaoAparente:
+            diagnosticoExperimentaisV2.realizadasSemConversaoAparente,
+          taxaExpMatMinimaCanonica: diagnosticoExperimentaisV2.taxaExpMatMinimaCanonica,
+          taxaExpMatMaximaAposRevisao: diagnosticoExperimentaisV2.taxaExpMatMaximaAposRevisao,
+          taxaExpMatStatus: diagnosticoExperimentaisV2.taxaExpMatStatus,
           presencasEmusysExperimentaisPresentes:
             diagnosticoExperimentaisV2.presencasEmusysExperimentaisPresentes,
           presencasEmusysComFunil: diagnosticoExperimentaisV2.presencasEmusysComFunil,
@@ -625,29 +645,46 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             <div className="flex items-start gap-3 mb-4">
               <Info className="w-5 h-5 text-cyan-300 flex-shrink-0 mt-0.5" />
               <div>
-                <h4 className="text-cyan-100 font-semibold">Diagnóstico v2 de experimentais</h4>
+                <h4 className="text-cyan-100 font-semibold">Diagnóstico P02P de experimentais</h4>
                 <p className="text-cyan-100/80 text-sm">
-                  Presença confirmada usa aluno vinculado + presença individual + aula Emusys experimental.
-                  Status operacional e taxa Exp → Mat continuam como legado/bloqueados para KPI oficial.
+                  Denominador operacional separado de conversões confirmadas por vínculo e presença.
+                  Taxa Exp → Mat segue bloqueada para KPI oficial.
                 </p>
               </div>
             </div>
-            <dl className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <dl className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 text-sm">
               <div>
-                <dt className="text-slate-400">Presença confirmada</dt>
+                <dt className="text-slate-400">Presença + vínculo</dt>
                 <dd className="text-white text-2xl font-bold">{experimentaisDiagnostico.realizadasPresencaConfirmada}</dd>
               </div>
               <div>
-                <dt className="text-slate-400">Status operacional</dt>
+                <dt className="text-slate-400">Realizadas operacionais</dt>
                 <dd className="text-white text-2xl font-bold">{experimentaisDiagnostico.realizadasStatusOperacional}</dd>
               </div>
               <div>
-                <dt className="text-slate-400">Sem presença/vínculo</dt>
-                <dd className="text-white text-2xl font-bold">{experimentaisDiagnostico.statusOperacionalSemPresenca}</dd>
+                <dt className="text-slate-400">Pendentes de vínculo</dt>
+                <dd className="text-white text-2xl font-bold">{experimentaisDiagnostico.conversoesPendentesVinculo}</dd>
+              </div>
+              <div>
+                <dt className="text-slate-400">Sem conversão aparente</dt>
+                <dd className="text-white text-2xl font-bold">{experimentaisDiagnostico.realizadasSemConversaoAparente}</dd>
               </div>
               <div>
                 <dt className="text-slate-400">Emusys sem funil</dt>
                 <dd className="text-white text-2xl font-bold">{experimentaisDiagnostico.presencasEmusysSemFunil}</dd>
+              </div>
+              <div>
+                <dt className="text-slate-400">Faixa diagnóstica</dt>
+                <dd className="text-amber-200 text-xl font-bold">
+                  {experimentaisDiagnostico.taxaExpMatMinimaCanonica === null
+                    ? '-'
+                    : `${experimentaisDiagnostico.taxaExpMatMinimaCanonica.toFixed(1)}%`}
+                  {' - '}
+                  {experimentaisDiagnostico.taxaExpMatMaximaAposRevisao === null
+                    ? '-'
+                    : `${experimentaisDiagnostico.taxaExpMatMaximaAposRevisao.toFixed(1)}%`}
+                </dd>
+                <p className="text-[11px] text-amber-200/80">Não é KPI oficial</p>
               </div>
             </dl>
           </div>
@@ -686,7 +723,9 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
               </div>
               <div>
                 <div className="text-2xl font-bold text-amber-200">Bloqueada</div>
-                <p className="text-xs text-slate-400 mt-1">Aguardando regra canônica de vínculo e presença.</p>
+                <p className="text-xs text-slate-400 mt-1">
+                  {experimentaisDiagnostico.conversoesPendentesVinculo} pendente(s) de vínculo nesta competência.
+                </p>
               </div>
             </div>
           </div>
@@ -698,7 +737,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
                 { label: 'Presença confirmada', value: experimentaisDiagnostico.realizadasPresencaConfirmada, color: '#8b5cf6' },
                 { label: 'Matrículas (legado)', value: dados.novas_matriculas, color: '#10b981' },
               ]}
-              title="Funil Diagnóstico"
+              title="Funil Diagnóstico (não KPI oficial)"
             />
             {dados.experimentais_por_canal.length > 0 ? (
               <DistributionChart
