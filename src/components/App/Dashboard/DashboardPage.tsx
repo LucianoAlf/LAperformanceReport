@@ -356,14 +356,6 @@ export function DashboardPage() {
         }
 
         // ===== DADOS DE GESTÃO =====
-        // Verificar se é período atual ou histórico
-        // Período atual = ano atual E o range inclui o mês atual E é apenas 1 mês
-        const currentDate = new Date();
-        const currentYear = currentDate.getFullYear();
-        const currentMonth = currentDate.getMonth() + 1;
-        const isPeriodoAtual = ano === currentYear && mesInicio === currentMonth && mesFim === currentMonth;
-        const isHistorico = !isPeriodoAtual;
-
         const kpisAlunos = await fetchKPIsAlunosCanonicos({
           unidadeId: unidade,
           ano,
@@ -393,111 +385,9 @@ export function DashboardPage() {
         }
 
         // ===== DADOS COMERCIAIS =====
-        // CORREÇÃO: Usar tabela leads diretamente (mesma fonte do TabComercialNew.tsx)
-        // Para histórico, usar vw_kpis_comercial_historico
-        // Para mês atual, buscar da tabela leads em tempo real
-
-        if (isHistorico) {
-          // Período histórico: usar vw_kpis_comercial_historico com range de meses
-          let comercialQuery = supabase
-            .from('vw_kpis_comercial_historico')
-            .select('*')
-            .eq('ano', ano)
-            .gte('mes', mes)
-            .lte('mes', mesFim);
-
-          if (unidade !== 'todos') {
-            comercialQuery = comercialQuery.eq('unidade_id', unidade);
-          }
-
-          const { data: comercialData } = await comercialQuery;
-          
-          if (comercialData && comercialData.length > 0) {
-            const leads = comercialData.reduce((acc: number, d: any) => acc + (d.total_leads || 0), 0);
-            const experimentais = comercialData.reduce((acc: number, d: any) => 
-              acc + (d.experimentais_realizadas || d.aulas_experimentais || 0), 0);
-            const matriculas = comercialData.reduce((acc: number, d: any) => 
-              acc + (d.novas_matriculas || d.novas_matriculas_total || 0), 0);
-            const ticketPassaporte = comercialData.reduce((acc: number, d: any) =>
-              acc + (Number(d.ticket_medio_passaporte) || 0), 0) / comercialData.length;
-
-            setDadosComercial({
-              leads_mes: leads,
-              experimentais_realizadas: experimentais,
-              // Exp -> Mat segue bloqueada como KPI oficial, inclusive em fallback legado.
-              taxa_conversao: 0,
-              ticket_passaporte: Math.round(ticketPassaporte)
-            });
-
-            setFunilComercial([
-              { etapa: 'Leads', valor: leads, cor: '#3b82f6' },
-              { etapa: 'Experimentais', valor: experimentais, cor: '#8b5cf6' },
-              { etapa: 'Matrículas', valor: matriculas, cor: '#10b981' }
-            ]);
-          } else {
-            setDadosComercial(null);
-            setFunilComercial([]);
-          }
-        } else {
-          // Mês atual: buscar da tabela leads em tempo real (mesma lógica do TabComercialNew.tsx)
-          const startDate = `${ano}-${String(mes).padStart(2, '0')}-01`;
-          const endDate = `${ano}-${String(mes).padStart(2, '0')}-${new Date(ano, mes, 0).getDate()}`;
-          
-          let leadsQuery = supabase
-            .from('leads')
-            .select('id, status, quantidade, data_contato, experimental_realizada')
-            .gte('data_contato', startDate)
-            .lte('data_contato', endDate);
-
-          if (unidade !== 'todos') {
-            leadsQuery = leadsQuery.eq('unidade_id', unidade);
-          }
-
-          const { data: leadsData } = await leadsQuery;
-          const leads = leadsData || [];
-
-          // Contagens usando mesma lógica do TabComercialNew.tsx
-          const totalLeads = leads.length;
-          // Exp/Visita exibida no card "Experimentais Realizadas":
-          // status atual exp_realizada/compareceu/visita_escola
-          const expTotal = leads.filter((l: any) =>
-            ['experimental_realizada', 'compareceu', 'visita_escola'].includes(l.status)
-          ).reduce((acc: number, l: any) => acc + (l.quantidade || 1), 0);
-          const novasMatriculas = leads.filter((l: any) =>
-            ['matriculado', 'convertido'].includes(l.status)
-          ).reduce((acc: number, l: any) => acc + (l.quantidade || 1), 0);
-
-          // Buscar ticket médio passaporte dos alunos matriculados no mês
-          let passaporteQuery = supabase
-            .from('alunos')
-            .select('valor_passaporte')
-            .gte('data_matricula', startDate)
-            .lte('data_matricula', endDate)
-            .gt('valor_passaporte', 0);
-
-          if (unidade !== 'todos') {
-            passaporteQuery = passaporteQuery.eq('unidade_id', unidade);
-          }
-
-          const { data: passaporteData } = await passaporteQuery;
-          const ticketPassaporte = passaporteData && passaporteData.length > 0
-            ? passaporteData.reduce((sum: number, a: any) => sum + Number(a.valor_passaporte), 0) / passaporteData.length
-            : 0;
-
-          setDadosComercial({
-            leads_mes: totalLeads,
-            experimentais_realizadas: expTotal,
-            // Exp -> Mat segue bloqueada como KPI oficial, inclusive em fallback legado.
-            taxa_conversao: 0,
-            ticket_passaporte: Math.round(ticketPassaporte)
-          });
-
-          setFunilComercial([
-            { etapa: 'Leads', valor: totalLeads, cor: '#3b82f6' },
-            { etapa: 'Exp/Visita', valor: expTotal, cor: '#8b5cf6' },
-            { etapa: 'Matrículas', valor: novasMatriculas, cor: '#10b981' }
-          ]);
-        }
+        // Fonte canônica v2. Não usar snapshots legados como fallback silencioso.
+        setDadosComercial(null);
+        setFunilComercial([]);
 
         try {
           const startDateComercial = `${ano}-${String(mesInicio).padStart(2, '0')}-01`;
