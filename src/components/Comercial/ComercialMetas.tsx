@@ -287,7 +287,7 @@ export function ComercialMetas() {
           <div>
             <h3 className="text-lg font-semibold text-yellow-200 mb-2">Controle de regra canonica</h3>
             <p className="text-gray-300 text-sm">
-              Esta pagina nao usa dados_comerciais nem useComercialData. Leads usam RPC v2; demais metas continuam cadastradas,
+              Esta pagina nao usa snapshot comercial nem hook legado. Leads usam RPC v2; demais metas continuam cadastradas,
               mas sem progresso oficial ate existir regra canonica de experimentais, matriculas, ticket e unidade comercial.
             </p>
           </div>

@@ -868,7 +868,7 @@ export function ComercialPage() {
       const conversaoLeadMat = leads > 0 ? (matriculas / leads) * 100 : 0;
       const conversaoExpMat = experimentais > 0 ? (matriculas / experimentais) * 100 : 0;
 
-      // Não usar dados_comerciais como fallback: snapshot legado pode contaminar o funil.
+      // Nao usar snapshot legado como fallback: pode contaminar o funil.
       setResumo({
         leads,
         experimentais,

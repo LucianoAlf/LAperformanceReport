@@ -17,7 +17,7 @@ const bloqueios = [
   {
     icon: CreditCard,
     titulo: 'Ticket Medio Passaporte',
-    descricao: 'Nao usar dados_comerciais como fonte. O relatorio mensal usa rotina propria validada separadamente.',
+    descricao: 'Nao usar snapshot comercial como fonte. O relatorio mensal usa rotina propria validada separadamente.',
   },
   {
     icon: Wallet,

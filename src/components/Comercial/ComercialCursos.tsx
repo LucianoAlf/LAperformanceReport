@@ -22,7 +22,7 @@ export function ComercialCursos() {
   
   const cores = ['#10b981', '#06b6d4', '#8b5cf6', '#f59e0b', '#ef4444', '#ec4899', '#14b8a6', '#6366f1', '#84cc16', '#f97316'];
 
-  // Diagnóstico de cursos, sem usar dados_comerciais como fonte comercial.
+  // Diagnostico de cursos, sem usar snapshot comercial como fonte.
   // Nomes de cursos Kids para filtrar top cursos
   const cursosKidsNomes = ['Musicalização', 'Musicalização Bebê', 'Musicalização Bebês', 'Musicalização Infantil', 'Musicalização Preparatória'];
   
