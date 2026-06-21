@@ -32,7 +32,7 @@ export function ComercialFunil({ ano, unidade, onAnoChange, onUnidadeChange }: P
     { nome: 'Barra', kpis: kpisBarra, cor: 'emerald' },
   ];
 
-  const melhorConversao = Math.max(
+  const melhorTaxaLeadMatricula = Math.max(
     kpisCG.taxaConversaoTotal,
     kpisRec.taxaConversaoTotal,
     kpisBarra.taxaConversaoTotal
@@ -43,13 +43,13 @@ export function ComercialFunil({ ano, unidade, onAnoChange, onUnidadeChange }: P
       {/* Header */}
       <div className="mb-8">
         <span className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-400 text-sm font-medium px-3 py-1 rounded-full mb-4">
-          <Target className="w-4 h-4" /> Funil de Conversão
+          <Target className="w-4 h-4" /> Funil Lead → Matrícula
         </span>
         <h1 className="text-4xl lg:text-5xl font-grotesk font-bold text-white mb-2">
           Jornada do <span className="text-emerald-400">Lead à Matrícula</span>
         </h1>
         <p className="text-gray-400">
-          Análise completa das taxas de conversão em cada etapa
+          Lead → Experimental e Lead → Matrícula; Exp → Mat segue bloqueada
         </p>
       </div>
 
@@ -92,7 +92,7 @@ export function ComercialFunil({ ano, unidade, onAnoChange, onUnidadeChange }: P
       {/* Funil Visual */}
       <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-8 mb-8">
         <h2 className="text-xl font-semibold text-white mb-8 text-center">
-          Funil de Conversão {ano}
+          Funil Lead → Matrícula {ano}
         </h2>
         
         <div className="flex flex-col items-center gap-2">
@@ -156,7 +156,7 @@ export function ComercialFunil({ ano, unidade, onAnoChange, onUnidadeChange }: P
         {/* Taxa Total */}
         <div className="mt-8 text-center">
           <div className="inline-block bg-slate-700/50 rounded-xl px-8 py-4">
-            <div className="text-sm text-gray-400 mb-1">Taxa de Conversão Total</div>
+            <div className="text-sm text-gray-400 mb-1">Taxa Lead → Matrícula</div>
             <div className="text-4xl font-bold text-emerald-400">
               {kpis.taxaConversaoTotal.toFixed(1)}%
             </div>
@@ -248,7 +248,7 @@ export function ComercialFunil({ ano, unidade, onAnoChange, onUnidadeChange }: P
                 <th className="text-right text-gray-400 text-sm font-medium py-3 px-4">Matrículas</th>
                 <th className="text-right text-gray-400 text-sm font-medium py-3 px-4">Lead→Exp</th>
                 <th className="text-right text-gray-400 text-sm font-medium py-3 px-4">Exp→Mat</th>
-                <th className="text-right text-gray-400 text-sm font-medium py-3 px-4">Total</th>
+                <th className="text-right text-gray-400 text-sm font-medium py-3 px-4">Lead→Mat</th>
               </tr>
             </thead>
             <tbody>
@@ -275,9 +275,9 @@ export function ComercialFunil({ ano, unidade, onAnoChange, onUnidadeChange }: P
                     <span className="text-yellow-300">Bloqueada</span>
                   </td>
                   <td className="text-right py-4 px-4">
-                    <span className={`font-bold ${u.kpis.taxaConversaoTotal === melhorConversao ? 'text-emerald-400' : 'text-white'}`}>
+                    <span className={`font-bold ${u.kpis.taxaConversaoTotal === melhorTaxaLeadMatricula ? 'text-emerald-400' : 'text-white'}`}>
                       {u.kpis.taxaConversaoTotal.toFixed(1)}%
-                      {u.kpis.taxaConversaoTotal === melhorConversao && ' 🏆'}
+                      {u.kpis.taxaConversaoTotal === melhorTaxaLeadMatricula && ' 🏆'}
                     </span>
                   </td>
                 </tr>
@@ -291,12 +291,12 @@ export function ComercialFunil({ ano, unidade, onAnoChange, onUnidadeChange }: P
           <div className="flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5" />
             <div>
-              <div className="text-amber-400 font-medium mb-1">Insight Crítico</div>
+              <div className="text-amber-400 font-medium mb-1">Nota de Controle</div>
               <p className="text-gray-300 text-sm">
-                <strong>Campo Grande</strong> gera 58% dos leads mas converte apenas 6,4%.
-                <strong> Recreio</strong> gera 20% dos leads mas converte 11,9% (quase o dobro).
+                A comparação acima usa apenas taxas seguras: <strong>Lead → Experimental</strong> e <strong>Lead → Matrícula</strong>.
+                A taxa <strong>Experimental → Matrícula</strong> permanece bloqueada até fechar presença individual + vínculo canônico.
                 <br />
-                <span className="text-gray-400">Ação: Investigar processo comercial de Campo Grande e replicar modelo do Recreio.</span>
+                <span className="text-gray-400">Ação: usar este bloco para leitura de funil sem publicar Exp→Mat como KPI oficial.</span>
               </p>
             </div>
           </div>
