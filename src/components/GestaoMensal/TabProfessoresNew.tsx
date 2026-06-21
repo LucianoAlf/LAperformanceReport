@@ -123,9 +123,9 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
         // Usar view mensal para período atual, histórica para passado
         const viewName = isCurrentPeriod ? 'vw_kpis_professor_mensal' : 'vw_kpis_professor_historico';
 
-        // ========== BUSCAR DADOS COMPARATIVOS (Mês Anterior e Ano Anterior) ==========
-        // Usar tabela dados_mensais que tem dados históricos completos de alunos, matrículas, ticket, etc.
-        // Usar tabela dados_comerciais para experimentais
+        // ========== BUSCAR DADOS COMPARATIVOS ==========
+        // Dados de base/gestao seguem em dados_mensais.
+        // Experimentais/conversao por professor nao usam snapshot comercial enquanto a regra canonica estiver bloqueada.
         const mesAnterior = mes === 1 ? 12 : mes - 1;
         const anoMesAnterior = mes === 1 ? ano - 1 : ano;
 
@@ -140,13 +140,6 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
           mesAnteriorDadosQuery = mesAnteriorDadosQuery.eq('unidade_id', unidade);
         }
 
-        // Buscar dados do mês anterior de dados_comerciais (experimentais)
-        const competenciaMesAnt = `${anoMesAnterior}-${String(mesAnterior).padStart(2, '0')}-01`;
-        let mesAnteriorComercialQuery = supabase
-          .from('dados_comerciais')
-          .select('*')
-          .eq('competencia', competenciaMesAnt);
-
         // Buscar dados do mesmo mês do ano anterior de dados_mensais
         let anoAnteriorDadosQuery = supabase
           .from('dados_mensais')
@@ -158,31 +151,21 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
           anoAnteriorDadosQuery = anoAnteriorDadosQuery.eq('unidade_id', unidade);
         }
 
-        // Buscar dados do ano anterior de dados_comerciais (experimentais)
-        const competenciaAnoAnt = `${ano - 1}-${String(mes).padStart(2, '0')}-01`;
-        let anoAnteriorComercialQuery = supabase
-          .from('dados_comerciais')
-          .select('*')
-          .eq('competencia', competenciaAnoAnt);
-
         // Executar queries comparativas em paralelo
-        const [mesAntDadosResult, mesAntComercialResult, anoAntDadosResult, anoAntComercialResult] = await Promise.all([
+        const [mesAntDadosResult, anoAntDadosResult] = await Promise.all([
           mesAnteriorDadosQuery,
-          mesAnteriorComercialQuery,
           anoAnteriorDadosQuery,
-          anoAnteriorComercialQuery
         ]);
 
         // Processar dados do mês anterior
         const dadosMesAnt = mesAntDadosResult.data || [];
-        const comercialMesAnt = mesAntComercialResult.data || [];
         if (dadosMesAnt.length > 0) {
           const alunosTotal = dadosMesAnt.reduce((acc, d) => acc + (d.alunos_pagantes || 0), 0);
           const matTotal = dadosMesAnt.reduce((acc, d) => acc + (d.novas_matriculas || 0), 0);
           const ticketMedio = dadosMesAnt.length > 0 
             ? dadosMesAnt.reduce((acc, d) => acc + (Number(d.ticket_medio) || 0), 0) / dadosMesAnt.length 
             : 0;
-          const expTotal = comercialMesAnt.reduce((acc, c) => acc + (c.aulas_experimentais || 0), 0);
+          const expTotal = 0;
 
           setDadosMesAnterior({
             total_professores: 0, // Não temos histórico mensal de professores
@@ -200,14 +183,13 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
 
         // Processar dados do ano anterior
         const dadosAnoAnt = anoAntDadosResult.data || [];
-        const comercialAnoAnt = anoAntComercialResult.data || [];
         if (dadosAnoAnt.length > 0) {
           const alunosTotal = dadosAnoAnt.reduce((acc, d) => acc + (d.alunos_pagantes || 0), 0);
           const matTotal = dadosAnoAnt.reduce((acc, d) => acc + (d.novas_matriculas || 0), 0);
           const ticketMedio = dadosAnoAnt.length > 0 
             ? dadosAnoAnt.reduce((acc, d) => acc + (Number(d.ticket_medio) || 0), 0) / dadosAnoAnt.length 
             : 0;
-          const expTotal = comercialAnoAnt.reduce((acc, c) => acc + (c.aulas_experimentais || 0), 0);
+          const expTotal = 0;
 
           setDadosAnoAnterior({
             total_professores: 0, // Não temos histórico mensal de professores
