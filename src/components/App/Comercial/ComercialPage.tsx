@@ -868,72 +868,7 @@ export function ComercialPage() {
       const conversaoLeadMat = leads > 0 ? (matriculas / leads) * 100 : 0;
       const conversaoExpMat = experimentais > 0 ? (matriculas / experimentais) * 100 : 0;
 
-      // Se não houver registros em leads, tentar buscar de dados_comerciais (histórico)
-      // Não disparar fallback para filtro "Hoje" — 0 leads no dia é correto
-      if (registrosParaResumo.length === 0 && !isFiltroHoje) {
-        // Extrair ano e mês do range diretamente da string para evitar bug de timezone
-        const [anoFiltroStr, mesFiltroStr] = startDate.split('-');
-        const anoFiltro = parseInt(anoFiltroStr);
-        const mesFiltro = parseInt(mesFiltroStr);
-        
-        // Buscar dados históricos de dados_comerciais
-        let historicoQuery = supabase
-          .from('dados_comerciais')
-          .select('*')
-          .eq('competencia', `${anoFiltro}-${String(mesFiltro).padStart(2, '0')}-01`);
-
-        // Filtrar por unidade
-        if (isAdmin && context?.unidadeSelecionada && context.unidadeSelecionada !== 'todos') {
-          // Buscar nome da unidade para filtrar
-          const { data: unidadeData } = await supabase
-            .from('unidades')
-            .select('nome')
-            .eq('id', context.unidadeSelecionada)
-            .single();
-          if (unidadeData) {
-            historicoQuery = historicoQuery.ilike('unidade', unidadeData.nome);
-          }
-        } else if (!isAdmin && usuario?.unidade_id) {
-          // Buscar nome da unidade para filtrar
-          const { data: unidadeData } = await supabase
-            .from('unidades')
-            .select('nome')
-            .eq('id', usuario.unidade_id)
-            .single();
-          if (unidadeData) {
-            historicoQuery = historicoQuery.ilike('unidade', unidadeData.nome);
-          }
-        }
-
-        const { data: historicoData } = await historicoQuery;
-        
-        if (historicoData && historicoData.length > 0) {
-          // Consolidar dados históricos
-          const totalLeads = historicoData.reduce((sum, d) => sum + (d.total_leads || 0), 0);
-          const totalExp = historicoData.reduce((sum, d) => sum + (d.aulas_experimentais || 0), 0);
-          const totalMat = historicoData.reduce((sum, d) => sum + (d.novas_matriculas_total || 0), 0);
-          
-          setResumo({
-            leads: totalLeads,
-            experimentais: totalExp,
-            visitas: 0,
-            matriculas: totalMat,
-            leadsPorCanal: [],
-            leadsPorCurso: [],
-            conversaoLeadExp: totalLeads > 0 ? (totalExp / totalLeads) * 100 : 0,
-            conversaoLeadMat: totalLeads > 0 ? (totalMat / totalLeads) * 100 : 0,
-            conversaoExpMat: totalExp > 0 ? (totalMat / totalExp) * 100 : 0,
-          });
-          
-          // IMPORTANTE: Também limpar leadsMes quando usar dados históricos
-          setLeadsMes([]);
-          setMatriculasMes([]);
-          setExperimentaisMes([]);
-          setVisitasMes([]);
-          return;
-        }
-      }
-
+      // Não usar dados_comerciais como fallback: snapshot legado pode contaminar o funil.
       setResumo({
         leads,
         experimentais,
