@@ -230,9 +230,9 @@ export function TabComercial({ ano, mes, unidade }: TabComercialProps) {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         <KPICard
           icon={Percent}
-          label="Taxa Conversão"
-          value={`${totais.taxaConversao.toFixed(1)}%`}
-          subvalue="Exp → Matrícula"
+          label="Taxa Exp→Mat bloqueada"
+          value="Bloqueada"
+          subvalue="legado; não usar como KPI oficial"
           variant="violet"
         />
         <KPICard
@@ -259,7 +259,7 @@ export function TabComercial({ ano, mes, unidade }: TabComercialProps) {
       {/* Funil de Conversão */}
       <FunnelChart
         steps={funnelSteps}
-        title="Funil de Conversão"
+        title="Funil operacional (legado)"
       />
 
       {/* Gráficos */}

@@ -935,7 +935,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             />
             <div className="bg-slate-800/70 border border-slate-700 rounded-xl p-4 min-h-[112px] flex flex-col justify-between">
               <div className="flex items-center justify-between gap-3">
-                <span className="text-xs text-slate-400 font-medium">Taxa Exp → Mat</span>
+                <span className="text-xs text-slate-400 font-medium">Taxa Exp → Mat bloqueada</span>
                 <Lock className="w-4 h-4 text-amber-300" />
               </div>
               <div>
@@ -950,7 +950,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
               steps={[
                 { label: 'Leads', value: dados.total_leads, color: '#06b6d4' },
                 { label: 'Presença confirmada', value: experimentaisDiagnostico.realizadasPresencaConfirmada, color: '#8b5cf6' },
-                { label: 'Matrículas', value: dados.novas_matriculas, color: '#10b981' },
+                { label: 'Matrículas (legado)', value: dados.novas_matriculas, color: '#10b981' },
               ]}
               title="Funil Diagnóstico"
             />

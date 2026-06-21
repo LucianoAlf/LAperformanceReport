@@ -54,7 +54,7 @@ export function ComercialOrigem() {
           De Onde Vêm os <span className="text-emerald-400">Leads</span>
         </h1>
         <p className="text-gray-400">
-          Análise de canais de aquisição e taxa de conversão
+          Análise de canais de aquisição e volume de leads
           {unidade !== 'Consolidado' && (
             <span className="text-emerald-400"> - {unidade}</span>
           )}

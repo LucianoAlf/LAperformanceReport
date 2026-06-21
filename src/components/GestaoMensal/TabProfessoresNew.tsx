@@ -887,7 +887,7 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
             />
             <KPICard
               icon={UserCheck}
-              label="Matrículas"
+              label="Matrículas (diagnóstico)"
               value={dados.matriculas_total}
               variant="emerald"
               comparativoMesAnterior={dadosMesAnterior ? { valor: dadosMesAnterior.matriculas_total, label: dadosMesAnterior.label } : undefined}
@@ -895,7 +895,7 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
             />
             <KPICard
               icon={Percent}
-              label="Taxa Exp → Mat"
+              label="Taxa Exp → Mat bloqueada"
               value="Bloqueada"
               subvalue="aguardando regra canônica"
               variant="amber"
@@ -903,7 +903,7 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
             />
             <KPICard
               icon={Award}
-              label="Melhor Professor"
+              label="Professor destaque"
               value={dados.ranking_matriculadores[0]?.nome.split(' ')[0] || '-'}
               subvalue={dados.ranking_matriculadores[0]?.subvalor || ''}
               variant="amber"
@@ -913,7 +913,7 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <RankingTableCollapsible
               data={dados.ranking_matriculadores}
-              title="Ranking Professores Matriculadores"
+              title="Ranking Professores Matriculadores (diagnóstico)"
               valorLabel="Matrículas"
               topCount={3}
               variant="emerald"
