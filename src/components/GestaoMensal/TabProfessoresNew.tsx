@@ -20,7 +20,7 @@ type SubTabId = 'visao_geral' | 'conversao' | 'retencao';
 
 const subTabs = [
   { id: 'visao_geral' as const, label: 'Visão Geral', icon: Users },
-  { id: 'conversao' as const, label: 'Conversão', icon: Target },
+  { id: 'conversao' as const, label: 'Conversão (legado)', icon: Target },
   { id: 'retencao' as const, label: 'Retenção', icon: UserCheck },
 ];
 
@@ -641,7 +641,7 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
             id: p.id,
             nome: p.nome,
             valor: p.matriculas,
-            subvalor: `${p.taxa_conversao.toFixed(0)}% conversão (${p.experimentais} exp)`
+            subvalor: `${p.taxa_conversao.toFixed(0)}% taxa legada (${p.experimentais} exp)`
           }));
 
         const rankingConversao = professoresKPIs
@@ -869,12 +869,19 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
       {/* Sub-aba: Conversão */}
       {activeSubTab === 'conversao' && (
         <div className="space-y-6">
+          <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-100">
+            Conversão de professores em modo diagnóstico: experimentais e taxa Exp → Mat ainda dependem de fonte operacional/legada.
+            Não usar como KPI oficial até fechar presença individual + vínculo canônico.
+          </div>
+
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <KPICard
               icon={Trophy}
-              label="Experimentais"
+              label="Experimentais (legado)"
               value={dados.experimentais_total}
               variant="cyan"
+              subvalue="operacional/diagnóstico"
+              tooltip="Total operacional usado apenas como diagnóstico. A regra canônica de presença individual + vínculo ainda está em validação."
               comparativoMesAnterior={dadosMesAnterior ? { valor: dadosMesAnterior.experimentais_total, label: dadosMesAnterior.label } : undefined}
               comparativoAnoAnterior={dadosAnoAnterior ? { valor: dadosAnoAnterior.experimentais_total, label: dadosAnoAnterior.label } : undefined}
             />
@@ -888,9 +895,11 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
             />
             <KPICard
               icon={Percent}
-              label="Taxa Conversão"
-              value={`${dados.taxa_conversao_geral.toFixed(1)}%`}
-              variant="violet"
+              label="Taxa Exp → Mat"
+              value="Bloqueada"
+              subvalue="aguardando regra canônica"
+              variant="amber"
+              tooltip="Taxa experimental para matrícula bloqueada para KPI oficial até presença individual e vínculo aluno/lead ficarem canônicos."
             />
             <KPICard
               icon={Award}
@@ -911,10 +920,10 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
             />
             <RankingTableCollapsible
               data={dados.ranking_conversao}
-              title="Ranking Melhor Taxa de Conversão"
-              valorLabel="Taxa"
+              title="Ranking Taxa de Conversão (legado)"
+              valorLabel="Taxa legada"
               topCount={3}
-              variant="violet"
+              variant="amber"
               valorFormatter={(value) => `${Number(value).toFixed(1)}%`}
             />
           </div>
