@@ -58,6 +58,8 @@ interface DadosComercial {
     conversoesCanonicasComVinculoPresenca: number;
     conversoesPendentesVinculo: number;
     realizadasSemConversaoAparente: number;
+    decisoesHumanasExcluidasDenominador: number;
+    decisoesHumanasPendentesCanonizacao: number;
     taxaExpMatMinimaCanonica: number | null;
     taxaExpMatMaximaAposRevisao: number | null;
     taxaExpMatStatus: string;
@@ -104,6 +106,8 @@ const experimentaisDiagnosticoVazio: DadosComercial['experimentais_diagnostico_v
   conversoesCanonicasComVinculoPresenca: 0,
   conversoesPendentesVinculo: 0,
   realizadasSemConversaoAparente: 0,
+  decisoesHumanasExcluidasDenominador: 0,
+  decisoesHumanasPendentesCanonizacao: 0,
   taxaExpMatMinimaCanonica: null,
   taxaExpMatMaximaAposRevisao: null,
   taxaExpMatStatus: 'bloqueada_regra_canonica',
@@ -171,6 +175,10 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           conversoesPendentesVinculo: diagnosticoExperimentaisV2.conversoesPendentesVinculo,
           realizadasSemConversaoAparente:
             diagnosticoExperimentaisV2.realizadasSemConversaoAparente,
+          decisoesHumanasExcluidasDenominador:
+            diagnosticoExperimentaisV2.decisoesHumanasExcluidasDenominador,
+          decisoesHumanasPendentesCanonizacao:
+            diagnosticoExperimentaisV2.decisoesHumanasPendentesCanonizacao,
           taxaExpMatMinimaCanonica: diagnosticoExperimentaisV2.taxaExpMatMinimaCanonica,
           taxaExpMatMaximaAposRevisao: diagnosticoExperimentaisV2.taxaExpMatMaximaAposRevisao,
           taxaExpMatStatus: diagnosticoExperimentaisV2.taxaExpMatStatus,
@@ -650,14 +658,14 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             <div className="flex items-start gap-3 mb-4">
               <Info className="w-5 h-5 text-cyan-300 flex-shrink-0 mt-0.5" />
               <div>
-                <h4 className="text-cyan-100 font-semibold">Diagnóstico P02P de experimentais</h4>
+                <h4 className="text-cyan-100 font-semibold">Diagnóstico P02Q de experimentais</h4>
                 <p className="text-cyan-100/80 text-sm">
                   Denominador operacional separado de conversões confirmadas por vínculo e presença.
-                  Taxa Exp → Mat segue bloqueada para KPI oficial.
+                  Decisões humanas removem duplicidades/matrículas diretas sem alterar o histórico original.
                 </p>
               </div>
             </div>
-            <dl className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 text-sm">
+            <dl className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-4 text-sm">
               <div>
                 <dt className="text-slate-400">Presença + vínculo</dt>
                 <dd className="text-white text-2xl font-bold">{experimentaisDiagnostico.realizadasPresencaConfirmada}</dd>
@@ -673,6 +681,20 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
               <div>
                 <dt className="text-slate-400">Sem conversão aparente</dt>
                 <dd className="text-white text-2xl font-bold">{experimentaisDiagnostico.realizadasSemConversaoAparente}</dd>
+              </div>
+              <div>
+                <dt className="text-slate-400">Decisões excluídas</dt>
+                <dd className="text-white text-2xl font-bold">
+                  {experimentaisDiagnostico.decisoesHumanasExcluidasDenominador}
+                </dd>
+                <p className="text-[11px] text-slate-400">fora do denominador</p>
+              </div>
+              <div>
+                <dt className="text-slate-400">Pendências humanas</dt>
+                <dd className="text-white text-2xl font-bold">
+                  {experimentaisDiagnostico.decisoesHumanasPendentesCanonizacao}
+                </dd>
+                <p className="text-[11px] text-slate-400">cadastro/vínculo</p>
               </div>
               <div>
                 <dt className="text-slate-400">Emusys sem funil</dt>
@@ -725,7 +747,9 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
               <div>
                 <div className="text-2xl font-bold text-amber-200">Bloqueada</div>
                 <p className="text-xs text-slate-400 mt-1">
-                  {experimentaisDiagnostico.conversoesPendentesVinculo} pendente(s) de vínculo nesta competência.
+                  {experimentaisDiagnostico.conversoesPendentesVinculo} pendente(s) de vínculo e{' '}
+                  {experimentaisDiagnostico.decisoesHumanasPendentesCanonizacao} decisão(ões) humana(s)
+                  ainda sem canonização.
                 </p>
               </div>
             </div>

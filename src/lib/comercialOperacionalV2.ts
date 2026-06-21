@@ -44,6 +44,8 @@ export interface ExperimentaisDiagnosticoTotaisPayloadV2 {
   conversoes_canonicas_com_vinculo_presenca?: number | string | null;
   conversoes_pendentes_vinculo?: number | string | null;
   realizadas_sem_conversao_aparente?: number | string | null;
+  decisoes_humanas_excluidas_denominador?: number | string | null;
+  decisoes_humanas_pendentes_canonizacao?: number | string | null;
   taxa_exp_mat_minima_canonica?: number | string | null;
   taxa_exp_mat_maxima_apos_revisao?: number | string | null;
   taxa_exp_mat_status?: string | null;
@@ -92,6 +94,8 @@ export interface ExperimentaisDiagnosticoMesV2 {
   conversoesCanonicasComVinculoPresenca: number;
   conversoesPendentesVinculo: number;
   realizadasSemConversaoAparente: number;
+  decisoesHumanasExcluidasDenominador: number;
+  decisoesHumanasPendentesCanonizacao: number;
   taxaExpMatMinimaCanonica: number | null;
   taxaExpMatMaximaAposRevisao: number | null;
   taxaExpMatStatus: string;
@@ -202,6 +206,12 @@ export function normalizarPayloadMensalExperimentaisDiagnosticoV2(
     realizadasSemConversaoAparente: toComercialNumber(
       totais?.realizadas_sem_conversao_aparente,
     ),
+    decisoesHumanasExcluidasDenominador: toComercialNumber(
+      totais?.decisoes_humanas_excluidas_denominador,
+    ),
+    decisoesHumanasPendentesCanonizacao: toComercialNumber(
+      totais?.decisoes_humanas_pendentes_canonizacao,
+    ),
     taxaExpMatMinimaCanonica:
       totais?.taxa_exp_mat_minima_canonica === null ||
       totais?.taxa_exp_mat_minima_canonica === undefined
@@ -283,6 +293,12 @@ export function somarSeriesMensaisExperimentaisDiagnosticoV2(
         conversoesPendentesVinculo,
         realizadasSemConversaoAparente:
           acc.realizadasSemConversaoAparente + mes.realizadasSemConversaoAparente,
+        decisoesHumanasExcluidasDenominador:
+          acc.decisoesHumanasExcluidasDenominador +
+          mes.decisoesHumanasExcluidasDenominador,
+        decisoesHumanasPendentesCanonizacao:
+          acc.decisoesHumanasPendentesCanonizacao +
+          mes.decisoesHumanasPendentesCanonizacao,
         taxaExpMatMinimaCanonica:
           realizadasStatusOperacional > 0
             ? (conversoesCanonicasComVinculoPresenca / realizadasStatusOperacional) * 100
@@ -313,6 +329,8 @@ export function somarSeriesMensaisExperimentaisDiagnosticoV2(
       conversoesCanonicasComVinculoPresenca: 0,
       conversoesPendentesVinculo: 0,
       realizadasSemConversaoAparente: 0,
+      decisoesHumanasExcluidasDenominador: 0,
+      decisoesHumanasPendentesCanonizacao: 0,
       taxaExpMatMinimaCanonica: null,
       taxaExpMatMaximaAposRevisao: null,
       taxaExpMatStatus: 'bloqueada_regra_canonica',
