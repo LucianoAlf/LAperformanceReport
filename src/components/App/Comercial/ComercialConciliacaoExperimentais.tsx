@@ -1,17 +1,29 @@
 import { useEffect, useMemo, useState, type ComponentType } from 'react';
 import {
   AlertTriangle,
+  Ban,
   Calendar,
   CheckCircle2,
   ClipboardCheck,
+  ClipboardX,
+  GraduationCap,
   HelpCircle,
   Link2,
   Loader2,
   RefreshCw,
   UserX,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea';
 
 interface ComercialConciliacaoExperimentaisProps {
   unidadeId: string | 'todos' | null | undefined;
@@ -29,6 +41,8 @@ interface ConciliacaoResumo {
   pendentes_conciliacao?: number;
   realizadas_sem_presenca_confirmada?: number;
   realizadas_status_operacional?: number;
+  decisoes_humanas?: number;
+  conversoes_confirmadas_decisao?: number;
 }
 
 interface ConciliacaoItem {
@@ -55,7 +69,11 @@ interface ConciliacaoItem {
   sinal_conversao: boolean;
   decisao_humana: string | null;
   incluir_denominador_exp_mat: boolean | null;
+  contar_conversao_exp_mat: boolean | null;
+  aluno_id_decidido: number | null;
   decisao_motivo: string | null;
+  decidido_por: string | null;
+  decidido_em: string | null;
 }
 
 interface ConciliacaoPayload {
@@ -73,6 +91,8 @@ const resumoVazio: Required<ConciliacaoResumo> = {
   pendentes_conciliacao: 0,
   realizadas_sem_presenca_confirmada: 0,
   realizadas_status_operacional: 0,
+  decisoes_humanas: 0,
+  conversoes_confirmadas_decisao: 0,
 };
 
 const etapaLabel: Record<string, string> = {
@@ -92,6 +112,9 @@ const motivoLabel: Record<string, string> = {
   responsavel_sem_aluno: 'Responsavel no lugar do aluno',
   pendente_cadastro_nao_encontrado: 'Cadastro nao encontrado',
   aluno_excluido_pos_matricula: 'Aluno excluido apos matricula',
+  realizada_sem_matricula_confirmada: 'Realizada sem matricula',
+  realizada_com_matricula_confirmada: 'Realizada com matricula',
+  experimental_faltou_confirmada: 'Falta confirmada',
   sem_aluno_vinculado_com_sinal_conversao: 'Sem aluno vinculado',
   aluno_vinculado_sem_presenca_experimental: 'Sem presenca experimental',
   realizada_sem_conversao_aparente: 'Realizada sem conversao aparente',
@@ -145,6 +168,101 @@ function getMotivoHumano(item: ConciliacaoItem) {
   return motivoLabel[item.decisao_humana || item.motivo_fila] || item.motivo_fila || 'Revisar';
 }
 
+interface AcaoConciliacao {
+  decisao: string;
+  label: string;
+  descricao: string;
+  motivo: string;
+  incluirDenominador: boolean;
+  contarConversao: boolean;
+  usarAlunoSugerido?: boolean;
+  tone: 'emerald' | 'cyan' | 'rose' | 'violet' | 'amber' | 'slate';
+  icon: ComponentType<{ className?: string }>;
+}
+
+const acoesConciliacao: AcaoConciliacao[] = [
+  {
+    decisao: 'realizada_sem_matricula_confirmada',
+    label: 'Fez experimental, nao matriculou',
+    descricao: 'Conta como experimental realizada, mas nao como conversao.',
+    motivo: 'Decisao humana: experimental realizada sem matricula.',
+    incluirDenominador: true,
+    contarConversao: false,
+    tone: 'cyan',
+    icon: CheckCircle2,
+  },
+  {
+    decisao: 'realizada_com_matricula_confirmada',
+    label: 'Fez experimental e matriculou',
+    descricao: 'Conta como experimental realizada e conversao, usando aluno vinculado/sugerido.',
+    motivo: 'Decisao humana: experimental realizada com matricula.',
+    incluirDenominador: true,
+    contarConversao: true,
+    usarAlunoSugerido: true,
+    tone: 'emerald',
+    icon: GraduationCap,
+  },
+  {
+    decisao: 'experimental_faltou_confirmada',
+    label: 'Faltou / no-show',
+    descricao: 'Remove do denominador de Exp -> Mat e marca como falta operacional validada.',
+    motivo: 'Decisao humana: aluno faltou a experimental.',
+    incluirDenominador: false,
+    contarConversao: false,
+    tone: 'rose',
+    icon: UserX,
+  },
+  {
+    decisao: 'matricula_direta_sem_experimental',
+    label: 'Matricula direta',
+    descricao: 'Matriculou sem fazer experimental. Nao entra na taxa Exp -> Mat.',
+    motivo: 'Decisao humana: matricula direta sem experimental realizada.',
+    incluirDenominador: false,
+    contarConversao: false,
+    tone: 'violet',
+    icon: GraduationCap,
+  },
+  {
+    decisao: 'duplicidade_reagendamento_ignorar',
+    label: 'Ignorar duplicidade/reagendamento',
+    descricao: 'Caso antigo, duplicado ou reagendado que nao deve afetar o funil.',
+    motivo: 'Decisao humana: ignorar por duplicidade ou reagendamento.',
+    incluirDenominador: false,
+    contarConversao: false,
+    tone: 'slate',
+    icon: ClipboardX,
+  },
+  {
+    decisao: 'responsavel_sem_aluno',
+    label: 'Responsavel/familia',
+    descricao: 'Nome do responsavel no funil. Precisa vinculo de aluno correto.',
+    motivo: 'Decisao humana: responsavel/familia no lugar do aluno.',
+    incluirDenominador: false,
+    contarConversao: false,
+    tone: 'amber',
+    icon: Link2,
+  },
+  {
+    decisao: 'revisar_manual',
+    label: 'Revisar depois',
+    descricao: 'Mantem o caso em pendencia humana para analise posterior.',
+    motivo: 'Decisao humana: manter em revisao manual.',
+    incluirDenominador: false,
+    contarConversao: false,
+    tone: 'amber',
+    icon: AlertTriangle,
+  },
+];
+
+const actionToneClasses: Record<AcaoConciliacao['tone'], string> = {
+  emerald: 'border-emerald-400/40 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/20',
+  cyan: 'border-cyan-400/40 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/20',
+  rose: 'border-rose-400/40 bg-rose-500/10 text-rose-100 hover:bg-rose-500/20',
+  violet: 'border-violet-400/40 bg-violet-500/10 text-violet-100 hover:bg-violet-500/20',
+  amber: 'border-amber-400/40 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20',
+  slate: 'border-slate-500/60 bg-slate-700/40 text-slate-200 hover:bg-slate-700/70',
+};
+
 export function ComercialConciliacaoExperimentais({
   unidadeId,
   ano,
@@ -153,6 +271,9 @@ export function ComercialConciliacaoExperimentais({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [payload, setPayload] = useState<ConciliacaoPayload | null>(null);
+  const [itemEmDecisao, setItemEmDecisao] = useState<ConciliacaoItem | null>(null);
+  const [observacao, setObservacao] = useState('');
+  const [salvando, setSalvando] = useState(false);
 
   const carregar = async () => {
     setLoading(true);
@@ -191,6 +312,75 @@ export function ComercialConciliacaoExperimentais({
       return acc;
     }, {});
   }, [items]);
+
+  const abrirDecisao = (item: ConciliacaoItem) => {
+    setItemEmDecisao(item);
+    setObservacao('');
+  };
+
+  const fecharDecisao = () => {
+    if (salvando) return;
+    setItemEmDecisao(null);
+    setObservacao('');
+  };
+
+  const salvarDecisao = async (acao: AcaoConciliacao) => {
+    if (!itemEmDecisao) return;
+
+    const alunoIdDecidido = acao.usarAlunoSugerido
+      ? itemEmDecisao.aluno_id || itemEmDecisao.aluno_sugerido_id || null
+      : null;
+
+    if (acao.usarAlunoSugerido && !alunoIdDecidido) {
+      toast.error('Esta decisao precisa de aluno vinculado ou sugerido. Marque como responsavel/familia ou revisar depois.');
+      return;
+    }
+
+    setSalvando(true);
+
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const email = authData.user?.email || 'usuario_app';
+      const nota = observacao.trim();
+      const motivo = nota ? `${acao.motivo} Observacao: ${nota}` : acao.motivo;
+
+      const { error: upsertError } = await supabase
+        .from('lead_experimentais_decisoes_humanas')
+        .upsert(
+          {
+            lead_experimental_id: itemEmDecisao.id,
+            decisao: acao.decisao,
+            incluir_denominador_exp_mat: acao.incluirDenominador,
+            contar_conversao_exp_mat: acao.contarConversao,
+            aluno_id_decidido: alunoIdDecidido,
+            motivo,
+            decidido_por: email,
+            metadata: {
+              origem: 'p02r2_conciliacao_ui',
+              unidade_nome: itemEmDecisao.unidade_nome,
+              nome_aluno: itemEmDecisao.nome_aluno,
+              lead_nome: itemEmDecisao.lead_nome,
+              status_operacional: itemEmDecisao.status_operacional,
+              data_experimental: itemEmDecisao.data_experimental,
+              horario_experimental: itemEmDecisao.horario_experimental,
+            },
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: 'lead_experimental_id' },
+        );
+
+      if (upsertError) throw upsertError;
+
+      toast.success('Decisao salva. A fila foi atualizada.');
+      setItemEmDecisao(null);
+      setObservacao('');
+      await carregar();
+    } catch (err: any) {
+      toast.error(err?.message || 'Erro ao salvar decisao humana');
+    } finally {
+      setSalvando(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -232,12 +422,12 @@ export function ComercialConciliacaoExperimentais({
             <div>
               <div className="flex items-center gap-2 text-cyan-300 text-sm font-semibold mb-2">
                 <ClipboardCheck className="w-4 h-4" />
-                P02R.1 - leitura operacional
+                P02R.2 - conciliacao operacional
               </div>
               <h2 className="text-2xl font-bold text-white">Conciliação de Experimentais</h2>
               <p className="text-sm text-slate-300 mt-1 max-w-3xl">
                 Visao do funil experimental por etapa: agendada, realizada confirmada, falta,
-                matricula direta e pendencias de vinculo/presenca. Esta tela ainda nao altera dados.
+                matricula direta e pendencias de vinculo/presenca. As decisoes gravam somente na camada humana.
               </p>
             </div>
             <button
@@ -251,7 +441,7 @@ export function ComercialConciliacaoExperimentais({
         </div>
 
         <div className="p-6 space-y-6">
-          <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3">
             <ResumoCard
               icon={Calendar}
               label="Agendadas"
@@ -288,6 +478,12 @@ export function ComercialConciliacaoExperimentais({
               value={resumo.matriculas_diretas + resumo.ignoradas_por_decisao}
               tone="violet"
             />
+            <ResumoCard
+              icon={ClipboardCheck}
+              label="Decididas"
+              value={resumo.decisoes_humanas}
+              tone="slate"
+            />
           </div>
 
           <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 p-4">
@@ -296,8 +492,8 @@ export function ComercialConciliacaoExperimentais({
               <div>
                 <h3 className="text-sm font-semibold text-amber-100">Taxa Experimental &gt; Matricula segue bloqueada</h3>
                 <p className="text-sm text-amber-100/80 mt-1">
-                  Esta tela mostra a fila que precisa ser conciliada antes de publicar KPI oficial.
-                  Botões de decisão entram no proximo passo, depois de validarmos a leitura com a equipe.
+                  Os botoes abaixo nao alteram Emusys nem status original. Eles registram a leitura humana
+                  para limpar a fila e preparar o KPI canônico com seguranca.
                 </p>
               </div>
             </div>
@@ -317,9 +513,9 @@ export function ComercialConciliacaoExperimentais({
       <section className="bg-slate-800/50 border border-slate-700/50 rounded-2xl overflow-hidden">
         <div className="px-6 py-4 border-b border-slate-700/50 flex items-center justify-between gap-3">
           <div>
-            <h3 className="text-lg font-bold text-white">Fila de leitura</h3>
+            <h3 className="text-lg font-bold text-white">Fila de acao</h3>
             <p className="text-sm text-slate-400">
-              {items.length} caso(s) que explicam divergencias entre Emusys, funil e KPIs.
+              {items.length} caso(s) que precisam de uma decisao humana para sair da divergencia.
             </p>
           </div>
         </div>
@@ -332,7 +528,7 @@ export function ComercialConciliacaoExperimentais({
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1120px] text-sm">
+            <table className="w-full min-w-[1280px] text-sm">
               <thead className="bg-slate-900/60 text-slate-400">
                 <tr>
                   <th className="text-left font-medium px-4 py-3">Data</th>
@@ -342,6 +538,7 @@ export function ComercialConciliacaoExperimentais({
                   <th className="text-left font-medium px-4 py-3">Professor / curso</th>
                   <th className="text-left font-medium px-4 py-3">Aluno sugerido</th>
                   <th className="text-left font-medium px-4 py-3">Sinais</th>
+                  <th className="text-left font-medium px-4 py-3">Acao</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-700/50">
@@ -397,6 +594,15 @@ export function ComercialConciliacaoExperimentais({
                         <Sinal ativo={Boolean(item.decisao_humana)} label="Decisao humana" />
                       </div>
                     </td>
+                    <td className="px-4 py-3 align-top">
+                      <button
+                        onClick={() => abrirDecisao(item)}
+                        className="inline-flex items-center gap-2 rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-3 py-2 text-xs font-semibold text-cyan-100 hover:bg-cyan-500/20"
+                      >
+                        <ClipboardCheck className="w-3.5 h-3.5" />
+                        Decidir
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -404,6 +610,94 @@ export function ComercialConciliacaoExperimentais({
           </div>
         )}
       </section>
+
+      <Dialog open={Boolean(itemEmDecisao)} onOpenChange={(open) => !open && fecharDecisao()}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto border-slate-700 bg-slate-950">
+          {itemEmDecisao && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Decidir experimental</DialogTitle>
+                <DialogDescription>
+                  Escolha o que aconteceu de verdade. A decisao salva aqui nao altera o historico original.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="rounded-xl border border-slate-700/70 bg-slate-900/70 p-4">
+                <div className="grid gap-3 md:grid-cols-2 text-sm">
+                  <InfoLinha label="Aluno/lead" value={itemEmDecisao.nome_aluno || itemEmDecisao.lead_nome || '-'} />
+                  <InfoLinha label="Data e hora" value={`${formatarData(itemEmDecisao.data_experimental)} ${formatarHora(itemEmDecisao.horario_experimental)}`} />
+                  <InfoLinha label="Professor" value={itemEmDecisao.professor_nome || 'Sem professor'} />
+                  <InfoLinha label="Curso" value={itemEmDecisao.curso_nome || 'Sem curso'} />
+                  <InfoLinha label="Status atual" value={itemEmDecisao.status_operacional || '-'} />
+                  <InfoLinha label="Problema" value={getMotivoHumano(itemEmDecisao)} />
+                </div>
+
+                {(itemEmDecisao.aluno_vinculado_nome || itemEmDecisao.aluno_sugerido_nome) && (
+                  <div className="mt-4 rounded-lg border border-amber-400/30 bg-amber-500/10 p-3">
+                    <p className="text-xs font-semibold text-amber-200">Aluno para vinculo/decisao</p>
+                    <p className="text-sm text-amber-50 mt-1">
+                      {itemEmDecisao.aluno_vinculado_nome || itemEmDecisao.aluno_sugerido_nome}
+                      <span className="text-amber-100/70">
+                        {' '}ID {itemEmDecisao.aluno_id || itemEmDecisao.aluno_sugerido_id}
+                      </span>
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="text-sm font-semibold text-slate-200">Observacao opcional</label>
+                <Textarea
+                  value={observacao}
+                  onChange={(event) => setObservacao(event.target.value)}
+                  placeholder="Ex.: confirmado pela Vitoria, aluno veio; ou caso de irmaos/familia..."
+                  className="mt-2 min-h-[84px] border-slate-700 bg-slate-900 text-slate-100 placeholder:text-slate-500"
+                />
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2">
+                {acoesConciliacao.map((acao) => {
+                  const Icon = acao.icon;
+                  const bloqueadaSemAluno = acao.usarAlunoSugerido && !(itemEmDecisao.aluno_id || itemEmDecisao.aluno_sugerido_id);
+                  return (
+                    <button
+                      key={acao.decisao}
+                      onClick={() => salvarDecisao(acao)}
+                      disabled={salvando || bloqueadaSemAluno}
+                      className={cn(
+                        'rounded-xl border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-45',
+                        actionToneClasses[acao.tone],
+                      )}
+                    >
+                      <div className="flex items-start gap-3">
+                        <Icon className="w-5 h-5 mt-0.5" />
+                        <div>
+                          <p className="font-semibold">{acao.label}</p>
+                          <p className="text-xs opacity-80 mt-1">{bloqueadaSemAluno ? 'Precisa de aluno vinculado/sugerido.' : acao.descricao}</p>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="flex justify-between gap-3 border-t border-slate-800 pt-4">
+                <p className="flex items-center gap-2 text-xs text-slate-500">
+                  <Ban className="w-4 h-4" />
+                  Nao altera Emusys, status, presenca ou matricula.
+                </p>
+                <button
+                  onClick={fecharDecisao}
+                  disabled={salvando}
+                  className="rounded-lg border border-slate-700 px-4 py-2 text-sm font-medium text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+                >
+                  Fechar
+                </button>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -412,7 +706,7 @@ interface ResumoCardProps {
   icon: ComponentType<{ className?: string }>;
   label: string;
   value: number;
-  tone: 'cyan' | 'emerald' | 'rose' | 'sky' | 'amber' | 'violet';
+  tone: 'cyan' | 'emerald' | 'rose' | 'sky' | 'amber' | 'violet' | 'slate';
 }
 
 const toneClasses: Record<ResumoCardProps['tone'], string> = {
@@ -422,6 +716,7 @@ const toneClasses: Record<ResumoCardProps['tone'], string> = {
   sky: 'border-sky-500/30 bg-sky-500/10 text-sky-200',
   amber: 'border-amber-500/30 bg-amber-500/10 text-amber-200',
   violet: 'border-violet-500/30 bg-violet-500/10 text-violet-200',
+  slate: 'border-slate-500/30 bg-slate-700/40 text-slate-200',
 };
 
 function ResumoCard({ icon: Icon, label, value, tone }: ResumoCardProps) {
@@ -448,5 +743,14 @@ function Sinal({ ativo, label }: { ativo: boolean; label: string }) {
     >
       {label}
     </span>
+  );
+}
+
+function InfoLinha({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
+      <p className="text-sm font-medium text-slate-100 mt-0.5">{value}</p>
+    </div>
   );
 }
