@@ -87,19 +87,6 @@ export function useDadosHistoricos(
           console.error('Erro ao buscar histórico:', errorHistorico);
         }
 
-        // Buscar dados comerciais históricos (usar vw_kpis_comercial_historico que tem dados completos)
-        const { data: historicoComercial, error: errorComercial } = await supabase
-          .from('vw_kpis_comercial_historico')
-          .select('*')
-          .eq('unidade_id', unidadeId)
-          .eq('ano', ano - 1) // Usar ano anterior para histórico
-          .order('mes', { ascending: false })
-          .limit(12);
-
-        if (errorComercial) {
-          console.error('Erro ao buscar histórico comercial:', errorComercial);
-        }
-
         const resumoComercialV2 = await fetchComercialOperacionalResumoV2({
           unidadeId,
           ano: ano - 1,
@@ -152,33 +139,18 @@ export function useDadosHistoricos(
           // Calcular médias de gestão
           const mediaEvasoes = historicoGestao.reduce((sum, h) => sum + (h.evasoes || 0), 0) / mesesAnalisados;
           
-          // Calcular médias comerciais
+          // Calcular medias comerciais seguras
           let mediaLeads = resumoComercialV2.seriesMensais.length > 0
             ? resumoComercialV2.leadsEntrantes / resumoComercialV2.seriesMensais.length
             : 0;
-          let mediaExperimentais = 0;
-          let mediaMatriculas = 0;
-          
-          if (historicoComercial && historicoComercial.length > 0) {
-            // Campos corretos da view vw_kpis_comercial_historico
-            mediaExperimentais = historicoComercial.reduce((sum, h) => sum + (h.experimentais_realizadas || 0), 0) / historicoComercial.length;
-            mediaMatriculas = historicoComercial.reduce((sum, h) => sum + (h.novas_matriculas_total || 0), 0) / historicoComercial.length;
-          } else {
-            // Fallback: usar dados de gestão se disponíveis
-            mediaMatriculas = historicoGestao.reduce((sum, h) => sum + (h.novas_matriculas || 0), 0) / mesesAnalisados;
-          }
+          const mediaExperimentais = 0;
+          const mediaMatriculas = 0;
 
           // Calcular taxas de conversão a partir dos dados históricos.
           // Exp -> Mat permanece bloqueada como KPI oficial: não alimentar simulador
           // com snapshot legado até a regra canônica de presença/vínculo fechar.
-          let taxaConversaoLeadExp = 60; // default
+          const taxaConversaoLeadExp = 0;
           const taxaConversaoExpMat = 0;
-          
-          if (historicoComercial && historicoComercial.length > 0) {
-            // Usar as taxas já calculadas na view (média das taxas mensais)
-            const taxasLeadExp = historicoComercial.map(h => parseFloat(h.taxa_lead_exp) || 0);
-            taxaConversaoLeadExp = taxasLeadExp.reduce((a, b) => a + b, 0) / taxasLeadExp.length;
-          }
           
           const taxaConversaoTotal = 0;
           
