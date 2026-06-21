@@ -11,6 +11,7 @@ import {
   Link2,
   Loader2,
   RefreshCw,
+  Search,
   UserX,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -81,6 +82,16 @@ interface ConciliacaoPayload {
   items?: ConciliacaoItem[];
 }
 
+interface AlunoOpcao {
+  id: number;
+  nome: string;
+  telefone: string | null;
+  responsavel_telefone: string | null;
+  status: string | null;
+  cursos?: { nome?: string | null } | null;
+  unidades?: { codigo?: string | null } | null;
+}
+
 const resumoVazio: Required<ConciliacaoResumo> = {
   experimentais_agendadas: 0,
   experimentais_realizadas_confirmadas: 0,
@@ -146,6 +157,10 @@ function formatarTelefone(telefone: string | null) {
   const primeira = digitos.length === 11 ? digitos.slice(2, 7) : digitos.slice(2, 6);
   const segunda = digitos.length === 11 ? digitos.slice(7) : digitos.slice(6);
   return `(${ddd}) ${primeira}-${segunda}`;
+}
+
+function limparBuscaAluno(valor: string) {
+  return valor.replace(/[()',%_*]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 function getEtapaStyle(etapa: string) {
@@ -274,6 +289,10 @@ export function ComercialConciliacaoExperimentais({
   const [itemEmDecisao, setItemEmDecisao] = useState<ConciliacaoItem | null>(null);
   const [observacao, setObservacao] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [buscaAluno, setBuscaAluno] = useState('');
+  const [buscandoAluno, setBuscandoAluno] = useState(false);
+  const [opcoesAluno, setOpcoesAluno] = useState<AlunoOpcao[]>([]);
+  const [alunoSelecionado, setAlunoSelecionado] = useState<AlunoOpcao | null>(null);
 
   const carregar = async () => {
     setLoading(true);
@@ -309,23 +328,81 @@ export function ComercialConciliacaoExperimentais({
   const abrirDecisao = (item: ConciliacaoItem) => {
     setItemEmDecisao(item);
     setObservacao('');
+    setBuscaAluno(item.nome_aluno || item.lead_nome || '');
+    setOpcoesAluno([]);
+    setAlunoSelecionado(null);
   };
 
   const fecharDecisao = () => {
     if (salvando) return;
     setItemEmDecisao(null);
     setObservacao('');
+    setBuscaAluno('');
+    setOpcoesAluno([]);
+    setAlunoSelecionado(null);
+  };
+
+  const buscarAlunos = async () => {
+    if (!itemEmDecisao) return;
+
+    const termo = limparBuscaAluno(buscaAluno);
+    const digitos = buscaAluno.replace(/\D/g, '');
+
+    if (termo.length < 2 && digitos.length < 4) {
+      toast.error('Digite pelo menos 2 letras do nome ou 4 numeros do telefone.');
+      return;
+    }
+
+    setBuscandoAluno(true);
+
+    try {
+      const filtros = [];
+      if (termo.length >= 2) {
+        filtros.push(`nome.ilike.%${termo}%`);
+        filtros.push(`telefone.ilike.%${termo}%`);
+        filtros.push(`responsavel_telefone.ilike.%${termo}%`);
+      }
+      if (digitos.length >= 4) {
+        filtros.push(`telefone.ilike.%${digitos}%`);
+        filtros.push(`responsavel_telefone.ilike.%${digitos}%`);
+      }
+
+      let query = supabase
+        .from('alunos')
+        .select('id, nome, telefone, responsavel_telefone, status, cursos:curso_id(nome), unidades:unidade_id(codigo)')
+        .or(filtros.join(','))
+        .order('nome', { ascending: true })
+        .limit(8);
+
+      const unidadeFiltro = normalizarUnidade(unidadeId);
+      if (unidadeFiltro) {
+        query = query.eq('unidade_id', unidadeFiltro);
+      }
+
+      const { data, error: queryError } = await query;
+      if (queryError) throw queryError;
+
+      setOpcoesAluno((data || []) as AlunoOpcao[]);
+      if (!data || data.length === 0) {
+        toast.info('Nenhum aluno encontrado nesta busca.');
+      }
+    } catch (err: any) {
+      toast.error(err?.message || 'Erro ao buscar aluno');
+      setOpcoesAluno([]);
+    } finally {
+      setBuscandoAluno(false);
+    }
   };
 
   const salvarDecisao = async (acao: AcaoConciliacao) => {
     if (!itemEmDecisao) return;
 
     const alunoIdDecidido = acao.usarAlunoSugerido
-      ? itemEmDecisao.aluno_id || itemEmDecisao.aluno_sugerido_id || null
+      ? alunoSelecionado?.id || itemEmDecisao.aluno_id || itemEmDecisao.aluno_sugerido_id || null
       : null;
 
     if (acao.usarAlunoSugerido && !alunoIdDecidido) {
-      toast.error('Esta decisao precisa de aluno vinculado ou sugerido. Marque como responsavel/familia ou revisar depois.');
+      toast.error('Esta decisao precisa de um aluno escolhido. Busque e selecione o aluno correto.');
       return;
     }
 
@@ -356,6 +433,8 @@ export function ComercialConciliacaoExperimentais({
               status_operacional: itemEmDecisao.status_operacional,
               data_experimental: itemEmDecisao.data_experimental,
               horario_experimental: itemEmDecisao.horario_experimental,
+              aluno_selecionado_id: alunoSelecionado?.id || null,
+              aluno_selecionado_nome: alunoSelecionado?.nome || null,
             },
             updated_at: new Date().toISOString(),
           },
@@ -367,6 +446,9 @@ export function ComercialConciliacaoExperimentais({
       toast.success('Decisao salva. A fila foi atualizada.');
       setItemEmDecisao(null);
       setObservacao('');
+      setBuscaAluno('');
+      setOpcoesAluno([]);
+      setAlunoSelecionado(null);
       await carregar();
     } catch (err: any) {
       toast.error(err?.message || 'Erro ao salvar decisao humana');
@@ -629,6 +711,83 @@ export function ComercialConciliacaoExperimentais({
                 )}
               </div>
 
+              <div className="rounded-xl border border-slate-700/70 bg-slate-900/50 p-4">
+                <div className="flex flex-col gap-3 md:flex-row md:items-end">
+                  <div className="flex-1">
+                    <label className="text-sm font-semibold text-slate-200">Buscar aluno no cadastro</label>
+                    <input
+                      value={buscaAluno}
+                      onChange={(event) => {
+                        setBuscaAluno(event.target.value);
+                        setAlunoSelecionado(null);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') {
+                          event.preventDefault();
+                          buscarAlunos();
+                        }
+                      }}
+                      placeholder="Digite nome ou telefone do aluno/responsavel"
+                      className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 outline-none focus:border-cyan-400/70"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={buscarAlunos}
+                    disabled={buscandoAluno}
+                    className="inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-4 py-2 text-sm font-semibold text-cyan-100 hover:bg-cyan-500/20 disabled:opacity-50"
+                  >
+                    {buscandoAluno ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+                    Buscar
+                  </button>
+                </div>
+
+                {alunoSelecionado && (
+                  <div className="mt-3 rounded-lg border border-emerald-400/30 bg-emerald-500/10 p-3">
+                    <p className="text-xs font-semibold text-emerald-200">Aluno escolhido para esta decisao</p>
+                    <p className="text-sm font-semibold text-emerald-50 mt-1">
+                      {alunoSelecionado.nome}
+                      <span className="font-normal text-emerald-100/70"> ID {alunoSelecionado.id}</span>
+                    </p>
+                  </div>
+                )}
+
+                {opcoesAluno.length > 0 && (
+                  <div className="mt-3 grid gap-2">
+                    {opcoesAluno.map((aluno) => (
+                      <button
+                        key={aluno.id}
+                        type="button"
+                        onClick={() => setAlunoSelecionado(aluno)}
+                        className={cn(
+                          'rounded-lg border px-3 py-2 text-left transition',
+                          alunoSelecionado?.id === aluno.id
+                            ? 'border-emerald-400/50 bg-emerald-500/10'
+                            : 'border-slate-700 bg-slate-950/60 hover:border-cyan-400/40 hover:bg-slate-800/70',
+                        )}
+                      >
+                        <div className="flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+                          <div>
+                            <p className="text-sm font-semibold text-slate-100">{aluno.nome}</p>
+                            <p className="text-xs text-slate-500">
+                              ID {aluno.id} | {aluno.status || 'sem status'} | {aluno.unidades?.codigo || 'sem unidade'}
+                            </p>
+                          </div>
+                          <div className="text-xs text-slate-400 md:text-right">
+                            <p>{formatarTelefone(aluno.telefone)}</p>
+                            {aluno.cursos?.nome && <p>{aluno.cursos.nome}</p>}
+                          </div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <p className="mt-3 text-xs text-slate-500">
+                  Use isto quando o sistema mostrar "Sem aluno sugerido" ou quando o aluno sugerido nao for o cadastro correto.
+                </p>
+              </div>
+
               <div>
                 <label className="text-sm font-semibold text-slate-200">Observacao opcional</label>
                 <Textarea
@@ -642,7 +801,7 @@ export function ComercialConciliacaoExperimentais({
               <div className="grid gap-3 md:grid-cols-2">
                 {acoesConciliacao.map((acao) => {
                   const Icon = acao.icon;
-                  const bloqueadaSemAluno = acao.usarAlunoSugerido && !(itemEmDecisao.aluno_id || itemEmDecisao.aluno_sugerido_id);
+                  const bloqueadaSemAluno = acao.usarAlunoSugerido && !(alunoSelecionado?.id || itemEmDecisao.aluno_id || itemEmDecisao.aluno_sugerido_id);
                   return (
                     <button
                       key={acao.decisao}
@@ -657,7 +816,7 @@ export function ComercialConciliacaoExperimentais({
                         <Icon className="w-5 h-5 mt-0.5" />
                         <div>
                           <p className="font-semibold">{acao.label}</p>
-                          <p className="text-xs opacity-80 mt-1">{bloqueadaSemAluno ? 'Precisa de aluno vinculado/sugerido.' : acao.descricao}</p>
+                          <p className="text-xs opacity-80 mt-1">{bloqueadaSemAluno ? 'Busque e selecione o aluno correto acima.' : acao.descricao}</p>
                         </div>
                       </div>
                     </button>

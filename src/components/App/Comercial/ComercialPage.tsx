@@ -3417,7 +3417,7 @@ export function ComercialPage() {
       <PageTabs
         tabs={[
           { id: 'lancamentos' as const, label: 'Lançamentos', shortLabel: 'Lanç.', icon: Zap, activeGradient: 'from-cyan-500 to-blue-500', activeShadow: 'shadow-cyan-500/20' },
-          { id: 'conciliacao' as const, label: 'Conciliação', shortLabel: 'Conciliar', icon: ClipboardCheck, activeGradient: 'from-amber-500 to-cyan-500', activeShadow: 'shadow-amber-500/20' },
+          { id: 'conciliacao' as const, label: 'Conciliação', shortLabel: 'Conciliar', icon: ClipboardCheck, activeGradient: 'from-amber-500 to-amber-500', activeShadow: 'shadow-amber-500/20' },
           { id: 'programa' as const, label: 'Programa Matriculador+ LA', shortLabel: 'Matriculador+', icon: Trophy, activeGradient: 'from-yellow-500 to-orange-500', activeShadow: 'shadow-yellow-500/20' },
           { id: 'tarefas' as const, label: 'Tarefas Rápidas', shortLabel: 'Tarefas', icon: CheckSquare, activeGradient: 'from-emerald-500 to-teal-500', activeShadow: 'shadow-emerald-500/20' },
         ]}
