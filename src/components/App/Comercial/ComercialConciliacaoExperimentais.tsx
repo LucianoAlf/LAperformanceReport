@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ComponentType } from 'react';
+import { useEffect, useState, type ComponentType } from 'react';
 import {
   AlertTriangle,
   Ban,
@@ -306,13 +306,6 @@ export function ComercialConciliacaoExperimentais({
   const resumo = { ...resumoVazio, ...(payload?.resumo || {}) };
   const items = payload?.items || [];
 
-  const grupos = useMemo(() => {
-    return items.reduce<Record<string, number>>((acc, item) => {
-      acc[item.etapa_canonica] = (acc[item.etapa_canonica] || 0) + 1;
-      return acc;
-    }, {});
-  }, [items]);
-
   const abrirDecisao = (item: ConciliacaoItem) => {
     setItemEmDecisao(item);
     setObservacao('');
@@ -426,8 +419,8 @@ export function ComercialConciliacaoExperimentais({
               </div>
               <h2 className="text-2xl font-bold text-white">Conciliação de Experimentais</h2>
               <p className="text-sm text-slate-300 mt-1 max-w-3xl">
-                Visao do funil experimental por etapa: agendada, realizada confirmada, falta,
-                matricula direta e pendencias de vinculo/presenca. As decisoes gravam somente na camada humana.
+                Visao do funil experimental por etapa. A fila mostra apenas casos que precisam de decisao humana;
+                as decisoes gravam somente na camada humana.
               </p>
             </div>
             <button
@@ -441,7 +434,7 @@ export function ComercialConciliacaoExperimentais({
         </div>
 
         <div className="p-6 space-y-6">
-          <div className="grid grid-cols-2 lg:grid-cols-4 xl:grid-cols-7 gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
             <ResumoCard
               icon={Calendar}
               label="Agendadas"
@@ -462,15 +455,9 @@ export function ComercialConciliacaoExperimentais({
             />
             <ResumoCard
               icon={AlertTriangle}
-              label="Sem presenca"
-              value={resumo.realizadas_sem_presenca_confirmada}
+              label="A conciliar"
+              value={items.length}
               tone="sky"
-            />
-            <ResumoCard
-              icon={Link2}
-              label="Pendentes"
-              value={resumo.pendentes_conciliacao}
-              tone="amber"
             />
             <ResumoCard
               icon={HelpCircle}
@@ -498,15 +485,6 @@ export function ComercialConciliacaoExperimentais({
               </div>
             </div>
           </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
-            {Object.entries(grupos).map(([etapa, total]) => (
-              <div key={etapa} className={cn('rounded-xl border px-4 py-3', getEtapaStyle(etapa))}>
-                <p className="text-xs opacity-80">{etapaLabel[etapa] || etapa}</p>
-                <p className="text-2xl font-bold">{total}</p>
-              </div>
-            ))}
-          </div>
         </div>
       </section>
 
@@ -515,7 +493,8 @@ export function ComercialConciliacaoExperimentais({
           <div>
             <h3 className="text-lg font-bold text-white">Fila de acao</h3>
             <p className="text-sm text-slate-400">
-              {items.length} caso(s) que precisam de uma decisao humana para sair da divergencia.
+              {items.length} caso(s) que precisam de decisao humana. Agendadas, faltas e confirmadas sem divergencia
+              ficam no resumo, nao entram nesta fila.
             </p>
           </div>
         </div>
