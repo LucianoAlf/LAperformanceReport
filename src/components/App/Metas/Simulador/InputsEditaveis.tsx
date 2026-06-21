@@ -135,11 +135,11 @@ export function InputsEditaveis({ inputs, historico, tipoObjetivo, onChange }: I
           </div>
         </div>
 
-        {/* Conversão Total (somente leitura) */}
+        {/* Lead→Mat simulado (somente leitura) */}
         <div>
           <label className="text-xs text-slate-500 mb-1 flex items-center gap-1">
             <Percent className="w-3 h-3" />
-            Conversão simulada
+            Lead→Mat simulado
           </label>
           <div className="bg-slate-700/50 border border-slate-600 rounded-lg p-2 text-center">
             <span className="text-lg font-bold text-cyan-400">

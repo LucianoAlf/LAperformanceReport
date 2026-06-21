@@ -327,7 +327,7 @@ function gerarAlertas(
     });
   }
 
-  // 5. Alerta de Taxa de Conversão (usar taxa dos inputs, não do histórico)
+  // 5. Alerta de taxa simulada do funil (usar taxa dos inputs, não do histórico)
   const taxaConversaoAtual = (taxaLeadExp / 100) * (taxaExpMat / 100) * 100;
   const taxaConversaoHistorica = historico.taxaConversaoTotal;
   
@@ -337,9 +337,9 @@ function gerarAlertas(
       tipo: 'aviso',
       categoria: 'conversao',
       icone: 'percent',
-      titulo: 'Taxa de conversão pode melhorar',
-      mensagem: `Conversão total de ${taxaConversaoAtual.toFixed(1)}% está abaixo do ideal (> 20%).`,
-      sugestao: 'Treine a equipe comercial para aumentar a conversão.',
+      titulo: 'Taxa simulada do funil pode melhorar',
+      mensagem: `Lead→Matrícula simulado de ${taxaConversaoAtual.toFixed(1)}% está abaixo do ideal (> 20%).`,
+      sugestao: 'Treine a equipe comercial para aumentar Lead→Experimental e matrículas.',
       valorAtual: taxaConversaoAtual,
       valorNecessario: 20,
     });
@@ -349,8 +349,8 @@ function gerarAlertas(
       tipo: 'sucesso',
       categoria: 'conversao',
       icone: 'check-circle',
-      titulo: 'Taxa de conversão adequada',
-      mensagem: `Conversão total de ${taxaConversaoAtual.toFixed(1)}% está em um bom nível.`,
+      titulo: 'Taxa simulada do funil adequada',
+      mensagem: `Lead→Matrícula simulado de ${taxaConversaoAtual.toFixed(1)}% está em um bom nível.`,
       valorAtual: taxaConversaoAtual,
     });
   }

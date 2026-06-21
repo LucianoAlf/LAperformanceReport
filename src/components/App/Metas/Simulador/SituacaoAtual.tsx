@@ -179,7 +179,7 @@ export function SituacaoAtual({
               <div className="text-white font-medium">{historico.mediaLeads}/mês</div>
             </div>
             <div className="text-center">
-              <div className="text-slate-400">Conversão</div>
+              <div className="text-slate-400">Lead→Mat</div>
               <div className="text-white font-medium">{formatarPercentual(historico.taxaConversaoTotal)}</div>
             </div>
           </div>
