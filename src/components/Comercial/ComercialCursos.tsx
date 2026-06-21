@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { useCursosData } from '../../hooks/useCursosData';
-import { useComercialData } from '../../hooks/useComercialData';
 import { UnidadeComercial } from '../../types/comercial';
 import { Music, Mic, Guitar } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
@@ -9,7 +8,6 @@ import { ChartTooltip } from './ChartTooltip';
 export function ComercialCursos() {
   const [unidade, setUnidade] = useState<UnidadeComercial>('Consolidado');
   const { cursos, loading } = useCursosData(2025, unidade);
-  const { kpis } = useComercialData(2025, unidade);
 
   if (loading) {
     return (
@@ -24,12 +22,7 @@ export function ComercialCursos() {
   
   const cores = ['#10b981', '#06b6d4', '#8b5cf6', '#f59e0b', '#ef4444', '#ec4899', '#14b8a6', '#6366f1', '#84cc16', '#f97316'];
 
-  // Fonte mista em validação: cursos_matriculados + dados_comerciais.
-  // Não tratar distribuição por curso como fonte canônica comercial até migração v2.
-  const totalKids = kpis?.matriculasLAMK || 0;
-  const totalAdultos = kpis?.matriculasEMLA || 0;
-  const totalGeral = totalKids + totalAdultos;
-
+  // Diagnóstico de cursos, sem usar dados_comerciais como fonte comercial.
   // Nomes de cursos Kids para filtrar top cursos
   const cursosKidsNomes = ['Musicalização', 'Musicalização Bebê', 'Musicalização Bebês', 'Musicalização Infantil', 'Musicalização Preparatória'];
   
@@ -40,6 +33,14 @@ export function ComercialCursos() {
   const topCursosAdultos = cursos
     .filter(c => !cursosKidsNomes.some(k => c.curso.includes(k)))
     .slice(0, 3);
+
+  const totalKids = cursos
+    .filter(c => cursosKidsNomes.some(k => c.curso.includes(k)))
+    .reduce((sum, c) => sum + c.total, 0);
+  const totalAdultos = cursos
+    .filter(c => !cursosKidsNomes.some(k => c.curso.includes(k)))
+    .reduce((sum, c) => sum + c.total, 0);
+  const totalGeral = totalKids + totalAdultos;
 
   const pieData = top10.map((c) => ({
     name: c.curso,
@@ -57,7 +58,7 @@ export function ComercialCursos() {
           Cursos Mais <span className="text-emerald-400">Procurados</span>
         </h1>
         <p className="text-gray-400">
-          Distribuição por instrumento/curso em 2025; métrica em validação semântica
+          Distribuição por instrumento/curso em 2025; diagnóstico, não conversão comercial canônica
           {unidade !== 'Consolidado' && (
             <span className="text-emerald-400"> - {unidade}</span>
           )}
@@ -100,7 +101,7 @@ export function ComercialCursos() {
             </div>
           </div>
           <div className="text-3xl font-grotesk font-bold text-white mb-2">{totalAdultos}</div>
-          <div className="text-sm text-gray-400">matrículas ({totalGeral > 0 ? ((totalAdultos / totalGeral) * 100).toFixed(0) : 0}%)</div>
+          <div className="text-sm text-gray-400">registros de curso ({totalGeral > 0 ? ((totalAdultos / totalGeral) * 100).toFixed(0) : 0}%)</div>
           <div className="mt-4 space-y-2">
             <div className="text-sm text-gray-300">Top Cursos:</div>
             {topCursosAdultos.map((c, idx) => (
@@ -126,7 +127,7 @@ export function ComercialCursos() {
             </div>
           </div>
           <div className="text-3xl font-grotesk font-bold text-white mb-2">{totalKids}</div>
-          <div className="text-sm text-gray-400">matrículas ({totalGeral > 0 ? ((totalKids / totalGeral) * 100).toFixed(0) : 0}%)</div>
+          <div className="text-sm text-gray-400">registros de curso ({totalGeral > 0 ? ((totalKids / totalGeral) * 100).toFixed(0) : 0}%)</div>
           <div className="mt-4 space-y-2">
             <div className="text-sm text-gray-300">Top Cursos:</div>
             {topCursosKids.map((c, idx) => (
@@ -162,7 +163,7 @@ export function ComercialCursos() {
                 </Pie>
                 <Tooltip 
                   cursor={{fill: '#1e293b'}}
-                  content={<ChartTooltip suffix=" matrículas" />}
+                  content={<ChartTooltip suffix=" registros" />}
                 />
                 <Legend />
               </PieChart>
