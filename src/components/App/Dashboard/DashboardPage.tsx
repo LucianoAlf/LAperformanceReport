@@ -1336,12 +1336,12 @@ export function DashboardPage() {
         } : undefined}
       />
 
-      {/* Modal Taxa Conversão */}
+      {/* Modal Taxa Conversão - legado */}
       <ModalDetalheKPI
         open={modalConversao}
         onClose={() => setModalConversao(false)}
-        titulo={`Taxa de Conversão (${labelPeriodo})`}
-        descricao={`Leads que fizeram aula experimental no período — ${unidade === 'todos' ? 'Consolidado' : 'Unidade selecionada'}. Numerador = matricularam, Denominador = total.`}
+        titulo={`Taxa Exp → Mat bloqueada (${labelPeriodo})`}
+        descricao={`Diagnóstico legado: não usar como KPI oficial. Aguardando regra canônica de vínculo lead → aluno → presença experimental individual.`}
         dados={dadosModalConversao}
         colunas={[
           { key: 'nome', label: 'Aluno' },
@@ -1359,12 +1359,11 @@ export function DashboardPage() {
           const total = dadosModalConversao.length;
           const matriculou = dadosModalConversao.filter(d => d._matriculou).length;
           const naoMatriculou = total - matriculou;
-          const taxa = total > 0 ? (matriculou / total) * 100 : 0;
           return [
-            { label: 'Fizeram Exp', valor: total, icone: <Calendar size={14} />, cor: 'text-sky-400', destaque: true },
+            { label: 'Exp. legado', valor: total, icone: <Calendar size={14} />, cor: 'text-sky-400', destaque: true },
             { label: 'Matricularam', valor: matriculou, icone: <GraduationCap size={14} />, cor: 'text-emerald-400' },
             { label: 'Não Matricularam', valor: naoMatriculou, icone: <Users size={14} />, cor: 'text-amber-400' },
-            { label: 'Taxa', valor: `${taxa.toFixed(1)}%`, icone: <Percent size={14} />, cor: 'text-violet-400' },
+            { label: 'Taxa oficial', valor: 'Bloqueada', icone: <Percent size={14} />, cor: 'text-yellow-300' },
           ];
         })()}
         distribuicao={unidade === 'todos' ? {
