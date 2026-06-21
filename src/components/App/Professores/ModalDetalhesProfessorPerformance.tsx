@@ -740,7 +740,7 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
                 <p className={`text-xl font-bold ${getMetricaColor(professor.taxa_conversao, { critico: 70, atencao: 90 })}`}>
                   {professor.taxa_conversao.toFixed(0)}%
                 </p>
-                <p className="text-xs text-slate-400">Conversão</p>
+                <p className="text-xs text-yellow-300">Conversão (legado)</p>
                 {(professor.matriculas_diretas ?? 0) > 0 && (
                   <p className="text-[10px] text-blue-400/70 mt-0.5">+{professor.matriculas_diretas} direta{(professor.matriculas_diretas ?? 0) > 1 ? 's' : ''}</p>
                 )}
@@ -1044,8 +1044,8 @@ export function ModalDetalhesProfessorPerformance({ open, onClose, professor, co
                     </div>
                     <div className="bg-cyan-500/10 rounded-lg px-3 py-2 text-center">
                       <p className="text-cyan-400 text-lg font-bold">{convRate}%</p>
-                      <p className="text-slate-400 text-xs">Conversão</p>
-                      <p className="text-slate-500 text-[9px] mt-0.5">pós-experimental</p>
+                      <p className="text-yellow-300 text-xs">Conversão (legado)</p>
+                      <p className="text-slate-500 text-[9px] mt-0.5">diagnóstico operacional</p>
                     </div>
                   </>
                 );

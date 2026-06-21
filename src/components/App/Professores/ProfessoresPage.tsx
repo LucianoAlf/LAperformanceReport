@@ -722,11 +722,10 @@ export function ProfessoresPage() {
 
               {/* Conversão */}
               <div className="space-y-3">
-                <p className="text-sm font-semibold text-white">Conversão</p>
+                <p className="text-sm font-semibold text-white">Conversão (legado)</p>
                 <div className="space-y-2 text-sm">
-                  <p className="flex items-center gap-2 text-slate-300"><span className="w-2.5 h-2.5 rounded-full bg-rose-500"></span> &lt;70% Ruim</p>
-                  <p className="flex items-center gap-2 text-slate-300"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span> 70-90% Bom</p>
-                  <p className="flex items-center gap-2 text-slate-300"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> &gt;90% Mestre</p>
+                  <p className="flex items-center gap-2 text-yellow-300"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span> Diagnóstico operacional</p>
+                  <p className="flex items-center gap-2 text-slate-300"><span className="w-2.5 h-2.5 rounded-full bg-slate-500"></span> Não usar como KPI oficial</p>
                 </div>
               </div>
 

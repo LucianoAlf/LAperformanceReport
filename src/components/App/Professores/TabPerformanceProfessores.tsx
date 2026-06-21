@@ -1247,10 +1247,9 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
             <p className="text-green-400">🟢 &gt;95% Excelente</p>
           </div>
           <div>
-            <p className="text-slate-300 font-medium">Conversão</p>
-            <p className="text-red-400">🔴 &lt;70% Ruim</p>
-            <p className="text-yellow-400">🟡 70-90% Bom</p>
-            <p className="text-green-400">🟢 &gt;90% Mestre</p>
+            <p className="text-slate-300 font-medium">Conversão (legado)</p>
+            <p className="text-yellow-300">Diagnóstico operacional</p>
+            <p className="text-slate-400">Não usar como KPI oficial</p>
           </div>
           <div>
             <p className="text-slate-300 font-medium">Presença</p>
