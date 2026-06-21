@@ -167,13 +167,10 @@ export function ComercialVisaoGeral({ ano, unidade, onAnoChange, onUnidadeChange
           {/* Taxa Exp→Mat */}
           <KPICard
             icon={Target}
-            iconColor="text-green-400"
-            iconBg="bg-green-500/20"
-            value={`${kpis.taxaExpMat.toFixed(1)}%`}
-            label="Taxa Experimental → Matrícula"
-            meta={75}
-            metaLabel="Meta %"
-            isPercent
+            iconColor="text-yellow-300"
+            iconBg="bg-yellow-500/20"
+            value="Bloqueada"
+            label="Taxa Exp→Mat em validação"
           />
 
           {/* Ticket Médio */}

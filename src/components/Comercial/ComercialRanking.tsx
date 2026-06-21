@@ -20,7 +20,6 @@ export function ComercialRanking() {
   const maxConversao = Math.max(kpisCG.taxaConversaoTotal, kpisRec.taxaConversaoTotal, kpisBarra.taxaConversaoTotal);
   const maxTicket = Math.max(kpisCG.ticketMedioParcelas, kpisRec.ticketMedioParcelas, kpisBarra.ticketMedioParcelas);
   const maxLeadExp = Math.max(kpisCG.taxaLeadExp, kpisRec.taxaLeadExp, kpisBarra.taxaLeadExp);
-  const maxExpMat = Math.max(kpisCG.taxaExpMat, kpisRec.taxaExpMat, kpisBarra.taxaExpMat);
   
   const radarData = [
     {
@@ -34,12 +33,6 @@ export function ComercialRanking() {
       'Campo Grande': (kpisCG.taxaLeadExp / maxLeadExp) * 100,
       'Recreio': (kpisRec.taxaLeadExp / maxLeadExp) * 100,
       'Barra': (kpisBarra.taxaLeadExp / maxLeadExp) * 100,
-    },
-    {
-      metric: 'Exp→Mat',
-      'Campo Grande': (kpisCG.taxaExpMat / maxExpMat) * 100,
-      'Recreio': (kpisRec.taxaExpMat / maxExpMat) * 100,
-      'Barra': (kpisBarra.taxaExpMat / maxExpMat) * 100,
     },
     {
       metric: 'Ticket Médio',
@@ -98,8 +91,6 @@ export function ComercialRanking() {
   const melhorConversaoNome = rankings.conversao[0].nome;
   const melhorLeadExp = kpisRec.taxaLeadExp >= kpisCG.taxaLeadExp && kpisRec.taxaLeadExp >= kpisBarra.taxaLeadExp ? 'Recreio' :
                         kpisCG.taxaLeadExp >= kpisBarra.taxaLeadExp ? 'C. Grande' : 'Barra';
-  const melhorExpMat = kpisCG.taxaExpMat >= kpisRec.taxaExpMat && kpisCG.taxaExpMat >= kpisBarra.taxaExpMat ? 'C. Grande' :
-                       kpisRec.taxaExpMat >= kpisBarra.taxaExpMat ? 'Recreio' : 'Barra';
   const melhorTicket = rankings.ticket[0].nome;
 
   return (
@@ -114,6 +105,9 @@ export function ComercialRanking() {
         </h1>
         <p className="text-gray-400">
           Quem performou melhor em cada KPI comercial
+        </p>
+        <p className="mt-2 text-sm text-yellow-300">
+          Taxa Exp→Mat removida deste ranking até fechar presença individual + vínculo canônico.
         </p>
       </div>
 
@@ -296,12 +290,7 @@ export function ComercialRanking() {
               </tr>
               <tr className="border-b border-slate-700/50">
                 <td className="py-2 px-3 text-gray-300">Exp→Mat</td>
-                <td className="text-center text-white py-2 px-3">{kpisBarra.taxaExpMat.toFixed(1)}%</td>
-                <td className="text-center text-white py-2 px-3">{kpisCG.taxaExpMat.toFixed(1)}%</td>
-                <td className="text-center text-white py-2 px-3">{kpisRec.taxaExpMat.toFixed(1)}%</td>
-                <td className="text-center py-2 px-3">
-                  <span className="bg-emerald-500/20 text-emerald-500 px-2 py-1 rounded text-xs">{melhorExpMat}</span>
-                </td>
+                <td className="text-center text-yellow-300 py-2 px-3" colSpan={4}>Bloqueada - aguardando regra canônica</td>
               </tr>
               <tr className="border-b border-slate-700/50">
                 <td className="py-2 px-3 text-gray-300">Ticket Médio</td>

@@ -24,9 +24,7 @@ export function ComercialFunil({ ano, unidade, onAnoChange, onUnidadeChange }: P
   }
 
   const perdasLeadExp = kpis.totalLeads - kpis.aulasExperimentais;
-  const perdasExpMat = kpis.aulasExperimentais - kpis.novasMatriculas;
   const taxaPerdasLeadExp = ((perdasLeadExp / kpis.totalLeads) * 100).toFixed(1);
-  const taxaPerdasExpMat = ((perdasExpMat / kpis.aulasExperimentais) * 100).toFixed(1);
 
   const unidadesData = [
     { nome: 'Campo Grande', kpis: kpisCG, cor: 'cyan' },
@@ -135,9 +133,9 @@ export function ComercialFunil({ ano, unidade, onAnoChange, onUnidadeChange }: P
           {/* Seta + Taxa */}
           <div className="flex items-center gap-4 py-2">
             <div className="text-gray-500">↓</div>
-            <div className="bg-slate-700/50 px-4 py-1 rounded-full">
-              <span className="text-emerald-400 font-semibold">{kpis.taxaExpMat.toFixed(1)}%</span>
-              <span className="text-gray-400 text-sm ml-2">converteram</span>
+            <div className="bg-yellow-500/10 border border-yellow-500/30 px-4 py-1 rounded-full">
+              <span className="text-yellow-300 font-semibold">BLOQUEADA</span>
+              <span className="text-gray-400 text-sm ml-2">aguarda presença/vínculo</span>
             </div>
             <div className="text-gray-500">↓</div>
           </div>
@@ -196,15 +194,9 @@ export function ComercialFunil({ ano, unidade, onAnoChange, onUnidadeChange }: P
             <div>
               <div className="flex justify-between text-sm mb-1">
                 <span className="text-gray-400">Experimental → Matrícula</span>
-                <span className="text-red-400 font-medium">{perdasExpMat.toLocaleString('pt-BR')} perdidos</span>
+                <span className="text-yellow-300 font-medium">BLOQUEADA</span>
               </div>
-              <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-red-500 rounded-full"
-                  style={{ width: `${taxaPerdasExpMat}%` }}
-                />
-              </div>
-              <div className="text-xs text-gray-500 mt-1">{taxaPerdasExpMat}% das experimentais não matricularam</div>
+              <div className="text-xs text-gray-500 mt-1">Não calcular perdas Exp→Mat até presença individual + vínculo canônico.</div>
             </div>
           </div>
         </div>
@@ -230,15 +222,11 @@ export function ComercialFunil({ ano, unidade, onAnoChange, onUnidadeChange }: P
                 <div className="text-xs text-gray-500">experimentais</div>
               </div>
               <div className="bg-slate-800/50 rounded-lg p-3">
-                <div className="text-xl font-bold text-emerald-400">
-                  +{Math.round((kpis.totalLeads * 0.15 - kpis.aulasExperimentais) * (kpis.taxaExpMat / 100))}
-                </div>
+                <div className="text-xl font-bold text-yellow-300">Bloqueado</div>
                 <div className="text-xs text-gray-500">matrículas</div>
               </div>
               <div className="bg-slate-800/50 rounded-lg p-3">
-                <div className="text-xl font-bold text-emerald-400">
-                  +R$ {Math.round((kpis.totalLeads * 0.15 - kpis.aulasExperimentais) * (kpis.taxaExpMat / 100) * kpis.ticketMedioParcelas / 1000)}k
-                </div>
+                <div className="text-xl font-bold text-yellow-300">Bloqueado</div>
                 <div className="text-xs text-gray-500">faturamento/ano</div>
               </div>
             </div>
@@ -284,9 +272,7 @@ export function ComercialFunil({ ano, unidade, onAnoChange, onUnidadeChange }: P
                     </span>
                   </td>
                   <td className="text-right py-4 px-4">
-                    <span className={u.kpis.taxaExpMat >= 70 ? 'text-emerald-400' : u.kpis.taxaExpMat >= 60 ? 'text-yellow-400' : 'text-red-400'}>
-                      {u.kpis.taxaExpMat.toFixed(1)}%
-                    </span>
+                    <span className="text-yellow-300">Bloqueada</span>
                   </td>
                   <td className="text-right py-4 px-4">
                     <span className={`font-bold ${u.kpis.taxaConversaoTotal === melhorConversao ? 'text-emerald-400' : 'text-white'}`}>
