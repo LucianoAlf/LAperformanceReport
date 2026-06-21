@@ -953,10 +953,10 @@ export function DashboardPage() {
           />
           <KPICard
             icon={Lock}
-            label="Taxa Exp → Mat"
+            label="Exp->Mat bloqueada"
             tooltip="KPI bloqueado: aguarda regra canônica de vínculo lead → aluno → presença experimental individual."
             value="Bloqueada"
-            subvalue="Aguardando regra canônica"
+            subvalue="KPI oficial bloqueado"
             variant="amber"
           />
           <KPICard

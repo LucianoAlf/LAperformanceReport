@@ -1498,7 +1498,7 @@ function HistoricoMensal({ historico, mediaGrupo, config, metaVolume, metaTicket
                   <th className="text-center py-3">Exp.</th>
                   <th className="text-center py-3">Mat.</th>
                   <th className="text-center py-3">Taxa Showup</th>
-                  <th className="text-center py-3">Exp→Mat</th>
+                  <th className="text-center py-3">Exp-&gt;Mat bloqueada</th>
                   <th className="text-center py-3 bg-yellow-500/10">Taxa Geral</th>
                   <th className="text-center py-3">Ticket</th>
                 </tr>

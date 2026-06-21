@@ -111,21 +111,21 @@ export function AlertasComercial({ unidadeId, ano, mes, resumoLeads, totalMatric
         });
       }
 
-      // Taxa de conversão
+      // Taxa Lead -> Matricula (nao confundir com Exp -> Mat, que segue bloqueada).
       if (taxaConversaoGeral >= 20) {
         alertasGerados.push({
           id: 'conversao-excelente',
           tipo: 'sucesso',
-          titulo: `Taxa de conversão de ${taxaConversaoGeral.toFixed(1)}%!`,
-          descricao: 'Conversão acima de 20% é excelente!',
+          titulo: `Taxa Lead -> Matricula de ${taxaConversaoGeral.toFixed(1)}%!`,
+          descricao: 'Conversao Lead -> Matricula acima de 20%. Exp -> Mat segue bloqueada.',
           icone: <TrendingUp className="w-5 h-5" />
         });
       } else if (taxaConversaoGeral < 10 && totalLeads > 0) {
         alertasGerados.push({
           id: 'conversao-baixa',
           tipo: 'atencao',
-          titulo: `Taxa de conversão de ${taxaConversaoGeral.toFixed(1)}%`,
-          descricao: 'Foco no follow-up e fechamento!',
+          titulo: `Taxa Lead -> Matricula de ${taxaConversaoGeral.toFixed(1)}%`,
+          descricao: 'Foco no follow-up e fechamento. Exp -> Mat segue bloqueada.',
           icone: <TrendingDown className="w-5 h-5" />
         });
       }
