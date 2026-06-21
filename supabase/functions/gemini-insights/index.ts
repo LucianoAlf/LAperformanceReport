@@ -1,5 +1,5 @@
 // Edge Function: gemini-insights
-// Gera plano de ação inteligente usando Gemini 3.0 Flash Preview
+// Gera plano de acao inteligente usando Gemini para o simulador/metas.
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
@@ -11,98 +11,74 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const SYSTEM_PROMPT = `Você é um consultor estratégico especialista em escolas de música, com profundo conhecimento em:
-- Gestão de academias e escolas de ensino artístico
-- Funil de vendas educacional (Lead → Experimental → Matrícula)
-- Retenção de alunos e redução de churn
-- Sazonalidade do mercado de educação musical
-- Marketing educacional e captação de alunos
+const TAXA_EXP_MAT_BLOQUEADA_LABEL =
+  "BLOQUEADA - aguardando regra canonica de presenca/vinculo";
+
+const SYSTEM_PROMPT = `Voce e um consultor estrategico especialista em escolas de musica, com profundo conhecimento em:
+- Gestao de academias e escolas de ensino artistico
+- Funil de vendas educacional
+- Retencao de alunos e reducao de churn
+- Sazonalidade do mercado de educacao musical
+- Marketing educacional e captacao de alunos
 
 ## CONTEXTO
-Você está analisando os dados de uma unidade da rede de escolas de música "LA Music" para gerar um plano de ação estratégico.
+Voce esta analisando os dados de uma unidade da rede LA Music para gerar um plano de acao estrategico.
 
-## PÚBLICO-ALVO DAS SUAS RECOMENDAÇÕES
-- Gestores de unidade (decisões operacionais)
-- Farmers/ADM (relacionamento e retenção)
-- Hunters/Comercial (captação e conversão)
+## PUBLICO-ALVO DAS SUAS RECOMENDACOES
+- Gestores de unidade
+- Farmers/ADM
+- Hunters/Comercial
 
-## DIRETRIZES OBRIGATÓRIAS
+## DIRETRIZES OBRIGATORIAS
+- Seja realista, pragmatico e especifico.
+- Evite sugestoes genericas como "fazer mais marketing" ou "melhorar atendimento".
+- De acoes mensuraveis, com prazo e responsavel.
+- Priorize impacto versus esforco.
+- Use linguagem direta, sem rodeios.
 
-### Tom e Estilo
-- Seja REALISTA e PRAGMÁTICO - nada de sugestões genéricas ou óbvias
-- Fuja do básico: "fazer mais marketing" ou "melhorar atendimento" são proibidos
-- Dê ações ESPECÍFICAS, MENSURÁVEIS e com PRAZO definido
-- Use linguagem direta, sem rodeios, focada em resultados
+## FOCO DOS GARGALOS
+1. Lead -> Experimental: como aumentar agendamento/show-up de forma operacional.
+2. Lead -> Matricula: como transformar volume em matriculas reais.
+3. Retencao: como reduzir churn e proteger MRR.
 
-### Análise de Dados
-- Considere a SAZONALIDADE histórica (dados fornecidos)
-- Identifique GARGALOS específicos no funil de conversão
-- Compare métricas atuais vs necessárias para atingir a meta
-- Priorize ações pelo IMPACTO vs ESFORÇO
+## BLOQUEIO COMERCIAL P02S
+- Nunca publique Taxa Experimental -> Matricula como KPI oficial.
+- Se citar essa taxa, use exatamente: ${TAXA_EXP_MAT_BLOQUEADA_LABEL}.
+- Nao gere plano de acao baseado em melhoria de Exp->Mat como taxa real.
+- Se o payload trouxer taxaExpMat, trate apenas como parametro de simulacao, nunca como resultado oficial.
 
-### Estrutura das Ações
-Para cada ação, inclua:
-1. Título claro e objetivo
-2. Impacto esperado (quantificado quando possível)
-3. Nível de esforço (Baixo/Médio/Alto)
-4. Passos específicos de execução (3-5 bullets)
-5. Meta mensurável de sucesso
-
-### Foco nos Gargalos Principais
-1. **Captação de Leads → Experimentais**: Como aumentar a taxa de conversão?
-2. **Fidelização e Retenção**: Como reduzir o churn e aumentar o LTV?
-
-### Prazos
-- **Curto prazo**: Ações para as próximas 2 semanas (quick wins)
-- **Médio prazo**: Ações para o próximo mês (estruturantes)
-- **Longo prazo**: Ações para o próximo trimestre (estratégicas)
-
-## FORMATO DE RESPOSTA (JSON)
-
-Responda APENAS com um JSON válido no seguinte formato, sem markdown ou texto adicional:
+## FORMATO DE RESPOSTA
+Responda APENAS com JSON valido, sem markdown:
 
 {
-  "diagnostico": "Análise resumida da situação atual e principais desafios (2-3 frases)",
+  "diagnostico": "Analise resumida da situacao atual e principais desafios.",
   "acoes_curto_prazo": [
     {
-      "titulo": "Nome da ação",
-      "impacto": "Descrição quantificada do impacto esperado",
-      "esforco": "Baixo|Médio|Alto",
+      "titulo": "Nome da acao",
+      "impacto": "Impacto esperado",
+      "esforco": "Baixo|Medio|Alto",
       "passos": ["Passo 1", "Passo 2", "Passo 3"],
-      "meta_sucesso": "Métrica específica de sucesso",
+      "meta_sucesso": "Metrica de sucesso",
       "responsavel": "Gestor|Farmer|Hunter"
     }
   ],
   "acoes_medio_prazo": [],
   "acoes_longo_prazo": [],
-  "insights_adicionais": [
-    "Insight 1 baseado nos dados",
-    "Insight 2 sobre sazonalidade",
-    "Insight 3 sobre oportunidades"
-  ]
+  "insights_adicionais": []
 }`;
 
 interface DadosSimulador {
-  // Situação Atual
   alunosAtual: number;
   ticketMedio: number;
   mrrAtual: number;
-  
-  // Metas
   alunosObjetivo: number;
   mrrObjetivo: number;
-  
-  // Parâmetros
   churnProjetado: number;
   taxaLeadExp: number;
   taxaExpMat: number;
-  
-  // Cálculos
   matriculasNecessarias: number;
   leadsNecessarios: number;
   evasoesProjetadas: number;
-  
-  // Histórico
   historico?: {
     mes: string;
     leads: number;
@@ -110,99 +86,93 @@ interface DadosSimulador {
     matriculas: number;
     cancelamentos: number;
   }[];
-  
-  // Alertas
   alertas?: {
     tipo: string;
     mensagem: string;
   }[];
-  
-  // Contexto
   unidadeNome?: string;
   mesAtual: number;
   anoAtual: number;
 }
 
 function montarPromptUsuario(dados: DadosSimulador): string {
-  const crescimentoPct = dados.alunosAtual > 0 
+  const crescimentoPct = dados.alunosAtual > 0
     ? ((dados.alunosObjetivo - dados.alunosAtual) / dados.alunosAtual * 100).toFixed(1)
-    : 0;
-  
-  const conversaoTotal = (dados.taxaLeadExp / 100) * (dados.taxaExpMat / 100) * 100;
-  
-  let prompt = `## DADOS DA UNIDADE: ${dados.unidadeNome || 'Unidade'}
-**Período**: ${dados.mesAtual}/${dados.anoAtual}
+    : "0";
 
-### SITUAÇÃO ATUAL
-- Alunos Pagantes: ${dados.alunosAtual}
-- Ticket Médio: R$ ${dados.ticketMedio.toFixed(2)}
-- MRR Atual: R$ ${dados.mrrAtual.toLocaleString('pt-BR')}
+  let prompt = `## DADOS DA UNIDADE: ${dados.unidadeNome || "Unidade"}
+Periodo: ${dados.mesAtual}/${dados.anoAtual}
+
+### SITUACAO ATUAL
+- Alunos pagantes: ${dados.alunosAtual}
+- Ticket medio: R$ ${dados.ticketMedio.toFixed(2)}
+- MRR atual: R$ ${dados.mrrAtual.toLocaleString("pt-BR")}
 
 ### METAS DEFINIDAS
-- Alunos Objetivo: ${dados.alunosObjetivo} (crescimento de ${crescimentoPct}%)
-- MRR Objetivo: R$ ${dados.mrrObjetivo.toLocaleString('pt-BR')}
+- Alunos objetivo: ${dados.alunosObjetivo} (crescimento de ${crescimentoPct}%)
+- MRR objetivo: R$ ${dados.mrrObjetivo.toLocaleString("pt-BR")}
 
-### PARÂMETROS DO FUNIL
-- Churn Projetado: ${dados.churnProjetado}%
-- Taxa Lead → Experimental: ${dados.taxaLeadExp}%
-- Taxa Experimental → Matrícula: ${dados.taxaExpMat}%
-- Conversão Total: ${conversaoTotal.toFixed(1)}%
+### PARAMETROS DO FUNIL
+- Churn projetado: ${dados.churnProjetado}%
+- Taxa Lead -> Experimental: ${dados.taxaLeadExp}%
+- Taxa Experimental -> Matricula: ${TAXA_EXP_MAT_BLOQUEADA_LABEL}
+- Conversao total baseada em Exp->Mat: BLOQUEADA para KPI oficial
+- Parametro de simulacao Exp->Mat recebido: ${dados.taxaExpMat}% (usar apenas como cenario, nunca como resultado oficial)
 
-### CÁLCULOS NECESSÁRIOS
-- Matrículas Necessárias: ${dados.matriculasNecessarias}
-- Leads Necessários: ${dados.leadsNecessarios}
-- Evasões Projetadas: ${dados.evasoesProjetadas}
+### CALCULOS NECESSARIOS
+- Matriculas necessarias: ${dados.matriculasNecessarias}
+- Leads necessarios: ${dados.leadsNecessarios}
+- Evasoes projetadas: ${dados.evasoesProjetadas}
 `;
 
   if (dados.historico && dados.historico.length > 0) {
-    prompt += `\n### HISTÓRICO (últimos meses)\n`;
-    dados.historico.forEach(h => {
-      const conv = h.leads > 0 ? ((h.matriculas / h.leads) * 100).toFixed(1) : '0';
-      prompt += `- ${h.mes}: ${h.leads} leads, ${h.experimentais} exp, ${h.matriculas} matr, ${h.cancelamentos} canc (conv: ${conv}%)\n`;
+    prompt += "\n### HISTORICO\n";
+    dados.historico.forEach((h) => {
+      const convLeadMat = h.leads > 0 ? ((h.matriculas / h.leads) * 100).toFixed(1) : "0";
+      prompt += `- ${h.mes}: ${h.leads} leads, ${h.experimentais} experimentais, ${h.matriculas} matriculas, ${h.cancelamentos} cancelamentos (Lead->Mat: ${convLeadMat}%)\n`;
     });
   }
 
   if (dados.alertas && dados.alertas.length > 0) {
-    prompt += `\n### ALERTAS DE VIABILIDADE\n`;
-    dados.alertas.forEach(a => {
-      const emoji = a.tipo === 'danger' ? '🔴' : a.tipo === 'warning' ? '🟡' : '🟢';
-      prompt += `${emoji} ${a.mensagem}\n`;
+    prompt += "\n### ALERTAS DE VIABILIDADE\n";
+    dados.alertas.forEach((a) => {
+      prompt += `- [${a.tipo}] ${a.mensagem}\n`;
     });
   }
 
-  prompt += `\n## TAREFA
-Analise os dados acima e gere um plano de ação estratégico para atingir as metas definidas.
-Foque especialmente nos gargalos de conversão Lead→Experimental e na retenção/fidelização.
-Considere a sazonalidade do mês ${dados.mesAtual} para suas recomendações.
-Responda APENAS com o JSON estruturado, sem texto adicional.`;
+  prompt += `
+## TAREFA
+Gere um plano de acao estrategico para atingir as metas definidas.
+Foque em Lead->Experimental, Lead->Matricula, volume, ticket, MRR e retencao.
+Nao publique Taxa Experimental->Matricula como KPI oficial.
+Responda apenas com JSON valido.`;
 
   return prompt;
 }
 
 function safePreview(value: unknown, maxLength = 1200): string {
   try {
-    const text = typeof value === 'string' ? value : JSON.stringify(value);
+    const text = typeof value === "string" ? value : JSON.stringify(value);
     return text.length > maxLength ? `${text.slice(0, maxLength)}...[truncated]` : text;
   } catch {
-    return '[unserializable]';
+    return "[unserializable]";
   }
 }
 
-serve(async (req) => {
-  // Handle CORS preflight
+serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
   try {
     if (!GEMINI_API_KEY) {
-      throw new Error("GEMINI_API_KEY não configurada");
+      throw new Error("GEMINI_API_KEY nao configurada");
     }
 
     const dados: DadosSimulador = await req.json();
-
     const userPrompt = montarPromptUsuario(dados);
-    console.log('[gemini-insights] payload recebido', {
+
+    console.log("[gemini-insights] payload recebido", {
       unidadeNome: dados.unidadeNome || null,
       mesAtual: dados.mesAtual,
       anoAtual: dados.anoAtual,
@@ -212,8 +182,8 @@ serve(async (req) => {
       model: GEMINI_MODEL,
     });
 
-    // Chamar Gemini API
-    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+    const geminiUrl =
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
     const startedAt = Date.now();
 
     const geminiResponse = await fetch(geminiUrl, {
@@ -241,11 +211,11 @@ serve(async (req) => {
       }),
     });
 
-    console.log('[gemini-insights] resposta Gemini recebida', {
+    console.log("[gemini-insights] resposta Gemini recebida", {
       status: geminiResponse.status,
       ok: geminiResponse.ok,
       elapsedMs: Date.now() - startedAt,
-      contentType: geminiResponse.headers.get('content-type'),
+      contentType: geminiResponse.headers.get("content-type"),
     });
 
     if (!geminiResponse.ok) {
@@ -255,57 +225,44 @@ serve(async (req) => {
     }
 
     const geminiData = await geminiResponse.json();
-    console.log('[gemini-insights] shape resposta Gemini', {
-      candidatesCount: Array.isArray(geminiData?.candidates) ? geminiData.candidates.length : 0,
-      firstCandidatePreview: safePreview(geminiData?.candidates?.[0]),
-      promptFeedbackPreview: safePreview(geminiData?.promptFeedback),
-      usageMetadataPreview: safePreview(geminiData?.usageMetadata),
-    });
-    
-    // Extrair o texto da resposta
     const responseText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text;
-    
+
     if (!responseText) {
-      console.error('[gemini-insights] resposta sem text extraível', safePreview(geminiData));
+      console.error("[gemini-insights] resposta sem texto", safePreview(geminiData));
       throw new Error("Resposta vazia do Gemini");
     }
 
-    console.log('[gemini-insights] responseText bruto', safePreview(responseText, 2000));
-
-    // Tentar parsear o JSON
     let planoAcao;
     try {
-      // Remover possíveis marcadores de código markdown
-      const cleanJson = responseText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-      console.log('[gemini-insights] responseText limpo', safePreview(cleanJson, 2000));
+      const cleanJson = responseText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
       planoAcao = JSON.parse(cleanJson);
     } catch (parseError) {
       console.error("Erro ao parsear JSON:", {
         parseError: safePreview(parseError),
         responseText: safePreview(responseText, 2000),
       });
-      throw new Error("Resposta do Gemini não é um JSON válido");
+      throw new Error("Resposta do Gemini nao e um JSON valido");
     }
 
     return new Response(JSON.stringify(planoAcao), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
-
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Erro interno";
     console.error("Erro na Edge Function:", error);
     return new Response(
-      JSON.stringify({ 
-        error: error.message || "Erro interno",
-        diagnostico: "Não foi possível gerar o plano de ação. Tente novamente.",
+      JSON.stringify({
+        error: message,
+        diagnostico: "Nao foi possivel gerar o plano de acao. Tente novamente.",
         acoes_curto_prazo: [],
         acoes_medio_prazo: [],
         acoes_longo_prazo: [],
-        insights_adicionais: []
+        insights_adicionais: [],
       }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
+      },
     );
   }
 });
