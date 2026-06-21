@@ -217,7 +217,7 @@ export function ModalDetalhesConversao({
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-white">Conversao — {professorNome}</DialogTitle>
+          <DialogTitle className="text-white">Conversao (legado) — {professorNome}</DialogTitle>
           <p className="text-sm text-slate-400 capitalize">{labelPeriodo}</p>
         </DialogHeader>
 
@@ -231,6 +231,10 @@ export function ModalDetalhesConversao({
           </div>
         ) : (
           <>
+            <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-100 mb-4">
+              Diagnostico operacional legado. Nao usar como KPI oficial ate presenca individual + vinculo canonico estarem fechados.
+            </div>
+
             {/* Resumo */}
             <div className="grid grid-cols-5 gap-2 mb-4">
               <div className="bg-emerald-500/10 rounded-lg p-3 text-center border border-emerald-500/20">
@@ -279,7 +283,7 @@ export function ModalDetalhesConversao({
                   side="top"
                   content={
                     <div className="text-xs max-w-[280px]">
-                      <p className="font-semibold text-slate-200 mb-1">Formula da Conversao</p>
+                      <p className="font-semibold text-slate-200 mb-1">Formula diagnostica legada</p>
                       <p className="text-slate-400 mb-1">
                         <span className="text-cyan-400">Matriculas pos-exp</span> = leads que matricularam tendo experimental no periodo (mesmo que `experimental_realizada=false`).
                       </p>
@@ -293,7 +297,7 @@ export function ModalDetalhesConversao({
                   }
                 >
                   <span className="cursor-help">
-                    Conversao = <span className="text-cyan-400">{totais.matPos}</span> ÷{' '}
+                    Conversao legada = <span className="text-cyan-400">{totais.matPos}</span> ÷{' '}
                     <span className="text-emerald-400">{totais.realizadas}</span>
                   </span>
                 </Tooltip>

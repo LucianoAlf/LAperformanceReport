@@ -654,11 +654,11 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
         {/* Top Conversão */}
         <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50 h-[115px] flex flex-col justify-center">
-          <p className="text-xs text-slate-400 mb-1">🏆 Top Conversão</p>
+          <p className="text-xs text-yellow-300 mb-1">🏆 Top Conversão (legado)</p>
           {rankings.topConversao ? (
             <>
               <p className="text-white font-semibold text-sm truncate">{rankings.topConversao.nome}</p>
-              <p className="text-green-400 text-sm">{rankings.topConversao.taxa_conversao.toFixed(1)}% conversão</p>
+              <p className="text-yellow-300 text-sm">{rankings.topConversao.taxa_conversao.toFixed(1)}% taxa legada</p>
             </>
           ) : (
             <p className="text-slate-500 text-sm">-</p>
@@ -765,6 +765,11 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
             <p className="text-slate-500 text-sm">-</p>
           )}
         </div>
+      </div>
+
+      <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-100">
+        Conversão de professores em modo diagnóstico: depende de experimentais operacionais/legadas.
+        Não usar como KPI oficial até presença individual + vínculo canônico estarem fechados.
       </div>
 
       {/* Filtros e Relatório */}
@@ -910,7 +915,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Alunos</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Média/Turma</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Retenção</th>
-                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Conversão</th>
+                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Conversão (legado)</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Presença</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Evasões</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Status</th>
@@ -1100,7 +1105,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                                 )}
                               </div>
                               <div className="flex justify-between gap-4 pt-1">
-                                <span className="text-cyan-400">↓ Matrículas pós-exp</span>
+                                <span className="text-cyan-400">↓ Matrículas pós-exp (legado)</span>
                                 <span className="text-cyan-300 font-medium">
                                   {professor.matriculas_pos_exp}
                                   {professor.experimentais > 0 && (
@@ -1121,7 +1126,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                                 <span className="text-white font-bold">{professor.matriculas_pos_exp + professor.matriculas_diretas}</span>
                               </div>
                             </div>
-                            <p className="text-slate-500 mt-1.5 text-[10px]">Conversão = pós-exp / realizadas</p>
+                            <p className="text-yellow-300 mt-1.5 text-[10px]">Diagnóstico legado: não usar como KPI oficial</p>
                           </div>
                         }
                       >
