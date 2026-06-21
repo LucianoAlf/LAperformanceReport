@@ -418,14 +418,14 @@ export function DashboardPage() {
               acc + (d.experimentais_realizadas || d.aulas_experimentais || 0), 0);
             const matriculas = comercialData.reduce((acc: number, d: any) => 
               acc + (d.novas_matriculas || d.novas_matriculas_total || 0), 0);
-            const taxaConversao = experimentais > 0 ? (matriculas / experimentais) * 100 : 0;
             const ticketPassaporte = comercialData.reduce((acc: number, d: any) =>
               acc + (Number(d.ticket_medio_passaporte) || 0), 0) / comercialData.length;
 
             setDadosComercial({
               leads_mes: leads,
               experimentais_realizadas: experimentais,
-              taxa_conversao: taxaConversao,
+              // Exp -> Mat segue bloqueada como KPI oficial, inclusive em fallback legado.
+              taxa_conversao: 0,
               ticket_passaporte: Math.round(ticketPassaporte)
             });
 
@@ -467,18 +467,6 @@ export function DashboardPage() {
             ['matriculado', 'convertido'].includes(l.status)
           ).reduce((acc: number, l: any) => acc + (l.quantidade || 1), 0);
 
-          // Taxa de conversão CORRETA: "dos alunos que fizeram exp, quantos matricularam?"
-          // - Denominador: leads com flag experimental_realizada=true (preserva mesmo após virar 'convertido')
-          // - Numerador: desses, os que viraram matriculado/convertido
-          // Exclui matrícula direta do numerador (não passou por exp) e
-          // recupera no denominador os que matricularam após exp (perderam o status 'experimental_realizada')
-          const fezExperimental = leads.filter((l: any) => l.experimental_realizada === true);
-          const fezExpQtd = fezExperimental.reduce((acc: number, l: any) => acc + (l.quantidade || 1), 0);
-          const matriculouAposExp = fezExperimental.filter((l: any) =>
-            ['matriculado', 'convertido'].includes(l.status)
-          ).reduce((acc: number, l: any) => acc + (l.quantidade || 1), 0);
-          const taxaConversao = fezExpQtd > 0 ? (matriculouAposExp / fezExpQtd) * 100 : 0;
-
           // Buscar ticket médio passaporte dos alunos matriculados no mês
           let passaporteQuery = supabase
             .from('alunos')
@@ -499,7 +487,8 @@ export function DashboardPage() {
           setDadosComercial({
             leads_mes: totalLeads,
             experimentais_realizadas: expTotal,
-            taxa_conversao: taxaConversao,
+            // Exp -> Mat segue bloqueada como KPI oficial, inclusive em fallback legado.
+            taxa_conversao: 0,
             ticket_passaporte: Math.round(ticketPassaporte)
           });
 
