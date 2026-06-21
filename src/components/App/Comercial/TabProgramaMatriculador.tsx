@@ -416,7 +416,7 @@ export function TabProgramaMatriculador({ unidadeId, ano = 2026 }: TabProgramaMa
 
                     <div className="space-y-2 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-slate-400">Taxa Geral</span>
+                        <span className="text-slate-400">Lead→Matrícula</span>
                         <span className={hunter.metricas.taxa_geral >= config.metas.taxa_lead_matricula ? "text-emerald-400" : "text-red-400"}>
                           {hunter.metricas.taxa_geral.toFixed(1)}% {hunter.metricas.taxa_geral >= config.metas.taxa_lead_matricula ? '✓' : '✗'}
                         </span>
@@ -840,7 +840,7 @@ export function TabProgramaMatriculador({ unidadeId, ano = 2026 }: TabProgramaMa
                     </div>
                   </div>
                   <div>
-                    <Label className="text-slate-400">Pontos - Taxa Geral (Desempate)</Label>
+                    <Label className="text-slate-400">Pontos - Lead→Matrícula (Desempate)</Label>
                     <div className="mt-1">
                       <ConfigInput value={config.pontuacao.taxa_geral} campo="pontos_taxa_geral" ano={ano} />
                     </div>
@@ -1499,7 +1499,7 @@ function HistoricoMensal({ historico, mediaGrupo, config, metaVolume, metaTicket
                   <th className="text-center py-3">Mat.</th>
                   <th className="text-center py-3">Taxa Showup</th>
                   <th className="text-center py-3">Exp-&gt;Mat bloqueada</th>
-                  <th className="text-center py-3 bg-yellow-500/10">Taxa Geral</th>
+                  <th className="text-center py-3 bg-yellow-500/10">Lead→Matrícula</th>
                   <th className="text-center py-3">Ticket</th>
                 </tr>
               </thead>
@@ -1597,9 +1597,9 @@ function HistoricoMensal({ historico, mediaGrupo, config, metaVolume, metaTicket
           Compare seu desempenho com a média dos Hunters (sem revelar posições individuais)
         </p>
         <div className="grid grid-cols-3 gap-4">
-          {/* Taxa Geral */}
+          {/* Taxa Lead→Matrícula */}
           <div className="bg-slate-800 rounded-xl p-4">
-            <div className="text-sm text-slate-400 mb-3">Taxa Geral (Desempate)</div>
+            <div className="text-sm text-slate-400 mb-3">Taxa Lead→Matrícula (Desempate)</div>
             <div className="flex items-end gap-3 h-24">
               <div className="flex-1 flex flex-col items-center">
                 <div className="text-xs text-slate-500 mb-1">Você</div>
