@@ -98,6 +98,7 @@ Sua tarefa é analisar os dados de performance de TODA A EQUIPE de professores e
 
 IMPORTANTE:
 - Foque em ações COLETIVAS e ESTRATÉGICAS
+- Conversao Exp->Mat de professor/equipe e diagnostico legado. Nao trate como KPI oficial enquanto a regra canonica de presenca/vinculo estiver bloqueada.
 - Identifique padrões e tendências gerais
 - Destaque professores que precisam de atenção urgente
 - Sugira professores exemplares como mentores
@@ -195,7 +196,7 @@ ${healthEmoji} Score Médio: ${healthScoreMedio.toFixed(1)} pontos - ${healthSta
 - Total de alunos: ${metricas_gerais.total_alunos}
 - Média geral de alunos/turma: ${metricas_gerais.media_geral_turma.toFixed(2)}
 - Taxa de retenção média: ${metricas_gerais.taxa_retencao_media.toFixed(1)}%
-- Taxa de conversão média: ${metricas_gerais.taxa_conversao_media.toFixed(1)}%
+- Conversao Exp->Mat media (legado/bloqueada): ${metricas_gerais.taxa_conversao_media.toFixed(1)}%
 - NPS médio: ${metricas_gerais.nps_medio.toFixed(1)}
 - Total de evasões no mês: ${metricas_gerais.total_evasoes}
 
@@ -216,13 +217,13 @@ ${healthSaudaveis.slice(0, 5).map(p => `- ${p.nome}: Health ${(p.health_score ||
 🏆 TOP PERFORMERS:
 - Melhor média de turma: ${topMediaTurma?.nome} (${topMediaTurma?.media_alunos_turma.toFixed(1)})
 - Melhor retenção: ${topRetencao?.nome} (${topRetencao?.taxa_retencao.toFixed(0)}%)
-- Melhor conversão: ${topConversao?.nome} (${topConversao?.taxa_conversao.toFixed(0)}%)
+- Melhor conversao legada: ${topConversao?.nome} (${topConversao?.taxa_conversao.toFixed(0)}%) - nao usar como KPI oficial
 
 ⚠️ PROBLEMAS IDENTIFICADOS:
 - Health Score crítico (<60): ${healthCriticos.length} professores
 - Média de turma baixa (<1.3): ${problemasMediaTurma.length} professores
 - Retenção crítica (<70%): ${problemasRetencao.length} professores
-- Conversão baixa (<70%): ${problemasConversao.length} professores
+- Conversao legada baixa (<70%): ${problemasConversao.length} professores - diagnostico, nao KPI oficial
 - NPS baixo (<7): ${problemasNPS.length} professores
 
 Gere um plano de ação estratégico para a coordenação pedagógica, priorizando os professores com Health Score mais baixo.`;

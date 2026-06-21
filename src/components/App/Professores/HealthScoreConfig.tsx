@@ -12,7 +12,7 @@ export const DEFAULT_HEALTH_WEIGHTS = {
   taxaCrescimento: 15, // Taxa de crescimento com fator de demanda ponderado
   mediaTurma: 20,      // Média de alunos por turma
   retencao: 25,        // Taxa de retenção (renovações)
-  conversao: 15,       // Taxa de conversão de experimentais
+  conversao: 15,       // Conversao Exp->Mat legada/bloqueada para KPI oficial
   presenca: 15,        // Taxa de presença dos alunos
   evasoes: 10,         // Evasões/Churn (inverso: menos = melhor)
 };
@@ -45,7 +45,12 @@ const WEIGHT_CONFIG: Record<HealthWeightKey, {
     description: 'Taxa de renovações',
     color: 'text-cyan-400' 
   },
-  conversao: { icon: Target, label: 'Conversão', color: 'text-pink-400' },
+  conversao: {
+    icon: Target,
+    label: 'Conversao legado',
+    description: 'Exp->Mat bloqueada como KPI oficial',
+    color: 'text-pink-400'
+  },
   presenca: { icon: Calendar, label: 'Presença', color: 'text-green-400' },
   evasoes: { 
     icon: DoorOpen, 

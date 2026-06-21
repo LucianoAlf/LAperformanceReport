@@ -50,12 +50,11 @@ O modelo de negócio incentiva turmas maiores para otimização de salas e recei
 - Crítico: <70%
 - Cálculo: (Alunos que permaneceram / Total de alunos no início) × 100
 
-### Taxa de Conversão (Experimental → Matriculado)
-- Meta ideal: ≥90%
-- Bom: 70-90%
-- Ruim: <70%
-- Janela: 30 dias após aula experimental
-- Nota: Responsabilidade compartilhada entre professor e comercial
+### Conversao Experimental -> Matriculado (LEGADO / DIAGNOSTICO)
+- Nao tratar como KPI oficial.
+- A taxa oficial segue BLOQUEADA ate regra canonica de presenca/vinculo.
+- Se citar, sempre sinalizar como diagnostico legado, nao como meta limpa.
+- Nota: responsabilidade compartilhada entre professor e comercial.
 
 ### Taxa de Presença
 - Meta ideal: ≥80%
@@ -75,7 +74,7 @@ O Health Score é uma métrica composta que resume a saúde geral do professor e
 - 📈 Taxa de Crescimento (15%): Crescimento da carteira ajustado pelo fator de demanda
 - 👥 Média/Turma (20%): Principal indicador de eficiência
 - 🔄 Retenção (25%): Manter alunos é crucial
-- 🎯 Conversão (15%): Experimentais → Matrículas
+- Conversao legado (15%): diagnostico historico, nao KPI oficial
 - 📅 Presença (15%): Engajamento nas aulas
 - 🚪 Evasões (10%): Inverso (menos = melhor)
 
@@ -287,7 +286,7 @@ ${healthScore.detalhes.map(d => `- ${d.kpi}: valor ${d.valor.toFixed(1)} → sco
 - Total de Turmas: ${dados.metricas_atuais.total_turmas}
 - Média de Alunos por Turma: ${dados.metricas_atuais.media_alunos_turma.toFixed(2)} ${dados.metricas_atuais.media_alunos_turma < 1.3 ? '🔴' : dados.metricas_atuais.media_alunos_turma < 1.5 ? '🟡' : '🟢'}
 - Taxa de Retenção: ${dados.metricas_atuais.taxa_retencao}% ${dados.metricas_atuais.taxa_retencao < 70 ? '🔴' : dados.metricas_atuais.taxa_retencao < 95 ? '🟡' : '🟢'}
-- Taxa de Conversão: ${dados.metricas_atuais.taxa_conversao}% ${dados.metricas_atuais.taxa_conversao < 70 ? '🔴' : dados.metricas_atuais.taxa_conversao < 90 ? '🟡' : '🟢'}
+- Conversao Exp->Mat (legado/bloqueada): ${dados.metricas_atuais.taxa_conversao}% - nao usar como KPI oficial
 - Fator de Demanda: ${(dados.metricas_atuais.fator_demanda_ponderado || 1.0).toFixed(1)} ${(dados.metricas_atuais.fator_demanda_ponderado || 1.0) <= 1.2 ? '🟢' : (dados.metricas_atuais.fator_demanda_ponderado || 1.0) <= 2.0 ? '🟡' : '🔴'}
 - Taxa de Presença: ${dados.metricas_atuais.taxa_presenca}% ${dados.metricas_atuais.taxa_presenca < 70 ? '🔴' : dados.metricas_atuais.taxa_presenca < 80 ? '🟡' : '🟢'}
 - Evasões no Mês: ${dados.metricas_atuais.evasoes_mes} ${dados.metricas_atuais.evasoes_mes >= 3 ? '🔴' : dados.metricas_atuais.evasoes_mes >= 1 ? '🟡' : '🟢'}
@@ -296,7 +295,7 @@ ${healthScore.detalhes.map(d => `- ${d.kpi}: valor ${d.valor.toFixed(1)} → sco
   if (dados.historico && dados.historico.length > 0) {
     prompt += `\n### HISTÓRICO (últimos meses)\n`;
     dados.historico.forEach(h => {
-      prompt += `- ${h.periodo}: Média ${h.media_alunos_turma.toFixed(2)}, Retenção ${h.taxa_retencao}%, Conversão ${h.taxa_conversao}%, Evasões ${h.evasoes}\n`;
+      prompt += `- ${h.periodo}: Média ${h.media_alunos_turma.toFixed(2)}, Retenção ${h.taxa_retencao}%, Conversao legado ${h.taxa_conversao}%, Evasões ${h.evasoes}\n`;
     });
   }
 

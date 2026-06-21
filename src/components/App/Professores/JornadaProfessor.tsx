@@ -163,7 +163,7 @@ export function JornadaProfessor({ professorId, professorNome, metaAtiva, acoes 
     switch (tipo) {
       case 'media_turma': return 'Média de Alunos por Turma';
       case 'retencao': return 'Taxa de Retenção';
-      case 'conversao': return 'Taxa de Conversão';
+      case 'conversao': return 'Conversao Exp->Mat legado';
       case 'nps': return 'NPS';
       case 'presenca': return 'Taxa de Presença';
       case 'max_evasoes': return 'Máximo de Evasões';
