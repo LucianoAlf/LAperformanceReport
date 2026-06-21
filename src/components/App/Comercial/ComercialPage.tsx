@@ -38,7 +38,8 @@ import {
   ChevronRight,
   ChevronDown,
   ChevronUp,
-  ArrowUpDown
+  ArrowUpDown,
+  ClipboardCheck
 } from 'lucide-react';
 import { TarefasRapidasTab } from '@/components/shared/TarefasRapidas';
 import { CanalOrigemBadge } from '@/components/shared/CanalOrigemBadge';
@@ -83,6 +84,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { AlertasComercial } from './AlertasComercial';
 import { PlanoAcaoComercial } from './PlanoAcaoComercial';
 import { TabProgramaMatriculador } from './TabProgramaMatriculador';
+import { ComercialConciliacaoExperimentais } from './ComercialConciliacaoExperimentais';
 import { ModalMatricular } from '../PreAtendimento/components/ModalMatricular';
 import { ModalArquivar } from '../PreAtendimento/components/ModalArquivar';
 import { ModalEditarLead } from '../PreAtendimento/components/ModalEditarLead';
@@ -392,7 +394,7 @@ export function ComercialPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [confirmouDuplicataLote, setConfirmouDuplicataLote] = useState(false);
-  const [abaPrincipal, setAbaPrincipal] = useState<'lancamentos' | 'programa' | 'tarefas'>('lancamentos');
+  const [abaPrincipal, setAbaPrincipal] = useState<'lancamentos' | 'conciliacao' | 'programa' | 'tarefas'>('lancamentos');
   const [modalOpen, setModalOpen] = useState<'lead' | 'matricula' | 'experimental' | null>(null);
   const [relatorioOpen, setRelatorioOpen] = useState(false);
   const [tipoRelatorio, setTipoRelatorio] = useState<'diario' | 'semanal' | 'mensal' | 'matriculas' | 'comparativo_mensal' | 'comparativo_anual' | null>(null);
@@ -3415,6 +3417,7 @@ export function ComercialPage() {
       <PageTabs
         tabs={[
           { id: 'lancamentos' as const, label: 'Lançamentos', shortLabel: 'Lanç.', icon: Zap, activeGradient: 'from-cyan-500 to-blue-500', activeShadow: 'shadow-cyan-500/20' },
+          { id: 'conciliacao' as const, label: 'Conciliação', shortLabel: 'Conciliar', icon: ClipboardCheck, activeGradient: 'from-amber-500 to-cyan-500', activeShadow: 'shadow-amber-500/20' },
           { id: 'programa' as const, label: 'Programa Matriculador+ LA', shortLabel: 'Matriculador+', icon: Trophy, activeGradient: 'from-yellow-500 to-orange-500', activeShadow: 'shadow-yellow-500/20' },
           { id: 'tarefas' as const, label: 'Tarefas Rápidas', shortLabel: 'Tarefas', icon: CheckSquare, activeGradient: 'from-emerald-500 to-teal-500', activeShadow: 'shadow-emerald-500/20' },
         ]}
@@ -3425,6 +3428,14 @@ export function ComercialPage() {
       {/* ═══════════════════════════════════════════════════════════════ */}
       {/* CONTEÚDO DA ABA PROGRAMA */}
       {/* ═══════════════════════════════════════════════════════════════ */}
+      {abaPrincipal === 'conciliacao' && (
+        <ComercialConciliacaoExperimentais
+          unidadeId={isAdmin ? (context?.unidadeSelecionada || 'todos') : unidadeId}
+          ano={competencia.filtro.ano}
+          mes={competencia.filtro.mes}
+        />
+      )}
+
       {abaPrincipal === 'programa' && (
         <TabProgramaMatriculador
           unidadeId={isAdmin ? (context?.unidadeSelecionada || 'todos') : unidadeId}
