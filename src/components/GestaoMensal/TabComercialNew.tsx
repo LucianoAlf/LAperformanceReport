@@ -320,23 +320,6 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             historicoQuery = historicoQuery.eq('unidade_id', unidade);
           }
 
-          // Buscar origem dos leads históricos
-          let origemQuery = supabase
-            .from('origem_leads')
-            .select('*')
-            .gte('competencia', startDate)
-            .lte('competencia', endDate);
-
-          if (unidade !== 'todos') {
-            // origem_leads usa nome da unidade, não UUID
-            const unidadeNomes: Record<string, string> = {
-              '2ec861f6-023f-4d7b-9927-3960ad8c2a92': 'Campo Grande',
-              '95553e96-971b-4590-a6eb-0201d013c14d': 'Recreio',
-              '368d47f5-2d88-4475-bc14-ba084a9a348e': 'Barra'
-            };
-            origemQuery = origemQuery.eq('unidade', unidadeNomes[unidade] || unidade);
-          }
-
           // Buscar experimentais por professor históricos
           let expProfQuery = supabase
             .from('experimentais_professor_mensal')
@@ -365,15 +348,13 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             cursosMatQuery = cursosMatQuery.eq('unidade', unidadeNomes[unidade] || unidade);
           }
 
-          const [historicoResult, origemResult, expProfResult, cursosMatResult] = await Promise.all([
+          const [historicoResult, expProfResult, cursosMatResult] = await Promise.all([
             historicoQuery,
-            origemQuery,
             expProfQuery,
             cursosMatQuery
           ]);
 
           const historico = historicoResult.data || [];
-          const origemLeads = origemResult.data || [];
           const expProf = expProfResult.data || [];
           const cursosMat = cursosMatResult.data || [];
 
@@ -392,13 +373,9 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             : 0;
           const faturamentoPassaportes = historico.reduce((acc, h) => acc + (Number(h.faturamento_passaporte) || 0), 0);
 
-          // Processar origem dos leads
+          // Canais de experimentais/matrículas seguem bloqueados no histórico até fonte canônica.
           const expCanaisMap = new Map<string, number>();
           const matCanaisMap = new Map<string, number>();
-          origemLeads.forEach(o => {
-            if (o.tipo === 'experimentais') expCanaisMap.set(o.canal, (expCanaisMap.get(o.canal) || 0) + (o.quantidade || 0));
-            if (o.tipo === 'matriculas') matCanaisMap.set(o.canal, (matCanaisMap.get(o.canal) || 0) + (o.quantidade || 0));
-          });
 
           // Processar experimentais por professor
           const expProfMap = new Map<string, { id: number; total: number }>();
