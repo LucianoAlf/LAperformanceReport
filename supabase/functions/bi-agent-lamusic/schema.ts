@@ -29,6 +29,11 @@ LEADS (pipeline comercial):
 - leads: id (int PK), nome, telefone, unidade_id (uuid FK), curso_interesse_id (int FK → cursos), canal_origem_id (int FK → canais_origem), etapa_pipeline_id (int), status ('novo','em_contato','experimental_agendada','experimental_realizada','convertido','arquivado'), data_contato (date), data_experimental (date), professor_experimental_id, experimental_realizada (bool), faltou_experimental (bool), converteu (bool), data_conversao (date), arquivado (bool), temperatura ('quente','morno','frio')
   Etapas pipeline: 1=Novo, 3=Em contato, 5=Experimental agendada, 7=Experimental realizada, 9=Faltou, 10=Convertido
 
+REGRA COMERCIAL CANONICA:
+- Taxa Experimental -> Matricula NAO e KPI oficial enquanto a regra lead_experimentais -> aluno -> presenca individual -> aula Emusys experimental nao estiver fechada.
+- Quando o usuario pedir mes/competencia, use parametros explicitos de ano/mes ou intervalo informado. Nao use CURRENT_DATE como competencia historica.
+- Para conversao geral comercial, use Lead -> Matricula quando a pergunta for matriculas por lead. Nao chame isso genericamente de "taxa de conversao".
+
 CANAIS DE ORIGEM:
 - canais_origem: id (int PK), nome ('Instagram','Google','Facebook','Indicação','Visita/Placa','Ex-aluno','Ligação','Convênios')
 
@@ -76,11 +81,11 @@ SELECT u.codigo, ROUND(AVG(a.valor_parcela)::numeric, 2) as ticket_medio FROM al
 -- Evasões por professor nos últimos 3 meses
 SELECT p.nome, COUNT(*) as evasoes FROM movimentacoes_admin m JOIN professores p ON p.id = m.professor_id WHERE m.tipo IN ('evasao','cancelamento') AND m.data >= CURRENT_DATE - INTERVAL '3 months' GROUP BY p.nome ORDER BY evasoes DESC;
 
--- Funil comercial do mês atual
-SELECT CASE l.etapa_pipeline_id WHEN 1 THEN 'Novo' WHEN 3 THEN 'Em contato' WHEN 5 THEN 'Exp. agendada' WHEN 7 THEN 'Exp. realizada' WHEN 10 THEN 'Convertido' ELSE 'Outro' END as etapa, COUNT(*) FROM leads l WHERE date_trunc('month', l.data_contato) = date_trunc('month', CURRENT_DATE) AND l.arquivado = false GROUP BY l.etapa_pipeline_id ORDER BY l.etapa_pipeline_id;
+-- Funil comercial por competencia explicita (substitua :data_inicio e :data_fim)
+SELECT CASE l.etapa_pipeline_id WHEN 1 THEN 'Novo' WHEN 3 THEN 'Em contato' WHEN 5 THEN 'Exp. agendada' WHEN 7 THEN 'Exp. realizada' WHEN 10 THEN 'Convertido' ELSE 'Outro' END as etapa, COUNT(*) FROM leads l WHERE l.data_contato >= :data_inicio::date AND l.data_contato <= :data_fim::date AND l.arquivado = false GROUP BY l.etapa_pipeline_id ORDER BY l.etapa_pipeline_id;
 
--- Leads por canal de origem este mês
-SELECT co.nome as canal, COUNT(*) as leads FROM leads l JOIN canais_origem co ON co.id = l.canal_origem_id WHERE l.data_contato >= date_trunc('month', CURRENT_DATE) AND l.arquivado = false GROUP BY co.nome ORDER BY leads DESC;
+-- Leads por canal de origem em competencia explicita
+SELECT co.nome as canal, COUNT(*) as leads FROM leads l JOIN canais_origem co ON co.id = l.canal_origem_id WHERE l.data_contato >= :data_inicio::date AND l.data_contato <= :data_fim::date AND l.arquivado = false GROUP BY co.nome ORDER BY leads DESC;
 
 -- Alunos por curso
 SELECT c.nome as curso, COUNT(*) as alunos FROM alunos a JOIN cursos c ON c.id = a.curso_id WHERE a.status = 'ativo' GROUP BY c.nome ORDER BY alunos DESC;
@@ -88,9 +93,10 @@ SELECT c.nome as curso, COUNT(*) as alunos FROM alunos a JOIN cursos c ON c.id =
 -- Evolução mensal de alunos ativos (dados_mensais)
 SELECT ano, mes, alunos_ativos, alunos_pagantes, evasoes, ticket_medio FROM dados_mensais WHERE unidade_id IS NOT NULL ORDER BY ano, mes;
 
--- Taxa de conversão de experimentais por professor
-SELECT p.nome, COUNT(*) FILTER (WHERE l.experimental_realizada) as realizadas, COUNT(*) FILTER (WHERE l.converteu) as convertidas, CASE WHEN COUNT(*) FILTER (WHERE l.experimental_realizada) > 0 THEN ROUND(COUNT(*) FILTER (WHERE l.converteu)::numeric / COUNT(*) FILTER (WHERE l.experimental_realizada) * 100, 1) ELSE 0 END as taxa_conversao FROM leads l JOIN professores p ON p.id = l.professor_experimental_id WHERE l.data_experimental >= CURRENT_DATE - INTERVAL '3 months' GROUP BY p.nome HAVING COUNT(*) FILTER (WHERE l.experimental_realizada) > 0 ORDER BY taxa_conversao DESC;
+-- Conversao Experimental -> Matricula BLOQUEADA como KPI oficial.
+-- Use apenas diagnostico de volume de experimentais por professor ate a regra canonica fechar.
+SELECT p.nome, COUNT(*) FILTER (WHERE l.experimental_realizada) as experimentais_status_operacional, COUNT(*) FILTER (WHERE l.converteu) as leads_convertidos_status_legado FROM leads l JOIN professores p ON p.id = l.professor_experimental_id WHERE l.data_experimental >= :data_inicio::date AND l.data_experimental <= :data_fim::date GROUP BY p.nome ORDER BY experimentais_status_operacional DESC;
 
 -- Metas vs realizado do mês
-SELECT m.meta_alunos_ativos, m.meta_matriculas, m.meta_evasoes_maximo, d.alunos_ativos, d.novas_matriculas, d.evasoes FROM metas m LEFT JOIN dados_mensais d ON d.unidade_id = m.unidade_id AND d.ano = m.ano AND d.mes = m.mes WHERE m.ano = EXTRACT(YEAR FROM CURRENT_DATE) AND m.mes = EXTRACT(MONTH FROM CURRENT_DATE);
+SELECT m.meta_alunos_ativos, m.meta_matriculas, m.meta_evasoes_maximo, d.alunos_ativos, d.novas_matriculas, d.evasoes FROM metas m LEFT JOIN dados_mensais d ON d.unidade_id = m.unidade_id AND d.ano = m.ano AND d.mes = m.mes WHERE m.ano = :ano AND m.mes = :mes;
 `;

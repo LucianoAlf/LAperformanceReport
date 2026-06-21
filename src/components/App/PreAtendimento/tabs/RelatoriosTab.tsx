@@ -39,7 +39,7 @@ const TIPOS_RELATORIO: { id: TipoRelatorio; label: string; icone: string; descri
   { id: 'diario', label: 'Diário', icone: '📋', descricao: 'Resumo do dia — leads, agendamentos, visitas' },
   { id: 'semanal', label: 'Semanal', icone: '📊', descricao: 'Performance da semana — taxas e evolução' },
   { id: 'mensal', label: 'Mensal', icone: '📈', descricao: 'Fechamento do mês — metas e resultados' },
-  { id: 'funil', label: 'Funil', icone: '🔽', descricao: 'Conversão por etapa do pipeline' },
+  { id: 'funil', label: 'Funil', icone: '🔽', descricao: 'Conversão Lead→Matrícula por etapa do pipeline' },
   { id: 'tags', label: 'KPIs Tags', icone: '🏷️', descricao: 'Status de tagueamento dos leads' },
   { id: 'mila', label: 'Mila', icone: '🤖', descricao: 'Atendimentos e passagens da SDR Bot' },
   { id: 'metas', label: 'Metas', icone: '🎯', descricao: 'Progresso das metas por unidade' },
@@ -264,6 +264,7 @@ function gerarRelatorio(tipo: TipoRelatorio, leads: LeadCRM[], ano: number, mes:
   const matriculados = leads.filter(l => l.converteu).length;
   const faltaram = leads.filter(l => l.faltou_experimental).length;
   const taxaShowUp = total > 0 ? ((visitaram / total) * 100).toFixed(1) : '0.0';
+  // Conversão geral do pré-atendimento = matriculados / leads. Não é taxa Exp→Mat.
   const taxaConversao = total > 0 ? ((matriculados / total) * 100).toFixed(1) : '0.0';
 
   // Leads de hoje
@@ -301,7 +302,7 @@ function gerarRelatorio(tipo: TipoRelatorio, leads: LeadCRM[], ano: number, mes:
 Obs.: Experimentais agendadas hoje não necessariamente foram realizadas hoje.
 
 🎯 *Taxa Show-up:* ${taxaShowUp}% (meta: 30%)
-📈 *Taxa Conversão:* ${taxaConversao}%
+📈 *Taxa Lead→Matrícula:* ${taxaConversao}%
 
 👩‍💻  *Leads atendidos no dia:*
 Instagram (direct e comentários): Todos atendidos até às 18h ✅
@@ -324,7 +325,7 @@ _Andreza — Pré-Atendimento LA Music_`;
 
 🎯 *Taxas:*
 • Show-up: ${taxaShowUp}% (meta 30%)
-• Conversão: ${taxaConversao}%
+• Lead→Matrícula: ${taxaConversao}%
 • Tags completas: ${taxaTags}%
 
 📍 *Por Unidade:*
@@ -348,7 +349,7 @@ _Andreza — Pré-Atendimento LA Music_`;
 🎯 *Metas:*
 • Show-up: ${taxaShowUp}% ${Number(taxaShowUp) >= 30 ? '✅' : '❌'} (meta 30%)
 • Tags: ${taxaTags}% ${Number(taxaTags) >= 90 ? '✅' : '❌'} (meta 100%)
-• Conversão: ${taxaConversao}%
+• Lead→Matrícula: ${taxaConversao}%
 
 📍 *Por Unidade:*
 • ${porUnidade('2ec861f6-023f-4d7b-9927-3960ad8c2a92', 'Campo Grande')}
@@ -358,7 +359,7 @@ _Andreza — Pré-Atendimento LA Music_`;
 _Andreza — Pré-Atendimento LA Music_`;
 
     case 'funil':
-      return `🔽 *FUNIL DE CONVERSÃO*
+      return `🔽 *FUNIL LEAD→MATRÍCULA*
 📅 ${mesLabel}
 
 ${total} Leads
@@ -399,7 +400,7 @@ ${total} Leads
 
 *Show-up Rate:* ${taxaShowUp}% / 30% ${Number(taxaShowUp) >= 30 ? '✅' : '⏳'}
 *Tags Completas:* ${taxaTags}% / 100% ${Number(taxaTags) >= 90 ? '✅' : '⏳'}
-*Conversão:* ${taxaConversao}%
+*Lead→Matrícula:* ${taxaConversao}%
 
 📍 *Bônus por Unidade (R$150 cada):*
 • CG: ${(() => { const u = leads.filter(l => l.unidade_id === '2ec861f6-023f-4d7b-9927-3960ad8c2a92'); const v = u.filter(l => l.experimental_realizada).length; const t = u.length > 0 ? ((v / u.length) * 100).toFixed(1) : '0.0'; return `${t}% ${Number(t) >= 30 ? '✅' : '❌'}`; })()}
