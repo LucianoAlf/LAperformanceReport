@@ -115,7 +115,7 @@ export const TOOLS_SCHEMA = [
     type: 'function' as const,
     function: {
       name: 'get_funil_leads',
-      description: 'Estatísticas do funil: contagem por etapa, taxas de conversão.',
+      description: 'Estatísticas do funil por leads. Retorna Lead→Matrícula; taxa Experimental→Matrícula está bloqueada como KPI oficial.',
       parameters: {
         type: 'object',
         properties: {
@@ -363,7 +363,9 @@ async function toolGetFunilLeads(supabase: any, args: any, ctx: AgentContext): P
   }
   return JSON.stringify({
     total_leads: data.length, por_etapa: porEtapa, convertidos,
-    taxa_conversao: `${data.length > 0 ? ((convertidos / data.length) * 100).toFixed(1) : 0}%`,
+    taxa_lead_matricula: `${data.length > 0 ? ((convertidos / data.length) * 100).toFixed(1) : 0}%`,
+    taxa_exp_matricula: 'BLOQUEADA - aguardando regra canonica de presenca/vinculo',
+    definicao_taxa_lead_matricula: 'convertidos / total_leads; nao e taxa Experimental -> Matricula',
   });
 }
 
