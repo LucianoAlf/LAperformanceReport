@@ -140,13 +140,13 @@ export function ComercialVisaoGeral({ ano, unidade, onAnoChange, onUnidadeChange
             metaLabel="Meta"
           />
 
-          {/* Taxa de Conversão */}
+          {/* Taxa Lead→Matrícula */}
           <KPICard
             icon={Percent}
             iconColor="text-purple-400"
             iconBg="bg-purple-500/20"
             value={`${kpis.taxaConversaoTotal.toFixed(1)}%`}
-            label="Taxa de Conversão Total"
+            label="Taxa Lead → Matrícula"
             meta={10}
             metaLabel="Meta %"
             isPercent
@@ -203,7 +203,10 @@ export function ComercialVisaoGeral({ ano, unidade, onAnoChange, onUnidadeChange
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Donut Chart */}
           <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
-            <h3 className="text-lg font-semibold text-white mb-4">Matrículas por Unidade</h3>
+            <h3 className="text-lg font-semibold text-white mb-1">Matrículas por Unidade</h3>
+            <p className="text-xs text-yellow-300 mb-4">
+              Distribuição por unidade em validação semântica; não usar como KPI canônico.
+            </p>
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -253,7 +256,7 @@ export function ComercialVisaoGeral({ ano, unidade, onAnoChange, onUnidadeChange
                     <th className="pb-3 text-right">Leads</th>
                     <th className="pb-3 text-right">Exp.</th>
                     <th className="pb-3 text-right">Mat.</th>
-                    <th className="pb-3 text-right">Conv.</th>
+                    <th className="pb-3 text-right">Lead→Mat</th>
                   </tr>
                 </thead>
                 <tbody>

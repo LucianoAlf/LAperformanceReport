@@ -17,16 +17,16 @@ export function ComercialRanking() {
   }
 
   // Normalizar dados para radar (0-100)
-  const maxConversao = Math.max(kpisCG.taxaConversaoTotal, kpisRec.taxaConversaoTotal, kpisBarra.taxaConversaoTotal);
+  const maxTaxaLeadMatricula = Math.max(kpisCG.taxaConversaoTotal, kpisRec.taxaConversaoTotal, kpisBarra.taxaConversaoTotal);
   const maxTicket = Math.max(kpisCG.ticketMedioParcelas, kpisRec.ticketMedioParcelas, kpisBarra.ticketMedioParcelas);
   const maxLeadExp = Math.max(kpisCG.taxaLeadExp, kpisRec.taxaLeadExp, kpisBarra.taxaLeadExp);
   
   const radarData = [
     {
-      metric: 'Conversão Total',
-      'Campo Grande': (kpisCG.taxaConversaoTotal / maxConversao) * 100,
-      'Recreio': (kpisRec.taxaConversaoTotal / maxConversao) * 100,
-      'Barra': (kpisBarra.taxaConversaoTotal / maxConversao) * 100,
+      metric: 'Lead→Mat',
+      'Campo Grande': (kpisCG.taxaConversaoTotal / maxTaxaLeadMatricula) * 100,
+      'Recreio': (kpisRec.taxaConversaoTotal / maxTaxaLeadMatricula) * 100,
+      'Barra': (kpisBarra.taxaConversaoTotal / maxTaxaLeadMatricula) * 100,
     },
     {
       metric: 'Lead→Exp',
@@ -50,7 +50,7 @@ export function ComercialRanking() {
 
   // Rankings
   const rankings = {
-    conversao: [
+    leadMatricula: [
       { nome: 'Recreio', valor: kpisRec.taxaConversaoTotal },
       { nome: 'Barra', valor: kpisBarra.taxaConversaoTotal },
       { nome: 'Campo Grande', valor: kpisCG.taxaConversaoTotal },
@@ -88,7 +88,7 @@ export function ComercialRanking() {
   };
 
   // Determinar melhor em cada métrica
-  const melhorConversaoNome = rankings.conversao[0].nome;
+  const melhorLeadMatriculaNome = rankings.leadMatricula[0].nome;
   const melhorLeadExp = kpisRec.taxaLeadExp >= kpisCG.taxaLeadExp && kpisRec.taxaLeadExp >= kpisBarra.taxaLeadExp ? 'Recreio' :
                         kpisCG.taxaLeadExp >= kpisBarra.taxaLeadExp ? 'C. Grande' : 'Barra';
   const melhorTicket = rankings.ticket[0].nome;
@@ -113,14 +113,14 @@ export function ComercialRanking() {
 
       {/* 4 Quadrantes de Rankings */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        {/* Taxa de Conversão */}
+        {/* Taxa Lead→Matrícula */}
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-4">
             <Target className="w-5 h-5 text-emerald-500" />
-            <h3 className="text-lg font-semibold text-white">Taxa de Conversão</h3>
+            <h3 className="text-lg font-semibold text-white">Taxa Lead→Matrícula</h3>
           </div>
           <div className="space-y-3">
-            {rankings.conversao.map((item, idx) => (
+            {rankings.leadMatricula.map((item, idx) => (
               <div key={item.nome} className="flex items-center gap-4">
                 <div className={`w-8 h-8 rounded-full ${getMedalBg(idx)} flex items-center justify-center`}>
                   <span className={`font-bold ${getMedalColor(idx)}`}>{idx + 1}</span>
@@ -271,12 +271,12 @@ export function ComercialRanking() {
             </thead>
             <tbody>
               <tr className="border-b border-slate-700/50">
-                <td className="py-2 px-3 text-gray-300">Conversão Total</td>
+                <td className="py-2 px-3 text-gray-300">Lead→Matrícula</td>
                 <td className="text-center text-white py-2 px-3">{kpisBarra.taxaConversaoTotal.toFixed(1)}%</td>
                 <td className="text-center text-white py-2 px-3">{kpisCG.taxaConversaoTotal.toFixed(1)}%</td>
                 <td className="text-center text-white py-2 px-3">{kpisRec.taxaConversaoTotal.toFixed(1)}%</td>
                 <td className="text-center py-2 px-3">
-                  <span className="bg-emerald-500/20 text-emerald-500 px-2 py-1 rounded text-xs">{melhorConversaoNome}</span>
+                  <span className="bg-emerald-500/20 text-emerald-500 px-2 py-1 rounded text-xs">{melhorLeadMatriculaNome}</span>
                 </td>
               </tr>
               <tr className="border-b border-slate-700/50">

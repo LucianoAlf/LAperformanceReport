@@ -80,8 +80,8 @@ export function ComercialMetas() {
     {
       numero: 3,
       titulo: 'Capacitação de Professores',
-      descricao: 'Treinar professores para conversão. Ranking mensal com premiação.',
-      meta: 'Top 5 professores com 80%+ conversão',
+      descricao: 'Treinar professores para presença, acolhimento e experiência experimental auditada.',
+      meta: 'Top 5 professores com presença e experiência auditadas',
       responsavel: 'Coordenação',
     },
     {
@@ -140,7 +140,7 @@ export function ComercialMetas() {
           </div>
           <div className="text-center">
             <div className="text-3xl font-grotesk font-bold text-white">{metaGrupo.meta_taxa_conversao}%</div>
-            <div className="text-sm text-gray-400">Taxa Conversão</div>
+            <div className="text-sm text-gray-400">Taxa Lead→Mat</div>
             <div className="text-xs text-emerald-400 mt-1">+{(metaGrupo.meta_taxa_conversao - kpisGrupo.taxaConversaoTotal).toFixed(1)}pp</div>
           </div>
           <div className="text-center">
