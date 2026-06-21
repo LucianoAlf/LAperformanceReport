@@ -1,79 +1,43 @@
-import { useComercialData } from '../../hooks/useComercialData';
-import { Trophy, TrendingUp, Target, DollarSign } from 'lucide-react';
-import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Legend, ResponsiveContainer, Tooltip } from 'recharts';
-import { ChartTooltip } from './ChartTooltip';
+import { BarChart3, LockKeyhole, TrendingUp, Trophy } from 'lucide-react';
+import { useComercialSeriesMensaisV2 } from '../../hooks/useComercialSeriesMensaisV2';
 
 export function ComercialRanking() {
-  const { kpis: kpisCG } = useComercialData(2025, 'Campo Grande');
-  const { kpis: kpisRec } = useComercialData(2025, 'Recreio');
-  const { kpis: kpisBarra } = useComercialData(2025, 'Barra');
+  const { series, loading, error } = useComercialSeriesMensaisV2(2025);
 
-  if (!kpisCG || !kpisRec || !kpisBarra) {
+  if (loading) {
     return (
       <div className="flex items-center justify-center h-full min-h-screen">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500" />
       </div>
     );
   }
 
-  // Normalizar dados para radar (0-100)
-  const maxTaxaLeadMatricula = Math.max(kpisCG.taxaConversaoTotal, kpisRec.taxaConversaoTotal, kpisBarra.taxaConversaoTotal);
-  const maxTicket = Math.max(kpisCG.ticketMedioParcelas, kpisRec.ticketMedioParcelas, kpisBarra.ticketMedioParcelas);
-  const maxLeadExp = Math.max(kpisCG.taxaLeadExp, kpisRec.taxaLeadExp, kpisBarra.taxaLeadExp);
-  
-  const radarData = [
-    {
-      metric: 'Lead→Mat',
-      'Campo Grande': (kpisCG.taxaConversaoTotal / maxTaxaLeadMatricula) * 100,
-      'Recreio': (kpisRec.taxaConversaoTotal / maxTaxaLeadMatricula) * 100,
-      'Barra': (kpisBarra.taxaConversaoTotal / maxTaxaLeadMatricula) * 100,
-    },
-    {
-      metric: 'Lead→Exp',
-      'Campo Grande': (kpisCG.taxaLeadExp / maxLeadExp) * 100,
-      'Recreio': (kpisRec.taxaLeadExp / maxLeadExp) * 100,
-      'Barra': (kpisBarra.taxaLeadExp / maxLeadExp) * 100,
-    },
-    {
-      metric: 'Ticket Médio',
-      'Campo Grande': (kpisCG.ticketMedioParcelas / maxTicket) * 100,
-      'Recreio': (kpisRec.ticketMedioParcelas / maxTicket) * 100,
-      'Barra': (kpisBarra.ticketMedioParcelas / maxTicket) * 100,
-    },
-    {
-      metric: '% Kids',
-      'Campo Grande': kpisCG.novasMatriculas > 0 ? (kpisCG.matriculasLAMK / kpisCG.novasMatriculas) * 100 : 0,
-      'Recreio': kpisRec.novasMatriculas > 0 ? (kpisRec.matriculasLAMK / kpisRec.novasMatriculas) * 100 : 0,
-      'Barra': kpisBarra.novasMatriculas > 0 ? (kpisBarra.matriculasLAMK / kpisBarra.novasMatriculas) * 100 : 0,
-    },
-  ];
+  if (error) {
+    return (
+      <div className="p-8 text-center text-red-400">
+        <div className="text-xl mb-2">Erro ao carregar ranking</div>
+        <div className="text-sm">{error}</div>
+      </div>
+    );
+  }
 
-  // Rankings
-  const rankings = {
-    leadMatricula: [
-      { nome: 'Recreio', valor: kpisRec.taxaConversaoTotal },
-      { nome: 'Barra', valor: kpisBarra.taxaConversaoTotal },
-      { nome: 'Campo Grande', valor: kpisCG.taxaConversaoTotal },
-    ].sort((a, b) => b.valor - a.valor),
-    
-    volume: [
-      { nome: 'Campo Grande', valor: kpisCG.totalLeads },
-      { nome: 'Barra', valor: kpisBarra.totalLeads },
-      { nome: 'Recreio', valor: kpisRec.totalLeads },
-    ].sort((a, b) => b.valor - a.valor),
-    
-    ticket: [
-      { nome: 'Barra', valor: kpisBarra.ticketMedioParcelas },
-      { nome: 'Recreio', valor: kpisRec.ticketMedioParcelas },
-      { nome: 'Campo Grande', valor: kpisCG.ticketMedioParcelas },
-    ].sort((a, b) => b.valor - a.valor),
-    
-    matriculas: [
-      { nome: 'Campo Grande', valor: kpisCG.novasMatriculas },
-      { nome: 'Recreio', valor: kpisRec.novasMatriculas },
-      { nome: 'Barra', valor: kpisBarra.novasMatriculas },
-    ].sort((a, b) => b.valor - a.valor),
-  };
+  const totais = series.reduce(
+    (acc, mes) => ({
+      campoGrande: acc.campoGrande + mes.cg_leads,
+      recreio: acc.recreio + mes.rec_leads,
+      barra: acc.barra + mes.barra_leads,
+    }),
+    { campoGrande: 0, recreio: 0, barra: 0 },
+  );
+
+  const rankingLeads = [
+    { nome: 'Campo Grande', valor: totais.campoGrande, cor: 'text-cyan-400', barra: 'bg-cyan-500' },
+    { nome: 'Recreio', valor: totais.recreio, cor: 'text-purple-400', barra: 'bg-purple-500' },
+    { nome: 'Barra', valor: totais.barra, cor: 'text-emerald-400', barra: 'bg-emerald-500' },
+  ].sort((a, b) => b.valor - a.valor);
+
+  const maiorValor = Math.max(...rankingLeads.map((item) => item.valor), 1);
+  const totalLeads = rankingLeads.reduce((sum, item) => sum + item.valor, 0);
 
   const getMedalColor = (index: number) => {
     if (index === 0) return 'text-yellow-400';
@@ -87,222 +51,99 @@ export function ComercialRanking() {
     return 'bg-amber-600/20';
   };
 
-  // Determinar melhor em cada métrica
-  const melhorLeadMatriculaNome = rankings.leadMatricula[0].nome;
-  const melhorLeadExp = kpisRec.taxaLeadExp >= kpisCG.taxaLeadExp && kpisRec.taxaLeadExp >= kpisBarra.taxaLeadExp ? 'Recreio' :
-                        kpisCG.taxaLeadExp >= kpisBarra.taxaLeadExp ? 'C. Grande' : 'Barra';
-  const melhorTicket = rankings.ticket[0].nome;
+  const metricasBloqueadas = [
+    'Taxa Lead-Matricula por unidade',
+    'Taxa Exp-Mat',
+    'Matriculas comerciais por unidade',
+    'Ticket medio por origem comercial',
+    '% Kids por conversao comercial',
+  ];
 
   return (
     <div className="p-8 min-h-screen">
-      {/* Header */}
       <div className="mb-8">
-        <span className="inline-block bg-emerald-500/20 text-emerald-500 text-sm font-medium px-3 py-1 rounded-full mb-4">
-          🏆 Ranking
+        <span className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-500 text-sm font-medium px-3 py-1 rounded-full mb-4">
+          <Trophy className="w-4 h-4" /> Ranking
         </span>
         <h1 className="text-4xl lg:text-5xl font-grotesk font-bold text-white mb-2">
           Ranking entre <span className="text-emerald-500">Unidades</span>
         </h1>
         <p className="text-gray-400">
-          Quem performou melhor em cada KPI comercial
+          Ranking seguro com Leads Entrantes pela fonte comercial v2.
         </p>
         <p className="mt-2 text-sm text-yellow-300">
-          Taxa Exp→Mat removida deste ranking até fechar presença individual + vínculo canônico.
+          Rankings de conversao, matriculas por unidade e Exp-Mat seguem bloqueados ate fechar regra canonica.
         </p>
       </div>
 
-      {/* 4 Quadrantes de Rankings */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        {/* Taxa Lead→Matrícula */}
-        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <Target className="w-5 h-5 text-emerald-500" />
-            <h3 className="text-lg font-semibold text-white">Taxa Lead→Matrícula</h3>
-          </div>
-          <div className="space-y-3">
-            {rankings.leadMatricula.map((item, idx) => (
-              <div key={item.nome} className="flex items-center gap-4">
-                <div className={`w-8 h-8 rounded-full ${getMedalBg(idx)} flex items-center justify-center`}>
-                  <span className={`font-bold ${getMedalColor(idx)}`}>{idx + 1}</span>
-                </div>
-                <div className="flex-1">
-                  <span className="text-white">{item.nome}</span>
-                </div>
-                <span className={`font-bold ${idx === 0 ? 'text-emerald-500' : 'text-gray-400'}`}>
-                  {item.valor.toFixed(1)}%
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Volume de Leads */}
-        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
-          <div className="flex items-center gap-3 mb-4">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <div className="lg:col-span-2 bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
+          <div className="flex items-center gap-3 mb-6">
             <TrendingUp className="w-5 h-5 text-blue-400" />
-            <h3 className="text-lg font-semibold text-white">Volume de Leads</h3>
+            <h3 className="text-lg font-semibold text-white">Volume de Leads Entrantes 2025</h3>
           </div>
-          <div className="space-y-3">
-            {rankings.volume.map((item, idx) => (
-              <div key={item.nome} className="flex items-center gap-4">
-                <div className={`w-8 h-8 rounded-full ${getMedalBg(idx)} flex items-center justify-center`}>
-                  <span className={`font-bold ${getMedalColor(idx)}`}>{idx + 1}</span>
+
+          <div className="space-y-5">
+            {rankingLeads.map((item, idx) => {
+              const percentualDoMaior = (item.valor / maiorValor) * 100;
+              const percentualDoTotal = totalLeads > 0 ? (item.valor / totalLeads) * 100 : 0;
+
+              return (
+                <div key={item.nome}>
+                  <div className="flex items-center gap-4 mb-2">
+                    <div className={`w-8 h-8 rounded-full ${getMedalBg(idx)} flex items-center justify-center`}>
+                      <span className={`font-bold ${getMedalColor(idx)}`}>{idx + 1}</span>
+                    </div>
+                    <div className="flex-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-white font-medium">{item.nome}</span>
+                        <span className={`font-bold ${item.cor}`}>
+                          {item.valor.toLocaleString('pt-BR')} leads
+                        </span>
+                      </div>
+                      <div className="text-xs text-gray-500">{percentualDoTotal.toFixed(1)}% do total</div>
+                    </div>
+                  </div>
+                  <div className="ml-12 h-3 bg-slate-700/70 rounded-full overflow-hidden">
+                    <div className={`h-full rounded-full ${item.barra}`} style={{ width: `${percentualDoMaior}%` }} />
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <span className="text-white">{item.nome}</span>
-                </div>
-                <span className={`font-bold ${idx === 0 ? 'text-blue-400' : 'text-gray-400'}`}>
-                  {item.valor.toLocaleString('pt-BR')}
-                </span>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
-        {/* Ticket Médio */}
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-4">
-            <DollarSign className="w-5 h-5 text-yellow-400" />
-            <h3 className="text-lg font-semibold text-white">Ticket Médio Parcelas</h3>
+            <BarChart3 className="w-5 h-5 text-emerald-400" />
+            <h3 className="text-lg font-semibold text-white">Total Consolidado</h3>
           </div>
-          <div className="space-y-3">
-            {rankings.ticket.map((item, idx) => (
-              <div key={item.nome} className="flex items-center gap-4">
-                <div className={`w-8 h-8 rounded-full ${getMedalBg(idx)} flex items-center justify-center`}>
-                  <span className={`font-bold ${getMedalColor(idx)}`}>{idx + 1}</span>
-                </div>
-                <div className="flex-1">
-                  <span className="text-white">{item.nome}</span>
-                </div>
-                <span className={`font-bold ${idx === 0 ? 'text-yellow-400' : 'text-gray-400'}`}>
-                  R$ {item.valor.toFixed(0)}
-                </span>
-              </div>
-            ))}
+          <div className="text-5xl font-grotesk font-bold text-white mb-2">
+            {totalLeads.toLocaleString('pt-BR')}
           </div>
-        </div>
-
-        {/* Matrículas */}
-        <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
-          <div className="flex items-center gap-3 mb-4">
-            <Trophy className="w-5 h-5 text-purple-400" />
-            <h3 className="text-lg font-semibold text-white">Matrículas Absolutas</h3>
-          </div>
-          <div className="space-y-3">
-            {rankings.matriculas.map((item, idx) => (
-              <div key={item.nome} className="flex items-center gap-4">
-                <div className={`w-8 h-8 rounded-full ${getMedalBg(idx)} flex items-center justify-center`}>
-                  <span className={`font-bold ${getMedalColor(idx)}`}>{idx + 1}</span>
-                </div>
-                <div className="flex-1">
-                  <span className="text-white">{item.nome}</span>
-                </div>
-                <span className={`font-bold ${idx === 0 ? 'text-purple-400' : 'text-gray-400'}`}>
-                  {item.valor}
-                </span>
-              </div>
-            ))}
+          <div className="text-sm text-gray-400">Leads Entrantes em 2025</div>
+          <div className="mt-6 rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-4">
+            <div className="text-sm text-emerald-300 font-medium mb-1">Fonte publicada</div>
+            <div className="text-xs text-gray-400">RPC comercial canonica v2, serie mensal consolidada.</div>
           </div>
         </div>
       </div>
 
-      {/* Radar Chart */}
       <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
-        <h3 className="text-xl font-semibold text-white mb-6 text-center">
-          Visão 360° de Performance
-        </h3>
-        
-        <div className="h-[400px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <RadarChart data={radarData}>
-              <PolarGrid stroke="#334155" />
-              <PolarAngleAxis 
-                dataKey="metric" 
-                tick={{ fill: '#94a3b8', fontSize: 12 }}
-              />
-              <PolarRadiusAxis 
-                angle={30} 
-                domain={[0, 100]} 
-                tick={{ fill: '#64748b', fontSize: 10 }}
-              />
-              <Tooltip 
-                cursor={{fill: '#1e293b'}}
-                content={<ChartTooltip suffix="%" />}
-              />
-              <Radar
-                name="Campo Grande"
-                dataKey="Campo Grande"
-                stroke="#06b6d4"
-                fill="#06b6d4"
-                fillOpacity={0.2}
-              />
-              <Radar
-                name="Recreio"
-                dataKey="Recreio"
-                stroke="#a855f7"
-                fill="#a855f7"
-                fillOpacity={0.2}
-              />
-              <Radar
-                name="Barra"
-                dataKey="Barra"
-                stroke="#10b981"
-                fill="#10b981"
-                fillOpacity={0.2}
-              />
-              <Legend 
-                wrapperStyle={{ paddingTop: 20 }}
-              />
-            </RadarChart>
-          </ResponsiveContainer>
+        <div className="flex items-center gap-3 mb-4">
+          <LockKeyhole className="w-5 h-5 text-yellow-300" />
+          <h3 className="text-lg font-semibold text-white">Rankings Bloqueados</h3>
         </div>
-
-        {/* Tabela Resumo */}
-        <div className="mt-6 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-slate-700">
-                <th className="text-left text-gray-400 font-medium py-2 px-3">Métrica</th>
-                <th className="text-center text-emerald-400 font-medium py-2 px-3">Barra</th>
-                <th className="text-center text-cyan-400 font-medium py-2 px-3">Campo Grande</th>
-                <th className="text-center text-purple-400 font-medium py-2 px-3">Recreio</th>
-                <th className="text-center text-yellow-400 font-medium py-2 px-3">Melhor</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-b border-slate-700/50">
-                <td className="py-2 px-3 text-gray-300">Lead→Matrícula</td>
-                <td className="text-center text-white py-2 px-3">{kpisBarra.taxaConversaoTotal.toFixed(1)}%</td>
-                <td className="text-center text-white py-2 px-3">{kpisCG.taxaConversaoTotal.toFixed(1)}%</td>
-                <td className="text-center text-white py-2 px-3">{kpisRec.taxaConversaoTotal.toFixed(1)}%</td>
-                <td className="text-center py-2 px-3">
-                  <span className="bg-emerald-500/20 text-emerald-500 px-2 py-1 rounded text-xs">{melhorLeadMatriculaNome}</span>
-                </td>
-              </tr>
-              <tr className="border-b border-slate-700/50">
-                <td className="py-2 px-3 text-gray-300">Lead→Exp</td>
-                <td className="text-center text-white py-2 px-3">{kpisBarra.taxaLeadExp.toFixed(1)}%</td>
-                <td className="text-center text-white py-2 px-3">{kpisCG.taxaLeadExp.toFixed(1)}%</td>
-                <td className="text-center text-white py-2 px-3">{kpisRec.taxaLeadExp.toFixed(1)}%</td>
-                <td className="text-center py-2 px-3">
-                  <span className="bg-emerald-500/20 text-emerald-500 px-2 py-1 rounded text-xs">{melhorLeadExp}</span>
-                </td>
-              </tr>
-              <tr className="border-b border-slate-700/50">
-                <td className="py-2 px-3 text-gray-300">Exp→Mat</td>
-                <td className="text-center text-yellow-300 py-2 px-3" colSpan={4}>Bloqueada - aguardando regra canônica</td>
-              </tr>
-              <tr className="border-b border-slate-700/50">
-                <td className="py-2 px-3 text-gray-300">Ticket Médio</td>
-                <td className="text-center text-white py-2 px-3">R$ {kpisBarra.ticketMedioParcelas.toFixed(0)}</td>
-                <td className="text-center text-white py-2 px-3">R$ {kpisCG.ticketMedioParcelas.toFixed(0)}</td>
-                <td className="text-center text-white py-2 px-3">R$ {kpisRec.ticketMedioParcelas.toFixed(0)}</td>
-                <td className="text-center py-2 px-3">
-                  <span className="bg-emerald-500/20 text-emerald-500 px-2 py-1 rounded text-xs">{melhorTicket}</span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+        <p className="text-sm text-gray-400 mb-5">
+          Estes rankings existiam na versao antiga, mas dependiam de snapshot ou regra ainda nao canonica. Eles nao devem ser publicados como verdade operacional.
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {metricasBloqueadas.map((metrica) => (
+            <div key={metrica} className="rounded-xl border border-yellow-500/20 bg-yellow-500/10 p-4">
+              <div className="text-sm font-medium text-yellow-300">{metrica}</div>
+              <div className="text-xs text-gray-500 mt-1">Aguardando regra canonica / reconciliacao.</div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
