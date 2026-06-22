@@ -504,7 +504,9 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           experimentais_realizadas: expRealizadas,
           faltaram: faltaram,
           taxa_showup: (expMarcadas + expRealizadas + faltaram) > 0 ? (expRealizadas / (expMarcadas + expRealizadas + faltaram)) * 100 : 0,
-          taxa_conversao_exp_mat: expRealizadas > 0 ? (novasMatriculas / expRealizadas) * 100 : 0,
+          // Exp -> Mat permanece bloqueada como KPI oficial ate regra canonica
+          // de presenca/vinculo. Nao alimentar campo interno com taxa operacional.
+          taxa_conversao_exp_mat: 0,
           experimentais_por_professor: Array.from(expProfMap.entries()).map(([nome, data]) => ({
             id: data.id,
             nome,

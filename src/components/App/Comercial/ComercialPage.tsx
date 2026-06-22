@@ -868,7 +868,9 @@ export function ComercialPage() {
       // Conversões (3 métricas)
       const conversaoLeadExp = leads > 0 ? (experimentais / leads) * 100 : 0;
       const conversaoLeadMat = leads > 0 ? (matriculas / leads) * 100 : 0;
-      const conversaoExpMat = experimentais > 0 ? (matriculas / experimentais) * 100 : 0;
+      // Exp -> Mat permanece bloqueada como KPI oficial ate regra canonica
+      // de presenca/vinculo. Nao propagar taxa operacional por acidente.
+      const conversaoExpMat = 0;
 
       // Nao usar snapshot legado como fallback: pode contaminar o funil.
       setResumo({
@@ -1009,7 +1011,7 @@ export function ComercialPage() {
           .map(([curso, quantidade]) => ({ curso, quantidade }))
           .sort((a, b) => b.quantidade - a.quantidade),
         conversaoLeadMat: prev.leads > 0 ? (totalMatPrimarias / prev.leads) * 100 : 0,
-        conversaoExpMat: prev.experimentais > 0 ? (totalMatPrimarias / prev.experimentais) * 100 : 0,
+        conversaoExpMat: 0,
       }));
 
       // Leads do mês (TODOS os leads, incluindo experimentais e convertidos)
@@ -2607,7 +2609,8 @@ export function ComercialPage() {
 
     // Calcular conversões
     const conversaoLeadExp = leadsSemana > 0 ? (experimentaisSemana / leadsSemana) * 100 : 0;
-    const conversaoExpMat = experimentaisSemana > 0 ? (matriculasSemana / experimentaisSemana) * 100 : 0;
+    // Exp -> Mat permanece bloqueada como KPI oficial.
+    const conversaoExpMat = 0;
     const conversaoLeadMat = leadsSemana > 0 ? (matriculasSemana / leadsSemana) * 100 : 0;
 
     // Calcular tickets medios pela mesma fonte canonica das matriculas
@@ -2708,7 +2711,8 @@ export function ComercialPage() {
 
     // Calcular conversões
     const conversaoLeadExp = leadsMes > 0 ? (experimentaisMes / leadsMes) * 100 : 0;
-    const conversaoExpMat = experimentaisMes > 0 ? (matriculasMes / experimentaisMes) * 100 : 0;
+    // Exp -> Mat permanece bloqueada como KPI oficial.
+    const conversaoExpMat = 0;
     const conversaoLeadMat = leadsMes > 0 ? (matriculasMes / leadsMes) * 100 : 0;
 
     // Matrículas detalhadas do mês (fonte = alunos por data_matricula)
