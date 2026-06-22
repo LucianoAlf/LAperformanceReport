@@ -149,14 +149,26 @@ const calcularIdade = (matricula: any, anoReferencia: number, mesReferencia: num
   return idade >= 0 ? idade : null;
 };
 
-const ehMatriculaComercialNova = (matricula: any): boolean => {
+const firstRelation = <T,>(value: T | T[] | null | undefined): T | null => {
+  if (Array.isArray(value)) return value[0] || null;
+  return value || null;
+};
+
+const ehNovaMatriculaExecutiva = (matricula: any): boolean => {
+  const tipo = firstRelation<any>(matricula.tipos_matricula);
   const cursoNome = ((matricula.cursos as any)?.nome || matricula.curso_nome || '').toLowerCase();
   const ehBanda =
     matricula.is_banda === true ||
     (matricula.cursos as any)?.is_projeto_banda === true ||
     cursoNome.includes('banda');
+  const ehCoral = cursoNome.includes('canto coral');
 
-  return !matricula.is_segundo_curso && !ehBanda && toNumber(matricula.valor_passaporte) > 0;
+  if (matricula.is_segundo_curso === true) return false;
+  if (ehBanda || ehCoral) return false;
+  if (tipo?.codigo === 'BOLSISTA_INT' || tipo?.codigo === 'BOLSISTA_PARC') return false;
+
+  return (tipo?.conta_como_pagante === true || tipo?.entra_ticket_medio === true) &&
+    toNumber(matricula.valor_parcela) > 0;
 };
 
 export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps) {
@@ -328,7 +340,8 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             *,
             cursos(nome, is_projeto_banda),
             canais_origem(nome),
-            professores:professor_atual_id(nome)
+            professores:professor_atual_id(nome),
+            tipos_matricula:tipo_matricula_id!left(codigo, conta_como_pagante, entra_ticket_medio)
           `)
           .gte('data_matricula', startDate)
           .lte('data_matricula', endDate);
@@ -343,7 +356,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
 
         const leads = leadsData || [];
         const matriculas = matriculasData || [];
-        const matriculasComerciaisNovas = matriculas.filter(ehMatriculaComercialNova);
+        const matriculasExecutivas = matriculas.filter(ehNovaMatriculaExecutiva);
 
         // Processar Leads
         const totalLeadsLegado = leads.reduce((acc, l) => acc + (l.quantidade || 1), 0);
@@ -353,7 +366,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
         // REGRA DE NEGÓCIO: Exp/Visita = realizada + visita_escola (não inclui agendada/faltou)
         const expRealizadas = leads.filter(l => ['experimental_realizada','compareceu','visita_escola'].includes(l.status)).reduce((acc, l) => acc + (l.quantidade || 1), 0);
         const faltaram = leads.filter(l => l.status === 'experimental_faltou').reduce((acc, l) => acc + (l.quantidade || 1), 0);
-        const novasMatriculas = matriculasComerciaisNovas.length;
+        const novasMatriculas = matriculasExecutivas.length;
 
         // Leads por Curso
         const cursosLeadMap = new Map<string, number>();
@@ -402,8 +415,8 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           expCanalMap.set(canal, (expCanalMap.get(canal) || 0) + (l.quantidade || 1));
         });
 
-        // Matriculas por Curso (fonte canonica operacional: alunos.data_matricula)
-        const matriculasCanonicas = matriculasComerciaisNovas;
+        // Matriculas por Curso (mesma regra executiva canonica do Dashboard)
+        const matriculasCanonicas = matriculasExecutivas;
         const cursoMatMap = new Map<string, number>();
         matriculasCanonicas.forEach(m => {
           const curso = (m as any).cursos?.nome || 'Nao informado';
