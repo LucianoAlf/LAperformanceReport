@@ -217,7 +217,7 @@ export function ModalDetalhesConversao({
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-white">Conversao (legado) — {professorNome}</DialogTitle>
+          <DialogTitle className="text-white">Conversao diagnostica (legado) — {professorNome}</DialogTitle>
           <p className="text-sm text-slate-400 capitalize">{labelPeriodo}</p>
         </DialogHeader>
 
@@ -302,20 +302,10 @@ export function ModalDetalhesConversao({
                   </span>
                 </Tooltip>
               </div>
-              <span
-                className={cn(
-                  'text-sm font-bold',
-                  taxaConversao > 100
-                    ? 'text-amber-400'
-                    : taxaConversao >= 70
-                    ? 'text-emerald-400'
-                    : taxaConversao >= 40
-                    ? 'text-amber-400'
-                    : 'text-rose-400'
-                )}
-              >
-                {taxaConversao.toFixed(1)}%
-              </span>
+              <div className="text-right">
+                <span className="text-sm font-bold text-amber-300">Oficial bloqueada</span>
+                <span className="block text-[11px] text-slate-400">diag. legado {taxaConversao.toFixed(1)}%</span>
+              </div>
             </div>
 
             {/* Filtros */}
