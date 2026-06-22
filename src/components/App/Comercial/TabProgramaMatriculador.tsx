@@ -1644,7 +1644,8 @@ function HistoricoMensal({ historico, mediaGrupo, config, metaVolume, metaTicket
         <div className="grid grid-cols-11 gap-2 text-center text-sm">
           {MESES.map((mes, idx) => {
             const dadosMes = historico.find(h => h.mes === idx + 1);
-            const temDados = dadosMes && dadosMes.total_matriculas > 0;
+            const mesCarregado = Boolean(dadosMes);
+            const temMatriculas = mesCarregado && (dadosMes?.total_matriculas || 0) > 0;
             const matriculas = dadosMes?.total_matriculas || 0;
             
             return (
@@ -1652,17 +1653,17 @@ function HistoricoMensal({ historico, mediaGrupo, config, metaVolume, metaTicket
                 key={mes} 
                 className={cn(
                   "rounded-lg p-3",
-                  temDados ? "bg-emerald-500/20" : "bg-slate-700/50"
+                  temMatriculas ? "bg-emerald-500/20" : "bg-slate-700/50"
                 )}
               >
-                <div className={cn("font-bold", temDados ? "text-emerald-400" : "text-slate-500")}>
+                <div className={cn("font-bold", temMatriculas ? "text-emerald-400" : "text-slate-500")}>
                   {mes}
                 </div>
-                <div className={cn("text-lg font-bold", temDados ? "text-white" : "text-slate-500")}>
-                  {temDados ? matriculas : '-'}
+                <div className={cn("text-lg font-bold", mesCarregado ? "text-white" : "text-slate-500")}>
+                  {mesCarregado ? matriculas : '-'}
                 </div>
-                <div className={cn("text-xs", temDados ? "text-slate-400" : "text-slate-500")}>
-                  {temDados ? 'matrículas' : 'pendente'}
+                <div className={cn("text-xs", mesCarregado ? "text-slate-400" : "text-slate-500")}>
+                  {mesCarregado ? 'matrículas' : 'pendente'}
                 </div>
               </div>
             );

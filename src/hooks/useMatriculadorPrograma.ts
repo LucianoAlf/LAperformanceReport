@@ -187,9 +187,8 @@ async function buscarMetricasMensaisV2(
   mesReferencia?: number,
 ): Promise<HistoricoMatriculadorItem[]> {
   const meses = normalizarMesesPrograma(config, mesReferencia);
-  const historico: HistoricoMatriculadorItem[] = [];
 
-  for (const mes of meses) {
+  return Promise.all(meses.map(async (mes) => {
     const [kpisResponse, conciliacaoResponse] = await Promise.all([
       supabase.rpc('get_kpis_comercial_canonicos_v2', {
         p_unidade_id: unidadeId,
@@ -236,7 +235,7 @@ async function buscarMetricasMensaisV2(
       ? Number(((conversoesExpMat / denominadorExpMat) * 100).toFixed(1))
       : 0;
 
-    historico.push({
+    return {
       mes,
       unidade_id: unidadeId,
       unidade_nome: '',
@@ -251,10 +250,8 @@ async function buscarMetricasMensaisV2(
       denominador_exp_mat: denominadorExpMat,
       conversoes_exp_mat: conversoesExpMat,
       taxa_geral: leads > 0 ? Number(((matriculas / leads) * 100).toFixed(1)) : 0,
-    });
-  }
-
-  return historico;
+    };
+  }));
 }
 
 function consolidarMetricasV2(
