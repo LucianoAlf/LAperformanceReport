@@ -1,4 +1,4 @@
-import { useEffect, useState, type ComponentType } from 'react';
+import { useEffect, useState, type ComponentType, type ReactNode } from 'react';
 import {
   AlertTriangle,
   Ban,
@@ -501,8 +501,8 @@ export function ComercialConciliacaoExperimentais({
               </div>
               <h2 className="text-2xl font-bold text-white">Conciliação de Experimentais</h2>
               <p className="text-sm text-slate-300 mt-1 max-w-3xl">
-                Visao do funil experimental por etapa. A fila mostra apenas casos que precisam de decisao humana;
-                as decisoes gravam somente na camada humana.
+                Separa o bruto do Emusys da leitura validada pela equipe. As decisoes limpam a fila e
+                alimentam a camada humana, sem alterar o historico original.
               </p>
             </div>
             <button
@@ -516,43 +516,78 @@ export function ComercialConciliacaoExperimentais({
         </div>
 
         <div className="p-6 space-y-6">
-          <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
-            <ResumoCard
-              icon={Calendar}
-              label="Agendadas"
-              value={resumo.experimentais_agendadas}
-              tone="cyan"
-            />
-            <ResumoCard
-              icon={CheckCircle2}
-              label="Realizadas confirmadas"
-              value={resumo.experimentais_realizadas_confirmadas}
-              tone="emerald"
-            />
-            <ResumoCard
-              icon={UserX}
-              label="Faltas"
-              value={resumo.experimentais_faltaram}
-              tone="rose"
-            />
-            <ResumoCard
-              icon={AlertTriangle}
-              label="A conciliar"
-              value={items.length}
-              tone="sky"
-            />
-            <ResumoCard
-              icon={HelpCircle}
-              label="Diretas/ignoradas"
-              value={resumo.matriculas_diretas + resumo.ignoradas_por_decisao}
-              tone="violet"
-            />
-            <ResumoCard
-              icon={ClipboardCheck}
-              label="Decididas"
-              value={resumo.decisoes_humanas}
-              tone="slate"
-            />
+          <div className="grid gap-4 xl:grid-cols-3">
+            <ResumoGrupo
+              titulo="Bruto Emusys"
+              descricao="Eventos recebidos do funil original."
+            >
+              <ResumoCard
+                icon={Calendar}
+                label="Agendadas"
+                value={resumo.experimentais_agendadas}
+                tone="cyan"
+              />
+              <ResumoCard
+                icon={ClipboardCheck}
+                label="Realizadas pelo status"
+                value={resumo.realizadas_status_operacional}
+                tone="sky"
+              />
+              <ResumoCard
+                icon={UserX}
+                label="Faltas no funil"
+                value={resumo.experimentais_faltaram}
+                tone="rose"
+              />
+            </ResumoGrupo>
+
+            <ResumoGrupo
+              titulo="Leitura da equipe"
+              descricao="Resultado apos decisoes humanas."
+            >
+              <ResumoCard
+                icon={CheckCircle2}
+                label="Realizadas confirmadas"
+                value={resumo.experimentais_realizadas_confirmadas}
+                tone="emerald"
+              />
+              <ResumoCard
+                icon={GraduationCap}
+                label="Matriculas diretas"
+                value={resumo.matriculas_diretas}
+                tone="violet"
+              />
+              <ResumoCard
+                icon={ClipboardX}
+                label="Ignoradas"
+                value={resumo.ignoradas_por_decisao}
+                tone="slate"
+              />
+            </ResumoGrupo>
+
+            <ResumoGrupo
+              titulo="Fila operacional"
+              descricao="Casos que ainda precisam de leitura humana."
+            >
+              <ResumoCard
+                icon={AlertTriangle}
+                label="A conciliar"
+                value={items.length}
+                tone="amber"
+              />
+              <ResumoCard
+                icon={HelpCircle}
+                label="Pendentes"
+                value={resumo.pendentes_conciliacao}
+                tone="sky"
+              />
+              <ResumoCard
+                icon={ClipboardCheck}
+                label="Decididas"
+                value={resumo.decisoes_humanas}
+                tone="emerald"
+              />
+            </ResumoGrupo>
           </div>
 
           <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 p-4">
@@ -561,8 +596,8 @@ export function ComercialConciliacaoExperimentais({
               <div>
                 <h3 className="text-sm font-semibold text-amber-100">Taxa Experimental &gt; Matricula segue bloqueada</h3>
                 <p className="text-sm text-amber-100/80 mt-1">
-                  Os botoes abaixo nao alteram Emusys nem status original. Eles registram a leitura humana
-                  para limpar a fila e preparar o KPI canônico com seguranca.
+                  As decisoes ja ajustam esta leitura operacional, mas ainda nao publicam KPI oficial. Primeiro vamos
+                  validar a fila conciliada por unidade e mes.
                 </p>
               </div>
             </div>
@@ -575,8 +610,7 @@ export function ComercialConciliacaoExperimentais({
           <div>
             <h3 className="text-lg font-bold text-white">Fila de acao</h3>
             <p className="text-sm text-slate-400">
-              {items.length} caso(s) que precisam de decisao humana. Agendadas, faltas e confirmadas sem divergencia
-              ficam no resumo, nao entram nesta fila.
+              {items.length} caso(s) pendentes. Ao decidir, o caso sai ou muda de grupo conforme a leitura escolhida.
             </p>
           </div>
         </div>
@@ -861,6 +895,28 @@ const toneClasses: Record<ResumoCardProps['tone'], string> = {
   violet: 'border-violet-500/30 bg-violet-500/10 text-violet-200',
   slate: 'border-slate-500/30 bg-slate-700/40 text-slate-200',
 };
+
+function ResumoGrupo({
+  titulo,
+  descricao,
+  children,
+}: {
+  titulo: string;
+  descricao: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-2xl border border-slate-700/60 bg-slate-950/30 p-4">
+      <div className="mb-3">
+        <h3 className="text-sm font-semibold text-slate-100">{titulo}</h3>
+        <p className="mt-1 text-xs text-slate-500">{descricao}</p>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
+        {children}
+      </div>
+    </div>
+  );
+}
 
 function ResumoCard({ icon: Icon, label, value, tone }: ResumoCardProps) {
   return (
