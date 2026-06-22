@@ -3635,11 +3635,11 @@ export function ComercialPage() {
                   )}
                 </div>
               </Tooltip>
-              <Tooltip content="Leads do mês que converteram em matrícula. Não inclui leads de meses anteriores que matricularam agora." side="bottom">
+              <Tooltip content="Matrículas novas do mês pela fonte alunos. Exclui segundo curso, banda/projeto e passaporte zerado." side="bottom">
                 <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/30 cursor-help">
                   <div className="flex items-center gap-2 mb-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    <span className="text-xs text-slate-400 font-medium">Matrículas</span>
+                    <span className="text-xs text-slate-400 font-medium">Matrículas novas</span>
                   </div>
                   <p className="text-2xl font-bold text-emerald-400">{resumo.matriculas}</p>
                   {hojeMatriculas > 0 && (
@@ -3819,7 +3819,7 @@ export function ComercialPage() {
                   }).length;
                 })(), icon: Guitar, color: '#a855f7', gradient: 'from-purple-500 to-violet-500' },
                 { key: 'visita', label: 'Visitas', count: visitasMes.length, icon: Building2, color: '#f59e0b', gradient: 'from-amber-500 to-orange-500' },
-                { key: 'matricula', label: 'Matrículas', count: matriculasMes.filter((m: any) => { const banda = m.is_banda || m.curso_nome?.toLowerCase().includes('banda'); if (filtroTipoMat === 'novos_alunos') return ehMatriculaNova(m); if (filtroTipoMat === 'segundo_curso') return m.is_segundo_curso || banda; return true; }).length, icon: GraduationCap, color: '#10b981', gradient: 'from-emerald-500 to-teal-500' },
+                { key: 'matricula', label: 'Matrículas novas', count: matriculasMes.filter((m: any) => { const banda = m.is_banda || m.curso_nome?.toLowerCase().includes('banda'); if (filtroTipoMat === 'novos_alunos') return ehMatriculaNova(m); if (filtroTipoMat === 'segundo_curso') return m.is_segundo_curso || banda; return true; }).length, icon: GraduationCap, color: '#10b981', gradient: 'from-emerald-500 to-teal-500' },
               ]}
               totalLeads={leadsMes.length}
               activeStage={abaDetalhamento}

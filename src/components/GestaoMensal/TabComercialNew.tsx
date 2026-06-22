@@ -734,48 +734,48 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
               <div>
                 <h4 className="text-cyan-100 font-semibold">Leitura operacional de experimentais</h4>
                 <p className="text-cyan-100/80 text-sm">
-                  Marcadas vêm do funil. Presença confirmada vem do Emusys com presença individual.
-                  Status realizado no funil ainda não é a taxa oficial.
+                  Marcadas vêm do funil comercial. Realizadas confirmadas exigem aluno vinculado,
+                  presença individual e aula experimental no Emusys. A taxa Exp → Mat segue bloqueada.
                 </p>
               </div>
             </div>
             <dl className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-4 text-sm">
               <div>
-                <dt className="text-slate-400">Presença confirmada</dt>
+                <dt className="text-slate-400">Realizadas confirmadas</dt>
                 <dd className="text-white text-2xl font-bold">{experimentaisDiagnostico.realizadasPresencaConfirmada}</dd>
               </div>
               <div>
-                <dt className="text-slate-400">Status realizado no funil</dt>
+                <dt className="text-slate-400">Realizadas pelo status</dt>
                 <dd className="text-white text-2xl font-bold">{experimentaisDiagnostico.realizadasStatusOperacional}</dd>
               </div>
               <div>
-                <dt className="text-slate-400">Com matrícula, sem vínculo</dt>
+                <dt className="text-slate-400">Matrículas sem vínculo</dt>
                 <dd className="text-white text-2xl font-bold">{experimentaisDiagnostico.conversoesPendentesVinculo}</dd>
               </div>
               <div>
-                <dt className="text-slate-400">Realizada sem matrícula</dt>
+                <dt className="text-slate-400">Realizadas sem matrícula</dt>
                 <dd className="text-white text-2xl font-bold">{experimentaisDiagnostico.realizadasSemConversaoAparente}</dd>
               </div>
               <div>
-                <dt className="text-slate-400">Ignoradas/diretas</dt>
+                <dt className="text-slate-400">Diretas/duplicadas</dt>
                 <dd className="text-white text-2xl font-bold">
                   {experimentaisDiagnostico.decisoesHumanasExcluidasDenominador}
                 </dd>
-                <p className="text-[11px] text-slate-400">fora da taxa Exp → Mat</p>
+                <p className="text-[11px] text-slate-400">não entram na taxa</p>
               </div>
               <div>
-                <dt className="text-slate-400">Para revisar</dt>
+                <dt className="text-slate-400">Revisão humana</dt>
                 <dd className="text-white text-2xl font-bold">
                   {experimentaisDiagnostico.decisoesHumanasPendentesCanonizacao}
                 </dd>
                 <p className="text-[11px] text-slate-400">cadastro/vínculo</p>
               </div>
               <div>
-                <dt className="text-slate-400">Emusys sem funil</dt>
+                <dt className="text-slate-400">Presença sem funil</dt>
                 <dd className="text-white text-2xl font-bold">{experimentaisDiagnostico.presencasEmusysSemFunil}</dd>
               </div>
               <div>
-                <dt className="text-slate-400">Faixa provisória</dt>
+                <dt className="text-slate-400">Faixa em teste</dt>
                 <dd className="text-amber-200 text-xl font-bold">
                   {formatTaxaDiagnostica(experimentaisDiagnostico.taxaExpMatMinimaCanonica)}
                   {' - '}
@@ -789,13 +789,13 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <KPICard
               icon={Calendar}
-              label="Agendadas/Marcadas"
+              label="Marcadas no funil"
               value={dados.experimentais_marcadas}
               variant="cyan"
             />
             <KPICard
               icon={Calendar}
-              label="Presença Confirmada"
+              label="Realizadas confirmadas"
               value={experimentaisDiagnostico.realizadasPresencaConfirmada}
               format="number"
               variant="emerald"
@@ -808,7 +808,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             />
             <KPICard
               icon={Percent}
-              label="Show-up operacional"
+              label="Show-up do funil"
               value={dados.taxa_showup}
               format="percent"
               variant="violet"
@@ -821,9 +821,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
               <div>
                 <div className="text-2xl font-bold text-amber-200">Bloqueada</div>
                 <p className="text-xs text-slate-400 mt-1">
-                  {experimentaisDiagnostico.conversoesPendentesVinculo} pendente(s) de vínculo e{' '}
-                  {experimentaisDiagnostico.decisoesHumanasPendentesCanonizacao} decisão(ões) humana(s)
-                  ainda sem regra oficial.
+                  Aguarda vínculo aluno → presença e decisões humanas antes de virar KPI oficial.
                 </p>
               </div>
             </div>
@@ -833,10 +831,10 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             <FunnelChart
               steps={[
                 { label: 'Leads', value: dados.total_leads, color: '#06b6d4' },
-                { label: 'Presença confirmada', value: experimentaisDiagnostico.realizadasPresencaConfirmada, color: '#8b5cf6' },
-                { label: 'Matrículas comerciais', value: dados.novas_matriculas, color: '#10b981' },
+                { label: 'Realizadas confirmadas', value: experimentaisDiagnostico.realizadasPresencaConfirmada, color: '#8b5cf6' },
+                { label: 'Matrículas novas', value: dados.novas_matriculas, color: '#10b981' },
               ]}
-              title="Funil de leitura (não KPI oficial)"
+              title="Funil diagnóstico (não KPI oficial)"
             />
             {dados.experimentais_por_canal.length > 0 ? (
               <DistributionChart
@@ -884,7 +882,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <KPICard
               icon={UserPlus}
-              label="Novas Matrículas"
+              label="Matrículas novas"
             value={dados.novas_matriculas}
             target={metas.matriculas}
             format="number"
