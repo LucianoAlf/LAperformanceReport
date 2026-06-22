@@ -51,6 +51,7 @@ interface DadosComercial {
   experimentais_por_canal: { name: string; value: number }[];
   experimentais_diagnostico_v2: {
     agendadasEventos: number;
+    noShowStatusOperacional: number;
     realizadasStatusOperacional: number;
     realizadasPresencaConfirmada: number;
     statusOperacionalSemPresenca: number;
@@ -105,6 +106,7 @@ interface DadosComparativo {
 
 const experimentaisDiagnosticoVazio: DadosComercial['experimentais_diagnostico_v2'] = {
   agendadasEventos: 0,
+  noShowStatusOperacional: 0,
   realizadasStatusOperacional: 0,
   realizadasPresencaConfirmada: 0,
   statusOperacionalSemPresenca: 0,
@@ -249,6 +251,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
         });
         const experimentaisDiagnosticoV2 = {
           agendadasEventos: diagnosticoExperimentaisV2.agendadasEventos,
+          noShowStatusOperacional: diagnosticoExperimentaisV2.noShowStatusOperacional,
           realizadasStatusOperacional: diagnosticoExperimentaisV2.realizadasStatusOperacional,
           realizadasPresencaConfirmada: diagnosticoExperimentaisV2.realizadasPresencaConfirmada,
           statusOperacionalSemPresenca: diagnosticoExperimentaisV2.statusOperacionalSemPresenca,
