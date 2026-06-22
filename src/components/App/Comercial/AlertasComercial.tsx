@@ -115,9 +115,10 @@ export function AlertasComercial({ unidadeId, ano, mes, resumoLeads, totalMatric
         });
       }
 
-      const expMatInfo = resumoLeads?.taxaExpMatLiberada
-        ? `Exp -> Mat canonica liberada: ${resumoLeads.conversaoExpMat.toFixed(1)}% (${resumoLeads.conversoesExpMat || 0}/${resumoLeads.denominadorExpMat || 0}).`
-        : 'Exp -> Mat aguarda conciliacao canonica.';
+      const taxaExpMatLiberada = Boolean(resumoLeads?.taxaExpMatLiberada && (resumoLeads.denominadorExpMat || 0) > 0);
+      const expMatInfo = taxaExpMatLiberada
+        ? `Exp -> Mat oficial liberada: ${resumoLeads!.conversaoExpMat.toFixed(1)}% (${resumoLeads!.conversoesExpMat || 0}/${resumoLeads!.denominadorExpMat || 0} confirmadas).`
+        : 'Exp -> Mat ainda aguarda conciliacao canonica.';
 
       // Taxa Lead -> Matricula (nao confundir com Exp -> Mat).
       if (taxaConversaoGeral >= 20) {
