@@ -2529,8 +2529,8 @@ export function ComercialPage() {
     texto += `👤 ${hunterNome}\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
     texto += `🎯 Leads no mês: *${leadsPeriodo}*\n`;
-    texto += `🎸 Experimentais no período: *${experimentaisPeriodo}*\n`;
-    texto += `📆 Experimentais agendadas: *${totalExpAgendadas}*\n`;
+    texto += `🎸 Experimentais marcadas no mês: *${experimentaisPeriodo}*\n`;
+    texto += `📆 Experimentais agendadas no dia: *${totalExpAgendadas}*\n`;
     texto += `🏫 Visitas: *${visitasDiaTotal}*\n\n`;
 
     texto += `✅ Matrículas no período: *${matriculasNovas.length}*\n\n`;
@@ -2630,7 +2630,7 @@ export function ComercialPage() {
     texto += `📈 *TOTAIS DA SEMANA*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
     texto += `🎯 Leads na semana: *${leadsSemana}*\n`;
-    texto += `🎸 Experimentais na semana: *${experimentaisSemana}*\n`;
+    texto += `🎸 Experimentais marcadas na semana: *${experimentaisSemana}*\n`;
     texto += `🏫 Visitas na semana: *${visitasSemana}*\n`;
     texto += `✅ Matrículas na semana: *${matriculasSemana}*\n\n`;
 
@@ -2779,7 +2779,7 @@ export function ComercialPage() {
     texto += `📈 *RESUMO GERAL DO MÊS*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
     texto += `🎯 Leads no mês: *${leadsMes}*\n`;
-    texto += `🎸 Experimentais no mês: *${experimentaisMes}*\n`;
+    texto += `🎸 Experimentais realizadas no mês: *${experimentaisMes}*\n`;
     texto += `🏫 Visitas no mês: *${visitasMes}*\n`;
     texto += `✅ Matrículas no mês: *${matriculasMes}*\n\n`;
 
