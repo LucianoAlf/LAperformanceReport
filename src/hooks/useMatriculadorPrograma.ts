@@ -287,38 +287,10 @@ function consolidarMetricasV2(
   };
 }
 
-async function sobreporHistoricoMatriculadorV2(
-  ano: number,
-  historicoLegado: HistoricoMatriculador,
-  config: ConfigPrograma,
-  unidadeId?: string | null,
-  mesReferencia?: number,
-): Promise<HistoricoMatriculador> {
-  const unidadeIds = unidadeId && unidadeId !== 'todos'
-    ? [unidadeId]
-    : Array.from(new Set(historicoLegado.historico.map((item) => item.unidade_id))).filter(Boolean);
-
-  const historicoV2: HistoricoMatriculadorItem[] = [];
-
-  for (const id of unidadeIds) {
-    const legadoPorMes = new Map(
-      historicoLegado.historico
-        .filter((item) => item.unidade_id === id)
-        .map((item) => [item.mes, item]),
-    );
-    const unidadeNome = legadoPorMes.values().next().value?.unidade_nome || '';
-    const serieV2 = await buscarMetricasMensaisV2(ano, id, config, mesReferencia);
-
-    serieV2.forEach((item) => {
-      const legado = legadoPorMes.get(item.mes);
-      historicoV2.push({
-        ...item,
-        unidade_nome: unidadeNome || legado?.unidade_nome || item.unidade_nome,
-        ticket_medio: legado?.ticket_medio || 0,
-      });
-    });
-  }
-
+function consolidarHistoricoMatriculadorV2(
+  historicoV2: HistoricoMatriculadorItem[],
+  historicoLegado?: HistoricoMatriculador | null,
+): HistoricoMatriculador {
   const linhasComLeads = historicoV2.filter((item) => item.total_leads > 0);
   const linhasComTicket = historicoV2.filter((item) => item.ticket_medio > 0);
 
@@ -327,17 +299,16 @@ async function sobreporHistoricoMatriculadorV2(
     media_grupo: {
       taxa_geral: linhasComLeads.length > 0
         ? Number((linhasComLeads.reduce((acc, item) => acc + item.taxa_geral, 0) / linhasComLeads.length).toFixed(1))
-        : 0,
+        : historicoLegado?.media_grupo?.taxa_geral || 0,
       volume_medio: historicoV2.length > 0
         ? Number((historicoV2.reduce((acc, item) => acc + item.total_matriculas, 0) / historicoV2.length).toFixed(1))
-        : 0,
+        : historicoLegado?.media_grupo?.volume_medio || 0,
       ticket_medio: linhasComTicket.length > 0
         ? Math.round(linhasComTicket.reduce((acc, item) => acc + item.ticket_medio, 0) / linhasComTicket.length)
-        : historicoLegado.media_grupo?.ticket_medio || 0,
+        : historicoLegado?.media_grupo?.ticket_medio || 0,
     },
   };
 }
-
 // Função para calcular pontuação de um Hunter
 function calcularPontuacao(
   hunter: HunterDados,
@@ -433,6 +404,7 @@ function calcularPontuacao(
 
 export function useMatriculadorPrograma(ano: number = 2026, unidadeId?: string | null, mesReferencia?: number) {
   const [dados, setDados] = useState<DadosPrograma | null>(null);
+  const [historico, setHistorico] = useState<HistoricoMatriculador | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -451,17 +423,46 @@ export function useMatriculadorPrograma(ano: number = 2026, unidadeId?: string |
 
       const resultado = data as DadosPrograma;
 
-      // Calcular pontuação para cada Hunter
+      // Calcular pontuacao para cada Hunter e reaproveitar a mesma serie v2 no historico.
       if (resultado.hunters && resultado.config) {
         const huntersComMetricasV2: HunterDados[] = [];
+        const historicoV2Consolidado: HistoricoMatriculadorItem[] = [];
+        let historicoLegado: HistoricoMatriculador | null = null;
+
+        const { data: historicoData, error: historicoError } = await supabase.rpc('get_historico_mensal_matriculador', {
+          p_ano: ano,
+          p_unidade_id: unidadeId === 'todos' ? null : unidadeId,
+        });
+
+        if (historicoError) {
+          console.warn('Historico legado do Matriculador indisponivel:', historicoError.message);
+        } else {
+          historicoLegado = historicoData as HistoricoMatriculador;
+        }
+
+        const legadoPorUnidadeMes = new Map<string, HistoricoMatriculadorItem>();
+        historicoLegado?.historico?.forEach((item) => {
+          legadoPorUnidadeMes.set(`${item.unidade_id}:${item.mes}`, item);
+        });
 
         for (const hunter of resultado.hunters) {
           const historicoV2 = await buscarMetricasMensaisV2(ano, hunter.unidade_id, resultado.config, mesReferencia);
-          const metricasV2 = consolidarMetricasV2(historicoV2, hunter.metricas, mesReferencia);
+          const historicoV2ComLegado = historicoV2.map((item) => {
+            const legado = legadoPorUnidadeMes.get(`${hunter.unidade_id}:${item.mes}`);
+
+            return {
+              ...item,
+              unidade_nome: hunter.unidade_nome || legado?.unidade_nome || item.unidade_nome,
+              ticket_medio: legado?.ticket_medio || hunter.metricas.media_ticket || item.ticket_medio || 0,
+            };
+          });
+          const metricasV2 = consolidarMetricasV2(historicoV2ComLegado, hunter.metricas, mesReferencia);
           const hunterComMetricasV2 = {
             ...hunter,
             metricas: metricasV2,
           };
+
+          historicoV2Consolidado.push(...historicoV2ComLegado);
 
           huntersComMetricasV2.push({
             ...hunterComMetricasV2,
@@ -471,8 +472,8 @@ export function useMatriculadorPrograma(ano: number = 2026, unidadeId?: string |
 
         resultado.hunters = huntersComMetricasV2;
 
-        // Ordenar por pontuação total (decrescente) e atribuir posição
-        resultado.hunters.sort((a, b) => 
+        // Ordenar por pontuacao total (decrescente) e atribuir posicao
+        resultado.hunters.sort((a, b) =>
           (b.pontuacao?.total || 0) - (a.pontuacao?.total || 0)
         );
 
@@ -481,6 +482,8 @@ export function useMatriculadorPrograma(ano: number = 2026, unidadeId?: string |
           posicao: index + 1,
           acima_corte: (hunter.pontuacao?.total || 0) >= resultado.config.nota_corte,
         }));
+
+        setHistorico(consolidarHistoricoMatriculadorV2(historicoV2Consolidado, historicoLegado));
       }
 
       setDados(resultado);
@@ -583,58 +586,10 @@ export function useMatriculadorPrograma(ano: number = 2026, unidadeId?: string |
     }
   }, [ano, carregarDados]);
 
-  // Buscar histórico mensal
-  const [historico, setHistorico] = useState<HistoricoMatriculador | null>(null);
-
-  const carregarHistorico = useCallback(async () => {
-    try {
-      const { data, error: rpcError } = await supabase.rpc('get_historico_mensal_matriculador', {
-        p_ano: ano,
-        p_unidade_id: unidadeId === 'todos' ? null : unidadeId,
-      });
-
-      if (rpcError) throw rpcError;
-
-      const historicoLegado = data as HistoricoMatriculador;
-      const configAtual: ConfigPrograma = {
-        ano,
-        metas: {
-          taxa_showup_experimental: 0,
-          taxa_experimental_matricula: 0,
-          taxa_lead_matricula: 0,
-          volume_campo_grande: 0,
-          volume_recreio: 0,
-          volume_barra: 0,
-          ticket_campo_grande: 0,
-          ticket_recreio: 0,
-          ticket_barra: 0,
-        },
-        pontuacao: {
-          taxa_showup: 0,
-          taxa_exp_mat: 0,
-          taxa_geral: 0,
-          volume_medio: 0,
-          ticket_medio: 0,
-        },
-        nota_corte: 0,
-        periodo: {
-          mes_inicio: 1,
-          mes_fim: mesReferencia || 11,
-        },
-      };
-
-      setHistorico(
-        await sobreporHistoricoMatriculadorV2(ano, historicoLegado, configAtual, unidadeId, mesReferencia),
-      );
-    } catch (err) {
-      console.error('Erro ao carregar histórico:', err);
-    }
-  }, [ano, unidadeId, mesReferencia]);
 
   useEffect(() => {
     carregarDados();
-    carregarHistorico();
-  }, [carregarDados, carregarHistorico]);
+  }, [carregarDados]);
 
   return {
     dados,
