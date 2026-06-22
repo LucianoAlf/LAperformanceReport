@@ -813,17 +813,17 @@ export function ComercialPage() {
       // Quando o filtro é "Hoje", buscar dados do mês inteiro para o "Acumulado do Mês"
       const isFiltroHoje = competencia.filtro.tipo === 'diario';
       let registrosParaResumo = registros;
+      const mesStartDateResumo = `${competencia.filtro.ano}-${String(competencia.filtro.mes).padStart(2, '0')}-01`;
+      const mesEndDateResumo = `${competencia.filtro.ano}-${String(competencia.filtro.mes).padStart(2, '0')}-${new Date(competencia.filtro.ano, competencia.filtro.mes, 0).getDate()}`;
+      const matriculasResumoStartDate = isFiltroHoje ? mesStartDateResumo : startDate;
+      const matriculasResumoEndDate = isFiltroHoje ? mesEndDateResumo : endDate;
 
       if (isFiltroHoje) {
-        const mesStartDate = `${competencia.filtro.ano}-${String(competencia.filtro.mes).padStart(2, '0')}-01`;
-        const ultimoDiaMes = new Date(competencia.filtro.ano, competencia.filtro.mes, 0).getDate();
-        const mesEndDate = `${competencia.filtro.ano}-${String(competencia.filtro.mes).padStart(2, '0')}-${ultimoDiaMes}`;
-
         let queryMes = supabase
           .from('leads')
           .select('*, canais_origem(nome), cursos(nome), unidades(codigo)')
-          .gte('data_contato', mesStartDate)
-          .lte('data_contato', mesEndDate);
+          .gte('data_contato', mesStartDateResumo)
+          .lte('data_contato', mesEndDateResumo);
 
         if (isAdmin) {
           if (context?.unidadeSelecionada && context.unidadeSelecionada !== 'todos') {
@@ -900,8 +900,8 @@ export function ComercialPage() {
         .not('data_matricula', 'is', null)
         .limit(10000);
 
-      if (startDate) alunosMatQuery = alunosMatQuery.gte('data_matricula', startDate);
-      if (endDate) alunosMatQuery = alunosMatQuery.lte('data_matricula', endDate);
+      if (matriculasResumoStartDate) alunosMatQuery = alunosMatQuery.gte('data_matricula', matriculasResumoStartDate);
+      if (matriculasResumoEndDate) alunosMatQuery = alunosMatQuery.lte('data_matricula', matriculasResumoEndDate);
 
       if (isAdmin) {
         if (context?.unidadeSelecionada && context.unidadeSelecionada !== 'todos') {
@@ -986,32 +986,31 @@ export function ComercialPage() {
 
       setMatriculasMes(matriculasDoMes as any);
 
-      // Alinhar resumo/conversão à fonte real (alunos): conta matrículas primárias
-      // (sem segundo curso/banda). No modo "Hoje" mantém o acumulado do mês via leads.
-      if (!isFiltroHoje) {
-        const matriculasPrimarias = matriculasDoMes.filter(ehMatriculaNova);
-        const totalMatPrimarias = matriculasPrimarias.length;
-        const matCanalMap = new Map<string, number>();
-        const matCursoMap = new Map<string, number>();
-        matriculasPrimarias.forEach((m: any) => {
-          const canal = m.canal_nome || 'Não informado';
-          const curso = m.curso_nome || 'Não informado';
-          matCanalMap.set(canal, (matCanalMap.get(canal) || 0) + 1);
-          matCursoMap.set(curso, (matCursoMap.get(curso) || 0) + 1);
-        });
-        setResumo(prev => ({
-          ...prev,
-          matriculas: totalMatPrimarias,
-          matriculasPorCanal: Array.from(matCanalMap.entries())
-            .map(([canal, quantidade]) => ({ canal, quantidade }))
-            .sort((a, b) => b.quantidade - a.quantidade),
-          matriculasPorCurso: Array.from(matCursoMap.entries())
-            .map(([curso, quantidade]) => ({ curso, quantidade }))
-            .sort((a, b) => b.quantidade - a.quantidade),
-          conversaoLeadMat: prev.leads > 0 ? (totalMatPrimarias / prev.leads) * 100 : 0,
-          conversaoExpMat: prev.experimentais > 0 ? (totalMatPrimarias / prev.experimentais) * 100 : 0,
-        }));
-      }
+      // Alinhar resumo/conversao a fonte real (alunos): conta matriculas primarias
+      // (sem segundo curso/banda/passaporte zerado). Inclusive no filtro "Hoje",
+      // o card superior mostra acumulado do mes, entao usa o mesmo range mensal.
+      const matriculasPrimarias = matriculasDoMes.filter(ehMatriculaNova);
+      const totalMatPrimarias = matriculasPrimarias.length;
+      const matCanalMap = new Map<string, number>();
+      const matCursoMap = new Map<string, number>();
+      matriculasPrimarias.forEach((m: any) => {
+        const canal = m.canal_nome || 'Nao informado';
+        const curso = m.curso_nome || 'Nao informado';
+        matCanalMap.set(canal, (matCanalMap.get(canal) || 0) + 1);
+        matCursoMap.set(curso, (matCursoMap.get(curso) || 0) + 1);
+      });
+      setResumo(prev => ({
+        ...prev,
+        matriculas: totalMatPrimarias,
+        matriculasPorCanal: Array.from(matCanalMap.entries())
+          .map(([canal, quantidade]) => ({ canal, quantidade }))
+          .sort((a, b) => b.quantidade - a.quantidade),
+        matriculasPorCurso: Array.from(matCursoMap.entries())
+          .map(([curso, quantidade]) => ({ curso, quantidade }))
+          .sort((a, b) => b.quantidade - a.quantidade),
+        conversaoLeadMat: prev.leads > 0 ? (totalMatPrimarias / prev.leads) * 100 : 0,
+        conversaoExpMat: prev.experimentais > 0 ? (totalMatPrimarias / prev.experimentais) * 100 : 0,
+      }));
 
       // Leads do mês (TODOS os leads, incluindo experimentais e convertidos)
       // Cada lead aparece aqui independente do status atual
@@ -2602,21 +2601,21 @@ export function ComercialPage() {
     const leadsSemana = registrosSemana?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const experimentaisSemana = registrosSemana?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const visitasSemana = registrosSemana?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    // Matrículas: fonte = alunos por data_matricula (apenas matrículas novas)
-    const matriculasSemana = (await buscarMatriculasAlunos(unidadeId, seteDiasAtras.toISOString().split('T')[0], hoje.toISOString().split('T')[0])).filter(ehMatriculaNova).length;
+    // Matriculas: fonte = alunos por data_matricula (apenas matriculas novas)
+    const matriculasSemanaAlunos = (await buscarMatriculasAlunos(unidadeId, seteDiasAtras.toISOString().split('T')[0], hoje.toISOString().split('T')[0])).filter(ehMatriculaNova);
+    const matriculasSemana = matriculasSemanaAlunos.length;
 
     // Calcular conversões
     const conversaoLeadExp = leadsSemana > 0 ? (experimentaisSemana / leadsSemana) * 100 : 0;
     const conversaoExpMat = experimentaisSemana > 0 ? (matriculasSemana / experimentaisSemana) * 100 : 0;
     const conversaoLeadMat = leadsSemana > 0 ? (matriculasSemana / leadsSemana) * 100 : 0;
 
-    // Calcular tickets médios
-    const matriculas = registrosSemana?.filter(r => ['matriculado','convertido'].includes(r.status)) || [];
-    // Regra de negócio: matrículas com passaporte zerado (ex: re-matrícula) não entram no ticket médio
-    const matriculasComPassaporteSemana = matriculas.filter(m => (m.valor_passaporte || 0) > 0);
+    // Calcular tickets medios pela mesma fonte canonica das matriculas
+    // Regra de negocio: matriculas com passaporte zerado (ex: re-matricula) nao entram no ticket medio
+    const matriculasComPassaporteSemana = matriculasSemanaAlunos.filter(m => (m.valor_passaporte || 0) > 0);
     const totalPassaporte = matriculasComPassaporteSemana.reduce((acc, m) => acc + (m.valor_passaporte || 0), 0);
-    // Regra de negócio: bolsistas não entram no ticket médio da parcela
-    const matriculasPagantesSemana = matriculas.filter(m => !TIPOS_SEM_PAGAMENTO.includes(m.tipo_aluno));
+    // Regra de negocio: bolsistas nao entram no ticket medio da parcela
+    const matriculasPagantesSemana = matriculasSemanaAlunos.filter(m => !TIPOS_SEM_PAGAMENTO.includes(m.tipo_aluno));
     const totalParcela = matriculasPagantesSemana.reduce((acc, m) => acc + (m.valor_parcela || 0), 0);
     const ticketMedioPassaporte = matriculasComPassaporteSemana.length > 0 ? totalPassaporte / matriculasComPassaporteSemana.length : 0;
     const ticketMedioParcela = matriculasPagantesSemana.length > 0 ? totalParcela / matriculasPagantesSemana.length : 0;
@@ -3081,13 +3080,13 @@ export function ComercialPage() {
     const leadsAtual = dadosMesAtual?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const experimentaisAtual = dadosMesAtual?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const visitasAtual = dadosMesAtual?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const matriculasAtual = dadosMesAtual?.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const matriculasAtual = (await buscarMatriculasAlunos(unidadeId, inicioMesAtual.toISOString().split('T')[0], fimMesAtual.toISOString().split('T')[0])).filter(ehMatriculaNova).length;
 
     // Calcular totais mês anterior
     const leadsAnterior = dadosMesAnterior?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const experimentaisAnterior = dadosMesAnterior?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const visitasAnterior = dadosMesAnterior?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const matriculasAnterior = dadosMesAnterior?.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const matriculasAnterior = (await buscarMatriculasAlunos(unidadeId, inicioMesAnterior.toISOString().split('T')[0], fimMesAnterior.toISOString().split('T')[0])).filter(ehMatriculaNova).length;
 
     // Calcular variações
     const varLeads = leadsAnterior > 0 ? ((leadsAtual - leadsAnterior) / leadsAnterior * 100) : 0;
@@ -3179,13 +3178,13 @@ export function ComercialPage() {
     const leadsAtual = dadosAnoAtual?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const experimentaisAtual = dadosAnoAtual?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const visitasAtual = dadosAnoAtual?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const matriculasAtual = dadosAnoAtual?.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const matriculasAtual = (await buscarMatriculasAlunos(unidadeId, inicioMesAtual.toISOString().split('T')[0], fimMesAtual.toISOString().split('T')[0])).filter(ehMatriculaNova).length;
 
     // Calcular totais ano anterior
     const leadsAnterior = dadosAnoAnterior?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const experimentaisAnterior = dadosAnoAnterior?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const visitasAnterior = dadosAnoAnterior?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const matriculasAnterior = dadosAnoAnterior?.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const matriculasAnterior = (await buscarMatriculasAlunos(unidadeId, inicioMesAnterior.toISOString().split('T')[0], fimMesAnterior.toISOString().split('T')[0])).filter(ehMatriculaNova).length;
 
     // Calcular variações
     const varLeads = leadsAnterior > 0 ? ((leadsAtual - leadsAnterior) / leadsAnterior * 100) : 0;
@@ -3354,9 +3353,10 @@ export function ComercialPage() {
         .reduce((acc, r) => acc + r.quantidade, 0);
     }
     if (tipo === 'matricula') {
-      return registrosHoje
-        .filter(r => ['matriculado','convertido'].includes(r.status))
-        .reduce((acc, r) => acc + r.quantidade, 0);
+      const hojeISO = new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+      return matriculasMes
+        .filter((m: any) => ehMatriculaNova(m) && ((m.data_matricula || m.data_conversao || m.data_contato) === hojeISO))
+        .length;
     }
     return registrosHoje
       .filter(r => r.status === tipo)
