@@ -3541,6 +3541,7 @@ export function ComercialPage() {
         <TabProgramaMatriculador
           unidadeId={isAdmin ? (context?.unidadeSelecionada || 'todos') : unidadeId}
           ano={competencia.filtro.ano}
+          mes={competencia.filtro.mes}
         />
       )}
 

@@ -56,6 +56,10 @@ export interface HunterDados {
     media_ticket: number;
     taxa_showup_exp: number;
     taxa_exp_mat: number;
+    taxa_exp_mat_liberada?: boolean;
+    pendencias_exp_mat?: number;
+    denominador_exp_mat?: number;
+    conversoes_exp_mat?: number;
     taxa_geral: number;
   };
   penalidades: {
@@ -105,6 +109,10 @@ interface HistoricoMatriculadorItem {
   ticket_medio: number;
   taxa_showup: number;
   taxa_exp_mat: number;
+  taxa_exp_mat_liberada?: boolean;
+  pendencias_exp_mat?: number;
+  denominador_exp_mat?: number;
+  conversoes_exp_mat?: number;
   taxa_geral: number;
 }
 
@@ -125,6 +133,16 @@ interface KpisComercialCanonicosV2Payload {
   } | null;
 }
 
+interface ConciliacaoExperimentaisV2Payload {
+  resumo?: {
+    taxa_exp_mat_liberada?: boolean | null;
+    taxa_exp_mat_canonica?: number | string | null;
+    pendencias_taxa_exp_mat?: number | string | null;
+    denominador_taxa_exp_mat?: number | string | null;
+    conversoes_exp_mat_canonicas?: number | string | null;
+  } | null;
+}
+
 // Mapeamento de UUIDs para metas de volume e ticket
 const UNIDADE_METAS_MAP: Record<string, { volume: string; ticket: string }> = {
   '2ec861f6-023f-4d7b-9927-3960ad8c2a92': { volume: 'volume_campo_grande', ticket: 'ticket_campo_grande' },
@@ -137,9 +155,13 @@ function toNumber(valor: unknown): number {
   return Number.isFinite(numero) ? numero : 0;
 }
 
-function normalizarMesesPrograma(config?: ConfigPrograma): number[] {
+function normalizarMesesPrograma(config?: ConfigPrograma, mesReferencia?: number): number[] {
   const inicio = Math.max(1, Math.min(12, Math.trunc(config?.periodo?.mes_inicio || 1)));
-  const fim = Math.max(inicio, Math.min(12, Math.trunc(config?.periodo?.mes_fim || 11)));
+  const fimConfigurado = Math.max(inicio, Math.min(12, Math.trunc(config?.periodo?.mes_fim || 11)));
+  const fimReferencia = mesReferencia
+    ? Math.max(inicio, Math.min(12, Math.trunc(mesReferencia)))
+    : fimConfigurado;
+  const fim = Math.min(fimConfigurado, fimReferencia);
 
   return Array.from({ length: fim - inicio + 1 }, (_, index) => inicio + index);
 }
@@ -148,29 +170,57 @@ async function buscarMetricasMensaisV2(
   ano: number,
   unidadeId: string,
   config: ConfigPrograma,
+  mesReferencia?: number,
 ): Promise<HistoricoMatriculadorItem[]> {
-  const meses = normalizarMesesPrograma(config);
+  const meses = normalizarMesesPrograma(config, mesReferencia);
   const historico: HistoricoMatriculadorItem[] = [];
 
   for (const mes of meses) {
-    const { data, error } = await supabase.rpc('get_kpis_comercial_canonicos_v2', {
-      p_unidade_id: unidadeId,
-      p_ano: ano,
-      p_mes: mes,
-      p_periodo: 'mensal',
-      p_data: null,
-    });
+    const [kpisResponse, conciliacaoResponse] = await Promise.all([
+      supabase.rpc('get_kpis_comercial_canonicos_v2', {
+        p_unidade_id: unidadeId,
+        p_ano: ano,
+        p_mes: mes,
+        p_periodo: 'mensal',
+        p_data: null,
+      }),
+      supabase.rpc('get_conciliacao_experimentais_v2', {
+        p_unidade_id: unidadeId,
+        p_ano: ano,
+        p_mes: mes,
+        p_periodo: 'mensal',
+        p_data: null,
+      }),
+    ]);
 
-    if (error) {
+    if (kpisResponse.error) {
       throw new Error(
-        `Erro ao buscar metricas v2 do Matriculador ${ano}-${String(mes).padStart(2, '0')}: ${error.message}`,
+        `Erro ao buscar metricas v2 do Matriculador ${ano}-${String(mes).padStart(2, '0')}: ${kpisResponse.error.message}`,
       );
     }
 
-    const payload = data as KpisComercialCanonicosV2Payload | null;
+    if (conciliacaoResponse.error) {
+      throw new Error(
+        `Erro ao buscar conciliacao v2 do Matriculador ${ano}-${String(mes).padStart(2, '0')}: ${conciliacaoResponse.error.message}`,
+      );
+    }
+
+    const payload = kpisResponse.data as KpisComercialCanonicosV2Payload | null;
+    const conciliacao = conciliacaoResponse.data as ConciliacaoExperimentaisV2Payload | null;
+    const resumoConciliacao = conciliacao?.resumo || {};
     const leads = toNumber(payload?.kpis?.leads_entrantes);
     const experimentais = toNumber(payload?.kpis?.experimentais_realizadas_status_operacional);
     const matriculas = toNumber(payload?.kpis?.matriculas_comerciais_principais);
+    const pendenciasExpMat = toNumber(resumoConciliacao.pendencias_taxa_exp_mat);
+    const denominadorExpMat = toNumber(resumoConciliacao.denominador_taxa_exp_mat);
+    const conversoesExpMat = toNumber(resumoConciliacao.conversoes_exp_mat_canonicas);
+    const taxaExpMatLiberada =
+      resumoConciliacao.taxa_exp_mat_liberada === true &&
+      pendenciasExpMat === 0 &&
+      denominadorExpMat > 0;
+    const taxaExpMat = taxaExpMatLiberada && denominadorExpMat > 0
+      ? Number(((conversoesExpMat / denominadorExpMat) * 100).toFixed(1))
+      : 0;
 
     historico.push({
       mes,
@@ -181,7 +231,11 @@ async function buscarMetricasMensaisV2(
       total_matriculas: matriculas,
       ticket_medio: 0,
       taxa_showup: leads > 0 ? Number(((experimentais / leads) * 100).toFixed(1)) : 0,
-      taxa_exp_mat: 0,
+      taxa_exp_mat: taxaExpMat,
+      taxa_exp_mat_liberada: taxaExpMatLiberada,
+      pendencias_exp_mat: pendenciasExpMat,
+      denominador_exp_mat: denominadorExpMat,
+      conversoes_exp_mat: conversoesExpMat,
       taxa_geral: leads > 0 ? Number(((matriculas / leads) * 100).toFixed(1)) : 0,
     });
   }
@@ -192,11 +246,15 @@ async function buscarMetricasMensaisV2(
 function consolidarMetricasV2(
   historico: HistoricoMatriculadorItem[],
   metricasLegadas: HunterDados['metricas'],
+  mesReferencia?: number,
 ): HunterDados['metricas'] {
   const totalLeads = historico.reduce((acc, item) => acc + item.total_leads, 0);
   const totalExperimentais = historico.reduce((acc, item) => acc + item.total_experimentais, 0);
   const totalMatriculas = historico.reduce((acc, item) => acc + item.total_matriculas, 0);
   const mesesComDados = historico.length || 1;
+  const referenciaExpMat =
+    (mesReferencia ? historico.find((item) => item.mes === mesReferencia) : null) ||
+    [...historico].reverse().find((item) => (item.denominador_exp_mat || 0) > 0);
 
   return {
     ...metricasLegadas,
@@ -206,7 +264,11 @@ function consolidarMetricasV2(
     meses_com_dados: mesesComDados,
     media_matriculas_mes: Number((totalMatriculas / mesesComDados).toFixed(1)),
     taxa_showup_exp: totalLeads > 0 ? (totalExperimentais / totalLeads) * 100 : 0,
-    taxa_exp_mat: 0,
+    taxa_exp_mat: referenciaExpMat?.taxa_exp_mat_liberada ? referenciaExpMat.taxa_exp_mat : 0,
+    taxa_exp_mat_liberada: referenciaExpMat?.taxa_exp_mat_liberada === true,
+    pendencias_exp_mat: referenciaExpMat?.pendencias_exp_mat || 0,
+    denominador_exp_mat: referenciaExpMat?.denominador_exp_mat || 0,
+    conversoes_exp_mat: referenciaExpMat?.conversoes_exp_mat || 0,
     taxa_geral: totalLeads > 0 ? (totalMatriculas / totalLeads) * 100 : 0,
   };
 }
@@ -216,6 +278,7 @@ async function sobreporHistoricoMatriculadorV2(
   historicoLegado: HistoricoMatriculador,
   config: ConfigPrograma,
   unidadeId?: string | null,
+  mesReferencia?: number,
 ): Promise<HistoricoMatriculador> {
   const unidadeIds = unidadeId && unidadeId !== 'todos'
     ? [unidadeId]
@@ -230,7 +293,7 @@ async function sobreporHistoricoMatriculadorV2(
         .map((item) => [item.mes, item]),
     );
     const unidadeNome = legadoPorMes.values().next().value?.unidade_nome || '';
-    const serieV2 = await buscarMetricasMensaisV2(ano, id, config);
+    const serieV2 = await buscarMetricasMensaisV2(ano, id, config, mesReferencia);
 
     serieV2.forEach((item) => {
       const legado = legadoPorMes.get(item.mes);
@@ -277,7 +340,10 @@ function calcularPontuacao(
   // Calcular pontos por métrica (só ganha se bater a meta)
   const pontosTaxaShowup = metricas.taxa_showup_exp >= metas.taxa_showup_experimental 
     ? pontosConfig.taxa_showup : 0;
-  const pontosTaxaExpMat = 0;
+  const pontosTaxaExpMat =
+    metricas.taxa_exp_mat_liberada && metricas.taxa_exp_mat >= metas.taxa_experimental_matricula
+      ? pontosConfig.taxa_exp_mat
+      : 0;
   const pontosTaxaGeral = metricas.taxa_geral >= metas.taxa_lead_matricula 
     ? pontosConfig.taxa_geral : 0;
   const pontosVolume = metricas.media_matriculas_mes >= metaVolume 
@@ -295,7 +361,14 @@ function calcularPontuacao(
       const acima = metricas.taxa_showup_exp - metas.taxa_showup_experimental;
       bonus += Math.min(MAX_BONUS_POR_CATEGORIA, Math.floor(acima / 2) * config.bonus.taxa_showup_por_2pct);
     }
-    // Taxa exp->mat segue bloqueada ate regra canonica de presenca/vinculo.
+    // Bonus taxa exp->mat: apenas quando a competencia estiver liberada pela conciliacao v2.
+    if (
+      metricas.taxa_exp_mat_liberada &&
+      metricas.taxa_exp_mat > metas.taxa_experimental_matricula
+    ) {
+      const acima = metricas.taxa_exp_mat - metas.taxa_experimental_matricula;
+      bonus += Math.min(MAX_BONUS_POR_CATEGORIA, Math.floor(acima / 5) * config.bonus.taxa_exp_mat_por_5pct);
+    }
     // Bônus taxa geral: +10 pts a cada 1% acima (máx 20 pts)
     if (metricas.taxa_geral > metas.taxa_lead_matricula) {
       const acima = metricas.taxa_geral - metas.taxa_lead_matricula;
@@ -314,7 +387,7 @@ function calcularPontuacao(
   }
 
   // Total
-  const total = pontosTaxaShowup + pontosTaxaGeral +
+  const total = pontosTaxaShowup + pontosTaxaExpMat + pontosTaxaGeral +
                 pontosVolume + pontosTicket + bonus - penalidades.total_pontos;
 
   return {
@@ -329,7 +402,7 @@ function calcularPontuacao(
   };
 }
 
-export function useMatriculadorPrograma(ano: number = 2026, unidadeId?: string | null) {
+export function useMatriculadorPrograma(ano: number = 2026, unidadeId?: string | null, mesReferencia?: number) {
   const [dados, setDados] = useState<DadosPrograma | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -354,8 +427,8 @@ export function useMatriculadorPrograma(ano: number = 2026, unidadeId?: string |
         const huntersComMetricasV2: HunterDados[] = [];
 
         for (const hunter of resultado.hunters) {
-          const historicoV2 = await buscarMetricasMensaisV2(ano, hunter.unidade_id, resultado.config);
-          const metricasV2 = consolidarMetricasV2(historicoV2, hunter.metricas);
+          const historicoV2 = await buscarMetricasMensaisV2(ano, hunter.unidade_id, resultado.config, mesReferencia);
+          const metricasV2 = consolidarMetricasV2(historicoV2, hunter.metricas, mesReferencia);
           const hunterComMetricasV2 = {
             ...hunter,
             metricas: metricasV2,
@@ -388,7 +461,7 @@ export function useMatriculadorPrograma(ano: number = 2026, unidadeId?: string |
     } finally {
       setLoading(false);
     }
-  }, [ano, unidadeId]);
+  }, [ano, unidadeId, mesReferencia]);
 
   // Registrar penalidade
   const registrarPenalidade = useCallback(async (
@@ -517,17 +590,17 @@ export function useMatriculadorPrograma(ano: number = 2026, unidadeId?: string |
         nota_corte: 0,
         periodo: {
           mes_inicio: 1,
-          mes_fim: 11,
+          mes_fim: mesReferencia || 11,
         },
       };
 
       setHistorico(
-        await sobreporHistoricoMatriculadorV2(ano, historicoLegado, configAtual, unidadeId),
+        await sobreporHistoricoMatriculadorV2(ano, historicoLegado, configAtual, unidadeId, mesReferencia),
       );
     } catch (err) {
       console.error('Erro ao carregar histórico:', err);
     }
-  }, [ano, unidadeId]);
+  }, [ano, unidadeId, mesReferencia]);
 
   useEffect(() => {
     carregarDados();
