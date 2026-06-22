@@ -473,11 +473,18 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           profMatMap.set(prof, current);
         });
 
-        // Matriculas por Horario (campo ainda nem sempre vem preenchido no cadastro do aluno)
+        // Matriculas por Horario (fonte canonica operacional: horario_aula do aluno)
         const horarioMap = new Map<string, number>();
         matriculasCanonicas.forEach(m => {
-          const horarioPreferido = (m as any).horario_preferido;
-          const hora = horarioPreferido ? (parseInt(horarioPreferido.split(':')[0]) < 12 ? 'Manha' : parseInt(horarioPreferido.split(':')[0]) < 18 ? 'Tarde' : 'Noite') : 'Nao informado';
+          const horarioAula = (m as any).horario_aula;
+          const horaNumero = horarioAula ? parseInt(String(horarioAula).split(':')[0], 10) : NaN;
+          const hora = Number.isFinite(horaNumero)
+            ? horaNumero < 12
+              ? 'Manha'
+              : horaNumero < 18
+                ? 'Tarde'
+                : 'Noite'
+            : 'Nao informado';
           horarioMap.set(hora, (horarioMap.get(hora) || 0) + 1);
         });
 
@@ -749,7 +756,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             <div className="flex items-start gap-3 mb-4">
               <Info className="w-5 h-5 text-cyan-300 flex-shrink-0 mt-0.5" />
               <div>
-                <h4 className="text-cyan-100 font-semibold">Leitura operacional de experimentais</h4>
+                <h4 className="text-cyan-100 font-semibold">Origem dos numeros de experimentais</h4>
                 <p className="text-cyan-100/80 text-sm">
                   Marcadas vêm do funil comercial. Realizadas confirmadas exigem aluno vinculado,
                   presença individual e aula experimental no Emusys.
@@ -761,11 +768,11 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             </div>
             <dl className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-4 text-sm">
               <div>
-                <dt className="text-slate-400">Realizadas confirmadas</dt>
+                <dt className="text-slate-400">KPI: realizadas</dt>
                 <dd className="text-white text-2xl font-bold">{experimentaisDiagnostico.realizadasPresencaConfirmada}</dd>
               </div>
               <div>
-                <dt className="text-slate-400">Realizadas pelo status</dt>
+                <dt className="text-slate-400">Status Emusys</dt>
                 <dd className="text-white text-2xl font-bold">{experimentaisDiagnostico.realizadasStatusOperacional}</dd>
               </div>
               <div>
