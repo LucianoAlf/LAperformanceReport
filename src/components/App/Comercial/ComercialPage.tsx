@@ -3712,7 +3712,7 @@ export function ComercialPage() {
                   )}
                 </div>
               </Tooltip>
-              <Tooltip content="Status operacional do funil. Não equivale a presença individual confirmada." side="bottom">
+              <Tooltip content={resumo.taxaExpMatLiberada ? 'Experimentais realizadas confirmadas pela conciliacao v2/Emusys.' : 'Status operacional do funil. Nao equivale a presenca individual confirmada.'} side="bottom">
                 <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/30 cursor-help">
                   <div className="flex items-center gap-2 mb-2">
                     <Guitar className="w-4 h-4 text-purple-400" />
@@ -3761,7 +3761,7 @@ export function ComercialPage() {
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Lead → Experimental */}
-              <Tooltip content="Métrica operacional legada: experimentais por status / total de leads do mês." side="bottom">
+              <Tooltip content={resumo.taxaExpMatLiberada ? 'Leads do mes para experimentais realizadas confirmadas pela conciliacao v2/Emusys.' : 'Metrica operacional por status / total de leads do mes.'} side="bottom">
                 <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/30 cursor-help">
                   <div className="flex items-center gap-2 mb-3">
                     <span className="text-blue-400 text-sm font-medium">Lead</span>

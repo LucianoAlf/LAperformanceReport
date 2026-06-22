@@ -521,11 +521,16 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           leads_serie_mensal: leadsSerieMensalV2,
           motivos_arquivamento: Array.from(motivosArqMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
           
-          // Experimentais
-          experimentais_marcadas: expMarcadas + expRealizadas + faltaram,
-          experimentais_realizadas: expRealizadas,
-          faltaram: faltaram,
-          taxa_showup: (expMarcadas + expRealizadas + faltaram) > 0 ? (expRealizadas / (expMarcadas + expRealizadas + faltaram)) * 100 : 0,
+          // Experimentais - fonte operacional v2/Emusys.
+          // Status bruto fica no painel diagnostico; os cards usam a leitura validada.
+          experimentais_marcadas: experimentaisDiagnosticoV2.agendadasEventos,
+          experimentais_realizadas: experimentaisDiagnosticoV2.realizadasPresencaConfirmada,
+          faltaram: experimentaisDiagnosticoV2.noShowStatusOperacional,
+          taxa_showup:
+            (experimentaisDiagnosticoV2.realizadasPresencaConfirmada + experimentaisDiagnosticoV2.noShowStatusOperacional) > 0
+              ? (experimentaisDiagnosticoV2.realizadasPresencaConfirmada /
+                (experimentaisDiagnosticoV2.realizadasPresencaConfirmada + experimentaisDiagnosticoV2.noShowStatusOperacional)) * 100
+              : 0,
           // Exp -> Mat permanece bloqueada como KPI oficial ate regra canonica
           // de presenca/vinculo. Nao alimentar campo interno com taxa operacional.
           taxa_conversao_exp_mat: 0,
@@ -828,7 +833,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <KPICard
               icon={Calendar}
-              label="Marcadas no funil"
+              label="Agendadas no funil"
               value={dados.experimentais_marcadas}
               variant="cyan"
             />
@@ -847,7 +852,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             />
             <KPICard
               icon={Percent}
-              label="Show-up do funil"
+              label="Show-up validado"
               value={dados.taxa_showup}
               format="percent"
               variant="violet"
