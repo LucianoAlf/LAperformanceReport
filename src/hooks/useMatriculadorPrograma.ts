@@ -187,24 +187,16 @@ async function buscarMetricasMensaisV2(
   mesReferencia?: number,
 ): Promise<HistoricoMatriculadorItem[]> {
   const meses = normalizarMesesPrograma(config, mesReferencia);
+  const mesComConciliacao = mesReferencia || meses[meses.length - 1];
 
   return Promise.all(meses.map(async (mes) => {
-    const [kpisResponse, conciliacaoResponse] = await Promise.all([
-      supabase.rpc('get_kpis_comercial_canonicos_v2', {
+    const kpisResponse = await supabase.rpc('get_kpis_comercial_canonicos_v2', {
         p_unidade_id: unidadeId,
         p_ano: ano,
         p_mes: mes,
         p_periodo: 'mensal',
         p_data: null,
-      }),
-      supabase.rpc('get_conciliacao_experimentais_v2', {
-        p_unidade_id: unidadeId,
-        p_ano: ano,
-        p_mes: mes,
-        p_periodo: 'mensal',
-        p_data: null,
-      }),
-    ]);
+    });
 
     if (kpisResponse.error) {
       throw new Error(
@@ -212,14 +204,27 @@ async function buscarMetricasMensaisV2(
       );
     }
 
-    if (conciliacaoResponse.error) {
-      throw new Error(
-        `Erro ao buscar conciliacao v2 do Matriculador ${ano}-${String(mes).padStart(2, '0')}: ${conciliacaoResponse.error.message}`,
-      );
+    let conciliacao: ConciliacaoExperimentaisV2Payload | null = null;
+    if (mes === mesComConciliacao) {
+      const conciliacaoResponse = await supabase.rpc('get_conciliacao_experimentais_v2', {
+        p_unidade_id: unidadeId,
+        p_ano: ano,
+        p_mes: mes,
+        p_periodo: 'mensal',
+        p_data: null,
+      });
+
+      if (conciliacaoResponse.error) {
+        console.warn(
+          `Conciliacao v2 indisponivel no Matriculador ${ano}-${String(mes).padStart(2, '0')}:`,
+          conciliacaoResponse.error.message,
+        );
+      } else {
+        conciliacao = conciliacaoResponse.data as ConciliacaoExperimentaisV2Payload | null;
+      }
     }
 
     const payload = kpisResponse.data as KpisComercialCanonicosV2Payload | null;
-    const conciliacao = conciliacaoResponse.data as ConciliacaoExperimentaisV2Payload | null;
     const resumoConciliacao = conciliacao?.resumo || {};
     const leads = toNumber(payload?.kpis?.leads_entrantes);
     const experimentais = toNumber(payload?.kpis?.experimentais_realizadas_status_operacional);
