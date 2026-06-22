@@ -116,6 +116,16 @@ const experimentaisDiagnosticoVazio: DadosComercial['experimentais_diagnostico_v
   presencasEmusysSemFunil: 0,
 };
 
+const ehMatriculaComercialNova = (matricula: any): boolean => {
+  const cursoNome = ((matricula.cursos as any)?.nome || matricula.curso_nome || '').toLowerCase();
+  const ehBanda =
+    matricula.is_banda === true ||
+    (matricula.cursos as any)?.is_projeto_banda === true ||
+    cursoNome.includes('banda');
+
+  return !matricula.is_segundo_curso && !ehBanda && (Number(matricula.valor_passaporte) || 0) > 0;
+};
+
 export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps) {
   const [activeSubTab, setActiveSubTab] = useState<SubTabId>('leads');
   const [loading, setLoading] = useState(true);
@@ -248,7 +258,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           .select(`
             *,
             canais_origem(nome),
-            cursos(nome),
+            cursos(nome, is_projeto_banda),
             professores:professor_experimental_id(nome),
             motivos_arquivamento(nome),
             motivos_nao_matricula(nome)
@@ -300,6 +310,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
 
         const leads = leadsData || [];
         const matriculas = matriculasData || [];
+        const matriculasComerciaisNovas = matriculas.filter(ehMatriculaComercialNova);
 
         // Processar Leads
         const totalLeadsLegado = leads.reduce((acc, l) => acc + (l.quantidade || 1), 0);
@@ -309,7 +320,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
         // REGRA DE NEGÓCIO: Exp/Visita = realizada + visita_escola (não inclui agendada/faltou)
         const expRealizadas = leads.filter(l => ['experimental_realizada','compareceu','visita_escola'].includes(l.status)).reduce((acc, l) => acc + (l.quantidade || 1), 0);
         const faltaram = leads.filter(l => l.status === 'experimental_faltou').reduce((acc, l) => acc + (l.quantidade || 1), 0);
-        const novasMatriculas = leads.filter(l => ['matriculado','convertido'].includes(l.status)).reduce((acc, l) => acc + (l.quantidade || 1), 0) || matriculas.length;
+        const novasMatriculas = matriculasComerciaisNovas.length;
 
         // Leads por Curso
         const cursosLeadMap = new Map<string, number>();
@@ -358,45 +369,42 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           expCanalMap.set(canal, (expCanalMap.get(canal) || 0) + (l.quantidade || 1));
         });
 
-        // CORREÇÃO: Usar leads convertidos (não alunos.data_matricula) para gráficos de matrículas
-        // Isso garante consistência com o funil comercial (5 matrículas, não 36)
-        const leadsMatriculados = leads.filter(l => ['matriculado', 'convertido'].includes(l.status));
-
-        // Matrículas por Curso (via leads convertidos)
+        // Matriculas por Curso (fonte canonica operacional: alunos.data_matricula)
+        const matriculasCanonicas = matriculasComerciaisNovas;
         const cursoMatMap = new Map<string, number>();
-        leadsMatriculados.forEach(l => {
-          const curso = (l as any).cursos?.nome || 'Não informado';
-          cursoMatMap.set(curso, (cursoMatMap.get(curso) || 0) + (l.quantidade || 1));
+        matriculasCanonicas.forEach(m => {
+          const curso = (m as any).cursos?.nome || 'Nao informado';
+          cursoMatMap.set(curso, (cursoMatMap.get(curso) || 0) + 1);
         });
 
-        // Matrículas por Canal (via leads convertidos)
+        // Matriculas por Canal (fonte canonica operacional: alunos.data_matricula)
         const canalMatMap = new Map<string, number>();
-        leadsMatriculados.forEach(l => {
-          const canal = (l as any).canais_origem?.nome || 'Outros';
-          canalMatMap.set(canal, (canalMatMap.get(canal) || 0) + (l.quantidade || 1));
+        matriculasCanonicas.forEach(m => {
+          const canal = (m as any).canais_origem?.nome || 'Nao informado';
+          canalMatMap.set(canal, (canalMatMap.get(canal) || 0) + 1);
         });
 
-        // Matrículas por Professor (via leads convertidos - professor da experimental)
+        // Matriculas por Professor (fonte canonica operacional: alunos.data_matricula)
         const profMatMap = new Map<string, { id: number; count: number }>();
-        leadsMatriculados.forEach(l => {
-          const prof = (l as any).professores?.nome || 'Sem Professor';
-          const profId = l.professor_id || 0;
+        matriculasCanonicas.forEach(m => {
+          const prof = (m as any).professores?.nome || 'Sem Professor';
+          const profId = m.professor_atual_id || 0;
           const current = profMatMap.get(prof) || { id: profId, count: 0 };
-          current.count += (l.quantidade || 1);
+          current.count += 1;
           profMatMap.set(prof, current);
         });
 
-        // Matrículas por Horário (via leads convertidos)
+        // Matriculas por Horario (campo ainda nem sempre vem preenchido no cadastro do aluno)
         const horarioMap = new Map<string, number>();
-        leadsMatriculados.forEach(l => {
-          const hora = l.horario_preferido ? (parseInt(l.horario_preferido.split(':')[0]) < 12 ? 'Manhã' : parseInt(l.horario_preferido.split(':')[0]) < 18 ? 'Tarde' : 'Noite') : 'Não informado';
-          horarioMap.set(hora, (horarioMap.get(hora) || 0) + (l.quantidade || 1));
+        matriculasCanonicas.forEach(m => {
+          const horarioPreferido = (m as any).horario_preferido;
+          const hora = horarioPreferido ? (parseInt(horarioPreferido.split(':')[0]) < 12 ? 'Manha' : parseInt(horarioPreferido.split(':')[0]) < 18 ? 'Tarde' : 'Noite') : 'Nao informado';
+          horarioMap.set(hora, (horarioMap.get(hora) || 0) + 1);
         });
 
-        // Matrículas por Faixa Etária (LA Kids vs LA 12+) - usar leads convertidos, mesma lógica do Funil
-        const leadsConvertidosFaixa = leads.filter(l => ['matriculado', 'convertido'].includes(l.status));
-        const matriculasLaKids = leadsConvertidosFaixa.filter(l => l.idade !== null && l.idade <= 11).reduce((acc, l) => acc + (l.quantidade || 1), 0);
-        const matriculasLaAdultos = leadsConvertidosFaixa.filter(l => l.idade !== null && l.idade > 11).reduce((acc, l) => acc + (l.quantidade || 1), 0);
+        // Matriculas por Faixa Etaria (fonte canonica operacional: alunos.data_matricula)
+        const matriculasLaKids = matriculasCanonicas.filter(m => m.idade_atual !== null && m.idade_atual <= 11).length;
+        const matriculasLaAdultos = matriculasCanonicas.filter(m => m.idade_atual !== null && m.idade_atual > 11).length;
 
         // Motivos de Não Matrícula (experimentais que não converteram)
         const motivosNaoMatMap = new Map<string, number>();
@@ -405,15 +413,13 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           motivosNaoMatMap.set(motivo, (motivosNaoMatMap.get(motivo) || 0) + (l.quantidade || 1));
         });
 
-        // Faturamento - calcular de leads convertidos (mesma lógica do Funil/ComercialPage)
-        const leadsConvertidos = leads.filter(l => ['matriculado', 'convertido'].includes(l.status));
-        
-        // Regra de negócio: matrículas com passaporte zerado (ex: re-matrícula) não entram no ticket médio
-        const leadsComPassaporte = leadsConvertidos.filter(l => (Number(l.valor_passaporte) || 0) > 0);
-        const faturamentoPassaportes = leadsComPassaporte.reduce((acc, l) => acc + (Number(l.valor_passaporte) || 0), 0);
-        const faturamentoParcelas = leadsConvertidos.reduce((acc, l) => acc + (Number(l.valor_parcela) || 0), 0);
-        const ticketMedioPassaporte = leadsComPassaporte.length > 0 ? faturamentoPassaportes / leadsComPassaporte.length : 0;
-        const ticketMedioParcela = leadsConvertidos.length > 0 ? faturamentoParcelas / leadsConvertidos.length : 0;
+        // Faturamento - fonte canonica operacional: alunos.data_matricula
+        const matriculasComPassaporte = matriculasCanonicas.filter(m => (Number(m.valor_passaporte) || 0) > 0);
+        const matriculasComParcela = matriculasCanonicas.filter(m => (Number(m.valor_parcela) || 0) > 0);
+        const faturamentoPassaportes = matriculasComPassaporte.reduce((acc, m) => acc + (Number(m.valor_passaporte) || 0), 0);
+        const faturamentoParcelas = matriculasCanonicas.reduce((acc, m) => acc + (Number(m.valor_parcela) || 0), 0);
+        const ticketMedioPassaporte = matriculasComPassaporte.length > 0 ? faturamentoPassaportes / matriculasComPassaporte.length : 0;
+        const ticketMedioParcela = matriculasComParcela.length > 0 ? faturamentoParcelas / matriculasComParcela.length : 0;
 
         setDados({
           // Leads
@@ -442,7 +448,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           experimentais_diagnostico_v2: experimentaisDiagnosticoV2,
           
           // Matrículas
-          novas_matriculas: novasMatriculas || matriculas.length,
+          novas_matriculas: novasMatriculas,
           matriculas_por_curso: Array.from(cursoMatMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
           matriculas_por_canal: Array.from(canalMatMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
           matriculas_por_canal_origem: Array.from(canalMatMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
@@ -760,7 +766,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
               steps={[
                 { label: 'Leads', value: dados.total_leads, color: '#06b6d4' },
                 { label: 'Presença confirmada', value: experimentaisDiagnostico.realizadasPresencaConfirmada, color: '#8b5cf6' },
-                { label: 'Matrículas (legado)', value: dados.novas_matriculas, color: '#10b981' },
+                { label: 'Matrículas comerciais', value: dados.novas_matriculas, color: '#10b981' },
               ]}
               title="Funil Diagnóstico (não KPI oficial)"
             />
