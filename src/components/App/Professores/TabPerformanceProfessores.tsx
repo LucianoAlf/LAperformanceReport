@@ -41,6 +41,7 @@ interface ProfessorPerformance {
   media_alunos_turma: number;
   taxa_retencao: number;
   taxa_conversao: number;
+  taxa_conversao_diagnostica?: number;
   experimentais: number;
   experimentais_agendadas: number;
   experimentais_faltas: number;
@@ -131,6 +132,14 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
   const [modoVisualizacao, setModoVisualizacao] = useState<'mensal' | 'trimestre'>('mensal');
   const trimestreInfo = useMemo(() => getTrimestreOperacional(ano, mes), [ano, mes]);
   const periodoLabel = modoVisualizacao === 'trimestre' ? trimestreInfo.label : competenciaFiltro.range.label;
+  const healthWeightsSemConversao = useMemo(() => {
+    const base = healthWeights ?? DEFAULT_HEALTH_WEIGHTS;
+    return {
+      ...base,
+      retencao: base.retencao + base.conversao,
+      conversao: 0,
+    };
+  }, [healthWeights]);
 
   // Sincronizar badge do header com o filtro local
   useEffect(() => {
@@ -407,9 +416,9 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
             ? (kpis?.media_alunos_turma ? Number(kpis.media_alunos_turma) : alunosViaTurmas / totalTurmas)
             : 0;
 
-          // Métricas REAIS da view vw_kpis_professor_mensal
+          // Métricas da RPC/view. Conversao Exp->Mat segue apenas diagnostica ate regra canonica.
           const taxaPresenca = kpis?.media_presenca ? Number(kpis.media_presenca) : 0;
-          const taxaConversao = kpis?.taxa_conversao ? Number(kpis.taxa_conversao) : 0;
+          const taxaConversaoDiagnostica = kpis?.taxa_conversao ? Number(kpis.taxa_conversao) : 0;
           const nps = kpis?.nps_medio ? Number(kpis.nps_medio) : null;
           const evasoesMes = kpis?.evasoes || 0;
           
@@ -432,13 +441,13 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
           const healthResult = calcularHealthScore({
             mediaTurma: mediaAlunosTurma,
             retencao: taxaRetencao,
-            conversao: taxaConversao,
+            conversao: 0,
             presenca: taxaPresenca,
             evasoes: evasoesMes,
             taxaCrescimentoAjustada: 0, // TODO: buscar da view vw_taxa_crescimento_professor
             taxaEvasao: totalAlunos > 0 ? (evasoesMes / totalAlunos) * 100 : 0,
             carteiraAlunos: totalAlunos
-          }, healthWeights);
+          }, healthWeightsSemConversao);
 
           // Determinar status baseado no Health Score (V2)
           // Saudável (≥70) → excelente | Atenção (50-69) → atencao | Crítico (<50) → critico
@@ -463,7 +472,8 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
             alunos_via_turmas: alunosViaTurmas,
             media_alunos_turma: Math.round(mediaAlunosTurma * 100) / 100,
             taxa_retencao: Math.round(taxaRetencao * 10) / 10,
-            taxa_conversao: Math.round(taxaConversao * 10) / 10,
+            taxa_conversao: 0,
+            taxa_conversao_diagnostica: Math.round(taxaConversaoDiagnostica * 10) / 10,
             experimentais: kpis?.experimentais || 0,
             experimentais_agendadas: kpis?.experimentais_agendadas || 0,
             experimentais_faltas: kpis?.experimentais_faltas || 0,
@@ -534,12 +544,11 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
 
   // Rankings
   const rankings = useMemo(() => {
-    const comConversao = professores.filter(p => p.total_alunos > 0);
+    const comCarteira = professores.filter(p => p.total_alunos > 0);
     const comTurmas = professores.filter(p => p.total_turmas > 0);
 
     return {
-      topConversao: [...comConversao].sort((a, b) => b.taxa_conversao - a.taxa_conversao)[0],
-      topRetencao: [...comConversao].sort((a, b) => b.taxa_retencao - a.taxa_retencao)[0],
+      topRetencao: [...comCarteira].sort((a, b) => b.taxa_retencao - a.taxa_retencao)[0],
       topMediaTurma: [...comTurmas].sort((a, b) => b.media_alunos_turma - a.media_alunos_turma)[0]
     };
   }, [professores]);
@@ -557,9 +566,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
       taxa_retencao_media: professores.length > 0 
         ? professores.reduce((acc, p) => acc + p.taxa_retencao, 0) / professores.length 
         : 0,
-      taxa_conversao_media: professores.length > 0 
-        ? professores.reduce((acc, p) => acc + p.taxa_conversao, 0) / professores.length 
-        : 0,
+      taxa_conversao_media: 0,
       nps_medio: 0, // DEPRECATED - mantido para compatibilidade
       total_evasoes: totalEvasoes,
       professores_criticos: professores.filter(p => p.status === 'critico').length,
@@ -652,17 +659,11 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
 
       {/* Ranking Rápido + Health Score com Gauge */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-        {/* Top Conversão */}
+        {/* Conversao bloqueada */}
         <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50 h-[115px] flex flex-col justify-center">
-          <p className="text-xs text-yellow-300 mb-1">🏆 Top Conversão (legado)</p>
-          {rankings.topConversao ? (
-            <>
-              <p className="text-white font-semibold text-sm truncate">{rankings.topConversao.nome}</p>
-              <p className="text-yellow-300 text-sm">{rankings.topConversao.taxa_conversao.toFixed(1)}% taxa legada</p>
-            </>
-          ) : (
-            <p className="text-slate-500 text-sm">-</p>
-          )}
+          <p className="text-xs text-yellow-300 mb-1">🔒 Exp → Matrícula</p>
+          <p className="text-white font-semibold text-sm">Bloqueada</p>
+          <p className="text-yellow-300 text-xs">fora do Health Score</p>
         </div>
 
         {/* Top Retenção */}
@@ -915,7 +916,7 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Alunos</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Média/Turma</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Retenção</th>
-                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Conversão (legado)</th>
+                <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Exp → Mat</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Presença</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Evasões</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-400">Status</th>
@@ -1131,10 +1132,15 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
                         }
                       >
                         <span
-                          className={`font-medium cursor-pointer hover:underline ${getMetricaColor(professor.taxa_conversao, { critico: 70, atencao: 90 })}`}
+                          className="font-medium text-yellow-300 cursor-pointer hover:underline"
                           onClick={(e) => { e.stopPropagation(); setModalConversao({ open: true, professorId: professor.id, professorNome: professor.nome }); }}
                         >
-                          {professor.taxa_conversao.toFixed(0)}%
+                          Bloq.
+                          {(professor.taxa_conversao_diagnostica ?? 0) > 0 && (
+                            <span className="text-slate-500 text-[10px] ml-1">
+                              diag. {(professor.taxa_conversao_diagnostica ?? 0).toFixed(0)}%
+                            </span>
+                          )}
                           {professor.matriculas_diretas > 0 && (
                             <span className="text-blue-400/70 text-[10px] ml-0.5">+{professor.matriculas_diretas}</span>
                           )}
