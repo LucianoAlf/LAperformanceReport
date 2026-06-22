@@ -197,13 +197,15 @@ Deno.serve(async (req) => {
 
     if (!body?.dados && supabaseUrl && supabaseKey) {
       const supabase = createClient(supabaseUrl, supabaseKey);
-      const { data, error } = await supabase.rpc("get_dados_comercial_ia", {
+      const { data, error } = await supabase.rpc("get_kpis_comercial_canonicos_v2", {
         p_unidade_id: unidadeId,
         p_ano: ano,
         p_mes: mes,
+        p_periodo: "mensal",
+        p_data: null,
       });
 
-      if (error) console.error("Erro ao buscar dados comerciais:", error);
+      if (error) console.error("Erro ao buscar dados comerciais v2:", error);
       dados = data || {};
     }
 
