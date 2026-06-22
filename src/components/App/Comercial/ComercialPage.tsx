@@ -190,9 +190,9 @@ interface AnamnesePendente {
 }
 
 const UNIDADE_MAP: Record<string, string> = {
-  cg: '95553e96-971b-4590-a6eb-0201d013c14d',
-  rec: '368d47f5-2d88-4475-bc14-ba084a9a348e',
-  bar: '2ec861f6-023f-4d7b-9927-3960ad8c2a92',
+  cg: '2ec861f6-023f-4d7b-9927-3960ad8c2a92',
+  rec: '95553e96-971b-4590-a6eb-0201d013c14d',
+  bar: '368d47f5-2d88-4475-bc14-ba084a9a348e',
 };
 
 function normalizarBuscaAnamnese(valor: string) {
@@ -916,6 +916,9 @@ export function ComercialPage() {
       const experimentais = registrosParaResumo.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0);
       const visitas = registrosParaResumo.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0);
       const matriculas = registrosParaResumo.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0);
+      const experimentaisConfirmadas = taxaExpMatResumo.liberada && taxaExpMatResumo.denominador > 0
+        ? taxaExpMatResumo.denominador
+        : experimentais;
 
       // Matrículas por canal (convertidos)
       const canalMap = new Map<string, number>();
@@ -938,14 +941,14 @@ export function ComercialPage() {
         .sort((a, b) => b.quantidade - a.quantidade);
 
       // Conversões (3 métricas)
-      const conversaoLeadExp = leads > 0 ? (experimentais / leads) * 100 : 0;
+      const conversaoLeadExp = leads > 0 ? (experimentaisConfirmadas / leads) * 100 : 0;
       const conversaoLeadMat = leads > 0 ? (matriculas / leads) * 100 : 0;
       const conversaoExpMat = taxaExpMatResumo.taxa;
 
       // Nao usar snapshot legado como fallback: pode contaminar o funil.
       setResumo({
         leads,
-        experimentais,
+        experimentais: experimentaisConfirmadas,
         visitas,
         matriculas,
         matriculasPorCanal,
@@ -1077,6 +1080,9 @@ export function ComercialPage() {
       });
       setResumo(prev => ({
         ...prev,
+        experimentais: taxaExpMatResumo.liberada && taxaExpMatResumo.denominador > 0
+          ? taxaExpMatResumo.denominador
+          : prev.experimentais,
         matriculas: totalMatPrimarias,
         matriculasPorCanal: Array.from(matCanalMap.entries())
           .map(([canal, quantidade]) => ({ canal, quantidade }))
@@ -1085,6 +1091,11 @@ export function ComercialPage() {
           .map(([curso, quantidade]) => ({ curso, quantidade }))
           .sort((a, b) => b.quantidade - a.quantidade),
         conversaoLeadMat: prev.leads > 0 ? (totalMatPrimarias / prev.leads) * 100 : 0,
+        conversaoLeadExp: prev.leads > 0
+          ? ((taxaExpMatResumo.liberada && taxaExpMatResumo.denominador > 0
+            ? taxaExpMatResumo.denominador
+            : prev.experimentais) / prev.leads) * 100
+          : 0,
         conversaoExpMat: taxaExpMatResumo.taxa,
         taxaExpMatLiberada: taxaExpMatResumo.liberada,
         denominadorExpMat: taxaExpMatResumo.denominador,
@@ -3705,10 +3716,12 @@ export function ComercialPage() {
                 <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/30 cursor-help">
                   <div className="flex items-center gap-2 mb-2">
                     <Guitar className="w-4 h-4 text-purple-400" />
-                    <span className="text-xs text-slate-400 font-medium">Experimentais (status)</span>
+                    <span className="text-xs text-slate-400 font-medium">
+                      {resumo.taxaExpMatLiberada ? 'Experimentais confirmadas' : 'Experimentais (status)'}
+                    </span>
                   </div>
                   <p className="text-2xl font-bold text-purple-400">{resumo.experimentais}</p>
-                  {hojeExp > 0 && (
+                  {!resumo.taxaExpMatLiberada && hojeExp > 0 && (
                     <p className="text-xs text-emerald-400 mt-1">+{hojeExp} hoje</p>
                   )}
                 </div>
@@ -3753,7 +3766,9 @@ export function ComercialPage() {
                   <div className="flex items-center gap-2 mb-3">
                     <span className="text-blue-400 text-sm font-medium">Lead</span>
                     <ArrowRight className="w-3 h-3 text-slate-500" />
-                    <span className="text-purple-400 text-sm font-medium">Experimental</span>
+                    <span className="text-purple-400 text-sm font-medium">
+                      {resumo.taxaExpMatLiberada ? 'Experimental confirmada' : 'Experimental'}
+                    </span>
                   </div>
                   <p className="text-3xl font-bold text-cyan-400 mb-2">{resumo.conversaoLeadExp.toFixed(1)}%</p>
                   <div className="w-full bg-slate-700/50 rounded-full h-2">
@@ -3916,6 +3931,9 @@ export function ComercialPage() {
               stages={[
                 { key: 'leads', label: 'Novos', count: leadsMes.filter(l => !l.status || l.status === 'novo').length, icon: Smartphone, color: '#3b82f6', gradient: 'from-blue-500 to-cyan-500' },
                 { key: 'experimental', label: 'Experimentais', count: (() => {
+                  if (resumo.taxaExpMatLiberada && filtroTipoExp !== 'agendadas_periodo' && filtroPresencaExp === 'compareceram') {
+                    return resumo.denominadorExpMat;
+                  }
                   if (filtroTipoExp === 'agendadas_periodo') {
                     const { startDate, endDate } = competencia.range;
                     const toDateBRT = (ts: string) => ts ? new Date(ts).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' }) : '';

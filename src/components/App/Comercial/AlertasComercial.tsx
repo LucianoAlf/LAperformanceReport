@@ -40,6 +40,10 @@ interface ResumoLeads {
   conversaoLeadExp: number;
   conversaoLeadMat: number;
   conversaoExpMat: number;
+  taxaExpMatLiberada?: boolean;
+  denominadorExpMat?: number;
+  conversoesExpMat?: number;
+  pendenciasExpMat?: number;
 }
 
 interface AlertasComercialProps {
@@ -111,13 +115,17 @@ export function AlertasComercial({ unidadeId, ano, mes, resumoLeads, totalMatric
         });
       }
 
-      // Taxa Lead -> Matricula (nao confundir com Exp -> Mat, que segue bloqueada).
+      const expMatInfo = resumoLeads?.taxaExpMatLiberada
+        ? `Exp -> Mat canonica liberada: ${resumoLeads.conversaoExpMat.toFixed(1)}% (${resumoLeads.conversoesExpMat || 0}/${resumoLeads.denominadorExpMat || 0}).`
+        : 'Exp -> Mat aguarda conciliacao canonica.';
+
+      // Taxa Lead -> Matricula (nao confundir com Exp -> Mat).
       if (taxaConversaoGeral >= 20) {
         alertasGerados.push({
           id: 'conversao-excelente',
           tipo: 'sucesso',
           titulo: `Taxa Lead -> Matricula de ${taxaConversaoGeral.toFixed(1)}%!`,
-          descricao: 'Conversao Lead -> Matricula acima de 20%. Exp -> Mat segue bloqueada.',
+          descricao: `Conversao Lead -> Matricula acima de 20%. ${expMatInfo}`,
           icone: <TrendingUp className="w-5 h-5" />
         });
       } else if (taxaConversaoGeral < 10 && totalLeads > 0) {
@@ -125,7 +133,7 @@ export function AlertasComercial({ unidadeId, ano, mes, resumoLeads, totalMatric
           id: 'conversao-baixa',
           tipo: 'atencao',
           titulo: `Taxa Lead -> Matricula de ${taxaConversaoGeral.toFixed(1)}%`,
-          descricao: 'Foco no follow-up e fechamento. Exp -> Mat segue bloqueada.',
+          descricao: `Foco no follow-up e fechamento. ${expMatInfo}`,
           icone: <TrendingDown className="w-5 h-5" />
         });
       }
