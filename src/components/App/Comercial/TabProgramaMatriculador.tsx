@@ -1482,6 +1482,13 @@ function HistoricoMensal({ historico, mediaGrupo, config, metaVolume, metaTicket
   const taxaGeralMedia = historico.length > 0
     ? historico.reduce((acc, h) => acc + h.taxa_geral, 0) / historico.length
     : 0;
+  const taxaExpMatMedia = historicoExpMatLiberado.length > 0
+    ? historicoExpMatLiberado.reduce((acc, h) => acc + h.taxa_exp_mat, 0) / historicoExpMatLiberado.length
+    : null;
+  const mesesLiberadosExpMat = historicoExpMatLiberado.length;
+  const periodoResumo = historico.length > 0
+    ? `Jan-${MESES[historico[historico.length - 1].mes - 1]}`
+    : 'sem periodo';
 
   return (
     <div className="space-y-6">
@@ -1663,130 +1670,74 @@ function HistoricoMensal({ historico, mediaGrupo, config, metaVolume, metaTicket
         </div>
       </div>
 
-      {/* Comparativo com Média do Grupo */}
+      {/* Comparativo acumulado do programa */}
       <div className="bg-slate-900 rounded-2xl p-6">
         <h3 className="text-lg font-bold mb-2 flex items-center gap-2">
           <Target className="w-5 h-5" />
-          Suas Metas vs Média do Grupo
+          Acumulado do Programa
         </h3>
         <p className="text-sm text-slate-400 mb-4">
-          Compare seu desempenho com a média dos Hunters (sem revelar posições individuais)
+          Media do periodo {periodoResumo}/{config.ano || 2026}. Pontos sao proporcionais ao progresso ate a meta.
         </p>
-        <div className="grid grid-cols-3 gap-4">
-          {/* Taxa Lead→Matrícula */}
-          <div className="bg-slate-800 rounded-xl p-4">
-            <div className="text-sm text-slate-400 mb-3">Taxa Lead→Matrícula (Desempate)</div>
-            <div className="flex items-end gap-3 h-24">
-              <div className="flex-1 flex flex-col items-center">
-                <div className="text-xs text-slate-500 mb-1">Você</div>
-                <div 
-                  className={cn("w-full rounded-t flex items-end justify-center pb-2", taxaGeralMedia >= config.metas.taxa_lead_matricula ? "bg-emerald-500" : "bg-red-500")}
-                  style={{ height: `${Math.min(100, (taxaGeralMedia / 20) * 100)}%` }}
-                >
-                  <span className="text-white font-bold text-sm">{taxaGeralMedia.toFixed(1)}%</span>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="bg-slate-800 rounded-xl p-4 border border-slate-700/70">
+            <div className="text-sm text-slate-400 mb-3">Lead &gt; Matricula</div>
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <div className={cn("text-2xl font-bold", taxaGeralMedia >= config.metas.taxa_lead_matricula ? "text-emerald-400" : "text-amber-400")}>
+                  {taxaGeralMedia.toFixed(1)}%
                 </div>
+                <div className="text-xs text-slate-500">media do periodo</div>
               </div>
-              <div className="flex-1 flex flex-col items-center">
-                <div className="text-xs text-slate-500 mb-1">Média</div>
-                <div 
-                  className="w-full bg-slate-600 rounded-t flex items-end justify-center pb-2"
-                  style={{ height: `${Math.min(100, (mediaGrupo.taxa_geral / 20) * 100)}%` }}
-                >
-                  <span className="text-slate-300 font-bold text-sm">{mediaGrupo.taxa_geral}%</span>
-                </div>
-              </div>
-              <div className="flex-1 flex flex-col items-center">
-                <div className="text-xs text-slate-500 mb-1">Meta</div>
-                <div 
-                  className="w-full bg-yellow-500/50 rounded-t flex items-end justify-center pb-2"
-                  style={{ height: `${Math.min(100, (config.metas.taxa_lead_matricula / 20) * 100)}%` }}
-                >
-                  <span className="text-yellow-300 font-bold text-sm">{config.metas.taxa_lead_matricula}%</span>
-                </div>
+              <div className="text-right text-xs text-slate-400">
+                <div>Grupo: {mediaGrupo.taxa_geral}%</div>
+                <div>Meta: {config.metas.taxa_lead_matricula}%</div>
               </div>
             </div>
-            <div className={cn("text-center mt-2 text-sm", taxaGeralMedia >= mediaGrupo.taxa_geral ? "text-emerald-400" : "text-amber-400")}>
-              {taxaGeralMedia >= mediaGrupo.taxa_geral 
-                ? `+${(taxaGeralMedia - mediaGrupo.taxa_geral).toFixed(1)}% acima da média!`
-                : `${(mediaGrupo.taxa_geral - taxaGeralMedia).toFixed(1)}% abaixo da média`}
+            <div className="mt-3 h-2 rounded-full bg-slate-700 overflow-hidden">
+              <div className="h-full rounded-full bg-cyan-400" style={{ width: `${Math.min(100, (taxaGeralMedia / config.metas.taxa_lead_matricula) * 100)}%` }} />
             </div>
           </div>
 
-          {/* Volume Médio */}
-          <div className="bg-slate-800 rounded-xl p-4">
-            <div className="text-sm text-slate-400 mb-3">Volume Médio/Mês</div>
-            <div className="flex items-end gap-3 h-24">
-              <div className="flex-1 flex flex-col items-center">
-                <div className="text-xs text-slate-500 mb-1">Você</div>
-                <div 
-                  className={cn("w-full rounded-t flex items-end justify-center pb-2", volumeMedio >= metaVolume ? "bg-emerald-500" : "bg-red-500")}
-                  style={{ height: `${Math.min(100, (volumeMedio / metaVolume) * 80)}%` }}
-                >
-                  <span className="text-white font-bold text-sm">{volumeMedio.toFixed(1)}</span>
+          <div className="bg-slate-800 rounded-xl p-4 border border-slate-700/70">
+            <div className="text-sm text-slate-400 mb-3">Exp &gt; Matricula</div>
+            {taxaExpMatMedia === null ? (
+              <>
+                <div className="text-2xl font-bold text-yellow-300">Bloqueada</div>
+                <div className="text-xs text-slate-500 mt-1">nenhum mes liberado no periodo</div>
+              </>
+            ) : (
+              <>
+                <div className={cn("text-2xl font-bold", taxaExpMatMedia >= config.metas.taxa_experimental_matricula ? "text-emerald-400" : "text-amber-400")}>
+                  {taxaExpMatMedia.toFixed(1)}%
                 </div>
-              </div>
-              <div className="flex-1 flex flex-col items-center">
-                <div className="text-xs text-slate-500 mb-1">Média</div>
-                <div 
-                  className="w-full bg-slate-600 rounded-t flex items-end justify-center pb-2"
-                  style={{ height: `${Math.min(100, (mediaGrupo.volume_medio / metaVolume) * 80)}%` }}
-                >
-                  <span className="text-slate-300 font-bold text-sm">{mediaGrupo.volume_medio}</span>
+                <div className="text-xs text-slate-500">{mesesLiberadosExpMat}/{historico.length} meses liberados</div>
+                <div className="mt-3 h-2 rounded-full bg-slate-700 overflow-hidden">
+                  <div className="h-full rounded-full bg-emerald-400" style={{ width: `${Math.min(100, (taxaExpMatMedia / config.metas.taxa_experimental_matricula) * 100)}%` }} />
                 </div>
-              </div>
-              <div className="flex-1 flex flex-col items-center">
-                <div className="text-xs text-slate-500 mb-1">Meta</div>
-                <div 
-                  className="w-full bg-yellow-500/50 rounded-t flex items-end justify-center pb-2"
-                  style={{ height: '100%' }}
-                >
-                  <span className="text-yellow-300 font-bold text-sm">{metaVolume}</span>
-                </div>
-              </div>
+              </>
+            )}
+          </div>
+
+          <div className="bg-slate-800 rounded-xl p-4 border border-slate-700/70">
+            <div className="text-sm text-slate-400 mb-3">Volume Medio/Mes</div>
+            <div className={cn("text-2xl font-bold", volumeMedio >= metaVolume ? "text-emerald-400" : "text-amber-400")}>
+              {volumeMedio.toFixed(1)}
             </div>
-            <div className={cn("text-center mt-2 text-sm", volumeMedio >= metaVolume ? "text-emerald-400" : "text-amber-400")}>
-              {volumeMedio >= metaVolume 
-                ? `Meta batida!`
-                : `Faltam ${(metaVolume - volumeMedio).toFixed(1)} para bater a meta!`}
+            <div className="text-xs text-slate-500">Grupo: {mediaGrupo.volume_medio} | Meta: {metaVolume}</div>
+            <div className="mt-3 h-2 rounded-full bg-slate-700 overflow-hidden">
+              <div className="h-full rounded-full bg-cyan-400" style={{ width: `${Math.min(100, (volumeMedio / metaVolume) * 100)}%` }} />
             </div>
           </div>
 
-          {/* Ticket Médio */}
-          <div className="bg-slate-800 rounded-xl p-4">
-            <div className="text-sm text-slate-400 mb-3">Ticket Médio</div>
-            <div className="flex items-end gap-3 h-24">
-              <div className="flex-1 flex flex-col items-center">
-                <div className="text-xs text-slate-500 mb-1">Você</div>
-                <div 
-                  className={cn("w-full rounded-t flex items-end justify-center pb-2", ticketMedio >= metaTicket ? "bg-emerald-500" : "bg-red-500")}
-                  style={{ height: `${Math.min(100, (ticketMedio / metaTicket) * 80)}%` }}
-                >
-                  <span className="text-white font-bold text-xs">R${Math.round(ticketMedio)}</span>
-                </div>
-              </div>
-              <div className="flex-1 flex flex-col items-center">
-                <div className="text-xs text-slate-500 mb-1">Média</div>
-                <div 
-                  className="w-full bg-slate-600 rounded-t flex items-end justify-center pb-2"
-                  style={{ height: `${Math.min(100, (mediaGrupo.ticket_medio / metaTicket) * 80)}%` }}
-                >
-                  <span className="text-slate-300 font-bold text-xs">R${mediaGrupo.ticket_medio}</span>
-                </div>
-              </div>
-              <div className="flex-1 flex flex-col items-center">
-                <div className="text-xs text-slate-500 mb-1">Meta</div>
-                <div 
-                  className="w-full bg-yellow-500/50 rounded-t flex items-end justify-center pb-2"
-                  style={{ height: '100%' }}
-                >
-                  <span className="text-yellow-300 font-bold text-xs">R${metaTicket}</span>
-                </div>
-              </div>
+          <div className="bg-slate-800 rounded-xl p-4 border border-slate-700/70">
+            <div className="text-sm text-slate-400 mb-3">Ticket Medio</div>
+            <div className={cn("text-2xl font-bold", ticketMedio >= metaTicket ? "text-emerald-400" : "text-amber-400")}>
+              R$ {Math.round(ticketMedio)}
             </div>
-            <div className={cn("text-center mt-2 text-sm", ticketMedio >= metaTicket ? "text-emerald-400" : "text-amber-400")}>
-              {ticketMedio >= metaTicket 
-                ? `+R$${Math.round(ticketMedio - metaTicket)} acima da meta!`
-                : `Faltam R$${Math.round(metaTicket - ticketMedio)} para a meta`}
+            <div className="text-xs text-slate-500">Grupo: R$ {mediaGrupo.ticket_medio} | Meta: R$ {metaTicket}</div>
+            <div className="mt-3 h-2 rounded-full bg-slate-700 overflow-hidden">
+              <div className="h-full rounded-full bg-cyan-400" style={{ width: `${Math.min(100, (ticketMedio / metaTicket) * 100)}%` }} />
             </div>
           </div>
         </div>
