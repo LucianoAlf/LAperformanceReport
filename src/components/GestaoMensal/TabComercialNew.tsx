@@ -715,10 +715,10 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             <div className="flex items-start gap-3 mb-4">
               <Info className="w-5 h-5 text-cyan-300 flex-shrink-0 mt-0.5" />
               <div>
-                <h4 className="text-cyan-100 font-semibold">Diagnóstico P02Q de experimentais</h4>
+                <h4 className="text-cyan-100 font-semibold">Leitura operacional de experimentais</h4>
                 <p className="text-cyan-100/80 text-sm">
-                  Denominador operacional separado de conversões confirmadas por vínculo e presença.
-                  Decisões humanas removem duplicidades/matrículas diretas sem alterar o histórico original.
+                  Marcadas vêm do funil. Presença confirmada vem do Emusys com presença individual.
+                  Status realizado no funil ainda não é a taxa oficial.
                 </p>
               </div>
             </div>
@@ -728,7 +728,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
                 <dd className="text-white text-2xl font-bold">{experimentaisDiagnostico.realizadasPresencaConfirmada}</dd>
               </div>
               <div>
-                <dt className="text-slate-400">Marcadas como realizadas</dt>
+                <dt className="text-slate-400">Status realizado no funil</dt>
                 <dd className="text-white text-2xl font-bold">{experimentaisDiagnostico.realizadasStatusOperacional}</dd>
               </div>
               <div>
@@ -736,7 +736,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
                 <dd className="text-white text-2xl font-bold">{experimentaisDiagnostico.conversoesPendentesVinculo}</dd>
               </div>
               <div>
-                <dt className="text-slate-400">Sem matrícula vinculada</dt>
+                <dt className="text-slate-400">Realizada sem matrícula</dt>
                 <dd className="text-white text-2xl font-bold">{experimentaisDiagnostico.realizadasSemConversaoAparente}</dd>
               </div>
               <div>
@@ -744,7 +744,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
                 <dd className="text-white text-2xl font-bold">
                   {experimentaisDiagnostico.decisoesHumanasExcluidasDenominador}
                 </dd>
-                <p className="text-[11px] text-slate-400">não entram na taxa</p>
+                <p className="text-[11px] text-slate-400">fora da taxa Exp → Mat</p>
               </div>
               <div>
                 <dt className="text-slate-400">Para revisar</dt>
@@ -754,7 +754,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
                 <p className="text-[11px] text-slate-400">cadastro/vínculo</p>
               </div>
               <div>
-                <dt className="text-slate-400">Presença sem funil</dt>
+                <dt className="text-slate-400">Emusys sem funil</dt>
                 <dd className="text-white text-2xl font-bold">{experimentaisDiagnostico.presencasEmusysSemFunil}</dd>
               </div>
               <div>
@@ -772,7 +772,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <KPICard
               icon={Calendar}
-              label="Marcadas (legado)"
+              label="Agendadas/Marcadas"
               value={dados.experimentais_marcadas}
               variant="cyan"
             />
@@ -785,13 +785,13 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             />
             <KPICard
               icon={XCircle}
-              label="Faltaram (legado)"
+              label="Faltas no funil"
               value={dados.faltaram}
               variant="rose"
             />
             <KPICard
               icon={Percent}
-              label="Show-up (legado)"
+              label="Show-up operacional"
               value={dados.taxa_showup}
               format="percent"
               variant="violet"
@@ -806,7 +806,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
                 <p className="text-xs text-slate-400 mt-1">
                   {experimentaisDiagnostico.conversoesPendentesVinculo} pendente(s) de vínculo e{' '}
                   {experimentaisDiagnostico.decisoesHumanasPendentesCanonizacao} decisão(ões) humana(s)
-                  ainda sem canonização.
+                  ainda sem regra oficial.
                 </p>
               </div>
             </div>
@@ -819,7 +819,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
                 { label: 'Presença confirmada', value: experimentaisDiagnostico.realizadasPresencaConfirmada, color: '#8b5cf6' },
                 { label: 'Matrículas comerciais', value: dados.novas_matriculas, color: '#10b981' },
               ]}
-              title="Funil Diagnóstico (não KPI oficial)"
+              title="Funil de leitura (não KPI oficial)"
             />
             {dados.experimentais_por_canal.length > 0 ? (
               <DistributionChart
