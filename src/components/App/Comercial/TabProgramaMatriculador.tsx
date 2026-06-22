@@ -1433,6 +1433,7 @@ interface HistoricoMensalProps {
     taxa_showup: number;
     taxa_exp_mat: number;
     taxa_exp_mat_liberada?: boolean;
+    conciliacao_exp_mat_carregada?: boolean;
     pendencias_exp_mat?: number;
     denominador_exp_mat?: number;
     conversoes_exp_mat?: number;
@@ -1574,7 +1575,7 @@ function HistoricoMensal({ historico, mediaGrupo, config, metaVolume, metaTicket
                   <th className="text-center py-3">Leads</th>
                   <th className="text-center py-3">Exp.</th>
                   <th className="text-center py-3">Mat.</th>
-                  <th className="text-center py-3">Taxa Showup</th>
+                  <th className="text-center py-3">Lead→Exp op.</th>
                   <th className="text-center py-3">Exp-&gt;Mat</th>
                   <th className="text-center py-3 bg-yellow-500/10">Lead→Matrícula</th>
                   <th className="text-center py-3">Ticket</th>
@@ -1594,13 +1595,26 @@ function HistoricoMensal({ historico, mediaGrupo, config, metaVolume, metaTicket
                       <td className={cn("text-center", h.taxa_showup >= config.metas.taxa_showup_experimental ? "text-emerald-400" : "text-red-400")}>
                         {h.taxa_showup}% {h.taxa_showup >= config.metas.taxa_showup_experimental ? <Check className="inline w-3 h-3" /> : <X className="inline w-3 h-3" />}
                       </td>
-                      <td className={cn("text-center", !h.taxa_exp_mat_liberada ? "text-yellow-300" : h.taxa_exp_mat >= config.metas.taxa_experimental_matricula ? "text-emerald-400" : "text-red-400")}>
-                        {h.taxa_exp_mat_liberada ? (
+                      <td className={cn(
+                        "text-center",
+                        !h.conciliacao_exp_mat_carregada
+                          ? "text-slate-500"
+                          : h.taxa_exp_mat_liberada
+                            ? h.taxa_exp_mat >= config.metas.taxa_experimental_matricula ? "text-emerald-400" : "text-red-400"
+                            : (h.denominador_exp_mat || 0) === 0 && (h.pendencias_exp_mat || 0) === 0
+                              ? "text-slate-400"
+                              : "text-yellow-300"
+                      )}>
+                        {!h.conciliacao_exp_mat_carregada ? (
+                          "Indisp."
+                        ) : h.taxa_exp_mat_liberada ? (
                           <>
                             {h.taxa_exp_mat}% {h.taxa_exp_mat >= config.metas.taxa_experimental_matricula ? <Check className="inline w-3 h-3" /> : <X className="inline w-3 h-3" />}
                           </>
+                        ) : (h.denominador_exp_mat || 0) === 0 && (h.pendencias_exp_mat || 0) === 0 ? (
+                          "Sem base"
                         ) : (
-                          "Bloqueada"
+                          `Pendente (${h.pendencias_exp_mat || 0})`
                         )}
                       </td>
                       <td className={cn("text-center bg-yellow-500/10 font-bold", h.taxa_geral >= config.metas.taxa_lead_matricula ? "text-emerald-400" : "text-red-400")}>
@@ -1621,8 +1635,8 @@ function HistoricoMensal({ historico, mediaGrupo, config, metaVolume, metaTicket
                   <td className={cn("text-center", Number(mediasAnuais.taxa_showup) >= config.metas.taxa_showup_experimental ? "text-emerald-400" : "text-red-400")}>
                     {mediasAnuais.taxa_showup}%
                   </td>
-                  <td className={cn("text-center", mediasAnuais.taxa_exp_mat === null ? "text-yellow-300" : Number(mediasAnuais.taxa_exp_mat) >= config.metas.taxa_experimental_matricula ? "text-emerald-400" : "text-red-400")}>
-                    {mediasAnuais.taxa_exp_mat === null ? "Bloqueada" : `${mediasAnuais.taxa_exp_mat}%`}
+                  <td className={cn("text-center", mediasAnuais.taxa_exp_mat === null ? "text-slate-400" : Number(mediasAnuais.taxa_exp_mat) >= config.metas.taxa_experimental_matricula ? "text-emerald-400" : "text-red-400")}>
+                    {mediasAnuais.taxa_exp_mat === null ? "Sem base" : `${mediasAnuais.taxa_exp_mat}%`}
                   </td>
                   <td className={cn("text-center bg-yellow-500/10", Number(mediasAnuais.taxa_geral) >= config.metas.taxa_lead_matricula ? "text-emerald-400" : "text-red-400")}>
                     {mediasAnuais.taxa_geral}%

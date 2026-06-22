@@ -110,6 +110,7 @@ interface HistoricoMatriculadorItem {
   taxa_showup: number;
   taxa_exp_mat: number;
   taxa_exp_mat_liberada?: boolean;
+  conciliacao_exp_mat_carregada?: boolean;
   pendencias_exp_mat?: number;
   denominador_exp_mat?: number;
   conversoes_exp_mat?: number;
@@ -187,9 +188,7 @@ async function buscarMetricasMensaisV2(
   mesReferencia?: number,
 ): Promise<HistoricoMatriculadorItem[]> {
   const meses = normalizarMesesPrograma(config, mesReferencia);
-  const mesComConciliacao = mesReferencia || meses[meses.length - 1];
-
-  return Promise.all(meses.map(async (mes) => {
+  const kpisPorMes = await Promise.all(meses.map(async (mes) => {
     const kpisResponse = await supabase.rpc('get_kpis_comercial_canonicos_v2', {
         p_unidade_id: unidadeId,
         p_ano: ano,
@@ -204,27 +203,35 @@ async function buscarMetricasMensaisV2(
       );
     }
 
-    let conciliacao: ConciliacaoExperimentaisV2Payload | null = null;
-    if (mes === mesComConciliacao) {
-      const conciliacaoResponse = await supabase.rpc('get_conciliacao_experimentais_v2', {
+    return {
+      mes,
+      payload: kpisResponse.data as KpisComercialCanonicosV2Payload | null,
+    };
+  }));
+
+  const conciliacaoPorMes = new Map<number, ConciliacaoExperimentaisV2Payload | null>();
+  for (const mes of meses) {
+    const conciliacaoResponse = await supabase.rpc('get_conciliacao_experimentais_v2', {
         p_unidade_id: unidadeId,
         p_ano: ano,
         p_mes: mes,
         p_periodo: 'mensal',
         p_data: null,
-      });
+    });
 
-      if (conciliacaoResponse.error) {
-        console.warn(
-          `Conciliacao v2 indisponivel no Matriculador ${ano}-${String(mes).padStart(2, '0')}:`,
-          conciliacaoResponse.error.message,
-        );
-      } else {
-        conciliacao = conciliacaoResponse.data as ConciliacaoExperimentaisV2Payload | null;
-      }
+    if (conciliacaoResponse.error) {
+      console.warn(
+        `Conciliacao v2 indisponivel no Matriculador ${ano}-${String(mes).padStart(2, '0')}:`,
+        conciliacaoResponse.error.message,
+      );
+      conciliacaoPorMes.set(mes, null);
+    } else {
+      conciliacaoPorMes.set(mes, conciliacaoResponse.data as ConciliacaoExperimentaisV2Payload | null);
     }
+  }
 
-    const payload = kpisResponse.data as KpisComercialCanonicosV2Payload | null;
+  return kpisPorMes.map(({ mes, payload }) => {
+    const conciliacao = conciliacaoPorMes.get(mes) || null;
     const resumoConciliacao = conciliacao?.resumo || {};
     const leads = toNumber(payload?.kpis?.leads_entrantes);
     const experimentais = toNumber(payload?.kpis?.experimentais_realizadas_status_operacional);
@@ -251,12 +258,13 @@ async function buscarMetricasMensaisV2(
       taxa_showup: leads > 0 ? Number(((experimentais / leads) * 100).toFixed(1)) : 0,
       taxa_exp_mat: taxaExpMat,
       taxa_exp_mat_liberada: taxaExpMatLiberada,
+      conciliacao_exp_mat_carregada: Boolean(conciliacao),
       pendencias_exp_mat: pendenciasExpMat,
       denominador_exp_mat: denominadorExpMat,
       conversoes_exp_mat: conversoesExpMat,
       taxa_geral: leads > 0 ? Number(((matriculas / leads) * 100).toFixed(1)) : 0,
     };
-  }));
+  });
 }
 
 function consolidarMetricasV2(
