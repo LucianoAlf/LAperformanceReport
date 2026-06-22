@@ -467,7 +467,7 @@ export function TabProgramaMatriculador({ unidadeId, ano = 2026 }: TabProgramaMa
                   </thead>
                   <tbody>
                     <tr className="border-b border-slate-800">
-                      <td className="py-3 font-medium">Taxa Show-up → Experimental</td>
+                      <td className="py-3 font-medium">Lead → Experimental operacional</td>
                       <td className="text-center text-slate-400">{config.metas.taxa_showup_experimental}%</td>
                       {hunters.map(h => (
                         <td key={h.unidade_id} className={cn(
@@ -745,7 +745,7 @@ export function TabProgramaMatriculador({ unidadeId, ano = 2026 }: TabProgramaMa
                 <h3 className="text-lg font-semibold mb-4">Metas Comerciais Seguras</h3>
                 <div className="space-y-4">
                   <div>
-                    <Label className="text-slate-400">Taxa Show-up → Experimental</Label>
+                    <Label className="text-slate-400">Lead → Experimental operacional</Label>
                     <div className="flex gap-2 mt-1">
                       <ConfigInput value={config.metas.taxa_showup_experimental} campo="meta_taxa_showup_experimental" ano={ano} />
                       <span className="flex items-center text-slate-400">%</span>
@@ -828,7 +828,7 @@ export function TabProgramaMatriculador({ unidadeId, ano = 2026 }: TabProgramaMa
                 <h3 className="text-lg font-semibold mb-4">Sistema de Pontuação</h3>
                 <div className="space-y-4">
                   <div>
-                    <Label className="text-slate-400">Pontos - Taxa Show-up → Exp</Label>
+                    <Label className="text-slate-400">Pontos - Lead → Exp operacional</Label>
                     <div className="mt-1">
                       <ConfigInput value={config.pontuacao.taxa_showup} campo="pontos_taxa_showup" ano={ano} />
                     </div>
@@ -1117,11 +1117,11 @@ export function TabProgramaMatriculador({ unidadeId, ano = 2026 }: TabProgramaMa
 
       {/* Progresso das Metas */}
       <div className="grid grid-cols-2 gap-4">
-        {/* Taxa Show-up → Experimental */}
+        {/* Lead → Experimental operacional */}
         <div className="bg-slate-900 rounded-xl p-5">
           <div className="flex items-center justify-between mb-3">
             <div>
-              <h4 className="font-medium">Taxa Show-up → Experimental</h4>
+              <h4 className="font-medium">Lead → Experimental operacional</h4>
               <p className="text-sm text-slate-400">Meta: {config.metas.taxa_showup_experimental}%</p>
             </div>
             <div className="text-right">
