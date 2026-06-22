@@ -80,9 +80,7 @@ export function TabProfessores({ ano, mes, unidade }: TabProfessoresProps) {
           const carteiraMedia = total > 0 
             ? data.reduce((acc, p) => acc + (p.carteira_alunos || 0), 0) / total 
             : 0;
-          const taxaConversaoMedia = total > 0 
-            ? data.reduce((acc, p) => acc + (Number(p.taxa_conversao) || 0), 0) / total 
-            : 0;
+          const taxaConversaoMedia = 0;
           const taxaRenovacaoMedia = total > 0 
             ? data.reduce((acc, p) => acc + (Number(p.taxa_renovacao) || 0), 0) / total 
             : 0;
@@ -137,8 +135,14 @@ export function TabProfessores({ ano, mes, unidade }: TabProfessoresProps) {
 
   // Preparar dados para rankings
   const rankingMatriculadores = [...professores]
-    .sort((a, b) => a.ranking_matriculador - b.ranking_matriculador)
-    .map(p => ({ id: p.id, nome: p.nome, valor: Number(p.taxa_conversao) || 0, subvalor: `${p.matriculas || 0} matrículas` }));
+    .filter(p => (p.matriculas || 0) > 0)
+    .sort((a, b) => (b.matriculas || 0) - (a.matriculas || 0))
+    .map(p => ({
+      id: p.id,
+      nome: p.nome,
+      valor: p.matriculas || 0,
+      subvalor: `Exp -> Mat bloqueada (diag. ${(Number(p.taxa_conversao) || 0).toFixed(0)}%)`,
+    }));
 
   const rankingRenovadores = [...professores]
     .sort((a, b) => a.ranking_renovador - b.ranking_renovador)
@@ -196,9 +200,10 @@ export function TabProfessores({ ano, mes, unidade }: TabProfessoresProps) {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <KPICard
           icon={TrendingUp}
-          label="Conversão Média"
-          value={`${totais.taxaConversaoMedia.toFixed(1)}%`}
-          variant="emerald"
+          label="Exp → Mat bloqueada"
+          value="Bloqueada"
+          subvalue="aguardando regra canônica"
+          variant="amber"
         />
         <KPICard
           icon={TrendingUp}
@@ -225,10 +230,9 @@ export function TabProfessores({ ano, mes, unidade }: TabProfessoresProps) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <RankingTable
           data={rankingMatriculadores}
-          title="🏆 Top Matriculadores"
-          valorLabel="Conversão"
+          title="🏆 Matrículas por Professor (diagnóstico)"
+          valorLabel="Matrículas"
           variant="emerald"
-          valorFormatter={(v) => `${Number(v).toFixed(0)}%`}
           maxItems={5}
         />
         <RankingTable
@@ -269,7 +273,7 @@ export function TabProfessores({ ano, mes, unidade }: TabProfessoresProps) {
                 <th className="py-3 px-4 text-left">Unidade</th>
                 <th className="py-3 px-4 text-right">Carteira</th>
                 <th className="py-3 px-4 text-right">Ticket Médio</th>
-                <th className="py-3 px-4 text-right">Conversão</th>
+                <th className="py-3 px-4 text-right">Exp → Mat</th>
                 <th className="py-3 px-4 text-right">Renovação</th>
                 <th className="py-3 px-4 text-right">Evasões</th>
               </tr>
@@ -291,8 +295,13 @@ export function TabProfessores({ ano, mes, unidade }: TabProfessoresProps) {
                       {formatCurrency(Number(p.ticket_medio) || 0)}
                     </td>
                     <td className="py-3 px-4 text-right">
-                      <span className={Number(p.taxa_conversao) >= 50 ? 'text-emerald-400' : 'text-slate-300'}>
-                        {Number(p.taxa_conversao).toFixed(1)}%
+                      <span className="text-yellow-300">
+                        Bloq.
+                        {(Number(p.taxa_conversao) || 0) > 0 && (
+                          <span className="ml-1 text-[10px] text-slate-500">
+                            diag. {Number(p.taxa_conversao).toFixed(0)}%
+                          </span>
+                        )}
                       </span>
                     </td>
                     <td className="py-3 px-4 text-right">

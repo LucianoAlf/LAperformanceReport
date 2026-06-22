@@ -116,9 +116,7 @@ export function useKPIsProfessor(
         const taxaFaltas = total > 0 
           ? professoresData.reduce((acc, p) => acc + (Number(p.taxa_faltas) || 0), 0) / total 
           : 0;
-        const taxaConversaoMedia = total > 0 
-          ? professoresData.reduce((acc, p) => acc + (Number(p.taxa_conversao) || 0), 0) / total 
-          : 0;
+        const taxaConversaoMedia = 0;
         const taxaRenovacaoMedia = total > 0 
           ? professoresData.reduce((acc, p) => acc + (Number(p.taxa_renovacao) || 0), 0) / total 
           : 0;
@@ -146,12 +144,13 @@ export function useKPIsProfessor(
         // Preparar rankings
         setRankingMatriculadores(
           [...professoresData]
-            .sort((a, b) => a.ranking_matriculador - b.ranking_matriculador)
+            .filter(p => (p.matriculas || 0) > 0)
+            .sort((a, b) => (b.matriculas || 0) - (a.matriculas || 0))
             .map(p => ({
               id: p.id,
               nome: p.nome,
-              valor: Number(p.taxa_conversao) || 0,
-              subvalor: `${p.matriculas || 0} matrículas`,
+              valor: p.matriculas || 0,
+              subvalor: `Exp -> Mat bloqueada (diag. ${(Number(p.taxa_conversao) || 0).toFixed(0)}%)`,
             }))
         );
 
