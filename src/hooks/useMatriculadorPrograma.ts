@@ -95,12 +95,171 @@ export interface DadosPrograma {
   penalidades: Penalidade[];
 }
 
+interface HistoricoMatriculadorItem {
+  mes: number;
+  unidade_id: string;
+  unidade_nome: string;
+  total_leads: number;
+  total_experimentais: number;
+  total_matriculas: number;
+  ticket_medio: number;
+  taxa_showup: number;
+  taxa_exp_mat: number;
+  taxa_geral: number;
+}
+
+interface HistoricoMatriculador {
+  historico: HistoricoMatriculadorItem[];
+  media_grupo: {
+    taxa_geral: number;
+    volume_medio: number;
+    ticket_medio: number;
+  };
+}
+
+interface KpisComercialCanonicosV2Payload {
+  kpis?: {
+    leads_entrantes?: number | string | null;
+    experimentais_realizadas_status_operacional?: number | string | null;
+    matriculas_comerciais_principais?: number | string | null;
+  } | null;
+}
+
 // Mapeamento de UUIDs para metas de volume e ticket
 const UNIDADE_METAS_MAP: Record<string, { volume: string; ticket: string }> = {
   '2ec861f6-023f-4d7b-9927-3960ad8c2a92': { volume: 'volume_campo_grande', ticket: 'ticket_campo_grande' },
   '95553e96-971b-4590-a6eb-0201d013c14d': { volume: 'volume_recreio', ticket: 'ticket_recreio' },
   '368d47f5-2d88-4475-bc14-ba084a9a348e': { volume: 'volume_barra', ticket: 'ticket_barra' },
 };
+
+function toNumber(valor: unknown): number {
+  const numero = Number(valor);
+  return Number.isFinite(numero) ? numero : 0;
+}
+
+function normalizarMesesPrograma(config?: ConfigPrograma): number[] {
+  const inicio = Math.max(1, Math.min(12, Math.trunc(config?.periodo?.mes_inicio || 1)));
+  const fim = Math.max(inicio, Math.min(12, Math.trunc(config?.periodo?.mes_fim || 11)));
+
+  return Array.from({ length: fim - inicio + 1 }, (_, index) => inicio + index);
+}
+
+async function buscarMetricasMensaisV2(
+  ano: number,
+  unidadeId: string,
+  config: ConfigPrograma,
+): Promise<HistoricoMatriculadorItem[]> {
+  const meses = normalizarMesesPrograma(config);
+  const historico: HistoricoMatriculadorItem[] = [];
+
+  for (const mes of meses) {
+    const { data, error } = await supabase.rpc('get_kpis_comercial_canonicos_v2', {
+      p_unidade_id: unidadeId,
+      p_ano: ano,
+      p_mes: mes,
+      p_periodo: 'mensal',
+      p_data: null,
+    });
+
+    if (error) {
+      throw new Error(
+        `Erro ao buscar metricas v2 do Matriculador ${ano}-${String(mes).padStart(2, '0')}: ${error.message}`,
+      );
+    }
+
+    const payload = data as KpisComercialCanonicosV2Payload | null;
+    const leads = toNumber(payload?.kpis?.leads_entrantes);
+    const experimentais = toNumber(payload?.kpis?.experimentais_realizadas_status_operacional);
+    const matriculas = toNumber(payload?.kpis?.matriculas_comerciais_principais);
+
+    historico.push({
+      mes,
+      unidade_id: unidadeId,
+      unidade_nome: '',
+      total_leads: leads,
+      total_experimentais: experimentais,
+      total_matriculas: matriculas,
+      ticket_medio: 0,
+      taxa_showup: leads > 0 ? Number(((experimentais / leads) * 100).toFixed(1)) : 0,
+      taxa_exp_mat: 0,
+      taxa_geral: leads > 0 ? Number(((matriculas / leads) * 100).toFixed(1)) : 0,
+    });
+  }
+
+  return historico;
+}
+
+function consolidarMetricasV2(
+  historico: HistoricoMatriculadorItem[],
+  metricasLegadas: HunterDados['metricas'],
+): HunterDados['metricas'] {
+  const totalLeads = historico.reduce((acc, item) => acc + item.total_leads, 0);
+  const totalExperimentais = historico.reduce((acc, item) => acc + item.total_experimentais, 0);
+  const totalMatriculas = historico.reduce((acc, item) => acc + item.total_matriculas, 0);
+  const mesesComDados = historico.length || 1;
+
+  return {
+    ...metricasLegadas,
+    total_leads: totalLeads,
+    total_experimentais: totalExperimentais,
+    total_matriculas: totalMatriculas,
+    meses_com_dados: mesesComDados,
+    media_matriculas_mes: Number((totalMatriculas / mesesComDados).toFixed(1)),
+    taxa_showup_exp: totalLeads > 0 ? (totalExperimentais / totalLeads) * 100 : 0,
+    taxa_exp_mat: 0,
+    taxa_geral: totalLeads > 0 ? (totalMatriculas / totalLeads) * 100 : 0,
+  };
+}
+
+async function sobreporHistoricoMatriculadorV2(
+  ano: number,
+  historicoLegado: HistoricoMatriculador,
+  config: ConfigPrograma,
+  unidadeId?: string | null,
+): Promise<HistoricoMatriculador> {
+  const unidadeIds = unidadeId && unidadeId !== 'todos'
+    ? [unidadeId]
+    : Array.from(new Set(historicoLegado.historico.map((item) => item.unidade_id))).filter(Boolean);
+
+  const historicoV2: HistoricoMatriculadorItem[] = [];
+
+  for (const id of unidadeIds) {
+    const legadoPorMes = new Map(
+      historicoLegado.historico
+        .filter((item) => item.unidade_id === id)
+        .map((item) => [item.mes, item]),
+    );
+    const unidadeNome = legadoPorMes.values().next().value?.unidade_nome || '';
+    const serieV2 = await buscarMetricasMensaisV2(ano, id, config);
+
+    serieV2.forEach((item) => {
+      const legado = legadoPorMes.get(item.mes);
+      historicoV2.push({
+        ...item,
+        unidade_nome: unidadeNome || legado?.unidade_nome || item.unidade_nome,
+        ticket_medio: legado?.ticket_medio || 0,
+      });
+    });
+  }
+
+  const linhasComLeads = historicoV2.filter((item) => item.total_leads > 0);
+  const linhasComTicket = historicoV2.filter((item) => item.ticket_medio > 0);
+
+  return {
+    historico: historicoV2,
+    media_grupo: {
+      taxa_geral: linhasComLeads.length > 0
+        ? Number((linhasComLeads.reduce((acc, item) => acc + item.taxa_geral, 0) / linhasComLeads.length).toFixed(1))
+        : 0,
+      volume_medio: historicoV2.length > 0
+        ? Number((historicoV2.reduce((acc, item) => acc + item.total_matriculas, 0) / historicoV2.length).toFixed(1))
+        : 0,
+      ticket_medio: linhasComTicket.length > 0
+        ? Math.round(linhasComTicket.reduce((acc, item) => acc + item.ticket_medio, 0) / linhasComTicket.length)
+        : historicoLegado.media_grupo?.ticket_medio || 0,
+    },
+  };
+}
 
 // Função para calcular pontuação de um Hunter
 function calcularPontuacao(
@@ -192,10 +351,23 @@ export function useMatriculadorPrograma(ano: number = 2026, unidadeId?: string |
 
       // Calcular pontuação para cada Hunter
       if (resultado.hunters && resultado.config) {
-        resultado.hunters = resultado.hunters.map(hunter => ({
-          ...hunter,
-          pontuacao: calcularPontuacao(hunter, resultado.config),
-        }));
+        const huntersComMetricasV2: HunterDados[] = [];
+
+        for (const hunter of resultado.hunters) {
+          const historicoV2 = await buscarMetricasMensaisV2(ano, hunter.unidade_id, resultado.config);
+          const metricasV2 = consolidarMetricasV2(historicoV2, hunter.metricas);
+          const hunterComMetricasV2 = {
+            ...hunter,
+            metricas: metricasV2,
+          };
+
+          huntersComMetricasV2.push({
+            ...hunterComMetricasV2,
+            pontuacao: calcularPontuacao(hunterComMetricasV2, resultado.config),
+          });
+        }
+
+        resultado.hunters = huntersComMetricasV2;
 
         // Ordenar por pontuação total (decrescente) e atribuir posição
         resultado.hunters.sort((a, b) => 
@@ -310,25 +482,7 @@ export function useMatriculadorPrograma(ano: number = 2026, unidadeId?: string |
   }, [ano, carregarDados]);
 
   // Buscar histórico mensal
-  const [historico, setHistorico] = useState<{
-    historico: Array<{
-      mes: number;
-      unidade_id: string;
-      unidade_nome: string;
-      total_leads: number;
-      total_experimentais: number;
-      total_matriculas: number;
-      ticket_medio: number;
-      taxa_showup: number;
-      taxa_exp_mat: number;
-      taxa_geral: number;
-    }>;
-    media_grupo: {
-      taxa_geral: number;
-      volume_medio: number;
-      ticket_medio: number;
-    };
-  } | null>(null);
+  const [historico, setHistorico] = useState<HistoricoMatriculador | null>(null);
 
   const carregarHistorico = useCallback(async () => {
     try {
@@ -338,7 +492,38 @@ export function useMatriculadorPrograma(ano: number = 2026, unidadeId?: string |
       });
 
       if (rpcError) throw rpcError;
-      setHistorico(data);
+
+      const historicoLegado = data as HistoricoMatriculador;
+      const configAtual: ConfigPrograma = {
+        ano,
+        metas: {
+          taxa_showup_experimental: 0,
+          taxa_experimental_matricula: 0,
+          taxa_lead_matricula: 0,
+          volume_campo_grande: 0,
+          volume_recreio: 0,
+          volume_barra: 0,
+          ticket_campo_grande: 0,
+          ticket_recreio: 0,
+          ticket_barra: 0,
+        },
+        pontuacao: {
+          taxa_showup: 0,
+          taxa_exp_mat: 0,
+          taxa_geral: 0,
+          volume_medio: 0,
+          ticket_medio: 0,
+        },
+        nota_corte: 0,
+        periodo: {
+          mes_inicio: 1,
+          mes_fim: 11,
+        },
+      };
+
+      setHistorico(
+        await sobreporHistoricoMatriculadorV2(ano, historicoLegado, configAtual, unidadeId),
+      );
     } catch (err) {
       console.error('Erro ao carregar histórico:', err);
     }
