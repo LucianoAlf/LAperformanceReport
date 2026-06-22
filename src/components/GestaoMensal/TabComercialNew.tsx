@@ -293,7 +293,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           .from('alunos')
           .select(`
             *,
-            cursos(nome),
+            cursos(nome, is_projeto_banda),
             canais_origem(nome),
             professores:professor_atual_id(nome)
           `)
@@ -673,41 +673,41 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             </div>
             <dl className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-4 text-sm">
               <div>
-                <dt className="text-slate-400">Presença + vínculo</dt>
+                <dt className="text-slate-400">Presença confirmada</dt>
                 <dd className="text-white text-2xl font-bold">{experimentaisDiagnostico.realizadasPresencaConfirmada}</dd>
               </div>
               <div>
-                <dt className="text-slate-400">Realizadas operacionais</dt>
+                <dt className="text-slate-400">Marcadas como realizadas</dt>
                 <dd className="text-white text-2xl font-bold">{experimentaisDiagnostico.realizadasStatusOperacional}</dd>
               </div>
               <div>
-                <dt className="text-slate-400">Pendentes de vínculo</dt>
+                <dt className="text-slate-400">Com matrícula, sem vínculo</dt>
                 <dd className="text-white text-2xl font-bold">{experimentaisDiagnostico.conversoesPendentesVinculo}</dd>
               </div>
               <div>
-                <dt className="text-slate-400">Sem conversão aparente</dt>
+                <dt className="text-slate-400">Sem matrícula vinculada</dt>
                 <dd className="text-white text-2xl font-bold">{experimentaisDiagnostico.realizadasSemConversaoAparente}</dd>
               </div>
               <div>
-                <dt className="text-slate-400">Decisões excluídas</dt>
+                <dt className="text-slate-400">Ignoradas/diretas</dt>
                 <dd className="text-white text-2xl font-bold">
                   {experimentaisDiagnostico.decisoesHumanasExcluidasDenominador}
                 </dd>
-                <p className="text-[11px] text-slate-400">fora do denominador</p>
+                <p className="text-[11px] text-slate-400">não entram na taxa</p>
               </div>
               <div>
-                <dt className="text-slate-400">Pendências humanas</dt>
+                <dt className="text-slate-400">Para revisar</dt>
                 <dd className="text-white text-2xl font-bold">
                   {experimentaisDiagnostico.decisoesHumanasPendentesCanonizacao}
                 </dd>
                 <p className="text-[11px] text-slate-400">cadastro/vínculo</p>
               </div>
               <div>
-                <dt className="text-slate-400">Emusys sem funil</dt>
+                <dt className="text-slate-400">Presença sem funil</dt>
                 <dd className="text-white text-2xl font-bold">{experimentaisDiagnostico.presencasEmusysSemFunil}</dd>
               </div>
               <div>
-                <dt className="text-slate-400">Faixa diagnóstica</dt>
+                <dt className="text-slate-400">Faixa provisória</dt>
                 <dd className="text-amber-200 text-xl font-bold">
                   {formatTaxaDiagnostica(experimentaisDiagnostico.taxaExpMatMinimaCanonica)}
                   {' - '}
