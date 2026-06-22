@@ -20,7 +20,7 @@ type SubTabId = 'visao_geral' | 'conversao' | 'retencao';
 
 const subTabs = [
   { id: 'visao_geral' as const, label: 'Visão Geral', icon: Users },
-  { id: 'conversao' as const, label: 'Conversão (legado)', icon: Target },
+  { id: 'conversao' as const, label: 'Exp->Mat bloqueada', icon: Target },
   { id: 'retencao' as const, label: 'Retenção', icon: UserCheck },
 ];
 
@@ -902,8 +902,8 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
             />
             <RankingTableCollapsible
               data={dados.ranking_conversao}
-              title="Ranking Taxa de Conversão (legado)"
-              valorLabel="Taxa legada"
+              title="Ranking diagnóstico Exp->Mat"
+              valorLabel="Diag."
               topCount={3}
               variant="amber"
               valorFormatter={(value) => `${Number(value).toFixed(1)}%`}
