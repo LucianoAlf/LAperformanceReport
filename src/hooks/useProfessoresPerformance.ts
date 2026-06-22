@@ -14,6 +14,8 @@ export interface ProfessorPerformance {
   contratos_vencer: number;
   renovacoes: number;
   taxa_renovacao: number;
+  taxa_conversao_diagnostica?: number;
+  conversao_bloqueada?: boolean;
   // Calculados
   score_saude?: number;
   nivel_risco?: 'crítico' | 'alto' | 'médio' | 'normal';
@@ -86,9 +88,8 @@ export function useProfessoresPerformance(ano: number = new Date().getFullYear()
 
       // Calcular score de saúde e nível de risco
       const processados = (data || []).map(prof => {
-        const scoreConversao = (prof.taxa_conversao || 0) * 0.4;
-        const scoreRenovacao = (prof.taxa_renovacao || 0) * 0.6;
-        const score_saude = scoreConversao + scoreRenovacao;
+        const taxa_conversao_diagnostica = prof.taxa_conversao || 0;
+        const score_saude = prof.taxa_renovacao || 0;
 
         // Usar evasões filtradas se disponível, senão usar o total da view
         const evasoesParaRisco = evasoesFiltradas !== null
@@ -101,7 +102,15 @@ export function useProfessoresPerformance(ano: number = new Date().getFullYear()
         else if (evasoesParaRisco >= 5) nivel_risco = 'médio';
         else nivel_risco = 'normal';
 
-        return { ...prof, evasoes: evasoesParaRisco, score_saude, nivel_risco };
+        return {
+          ...prof,
+          evasoes: evasoesParaRisco,
+          taxa_conversao: 0,
+          taxa_conversao_diagnostica,
+          conversao_bloqueada: true,
+          score_saude,
+          nivel_risco,
+        };
       });
 
       setProfessores(processados);
@@ -127,7 +136,7 @@ export function useProfessoresPerformance(ano: number = new Date().getFullYear()
 
     return {
       ...total,
-      taxa_conversao: total.experimentais > 0 ? (100 * total.matriculas / total.experimentais) : 0,
+      taxa_conversao: 0,
       taxa_renovacao: total.contratos_vencer > 0 ? (100 * total.renovacoes / total.contratos_vencer) : 0,
       nao_renovados: total.contratos_vencer - total.renovacoes,
       totalProfessores: professores.length,
@@ -158,7 +167,7 @@ export function useProfessoresPerformance(ano: number = new Date().getFullYear()
     // Calcular taxas
     Object.keys(agrupado).forEach(u => {
       const t = agrupado[u];
-      t.taxa_conversao = t.experimentais > 0 ? (100 * t.matriculas / t.experimentais) : 0;
+      t.taxa_conversao = 0;
       t.taxa_renovacao = t.contratos_vencer > 0 ? (100 * t.renovacoes / t.contratos_vencer) : 0;
       t.nao_renovados = t.contratos_vencer - t.renovacoes;
     });

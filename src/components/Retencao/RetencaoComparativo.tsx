@@ -107,7 +107,7 @@ export function RetencaoComparativo({ ano }: RetencaoComparativoProps) {
                       <div className="text-xs text-gray-400">Mat</div>
                     </div>
                     <div className="bg-slate-900/50 rounded-xl p-3 text-center">
-                      <div className="text-lg font-bold text-purple-400">{perf?.taxa_conversao?.toFixed(1) || 0}%</div>
+                      <div className="text-sm font-bold text-amber-300">Bloq.</div>
                       <div className="text-xs text-gray-400">Conv</div>
                     </div>
                     <div className="bg-slate-900/50 rounded-xl p-3 text-center">

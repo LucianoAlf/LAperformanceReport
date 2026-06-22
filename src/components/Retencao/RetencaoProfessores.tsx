@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { Users, AlertTriangle, TrendingDown, ArrowUpDown, Filter, GraduationCap } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ScatterChart, Scatter, ZAxis } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { useProfessoresPerformance } from '../../hooks/useProfessoresPerformance';
 import { useMotivosScoreProfessor } from '../../hooks/useMotivosScoreProfessor';
 import { UnidadeRetencao } from '../../types/retencao';
@@ -10,7 +10,7 @@ interface RetencaoProfessoresProps {
   unidade: UnidadeRetencao;
 }
 
-type OrdenacaoTipo = 'evasoes' | 'taxa_renovacao' | 'taxa_conversao' | 'score_saude';
+type OrdenacaoTipo = 'evasoes' | 'taxa_renovacao' | 'score_saude';
 
 export function RetencaoProfessores({ ano, unidade }: RetencaoProfessoresProps) {
   const { idsQueContam } = useMotivosScoreProfessor();
@@ -32,7 +32,6 @@ export function RetencaoProfessores({ ano, unidade }: RetencaoProfessoresProps) 
       switch (ordenarPor) {
         case 'evasoes': return b.evasoes - a.evasoes;
         case 'taxa_renovacao': return a.taxa_renovacao - b.taxa_renovacao;
-        case 'taxa_conversao': return b.taxa_conversao - a.taxa_conversao;
         case 'score_saude': return (a.score_saude || 0) - (b.score_saude || 0);
         default: return 0;
       }
@@ -65,8 +64,7 @@ export function RetencaoProfessores({ ano, unidade }: RetencaoProfessoresProps) 
     switch (tipo) {
       case 'evasoes': return 'Evasões';
       case 'taxa_renovacao': return 'Renovação %';
-      case 'taxa_conversao': return 'Conversão %';
-      case 'score_saude': return 'Score';
+      case 'score_saude': return 'Score de Retencao';
       default: return 'Evasões';
     }
   };
@@ -77,7 +75,6 @@ export function RetencaoProfessores({ ano, unidade }: RetencaoProfessoresProps) 
     switch (ordenarPor) {
       case 'evasoes': valor = p.evasoes; break;
       case 'taxa_renovacao': valor = p.taxa_renovacao; break;
-      case 'taxa_conversao': valor = p.taxa_conversao; break;
       case 'score_saude': valor = p.score_saude || 0; break;
       default: valor = p.evasoes;
     }
@@ -87,16 +84,6 @@ export function RetencaoProfessores({ ano, unidade }: RetencaoProfessoresProps) 
       risco: p.nivel_risco || 'normal',
     };
   });
-
-  // Dados para scatter plot (Conversão vs Evasão)
-  const dadosScatter = professores.map(p => ({
-    nome: p.professor,
-    conversao: p.taxa_conversao,
-    evasoes: p.evasoes,
-    renovacao: p.taxa_renovacao,
-    risco: p.nivel_risco || 'normal',
-    fill: getCoresRisco(p.nivel_risco || 'normal').bar,
-  }));
 
   return (
     <div className="min-h-screen p-8 bg-slate-950">
@@ -175,7 +162,7 @@ export function RetencaoProfessores({ ano, unidade }: RetencaoProfessoresProps) 
             <div className="flex items-center gap-2">
               <ArrowUpDown className="w-4 h-4 text-gray-400" />
               <span className="text-gray-400 text-sm">Ordenar:</span>
-              {(['evasoes', 'taxa_renovacao', 'taxa_conversao', 'score_saude'] as OrdenacaoTipo[]).map(tipo => (
+              {(['evasoes', 'taxa_renovacao', 'score_saude'] as OrdenacaoTipo[]).map(tipo => (
                 <button
                   key={tipo}
                   onClick={() => setOrdenarPor(tipo)}
@@ -186,8 +173,7 @@ export function RetencaoProfessores({ ano, unidade }: RetencaoProfessoresProps) 
                   }`}
                 >
                   {tipo === 'evasoes' ? 'Evasões' : 
-                   tipo === 'taxa_renovacao' ? 'Renovação' :
-                   tipo === 'taxa_conversao' ? 'Conversão' : 'Score'}
+                   tipo === 'taxa_renovacao' ? 'Renovação' : 'Score'}
                 </button>
               ))}
             </div>
@@ -237,7 +223,7 @@ export function RetencaoProfessores({ ano, unidade }: RetencaoProfessoresProps) 
                     itemStyle={{ color: '#fff' }}
                     cursor={{ fill: '#1e293b' }}
                     formatter={(value: number) => [
-                      ordenarPor === 'taxa_renovacao' || ordenarPor === 'taxa_conversao' 
+                      ordenarPor === 'taxa_renovacao' || ordenarPor === 'score_saude'
                         ? `${value.toFixed(1)}%` 
                         : value,
                       getMetricaLabel(ordenarPor)
@@ -268,7 +254,7 @@ export function RetencaoProfessores({ ano, unidade }: RetencaoProfessoresProps) 
                     <th className="text-left p-4 text-gray-400 text-sm font-medium">Unidade</th>
                     <th className="text-right p-4 text-gray-400 text-sm font-medium">Exp</th>
                     <th className="text-right p-4 text-gray-400 text-sm font-medium">Mat</th>
-                    <th className="text-right p-4 text-gray-400 text-sm font-medium">Conv%</th>
+                    <th className="text-right p-4 text-gray-400 text-sm font-medium">Conversao</th>
                     <th className="text-right p-4 text-gray-400 text-sm font-medium">Eva</th>
                     <th className="text-right p-4 text-gray-400 text-sm font-medium">Ren</th>
                     <th className="text-right p-4 text-gray-400 text-sm font-medium">Ren%</th>
@@ -289,7 +275,12 @@ export function RetencaoProfessores({ ano, unidade }: RetencaoProfessoresProps) 
                         <td className="p-4 text-gray-400 text-sm">{prof.unidade}</td>
                         <td className="p-4 text-right text-gray-300">{prof.experimentais}</td>
                         <td className="p-4 text-right text-gray-300">{prof.matriculas}</td>
-                        <td className="p-4 text-right text-cyan-400 font-medium">{prof.taxa_conversao.toFixed(1)}%</td>
+                        <td className="p-4 text-right">
+                          <span className="text-amber-300 text-xs font-semibold">Bloqueada</span>
+                          <div className="text-[11px] text-slate-500">
+                            diag. {prof.taxa_conversao_diagnostica?.toFixed(1) || '0.0'}%
+                          </div>
+                        </td>
                         <td className="p-4 text-right text-rose-400 font-bold">{prof.evasoes}</td>
                         <td className="p-4 text-right text-gray-300">{prof.renovacoes}</td>
                         <td className="p-4 text-right text-emerald-400 font-medium">{prof.taxa_renovacao.toFixed(1)}%</td>
@@ -306,67 +297,12 @@ export function RetencaoProfessores({ ano, unidade }: RetencaoProfessoresProps) 
             </div>
           </div>
 
-          {/* Gráfico Scatter: Conversão vs Evasão */}
-          <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6 mt-8">
-            <h3 className="text-lg font-grotesk font-semibold text-white mb-2">Conversão vs Evasão</h3>
-            <p className="text-gray-400 text-sm mb-6">Relação entre taxa de conversão e número de evasões por professor</p>
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
-                <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                  <XAxis 
-                    type="number" 
-                    dataKey="evasoes" 
-                    name="Evasões" 
-                    stroke="#94a3b8"
-                    tick={{ fill: '#94a3b8' }}
-                    label={{ value: 'Evasões', position: 'bottom', fill: '#94a3b8' }}
-                  />
-                  <YAxis 
-                    type="number" 
-                    dataKey="conversao" 
-                    name="Conversão %" 
-                    stroke="#94a3b8"
-                    tick={{ fill: '#94a3b8' }}
-                    label={{ value: 'Conversão %', angle: -90, position: 'insideLeft', fill: '#94a3b8' }}
-                  />
-                  <ZAxis type="number" dataKey="evasoes" range={[50, 400]} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#1e293b',
-                      border: '1px solid #334155',
-                      borderRadius: '12px',
-                    }}
-                    labelStyle={{ color: '#fff' }}
-                    itemStyle={{ color: '#fff' }}
-                    formatter={(value: number, name: string) => [
-                      name === 'conversao' ? `${value.toFixed(1)}%` : value,
-                      name === 'conversao' ? 'Conversão' : name === 'evasoes' ? 'Evasões' : name
-                    ]}
-                    labelFormatter={(label) => `Professor`}
-                  />
-                  <Scatter name="Professores" data={dadosScatter} />
-                </ScatterChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="flex justify-center gap-4 mt-4">
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-red-500"></div>
-                <span className="text-gray-400 text-sm">Crítico</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-orange-500"></div>
-                <span className="text-gray-400 text-sm">Alto</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
-                <span className="text-gray-400 text-sm">Médio</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-3 h-3 rounded-full bg-green-500"></div>
-                <span className="text-gray-400 text-sm">Normal</span>
-              </div>
-            </div>
+          <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-6 mt-8">
+            <h3 className="text-lg font-grotesk font-semibold text-amber-200 mb-2">Conversao por professor bloqueada</h3>
+            <p className="text-amber-100/80 text-sm">
+              A taxa experimental para matricula por professor depende da conciliacao de presenca individual, professor da aula e matricula.
+              Enquanto essa regra nao estiver fechada, ela fica apenas como diagnostico e nao entra no score de saude.
+            </p>
           </div>
         </>
       )}
