@@ -59,7 +59,7 @@ const KPIS_GESTAO: KPIConfig[] = [
 
 const KPIS_COMERCIAL: KPIConfig[] = [
   { id: 'leads', label: 'Leads', icon: TrendingUp, formato: 'numero', cor: 'cyan', descricao: 'Novos contatos recebidos', agregacao: 'soma' },
-  { id: 'experimentais', label: 'Aulas Experimentais', icon: Star, formato: 'numero', cor: 'amber', descricao: 'Aulas experimentais agendadas', agregacao: 'soma' },
+  { id: 'experimentais', label: 'Experimentais Agendadas', icon: Star, formato: 'numero', cor: 'amber', descricao: 'Meta de aulas experimentais marcadas; realizada confirmada usa regra de presenca/vinculo', agregacao: 'soma' },
   { id: 'matriculas', label: 'Matrículas', icon: UserCheck, formato: 'numero', cor: 'emerald', descricao: 'Novas matrículas no mês', agregacao: 'soma' },
   { id: 'taxa_lead_exp', label: 'Taxa Lead → Exp (%)', icon: Percent, formato: 'percentual', cor: 'cyan', descricao: 'Conversão de lead para experimental', agregacao: 'media' },
   { id: 'taxa_exp_mat', label: 'Taxa Exp → Mat bloqueada (%)', icon: Percent, formato: 'percentual', cor: 'emerald', descricao: 'KPI bloqueado até regra canônica de presença/vínculo', agregacao: 'media' },
@@ -72,7 +72,7 @@ const KPIS_PROFESSORES: KPIConfig[] = [
   { id: 'media_alunos_prof', label: 'Média Alunos/Professor', icon: Users, formato: 'numero', cor: 'emerald', descricao: 'Carteira média por professor', agregacao: 'media' },
   { id: 'taxa_renovacao_prof', label: 'Taxa Renovação Prof (%)', icon: RefreshCw, formato: 'percentual', cor: 'amber', descricao: 'Renovação média dos professores', agregacao: 'media' },
   { id: 'presenca_media', label: 'Presença Média (%)', icon: UserCheck, formato: 'percentual', cor: 'emerald', descricao: 'Taxa de presença nas aulas', agregacao: 'media' },
-  { id: 'taxa_conversao_exp', label: 'Taxa Conversão Aula Exp (%)', icon: TrendingUp, formato: 'percentual', cor: 'cyan', descricao: 'Conversão de experimental do professor', agregacao: 'media' },
+  { id: 'taxa_conversao_exp', label: 'Taxa Exp Prof bloqueada (%)', icon: TrendingUp, formato: 'percentual', cor: 'cyan', descricao: 'Bloqueada para KPI oficial ate fechar presenca individual, professor da aula e matricula', agregacao: 'media' },
   { id: 'melhor_retencao', label: 'Melhor Retenção (Menor Churn %)', icon: TrendingDown, formato: 'percentual', cor: 'rose', descricao: 'Meta de menor churn por professor', agregacao: 'media' },
 ];
 
