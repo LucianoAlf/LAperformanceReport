@@ -155,6 +155,20 @@ function toNumber(valor: unknown): number {
   return Number.isFinite(numero) ? numero : 0;
 }
 
+function calcularPontosProporcionais(
+  valorAtual: number,
+  meta: number,
+  pontosMaximos: number,
+  habilitado: boolean = true,
+): number {
+  if (!habilitado || meta <= 0 || pontosMaximos <= 0 || valorAtual <= 0) {
+    return 0;
+  }
+
+  const proporcao = Math.min(1, valorAtual / meta);
+  return Math.round(pontosMaximos * proporcao);
+}
+
 function normalizarMesesPrograma(config?: ConfigPrograma, mesReferencia?: number): number[] {
   const inicio = Math.max(1, Math.min(12, Math.trunc(config?.periodo?.mes_inicio || 1)));
   const fimConfigurado = Math.max(inicio, Math.min(12, Math.trunc(config?.periodo?.mes_fim || 11)));
@@ -337,19 +351,34 @@ function calcularPontuacao(
   const metaVolume = unidadeKey ? (metas as any)[unidadeKey.volume] || 20 : 20;
   const metaTicket = unidadeKey ? (metas as any)[unidadeKey.ticket] || 400 : 400;
 
-  // Calcular pontos por métrica (só ganha se bater a meta)
-  const pontosTaxaShowup = metricas.taxa_showup_exp >= metas.taxa_showup_experimental 
-    ? pontosConfig.taxa_showup : 0;
-  const pontosTaxaExpMat =
-    metricas.taxa_exp_mat_liberada && metricas.taxa_exp_mat >= metas.taxa_experimental_matricula
-      ? pontosConfig.taxa_exp_mat
-      : 0;
-  const pontosTaxaGeral = metricas.taxa_geral >= metas.taxa_lead_matricula 
-    ? pontosConfig.taxa_geral : 0;
-  const pontosVolume = metricas.media_matriculas_mes >= metaVolume 
-    ? pontosConfig.volume_medio : 0;
-  const pontosTicket = metricas.media_ticket >= metaTicket 
-    ? pontosConfig.ticket_medio : 0;
+  // Calcular pontos por metrica com progresso proporcional.
+  // A meta cheia continua dando 100% dos pontos; abaixo da meta ganha a parte proporcional.
+  const pontosTaxaShowup = calcularPontosProporcionais(
+    metricas.taxa_showup_exp,
+    metas.taxa_showup_experimental,
+    pontosConfig.taxa_showup,
+  );
+  const pontosTaxaExpMat = calcularPontosProporcionais(
+    metricas.taxa_exp_mat,
+    metas.taxa_experimental_matricula,
+    pontosConfig.taxa_exp_mat,
+    metricas.taxa_exp_mat_liberada === true,
+  );
+  const pontosTaxaGeral = calcularPontosProporcionais(
+    metricas.taxa_geral,
+    metas.taxa_lead_matricula,
+    pontosConfig.taxa_geral,
+  );
+  const pontosVolume = calcularPontosProporcionais(
+    metricas.media_matriculas_mes,
+    metaVolume,
+    pontosConfig.volume_medio,
+  );
+  const pontosTicket = calcularPontosProporcionais(
+    metricas.media_ticket,
+    metaTicket,
+    pontosConfig.ticket_medio,
+  );
 
   // Calcular bônus por performance acima da meta
   // LIMITE: máximo 20 pontos de bônus por categoria para evitar distorções com poucos dados
