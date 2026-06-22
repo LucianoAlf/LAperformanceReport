@@ -38,7 +38,7 @@ interface UseMetasResult {
 const TIPOS_META_LABELS: Record<string, string> = {
   matriculas: 'Matrículas',
   leads: 'Leads',
-  experimentais: 'Experimentais',
+  experimentais: 'Experimentais Agendadas',
   renovacoes: 'Renovações',
   evasoes_max: 'Evasões (máx)',
   faturamento: 'Faturamento',
@@ -93,7 +93,7 @@ export function useMetas(
 
       // Buscar dados realizados
       const startDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-01`;
-      const endDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-31`;
+      const endDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(daysInMonth).padStart(2, '0')}`;
 
       // Matrículas realizadas
       let matriculasQuery = supabase
@@ -121,19 +121,19 @@ export function useMetas(
 
       const { count: leadsRealizados } = await leadsQuery;
 
-      // Experimentais realizadas
+      // Metas de experimentais medem agenda/marcação. Realizada confirmada
+      // continua bloqueada para KPI oficial até fechar presença/vínculo.
       let expQuery = supabase
-        .from('leads')
+        .from('lead_experimentais')
         .select('*', { count: 'exact', head: true })
-        .gte('data_contato', startDate)
-        .lte('data_contato', endDate)
-        .in('status', ['experimental_realizada', 'matriculado']);
+        .gte('data_experimental', startDate)
+        .lte('data_experimental', endDate);
 
       if (unidadeId !== 'todos') {
         expQuery = expQuery.eq('unidade_id', unidadeId);
       }
 
-      const { count: experimentaisRealizadas } = await expQuery;
+      const { count: experimentaisAgendadas } = await expQuery;
 
       // Renovações realizadas
       let renovacoesQuery = supabase
@@ -167,7 +167,7 @@ export function useMetas(
       const realizados: Record<string, number> = {
         matriculas: matriculasRealizadas || 0,
         leads: leadsRealizados || 0,
-        experimentais: experimentaisRealizadas || 0,
+        experimentais: experimentaisAgendadas || 0,
         renovacoes: renovacoesRealizadas || 0,
         evasoes_max: evasoesRealizadas || 0,
       };
