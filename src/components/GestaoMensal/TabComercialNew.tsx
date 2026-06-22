@@ -78,6 +78,7 @@ interface DadosComercial {
   matriculas_por_faixa_etaria: { name: string; value: number }[];
   ticket_medio_passaporte: number;
   ticket_medio_parcela: number;
+  qtd_passaportes_vendidos: number;
   motivos_nao_matricula: { name: string; value: number }[];
   
   // Faturamento
@@ -116,6 +117,38 @@ const experimentaisDiagnosticoVazio: DadosComercial['experimentais_diagnostico_v
   presencasEmusysSemFunil: 0,
 };
 
+const toNumber = (valor: unknown): number => {
+  if (typeof valor === 'number') return Number.isFinite(valor) ? valor : 0;
+  if (typeof valor === 'string') {
+    const trimmed = valor.trim();
+    const normalizado = trimmed.includes(',')
+      ? trimmed.replace(/\./g, '').replace(',', '.')
+      : trimmed;
+    const numero = Number(normalizado);
+    return Number.isFinite(numero) ? numero : 0;
+  }
+  return 0;
+};
+
+const calcularIdade = (matricula: any, anoReferencia: number, mesReferencia: number): number | null => {
+  const idadeAtual = Number(matricula.idade_atual);
+  if (Number.isFinite(idadeAtual) && idadeAtual > 0) return idadeAtual;
+
+  if (!matricula.data_nascimento) return null;
+
+  const nascimento = new Date(`${matricula.data_nascimento}T12:00:00`);
+  if (Number.isNaN(nascimento.getTime())) return null;
+
+  const referencia = new Date(anoReferencia, mesReferencia - 1, 1);
+  let idade = referencia.getFullYear() - nascimento.getFullYear();
+  const fezAniversario =
+    referencia.getMonth() > nascimento.getMonth() ||
+    (referencia.getMonth() === nascimento.getMonth() && referencia.getDate() >= nascimento.getDate());
+
+  if (!fezAniversario) idade -= 1;
+  return idade >= 0 ? idade : null;
+};
+
 const ehMatriculaComercialNova = (matricula: any): boolean => {
   const cursoNome = ((matricula.cursos as any)?.nome || matricula.curso_nome || '').toLowerCase();
   const ehBanda =
@@ -123,7 +156,7 @@ const ehMatriculaComercialNova = (matricula: any): boolean => {
     (matricula.cursos as any)?.is_projeto_banda === true ||
     cursoNome.includes('banda');
 
-  return !matricula.is_segundo_curso && !ehBanda && (Number(matricula.valor_passaporte) || 0) > 0;
+  return !matricula.is_segundo_curso && !ehBanda && toNumber(matricula.valor_passaporte) > 0;
 };
 
 export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps) {
@@ -403,8 +436,12 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
         });
 
         // Matriculas por Faixa Etaria (fonte canonica operacional: alunos.data_matricula)
-        const matriculasLaKids = matriculasCanonicas.filter(m => m.idade_atual !== null && m.idade_atual <= 11).length;
-        const matriculasLaAdultos = matriculasCanonicas.filter(m => m.idade_atual !== null && m.idade_atual > 11).length;
+        const matriculasComIdade = matriculasCanonicas.map((m) => ({
+          ...m,
+          idade_calculada: calcularIdade(m, ano, mesFinal),
+        }));
+        const matriculasLaKids = matriculasComIdade.filter(m => m.idade_calculada !== null && m.idade_calculada <= 11).length;
+        const matriculasLaAdultos = matriculasComIdade.filter(m => m.idade_calculada !== null && m.idade_calculada > 11).length;
 
         // Motivos de Não Matrícula (experimentais que não converteram)
         const motivosNaoMatMap = new Map<string, number>();
@@ -414,10 +451,10 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
         });
 
         // Faturamento - fonte canonica operacional: alunos.data_matricula
-        const matriculasComPassaporte = matriculasCanonicas.filter(m => (Number(m.valor_passaporte) || 0) > 0);
-        const matriculasComParcela = matriculasCanonicas.filter(m => (Number(m.valor_parcela) || 0) > 0);
-        const faturamentoPassaportes = matriculasComPassaporte.reduce((acc, m) => acc + (Number(m.valor_passaporte) || 0), 0);
-        const faturamentoParcelas = matriculasCanonicas.reduce((acc, m) => acc + (Number(m.valor_parcela) || 0), 0);
+        const matriculasComPassaporte = matriculasCanonicas.filter(m => toNumber(m.valor_passaporte) > 0);
+        const matriculasComParcela = matriculasCanonicas.filter(m => toNumber(m.valor_parcela) > 0);
+        const faturamentoPassaportes = matriculasComPassaporte.reduce((acc, m) => acc + toNumber(m.valor_passaporte), 0);
+        const faturamentoParcelas = matriculasCanonicas.reduce((acc, m) => acc + toNumber(m.valor_parcela), 0);
         const ticketMedioPassaporte = matriculasComPassaporte.length > 0 ? faturamentoPassaportes / matriculasComPassaporte.length : 0;
         const ticketMedioParcela = matriculasComParcela.length > 0 ? faturamentoParcelas / matriculasComParcela.length : 0;
 
@@ -464,6 +501,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           ],
           ticket_medio_passaporte: ticketMedioPassaporte,
           ticket_medio_parcela: ticketMedioParcela,
+          qtd_passaportes_vendidos: matriculasComPassaporte.length,
           motivos_nao_matricula: Array.from(motivosNaoMatMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
           
           // Faturamento
@@ -826,7 +864,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
               icon={DollarSign}
               label="Receita Passaportes"
               value={formatCurrency(dados.faturamento_passaportes)}
-              subvalue={`${dados.novas_matriculas} vendidos`}
+              subvalue={`${dados.qtd_passaportes_vendidos} vendidos`}
               variant="cyan"
             />
             <KPICard
