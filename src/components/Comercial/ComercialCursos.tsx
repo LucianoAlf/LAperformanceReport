@@ -2,12 +2,24 @@ import { useState } from 'react';
 import { useCursosData } from '../../hooks/useCursosData';
 import { UnidadeComercial } from '../../types/comercial';
 import { Music, Mic, Guitar } from 'lucide-react';
-import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from 'recharts';
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Legend,
+  Tooltip,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+} from 'recharts';
 import { ChartTooltip } from './ChartTooltip';
 
 export function ComercialCursos() {
   const [unidade, setUnidade] = useState<UnidadeComercial>('Consolidado');
-  const { cursos, loading } = useCursosData(2025, unidade);
+  const { cursos, loading, error } = useCursosData(2025, unidade);
 
   if (loading) {
     return (
@@ -19,26 +31,36 @@ export function ComercialCursos() {
 
   const top10 = cursos.slice(0, 10);
   const total = cursos.reduce((sum, c) => sum + c.total, 0);
-  
-  const cores = ['#10b981', '#06b6d4', '#8b5cf6', '#f59e0b', '#ef4444', '#ec4899', '#14b8a6', '#6366f1', '#84cc16', '#f97316'];
+  const cores = [
+    '#10b981',
+    '#06b6d4',
+    '#8b5cf6',
+    '#f59e0b',
+    '#ef4444',
+    '#ec4899',
+    '#14b8a6',
+    '#6366f1',
+    '#84cc16',
+    '#f97316',
+  ];
 
-  // Diagnostico de cursos, sem usar snapshot comercial como fonte.
-  // Nomes de cursos Kids para filtrar top cursos
-  const cursosKidsNomes = ['Musicalização', 'Musicalização Bebê', 'Musicalização Bebês', 'Musicalização Infantil', 'Musicalização Preparatória'];
-  
-  const topCursosKids = cursos
-    .filter(c => cursosKidsNomes.some(k => c.curso.includes(k)))
-    .slice(0, 3);
+  function normalizarCurso(valor: string): string {
+    return valor
+      .trim()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLocaleLowerCase('pt-BR');
+  }
 
-  const topCursosAdultos = cursos
-    .filter(c => !cursosKidsNomes.some(k => c.curso.includes(k)))
-    .slice(0, 3);
+  const isCursoKids = (curso: string) => normalizarCurso(curso).includes('musicalizacao');
 
+  const topCursosKids = cursos.filter((c) => isCursoKids(c.curso)).slice(0, 3);
+  const topCursosAdultos = cursos.filter((c) => !isCursoKids(c.curso)).slice(0, 3);
   const totalKids = cursos
-    .filter(c => cursosKidsNomes.some(k => c.curso.includes(k)))
+    .filter((c) => isCursoKids(c.curso))
     .reduce((sum, c) => sum + c.total, 0);
   const totalAdultos = cursos
-    .filter(c => !cursosKidsNomes.some(k => c.curso.includes(k)))
+    .filter((c) => !isCursoKids(c.curso))
     .reduce((sum, c) => sum + c.total, 0);
   const totalGeral = totalKids + totalAdultos;
 
@@ -49,43 +71,49 @@ export function ComercialCursos() {
 
   return (
     <div className="p-8 min-h-screen">
-      {/* Header */}
       <div className="mb-8">
         <span className="inline-flex items-center gap-1.5 bg-emerald-500/20 text-emerald-400 text-sm font-medium px-3 py-1 rounded-full mb-4">
-          <Guitar className="w-4 h-4" /> Cursos Matriculados (diagnóstico)
+          <Guitar className="w-4 h-4" /> Interesse dos Leads por Curso
         </span>
         <h1 className="text-4xl lg:text-5xl font-grotesk font-bold text-white mb-2">
           Cursos Mais <span className="text-emerald-400">Procurados</span>
         </h1>
         <p className="text-gray-400">
-          Distribuição por instrumento/curso em 2025; diagnóstico, não conversão comercial canônica
+          Distribuicao de interesse dos leads em 2025 pela fonte comercial v2. Nao mede
+          matricula por curso.
           {unidade !== 'Consolidado' && (
             <span className="text-emerald-400"> - {unidade}</span>
           )}
         </p>
       </div>
 
-      {/* Filtros */}
+      {error && (
+        <div className="mb-6 rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+          {error}
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-4 mb-8">
         <div className="flex gap-2">
           <span className="text-gray-400 self-center text-sm">Unidade:</span>
-          {(['Consolidado', 'Campo Grande', 'Recreio', 'Barra'] as UnidadeComercial[]).map((u) => (
-            <button
-              key={u}
-              onClick={() => setUnidade(u)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                unidade === u
-                  ? 'bg-emerald-500 text-white'
-                  : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
-              }`}
-            >
-              {u === 'Campo Grande' ? 'C. Grande' : u}
-            </button>
-          ))}
+          {(['Consolidado', 'Campo Grande', 'Recreio', 'Barra'] as UnidadeComercial[]).map(
+            (u) => (
+              <button
+                key={u}
+                onClick={() => setUnidade(u)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  unidade === u
+                    ? 'bg-emerald-500 text-white'
+                    : 'bg-slate-800 text-gray-400 hover:bg-slate-700'
+                }`}
+              >
+                {u === 'Campo Grande' ? 'C. Grande' : u}
+              </button>
+            ),
+          )}
         </div>
       </div>
 
-      {/* Cards LA Music vs Kids */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <div className="bg-gradient-to-br from-blue-500/20 to-cyan-500/20 border border-blue-500/30 rounded-2xl p-6">
           <div className="flex items-center gap-3 mb-4">
@@ -93,20 +121,27 @@ export function ComercialCursos() {
               <Mic className="w-6 h-6 text-blue-400" />
             </div>
             <div>
-              <div className="text-blue-400 font-medium">Escola de Música LA</div>
+              <div className="text-blue-400 font-medium">Escola de Musica LA</div>
               <div className="text-sm text-gray-400">
-                  12 anos em diante
-                  {unidade !== 'Consolidado' && <span className="text-blue-300"> • {unidade}</span>}
-                </div>
+                12 anos em diante
+                {unidade !== 'Consolidado' && (
+                  <span className="text-blue-300"> - {unidade}</span>
+                )}
+              </div>
             </div>
           </div>
           <div className="text-3xl font-grotesk font-bold text-white mb-2">{totalAdultos}</div>
-          <div className="text-sm text-gray-400">registros de curso ({totalGeral > 0 ? ((totalAdultos / totalGeral) * 100).toFixed(0) : 0}%)</div>
+          <div className="text-sm text-gray-400">
+            leads interessados (
+            {totalGeral > 0 ? ((totalAdultos / totalGeral) * 100).toFixed(0) : 0}%)
+          </div>
           <div className="mt-4 space-y-2">
             <div className="text-sm text-gray-300">Top Cursos:</div>
             {topCursosAdultos.map((c, idx) => (
               <div key={c.curso} className="flex justify-between text-sm">
-                <span className="text-gray-400">{idx + 1}. {c.curso}</span>
+                <span className="text-gray-400">
+                  {idx + 1}. {c.curso}
+                </span>
                 <span className="text-blue-400">{c.total}</span>
               </div>
             ))}
@@ -121,18 +156,25 @@ export function ComercialCursos() {
             <div>
               <div className="text-pink-400 font-medium">LA Music Kids</div>
               <div className="text-sm text-gray-400">
-                  Até 11 anos
-                  {unidade !== 'Consolidado' && <span className="text-pink-300"> • {unidade}</span>}
-                </div>
+                Ate 11 anos
+                {unidade !== 'Consolidado' && (
+                  <span className="text-pink-300"> - {unidade}</span>
+                )}
+              </div>
             </div>
           </div>
           <div className="text-3xl font-grotesk font-bold text-white mb-2">{totalKids}</div>
-          <div className="text-sm text-gray-400">registros de curso ({totalGeral > 0 ? ((totalKids / totalGeral) * 100).toFixed(0) : 0}%)</div>
+          <div className="text-sm text-gray-400">
+            leads interessados ({totalGeral > 0 ? ((totalKids / totalGeral) * 100).toFixed(0) : 0}
+            %)
+          </div>
           <div className="mt-4 space-y-2">
             <div className="text-sm text-gray-300">Top Cursos:</div>
             {topCursosKids.map((c, idx) => (
               <div key={c.curso} className="flex justify-between text-sm">
-                <span className="text-gray-400">{idx + 1}. {c.curso}</span>
+                <span className="text-gray-400">
+                  {idx + 1}. {c.curso}
+                </span>
                 <span className="text-pink-400">{c.total}</span>
               </div>
             ))}
@@ -140,11 +182,11 @@ export function ComercialCursos() {
         </div>
       </div>
 
-      {/* Gráficos lado a lado */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-        {/* Gráfico de Pizza */}
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
-          <h3 className="text-lg font-semibold text-white mb-6">Distribuição por Curso</h3>
+          <h3 className="text-lg font-semibold text-white mb-6">
+            Distribuicao de Leads por Curso
+          </h3>
           <div className="h-[350px]">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
@@ -161,35 +203,28 @@ export function ComercialCursos() {
                     <Cell key={`cell-${index}`} fill={cores[index % cores.length]} />
                   ))}
                 </Pie>
-                <Tooltip 
-                  cursor={{fill: '#1e293b'}}
-                  content={<ChartTooltip suffix=" registros" />}
-                />
+                <Tooltip cursor={{ fill: '#1e293b' }} content={<ChartTooltip suffix=" leads" />} />
                 <Legend />
               </PieChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        {/* Gráfico de Barras */}
         <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
-          <h3 className="text-lg font-semibold text-white mb-6">Top 10 Cursos</h3>
+          <h3 className="text-lg font-semibold text-white mb-6">Top 10 Cursos por Interesse</h3>
           <div className="h-[350px]">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={top10} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                 <XAxis type="number" stroke="#94a3b8" />
-                <YAxis 
-                  dataKey="curso" 
-                  type="category" 
-                  stroke="#94a3b8" 
+                <YAxis
+                  dataKey="curso"
+                  type="category"
+                  stroke="#94a3b8"
                   width={100}
                   tick={{ fontSize: 11 }}
                 />
-                <Tooltip 
-                  cursor={{fill: '#1e293b'}}
-                  content={<ChartTooltip />}
-                />
+                <Tooltip cursor={{ fill: '#1e293b' }} content={<ChartTooltip suffix=" leads" />} />
                 <Bar dataKey="total" radius={[0, 4, 4, 0]}>
                   {top10.map((_, index) => (
                     <Cell key={`cell-${index}`} fill={cores[index]} />
@@ -201,10 +236,13 @@ export function ComercialCursos() {
         </div>
       </div>
 
-      {/* Tabela por Unidade */}
       <div className="bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6">
-        <h3 className="text-lg font-semibold text-white mb-6">Detalhamento por Unidade</h3>
-        
+        <h3 className="text-lg font-semibold text-white mb-2">Detalhamento por Unidade</h3>
+        <p className="text-sm text-gray-400 mb-6">
+          Baseado no curso de interesse informado no lead. Matricula por curso continua fora deste
+          KPI.
+        </p>
+
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
@@ -214,9 +252,15 @@ export function ComercialCursos() {
                 <th className="text-right text-gray-400 text-sm font-medium py-3 px-4">Total</th>
                 {unidade === 'Consolidado' && (
                   <>
-                    <th className="text-right text-gray-400 text-sm font-medium py-3 px-4">C. Grande</th>
-                    <th className="text-right text-gray-400 text-sm font-medium py-3 px-4">Recreio</th>
-                    <th className="text-right text-gray-400 text-sm font-medium py-3 px-4">Barra</th>
+                    <th className="text-right text-gray-400 text-sm font-medium py-3 px-4">
+                      C. Grande
+                    </th>
+                    <th className="text-right text-gray-400 text-sm font-medium py-3 px-4">
+                      Recreio
+                    </th>
+                    <th className="text-right text-gray-400 text-sm font-medium py-3 px-4">
+                      Barra
+                    </th>
                   </>
                 )}
                 <th className="text-right text-gray-400 text-sm font-medium py-3 px-4">%</th>
@@ -227,15 +271,25 @@ export function ComercialCursos() {
                 <tr key={curso.curso} className="border-b border-slate-700/50 hover:bg-slate-700/20">
                   <td className="py-3 px-4 text-gray-500">{idx + 1}</td>
                   <td className="py-3 px-4 text-white font-medium">{curso.curso}</td>
-                  <td className="text-right py-3 px-4 text-emerald-400 font-bold">{curso.total}</td>
+                  <td className="text-right py-3 px-4 text-emerald-400 font-bold">
+                    {curso.total}
+                  </td>
                   {unidade === 'Consolidado' && (
                     <>
-                      <td className="text-right py-3 px-4 text-cyan-400">{curso.unidades['Campo Grande'] || '-'}</td>
-                      <td className="text-right py-3 px-4 text-purple-400">{curso.unidades['Recreio'] || '-'}</td>
-                      <td className="text-right py-3 px-4 text-emerald-400">{curso.unidades['Barra'] || '-'}</td>
+                      <td className="text-right py-3 px-4 text-cyan-400">
+                        {curso.unidades['Campo Grande'] || '-'}
+                      </td>
+                      <td className="text-right py-3 px-4 text-purple-400">
+                        {curso.unidades['Recreio'] || '-'}
+                      </td>
+                      <td className="text-right py-3 px-4 text-emerald-400">
+                        {curso.unidades['Barra'] || '-'}
+                      </td>
                     </>
                   )}
-                  <td className="text-right py-3 px-4 text-gray-400">{total > 0 ? ((curso.total / total) * 100).toFixed(1) : 0}%</td>
+                  <td className="text-right py-3 px-4 text-gray-400">
+                    {total > 0 ? ((curso.total / total) * 100).toFixed(1) : 0}%
+                  </td>
                 </tr>
               ))}
             </tbody>
