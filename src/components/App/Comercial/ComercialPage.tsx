@@ -2539,7 +2539,7 @@ export function ComercialPage() {
   };
 
   const gerarRelatorioDiario = async () => {
-    const { dataInicio: dataInicioOriginal, dataFim, dataInicioObj, dataFimObj } = calcularRangeDatas();
+    const { dataFim, dataFimObj } = calcularRangeDatas();
     const hoje = dataFimObj;
     const dia = hoje.getDate().toString().padStart(2, '0');
     const mesNome = hoje.toLocaleString('pt-BR', { month: 'long' });
@@ -2547,11 +2547,6 @@ export function ComercialPage() {
 
     // Setor comercial pensa em acumulado: quando o filtro é "hoje", reportar
     // desde o 1º dia do mês até hoje (leads/experimentais/matrículas).
-    // Experimentais agendadas e Visitas continuam só do dia (queries usam dataFim).
-    const dataInicio = relatorioPeriodo === 'hoje'
-      ? format(new Date(hoje.getFullYear(), hoje.getMonth(), 1), 'yyyy-MM-dd')
-      : dataInicioOriginal;
-    
     // Buscar informações da unidade incluindo o Hunter
     const unidadeId = filtroAtivo || usuario?.unidade_id;
     let unidadeNome = 'Unidade';
@@ -2570,48 +2565,62 @@ export function ComercialPage() {
       }
     }
 
-    // Buscar dados do período selecionado
-    const { data: registrosPeriodo } = await supabase
-      .from('leads')
-      .select('status, quantidade, experimental_agendada')
-      .eq('unidade_id', unidadeId)
-      .gte('data_contato', dataInicio)
-      .lte('data_contato', dataFim);
+    const [kpisMesResponse, kpisDiaResponse, conciliacaoMesResponse, conciliacaoDiaResponse] = await Promise.all([
+      supabase.rpc('get_kpis_comercial_canonicos_v2', {
+        p_unidade_id: unidadeId && unidadeId !== 'todos' ? unidadeId : null,
+        p_ano: ano,
+        p_mes: hoje.getMonth() + 1,
+        p_periodo: 'mensal',
+        p_data: null,
+      }),
+      supabase.rpc('get_kpis_comercial_canonicos_v2', {
+        p_unidade_id: unidadeId && unidadeId !== 'todos' ? unidadeId : null,
+        p_ano: ano,
+        p_mes: hoje.getMonth() + 1,
+        p_periodo: 'diario',
+        p_data: dataFim,
+      }),
+      supabase.rpc('get_conciliacao_experimentais_v2', {
+        p_unidade_id: unidadeId && unidadeId !== 'todos' ? unidadeId : null,
+        p_ano: ano,
+        p_mes: hoje.getMonth() + 1,
+        p_periodo: 'mensal',
+        p_data: null,
+      }),
+      supabase.rpc('get_conciliacao_experimentais_v2', {
+        p_unidade_id: unidadeId && unidadeId !== 'todos' ? unidadeId : null,
+        p_ano: ano,
+        p_mes: hoje.getMonth() + 1,
+        p_periodo: 'diario',
+        p_data: dataFim,
+      }),
+    ]);
 
-    const leadsPeriodo = registrosPeriodo?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const experimentaisPeriodo = registrosPeriodo?.filter((r: any) => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    if (kpisMesResponse.error) throw kpisMesResponse.error;
+    if (kpisDiaResponse.error) throw kpisDiaResponse.error;
+    if (conciliacaoMesResponse.error) throw conciliacaoMesResponse.error;
+    if (conciliacaoDiaResponse.error) throw conciliacaoDiaResponse.error;
 
-    // Experimentais agendadas para o dia (com nome e professor)
-    const { data: experimentaisAgendadasHoje } = await supabase
-      .from('leads')
-      .select('nome, quantidade, professor_experimental_id')
-      .eq('unidade_id', unidadeId)
-      .eq('data_contato', dataFim)
-      .eq('status', 'experimental_agendada');
+    const kpisMes = ((kpisMesResponse.data as any)?.kpis || {}) as Record<string, unknown>;
+    const kpisDia = ((kpisDiaResponse.data as any)?.kpis || {}) as Record<string, unknown>;
+    const resumoConciliacaoMes = ((conciliacaoMesResponse.data as any)?.resumo || {}) as Record<string, unknown>;
+    const resumoConciliacaoDia = ((conciliacaoDiaResponse.data as any)?.resumo || {}) as Record<string, unknown>;
 
-    const expProfIds = [...new Set((experimentaisAgendadasHoje || []).map((e: any) => e.professor_experimental_id).filter(Boolean))];
-    const expProfMap = new Map<number, string>();
-    if (expProfIds.length > 0) {
-      const { data: profs } = await supabase.from('professores').select('id, nome').in('id', expProfIds);
-      (profs || []).forEach((p: any) => expProfMap.set(p.id, p.nome));
-    }
+    const leadsPeriodo = numeroResumo(kpisMes.leads_entrantes);
+    const experimentaisAgendadasMes = numeroResumo(resumoConciliacaoMes.experimentais_agendadas);
+    const experimentaisRealizadasMes = numeroResumo(resumoConciliacaoMes.experimentais_realizadas_confirmadas);
+    const experimentaisFaltasMes = numeroResumo(resumoConciliacaoMes.experimentais_faltaram);
+    const totalExpAgendadasV2 = numeroResumo(resumoConciliacaoDia.experimentais_agendadas);
+    const visitasDiaTotalV2 = numeroResumo(kpisDia.visitas);
 
-    // Buscar visitas do dia final do período
-    const { data: visitasDia } = await supabase
-      .from('leads')
-      .select('quantidade')
-      .eq('unidade_id', unidadeId)
-      .eq('data_contato', dataFim)
-      .eq('status', 'visita_escola');
-
-    const visitasDiaTotal = visitasDia?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
+    const visitasDiaTotal = visitasDiaTotalV2;
 
     // Matrículas: usar state já enriquecido, filtrar novos alunos (sem 2º curso e sem banda)
     const matriculasNovas = matriculasMes
       .filter(ehMatriculaNova)
       .sort((a: any, b: any) => (a.data_matricula || '').localeCompare(b.data_matricula || ''));
 
-    const totalExpAgendadas = (experimentaisAgendadasHoje || []).reduce((acc: number, e: any) => acc + e.quantidade, 0);
+    const totalExpAgendadas = totalExpAgendadasV2;
 
     let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
     texto += `📅 *RELATÓRIO DIÁRIO*\n`;
@@ -2620,7 +2629,9 @@ export function ComercialPage() {
     texto += `👤 ${hunterNome}\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
     texto += `🎯 Leads no mês: *${leadsPeriodo}*\n`;
-    texto += `🎸 Experimentais marcadas no mês: *${experimentaisPeriodo}*\n`;
+    texto += `🎸 Experimentais agendadas no mês: *${experimentaisAgendadasMes}*\n`;
+    texto += `✅ Experimentais realizadas confirmadas: *${experimentaisRealizadasMes}*\n`;
+    texto += `❌ Faltas em experimentais no mês: *${experimentaisFaltasMes}*\n`;
     texto += `📆 Experimentais agendadas no dia: *${totalExpAgendadas}*\n`;
     texto += `🏫 Visitas: *${visitasDiaTotal}*\n\n`;
 
