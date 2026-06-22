@@ -56,6 +56,24 @@ export interface ExperimentaisDiagnosticoTotaisPayloadV2 {
 
 export interface ExperimentaisDiagnosticoPayloadV2 {
   totais?: ExperimentaisDiagnosticoTotaisPayloadV2 | null;
+  resumo?: {
+    experimentais_agendadas?: number | string | null;
+    experimentais_canceladas?: number | string | null;
+    experimentais_faltaram?: number | string | null;
+    realizadas_status_operacional?: number | string | null;
+    experimentais_realizadas_confirmadas?: number | string | null;
+    realizadas_sem_presenca_confirmada?: number | string | null;
+    pendentes_conciliacao?: number | string | null;
+    pendencias_taxa_exp_mat?: number | string | null;
+    decisoes_humanas?: number | string | null;
+    matriculas_diretas?: number | string | null;
+    ignoradas_por_decisao?: number | string | null;
+    denominador_taxa_exp_mat?: number | string | null;
+    conversoes_exp_mat_canonicas?: number | string | null;
+    taxa_exp_mat_canonica?: number | string | null;
+    taxa_exp_mat_liberada?: boolean | null;
+    taxa_exp_mat_status?: string | null;
+  } | null;
 }
 
 export interface OrigemCanalOperacionalV2 {
@@ -98,6 +116,11 @@ export interface ExperimentaisDiagnosticoMesV2 {
   decisoesHumanasPendentesCanonizacao: number;
   taxaExpMatMinimaCanonica: number | null;
   taxaExpMatMaximaAposRevisao: number | null;
+  denominadorTaxaExpMat: number;
+  conversoesExpMatCanonicas: number;
+  taxaExpMatCanonica: number | null;
+  pendenciasTaxaExpMat: number;
+  taxaExpMatLiberada: boolean;
   taxaExpMatStatus: string;
   presencasEmusysExperimentaisPresentes: number;
   presencasEmusysComFunil: number;
@@ -183,6 +206,91 @@ export function normalizarPayloadMensalExperimentaisDiagnosticoV2(
   payload: ExperimentaisDiagnosticoPayloadV2 | null,
 ): ExperimentaisDiagnosticoMesV2 {
   const totais = payload?.totais;
+  const resumo = payload?.resumo;
+  const denominadorTaxaExpMat = toComercialNumber(resumo?.denominador_taxa_exp_mat);
+  const conversoesExpMatCanonicas = toComercialNumber(resumo?.conversoes_exp_mat_canonicas);
+  const taxaExpMatCanonica =
+    resumo?.taxa_exp_mat_canonica === null || resumo?.taxa_exp_mat_canonica === undefined
+      ? null
+      : toComercialNumber(resumo.taxa_exp_mat_canonica);
+  const pendenciasTaxaExpMat = toComercialNumber(
+    resumo?.pendencias_taxa_exp_mat ?? resumo?.pendentes_conciliacao,
+  );
+  const realizadasSemConversao = Math.max(denominadorTaxaExpMat - conversoesExpMatCanonicas, 0);
+
+  return {
+    mes,
+    agendadasEventos: toComercialNumber(
+      resumo?.experimentais_agendadas ?? totais?.experimentais_agendadas_eventos,
+    ),
+    canceladas: toComercialNumber(
+      resumo?.experimentais_canceladas ?? totais?.experimentais_canceladas,
+    ),
+    noShowStatusOperacional: toComercialNumber(
+      resumo?.experimentais_faltaram ?? totais?.no_show_status_operacional,
+    ),
+    realizadasStatusOperacional: toComercialNumber(
+      resumo?.realizadas_status_operacional ?? totais?.experimentais_realizadas_status_operacional,
+    ),
+    realizadasPresencaConfirmada: toComercialNumber(
+      resumo?.experimentais_realizadas_confirmadas ??
+        totais?.experimentais_realizadas_presenca_confirmada,
+    ),
+    statusOperacionalSemPresenca: toComercialNumber(
+      resumo?.realizadas_sem_presenca_confirmada ??
+        totais?.experimentais_status_operacional_sem_presenca,
+    ),
+    semAlunoId: toComercialNumber(totais?.experimentais_sem_aluno_id),
+    conversoesCanonicasComVinculoPresenca: toComercialNumber(
+      resumo?.conversoes_exp_mat_canonicas ??
+        totais?.conversoes_canonicas_com_vinculo_presenca,
+    ),
+    conversoesPendentesVinculo: toComercialNumber(
+      resumo?.pendentes_conciliacao ?? totais?.conversoes_pendentes_vinculo,
+    ),
+    realizadasSemConversaoAparente: resumo
+      ? realizadasSemConversao
+      : toComercialNumber(totais?.realizadas_sem_conversao_aparente),
+    decisoesHumanasExcluidasDenominador: toComercialNumber(
+      resumo
+        ? toComercialNumber(resumo.matriculas_diretas) + toComercialNumber(resumo.ignoradas_por_decisao)
+        : totais?.decisoes_humanas_excluidas_denominador,
+    ),
+    decisoesHumanasPendentesCanonizacao: toComercialNumber(
+      resumo?.pendentes_conciliacao ?? totais?.decisoes_humanas_pendentes_canonizacao,
+    ),
+    taxaExpMatMinimaCanonica: resumo
+      ? taxaExpMatCanonica
+      : totais?.taxa_exp_mat_minima_canonica === null ||
+        totais?.taxa_exp_mat_minima_canonica === undefined
+        ? null
+        : toComercialNumber(totais.taxa_exp_mat_minima_canonica),
+    taxaExpMatMaximaAposRevisao: resumo
+      ? taxaExpMatCanonica
+      : totais?.taxa_exp_mat_maxima_apos_revisao === null ||
+        totais?.taxa_exp_mat_maxima_apos_revisao === undefined
+        ? null
+        : toComercialNumber(totais.taxa_exp_mat_maxima_apos_revisao),
+    denominadorTaxaExpMat,
+    conversoesExpMatCanonicas,
+    taxaExpMatCanonica,
+    pendenciasTaxaExpMat,
+    taxaExpMatLiberada:
+      resumo?.taxa_exp_mat_liberada === true && pendenciasTaxaExpMat === 0,
+    taxaExpMatStatus: resumo?.taxa_exp_mat_status || totais?.taxa_exp_mat_status || 'bloqueada_regra_canonica',
+    presencasEmusysExperimentaisPresentes: toComercialNumber(
+      totais?.presencas_emusys_experimentais_presentes,
+    ),
+    presencasEmusysComFunil: toComercialNumber(totais?.presencas_emusys_com_funil),
+    presencasEmusysSemFunil: toComercialNumber(totais?.presencas_emusys_sem_funil),
+  };
+}
+
+export function normalizarPayloadMensalExperimentaisDiagnosticoLegadoV2(
+  mes: number,
+  payload: ExperimentaisDiagnosticoPayloadV2 | null,
+): ExperimentaisDiagnosticoMesV2 {
+  const totais = payload?.totais;
 
   return {
     mes,
@@ -222,6 +330,11 @@ export function normalizarPayloadMensalExperimentaisDiagnosticoV2(
       totais?.taxa_exp_mat_maxima_apos_revisao === undefined
         ? null
         : toComercialNumber(totais.taxa_exp_mat_maxima_apos_revisao),
+    denominadorTaxaExpMat: 0,
+    conversoesExpMatCanonicas: 0,
+    taxaExpMatCanonica: null,
+    pendenciasTaxaExpMat: toComercialNumber(totais?.decisoes_humanas_pendentes_canonizacao),
+    taxaExpMatLiberada: false,
     taxaExpMatStatus: totais?.taxa_exp_mat_status || 'bloqueada_regra_canonica',
     presencasEmusysExperimentaisPresentes: toComercialNumber(
       totais?.presencas_emusys_experimentais_presentes,
@@ -278,6 +391,15 @@ export function somarSeriesMensaisExperimentaisDiagnosticoV2(
         mes.conversoesCanonicasComVinculoPresenca;
       const conversoesPendentesVinculo =
         acc.conversoesPendentesVinculo + mes.conversoesPendentesVinculo;
+      const denominadorTaxaExpMat = acc.denominadorTaxaExpMat + mes.denominadorTaxaExpMat;
+      const conversoesExpMatCanonicas =
+        acc.conversoesExpMatCanonicas + mes.conversoesExpMatCanonicas;
+      const pendenciasTaxaExpMat = acc.pendenciasTaxaExpMat + mes.pendenciasTaxaExpMat;
+      const taxaExpMatCanonica =
+        denominadorTaxaExpMat > 0
+          ? (conversoesExpMatCanonicas / denominadorTaxaExpMat) * 100
+          : null;
+      const taxaExpMatLiberada = denominadorTaxaExpMat > 0 && pendenciasTaxaExpMat === 0;
 
       return {
         agendadasEventos: acc.agendadasEventos + mes.agendadasEventos,
@@ -300,16 +422,25 @@ export function somarSeriesMensaisExperimentaisDiagnosticoV2(
           acc.decisoesHumanasPendentesCanonizacao +
           mes.decisoesHumanasPendentesCanonizacao,
         taxaExpMatMinimaCanonica:
-          realizadasStatusOperacional > 0
+          taxaExpMatCanonica ??
+          (realizadasStatusOperacional > 0
             ? (conversoesCanonicasComVinculoPresenca / realizadasStatusOperacional) * 100
-            : null,
+            : null),
         taxaExpMatMaximaAposRevisao:
-          realizadasStatusOperacional > 0
+          taxaExpMatCanonica ??
+          (realizadasStatusOperacional > 0
             ? ((conversoesCanonicasComVinculoPresenca + conversoesPendentesVinculo) /
                 realizadasStatusOperacional) *
               100
-            : null,
-        taxaExpMatStatus: mes.taxaExpMatStatus || acc.taxaExpMatStatus,
+            : null),
+        denominadorTaxaExpMat,
+        conversoesExpMatCanonicas,
+        taxaExpMatCanonica,
+        pendenciasTaxaExpMat,
+        taxaExpMatLiberada,
+        taxaExpMatStatus: taxaExpMatLiberada
+          ? 'liberada_p02v'
+          : mes.taxaExpMatStatus || acc.taxaExpMatStatus,
         presencasEmusysExperimentaisPresentes:
           acc.presencasEmusysExperimentaisPresentes +
           mes.presencasEmusysExperimentaisPresentes,
@@ -333,6 +464,11 @@ export function somarSeriesMensaisExperimentaisDiagnosticoV2(
       decisoesHumanasPendentesCanonizacao: 0,
       taxaExpMatMinimaCanonica: null,
       taxaExpMatMaximaAposRevisao: null,
+      denominadorTaxaExpMat: 0,
+      conversoesExpMatCanonicas: 0,
+      taxaExpMatCanonica: null,
+      pendenciasTaxaExpMat: 0,
+      taxaExpMatLiberada: false,
       taxaExpMatStatus: 'bloqueada_regra_canonica',
       presencasEmusysExperimentaisPresentes: 0,
       presencasEmusysComFunil: 0,

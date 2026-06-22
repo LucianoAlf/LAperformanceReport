@@ -44,6 +44,12 @@ interface ConciliacaoResumo {
   realizadas_status_operacional?: number;
   decisoes_humanas?: number;
   conversoes_confirmadas_decisao?: number;
+  denominador_taxa_exp_mat?: number;
+  conversoes_exp_mat_canonicas?: number;
+  taxa_exp_mat_canonica?: number | null;
+  pendencias_taxa_exp_mat?: number;
+  taxa_exp_mat_liberada?: boolean;
+  taxa_exp_mat_status?: string;
 }
 
 interface ConciliacaoItem {
@@ -104,6 +110,12 @@ const resumoVazio: Required<ConciliacaoResumo> = {
   realizadas_status_operacional: 0,
   decisoes_humanas: 0,
   conversoes_confirmadas_decisao: 0,
+  denominador_taxa_exp_mat: 0,
+  conversoes_exp_mat_canonicas: 0,
+  taxa_exp_mat_canonica: null,
+  pendencias_taxa_exp_mat: 0,
+  taxa_exp_mat_liberada: false,
+  taxa_exp_mat_status: 'bloqueada_pendencias_conciliacao',
 };
 
 const etapaLabel: Record<string, string> = {
@@ -590,14 +602,34 @@ export function ComercialConciliacaoExperimentais({
             </ResumoGrupo>
           </div>
 
-          <div className="rounded-xl border border-amber-400/30 bg-amber-500/10 p-4">
+          <div className={cn(
+            'rounded-xl border p-4',
+            resumo.taxa_exp_mat_liberada
+              ? 'border-emerald-400/30 bg-emerald-500/10'
+              : 'border-amber-400/30 bg-amber-500/10'
+          )}>
             <div className="flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-amber-300 mt-0.5" />
+              {resumo.taxa_exp_mat_liberada ? (
+                <CheckCircle2 className="w-5 h-5 text-emerald-300 mt-0.5" />
+              ) : (
+                <AlertTriangle className="w-5 h-5 text-amber-300 mt-0.5" />
+              )}
               <div>
-                <h3 className="text-sm font-semibold text-amber-100">Taxa Experimental &gt; Matricula segue bloqueada</h3>
-                <p className="text-sm text-amber-100/80 mt-1">
-                  As decisoes ja ajustam esta leitura operacional, mas ainda nao publicam KPI oficial. Primeiro vamos
-                  validar a fila conciliada por unidade e mes.
+                <h3 className={cn(
+                  'text-sm font-semibold',
+                  resumo.taxa_exp_mat_liberada ? 'text-emerald-100' : 'text-amber-100'
+                )}>
+                  {resumo.taxa_exp_mat_liberada
+                    ? `Taxa Experimental > Matricula liberada: ${(resumo.taxa_exp_mat_canonica ?? 0).toFixed(1)}%`
+                    : 'Taxa Experimental > Matricula segue bloqueada'}
+                </h3>
+                <p className={cn(
+                  'text-sm mt-1',
+                  resumo.taxa_exp_mat_liberada ? 'text-emerald-100/80' : 'text-amber-100/80'
+                )}>
+                  {resumo.taxa_exp_mat_liberada
+                    ? `${resumo.conversoes_exp_mat_canonicas}/${resumo.denominador_taxa_exp_mat} experimentais realizadas confirmadas viraram matricula nesta competencia.`
+                    : 'As decisoes ja ajustam esta leitura operacional, mas ainda nao publicam KPI oficial. Primeiro vamos validar a fila conciliada por unidade e mes.'}
                 </p>
               </div>
             </div>

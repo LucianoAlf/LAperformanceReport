@@ -112,19 +112,27 @@ async function fetchGeminiComRetry(url: string, options: RequestInit, maxRetries
   return new Response(null, { status: 500 });
 }
 
-function fallbackIA(mesNome: string, unidadeNome: string) {
+function fallbackIA(mesNome: string, unidadeNome: string, taxaExpMatLiberada = false, taxaExpMatLabel = TAXA_EXP_MAT_BLOQUEADA_LABEL) {
   return {
     resumo_executivo:
-      `A unidade ${unidadeNome} apresenta indicadores consolidados de ${mesNome}. O relatório mantém a taxa Experimental -> Matrícula bloqueada como KPI oficial até fechamento da regra canonica de presença/vínculo.`,
+      `A unidade ${unidadeNome} apresenta indicadores consolidados de ${mesNome}. ${
+        taxaExpMatLiberada
+          ? `A taxa Experimental -> Matrícula foi publicada pela camada canonica de conciliação (${taxaExpMatLabel}).`
+          : "O relatório mantém a taxa Experimental -> Matrícula bloqueada como KPI oficial até fechamento da regra canonica de presença/vínculo."
+      }`,
     conquistas: [
       "Indicadores financeiros, retenção, funil e rankings consolidados para leitura gerencial.",
-      "Taxa Experimental -> Matrícula bloqueada de forma segura, sem publicar KPI não canonico.",
+      taxaExpMatLiberada
+        ? `Taxa Experimental -> Matrícula liberada pela conciliação canonica: ${taxaExpMatLabel}.`
+        : "Taxa Experimental -> Matrícula bloqueada de forma segura, sem publicar KPI não canonico.",
       "Relatório preserva metas, comparativos e programas internos para acompanhamento da equipe.",
     ],
     pontos_atencao: [
       "Revisar gargalos de Lead -> Experimental e evolução de matrículas.",
       "Acompanhar churn, evasões e não renovações com leitura qualitativa.",
-      "Validar vínculos de experimental, presença e matrícula antes de liberar taxa oficial.",
+      taxaExpMatLiberada
+        ? "Manter revisão diária da conciliação para preservar a taxa oficial sem pendências."
+        : "Validar vínculos de experimental, presença e matrícula antes de liberar taxa oficial.",
     ],
     plano_acao: [
       "Acompanhar diariamente leads, experimentais e matrículas por unidade.",
@@ -136,15 +144,21 @@ function fallbackIA(mesNome: string, unidadeNome: string) {
 }
 
 async function gerarIA(dadosParaIA: any, mesNome: string, unidadeNome: string) {
-  const fallback = fallbackIA(mesNome, unidadeNome);
+  const fallback = fallbackIA(
+    mesNome,
+    unidadeNome,
+    dadosParaIA?.taxa_exp_mat_liberada === true,
+    dadosParaIA?.taxa_exp_mat_label || TAXA_EXP_MAT_BLOQUEADA_LABEL,
+  );
   const apiKey = Deno.env.get("GEMINI_API_KEY");
   if (!apiKey) return fallback;
 
   const prompt = `
 Voce e um consultor de gestao especializado em escolas de musica.
 Gere apenas JSON valido com resumo_executivo, conquistas, pontos_atencao, plano_acao e mensagem_final.
-Nunca publique Taxa Experimental -> Matricula como KPI oficial.
-Se mencionar essa taxa, diga que esta BLOQUEADA aguardando regra canonica de presenca/vinculo.
+Publique Taxa Experimental -> Matricula apenas se taxa_exp_mat_liberada=true.
+Se taxa_exp_mat_liberada=false, diga que esta BLOQUEADA aguardando regra canonica de presenca/vinculo.
+Quando taxa_exp_mat_liberada=true, use exatamente o valor taxa_exp_mat_label e cite que a fonte e a conciliacao canonica.
 Quando falar de experimentais, diferencie status operacional de presenca confirmada.
 Use linguagem profissional, direta e pronta para WhatsApp.
 
@@ -231,6 +245,15 @@ async function montarRelatorio(dados: any): Promise<string> {
   );
   const taxaLeadExp = n(kpiComercial.taxa_conversao_lead_exp ?? kpiComercial.taxa_lead_experimental);
   const taxaConversaoGeral = n(kpiComercial.taxa_conversao_geral ?? kpiComercial.taxa_lead_matricula);
+  const taxaExpMatLiberada =
+    kpiComercial.taxa_exp_mat_liberada === true &&
+    n(kpiComercial.pendencias_taxa_exp_mat) === 0;
+  const taxaExpMatCanonica = n(kpiComercial.taxa_conversao_exp_mat ?? kpiComercial.taxa_exp_mat_canonica);
+  const denominadorExpMat = n(kpiComercial.denominador_taxa_exp_mat);
+  const conversoesExpMat = n(kpiComercial.conversoes_exp_mat_canonicas);
+  const taxaExpMatLabel = taxaExpMatLiberada
+    ? `${pct(taxaExpMatCanonica, 1)} (${conversoesExpMat}/${denominadorExpMat})`
+    : TAXA_EXP_MAT_BLOQUEADA_LABEL;
 
   const matriculasAtivas = n(dados?.matriculas_ativas ?? kpiGestao.matriculas_ativas);
   const matriculasBanda = n(dados?.matriculas_banda ?? kpiGestao.matriculas_banda);
@@ -268,7 +291,11 @@ async function montarRelatorio(dados: any): Promise<string> {
     experimentais_presenca_confirmada: experimentaisPresencaConfirmada,
     experimentais_sem_presenca_confirmada: experimentaisSemPresenca,
     taxa_lead_exp_operacional: taxaLeadExp,
-    taxa_exp_mat: TAXA_EXP_MAT_BLOQUEADA_LABEL,
+    taxa_exp_mat: taxaExpMatLabel,
+    taxa_exp_mat_liberada: taxaExpMatLiberada,
+    taxa_exp_mat_label: taxaExpMatLabel,
+    taxa_exp_mat_denominador: denominadorExpMat,
+    taxa_exp_mat_conversoes: conversoesExpMat,
     taxa_conversao_geral: taxaConversaoGeral,
     motivos_evasao: motivosEvasao.slice(0, 5),
   }, mesNome, unidadeNome);
@@ -320,7 +347,7 @@ async function montarRelatorio(dados: any): Promise<string> {
   relatorio += `• Presença experimental confirmada: *${experimentaisPresencaConfirmada}*\n`;
   relatorio += `• Matrículas: *${novasMatriculas}*\n`;
   relatorio += `• Taxa Lead→Exp operacional: *${pct(taxaLeadExp, 2)}*\n`;
-  relatorio += `• Taxa Exp→Mat: *${TAXA_EXP_MAT_BLOQUEADA_LABEL}*\n`;
+  relatorio += `• Taxa Exp→Mat: *${taxaExpMatLabel}*\n`;
   relatorio += `• Taxa Lead→Matrícula: *${pct(taxaConversaoGeral, 2)}*\n\n`;
 
   relatorio += "🎯 *METAS COMERCIAIS*\n";
@@ -415,7 +442,9 @@ async function montarRelatorio(dados: any): Promise<string> {
   relatorio += metasKpi.experimentais ? linhaMeta("Experimentais operacionais", totalExperimentais, n(metasKpi.experimentais)) : "• Experimentais operacionais: sem meta cadastrada\n";
   relatorio += metasKpi.matriculas ? linhaMeta("Matrículas", novasMatriculas, n(metasKpi.matriculas)) : "• Matrículas: sem meta cadastrada\n";
   relatorio += metasKpi.taxa_lead_exp ? linhaMeta("Lead→Exp operacional", taxaLeadExp, n(metasKpi.taxa_lead_exp)) : "• Lead→Exp operacional: sem meta cadastrada\n";
-  relatorio += `Exp→Mat: ${TAXA_EXP_MAT_BLOQUEADA_LABEL}\n`;
+  relatorio += taxaExpMatLiberada
+    ? `Exp→Mat: ${taxaExpMatLabel}\n`
+    : `Exp→Mat: ${TAXA_EXP_MAT_BLOQUEADA_LABEL}\n`;
   relatorio += metasKpi.taxa_conversao ? linhaMeta("Lead→Matrícula", taxaConversaoGeral, n(metasKpi.taxa_conversao)) : "• Lead→Matrícula: sem meta cadastrada\n";
   relatorio += "\n";
 
@@ -431,8 +460,12 @@ async function montarRelatorio(dados: any): Promise<string> {
   relatorio += "📊 *TAXA LEAD → EXP OPERACIONAL*\n";
   relatorio += `Atual: ${pct(taxaLeadExp, 2)} | Meta: ${pct(metaTaxaShowup, 0)}\n\n`;
   relatorio += "📊 *TAXA EXP → MATRÍCULA*\n";
-  relatorio += `${TAXA_EXP_MAT_BLOQUEADA_LABEL}\n`;
-  relatorio += "Atual: *BLOQUEADA* | Pts: *0*\n\n";
+  if (taxaExpMatLiberada) {
+    relatorio += `Atual: *${taxaExpMatLabel}* | Fonte: *conciliação canônica*\n\n`;
+  } else {
+    relatorio += `${TAXA_EXP_MAT_BLOQUEADA_LABEL}\n`;
+    relatorio += "Atual: *BLOQUEADA* | Pts: *0*\n\n";
+  }
   relatorio += "⭐ *LEAD → MATRÍCULA*\n";
   relatorio += `Atual: ${pct(taxaConversaoGeral, 2)} | Meta: ${pct(metaTaxaGeral, 1)}\n\n`;
   relatorio += "📊 *VOLUME MÉDIO/MÊS*\n";
@@ -450,7 +483,9 @@ async function montarRelatorio(dados: any): Promise<string> {
   relatorio += `${ia.mensagem_final}\n\n`;
 
   relatorio += "⚠️ *Nota de controle*\n";
-  relatorio += `Taxa Experimental → Matrícula: ${TAXA_EXP_MAT_BLOQUEADA_LABEL}.\n`;
+  relatorio += taxaExpMatLiberada
+    ? `Taxa Experimental → Matrícula: ${taxaExpMatLabel}, fonte conciliação canônica.\n`
+    : `Taxa Experimental → Matrícula: ${TAXA_EXP_MAT_BLOQUEADA_LABEL}.\n`;
   relatorio += `Experimentais operacionais usam status do funil; presença confirmada usa aluno vinculado + presença individual + aula Emusys experimental.\n\n`;
   relatorio += "━━━━━━━━━━━━━━━━━━━━━━\n";
   relatorio += `📅 Gerado em: ${new Date().toLocaleDateString("pt-BR")} às ${new Date().getHours()}:${String(new Date().getMinutes()).padStart(2, "0")}\n`;

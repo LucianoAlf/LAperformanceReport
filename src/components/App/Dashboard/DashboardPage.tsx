@@ -68,6 +68,10 @@ interface DadosComercial {
   experimentais_realizadas: number;
   experimentais_status_operacional?: number;
   taxa_conversao: number;
+  taxa_exp_mat_liberada?: boolean;
+  denominador_exp_mat?: number;
+  conversoes_exp_mat?: number;
+  pendencias_exp_mat?: number;
   ticket_passaporte: number;
 }
 
@@ -433,7 +437,13 @@ export function DashboardPage() {
             leads_mes: resumoComercialV2.leadsEntrantes,
             experimentais_realizadas: diagnosticoExperimentaisV2.realizadasPresencaConfirmada,
             experimentais_status_operacional: diagnosticoExperimentaisV2.realizadasStatusOperacional,
-            taxa_conversao: 0,
+            taxa_conversao: diagnosticoExperimentaisV2.taxaExpMatLiberada
+              ? diagnosticoExperimentaisV2.taxaExpMatCanonica || 0
+              : 0,
+            taxa_exp_mat_liberada: diagnosticoExperimentaisV2.taxaExpMatLiberada,
+            denominador_exp_mat: diagnosticoExperimentaisV2.denominadorTaxaExpMat,
+            conversoes_exp_mat: diagnosticoExperimentaisV2.conversoesExpMatCanonicas,
+            pendencias_exp_mat: diagnosticoExperimentaisV2.pendenciasTaxaExpMat,
             ticket_passaporte: Math.round(ticketPassaporteV2),
           });
 
@@ -831,12 +841,21 @@ export function DashboardPage() {
             onClick={() => { fetchExperimentais(); setModalExperimentais(true); }}
           />
           <KPICard
-            icon={Lock}
-            label="Exp->Mat bloqueada"
-            tooltip="KPI bloqueado: aguarda regra canônica de vínculo lead → aluno → presença experimental individual."
-            value="Bloqueada"
-            subvalue="KPI oficial bloqueado"
-            variant="amber"
+            icon={dadosComercial?.taxa_exp_mat_liberada ? Percent : Lock}
+            label="Taxa Exp→Mat"
+            tooltip={
+              dadosComercial?.taxa_exp_mat_liberada
+                ? 'KPI canônico: matrículas originadas de experimentais confirmadas dividido por experimentais realizadas confirmadas.'
+                : 'KPI bloqueado: aguarda regra canônica de vínculo lead → aluno → presença experimental individual.'
+            }
+            value={dadosComercial?.taxa_exp_mat_liberada ? dadosComercial.taxa_conversao : 'Bloqueada'}
+            format={dadosComercial?.taxa_exp_mat_liberada ? 'percent' : undefined}
+            subvalue={
+              dadosComercial?.taxa_exp_mat_liberada
+                ? `${dadosComercial.conversoes_exp_mat ?? 0}/${dadosComercial.denominador_exp_mat ?? 0} confirmadas`
+                : `${dadosComercial?.pendencias_exp_mat ?? 0} pendência(s)`
+            }
+            variant={dadosComercial?.taxa_exp_mat_liberada ? 'emerald' : 'amber'}
           />
           <KPICard
             icon={Ticket}

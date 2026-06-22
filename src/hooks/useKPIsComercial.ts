@@ -170,8 +170,9 @@ export function useKPIsComercial(
         taxa_showup: agendadas > 0 ? (presencaConfirmada / agendadas) * 100 : 0,
         novas_matriculas: novasMatriculas,
         taxa_conversao_lead_exp: totalLeads > 0 ? (presencaConfirmada / totalLeads) * 100 : 0,
-        // Bloqueada ate fechar regra canonica de presenca/vinculo.
-        taxa_conversao_exp_mat: 0,
+        taxa_conversao_exp_mat: diagnosticoV2.taxaExpMatLiberada
+          ? diagnosticoV2.taxaExpMatCanonica || 0
+          : 0,
         taxa_conversao_geral: totalLeads > 0 ? (novasMatriculas / totalLeads) * 100 : 0,
         faturamento_novos: faturamentoNovos,
         ticket_medio_novos: novasMatriculas > 0 ? faturamentoNovos / novasMatriculas : 0,

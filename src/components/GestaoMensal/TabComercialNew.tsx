@@ -62,6 +62,11 @@ interface DadosComercial {
     decisoesHumanasPendentesCanonizacao: number;
     taxaExpMatMinimaCanonica: number | null;
     taxaExpMatMaximaAposRevisao: number | null;
+    denominadorTaxaExpMat: number;
+    conversoesExpMatCanonicas: number;
+    taxaExpMatCanonica: number | null;
+    pendenciasTaxaExpMat: number;
+    taxaExpMatLiberada: boolean;
     taxaExpMatStatus: string;
     presencasEmusysExperimentaisPresentes: number;
     presencasEmusysComFunil: number;
@@ -111,6 +116,11 @@ const experimentaisDiagnosticoVazio: DadosComercial['experimentais_diagnostico_v
   decisoesHumanasPendentesCanonizacao: 0,
   taxaExpMatMinimaCanonica: null,
   taxaExpMatMaximaAposRevisao: null,
+  denominadorTaxaExpMat: 0,
+  conversoesExpMatCanonicas: 0,
+  taxaExpMatCanonica: null,
+  pendenciasTaxaExpMat: 0,
+  taxaExpMatLiberada: false,
   taxaExpMatStatus: 'bloqueada_regra_canonica',
   presencasEmusysExperimentaisPresentes: 0,
   presencasEmusysComFunil: 0,
@@ -254,6 +264,11 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             diagnosticoExperimentaisV2.decisoesHumanasPendentesCanonizacao,
           taxaExpMatMinimaCanonica: diagnosticoExperimentaisV2.taxaExpMatMinimaCanonica,
           taxaExpMatMaximaAposRevisao: diagnosticoExperimentaisV2.taxaExpMatMaximaAposRevisao,
+          denominadorTaxaExpMat: diagnosticoExperimentaisV2.denominadorTaxaExpMat,
+          conversoesExpMatCanonicas: diagnosticoExperimentaisV2.conversoesExpMatCanonicas,
+          taxaExpMatCanonica: diagnosticoExperimentaisV2.taxaExpMatCanonica,
+          pendenciasTaxaExpMat: diagnosticoExperimentaisV2.pendenciasTaxaExpMat,
+          taxaExpMatLiberada: diagnosticoExperimentaisV2.taxaExpMatLiberada,
           taxaExpMatStatus: diagnosticoExperimentaisV2.taxaExpMatStatus,
           presencasEmusysExperimentaisPresentes:
             diagnosticoExperimentaisV2.presencasEmusysExperimentaisPresentes,
@@ -737,7 +752,10 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
                 <h4 className="text-cyan-100 font-semibold">Leitura operacional de experimentais</h4>
                 <p className="text-cyan-100/80 text-sm">
                   Marcadas vêm do funil comercial. Realizadas confirmadas exigem aluno vinculado,
-                  presença individual e aula experimental no Emusys. A taxa Exp → Mat segue bloqueada.
+                  presença individual e aula experimental no Emusys.
+                  {experimentaisDiagnostico.taxaExpMatLiberada
+                    ? ' A taxa Exp → Mat está liberada para esta competência.'
+                    : ' A taxa Exp → Mat segue bloqueada para esta competência.'}
                 </p>
               </div>
             </div>
@@ -777,13 +795,25 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
                 <dd className="text-white text-2xl font-bold">{experimentaisDiagnostico.presencasEmusysSemFunil}</dd>
               </div>
               <div>
-                <dt className="text-slate-400">Faixa em teste</dt>
-                <dd className="text-amber-200 text-xl font-bold">
-                  {formatTaxaDiagnostica(experimentaisDiagnostico.taxaExpMatMinimaCanonica)}
-                  {' - '}
-                  {formatTaxaDiagnostica(experimentaisDiagnostico.taxaExpMatMaximaAposRevisao)}
+                <dt className="text-slate-400">
+                  {experimentaisDiagnostico.taxaExpMatLiberada ? 'Taxa oficial' : 'Faixa em teste'}
+                </dt>
+                <dd className={cn(
+                  'text-xl font-bold',
+                  experimentaisDiagnostico.taxaExpMatLiberada ? 'text-emerald-300' : 'text-amber-200'
+                )}>
+                  {experimentaisDiagnostico.taxaExpMatLiberada
+                    ? formatTaxaDiagnostica(experimentaisDiagnostico.taxaExpMatCanonica)
+                    : `${formatTaxaDiagnostica(experimentaisDiagnostico.taxaExpMatMinimaCanonica)} - ${formatTaxaDiagnostica(experimentaisDiagnostico.taxaExpMatMaximaAposRevisao)}`}
                 </dd>
-                <p className="text-[11px] text-amber-200/80">Não é KPI oficial</p>
+                <p className={cn(
+                  'text-[11px]',
+                  experimentaisDiagnostico.taxaExpMatLiberada ? 'text-emerald-200/80' : 'text-amber-200/80'
+                )}>
+                  {experimentaisDiagnostico.taxaExpMatLiberada
+                    ? `${experimentaisDiagnostico.conversoesExpMatCanonicas}/${experimentaisDiagnostico.denominadorTaxaExpMat}`
+                    : 'Não é KPI oficial'}
+                </p>
               </div>
             </dl>
           </div>
@@ -815,15 +845,33 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
               format="percent"
               variant="violet"
             />
-            <div className="bg-slate-800/70 border border-slate-700 rounded-xl p-4 min-h-[112px] flex flex-col justify-between">
+            <div className={cn(
+              'bg-slate-800/70 border rounded-xl p-4 min-h-[112px] flex flex-col justify-between',
+              experimentaisDiagnostico.taxaExpMatLiberada
+                ? 'border-emerald-500/30'
+                : 'border-slate-700'
+            )}>
               <div className="flex items-center justify-between gap-3">
-                <span className="text-xs text-slate-400 font-medium">Taxa Exp → Mat bloqueada</span>
-                <Lock className="w-4 h-4 text-amber-300" />
+                <span className="text-xs text-slate-400 font-medium">Taxa Exp → Mat</span>
+                {experimentaisDiagnostico.taxaExpMatLiberada ? (
+                  <Unlock className="w-4 h-4 text-emerald-300" />
+                ) : (
+                  <Lock className="w-4 h-4 text-amber-300" />
+                )}
               </div>
               <div>
-                <div className="text-2xl font-bold text-amber-200">Bloqueada</div>
+                <div className={cn(
+                  'text-2xl font-bold',
+                  experimentaisDiagnostico.taxaExpMatLiberada ? 'text-emerald-300' : 'text-amber-200'
+                )}>
+                  {experimentaisDiagnostico.taxaExpMatLiberada
+                    ? formatTaxaDiagnostica(experimentaisDiagnostico.taxaExpMatCanonica)
+                    : 'Bloqueada'}
+                </div>
                 <p className="text-xs text-slate-400 mt-1">
-                  Aguarda vínculo aluno → presença e decisões humanas antes de virar KPI oficial.
+                  {experimentaisDiagnostico.taxaExpMatLiberada
+                    ? `${experimentaisDiagnostico.conversoesExpMatCanonicas}/${experimentaisDiagnostico.denominadorTaxaExpMat} conversões confirmadas.`
+                    : 'Aguarda vínculo aluno → presença e decisões humanas antes de virar KPI oficial.'}
                 </p>
               </div>
             </div>

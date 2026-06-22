@@ -84,7 +84,7 @@ export async function fetchExperimentaisDiagnosticoComercialV2({
 
   for (const mes of meses) {
     const { data, error } = await supabase.rpc(
-      'get_experimentais_comercial_diagnostico_v2',
+      'get_conciliacao_experimentais_v2',
       buildComercialOperacionalRpcParamsV2({
         unidadeId,
         ano,

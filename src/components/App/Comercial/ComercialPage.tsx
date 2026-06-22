@@ -218,7 +218,67 @@ interface ResumoMes {
   conversaoLeadExp: number;
   conversaoLeadMat: number;
   conversaoExpMat: number;
+  taxaExpMatLiberada: boolean;
+  denominadorExpMat: number;
+  conversoesExpMat: number;
+  pendenciasExpMat: number;
 }
+
+interface TaxaExpMatCanonica {
+  liberada: boolean;
+  taxa: number;
+  denominador: number;
+  conversoes: number;
+  pendencias: number;
+}
+
+const taxaExpMatIndisponivel: TaxaExpMatCanonica = {
+  liberada: false,
+  taxa: 0,
+  denominador: 0,
+  conversoes: 0,
+  pendencias: 0,
+};
+
+const numeroResumo = (valor: unknown): number => {
+  const n = Number(valor);
+  return Number.isFinite(n) ? n : 0;
+};
+
+const buscarTaxaExpMatCanonica = async (
+  unidadeId: string | null | undefined,
+  ano: number,
+  mes: number,
+  periodo: 'mensal' | 'diario' = 'mensal',
+  data?: string | null
+): Promise<TaxaExpMatCanonica> => {
+  const { data: payload, error } = await supabase.rpc('get_conciliacao_experimentais_v2', {
+    p_unidade_id: unidadeId && unidadeId !== 'todos' ? unidadeId : null,
+    p_ano: ano,
+    p_mes: mes,
+    p_periodo: periodo,
+    p_data: data || null,
+  });
+
+  if (error) {
+    console.warn('[comercial] falha ao buscar taxa Exp->Mat canonica:', error);
+    return taxaExpMatIndisponivel;
+  }
+
+  const resumo = (payload as any)?.resumo || {};
+  return {
+    liberada: resumo.taxa_exp_mat_liberada === true,
+    taxa: numeroResumo(resumo.taxa_exp_mat_canonica),
+    denominador: numeroResumo(resumo.denominador_taxa_exp_mat),
+    conversoes: numeroResumo(resumo.conversoes_exp_mat_canonicas),
+    pendencias: numeroResumo(resumo.pendencias_taxa_exp_mat),
+  };
+};
+
+const textoTaxaExpMat = (taxa: TaxaExpMatCanonica) =>
+  taxa.liberada
+    ? `*${taxa.taxa.toFixed(1)}%* (${taxa.conversoes}/${taxa.denominador})`
+    : `*BLOQUEADA* (${taxa.pendencias} pendencia(s) de conciliacao)`;
 
 // Cards de Quick Input
 const quickInputCards = [
@@ -431,6 +491,10 @@ export function ComercialPage() {
     conversaoLeadExp: 0,
     conversaoLeadMat: 0,
     conversaoExpMat: 0,
+    taxaExpMatLiberada: false,
+    denominadorExpMat: 0,
+    conversoesExpMat: 0,
+    pendenciasExpMat: 0,
   });
   
   // Registros do dia
@@ -839,6 +903,14 @@ export function ComercialPage() {
         registrosParaResumo = dadosMes || [];
       }
 
+      const unidadeResumoId = isAdmin ? context?.unidadeSelecionada : usuario?.unidade_id;
+      const taxaExpMatResumo = await buscarTaxaExpMatCanonica(
+        unidadeResumoId,
+        competencia.filtro.ano,
+        competencia.filtro.mes,
+        'mensal'
+      );
+
       // Calcular resumo (usa mês inteiro quando filtro é "Hoje")
       const leads = registrosParaResumo.reduce((acc, r) => acc + r.quantidade, 0);
       const experimentais = registrosParaResumo.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0);
@@ -868,9 +940,7 @@ export function ComercialPage() {
       // Conversões (3 métricas)
       const conversaoLeadExp = leads > 0 ? (experimentais / leads) * 100 : 0;
       const conversaoLeadMat = leads > 0 ? (matriculas / leads) * 100 : 0;
-      // Exp -> Mat permanece bloqueada como KPI oficial ate regra canonica
-      // de presenca/vinculo. Nao propagar taxa operacional por acidente.
-      const conversaoExpMat = 0;
+      const conversaoExpMat = taxaExpMatResumo.taxa;
 
       // Nao usar snapshot legado como fallback: pode contaminar o funil.
       setResumo({
@@ -883,6 +953,10 @@ export function ComercialPage() {
         conversaoLeadExp,
         conversaoLeadMat,
         conversaoExpMat,
+        taxaExpMatLiberada: taxaExpMatResumo.liberada,
+        denominadorExpMat: taxaExpMatResumo.denominador,
+        conversoesExpMat: taxaExpMatResumo.conversoes,
+        pendenciasExpMat: taxaExpMatResumo.pendencias,
       });
 
       // Registros de hoje: apenas leads que entraram hoje (por data_contato)
@@ -1011,7 +1085,11 @@ export function ComercialPage() {
           .map(([curso, quantidade]) => ({ curso, quantidade }))
           .sort((a, b) => b.quantidade - a.quantidade),
         conversaoLeadMat: prev.leads > 0 ? (totalMatPrimarias / prev.leads) * 100 : 0,
-        conversaoExpMat: 0,
+        conversaoExpMat: taxaExpMatResumo.taxa,
+        taxaExpMatLiberada: taxaExpMatResumo.liberada,
+        denominadorExpMat: taxaExpMatResumo.denominador,
+        conversoesExpMat: taxaExpMatResumo.conversoes,
+        pendenciasExpMat: taxaExpMatResumo.pendencias,
       }));
 
       // Leads do mês (TODOS os leads, incluindo experimentais e convertidos)
@@ -2609,8 +2687,12 @@ export function ComercialPage() {
 
     // Calcular conversões
     const conversaoLeadExp = leadsSemana > 0 ? (experimentaisSemana / leadsSemana) * 100 : 0;
-    // Exp -> Mat permanece bloqueada como KPI oficial.
-    const conversaoExpMat = 0;
+    const taxaExpMatSemana = await buscarTaxaExpMatCanonica(
+      unidadeId,
+      hoje.getFullYear(),
+      hoje.getMonth() + 1,
+      'mensal'
+    );
     const conversaoLeadMat = leadsSemana > 0 ? (matriculasSemana / leadsSemana) * 100 : 0;
 
     // Calcular tickets medios pela mesma fonte canonica das matriculas
@@ -2640,7 +2722,7 @@ export function ComercialPage() {
     texto += `📊 *CONVERSÕES*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
     texto += `Lead → Experimental: *${conversaoLeadExp.toFixed(1)}%*\n`;
-    texto += `Experimental → Matrícula: *BLOQUEADA* (aguardando regra canônica de presença/vínculo)\n`;
+    texto += `Experimental → Matrícula: ${textoTaxaExpMat(taxaExpMatSemana)}\n`;
     texto += `Lead → Matrícula: *${conversaoLeadMat.toFixed(1)}%*\n\n`;
 
     texto += `💰 *FINANCEIRO*\n`;
@@ -2711,8 +2793,12 @@ export function ComercialPage() {
 
     // Calcular conversões
     const conversaoLeadExp = leadsMes > 0 ? (experimentaisMes / leadsMes) * 100 : 0;
-    // Exp -> Mat permanece bloqueada como KPI oficial.
-    const conversaoExpMat = 0;
+    const taxaExpMatMes = await buscarTaxaExpMatCanonica(
+      unidadeId,
+      hoje.getFullYear(),
+      hoje.getMonth() + 1,
+      'mensal'
+    );
     const conversaoLeadMat = leadsMes > 0 ? (matriculasMes / leadsMes) * 100 : 0;
 
     // Matrículas detalhadas do mês (fonte = alunos por data_matricula)
@@ -2791,7 +2877,7 @@ export function ComercialPage() {
     texto += `📊 *TAXAS DE CONVERSÃO*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
     texto += `Lead → Experimental: *${conversaoLeadExp.toFixed(1)}%*\n`;
-    texto += `Experimental → Matrícula: *BLOQUEADA* (aguardando regra canônica de presença/vínculo)\n`;
+    texto += `Experimental → Matrícula: ${textoTaxaExpMat(taxaExpMatMes)}\n`;
     texto += `Lead → Matrícula: *${conversaoLeadMat.toFixed(1)}%*\n\n`;
 
     // Matrículas por tipo
@@ -3658,7 +3744,7 @@ export function ComercialPage() {
           <div>
             <h3 className="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
               <Target className="w-4 h-4" />
-              Conversões (legado)
+              Conversões
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Lead → Experimental */}
@@ -3680,18 +3766,44 @@ export function ComercialPage() {
               </Tooltip>
 
               {/* Experimental → Matrícula */}
-              <Tooltip content="Bloqueada até a regra canônica de presença/vínculo ficar completa." side="bottom">
-                <div className="bg-slate-900/60 rounded-xl p-4 border border-amber-500/30 cursor-help">
+              <Tooltip
+                content={resumo.taxaExpMatLiberada
+                  ? 'KPI canonico: conversoes / experimentais realizadas confirmadas por presenca ou decisao humana.'
+                  : 'Bloqueada ate a conciliacao de presenca/vinculo ficar completa.'
+                }
+                side="bottom"
+              >
+                <div className={cn(
+                  'bg-slate-900/60 rounded-xl p-4 border cursor-help',
+                  resumo.taxaExpMatLiberada ? 'border-emerald-500/30' : 'border-amber-500/30'
+                )}>
                   <div className="flex items-center gap-2 mb-3">
                     <span className="text-purple-400 text-sm font-medium">Experimental</span>
                     <ArrowRight className="w-3 h-3 text-slate-500" />
                     <span className="text-emerald-400 text-sm font-medium">Matrícula</span>
                   </div>
-                  <div className="flex items-center gap-2 text-amber-200 mb-2">
-                    <Lock className="w-4 h-4" />
-                    <p className="text-2xl font-bold">Bloqueada</p>
-                  </div>
-                  <p className="text-xs text-slate-400">Não usar como KPI oficial ainda.</p>
+                  {resumo.taxaExpMatLiberada ? (
+                    <>
+                      <p className="text-3xl font-bold text-emerald-400 mb-2">{resumo.conversaoExpMat.toFixed(1)}%</p>
+                      <div className="w-full bg-slate-700/50 rounded-full h-2">
+                        <div
+                          className="bg-gradient-to-r from-purple-500 to-emerald-500 h-2 rounded-full transition-all"
+                          style={{ width: `${Math.min(resumo.conversaoExpMat, 100)}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-slate-400 mt-2">
+                        {resumo.conversoesExpMat}/{resumo.denominadorExpMat} confirmadas.
+                      </p>
+                    </>
+                  ) : (
+                    <div className="flex items-center gap-2 text-amber-200 mb-2">
+                      <Lock className="w-4 h-4" />
+                      <p className="text-2xl font-bold">Bloqueada</p>
+                    </div>
+                  )}
+                  {!resumo.taxaExpMatLiberada && (
+                    <p className="text-xs text-slate-400">{resumo.pendenciasExpMat} pendencia(s) de conciliacao.</p>
+                  )}
                 </div>
               </Tooltip>
 
