@@ -149,6 +149,24 @@ const calcularIdade = (matricula: any, anoReferencia: number, mesReferencia: num
   return idade >= 0 ? idade : null;
 };
 
+const classificarEscolaMatricula = (
+  matricula: any,
+  anoReferencia: number,
+  mesReferencia: number
+): 'LAMK' | 'EMLA' | 'NAO_CLASSIFICADO' => {
+  const classificacao = String(matricula.classificacao || matricula.tipo_matricula || '').toUpperCase();
+  if (classificacao.includes('LAMK')) return 'LAMK';
+  if (classificacao.includes('EMLA')) return 'EMLA';
+
+  const idade = calcularIdade(matricula, anoReferencia, mesReferencia);
+  if (idade !== null) return idade <= 11 ? 'LAMK' : 'EMLA';
+
+  const cursoNome = String((matricula.cursos as any)?.nome || matricula.curso_nome || '').toLowerCase();
+  if (cursoNome.includes('musicalizacao') || cursoNome.includes('musicalização')) return 'LAMK';
+
+  return 'NAO_CLASSIFICADO';
+};
+
 const firstRelation = <T,>(value: T | T[] | null | undefined): T | null => {
   if (Array.isArray(value)) return value[0] || null;
   return value || null;
@@ -448,13 +466,12 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           horarioMap.set(hora, (horarioMap.get(hora) || 0) + 1);
         });
 
-        // Matriculas por Faixa Etaria (fonte canonica operacional: alunos.data_matricula)
-        const matriculasComIdade = matriculasCanonicas.map((m) => ({
-          ...m,
-          idade_calculada: calcularIdade(m, ano, mesFinal),
-        }));
-        const matriculasLaKids = matriculasComIdade.filter(m => m.idade_calculada !== null && m.idade_calculada <= 11).length;
-        const matriculasLaAdultos = matriculasComIdade.filter(m => m.idade_calculada !== null && m.idade_calculada > 11).length;
+        // Matriculas por escola: prioriza classificacao calculada pelo banco; idade e curso sao fallback.
+        const matriculasPorEscola = matriculasCanonicas.map((m) =>
+          classificarEscolaMatricula(m, ano, mesFinal)
+        );
+        const matriculasLaKids = matriculasPorEscola.filter((escola) => escola === 'LAMK').length;
+        const matriculasLaAdultos = matriculasPorEscola.filter((escola) => escola === 'EMLA').length;
 
         // Motivos de Não Matrícula (experimentais que não converteram)
         const motivosNaoMatMap = new Map<string, number>();
