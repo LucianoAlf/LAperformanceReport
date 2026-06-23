@@ -5,9 +5,10 @@ import { ptBR } from 'date-fns/locale';
 import { toast } from 'sonner';
 import {
   X, Target, Calendar, CheckCircle2, Clock, AlertTriangle,
-  TrendingUp, TrendingDown, Sparkles, Loader2, Users, BarChart3, Brain, Heart, FileText, Copy, Check, Music, User, DollarSign, RefreshCw
+  TrendingUp, TrendingDown, Sparkles, Loader2, Users, BarChart3, Brain, Heart, FileText, Copy, Check, Music, User, DollarSign, RefreshCw, Star
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { TimelinePesquisasAluno } from './TimelinePesquisasAluno';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle
 } from '@/components/ui/dialog';
@@ -876,6 +877,16 @@ export function ModalDetalhesSucessoAluno({ open, onClose, aluno, competencia }:
                 </div>
               )}
             </div>
+          </div>
+        </div>
+
+        {/* Pesquisas / Acompanhamento */}
+        <div className="py-4">
+          <div className="bg-slate-800/50 rounded-2xl border border-slate-700/50 p-6">
+            <h3 className="font-semibold text-white flex items-center gap-2 mb-4">
+              <Star className="w-4 h-4 text-amber-400" /> Pesquisas
+            </h3>
+            <TimelinePesquisasAluno alunoId={aluno.id} alunoNome={aluno.nome} />
           </div>
         </div>
       </DialogContent>
