@@ -134,7 +134,7 @@ serve(async (req) => {
     // Registrar nota
     await supabase
       .from('pesquisas_whatsapp')
-      .update({ nota, respondido_em: new Date().toISOString() })
+      .update({ nota, status: 'respondida', respondido_em: new Date().toISOString() })
       .eq('id', pesquisa.id);
 
     // Buscar dados do aluno para notificação ao gerente
