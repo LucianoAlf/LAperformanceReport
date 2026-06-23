@@ -85,6 +85,8 @@ BEGIN
     RAISE EXCEPTION 'Aluno % não encontrado', p_aluno_id;
   END IF;
 
+  v_data_matricula := COALESCE(v_data_matricula, p_data);
+
   v_ts := (p_data::timestamp + interval '15 hours') AT TIME ZONE 'UTC';
   v_status := CASE WHEN p_nao_respondeu THEN 'nao_respondida' ELSE 'respondida' END;
 
