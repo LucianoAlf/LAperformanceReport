@@ -20,7 +20,7 @@ type SubTabId = 'visao_geral' | 'conversao' | 'retencao';
 
 const subTabs = [
   { id: 'visao_geral' as const, label: 'Visão Geral', icon: Users },
-  { id: 'conversao' as const, label: 'Exp->Mat bloqueada', icon: Target },
+  { id: 'conversao' as const, label: 'Exp->Mat v2', icon: Target },
   { id: 'retencao' as const, label: 'Retenção', icon: UserCheck },
 ];
 
@@ -96,6 +96,18 @@ interface DadosComparativoProfessores {
   label: string;
 }
 
+interface ConversaoProfessorCanonica {
+  professor_id: number;
+  professor_nome: string;
+  unidade_id: string;
+  unidade_nome: string;
+  realizadas_emusys: number;
+  faltas_emusys: number;
+  canceladas_emusys: number;
+  matriculas_pos_exp: number;
+  taxa_exp_mat: number;
+}
+
 export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresProps) {
   const [activeSubTab, setActiveSubTab] = useState<SubTabId>('visao_geral');
   const [loading, setLoading] = useState(true);
@@ -125,7 +137,7 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
 
         // ========== BUSCAR DADOS COMPARATIVOS ==========
         // Dados de base/gestao seguem em dados_mensais.
-        // Experimentais/conversao por professor nao usam snapshot comercial enquanto a regra canonica estiver bloqueada.
+        // Conversao por professor usa Emusys v2, sem snapshot comercial legado.
         const mesAnterior = mes === 1 ? 12 : mes - 1;
         const anoMesAnterior = mes === 1 ? ano - 1 : ano;
 
@@ -228,17 +240,13 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
           nomeUnidade = unidadeData?.nome || '';
         }
 
-        // Buscar totais de experimentais/matrículas por unidade (dados do CSV - só para histórico)
-        let totaisQuery = supabase
-          .from('experimentais_mensal_unidade')
-          .select('*')
-          .eq('ano', ano)
-          .gte('mes', mesInicio)
-          .lte('mes', mesFinal);
-
-        if (unidade !== 'todos') {
-          totaisQuery = totaisQuery.eq('unidade_id', unidade);
-        }
+        // Buscar conversao por professor na fonte canonica operacional v2.
+        const conversaoProfessorQuery = supabase.rpc('get_experimentais_professor_canonicos_v1', {
+          p_unidade_id: unidade !== 'todos' ? unidade : null,
+          p_ano: ano,
+          p_mes_inicio: mesInicio,
+          p_mes_fim: mesFinal,
+        });
 
         // Buscar dados de performance anual (conversão e retenção)
         let performanceQuery = supabase
@@ -312,9 +320,9 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
           alunosTotalQuery = alunosTotalQuery.eq('unidade_id', unidade);
         }
 
-        const [professoresResult, totaisResult, performanceResult, qualidadeResult, evasoesResult, movimentacoesResult, turmasImplicitasResult, professoresReaisResult, profUnidadesResult, alunosTotalResult] = await Promise.all([
+        const [professoresResult, conversaoProfessorResult, performanceResult, qualidadeResult, evasoesResult, movimentacoesResult, turmasImplicitasResult, professoresReaisResult, profUnidadesResult, alunosTotalResult] = await Promise.all([
           query,
-          totaisQuery,
+          conversaoProfessorQuery,
           performanceQuery,
           qualidadeQuery,
           evasoesQuery,
@@ -326,10 +334,10 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
         ]);
 
         if (professoresResult.error) throw professoresResult.error;
-        if (totaisResult.error) throw totaisResult.error;
+        if (conversaoProfessorResult.error) throw conversaoProfessorResult.error;
 
         const professores = professoresResult.data || [];
-        const totaisUnidade = totaisResult.data || [];
+        const conversaoProfessorData = (conversaoProfessorResult.data || []) as ConversaoProfessorCanonica[];
         const performanceData = performanceResult.data || [];
         const qualidadeDataRaw = qualidadeResult.data || [];
         const evasoesData = evasoesResult.data || [];
@@ -384,9 +392,30 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
           mediaAlunosTurmaPorProfessor.set(profId, turmas > 0 ? alunos / turmas : 0);
         });
         
-        // Calcular totais corretos do CSV
-        const experimentaisTotalCSV = totaisUnidade.reduce((acc, t) => acc + (t.total_experimentais || 0), 0);
-        const matriculasTotalCSV = totaisUnidade.reduce((acc, t) => acc + (t.total_matriculas || 0), 0);
+        const conversaoCanonicaPorProfessor = new Map<number, {
+          experimentais: number;
+          faltas: number;
+          canceladas: number;
+          matriculas: number;
+        }>();
+
+        conversaoProfessorData.forEach((row) => {
+          const professorId = Number(row.professor_id);
+          if (!professorId) return;
+
+          const atual = conversaoCanonicaPorProfessor.get(professorId) || {
+            experimentais: 0,
+            faltas: 0,
+            canceladas: 0,
+            matriculas: 0,
+          };
+
+          atual.experimentais += Number(row.realizadas_emusys) || 0;
+          atual.faltas += Number(row.faltas_emusys) || 0;
+          atual.canceladas += Number(row.canceladas_emusys) || 0;
+          atual.matriculas += Number(row.matriculas_pos_exp) || 0;
+          conversaoCanonicaPorProfessor.set(professorId, atual);
+        });
 
         // Mapear dados de qualidade por nome de professor
         const qualidadeMap = new Map<string, typeof qualidadeData[0]>();
@@ -553,9 +582,41 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
         
         // Converter Map para array e normalizar taxas para evitar inconsistências
         // (ex.: taxa herdada de fonte anual com base diferente do período filtrado)
+        professoresFiltrados.forEach((prof: any) => {
+          const id = Number(prof.id);
+          if (!id || professoresMap.has(id) || !conversaoCanonicaPorProfessor.has(id)) return;
+
+          const carteira = carteiraPorProfessorReal.get(id);
+          const mediaAlunosTurmaCalculada = mediaAlunosTurmaPorProfessor.get(id) || 0;
+
+          professoresMap.set(id, {
+            id,
+            nome: prof.nome,
+            unidade_nome: '',
+            carteira_alunos: carteira?.alunos || 0,
+            media_alunos_turma: mediaAlunosTurmaCalculada,
+            ticket_medio: carteira && carteira.alunos > 0 ? carteira.ticketTotal / carteira.alunos : 0,
+            experimentais: 0,
+            matriculas: 0,
+            taxa_conversao: 0,
+            renovacoes: 0,
+            nao_renovacoes: 0,
+            taxa_renovacao: 0,
+            evasoes: 0,
+            taxa_cancelamento: 0,
+            mrr_perdido: mrrPerdidoPorProfessor.get(`ID_${id}`) || 0,
+            nps: 0,
+            media_presenca: carteira && carteira.alunos > 0 ? carteira.presencaTotal / carteira.alunos : 0,
+            taxa_faltas: 0,
+          });
+        });
+
         const professoresKPIs: ProfessorKPI[] = Array.from(professoresMap.values()).map((p) => {
-          const taxaConversaoCalculada = p.experimentais > 0
-            ? (p.matriculas / p.experimentais) * 100
+          const conversaoCanonica = conversaoCanonicaPorProfessor.get(p.id);
+          const experimentaisCanonicas = conversaoCanonica?.experimentais || 0;
+          const matriculasCanonicas = conversaoCanonica?.matriculas || 0;
+          const taxaConversaoCalculada = experimentaisCanonicas > 0
+            ? (matriculasCanonicas / experimentaisCanonicas) * 100
             : 0;
 
           const totalRenovacoesProfessor = p.renovacoes + p.nao_renovacoes;
@@ -565,6 +626,8 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
 
           return {
             ...p,
+            experimentais: experimentaisCanonicas,
+            matriculas: matriculasCanonicas,
             taxa_conversao: taxaConversaoCalculada,
             taxa_renovacao: taxaRenovacaoCalculada,
           };
@@ -577,9 +640,8 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
         const alunosTotal = alunosTotalReal;
         const carteiraMedia = totalProfessores > 0 ? alunosTotal / totalProfessores : 0;
         
-        // Usar totais do CSV (dados corretos)
-        const experimentaisTotal = experimentaisTotalCSV;
-        const matriculasTotal = matriculasTotalCSV;
+        const experimentaisTotal = professoresKPIs.reduce((acc, p) => acc + p.experimentais, 0);
+        const matriculasTotal = professoresKPIs.reduce((acc, p) => acc + p.matriculas, 0);
         const taxaConversaoGeral = experimentaisTotal > 0 ? (matriculasTotal / experimentaisTotal) * 100 : 0;
         
         const renovacoesTotal = professoresKPIs.reduce((acc, p) => acc + p.renovacoes, 0);
@@ -623,7 +685,7 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
             id: p.id,
             nome: p.nome,
             valor: p.matriculas,
-            subvalor: `${p.taxa_conversao.toFixed(0)}% taxa legada (${p.experimentais} exp)`
+            subvalor: `${p.taxa_conversao.toFixed(0)}% v2 (${p.experimentais} exp)`
           }));
 
         const rankingConversao = professoresKPIs
@@ -851,37 +913,38 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
       {/* Sub-aba: Conversão */}
       {activeSubTab === 'conversao' && (
         <div className="space-y-6">
-          <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-100">
-            Conversão de professores em modo diagnóstico: experimentais e taxa Exp → Mat ainda dependem de fonte operacional/legada.
-            Não usar como KPI oficial até fechar presença individual + vínculo canônico.
+          <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 px-4 py-3 text-sm text-cyan-100">
+            Conversão por professor via Emusys v2: realizadas, faltas e matrículas pós-exp usam o raw novo por aluno/professor.
+            Retenção e carteira continuam nas fontes operacionais atuais.
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <KPICard
               icon={Trophy}
-              label="Experimentais (legado)"
+              label="Experimentais v2"
               value={dados.experimentais_total}
               variant="cyan"
-              subvalue="operacional/diagnóstico"
-              tooltip="Total operacional usado apenas como diagnóstico. A regra canônica de presença individual + vínculo ainda está em validação."
+              subvalue="realizadas Emusys"
+              tooltip="Total de experimentais realizadas no raw Emusys agrupadas pelo professor da aula experimental."
               comparativoMesAnterior={dadosMesAnterior ? { valor: dadosMesAnterior.experimentais_total, label: dadosMesAnterior.label } : undefined}
               comparativoAnoAnterior={dadosAnoAnterior ? { valor: dadosAnoAnterior.experimentais_total, label: dadosAnoAnterior.label } : undefined}
             />
             <KPICard
               icon={UserCheck}
-              label="Matrículas (diagnóstico)"
+              label="Matrículas pós-exp v2"
               value={dados.matriculas_total}
               variant="emerald"
+              subvalue="aluno matriculado no período"
               comparativoMesAnterior={dadosMesAnterior ? { valor: dadosMesAnterior.matriculas_total, label: dadosMesAnterior.label } : undefined}
               comparativoAnoAnterior={dadosAnoAnterior ? { valor: dadosAnoAnterior.matriculas_total, label: dadosAnoAnterior.label } : undefined}
             />
             <KPICard
               icon={Percent}
-              label="Taxa Exp → Mat bloqueada"
-              value="Bloqueada"
-              subvalue="aguardando regra canônica"
-              variant="amber"
-              tooltip="Taxa experimental para matrícula bloqueada para KPI oficial até presença individual e vínculo aluno/lead ficarem canônicos."
+              label="Taxa Exp → Mat v2"
+              value={`${dados.taxa_conversao_geral.toFixed(1)}%`}
+              subvalue={`${dados.matriculas_total}/${dados.experimentais_total} confirmadas`}
+              variant="emerald"
+              tooltip="Taxa por professor calculada com realizadas Emusys v2 e alunos matriculados no período."
             />
             <KPICard
               icon={Award}
@@ -895,15 +958,15 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <RankingTableCollapsible
               data={dados.ranking_matriculadores}
-              title="Ranking Professores Matriculadores (diagnóstico)"
+              title="Ranking Professores Matriculadores v2"
               valorLabel="Matrículas"
               topCount={3}
               variant="emerald"
             />
             <RankingTableCollapsible
               data={dados.ranking_conversao}
-              title="Ranking diagnóstico Exp->Mat"
-              valorLabel="Diag."
+              title="Ranking Exp->Mat v2"
+              valorLabel="Taxa"
               topCount={3}
               variant="amber"
               valorFormatter={(value) => `${Number(value).toFixed(1)}%`}
