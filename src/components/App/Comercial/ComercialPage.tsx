@@ -2632,7 +2632,7 @@ export function ComercialPage() {
 
     const leadsPeriodo = numeroResumo(kpisMes.leads_entrantes);
     const experimentaisRealizadasMes = numeroResumo(resumoConciliacaoMes.experimentais_realizadas_confirmadas);
-    const experimentaisEmusysMes = numeroResumo(resumoEmusysMes.realizadas_emusys) || experimentaisRealizadasMes;
+    const experimentaisEmusysMes = numeroResumo(resumoEmusysMes.realizadas_emusys);
     const experimentaisAgendadasMes = experimentaisEmusysMes;
     const experimentaisFaltasMes = numeroResumo(resumoEmusysMes.faltas);
     const totalExpAgendadasV2 = numeroResumo(resumoEmusysDia.linhas_raw);
