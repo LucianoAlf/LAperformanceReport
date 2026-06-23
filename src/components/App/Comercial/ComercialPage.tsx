@@ -230,6 +230,7 @@ interface TaxaExpMatCanonica {
   denominador: number;
   conversoes: number;
   pendencias: number;
+  realizadasConfirmadas: number;
 }
 
 const taxaExpMatIndisponivel: TaxaExpMatCanonica = {
@@ -238,6 +239,7 @@ const taxaExpMatIndisponivel: TaxaExpMatCanonica = {
   denominador: 0,
   conversoes: 0,
   pendencias: 0,
+  realizadasConfirmadas: 0,
 };
 
 const numeroResumo = (valor: unknown): number => {
@@ -272,6 +274,9 @@ const buscarTaxaExpMatCanonica = async (
     denominador: numeroResumo(resumo.denominador_taxa_exp_mat),
     conversoes: numeroResumo(resumo.conversoes_exp_mat_canonicas),
     pendencias: numeroResumo(resumo.pendencias_taxa_exp_mat),
+    realizadasConfirmadas: numeroResumo(
+      resumo.experimentais_realizadas_confirmadas ?? resumo.denominador_taxa_exp_mat
+    ),
   };
 };
 
@@ -913,12 +918,9 @@ export function ComercialPage() {
 
       // Calcular resumo (usa mês inteiro quando filtro é "Hoje")
       const leads = registrosParaResumo.reduce((acc, r) => acc + r.quantidade, 0);
-      const experimentais = registrosParaResumo.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0);
       const visitas = registrosParaResumo.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0);
       const matriculas = registrosParaResumo.filter(r => ['matriculado','convertido'].includes(r.status)).reduce((acc, r) => acc + r.quantidade, 0);
-      const experimentaisConfirmadas = taxaExpMatResumo.liberada && taxaExpMatResumo.denominador > 0
-        ? taxaExpMatResumo.denominador
-        : experimentais;
+      const experimentaisConfirmadas = taxaExpMatResumo.realizadasConfirmadas;
 
       // Matrículas por canal (convertidos)
       const canalMap = new Map<string, number>();
@@ -1080,9 +1082,7 @@ export function ComercialPage() {
       });
       setResumo(prev => ({
         ...prev,
-        experimentais: taxaExpMatResumo.liberada && taxaExpMatResumo.denominador > 0
-          ? taxaExpMatResumo.denominador
-          : prev.experimentais,
+        experimentais: taxaExpMatResumo.realizadasConfirmadas,
         matriculas: totalMatPrimarias,
         matriculasPorCanal: Array.from(matCanalMap.entries())
           .map(([canal, quantidade]) => ({ canal, quantidade }))
@@ -1092,9 +1092,7 @@ export function ComercialPage() {
           .sort((a, b) => b.quantidade - a.quantidade),
         conversaoLeadMat: prev.leads > 0 ? (totalMatPrimarias / prev.leads) * 100 : 0,
         conversaoLeadExp: prev.leads > 0
-          ? ((taxaExpMatResumo.liberada && taxaExpMatResumo.denominador > 0
-            ? taxaExpMatResumo.denominador
-            : prev.experimentais) / prev.leads) * 100
+          ? (taxaExpMatResumo.realizadasConfirmadas / prev.leads) * 100
           : 0,
         conversaoExpMat: taxaExpMatResumo.taxa,
         taxaExpMatLiberada: taxaExpMatResumo.liberada,
@@ -3528,7 +3526,6 @@ export function ComercialPage() {
 
   // Calcular totais de hoje
   const hojeLeads = getContagemHoje('lead');
-  const hojeExp = getContagemHoje('experimental');
   const hojeVisitas = getContagemHoje('visita');
   const hojeMatriculas = getContagemHoje('matricula');
   const hojeTotalRegistros = registrosHoje.length;
@@ -3767,18 +3764,13 @@ export function ComercialPage() {
                   )}
                 </div>
               </Tooltip>
-              <Tooltip content={resumo.taxaExpMatLiberada ? 'Experimentais realizadas confirmadas pela conciliacao v2/Emusys.' : 'Status operacional do funil. Nao equivale a presenca individual confirmada.'} side="bottom">
+              <Tooltip content="Experimentais realizadas confirmadas pela conciliacao v2/Emusys: aluno vinculado, presença individual e aula experimental." side="bottom">
                 <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/30 cursor-help">
                   <div className="flex items-center gap-2 mb-2">
                     <Guitar className="w-4 h-4 text-purple-400" />
-                    <span className="text-xs text-slate-400 font-medium">
-                      {resumo.taxaExpMatLiberada ? 'Experimentais confirmadas' : 'Experimentais (status)'}
-                    </span>
+                    <span className="text-xs text-slate-400 font-medium">Experimentais confirmadas</span>
                   </div>
                   <p className="text-2xl font-bold text-purple-400">{resumo.experimentais}</p>
-                  {!resumo.taxaExpMatLiberada && hojeExp > 0 && (
-                    <p className="text-xs text-emerald-400 mt-1">+{hojeExp} hoje</p>
-                  )}
                 </div>
               </Tooltip>
               <Tooltip content="Leads que visitaram a escola no mês." side="bottom">
@@ -3816,14 +3808,12 @@ export function ComercialPage() {
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Lead → Experimental */}
-              <Tooltip content={resumo.taxaExpMatLiberada ? 'Leads do mes para experimentais realizadas confirmadas pela conciliacao v2/Emusys.' : 'Metrica operacional por status / total de leads do mes.'} side="bottom">
+              <Tooltip content="Leads do mes para experimentais realizadas confirmadas pela conciliacao v2/Emusys." side="bottom">
                 <div className="bg-slate-900/60 rounded-xl p-4 border border-slate-700/30 cursor-help">
                   <div className="flex items-center gap-2 mb-3">
                     <span className="text-blue-400 text-sm font-medium">Lead</span>
                     <ArrowRight className="w-3 h-3 text-slate-500" />
-                    <span className="text-purple-400 text-sm font-medium">
-                      {resumo.taxaExpMatLiberada ? 'Experimental confirmada' : 'Experimental'}
-                    </span>
+                    <span className="text-purple-400 text-sm font-medium">Experimental confirmada</span>
                   </div>
                   <p className="text-3xl font-bold text-cyan-400 mb-2">{resumo.conversaoLeadExp.toFixed(1)}%</p>
                   <div className="w-full bg-slate-700/50 rounded-full h-2">
@@ -3986,8 +3976,8 @@ export function ComercialPage() {
               stages={[
                 { key: 'leads', label: 'Novos', count: leadsMes.filter(l => !l.status || l.status === 'novo').length, icon: Smartphone, color: '#3b82f6', gradient: 'from-blue-500 to-cyan-500' },
                 { key: 'experimental', label: 'Experimentais', count: (() => {
-                  if (resumo.taxaExpMatLiberada && filtroTipoExp !== 'agendadas_periodo' && filtroPresencaExp === 'compareceram') {
-                    return resumo.denominadorExpMat;
+                  if (filtroTipoExp !== 'agendadas_periodo' && filtroPresencaExp === 'compareceram') {
+                    return resumo.experimentais;
                   }
                   if (filtroTipoExp === 'agendadas_periodo') {
                     const { startDate, endDate } = competencia.range;
