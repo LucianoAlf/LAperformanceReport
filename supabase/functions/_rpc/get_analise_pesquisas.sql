@@ -79,6 +79,7 @@ AS $function$
           count(*) AS qtd,
           round(avg(r.nota), 2) AS nota_media
         FROM respondidas r
+        WHERE r.respondido_em IS NOT NULL
         GROUP BY date_trunc('week', r.respondido_em)
         ORDER BY date_trunc('week', r.respondido_em)
       ) x
