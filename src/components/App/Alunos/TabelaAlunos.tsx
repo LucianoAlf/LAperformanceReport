@@ -673,13 +673,14 @@ export function TabelaAlunos({
     }
   }, [abrirGovernancaSemParcela, aplicarUpdateLocal, alunosProp, usuario?.email, usuario?.nome]);
 
-  // Salva a composição da mensalidade: parcela = cheio − desconto fixo − desconto condicional
+  // Salva a composição da mensalidade: parcela = cheio − desconto condicional.
+  // O desconto fixo é REGISTRADO (coluna desconto_fixo) mas NÃO entra na parcela comercial.
   const salvarMensalidade = useCallback(async () => {
     if (!modalMensalidade) return;
     const cheio = modalMensalidade.cheio.trim() !== '' ? Number(modalMensalidade.cheio) : null;
     const fixo = modalMensalidade.fixo.trim() !== '' ? Number(modalMensalidade.fixo) : 0;
     const cond = modalMensalidade.cond.trim() !== '' ? Number(modalMensalidade.cond) : 0;
-    const parcela = cheio != null ? Math.round((cheio - fixo - cond) * 100) / 100 : null;
+    const parcela = cheio != null ? Math.round((cheio - cond) * 100) / 100 : null;
     const alunoId = modalMensalidade.alunoId;
     setModalMensalidade(null);
     const { error } = await supabase.from('alunos').update({
@@ -3167,14 +3168,14 @@ export function TabelaAlunos({
           <DialogHeader>
             <DialogTitle>Mensalidade{modalMensalidade ? ` — ${modalMensalidade.nome}` : ''}</DialogTitle>
             <DialogDescription>
-              A mensalidade real é o <strong>valor cheio menos os descontos</strong>. Edite os componentes — o valor final é recalculado automaticamente.
+              A parcela é o <strong>valor cheio menos o desconto condicional</strong>. O desconto fixo fica registrado, mas <strong>não entra</strong> no valor da parcela. O valor final é recalculado automaticamente.
             </DialogDescription>
           </DialogHeader>
           {modalMensalidade && (() => {
             const cheioN = modalMensalidade.cheio.trim() !== '' ? Number(modalMensalidade.cheio) : null;
-            const fixoN = modalMensalidade.fixo.trim() !== '' ? Number(modalMensalidade.fixo) : 0;
             const condN = modalMensalidade.cond.trim() !== '' ? Number(modalMensalidade.cond) : 0;
-            const parcela = cheioN != null ? Math.round((cheioN - fixoN - condN) * 100) / 100 : null;
+            // Desconto fixo é registrado mas NÃO entra na parcela
+            const parcela = cheioN != null ? Math.round((cheioN - condN) * 100) / 100 : null;
             return (
               <div className="space-y-3 py-2">
                 <div className="flex items-center justify-between gap-3">
@@ -3184,7 +3185,7 @@ export function TabelaAlunos({
                     className="w-32 text-right" placeholder="0,00" />
                 </div>
                 <div className="flex items-center justify-between gap-3">
-                  <label className="text-sm text-slate-300">− Desconto fixo</label>
+                  <label className="text-sm text-slate-400">Desconto fixo <span className="text-slate-500">(registrado — não entra)</span></label>
                   <Input type="number" step="0.01" value={modalMensalidade.fixo}
                     onChange={(e) => setModalMensalidade(m => m && ({ ...m, fixo: e.target.value }))}
                     className="w-32 text-right" placeholder="0,00" />

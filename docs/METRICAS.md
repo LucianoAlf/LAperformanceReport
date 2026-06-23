@@ -16,6 +16,22 @@
 
 ---
 
+## Valor da parcela (mensalidade) — regra comercial
+
+**Fórmula canônica (desde 2026-06-23, commits do Luciano `befdbbc`/`dfe349e`):**
+```
+valor_parcela = valor_cheio − desconto_condicional
+```
+- `valor_cheio` = `contrato_atual.valor_mensalidade` da API Emusys.
+- `desconto_condicional` = subtraído (inclui a bolsa, no caso de bolsista parcial).
+- **`desconto_fixo` NÃO entra na parcela** — fica gravado/auditado na coluna `alunos.desconto_fixo`, separado. É um desconto de pontualidade tratado à parte.
+- Existe `liquido_financeiro = cheio − fixo − cond` **só para auditoria/divergência** (não é a parcela comercial).
+- Aplicado nas edges `sync-matriculas-emusys` e `processar-matricula-emusys` (carimba `regra_valor_parcela='valor_mensalidade_menos_desconto_condicional'`). Se a parcela der ≤ 0 ou cheio ≤ 0 → fila `valor_divergente` (revisão humana).
+- **Backfill 2026-06-23:** 535 alunos ativos/trancados (CG 399, Barra 116, Recreio 20) estavam na fórmula antiga (`cheio − fixo − cond`) e foram recalculados — `desconto_fixo` preservado. Nenhum de banda, nenhum travado, nenhum zerado.
+- ⚠️ Regra **anterior** (até 22/06) era `cheio − fixo − cond` — obsoleta.
+
+---
+
 ## Alunos
 
 ### Aluno pagante
