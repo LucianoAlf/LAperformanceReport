@@ -1,5 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
+import {
+  calcularTicketParcelaCanonicoPorMes,
+  toComercialMoneyNumber,
+  type MatriculaComercialCanonicaLike,
+} from '@/lib/comercialMatriculasCanonicas';
 
 // Tipos
 export interface ConfigPrograma {
@@ -152,8 +157,21 @@ const UNIDADE_METAS_MAP: Record<string, { volume: string; ticket: string }> = {
 };
 
 function toNumber(valor: unknown): number {
-  const numero = Number(valor);
-  return Number.isFinite(numero) ? numero : 0;
+  return toComercialMoneyNumber(valor);
+}
+
+function calcularTicketMedioPonderado(historico: HistoricoMatriculadorItem[]): number {
+  const linhasComTicket = historico.filter((item) => item.ticket_medio > 0 && item.total_matriculas > 0);
+  const totalMatriculasComTicket = linhasComTicket.reduce((acc, item) => acc + item.total_matriculas, 0);
+
+  if (totalMatriculasComTicket <= 0) return 0;
+
+  const totalPonderado = linhasComTicket.reduce(
+    (acc, item) => acc + item.ticket_medio * item.total_matriculas,
+    0,
+  );
+
+  return Math.round(totalPonderado / totalMatriculasComTicket);
 }
 
 function calcularPontosProporcionais(
@@ -209,8 +227,7 @@ async function buscarMetricasMensaisV2(
     };
   }));
 
-  const conciliacaoPorMes = new Map<number, ConciliacaoExperimentaisV2Payload | null>();
-  for (const mes of meses) {
+  const conciliacoes = await Promise.all(meses.map(async (mes) => {
     const conciliacaoResponse = await supabase.rpc('get_conciliacao_experimentais_v2', {
         p_unidade_id: unidadeId,
         p_ano: ano,
@@ -224,11 +241,44 @@ async function buscarMetricasMensaisV2(
         `Conciliacao v2 indisponivel no Matriculador ${ano}-${String(mes).padStart(2, '0')}:`,
         conciliacaoResponse.error.message,
       );
-      conciliacaoPorMes.set(mes, null);
-    } else {
-      conciliacaoPorMes.set(mes, conciliacaoResponse.data as ConciliacaoExperimentaisV2Payload | null);
+      return { mes, payload: null };
     }
+
+    return { mes, payload: conciliacaoResponse.data as ConciliacaoExperimentaisV2Payload | null };
+  }));
+  const conciliacaoPorMes = new Map<number, ConciliacaoExperimentaisV2Payload | null>(
+    conciliacoes.map((item) => [item.mes, item.payload]),
+  );
+
+  const primeiroMes = meses[0];
+  const ultimoMes = meses[meses.length - 1];
+  const dataInicio = `${ano}-${String(primeiroMes).padStart(2, '0')}-01`;
+  const dataFim = `${ano}-${String(ultimoMes).padStart(2, '0')}-${new Date(ano, ultimoMes, 0).getDate()}`;
+  const { data: matriculasData, error: matriculasError } = await supabase
+    .from('alunos')
+    .select(`
+      data_matricula,
+      valor_parcela,
+      valor_passaporte,
+      is_segundo_curso,
+      status,
+      cursos:curso_id!left(nome, is_projeto_banda),
+      tipos_matricula:tipo_matricula_id!left(codigo, conta_como_pagante, entra_ticket_medio)
+    `)
+    .eq('unidade_id', unidadeId)
+    .gte('data_matricula', dataInicio)
+    .lte('data_matricula', dataFim);
+
+  if (matriculasError) {
+    throw new Error(
+      `Erro ao buscar tickets canonicos do Matriculador ${ano}: ${matriculasError.message}`,
+    );
   }
+
+  const ticketParcelaPorMes = calcularTicketParcelaCanonicoPorMes(
+    (matriculasData || []) as MatriculaComercialCanonicaLike[],
+    meses,
+  );
 
   return kpisPorMes.map(({ mes, payload }) => {
     const conciliacao = conciliacaoPorMes.get(mes) || null;
@@ -254,7 +304,7 @@ async function buscarMetricasMensaisV2(
       total_leads: leads,
       total_experimentais: experimentais,
       total_matriculas: matriculas,
-      ticket_medio: 0,
+      ticket_medio: ticketParcelaPorMes.get(mes) || 0,
       taxa_showup: leads > 0 ? Number(((experimentais / leads) * 100).toFixed(1)) : 0,
       taxa_exp_mat: taxaExpMat,
       taxa_exp_mat_liberada: taxaExpMatLiberada,
@@ -276,6 +326,7 @@ function consolidarMetricasV2(
   const totalExperimentais = historico.reduce((acc, item) => acc + item.total_experimentais, 0);
   const totalMatriculas = historico.reduce((acc, item) => acc + item.total_matriculas, 0);
   const mesesComDados = historico.length || 1;
+  const mediaTicketCanonica = calcularTicketMedioPonderado(historico);
   const referenciaExpMat =
     (mesReferencia ? historico.find((item) => item.mes === mesReferencia) : null) ||
     [...historico].reverse().find((item) => (item.denominador_exp_mat || 0) > 0);
@@ -287,6 +338,7 @@ function consolidarMetricasV2(
     total_matriculas: totalMatriculas,
     meses_com_dados: mesesComDados,
     media_matriculas_mes: Number((totalMatriculas / mesesComDados).toFixed(1)),
+    media_ticket: mediaTicketCanonica || 0,
     taxa_showup_exp: totalLeads > 0 ? (totalExperimentais / totalLeads) * 100 : 0,
     taxa_exp_mat: referenciaExpMat?.taxa_exp_mat_liberada ? referenciaExpMat.taxa_exp_mat : 0,
     taxa_exp_mat_liberada: referenciaExpMat?.taxa_exp_mat_liberada === true,
@@ -302,7 +354,7 @@ function consolidarHistoricoMatriculadorV2(
   historicoLegado?: HistoricoMatriculador | null,
 ): HistoricoMatriculador {
   const linhasComLeads = historicoV2.filter((item) => item.total_leads > 0);
-  const linhasComTicket = historicoV2.filter((item) => item.ticket_medio > 0);
+  const mediaTicketCanonica = calcularTicketMedioPonderado(historicoV2);
 
   return {
     historico: historicoV2,
@@ -313,9 +365,7 @@ function consolidarHistoricoMatriculadorV2(
       volume_medio: historicoV2.length > 0
         ? Number((historicoV2.reduce((acc, item) => acc + item.total_matriculas, 0) / historicoV2.length).toFixed(1))
         : historicoLegado?.media_grupo?.volume_medio || 0,
-      ticket_medio: linhasComTicket.length > 0
-        ? Math.round(linhasComTicket.reduce((acc, item) => acc + item.ticket_medio, 0) / linhasComTicket.length)
-        : historicoLegado?.media_grupo?.ticket_medio || 0,
+      ticket_medio: mediaTicketCanonica || 0,
     },
   };
 }
@@ -463,7 +513,7 @@ export function useMatriculadorPrograma(ano: number = 2026, unidadeId?: string |
             return {
               ...item,
               unidade_nome: hunter.unidade_nome || legado?.unidade_nome || item.unidade_nome,
-              ticket_medio: legado?.ticket_medio || hunter.metricas.media_ticket || item.ticket_medio || 0,
+              ticket_medio: item.ticket_medio || 0,
             };
           });
           const metricasV2 = consolidarMetricasV2(historicoV2ComLegado, hunter.metricas, mesReferencia);

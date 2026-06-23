@@ -36,6 +36,7 @@ import {
   fetchExperimentaisDiagnosticoComercialV2,
   useComercialOperacionalResumoV2,
 } from '@/hooks/useComercialOperacionalResumoV2';
+import { ehMatriculaComercialCanonica } from '@/lib/comercialMatriculasCanonicas';
 import { filtrarRetencaoCanonica } from '@/lib/atividadesExtras';
 
 
@@ -414,7 +415,14 @@ export function DashboardPage() {
 
           let passaporteQueryV2 = supabase
             .from('alunos')
-            .select('valor_passaporte')
+            .select(`
+              valor_passaporte,
+              valor_parcela,
+              is_segundo_curso,
+              status,
+              cursos:curso_id!left(nome, is_projeto_banda),
+              tipos_matricula:tipo_matricula_id!left(codigo, conta_como_pagante, entra_ticket_medio)
+            `)
             .gte('data_matricula', startDateComercial)
             .lte('data_matricula', endDateComercial)
             .gt('valor_passaporte', 0);
@@ -424,10 +432,11 @@ export function DashboardPage() {
           }
 
           const { data: passaporteV2Data } = await passaporteQueryV2;
+          const passaportesCanonicos = (passaporteV2Data || []).filter(ehMatriculaComercialCanonica);
           const ticketPassaporteV2 =
-            passaporteV2Data && passaporteV2Data.length > 0
-              ? passaporteV2Data.reduce((sum: number, a: any) => sum + Number(a.valor_passaporte), 0) /
-                passaporteV2Data.length
+            passaportesCanonicos.length > 0
+              ? passaportesCanonicos.reduce((sum: number, a: any) => sum + Number(a.valor_passaporte), 0) /
+                passaportesCanonicos.length
               : 0;
 
           const matriculasCanonicas =

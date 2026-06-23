@@ -14,6 +14,10 @@ import {
   fetchComercialOperacionalResumoV2,
   fetchExperimentaisDiagnosticoComercialV2,
 } from '@/hooks/useComercialOperacionalResumoV2';
+import {
+  calcularFinanceiroMatriculasCanonicas,
+  toComercialMoneyNumber as toNumber,
+} from '@/lib/comercialMatriculasCanonicas';
 
 interface TabComercialProps {
   ano: number;
@@ -129,19 +133,6 @@ const experimentaisDiagnosticoVazio: DadosComercial['experimentais_diagnostico_v
   presencasEmusysSemFunil: 0,
 };
 
-const toNumber = (valor: unknown): number => {
-  if (typeof valor === 'number') return Number.isFinite(valor) ? valor : 0;
-  if (typeof valor === 'string') {
-    const trimmed = valor.trim();
-    const normalizado = trimmed.includes(',')
-      ? trimmed.replace(/\./g, '').replace(',', '.')
-      : trimmed;
-    const numero = Number(normalizado);
-    return Number.isFinite(numero) ? numero : 0;
-  }
-  return 0;
-};
-
 const calcularIdade = (matricula: any, anoReferencia: number, mesReferencia: number): number | null => {
   const idadeAtual = Number(matricula.idade_atual);
   if (Number.isFinite(idadeAtual) && idadeAtual > 0) return idadeAtual;
@@ -177,28 +168,6 @@ const classificarEscolaMatricula = (
   if (cursoNome.includes('musicalizacao') || cursoNome.includes('musicalização')) return 'LAMK';
 
   return 'NAO_CLASSIFICADO';
-};
-
-const firstRelation = <T,>(value: T | T[] | null | undefined): T | null => {
-  if (Array.isArray(value)) return value[0] || null;
-  return value || null;
-};
-
-const ehNovaMatriculaExecutiva = (matricula: any): boolean => {
-  const tipo = firstRelation<any>(matricula.tipos_matricula);
-  const cursoNome = ((matricula.cursos as any)?.nome || matricula.curso_nome || '').toLowerCase();
-  const ehBanda =
-    matricula.is_banda === true ||
-    (matricula.cursos as any)?.is_projeto_banda === true ||
-    cursoNome.includes('banda');
-  const ehCoral = cursoNome.includes('canto coral');
-
-  if (matricula.is_segundo_curso === true) return false;
-  if (ehBanda || ehCoral) return false;
-  if (tipo?.codigo === 'BOLSISTA_INT' || tipo?.codigo === 'BOLSISTA_PARC') return false;
-
-  return (tipo?.conta_como_pagante === true || tipo?.entra_ticket_medio === true) &&
-    toNumber(matricula.valor_parcela) > 0;
 };
 
 export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps) {
@@ -355,19 +324,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
 
         if (leadsError) throw leadsError;
 
-        // Buscar dados mensais para ticket de passaporte (dados históricos)
-        let dadosMensaisQuery = supabase
-          .from('dados_mensais')
-          .select('ticket_medio_passaporte, faturamento_passaporte, unidade_id')
-          .eq('ano', ano)
-          .gte('mes', mesInicio)
-          .lte('mes', mesFinal);
-
-        if (unidade !== 'todos') {
-          dadosMensaisQuery = dadosMensaisQuery.eq('unidade_id', unidade);
-        }
-
-        const { data: dadosMensaisData } = await dadosMensaisQuery;
+        // Tickets e faturamento saem da base canonica de matriculas.
 
         // Buscar matrículas do mês
         let matriculasQuery = supabase
@@ -392,7 +349,8 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
 
         const leads = leadsData || [];
         const matriculas = matriculasData || [];
-        const matriculasExecutivas = matriculas.filter(ehNovaMatriculaExecutiva);
+        const financeiroMatriculas = calcularFinanceiroMatriculasCanonicas(matriculas);
+        const matriculasExecutivas = financeiroMatriculas.matriculasCanonicas;
 
         // Processar Leads
         const totalLeadsLegado = leads.reduce((acc, l) => acc + (l.quantidade || 1), 0);
@@ -506,12 +464,13 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
         });
 
         // Faturamento - fonte canonica operacional: alunos.data_matricula
-        const matriculasComPassaporte = matriculasCanonicas.filter(m => toNumber(m.valor_passaporte) > 0);
-        const matriculasComParcela = matriculasCanonicas.filter(m => toNumber(m.valor_parcela) > 0);
-        const faturamentoPassaportes = matriculasComPassaporte.reduce((acc, m) => acc + toNumber(m.valor_passaporte), 0);
-        const faturamentoParcelas = matriculasCanonicas.reduce((acc, m) => acc + toNumber(m.valor_parcela), 0);
-        const ticketMedioPassaporte = matriculasComPassaporte.length > 0 ? faturamentoPassaportes / matriculasComPassaporte.length : 0;
-        const ticketMedioParcela = matriculasComParcela.length > 0 ? faturamentoParcelas / matriculasComParcela.length : 0;
+        const {
+          matriculasComPassaporte,
+          faturamentoPassaportes,
+          faturamentoParcelas,
+          ticketMedioPassaporte,
+          ticketMedioParcela,
+        } = financeiroMatriculas;
 
         setDados({
           // Leads
