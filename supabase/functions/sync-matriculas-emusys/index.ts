@@ -9,7 +9,7 @@
 //
 // Trilha AUTO (determinística, convergente): status, data_fim, curso_id, professor_atual_id, valor LIMPO.
 // Trilha FILA (matriculas_divergencias): ambiguo, ausente_api, disciplina_nao_mapeada,
-//   valor_divergente (desconto_fixo embutido / líquido<0 — fonte ambígua), classificacao_divergente (bolsa x tipo).
+//   valor_divergente (parcela comercial divergente), classificacao_divergente (bolsa x tipo).
 // Dedup: (aluno|tipo) já com decisão humana não é reenfileirado.
 // MODO_TESTE (env SYNC_MATRICULAS_DRYRUN != 'false', default true): não aplica AUTO, só detecta (a fila É gravada).
 //
@@ -217,9 +217,10 @@ function reconciliar(
   const cheio = c.valor_mensalidade != null ? Number(c.valor_mensalidade) : null;
   const fixo = Number(c.desconto_fixo || 0);
   const cond = Number(c.desconto_condicional || 0);
-  const liquido = cheio != null ? Math.round((cheio - fixo - cond) * 100) / 100 : null;
-  // parcela real estimada: quando líquido<0 o desconto_fixo veio embutido no valor_mensalidade (fonte ambígua) → usa cheio-cond
-  const efetivo = cheio != null ? (liquido! >= 0 ? liquido! : Math.max(Math.round((cheio - cond) * 100) / 100, 0)) : null;
+  // Parcela comercial dos relatórios: contrato mensal menos desconto condicional.
+  // O desconto_fixo fica auditado, mas não é subtraído de valor_parcela.
+  const parcelaComercial = cheio != null ? Math.round((cheio - cond) * 100) / 100 : null;
+  const liquidoFinanceiro = cheio != null ? Math.round((cheio - fixo - cond) * 100) / 100 : null;
   const bolsa = c.bolsa === true;
   const dataFim = c.data_original_ultima_aula || null;
 
@@ -235,22 +236,19 @@ function reconciliar(
   }
   setCampo('data_fim_contrato', dataFim, a.data_fim_contrato);
 
-  // Régua de VALOR: aplica AUTO só se a fonte é limpa; senão enfileira (fonte ambígua = desconto_fixo embutido)
+  // Régua de VALOR: contrato Emusys é a fonte da parcela comercial.
   if (cheio != null) {
-    if (liquido! >= 0 && cheio > 0) {
+    if (parcelaComercial != null && parcelaComercial >= 0 && cheio > 0) {
       setCampo('valor_cheio', cheio, a.valor_cheio);
       setCampo('desconto_fixo', fixo, a.desconto_fixo);
       setCampo('desconto_condicional', cond, a.desconto_condicional);
-      setCampo('valor_parcela', liquido, a.valor_parcela);
+      setCampo('valor_parcela', parcelaComercial, a.valor_parcela);
     } else if (!fixados.has('valor_parcela')) {
-      // fonte ambígua (desconto_fixo embutido): parcela real estimada = efetivo (cheio - cond).
-      // Só enfileira quando há parcela parcial real a recuperar (>0) e difere do nosso.
-      // cheio<=0 com líquido<0 (bolsista integral: mensal 0, fixo cheio) → efetivo 0 → ignora (não-pagante legítimo).
-      if ((efetivo ?? 0) > 0 && Number(a.valor_parcela ?? 0) !== efetivo) {
+      if ((parcelaComercial ?? 0) > 0 && Number(a.valor_parcela ?? 0) !== parcelaComercial) {
         divergencias.push({
           tipo: 'valor_divergente', campo: 'valor_parcela', severidade: 'media',
-          valorApi: { cheio, fixo, cond, liquido, liquido_estimado: efetivo, ambiguo: true },
-          sugestao: efetivo,
+          valorApi: { cheio, fixo, cond, parcela_comercial: parcelaComercial, liquido_financeiro: liquidoFinanceiro },
+          sugestao: parcelaComercial,
         });
       }
     }
@@ -261,16 +259,16 @@ function reconciliar(
   // não é confiável p/ parciais (que têm desconto real). REGULAR→bolsista quando a API marca bolsa=true.
   if (statusAlvo === 'ativo' && tipoCodigo && !fixados.has('tipo_matricula_id')) {
     const ehBolsista = tipoCodigo === 'BOLSISTA_INT' || tipoCodigo === 'BOLSISTA_PARC';
-    if (ehBolsista && !bolsa && cheio != null && cheio > 0 && liquido === cheio) {
+    if (ehBolsista && !bolsa && cheio != null && cheio > 0 && parcelaComercial === cheio) {
       divergencias.push({
         tipo: 'classificacao_divergente', campo: 'tipo_matricula_id', severidade: 'media',
-        valorApi: { bolsa, liquido, efetivo, cheio, fixo, cond, tipo_sugerido: 'REGULAR' }, sugestao: 'REGULAR',
+        valorApi: { bolsa, parcela_comercial: parcelaComercial, liquido_financeiro: liquidoFinanceiro, cheio, fixo, cond, tipo_sugerido: 'REGULAR' }, sugestao: 'REGULAR',
       });
     } else if (tipoCodigo === 'REGULAR' && bolsa) {
-      const sug = (efetivo ?? 0) <= 0 ? 'BOLSISTA_INT' : 'BOLSISTA_PARC';
+      const sug = (parcelaComercial ?? 0) <= 0 ? 'BOLSISTA_INT' : 'BOLSISTA_PARC';
       divergencias.push({
         tipo: 'classificacao_divergente', campo: 'tipo_matricula_id', severidade: 'media',
-        valorApi: { bolsa, liquido, efetivo, cheio, fixo, cond, tipo_sugerido: sug }, sugestao: sug,
+        valorApi: { bolsa, parcela_comercial: parcelaComercial, liquido_financeiro: liquidoFinanceiro, cheio, fixo, cond, tipo_sugerido: sug }, sugestao: sug,
       });
     }
   }

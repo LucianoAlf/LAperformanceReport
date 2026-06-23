@@ -129,7 +129,9 @@ async function complementarDescontoMatricula(
     const cheio = Number(c.valor_mensalidade);
     const fixo = Number(c.desconto_fixo || 0);
     const cond = Number(c.desconto_condicional || 0);
-    const liquido = Math.round((cheio - fixo - cond) * 100) / 100;
+    // Parcela comercial dos relatórios: contrato mensal menos desconto condicional.
+    // O desconto_fixo fica auditado, mas não é subtraído de valor_parcela.
+    const parcelaComercial = Math.round((cheio - cond) * 100) / 100;
 
     // respeitar campos editados manualmente (não sobrescrever)
     const { data: fixados } = await supabase
@@ -140,7 +142,7 @@ async function complementarDescontoMatricula(
     if (!travados.has('valor_cheio')) upd.valor_cheio = cheio;
     if (!travados.has('desconto_fixo')) upd.desconto_fixo = fixo;
     if (!travados.has('desconto_condicional')) upd.desconto_condicional = cond;
-    if (!travados.has('valor_parcela')) upd.valor_parcela = liquido;
+    if (!travados.has('valor_parcela')) upd.valor_parcela = parcelaComercial;
     await supabase.from('alunos').update(upd).eq('id', alunoId);
 
     await supabase.from('automacao_log').insert({
@@ -151,7 +153,10 @@ async function complementarDescontoMatricula(
       status: 'ok',
       detalhes: {
         matricula_id: matriculaId, valor_cheio: cheio, desconto_fixo: fixo,
-        desconto_condicional: cond, valor_parcela: liquido, fonte: 'frente1_pontual',
+        desconto_condicional: cond,
+        valor_parcela: parcelaComercial,
+        regra_valor_parcela: 'valor_mensalidade_menos_desconto_condicional',
+        fonte: 'frente1_pontual',
       },
       created_at: new Date().toISOString(),
     });

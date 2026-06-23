@@ -1063,8 +1063,6 @@ export function ComercialPage() {
         });
       }
 
-      matriculasDoMes = await aplicarParcelasComerciaisFixadas(matriculasDoMes);
-
       setMatriculasMes(matriculasDoMes as any);
 
       // Alinhar resumo/conversao a fonte real (alunos): conta matriculas primarias
@@ -2528,69 +2526,6 @@ export function ComercialPage() {
     return data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
   };
 
-  const extrairNumeroFixado = (valor: unknown): number | null => {
-    if (valor == null) return null;
-    if (typeof valor === 'number') return Number.isFinite(valor) ? valor : null;
-    if (typeof valor === 'string') {
-      const numero = Number(valor.replace(',', '.'));
-      return Number.isFinite(numero) ? numero : null;
-    }
-    if (typeof valor === 'object') {
-      const dados = valor as Record<string, unknown>;
-      return (
-        extrairNumeroFixado(dados.valor) ??
-        extrairNumeroFixado(dados.value) ??
-        extrairNumeroFixado(dados.valor_parcela) ??
-        extrairNumeroFixado(dados.parcela)
-      );
-    }
-    return null;
-  };
-
-  const aplicarParcelasComerciaisFixadas = async <T extends { id?: number | null; valor_parcela?: unknown }>(
-    matriculas: T[],
-  ): Promise<T[]> => {
-    const alunoIds = Array.from(new Set(
-      matriculas
-        .map((m) => Number(m.id))
-        .filter((id) => Number.isFinite(id) && id > 0),
-    ));
-
-    if (alunoIds.length === 0) return matriculas;
-
-    const { data, error } = await supabase
-      .from('matriculas_campos_fixados')
-      .select('aluno_id, valor')
-      .eq('campo', 'valor_parcela_comercial')
-      .in('aluno_id', alunoIds);
-
-    if (error || !data?.length) {
-      if (error) console.warn('Falha ao buscar parcelas comerciais fixadas:', error);
-      return matriculas;
-    }
-
-    const valoresPorAluno = new Map<number, number>();
-    data.forEach((row: any) => {
-      const alunoId = Number(row.aluno_id);
-      const valor = extrairNumeroFixado(row.valor);
-      if (Number.isFinite(alunoId) && valor != null) valoresPorAluno.set(alunoId, valor);
-    });
-
-    if (valoresPorAluno.size === 0) return matriculas;
-
-    return matriculas.map((matricula: any) => {
-      const valorFixado = valoresPorAluno.get(Number(matricula.id));
-      if (valorFixado == null) return matricula;
-      return {
-        ...matricula,
-        valor_parcela_atual: matricula.valor_parcela,
-        valor_parcela_comercial: valorFixado,
-        valor_parcela_fonte: 'fixado',
-        valor_parcela: valorFixado,
-      };
-    });
-  };
-
   const buscarMatriculasAlunos = async (uid: string | null | undefined, dataInicio: string, dataFim: string) => {
     let q = supabase
       .from('alunos')
@@ -2600,7 +2535,7 @@ export function ComercialPage() {
       .lte('data_matricula', dataFim);
     if (uid && uid !== 'todos') q = q.eq('unidade_id', uid);
     const { data } = await q;
-    return aplicarParcelasComerciaisFixadas((data || []) as any[]);
+    return (data || []) as any[];
   };
 
   const gerarRelatorioDiario = async () => {
