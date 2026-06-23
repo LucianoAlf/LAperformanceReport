@@ -6,7 +6,7 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL');
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 const DEPARTAMENTO = 'sucesso_aluno';
 
-const FOOTER_MENSAGEM = 'Toque em uma das opções abaixo 👇 — e, se quiser, me conta também o que mais gostou!';
+const FOOTER_MENSAGEM = 'Toque em *Avaliar* e escolha uma opção 👇 — e, se quiser, me conta também o que mais gostou!';
 
 function primeiroNome(nome) {
   if (!nome) return '';
@@ -27,11 +27,12 @@ function montarTexto(nome, curso) {
   );
 }
 
-// Formato UAZAPI /send/menu com type=button: choices = ["label|id", ...]
+// Formato UAZAPI /send/menu com type=list: choices = ["[Seção]", "label|id|descrição", ...]
 const CHOICES = [
-  '⭐ Esperava mais|esperava_mais',
-  '⭐⭐⭐ Foi ok|foi_ok',
-  '⭐⭐⭐⭐⭐ Amei|amei',
+  '[Sua avaliação]',
+  '⭐ Esperava mais|esperava_mais|Posso melhorar algo?',
+  '⭐⭐⭐ Foi ok|foi_ok|Está indo bem',
+  '⭐⭐⭐⭐⭐ Amei|amei|Estou adorando!',
 ];
 
 const OPCOES_INTERATIVO = [
@@ -52,9 +53,10 @@ async function enviarBotoes(baseUrl, token, numero, texto) {
   try {
     const body = {
       number: numero,
-      type: 'button',
+      type: 'list',
       text: texto,
       footerText: FOOTER_MENSAGEM,
+      listButton: 'Avaliar',
       choices: CHOICES,
       delay: 500,
       readchat: true,
