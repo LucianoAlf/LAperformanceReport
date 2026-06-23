@@ -88,6 +88,21 @@ interface ConciliacaoPayload {
   items?: ConciliacaoItem[];
 }
 
+interface EmusysRawResumo {
+  linhas_raw?: number;
+  presentes?: number;
+  matriculados?: number;
+  realizadas_emusys?: number;
+  faltas?: number;
+  canceladas?: number;
+  sem_aluno_id?: number;
+  sem_lead_id?: number;
+}
+
+interface EmusysRawPayload {
+  resumo?: EmusysRawResumo;
+}
+
 interface AlunoOpcao {
   id: number;
   nome: string;
@@ -116,6 +131,17 @@ const resumoVazio: Required<ConciliacaoResumo> = {
   pendencias_taxa_exp_mat: 0,
   taxa_exp_mat_liberada: false,
   taxa_exp_mat_status: 'bloqueada_pendencias_conciliacao',
+};
+
+const resumoEmusysVazio: Required<EmusysRawResumo> = {
+  linhas_raw: 0,
+  presentes: 0,
+  matriculados: 0,
+  realizadas_emusys: 0,
+  faltas: 0,
+  canceladas: 0,
+  sem_aluno_id: 0,
+  sem_lead_id: 0,
 };
 
 const etapaLabel: Record<string, string> = {
@@ -298,6 +324,7 @@ export function ComercialConciliacaoExperimentais({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [payload, setPayload] = useState<ConciliacaoPayload | null>(null);
+  const [emusysPayload, setEmusysPayload] = useState<EmusysRawPayload | null>(null);
   const [itemEmDecisao, setItemEmDecisao] = useState<ConciliacaoItem | null>(null);
   const [observacao, setObservacao] = useState('');
   const [salvando, setSalvando] = useState(false);
@@ -311,19 +338,28 @@ export function ComercialConciliacaoExperimentais({
     setError(null);
 
     try {
-      const { data, error: rpcError } = await supabase.rpc('get_conciliacao_experimentais_v2', {
+      const params = {
         p_unidade_id: normalizarUnidade(unidadeId),
         p_ano: ano,
         p_mes: mes,
         p_periodo: 'mensal',
         p_data: null,
-      });
+      };
 
-      if (rpcError) throw rpcError;
-      setPayload((data || {}) as ConciliacaoPayload);
+      const [conciliacaoResponse, emusysResponse] = await Promise.all([
+        supabase.rpc('get_conciliacao_experimentais_v2', params),
+        supabase.rpc('get_experimentais_emusys_operacional_v1', params),
+      ]);
+
+      if (conciliacaoResponse.error) throw conciliacaoResponse.error;
+      if (emusysResponse.error) throw emusysResponse.error;
+
+      setPayload((conciliacaoResponse.data || {}) as ConciliacaoPayload);
+      setEmusysPayload((emusysResponse.data || {}) as EmusysRawPayload);
     } catch (err: any) {
       setError(err?.message || 'Erro ao carregar conciliacao de experimentais');
       setPayload(null);
+      setEmusysPayload(null);
     } finally {
       setLoading(false);
     }
@@ -335,6 +371,7 @@ export function ComercialConciliacaoExperimentais({
   }, [unidadeId, ano, mes]);
 
   const resumo = { ...resumoVazio, ...(payload?.resumo || {}) };
+  const resumoEmusys = { ...resumoEmusysVazio, ...(emusysPayload?.resumo || {}) };
   const items = payload?.items || [];
 
   const abrirDecisao = (item: ConciliacaoItem) => {
@@ -531,24 +568,24 @@ export function ComercialConciliacaoExperimentais({
           <div className="grid gap-4 xl:grid-cols-3">
             <ResumoGrupo
               titulo="Bruto Emusys"
-              descricao="Eventos recebidos do funil original."
+              descricao="Eventos recebidos pelo endpoint novo de aulas experimentais."
             >
               <ResumoCard
                 icon={Calendar}
-                label="Agendadas"
-                value={resumo.experimentais_agendadas}
+                label="Eventos recebidos"
+                value={resumoEmusys.linhas_raw}
                 tone="cyan"
               />
               <ResumoCard
                 icon={ClipboardCheck}
-                label="Realizadas pelo status"
-                value={resumo.realizadas_status_operacional}
+                label="Realizadas Emusys"
+                value={resumoEmusys.realizadas_emusys}
                 tone="sky"
               />
               <ResumoCard
                 icon={UserX}
-                label="Faltas no funil"
-                value={resumo.experimentais_faltaram}
+                label="Faltas Emusys"
+                value={resumoEmusys.faltas}
                 tone="rose"
               />
             </ResumoGrupo>
