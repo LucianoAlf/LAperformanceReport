@@ -29,6 +29,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { useWidgetOverlapSentinel } from '@/contexts/WidgetVisibilityContext';
 import {
   Popover,
@@ -209,6 +210,10 @@ export function TabelaAlunos({
   const [processandoReset, setProcessandoReset] = useState(false);
   const [filtrosExpandidos, setFiltrosExpandidos] = useState(false);
   const [colunasVisiveis, setColunasVisiveis] = useState<Set<string>>(getDefaultColunas);
+  // Modal de composição da mensalidade (valor cheio − descontos = parcela real)
+  const [modalMensalidade, setModalMensalidade] = useState<{
+    alunoId: number; nome: string; cheio: string; fixo: string; cond: string;
+  } | null>(null);
   const [colunasDropdownOpen, setColunasDropdownOpen] = useState(false);
   const [alunoFicha, setAlunoFicha] = useState<Aluno | null>(null);
   const [alunosExpandidos, setAlunosExpandidos] = useState<Set<number>>(new Set());
@@ -544,6 +549,15 @@ export function TabelaAlunos({
       case 'valor_parcela':
         updated.valor_parcela = valor ? Number(valor) : null;
         break;
+      case 'valor_cheio':
+        updated.valor_cheio = valor ? Number(valor) : null;
+        break;
+      case 'desconto_fixo':
+        updated.desconto_fixo = valor ? Number(valor) : null;
+        break;
+      case 'desconto_condicional':
+        updated.desconto_condicional = valor ? Number(valor) : null;
+        break;
       case 'status':
         updated.status = (valor as string) || 'ativo';
         break;
@@ -616,6 +630,15 @@ export function TabelaAlunos({
       case 'valor_parcela':
         updateData.valor_parcela = valor ? Number(valor) : null;
         break;
+      case 'valor_cheio':
+        updateData.valor_cheio = valor ? Number(valor) : null;
+        break;
+      case 'desconto_fixo':
+        updateData.desconto_fixo = valor ? Number(valor) : null;
+        break;
+      case 'desconto_condicional':
+        updateData.desconto_condicional = valor ? Number(valor) : null;
+        break;
       case 'status':
         updateData.status = valor || 'ativo';
         break;
@@ -649,6 +672,27 @@ export function TabelaAlunos({
       throw error;
     }
   }, [abrirGovernancaSemParcela, aplicarUpdateLocal, alunosProp, usuario?.email, usuario?.nome]);
+
+  // Salva a composição da mensalidade: parcela = cheio − desconto fixo − desconto condicional
+  const salvarMensalidade = useCallback(async () => {
+    if (!modalMensalidade) return;
+    const cheio = modalMensalidade.cheio.trim() !== '' ? Number(modalMensalidade.cheio) : null;
+    const fixo = modalMensalidade.fixo.trim() !== '' ? Number(modalMensalidade.fixo) : 0;
+    const cond = modalMensalidade.cond.trim() !== '' ? Number(modalMensalidade.cond) : 0;
+    const parcela = cheio != null ? Math.round((cheio - fixo - cond) * 100) / 100 : null;
+    const alunoId = modalMensalidade.alunoId;
+    setModalMensalidade(null);
+    const { error } = await supabase.from('alunos').update({
+      valor_cheio: cheio,
+      desconto_fixo: cheio != null ? fixo : null,
+      desconto_condicional: cheio != null ? cond : null,
+      valor_parcela: parcela,
+      updated_at: new Date().toISOString(),
+      updated_by: usuario?.email || usuario?.nome || 'sistema',
+    }).eq('id', alunoId);
+    if (error) { console.error('Erro ao salvar mensalidade:', error); throw error; }
+    onRecarregar();
+  }, [modalMensalidade, usuario?.email, usuario?.nome, onRecarregar]);
 
   async function confirmarExclusao() {
     if (!alunoParaExcluir) return;
@@ -2169,13 +2213,23 @@ export function TabelaAlunos({
                           aluno.status_pagamento === 'parcial' ? 'text-yellow-400' :
                           ''
                         }`}>
-                          <CelulaEditavel
-                            value={valorExibido}
-                            onChange={async (valor) => salvarCampo(aluno.id, 'valor_parcela', valor)}
-                            tipo="moeda"
-                            placeholder="-"
-                            className="min-w-[80px]"
-                          />
+                          <button
+                            type="button"
+                            onClick={() => setModalMensalidade({
+                              alunoId: aluno.id,
+                              nome: aluno.nome,
+                              cheio: aluno.valor_cheio != null ? String(aluno.valor_cheio)
+                                : (aluno.valor_parcela != null ? String(aluno.valor_parcela) : ''),
+                              fixo: aluno.desconto_fixo != null ? String(aluno.desconto_fixo) : '',
+                              cond: aluno.desconto_condicional != null ? String(aluno.desconto_condicional) : '',
+                            })}
+                            className="min-w-[80px] text-left hover:underline decoration-dotted cursor-pointer"
+                            title="Clique para ver/editar a composição (valor cheio − descontos)"
+                          >
+                            {valorExibido != null
+                              ? `R$ ${Number(valorExibido).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                              : '-'}
+                          </button>
                           {vemDeOutroCurso && (
                             <span className="text-[10px] text-purple-400 ml-1" title="Valor do segundo curso">2º</span>
                           )}
@@ -3106,6 +3160,56 @@ export function TabelaAlunos({
           onAbrirOutroCurso={(outroAluno) => setAlunoFicha(outroAluno)}
         />
       )}
+
+      {/* Modal de composição da mensalidade: cheio − descontos = parcela real */}
+      <Dialog open={!!modalMensalidade} onOpenChange={(open) => !open && setModalMensalidade(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Mensalidade{modalMensalidade ? ` — ${modalMensalidade.nome}` : ''}</DialogTitle>
+            <DialogDescription>
+              A mensalidade real é o <strong>valor cheio menos os descontos</strong>. Edite os componentes — o valor final é recalculado automaticamente.
+            </DialogDescription>
+          </DialogHeader>
+          {modalMensalidade && (() => {
+            const cheioN = modalMensalidade.cheio.trim() !== '' ? Number(modalMensalidade.cheio) : null;
+            const fixoN = modalMensalidade.fixo.trim() !== '' ? Number(modalMensalidade.fixo) : 0;
+            const condN = modalMensalidade.cond.trim() !== '' ? Number(modalMensalidade.cond) : 0;
+            const parcela = cheioN != null ? Math.round((cheioN - fixoN - condN) * 100) / 100 : null;
+            return (
+              <div className="space-y-3 py-2">
+                <div className="flex items-center justify-between gap-3">
+                  <label className="text-sm text-slate-300">Valor cheio <span className="text-slate-500">(entrou no sistema)</span></label>
+                  <Input type="number" step="0.01" value={modalMensalidade.cheio}
+                    onChange={(e) => setModalMensalidade(m => m && ({ ...m, cheio: e.target.value }))}
+                    className="w-32 text-right" placeholder="0,00" />
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <label className="text-sm text-slate-300">− Desconto fixo</label>
+                  <Input type="number" step="0.01" value={modalMensalidade.fixo}
+                    onChange={(e) => setModalMensalidade(m => m && ({ ...m, fixo: e.target.value }))}
+                    className="w-32 text-right" placeholder="0,00" />
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <label className="text-sm text-slate-300">− Desconto condicional</label>
+                  <Input type="number" step="0.01" value={modalMensalidade.cond}
+                    onChange={(e) => setModalMensalidade(m => m && ({ ...m, cond: e.target.value }))}
+                    className="w-32 text-right" placeholder="0,00" />
+                </div>
+                <div className="flex items-center justify-between gap-3 border-t border-slate-700 pt-3 mt-1">
+                  <span className="text-sm font-semibold text-emerald-300">= Mensalidade real</span>
+                  <span className="text-lg font-bold text-emerald-300">
+                    {parcela != null ? `R$ ${parcela.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+                  </span>
+                </div>
+              </div>
+            );
+          })()}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setModalMensalidade(null)}>Cancelar</Button>
+            <Button onClick={salvarMensalidade}>Salvar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

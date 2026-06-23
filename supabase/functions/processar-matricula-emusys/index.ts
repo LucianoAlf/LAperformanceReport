@@ -87,6 +87,79 @@ const ESCOLA_UNIDADE: Record<number, { id: string; nome: string }> = {
   316: { id: '368d47f5-2d88-4475-bc14-ba084a9a348e', nome: 'Barra' },
 };
 
+// API Emusys v1 — tokens por escola_id (mesmos da edge sync-presenca-emusys)
+const EMUSYS_API = 'https://api.emusys.com.br/v1';
+const TOKENS_API: Record<number, string> = {
+  39: 'nEAlBC5gjtqojA7qberYVOttD1lXdx',   // Campo Grande
+  40: 'rUI85cQTePX1ecpLwWLbAWY9UM9yiF',   // Recreio
+  316: '4reVMLdiBmdNTOBQKa4m7WGYQaRDKI',  // Barra
+};
+
+// ==================== FRENTE 1: COMPLEMENTO PONTUAL DE DESCONTO ====================
+// O webhook de matrícula NÃO traz desconto (manda o valor cheio). Aqui buscamos a matrícula
+// na API por data (a matrícula nova foi realizada hoje), achamos pelo matricula_id e gravamos
+// o valor líquido + componentes de desconto. Best-effort: nunca derruba o handler.
+
+async function buscarMatriculaApiPorData(escolaId: number, matriculaId: number, data: string) {
+  const token = TOKENS_API[escolaId];
+  if (!token || !matriculaId || !data) return null;
+  let cursor = '';
+  for (let i = 0; i < 20; i++) {
+    const url = `${EMUSYS_API}/matriculas?data_inicial=${data}&data_final=${data}&status=todas&limite=50${cursor ? `&cursor=${cursor}` : ''}`;
+    const resp = await fetch(url, { headers: { token } });
+    if (!resp.ok) return null;
+    const json = await resp.json();
+    const hit = (json.items || []).find((m: any) => Number(m.id) === Number(matriculaId));
+    if (hit) return hit;
+    if (!json.paginacao?.tem_mais || !json.paginacao?.proximo_cursor) break;
+    cursor = json.paginacao.proximo_cursor;
+  }
+  return null;
+}
+
+async function complementarDescontoMatricula(
+  supabase: any, escolaId: number, alunoId: number, matriculaId: number, dataMatricula: string,
+) {
+  try {
+    if (!alunoId || !matriculaId || !dataMatricula) return;
+    const mat = await buscarMatriculaApiPorData(escolaId, matriculaId, dataMatricula);
+    const c = mat?.contrato_atual;
+    if (!c || c.valor_mensalidade == null) return;
+
+    const cheio = Number(c.valor_mensalidade);
+    const fixo = Number(c.desconto_fixo || 0);
+    const cond = Number(c.desconto_condicional || 0);
+    const liquido = Math.round((cheio - fixo - cond) * 100) / 100;
+
+    // respeitar campos editados manualmente (não sobrescrever)
+    const { data: fixados } = await supabase
+      .from('matriculas_campos_fixados').select('campo').eq('aluno_id', alunoId);
+    const travados = new Set((fixados || []).map((f: any) => f.campo));
+
+    const upd: Record<string, any> = { updated_at: new Date().toISOString() };
+    if (!travados.has('valor_cheio')) upd.valor_cheio = cheio;
+    if (!travados.has('desconto_fixo')) upd.desconto_fixo = fixo;
+    if (!travados.has('desconto_condicional')) upd.desconto_condicional = cond;
+    if (!travados.has('valor_parcela')) upd.valor_parcela = liquido;
+    await supabase.from('alunos').update(upd).eq('id', alunoId);
+
+    await supabase.from('automacao_log').insert({
+      aluno_id: alunoId,
+      unidade_nome: ESCOLA_UNIDADE[escolaId]?.nome || null,
+      evento: 'sync_matricula_reconciliacao',
+      acao: 'desconto_complementado',
+      status: 'ok',
+      detalhes: {
+        matricula_id: matriculaId, valor_cheio: cheio, desconto_fixo: fixo,
+        desconto_condicional: cond, valor_parcela: liquido, fonte: 'frente1_pontual',
+      },
+      created_at: new Date().toISOString(),
+    });
+  } catch (_e) {
+    // best-effort — desconto será reconciliado pela varredura horária
+  }
+}
+
 // ==================== HELPERS ====================
 
 function normalizar(texto: string | null | undefined): string {
@@ -642,6 +715,14 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
       fonte = 'aluno_novo';
     }
 
+    // Frente 1: complemento pontual de desconto — o webhook manda o valor cheio,
+    // aqui buscamos o desconto real na API e gravamos o líquido (best-effort).
+    if (alunoId) {
+      await complementarDescontoMatricula(
+        supabase, p.escolaId, alunoId, Number(p.matriculaIdEmusys), p.dataMatricula ?? '',
+      );
+    }
+
     const leadResult = await converterLead(supabase, p, alunoId);
 
     const result = {
@@ -817,6 +898,13 @@ async function handleRenovacao(supabase: any, p: Payload) {
     if (p.instagram) alunoUpdate.instagram = p.instagram;
 
     await supabase.from('alunos').update(alunoUpdate).eq('id', aluno.id);
+
+    // Renovação pode trazer desconto/valor novo (o webhook manda só o cheio). Complementa pela
+    // API igual na matrícula nova — data_matricula vem a ORIGINAL, então a busca por data acha o
+    // contrato renovado pelo matricula_id. Best-effort: não bloqueia a renovação.
+    await complementarDescontoMatricula(
+      supabase, p.escolaId, aluno.id, Number(p.matriculaIdEmusys), p.dataMatricula ?? '',
+    );
 
     let renovacaoLegadaPendente = false;
     if (!renovacaoDuplicada) {

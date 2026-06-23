@@ -6,19 +6,9 @@ Problemas/limitações **do lado do Emusys** (API ou plataforma) que afetam noss
 
 ---
 
-## 🚨 [API] Endpoint `/aulas` não retorna `professor_id`
-
-**Identificado em:** 2026-05-04
-
-**Descrição:** O array `professores[]` vem só com `{ nome, telefone, email, presenca, horario_presenca }` — **sem `id`**. Inconsistência da própria API: o ID existe no webhook (`processar-matricula-emusys`, campo `id_professor`), mas não no GET.
-
-**Solicitação ideal (Emusys):** incluir `id` no objeto `professores[]` do `/aulas`.
-
----
-
 ## 🚨 [API] Aulas tipo "turma" não vêm com professor
 
-**Identificado em:** 2026-05-04
+**Identificado em:** 2026-05-04 · **Reverificado 2026-06-22: AINDA ABERTO** — aulas `turma` seguem com `professores: []` (ex. aulas 159430, 227713, 235195 em 16/06, todas turma, professores vazio), enquanto as `individual` agora trazem o professor com `id`.
 
 **Descrição:** Aula tipo `turma` (grupo) com categoria `normal` retorna `professores: []` (vazio), mesmo com professor designado. Aulas tipo `individual` retornam o professor corretamente.
 
@@ -50,7 +40,7 @@ Problemas/limitações **do lado do Emusys** (API ou plataforma) que afetam noss
 
 ## 🚨 [API] Filtro `pessoa_id` no `/aulas` não cobre professor (só aluno)
 
-**Identificado em:** 2026-06-12
+**Identificado em:** 2026-06-12 · **Reverificado 2026-06-22: AINDA ABERTO** — `/aulas?pessoa_id=415` (Gabriel Antony, com aulas no dia) retornou **0 aulas**.
 
 **Descrição:** O `/aulas` ganhou `pessoa_id` (v1.1.6) e a doc diz que filtra "Pessoa_ID do aluno **ou professor**". Na prática, só casa o papel de **aluno** — passar o `pessoa_id` de um professor retorna vazio.
 
@@ -62,25 +52,13 @@ Problemas/limitações **do lado do Emusys** (API ou plataforma) que afetam noss
 
 ## 🚨 [API] `/pessoas/buscar` é via de mão única (não aceita id)
 
-**Identificado em:** 2026-06-12
+**Identificado em:** 2026-06-12 · **Reverificado 2026-06-22: AINDA ABERTO** — `?id=473` → `{"status":"erro","msg":"Informe email, cpf ou telefone..."}`. Mas o problema raiz (mapear aluno → id) foi **resolvido por outro caminho**: `id_aluno` agora vem direto no `/aulas`.
 
 **Descrição:** O `/pessoas/buscar` só aceita `email`/`cpf`/`telefone`. Não há nenhuma forma de resolver `id → pessoa`.
 
 **Evidência:** testado `?id=1026`, `?pessoa_id=1026`, `?id_pessoa=1026` → erro `"Informe email, cpf ou telefone"`; rota REST `/pessoas/1026` → `"Endpoint inválido"`.
 
 **Solicitação ideal (Emusys):** aceitar `id`/`pessoa_id` no `/pessoas/buscar` **ou** criar `GET /pessoas/{id}`.
-
----
-
-## 🚨 [API] `pessoa_id` do aluno não aparece em nenhum payload
-
-**Identificado em:** 2026-06-12
-
-**Descrição:** O `/aulas` filtra **por** `pessoa_id`, mas o objeto `alunos[]` não traz o `id` (só `nome_aluno`, `data_nascimento_aluno`, dados do responsável). Combinado com o `/pessoas/buscar` ser via de mão única, fica **impossível** mapear aluno → `pessoa_id` de forma determinística. Pior para **menor de idade**: sem CPF/e-mail/telefone próprio, o `/pessoas/buscar` cai sempre no responsável, nunca no aluno.
-
-**Evidência:** Lorenzo Tavares (Barra, menor) só foi localizável por dedução — achar o responsável (Izabelle, `pessoa_id` 1025) e varrer ids vizinhos até bater o nome → aluno em `1026`. Não há caminho limpo.
-
-**Solicitação ideal (Emusys):** incluir `pessoa_id` dentro de `alunos[]` no `/aulas` (resolve esta e a anterior de uma vez).
 
 ---
 
@@ -94,7 +72,19 @@ Problemas/limitações **do lado do Emusys** (API ou plataforma) que afetam noss
 
 **Limite:** a API não expõe o histórico de contratos, então não dá pra ver **quando** a troca ocorreu — só que as aulas seguem com o curso antigo.
 
-**Solicitação ideal (Emusys):** ao trocar o curso de um contrato, repropagar para a turma/aulas futuras — **ou** expor o curso do **contrato** no payload do `/aulas`, não só o da turma.
+**Régua de detecção (precisa):** comparar a disciplina do `contrato_atual` (`/matriculas`) com as **aulas recentes** (`/aulas`, últimos ~45 dias). Se a disciplina do contrato **não aparece** nas aulas recentes → o contrato está errado. (Não basta comparar com o histórico todo: quem **trocou** acumula aulas dos dois cursos, e aí o contrato está certo — a divergência é só com o nosso cache. O bug é quando o contrato declara um curso que o aluno **não está tendo aula**.)
+
+**Magnitude (2026-06-22):** de 174 divergências de curso, **166 eram trocas reais** (contrato certo, nosso cache atrasado) e **5 são erro do Emusys** (contrato declara curso sem aula recente). ⚠️ Detecção tem que ser **por PESSOA, agregando todas as matrículas/linhas** — a presença não vem separada por linha (aluno multi-curso tem todas as aulas em cada linha). Agregar por linha gera falso positivo (ex. Gabriel Mello e Débora "pareciam" erro, mas fazem o curso do contrato em outra linha).
+
+| Unidade | Aluno | `matricula_id` | `contrato_atual` diz | Aulas recentes reais (`/aulas`) |
+|---|---|---|---|---|
+| Barra | Bento Cordeiro Sobrinho | 313 | Bateria | **Teclado** (12x, até 16/06) |
+| Barra | Davi Barreto Lima | 327 | Mus. Preparatória | **Bateria** (15x, até 16/06) |
+| CG | Joaquim Isaac da Cunha Cal | 2434 | Mus. Infantil | **Mus. para Bebês** (10x, até 18/06) |
+| CG | Katia Regina Rocha de Siqueira de Azevedo | 2526 | Piano | **Teclado** (12x, até 17/06) |
+| CG | Olívia de Rezende Samico | 2421 | Mus. Infantil | **Mus. para Bebês** (12x, até 20/06) |
+
+**Solicitação ideal (Emusys):** garantir que `contrato_atual.disciplinas` reflita a disciplina/turma onde o aluno **efetivamente** tem aula (cruzar com `/aulas`). Hoje o contrato pode apontar um curso que o aluno não frequenta.
 
 ---
 
@@ -118,7 +108,10 @@ Problemas/limitações **do lado do Emusys** (API ou plataforma) que afetam noss
 
 ## Resolvidos (histórico)
 
-(nenhum ainda — Emusys responde lentamente a feedbacks)
+- **✅ 2026-06-22** — `professores[].id` no `/aulas` (era de 2026-05-04). Corrigido na v1.2.0/21-06; vale só para aulas `individual`.
+- **✅ 2026-06-22** — `id_aluno`/`id_lead` em `alunos[]` no `/aulas` (era de 2026-06-12). Corrigido na v1.2.0/21-06; tornou o `/pessoas/buscar` por id desnecessário para mapear aluno.
+
+Ainda abertas (reverificadas 2026-06-22): turma sem professor, `pessoa_id` não filtra professor, `/pessoas/buscar` não aceita id, troca de curso não propaga.
 
 ---
 
