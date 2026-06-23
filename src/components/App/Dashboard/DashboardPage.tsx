@@ -1243,12 +1243,20 @@ export function DashboardPage() {
         } : undefined}
       />
 
-      {/* Modal Taxa Conversão - legado */}
+      {/* Modal Taxa Conversão - v2 */}
       <ModalDetalheKPI
         open={modalConversao}
         onClose={() => setModalConversao(false)}
-        titulo={`Taxa Exp → Mat bloqueada (${labelPeriodo})`}
-        descricao={`Diagnóstico legado: não usar como KPI oficial. Aguardando regra canônica de vínculo lead → aluno → presença experimental individual.`}
+        titulo={
+          dadosComercial?.taxa_exp_mat_liberada
+            ? `Taxa Exp → Mat oficial (${labelPeriodo})`
+            : `Taxa Exp → Mat bloqueada (${labelPeriodo})`
+        }
+        descricao={
+          dadosComercial?.taxa_exp_mat_liberada
+            ? `KPI canônico pela conciliação Emusys v2: conversões confirmadas / experimentais realizadas confirmadas.`
+            : `Diagnóstico: não usar como KPI oficial até fechar vínculo lead → aluno → presença experimental individual.`
+        }
         dados={dadosModalConversao}
         colunas={[
           { key: 'nome', label: 'Aluno' },
@@ -1266,11 +1274,33 @@ export function DashboardPage() {
           const total = dadosModalConversao.length;
           const matriculou = dadosModalConversao.filter(d => d._matriculou).length;
           const naoMatriculou = total - matriculou;
+          const taxaLiberada = dadosComercial?.taxa_exp_mat_liberada === true;
           return [
-            { label: 'Exp. legado', valor: total, icone: <Calendar size={14} />, cor: 'text-sky-400', destaque: true },
-            { label: 'Matricularam', valor: matriculou, icone: <GraduationCap size={14} />, cor: 'text-emerald-400' },
-            { label: 'Não Matricularam', valor: naoMatriculou, icone: <Users size={14} />, cor: 'text-amber-400' },
-            { label: 'Taxa oficial', valor: 'Bloqueada', icone: <Percent size={14} />, cor: 'text-yellow-300' },
+            {
+              label: taxaLiberada ? 'Denominador v2' : 'Exp. diagnóstico',
+              valor: taxaLiberada ? dadosComercial?.denominador_exp_mat ?? 0 : total,
+              icone: <Calendar size={14} />,
+              cor: 'text-sky-400',
+              destaque: true,
+            },
+            {
+              label: taxaLiberada ? 'Conversões confirmadas' : 'Matricularam',
+              valor: taxaLiberada ? dadosComercial?.conversoes_exp_mat ?? 0 : matriculou,
+              icone: <GraduationCap size={14} />,
+              cor: 'text-emerald-400',
+            },
+            {
+              label: taxaLiberada ? 'Pendências' : 'Não Matricularam',
+              valor: taxaLiberada ? dadosComercial?.pendencias_exp_mat ?? 0 : naoMatriculou,
+              icone: <Users size={14} />,
+              cor: taxaLiberada ? 'text-slate-300' : 'text-amber-400',
+            },
+            {
+              label: 'Taxa oficial',
+              valor: taxaLiberada ? `${(dadosComercial?.taxa_conversao ?? 0).toFixed(1)}%` : 'Bloqueada',
+              icone: <Percent size={14} />,
+              cor: taxaLiberada ? 'text-emerald-400' : 'text-yellow-300',
+            },
           ];
         })()}
         distribuicao={unidade === 'todos' ? {

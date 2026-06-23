@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { UnidadeComercial } from '../types/comercial';
+import { fetchExperimentaisDiagnosticoComercialV2 } from './useComercialOperacionalResumoV2';
 
 interface UnidadeRow {
   id: string;
@@ -132,25 +133,38 @@ export function useComercialResumoV2(ano: number = 2025, unidade: UnidadeComerci
 
     try {
       const unidadeId = await resolverUnidadeId();
-      const resumosMensais: ComercialResumoV2[] = [];
+      const [resumosMensais, diagnosticoExperimentais] = await Promise.all([
+        Promise.all(Array.from({ length: 12 }, async (_, index) => {
+          const mes = index + 1;
+          const { data, error: rpcError } = await supabase.rpc('get_kpis_comercial_canonicos_v2', {
+            p_unidade_id: unidadeId,
+            p_ano: ano,
+            p_mes: mes,
+            p_periodo: 'mensal',
+            p_data: null,
+          });
 
-      for (let mes = 1; mes <= 12; mes += 1) {
-        const { data, error: rpcError } = await supabase.rpc('get_kpis_comercial_canonicos_v2', {
-          p_unidade_id: unidadeId,
-          p_ano: ano,
-          p_mes: mes,
-          p_periodo: 'mensal',
-          p_data: null,
-        });
+          if (rpcError) {
+            throw new Error(`Erro ao buscar resumo comercial v2 ${ano}-${String(mes).padStart(2, '0')}: ${rpcError.message}`);
+          }
 
-        if (rpcError) {
-          throw new Error(`Erro ao buscar resumo comercial v2 ${ano}-${String(mes).padStart(2, '0')}: ${rpcError.message}`);
-        }
+          return normalizarResumoComercialV2(data as KPIsComercialCanonicosV2Payload | null);
+        })),
+        fetchExperimentaisDiagnosticoComercialV2({
+          unidadeId: unidadeId || 'todos',
+          ano,
+          mesInicio: 1,
+          mesFim: 12,
+        }),
+      ]);
 
-        resumosMensais.push(normalizarResumoComercialV2(data as KPIsComercialCanonicosV2Payload | null));
-      }
-
-      setResumo(somarResumosComercialV2(resumosMensais));
+      const resumoBase = somarResumosComercialV2(resumosMensais);
+      setResumo({
+        ...resumoBase,
+        experimentaisConfirmadas: diagnosticoExperimentais.realizadasPresencaConfirmada,
+        experimentaisOperacionais: diagnosticoExperimentais.realizadasStatusOperacional,
+        experimentalStatusSemPresenca: diagnosticoExperimentais.statusOperacionalSemPresenca,
+      });
     } catch (err: any) {
       setResumo(RESUMO_VAZIO);
       setError(err?.message || 'Erro ao buscar resumo comercial v2');
