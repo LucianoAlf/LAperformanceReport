@@ -965,6 +965,20 @@ serve(async (req: Request) => {
           continue;
         }
 
+        // ========== RESPOSTA DA PESQUISA PÓS-1ª AULA (botão/lista) ==========
+        // Repassa o payload cru para a edge que grava a nota em pesquisas_whatsapp
+        // e avisa o gerente. Idempotente: a edge só grava se houver pesquisa pendente
+        // para o remote_jid. NÃO interrompe o fluxo — a resposta também é registrada
+        // na caixa normalmente (mensagem "↩️ ..." visível na conversa).
+        if (msg.buttonOrListid) {
+          try {
+            await supabase.functions.invoke('processar-resposta-pesquisa', { body: payload });
+            console.log(`[webhook-inbox] buttonOrListid '${msg.buttonOrListid}' repassado para processar-resposta-pesquisa`);
+          } catch (e) {
+            console.error('[webhook-inbox] erro ao repassar para processar-resposta-pesquisa:', e);
+          }
+        }
+
         // Ignorar mensagens enviadas por nos (fromMe = true) — EXCETO em caixas admin,
         // onde toda mensagem enviada da caixa deve aparecer na conversa.
         // O check de duplicata (whatsapp_message_id) evita duplicar o que enviar-mensagem-admin já salvou.
