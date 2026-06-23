@@ -2565,7 +2565,14 @@ export function ComercialPage() {
       }
     }
 
-    const [kpisMesResponse, kpisDiaResponse, conciliacaoMesResponse, conciliacaoDiaResponse, emusysMesResponse] = await Promise.all([
+    const [
+      kpisMesResponse,
+      kpisDiaResponse,
+      conciliacaoMesResponse,
+      conciliacaoDiaResponse,
+      emusysMesResponse,
+      emusysDiaResponse,
+    ] = await Promise.all([
       supabase.rpc('get_kpis_comercial_canonicos_v2', {
         p_unidade_id: unidadeId && unidadeId !== 'todos' ? unidadeId : null,
         p_ano: ano,
@@ -2601,6 +2608,13 @@ export function ComercialPage() {
         p_periodo: 'mensal',
         p_data: null,
       }),
+      supabase.rpc('get_experimentais_emusys_operacional_v1', {
+        p_unidade_id: unidadeId && unidadeId !== 'todos' ? unidadeId : null,
+        p_ano: ano,
+        p_mes: hoje.getMonth() + 1,
+        p_periodo: 'diario',
+        p_data: dataFim,
+      }),
     ]);
 
     if (kpisMesResponse.error) throw kpisMesResponse.error;
@@ -2608,19 +2622,20 @@ export function ComercialPage() {
     if (conciliacaoMesResponse.error) throw conciliacaoMesResponse.error;
     if (conciliacaoDiaResponse.error) throw conciliacaoDiaResponse.error;
     if (emusysMesResponse.error) throw emusysMesResponse.error;
+    if (emusysDiaResponse.error) throw emusysDiaResponse.error;
 
     const kpisMes = ((kpisMesResponse.data as any)?.kpis || {}) as Record<string, unknown>;
     const kpisDia = ((kpisDiaResponse.data as any)?.kpis || {}) as Record<string, unknown>;
     const resumoConciliacaoMes = ((conciliacaoMesResponse.data as any)?.resumo || {}) as Record<string, unknown>;
-    const resumoConciliacaoDia = ((conciliacaoDiaResponse.data as any)?.resumo || {}) as Record<string, unknown>;
     const resumoEmusysMes = ((emusysMesResponse.data as any)?.resumo || {}) as Record<string, unknown>;
+    const resumoEmusysDia = ((emusysDiaResponse.data as any)?.resumo || {}) as Record<string, unknown>;
 
     const leadsPeriodo = numeroResumo(kpisMes.leads_entrantes);
     const experimentaisRealizadasMes = numeroResumo(resumoConciliacaoMes.experimentais_realizadas_confirmadas);
     const experimentaisEmusysMes = numeroResumo(resumoEmusysMes.realizadas_emusys) || experimentaisRealizadasMes;
     const experimentaisAgendadasMes = experimentaisEmusysMes;
-    const experimentaisFaltasMes = numeroResumo(resumoConciliacaoMes.experimentais_faltaram);
-    const totalExpAgendadasV2 = numeroResumo(resumoConciliacaoDia.experimentais_agendadas);
+    const experimentaisFaltasMes = numeroResumo(resumoEmusysMes.faltas);
+    const totalExpAgendadasV2 = numeroResumo(resumoEmusysDia.linhas_raw);
     const visitasDiaTotalV2 = numeroResumo(kpisDia.visitas);
 
     const visitasDiaTotal = visitasDiaTotalV2;
@@ -2646,6 +2661,24 @@ export function ComercialPage() {
     texto += `🏫 Visitas: *${visitasDiaTotal}*\n\n`;
 
     texto += `✅ Matrículas no período: *${matriculasNovas.length}*\n\n`;
+
+    texto = texto
+      .replace(
+        new RegExp(`^.*Experimentais agendadas no m.*\\*${experimentaisAgendadasMes}\\*\\n`, 'm'),
+        `\u{1F3B8} Experimentais realizadas no m\u00eas (Emusys): *${experimentaisEmusysMes}*\n`,
+      )
+      .replace(
+        new RegExp(`^.*Experimentais realizadas confirmadas: \\*${experimentaisRealizadasMes}\\*\\n`, 'm'),
+        `\u2705 Presen\u00e7a + v\u00ednculo confirmados: *${experimentaisRealizadasMes}*\n`,
+      )
+      .replace(
+        new RegExp(`^.*Faltas em experimentais no m.*\\*${experimentaisFaltasMes}\\*\\n`, 'm'),
+        `\u274C Faltas em experimentais no m\u00eas (Emusys): *${experimentaisFaltasMes}*\n`,
+      )
+      .replace(
+        new RegExp(`^.*Experimentais agendadas no dia: \\*${totalExpAgendadas}\\*\\n`, 'm'),
+        `\u{1F4C6} Experimentais no dia (Emusys): *${totalExpAgendadas}*\n`,
+      );
 
     if (matriculasNovas.length > 0) {
       texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
