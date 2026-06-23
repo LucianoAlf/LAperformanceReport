@@ -520,7 +520,7 @@ export function ComercialPage() {
     } else if (tipoRelatorio === 'comparativo_anual') {
       gerarRelatorioComparativoAnual().then(texto => setRelatorioTexto(texto));
     }
-  }, [tipoRelatorio, relatorioPeriodo, relatorioDataInicio, relatorioDataFim, filtroAtivo]);
+  }, [tipoRelatorio, relatorioPeriodo, relatorioDataInicio, relatorioDataFim, filtroAtivo, context?.unidadeSelecionada, usuario?.unidade_id, isAdmin]);
   
   // Matrículas do mês (para tabela)
   const [matriculasMes, setMatriculasMes] = useState<(LeadDiario & { 
@@ -2527,13 +2527,59 @@ export function ComercialPage() {
   const buscarMatriculasAlunos = async (uid: string | null | undefined, dataInicio: string, dataFim: string) => {
     let q = supabase
       .from('alunos')
-      .select('id, nome, idade_atual, data_matricula, tipo_aluno, valor_passaporte, valor_parcela, is_segundo_curso, curso_id, canal_origem_id, professor_atual_id, cursos:curso_id(nome, is_projeto_banda), canais_origem:canal_origem_id(nome)')
+      .select('id, nome, telefone, responsavel_telefone, idade_atual, data_matricula, tipo_aluno, valor_passaporte, valor_parcela, is_segundo_curso, curso_id, canal_origem_id, professor_atual_id, professor_experimental_id, forma_pagamento_id, unidade_id, modalidade, status, emusys_matricula_id, cursos:curso_id(nome, is_projeto_banda), canais_origem:canal_origem_id(nome), unidades:unidade_id(codigo, nome, hunter_nome), formas_pagamento:forma_pagamento_id(nome)')
       .not('data_matricula', 'is', null)
       .gte('data_matricula', dataInicio)
       .lte('data_matricula', dataFim);
     if (uid && uid !== 'todos') q = q.eq('unidade_id', uid);
     const { data } = await q;
-    return (data || []) as any[];
+    const alunos = (data || []) as any[];
+    const professorIds = Array.from(new Set(
+      alunos.flatMap((a: any) => [a.professor_atual_id, a.professor_experimental_id]).filter(Boolean)
+    ));
+    const alunoIds = alunos.map((a: any) => a.id).filter(Boolean);
+
+    const [{ data: professores }, { data: leadsVinculados }] = await Promise.all([
+      professorIds.length
+        ? supabase.from('professores').select('id, nome').in('id', professorIds)
+        : Promise.resolve({ data: [] as any[] }),
+      alunoIds.length
+        ? supabase
+            .from('leads')
+            .select('aluno_id, canal_origem_id, canais_origem:canal_origem_id(nome)')
+            .in('aluno_id', alunoIds)
+        : Promise.resolve({ data: [] as any[] }),
+    ]);
+
+    const professoresPorId = new Map((professores || []).map((p: any) => [p.id, p.nome]));
+    const leadsPorAluno = new Map();
+    (leadsVinculados || []).forEach((lead: any) => {
+      if (lead.aluno_id && !leadsPorAluno.has(lead.aluno_id)) leadsPorAluno.set(lead.aluno_id, lead);
+    });
+
+    return alunos.map((aluno: any) => {
+      const lead = leadsPorAluno.get(aluno.id);
+      const canalAluno = (aluno.canais_origem as any)?.nome;
+      const canalLead = (lead?.canais_origem as any)?.nome;
+
+      return {
+        ...aluno,
+        curso_interesse_id: aluno.curso_id,
+        professor_fixo_id: aluno.professor_atual_id,
+        idade: aluno.idade_atual,
+        data_conversao: aluno.data_matricula,
+        curso_nome: (aluno.cursos as any)?.nome || '',
+        is_banda: Boolean((aluno.cursos as any)?.is_projeto_banda || (aluno.modalidade || '').toLowerCase().includes('banda')),
+        canal_origem_id: aluno.canal_origem_id || lead?.canal_origem_id,
+        canal_nome: canalAluno || canalLead || 'Não informado',
+        unidade_codigo: (aluno.unidades as any)?.codigo,
+        unidade_nome: (aluno.unidades as any)?.nome,
+        hunter_nome: (aluno.unidades as any)?.hunter_nome,
+        professor_fixo_nome: professoresPorId.get(aluno.professor_atual_id) || null,
+        professor_exp_nome: professoresPorId.get(aluno.professor_experimental_id) || null,
+        forma_pagamento_nome: (aluno.formas_pagamento as any)?.nome || null,
+      };
+    });
   };
 
   const gerarRelatorioDiario = async () => {
@@ -2546,15 +2592,16 @@ export function ComercialPage() {
     // Setor comercial pensa em acumulado: quando o filtro é "hoje", reportar
     // desde o 1º dia do mês até hoje (leads/experimentais/matrículas).
     // Buscar informações da unidade incluindo o Hunter
-    const unidadeId = filtroAtivo || usuario?.unidade_id;
-    let unidadeNome = 'Unidade';
-    let hunterNome = usuario?.nome || 'Usuário';
-    
-    if (unidadeId) {
+    const unidadeId = isAdmin ? context?.unidadeSelecionada : usuario?.unidade_id;
+    const unidadeRelatorioId = unidadeId && unidadeId !== 'todos' ? unidadeId : null;
+    let unidadeNome = unidadeRelatorioId ? 'Unidade' : 'Consolidado';
+    let hunterNome = unidadeRelatorioId ? (usuario?.nome || 'Usuário') : 'Todos';
+
+    if (unidadeRelatorioId) {
       const { data: unidadeData } = await supabase
         .from('unidades')
         .select('nome, hunter_nome')
-        .eq('id', unidadeId)
+        .eq('id', unidadeRelatorioId)
         .single();
       
       if (unidadeData) {
@@ -2572,42 +2619,42 @@ export function ComercialPage() {
       emusysDiaResponse,
     ] = await Promise.all([
       supabase.rpc('get_kpis_comercial_canonicos_v2', {
-        p_unidade_id: unidadeId && unidadeId !== 'todos' ? unidadeId : null,
+        p_unidade_id: unidadeRelatorioId,
         p_ano: ano,
         p_mes: hoje.getMonth() + 1,
         p_periodo: 'mensal',
         p_data: null,
       }),
       supabase.rpc('get_kpis_comercial_canonicos_v2', {
-        p_unidade_id: unidadeId && unidadeId !== 'todos' ? unidadeId : null,
+        p_unidade_id: unidadeRelatorioId,
         p_ano: ano,
         p_mes: hoje.getMonth() + 1,
         p_periodo: 'diario',
         p_data: dataFim,
       }),
       supabase.rpc('get_conciliacao_experimentais_v2', {
-        p_unidade_id: unidadeId && unidadeId !== 'todos' ? unidadeId : null,
+        p_unidade_id: unidadeRelatorioId,
         p_ano: ano,
         p_mes: hoje.getMonth() + 1,
         p_periodo: 'mensal',
         p_data: null,
       }),
       supabase.rpc('get_conciliacao_experimentais_v2', {
-        p_unidade_id: unidadeId && unidadeId !== 'todos' ? unidadeId : null,
+        p_unidade_id: unidadeRelatorioId,
         p_ano: ano,
         p_mes: hoje.getMonth() + 1,
         p_periodo: 'diario',
         p_data: dataFim,
       }),
       supabase.rpc('get_experimentais_emusys_operacional_v1', {
-        p_unidade_id: unidadeId && unidadeId !== 'todos' ? unidadeId : null,
+        p_unidade_id: unidadeRelatorioId,
         p_ano: ano,
         p_mes: hoje.getMonth() + 1,
         p_periodo: 'mensal',
         p_data: null,
       }),
       supabase.rpc('get_experimentais_emusys_operacional_v1', {
-        p_unidade_id: unidadeId && unidadeId !== 'todos' ? unidadeId : null,
+        p_unidade_id: unidadeRelatorioId,
         p_ano: ano,
         p_mes: hoje.getMonth() + 1,
         p_periodo: 'diario',
@@ -2638,8 +2685,9 @@ export function ComercialPage() {
 
     const visitasDiaTotal = visitasDiaTotalV2;
 
-    // Matrículas: usar state já enriquecido, filtrar novos alunos (sem 2º curso e sem banda)
-    const matriculasNovas = matriculasMes
+    // Nao reaproveitar o state da tela, que pode estar consolidado ou defasado entre filtros.
+    const dataInicioMes = `${ano}-${String(hoje.getMonth() + 1).padStart(2, '0')}-01`;
+    const matriculasNovas = (await buscarMatriculasAlunos(unidadeRelatorioId, dataInicioMes, dataFim))
       .filter(ehMatriculaNova)
       .sort((a: any, b: any) => (a.data_matricula || '').localeCompare(b.data_matricula || ''));
 
@@ -2694,7 +2742,7 @@ export function ComercialPage() {
         texto += `👨‍🏫 Professor: ${mat.professor_fixo_nome || 'Não informado'}\n`;
         texto += `🎸 Prof. Experimental: ${mat.professor_exp_nome || 'Não teve'}\n`;
         texto += `📱 Canal: ${mat.canal_nome || 'Não informado'}\n`;
-        texto += `👤 Hunter: ${hunterNome}\n`;
+        texto += `👤 Hunter: ${mat.hunter_nome || hunterNome}\n`;
         texto += `💵 Pass: R$ ${(mat.valor_passaporte || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
         texto += `💵 Parc: R$ ${(mat.valor_parcela || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
         texto += `💳 Pag: ${mat.forma_pagamento_nome || 'Não informado'}\n\n`;
@@ -2716,15 +2764,16 @@ export function ComercialPage() {
     seteDiasAtras.setDate(hoje.getDate() - 7);
     
     // Buscar informações da unidade incluindo o Hunter
-    const unidadeId = filtroAtivo || usuario?.unidade_id;
-    let unidadeNome = 'Unidade';
-    let hunterNome = usuario?.nome || 'Usuário';
-    
-    if (unidadeId) {
+    const unidadeId = isAdmin ? context?.unidadeSelecionada : usuario?.unidade_id;
+    const unidadeRelatorioId = unidadeId && unidadeId !== 'todos' ? unidadeId : null;
+    let unidadeNome = unidadeRelatorioId ? 'Unidade' : 'Consolidado';
+    let hunterNome = unidadeRelatorioId ? (usuario?.nome || 'Usuário') : 'Todos';
+
+    if (unidadeRelatorioId) {
       const { data: unidadeData } = await supabase
         .from('unidades')
         .select('nome, hunter_nome')
-        .eq('id', unidadeId)
+        .eq('id', unidadeRelatorioId)
         .single();
       
       if (unidadeData) {
@@ -2734,24 +2783,25 @@ export function ComercialPage() {
     }
 
     // Buscar dados dos últimos 7 dias
-    const { data: registrosSemana } = await supabase
+    let registrosSemanaQuery = supabase
       .from('leads')
       .select('status, quantidade, valor_passaporte, valor_parcela, experimental_agendada, tipo_aluno')
-      .eq('unidade_id', unidadeId)
       .gte('data_contato', seteDiasAtras.toISOString().split('T')[0])
       .lte('data_contato', hoje.toISOString().split('T')[0]);
+    if (unidadeRelatorioId) registrosSemanaQuery = registrosSemanaQuery.eq('unidade_id', unidadeRelatorioId);
+    const { data: registrosSemana } = await registrosSemanaQuery;
 
     const leadsSemana = registrosSemana?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const experimentaisSemana = registrosSemana?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const visitasSemana = registrosSemana?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
     // Matriculas: fonte = alunos por data_matricula (apenas matriculas novas)
-    const matriculasSemanaAlunos = (await buscarMatriculasAlunos(unidadeId, seteDiasAtras.toISOString().split('T')[0], hoje.toISOString().split('T')[0])).filter(ehMatriculaNova);
+    const matriculasSemanaAlunos = (await buscarMatriculasAlunos(unidadeRelatorioId, seteDiasAtras.toISOString().split('T')[0], hoje.toISOString().split('T')[0])).filter(ehMatriculaNova);
     const matriculasSemana = matriculasSemanaAlunos.length;
 
     // Calcular conversões
     const conversaoLeadExp = leadsSemana > 0 ? (experimentaisSemana / leadsSemana) * 100 : 0;
     const taxaExpMatSemana = await buscarTaxaExpMatCanonica(
-      unidadeId,
+      unidadeRelatorioId,
       hoje.getFullYear(),
       hoje.getMonth() + 1,
       'mensal'
@@ -2810,15 +2860,16 @@ export function ComercialPage() {
       : `${mesNomeUpper}/${ano}`;
 
     // Buscar informações da unidade incluindo o Hunter
-    const unidadeId = filtroAtivo || usuario?.unidade_id;
-    let unidadeNome = 'Unidade';
-    let hunterNome = usuario?.nome || 'Usuário';
+    const unidadeId = isAdmin ? context?.unidadeSelecionada : usuario?.unidade_id;
+    const unidadeRelatorioId = unidadeId && unidadeId !== 'todos' ? unidadeId : null;
+    let unidadeNome = unidadeRelatorioId ? 'Unidade' : 'Consolidado';
+    let hunterNome = unidadeRelatorioId ? (usuario?.nome || 'Usuário') : 'Todos';
 
-    if (unidadeId) {
+    if (unidadeRelatorioId) {
       const { data: unidadeData } = await supabase
         .from('unidades')
         .select('nome, hunter_nome')
-        .eq('id', unidadeId)
+        .eq('id', unidadeRelatorioId)
         .single();
 
       if (unidadeData) {
@@ -2828,12 +2879,13 @@ export function ComercialPage() {
     }
 
     // Buscar dados do período selecionado
-    const { data: registrosMes } = await supabase
+    let registrosMesQuery = supabase
       .from('leads')
       .select('status, quantidade, canal_origem_id, curso_interesse_id, experimental_agendada, canais_origem(nome), cursos(nome)')
-      .eq('unidade_id', unidadeId)
       .gte('data_contato', dataInicio)
       .lte('data_contato', dataFim);
+    if (unidadeRelatorioId) registrosMesQuery = registrosMesQuery.eq('unidade_id', unidadeRelatorioId);
+    const { data: registrosMes } = await registrosMesQuery;
 
     const leadsMes = registrosMes?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
     // Experimentais do RELATÓRIO MENSAL = as que COMPARECERAM (realizadas), por data da aula.
@@ -2844,20 +2896,20 @@ export function ComercialPage() {
       .gte('data_experimental', dataInicio)
       .lte('data_experimental', dataFim)
       .in('status', ['experimental_realizada', 'convertido']);
-    if (unidadeId) expRealizadasQ = expRealizadasQ.eq('unidade_id', unidadeId);
+    if (unidadeRelatorioId) expRealizadasQ = expRealizadasQ.eq('unidade_id', unidadeRelatorioId);
     const { count: expRealizadasCount } = await expRealizadasQ;
     const experimentaisMes = expRealizadasCount || 0;
     const visitasMes = registrosMes?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
     // Matrículas: fonte = alunos por data_matricula (inclui matrículas sem lead).
     // Conta apenas matrículas novas (exclui 2º curso, banda e passaporte zerado),
     // alinhando com o resumo/funil da tela.
-    const matAlunosMes = (await buscarMatriculasAlunos(unidadeId, dataInicio, dataFim)).filter(ehMatriculaNova);
+    const matAlunosMes = (await buscarMatriculasAlunos(unidadeRelatorioId, dataInicio, dataFim)).filter(ehMatriculaNova);
     const matriculasMes = matAlunosMes.length;
 
     // Calcular conversões
     const conversaoLeadExp = leadsMes > 0 ? (experimentaisMes / leadsMes) * 100 : 0;
     const taxaExpMatMes = await buscarTaxaExpMatCanonica(
-      unidadeId,
+      unidadeRelatorioId,
       hoje.getFullYear(),
       hoje.getMonth() + 1,
       'mensal'
@@ -3046,15 +3098,16 @@ export function ComercialPage() {
     const ano = hoje.getFullYear();
     
     // Buscar informações da unidade incluindo o Hunter
-    const unidadeId = filtroAtivo || usuario?.unidade_id;
-    let unidadeNome = 'Unidade';
-    let hunterNome = usuario?.nome || 'Usuário';
+    const unidadeId = isAdmin ? context?.unidadeSelecionada : usuario?.unidade_id;
+    const unidadeRelatorioId = unidadeId && unidadeId !== 'todos' ? unidadeId : null;
+    let unidadeNome = unidadeRelatorioId ? 'Unidade' : 'Consolidado';
+    let hunterNome = unidadeRelatorioId ? (usuario?.nome || 'Usuário') : 'Todos';
     
-    if (unidadeId) {
+    if (unidadeRelatorioId) {
       const { data: unidadeData } = await supabase
         .from('unidades')
         .select('nome, hunter_nome')
-        .eq('id', unidadeId)
+        .eq('id', unidadeRelatorioId)
         .single();
       
       if (unidadeData) {
@@ -3064,7 +3117,11 @@ export function ComercialPage() {
     }
 
     // Calcular totais e estatísticas — apenas matrículas novas (exclui 2º curso/banda/passaporte zerado)
-    const matriculasNovas = matriculasMes.filter(ehMatriculaNova);
+    const dataInicioMes = `${ano}-${String(hoje.getMonth() + 1).padStart(2, '0')}-01`;
+    const dataFimMes = `${ano}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${new Date(ano, hoje.getMonth() + 1, 0).getDate()}`;
+    const matriculasNovas = (await buscarMatriculasAlunos(unidadeRelatorioId, dataInicioMes, dataFimMes))
+      .filter(ehMatriculaNova)
+      .sort((a: any, b: any) => (a.data_matricula || '').localeCompare(b.data_matricula || ''));
     const totalMatriculas = matriculasNovas.length;
     const lamkCount = matriculasNovas.filter(m => m.idade != null ? m.idade <= 11 : m.tipo_matricula === 'LAMK').length;
     const emlaCount = matriculasNovas.filter(m => m.idade != null ? m.idade > 11 : m.tipo_matricula === 'EMLA').length;
@@ -3150,7 +3207,7 @@ export function ComercialPage() {
     texto += `📝 *LISTA DETALHADA*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n\n`;
 
-    matriculasMes.forEach((mat, i) => {
+    matriculasNovas.forEach((mat, i) => {
       const dataMat = (mat as any).data_matricula || mat.data_contato;
       const dataFormatada = formatarDataCurtaRelatorio(dataMat);
 
@@ -3163,7 +3220,7 @@ export function ComercialPage() {
       texto += `👨‍🏫 Professor: ${mat.professor_fixo_nome || 'Não informado'}\n`;
       texto += `🎸 Prof. Experimental: ${mat.professor_exp_nome || 'Não teve'}\n`;
       texto += `📱 Canal: ${mat.canal_nome || 'Não informado'}\n`;
-      texto += `👤 Hunter: ${hunterNome}\n`;
+      texto += `👤 Hunter: ${mat.hunter_nome || hunterNome}\n`;
       texto += `💵 Pass: R$ ${(mat.valor_passaporte || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
       if (mat.forma_pagamento_passaporte_nome) texto += ` (${mat.forma_pagamento_passaporte_nome})`;
       texto += `\n`;
@@ -3190,15 +3247,16 @@ export function ComercialPage() {
     const mesAnterior = mesAtual === 0 ? 11 : mesAtual - 1;
     const anoAnterior = mesAtual === 0 ? anoAtual - 1 : anoAtual;
     
-    const unidadeId = filtroAtivo || usuario?.unidade_id;
-    let unidadeNome = 'Unidade';
-    let hunterNome = usuario?.nome || 'Usuário';
+    const unidadeId = isAdmin ? context?.unidadeSelecionada : usuario?.unidade_id;
+    const unidadeRelatorioId = unidadeId && unidadeId !== 'todos' ? unidadeId : null;
+    let unidadeNome = unidadeRelatorioId ? 'Unidade' : 'Consolidado';
+    let hunterNome = unidadeRelatorioId ? (usuario?.nome || 'Usuário') : 'Todos';
     
-    if (unidadeId) {
+    if (unidadeRelatorioId) {
       const { data: unidadeData } = await supabase
         .from('unidades')
         .select('nome, hunter_nome')
-        .eq('id', unidadeId)
+        .eq('id', unidadeRelatorioId)
         .single();
       
       if (unidadeData) {
@@ -3211,35 +3269,37 @@ export function ComercialPage() {
     const inicioMesAtual = new Date(anoAtual, mesAtual, 1);
     const fimMesAtual = hoje;
     
-    const { data: dadosMesAtual } = await supabase
+    let dadosMesAtualQuery = supabase
       .from('leads')
       .select('status, quantidade, experimental_agendada')
-      .eq('unidade_id', unidadeId)
       .gte('data_contato', inicioMesAtual.toISOString().split('T')[0])
       .lte('data_contato', fimMesAtual.toISOString().split('T')[0]);
+    if (unidadeRelatorioId) dadosMesAtualQuery = dadosMesAtualQuery.eq('unidade_id', unidadeRelatorioId);
+    const { data: dadosMesAtual } = await dadosMesAtualQuery;
 
     // Buscar dados do mês anterior
     const inicioMesAnterior = new Date(anoAnterior, mesAnterior, 1);
     const fimMesAnterior = new Date(anoAnterior, mesAnterior + 1, 0); // Último dia do mês
 
-    const { data: dadosMesAnterior } = await supabase
+    let dadosMesAnteriorQuery = supabase
       .from('leads')
       .select('status, quantidade, experimental_agendada')
-      .eq('unidade_id', unidadeId)
       .gte('data_contato', inicioMesAnterior.toISOString().split('T')[0])
       .lte('data_contato', fimMesAnterior.toISOString().split('T')[0]);
+    if (unidadeRelatorioId) dadosMesAnteriorQuery = dadosMesAnteriorQuery.eq('unidade_id', unidadeRelatorioId);
+    const { data: dadosMesAnterior } = await dadosMesAnteriorQuery;
 
     // Calcular totais mês atual
     const leadsAtual = dadosMesAtual?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const experimentaisAtual = dadosMesAtual?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const visitasAtual = dadosMesAtual?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const matriculasAtual = (await buscarMatriculasAlunos(unidadeId, inicioMesAtual.toISOString().split('T')[0], fimMesAtual.toISOString().split('T')[0])).filter(ehMatriculaNova).length;
+    const matriculasAtual = (await buscarMatriculasAlunos(unidadeRelatorioId, inicioMesAtual.toISOString().split('T')[0], fimMesAtual.toISOString().split('T')[0])).filter(ehMatriculaNova).length;
 
     // Calcular totais mês anterior
     const leadsAnterior = dadosMesAnterior?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const experimentaisAnterior = dadosMesAnterior?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const visitasAnterior = dadosMesAnterior?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const matriculasAnterior = (await buscarMatriculasAlunos(unidadeId, inicioMesAnterior.toISOString().split('T')[0], fimMesAnterior.toISOString().split('T')[0])).filter(ehMatriculaNova).length;
+    const matriculasAnterior = (await buscarMatriculasAlunos(unidadeRelatorioId, inicioMesAnterior.toISOString().split('T')[0], fimMesAnterior.toISOString().split('T')[0])).filter(ehMatriculaNova).length;
 
     // Calcular variações
     const varLeads = leadsAnterior > 0 ? ((leadsAtual - leadsAnterior) / leadsAnterior * 100) : 0;
@@ -3288,15 +3348,16 @@ export function ComercialPage() {
     const anoAtual = hoje.getFullYear();
     const anoAnterior = anoAtual - 1;
     
-    const unidadeId = filtroAtivo || usuario?.unidade_id;
-    let unidadeNome = 'Unidade';
-    let hunterNome = usuario?.nome || 'Usuário';
+    const unidadeId = isAdmin ? context?.unidadeSelecionada : usuario?.unidade_id;
+    const unidadeRelatorioId = unidadeId && unidadeId !== 'todos' ? unidadeId : null;
+    let unidadeNome = unidadeRelatorioId ? 'Unidade' : 'Consolidado';
+    let hunterNome = unidadeRelatorioId ? (usuario?.nome || 'Usuário') : 'Todos';
     
-    if (unidadeId) {
+    if (unidadeRelatorioId) {
       const { data: unidadeData } = await supabase
         .from('unidades')
         .select('nome, hunter_nome')
-        .eq('id', unidadeId)
+        .eq('id', unidadeRelatorioId)
         .single();
       
       if (unidadeData) {
@@ -3309,35 +3370,37 @@ export function ComercialPage() {
     const inicioMesAtual = new Date(anoAtual, mesAtual, 1);
     const fimMesAtual = hoje;
     
-    const { data: dadosAnoAtual } = await supabase
+    let dadosAnoAtualQuery = supabase
       .from('leads')
       .select('status, quantidade, experimental_agendada')
-      .eq('unidade_id', unidadeId)
       .gte('data_contato', inicioMesAtual.toISOString().split('T')[0])
       .lte('data_contato', fimMesAtual.toISOString().split('T')[0]);
+    if (unidadeRelatorioId) dadosAnoAtualQuery = dadosAnoAtualQuery.eq('unidade_id', unidadeRelatorioId);
+    const { data: dadosAnoAtual } = await dadosAnoAtualQuery;
 
     // Buscar dados do mesmo mês no ano anterior
     const inicioMesAnterior = new Date(anoAnterior, mesAtual, 1);
     const fimMesAnterior = new Date(anoAnterior, mesAtual + 1, 0);
 
-    const { data: dadosAnoAnterior } = await supabase
+    let dadosAnoAnteriorQuery = supabase
       .from('leads')
       .select('status, quantidade, experimental_agendada')
-      .eq('unidade_id', unidadeId)
       .gte('data_contato', inicioMesAnterior.toISOString().split('T')[0])
       .lte('data_contato', fimMesAnterior.toISOString().split('T')[0]);
+    if (unidadeRelatorioId) dadosAnoAnteriorQuery = dadosAnoAnteriorQuery.eq('unidade_id', unidadeRelatorioId);
+    const { data: dadosAnoAnterior } = await dadosAnoAnteriorQuery;
 
     // Calcular totais ano atual
     const leadsAtual = dadosAnoAtual?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const experimentaisAtual = dadosAnoAtual?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const visitasAtual = dadosAnoAtual?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const matriculasAtual = (await buscarMatriculasAlunos(unidadeId, inicioMesAtual.toISOString().split('T')[0], fimMesAtual.toISOString().split('T')[0])).filter(ehMatriculaNova).length;
+    const matriculasAtual = (await buscarMatriculasAlunos(unidadeRelatorioId, inicioMesAtual.toISOString().split('T')[0], fimMesAtual.toISOString().split('T')[0])).filter(ehMatriculaNova).length;
 
     // Calcular totais ano anterior
     const leadsAnterior = dadosAnoAnterior?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const experimentaisAnterior = dadosAnoAnterior?.filter(r => r.experimental_agendada === true).reduce((acc, r) => acc + r.quantidade, 0) || 0;
     const visitasAnterior = dadosAnoAnterior?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    const matriculasAnterior = (await buscarMatriculasAlunos(unidadeId, inicioMesAnterior.toISOString().split('T')[0], fimMesAnterior.toISOString().split('T')[0])).filter(ehMatriculaNova).length;
+    const matriculasAnterior = (await buscarMatriculasAlunos(unidadeRelatorioId, inicioMesAnterior.toISOString().split('T')[0], fimMesAnterior.toISOString().split('T')[0])).filter(ehMatriculaNova).length;
 
     // Calcular variações
     const varLeads = leadsAnterior > 0 ? ((leadsAtual - leadsAnterior) / leadsAnterior * 100) : 0;
