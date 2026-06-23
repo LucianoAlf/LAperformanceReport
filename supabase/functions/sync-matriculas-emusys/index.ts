@@ -7,9 +7,11 @@
 // Processa UMA unidade por invocação (?u=cg|barra|recreio) — o cron chama as 3 defasadas,
 // para caber no idle timeout de 150s do Supabase apesar do throttle do rate limit (60/min).
 //
-// Trilha AUTO (determinística, convergente): status, data_fim, curso_id, professor_atual_id, desconto/valor.
-// Trilha FILA (matriculas_divergencias): ambíguo, ausente_api, disciplina_nao_mapeada.
-// MODO_TESTE (env SYNC_MATRICULAS_DRYRUN != 'false', default true): não aplica, só detecta.
+// Trilha AUTO (determinística, convergente): status, data_fim, curso_id, professor_atual_id, valor LIMPO.
+// Trilha FILA (matriculas_divergencias): ambiguo, ausente_api, disciplina_nao_mapeada,
+//   valor_divergente (desconto_fixo embutido / líquido<0 — fonte ambígua), classificacao_divergente (bolsa x tipo).
+// Dedup: (aluno|tipo) já com decisão humana não é reenfileirado.
+// MODO_TESTE (env SYNC_MATRICULAS_DRYRUN != 'false', default true): não aplica AUTO, só detecta (a fila É gravada).
 //
 // Salvaguardas: por matrícula (não por pessoa); data_saida = data real da API;
 //   respeita matriculas_campos_fixados; tudo logado em automacao_log (lote).
@@ -111,40 +113,63 @@ serve(async (req) => {
     const profMap = new Map<number, number>((prof || []).map((p: any) => [p.emusys_id, p.professor_id]));
 
     const { data: alunos } = await supabase.from('alunos')
-      .select('id, nome, curso_id, professor_atual_id, emusys_matricula_id, status, data_fim_contrato, valor_cheio, desconto_fixo, desconto_condicional, valor_parcela')
+      .select('id, nome, curso_id, professor_atual_id, emusys_matricula_id, status, data_fim_contrato, valor_cheio, desconto_fixo, desconto_condicional, valor_parcela, tipo_matricula_id')
       .eq('unidade_id', u.id).eq('status', 'ativo');
+
+    // tipo_matricula_id -> codigo (BOLSISTA_INT, REGULAR, etc.) para a régua de classificação
+    const { data: tiposMat } = await supabase.from('tipos_matricula').select('id, codigo');
+    const tipoCodigoMap = new Map<number, string>((tiposMat || []).map((t: any) => [t.id, t.codigo]));
 
     const ids = (alunos || []).map((a: any) => a.id);
     const fixadosMap = new Map<number, Set<string>>();
+    // dedup: (aluno_id|tipo) que o usuário já decidiu — não reenfileirar (respeita a decisão humana)
+    const jaDecidido = new Set<string>();
     if (ids.length) {
       const { data: fx } = await supabase.from('matriculas_campos_fixados').select('aluno_id, campo').in('aluno_id', ids);
       for (const f of fx || []) {
         if (!fixadosMap.has(f.aluno_id)) fixadosMap.set(f.aluno_id, new Set());
         fixadosMap.get(f.aluno_id)!.add(f.campo);
       }
+      const { data: decididas } = await supabase
+        .from('matriculas_divergencias_decisoes')
+        .select('aluno_id, matriculas_divergencias!inner(tipo_divergencia)')
+        .in('aluno_id', ids);
+      for (const d of decididas || []) {
+        const tp = (d as any).matriculas_divergencias?.tipo_divergencia;
+        if (tp) jaDecidido.add(`${d.aluno_id}|${tp}`);
+      }
     }
 
     for (const a of alunos || []) {
       try {
-        const r = reconciliar(a, u, porId, ativasPorNome, depara, profMap, banda, fixadosMap.get(a.id) || new Set());
-        if (r.tipo === 'auto') {
+        const tipoCodigo = a.tipo_matricula_id ? tipoCodigoMap.get(a.tipo_matricula_id) || null : null;
+        const r = reconciliar(a, u, porId, ativasPorNome, depara, profMap, banda, fixadosMap.get(a.id) || new Set(), tipoCodigo);
+
+        // AUTO: aplica mudanças seguras — SÓ fora do dry-run. Em dry-run não escreve nem loga
+        // (evita poluir automacao_log a cada rodada do cron de fila).
+        if (Object.keys(r.upd).length) {
           resumo.auto++;
-          if (!MODO_TESTE && Object.keys(r.upd).length) {
+          if (!MODO_TESTE) {
             r.upd.updated_at = new Date().toISOString();
             await supabase.from('alunos').update(r.upd).eq('id', a.id);
+            logs.push({
+              aluno_id: a.id, aluno_nome: a.nome, unidade_nome: u.nome,
+              evento: 'sync_matricula_reconciliacao', acao: 'reconciliado',
+              status: 'ok', detalhes: r.detalhes, created_at: new Date().toISOString(),
+            });
           }
-          logs.push({
-            aluno_id: a.id, aluno_nome: a.nome, unidade_nome: u.nome,
-            evento: 'sync_matricula_reconciliacao', acao: MODO_TESTE ? 'dry_run_detectado' : 'reconciliado',
-            status: 'ok', detalhes: r.detalhes, created_at: new Date().toISOString(),
-          });
-        } else if (r.tipo) {
-          resumo.fila[r.tipo] = (resumo.fila[r.tipo] || 0) + 1;
+        }
+
+        // FILA: cada divergência vira uma linha (respeitando dedup de decisões humanas)
+        for (const dv of r.divergencias) {
+          if (jaDecidido.has(`${a.id}|${dv.tipo}`)) continue;
+          resumo.fila[dv.tipo] = (resumo.fila[dv.tipo] || 0) + 1;
           divs.push({
             aluno_id: a.id, emusys_matricula_id: a.emusys_matricula_id, unidade_id: u.id,
-            tipo_divergencia: r.tipo, campo: '',
-            valor_nosso: { nome: a.nome, curso_id: a.curso_id, status: a.status },
-            valor_api: r.valorApi, severidade: r.tipo === 'ausente_api' ? 'alta' : 'media',
+            tipo_divergencia: dv.tipo, campo: dv.campo || '',
+            valor_nosso: { nome: a.nome, curso_id: a.curso_id, status: a.status, tipo: tipoCodigo },
+            valor_api: dv.valorApi, sugestao: dv.sugestao ?? null,
+            severidade: dv.severidade || 'media',
             resolvido: false, updated_at: new Date().toISOString(),
           });
         }
@@ -161,19 +186,30 @@ serve(async (req) => {
   return new Response(JSON.stringify(resumo, null, 2), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 });
 
-// Pura (sem I/O): decide o que fazer com o aluno. Retorna { tipo, upd, detalhes } ou { tipo, valorApi }.
+// Pura (sem I/O): decide o que fazer com o aluno.
+// Retorna { upd, detalhes, divergencias: [{tipo, campo, valorApi, severidade, sugestao}] }.
+// `upd` = mudanças AUTO seguras; `divergencias` = casos de fila (decisão humana). Podem coexistir.
 function reconciliar(
   a: any, u: any, porId: Map<number, any>, ativasPorNome: Map<string, any[]>,
   depara: Map<number, number | null>, profMap: Map<number, number>, banda: Set<number>, fixados: Set<string>,
+  tipoCodigo: string | null,
 ): any {
+  const upd: Record<string, any> = {};
+  const divergencias: any[] = [];
+
   let mat: any = null;
   if (a.emusys_matricula_id && porId.has(Number(a.emusys_matricula_id))) {
     mat = porId.get(Number(a.emusys_matricula_id));
   } else {
     const cand = ativasPorNome.get(normalizarNome(a.nome)) || [];
     if (cand.length === 1) mat = cand[0];
-    else if (cand.length > 1) return { tipo: 'ambiguo', valorApi: { candidatos: cand.map((m: any) => ({ id: m.id, disciplinas: (m.contrato_atual?.disciplinas || []).map((d: any) => d.nome) })) } };
-    else return { tipo: 'ausente_api', valorApi: { nome: a.nome } };
+    else if (cand.length > 1) {
+      divergencias.push({ tipo: 'ambiguo', campo: '', severidade: 'media', valorApi: { candidatos: cand.map((m: any) => ({ id: m.id, disciplinas: (m.contrato_atual?.disciplinas || []).map((d: any) => d.nome) })) } });
+      return { upd, divergencias };
+    } else {
+      divergencias.push({ tipo: 'ausente_api', campo: '', severidade: 'alta', valorApi: { nome: a.nome } });
+      return { upd, divergencias };
+    }
   }
 
   const statusAlvo = STATUS_API_PARA_NOSSO[mat.status] || 'ativo';
@@ -182,9 +218,11 @@ function reconciliar(
   const fixo = Number(c.desconto_fixo || 0);
   const cond = Number(c.desconto_condicional || 0);
   const liquido = cheio != null ? Math.round((cheio - fixo - cond) * 100) / 100 : null;
+  // parcela real estimada: quando líquido<0 o desconto_fixo veio embutido no valor_mensalidade (fonte ambígua) → usa cheio-cond
+  const efetivo = cheio != null ? (liquido! >= 0 ? liquido! : Math.max(Math.round((cheio - cond) * 100) / 100, 0)) : null;
+  const bolsa = c.bolsa === true;
   const dataFim = c.data_original_ultima_aula || null;
 
-  const upd: Record<string, any> = {};
   const diffs: Record<string, any> = {};
   const setCampo = (campo: string, vNovo: any, vAtual: any) => {
     if (vNovo == null || fixados.has(campo)) return;
@@ -196,20 +234,59 @@ function reconciliar(
     if (statusAlvo === 'evadido' && dataFim && !fixados.has('data_saida')) upd.data_saida = dataFim;
   }
   setCampo('data_fim_contrato', dataFim, a.data_fim_contrato);
-  setCampo('valor_cheio', cheio, a.valor_cheio);
-  setCampo('desconto_fixo', fixo, a.desconto_fixo);
-  setCampo('desconto_condicional', cond, a.desconto_condicional);
-  setCampo('valor_parcela', liquido, a.valor_parcela);
+
+  // Régua de VALOR: aplica AUTO só se a fonte é limpa; senão enfileira (fonte ambígua = desconto_fixo embutido)
+  if (cheio != null) {
+    if (liquido! >= 0 && cheio > 0) {
+      setCampo('valor_cheio', cheio, a.valor_cheio);
+      setCampo('desconto_fixo', fixo, a.desconto_fixo);
+      setCampo('desconto_condicional', cond, a.desconto_condicional);
+      setCampo('valor_parcela', liquido, a.valor_parcela);
+    } else if (!fixados.has('valor_parcela')) {
+      // fonte ambígua (desconto_fixo embutido): parcela real estimada = efetivo (cheio - cond).
+      // Só enfileira quando há parcela parcial real a recuperar (>0) e difere do nosso.
+      // cheio<=0 com líquido<0 (bolsista integral: mensal 0, fixo cheio) → efetivo 0 → ignora (não-pagante legítimo).
+      if ((efetivo ?? 0) > 0 && Number(a.valor_parcela ?? 0) !== efetivo) {
+        divergencias.push({
+          tipo: 'valor_divergente', campo: 'valor_parcela', severidade: 'media',
+          valorApi: { cheio, fixo, cond, liquido, liquido_estimado: efetivo, ambiguo: true },
+          sugestao: efetivo,
+        });
+      }
+    }
+  }
+
+  // Régua de CLASSIFICAÇÃO: tipo de matrícula do nosso x realidade da API (bolsa/valor).
+  // Bolsista→REGULAR só quando paga o CHEIO integral (sem desconto algum) — o flag `bolsa=false` da API
+  // não é confiável p/ parciais (que têm desconto real). REGULAR→bolsista quando a API marca bolsa=true.
+  if (statusAlvo === 'ativo' && tipoCodigo && !fixados.has('tipo_matricula_id')) {
+    const ehBolsista = tipoCodigo === 'BOLSISTA_INT' || tipoCodigo === 'BOLSISTA_PARC';
+    if (ehBolsista && !bolsa && cheio != null && cheio > 0 && liquido === cheio) {
+      divergencias.push({
+        tipo: 'classificacao_divergente', campo: 'tipo_matricula_id', severidade: 'media',
+        valorApi: { bolsa, liquido, efetivo, cheio, fixo, cond, tipo_sugerido: 'REGULAR' }, sugestao: 'REGULAR',
+      });
+    } else if (tipoCodigo === 'REGULAR' && bolsa) {
+      const sug = (efetivo ?? 0) <= 0 ? 'BOLSISTA_INT' : 'BOLSISTA_PARC';
+      divergencias.push({
+        tipo: 'classificacao_divergente', campo: 'tipo_matricula_id', severidade: 'media',
+        valorApi: { bolsa, liquido, efetivo, cheio, fixo, cond, tipo_sugerido: sug }, sugestao: sug,
+      });
+    }
+  }
 
   if (statusAlvo === 'ativo') {
     const { cursos, naoMapeada } = resolverCursoContrato(mat, depara, banda);
-    if (naoMapeada != null && cursos.length === 0) return { tipo: 'disciplina_nao_mapeada', valorApi: { disciplina_id: naoMapeada } };
-    if (cursos.length === 1) setCampo('curso_id', cursos[0], a.curso_id);
-    else if (cursos.length > 1 && !cursos.includes(a.curso_id)) return { tipo: 'ambiguo', valorApi: { motivo: 'multiplos_cursos', cursos } };
+    if (naoMapeada != null && cursos.length === 0) {
+      divergencias.push({ tipo: 'disciplina_nao_mapeada', campo: '', severidade: 'media', valorApi: { disciplina_id: naoMapeada } });
+    } else if (cursos.length === 1) {
+      setCampo('curso_id', cursos[0], a.curso_id);
+    } else if (cursos.length > 1 && !cursos.includes(a.curso_id)) {
+      divergencias.push({ tipo: 'ambiguo', campo: '', severidade: 'media', valorApi: { motivo: 'multiplos_cursos', cursos } });
+    }
     const profId = resolverProfessorContrato(mat, profMap);
     if (profId != null) setCampo('professor_atual_id', profId, a.professor_atual_id);
   }
 
-  if (Object.keys(upd).length === 0) return { tipo: null };
-  return { tipo: 'auto', upd, detalhes: { emusys_matricula_id: mat.id, status_api: mat.status, diffs } };
+  return { upd, divergencias, detalhes: { emusys_matricula_id: mat.id, status_api: mat.status, diffs } };
 }
