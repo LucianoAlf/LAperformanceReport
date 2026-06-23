@@ -27,3 +27,10 @@
 - `/pessoas/buscar` por telefone também é furado (telefone da Marcela retornou outra pessoa "Lorena" — família/responsável). NÃO usar.
 - Os **15 ausentes = 7 ativos (= os "ausente_api" da conciliação de matrículas) + 8 inativos antigos**. Não há id pra puxar — não existem no Emusys. Os 7 ativos são divergência de status (resolver na aba Conciliação, não backfill). emusys_matricula_id órfão em 2 casos (Pietro 2575, Pablo 795 — matrícula removida da API).
 - **COBERTURA FINAL ids Emusys: 1510/1525 (99,0%)**. Costura lead↔aluno↔experimental por id do Emusys habilitada.
+
+## EXECUTADO 2026-06-23 — CORRIGIDA RPC get_conciliacao_experimentais_v2 (Camada 1)
+- **Causa raiz**: presença era só `exists(aluno_presenca WHERE aluno_id=le.aluno_id)`, mas 81% das experimentais são de lead com `aluno_id` NULL → falso "sem presença" (mar 117, abr 63, mai 70 na fila).
+- **Correção** (migration `fix_conciliacao_experimentais_presenca_via_status`): (1) presença = `le.status='experimental_realizada'` OR aluno_presenca; (2) etapa 'experimental_realizada_confirmada' não exige mais aluno vinculado; (3) denominador = realizadas confirmadas; (4) **numerador via `emusys_lead_id`**: converteu = existe aluno ativo/trancado com mesmo `emusys_lead_id` na unidade (aproveita o backfill de hoje).
+- **Resultado**: fila ~250 falsos → 2 pendências reais (mai). Taxa Exp→Mat destravada e plausível: mar 17,3% / abr 33,7% / mai 28,8% / jun 23,7%. Sem mudança de frontend (aba Comercial consome a mesma RPC).
+- ⚠️ numerador via emusys_lead_id pode inflar levemente em família (1 lead→N alunos, emusys_lead_id compartilhado) — decisão de família ainda pendente, mas impacto pequeno.
+- Migration aplicada via MCP (não versionada no repo ainda).
