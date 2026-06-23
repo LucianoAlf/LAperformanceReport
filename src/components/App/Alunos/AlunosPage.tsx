@@ -8,7 +8,7 @@ import { ptBR } from 'date-fns/locale';
 import {
   Users, DollarSign, BarChart3, Clock, Layers, AlertTriangle, BookOpen,
   Plus, Search, RotateCcw, Edit2, Trash2, Check, X, History,
-  Calendar, Upload, Zap, RefreshCw, Lock, Unlock
+  Calendar, Upload, Zap, RefreshCw, Lock, Unlock, Link2
 } from 'lucide-react';
 import { useCompetenciaFiltro } from '@/hooks/useCompetenciaFiltro';
 import { COMPETENCIA_FECHADA_MESSAGE, useCompetenciaMensalStatus } from '@/hooks/useCompetenciaMensalStatus';
@@ -20,6 +20,7 @@ import { ModalPermanenciaDetalhe } from '@/components/GestaoMensal/ModalPermanen
 import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { TabelaAlunos } from './TabelaAlunos';
+import { ConciliacaoMatriculas } from './ConciliacaoMatriculas';
 import { GestaoTurmas } from './GestaoTurmas';
 import { DistribuicaoAlunos } from './DistribuicaoAlunos';
 import { ImportarAlunos } from './ImportarAlunos';
@@ -154,7 +155,7 @@ export interface Filtros {
   sem_telefone: boolean;
 }
 
-type TabAtiva = 'lista' | 'turmas' | 'grade' | 'distribuicao' | 'importar' | 'automacao' | 'historico';
+type TabAtiva = 'lista' | 'turmas' | 'grade' | 'distribuicao' | 'importar' | 'automacao' | 'historico' | 'conciliacao';
 
 const alunosTabs: PageTab<TabAtiva>[] = [
   { id: 'lista', label: 'Lista de Alunos', shortLabel: 'Lista', icon: Users },
@@ -164,6 +165,7 @@ const alunosTabs: PageTab<TabAtiva>[] = [
   { id: 'historico', label: 'Histórico LTV', shortLabel: 'LTV', icon: History },
   { id: 'importar', label: 'Importar Alunos', shortLabel: 'Importar', icon: Upload, disabled: true, disabledTitle: 'Em breve — funcionalidade em desenvolvimento' },
   { id: 'automacao', label: 'Automacao', shortLabel: 'Automacao', icon: Zap },
+  { id: 'conciliacao', label: 'Conciliação Emusys', shortLabel: 'Conciliação', icon: Link2 },
 ];
 
 export function AlunosPage() {
@@ -1653,6 +1655,12 @@ export function AlunosPage() {
               verificarTurmaAoSalvar={verificarTurmaAoSalvar}
               onAbrirModalTurma={handleAbrirModalTurma}
             />
+          )}
+
+          {tabAtiva === 'conciliacao' && (
+            <div className="p-4">
+              <ConciliacaoMatriculas unidadeId={unidadeAtual === 'todos' ? null : unidadeAtual} />
+            </div>
           )}
 
           {tabAtiva === 'turmas' && (
