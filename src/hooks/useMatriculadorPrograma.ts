@@ -357,7 +357,6 @@ function consolidarMetricasV2(
 
 function consolidarHistoricoMatriculadorV2(
   historicoV2: HistoricoMatriculadorItem[],
-  historicoLegado?: HistoricoMatriculador | null,
 ): HistoricoMatriculador {
   const linhasComLeads = historicoV2.filter((item) => item.total_leads > 0);
   const mediaTicketCanonica = calcularTicketMedioPonderado(historicoV2);
@@ -367,10 +366,10 @@ function consolidarHistoricoMatriculadorV2(
     media_grupo: {
       taxa_geral: linhasComLeads.length > 0
         ? Number((linhasComLeads.reduce((acc, item) => acc + item.taxa_geral, 0) / linhasComLeads.length).toFixed(1))
-        : historicoLegado?.media_grupo?.taxa_geral || 0,
+        : 0,
       volume_medio: historicoV2.length > 0
         ? Number((historicoV2.reduce((acc, item) => acc + item.total_matriculas, 0) / historicoV2.length).toFixed(1))
-        : historicoLegado?.media_grupo?.volume_medio || 0,
+        : 0,
       ticket_medio: mediaTicketCanonica || 0,
     },
   };
@@ -491,50 +490,32 @@ export function useMatriculadorPrograma(ano: number = 2026, unidadeId?: string |
 
       // Calcular pontuacao para cada Hunter e reaproveitar a mesma serie v2 no historico.
       if (resultado.hunters && resultado.config) {
-        const huntersComMetricasV2: HunterDados[] = [];
-        const historicoV2Consolidado: HistoricoMatriculadorItem[] = [];
-        let historicoLegado: HistoricoMatriculador | null = null;
-
-        const { data: historicoData, error: historicoError } = await supabase.rpc('get_historico_mensal_matriculador', {
-          p_ano: ano,
-          p_unidade_id: unidadeId === 'todos' ? null : unidadeId,
-        });
-
-        if (historicoError) {
-          console.warn('Historico legado do Matriculador indisponivel:', historicoError.message);
-        } else {
-          historicoLegado = historicoData as HistoricoMatriculador;
-        }
-
-        const legadoPorUnidadeMes = new Map<string, HistoricoMatriculadorItem>();
-        historicoLegado?.historico?.forEach((item) => {
-          legadoPorUnidadeMes.set(`${item.unidade_id}:${item.mes}`, item);
-        });
-
-        for (const hunter of resultado.hunters) {
+        const huntersV2 = await Promise.all(resultado.hunters.map(async (hunter) => {
           const historicoV2 = await buscarMetricasMensaisV2(ano, hunter.unidade_id, resultado.config, mesReferencia);
-          const historicoV2ComLegado = historicoV2.map((item) => {
-            const legado = legadoPorUnidadeMes.get(`${hunter.unidade_id}:${item.mes}`);
-
-            return {
-              ...item,
-              unidade_nome: hunter.unidade_nome || legado?.unidade_nome || item.unidade_nome,
-              ticket_medio: item.ticket_medio || 0,
-            };
-          });
-          const metricasV2 = consolidarMetricasV2(historicoV2ComLegado, hunter.metricas, mesReferencia);
+          const historicoV2ComUnidade = historicoV2.map((item) => ({
+            ...item,
+            unidade_nome: hunter.unidade_nome || item.unidade_nome,
+            ticket_medio: item.ticket_medio || 0,
+          }));
+          const metricasV2 = consolidarMetricasV2(historicoV2ComUnidade, hunter.metricas, mesReferencia);
           const hunterComMetricasV2 = {
             ...hunter,
             metricas: metricasV2,
           };
 
-          historicoV2Consolidado.push(...historicoV2ComLegado);
+          return {
+            hunter: {
+              ...hunterComMetricasV2,
+              pontuacao: calcularPontuacao(hunterComMetricasV2, resultado.config),
+            },
+            historico: historicoV2ComUnidade,
+          };
+        }));
 
-          huntersComMetricasV2.push({
-            ...hunterComMetricasV2,
-            pontuacao: calcularPontuacao(hunterComMetricasV2, resultado.config),
-          });
-        }
+        const huntersComMetricasV2 = huntersV2.map((item) => item.hunter);
+        const historicoV2Consolidado = huntersV2
+          .flatMap((item) => item.historico)
+          .sort((a, b) => a.unidade_nome.localeCompare(b.unidade_nome) || a.mes - b.mes);
 
         resultado.hunters = huntersComMetricasV2;
 
@@ -549,7 +530,7 @@ export function useMatriculadorPrograma(ano: number = 2026, unidadeId?: string |
           acima_corte: (hunter.pontuacao?.total || 0) >= resultado.config.nota_corte,
         }));
 
-        setHistorico(consolidarHistoricoMatriculadorV2(historicoV2Consolidado, historicoLegado));
+        setHistorico(consolidarHistoricoMatriculadorV2(historicoV2Consolidado));
       }
 
       setDados(resultado);
