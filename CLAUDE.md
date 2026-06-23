@@ -2,6 +2,12 @@
 
 Sistema de gestão operacional e BI para rede de escolas de música. Pipeline comercial, gestão de alunos, metas, retenção, professores, salas e projetos.
 
+> **Referência rápida (consultar PRIMEIRO):**
+> - **[`docs/MAPA-SISTEMA.md`](docs/MAPA-SISTEMA.md)** — por página: rota, componentes, hooks, RPCs e edge functions. Use antes de mexer numa página.
+> - **[`docs/METRICAS.md`](docs/METRICAS.md)** — critérios canônicos de cada métrica (pagante, ativo, evasão, conversão, ticket, health score…). Use antes de query/KPI/relatório.
+> - **[`docs/MAPA-INTEGRACAO-EMUSYS.md`](docs/MAPA-INTEGRACAO-EMUSYS.md)** — ciclo de integração Emusys.
+> Manter os três atualizados no mesmo commit ao mexer em páginas/RPCs/edges/métricas.
+
 ## Stack
 
 - **Frontend:** React 19 + TypeScript 5.8 + Vite 6 (porta 5175)
