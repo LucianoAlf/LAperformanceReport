@@ -98,6 +98,7 @@
 - `admin-create-user` — criar usuario
 - `admin-update-password` — alterar senha
 - `enviar-pesquisa-evasao` — pesquisa churn via WhatsApp
+- `enviar-pesquisa-pos-primeira-aula` — NPS pós-1ª-aula (Fabi/Sucesso do Aluno). UAZAPI `/send/menu type=list` (v4, botão "Avaliar"; antes `type=button`). 3 opções → notas 1/3/5 via `buttonOrListid`. Captura em `processar-resposta-pesquisa` (recebe webhook UAZAPI direto, NÃO via `webhook-whatsapp-inbox`). Lista nativa não tem campo de texto livre (feedback textual = follow-up ou WhatsApp Flows, pendente)
 - `enviar-mensagem-admin` — envia msg WhatsApp admin→aluno (texto+midia), v6 com health check ping (`body.ping` retorna early), `verify_jwt: false`. Retry no frontend via `invokeWithRetry()` (ver padroes-codigo.md). Campo `erro_motivo` em admin_mensagens para tooltip de erro no chat
 - `validar-token-feedback` — validar token feedback
 - `gerar-relatorio-aluno` — relatorio IA do aluno
