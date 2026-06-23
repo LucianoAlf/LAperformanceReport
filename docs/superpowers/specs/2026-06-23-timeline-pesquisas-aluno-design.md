@@ -46,12 +46,9 @@ SET status = CASE WHEN nota IS NOT NULL THEN 'respondida' ELSE 'pendente' END
 WHERE status IS NULL;
 ```
 
-Constraint de unicidade lógica: **1 registro ativo por (`aluno_id`, `tipo`)**. Para suportar upsert de forma segura, criar índice único parcial:
-```sql
-CREATE UNIQUE INDEX IF NOT EXISTS uniq_pesquisa_aluno_tipo
-  ON pesquisas_whatsapp (aluno_id, tipo);
-```
-> Risco a validar antes de aplicar: confirmar que não há duplicatas `(aluno_id, tipo)` pré-existentes (tabela hoje está vazia, então seguro). A coleta automática deve respeitar o upsert.
+**Unicidade existente (descoberta na fonte):** já há `UNIQUE (aluno_id, tipo, data_matricula)` — usada pela edge `enviar-pesquisa-pos-primeira-aula` (`upsert onConflict: 'aluno_id,tipo,data_matricula'`). **Não criar índice novo nem alterar essa constraint** (quebraria o envio). Como `data_matricula` faz parte da chave e o lançamento manual grava `data_matricula` NULL (NULLs não conflitam em índice único), o "1 registro por marco" é garantido em duas camadas:
+- **Gravação:** RPC faz **upsert lógico por (`aluno_id`, `tipo`)** — busca o registro existente daquele tipo (qualquer `data_matricula`, o mais recente) e dá UPDATE; só INSERE se não houver. Assim o lançamento manual da Fabi **atualiza o registro `pendente` que a edge de envio já criou**, em vez de criar um paralelo.
+- **Leitura:** RPC usa `DISTINCT ON (tipo)` ordenado (respondida antes de pendente, depois mais recente) para escolher 1 registro por marco mesmo se houver dois.
 
 A régua de marcos usa o campo `tipo` existente: `pos_primeira_aula` (ativo), `tres_meses` e `evasao` (reservados, sem coleta nesta entrega).
 
@@ -76,8 +73,8 @@ A RPC atual (`p_aluno_id, p_nota, p_data`) só grava 1ª aula respondida. Genera
 Comportamento:
 - Validação: se não é `nao_respondeu`, exige `p_nota` entre 1 e 5.
 - `status` derivado: `nao_respondida` se `p_nao_respondeu`, senão `respondida`.
-- **Upsert** por (`aluno_id`, `tipo`): insere ou atualiza nota/comentário/status/datas (permite correção).
-- `unidade_id` puxado do aluno; `enviado_em` = `respondido_em` = `p_data` @ 12h BRT; `manual = true`.
+- **Upsert lógico** por (`aluno_id`, `tipo`): `SELECT` do registro existente daquele tipo (ordenado mais recente) → UPDATE de nota/comentário/status/`respondido_em`/`manual`; só INSERE se não existir nenhum. Permite correção e não cria paralelo ao registro `pendente` da edge.
+- No INSERT: `unidade_id` puxado do aluno; `data_matricula` = `alunos.data_inicio_contrato` (ou NULL se ausente); `enviado_em` = `respondido_em` = `p_data` @ 12h BRT; `enviado_ok = true`; `manual = true`.
 
 > Compatibilidade: a assinatura muda (novos parâmetros), então a migration faz **`DROP FUNCTION registrar_resposta_pesquisa_manual(integer,integer,date)` + recriar** com a nova assinatura (não dá para `CREATE OR REPLACE` mudando os params). O modal é o único consumidor e é atualizado junto.
 
@@ -118,7 +115,7 @@ Ambos recebem o `aluno.id`; basta inserir `<TimelinePesquisasAluno alunoId={...}
 - Componente `TimelinePesquisasAluno`.
 - Modal de lançamento generalizado (busca + contextual; nota/não-respondeu/comentário).
 - Embutir nas duas fichas.
-- **Ajustar a edge `processar-resposta-pesquisa`** para respeitar a unicidade `(aluno_id, tipo)`: fazer update do registro `pendente` em vez de inserir um novo (senão a coleta automática quebra com o índice único). Verificar a lógica atual da edge antes de aplicar o índice.
+- **Ajuste leve na edge `processar-resposta-pesquisa`**: ela já faz UPDATE do registro pendente (não INSERT) — só adicionar `status = 'respondida'` ao update, para consistência com o novo campo. Sem mudança estrutural.
 
 **Fora de escopo (futuro):**
 - Criar as pesquisas de **3 meses** e **evasão** (coleta/disparo).
@@ -128,7 +125,7 @@ Ambos recebem o `aluno.id`; basta inserir `<TimelinePesquisasAluno alunoId={...}
 
 ## Riscos / pontos de atenção
 
-- **Índice único `(aluno_id, tipo)`**: confirmar ausência de duplicatas antes de aplicar (tabela vazia hoje → seguro). A coleta automática (`processar-resposta-pesquisa`) precisa continuar funcionando com a unicidade — validar que ela não tenta inserir um segundo registro do mesmo tipo (deve fazer update do registro `pendente`).
+- **Unicidade `(aluno_id, tipo, data_matricula)` já existe** — não mexer. O "1 por marco" é garantido por upsert lógico (gravação) + `DISTINCT ON` (leitura), sem índice novo. A edge de envio (`enviar-pesquisa-pos-primeira-aula`) continua intacta.
 - **Granularidade pessoa × matrícula**: a timeline é por `aluno_id` (matrícula). Pessoa com 2 cursos verá a timeline da matrícula da ficha aberta. Aceito para esta entrega.
 - **RLS**: leitura/gravação via RPC `SECURITY DEFINER` (a tabela tem RLS sem policies de acesso direto).
 
