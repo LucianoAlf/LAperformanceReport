@@ -968,7 +968,7 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
               title="Ranking Exp->Mat v2"
               valorLabel="Taxa"
               topCount={3}
-              variant="amber"
+              variant="gold"
               valorFormatter={(value) => `${Number(value).toFixed(1)}%`}
             />
           </div>
