@@ -27,6 +27,12 @@ export function SucessoClientePage() {
   const unidadeAtual = context?.unidadeSelecionada || 'todos';
 
   const [aba, setAba] = useState<AbaModulo>('caixa');
+  const [alunoParaCaixa, setAlunoParaCaixa] = useState<number | null>(null);
+
+  const abrirConversaAluno = (alunoId: number) => {
+    setAlunoParaCaixa(alunoId);
+    setAba('caixa');
+  };
 
   return (
     <div className="space-y-4">
@@ -35,9 +41,14 @@ export function SucessoClientePage() {
       {aba === 'caixa' ? (
         // Caixa de Entrada travada no departamento Sucesso do Aluno:
         // só recebe as conversas do número dedicado a Sucesso.
-        <CaixaEntradaTab unidadeId={unidadeAtual} departamento="sucesso_aluno" multiUnidade />
+        <CaixaEntradaTab
+          unidadeId={unidadeAtual}
+          departamento="sucesso_aluno"
+          multiUnidade
+          alunoIdInicial={alunoParaCaixa}
+        />
       ) : (
-        <TabSucessoAluno unidadeAtual={unidadeAtual} />
+        <TabSucessoAluno unidadeAtual={unidadeAtual} onAbrirConversa={abrirConversaAluno} />
       )}
     </div>
   );

@@ -57,9 +57,10 @@ interface AlertaSaude {
 
 interface Props {
   unidadeAtual: UnidadeId;
+  onAbrirConversa?: (alunoId: number) => void;
 }
 
-export function TabSucessoAluno({ unidadeAtual }: Props) {
+export function TabSucessoAluno({ unidadeAtual, onAbrirConversa }: Props) {
   const toast = useToast();
   const sentinelRef = useWidgetOverlapSentinel();
 
@@ -696,7 +697,7 @@ export function TabSucessoAluno({ unidadeAtual }: Props) {
 
       {/* Conteúdo da Subaba PESQUISAS */}
       {subAba === 'pesquisa' && (
-        <PesquisasTab unidadeAtual={unidadeAtual} />
+        <PesquisasTab unidadeAtual={unidadeAtual} onAbrirConversa={onAbrirConversa} />
       )}
 
       {/* Conteúdo da Subaba JORNADA */}
