@@ -19,8 +19,9 @@ mostre essas respostas nem uma análise agregada**. A coordenação não tem vis
 
 ## Escopo
 
-Criar uma **nova aba "Respostas"** na página de Sucesso do Aluno, ao lado de "Pós-1ª Aula"
-e "Evasão", contendo:
+Criar uma **nova sub-aba "Respostas"** dentro de `PesquisasTab.tsx`, ao lado das sub-abas
+"Pós-1ª Aula" e "Evasão" (estado local `subAba`, **não** são tabs de página/`PageTabs`),
+contendo:
 
 1. **KPIs gerais** — enviadas, taxa de resposta, nota média, distribuição por estrela.
 2. **Recortes** — nota média + quantidade por professor, por unidade e por curso.
@@ -93,8 +94,8 @@ aluno_id, nome, nota, curso_nome, professor_nome, unidade_nome, enviado_em, resp
 
 ### Frontend
 
-- **Aba**: novo item "Respostas" no container de Sucesso do Aluno (junto de "Pós-1ª Aula" e
-  "Evasão"). Componente `RespostasPesquisaTab`.
+- **Aba**: nova sub-aba `subAba='respostas'` em `src/components/App/SucessoCliente/PesquisasTab.tsx`
+  (junto de "Pós-1ª Aula" e "Evasão"). Componente `RespostasPesquisaTab`.
 - **Hook**: `useAnalisePesquisas(unidadeAtual, dataInicio, dataFim)` — chama as duas RPCs,
   expõe `{ analise, respostas, loading, recarregar }`.
 - **Layout** (de cima para baixo):
@@ -147,4 +148,5 @@ recém-matriculado isso quase nunca diverge. Caso no futuro se queira precisão 
   para criar as funções, sem DDL de tabela).
 - `src/components/App/SucessoCliente/RespostasPesquisaTab.tsx` (novo).
 - `src/components/App/SucessoCliente/hooks/useAnalisePesquisas.ts` (novo).
-- Registro da aba no container de Sucesso do Aluno (arquivo de tabs existente).
+- `src/components/App/SucessoCliente/PesquisasTab.tsx` — adicionar a sub-aba `respostas`
+  (botão de sub-aba + render condicional do `RespostasPesquisaTab`).
