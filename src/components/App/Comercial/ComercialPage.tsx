@@ -2565,7 +2565,7 @@ export function ComercialPage() {
       }
     }
 
-    const [kpisMesResponse, kpisDiaResponse, conciliacaoMesResponse, conciliacaoDiaResponse] = await Promise.all([
+    const [kpisMesResponse, kpisDiaResponse, conciliacaoMesResponse, conciliacaoDiaResponse, emusysMesResponse] = await Promise.all([
       supabase.rpc('get_kpis_comercial_canonicos_v2', {
         p_unidade_id: unidadeId && unidadeId !== 'todos' ? unidadeId : null,
         p_ano: ano,
@@ -2593,6 +2593,13 @@ export function ComercialPage() {
         p_mes: hoje.getMonth() + 1,
         p_periodo: 'diario',
         p_data: dataFim,
+      }),
+      supabase.rpc('get_experimentais_emusys_operacional_v1', {
+        p_unidade_id: unidadeId && unidadeId !== 'todos' ? unidadeId : null,
+        p_ano: ano,
+        p_mes: hoje.getMonth() + 1,
+        p_periodo: 'mensal',
+        p_data: null,
       }),
     ]);
 
@@ -2600,15 +2607,18 @@ export function ComercialPage() {
     if (kpisDiaResponse.error) throw kpisDiaResponse.error;
     if (conciliacaoMesResponse.error) throw conciliacaoMesResponse.error;
     if (conciliacaoDiaResponse.error) throw conciliacaoDiaResponse.error;
+    if (emusysMesResponse.error) throw emusysMesResponse.error;
 
     const kpisMes = ((kpisMesResponse.data as any)?.kpis || {}) as Record<string, unknown>;
     const kpisDia = ((kpisDiaResponse.data as any)?.kpis || {}) as Record<string, unknown>;
     const resumoConciliacaoMes = ((conciliacaoMesResponse.data as any)?.resumo || {}) as Record<string, unknown>;
     const resumoConciliacaoDia = ((conciliacaoDiaResponse.data as any)?.resumo || {}) as Record<string, unknown>;
+    const resumoEmusysMes = ((emusysMesResponse.data as any)?.resumo || {}) as Record<string, unknown>;
 
     const leadsPeriodo = numeroResumo(kpisMes.leads_entrantes);
-    const experimentaisAgendadasMes = numeroResumo(resumoConciliacaoMes.experimentais_agendadas);
     const experimentaisRealizadasMes = numeroResumo(resumoConciliacaoMes.experimentais_realizadas_confirmadas);
+    const experimentaisEmusysMes = numeroResumo(resumoEmusysMes.realizadas_emusys) || experimentaisRealizadasMes;
+    const experimentaisAgendadasMes = experimentaisEmusysMes;
     const experimentaisFaltasMes = numeroResumo(resumoConciliacaoMes.experimentais_faltaram);
     const totalExpAgendadasV2 = numeroResumo(resumoConciliacaoDia.experimentais_agendadas);
     const visitasDiaTotalV2 = numeroResumo(kpisDia.visitas);

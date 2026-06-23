@@ -1,3 +1,5 @@
+/// <reference lib="deno.ns" />
+
 // Edge Function: sync-presenca-emusys
 // Sincroniza aulas e presença dos alunos do Emusys para aulas_emusys + aluno_presenca
 // Chamada diariamente via pg_cron (22h BRT) com janela de 7 dias
@@ -147,12 +149,15 @@ function parseDataHoraEmusys(dataHora: string): string {
 
 // Dados coletados de aulas experimentais para reconciliação
 interface ExperimentalParaReconciliar {
+  emusysAulaId: number;
   dataAula: string;
   horario: string;
   professorId: number | null;
+  professorNome: string | null;
   unidadeId: string;
   cancelada: boolean;
   cursoId: number | null;
+  cursoNome: string | null;
   alunos: AlunoEmusys[];
 }
 
@@ -167,6 +172,90 @@ function normalizarTelefone(tel: string | null | undefined): string | null {
 // Rede de segurança: reconciliar experimentais que o webhook não atualizou
 // Parte das aulas experimentais do Emusys e busca leads correspondentes por telefone/nome
 // Insere na lead_experimentais (não nas colunas legadas do lead)
+function normalizarSituacaoExperimental(presenca: string | null | undefined, cancelada: boolean): string {
+  if (cancelada) return 'cancelada';
+  const raw = normalizarNome(presenca || '');
+  if (raw.includes('matriculado')) return 'matriculado';
+  if (raw.includes('presente') || raw === 'sim') return 'presente';
+  if (raw.includes('falt') || raw.includes('ausente') || raw.includes('nao')) return 'faltou';
+  return 'desconhecida';
+}
+
+function criarRawKey(unidadeId: string, aulaId: number, aluno: AlunoEmusys): string {
+  const nome = normalizarNome(aluno.nome_aluno || '');
+  const telefone = normalizarTelefone(aluno.telefone_aluno)
+    || normalizarTelefone(aluno.telefone_responsavel)
+    || '';
+  const nascimento = aluno.data_nascimento_aluno || '';
+  return `${unidadeId}:${aulaId}:${nome}:${telefone || nascimento}`;
+}
+
+async function upsertExperimentalRaw(
+  supabase: any,
+  params: {
+    aula: AulaEmusys;
+    aulaLocalId: number;
+    unidadeId: string;
+    dataAula: string;
+    professorId: number | null;
+    professorNome: string | null;
+    cursoId: number | null;
+    aluno: AlunoEmusys;
+    alunoId?: number | null;
+  }
+) {
+  const nome = params.aluno.nome_aluno?.trim();
+  if (!nome) return;
+
+  const telefoneAluno = normalizarTelefone(params.aluno.telefone_aluno) || '';
+  const horario = params.aluno.horario_presenca
+    || params.aula.data_hora_inicio?.split(' ')[1]
+    || null;
+
+  const { error } = await supabase
+    .from('emusys_experimentais_raw')
+    .upsert(
+      {
+        raw_key: criarRawKey(params.unidadeId, params.aula.id, params.aluno),
+        emusys_aula_id: params.aula.id,
+        aula_emusys_id: params.aulaLocalId,
+        unidade_id: params.unidadeId,
+        data_aula: params.dataAula,
+        horario_aula: horario,
+        aluno_nome: nome,
+        aluno_nome_normalizado: normalizarNome(nome),
+        aluno_telefone: telefoneAluno,
+        responsavel_nome: params.aluno.nome_responsavel || null,
+        responsavel_telefone: normalizarTelefone(params.aluno.telefone_responsavel),
+        professor_nome: params.professorNome,
+        professor_id: params.professorId,
+        curso_nome: params.aula.curso_nome || null,
+        curso_id: params.cursoId,
+        presenca_emusys: params.aluno.presenca || null,
+        situacao_operacional: normalizarSituacaoExperimental(params.aluno.presenca, params.aula.cancelada),
+        aluno_id: params.alunoId || null,
+        payload: {
+          aluno: params.aluno,
+          aula: {
+            id: params.aula.id,
+            categoria: params.aula.categoria,
+            tipo: params.aula.tipo,
+            turma_nome: params.aula.turma_nome,
+            curso_nome: params.aula.curso_nome,
+            sala_nome: params.aula.sala_nome,
+            data_hora_inicio: params.aula.data_hora_inicio,
+            data_hora_fim: params.aula.data_hora_fim,
+          },
+        },
+      },
+      { onConflict: 'raw_key', ignoreDuplicates: false }
+    );
+
+  if (error) {
+    console.error(`[sync-presenca] Upsert experimental raw ${nome} aula ${params.aula.id}:`, error.message);
+  }
+}
+
 async function reconciliarExperimentaisOrfas(
   supabase: any,
   experimentais: ExperimentalParaReconciliar[]
@@ -680,12 +769,15 @@ serve(async (req: Request) => {
           if (aula.categoria === 'experimental') {
             const horario = aula.data_hora_inicio?.split(' ')[1] || '00:00';
             experimentaisColetadas.push({
+              emusysAulaId: aula.id,
               dataAula: dataAlvo,
               horario,
               professorId,
+              professorNome: profNome,
               unidadeId: unidade.id,
               cancelada: aula.cancelada,
               cursoId: cursoMapa.get(normalizarCurso(aula.curso_nome || '')) ?? null,
+              cursoNome: aula.curso_nome || null,
               alunos: aula.alunos || [],
             });
           }
@@ -749,6 +841,20 @@ serve(async (req: Request) => {
               if (candidatos.length === 1) alunoId = candidatos[0];
             }
             if (alunoId == null) alunoId = mapaAlunos.get(nomeNorm);
+
+            if (aula.categoria === 'experimental') {
+              await upsertExperimentalRaw(supabase, {
+                aula,
+                aulaLocalId,
+                unidadeId: unidade.id,
+                dataAula: dataAlvo,
+                professorId,
+                professorNome: profNome,
+                cursoId: cursoIdAula,
+                aluno,
+                alunoId: alunoId ?? null,
+              });
+            }
 
             if (!alunoId) {
               naoEncontrados++;
