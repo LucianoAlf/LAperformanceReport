@@ -6,7 +6,7 @@ const parseLocalDate = (s: string | null | undefined): Date | null =>
 const formatLocalDate = (d: Date | null | undefined): string | null =>
   d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : null;
 import { supabase } from '@/lib/supabase';
-import { X, Loader2, Save, User, GraduationCap, DollarSign, TrendingUp, History, AlertCircle, Plus, Users, Pencil, Brain, ExternalLink, MessageCircle, Search } from 'lucide-react';
+import { X, Loader2, Save, User, GraduationCap, DollarSign, TrendingUp, History, AlertCircle, Plus, Users, Pencil, Brain, ExternalLink, MessageCircle, Search, Star } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   AlertDialog,
@@ -30,6 +30,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import type { Aluno } from './AlunosPage';
 import { ContatosAluno } from './ContatosAluno';
+import { TimelinePesquisasAluno } from '../SucessoCliente/TimelinePesquisasAluno';
 import {
   analisarMudancaParaSemParcela,
   buscarContextosStatusPagamento,
@@ -879,7 +880,7 @@ export function ModalFichaAluno({
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid grid-cols-6 flex-shrink-0">
+          <TabsList className="grid grid-cols-7 flex-shrink-0">
             <TabsTrigger value="pessoal" className="flex items-center gap-2">
               <User className="w-4 h-4" />
               <span className="hidden sm:inline">Pessoal</span>
@@ -903,6 +904,10 @@ export function ModalFichaAluno({
             <TabsTrigger value="historico" className="flex items-center gap-2">
               <History className="w-4 h-4" />
               <span className="hidden sm:inline">Histórico</span>
+            </TabsTrigger>
+            <TabsTrigger value="pesquisas" className="flex items-center gap-2">
+              <Star className="w-4 h-4" />
+              <span className="hidden sm:inline">Pesquisas</span>
             </TabsTrigger>
           </TabsList>
 
@@ -1661,6 +1666,10 @@ export function ModalFichaAluno({
                   </div>
                 )}
               </div>
+            </TabsContent>
+
+            <TabsContent value="pesquisas" className="space-y-4 mt-0">
+              <TimelinePesquisasAluno alunoId={aluno.id} alunoNome={aluno.nome} />
             </TabsContent>
           </div>
         </Tabs>
