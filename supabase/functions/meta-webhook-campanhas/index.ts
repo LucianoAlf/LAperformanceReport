@@ -88,7 +88,7 @@ async function processarMensagem(supabase: any, phoneNumberId: string, msg: any,
   // 1. Buscar número Meta pelo phone_number_id
   const { data: numero, error: numErr } = await supabase
     .from('numeros_meta')
-    .select('id, unidade_id, access_token')
+    .select('id, unidade_id, access_token, auto_reply_ativo, auto_reply_message')
     .eq('phone_number_id', phoneNumberId)
     .single()
 
@@ -266,51 +266,31 @@ async function processarMensagem(supabase: any, phoneNumberId: string, msg: any,
 
         if (novaAgConv) agenteParaInvocar = novaAgConv.agente_id
       }
-    } else {
-      // Sem agente ativo — verificar auto-reply
-      // Buscar campanhas que enviaram template para este telefone
-      const { data: campanhaContato } = await supabase
-        .from('campanha_contatos')
-        .select('campanha_id')
-        .eq('telefone', telefone)
-        .in('status', ['enviado', 'entregue', 'lido'])
-        .order('created_at', { ascending: false })
-        .limit(1)
+    } else if (numero.auto_reply_ativo && numero.auto_reply_message) {
+      // Caixa de disparo sem agente — autoreply reorientando para os canais de atendimento.
+      // Responde a QUALQUER um que escreve (sem trava de campanha).
+      // Debounce: não reenvia se já respondeu este contato nos últimos 10 minutos.
+      const dezMinAtras = new Date(Date.now() - 10 * 60 * 1000).toISOString()
+      const { data: autoReplyRecente } = await supabase
+        .from('mensagens_campanha')
+        .select('id')
+        .eq('conversa_id', conversa.id)
+        .eq('direcao', 'outbound')
+        .eq('metadata->>auto_reply', 'true')
+        .gte('created_at', dezMinAtras)
         .maybeSingle()
 
-      if (campanhaContato) {
-        // Verificar se já enviou auto-reply para esta conversa
-        const { data: autoReplyJaEnviado } = await supabase
-          .from('mensagens_campanha')
-          .select('id')
-          .eq('conversa_id', conversa.id)
-          .eq('direcao', 'outbound')
-          .eq('metadata->>auto_reply', 'true')
-          .maybeSingle()
+      if (!autoReplyRecente) {
+        await enviarMensagemTexto(
+          { phone_number_id: phoneNumberId, access_token: numero.access_token },
+          telefone, numero.auto_reply_message,
+        ).catch(e => console.error('Auto-reply falhou:', e))
 
-        if (!autoReplyJaEnviado) {
-          // Buscar auto_reply de algum agente da unidade
-          const { data: agenteAutoReply } = await supabase
-            .from('agentes')
-            .select('auto_reply_message')
-            .eq('unidade_id', unidadeId)
-            .not('auto_reply_message', 'is', null)
-            .limit(1)
-            .maybeSingle()
-
-          if (agenteAutoReply?.auto_reply_message) {
-            await enviarMensagemTexto(
-              { phone_number_id: phoneNumberId, access_token: numero.access_token },
-              telefone, agenteAutoReply.auto_reply_message,
-            ).catch(e => console.error('Auto-reply falhou:', e))
-
-            await supabase.from('mensagens_campanha').insert({
-              conversa_id: conversa.id, telefone, direcao: 'outbound',
-              tipo: 'text', texto: agenteAutoReply.auto_reply_message,
-              status: 'sent', metadata: { auto_reply: true },
-            })
-          }
-        }
+        await supabase.from('mensagens_campanha').insert({
+          conversa_id: conversa.id, telefone, direcao: 'outbound',
+          tipo: 'text', texto: numero.auto_reply_message,
+          status: 'sent', metadata: { auto_reply: true },
+        })
       }
     }
   }

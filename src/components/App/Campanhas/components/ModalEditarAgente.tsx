@@ -659,16 +659,6 @@ function AbaMensagens({ form, set }: { form: AgenteForm; set: <K extends keyof A
           className={cn(inputCls, 'resize-none')}
         />
       </Campo>
-      <Campo label="Auto-reply (campanhas sem agente)">
-        <textarea
-          value={form.auto_reply_message ?? ''}
-          onChange={e => set('auto_reply_message', e.target.value || null)}
-          placeholder="Opcional — só envia se preenchido e não há agente ativo"
-          rows={3}
-          className={cn(inputCls, 'resize-none')}
-        />
-        <p className="text-xs text-gray-600 mt-1">Enviado apenas 1x quando contato responde a template e não há agente. Deixe vazio para não enviar nada.</p>
-      </Campo>
     </div>
   )
 }

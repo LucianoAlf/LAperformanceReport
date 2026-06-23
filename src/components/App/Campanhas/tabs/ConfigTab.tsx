@@ -34,6 +34,8 @@ function ModalNumero({ open, onOpenChange, numero, onSalvar }: ModalNumeroProps)
     orcamento_mensal: numero.orcamento_mensal,
     is_default: numero.is_default,
     unidade_id: numero.unidade_id,
+    auto_reply_ativo: numero.auto_reply_ativo,
+    auto_reply_message: numero.auto_reply_message,
   } : {
     nome: '',
     phone_number_id: '',
@@ -45,6 +47,8 @@ function ModalNumero({ open, onOpenChange, numero, onSalvar }: ModalNumeroProps)
     orcamento_mensal: null,
     is_default: false,
     unidade_id: isAdmin ? null : (usuario?.unidade_id ?? null),
+    auto_reply_ativo: false,
+    auto_reply_message: null,
   })
 
   const [mostrarToken, setMostrarToken] = useState(false)
@@ -166,6 +170,33 @@ function ModalNumero({ open, onOpenChange, numero, onSalvar }: ModalNumeroProps)
             />
             <span className="text-sm text-gray-300">Número padrão desta unidade</span>
           </label>
+
+          {/* Autoreply — canal de disparo sem atendimento */}
+          <div className="border-t border-slate-700/50 pt-4 space-y-3">
+            <label className="flex items-center gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={form.auto_reply_ativo ?? false}
+                onChange={e => set('auto_reply_ativo', e.target.checked)}
+                className="w-4 h-4 rounded accent-amber-500"
+              />
+              <div>
+                <span className="text-sm text-gray-300">Resposta automática (canal só de avisos)</span>
+                <p className="text-xs text-gray-500">Responde quem escrever aqui avisando que o canal não é de atendimento. Debounce de 10 min por contato.</p>
+              </div>
+            </label>
+            {form.auto_reply_ativo && (
+              <Campo label="Mensagem do autoreply">
+                <textarea
+                  value={form.auto_reply_message ?? ''}
+                  onChange={e => set('auto_reply_message', e.target.value || null)}
+                  placeholder="Ex: Este canal é só para avisos. Para atendimento, fale com sua unidade..."
+                  rows={8}
+                  className={cn(inputCls, 'resize-none')}
+                />
+              </Campo>
+            )}
+          </div>
         </div>
 
         <DialogFooter>

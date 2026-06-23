@@ -81,7 +81,7 @@
 - Tabela nova `automacao_invariantes` — 1 linha por regra violada, com soft `visto_em`. RLS: SELECT para `authenticated`, UPDATE só para admin.
 
 ### Meta WhatsApp Cloud API (Campanhas)
-- `meta-webhook-campanhas` — webhook receiver da Meta WhatsApp API (status updates de campanhas)
+- `meta-webhook-campanhas` — webhook receiver da Meta WhatsApp API (mensagens inbound + status updates). Roteia para agente IA se houver; **autoreply por caixa** (v11, 2026-06-23): se a caixa (`numeros_meta.auto_reply_ativo=true`) não tem agente ativo, responde QUALQUER inbound com `numeros_meta.auto_reply_message` (reorienta para canais de atendimento). Debounce de 10 min por contato (verifica último outbound `metadata->>auto_reply='true'` na conversa). Substituiu o autoreply antigo amarrado a `agentes.auto_reply_message` (que nunca disparou: caixas com `unidade_id=NULL` + trava de campanha). Editável em Campanhas→Config→Número Meta (toggle + textarea). Ativo na caixa "Envio de Avisos (Sem Agente)" (`931b0c24`). ⚠️ Deploy via MCP achata `_shared` → imports `./_shared/`, `verify_jwt:false`.
 - `enviar-campanha` — dispatcher batch de campanhas (recursivo, batch 50, delay 100ms)
 - `controle-campanha` — UI controller (iniciar/pausar/retomar). Atualiza status em `campanhas`, invoca `enviar-campanha`
 - `enviar-mensagem-meta` — envio individual via Meta Cloud API

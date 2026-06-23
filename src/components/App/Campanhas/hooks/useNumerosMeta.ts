@@ -15,6 +15,8 @@ export interface NumeroMeta {
   custo_por_categoria: { marketing: number; utility: number; authentication: number }
   orcamento_mensal: number | null
   is_default: boolean
+  auto_reply_ativo: boolean
+  auto_reply_message: string | null
   created_at: string
   updated_at: string
 }
@@ -30,6 +32,8 @@ export interface NumeroMetaForm {
   orcamento_mensal?: number | null
   is_default: boolean
   unidade_id?: string | null
+  auto_reply_ativo?: boolean
+  auto_reply_message?: string | null
 }
 
 export function useNumerosMeta(unidadeId?: string | null) {
