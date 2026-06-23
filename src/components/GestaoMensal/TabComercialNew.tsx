@@ -477,7 +477,9 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           total_leads: totalLeads,
           leads_arquivados: leadsArquivados,
           leads_ativos: totalLeadsLegado - leadsArquivados - expMarcadas,
-          taxa_conversao_lead_exp: totalLeadsLegado > 0 ? (expRealizadas / totalLeadsLegado) * 100 : 0,
+          taxa_conversao_lead_exp: totalLeads > 0
+            ? (experimentaisDiagnosticoV2.realizadasPresencaConfirmada / totalLeads) * 100
+            : 0,
           leads_por_canal: leadsPorCanalV2,
           leads_por_curso: Array.from(cursosLeadMap.entries()).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value),
           leads_serie_mensal: leadsSerieMensalV2,
@@ -641,11 +643,11 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             />
             <KPICard
               icon={Percent}
-              label="Lead → Exp (legado)"
+              label="Lead -> Exp v2"
               value={dados.taxa_conversao_lead_exp}
               target={metas.taxa_lead_exp}
               format="percent"
-              subvalue="Operacional; regra canônica em validação"
+              subvalue="Leads v2 x realizadas Emusys"
               variant="violet"
             />
           </div>
@@ -654,7 +656,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             <Info className="w-5 h-5 text-cyan-300 flex-shrink-0 mt-0.5" />
             <p className="text-cyan-100 text-sm">
               <strong>Fonte canônica v2:</strong> Leads Entrantes, Leads por Canal e Série Mensal.
-              Arquivados, ativos, curso de interesse e conversão Lead → Exp seguem como legado/pendente.
+              Arquivados, ativos e curso de interesse seguem como leitura operacional.
             </p>
           </div>
 
@@ -725,8 +727,8 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
               <div>
                 <h4 className="text-cyan-100 font-semibold">Origem dos numeros de experimentais</h4>
                 <p className="text-cyan-100/80 text-sm">
-                  Marcadas vêm do funil comercial. Realizadas confirmadas exigem aluno vinculado,
-                  presença individual e aula experimental no Emusys.
+                  Eventos, realizadas e faltas usam o endpoint Emusys v2. A taxa Exp para Mat usa o
+                  denominador canonico da conciliacao quando a competencia esta sem pendencias.
                   {experimentaisDiagnostico.taxaExpMatLiberada
                     ? ' A taxa Exp → Mat está liberada para esta competência.'
                     : ' A taxa Exp → Mat segue bloqueada para esta competência.'}
@@ -795,7 +797,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
             <KPICard
               icon={Calendar}
-              label="Agendadas no funil"
+              label="Eventos Emusys"
               value={dados.experimentais_marcadas}
               variant="cyan"
             />
@@ -808,7 +810,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             />
             <KPICard
               icon={XCircle}
-              label="Faltas no funil"
+              label="Faltas Emusys"
               value={dados.faltaram}
               variant="rose"
             />
@@ -863,7 +865,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             {dados.experimentais_por_canal.length > 0 ? (
               <DistributionChart
                 data={dados.experimentais_por_canal}
-                title="Experimentais/Visitas por Canal (legado)"
+                title="Experimentais/Visitas por Canal (operacional)"
               />
             ) : (
               <EstadoVazio
@@ -877,7 +879,7 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
             {dados.experimentais_por_professor.length > 0 ? (
               <RankingTable
                 data={dados.experimentais_por_professor}
-                title="Experimentais por Professor (legado)"
+                title="Experimentais por Professor (operacional)"
                 valorLabel="Aulas"
               />
             ) : (

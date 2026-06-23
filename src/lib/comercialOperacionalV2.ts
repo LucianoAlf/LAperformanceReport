@@ -60,6 +60,10 @@ export interface ExperimentaisDiagnosticoPayloadV2 {
     experimentais_agendadas?: number | string | null;
     experimentais_canceladas?: number | string | null;
     experimentais_faltaram?: number | string | null;
+    raw_realizadas_emusys?: number | string | null;
+    raw_faltas_emusys?: number | string | null;
+    raw_canceladas_emusys?: number | string | null;
+    raw_conversoes_exp_mat?: number | string | null;
     realizadas_status_operacional?: number | string | null;
     experimentais_realizadas_confirmadas?: number | string | null;
     realizadas_sem_presenca_confirmada?: number | string | null;
@@ -217,21 +221,34 @@ export function normalizarPayloadMensalExperimentaisDiagnosticoV2(
     resumo?.pendencias_taxa_exp_mat ?? resumo?.pendentes_conciliacao,
   );
   const realizadasSemConversao = Math.max(denominadorTaxaExpMat - conversoesExpMatCanonicas, 0);
+  const rawRealizadasEmusys = toComercialNumber(resumo?.raw_realizadas_emusys);
+  const rawFaltasEmusys = toComercialNumber(resumo?.raw_faltas_emusys);
+  const rawCanceladasEmusys = toComercialNumber(resumo?.raw_canceladas_emusys);
+  const rawEventosEmusys = rawRealizadasEmusys + rawFaltasEmusys + rawCanceladasEmusys;
+  const temRawEmusys = rawEventosEmusys > 0;
 
   return {
     mes,
-    agendadasEventos: toComercialNumber(
-      resumo?.experimentais_agendadas ?? totais?.experimentais_agendadas_eventos,
-    ),
-    canceladas: toComercialNumber(
-      resumo?.experimentais_canceladas ?? totais?.experimentais_canceladas,
-    ),
-    noShowStatusOperacional: toComercialNumber(
-      resumo?.experimentais_faltaram ?? totais?.no_show_status_operacional,
-    ),
-    realizadasStatusOperacional: toComercialNumber(
-      resumo?.realizadas_status_operacional ?? totais?.experimentais_realizadas_status_operacional,
-    ),
+    agendadasEventos: temRawEmusys
+      ? rawEventosEmusys
+      : toComercialNumber(
+          resumo?.experimentais_agendadas ?? totais?.experimentais_agendadas_eventos,
+        ),
+    canceladas: temRawEmusys
+      ? rawCanceladasEmusys
+      : toComercialNumber(
+          resumo?.experimentais_canceladas ?? totais?.experimentais_canceladas,
+        ),
+    noShowStatusOperacional: temRawEmusys
+      ? rawFaltasEmusys
+      : toComercialNumber(
+          resumo?.experimentais_faltaram ?? totais?.no_show_status_operacional,
+        ),
+    realizadasStatusOperacional: temRawEmusys
+      ? rawRealizadasEmusys
+      : toComercialNumber(
+          resumo?.realizadas_status_operacional ?? totais?.experimentais_realizadas_status_operacional,
+        ),
     realizadasPresencaConfirmada: toComercialNumber(
       resumo?.experimentais_realizadas_confirmadas ??
         totais?.experimentais_realizadas_presenca_confirmada,

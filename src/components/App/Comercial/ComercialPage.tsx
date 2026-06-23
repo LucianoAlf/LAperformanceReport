@@ -2888,17 +2888,15 @@ export function ComercialPage() {
     const { data: registrosMes } = await registrosMesQuery;
 
     const leadsMes = registrosMes?.reduce((acc, r) => acc + r.quantidade, 0) || 0;
-    // Experimentais do RELATÓRIO MENSAL = as que COMPARECERAM (realizadas), por data da aula.
-    // Faltas e agendadas-não-realizadas não contam (regra do consultor).
-    let expRealizadasQ = supabase
-      .from('lead_experimentais')
-      .select('id', { count: 'exact', head: true })
-      .gte('data_experimental', dataInicio)
-      .lte('data_experimental', dataFim)
-      .in('status', ['experimental_realizada', 'convertido']);
-    if (unidadeRelatorioId) expRealizadasQ = expRealizadasQ.eq('unidade_id', unidadeRelatorioId);
-    const { count: expRealizadasCount } = await expRealizadasQ;
-    const experimentaisMes = expRealizadasCount || 0;
+    // Experimentais do relatorio mensal usam a mesma conciliacao canonica
+    // do diario/cards: endpoint Emusys v2 + decisoes humanas.
+    const taxaExpMatMes = await buscarTaxaExpMatCanonica(
+      unidadeRelatorioId,
+      ano,
+      hoje.getMonth() + 1,
+      'mensal'
+    );
+    const experimentaisMes = taxaExpMatMes.realizadasConfirmadas || taxaExpMatMes.denominador;
     const visitasMes = registrosMes?.filter(r => r.status === 'visita_escola').reduce((acc, r) => acc + r.quantidade, 0) || 0;
     // Matrículas: fonte = alunos por data_matricula (inclui matrículas sem lead).
     // Conta apenas matrículas novas (exclui 2º curso, banda e passaporte zerado),
@@ -2908,12 +2906,6 @@ export function ComercialPage() {
 
     // Calcular conversões
     const conversaoLeadExp = leadsMes > 0 ? (experimentaisMes / leadsMes) * 100 : 0;
-    const taxaExpMatMes = await buscarTaxaExpMatCanonica(
-      unidadeRelatorioId,
-      hoje.getFullYear(),
-      hoje.getMonth() + 1,
-      'mensal'
-    );
     const conversaoLeadMat = leadsMes > 0 ? (matriculasMes / leadsMes) * 100 : 0;
 
     // Matrículas detalhadas do mês (fonte = alunos por data_matricula)

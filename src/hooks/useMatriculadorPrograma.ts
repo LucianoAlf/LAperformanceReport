@@ -146,6 +146,7 @@ interface ConciliacaoExperimentaisV2Payload {
     pendencias_taxa_exp_mat?: number | string | null;
     denominador_taxa_exp_mat?: number | string | null;
     conversoes_exp_mat_canonicas?: number | string | null;
+    experimentais_realizadas_confirmadas?: number | string | null;
   } | null;
 }
 
@@ -284,7 +285,12 @@ async function buscarMetricasMensaisV2(
     const conciliacao = conciliacaoPorMes.get(mes) || null;
     const resumoConciliacao = conciliacao?.resumo || {};
     const leads = toNumber(payload?.kpis?.leads_entrantes);
-    const experimentais = toNumber(payload?.kpis?.experimentais_realizadas_status_operacional);
+    const experimentaisConciliacao = toNumber(
+      resumoConciliacao.experimentais_realizadas_confirmadas ??
+        resumoConciliacao.denominador_taxa_exp_mat,
+    );
+    const experimentais = experimentaisConciliacao ||
+      toNumber(payload?.kpis?.experimentais_realizadas_status_operacional);
     const matriculas = toNumber(payload?.kpis?.matriculas_comerciais_principais);
     const pendenciasExpMat = toNumber(resumoConciliacao.pendencias_taxa_exp_mat);
     const denominadorExpMat = toNumber(resumoConciliacao.denominador_taxa_exp_mat);
