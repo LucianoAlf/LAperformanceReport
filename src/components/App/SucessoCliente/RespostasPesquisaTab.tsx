@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Star, Send, MessageCircle, TrendingUp, Loader2, BarChart3 } from 'lucide-react';
+import { Star, Send, MessageCircle, TrendingUp, Loader2, BarChart3, Plus } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
 } from 'recharts';
@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/select';
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 import { useAnalisePesquisas } from './hooks/useAnalisePesquisas';
+import { ModalLancarRespostaManual } from './ModalLancarRespostaManual';
 
 interface Props {
   unidadeAtual: UnidadeId;
@@ -29,6 +30,7 @@ export function RespostasPesquisaTab({ unidadeAtual, onAbrirConversa }: Props) {
   const hoje = new Date();
   const [ano, setAno] = useState(hoje.getFullYear());
   const [mes, setMes] = useState(hoje.getMonth()); // 0-11
+  const [modalAberto, setModalAberto] = useState(false);
 
   const { dataInicio, dataFim } = useMemo(() => {
     const base = new Date(ano, mes, 1);
@@ -38,7 +40,7 @@ export function RespostasPesquisaTab({ unidadeAtual, onAbrirConversa }: Props) {
     };
   }, [ano, mes]);
 
-  const { analise, respostas, loading } = useAnalisePesquisas(unidadeAtual, dataInicio, dataFim);
+  const { analise, respostas, loading, recarregar } = useAnalisePesquisas(unidadeAtual, dataInicio, dataFim);
 
   const kpis = analise?.kpis;
   const distribuicao = kpis?.distribuicao || {};
@@ -65,6 +67,14 @@ export function RespostasPesquisaTab({ unidadeAtual, onAbrirConversa }: Props) {
           </SelectContent>
         </Select>
         {loading && <Loader2 className="w-4 h-4 animate-spin text-violet-500" />}
+
+        <button
+          onClick={() => setModalAberto(true)}
+          className="ml-auto flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-gradient-to-r from-violet-500 to-pink-500 text-white hover:opacity-90 transition"
+        >
+          <Plus className="w-4 h-4" />
+          Lançar resposta manual
+        </button>
       </div>
 
       {vazio ? (
@@ -286,6 +296,13 @@ export function RespostasPesquisaTab({ unidadeAtual, onAbrirConversa }: Props) {
           </div>
         </>
       )}
+
+      <ModalLancarRespostaManual
+        open={modalAberto}
+        onClose={() => setModalAberto(false)}
+        unidadeAtual={unidadeAtual}
+        onSaved={recarregar}
+      />
     </div>
   );
 }
