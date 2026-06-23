@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Plus, Pencil, Trash2, Phone, Star, StarOff, Eye, EyeOff, RefreshCw, Ban, MessageSquare, Bell, BellOff, Globe, GlobeLock, Settings } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -23,7 +23,7 @@ interface ModalNumeroProps {
 function ModalNumero({ open, onOpenChange, numero, onSalvar }: ModalNumeroProps) {
   const { usuario, isAdmin } = useAuth()
 
-  const [form, setForm] = useState<NumeroMetaForm>(() => numero ? {
+  const buildForm = useCallback((): NumeroMetaForm => numero ? {
     nome: numero.nome,
     phone_number_id: numero.phone_number_id,
     waba_id: numero.waba_id,
@@ -49,7 +49,14 @@ function ModalNumero({ open, onOpenChange, numero, onSalvar }: ModalNumeroProps)
     unidade_id: isAdmin ? null : (usuario?.unidade_id ?? null),
     auto_reply_ativo: false,
     auto_reply_message: null,
-  })
+  }, [numero, isAdmin, usuario?.unidade_id])
+
+  const [form, setForm] = useState<NumeroMetaForm>(buildForm)
+
+  // Recarrega o formulário sempre que o modal abre (corrige campos vazios ao editar)
+  useEffect(() => {
+    if (open) setForm(buildForm())
+  }, [open, buildForm])
 
   const [mostrarToken, setMostrarToken] = useState(false)
   const [salvando, setSalvando] = useState(false)
