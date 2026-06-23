@@ -10,10 +10,12 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 const DEPARTAMENTO = 'sucesso_aluno';
 const JANELA_RESPOSTA_DIAS = 7;
 
-const NOTA_POR_BOTAO = { esperava_mais: 1, foi_ok: 3, amei: 5 };
+const NOTA_POR_BOTAO = { esperava_mais: 1, foi_ok: 2, gostei: 3, gostei_muito: 4, amei: 5 };
 const LABEL_POR_BOTAO = {
   esperava_mais: '⭐ Esperava mais',
-  foi_ok: '⭐⭐⭐ Foi ok',
+  foi_ok: '⭐⭐ Foi ok',
+  gostei: '⭐⭐⭐ Gostei',
+  gostei_muito: '⭐⭐⭐⭐ Gostei muito',
   amei: '⭐⭐⭐⭐⭐ Amei',
 };
 

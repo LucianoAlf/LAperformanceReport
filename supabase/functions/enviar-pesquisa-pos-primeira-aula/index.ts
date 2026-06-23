@@ -27,17 +27,21 @@ function montarTexto(nome, curso) {
   );
 }
 
-// Formato UAZAPI /send/menu com type=list: choices = ["[Seção]", "label|id|descrição", ...]
+// Formato UAZAPI /send/menu com type=list: choices = ["[Seção]", "label|id", ...]
 const CHOICES = [
   '[Sua avaliação]',
-  '⭐ Esperava mais|esperava_mais|Posso melhorar algo?',
-  '⭐⭐⭐ Foi ok|foi_ok|Está indo bem',
-  '⭐⭐⭐⭐⭐ Amei|amei|Estou adorando!',
+  '⭐ Esperava mais|esperava_mais',
+  '⭐⭐ Foi ok|foi_ok',
+  '⭐⭐⭐ Gostei|gostei',
+  '⭐⭐⭐⭐ Gostei muito|gostei_muito',
+  '⭐⭐⭐⭐⭐ Amei|amei',
 ];
 
 const OPCOES_INTERATIVO = [
   { id: 'esperava_mais', label: '⭐ Esperava mais' },
-  { id: 'foi_ok',        label: '⭐⭐⭐ Foi ok' },
+  { id: 'foi_ok',        label: '⭐⭐ Foi ok' },
+  { id: 'gostei',        label: '⭐⭐⭐ Gostei' },
+  { id: 'gostei_muito',  label: '⭐⭐⭐⭐ Gostei muito' },
   { id: 'amei',          label: '⭐⭐⭐⭐⭐ Amei' },
 ];
 
