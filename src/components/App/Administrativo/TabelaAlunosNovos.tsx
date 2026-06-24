@@ -1,5 +1,9 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  firstRelation,
+  isTipoMatriculaForaNovaComercial,
+} from '@/lib/comercialMatriculasCanonicas';
 
 interface AlunoNovo {
   id: number;
@@ -12,7 +16,7 @@ interface AlunoNovo {
   agente_comercial: string | null;
   cursos?: { nome: string } | null;
   professores?: { nome: string } | null;
-  tipos_matricula?: { codigo: string; conta_como_pagante: boolean } | null;
+  tipos_matricula?: { codigo: string; conta_como_pagante: boolean } | { codigo: string; conta_como_pagante: boolean }[] | null;
   formas_pagamento?: { nome: string; sigla: string } | null;
   unidades?: { codigo: string } | null;
 }
@@ -21,21 +25,25 @@ interface TabelaAlunosNovosProps {
   data: AlunoNovo[];
 }
 
-type Filtro = 'todos' | 'pagantes' | 'segundo_curso' | 'bolsistas';
+type Filtro = 'todos' | 'pagantes' | 'segundo_curso' | 'nao_comerciais';
 
-function isBolsistaOuBanda(a: AlunoNovo) {
-  return a.tipo_matricula_id != null && [3, 4, 5].includes(a.tipo_matricula_id) && !a.is_segundo_curso;
+function codigoTipoMatricula(a: AlunoNovo): string {
+  return String(firstRelation(a.tipos_matricula)?.codigo || '').toUpperCase();
+}
+
+function isForaNovosPagantes(a: AlunoNovo) {
+  return !a.is_segundo_curso && isTipoMatriculaForaNovaComercial(codigoTipoMatricula(a));
 }
 
 function isPagante(a: AlunoNovo) {
-  return !a.is_segundo_curso && !isBolsistaOuBanda(a);
+  return a.tipo_matricula_id != null && !a.is_segundo_curso && !isForaNovosPagantes(a);
 }
 
 function getTipoBadge(aluno: AlunoNovo) {
   if (aluno.is_segundo_curso) {
     return { label: '2º Curso', className: 'bg-violet-500/20 text-violet-400' };
   }
-  const codigo = aluno.tipos_matricula?.codigo;
+  const codigo = codigoTipoMatricula(aluno);
   if (codigo === 'BOLSISTA_INT') {
     return { label: 'Bolsista Int.', className: 'bg-amber-500/20 text-amber-400' };
   }
@@ -44,6 +52,9 @@ function getTipoBadge(aluno: AlunoNovo) {
   }
   if (codigo === 'BANDA') {
     return { label: 'Banda', className: 'bg-cyan-500/20 text-cyan-400' };
+  }
+  if (codigo === 'TRANSFERENCIA') {
+    return { label: 'Transferência', className: 'bg-blue-500/20 text-blue-400' };
   }
   return { label: 'Pagante', className: 'bg-emerald-500/20 text-emerald-400' };
 }
@@ -56,13 +67,13 @@ export function TabelaAlunosNovos({ data }: TabelaAlunosNovosProps) {
   // Contagens por categoria
   const countPagantes = data.filter(isPagante).length;
   const countSegundoCurso = data.filter(a => a.is_segundo_curso).length;
-  const countBolsistas = data.filter(isBolsistaOuBanda).length;
+  const countNaoComerciais = data.filter(isForaNovosPagantes).length;
 
   // Filtrar dados
   const dadosFiltrados = filtro === 'todos' ? data
     : filtro === 'pagantes' ? data.filter(isPagante)
     : filtro === 'segundo_curso' ? data.filter(a => a.is_segundo_curso)
-    : data.filter(isBolsistaOuBanda);
+    : data.filter(isForaNovosPagantes);
 
   // Ticket médio dos dados filtrados (apenas pagantes com valor)
   const pagantesComValor = dadosFiltrados.filter(a => a.valor_parcela && Number(a.valor_parcela) > 0);
@@ -74,7 +85,7 @@ export function TabelaAlunosNovos({ data }: TabelaAlunosNovosProps) {
     { id: 'todos', label: 'Todos', count: data.length, color: 'from-slate-500 to-slate-600' },
     { id: 'pagantes', label: 'Novos Pagantes', count: countPagantes, color: 'from-emerald-500 to-teal-500' },
     { id: 'segundo_curso', label: '2º Curso', count: countSegundoCurso, color: 'from-violet-500 to-purple-500' },
-    { id: 'bolsistas', label: 'Bolsistas/Banda', count: countBolsistas, color: 'from-amber-500 to-orange-500' },
+    { id: 'nao_comerciais', label: 'Não comerciais', count: countNaoComerciais, color: 'from-amber-500 to-orange-500' },
   ];
 
   return (

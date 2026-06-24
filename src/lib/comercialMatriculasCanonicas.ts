@@ -37,6 +37,20 @@ export function toComercialMoneyNumber(valor: unknown): number {
   return 0;
 }
 
+export const CODIGOS_TIPO_MATRICULA_FORA_NOVA_COMERCIAL = new Set([
+  'BOLSISTA_INT',
+  'BOLSISTA_PARC',
+  'BANDA',
+  'SEGUNDO_CURSO',
+  'TRANSFERENCIA',
+]);
+
+export function isTipoMatriculaForaNovaComercial(codigo: unknown): boolean {
+  return CODIGOS_TIPO_MATRICULA_FORA_NOVA_COMERCIAL.has(
+    String(codigo || '').trim().toUpperCase(),
+  );
+}
+
 export function ehMatriculaComercialCanonica(
   matricula: MatriculaComercialCanonicaLike,
 ): boolean {
@@ -56,7 +70,7 @@ export function ehMatriculaComercialCanonica(
   }
   if (matricula.is_segundo_curso === true) return false;
   if (ehBanda || ehCoral) return false;
-  if (codigoTipo === 'BOLSISTA_INT' || codigoTipo === 'BOLSISTA_PARC') return false;
+  if (isTipoMatriculaForaNovaComercial(codigoTipo)) return false;
 
   return (
     (tipo?.conta_como_pagante === true || tipo?.entra_ticket_medio === true) &&

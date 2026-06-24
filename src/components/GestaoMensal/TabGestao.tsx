@@ -17,6 +17,7 @@ import { COMPETENCIA_FECHADA_MESSAGE, getCompetenciaAbertaAlertCopy, useCompeten
 import { fetchKPIsAlunosCanonicos } from '@/hooks/useKPIsAlunosCanonicos';
 import { ModalPermanenciaDetalhe } from './ModalPermanenciaDetalhe';
 import { ModalDetalheKPI, BadgeUnidade, TextoCurso, ValorParcela, BadgeTipo } from '@/components/App/Dashboard/ModalDetalheKPI';
+import { isTipoMatriculaForaNovaComercial } from '@/lib/comercialMatriculasCanonicas';
 import {
   aplicarFallbacksRetencao,
   calcularRetencaoOperacionalCanonica,
@@ -231,7 +232,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
         const { data } = await query;
         const filtrados = (data || []).filter((a: any) => {
           const codigo = a.tipos_matricula?.codigo;
-          if (codigo === 'BOLSISTA_INT' || codigo === 'BOLSISTA_PARC') return false;
+          if (isTipoMatriculaForaNovaComercial(codigo)) return false;
           if (a.cursos?.is_projeto_banda) return false;
           if (a.cursos?.nome?.toLowerCase().includes('canto coral')) return false;
           return true;
@@ -738,7 +739,7 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           // Filtrar passaporte only (sem banda, coral, bolsista)
           const leadsMatData = (alunosMatRaw || []).filter((a: any) => {
             const codigo = a.tipos_matricula?.codigo;
-            if (codigo === 'BOLSISTA_INT' || codigo === 'BOLSISTA_PARC') return false;
+            if (isTipoMatriculaForaNovaComercial(codigo)) return false;
             if (a.cursos?.is_projeto_banda) return false;
             if (a.cursos?.nome?.toLowerCase().includes('canto coral')) return false;
             return true;

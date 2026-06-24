@@ -36,7 +36,10 @@ import {
   fetchExperimentaisDiagnosticoComercialV2,
   useComercialOperacionalResumoV2,
 } from '@/hooks/useComercialOperacionalResumoV2';
-import { ehMatriculaComercialCanonica } from '@/lib/comercialMatriculasCanonicas';
+import {
+  ehMatriculaComercialCanonica,
+  isTipoMatriculaForaNovaComercial,
+} from '@/lib/comercialMatriculasCanonicas';
 import { filtrarRetencaoCanonica } from '@/lib/atividadesExtras';
 
 
@@ -204,7 +207,7 @@ export function DashboardPage() {
       const { data } = await query;
       const filtrados = (data || []).filter((a: any) => {
         const codigo = a.tipos_matricula?.codigo;
-        if (codigo === 'BOLSISTA_INT' || codigo === 'BOLSISTA_PARC') return false;
+        if (isTipoMatriculaForaNovaComercial(codigo)) return false;
         if (a.cursos?.is_projeto_banda) return false;
         if (a.cursos?.nome?.toLowerCase().includes('canto coral')) return false;
         return true;

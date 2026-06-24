@@ -61,6 +61,10 @@ import {
   isRenovacaoAntecipada,
 } from '@/lib/renovacoesAntecipadas';
 import { filtrarRetencaoCanonica } from '@/lib/atividadesExtras';
+import {
+  firstRelation,
+  isTipoMatriculaForaNovaComercial,
+} from '@/lib/comercialMatriculasCanonicas';
 
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 
@@ -156,6 +160,18 @@ function getTrimestreLabelFromMes(mes: number): string {
   if (mes >= 4 && mes <= 6) return 'Q2 - Abril, Maio e Junho';
   if (mes >= 7 && mes <= 9) return 'Q3 - Julho, Agosto e Setembro';
   return 'Q4 - Outubro, Novembro e Dezembro';
+}
+
+function codigoTipoMatriculaAluno(row: any): string {
+  return String(firstRelation(row?.tipos_matricula)?.codigo || '').toUpperCase();
+}
+
+function isNovoAlunoPaganteOperacional(row: any): boolean {
+  return Boolean(row?.tipo_matricula_id) && row?.is_segundo_curso !== true && !isTipoMatriculaForaNovaComercial(codigoTipoMatriculaAluno(row));
+}
+
+function isNovoAlunoForaComercial(row: any): boolean {
+  return row?.is_segundo_curso !== true && isTipoMatriculaForaNovaComercial(codigoTipoMatriculaAluno(row));
 }
 
 export function AdministrativoPage() {
@@ -540,14 +556,9 @@ export function AdministrativoPage() {
       setAlunosNovos(todosNovos);
       // Filtrar: apenas novos indivíduos pagantes (sem 2º curso, sem bolsistas)
       // tipos_matricula bolsistas: BOLSISTA_INT(3), BOLSISTA_PARC(4), BANDA(5)
-      const novosAlunos = todosNovos.filter(a => 
-        !a.is_segundo_curso && 
-        a.tipo_matricula_id && ![3, 4, 5].includes(a.tipo_matricula_id)
-      );
+      const novosAlunos = todosNovos.filter(isNovoAlunoPaganteOperacional);
       const novosSegundoCurso = todosNovos.filter(a => a.is_segundo_curso).length;
-      const novosBolsistas = todosNovos.filter(a => 
-        a.tipo_matricula_id && [3, 4, 5].includes(a.tipo_matricula_id)
-      ).length;
+      const novosBolsistas = todosNovos.filter(isNovoAlunoForaComercial).length;
 
       const retencaoRows: RetencaoOperacionalPorUnidade[] = kpisAlunosCanonicos.fonte === 'vivo'
         ? calcularRetencaoOperacionalCanonica({
@@ -1467,7 +1478,7 @@ export function AdministrativoPage() {
             </div>
             <div>
               <h2 className="text-lg font-bold text-white">Detalhamento do Mês</h2>
-              <p className="text-sm text-emerald-400">{renovacoes.length + renovacoesPendentesConfirmacao.length + renovacoesAntecipadas.length + avisosPrevios.length + evasoes.length + naoRenovacoes.length + trancamentos.length + alunosNovos.filter(a => !a.is_segundo_curso && !(a.tipo_matricula_id && [3, 4, 5].includes(a.tipo_matricula_id))).length} movimentações</p>
+              <p className="text-sm text-emerald-400">{renovacoes.length + renovacoesPendentesConfirmacao.length + renovacoesAntecipadas.length + avisosPrevios.length + evasoes.length + naoRenovacoes.length + trancamentos.length + alunosNovos.filter(isNovoAlunoPaganteOperacional).length} movimentações</p>
             </div>
           </div>
         </div>
@@ -1482,7 +1493,7 @@ export function AdministrativoPage() {
               : tab.id === 'nao_renovacoes' ? naoRenovacoes.length
               : tab.id === 'avisos' ? avisosPrevios.length
               : tab.id === 'cancelamentos' ? evasoes.length
-              : tab.id === 'alunos_novos' ? alunosNovos.filter(a => !a.is_segundo_curso && !(a.tipo_matricula_id && [3, 4, 5].includes(a.tipo_matricula_id))).length
+              : tab.id === 'alunos_novos' ? alunosNovos.filter(isNovoAlunoPaganteOperacional).length
               : trancamentos.length;
             const Icon = tab.icon;
             return (

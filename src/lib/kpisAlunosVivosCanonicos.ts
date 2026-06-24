@@ -2,6 +2,7 @@ import { supabase } from '@/lib/supabase';
 import { percentualReajusteMedioCanonico } from '@/lib/retencaoOperacionalCanonica';
 import { isCompetenciaNoPeriodo } from '@/lib/renovacoesAntecipadas';
 import { isAtividadeExtraAcademica } from '@/lib/atividadesExtras';
+import { isTipoMatriculaForaNovaComercial } from '@/lib/comercialMatriculasCanonicas';
 
 export interface KPIsAlunosVivosPorUnidade {
   unidade_id: string;
@@ -180,7 +181,7 @@ function isNovaMatriculaExecutiva(row: AlunoRow, inicioMes: string, dataCorte: s
   if (!row.data_matricula || row.data_matricula < inicioMes || row.data_matricula > dataCorte) return false;
   if (row.is_segundo_curso === true) return false;
   if (isBanda(row) || isCoral(row)) return false;
-  if (tipo?.codigo === 'BOLSISTA_INT' || tipo?.codigo === 'BOLSISTA_PARC') return false;
+  if (isTipoMatriculaForaNovaComercial(tipo?.codigo)) return false;
   return (tipo?.conta_como_pagante === true || tipo?.entra_ticket_medio === true) && n(row.valor_parcela) > 0;
 }
 
