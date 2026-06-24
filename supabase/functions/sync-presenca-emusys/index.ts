@@ -57,6 +57,9 @@ interface AlunoEmusys {
   nome_responsavel?: string;
   email_responsavel?: string;
   telefone_responsavel?: string;
+  // IDs que a API /aulas já fornece: id_lead=0 quando já é aluno; id_aluno=null quando é lead puro
+  id_lead?: number | null;
+  id_aluno?: number | null;
 }
 
 interface AulaEmusys {
@@ -260,18 +263,25 @@ async function reconciliarExperimentaisOrfas(
   supabase: any,
   experimentais: ExperimentalParaReconciliar[]
 ) {
-  const logs: { lead_id: number; lead_nome: string; unidade: string; data: string; status: string; motivo: string }[] = [];
+  const logs: { lead_id: number | null; lead_nome: string; unidade: string; data: string; status: string; motivo: string }[] = [];
   const unidadeNomes = new Map(UNIDADES.map(u => [u.id, u.nome]));
 
   for (const exp of experimentais) {
-    // Cancelada: atualizar registros existentes para 'cancelada' e pular
+    // Cancelada: marcar 'cancelada'. Casa pela AULA (emusys_aula_id) e, p/ legados sem id,
+    // por nome+data (só linhas sem aula_id, p/ não cancelar o outro instrumento do dia).
     if (exp.cancelada) {
+      await supabase
+        .from('lead_experimentais')
+        .update({ status: 'cancelada', updated_at: new Date().toISOString() })
+        .eq('emusys_aula_id', exp.emusysAulaId)
+        .neq('status', 'cancelada');
       for (const aluno of exp.alunos) {
         const nomeAluno = aluno.nome_aluno?.trim();
         if (!nomeAluno) continue;
         await supabase
           .from('lead_experimentais')
           .update({ status: 'cancelada', updated_at: new Date().toISOString() })
+          .is('emusys_aula_id', null)
           .eq('nome_aluno', nomeAluno)
           .eq('data_experimental', exp.dataAula)
           .eq('unidade_id', exp.unidadeId)
@@ -286,37 +296,54 @@ async function reconciliarExperimentaisOrfas(
 
       const unidadeNome = unidadeNomes.get(exp.unidadeId) || exp.unidadeId;
       const telNorm = normalizarTelefone(aluno.telefone_aluno) || normalizarTelefone(aluno.telefone_responsavel);
+      const idLead = Number(aluno.id_lead ?? 0);
+      const idAluno = aluno.id_aluno != null ? Number(aluno.id_aluno) : null;
 
       const presente = aluno.presenca === 'presente';
       const novoStatus = presente ? 'experimental_realizada' : 'experimental_faltou';
 
-      // Verificar se já existe registro na lead_experimentais para esse aluno+data
-      const { data: expExistente } = await supabase
+      // 1. Match primário pela AULA real (emusys_aula_id) — não colapsa multi-instrumento.
+      let { data: expExistente } = await supabase
         .from('lead_experimentais')
-        .select('id, status, lead_id, curso_interesse_id')
-        .eq('nome_aluno', nomeAluno)
-        .eq('data_experimental', exp.dataAula)
-        .eq('unidade_id', exp.unidadeId)
+        .select('id, status, lead_id, curso_interesse_id, professor_experimental_id, emusys_aula_id, aluno_id')
+        .eq('emusys_aula_id', exp.emusysAulaId)
         .neq('status', 'cancelada')
         .limit(1)
         .maybeSingle();
 
+      // 2. Fallback legado: linha sem aula_id (criada antes), casa por nome+data+unidade.
+      if (!expExistente) {
+        const { data: legado } = await supabase
+          .from('lead_experimentais')
+          .select('id, status, lead_id, curso_interesse_id, professor_experimental_id, emusys_aula_id, aluno_id')
+          .is('emusys_aula_id', null)
+          .eq('nome_aluno', nomeAluno)
+          .eq('data_experimental', exp.dataAula)
+          .eq('unidade_id', exp.unidadeId)
+          .neq('status', 'cancelada')
+          .limit(1)
+          .maybeSingle();
+        expExistente = legado || null;
+      }
+
       if (expExistente) {
-        const precisaCorrigirStatus = expExistente.status !== novoStatus;
-        const precisaPreencherCurso = !expExistente.curso_interesse_id && exp.cursoId != null;
+        // Sobrescrever SEMPRE curso/professor com a verdade do /aulas (pega remarcação/troca);
+        // gravar emusys_aula_id/aluno_id se faltavam.
+        const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
+        const statusMudou = expExistente.status !== novoStatus;
+        if (statusMudou) {
+          patch.status = novoStatus;
+          patch.etapa_pipeline_id = presente ? 7 : 9;
+        }
+        if (exp.cursoId != null && expExistente.curso_interesse_id !== exp.cursoId) patch.curso_interesse_id = exp.cursoId;
+        if (exp.professorId != null && expExistente.professor_experimental_id !== exp.professorId) patch.professor_experimental_id = exp.professorId;
+        if (expExistente.emusys_aula_id == null) patch.emusys_aula_id = exp.emusysAulaId;
+        if (idAluno != null && expExistente.aluno_id == null) patch.aluno_id = idAluno;
 
-        // Reconciliação bidirecional: corrigir status divergente e/ou preencher curso faltante
-        if (precisaCorrigirStatus || precisaPreencherCurso) {
-          const patch: Record<string, unknown> = { updated_at: new Date().toISOString() };
-          if (precisaCorrigirStatus) {
-            patch.status = novoStatus;
-            patch.etapa_pipeline_id = presente ? 7 : 9;
-          }
-          if (precisaPreencherCurso) patch.curso_interesse_id = exp.cursoId;
+        if (Object.keys(patch).length > 1) {
           await supabase.from('lead_experimentais').update(patch).eq('id', expExistente.id);
-
           // Propagar status para leads só quando o status mudou (não sobrescrever convertidos/matriculados)
-          if (precisaCorrigirStatus && expExistente.lead_id) {
+          if (statusMudou && expExistente.lead_id) {
             await supabase.from('leads').update({
               experimental_realizada: presente,
               faltou_experimental: !presente,
@@ -330,61 +357,63 @@ async function reconciliarExperimentaisOrfas(
         continue;
       }
 
-      // Buscar lead por telefone
+      // 3. Não existe: resolver identidade (lead puro OU aluno existente) e inserir.
       let leadId: number | null = null;
       let matchadoPorNome = false;
-      if (telNorm) {
+
+      // 3a. Lead pelo id_lead da API (emusys_lead_id)
+      if (idLead > 0) {
+        const { data: leadPorEmusys } = await supabase
+          .from('leads').select('id').eq('emusys_lead_id', idLead).limit(1).maybeSingle();
+        if (leadPorEmusys) leadId = leadPorEmusys.id;
+      }
+      // 3b. Lead por telefone
+      if (!leadId && telNorm) {
         const { data: leadPorTel } = await supabase
-          .from('leads')
-          .select('id')
-          .eq('telefone', telNorm)
-          .eq('unidade_id', exp.unidadeId)
-          .eq('arquivado', false)
-          .limit(1)
-          .maybeSingle();
+          .from('leads').select('id')
+          .eq('telefone', telNorm).eq('unidade_id', exp.unidadeId).eq('arquivado', false)
+          .limit(1).maybeSingle();
         if (leadPorTel) leadId = leadPorTel.id;
       }
-
-      // Fallback por nome normalizado
-      if (!leadId) {
+      // 3c. Fallback por nome — só quando NÃO é aluno existente (sem id_aluno)
+      if (!leadId && idAluno == null) {
         const nomeNorm = normalizarNome(nomeAluno);
         const { data: leads } = await supabase
-          .from('leads')
-          .select('id, nome, data_experimental')
-          .eq('unidade_id', exp.unidadeId)
-          .eq('arquivado', false)
-          .limit(100);
-
+          .from('leads').select('id, nome, data_experimental')
+          .eq('unidade_id', exp.unidadeId).eq('arquivado', false).limit(100);
         const match = (leads || []).find((l: any) => l.nome && normalizarNome(l.nome) === nomeNorm);
-        if (match) {
-          // Guard: match por nome só é aceito se o lead tem data_experimental definida
-          // (evita falso positivo ao criar registro para lead diferente com nome parecido)
-          if (!match.data_experimental) continue;
+        // Guard: match por nome só vale se o lead tem data_experimental (evita falso positivo)
+        if (match && match.data_experimental) {
           leadId = match.id;
           matchadoPorNome = true;
         }
       }
 
+      // Régua do professor é SÓ LEAD por ora (dúvida em aberto: experimental de aluno
+      // antigo conta? — decidir com o Alf). Sem lead → não insere, p/ não inflar o
+      // denominador da régua com linhas que nunca entram no numerador. O id_aluno segue
+      // sendo capturado (match/raw) p/ quando a decisão for tomada.
       if (!leadId) continue;
 
-      // Inserir na lead_experimentais direto no estado final
-      const status = novoStatus;
-
+      // Inserir já no estado final (lead puro).
       const { error } = await supabase
         .from('lead_experimentais')
         .insert({
           lead_id: leadId,
+          aluno_id: idAluno,
           nome_aluno: nomeAluno,
           unidade_id: exp.unidadeId,
           data_experimental: exp.dataAula,
           horario_experimental: exp.horario + ':00',
           professor_experimental_id: exp.professorId,
           curso_interesse_id: exp.cursoId,
-          status,
+          emusys_aula_id: exp.emusysAulaId,
+          emusys_lead_id: idLead > 0 ? idLead : null,
+          status: novoStatus,
           etapa_pipeline_id: presente ? 7 : 9,
         });
 
-      if (!error) {
+      if (!error && leadId) {
         // Propagar para leads (não sobrescrever leads já convertidos/matriculados)
         await supabase.from('leads').update({
           experimental_realizada: presente,
@@ -404,7 +433,7 @@ async function reconciliarExperimentaisOrfas(
         status: error ? 'erro' : (presente ? 'reconciliada_presente' : 'reconciliada_faltou'),
         motivo: error
           ? error.message
-          : `Experimental ${presente ? 'realizada' : 'faltou'} via reconciliação (matchadoPorNome=${matchadoPorNome})`
+          : `Experimental ${presente ? 'realizada' : 'faltou'} via reconciliação (aulaId=${exp.emusysAulaId}, matchadoPorNome=${matchadoPorNome}, alunoExistente=${idAluno != null})`
       });
     }
   }

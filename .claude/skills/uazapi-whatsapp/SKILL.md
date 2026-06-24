@@ -72,6 +72,16 @@ Tabela `whatsapp_caixas`:
 - `administrativo` — comunicacao com alunos (admin inbox)
 - `ambos` — agente + sistema
 
+### ⚠️ Provedor: UAZAPI vs WAHA (gotcha)
+
+`whatsapp_caixas` tem campo **`provedor`** (`uazapi` | `waha`) + colunas WAHA: `waha_url`, `waha_session`, `waha_api_key`, `departamento`. **Nem toda caixa é UAZAPI.** Edges como `relatorio-admin-whatsapp` roteiam pelo `provedor`.
+
+**Trap:** algumas caixas WAHA têm `uazapi_url`/`uazapi_token` **também preenchidos** (instância UAZAPI homônima, mesmo número) — checar status pela UAZAPI dá resultado errado. Sempre conferir `provedor` primeiro.
+
+- Caixa **"Sol"** (id 2, `funcao=sistema`, número +55 21 3955-4415) = **WAHA** (`waha.agenticflowio.com.br`). É a caixa dos relatórios automáticos (`relatorio-admin-whatsapp` resolve por `funcao:'sistema'`).
+- **Status WAHA:** `GET {waha_url}/api/sessions/{waha_session}` header `X-Api-Key: {waha_api_key}` → `status: WORKING` = conectado (outros: `STOPPED`/`SCAN_QR_CODE`/`FAILED`).
+- Erro de envio *"session status is not as expected. Try again later or restart the session"* = sessão (UAZAPI **ou** WAHA) não conectada → reconectar/reparear.
+
 ## API Endpoints
 
 ### Enviar Texto — `POST /send/text`

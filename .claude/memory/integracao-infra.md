@@ -60,7 +60,9 @@
 - `lojinha-relatorio-vendas` — relatorio de vendas
 
 ### Presenca / Sync Emusys
-- `sync-presenca-emusys` (v31, 2026-06-09) — sync aulas/presenca do Emusys (pg_cron diario 22h BRT). **Só registra presença; NÃO calcula mais `dia_aula`/`horario_aula`** (movido para a função SQL `sincronizar_grade_horaria_alunos`).
+- `sync-presenca-emusys` (v31, 2026-06-09) — sync aulas/presenca do Emusys (pg_cron diario **19:50-19:54 BRT**, antecipado de 22h em 2026-06-23). **Só registra presença; NÃO calcula mais `dia_aula`/`horario_aula`** (movido para a função SQL `sincronizar_grade_horaria_alunos`).
+- **Horário antecipado, 10min antes do fechamento de cada unidade (2026-06-23):** os 3 crons rodavam 22:00/22:20/22:40 → o relatório operacional (consultado ~20h) nunca tinha as aulas do próprio dia. Reagendados p/ 10min antes do fechamento, com job separado p/ semana (seg-sex, dow 1-5) e sábado (dow 6). Cada job = 1 unidade c/ token próprio (sem conflito). Não há aula iniciando no horário do cron (aulas começam de hora em hora), então captura o dia todo sem perder nada; o que começar depois entra no sync seguinte (janela 5-7d resgata). **Domingo não roda** (sem aula). Grade horária (01:30 UTC) continua depois, ordem preservada.
+  - **Fechamentos:** semana — CG/Recreio 21h, Barra 20h; sábado — CG/Recreio 15h, Barra 16h.
 - **Vínculo de presença POR CURSO (v31):** o `aluno_id` de `aluno_presenca` passou a ser resolvido pela matrícula do **curso da aula** (`mapaAlunosComposto` chave `nome|nascimento|curso_id`), com fallback ao nome quando ambíguo/sem curso. Antes resolvia só por nome → embaralhava alunos com 2+ cursos. `normalizarCurso` agora remove sufixos `" t"`/`" ind"` (turma/individual) do `curso_nome` do Emusys.
 - **`sincronizar_grade_horaria_alunos` (reescrita 2026-06-09) — fonte ÚNICA do `dia_aula`/`horario_aula`.** Deriva por **pessoa (nome+unidade) + curso da aula** a partir de `aluno_presenca` (moda do dia/horário, 30d com fallback 60d, ≥3 ocorrências), `UPDATE` só quando muda. Robusta a homônimos/multi-curso e ao histórico embaralhado (reagrupa pelo curso da aula). Cron `sincronizar-grade-horaria` 01:30 UTC. Roda em <1s. Helpers `grade_norm_nome`/`grade_norm_curso` (espelham o TS). **Resolveu o flapping** (horários trocados entre matrículas de aluno multi-curso, oscilando 2×/noite — ex: Mateus K. Paulino com Canto/Power Kids/Canto Coral). Forward-only: histórico de `aluno_presenca` (~60d) não foi saneado.
 - **GOTCHA (provado 2026-05-27): o sync de presenca IGNORA o `status` do aluno.** Casa aula→aluno por nome+curso. 64 alunos inativo/evadido/trancado receberam 176 presencas nos ultimos 30 dias. Consequencia: marcar `status='inativo'` NAO para o sync nem tira o aluno de metricas que leem `aluno_presenca` direto (score professor, frequencia). Para um aluno realmente sumir, a linha tem que SAIR de `alunos` (mover p/ `alunos_arquivados`). Soft-delete via status é leaky.
@@ -110,7 +112,8 @@
 | Job | Schedule | Descricao |
 |-----|----------|-----------|
 | `processar-mensagens-agendadas` | `* * * * *` (cada minuto) | Processa fila de mensagens WhatsApp |
-| `sync-presenca-cg` / `-barra` / `-recreio` | `0/20/40 1 * * *` (22h/22h20/22h40 BRT) | Sync presenca do Emusys por unidade (CG `dias:5`, Barra/Recreio `dias:7`) |
+| `sync-presenca-{cg,barra,recreio}` (semana, dow 1-5) | Barra `50 22`, CG `50 23`, Recreio `52 23` (= 19h50/20h50/20h52 BRT) | Sync presenca do Emusys por unidade (CG `dias:5`, Barra/Recreio `dias:7`). 10min antes do fechamento (CG/Rec 21h, Barra 20h) |
+| `sync-presenca-{cg,recreio,barra}-sabado` (dow 6) | CG `50 17`, Recreio `52 17`, Barra `50 18` (= 14h50/14h52/15h50 BRT) | Idem, sábado. Fechamento sáb: CG/Rec 15h, Barra 16h |
 | `sincronizar-grade-horaria` | `30 1 * * *` (22h30 BRT) | `sincronizar_grade_horaria_alunos()` — deriva dia_aula/horario_aula por pessoa+curso |
 | `alertas-diarios` | `0 11 * * *` (diario 8h BRT) | Alertas de projetos via WhatsApp |
 | `alertas-tarefas-atrasadas` | a cada 2h (11-23 UTC) | Alertas tarefas atrasadas |
