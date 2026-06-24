@@ -512,7 +512,7 @@ export function ModalRelatorio({
       : 0;
     const ticketMedio = resumo?.ticket_medio || 0;
     const ltv = (resumo?.ltv_meses || 0) * ticketMedio;
-    const mrrAtual = (resumo?.alunos_pagantes || 0) * ticketMedio;
+    const mrrAtual = resumo?.faturamento || ((resumo?.alunos_pagantes || 0) * ticketMedio);
     const mrrPerdido = evasoes.reduce((acc, e) => acc + (e.valor_parcela_novo || 0), 0);
 
     // Função para gerar barra de progresso WhatsApp

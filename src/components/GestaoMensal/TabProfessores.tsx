@@ -89,8 +89,9 @@ export function TabProfessores({ ano, mes, unidade }: TabProfessoresProps) {
             ? profsComNps.reduce((acc, p) => acc + (p.nps_medio || 0), 0) / profsComNps.length 
             : 0;
 
-          const ticketMedioGeral = total > 0 
-            ? data.reduce((acc, p) => acc + (Number(p.ticket_medio) || 0), 0) / total 
+          const carteiraTicketTotal = data.reduce((acc, p) => acc + (Number(p.carteira_alunos) || 0), 0);
+          const ticketMedioGeral = carteiraTicketTotal > 0
+            ? data.reduce((acc, p) => acc + ((Number(p.ticket_medio) || 0) * (Number(p.carteira_alunos) || 0)), 0) / carteiraTicketTotal
             : 0;
           const mediaPresenca = total > 0 
             ? data.reduce((acc, p) => acc + (Number(p.media_presenca) || 0), 0) / total 

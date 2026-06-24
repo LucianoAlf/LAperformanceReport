@@ -491,11 +491,13 @@ export function AdministrativoPage() {
         alunos_com_2_curso: (acc.alunos_com_2_curso || 0) + (k._alunos_com_2_curso || 0),
         matriculas_2_curso_extras: (acc.matriculas_2_curso_extras || 0) + (k._matriculas_2_curso_extras || 0),
         alunos_coral: alunosCoral,
-        ticket_medio: k.ticket_medio || acc.ticket_medio || 0,
         faturamento: (acc.faturamento || 0) + (Number(k.faturamento_previsto) || 0),
         churn_rate: k.churn_rate || acc.churn_rate || 0,
         ltv_meses: Number(k.tempo_permanencia_medio) || acc.ltv_meses || 0,
       }), {} as any) || {};
+      kpis.ticket_medio = kpis.alunos_pagantes > 0
+        ? kpis.faturamento / kpis.alunos_pagantes
+        : 0;
 
       // Contar movimentações por tipo
       const movRetencaoCanonicas = filtrarRetencaoCanonica(movDataComAlunos);

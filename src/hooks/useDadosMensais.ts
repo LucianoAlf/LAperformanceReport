@@ -93,9 +93,7 @@ export function useDadosMensais(
             churn_rate: Number(
               (data.reduce((acc, d) => acc + (d.churn_rate || 0), 0) / totalRegistros).toFixed(2)
             ),
-            ticket_medio: Number(
-              (data.reduce((acc, d) => acc + (d.ticket_medio || 0), 0) / totalRegistros).toFixed(2)
-            ),
+            ticket_medio: 0,
             taxa_renovacao: Number(
               (data.reduce((acc, d) => acc + (d.taxa_renovacao || 0), 0) / totalRegistros).toFixed(2)
             ),
@@ -117,10 +115,11 @@ export function useDadosMensais(
             (agregados.faturamento_estimado * (1 - agregados.inadimplencia / 100)).toFixed(2)
           );
 
-          // Calcular MRR médio (ticket médio * alunos pagantes)
-          agregados.mrr = Number(
-            (agregados.ticket_medio * agregados.alunos_pagantes).toFixed(2)
-          );
+          // Snapshot financeiro: faturamento_estimado ja e o MRR consolidado.
+          agregados.mrr = agregados.faturamento_estimado;
+          agregados.ticket_medio = agregados.alunos_pagantes > 0
+            ? Number((agregados.mrr / agregados.alunos_pagantes).toFixed(2))
+            : 0;
 
           setDadosAgregados(agregados);
         } else {

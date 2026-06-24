@@ -1455,6 +1455,11 @@ const MESES_COMPLETO = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junh
 function HistoricoMensal({ historico, mediaGrupo, config, metaVolume, metaTicket }: HistoricoMensalProps) {
   const [viewMode, setViewMode] = useState<'tabela' | 'grafico'>('grafico');
   const historicoExpMatLiberado = historico.filter(h => h.taxa_exp_mat_liberada === true);
+  const historicoComTicket = historico.filter(h => h.ticket_medio > 0 && h.total_matriculas > 0);
+  const ticketMedioPonderado = historicoComTicket.length > 0
+    ? historicoComTicket.reduce((acc, h) => acc + ((h.ticket_medio || 0) * h.total_matriculas), 0) /
+      historicoComTicket.reduce((acc, h) => acc + h.total_matriculas, 0)
+    : 0;
   
   // Calcular médias anuais
   const mediasAnuais = {
@@ -1466,7 +1471,7 @@ function HistoricoMensal({ historico, mediaGrupo, config, metaVolume, metaTicket
       ? (historicoExpMatLiberado.reduce((acc, h) => acc + h.taxa_exp_mat, 0) / historicoExpMatLiberado.length).toFixed(1)
       : null,
     taxa_geral: historico.length > 0 ? (historico.reduce((acc, h) => acc + h.taxa_geral, 0) / historico.length).toFixed(1) : 0,
-    ticket_medio: historico.length > 0 ? Math.round(historico.filter(h => h.ticket_medio).reduce((acc, h) => acc + (h.ticket_medio || 0), 0) / historico.filter(h => h.ticket_medio).length) || 0 : 0,
+    ticket_medio: Math.round(ticketMedioPonderado) || 0,
   };
 
   // Calcular volume médio mensal
@@ -1475,9 +1480,7 @@ function HistoricoMensal({ historico, mediaGrupo, config, metaVolume, metaTicket
     : 0;
 
   // Calcular ticket médio
-  const ticketMedio = historico.filter(h => h.ticket_medio).length > 0
-    ? historico.filter(h => h.ticket_medio).reduce((acc, h) => acc + (h.ticket_medio || 0), 0) / historico.filter(h => h.ticket_medio).length
-    : 0;
+  const ticketMedio = ticketMedioPonderado;
 
   // Calcular taxa geral média
   const taxaGeralMedia = historico.length > 0

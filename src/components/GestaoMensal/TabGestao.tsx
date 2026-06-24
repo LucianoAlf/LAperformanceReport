@@ -573,7 +573,9 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           
           const dadosMesAnteriorFinal = {
             ...consolidadoMesAnterior,
-            ticket_medio: consolidadoMesAnterior.count > 0 ? consolidadoMesAnterior.ticket_medio / consolidadoMesAnterior.count : 0,
+            ticket_medio: consolidadoMesAnterior.alunos_pagantes > 0
+              ? consolidadoMesAnterior.faturamento_estimado / consolidadoMesAnterior.alunos_pagantes
+              : 0,
             churn_rate: consolidadoMesAnterior.count > 0 ? consolidadoMesAnterior.churn_rate / consolidadoMesAnterior.count : 0,
             taxa_renovacao: consolidadoMesAnterior.count > 0 ? consolidadoMesAnterior.taxa_renovacao / consolidadoMesAnterior.count : 0,
             tempo_permanencia: consolidadoMesAnterior.count > 0 ? consolidadoMesAnterior.tempo_permanencia / consolidadoMesAnterior.count : 0,
@@ -621,7 +623,9 @@ export function TabGestao({ ano, mes, mesFim, unidade }: TabGestaoProps) {
           
           const dadosAnoAnteriorFinal = {
             ...consolidadoAnoAnterior,
-            ticket_medio: consolidadoAnoAnterior.count > 0 ? consolidadoAnoAnterior.ticket_medio / consolidadoAnoAnterior.count : 0,
+            ticket_medio: consolidadoAnoAnterior.alunos_pagantes > 0
+              ? consolidadoAnoAnterior.faturamento_estimado / consolidadoAnoAnterior.alunos_pagantes
+              : 0,
             churn_rate: consolidadoAnoAnterior.count > 0 ? consolidadoAnoAnterior.churn_rate / consolidadoAnoAnterior.count : 0,
             taxa_renovacao: consolidadoAnoAnterior.count > 0 ? consolidadoAnoAnterior.taxa_renovacao / consolidadoAnoAnterior.count : 0,
             tempo_permanencia: consolidadoAnoAnterior.count > 0 ? consolidadoAnoAnterior.tempo_permanencia / consolidadoAnoAnterior.count : 0,

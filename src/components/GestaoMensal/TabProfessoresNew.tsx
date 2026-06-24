@@ -174,9 +174,8 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
         if (dadosMesAnt.length > 0) {
           const alunosTotal = dadosMesAnt.reduce((acc, d) => acc + (d.alunos_pagantes || 0), 0);
           const matTotal = dadosMesAnt.reduce((acc, d) => acc + (d.novas_matriculas || 0), 0);
-          const ticketMedio = dadosMesAnt.length > 0 
-            ? dadosMesAnt.reduce((acc, d) => acc + (Number(d.ticket_medio) || 0), 0) / dadosMesAnt.length 
-            : 0;
+          const faturamentoTotal = dadosMesAnt.reduce((acc, d) => acc + (Number(d.faturamento_estimado) || 0), 0);
+          const ticketMedio = alunosTotal > 0 ? faturamentoTotal / alunosTotal : 0;
           const expTotal = 0;
 
           setDadosMesAnterior({
@@ -198,9 +197,8 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
         if (dadosAnoAnt.length > 0) {
           const alunosTotal = dadosAnoAnt.reduce((acc, d) => acc + (d.alunos_pagantes || 0), 0);
           const matTotal = dadosAnoAnt.reduce((acc, d) => acc + (d.novas_matriculas || 0), 0);
-          const ticketMedio = dadosAnoAnt.length > 0 
-            ? dadosAnoAnt.reduce((acc, d) => acc + (Number(d.ticket_medio) || 0), 0) / dadosAnoAnt.length 
-            : 0;
+          const faturamentoTotal = dadosAnoAnt.reduce((acc, d) => acc + (Number(d.faturamento_estimado) || 0), 0);
+          const ticketMedio = alunosTotal > 0 ? faturamentoTotal / alunosTotal : 0;
           const expTotal = 0;
 
           setDadosAnoAnterior({

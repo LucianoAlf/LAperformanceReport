@@ -217,9 +217,11 @@ Deno.serve(async (req) => {
     const alunosUrgentes = dados.alunos_renovacao_urgente || [];
 
     const totalPagantes = kpisGestao.reduce((acc, k) => acc + (k.total_alunos_pagantes || 0), 0);
-    const ticketMedio = kpisGestao.length > 0 
-      ? kpisGestao.reduce((acc, k) => acc + (k.ticket_medio || 0), 0) / kpisGestao.length 
-      : 0;
+    const mrrTotal = kpisGestao.reduce(
+      (acc, k) => acc + (Number(k.mrr ?? k.faturamento_previsto) || 0),
+      0,
+    );
+    const ticketMedio = totalPagantes > 0 ? mrrTotal / totalPagantes : 0;
     const churnRate = kpisGestao.length > 0
       ? kpisGestao.reduce((acc, k) => acc + (k.churn_rate || 0), 0) / kpisGestao.length
       : 0;

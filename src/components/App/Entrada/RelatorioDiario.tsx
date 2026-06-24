@@ -16,11 +16,13 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { supabase } from '../../../lib/supabase';
+import { fetchKPIsAlunosCanonicos } from '@/hooks/useKPIsAlunosCanonicos';
 
 interface ResumoUnidade {
   unidade_id: string;
   unidade_nome: string;
   alunos_ativos: number;
+  alunos_pagantes: number;
   matriculas_mes: number;
   evasoes_mes: number;
   saldo_liquido: number;
@@ -82,6 +84,14 @@ export function RelatorioDiario() {
       if (!unidades) return;
 
       const resumos: ResumoUnidade[] = [];
+      const [anoRelatorio, mesRelatorio] = dataRelatorio.split('-').map(Number);
+      const kpisAlunos = await fetchKPIsAlunosCanonicos({
+        ano: anoRelatorio,
+        mes: mesRelatorio,
+      });
+      const kpisPorUnidade = new Map(
+        kpisAlunos.porUnidade.map((row) => [row.unidade_id, row])
+      );
 
       for (const unidade of unidades) {
         // Alunos ativos
@@ -118,26 +128,21 @@ export function RelatorioDiario() {
           .lte('data_renovacao', dataRelatorio);
 
         // Ticket médio
-        const { data: ticketData } = await supabase
-          .from('alunos')
-          .select('valor_mensalidade')
-          .eq('unidade_id', unidade.id)
-          .eq('status', 'ativo');
-
-        const ticketMedio = ticketData && ticketData.length > 0
-          ? ticketData.reduce((acc, a) => acc + (a.valor_mensalidade || 0), 0) / ticketData.length
-          : 0;
+        const kpiFinanceiro = kpisPorUnidade.get(unidade.id);
+        const ticketMedio = kpiFinanceiro?.ticketMedio || 0;
+        const receitaEstimada = kpiFinanceiro?.mrr || 0;
 
         resumos.push({
           unidade_id: unidade.id,
           unidade_nome: unidade.nome,
           alunos_ativos: alunosAtivos || 0,
+          alunos_pagantes: kpiFinanceiro?.alunosPagantes || 0,
           matriculas_mes: matriculasMes || 0,
           evasoes_mes: evasoesMes || 0,
           saldo_liquido: (matriculasMes || 0) - (evasoesMes || 0),
           renovacoes_mes: renovacoesMes || 0,
           taxa_renovacao: 0,
-          receita_estimada: (alunosAtivos || 0) * ticketMedio,
+          receita_estimada: receitaEstimada,
           ticket_medio: Math.round(ticketMedio),
         });
       }
@@ -145,16 +150,16 @@ export function RelatorioDiario() {
       setResumoUnidades(resumos);
 
       // Calcular resumo geral
+      const receitaTotal = resumos.reduce((acc, r) => acc + r.receita_estimada, 0);
+      const pagantesTotal = resumos.reduce((acc, r) => acc + r.alunos_pagantes, 0);
       const geral: ResumoGeral = {
         total_alunos: resumos.reduce((acc, r) => acc + r.alunos_ativos, 0),
         total_matriculas: resumos.reduce((acc, r) => acc + r.matriculas_mes, 0),
         total_evasoes: resumos.reduce((acc, r) => acc + r.evasoes_mes, 0),
         total_renovacoes: resumos.reduce((acc, r) => acc + r.renovacoes_mes, 0),
         saldo_liquido: resumos.reduce((acc, r) => acc + r.saldo_liquido, 0),
-        receita_total: resumos.reduce((acc, r) => acc + r.receita_estimada, 0),
-        ticket_medio: resumos.length > 0 
-          ? Math.round(resumos.reduce((acc, r) => acc + r.ticket_medio, 0) / resumos.length)
-          : 0,
+        receita_total: receitaTotal,
+        ticket_medio: pagantesTotal > 0 ? Math.round(receitaTotal / pagantesTotal) : 0,
       };
 
       setResumoGeral(geral);

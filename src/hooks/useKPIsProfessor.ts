@@ -107,8 +107,9 @@ export function useKPIsProfessor(
         const carteiraMedia = total > 0 
           ? professoresData.reduce((acc, p) => acc + (p.carteira_alunos || 0), 0) / total 
           : 0;
-        const ticketMedioGeral = total > 0 
-          ? professoresData.reduce((acc, p) => acc + (Number(p.ticket_medio) || 0), 0) / total 
+        const carteiraTicketTotal = professoresData.reduce((acc, p) => acc + (Number(p.carteira_alunos) || 0), 0);
+        const ticketMedioGeral = carteiraTicketTotal > 0
+          ? professoresData.reduce((acc, p) => acc + ((Number(p.ticket_medio) || 0) * (Number(p.carteira_alunos) || 0)), 0) / carteiraTicketTotal
           : 0;
         const mediaPresenca = total > 0 
           ? professoresData.reduce((acc, p) => acc + (Number(p.media_presenca) || 0), 0) / total 
