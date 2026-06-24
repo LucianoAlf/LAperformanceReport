@@ -92,7 +92,11 @@ function descreverApi(item: ConciliacaoItem, tiposMap: Map<string, TipoMatricula
     return `bolsa: ${v.bolsa ? 'sim' : 'não'} · ${pagaTxt} → sugere ${sug}`;
   }
   if (Array.isArray(v.candidatos)) {
-    return v.candidatos.map((c: any) => `#${c.id}: ${(c.disciplinas || []).join(', ')}`).join('  |  ');
+    return v.candidatos.map((c: any) => {
+      const disc = (c.disciplinas || []).join(', ');
+      const turma = (c.turmas || []).join(', ');
+      return `#${c.id}: ${disc}${turma ? ` (${turma})` : ''}`;
+    }).join('  |  ');
   }
   if (v.nome) return '(não encontrado na API)';
   if (v.cursos) return `cursos: ${v.cursos.join(', ')}`;

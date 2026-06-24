@@ -45,7 +45,8 @@ const STATUS_API_PARA_NOSSO: Record<string, string> = { ativa: 'ativo', trancada
 
 async function fetchTodasMatriculas(token: string) {
   const porId = new Map<number, any>();
-  const ativasPorNome = new Map<string, any[]>();
+  // indexa TODOS os status para o fallback de nome — a reconciliação resolve o conflito depois
+  const todasPorNome = new Map<string, any[]>();
   let cursor = '';
   for (let i = 0; i < 200; i++) {
     const url = `${EMUSYS_API}/matriculas?status=todas&limite=50${cursor ? `&cursor=${cursor}` : ''}`;
@@ -54,17 +55,15 @@ async function fetchTodasMatriculas(token: string) {
     const json = await resp.json();
     for (const m of json.items || []) {
       porId.set(Number(m.id), m);
-      if (m.status === 'ativa') {
-        const k = normalizarNome(m.aluno?.nome || '');
-        if (!ativasPorNome.has(k)) ativasPorNome.set(k, []);
-        ativasPorNome.get(k)!.push(m);
-      }
+      const k = normalizarNome(m.aluno?.nome || '');
+      if (!todasPorNome.has(k)) todasPorNome.set(k, []);
+      todasPorNome.get(k)!.push(m);
     }
     if (!json.paginacao?.tem_mais || !json.paginacao?.proximo_cursor) break;
     cursor = json.paginacao.proximo_cursor;
     await sleep(1100); // throttle: rate limit 60/min por IP
   }
-  return { porId, ativasPorNome };
+  return { porId, ativasPorNome: todasPorNome };
 }
 
 function resolverCursoContrato(mat: any, depara: Map<number, number | null>, banda: Set<number>) {
@@ -99,6 +98,8 @@ serve(async (req) => {
   const resumo: any = { modo: MODO_TESTE ? 'dry-run' : 'aplicando', unidade: u.nome, auto: 0, fila: {}, erros: 0 };
   const logs: any[] = [];
   const divs: any[] = [];
+  // dry-run: alunos cujo upd seria aplicado (prévia do que o sync faria em produção)
+  const previewAlunoIds: number[] = [];
 
   try {
     const { porId, ativasPorNome } = await fetchTodasMatriculas(u.token);
@@ -113,7 +114,7 @@ serve(async (req) => {
     const profMap = new Map<number, number>((prof || []).map((p: any) => [p.emusys_id, p.professor_id]));
 
     const { data: alunos } = await supabase.from('alunos')
-      .select('id, nome, curso_id, professor_atual_id, emusys_matricula_id, status, data_fim_contrato, valor_cheio, desconto_fixo, desconto_condicional, valor_parcela, tipo_matricula_id')
+      .select('id, nome, curso_id, professor_atual_id, emusys_matricula_id, status, data_fim_contrato, valor_cheio, desconto_fixo, desconto_condicional, valor_parcela, tipo_matricula_id, dia_aula')
       .eq('unidade_id', u.id).eq('status', 'ativo');
 
     // tipo_matricula_id -> codigo (BOLSISTA_INT, REGULAR, etc.) para a régua de classificação
@@ -145,8 +146,10 @@ serve(async (req) => {
         const tipoCodigo = a.tipo_matricula_id ? tipoCodigoMap.get(a.tipo_matricula_id) || null : null;
         const r = reconciliar(a, u, porId, ativasPorNome, depara, profMap, banda, fixadosMap.get(a.id) || new Set(), tipoCodigo);
 
-        // AUTO: aplica mudanças seguras — SÓ fora do dry-run. Em dry-run não escreve nem loga
-        // (evita poluir automacao_log a cada rodada do cron de fila).
+        // AUTO: aplica mudanças seguras. Em produção escreve em `alunos` + loga.
+        // Em dry-run NÃO altera nada, mas registra uma linha `auto_preview` na fila de
+        // conciliação (1 por aluno) com os diffs de→para, para a aba mostrar exatamente
+        // o que o sync faria quando sair do modo auditoria.
         if (Object.keys(r.upd).length) {
           resumo.auto++;
           if (!MODO_TESTE) {
@@ -156,6 +159,16 @@ serve(async (req) => {
               aluno_id: a.id, aluno_nome: a.nome, unidade_nome: u.nome,
               evento: 'sync_matricula_reconciliacao', acao: 'reconciliado',
               status: 'ok', detalhes: r.detalhes, created_at: new Date().toISOString(),
+            });
+          } else {
+            previewAlunoIds.push(a.id);
+            divs.push({
+              aluno_id: a.id, emusys_matricula_id: a.emusys_matricula_id, unidade_id: u.id,
+              tipo_divergencia: 'auto_preview', campo: '',
+              valor_nosso: { nome: a.nome },
+              valor_api: { diffs: r.detalhes?.diffs ?? {}, status_api: r.detalhes?.status_api },
+              sugestao: null, severidade: 'baixa',
+              resolvido: false, updated_at: new Date().toISOString(),
             });
           }
         }
@@ -179,12 +192,52 @@ serve(async (req) => {
     // inserts em lote
     if (logs.length) await supabase.from('automacao_log').insert(logs);
     if (divs.length) await supabase.from('matriculas_divergencias').upsert(divs, { onConflict: 'aluno_id,tipo_divergencia,campo' });
+
+    // limpa ausente_api obsoletos: alunos que foram encontrados na API nesta rodada
+    const encontradosIds = (alunos || [])
+      .filter((a: any) => {
+        const eid = Number(a.emusys_matricula_id);
+        return (a.emusys_matricula_id && porId.has(eid));
+      })
+      .map((a: any) => a.id);
+    if (encontradosIds.length) {
+      await supabase.from('matriculas_divergencias')
+        .update({ resolvido: true, updated_at: new Date().toISOString() })
+        .in('aluno_id', encontradosIds)
+        .eq('tipo_divergencia', 'ausente_api')
+        .eq('resolvido', false);
+    }
+
+    // limpa auto_preview obsoletos: alunos desta unidade que NÃO teriam mais mudança
+    // auto nesta rodada (ou TODOS, quando em produção — lá o upd é aplicado, não previsto).
+    {
+      let q = supabase.from('matriculas_divergencias')
+        .update({ resolvido: true, updated_at: new Date().toISOString() })
+        .eq('unidade_id', u.id)
+        .eq('tipo_divergencia', 'auto_preview')
+        .eq('resolvido', false);
+      if (previewAlunoIds.length) q = q.not('aluno_id', 'in', `(${previewAlunoIds.join(',')})`);
+      await q;
+    }
   } catch (e) {
     resumo.erro_unidade = String(e);
   }
 
   return new Response(JSON.stringify(resumo, null, 2), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 });
+
+// Extrai o dia da semana do nome da turma (ex: "G_Ter_14" → "Terça", "BT_Seg_18" → "Segunda").
+// Retorna null se o formato não for reconhecido.
+function parseDiaDeTurma(nomeTurma: string): string | null {
+  const partes = (nomeTurma || '').split('_');
+  if (partes.length < 3) return null;
+  const abrev = partes[partes.length - 2];
+  const mapa: Record<string, string> = {
+    Seg: 'Segunda', Ter: 'Terça', Qua: 'Quarta',
+    Qui: 'Quinta', Sex: 'Sexta', Sab: 'Sábado',
+  };
+  return mapa[abrev] || null;
+}
 
 // Pura (sem I/O): decide o que fazer com o aluno.
 // Retorna { upd, detalhes, divergencias: [{tipo, campo, valorApi, severidade, sugestao}] }.
@@ -201,10 +254,32 @@ function reconciliar(
   if (a.emusys_matricula_id && porId.has(Number(a.emusys_matricula_id))) {
     mat = porId.get(Number(a.emusys_matricula_id));
   } else {
-    const cand = ativasPorNome.get(normalizarNome(a.nome)) || [];
+    const candTodas = ativasPorNome.get(normalizarNome(a.nome)) || [];
+    // prefere ativas; só cai para qualquer status se não há ativa (ex: trancada no Emusys, ativo no nosso)
+    const candAtivas = candTodas.filter((m: any) => m.status === 'ativa');
+    const cand = candAtivas.length > 0 ? candAtivas : candTodas;
     if (cand.length === 1) mat = cand[0];
     else if (cand.length > 1) {
-      divergencias.push({ tipo: 'ambiguo', campo: '', severidade: 'media', valorApi: { candidatos: cand.map((m: any) => ({ id: m.id, disciplinas: (m.contrato_atual?.disciplinas || []).map((d: any) => d.nome) })) } });
+      // Tenta narrowing por turma: compara dia da turma (nome_turma na API) com dia_aula do nosso banco.
+      // Se resultar em 1 candidato, ainda vai pra fila (nunca auto-aplica), mas com candidato único
+      // para o humano confirmar. Se 0 ou múltiplos, mantém os candidatos originais.
+      let candFinal = cand;
+      if (a.dia_aula) {
+        const diaAluno = normalizarNome(a.dia_aula);
+        const filtradosPorTurma = cand.filter((m: any) =>
+          (m.contrato_atual?.disciplinas || []).some((d: any) => {
+            const dia = parseDiaDeTurma(d.nome_turma || '');
+            return dia && normalizarNome(dia) === diaAluno;
+          })
+        );
+        if (filtradosPorTurma.length === 1) candFinal = filtradosPorTurma;
+      }
+      const candidatosMeta = (m: any) => ({
+        id: m.id, status: m.status,
+        disciplinas: (m.contrato_atual?.disciplinas || []).map((d: any) => d.nome),
+        turmas: (m.contrato_atual?.disciplinas || []).map((d: any) => d.nome_turma).filter(Boolean),
+      });
+      divergencias.push({ tipo: 'ambiguo', campo: '', severidade: 'media', valorApi: { candidatos: candFinal.map(candidatosMeta), filtrado_por_turma: candFinal.length < cand.length } });
       return { upd, divergencias };
     } else {
       divergencias.push({ tipo: 'ausente_api', campo: '', severidade: 'alta', valorApi: { nome: a.nome } });
