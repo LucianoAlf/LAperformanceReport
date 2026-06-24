@@ -200,6 +200,22 @@ serve(async (req) => {
     if (logs.length) await supabase.from('automacao_log').insert(logs);
     if (divs.length) await supabase.from('matriculas_divergencias').upsert(divs, { onConflict: 'aluno_id,tipo_divergencia,campo' });
 
+    // Limpa ambíguos obsoletos: alunos processados nesta rodada que não geraram novo ambíguo.
+    // Caso típico: aluno era ambíguo (3 candidatos), sync filtrou candidatos já vinculados e
+    // agora tem match único → row antigo ficaria para sempre sem ser sobrescrito.
+    {
+      const alunosComAmbiguo = new Set(divs.filter((d: any) => d.tipo_divergencia === 'ambiguo').map((d: any) => d.aluno_id));
+      const alunosSemAmbiguo = (alunos || []).map((a: any) => a.id).filter((id: number) => !alunosComAmbiguo.has(id));
+      if (alunosSemAmbiguo.length) {
+        await supabase.from('matriculas_divergencias')
+          .update({ resolvido: true, updated_at: new Date().toISOString() })
+          .in('aluno_id', alunosSemAmbiguo)
+          .eq('tipo_divergencia', 'ambiguo')
+          .eq('resolvido', false)
+          .eq('unidade_id', u.id);
+      }
+    }
+
     // ─── VARREDURA REVERSA: contratos Emusys sem matrícula nossa ───
     // Detecta contratos ATIVOS no Emusys sem correspondência no banco.
     // Casos cobertos:
