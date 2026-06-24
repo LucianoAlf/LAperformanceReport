@@ -50,6 +50,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
 import { ehMatriculaComercialCanonica } from '@/lib/comercialMatriculasCanonicas';
+import { resolverProfessorExperimentalCanonico } from '@/lib/comercialProfessorExperimental.js';
 import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { PageFilterBar } from '@/components/ui/page-filter-bar';
 import { format } from 'date-fns';
@@ -2533,33 +2534,92 @@ export function ComercialPage() {
     if (uid && uid !== 'todos') q = q.eq('unidade_id', uid);
     const { data } = await q;
     const alunos = (data || []) as any[];
-    const professorIds = Array.from(new Set(
-      alunos.flatMap((a: any) => [a.professor_atual_id, a.professor_experimental_id]).filter(Boolean)
-    ));
     const alunoIds = alunos.map((a: any) => a.id).filter(Boolean);
+    const emusysLeadIds = Array.from(new Set(
+      alunos
+        .map((a: any) => Number(a.emusys_lead_id))
+        .filter((id: number) => Number.isFinite(id) && id > 0)
+    ));
 
-    const [{ data: professores }, { data: leadsVinculados }] = await Promise.all([
-      professorIds.length
-        ? supabase.from('professores').select('id, nome').in('id', professorIds)
-        : Promise.resolve({ data: [] as any[] }),
+    const [
+      { data: leadsVinculados },
+      { data: experimentaisPorAluno },
+      { data: experimentaisPorEmusys },
+    ] = await Promise.all([
       alunoIds.length
         ? supabase
             .from('leads')
             .select('aluno_id, canal_origem_id, canais_origem:canal_origem_id(nome)')
             .in('aluno_id', alunoIds)
         : Promise.resolve({ data: [] as any[] }),
+      alunoIds.length
+        ? supabase
+            .from('lead_experimentais')
+            .select('id, aluno_id, emusys_lead_id, status, data_experimental, professor_experimental_id')
+            .in('aluno_id', alunoIds)
+        : Promise.resolve({ data: [] as any[] }),
+      emusysLeadIds.length
+        ? supabase
+            .from('lead_experimentais')
+            .select('id, aluno_id, emusys_lead_id, status, data_experimental, professor_experimental_id')
+            .in('emusys_lead_id', emusysLeadIds)
+        : Promise.resolve({ data: [] as any[] }),
     ]);
+
+    const experimentaisCanonicas = Array.from(
+      new Map(
+        [...(experimentaisPorAluno || []), ...(experimentaisPorEmusys || [])]
+          .filter((exp: any) => exp?.id)
+          .map((exp: any) => [exp.id, exp])
+      ).values()
+    );
+
+    const professorIds = Array.from(new Set([
+      ...alunos.map((a: any) => a.professor_atual_id),
+      ...experimentaisCanonicas.map((exp: any) => exp.professor_experimental_id),
+    ].filter(Boolean)));
+
+    const { data: professores } = professorIds.length
+      ? await supabase.from('professores').select('id, nome').in('id', professorIds)
+      : { data: [] as any[] };
 
     const professoresPorId = new Map((professores || []).map((p: any) => [p.id, p.nome]));
     const leadsPorAluno = new Map();
     (leadsVinculados || []).forEach((lead: any) => {
       if (lead.aluno_id && !leadsPorAluno.has(lead.aluno_id)) leadsPorAluno.set(lead.aluno_id, lead);
     });
+    const experimentaisPorAlunoId = new Map();
+    const experimentaisPorEmusysLeadId = new Map();
+    experimentaisCanonicas.forEach((exp: any) => {
+      const enriquecida = {
+        ...exp,
+        professorExperimentalNome: professoresPorId.get(exp.professor_experimental_id) || null,
+      };
+      if (exp.aluno_id) {
+        const lista = experimentaisPorAlunoId.get(exp.aluno_id) || [];
+        lista.push(enriquecida);
+        experimentaisPorAlunoId.set(exp.aluno_id, lista);
+      }
+      if (exp.emusys_lead_id) {
+        const lista = experimentaisPorEmusysLeadId.get(Number(exp.emusys_lead_id)) || [];
+        lista.push(enriquecida);
+        experimentaisPorEmusysLeadId.set(Number(exp.emusys_lead_id), lista);
+      }
+    });
 
     return alunos.map((aluno: any) => {
       const lead = leadsPorAluno.get(aluno.id);
       const canalAluno = (aluno.canais_origem as any)?.nome;
       const canalLead = (lead?.canais_origem as any)?.nome;
+      const emusysLeadId = Number(aluno.emusys_lead_id);
+      const experimentaisCanonicasAluno = [
+        ...(experimentaisPorAlunoId.get(aluno.id) || []),
+        ...(Number.isFinite(emusysLeadId) ? (experimentaisPorEmusysLeadId.get(emusysLeadId) || []) : []),
+      ];
+      const professorExpCanonico = resolverProfessorExperimentalCanonico({
+        dataMatricula: aluno.data_matricula,
+        experimentais: experimentaisCanonicasAluno,
+      });
 
       return {
         ...aluno,
@@ -2575,7 +2635,7 @@ export function ComercialPage() {
         unidade_nome: (aluno.unidades as any)?.nome,
         hunter_nome: (aluno.unidades as any)?.hunter_nome,
         professor_fixo_nome: professoresPorId.get(aluno.professor_atual_id) || null,
-        professor_exp_nome: professoresPorId.get(aluno.professor_experimental_id) || null,
+        professor_exp_nome: professorExpCanonico,
         forma_pagamento_nome: (aluno.formas_pagamento as any)?.nome || null,
       };
     });
