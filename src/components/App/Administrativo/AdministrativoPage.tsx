@@ -8,7 +8,7 @@ import { useToast } from '@/hooks/useToast';
 import { 
   Users, DollarSign, BookOpen, GraduationCap, UserPlus,
   FileText, Calendar, Plus, Pause, RefreshCw, XCircle, AlertTriangle, LogOut,
-  Zap, BarChart3, CheckCircle, DoorOpen, PauseCircle, Search, Clock
+  Zap, BarChart3, CheckCircle, DoorOpen, PauseCircle, Search, Clock, ArrowRightLeft
 } from 'lucide-react';
 
 import { supabase } from '@/lib/supabase';
@@ -29,10 +29,12 @@ import { ModalNaoRenovacao } from './ModalNaoRenovacao';
 import { ModalAvisoPrevio } from './ModalAvisoPrevio';
 import { ModalEvasao } from './ModalEvasao';
 import { ModalTrancamento } from './ModalTrancamento';
+import { ModalTransferencia } from './ModalTransferencia';
 import { ModalRelatorio } from './ModalRelatorio';
 import { TabelaNaoRenovacoes } from './TabelaNaoRenovacoes';
 import { TabelaTrancamentos } from './TabelaTrancamentos';
 import { TabelaAlunosNovos } from './TabelaAlunosNovos';
+import { TabelaTransferencias } from './TabelaTransferencias';
 import { ModalConfirmacao } from '@/components/ui/ModalConfirmacao';
 import { AlertasRetencao } from './AlertasRetencao';
 import { PlanoAcaoRetencao } from './PlanoAcaoRetencao';
@@ -62,9 +64,11 @@ import {
 } from '@/lib/renovacoesAntecipadas';
 import { filtrarRetencaoCanonica } from '@/lib/atividadesExtras';
 import {
-  firstRelation,
-  isTipoMatriculaForaNovaComercial,
-} from '@/lib/comercialMatriculasCanonicas';
+  codigoTipoMatriculaAdministrativo,
+  isAlunoNovoForaComercial,
+  isAlunoNovoPaganteAdministrativo,
+  isAlunoTransferenciaAdministrativa,
+} from '@/lib/administrativoTransferencias';
 
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 
@@ -140,9 +144,10 @@ export interface ResumoMes {
   mrr_perdido: number;
   novos_segundo_curso: number;
   novos_bolsistas: number;
+  novas_transferencias: number;
 }
 
-type TabId = 'renovacoes' | 'renovacoes_pendentes' | 'renovacoes_antecipadas' | 'nao_renovacoes' | 'avisos' | 'cancelamentos' | 'trancamentos' | 'alunos_novos';
+type TabId = 'renovacoes' | 'renovacoes_pendentes' | 'renovacoes_antecipadas' | 'nao_renovacoes' | 'avisos' | 'cancelamentos' | 'trancamentos' | 'transferencias' | 'alunos_novos';
 
 const tabs: { id: TabId; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { id: 'renovacoes', label: 'Renovações', icon: CheckCircle },
@@ -152,6 +157,7 @@ const tabs: { id: TabId; label: string; icon: React.ComponentType<{ className?: 
   { id: 'avisos', label: 'Avisos Prévios', icon: AlertTriangle },
   { id: 'cancelamentos', label: 'Cancelamentos', icon: DoorOpen },
   { id: 'trancamentos', label: 'Trancamentos', icon: PauseCircle },
+  { id: 'transferencias', label: 'Transferencias', icon: ArrowRightLeft },
   { id: 'alunos_novos', label: 'Alunos Novos', icon: UserPlus },
 ];
 
@@ -162,16 +168,12 @@ function getTrimestreLabelFromMes(mes: number): string {
   return 'Q4 - Outubro, Novembro e Dezembro';
 }
 
-function codigoTipoMatriculaAluno(row: any): string {
-  return String(firstRelation(row?.tipos_matricula)?.codigo || '').toUpperCase();
-}
-
 function isNovoAlunoPaganteOperacional(row: any): boolean {
-  return Boolean(row?.tipo_matricula_id) && row?.is_segundo_curso !== true && !isTipoMatriculaForaNovaComercial(codigoTipoMatriculaAluno(row));
+  return isAlunoNovoPaganteAdministrativo(row);
 }
 
 function isNovoAlunoForaComercial(row: any): boolean {
-  return row?.is_segundo_curso !== true && isTipoMatriculaForaNovaComercial(codigoTipoMatriculaAluno(row));
+  return isAlunoNovoForaComercial(row);
 }
 
 export function AdministrativoPage() {
@@ -231,6 +233,7 @@ export function AdministrativoPage() {
   const [modalAvisoPrevio, setModalAvisoPrevio] = useState(false);
   const [modalEvasao, setModalEvasao] = useState(false);
   const [modalTrancamento, setModalTrancamento] = useState(false);
+  const [modalTransferencia, setModalTransferencia] = useState(false);
   const [modalRelatorio, setModalRelatorio] = useState(false);
   const [editingItem, setEditingItem] = useState<MovimentacaoAdmin | null>(null);
   const [modalConfirmacao, setModalConfirmacao] = useState(false);
@@ -290,9 +293,10 @@ export function AdministrativoPage() {
       let query = supabase
         .from('alunos')
         .select(`
-          nome, data_matricula, valor_parcela, status, is_segundo_curso,
+          nome, data_matricula, valor_parcela, status, is_segundo_curso, tipo_matricula_id,
           unidades:unidade_id!inner(nome),
-          cursos:curso_id!left(nome, is_projeto_banda)
+          cursos:curso_id!left(nome, is_projeto_banda),
+          tipos_matricula(codigo)
         `)
         .in('status', ['ativo', 'aviso_previo', 'trancado'])
         .order('nome');
@@ -307,7 +311,8 @@ export function AdministrativoPage() {
         const isBanda = a.cursos?.is_projeto_banda || false;
         const isCoral = cursoNome.toLowerCase().includes('canto coral');
         const is2Curso = a.is_segundo_curso || false;
-        const tipo = isBanda ? 'Banda' : isCoral ? 'Coral' : is2Curso ? '2º Curso' : '—';
+        const isTransferencia = codigoTipoMatriculaAdministrativo(a) === 'TRANSFERENCIA';
+        const tipo = isTransferencia ? 'Transferência' : isBanda ? 'Banda' : isCoral ? 'Coral' : is2Curso ? '2º Curso' : '—';
 
         return {
           nome: a.nome,
@@ -558,7 +563,10 @@ export function AdministrativoPage() {
       // tipos_matricula bolsistas: BOLSISTA_INT(3), BOLSISTA_PARC(4), BANDA(5)
       const novosAlunos = todosNovos.filter(isNovoAlunoPaganteOperacional);
       const novosSegundoCurso = todosNovos.filter(a => a.is_segundo_curso).length;
-      const novosBolsistas = todosNovos.filter(isNovoAlunoForaComercial).length;
+      const novasTransferencias = todosNovos.filter(isAlunoTransferenciaAdministrativa).length;
+      const novosBolsistas = todosNovos.filter(a =>
+        isNovoAlunoForaComercial(a) && !isAlunoTransferenciaAdministrativa(a)
+      ).length;
 
       const retencaoRows: RetencaoOperacionalPorUnidade[] = kpisAlunosCanonicos.fonte === 'vivo'
         ? calcularRetencaoOperacionalCanonica({
@@ -602,6 +610,7 @@ export function AdministrativoPage() {
         alunos_novos: novosAlunos.length,
         novos_segundo_curso: novosSegundoCurso,
         novos_bolsistas: novosBolsistas,
+        novas_transferencias: novasTransferencias,
         matriculas_ativas: matriculasAtivas,
         renovacoes_previstas: renovacoesRealizadasCount + naoRenovacoesCount + renovacoesPendentesCount,
         renovacoes_realizadas: renovacoesRealizadasCount,
@@ -758,6 +767,47 @@ export function AdministrativoPage() {
     } catch (error) {
       console.error('Erro ao salvar:', error);
       toastError('Erro ao salvar', 'Ocorreu um erro ao salvar o registro. Tente novamente.');
+      return false;
+    }
+  }
+
+  async function handleSaveTransferencia(aluno: { id: number; nome: string }) {
+    try {
+      const { data: tipoTransferencia, error: tipoError } = await supabase
+        .from('tipos_matricula')
+        .select('id')
+        .eq('codigo', 'TRANSFERENCIA')
+        .maybeSingle();
+
+      if (tipoError) throw tipoError;
+
+      if (!tipoTransferencia?.id) {
+        toastError(
+          'Tipo de transferencia ausente no banco',
+          'A migration 20260624_tipo_matricula_transferencia.sql precisa ser aplicada no Supabase.'
+        );
+        return false;
+      }
+
+      const { error } = await supabase
+        .from('alunos')
+        .update({ tipo_matricula_id: tipoTransferencia.id })
+        .eq('id', aluno.id);
+
+      if (error) throw error;
+
+      toastSuccess(
+        'Transferencia registrada',
+        `${aluno.nome} saiu de matricula nova comercial e permanece na base administrativa.`
+      );
+      await loadData();
+      return true;
+    } catch (error) {
+      console.error('Erro ao registrar transferencia:', error);
+      toastError(
+        'Erro ao registrar transferencia',
+        'Nao foi possivel atualizar o tipo de matricula do aluno.'
+      );
       return false;
     }
   }
@@ -932,6 +982,7 @@ export function AdministrativoPage() {
   const evasoes = movimentacoes.filter(m => m.tipo === 'evasao');
   const naoRenovacoes = movimentacoes.filter(m => m.tipo === 'nao_renovacao');
   const trancamentos = movimentacoes.filter(m => m.tipo === 'trancamento');
+  const transferencias = alunosNovos.filter(isAlunoTransferenciaAdministrativa);
 
   // Gerar opções de competência (últimos 12 meses)
   const competenciaOptions = Array.from({ length: 12 }, (_, i) => {
@@ -1101,11 +1152,12 @@ export function AdministrativoPage() {
           <KPICard
             icon={UserPlus}
             label="Novos no Mês"
-            tooltip="Alunos que matricularam no mes atual. Inclui novos alunos, segundo curso e bolsistas."
+            tooltip="Alunos pagantes novos do mês. Segundo curso, bolsistas e transferencias ficam separados para nao inflar aquisicao."
             value={resumo?.alunos_novos || 0}
             subvalue={[
               resumo?.novos_bolsistas ? `${resumo.novos_bolsistas} bolsista${resumo.novos_bolsistas > 1 ? 's' : ''}` : '',
               resumo?.novos_segundo_curso ? `${resumo.novos_segundo_curso} 2º curso` : '',
+              resumo?.novas_transferencias ? `${resumo.novas_transferencias} transferencia${resumo.novas_transferencias > 1 ? 's' : ''}` : '',
             ].filter(Boolean).join(' | ') || 'novos alunos pagantes'}
             variant="green"
           />
@@ -1131,7 +1183,7 @@ export function AdministrativoPage() {
           <Plus className="w-4 h-4" />
           Clique para adicionar um novo registro
         </p>
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-7 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-8 gap-4">
           <QuickInputCard
             icon={RefreshCw}
             title="Renovação"
@@ -1173,6 +1225,13 @@ export function AdministrativoPage() {
             count={trancamentos.length}
             variant="amber"
             onClick={() => { setEditingItem(null); setModalTrancamento(true); }}
+          />
+          <QuickInputCard
+            icon={ArrowRightLeft}
+            title="Transferencia"
+            count={transferencias.length}
+            variant="blue"
+            onClick={() => { setEditingItem(null); setModalTransferencia(true); }}
           />
           <QuickInputCard
             icon={LogOut}
@@ -1478,14 +1537,14 @@ export function AdministrativoPage() {
             </div>
             <div>
               <h2 className="text-lg font-bold text-white">Detalhamento do Mês</h2>
-              <p className="text-sm text-emerald-400">{renovacoes.length + renovacoesPendentesConfirmacao.length + renovacoesAntecipadas.length + avisosPrevios.length + evasoes.length + naoRenovacoes.length + trancamentos.length + alunosNovos.filter(isNovoAlunoPaganteOperacional).length} movimentações</p>
+              <p className="text-sm text-emerald-400">{renovacoes.length + renovacoesPendentesConfirmacao.length + renovacoesAntecipadas.length + avisosPrevios.length + evasoes.length + naoRenovacoes.length + trancamentos.length + transferencias.length + alunosNovos.filter(isNovoAlunoPaganteOperacional).length} movimentações</p>
             </div>
           </div>
         </div>
         <div className="p-6">
 
         {/* Tabs */}
-        <div className="flex gap-2 mb-4">
+        <div className="flex flex-wrap gap-2 mb-4">
           {tabs.map(tab => {
             const count = tab.id === 'renovacoes' ? renovacoes.length
               : tab.id === 'renovacoes_pendentes' ? renovacoesPendentesConfirmacao.length
@@ -1493,6 +1552,7 @@ export function AdministrativoPage() {
               : tab.id === 'nao_renovacoes' ? naoRenovacoes.length
               : tab.id === 'avisos' ? avisosPrevios.length
               : tab.id === 'cancelamentos' ? evasoes.length
+              : tab.id === 'transferencias' ? transferencias.length
               : tab.id === 'alunos_novos' ? alunosNovos.filter(isNovoAlunoPaganteOperacional).length
               : trancamentos.length;
             const Icon = tab.icon;
@@ -1592,6 +1652,9 @@ export function AdministrativoPage() {
               }}
             />
           )}
+          {activeTab === 'transferencias' && (
+            <TabelaTransferencias data={transferencias} />
+          )}
           {activeTab === 'alunos_novos' && (
             <TabelaAlunosNovos data={alunosNovos} />
           )}
@@ -1645,6 +1708,12 @@ export function AdministrativoPage() {
         editingItem={editingItem}
         professores={professores}
         competencia={competencia}
+        unidadeId={unidade === 'todos' ? null : unidade}
+      />
+      <ModalTransferencia
+        open={modalTransferencia}
+        onOpenChange={setModalTransferencia}
+        onSave={handleSaveTransferencia}
         unidadeId={unidade === 'todos' ? null : unidade}
       />
       <ModalRelatorio
@@ -1717,6 +1786,7 @@ export function AdministrativoPage() {
               'text-xs px-2 py-0.5 rounded-full whitespace-nowrap',
               v === 'Banda' && 'bg-amber-500/20 text-amber-400',
               v === 'Coral' && 'bg-pink-500/20 text-pink-400',
+              v === 'Transferência' && 'bg-sky-500/20 text-sky-400',
               v === '2º Curso' && 'bg-violet-500/20 text-violet-400',
               v === '—' && 'text-slate-500',
             )}>{v}</span>
@@ -1736,12 +1806,14 @@ export function AdministrativoPage() {
           const total = dadosModalMatriculasAtivas.length;
           const banda = dadosModalMatriculasAtivas.filter(d => d.tipo === 'Banda').length;
           const coral = dadosModalMatriculasAtivas.filter(d => d.tipo === 'Coral').length;
+          const transferenciasAtivas = dadosModalMatriculasAtivas.filter(d => d.tipo === 'Transferência').length;
           const segundo = dadosModalMatriculasAtivas.filter(d => d.tipo === '2º Curso').length;
           const comValor = dadosModalMatriculasAtivas.filter(d => d._valor_raw > 0);
           const somaValor = comValor.reduce((s, d) => s + d._valor_raw, 0);
           return [
             { label: 'Total', valor: total, icone: <BookOpen size={14} />, cor: 'text-violet-400', destaque: true },
             { label: 'Banda', valor: banda, icone: <Users size={14} />, cor: 'text-amber-400', filtroKey: 'tipo', filtroValor: 'Banda' },
+            { label: 'Transferências', valor: transferenciasAtivas, icone: <ArrowRightLeft size={14} />, cor: 'text-sky-400', filtroKey: 'tipo', filtroValor: 'Transferência' },
             { label: '2º Curso', valor: segundo, icone: <GraduationCap size={14} />, cor: 'text-violet-400', filtroKey: 'tipo', filtroValor: '2º Curso' },
             { label: 'Faturamento', valor: `R$ ${somaValor.toLocaleString('pt-BR')}`, icone: <DollarSign size={14} />, cor: 'text-emerald-400' },
           ];

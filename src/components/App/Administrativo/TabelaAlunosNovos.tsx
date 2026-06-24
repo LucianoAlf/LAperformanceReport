@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import {
-  firstRelation,
-  isTipoMatriculaForaNovaComercial,
-} from '@/lib/comercialMatriculasCanonicas';
+  codigoTipoMatriculaAdministrativo,
+  isAlunoNovoForaComercial,
+  isAlunoNovoPaganteAdministrativo,
+} from '@/lib/administrativoTransferencias';
 
 interface AlunoNovo {
   id: number;
@@ -27,23 +28,19 @@ interface TabelaAlunosNovosProps {
 
 type Filtro = 'todos' | 'pagantes' | 'segundo_curso' | 'nao_comerciais';
 
-function codigoTipoMatricula(a: AlunoNovo): string {
-  return String(firstRelation(a.tipos_matricula)?.codigo || '').toUpperCase();
-}
-
 function isForaNovosPagantes(a: AlunoNovo) {
-  return !a.is_segundo_curso && isTipoMatriculaForaNovaComercial(codigoTipoMatricula(a));
+  return isAlunoNovoForaComercial(a);
 }
 
 function isPagante(a: AlunoNovo) {
-  return a.tipo_matricula_id != null && !a.is_segundo_curso && !isForaNovosPagantes(a);
+  return isAlunoNovoPaganteAdministrativo(a);
 }
 
 function getTipoBadge(aluno: AlunoNovo) {
   if (aluno.is_segundo_curso) {
     return { label: '2º Curso', className: 'bg-violet-500/20 text-violet-400' };
   }
-  const codigo = codigoTipoMatricula(aluno);
+  const codigo = codigoTipoMatriculaAdministrativo(aluno);
   if (codigo === 'BOLSISTA_INT') {
     return { label: 'Bolsista Int.', className: 'bg-amber-500/20 text-amber-400' };
   }

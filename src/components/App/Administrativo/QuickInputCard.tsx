@@ -5,7 +5,7 @@ interface QuickInputCardProps {
   icon: LucideIcon;
   title: string;
   count: number;
-  variant: 'emerald' | 'amber' | 'orange' | 'rose' | 'cyan' | 'violet';
+  variant: 'emerald' | 'amber' | 'orange' | 'rose' | 'cyan' | 'violet' | 'blue';
   onClick: () => void;
 }
 
@@ -45,6 +45,12 @@ const variantStyles = {
     border: 'border-violet-500/30',
     text: 'text-violet-400',
     iconBg: 'from-violet-500 to-purple-500',
+  },
+  blue: {
+    bg: 'bg-sky-500/10',
+    border: 'border-sky-500/30',
+    text: 'text-sky-400',
+    iconBg: 'from-sky-500 to-blue-500',
   },
 };
 
