@@ -35,7 +35,7 @@ interface Aluno {
   unidade?: { nome: string };
   curso?: { nome: string };
   data_matricula: string;
-  valor_mensalidade: number;
+  valor_parcela: number | null;
 }
 
 export function FormRenovacao() {
@@ -87,8 +87,9 @@ export function FormRenovacao() {
   const selectAluno = (aluno: Aluno) => {
     setSelectedAluno(aluno);
     setValue('aluno_id', aluno.id);
-    setValue('valor_anterior', aluno.valor_mensalidade);
-    setValue('valor_novo', Math.round(aluno.valor_mensalidade * 1.08));
+    const valorAtual = Number(aluno.valor_parcela || 0);
+    setValue('valor_anterior', valorAtual);
+    setValue('valor_novo', Math.round(valorAtual * 1.08));
     setAlunos([]);
     setAlunoSearch('');
   };
@@ -109,7 +110,7 @@ export function FormRenovacao() {
     setLoading(true);
     try {
       await supabase.from('alunos').update({
-        valor_mensalidade: data.valor_novo,
+        valor_parcela: data.valor_novo,
         data_ultima_renovacao: data.data_renovacao,
       }).eq('id', data.aluno_id);
 
@@ -182,7 +183,7 @@ export function FormRenovacao() {
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="text-white font-medium">{aluno.nome}</p>
-                      <p className="text-gray-400 text-sm">{aluno.curso?.nome} • {aluno.unidade?.nome} • R$ {aluno.valor_mensalidade}</p>
+                      <p className="text-gray-400 text-sm">{aluno.curso?.nome} • {aluno.unidade?.nome} • R$ {Number(aluno.valor_parcela || 0)}</p>
                     </div>
                     <span className="text-xs text-gray-500">{calcularTempoAluno(aluno.data_matricula)} meses</span>
                   </div>
@@ -212,11 +213,11 @@ export function FormRenovacao() {
                   <p className="text-xs text-gray-400">meses de permanência</p>
                 </div>
                 <div className="bg-slate-800/50 rounded-xl p-3">
-                  <p className="text-2xl font-bold text-white">R$ {selectedAluno.valor_mensalidade}</p>
+                  <p className="text-2xl font-bold text-white">R$ {Number(selectedAluno.valor_parcela || 0)}</p>
                   <p className="text-xs text-gray-400">valor atual</p>
                 </div>
                 <div className="bg-slate-800/50 rounded-xl p-3">
-                  <p className="text-2xl font-bold text-green-400">R$ {(selectedAluno.valor_mensalidade * calcularTempoAluno(selectedAluno.data_matricula)).toLocaleString()}</p>
+                  <p className="text-2xl font-bold text-green-400">R$ {(Number(selectedAluno.valor_parcela || 0) * calcularTempoAluno(selectedAluno.data_matricula)).toLocaleString()}</p>
                   <p className="text-xs text-gray-400">LTV acumulado</p>
                 </div>
               </div>

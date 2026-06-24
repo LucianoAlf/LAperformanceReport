@@ -1174,7 +1174,7 @@ export function TabelaAlunos({
       const { data: alunosAtivos, error: errorBusca } = await supabase
         .from('alunos')
         .select('id, status_pagamento, valor_parcela, dia_vencimento, unidade_id')
-        .eq('status', 'Ativo');
+        .in('status', ['ativo', 'trancado']);
 
       if (errorBusca) throw errorBusca;
 
@@ -1204,7 +1204,7 @@ export function TabelaAlunos({
       const { error: errorReset } = await supabase
         .from('alunos')
         .update({ status_pagamento: null })
-        .eq('status', 'Ativo');
+        .in('status', ['ativo', 'trancado']);
 
       if (errorReset) throw errorReset;
 
@@ -1213,7 +1213,7 @@ export function TabelaAlunos({
       setConfirmacaoReset('');
       onRecarregar();
       
-      alert(`✅ Reset concluído!\n\n• ${snapshotData?.length || 0} registros salvos no histórico\n• ${alunosAtivos?.length || 0} alunos resetados para "Em aberto"`);
+      alert(`✅ Reset concluído!\n\n• ${snapshotData?.length || 0} registros salvos no histórico\n• ${alunosAtivos?.length || 0} matrículas ativas/trancadas resetadas para "Em aberto"`);
     } catch (error) {
       console.error('Erro ao resetar mês:', error);
       alert('Erro ao resetar mês. Tente novamente.');
@@ -1913,17 +1913,17 @@ export function TabelaAlunos({
               }
             </strong>
             {inadimplenciaInfo.total > 0 && (
-              <> — R$ {inadimplenciaInfo.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} em parcelas não pagas</>
+              <> — R$ {inadimplenciaInfo.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} em parcelas marcadas como não pagas</>
             )}
             {inadimplenciaInfo.pendentes > 0 && inadimplenciaInfo.total > 0 && (
-              <> • {inadimplenciaInfo.pendentes} ainda como "em dia" precisam ser verificados</>
+              <> • {inadimplenciaInfo.pendentes} ainda precisam de conferência financeira</>
             )}
           </span>
           <button
             onClick={() => setFiltros({ ...filtros, status_pagamento: 'inadimplente' })}
             className="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 rounded-lg text-red-200 text-xs font-medium transition-colors whitespace-nowrap"
           >
-            Filtrar Inadimplentes
+            Filtrar inadimplentes
           </button>
           <button
             onClick={() => setAlertaInadimplenciaDismissed(true)}
@@ -3152,7 +3152,7 @@ export function TabelaAlunos({
               </p>
               <ul className="list-disc list-inside text-sm text-slate-400 space-y-1">
                 <li>Salvar um snapshot do status atual no histórico</li>
-                <li>Resetar <strong className="text-white">TODOS</strong> os alunos para "Em aberto"</li>
+                <li>Resetar <strong className="text-white">matrículas ativas/trancadas</strong> para "Em aberto"</li>
               </ul>
               <p className="text-red-400 font-medium text-sm">
                 ⚠️ Esta ação não pode ser desfeita!

@@ -42,7 +42,7 @@ interface Aluno {
   unidade?: { nome: string };
   curso?: { nome: string };
   data_matricula: string;
-  valor_mensalidade: number;
+  valor_parcela: number | null;
   status: string;
 }
 
@@ -175,7 +175,7 @@ export function FormEvasao() {
           unidade_id: selectedAluno?.unidade_id,
           tipo: 'evasao',
           data_movimentacao: data.data_evasao,
-          valor_mensalidade: selectedAluno?.valor_mensalidade,
+          valor_mensalidade: selectedAluno?.valor_parcela,
           observacoes: `Evasão: ${data.tipo_evasao} - ${data.motivo_detalhe || motivos.find(m => m.id === data.motivo_id)?.nome || 'Sem motivo'}`,
         });
 
@@ -197,7 +197,7 @@ export function FormEvasao() {
             feedback_aluno: data.feedback_aluno || null,
             observacoes: data.observacoes || null,
             tempo_permanencia_meses: selectedAluno ? calcularTempoAluno(selectedAluno.data_matricula) : null,
-            valor_mensalidade: selectedAluno?.valor_mensalidade,
+            valor_mensalidade: selectedAluno?.valor_parcela,
           });
       } catch {
         // Tabela pode não existir, continua sem erro
@@ -313,13 +313,13 @@ export function FormEvasao() {
               </div>
               <div className="bg-slate-800/50 rounded-xl p-3">
                 <p className="text-2xl font-bold text-white">
-                  R$ {selectedAluno.valor_mensalidade}
+                  R$ {Number(selectedAluno.valor_parcela || 0)}
                 </p>
                 <p className="text-xs text-gray-400">mensalidade</p>
               </div>
               <div className="bg-slate-800/50 rounded-xl p-3">
                 <p className="text-2xl font-bold text-red-400">
-                  R$ {(selectedAluno.valor_mensalidade * calcularTempoAluno(selectedAluno.data_matricula)).toLocaleString()}
+                  R$ {(Number(selectedAluno.valor_parcela || 0) * calcularTempoAluno(selectedAluno.data_matricula)).toLocaleString()}
                 </p>
                 <p className="text-xs text-gray-400">LTV perdido</p>
               </div>
