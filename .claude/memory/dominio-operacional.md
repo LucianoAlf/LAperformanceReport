@@ -73,6 +73,12 @@
 - `comissao_farmer_padrao`, `comissao_professor_indicacao`, `valor_moeda_la`, `alerta_whatsapp_ativo`
 - Parte do programa Fideliza+ (meta vendas_lojinha por unidade)
 
+## Caixa Financeiro (Administrativo > aba Caixa)
+- Caixa diario = **por `unidade_id + data_caixa`** (constraint unique), NAO por usuario. Todos da unidade (ou admin) compartilham o mesmo caixa do dia (RLS por `usuarios.unidade_id`). Tabelas: `caixas_diarios`, `caixa_movimentacoes`, `caixa_financeiro_grupos_whatsapp`.
+- **Data sempre BRT**: usar `hojeISOBrt()` de `lib/caixaFinanceiro.ts` (`toLocaleDateString('en-CA',{timeZone:'America/Sao_Paulo'})`). NUNCA `new Date().toISOString().slice(0,10)` (UTC pula o dia apos 21h BRT — bug corrigido 23/06).
+- `CaixaFinanceiroTab` tem **estado proprio de data** (desacoplado do filtro de competencia) + date picker navegavel (setas ◄►+ DatePicker). Trava: dia 01 do mes corrente ≤ data ≤ hoje (futuro bloqueado, so mes corrente). Permite abrir/fechar/enviar caixa retroativo dentro do mes.
+- Botao "Enviar WhatsApp" so habilita com caixa **fechado**. Envio via edge `caixa-financeiro-whatsapp` (provedor `funcao=sistema`, hoje WAHA "Sol") pro grupo financeiro da unidade. Falha comum: sessao WAHA caida ("Session status is not as expected").
+
 ## Config
 - `src/components/App/Config/ConfigPage.tsx` — configuracoes do sistema
 

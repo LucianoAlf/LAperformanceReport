@@ -1,5 +1,5 @@
 import { FormEvent, useMemo, useState } from 'react';
-import { AlertTriangle, CalendarDays, CheckCircle2, History, Lock, Pencil, RotateCcw, Unlock, Wallet } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, History, Lock, Pencil, RotateCcw, Unlock, Wallet } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -12,17 +12,23 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCaixaCategorias } from '@/hooks/useCaixaCategorias';
 import { useCaixaDiario } from '@/hooks/useCaixaDiario';
 import {
+  dateParaIsoCaixa,
   formatarDataCaixa,
   formatarInputMoedaCaixa,
   formatarMoedaCaixa,
   formatarNumeroComoInputMoedaCaixa,
+  hojeISOBrt,
+  isoParaDateCaixa,
   parseMoedaCaixa,
+  primeiroDiaMesISO,
+  somarDiasIsoCaixa,
 } from '@/lib/caixaFinanceiro';
 import { CaixaHistoricoPanel } from './CaixaHistorico';
 import { CaixaMovimentacaoForm } from './CaixaMovimentacaoForm';
@@ -34,18 +40,21 @@ interface CaixaFinanceiroTabProps {
   unidadeId?: string | null;
   unidadeNome: string;
   unidadeCodigo: string;
-  dataCaixa: string;
-  isCompetenciaAtual?: boolean;
 }
 
 export function CaixaFinanceiroTab({
   unidadeId,
   unidadeNome,
   unidadeCodigo,
-  dataCaixa,
-  isCompetenciaAtual = true,
 }: CaixaFinanceiroTabProps) {
   const { usuario } = useAuth();
+  // Data operacional do caixa: estado proprio, sempre dentro do mes corrente (BRT).
+  // Desacoplado do filtro de competencia do Administrativo.
+  const [dataCaixa, setDataCaixa] = useState(() => hojeISOBrt());
+  const hojeIso = hojeISOBrt();
+  const minDataIso = primeiroDiaMesISO(hojeIso);
+  const podeVoltar = dataCaixa > minDataIso;
+  const podeAvancar = dataCaixa < hojeIso;
   const [saldoInicial, setSaldoInicial] = useState('');
   const [abertoPor, setAbertoPor] = useState(usuario?.nome || '');
   const [fechadoPor, setFechadoPor] = useState(usuario?.nome || '');
@@ -153,14 +162,6 @@ export function CaixaFinanceiroTab({
     );
   }
 
-  if (!isCompetenciaAtual) {
-    return (
-      <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-4 text-sm text-amber-200">
-        Caixa diario usa a data operacional do dia. Selecione o mes atual para lancar fechamento.
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-800 bg-slate-900/70 p-4">
@@ -184,10 +185,39 @@ export function CaixaFinanceiroTab({
             <History className="h-4 w-4" />
             Histórico
           </Button>
-          <span className="inline-flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-950/50 px-3 py-2 text-xs text-slate-300">
-            <CalendarDays className="h-4 w-4 text-slate-400" />
-            {dataLabel}
-          </span>
+          <div className="inline-flex items-center gap-1">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 border-slate-700 text-slate-300 hover:text-white"
+              disabled={!podeVoltar}
+              title="Dia anterior"
+              onClick={() => setDataCaixa((d) => somarDiasIsoCaixa(d, -1))}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <DatePicker
+              date={isoParaDateCaixa(dataCaixa)}
+              onDateChange={(novaData) => {
+                if (novaData) setDataCaixa(dateParaIsoCaixa(novaData));
+              }}
+              minDate={isoParaDateCaixa(minDataIso)}
+              maxDate={isoParaDateCaixa(hojeIso)}
+              className="h-9 w-[150px] border-slate-700 bg-slate-950/50"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 border-slate-700 text-slate-300 hover:text-white"
+              disabled={!podeAvancar}
+              title="Proximo dia"
+              onClick={() => setDataCaixa((d) => somarDiasIsoCaixa(d, 1))}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
           <span className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-medium ${
             caixaFechado
               ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'

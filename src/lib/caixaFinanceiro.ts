@@ -38,6 +38,36 @@ export function formatarDataCaixa(dataCaixa: string): string {
   return parseLocalDate(dataCaixa).toLocaleDateString('pt-BR');
 }
 
+// Data operacional do caixa SEMPRE em BRT (UTC-3). Evita que o dia "pule"
+// para o seguinte apos as 21h, quando toISOString() (UTC) ja virou o outro dia.
+export function hojeISOBrt(): string {
+  // en-CA formata como YYYY-MM-DD; timeZone garante o fuso de Brasilia.
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' });
+}
+
+export function primeiroDiaMesISO(dataIso: string): string {
+  return `${dataIso.slice(0, 7)}-01`;
+}
+
+// Converte YYYY-MM-DD em Date ao meio-dia local, evitando shift de fuso.
+export function isoParaDateCaixa(dataIso: string): Date {
+  return new Date(`${dataIso}T12:00:00`);
+}
+
+export function dateParaIsoCaixa(date: Date): string {
+  const ano = date.getFullYear();
+  const mes = String(date.getMonth() + 1).padStart(2, '0');
+  const dia = String(date.getDate()).padStart(2, '0');
+  return `${ano}-${mes}-${dia}`;
+}
+
+// Soma dias a uma data YYYY-MM-DD preservando o calendario local.
+export function somarDiasIsoCaixa(dataIso: string, dias: number): string {
+  const base = isoParaDateCaixa(dataIso);
+  base.setDate(base.getDate() + dias);
+  return dateParaIsoCaixa(base);
+}
+
 export function calcularResumoCaixa(
   caixa: Pick<CaixaDiario, 'saldo_inicial_cofre'> | null,
   movimentos: CaixaMovimentacao[]

@@ -234,12 +234,7 @@ export function AdministrativoPage() {
   const ano = competenciaFiltro.filtro.ano;
   const mes = competenciaFiltro.filtro.mes;
   const { startDate, endDate } = competenciaFiltro.range;
-  const hojeCaixa = new Date();
-  const isCompetenciaAtualCaixa = ano === hojeCaixa.getFullYear() && mes === hojeCaixa.getMonth() + 1;
-  const dataCaixaISO = isCompetenciaAtualCaixa
-    ? hojeCaixa.toISOString().slice(0, 10)
-    : `${ano}-${String(mes).padStart(2, '0')}-01`;
-  
+
   // Competência formatada para os modais (YYYY-MM)
   const competencia = `${ano}-${String(mes).padStart(2, '0')}`;
 
@@ -991,8 +986,6 @@ export function AdministrativoPage() {
           unidadeId={unidade}
           unidadeNome={unidadeCaixaInfo.nome}
           unidadeCodigo={unidadeCaixaInfo.codigo}
-          dataCaixa={dataCaixaISO}
-          isCompetenciaAtual={isCompetenciaAtualCaixa}
         />
       ) : mainTab === 'caixa_entrada' ? (
         <CaixaEntradaTab unidadeId={unidade} departamento="administrativo" />
