@@ -907,38 +907,38 @@ export function ModalFichaAluno({
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid grid-cols-8 flex-shrink-0">
-            <TabsTrigger value="pessoal" className="flex items-center gap-2">
+          <TabsList className="flex flex-shrink-0 w-full overflow-x-auto h-auto p-1 gap-1">
+            <TabsTrigger value="pessoal" className="flex items-center gap-1.5 flex-shrink-0">
               <User className="w-4 h-4" />
-              <span className="hidden sm:inline">Pessoal</span>
+              Pessoal
             </TabsTrigger>
-            <TabsTrigger value="academico" className="flex items-center gap-2">
+            <TabsTrigger value="academico" className="flex items-center gap-1.5 flex-shrink-0">
               <GraduationCap className="w-4 h-4" />
-              <span className="hidden sm:inline">Acadêmico</span>
+              Acadêmico
             </TabsTrigger>
-            <TabsTrigger value="financeiro" className="flex items-center gap-2">
+            <TabsTrigger value="financeiro" className="flex items-center gap-1.5 flex-shrink-0">
               <DollarSign className="w-4 h-4" />
-              <span className="hidden sm:inline">Financeiro</span>
+              Financeiro
             </TabsTrigger>
-            <TabsTrigger value="comercial" className="flex items-center gap-2">
+            <TabsTrigger value="comercial" className="flex items-center gap-1.5 flex-shrink-0">
               <TrendingUp className="w-4 h-4" />
-              <span className="hidden sm:inline">Comercial</span>
+              Comercial
             </TabsTrigger>
-            <TabsTrigger value="anamnese" className="flex items-center gap-2">
+            <TabsTrigger value="anamnese" className="flex items-center gap-1.5 flex-shrink-0">
               <Brain className="w-4 h-4" />
-              <span className="hidden sm:inline">Anamnese</span>
+              Anamnese
             </TabsTrigger>
-            <TabsTrigger value="historico" className="flex items-center gap-2">
+            <TabsTrigger value="historico" className="flex items-center gap-1.5 flex-shrink-0">
               <History className="w-4 h-4" />
-              <span className="hidden sm:inline">Histórico</span>
+              Histórico
             </TabsTrigger>
-            <TabsTrigger value="pesquisas" className="flex items-center gap-2">
+            <TabsTrigger value="pesquisas" className="flex items-center gap-1.5 flex-shrink-0">
               <Star className="w-4 h-4" />
-              <span className="hidden sm:inline">Pesquisas</span>
+              Pesquisas
             </TabsTrigger>
-            <TabsTrigger value="aulas" className="flex items-center gap-2">
+            <TabsTrigger value="aulas" className="flex items-center gap-1.5 flex-shrink-0">
               <BookOpen className="w-4 h-4" />
-              <span className="hidden sm:inline">Aulas</span>
+              Aulas
             </TabsTrigger>
           </TabsList>
 
