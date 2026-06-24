@@ -4,8 +4,8 @@
 CREATE TABLE IF NOT EXISTS public.aluno_transferencias (
   id BIGSERIAL PRIMARY KEY,
   aluno_id BIGINT NOT NULL REFERENCES public.alunos(id) ON DELETE CASCADE,
-  unidade_origem_id TEXT NULL REFERENCES public.unidades(id),
-  unidade_destino_id TEXT NOT NULL REFERENCES public.unidades(id),
+  unidade_origem_id UUID NULL REFERENCES public.unidades(id),
+  unidade_destino_id UUID NOT NULL REFERENCES public.unidades(id),
   data_transferencia DATE NOT NULL DEFAULT CURRENT_DATE,
   observacao TEXT NULL,
   created_by UUID NULL,
