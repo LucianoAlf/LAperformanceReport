@@ -122,6 +122,11 @@ serve(async (req) => {
     const { data: tiposMat } = await supabase.from('tipos_matricula').select('id, codigo');
     const tipoCodigoMap = new Map<number, string>((tiposMat || []).map((t: any) => [t.id, t.codigo]));
 
+    // IDs Emusys já vinculados a outros alunos ativos — usados para filtrar candidatos de ambíguo
+    const idsVinculadosAtivos = new Set<number>(
+      (alunos || []).filter((a: any) => a.emusys_matricula_id).map((a: any) => Number(a.emusys_matricula_id))
+    );
+
     const ids = (alunos || []).map((a: any) => a.id);
     const fixadosMap = new Map<number, Set<string>>();
     // dedup: (aluno_id|tipo) que o usuário já decidiu — não reenfileirar (respeita a decisão humana)
@@ -145,7 +150,7 @@ serve(async (req) => {
     for (const a of alunos || []) {
       try {
         const tipoCodigo = a.tipo_matricula_id ? tipoCodigoMap.get(a.tipo_matricula_id) || null : null;
-        const r = reconciliar(a, u, porId, ativasPorNome, depara, profMap, banda, fixadosMap.get(a.id) || new Set(), tipoCodigo);
+        const r = reconciliar(a, u, porId, ativasPorNome, depara, profMap, banda, fixadosMap.get(a.id) || new Set(), tipoCodigo, idsVinculadosAtivos);
 
         // AUTO: aplica mudanças seguras. Em produção escreve em `alunos` + loga.
         // Em dry-run NÃO altera nada, mas registra uma linha `auto_preview` na fila de
@@ -388,7 +393,7 @@ function parseHorarioDeTurma(nomeTurma: string): string | null {
 function reconciliar(
   a: any, u: any, porId: Map<number, any>, ativasPorNome: Map<string, any[]>,
   depara: Map<number, number | null>, profMap: Map<number, number>, banda: Set<number>, fixados: Set<string>,
-  tipoCodigo: string | null,
+  tipoCodigo: string | null, idsVinculados: Set<number> = new Set(),
 ): any {
   const upd: Record<string, any> = {};
   const divergencias: any[] = [];
@@ -397,7 +402,8 @@ function reconciliar(
   if (a.emusys_matricula_id && porId.has(Number(a.emusys_matricula_id))) {
     mat = porId.get(Number(a.emusys_matricula_id));
   } else {
-    const candTodas = ativasPorNome.get(normalizarNome(a.nome)) || [];
+    const candTodas = (ativasPorNome.get(normalizarNome(a.nome)) || [])
+      .filter((m: any) => !idsVinculados.has(Number(m.id)));
     // prefere ativas; só cai para qualquer status se não há ativa (ex: trancada no Emusys, ativo no nosso)
     const candAtivas = candTodas.filter((m: any) => m.status === 'ativa');
     const cand = candAtivas.length > 0 ? candAtivas : candTodas;

@@ -143,6 +143,20 @@ async function complementarDescontoMatricula(
     if (!travados.has('desconto_fixo')) upd.desconto_fixo = fixo;
     if (!travados.has('desconto_condicional')) upd.desconto_condicional = cond;
     if (!travados.has('valor_parcela')) upd.valor_parcela = parcelaComercial;
+
+    // Classificar tipo_matricula_id automaticamente pelo flag bolsa da API.
+    // Só aplica quando parcelaComercial >= 0 e cheio > 0 (evita casos suspeitos onde
+    // desconto_fixo foi embutido no valor_mensalidade, resultando em líquido negativo).
+    if (!travados.has('tipo_matricula_id') && cheio > 0 && parcelaComercial >= 0) {
+      const bolsa = c.bolsa === true;
+      const tipoCode = bolsa
+        ? (parcelaComercial <= 0 ? 'BOLSISTA_INT' : 'BOLSISTA_PARC')
+        : 'REGULAR';
+      const { data: tipoRow } = await supabase
+        .from('tipos_matricula').select('id').eq('codigo', tipoCode).single();
+      if (tipoRow?.id) upd.tipo_matricula_id = tipoRow.id;
+    }
+
     await supabase.from('alunos').update(upd).eq('id', alunoId);
 
     await supabase.from('automacao_log').insert({
@@ -155,6 +169,7 @@ async function complementarDescontoMatricula(
         matricula_id: matriculaId, valor_cheio: cheio, desconto_fixo: fixo,
         desconto_condicional: cond,
         valor_parcela: parcelaComercial,
+        tipo_matricula_id: upd.tipo_matricula_id ?? null,
         regra_valor_parcela: 'valor_mensalidade_menos_desconto_condicional',
         fonte: 'frente1_pontual',
       },
