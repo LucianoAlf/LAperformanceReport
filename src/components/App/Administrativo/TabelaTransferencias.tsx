@@ -12,6 +12,12 @@ interface AlunoTransferencia {
   cursos?: { nome?: string | null } | null;
   professores?: { nome?: string | null } | null;
   unidades?: { codigo?: string | null } | null;
+  transferencia?: {
+    data_transferencia?: string | null;
+    unidade_origem_codigo?: string | null;
+    unidade_destino_codigo?: string | null;
+    observacao?: string | null;
+  } | null;
 }
 
 interface TabelaTransferenciasProps {
@@ -31,7 +37,7 @@ export function TabelaTransferencias({ data }: TabelaTransferenciasProps) {
               <th className="pb-3 px-2 font-medium border-r border-slate-700/30">#</th>
               <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Data</th>
               <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Aluno</th>
-              <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Escola</th>
+              <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Movimento</th>
               <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Curso</th>
               <th className="pb-3 px-2 font-medium border-r border-slate-700/30">Professor</th>
               <th className="pb-3 px-2 font-medium border-r border-slate-700/30 text-right">Parcela</th>
@@ -57,18 +63,24 @@ export function TabelaTransferencias({ data }: TabelaTransferenciasProps) {
                   </div>
                 </td>
                 <td className="py-3 px-2 border-r border-slate-700/30">
-                  <div className="flex items-center gap-1.5">
-                    <span className={cn(
-                      'px-2 py-1 rounded text-xs font-medium',
-                      aluno.unidade_id === 'emla'
-                        ? 'bg-violet-500/20 text-violet-400'
-                        : 'bg-cyan-500/20 text-cyan-400',
-                    )}>
-                      {aluno.unidade_id === 'emla' ? 'EMLA' : 'LAMK'}
-                    </span>
-                    {isAdmin && aluno.unidades?.codigo && (
-                      <span className="px-2 py-1 rounded text-xs font-medium bg-slate-600/30 text-slate-300">
-                        {aluno.unidades.codigo}
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-1.5">
+                      <span className="px-2 py-1 rounded text-xs font-medium bg-slate-700/60 text-slate-300">
+                        {aluno.transferencia?.unidade_origem_codigo || 'Origem n/r'}
+                      </span>
+                      <ArrowRightLeft className="w-3.5 h-3.5 text-sky-400" />
+                      <span className={cn(
+                        'px-2 py-1 rounded text-xs font-medium',
+                        aluno.unidades?.codigo
+                          ? 'bg-sky-500/20 text-sky-300'
+                          : 'bg-slate-600/30 text-slate-300',
+                      )}>
+                        {aluno.transferencia?.unidade_destino_codigo || aluno.unidades?.codigo || 'Destino n/r'}
+                      </span>
+                    </div>
+                    {aluno.transferencia?.observacao && (
+                      <span className="max-w-xs truncate text-xs text-slate-500">
+                        {aluno.transferencia.observacao}
                       </span>
                     )}
                   </div>
@@ -86,7 +98,7 @@ export function TabelaTransferencias({ data }: TabelaTransferenciasProps) {
                 </td>
                 <td className="py-3 px-2">
                   <span className="inline-flex rounded-full bg-sky-500/15 px-2.5 py-1 text-xs font-medium text-sky-300">
-                    fora de matricula nova
+                    transferencia interna
                   </span>
                 </td>
               </tr>

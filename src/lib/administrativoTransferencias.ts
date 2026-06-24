@@ -8,6 +8,14 @@ export interface AlunoAdministrativoLike {
   }>;
 }
 
+export interface TransferenciaAdministrativaLike {
+  tipo?: string | null;
+  aluno_id?: number | string | null;
+  unidade_origem_id?: string | null;
+  unidade_destino_id?: string | null;
+  data_transferencia?: string | null;
+}
+
 function firstAdminRelation<T>(value: Relation<T>): T | null {
   if (Array.isArray(value)) return value[0] || null;
   return value || null;
@@ -34,6 +42,23 @@ export function isAlunoNovoForaComercial(row: AlunoAdministrativoLike): boolean 
     row?.is_segundo_curso !== true &&
     CODIGOS_TIPO_MATRICULA_FORA_NOVA_ADMIN.has(codigoTipoMatriculaAdministrativo(row))
   );
+}
+
+export function isTransferenciaMovimentacaoInterna(row: TransferenciaAdministrativaLike): boolean {
+  return String(row?.tipo || '').trim().toLowerCase() === 'transferencia'
+    || Boolean(row?.aluno_id && row?.unidade_origem_id && row?.unidade_destino_id);
+}
+
+export function transferenciaContaComoMatriculaNovaAdministrativa(
+  row: TransferenciaAdministrativaLike
+): boolean {
+  return !isTransferenciaMovimentacaoInterna(row);
+}
+
+export function transferenciaContaComoEvasaoAdministrativa(
+  row: TransferenciaAdministrativaLike
+): boolean {
+  return !isTransferenciaMovimentacaoInterna(row);
 }
 
 const CODIGOS_TIPO_MATRICULA_FORA_NOVA_ADMIN = new Set([

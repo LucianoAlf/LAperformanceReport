@@ -29,7 +29,7 @@ import { ModalNaoRenovacao } from './ModalNaoRenovacao';
 import { ModalAvisoPrevio } from './ModalAvisoPrevio';
 import { ModalEvasao } from './ModalEvasao';
 import { ModalTrancamento } from './ModalTrancamento';
-import { ModalTransferencia } from './ModalTransferencia';
+import { ModalTransferencia, type TransferenciaPayload } from './ModalTransferencia';
 import { ModalRelatorio } from './ModalRelatorio';
 import { TabelaNaoRenovacoes } from './TabelaNaoRenovacoes';
 import { TabelaTrancamentos } from './TabelaTrancamentos';
@@ -221,6 +221,7 @@ export function AdministrativoPage() {
   const [formasPagamento, setFormasPagamento] = useState<{ id: number; nome: string; sigla: string }[]>([]);
   const [cursos, setCursos] = useState<{ id: number; nome: string }[]>([]);
   const [alunosNovos, setAlunosNovos] = useState<any[]>([]);
+  const [transferenciasPorAluno, setTransferenciasPorAluno] = useState<Map<string, any>>(new Map());
   const [unidadeCaixaInfo, setUnidadeCaixaInfo] = useState<{ nome: string; codigo: string }>({
     nome: 'Unidade',
     codigo: 'LA',
@@ -558,6 +559,58 @@ export function AdministrativoPage() {
 
       const { data: novosAlunosData } = await novosAlunosQuery;
       const todosNovos = novosAlunosData || [];
+
+      let transferenciasHistorico: any[] = [];
+      try {
+        let transferenciasQuery = supabase
+          .from('aluno_transferencias')
+          .select('id, aluno_id, unidade_origem_id, unidade_destino_id, data_transferencia, observacao')
+          .gte('data_transferencia', startDate)
+          .lte('data_transferencia', endDate)
+          .order('data_transferencia', { ascending: false });
+
+        if (unidade !== 'todos') {
+          transferenciasQuery = transferenciasQuery.or(`unidade_origem_id.eq.${unidade},unidade_destino_id.eq.${unidade}`);
+        }
+
+        const { data: transferenciasData, error: transferenciasError } = await transferenciasQuery;
+        if (transferenciasError) throw transferenciasError;
+        transferenciasHistorico = transferenciasData || [];
+      } catch (error: any) {
+        if (!['PGRST205', '42P01'].includes(error?.code)) {
+          console.warn('Historico de transferencias indisponivel:', error);
+        }
+      }
+
+      const unidadeIdsTransferencia = Array.from(new Set(
+        transferenciasHistorico
+          .flatMap(t => [t.unidade_origem_id, t.unidade_destino_id])
+          .filter(Boolean)
+      ));
+      let unidadesTransferenciaMap = new Map<string, { codigo?: string | null; nome?: string | null }>();
+
+      if (unidadeIdsTransferencia.length > 0) {
+        const { data: unidadesTransferenciaData } = await supabase
+          .from('unidades')
+          .select('id, codigo, nome')
+          .in('id', unidadeIdsTransferencia);
+
+        unidadesTransferenciaMap = new Map(
+          (unidadesTransferenciaData || []).map((u: any) => [String(u.id), { codigo: u.codigo, nome: u.nome }])
+        );
+      }
+
+      setTransferenciasPorAluno(new Map(
+        transferenciasHistorico.map((t: any) => [
+          String(t.aluno_id),
+          {
+            ...t,
+            unidade_origem_codigo: unidadesTransferenciaMap.get(String(t.unidade_origem_id))?.codigo || null,
+            unidade_destino_codigo: unidadesTransferenciaMap.get(String(t.unidade_destino_id))?.codigo || null,
+          },
+        ])
+      ));
+
       setAlunosNovos(todosNovos);
       // Filtrar: apenas novos indivíduos pagantes (sem 2º curso, sem bolsistas)
       // tipos_matricula bolsistas: BOLSISTA_INT(3), BOLSISTA_PARC(4), BANDA(5)
@@ -771,8 +824,9 @@ export function AdministrativoPage() {
     }
   }
 
-  async function handleSaveTransferencia(aluno: { id: number; nome: string }) {
+  async function handleSaveTransferencia(payload: TransferenciaPayload) {
     try {
+      const { aluno, unidadeOrigemId, unidadeDestinoId, dataTransferencia, observacao } = payload;
       const { data: tipoTransferencia, error: tipoError } = await supabase
         .from('tipos_matricula')
         .select('id')
@@ -796,9 +850,33 @@ export function AdministrativoPage() {
 
       if (error) throw error;
 
+      const { error: transferenciaError } = await supabase
+        .from('aluno_transferencias')
+        .upsert({
+          aluno_id: aluno.id,
+          unidade_origem_id: unidadeOrigemId,
+          unidade_destino_id: unidadeDestinoId,
+          data_transferencia: dataTransferencia,
+          observacao: observacao || null,
+        }, {
+          onConflict: 'aluno_id,unidade_destino_id,data_transferencia',
+        });
+
+      if (transferenciaError) {
+        if (['PGRST205', '42P01'].includes((transferenciaError as any)?.code)) {
+          toastInfo(
+            'Transferencia classificada',
+            'O aluno saiu de matricula nova comercial. A migration de origem/destino ainda precisa ser aplicada para guardar o historico completo.'
+          );
+          await loadData();
+          return true;
+        }
+        throw transferenciaError;
+      }
+
       toastSuccess(
         'Transferencia registrada',
-        `${aluno.nome} saiu de matricula nova comercial e permanece na base administrativa.`
+        `${aluno.nome} foi registrado como transferencia interna entre unidades.`
       );
       await loadData();
       return true;
@@ -982,7 +1060,12 @@ export function AdministrativoPage() {
   const evasoes = movimentacoes.filter(m => m.tipo === 'evasao');
   const naoRenovacoes = movimentacoes.filter(m => m.tipo === 'nao_renovacao');
   const trancamentos = movimentacoes.filter(m => m.tipo === 'trancamento');
-  const transferencias = alunosNovos.filter(isAlunoTransferenciaAdministrativa);
+  const transferencias = alunosNovos
+    .filter(isAlunoTransferenciaAdministrativa)
+    .map(aluno => ({
+      ...aluno,
+      transferencia: transferenciasPorAluno.get(String(aluno.id)) || null,
+    }));
 
   // Gerar opções de competência (últimos 12 meses)
   const competenciaOptions = Array.from({ length: 12 }, (_, i) => {

@@ -13,6 +13,7 @@ export interface Aluno {
   classificacao?: string;
   status: string;
   valor_parcela?: number;
+  data_matricula?: string | null;
   curso_id?: number;
   professor_atual_id?: number;
   cursos?: { nome: string };
@@ -85,7 +86,7 @@ export function AutocompleteAluno({
       
       let query = supabase
         .from('alunos')
-        .select('id, nome, nome_normalizado, unidade_id, classificacao, status, valor_parcela, curso_id, professor_atual_id, unidades(codigo)')
+        .select('id, nome, nome_normalizado, unidade_id, classificacao, status, valor_parcela, data_matricula, curso_id, professor_atual_id, unidades(codigo)')
         .ilike('nome_normalizado', `%${termUpper}%`)
         .limit(50);
 
