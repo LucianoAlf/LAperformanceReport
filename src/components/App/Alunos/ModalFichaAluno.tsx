@@ -242,6 +242,83 @@ const TIPO_ALUNO_PARA_MATRICULA: Record<string, number> = {
   'bolsista_parcial': 4,
 };
 
+function AulasTurmasTabs({
+  turmas,
+  turmaKeys,
+  diasSemana,
+}: {
+  turmas: Record<string, AulaHistorico[]>;
+  turmaKeys: string[];
+  diasSemana: string[];
+}) {
+  const [turmaSelecionada, setTurmaSelecionada] = useState(turmaKeys[0]);
+  const aulas = turmas[turmaSelecionada] ?? [];
+  const total = aulas.length;
+  const presentes = aulas.filter(a => a.status === 'presente').length;
+  const pct = total > 0 ? Math.round((presentes / total) * 100) : 0;
+  const professor = aulas.find(a => a.professor_nome)?.professor_nome;
+  const curso = aulas[0]?.curso_nome ?? '';
+
+  return (
+    <div className="flex flex-col gap-3">
+      {/* Tabs de turma */}
+      <div className="flex gap-1 overflow-x-auto pb-1">
+        {turmaKeys.map(t => (
+          <button
+            key={t}
+            onClick={() => setTurmaSelecionada(t)}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium flex-shrink-0 transition-colors ${
+              t === turmaSelecionada
+                ? 'bg-purple-600 text-white'
+                : 'bg-slate-800 text-slate-400 hover:text-slate-200 hover:bg-slate-700'
+            }`}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      {/* Header da turma selecionada */}
+      <div className="bg-slate-800 rounded-lg px-4 py-3 flex items-center justify-between">
+        <div>
+          <p className="font-medium text-slate-100 text-sm">{curso}</p>
+          <p className="text-xs text-slate-400 mt-0.5">{turmaSelecionada} · {professor || 'Professor não registrado'}</p>
+        </div>
+        <div className="flex items-center gap-3 text-sm">
+          <span className="text-emerald-400 font-medium">{presentes}P</span>
+          <span className="text-red-400 font-medium">{total - presentes}F</span>
+          <span className={`font-bold ${pct >= 75 ? 'text-emerald-400' : pct >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
+            {pct}%
+          </span>
+        </div>
+      </div>
+
+      {/* Lista de aulas */}
+      <div className="border border-slate-700 rounded-lg divide-y divide-slate-700/40 overflow-hidden">
+        {aulas.map((aula, i) => {
+          const d = new Date(aula.data_aula + 'T00:00:00');
+          return (
+            <div key={i} className="flex items-center justify-between px-4 py-2.5 text-sm hover:bg-slate-800/40">
+              <div className="flex items-center gap-3">
+                <span className="text-slate-500 w-7 text-xs">{diasSemana[d.getDay()]}</span>
+                <span className="text-slate-300">{d.toLocaleDateString('pt-BR')}</span>
+                <span className="text-slate-600 text-xs">#{aula.nr_da_aula}</span>
+              </div>
+              <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                aula.status === 'presente'
+                  ? 'bg-emerald-500/20 text-emerald-400'
+                  : 'bg-red-500/20 text-red-400'
+              }`}>
+                {aula.status === 'presente' ? 'Presente' : 'Faltou'}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function ModalFichaAluno({
   aluno,
   onClose,
@@ -907,38 +984,38 @@ export function ModalFichaAluno({
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="flex flex-shrink-0 w-full overflow-x-auto h-auto p-1 gap-1">
-            <TabsTrigger value="pessoal" className="flex items-center gap-1.5 flex-shrink-0">
+          <TabsList className="grid grid-cols-8 flex-shrink-0">
+            <TabsTrigger value="pessoal" className="flex items-center gap-2">
               <User className="w-4 h-4" />
-              Pessoal
+              <span className="hidden sm:inline">Pessoal</span>
             </TabsTrigger>
-            <TabsTrigger value="academico" className="flex items-center gap-1.5 flex-shrink-0">
+            <TabsTrigger value="academico" className="flex items-center gap-2">
               <GraduationCap className="w-4 h-4" />
-              Acadêmico
+              <span className="hidden sm:inline">Acadêmico</span>
             </TabsTrigger>
-            <TabsTrigger value="financeiro" className="flex items-center gap-1.5 flex-shrink-0">
+            <TabsTrigger value="financeiro" className="flex items-center gap-2">
               <DollarSign className="w-4 h-4" />
-              Financeiro
+              <span className="hidden sm:inline">Financeiro</span>
             </TabsTrigger>
-            <TabsTrigger value="comercial" className="flex items-center gap-1.5 flex-shrink-0">
+            <TabsTrigger value="comercial" className="flex items-center gap-2">
               <TrendingUp className="w-4 h-4" />
-              Comercial
+              <span className="hidden sm:inline">Comercial</span>
             </TabsTrigger>
-            <TabsTrigger value="anamnese" className="flex items-center gap-1.5 flex-shrink-0">
+            <TabsTrigger value="anamnese" className="flex items-center gap-2">
               <Brain className="w-4 h-4" />
-              Anamnese
+              <span className="hidden sm:inline">Anamnese</span>
             </TabsTrigger>
-            <TabsTrigger value="historico" className="flex items-center gap-1.5 flex-shrink-0">
+            <TabsTrigger value="historico" className="flex items-center gap-2">
               <History className="w-4 h-4" />
-              Histórico
+              <span className="hidden sm:inline">Histórico</span>
             </TabsTrigger>
-            <TabsTrigger value="pesquisas" className="flex items-center gap-1.5 flex-shrink-0">
+            <TabsTrigger value="pesquisas" className="flex items-center gap-2">
               <Star className="w-4 h-4" />
-              Pesquisas
+              <span className="hidden sm:inline">Pesquisas</span>
             </TabsTrigger>
-            <TabsTrigger value="aulas" className="flex items-center gap-1.5 flex-shrink-0">
+            <TabsTrigger value="aulas" className="flex items-center gap-2">
               <BookOpen className="w-4 h-4" />
-              Aulas
+              <span className="hidden sm:inline">Aulas</span>
             </TabsTrigger>
           </TabsList>
 
@@ -1704,7 +1781,7 @@ export function ModalFichaAluno({
             </TabsContent>
 
             {/* ABA AULAS */}
-            <TabsContent value="aulas" className="space-y-3 mt-0">
+            <TabsContent value="aulas" className="mt-0">
               {loadingAulas ? (
                 <div className="flex items-center justify-center py-16">
                   <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
@@ -1720,52 +1797,11 @@ export function ModalFichaAluno({
                   acc[aula.turma_nome].push(aula);
                   return acc;
                 }, {});
+                const turmaKeys = Object.keys(turmas);
                 const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-                return Object.entries(turmas).map(([turma, aulas]) => {
-                  const total = aulas.length;
-                  const presentes = aulas.filter(a => a.status === 'presente').length;
-                  const pct = total > 0 ? Math.round((presentes / total) * 100) : 0;
-                  const professor = aulas.find(a => a.professor_nome)?.professor_nome;
-                  const curso = aulas[0].curso_nome;
-                  return (
-                    <div key={turma} className="border border-slate-700 rounded-lg overflow-hidden">
-                      <div className="bg-slate-800 px-4 py-3 flex items-center justify-between">
-                        <div>
-                          <p className="font-medium text-slate-100 text-sm">{curso}</p>
-                          <p className="text-xs text-slate-400 mt-0.5">{turma} · {professor || 'Professor não registrado'}</p>
-                        </div>
-                        <div className="flex items-center gap-3 text-sm">
-                          <span className="text-emerald-400 font-medium">{presentes}P</span>
-                          <span className="text-red-400 font-medium">{total - presentes}F</span>
-                          <span className={`font-bold ${pct >= 75 ? 'text-emerald-400' : pct >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
-                            {pct}%
-                          </span>
-                        </div>
-                      </div>
-                      <div className="divide-y divide-slate-700/40 max-h-60 overflow-y-auto">
-                        {aulas.map((aula, i) => {
-                          const d = new Date(aula.data_aula + 'T00:00:00');
-                          return (
-                            <div key={i} className="flex items-center justify-between px-4 py-2 text-sm hover:bg-slate-800/40">
-                              <div className="flex items-center gap-3">
-                                <span className="text-slate-500 w-7 text-xs">{diasSemana[d.getDay()]}</span>
-                                <span className="text-slate-300">{d.toLocaleDateString('pt-BR')}</span>
-                                <span className="text-slate-600 text-xs">#{aula.nr_da_aula}</span>
-                              </div>
-                              <span className={`px-2 py-0.5 rounded text-xs font-medium ${
-                                aula.status === 'presente'
-                                  ? 'bg-emerald-500/20 text-emerald-400'
-                                  : 'bg-red-500/20 text-red-400'
-                              }`}>
-                                {aula.status === 'presente' ? 'Presente' : 'Faltou'}
-                              </span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  );
-                });
+                return (
+                  <AulasTurmasTabs turmas={turmas} turmaKeys={turmaKeys} diasSemana={diasSemana} />
+                );
               })()}
             </TabsContent>
           </div>
