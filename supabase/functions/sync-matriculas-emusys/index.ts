@@ -11,7 +11,8 @@
 // Trilha FILA (matriculas_divergencias): ambiguo, ausente_api, disciplina_nao_mapeada,
 //   valor_divergente (parcela comercial divergente), classificacao_divergente (bolsa x tipo).
 // Dedup: (aluno|tipo) já com decisão humana não é reenfileirado.
-// MODO_TESTE (env SYNC_MATRICULAS_DRYRUN != 'false', default true): não aplica AUTO, só detecta (a fila É gravada).
+// MODO_TESTE (env SYNC_MATRICULAS_DRYRUN != 'false', default true): não aplica AUTO; em vez disso
+//   registra cada mudança AUTO como linha `auto_preview` na fila (prévia do que faria em produção).
 //
 // Salvaguardas: por matrícula (não por pessoa); data_saida = data real da API;
 //   respeita matriculas_campos_fixados; tudo logado em automacao_log (lote).
@@ -164,9 +165,10 @@ serve(async (req) => {
             previewAlunoIds.push(a.id);
             divs.push({
               aluno_id: a.id, emusys_matricula_id: a.emusys_matricula_id, unidade_id: u.id,
-              tipo_divergencia: 'auto_preview', campo: '',
+              tipo_divergencia: 'auto_preview', campo: '', fonte: 'sync',
               valor_nosso: { nome: a.nome },
-              valor_api: { diffs: r.detalhes?.diffs ?? {}, status_api: r.detalhes?.status_api },
+              // `patch` = o que o "Aprovar" da tela vai gravar (mesmo upd que o sync aplicaria em produção)
+              valor_api: { diffs: r.detalhes?.diffs ?? {}, patch: r.upd, status_api: r.detalhes?.status_api },
               sugestao: null, severidade: 'baixa',
               resolvido: false, updated_at: new Date().toISOString(),
             });
@@ -179,7 +181,7 @@ serve(async (req) => {
           resumo.fila[dv.tipo] = (resumo.fila[dv.tipo] || 0) + 1;
           divs.push({
             aluno_id: a.id, emusys_matricula_id: a.emusys_matricula_id, unidade_id: u.id,
-            tipo_divergencia: dv.tipo, campo: dv.campo || '',
+            tipo_divergencia: dv.tipo, campo: dv.campo || '', fonte: 'sync',
             valor_nosso: { nome: a.nome, curso_id: a.curso_id, status: a.status, tipo: tipoCodigo },
             valor_api: dv.valorApi, sugestao: dv.sugestao ?? null,
             severidade: dv.severidade || 'media',
@@ -260,26 +262,34 @@ function reconciliar(
     const cand = candAtivas.length > 0 ? candAtivas : candTodas;
     if (cand.length === 1) mat = cand[0];
     else if (cand.length > 1) {
-      // Tenta narrowing por turma: compara dia da turma (nome_turma na API) com dia_aula do nosso banco.
-      // Se resultar em 1 candidato, ainda vai pra fila (nunca auto-aplica), mas com candidato único
-      // para o humano confirmar. Se 0 ou múltiplos, mantém os candidatos originais.
-      let candFinal = cand;
-      if (a.dia_aula) {
-        const diaAluno = normalizarNome(a.dia_aula);
-        const filtradosPorTurma = cand.filter((m: any) =>
-          (m.contrato_atual?.disciplinas || []).some((d: any) => {
-            const dia = parseDiaDeTurma(d.nome_turma || '');
-            return dia && normalizarNome(dia) === diaAluno;
-          })
-        );
-        if (filtradosPorTurma.length === 1) candFinal = filtradosPorTurma;
-      }
-      const candidatosMeta = (m: any) => ({
-        id: m.id, status: m.status,
-        disciplinas: (m.contrato_atual?.disciplinas || []).map((d: any) => d.nome),
-        turmas: (m.contrato_atual?.disciplinas || []).map((d: any) => d.nome_turma).filter(Boolean),
-      });
-      divergencias.push({ tipo: 'ambiguo', campo: '', severidade: 'media', valorApi: { candidatos: candFinal.map(candidatosMeta), filtrado_por_turma: candFinal.length < cand.length } });
+      // Mantém TODOS os candidatos (não descarta no narrowing — senão a 2ª matrícula do
+      // caso 2x/semana some). Marca `sugerido_por_turma` no que bate com o dia_aula, e
+      // enriquece cada um com curso/professor/valor/dia pra tela mostrar e o humano vincular.
+      const diaAluno = a.dia_aula ? normalizarNome(a.dia_aula) : null;
+      const candidatosMeta = (m: any) => {
+        const c = m.contrato_atual || {};
+        const disc = c.disciplinas || [];
+        const turmasArr = disc.map((d: any) => d.nome_turma).filter(Boolean);
+        const dias = turmasArr.map((t: string) => parseDiaDeTurma(t)).filter(Boolean) as string[];
+        const cheioM = c.valor_mensalidade != null ? Number(c.valor_mensalidade) : null;
+        const condM = Number(c.desconto_condicional || 0);
+        const parcelaM = cheioM != null ? Math.round((cheioM - condM) * 100) / 100 : null;
+        const { cursos } = resolverCursoContrato(m, depara, banda);
+        return {
+          id: m.id, status: m.status, aluno_id: m.aluno?.id ?? null,
+          disciplinas: disc.map((d: any) => d.nome),
+          turmas: turmasArr,
+          dia: dias[0] || null,
+          curso_id: cursos[0] ?? null,
+          professor_id: resolverProfessorContrato(m, profMap),
+          cheio: cheioM, fixo: Number(c.desconto_fixo || 0), cond: condM,
+          parcela: (parcelaM != null && parcelaM >= 0) ? parcelaM : null,
+          parcela_invalida: !(parcelaM != null && parcelaM >= 0 && (cheioM ?? 0) > 0),
+          data_fim: c.data_original_ultima_aula || null,
+          sugerido_por_turma: !!(diaAluno && dias.some((d) => normalizarNome(d) === diaAluno)),
+        };
+      };
+      divergencias.push({ tipo: 'ambiguo', campo: '', severidade: 'media', valorApi: { candidatos: cand.map(candidatosMeta) } });
       return { upd, divergencias };
     } else {
       divergencias.push({ tipo: 'ausente_api', campo: '', severidade: 'alta', valorApi: { nome: a.nome } });

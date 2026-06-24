@@ -158,15 +158,59 @@ serve(async (req: Request) => {
 });
 
 // ─── Processar fila de relatórios WhatsApp ────────────────────────────────────
+//
+// Retry SEGURO (nunca envia duas vezes):
+//  - 'enviada' (sucesso) e 'falhou' (erro terminal) NUNCA são repescados.
+//  - Só reenvia ('erro') quando a falha indica que a msg não chegou a sair
+//    (sessão WAHA fora, conexão/timeout). Se o WhatsApp recebeu a requisição e
+//    devolveu erro de conteúdo, marca 'falhou' → não reenvia (evita duplicata).
+//  - Antes de enviar, confirma que a sessão WAHA está WORKING.
+//  - Limite de tentativas + janela de 2h (não reenvia relatório de dias atrás)
+//    + destravamento de itens presos em 'enviando'.
+
+const RELATORIO_MAX_TENTATIVAS = 8;
+
+// Erros que indicam que a mensagem NÃO foi enviada → seguro tentar de novo.
+function relatorioErroRetryavel(msg: string): boolean {
+  return /session status|not as expected|restart the session|not connected|no session|connection|econn|socket|timeout|fetch failed|network|unavailable|50[234]/i.test(msg || '');
+}
+
+// Confirma que a sessão WAHA está pronta para enviar (status WORKING).
+async function sessaoWahaWorking(creds: WhatsAppCreds): Promise<boolean> {
+  if (!creds.wahaUrl || !creds.wahaSession) return true; // sem como checar → segue o fluxo
+  try {
+    const headers: Record<string, string> = {};
+    if (creds.wahaApiKey) headers['X-Api-Key'] = creds.wahaApiKey;
+    const r = await fetch(`${creds.wahaUrl}/api/sessions/${creds.wahaSession}`, { headers });
+    const d = await r.json().catch(() => ({}));
+    return r.ok && d?.status === 'WORKING';
+  } catch {
+    return false;
+  }
+}
 
 async function processarFilaRelatorios(supabase: any): Promise<number> {
-  const agora = new Date().toISOString();
+  const agora = new Date();
+  const agoraISO = agora.toISOString();
+  const travaLimite = new Date(agora.getTime() - 5 * 60_000).toISOString();    // destrava 'enviando' preso há +5min
+  const janelaRetry = new Date(agora.getTime() - 2 * 3_600_000).toISOString(); // só relatórios das últimas 2h
 
+  // Safety: item preso em 'enviando' (edge morreu no meio) volta para 'erro' (retryável)
+  await supabase
+    .from('fila_relatorios_whatsapp')
+    .update({ status: 'erro', erro: 'destravado: preso em enviando' })
+    .eq('status', 'enviando')
+    .lt('ultima_tentativa_em', travaLimite);
+
+  // Candidato: nunca enviado ('pendente') ou falha retryável ('erro'), dentro da
+  // janela e abaixo do limite. 'enviada' e 'falhou' ficam de fora → sem reenvio duplicado.
   const { data: itens, error } = await supabase
     .from('fila_relatorios_whatsapp')
-    .select('id, unidade_id, unidade_nome, jid, grupo_nome, texto')
-    .eq('status', 'pendente')
-    .lte('agendada_para', agora)
+    .select('id, unidade_id, unidade_nome, jid, grupo_nome, texto, tentativas')
+    .in('status', ['pendente', 'erro'])
+    .lt('tentativas', RELATORIO_MAX_TENTATIVAS)
+    .lte('agendada_para', agoraISO)
+    .gte('agendada_para', janelaRetry)
     .order('agendada_para', { ascending: true })
     .limit(1); // 1 por vez — cron roda a cada minuto
 
@@ -177,14 +221,31 @@ async function processarFilaRelatorios(supabase: any): Promise<number> {
   if (!itens?.length) return 0;
 
   const item = itens[0];
+  const tentativaAtual = (item.tentativas || 0) + 1;
 
+  // Trava + conta a tentativa (impede que outro ciclo pegue o mesmo item)
   await supabase
     .from('fila_relatorios_whatsapp')
-    .update({ status: 'enviando' })
+    .update({ status: 'enviando', tentativas: tentativaAtual, ultima_tentativa_em: agoraISO })
     .eq('id', item.id);
+
+  const marcarFalha = async (msg: string, retryavel: boolean) => {
+    const status = retryavel && tentativaAtual < RELATORIO_MAX_TENTATIVAS ? 'erro' : 'falhou';
+    await supabase
+      .from('fila_relatorios_whatsapp')
+      .update({ status, erro: msg })
+      .eq('id', item.id);
+    console.error(`[processar-agendadas] ${status === 'erro' ? '↻' : '✖'} Relatório ${item.unidade_nome} (tentativa ${tentativaAtual}/${RELATORIO_MAX_TENTATIVAS}): ${msg}`);
+  };
 
   try {
     const creds = await getWhatsAppCredentials(supabase, { funcao: 'sistema', unidadeId: item.unidade_id });
+
+    // Guarda anti-duplicação: sessão fora → nem tenta enviar, fica para o próximo ciclo.
+    if (creds.provedor === 'waha' && !(await sessaoWahaWorking(creds))) {
+      await marcarFalha('Sessão WAHA não está WORKING — adiado para retry', true);
+      return 1;
+    }
 
     let response: Response;
     if (creds.provedor === 'waha') {
@@ -209,23 +270,17 @@ async function processarFilaRelatorios(supabase: any): Promise<number> {
     if (success) {
       await supabase
         .from('fila_relatorios_whatsapp')
-        .update({ status: 'enviada', enviada_em: new Date().toISOString() })
+        .update({ status: 'enviada', enviada_em: new Date().toISOString(), erro: null })
         .eq('id', item.id);
       console.log(`[processar-agendadas] ✅ Relatório enviado: ${item.unidade_nome} → ${item.grupo_nome}`);
     } else {
-      const errMsg = typeof data.error === 'string' ? data.error : JSON.stringify(data);
-      await supabase
-        .from('fila_relatorios_whatsapp')
-        .update({ status: 'erro', erro: errMsg })
-        .eq('id', item.id);
-      console.error(`[processar-agendadas] ❌ Erro ao enviar relatório ${item.unidade_nome}:`, errMsg);
+      // WhatsApp recebeu a requisição: só reenvia se o erro indicar que a msg não saiu.
+      const errMsg = typeof data.error === 'string' ? data.error : (data.message || JSON.stringify(data) || `HTTP ${response.status}`);
+      await marcarFalha(errMsg, relatorioErroRetryavel(errMsg));
     }
   } catch (err) {
-    await supabase
-      .from('fila_relatorios_whatsapp')
-      .update({ status: 'erro', erro: String(err) })
-      .eq('id', item.id);
-    console.error(`[processar-agendadas] ❌ Exceção ao enviar relatório ${item.unidade_nome}:`, err);
+    // Falha de conexão/timeout: não chegou a falar com o WhatsApp → seguro reenviar.
+    await marcarFalha(String(err), true);
   }
 
   return 1;

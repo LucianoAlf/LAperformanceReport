@@ -1,7 +1,7 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, Fragment } from 'react';
 import {
   AlertTriangle, RefreshCw, Check, X, Loader2, Link2, UserX, Copy, HelpCircle,
-  Search, MoreVertical, DollarSign, GraduationCap, ChevronLeft, ChevronRight, Pencil,
+  Search, MoreVertical, DollarSign, GraduationCap, ChevronLeft, ChevronRight, Pencil, Zap, Link as LinkIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
@@ -26,6 +26,8 @@ interface ConciliacaoItem {
   detectado_em: string | null;
   emusys_matricula_id: string | null;
   curso_nome: string | null;
+  fonte?: string | null;
+  analise_sol?: string | null;
 }
 
 interface ConciliacaoPayload {
@@ -44,6 +46,7 @@ const TIPO_META: Record<string, { label: string; descricao: string; icon: typeof
   disciplina_nao_mapeada: { label: 'Disciplina nova', descricao: 'Disciplina do Emusys sem mapeamento para curso', icon: HelpCircle, cor: 'violet' },
   professor_nao_mapeado: { label: 'Professor novo', descricao: 'Professor do Emusys sem mapeamento', icon: HelpCircle, cor: 'violet' },
   valor_fixado_divergente: { label: 'Valor fixado diverge', descricao: 'Valor editado manualmente difere da API', icon: AlertTriangle, cor: 'orange' },
+  auto_preview: { label: 'Sugestão do sync', descricao: 'Correções que o sync propõe — você aprova (em lote ou uma a uma) ou mantém', icon: Zap, cor: 'emerald' },
 };
 
 const COR_CLASSES: Record<string, string> = {
@@ -53,7 +56,16 @@ const COR_CLASSES: Record<string, string> = {
   violet: 'border-violet-500/30 bg-violet-500/10 text-violet-300',
   orange: 'border-orange-500/30 bg-orange-500/10 text-orange-300',
   sky: 'border-sky-500/30 bg-sky-500/10 text-sky-300',
+  emerald: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
 };
+
+// rótulos legíveis dos campos que o sync aplica sozinho (chaves do upd da edge)
+const CAMPO_LABEL: Record<string, string> = {
+  status: 'status', data_fim_contrato: 'fim do contrato', data_saida: 'data de saída',
+  curso_id: 'curso', professor_atual_id: 'professor', valor_cheio: 'valor cheio',
+  valor_parcela: 'parcela', desconto_fixo: 'desc. fixo', desconto_condicional: 'desc. condicional',
+};
+const CAMPO_MONETARIO = new Set(['valor_cheio', 'valor_parcela', 'desconto_fixo', 'desconto_condicional']);
 
 const PER_PAGE = 20;
 
@@ -68,7 +80,30 @@ function temSugestaoAplicavel(item: ConciliacaoItem): boolean {
   return (item.tipo_divergencia === 'valor_divergente' || item.tipo_divergencia === 'classificacao_divergente') && item.sugestao != null;
 }
 
+interface DiffLookups { cursos: Map<number, string>; profs: Map<number, string> }
+
+function fmtVal(campo: string, v: any, lk?: DiffLookups): string {
+  if (v == null || v === '') return '—';
+  if (CAMPO_MONETARIO.has(campo)) return fmtBRL(v);
+  if (campo === 'curso_id') return lk?.cursos.get(Number(v)) || `curso ${v}`;
+  if (campo === 'professor_atual_id') return lk?.profs.get(Number(v)) || `prof. ${v}`;
+  return String(v);
+}
+
+// Monta "campo: de → para · campo: de → para" a partir dos diffs do auto_preview.
+function descreverDiffs(diffs: Record<string, { de: any; para: any }> | undefined, lk?: DiffLookups): string {
+  if (!diffs || typeof diffs !== 'object') return '—';
+  const partes = Object.entries(diffs).map(([campo, d]) =>
+    `${CAMPO_LABEL[campo] || campo}: ${fmtVal(campo, d?.de, lk)} → ${fmtVal(campo, d?.para, lk)}`);
+  return partes.length ? partes.join('  ·  ') : '—';
+}
+
 function descreverNosso(item: ConciliacaoItem, tiposMap: Map<string, TipoMatricula>): string {
+  if (item.tipo_divergencia === 'auto_preview') {
+    const campos = Object.keys(item.valor_api?.diffs || {});
+    if (!campos.length) return '—';
+    return campos.map(c => CAMPO_LABEL[c] || c).join(', ');
+  }
   if (item.tipo_divergencia === 'classificacao_divergente') {
     const cod = item.valor_nosso?.tipo;
     return cod ? (tiposMap.get(cod)?.nome || cod) : '—';
@@ -79,9 +114,12 @@ function descreverNosso(item: ConciliacaoItem, tiposMap: Map<string, TipoMatricu
   return item.curso_nome || (item.valor_nosso?.curso_id ? `curso ${item.valor_nosso.curso_id}` : '—');
 }
 
-function descreverApi(item: ConciliacaoItem, tiposMap: Map<string, TipoMatricula>): string {
+function descreverApi(item: ConciliacaoItem, tiposMap: Map<string, TipoMatricula>, lk?: DiffLookups): string {
   const v = item.valor_api;
   if (!v) return '—';
+  if (item.tipo_divergencia === 'auto_preview') {
+    return descreverDiffs(v.diffs, lk);
+  }
   if (item.tipo_divergencia === 'valor_divergente') {
     const parcelaComercial = v.parcela_comercial ?? item.sugestao;
     return `cheio ${fmtBRL(v.cheio)} − desconto condicional ${fmtBRL(v.cond)} → parcela ${fmtBRL(parcelaComercial)}`;
@@ -110,6 +148,9 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
   const [salvando, setSalvando] = useState<Set<number>>(new Set());
   const [tipos, setTipos] = useState<TipoMatricula[]>([]);
   const [unidades, setUnidades] = useState<{ id: string; nome: string }[]>([]);
+  // mapas id→nome para legibilizar os diffs do auto_preview (curso/professor)
+  const [cursos, setCursos] = useState<{ id: number; nome: string }[]>([]);
+  const [profs, setProfs] = useState<{ id: number; nome: string }[]>([]);
 
   // filtros
   const [busca, setBusca] = useState('');
@@ -126,6 +167,10 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
   const [modalReclass, setModalReclass] = useState<{ item: ConciliacaoItem; tipoId: string } | null>(null);
 
   const tiposMap = useMemo(() => new Map(tipos.map(t => [t.codigo, t])), [tipos]);
+  const diffLookups = useMemo<DiffLookups>(() => ({
+    cursos: new Map(cursos.map(c => [c.id, c.nome])),
+    profs: new Map(profs.map(p => [p.id, p.nome])),
+  }), [cursos, profs]);
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -149,6 +194,8 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
   useEffect(() => {
     supabase.from('tipos_matricula').select('id, codigo, nome').then(({ data }) => setTipos(data || []));
     supabase.from('unidades').select('id, nome').eq('ativo', true).order('nome').then(({ data }) => setUnidades(data || []));
+    supabase.from('cursos').select('id, nome').then(({ data }) => setCursos(data || []));
+    supabase.from('professores').select('id, nome').then(({ data }) => setProfs(data || []));
   }, []);
 
   // reset de página ao mudar filtro
@@ -229,6 +276,49 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
     }
   }, [resolverDivergencia, removerDoEstado]);
 
+  // aplica uma decisão via a RPC guardada (trava anti-vínculo-duplicado + régua de valor no banco)
+  const aplicarDecisaoRPC = useCallback(async (
+    item: ConciliacaoItem, decisao: string, patch: Record<string, any> = {}, emusysMatriculaId: string | null = null,
+  ): Promise<boolean> => {
+    const { data: authData } = await supabase.auth.getUser();
+    const { error } = await supabase.rpc('aplicar_conciliacao_decisao', {
+      p_divergencia_id: item.id,
+      p_aluno_id: item.aluno_id,
+      p_decisao: decisao,
+      p_patch: patch,
+      p_emusys_matricula_id: emusysMatriculaId,
+      p_decidido_por: authData.user?.email || 'usuario_app',
+    });
+    if (error) throw error;
+    return true;
+  }, []);
+
+  const executarRPC = useCallback(async (
+    item: ConciliacaoItem, decisao: string, patch: Record<string, any> = {}, emusysMatriculaId: string | null = null,
+  ) => {
+    setSalvando(prev => new Set(prev).add(item.id));
+    try {
+      await aplicarDecisaoRPC(item, decisao, patch, emusysMatriculaId);
+      removerDoEstado([item.id]);
+      toast.success(decisao === 'vincular' ? 'Vinculado e populado.' : 'Aprovado e aplicado.');
+    } catch (e: any) {
+      toast.error(e?.message || 'Erro ao aplicar');
+    } finally {
+      setSalvando(prev => { const n = new Set(prev); n.delete(item.id); return n; });
+    }
+  }, [aplicarDecisaoRPC, removerDoEstado]);
+
+  // monta o patch (campos→valores) a partir de um candidato do Emusys para "vincular e popular"
+  const patchDeCandidato = useCallback((c: any): Record<string, any> => {
+    const p: Record<string, any> = {
+      curso_id: c.curso_id, professor_atual_id: c.professor_id, dia_aula: c.dia, data_fim_contrato: c.data_fim,
+    };
+    if (!c.parcela_invalida && c.cheio != null) {
+      p.valor_cheio = c.cheio; p.desconto_fixo = c.fixo; p.desconto_condicional = c.cond;
+    }
+    return Object.fromEntries(Object.entries(p).filter(([, v]) => v !== undefined && v !== null));
+  }, []);
+
   // converte uma divergência "aplicável" nas opções de gravação a partir da sugestão da API
   const opcoesAplicarApi = useCallback((item: ConciliacaoItem): { campo: string; valor: any } | null => {
     if (item.tipo_divergencia === 'valor_divergente') {
@@ -250,10 +340,12 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
 
   // ações em lote
   const aplicarLote = useCallback(async () => {
-    const alvos = itemsFiltrados.filter(i => selecionados.has(i.id) && temSugestaoAplicavel(i));
-    if (!alvos.length) { toast.error('Nenhum selecionado com sugestão aplicável.'); return; }
+    // aprováveis em lote: sugestões do sync (auto_preview) + divergências com sugestão direta da API
+    const alvos = itemsFiltrados.filter(i => selecionados.has(i.id) && (i.tipo_divergencia === 'auto_preview' || temSugestaoAplicavel(i)));
+    if (!alvos.length) { toast.error('Nenhum selecionado aprovável.'); return; }
     setProcessandoLote(true);
     const res = await Promise.allSettled(alvos.map(i => {
+      if (i.tipo_divergencia === 'auto_preview') return aplicarDecisaoRPC(i, 'aprovar', i.valor_api?.patch || {});
       const op = opcoesAplicarApi(i);
       return op ? resolverDivergencia(i, { decisao: 'aplicar_api', ...op, motivo: 'Aplicado em lote (API)' }) : Promise.reject();
     }));
@@ -262,7 +354,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
     const falhas = res.length - okIds.length;
     toast[falhas ? 'warning' : 'success'](`${okIds.length} aplicada(s)${falhas ? `, ${falhas} falha(s)` : ''}.`);
     setProcessandoLote(false);
-  }, [itemsFiltrados, selecionados, opcoesAplicarApi, resolverDivergencia, removerDoEstado]);
+  }, [itemsFiltrados, selecionados, opcoesAplicarApi, resolverDivergencia, aplicarDecisaoRPC, removerDoEstado]);
 
   const ignorarLote = useCallback(async () => {
     const alvos = itemsFiltrados.filter(i => selecionados.has(i.id));
@@ -279,7 +371,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
   const toggleSel = (id: number) => setSelecionados(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const toggleSelTodosPagina = () => {
     const idsPagina = itemsPagina.map(i => i.id);
-    const todosMarcados = idsPagina.every(id => selecionados.has(id));
+    const todosMarcados = idsPagina.length > 0 && idsPagina.every(id => selecionados.has(id));
     setSelecionados(prev => {
       const n = new Set(prev);
       idsPagina.forEach(id => todosMarcados ? n.delete(id) : n.add(id));
@@ -290,6 +382,13 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
   const totalAberto = itemsFiltrados.length;
   const mostrarFiltroUnidade = (!unidadeId || unidadeId === 'todos') && unidades.length > 1;
 
+  // separa a prévia automática (informativa) dos tipos que pedem decisão humana
+  const previewQtd = dados.resumo?.auto_preview || 0;
+  const decisaoEntries = Object.entries(dados.resumo || {}).filter(([t]) => t !== 'auto_preview');
+  const previewAtivo = filtroTipo === 'auto_preview';
+  const totalPreviewFiltrado = itemsFiltrados.filter(i => i.tipo_divergencia === 'auto_preview').length;
+  const totalDecisaoFiltrado = totalAberto - totalPreviewFiltrado;
+
   return (
     <div className="space-y-4 pb-24">
       {/* Cabeçalho */}
@@ -299,7 +398,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
             <Link2 className="w-5 h-5 text-cyan-400" /> Conciliação Emusys
           </h3>
           <p className="text-sm text-slate-400">
-            Divergências entre o nosso cadastro e a API do Emusys que precisam de decisão humana.
+            O sync só audita e propõe — <span className="text-slate-300">nada é alterado sem você aprovar</span>. Aprove ou mantenha cada divergência/sugestão.
           </p>
         </div>
         <button onClick={carregar} disabled={loading}
@@ -308,29 +407,61 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
         </button>
       </div>
 
-      {/* Cards de resumo por tipo (clicáveis = filtro) */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {Object.entries(dados.resumo || {}).map(([tipo, qtd]) => {
-          const meta = TIPO_META[tipo] || { label: tipo, descricao: '', icon: HelpCircle, cor: 'amber' };
-          const Icon = meta.icon;
-          const ativo = filtroTipo === tipo;
-          return (
-            <button key={tipo} onClick={() => setFiltroTipo(ativo ? null : tipo)}
-              className={cn('text-left rounded-lg border p-3 transition', COR_CLASSES[meta.cor], ativo ? 'ring-2 ring-offset-1 ring-offset-slate-900 ring-white/60' : 'opacity-90 hover:opacity-100')}>
-              <div className="flex items-center gap-2 text-xs uppercase tracking-wide opacity-80">
-                <Icon className="w-3.5 h-3.5" /> {meta.label}
-              </div>
-              <div className="mt-1 text-2xl font-bold">{qtd}</div>
-              <div className="mt-1 text-[11px] opacity-70 leading-tight">{meta.descricao}</div>
-            </button>
-          );
-        })}
-        {Object.keys(dados.resumo || {}).length === 0 && !loading && (
-          <div className="col-span-full rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 text-emerald-300 text-sm flex items-center gap-2">
-            <Check className="w-4 h-4" /> Nenhuma divergência pendente. Tudo conciliado.
+      {/* Faixa da prévia automática (informativa — não pede decisão) */}
+      {previewQtd > 0 && (
+        <button
+          onClick={() => setFiltroTipo(previewAtivo ? null : 'auto_preview')}
+          className={cn(
+            'group w-full text-left rounded-xl border p-4 transition flex flex-wrap items-center gap-x-4 gap-y-2',
+            'border-emerald-500/30 bg-gradient-to-r from-emerald-500/15 via-emerald-500/5 to-transparent',
+            previewAtivo ? 'ring-2 ring-emerald-400/60' : 'hover:from-emerald-500/25',
+          )}
+        >
+          <div className="shrink-0 grid place-items-center w-11 h-11 rounded-lg bg-emerald-500/20 text-emerald-300">
+            <Zap className="w-5 h-5" />
           </div>
-        )}
-      </div>
+          <div className="flex items-baseline gap-2">
+            <span className="text-3xl font-bold text-emerald-200 tabular-nums leading-none">{previewQtd}</span>
+            <span className="text-sm font-semibold uppercase tracking-wide text-emerald-300">Sugestões do sync</span>
+          </div>
+          <p className="hidden md:block text-xs text-emerald-300/70 leading-tight max-w-sm">
+            Correções que o sync propõe (curso, valor, status…). Selecione e aprove em lote, ou uma a uma.
+          </p>
+          <span className="ml-auto shrink-0 inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-medium text-emerald-300">
+            {previewAtivo ? 'filtrando' : 'clique para revisar'}
+          </span>
+        </button>
+      )}
+
+      {/* Cards dos tipos que precisam de decisão humana (clicáveis = filtro) */}
+      {decisaoEntries.length > 0 && (
+        <div>
+          <p className="mb-2 text-[11px] font-medium uppercase tracking-wider text-slate-500">Precisam de decisão</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+            {decisaoEntries.map(([tipo, qtd]) => {
+              const meta = TIPO_META[tipo] || { label: tipo, descricao: '', icon: HelpCircle, cor: 'amber' };
+              const Icon = meta.icon;
+              const ativo = filtroTipo === tipo;
+              return (
+                <button key={tipo} onClick={() => setFiltroTipo(ativo ? null : tipo)}
+                  className={cn('flex h-full flex-col rounded-lg border p-3 text-left transition', COR_CLASSES[meta.cor], ativo ? 'ring-2 ring-offset-1 ring-offset-slate-900 ring-white/60' : 'opacity-90 hover:opacity-100')}>
+                  <div className="flex items-center gap-2 text-xs uppercase tracking-wide opacity-80">
+                    <Icon className="w-3.5 h-3.5 shrink-0" /> <span className="truncate">{meta.label}</span>
+                  </div>
+                  <div className="mt-1 text-2xl font-bold tabular-nums">{qtd}</div>
+                  <div className="mt-1 text-[11px] opacity-70 leading-tight line-clamp-2">{meta.descricao}</div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {Object.keys(dados.resumo || {}).length === 0 && !loading && (
+        <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 text-emerald-300 text-sm flex items-center gap-2">
+          <Check className="w-4 h-4" /> Nenhuma divergência pendente. Tudo conciliado.
+        </div>
+      )}
 
       {/* Filtros */}
       {!loading && (dados.items || []).length > 0 && (
@@ -357,7 +488,11 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
               </SelectContent>
             </Select>
           )}
-          <span className="text-sm text-slate-500 ml-auto">{totalAberto} divergência(s)</span>
+          <span className="text-sm text-slate-500 ml-auto">
+            {totalDecisaoFiltrado > 0 && <span>{totalDecisaoFiltrado} p/ decisão</span>}
+            {totalDecisaoFiltrado > 0 && totalPreviewFiltrado > 0 && <span className="text-slate-600"> · </span>}
+            {totalPreviewFiltrado > 0 && <span className="text-emerald-500/80">{totalPreviewFiltrado} automática(s)</span>}
+          </span>
         </div>
       )}
 
@@ -388,18 +523,24 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                   const meta = TIPO_META[item.tipo_divergencia] || { label: item.tipo_divergencia, cor: 'amber' };
                   const emProgresso = salvando.has(item.id);
                   const aplicavel = temSugestaoAplicavel(item);
+                  const isPreview = item.tipo_divergencia === 'auto_preview';
+                  const candidatos: any[] = item.tipo_divergencia === 'ambiguo' && Array.isArray(item.valor_api?.candidatos) ? item.valor_api.candidatos : [];
+                  const homonimo = new Set(candidatos.map(c => c.aluno_id)).size > 1;
+                  const temDetalhe = candidatos.length > 0 || !!item.analise_sol;
                   return (
-                    <tr key={item.id} className={cn('hover:bg-slate-700/20', selecionados.has(item.id) && 'bg-cyan-500/5')}>
+                    <Fragment key={item.id}>
+                    <tr className={cn('hover:bg-slate-700/20', selecionados.has(item.id) && 'bg-cyan-500/5', temDetalhe && 'border-b-0')}>
                       <td className="px-3 py-3"><Checkbox checked={selecionados.has(item.id)} onCheckedChange={() => toggleSel(item.id)} /></td>
                       <td className="px-4 py-3 text-slate-200">{item.aluno_nome || '—'}</td>
                       <td className="px-4 py-3 text-slate-400">{item.unidade_nome || '—'}</td>
                       <td className="px-4 py-3">
-                        <span className={cn('inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium', COR_CLASSES[meta.cor])}>
-                          {meta.label}
+                        <span className={cn('inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-medium', COR_CLASSES[meta.cor])}>
+                          {isPreview && <Zap className="w-3 h-3 shrink-0" />}
+                          {isPreview ? 'Sugestão' : meta.label}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-slate-300">{descreverNosso(item, tiposMap)}</td>
-                      <td className="px-4 py-3 text-slate-400 max-w-md truncate" title={descreverApi(item, tiposMap)}>{descreverApi(item, tiposMap)}</td>
+                      <td className="px-4 py-3 text-slate-400 max-w-md truncate" title={descreverApi(item, tiposMap, diffLookups)}>{descreverApi(item, tiposMap, diffLookups)}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end">
                           {emProgresso ? (
@@ -412,6 +553,12 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                                 </button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" className="w-56">
+                                {isPreview && (
+                                  <DropdownMenuItem onClick={() => executarRPC(item, 'aprovar', item.valor_api?.patch || {})}
+                                    className="cursor-pointer text-emerald-400 focus:text-emerald-400 focus:bg-emerald-500/10">
+                                    <Check className="w-4 h-4 mr-2" /> Aprovar (aplicar)
+                                  </DropdownMenuItem>
+                                )}
                                 {aplicavel && (
                                   <DropdownMenuItem onClick={() => aplicarApi(item)}
                                     className="cursor-pointer text-emerald-400 focus:text-emerald-400 focus:bg-emerald-500/10">
@@ -447,6 +594,58 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                         </div>
                       </td>
                     </tr>
+                    {temDetalhe && (
+                      <tr className={cn(selecionados.has(item.id) && 'bg-cyan-500/5')}>
+                        <td></td>
+                        <td colSpan={6} className="px-4 pb-4 pt-0 align-top">
+                          {item.analise_sol && (
+                            <div className="mb-2 rounded-lg border border-violet-500/30 bg-violet-500/10 p-2.5 text-xs text-violet-200">
+                              <span className="font-semibold">Análise da Sol:</span> {item.analise_sol}
+                            </div>
+                          )}
+                          {candidatos.length > 0 && (
+                            <div className="space-y-2">
+                              {homonimo && (
+                                <div className="flex items-center gap-1.5 text-[11px] text-red-300">
+                                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                                  Candidatos de pessoas diferentes (aluno_id distinto no Emusys) — confirme que é a pessoa certa antes de vincular.
+                                </div>
+                              )}
+                              <div className="grid gap-2 md:grid-cols-2">
+                                {candidatos.map((c) => (
+                                  <div key={c.id} className={cn('rounded-lg border p-3', c.sugerido_por_turma ? 'border-cyan-500/40 bg-cyan-500/5' : 'border-slate-700 bg-slate-800/40')}>
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="min-w-0">
+                                        <div className="flex items-center gap-2 text-sm text-slate-200">
+                                          <span className="font-medium">#{c.id}</span>
+                                          <span className="text-slate-400">·</span>
+                                          <span>{c.dia || 'dia ?'}</span>
+                                          {(c.turmas || []).length > 0 && <span className="text-slate-500 text-xs truncate">{(c.turmas || []).join(', ')}</span>}
+                                          {c.sugerido_por_turma && <span className="rounded-full bg-cyan-500/20 text-cyan-300 px-1.5 py-0.5 text-[10px]">sugerido</span>}
+                                        </div>
+                                        <div className="mt-1 text-xs text-slate-400">
+                                          {diffLookups.cursos.get(Number(c.curso_id)) || `curso ${c.curso_id ?? '?'}`}
+                                          {' · '}{diffLookups.profs.get(Number(c.professor_id)) || `prof. ${c.professor_id ?? '?'}`}
+                                          {' · '}{c.parcela_invalida ? <span className="text-orange-300">valor a revisar</span> : `parcela ${fmtBRL(c.parcela)}`}
+                                          {c.status && c.status !== 'ativa' && <span className="text-amber-300"> · {c.status}</span>}
+                                        </div>
+                                      </div>
+                                      <button
+                                        onClick={() => executarRPC(item, 'vincular', patchDeCandidato(c), String(c.id))}
+                                        disabled={emProgresso}
+                                        className="shrink-0 inline-flex items-center gap-1 rounded-md bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 text-white text-xs font-medium px-2.5 py-1.5">
+                                        <LinkIcon className="w-3.5 h-3.5" /> Vincular
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                    </Fragment>
                   );
                 })}
               </tbody>
@@ -472,7 +671,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
           <span className="text-white font-medium">{selecionados.size} selecionada(s)</span>
           <button onClick={aplicarLote} disabled={processandoLote}
             className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-emerald-800 text-white rounded-lg text-sm font-medium flex items-center gap-2">
-            <Check className="w-4 h-4" /> {processandoLote ? 'Processando...' : 'Aplicar dado da API'}
+            <Check className="w-4 h-4" /> {processandoLote ? 'Processando...' : 'Aprovar / aplicar'}
           </button>
           <button onClick={ignorarLote} disabled={processandoLote}
             className="px-4 py-2 bg-slate-600 hover:bg-slate-700 disabled:bg-slate-700 text-white rounded-lg text-sm font-medium flex items-center gap-2">
