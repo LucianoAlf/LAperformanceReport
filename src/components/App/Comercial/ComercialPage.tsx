@@ -49,6 +49,7 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
+import { ehMatriculaComercialCanonica } from '@/lib/comercialMatriculasCanonicas';
 import { PageTabs, type PageTab } from '@/components/ui/page-tabs';
 import { PageFilterBar } from '@/components/ui/page-filter-bar';
 import { format } from 'date-fns';
@@ -345,9 +346,7 @@ const TIPOS_SEM_PAGAMENTO = ['bolsista_integral', 'nao_pagante'];
 // relatórios e cards para nunca divergirem. Aceita tanto o objeto do state
 // (campos planos is_banda/curso_nome) quanto o do relatório (aninhado em cursos).
 const ehMatriculaNova = (m: any): boolean => {
-  const nomeCurso = (m.curso_nome || (m.cursos as any)?.nome || '').toLowerCase();
-  const ehBanda = m.is_banda === true || (m.cursos as any)?.is_projeto_banda === true || nomeCurso.includes('banda');
-  return !m.is_segundo_curso && !ehBanda && (Number(m.valor_passaporte) || 0) > 0;
+  return ehMatriculaComercialCanonica(m);
 };
 
 // Formatação monetária BRL com exatamente 2 casas (evita o bug de 3 decimais do
@@ -977,7 +976,7 @@ export function ComercialPage() {
       // ════════════════════════════════════════════════════════════════
       let alunosMatQuery = supabase
         .from('alunos')
-        .select('id, nome, telefone, responsavel_telefone, data_nascimento, idade_atual, curso_id, professor_atual_id, professor_experimental_id, tipo_matricula_id, tipo_aluno, forma_pagamento_id, valor_parcela, valor_passaporte, data_matricula, is_segundo_curso, modalidade, unidade_id, status, canal_origem_id, emusys_matricula_id, cursos:curso_id(nome, is_projeto_banda), canais_origem:canal_origem_id(nome), unidades:unidade_id(codigo)')
+        .select('id, nome, telefone, responsavel_telefone, data_nascimento, idade_atual, curso_id, professor_atual_id, professor_experimental_id, tipo_matricula_id, tipo_aluno, forma_pagamento_id, valor_parcela, valor_passaporte, data_matricula, is_segundo_curso, modalidade, unidade_id, status, canal_origem_id, emusys_matricula_id, cursos:curso_id(nome, is_projeto_banda), canais_origem:canal_origem_id(nome), tipos_matricula:tipo_matricula_id!left(codigo, conta_como_pagante, entra_ticket_medio), unidades:unidade_id(codigo)')
         .not('data_matricula', 'is', null)
         .limit(10000);
 
@@ -2527,7 +2526,7 @@ export function ComercialPage() {
   const buscarMatriculasAlunos = async (uid: string | null | undefined, dataInicio: string, dataFim: string) => {
     let q = supabase
       .from('alunos')
-      .select('id, nome, telefone, responsavel_telefone, idade_atual, data_matricula, tipo_aluno, valor_passaporte, valor_parcela, is_segundo_curso, curso_id, canal_origem_id, professor_atual_id, professor_experimental_id, forma_pagamento_id, unidade_id, modalidade, status, emusys_matricula_id, cursos:curso_id(nome, is_projeto_banda), canais_origem:canal_origem_id(nome), unidades:unidade_id(codigo, nome, hunter_nome), formas_pagamento:forma_pagamento_id(nome)')
+      .select('id, nome, telefone, responsavel_telefone, idade_atual, data_matricula, tipo_aluno, valor_passaporte, valor_parcela, is_segundo_curso, curso_id, canal_origem_id, professor_atual_id, professor_experimental_id, forma_pagamento_id, tipo_matricula_id, unidade_id, modalidade, status, emusys_matricula_id, cursos:curso_id(nome, is_projeto_banda), canais_origem:canal_origem_id(nome), tipos_matricula:tipo_matricula_id!left(codigo, conta_como_pagante, entra_ticket_medio), unidades:unidade_id(codigo, nome, hunter_nome), formas_pagamento:forma_pagamento_id(nome)')
       .not('data_matricula', 'is', null)
       .gte('data_matricula', dataInicio)
       .lte('data_matricula', dataFim);
@@ -5597,7 +5596,7 @@ export function ComercialPage() {
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-slate-400">Total Passaportes:</span>
                   <span className="text-lg font-bold text-emerald-400">
-                    R$ {matriculasMes.reduce((acc, m) => acc + (m.valor_passaporte || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    R$ {matriculasFiltradasRaw.reduce((acc, m) => acc + (m.valor_passaporte || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </span>
                 </div>
               </div>
@@ -5816,10 +5815,10 @@ export function ComercialPage() {
                 <tr className="border-t border-slate-600 bg-slate-800/50">
                   <td colSpan={10} className="py-3 px-2 text-right text-slate-400 font-medium">Totais:</td>
                   <td className="py-3 px-2 text-emerald-400 font-bold">
-                    R$ {matriculasMes.reduce((acc, m) => acc + (m.valor_passaporte || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    R$ {matriculasFiltradasRaw.reduce((acc, m) => acc + (m.valor_passaporte || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </td>
                   <td className="py-3 px-2 text-cyan-400 font-bold">
-                    R$ {matriculasMes.reduce((acc, m) => acc + (m.valor_parcela || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    R$ {matriculasFiltradasRaw.reduce((acc, m) => acc + (m.valor_parcela || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </td>
                   <td colSpan={2}></td>
                 </tr>
