@@ -38,7 +38,7 @@ interface TipoMatricula { id: number; codigo: string; nome: string }
 const TIPO_META: Record<string, { label: string; descricao: string; icon: typeof Link2; cor: string }> = {
   ambiguo: { label: 'Ambíguo', descricao: 'Várias matrículas ativas, nenhuma casa o curso do nosso cadastro', icon: Copy, cor: 'amber' },
   ausente_api: { label: 'Ausente na API', descricao: 'Ativo no nosso sistema, mas não existe na API do Emusys', icon: UserX, cor: 'red' },
-  valor_divergente: { label: 'Valor divergente', descricao: 'Parcela do nosso difere da API (fonte de desconto ambígua)', icon: DollarSign, cor: 'orange' },
+  valor_divergente: { label: 'Valor divergente', descricao: 'Parcela comercial difere da API canônica do Emusys', icon: DollarSign, cor: 'orange' },
   classificacao_divergente: { label: 'Classificação', descricao: 'Tipo (bolsista/regular) não bate com a realidade da API', icon: GraduationCap, cor: 'sky' },
   duas_matriculas: { label: '2× mesmo curso', descricao: 'Duas matrículas do mesmo curso (ex.: 2 aulas/semana)', icon: Copy, cor: 'cyan' },
   disciplina_nao_mapeada: { label: 'Disciplina nova', descricao: 'Disciplina do Emusys sem mapeamento para curso', icon: HelpCircle, cor: 'violet' },
@@ -83,7 +83,8 @@ function descreverApi(item: ConciliacaoItem, tiposMap: Map<string, TipoMatricula
   const v = item.valor_api;
   if (!v) return '—';
   if (item.tipo_divergencia === 'valor_divergente') {
-    return `cheio ${fmtBRL(v.cheio)} − descontos → paga ~${fmtBRL(v.liquido_estimado)}`;
+    const parcelaComercial = v.parcela_comercial ?? item.sugestao;
+    return `cheio ${fmtBRL(v.cheio)} − desconto condicional ${fmtBRL(v.cond)} → parcela ${fmtBRL(parcelaComercial)}`;
   }
   if (item.tipo_divergencia === 'classificacao_divergente') {
     const sug = tiposMap.get(v.tipo_sugerido)?.nome || v.tipo_sugerido;

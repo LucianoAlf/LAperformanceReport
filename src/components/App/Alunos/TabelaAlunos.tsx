@@ -122,6 +122,24 @@ function getDefaultColunas(): Set<string> {
   return new Set(COLUNAS_CONFIG.filter(c => c.defaultVisible).map(c => c.id));
 }
 
+const CAMPOS_COMPOSICAO_MENSALIDADE = new Set(['valor_cheio', 'desconto_fixo', 'desconto_condicional']);
+
+function numeroOuNull(valor: string | number | null | undefined): number | null {
+  if (valor === null || valor === undefined || valor === '') return null;
+  const numero = Number(valor);
+  return Number.isFinite(numero) ? numero : null;
+}
+
+function calcularParcelaComercialCanonica(
+  valorCheio: string | number | null | undefined,
+  descontoCondicional: string | number | null | undefined
+): number | null {
+  const cheio = numeroOuNull(valorCheio);
+  if (cheio === null) return null;
+  const condicional = numeroOuNull(descontoCondicional) ?? 0;
+  return Math.round((cheio - condicional) * 100) / 100;
+}
+
 function SortableHeader({ label, sortKey, sortConfig, onSort, className = '', px = 'px-4' }: {
   label: string;
   sortKey: string;
@@ -547,16 +565,16 @@ export function TabelaAlunos({
         updated.horario_aula = valor ? `${valor}:00` : null;
         break;
       case 'valor_parcela':
-        updated.valor_parcela = valor ? Number(valor) : null;
+        updated.valor_parcela = numeroOuNull(valor);
         break;
       case 'valor_cheio':
-        updated.valor_cheio = valor ? Number(valor) : null;
+        updated.valor_cheio = numeroOuNull(valor);
         break;
       case 'desconto_fixo':
-        updated.desconto_fixo = valor ? Number(valor) : null;
+        updated.desconto_fixo = numeroOuNull(valor);
         break;
       case 'desconto_condicional':
-        updated.desconto_condicional = valor ? Number(valor) : null;
+        updated.desconto_condicional = numeroOuNull(valor);
         break;
       case 'status':
         updated.status = (valor as string) || 'ativo';
@@ -576,6 +594,12 @@ export function TabelaAlunos({
       case 'data_matricula':
         updated.data_matricula = valor as string;
         break;
+    }
+    if (CAMPOS_COMPOSICAO_MENSALIDADE.has(campo)) {
+      updated.valor_parcela = calcularParcelaComercialCanonica(
+        updated.valor_cheio,
+        updated.desconto_condicional
+      );
     }
     return updated;
   }, [professores, cursos]);
@@ -628,16 +652,16 @@ export function TabelaAlunos({
         updateData.horario_aula = valor ? `${valor}:00` : null;
         break;
       case 'valor_parcela':
-        updateData.valor_parcela = valor ? Number(valor) : null;
+        updateData.valor_parcela = numeroOuNull(valor);
         break;
       case 'valor_cheio':
-        updateData.valor_cheio = valor ? Number(valor) : null;
+        updateData.valor_cheio = numeroOuNull(valor);
         break;
       case 'desconto_fixo':
-        updateData.desconto_fixo = valor ? Number(valor) : null;
+        updateData.desconto_fixo = numeroOuNull(valor);
         break;
       case 'desconto_condicional':
-        updateData.desconto_condicional = valor ? Number(valor) : null;
+        updateData.desconto_condicional = numeroOuNull(valor);
         break;
       case 'status':
         updateData.status = valor || 'ativo';
@@ -659,6 +683,19 @@ export function TabelaAlunos({
         break;
     }
 
+    if (CAMPOS_COMPOSICAO_MENSALIDADE.has(campo)) {
+      const alunoAtual =
+        alunosLocal.find(a => a.id === alunoId) ||
+        alunosLocal.flatMap(a => a.outros_cursos || []).find(a => a.id === alunoId);
+
+      const valorCheio =
+        campo === 'valor_cheio' ? numeroOuNull(valor) : alunoAtual?.valor_cheio ?? null;
+      const descontoCondicional =
+        campo === 'desconto_condicional' ? numeroOuNull(valor) : alunoAtual?.desconto_condicional ?? null;
+
+      updateData.valor_parcela = calcularParcelaComercialCanonica(valorCheio, descontoCondicional);
+    }
+
     // Salvar no banco
     const { error } = await supabase
       .from('alunos')
@@ -671,7 +708,7 @@ export function TabelaAlunos({
       setAlunosLocal(alunosProp);
       throw error;
     }
-  }, [abrirGovernancaSemParcela, aplicarUpdateLocal, alunosProp, usuario?.email, usuario?.nome]);
+  }, [abrirGovernancaSemParcela, aplicarUpdateLocal, alunosLocal, alunosProp, usuario?.email, usuario?.nome]);
 
   // Salva a composição da mensalidade: parcela = cheio − desconto condicional.
   // O desconto fixo é REGISTRADO (coluna desconto_fixo) mas NÃO entra na parcela comercial.

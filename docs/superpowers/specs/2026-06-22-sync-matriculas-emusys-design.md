@@ -4,6 +4,8 @@
 **Autor:** Hugo + Claude
 **Status:** Aprovado (design) — pendente implementação
 
+> Atualização 2026-06-24: Alf validou a regra financeira canônica final. `valor_parcela = valor_mensalidade - desconto_condicional`. `desconto_fixo` fica registrado/auditado, mas não entra em parcela comercial, ticket, MRR ou relatórios.
+
 ## Problema
 
 O webhook de matrícula do Emusys é a única fonte de contrato hoje, e ele tem buracos:
@@ -69,7 +71,7 @@ Recebe um aluno do nosso banco e as matrículas dele na API. Classifica e age:
 
 | Campo nosso | Fonte na API | Regra |
 |---|---|---|
-| `valor_parcela` | `contrato_atual` | `valor_mensalidade − desconto_fixo − desconto_condicional` (líquido) |
+| `valor_parcela` | `contrato_atual` | `valor_mensalidade − desconto_condicional` (parcela comercial canônica) |
 | `desconto_fixo` (nova col.) | `contrato_atual.desconto_fixo` | cópia |
 | `desconto_condicional` (nova col.) | `contrato_atual.desconto_condicional` | cópia |
 | `valor_cheio` (nova col.) | `contrato_atual.valor_mensalidade` | cópia |
@@ -143,7 +145,7 @@ ALTER TABLE alunos
   ADD COLUMN valor_cheio numeric,           -- valor_mensalidade da API (sem desconto)
   ADD COLUMN desconto_fixo numeric,         -- desconto_fixo da API
   ADD COLUMN desconto_condicional numeric;  -- desconto_condicional (pontualidade)
--- valor_parcela (já existe) = valor_cheio - desconto_fixo - desconto_condicional
+-- valor_parcela (já existe) = valor_cheio - desconto_condicional
 ```
 
 ### `matriculas_divergencias` (estado detectado pelo sync)
