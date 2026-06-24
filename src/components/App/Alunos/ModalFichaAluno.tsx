@@ -6,7 +6,7 @@ const parseLocalDate = (s: string | null | undefined): Date | null =>
 const formatLocalDate = (d: Date | null | undefined): string | null =>
   d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : null;
 import { supabase } from '@/lib/supabase';
-import { X, Loader2, Save, User, GraduationCap, DollarSign, TrendingUp, History, AlertCircle, Plus, Users, Pencil, Brain, ExternalLink, MessageCircle, Search, Star } from 'lucide-react';
+import { X, Loader2, Save, User, GraduationCap, DollarSign, TrendingUp, History, AlertCircle, Plus, Users, Pencil, Brain, ExternalLink, MessageCircle, Search, Star, BookOpen } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import {
   AlertDialog,
@@ -93,6 +93,16 @@ interface Anotacao {
   criado_por: string;
   created_at: string;
   resolvido: boolean;
+}
+
+interface AulaHistorico {
+  data_aula: string;
+  status: 'presente' | 'ausente';
+  curso_nome: string;
+  turma_nome: string;
+  professor_nome: string | null;
+  nr_da_aula: number;
+  cancelada: boolean;
 }
 
 interface GovernancaSemParcelaFichaState {
@@ -258,6 +268,11 @@ export function ModalFichaAluno({
   const [movimentacoes, setMovimentacoes] = useState<Movimentacao[]>([]);
   const [renovacoes, setRenovacoes] = useState<Renovacao[]>([]);
   const [anotacoes, setAnotacoes] = useState<Anotacao[]>([]);
+
+  // Histórico de Aulas
+  const [aulasHistorico, setAulasHistorico] = useState<AulaHistorico[]>([]);
+  const [loadingAulas, setLoadingAulas] = useState(false);
+  const [aulasCarregadas, setAulasCarregadas] = useState(false);
   
   // Form state
   const [formData, setFormData] = useState({
@@ -334,6 +349,18 @@ export function ModalFichaAluno({
   useEffect(() => {
     carregarDadosCompletos();
   }, [aluno.id]);
+
+  useEffect(() => {
+    if (activeTab !== 'aulas' || aulasCarregadas) return;
+    const carregar = async () => {
+      setLoadingAulas(true);
+      const { data } = await supabase.rpc('get_historico_aulas_aluno', { p_aluno_id: aluno.id });
+      setAulasHistorico((data as AulaHistorico[]) || []);
+      setAulasCarregadas(true);
+      setLoadingAulas(false);
+    };
+    carregar();
+  }, [activeTab, aluno.id, aulasCarregadas]);
 
   // Buscar turma quando professor, dia ou horário mudarem
   useEffect(() => {
@@ -880,7 +907,7 @@ export function ModalFichaAluno({
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid grid-cols-7 flex-shrink-0">
+          <TabsList className="grid grid-cols-8 flex-shrink-0">
             <TabsTrigger value="pessoal" className="flex items-center gap-2">
               <User className="w-4 h-4" />
               <span className="hidden sm:inline">Pessoal</span>
@@ -908,6 +935,10 @@ export function ModalFichaAluno({
             <TabsTrigger value="pesquisas" className="flex items-center gap-2">
               <Star className="w-4 h-4" />
               <span className="hidden sm:inline">Pesquisas</span>
+            </TabsTrigger>
+            <TabsTrigger value="aulas" className="flex items-center gap-2">
+              <BookOpen className="w-4 h-4" />
+              <span className="hidden sm:inline">Aulas</span>
             </TabsTrigger>
           </TabsList>
 
@@ -1670,6 +1701,72 @@ export function ModalFichaAluno({
 
             <TabsContent value="pesquisas" className="space-y-4 mt-0">
               <TimelinePesquisasAluno alunoId={aluno.id} alunoNome={aluno.nome} />
+            </TabsContent>
+
+            {/* ABA AULAS */}
+            <TabsContent value="aulas" className="space-y-3 mt-0">
+              {loadingAulas ? (
+                <div className="flex items-center justify-center py-16">
+                  <Loader2 className="w-6 h-6 animate-spin text-slate-400" />
+                </div>
+              ) : aulasHistorico.length === 0 ? (
+                <div className="text-center py-16 text-slate-400">
+                  <BookOpen className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                  <p className="text-sm">Nenhuma aula registrada</p>
+                </div>
+              ) : (() => {
+                const turmas = aulasHistorico.reduce<Record<string, AulaHistorico[]>>((acc, aula) => {
+                  if (!acc[aula.turma_nome]) acc[aula.turma_nome] = [];
+                  acc[aula.turma_nome].push(aula);
+                  return acc;
+                }, {});
+                const diasSemana = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+                return Object.entries(turmas).map(([turma, aulas]) => {
+                  const total = aulas.length;
+                  const presentes = aulas.filter(a => a.status === 'presente').length;
+                  const pct = total > 0 ? Math.round((presentes / total) * 100) : 0;
+                  const professor = aulas.find(a => a.professor_nome)?.professor_nome;
+                  const curso = aulas[0].curso_nome;
+                  return (
+                    <div key={turma} className="border border-slate-700 rounded-lg overflow-hidden">
+                      <div className="bg-slate-800 px-4 py-3 flex items-center justify-between">
+                        <div>
+                          <p className="font-medium text-slate-100 text-sm">{curso}</p>
+                          <p className="text-xs text-slate-400 mt-0.5">{turma} · {professor || 'Professor não registrado'}</p>
+                        </div>
+                        <div className="flex items-center gap-3 text-sm">
+                          <span className="text-emerald-400 font-medium">{presentes}P</span>
+                          <span className="text-red-400 font-medium">{total - presentes}F</span>
+                          <span className={`font-bold ${pct >= 75 ? 'text-emerald-400' : pct >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
+                            {pct}%
+                          </span>
+                        </div>
+                      </div>
+                      <div className="divide-y divide-slate-700/40 max-h-60 overflow-y-auto">
+                        {aulas.map((aula, i) => {
+                          const d = new Date(aula.data_aula + 'T00:00:00');
+                          return (
+                            <div key={i} className="flex items-center justify-between px-4 py-2 text-sm hover:bg-slate-800/40">
+                              <div className="flex items-center gap-3">
+                                <span className="text-slate-500 w-7 text-xs">{diasSemana[d.getDay()]}</span>
+                                <span className="text-slate-300">{d.toLocaleDateString('pt-BR')}</span>
+                                <span className="text-slate-600 text-xs">#{aula.nr_da_aula}</span>
+                              </div>
+                              <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                                aula.status === 'presente'
+                                  ? 'bg-emerald-500/20 text-emerald-400'
+                                  : 'bg-red-500/20 text-red-400'
+                              }`}>
+                                {aula.status === 'presente' ? 'Presente' : 'Faltou'}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
             </TabsContent>
           </div>
         </Tabs>
