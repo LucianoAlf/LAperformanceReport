@@ -168,6 +168,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
   const [modalValor, setModalValor] = useState<{ item: ConciliacaoItem; valor: string } | null>(null);
   const [modalReclass, setModalReclass] = useState<{ item: ConciliacaoItem; tipoId: string } | null>(null);
   const [confirmVincular, setConfirmVincular] = useState<{ item: ConciliacaoItem; candidato: any; patch: Record<string, any>; atual: Record<string, any> } | null>(null);
+  const [alunosAtuais, setAlunosAtuais] = useState<Map<number, Record<string, any>>>(new Map());
 
   const tiposMap = useMemo(() => new Map(tipos.map(t => [t.codigo, t])), [tipos]);
   const diffLookups = useMemo<DiffLookups>(() => ({
@@ -200,6 +201,22 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
     supabase.from('cursos').select('id, nome').then(({ data }) => setCursos(data || []));
     supabase.from('professores').select('id, nome').then(({ data }) => setProfs(data || []));
   }, []);
+
+  // batch fetch dos valores atuais dos alunos ambíguos para mostrar antes/depois nos cards
+  useEffect(() => {
+    const ids = [...new Set((dados.items || [])
+      .filter(i => i.tipo_divergencia === 'ambiguo' && i.aluno_id)
+      .map(i => i.aluno_id!))];
+    if (!ids.length) { setAlunosAtuais(new Map()); return; }
+    supabase.from('alunos')
+      .select('id, curso_id, professor_atual_id, dia_aula, valor_cheio, desconto_fixo, desconto_condicional')
+      .in('id', ids)
+      .then(({ data }) => {
+        const m = new Map<number, Record<string, any>>();
+        (data || []).forEach((a: any) => m.set(a.id, a));
+        setAlunosAtuais(m);
+      });
+  }, [dados.items]);
 
   // reset de página ao mudar filtro
   useEffect(() => { setPagina(1); }, [busca, filtroTipo, filtroUnidade]);
@@ -632,6 +649,28 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                                           {' · '}{c.parcela_invalida ? <span className="text-orange-300">valor a revisar</span> : `parcela ${fmtBRL(c.parcela)}`}
                                           {c.status && c.status !== 'ativa' && <span className="text-amber-300"> · {c.status}</span>}
                                         </div>
+                                        {(() => {
+                                          const at = alunosAtuais.get(item.aluno_id!);
+                                          if (!at) return null;
+                                          const diffs: { label: string; de: string; para: string }[] = [];
+                                          if (c.dia && c.dia !== at.dia_aula) diffs.push({ label: 'Dia', de: at.dia_aula || '—', para: c.dia });
+                                          if (c.curso_id != null && c.curso_id !== at.curso_id) diffs.push({ label: 'Curso', de: diffLookups.cursos.get(Number(at.curso_id)) || '—', para: diffLookups.cursos.get(Number(c.curso_id)) || `?` });
+                                          if (c.professor_id != null && c.professor_id !== at.professor_atual_id) diffs.push({ label: 'Prof.', de: diffLookups.profs.get(Number(at.professor_atual_id)) || '—', para: diffLookups.profs.get(Number(c.professor_id)) || `?` });
+                                          if (!c.parcela_invalida && c.cheio != null && c.cheio !== at.valor_cheio) diffs.push({ label: 'Cheio', de: fmtBRL(at.valor_cheio), para: fmtBRL(c.cheio) });
+                                          if (!diffs.length) return null;
+                                          return (
+                                            <div className="mt-2 space-y-0.5 border-t border-slate-700/50 pt-2">
+                                              {diffs.map(d => (
+                                                <div key={d.label} className="flex items-center gap-1.5 text-[11px]">
+                                                  <span className="text-slate-500 w-10 shrink-0">{d.label}</span>
+                                                  <span className="text-slate-400 line-through">{d.de}</span>
+                                                  <span className="text-slate-600">→</span>
+                                                  <span className="text-emerald-400">{d.para}</span>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          );
+                                        })()}
                                       </div>
                                       <button
                                         onClick={async () => {
