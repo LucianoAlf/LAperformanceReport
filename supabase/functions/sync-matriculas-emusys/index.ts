@@ -115,7 +115,7 @@ serve(async (req) => {
     const profMap = new Map<number, number>((prof || []).map((p: any) => [p.emusys_id, p.professor_id]));
 
     const { data: alunos } = await supabase.from('alunos')
-      .select('id, nome, curso_id, professor_atual_id, emusys_matricula_id, status, data_fim_contrato, valor_cheio, desconto_fixo, desconto_condicional, valor_parcela, tipo_matricula_id, dia_aula')
+      .select('id, nome, curso_id, professor_atual_id, emusys_matricula_id, status, data_fim_contrato, valor_cheio, desconto_fixo, desconto_condicional, valor_parcela, tipo_matricula_id, dia_aula, horario_aula')
       .eq('unidade_id', u.id).eq('status', 'ativo');
 
     // tipo_matricula_id -> codigo (BOLSISTA_INT, REGULAR, etc.) para a régua de classificação
@@ -239,6 +239,21 @@ function parseDiaDeTurma(nomeTurma: string): string | null {
     Qui: 'Quinta', Sex: 'Sexta', Sab: 'Sábado',
   };
   return mapa[abrev] || null;
+}
+
+// Extrai o horário da aula do nome da turma (último segmento numérico).
+// "G_Ter_14" → "14:00:00", "G_Seg_18" → "18:00:00", "X_Qua_1430" → "14:30:00".
+// Retorna null se o sufixo não for um horário reconhecível.
+function parseHorarioDeTurma(nomeTurma: string): string | null {
+  const partes = (nomeTurma || '').split('_');
+  if (partes.length < 3) return null;
+  const ult = partes[partes.length - 1];
+  if (!/^\d{1,4}$/.test(ult)) return null;
+  let h: number, m = 0;
+  if (ult.length <= 2) { h = parseInt(ult, 10); }
+  else { h = parseInt(ult.slice(0, ult.length - 2), 10); m = parseInt(ult.slice(-2), 10); }
+  if (h > 23 || m > 59) return null;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00`;
 }
 
 // Pura (sem I/O): decide o que fazer com o aluno.
@@ -370,6 +385,19 @@ function reconciliar(
     }
     const profId = resolverProfessorContrato(mat, profMap);
     if (profId != null) setCampo('professor_atual_id', profId, a.professor_atual_id);
+
+    // Dia e horário da aula derivados do nome_turma (fonte determinística do Emusys).
+    // Prefere a turma da disciplina que corresponde ao curso do aluno (caso multi-curso);
+    // só aplica quando há um único dia/horário (turmas divergentes → não força).
+    const discs = mat.contrato_atual?.disciplinas || [];
+    let turmasAlvo = discs
+      .filter((d: any) => depara.get(Number(d.disciplina_id)) === a.curso_id)
+      .map((d: any) => d.nome_turma).filter(Boolean);
+    if (turmasAlvo.length === 0) turmasAlvo = discs.map((d: any) => d.nome_turma).filter(Boolean);
+    const diasSet = new Set(turmasAlvo.map((t: string) => parseDiaDeTurma(t)).filter(Boolean));
+    const horasSet = new Set(turmasAlvo.map((t: string) => parseHorarioDeTurma(t)).filter(Boolean));
+    if (diasSet.size === 1) setCampo('dia_aula', [...diasSet][0] as string, a.dia_aula);
+    if (horasSet.size === 1) setCampo('horario_aula', [...horasSet][0] as string, a.horario_aula);
   }
 
   return { upd, divergencias, detalhes: { emusys_matricula_id: mat.id, status_api: mat.status, diffs } };

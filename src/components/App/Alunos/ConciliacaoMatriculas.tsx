@@ -64,6 +64,7 @@ const CAMPO_LABEL: Record<string, string> = {
   status: 'status', data_fim_contrato: 'fim do contrato', data_saida: 'data de saída',
   curso_id: 'curso', professor_atual_id: 'professor', valor_cheio: 'valor cheio',
   valor_parcela: 'parcela', desconto_fixo: 'desc. fixo', desconto_condicional: 'desc. condicional',
+  dia_aula: 'dia da aula', horario_aula: 'horário',
 };
 const CAMPO_MONETARIO = new Set(['valor_cheio', 'valor_parcela', 'desconto_fixo', 'desconto_condicional']);
 
@@ -87,6 +88,7 @@ function fmtVal(campo: string, v: any, lk?: DiffLookups): string {
   if (CAMPO_MONETARIO.has(campo)) return fmtBRL(v);
   if (campo === 'curso_id') return lk?.cursos.get(Number(v)) || `curso ${v}`;
   if (campo === 'professor_atual_id') return lk?.profs.get(Number(v)) || `prof. ${v}`;
+  if (campo === 'horario_aula') return String(v).slice(0, 5);
   return String(v);
 }
 
@@ -165,6 +167,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
   // modais
   const [modalValor, setModalValor] = useState<{ item: ConciliacaoItem; valor: string } | null>(null);
   const [modalReclass, setModalReclass] = useState<{ item: ConciliacaoItem; tipoId: string } | null>(null);
+  const [confirmVincular, setConfirmVincular] = useState<{ item: ConciliacaoItem; candidato: any; patch: Record<string, any> } | null>(null);
 
   const tiposMap = useMemo(() => new Map(tipos.map(t => [t.codigo, t])), [tipos]);
   const diffLookups = useMemo<DiffLookups>(() => ({
@@ -631,7 +634,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                                         </div>
                                       </div>
                                       <button
-                                        onClick={() => executarRPC(item, 'vincular', patchDeCandidato(c), String(c.id))}
+                                        onClick={() => setConfirmVincular({ item, candidato: c, patch: patchDeCandidato(c) })}
                                         disabled={emProgresso}
                                         className="shrink-0 inline-flex items-center gap-1 rounded-md bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 text-white text-xs font-medium px-2.5 py-1.5">
                                         <LinkIcon className="w-3.5 h-3.5" /> Vincular
@@ -708,6 +711,89 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                 executarUm(item, { decisao: 'editar_manual', campo: 'valor_parcela', valor: v, motivo: 'Valor editado manualmente' });
               }}
               className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-medium">Salvar</button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: confirmar vínculo Emusys */}
+      <Dialog open={!!confirmVincular} onOpenChange={(o) => !o && setConfirmVincular(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmar vínculo com #{confirmVincular?.candidato?.id}?</DialogTitle>
+            <DialogDescription>
+              {confirmVincular?.item.aluno_nome} — matrícula Emusys #{confirmVincular?.candidato?.id} ({confirmVincular?.candidato?.turma})
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
+            <p className="text-slate-400">Vai gravar <strong className="text-slate-200">agora</strong> nesta matrícula:</p>
+            <ul className="space-y-1.5 rounded-lg bg-slate-800 px-4 py-3 divide-y divide-slate-700/50">
+              <li className="flex justify-between py-1">
+                <span className="text-slate-400">ID Emusys</span>
+                <span className="font-mono text-slate-200">#{confirmVincular?.candidato?.id}</span>
+              </li>
+              {confirmVincular?.patch?.dia_aula && (
+                <li className="flex justify-between py-1">
+                  <span className="text-slate-400">Dia da aula</span>
+                  <span className="text-slate-200">{confirmVincular.patch.dia_aula}</span>
+                </li>
+              )}
+              {confirmVincular?.patch?.curso_id && (
+                <li className="flex justify-between py-1">
+                  <span className="text-slate-400">Curso</span>
+                  <span className="text-slate-200">{diffLookups.cursos.get(Number(confirmVincular.patch.curso_id)) || `ID ${confirmVincular.patch.curso_id}`}</span>
+                </li>
+              )}
+              {confirmVincular?.patch?.professor_atual_id && (
+                <li className="flex justify-between py-1">
+                  <span className="text-slate-400">Professor</span>
+                  <span className="text-slate-200">{diffLookups.profs.get(Number(confirmVincular.patch.professor_atual_id)) || `ID ${confirmVincular.patch.professor_atual_id}`}</span>
+                </li>
+              )}
+              {confirmVincular?.patch?.data_fim_contrato && (
+                <li className="flex justify-between py-1">
+                  <span className="text-slate-400">Fim do contrato</span>
+                  <span className="text-slate-200">{new Date(confirmVincular.patch.data_fim_contrato + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
+                </li>
+              )}
+              {confirmVincular?.patch?.valor_cheio != null && (
+                <li className="flex justify-between py-1">
+                  <span className="text-slate-400">Valor cheio</span>
+                  <span className="text-slate-200">{fmtBRL(confirmVincular.patch.valor_cheio)}</span>
+                </li>
+              )}
+              {confirmVincular?.patch?.desconto_fixo != null && (
+                <li className="flex justify-between py-1">
+                  <span className="text-slate-400">Desc. fixo</span>
+                  <span className="text-slate-200">{fmtBRL(confirmVincular.patch.desconto_fixo)}</span>
+                </li>
+              )}
+              {confirmVincular?.patch?.desconto_condicional != null && (
+                <li className="flex justify-between py-1">
+                  <span className="text-slate-400">Desc. condicional</span>
+                  <span className="text-slate-200">{fmtBRL(confirmVincular.patch.desconto_condicional)}</span>
+                </li>
+              )}
+              {confirmVincular?.candidato?.parcela != null && (
+                <li className="flex justify-between py-1.5 mt-0.5">
+                  <span className="text-slate-400 font-medium">Parcela resultante</span>
+                  <span className="font-semibold text-emerald-400">{fmtBRL(confirmVincular.candidato.parcela)}</span>
+                </li>
+              )}
+            </ul>
+            <p className="text-xs text-slate-500">Após vincular, o sync atualizará status e data_fim automaticamente a cada rodada.</p>
+          </div>
+          <DialogFooter>
+            <button onClick={() => setConfirmVincular(null)} className="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm">Cancelar</button>
+            <button
+              onClick={() => {
+                if (!confirmVincular) return;
+                const { item, candidato, patch } = confirmVincular;
+                setConfirmVincular(null);
+                executarRPC(item, 'vincular', patch, String(candidato.id));
+              }}
+              className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-medium">
+              Confirmar vínculo
+            </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
