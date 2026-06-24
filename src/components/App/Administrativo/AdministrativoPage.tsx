@@ -605,7 +605,9 @@ export function AdministrativoPage() {
           String(t.aluno_id),
           {
             ...t,
+            unidade_origem_nome: unidadesTransferenciaMap.get(String(t.unidade_origem_id))?.nome || null,
             unidade_origem_codigo: unidadesTransferenciaMap.get(String(t.unidade_origem_id))?.codigo || null,
+            unidade_destino_nome: unidadesTransferenciaMap.get(String(t.unidade_destino_id))?.nome || null,
             unidade_destino_codigo: unidadesTransferenciaMap.get(String(t.unidade_destino_id))?.codigo || null,
           },
         ])
@@ -1807,6 +1809,7 @@ export function AdministrativoPage() {
         naoRenovacoes={naoRenovacoes}
         avisosPrevios={avisosPrevios}
         evasoes={evasoes}
+        transferencias={transferencias}
         competencia={competencia}
         unidade={unidade}
       />

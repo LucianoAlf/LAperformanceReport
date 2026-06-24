@@ -28,8 +28,27 @@ interface ModalRelatorioProps {
   naoRenovacoes: MovimentacaoAdmin[];
   avisosPrevios: MovimentacaoAdmin[];
   evasoes: MovimentacaoAdmin[];
+  transferencias: TransferenciaRelatorio[];
   competencia: string;
   unidade: string;
+}
+
+interface TransferenciaRelatorio {
+  id: number;
+  nome: string;
+  data_matricula?: string | null;
+  valor_parcela?: number | string | null;
+  cursos?: { nome?: string | null } | null;
+  professores?: { nome?: string | null } | null;
+  unidades?: { codigo?: string | null; nome?: string | null } | null;
+  transferencia?: {
+    data_transferencia?: string | null;
+    unidade_origem_nome?: string | null;
+    unidade_origem_codigo?: string | null;
+    unidade_destino_nome?: string | null;
+    unidade_destino_codigo?: string | null;
+    observacao?: string | null;
+  } | null;
 }
 
 type TipoRelatorio = 'gerencial_ia' | 'diario' | 'mensal' | 'renovacoes' | 'avisos' | 'evasoes';
@@ -51,6 +70,7 @@ export function ModalRelatorio({
   naoRenovacoes,
   avisosPrevios, 
   evasoes, 
+  transferencias,
   competencia,
   unidade 
 }: ModalRelatorioProps) {
@@ -284,6 +304,26 @@ export function ModalRelatorio({
       return apenasData === format(dataSelecionada, 'yyyy-MM-dd');
     };
 
+    const dataTransferencia = (item: TransferenciaRelatorio) =>
+      item.transferencia?.data_transferencia || item.data_matricula || '';
+
+    const transferenciasNoPeriodo = transferencias.filter(t => dentroDoRange(dataTransferencia(t)));
+    const totalTransferenciasMes = transferencias.length || resumo?.novas_transferencias || 0;
+    const totalEntradasAdministrativas = (resumo?.alunos_novos || 0) + totalTransferenciasMes;
+
+    const labelUnidadeTransferencia = (
+      nome?: string | null,
+      codigo?: string | null,
+      fallback = 'N/I'
+    ) => nome || codigo || fallback;
+
+    const formatarParcelaTransferencia = (valor?: number | string | null) => {
+      const numero = Number(valor || 0);
+      return numero > 0
+        ? `R$ ${numero.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+        : 'N/I';
+    };
+
     // Filtrar renovações do período selecionado
     const renovacoesHoje = renovacoes.filter(r => dentroDoRange(r.data));
 
@@ -322,7 +362,9 @@ export function ModalRelatorio({
     texto += `- Bolsistas Integrais: ${formatarBolsistasIntegrais()}\n`;
     texto += `• Bolsistas Parciais: *${resumo?.bolsistas_parciais || 0}*\n`;
     texto += `• Trancados: *${resumo?.alunos_trancados || 0}*\n`;
-    texto += `• Novos no mês: *${resumo?.alunos_novos || 0}*\n\n`;
+    texto += `• Novos no mês: *${resumo?.alunos_novos || 0}*\n`;
+    texto += `• Transferências recebidas no mês: *${totalTransferenciasMes}*\n`;
+    texto += `• Entradas administrativas no mês: *${totalEntradasAdministrativas}* (${resumo?.alunos_novos || 0} novos + ${totalTransferenciasMes} transferência${totalTransferenciasMes !== 1 ? 's' : ''})\n\n`;
 
     texto += `📚 *MATRÍCULAS*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
@@ -371,6 +413,29 @@ export function ModalRelatorio({
       });
     } else {
       texto += `❌ *NÃO RENOVAÇÕES DO DIA: 0*\n\n`;
+    }
+
+    texto += `🔁 *TRANSFERÊNCIAS RECEBIDAS NO PERÍODO (${transferenciasNoPeriodo.length})*\n`;
+    texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+    if (transferenciasNoPeriodo.length === 0) {
+      texto += `Nenhuma transferência recebida neste período.\n\n`;
+    } else {
+      transferenciasNoPeriodo.forEach((t, i) => {
+        const origem = labelUnidadeTransferencia(
+          t.transferencia?.unidade_origem_nome,
+          t.transferencia?.unidade_origem_codigo,
+          'Origem não informada'
+        );
+        const destino = labelUnidadeTransferencia(
+          t.transferencia?.unidade_destino_nome,
+          t.transferencia?.unidade_destino_codigo || t.unidades?.codigo,
+          'Destino não informado'
+        );
+        texto += `${i + 1}) Nome: *${t.nome}*\n`;
+        texto += `   Movimento: ${origem} → ${destino}\n`;
+        texto += `   Curso: ${t.cursos?.nome || 'N/I'} | Prof: ${t.professores?.nome || 'N/I'}\n`;
+        texto += `   Parcela: ${formatarParcelaTransferencia(t.valor_parcela)}\n\n`;
+      });
     }
 
     // Avisos Prévios — buscar por mes_saida do mês seguinte
@@ -542,7 +607,9 @@ export function ModalRelatorio({
     texto += `• Não Pagantes: *${resumo?.alunos_nao_pagantes || 0}*\n`;
     texto += `- Bolsistas: *${totalBolsistas}* (${formatarBolsistasIntegraisTexto()} + ${resumo?.bolsistas_parciais || 0} parciais)\n`;
     texto += `• Trancados: *${resumo?.alunos_trancados || 0}*\n`;
-    texto += `• Novos no mês: *${resumo?.alunos_novos || 0}*\n\n`;
+    texto += `• Novos no mês: *${resumo?.alunos_novos || 0}*\n`;
+    texto += `• Transferências recebidas no mês: *${transferencias.length || resumo?.novas_transferencias || 0}*\n`;
+    texto += `• Entradas administrativas no mês: *${(resumo?.alunos_novos || 0) + (transferencias.length || resumo?.novas_transferencias || 0)}*\n\n`;
 
     // SEÇÃO 2: MATRÍCULAS
     texto += `📚 *MATRÍCULAS*\n`;

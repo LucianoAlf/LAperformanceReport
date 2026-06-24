@@ -14,7 +14,9 @@ interface AlunoTransferencia {
   unidades?: { codigo?: string | null } | null;
   transferencia?: {
     data_transferencia?: string | null;
+    unidade_origem_nome?: string | null;
     unidade_origem_codigo?: string | null;
+    unidade_destino_nome?: string | null;
     unidade_destino_codigo?: string | null;
     observacao?: string | null;
   } | null;
@@ -27,6 +29,12 @@ interface TabelaTransferenciasProps {
 export function TabelaTransferencias({ data }: TabelaTransferenciasProps) {
   const { usuario } = useAuth();
   const isAdmin = usuario?.perfil === 'admin' && usuario?.unidade_id === null;
+
+  const labelUnidade = (nome?: string | null, codigo?: string | null, fallback?: string) => {
+    if (nome) return nome;
+    if (codigo) return codigo;
+    return fallback || '-';
+  };
 
   return (
     <div className="p-4 overflow-x-auto">
@@ -66,7 +74,11 @@ export function TabelaTransferencias({ data }: TabelaTransferenciasProps) {
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-1.5">
                       <span className="px-2 py-1 rounded text-xs font-medium bg-slate-700/60 text-slate-300">
-                        {aluno.transferencia?.unidade_origem_codigo || 'Origem n/r'}
+                        {labelUnidade(
+                          aluno.transferencia?.unidade_origem_nome,
+                          aluno.transferencia?.unidade_origem_codigo,
+                          'Origem nao informada',
+                        )}
                       </span>
                       <ArrowRightLeft className="w-3.5 h-3.5 text-sky-400" />
                       <span className={cn(
@@ -75,7 +87,11 @@ export function TabelaTransferencias({ data }: TabelaTransferenciasProps) {
                           ? 'bg-sky-500/20 text-sky-300'
                           : 'bg-slate-600/30 text-slate-300',
                       )}>
-                        {aluno.transferencia?.unidade_destino_codigo || aluno.unidades?.codigo || 'Destino n/r'}
+                        {labelUnidade(
+                          aluno.transferencia?.unidade_destino_nome,
+                          aluno.transferencia?.unidade_destino_codigo || aluno.unidades?.codigo,
+                          'Destino nao informado',
+                        )}
                       </span>
                     </div>
                     {aluno.transferencia?.observacao && (
