@@ -40,6 +40,7 @@ interface TipoMatricula { id: number; codigo: string; nome: string }
 const TIPO_META: Record<string, { label: string; descricao: string; icon: typeof Link2; cor: string }> = {
   ambiguo: { label: 'Ambíguo', descricao: 'Várias matrículas ativas, nenhuma casa o curso do nosso cadastro', icon: Copy, cor: 'amber' },
   ausente_api: { label: 'Ausente na API', descricao: 'Ativo no nosso sistema, mas não existe na API do Emusys', icon: UserX, cor: 'red' },
+  ausente_nosso_sistema: { label: 'Só no Emusys', descricao: 'Contrato ativo no Emusys sem matrícula correspondente no nosso banco', icon: UserX, cor: 'red' },
   valor_divergente: { label: 'Valor divergente', descricao: 'Parcela comercial difere da API canônica do Emusys', icon: DollarSign, cor: 'orange' },
   classificacao_divergente: { label: 'Classificação', descricao: 'Tipo (bolsista/regular) não bate com a realidade da API', icon: GraduationCap, cor: 'sky' },
   duas_matriculas: { label: '2× mesmo curso', descricao: 'Duas matrículas do mesmo curso (ex.: 2 aulas/semana)', icon: Copy, cor: 'cyan' },
@@ -113,6 +114,7 @@ function descreverNosso(item: ConciliacaoItem, tiposMap: Map<string, TipoMatricu
   if (item.tipo_divergencia === 'valor_divergente') {
     return item.curso_nome || 'Sem valor de parcela';
   }
+  if (item.tipo_divergencia === 'ausente_nosso_sistema') return 'Novo cadastro';
   return item.curso_nome || (item.valor_nosso?.curso_id ? `curso ${item.valor_nosso.curso_id}` : '—');
 }
 
@@ -137,6 +139,9 @@ function descreverApi(item: ConciliacaoItem, tiposMap: Map<string, TipoMatricula
       const turma = (c.turmas || []).join(', ');
       return `#${c.id}: ${disc}${turma ? ` (${turma})` : ''}`;
     }).join('  |  ');
+  }
+  if (item.tipo_divergencia === 'ausente_nosso_sistema') {
+    return [v.nome, v.disciplinas ? `(${v.disciplinas})` : null, `Emusys #${v.emusys_id}`].filter(Boolean).join(' · ');
   }
   if (v.nome) return '(não encontrado na API)';
   if (v.cursos) return `cursos: ${v.cursos.join(', ')}`;
@@ -163,6 +168,10 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
   // seleção em lote
   const [selecionados, setSelecionados] = useState<Set<number>>(new Set());
   const [processandoLote, setProcessandoLote] = useState(false);
+
+  // sync manual
+  const [rodandoSync, setRodandoSync] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<string | null>(null);
 
   // modais
   const [modalValor, setModalValor] = useState<{ item: ConciliacaoItem; valor: string } | null>(null);
@@ -194,6 +203,37 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
   }, [unidadeId]);
 
   useEffect(() => { carregar(); }, [carregar]);
+
+  const UNIDADE_SLUG: Record<string, string> = {
+    '2ec861f6-023f-4d7b-9927-3960ad8c2a92': 'cg',
+    '95553e96-971b-4590-a6eb-0201d013c14d': 'recreio',
+    '368d47f5-2d88-4475-bc14-ba084a9a348e': 'barra',
+  };
+
+  const rodarSync = useCallback(async () => {
+    setRodandoSync(true);
+    const slugs = unidadeId && unidadeId !== 'todos' && UNIDADE_SLUG[unidadeId]
+      ? [UNIDADE_SLUG[unidadeId]]
+      : ['cg', 'recreio', 'barra'];
+    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-matriculas-emusys`;
+    const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
+    for (let i = 0; i < slugs.length; i++) {
+      const slug = slugs[i];
+      setSyncStatus(`${slug.toUpperCase()} (${i + 1}/${slugs.length})…`);
+      try {
+        const resp = await fetch(`${url}?u=${slug}`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+        });
+        if (!resp.ok) throw new Error(await resp.text());
+      } catch (e: any) {
+        toast.error(`Erro no sync ${slug.toUpperCase()}: ${e.message}`);
+      }
+    }
+    setSyncStatus(null);
+    setRodandoSync(false);
+    await carregar();
+  }, [unidadeId, carregar]);
 
   useEffect(() => {
     supabase.from('tipos_matricula').select('id, codigo, nome').then(({ data }) => setTipos(data || []));
@@ -360,18 +400,23 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
 
   // ações em lote
   const aplicarLote = useCallback(async () => {
-    // aprováveis em lote: sugestões do sync (auto_preview) + divergências com sugestão direta da API
     const alvos = itemsFiltrados.filter(i => selecionados.has(i.id) && (i.tipo_divergencia === 'auto_preview' || temSugestaoAplicavel(i)));
-    if (!alvos.length) { toast.error('Nenhum selecionado aprovável.'); return; }
+    const orfaos = itemsFiltrados.filter(i => selecionados.has(i.id) && i.tipo_divergencia === 'ausente_nosso_sistema');
+    if (!alvos.length && !orfaos.length) { toast.error('Nenhum selecionado aprovável.'); return; }
     setProcessandoLote(true);
-    const res = await Promise.allSettled(alvos.map(i => {
+    const resNormais = await Promise.allSettled(alvos.map(i => {
       if (i.tipo_divergencia === 'auto_preview') return aplicarDecisaoRPC(i, 'aprovar', i.valor_api?.patch || {});
       const op = opcoesAplicarApi(i);
       return op ? resolverDivergencia(i, { decisao: 'aplicar_api', ...op, motivo: 'Aplicado em lote (API)' }) : Promise.reject();
     }));
-    const okIds = alvos.filter((_, idx) => res[idx].status === 'fulfilled').map(i => i.id);
+    const resOrfaos = await Promise.allSettled(orfaos.map(i =>
+      resolverDivergencia(i, { decisao: 'ignorar', motivo: 'Ignorado em lote (sem registro nosso)' })
+    ));
+    const todos = [...alvos, ...orfaos];
+    const resAll = [...resNormais, ...resOrfaos];
+    const okIds = todos.filter((_, idx) => resAll[idx].status === 'fulfilled').map(i => i.id);
     removerDoEstado(okIds);
-    const falhas = res.length - okIds.length;
+    const falhas = resAll.length - okIds.length;
     toast[falhas ? 'warning' : 'success'](`${okIds.length} aplicada(s)${falhas ? `, ${falhas} falha(s)` : ''}.`);
     setProcessandoLote(false);
   }, [itemsFiltrados, selecionados, opcoesAplicarApi, resolverDivergencia, aplicarDecisaoRPC, removerDoEstado]);
@@ -421,10 +466,18 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
             O sync só audita e propõe — <span className="text-slate-300">nada é alterado sem você aprovar</span>. Aprove ou mantenha cada divergência/sugestão.
           </p>
         </div>
-        <button onClick={carregar} disabled={loading}
-          className="inline-flex items-center gap-2 rounded-md border border-slate-600 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-700/50 disabled:opacity-50">
-          <RefreshCw className={cn('w-4 h-4', loading && 'animate-spin')} /> Atualizar
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={rodarSync} disabled={rodandoSync || loading}
+            className="inline-flex items-center gap-2 rounded-md border border-cyan-600/50 bg-cyan-600/10 px-3 py-1.5 text-sm text-cyan-300 hover:bg-cyan-600/20 disabled:opacity-50">
+            {rodandoSync
+              ? <><Loader2 className="w-4 h-4 animate-spin" />{syncStatus || 'Rodando…'}</>
+              : <><Zap className="w-4 h-4" /> Rodar Sync</>}
+          </button>
+          <button onClick={carregar} disabled={loading || rodandoSync}
+            className="inline-flex items-center gap-2 rounded-md border border-slate-600 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-700/50 disabled:opacity-50">
+            <RefreshCw className={cn('w-4 h-4', loading && 'animate-spin')} /> Atualizar
+          </button>
+        </div>
       </div>
 
       {/* Faixa da prévia automática (informativa — não pede decisão) */}
@@ -546,7 +599,8 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                   const isPreview = item.tipo_divergencia === 'auto_preview';
                   const candidatos: any[] = item.tipo_divergencia === 'ambiguo' && Array.isArray(item.valor_api?.candidatos) ? item.valor_api.candidatos : [];
                   const homonimo = new Set(candidatos.map(c => c.aluno_id)).size > 1;
-                  const temDetalhe = candidatos.length > 0 || !!item.analise_sol;
+                  const isOrfao = item.tipo_divergencia === 'ausente_nosso_sistema';
+                  const temDetalhe = candidatos.length > 0 || !!item.analise_sol || isOrfao;
                   return (
                     <Fragment key={item.id}>
                     <tr className={cn('hover:bg-slate-700/20', selecionados.has(item.id) && 'bg-cyan-500/5', temDetalhe && 'border-b-0')}>
@@ -600,10 +654,12 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                                     <GraduationCap className="w-4 h-4 mr-2" /> Reclassificar…
                                   </DropdownMenuItem>
                                 )}
-                                <DropdownMenuItem onClick={() => executarUm(item, { decisao: 'manter_nosso' })}
-                                  className="cursor-pointer text-slate-300">
-                                  <Check className="w-4 h-4 mr-2" /> Manter nosso
-                                </DropdownMenuItem>
+                                {!isOrfao && (
+                                  <DropdownMenuItem onClick={() => executarUm(item, { decisao: 'manter_nosso' })}
+                                    className="cursor-pointer text-slate-300">
+                                    <Check className="w-4 h-4 mr-2" /> Manter nosso
+                                  </DropdownMenuItem>
+                                )}
                                 <DropdownMenuItem onClick={() => executarUm(item, { decisao: 'ignorar' })}
                                   className="cursor-pointer text-slate-400">
                                   <X className="w-4 h-4 mr-2" /> Ignorar
@@ -621,6 +677,22 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                           {item.analise_sol && (
                             <div className="mb-2 rounded-lg border border-violet-500/30 bg-violet-500/10 p-2.5 text-xs text-violet-200">
                               <span className="font-semibold">Análise da Sol:</span> {item.analise_sol}
+                            </div>
+                          )}
+                          {isOrfao && (
+                            <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-3">
+                              <div className="flex items-center gap-2 mb-2">
+                                <UserX className="w-4 h-4 text-red-400 shrink-0" />
+                                <span className="text-xs font-semibold text-red-300">Contrato no Emusys sem registro no nosso banco</span>
+                              </div>
+                              <div className="text-xs text-slate-300 space-y-1">
+                                {item.valor_api?.nome && <div><span className="text-slate-500">Nome:</span> {item.valor_api.nome}</div>}
+                                {item.valor_api?.disciplinas && <div><span className="text-slate-500">Disciplina:</span> {item.valor_api.disciplinas}</div>}
+                                {item.valor_api?.emusys_id && <div><span className="text-slate-500">Emusys ID:</span> #{item.valor_api.emusys_id}</div>}
+                              </div>
+                              <div className="mt-2.5 text-[11px] text-amber-300/80">
+                                ⚠ Para resolver, cadastre este aluno manualmente em Alunos → Novo Aluno e vincule ao ID Emusys #{item.valor_api?.emusys_id}.
+                              </div>
                             </div>
                           )}
                           {candidatos.length > 0 && (
@@ -644,7 +716,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                                           {c.sugerido_por_turma && <span className="rounded-full bg-cyan-500/20 text-cyan-300 px-1.5 py-0.5 text-[10px]">sugerido</span>}
                                         </div>
                                         <div className="mt-1 text-xs text-slate-400">
-                                          {diffLookups.cursos.get(Number(c.curso_id)) || `curso ${c.curso_id ?? '?'}`}
+                                          {diffLookups.cursos.get(Number(c.curso_id)) || (c.disciplinas?.length ? c.disciplinas.join(', ') : `curso ${c.curso_id ?? '?'}`)}
                                           {' · '}{diffLookups.profs.get(Number(c.professor_id)) || `prof. ${c.professor_id ?? '?'}`}
                                           {' · '}{c.parcela_invalida ? <span className="text-orange-300">valor a revisar</span> : `parcela ${fmtBRL(c.parcela)}`}
                                           {c.status && c.status !== 'ativa' && <span className="text-amber-300"> · {c.status}</span>}
@@ -654,7 +726,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                                           if (!at) return null;
                                           const diffs: { label: string; de: string; para: string }[] = [];
                                           if (c.dia && c.dia !== at.dia_aula) diffs.push({ label: 'Dia', de: at.dia_aula || '—', para: c.dia });
-                                          if (c.curso_id != null && c.curso_id !== at.curso_id) diffs.push({ label: 'Curso', de: diffLookups.cursos.get(Number(at.curso_id)) || '—', para: diffLookups.cursos.get(Number(c.curso_id)) || `?` });
+                                          if (c.curso_id != null && c.curso_id !== at.curso_id) diffs.push({ label: 'Curso', de: diffLookups.cursos.get(Number(at.curso_id)) || '—', para: diffLookups.cursos.get(Number(c.curso_id)) || (c.disciplinas?.join(', ') || `?`) });
                                           if (c.professor_id != null && c.professor_id !== at.professor_atual_id) diffs.push({ label: 'Prof.', de: diffLookups.profs.get(Number(at.professor_atual_id)) || '—', para: diffLookups.profs.get(Number(c.professor_id)) || `?` });
                                           if (!c.parcela_invalida && c.cheio != null && c.cheio !== at.valor_cheio) diffs.push({ label: 'Cheio', de: fmtBRL(at.valor_cheio), para: fmtBRL(c.cheio) });
                                           if (!diffs.length) return null;

@@ -235,6 +235,19 @@ export function TabelaAlunos({
   const [colunasDropdownOpen, setColunasDropdownOpen] = useState(false);
   const [alunoFicha, setAlunoFicha] = useState<Aluno | null>(null);
   const [alunosExpandidos, setAlunosExpandidos] = useState<Set<number>>(new Set());
+
+  // Ao buscar por nome, auto-expandir linhas com outros cursos (inclusive inativos)
+  useEffect(() => {
+    if (filtros.nome) {
+      const ids = alunos
+        .filter(a => a.outros_cursos && a.outros_cursos.length > 0)
+        .map(a => a.id);
+      setAlunosExpandidos(new Set(ids));
+    } else {
+      setAlunosExpandidos(new Set());
+    }
+  }, [filtros.nome, alunos]);
+
   const [alertaInadimplenciaDismissed, setAlertaInadimplenciaDismissed] = useState(false);
   const [sortConfig, setSortConfig] = useState<{ key: string; direction: 'asc' | 'desc' } | null>(null);
   const [governancaSemParcela, setGovernancaSemParcela] = useState<GovernancaSemParcelaState | null>(null);

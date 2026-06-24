@@ -195,6 +195,132 @@ serve(async (req) => {
     if (logs.length) await supabase.from('automacao_log').insert(logs);
     if (divs.length) await supabase.from('matriculas_divergencias').upsert(divs, { onConflict: 'aluno_id,tipo_divergencia,campo' });
 
+    // ─── VARREDURA REVERSA: contratos Emusys sem matrícula nossa ───
+    // Detecta contratos ATIVOS no Emusys sem correspondência no banco.
+    // Casos cobertos:
+    //   1. Pessoa sem nenhuma linha no banco → orphan direto
+    //   2. Pessoa COM linhas no banco mas com mais contratos Emusys ativos do que linhas
+    //      disponíveis (ex: 2 linhas / 3 contratos → 1 orphan). Evita duplo-flag com ambiguo
+    //      consultando os candidatos dos ambiguos existentes.
+    {
+      const { data: vinculadosDb } = await supabase
+        .from('alunos')
+        .select('emusys_matricula_id, nome')
+        .eq('unidade_id', u.id)
+        .is('arquivado_em', null)
+        .not('emusys_matricula_id', 'is', null);
+
+      const idsVinculados = new Set<number>(
+        (vinculadosDb || []).map((a: any) => Number(a.emusys_matricula_id))
+      );
+
+      // Contagem de linhas no banco por nome normalizado
+      const bancoPorNome = new Map<string, number>();
+      for (const a of (alunos || [])) {
+        const k = normalizarNome(a.nome);
+        bancoPorNome.set(k, (bancoPorNome.get(k) || 0) + 1);
+      }
+
+      // Contagem de linhas JÁ vinculadas (emusys_matricula_id preenchido) por nome
+      const linkedPorNome = new Map<string, number>();
+      for (const a of (vinculadosDb || [])) {
+        const k = normalizarNome(a.nome);
+        linkedPorNome.set(k, (linkedPorNome.get(k) || 0) + 1);
+      }
+
+      // Contagem de contratos Emusys ativos NÃO vinculados por nome
+      const unlinkedEmusysPorNome = new Map<string, number>();
+      for (const [eid, mat] of porId) {
+        if (mat.status !== 'ativa') continue;
+        if (idsVinculados.has(eid)) continue;
+        const k = normalizarNome(mat.aluno?.nome || '');
+        unlinkedEmusysPorNome.set(k, (unlinkedEmusysPorNome.get(k) || 0) + 1);
+      }
+
+      // IDs Emusys já expostos como candidatos em ambiguos ativos — evita duplo-flag
+      const { data: ambiguosAtivos } = await supabase
+        .from('matriculas_divergencias')
+        .select('valor_api')
+        .eq('unidade_id', u.id)
+        .eq('tipo_divergencia', 'ambiguo')
+        .eq('resolvido', false);
+
+      const idsEmAmbiguo = new Set<number>();
+      for (const row of (ambiguosAtivos || [])) {
+        for (const c of (row.valor_api?.candidatos || [])) {
+          idsEmAmbiguo.add(Number(c.id));
+        }
+      }
+
+      const orfaosDivs: any[] = [];
+      for (const [eid, mat] of porId) {
+        if (mat.status !== 'ativa') continue;
+        if (idsVinculados.has(eid)) continue;
+        if (idsEmAmbiguo.has(eid)) continue; // já aparece como candidato em ambiguo
+
+        const nomeKey = normalizarNome(mat.aluno?.nome || '');
+        const bancoCnt = bancoPorNome.get(nomeKey) || 0;
+
+        if (bancoCnt > 0) {
+          // Pessoa existe no banco — só é orphan se tem mais contratos Emusys do que linhas disponíveis
+          const linkedCnt = linkedPorNome.get(nomeKey) || 0;
+          const unlinkedBanco = bancoCnt - linkedCnt;
+          const unlinkedEmusys = unlinkedEmusysPorNome.get(nomeKey) || 0;
+          if (unlinkedEmusys <= unlinkedBanco) continue;
+        }
+
+        const c = mat.contrato_atual || {};
+        const disciplinas = (c.disciplinas || []).map((d: any) => d.nome).join(', ');
+        orfaosDivs.push({
+          aluno_id: null,
+          emusys_matricula_id: String(eid),
+          unidade_id: u.id,
+          tipo_divergencia: 'ausente_nosso_sistema',
+          campo: '',
+          fonte: 'sync',
+          valor_nosso: null,
+          valor_api: {
+            nome: mat.aluno?.nome || null,
+            emusys_id: eid,
+            status: mat.status,
+            disciplinas: disciplinas || null,
+          },
+          sugestao: null,
+          severidade: 'alta',
+          resolvido: false,
+          updated_at: new Date().toISOString(),
+        });
+      }
+      resumo.fila['ausente_nosso_sistema'] = orfaosDivs.length;
+
+      // Reconciliar sem upsert (aluno_id é null, constraint não cobre esse caso)
+      const { data: existingOrfaos } = await supabase
+        .from('matriculas_divergencias')
+        .select('id, emusys_matricula_id')
+        .eq('unidade_id', u.id)
+        .eq('tipo_divergencia', 'ausente_nosso_sistema')
+        .eq('resolvido', false);
+
+      const existingEids = new Set((existingOrfaos || []).map((e: any) => e.emusys_matricula_id));
+      const currentEids = new Set(orfaosDivs.map((o: any) => o.emusys_matricula_id));
+
+      // Resolve os que foram corrigidos (não aparecem mais como órfãos)
+      const toResolve = (existingOrfaos || [])
+        .filter((e: any) => !currentEids.has(e.emusys_matricula_id))
+        .map((e: any) => e.id);
+      if (toResolve.length) {
+        await supabase.from('matriculas_divergencias')
+          .update({ resolvido: true, updated_at: new Date().toISOString() })
+          .in('id', toResolve);
+      }
+
+      // Insere apenas os genuinamente novos (evita duplicatas)
+      const novos = orfaosDivs.filter((o: any) => !existingEids.has(o.emusys_matricula_id));
+      if (novos.length) {
+        await supabase.from('matriculas_divergencias').insert(novos);
+      }
+    }
+
     // limpa ausente_api obsoletos: alunos que foram encontrados na API nesta rodada
     const encontradosIds = (alunos || [])
       .filter((a: any) => {
