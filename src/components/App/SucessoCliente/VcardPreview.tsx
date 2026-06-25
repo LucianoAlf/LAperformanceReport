@@ -4,15 +4,16 @@ interface Props {
   fullName: string;
   telefones: string[];
   organizacao?: string | null;
+  compact?: boolean;
 }
 
 // Simula o cartão de contato como o WhatsApp exibe ao receber um vCard.
-export function VcardPreview({ fullName, telefones, organizacao }: Props) {
+export function VcardPreview({ fullName, telefones, organizacao, compact = false }: Props) {
   const tels = telefones.filter(Boolean);
   return (
-    <div className="bg-[#0b141a] rounded-2xl p-4 border border-slate-700/50 max-w-sm">
-      <p className="text-[11px] text-slate-500 mb-2 uppercase tracking-wide">Pré-visualização (WhatsApp)</p>
-      <div className="bg-[#202c33] rounded-xl overflow-hidden">
+    <div className={compact ? '' : 'bg-[#0b141a] rounded-2xl p-4 border border-slate-700/50 max-w-sm'}>
+      {!compact && <p className="text-[11px] text-slate-500 mb-2 uppercase tracking-wide">Pré-visualização (WhatsApp)</p>}
+      <div className="bg-[#202c33] rounded-xl overflow-hidden min-w-[220px]">
         <div className="flex items-center gap-3 p-3">
           <div className="w-12 h-12 rounded-full bg-slate-600 flex items-center justify-center flex-shrink-0">
             <User className="w-6 h-6 text-slate-300" />

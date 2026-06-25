@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Send, Paperclip, Image, FileText, Music, Video, Loader2, ChevronUp, Check, CheckCheck, Clock, AlertCircle, User, Phone, Mic, X, Play, Pause, Settings, Trash2, Pencil, Zap } from 'lucide-react';
+import { Send, Paperclip, Image, FileText, Music, Video, Loader2, ChevronUp, Check, CheckCheck, Clock, AlertCircle, User, Phone, Mic, X, Play, Pause, Settings, Trash2, Pencil, Zap, MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { Tooltip } from '@/components/ui/Tooltip';
@@ -10,6 +10,8 @@ import { ModalGerenciarTemplates } from '@/components/App/PreAtendimento/compone
 import type { TemplateWhatsApp } from '@/components/App/PreAtendimento/types';
 import { toast } from 'sonner';
 import type { AdminConversa, AdminMensagem, AlunoInbox } from './types';
+import { parseVcard } from './parseVcard';
+import { VcardPreview } from '@/components/App/SucessoCliente/VcardPreview';
 
 function getStatusAlunoTag(status: string | null | undefined) {
   if (!status || status === 'ativo') return null;
@@ -150,6 +152,28 @@ function AudioPlayer({ src, isSaida }: { src: string; isSaida: boolean }) {
 }
 
 function MidiaRender({ msg, isSaida }: { msg: AdminMensagem; isSaida: boolean }) {
+  if (msg.tipo === 'contato') {
+    const { fullName, telefones, organizacao } = parseVcard(msg.conteudo);
+    const nome = msg.midia_nome || fullName || 'Contato';
+    return <VcardPreview compact fullName={nome} telefones={telefones} organizacao={organizacao} />;
+  }
+
+  if (msg.tipo === 'localizacao') {
+    const [lat, lng] = (msg.conteudo || '').split(',').map(s => s.trim());
+    if (!lat || !lng) return <span className="text-sm text-slate-300">📍 Localização</span>;
+    return (
+      <a
+        href={`https://www.google.com/maps?q=${lat},${lng}`}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-700/50 hover:bg-slate-700 transition text-sm"
+      >
+        <MapPin className="w-4 h-4 text-rose-400 flex-shrink-0" />
+        <span className="text-slate-200">Abrir localização no mapa</span>
+      </a>
+    );
+  }
+
   if (msg.tipo === 'sticker') {
     return msg.midia_url ? (
       <img src={msg.midia_url} alt="Sticker" className="w-32 h-32 object-contain" loading="lazy" />
