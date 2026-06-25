@@ -71,7 +71,7 @@ Disparo de templates Meta (WhatsApp Cloud API) + conversas + agentes IA. `Campan
 - **Edge functions:** nenhuma direta (auditoria IA usa `execute_bi_query_lamusic` via RPC)
 
 ## Sucesso do Aluno (`/app/sucesso-aluno`)
-`SucessoCliente/SucessoClientePage.tsx`. Abas: **Caixa de Entrada** (`CaixaEntradaTab`, departamento `sucesso_aluno`) e **Acompanhamento** (`TabSucessoAluno` → tabela, jornada, pesquisa, presença, faltas, marcos, análise).
+`SucessoCliente/SucessoClientePage.tsx`. Abas: **Caixa de Entrada** (`CaixaEntradaTab`, departamento `sucesso_aluno`) e **Acompanhamento** (`TabSucessoAluno` → tabela, jornada, pesquisa, presença, faltas, marcos, análise, **cartões**). Subaba **Cartões** = `CartoesContatoTab` (hook `useVcardsUnidade`, `VcardPreview`) → CRUD de `vcards_unidade` + envio de teste via edge `enviar-vcard` (UAZAPI `/send/contact`, caixa id 3).
 - **Hooks:** `useFaltasPeriodo`, `useMarcosJornada`, `usePesquisaPrimeiraAula`, `useAnalisePesquisas`, `useAnaliseTurmas`
 - **RPCs:** `calcular_health_score_alunos_batch`, `get_faltas_periodo`, `get_candidatos_pesquisa_primeira_aula`, `get_analise_pesquisas`, `get_respostas_pesquisa`, `get_timeline_pesquisas_aluno`, `registrar_resposta_pesquisa_manual`, `listar_evadidos_para_pesquisa`, `stats_pesquisa_evasao`
 - **Edge functions:** `enviar-pesquisa-pos-primeira-aula`, `enviar-pesquisa-evasao`, `processar-resposta-pesquisa` (captura, via webhook), `enviar-mensagem-lead` (feedback), `gerar-plano-aluno`, `gerar-relatorio-aluno`, `sync-presenca-emusys`, `marcos-jornada`
