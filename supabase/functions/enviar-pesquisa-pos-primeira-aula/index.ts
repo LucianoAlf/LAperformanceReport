@@ -210,6 +210,15 @@ serve(async (req) => {
           continue;
         }
 
+        const numero = whatsapp_jid.replace('@s.whatsapp.net', '');
+
+        // Contato externo (aluno_id=null): só envia, sem registro no banco
+        if (!aluno_id) {
+          const resultado = await enviarBotoes(baseUrl, token, numero, textoMsg);
+          resultados.push({ aluno_id: null, ok: resultado.ok, erro: resultado.ok ? undefined : (resultado.data?.error || 'falha_envio') });
+          continue;
+        }
+
         // Upsert idempotente — reutiliza linha de tentativa anterior
         const { error: upsertErr } = await supabase
           .from('pesquisas_whatsapp')
@@ -224,7 +233,6 @@ serve(async (req) => {
           continue;
         }
 
-        const numero = whatsapp_jid.replace('@s.whatsapp.net', '');
         const resultado = await enviarBotoes(baseUrl, token, numero, textoMsg);
 
         if (resultado.ok) {

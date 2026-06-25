@@ -587,34 +587,48 @@ export function AdminChatPanel({
 
   // Dispara a automação confirmada (hoje: pesquisa pós-1ª aula com botões).
   const dispararAutomacao = useCallback(async () => {
-    if (!automacaoConfirmar || !aluno) return;
+    if (!automacaoConfirmar) return;
     setDisparandoAutomacao(true);
     try {
-      // data_matricula é usada pela edge para idempotência/registro
-      const { data: alunoRow } = await supabase
-        .from('alunos')
-        .select('data_matricula')
-        .eq('id', aluno.id)
-        .maybeSingle();
-
       let jid = conversa.whatsapp_jid;
-      if (!jid) {
-        const tel = (aluno.whatsapp || aluno.telefone || '').replace(/\D/g, '');
-        if (!tel) { toast.error('Aluno sem telefone para envio'); setDisparandoAutomacao(false); return; }
-        jid = `${tel.startsWith('55') ? tel : '55' + tel}@s.whatsapp.net`;
+      let alunoPayload: Record<string, unknown>;
+
+      if (aluno) {
+        const { data: alunoRow } = await supabase
+          .from('alunos')
+          .select('data_matricula')
+          .eq('id', aluno.id)
+          .maybeSingle();
+
+        if (!jid) {
+          const tel = (aluno.whatsapp || aluno.telefone || '').replace(/\D/g, '');
+          if (!tel) { toast.error('Aluno sem telefone para envio'); setDisparandoAutomacao(false); return; }
+          jid = `${tel.startsWith('55') ? tel : '55' + tel}@s.whatsapp.net`;
+        }
+
+        alunoPayload = {
+          aluno_id: aluno.id,
+          unidade_id: aluno.unidade_id || conversa.unidade_id,
+          whatsapp_jid: jid,
+          nome: aluno.nome,
+          curso: aluno.cursos?.nome || null,
+          data_matricula: alunoRow?.data_matricula || new Date().toISOString().slice(0, 10),
+        };
+      } else {
+        // Contato externo: sem registro no banco, só envia a mensagem
+        if (!jid) { toast.error('Conversa sem JID para envio'); setDisparandoAutomacao(false); return; }
+        alunoPayload = {
+          aluno_id: null,
+          unidade_id: conversa.unidade_id,
+          whatsapp_jid: jid,
+          nome: conversa.nome_externo || null,
+          curso: null,
+          data_matricula: new Date().toISOString().slice(0, 10),
+        };
       }
 
       const { data, error } = await supabase.functions.invoke('enviar-pesquisa-pos-primeira-aula', {
-        body: {
-          alunos: [{
-            aluno_id: aluno.id,
-            unidade_id: aluno.unidade_id || conversa.unidade_id,
-            whatsapp_jid: jid,
-            nome: aluno.nome,
-            curso: aluno.cursos?.nome || null,
-            data_matricula: alunoRow?.data_matricula || new Date().toISOString().slice(0, 10),
-          }],
-        },
+        body: { alunos: [alunoPayload] },
       });
 
       const resultado = (data as any)?.resultados?.[0];
@@ -629,7 +643,7 @@ export function AdminChatPanel({
       setDisparandoAutomacao(false);
       setAutomacaoConfirmar(null);
     }
-  }, [automacaoConfirmar, aluno, conversa.whatsapp_jid, conversa.unidade_id]);
+  }, [automacaoConfirmar, aluno, conversa.whatsapp_jid, conversa.unidade_id, conversa.nome_externo]);
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     // Se o dropdown de templates está aberto, deixa ele capturar as teclas de navegação
@@ -1056,8 +1070,9 @@ export function AdminChatPanel({
                 {aluno.cursos?.nome ? <> ({aluno.cursos.nome})</> : null}? O nome e o curso são preenchidos automaticamente e a resposta fica registrada.
               </p>
             ) : (
-              <p className="text-sm text-amber-400 mb-4">
-                Esta mensagem só pode ser enviada para um aluno cadastrado. Esta conversa é de um contato externo.
+              <p className="text-sm text-slate-300 mb-4">
+                Enviar a <strong>pesquisa de 1ª aula</strong> para <strong>{conversa.nome_externo || conversa.telefone_externo || 'contato externo'}</strong>?
+                <span className="block mt-1 text-xs text-amber-400">Contato externo — a resposta não será registrada no sistema.</span>
               </p>
             )}
             <div className="flex justify-end gap-2">
@@ -1070,7 +1085,7 @@ export function AdminChatPanel({
               </button>
               <button
                 onClick={dispararAutomacao}
-                disabled={disparandoAutomacao || !aluno}
+                disabled={disparandoAutomacao}
                 className="px-3 py-2 rounded-lg text-sm font-medium bg-amber-600 text-white hover:bg-amber-500 transition disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-1.5"
               >
                 {disparandoAutomacao ? <Loader2 className="w-4 h-4 animate-spin" /> : <Zap className="w-4 h-4" />}
