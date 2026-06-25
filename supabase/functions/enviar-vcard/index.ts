@@ -13,11 +13,20 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-// Normaliza telefone: só dígitos, garante prefixo 55. Vazio retorna ''.
+// Normaliza telefone: descarta sufixo @..., só dígitos, garante prefixo 55. Vazio -> ''.
 function normalizarTelefone(tel) {
-  const limpo = String(tel || '').replace(/\D/g, '');
+  const limpo = String(tel || '').split('@')[0].replace(/\D/g, '');
   if (!limpo) return '';
   return limpo.startsWith('55') ? limpo : '55' + limpo;
+}
+
+// Monta um vCard 3.0 (.vcf) a partir dos dados do cartão.
+function montarVCard(fullName, telefones, organizacao) {
+  const linhas = ['BEGIN:VCARD', 'VERSION:3.0', `FN:${fullName}`];
+  if (organizacao) linhas.push(`ORG:${organizacao}`);
+  for (const t of telefones) linhas.push(`TEL;type=CELL:${t}`);
+  linhas.push('END:VCARD');
+  return linhas.join('\n');
 }
 
 function json(body, status = 200) {
@@ -31,7 +40,7 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
   try {
-    const { numeroDestino, vcardId, vcard } = await req.json();
+    const { numeroDestino, vcardId, vcard, conversaId, remetenteNome } = await req.json();
 
     const destino = normalizarTelefone(numeroDestino);
     if (!destino) return json({ ok: false, erro: 'numeroDestino inválido ou ausente' }, 400);
@@ -44,7 +53,7 @@ serve(async (req) => {
     if (!dados && vcardId) {
       const { data, error } = await supabase
         .from('vcards_unidade')
-        .select('full_name, telefones, organizacao, email, url')
+        .select('titulo, full_name, telefones, organizacao, email, url')
         .eq('id', vcardId)
         .maybeSingle();
       if (error || !data) return json({ ok: false, erro: 'Cartão não encontrado' }, 404);
@@ -87,6 +96,29 @@ serve(async (req) => {
     }
 
     const messageId = data.id || data.messageid || data.key?.id || null;
+
+    // Registro no histórico da conversa (só quando veio de uma conversa do inbox)
+    if (conversaId) {
+      try {
+        const vcf = montarVCard(fullName, telefones, dados.organizacao);
+        await supabase.from('admin_mensagens').insert({
+          conversa_id: conversaId,
+          aluno_id: null,
+          direcao: 'saida',
+          remetente: 'admin',
+          remetente_nome: remetenteNome || 'Admin',
+          tipo: 'contato',
+          conteudo: vcf,
+          midia_nome: fullName,
+          status_entrega: 'enviada',
+          whatsapp_message_id: messageId,
+        });
+      } catch (regErr) {
+        console.error('[enviar-vcard] Falha ao registrar em admin_mensagens (envio ok):', regErr);
+        // não falha o envio por causa do registro
+      }
+    }
+
     return json({ ok: true, messageId });
   } catch (err) {
     console.error('[enviar-vcard] Erro:', err);
