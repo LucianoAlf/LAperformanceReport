@@ -81,33 +81,65 @@ async function enviarBotoes(baseUrl, token, numero, texto) {
   }
 }
 
-async function registrarNaCaixa(supabase, { alunoId, unidadeId, jid, caixaId, messageId, status, texto }) {
+async function registrarNaCaixa(supabase, { alunoId, unidadeId, jid, caixaId, messageId, status, texto, nomeExterno }) {
   try {
     let conversaId = null;
 
-    const { data: conv } = await supabase
-      .from('admin_conversas')
-      .select('id')
-      .eq('aluno_id', alunoId)
-      .eq('departamento', DEPARTAMENTO)
-      .maybeSingle();
-
-    if (conv) {
-      conversaId = conv.id;
-    } else {
-      const { data: nova } = await supabase
+    if (alunoId) {
+      const { data: conv } = await supabase
         .from('admin_conversas')
-        .insert({
-          aluno_id: alunoId,
-          unidade_id: unidadeId,
-          departamento: DEPARTAMENTO,
-          caixa_id: caixaId,
-          whatsapp_jid: jid,
-          status: 'aberta',
-        })
         .select('id')
-        .single();
-      conversaId = nova?.id || null;
+        .eq('aluno_id', alunoId)
+        .eq('departamento', DEPARTAMENTO)
+        .maybeSingle();
+
+      if (conv) {
+        conversaId = conv.id;
+      } else {
+        const { data: nova } = await supabase
+          .from('admin_conversas')
+          .insert({
+            aluno_id: alunoId,
+            unidade_id: unidadeId,
+            departamento: DEPARTAMENTO,
+            caixa_id: caixaId,
+            whatsapp_jid: jid,
+            status: 'aberta',
+          })
+          .select('id')
+          .single();
+        conversaId = nova?.id || null;
+      }
+    } else {
+      // Contato externo: busca conversa pelo JID
+      const { data: conv } = await supabase
+        .from('admin_conversas')
+        .select('id')
+        .eq('whatsapp_jid', jid)
+        .eq('departamento', DEPARTAMENTO)
+        .is('aluno_id', null)
+        .maybeSingle();
+
+      if (conv) {
+        conversaId = conv.id;
+      } else {
+        const telefone = jid.replace('@s.whatsapp.net', '');
+        const { data: nova } = await supabase
+          .from('admin_conversas')
+          .insert({
+            aluno_id: null,
+            unidade_id: unidadeId,
+            departamento: DEPARTAMENTO,
+            caixa_id: caixaId,
+            whatsapp_jid: jid,
+            telefone_externo: telefone,
+            nome_externo: nomeExterno || null,
+            status: 'aberta',
+          })
+          .select('id')
+          .single();
+        conversaId = nova?.id || null;
+      }
     }
 
     if (!conversaId) return;
@@ -212,9 +244,21 @@ serve(async (req) => {
 
         const numero = whatsapp_jid.replace('@s.whatsapp.net', '');
 
-        // Contato externo (aluno_id=null): só envia, sem registro no banco
+        // Contato externo (aluno_id=null): envia e registra na caixa (sem gravar em pesquisas_whatsapp)
         if (!aluno_id) {
           const resultado = await enviarBotoes(baseUrl, token, numero, textoMsg);
+          if (resultado.ok) {
+            await registrarNaCaixa(supabase, {
+              alunoId: null,
+              unidadeId: unidade_id,
+              jid: whatsapp_jid,
+              caixaId: caixa.id,
+              messageId: resultado.messageId,
+              status: 'enviada',
+              texto: textoMsg,
+              nomeExterno: nome || null,
+            });
+          }
           resultados.push({ aluno_id: null, ok: resultado.ok, erro: resultado.ok ? undefined : (resultado.data?.error || 'falha_envio') });
           continue;
         }
