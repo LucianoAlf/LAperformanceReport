@@ -359,7 +359,7 @@ function ChatBubble({ msg, onApagar, onEditar }: { msg: AdminMensagem; onApagar?
               ))}
             </div>
           </div>
-        ) : msg.conteudo ? (
+        ) : (msg.conteudo && msg.tipo !== 'contato' && msg.tipo !== 'localizacao') ? (
           <p className="text-sm whitespace-pre-wrap break-words">{formatarWhatsApp(msg.conteudo)}</p>
         ) : null}
 
