@@ -108,6 +108,16 @@ function normalizeUazapiPayload(payload: any): { key: any; message: any; message
           url: content.URL || content.url || null,
           mimetype: content.mimetype || 'image/webp'
         } : null,
+        // Contato (vCard) — UAZAPI: mediaType 'vcard' / messageType 'ContactMessage', content.vcard + content.displayName
+        contactMessage: (msg.mediaType === 'vcard' || msg.messageType === 'ContactMessage') ? {
+          displayName: content.displayName || null,
+          vcard: content.vcard || null,
+        } : null,
+        // Localização — UAZAPI: mediaType 'location' / messageType 'LocationMessage', content.degreesLatitude/Longitude
+        locationMessage: (msg.mediaType === 'location' || msg.messageType === 'LocationMessage') ? {
+          degreesLatitude: content.degreesLatitude ?? null,
+          degreesLongitude: content.degreesLongitude ?? null,
+        } : null,
         // Reação
         reactionMessage: (msg.type === 'reaction' || msg.messageType === 'ReactionMessage') ? {
           key: { id: msg.reaction || content?.key?.ID },
@@ -206,14 +216,15 @@ function detectMessageType(message: any): { tipo: string; conteudo: string | nul
     };
   }
 
-  // Contato
+  // Contato — guarda o vCard completo em conteudo (preserva telefones) e o nome em midia_nome
   if (message.message?.contactMessage) {
+    const c = message.message.contactMessage;
     return {
       tipo: 'contato',
-      conteudo: message.message.contactMessage.displayName || message.message.contactMessage.vcard || null,
+      conteudo: c.vcard || c.displayName || null,
       midia_url: null,
       midia_mimetype: null,
-      midia_nome: null,
+      midia_nome: c.displayName || null,
     };
   }
 
