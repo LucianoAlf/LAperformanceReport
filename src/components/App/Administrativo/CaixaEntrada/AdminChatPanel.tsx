@@ -161,9 +161,26 @@ function MidiaRender({ msg, isSaida }: { msg: AdminMensagem; isSaida: boolean })
   if (msg.tipo === 'localizacao') {
     const [lat, lng] = (msg.conteudo || '').split(',').map(s => s.trim());
     if (!lat || !lng) return <span className="text-sm text-slate-300">📍 Localização</span>;
+    const href = `https://www.google.com/maps?q=${lat},${lng}`;
+    // Se houver miniatura do mapa (JPEGThumbnail), mostra a imagem clicável; senão, só o link.
+    if (msg.midia_url) {
+      return (
+        <a href={href} target="_blank" rel="noopener noreferrer" className="block">
+          <img
+            src={msg.midia_url}
+            alt="Localização"
+            className="max-w-[260px] max-h-[180px] rounded-lg object-cover"
+            loading="lazy"
+          />
+          <span className="flex items-center gap-1.5 mt-1 text-xs text-rose-400">
+            <MapPin className="w-3.5 h-3.5 flex-shrink-0" /> Abrir no mapa
+          </span>
+        </a>
+      );
+    }
     return (
       <a
-        href={`https://www.google.com/maps?q=${lat},${lng}`}
+        href={href}
         target="_blank"
         rel="noopener noreferrer"
         className="flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-700/50 hover:bg-slate-700 transition text-sm"

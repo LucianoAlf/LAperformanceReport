@@ -67,7 +67,13 @@ function normalizeUazapiPayload(payload: any): { key: any; message: any; message
   if (payload.message?.chatid) {
     const msg = payload.message;
     const content = msg.content || {};
-    
+
+    // Contato/localização trazem msg.text (ex: "Nome\nPhone: ...") — NÃO tratar como texto,
+    // senão o detectMessageType (que checa texto primeiro) classifica errado.
+    const ehContato = msg.mediaType === 'vcard' || msg.messageType === 'ContactMessage';
+    const ehLocalizacao = msg.mediaType === 'location' || msg.messageType === 'LocationMessage';
+    const ehTextoValido = msg.type !== 'reaction' && msg.messageType !== 'ReactionMessage' && !ehContato && !ehLocalizacao;
+
     // Construir estrutura normalizada
     return {
       key: {
@@ -76,9 +82,9 @@ function normalizeUazapiPayload(payload: any): { key: any; message: any; message
         id: msg.messageid || msg.id
       },
       message: {
-        // Texto (ignorar se for reação — senão o emoji vira mensagem de texto)
-        conversation: (msg.type !== 'reaction' && msg.messageType !== 'ReactionMessage') ? (msg.text || null) : null,
-        extendedTextMessage: (msg.type !== 'reaction' && msg.messageType !== 'ReactionMessage' && msg.text) ? { text: msg.text } : null,
+        // Texto (ignorar se for reação/contato/localização — senão vira mensagem de texto)
+        conversation: ehTextoValido ? (msg.text || null) : null,
+        extendedTextMessage: (ehTextoValido && msg.text) ? { text: msg.text } : null,
         // Áudio/PTT
         audioMessage: (msg.mediaType === 'ptt' || msg.mediaType === 'audio' || msg.messageType === 'AudioMessage') ? {
           url: content.URL || content.url || null,
@@ -117,6 +123,7 @@ function normalizeUazapiPayload(payload: any): { key: any; message: any; message
         locationMessage: (msg.mediaType === 'location' || msg.messageType === 'LocationMessage') ? {
           degreesLatitude: content.degreesLatitude ?? null,
           degreesLongitude: content.degreesLongitude ?? null,
+          jpegThumbnail: content.JPEGThumbnail || content.jpegThumbnail || null,
         } : null,
         // Reação
         reactionMessage: (msg.type === 'reaction' || msg.messageType === 'ReactionMessage') ? {
@@ -204,14 +211,15 @@ function detectMessageType(message: any): { tipo: string; conteudo: string | nul
     };
   }
 
-  // Localizacao
+  // Localizacao — conteudo = "lat,lng"; miniatura do mapa (JPEGThumbnail base64) vira data URI em midia_url
   if (message.message?.locationMessage) {
     const loc = message.message.locationMessage;
+    const thumb = loc.jpegThumbnail || null;
     return {
       tipo: 'localizacao',
       conteudo: `${loc.degreesLatitude},${loc.degreesLongitude}`,
-      midia_url: null,
-      midia_mimetype: null,
+      midia_url: thumb ? `data:image/jpeg;base64,${thumb}` : null,
+      midia_mimetype: thumb ? 'image/jpeg' : null,
       midia_nome: null,
     };
   }
