@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback, useMemo, Fragment } from 'react';
 import {
   AlertTriangle, RefreshCw, Check, X, Loader2, Link2, UserX, Copy, HelpCircle,
-  Search, MoreVertical, DollarSign, GraduationCap, ChevronLeft, ChevronRight, Pencil, Zap, Link as LinkIcon,
+  Search, MoreVertical, DollarSign, GraduationCap, ChevronLeft, ChevronRight, Zap, Link as LinkIcon,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
@@ -78,8 +78,29 @@ function fmtBRL(v: any): string {
 }
 
 // "tipo aplicável" = divergência com sugestão que dá pra aplicar direto da API
+const CAMPOS_ALTO_RISCO = new Set(['status', 'data_saida', 'emusys_matricula_id']);
+const CAMPOS_DERIVADOS = new Set(['valor_parcela']);
+
 function temSugestaoAplicavel(item: ConciliacaoItem): boolean {
-  return (item.tipo_divergencia === 'valor_divergente' || item.tipo_divergencia === 'classificacao_divergente') && item.sugestao != null;
+  return item.tipo_divergencia === 'classificacao_divergente' && item.sugestao != null;
+}
+
+function camposDoItem(item: ConciliacaoItem): string[] {
+  const campos = new Set<string>();
+  Object.keys(item.valor_api?.diffs || {}).forEach(c => campos.add(c));
+  Object.keys(item.valor_api?.patch || {}).forEach(c => campos.add(c));
+  if (item.campo) campos.add(item.campo);
+  return [...campos];
+}
+
+function temCampoAltoRisco(item: ConciliacaoItem): boolean {
+  return camposDoItem(item).some(campo => CAMPOS_ALTO_RISCO.has(campo));
+}
+
+function limparPatchGuardado(patch: Record<string, any> = {}): Record<string, any> {
+  return Object.fromEntries(
+    Object.entries(patch).filter(([campo, valor]) => !CAMPOS_DERIVADOS.has(campo) && valor !== undefined)
+  );
 }
 
 interface DiffLookups { cursos: Map<number, string>; profs: Map<number, string> }
@@ -249,7 +270,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
       .map(i => i.aluno_id!))];
     if (!ids.length) { setAlunosAtuais(new Map()); return; }
     supabase.from('alunos')
-      .select('id, curso_id, professor_atual_id, dia_aula, valor_cheio, desconto_fixo, desconto_condicional')
+      .select('id, curso_id, professor_atual_id, dia_aula, horario_aula, valor_cheio, desconto_fixo, desconto_condicional')
       .in('id', ids)
       .then(({ data }) => {
         const m = new Map<number, Record<string, any>>();
@@ -285,14 +306,8 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
     const email = authData.user?.email || 'usuario_app';
     const agora = new Date().toISOString();
 
-    if (opts.campo && opts.valor !== undefined && opts.valor !== null && item.aluno_id) {
-      const { error: eUpd } = await supabase.from('alunos')
-        .update({ [opts.campo]: opts.valor, updated_at: agora }).eq('id', item.aluno_id);
-      if (eUpd) throw eUpd;
-      const { error: eFix } = await supabase.from('matriculas_campos_fixados')
-        .upsert({ aluno_id: item.aluno_id, campo: opts.campo, valor: opts.valor, fixado_por: email, fixado_em: agora },
-          { onConflict: 'aluno_id,campo' });
-      if (eFix) throw eFix;
+    if (opts.campo) {
+      throw new Error('Alteracoes em alunos devem passar pela RPC guardada.');
     }
 
     const { error: eDec } = await supabase.from('matriculas_divergencias_decisoes').upsert({
@@ -371,7 +386,11 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
   // monta o patch (campos→valores) a partir de um candidato do Emusys para "vincular e popular"
   const patchDeCandidato = useCallback((c: any): Record<string, any> => {
     const p: Record<string, any> = {
-      curso_id: c.curso_id, professor_atual_id: c.professor_id, dia_aula: c.dia, data_fim_contrato: c.data_fim,
+      curso_id: c.curso_id,
+      professor_atual_id: c.professor_id,
+      dia_aula: c.dia,
+      horario_aula: c.horario || c.horario_aula || c.hora,
+      data_fim_contrato: c.data_fim,
     };
     if (!c.parcela_invalida && c.cheio != null) {
       p.valor_cheio = c.cheio; p.desconto_fixo = c.fixo; p.desconto_condicional = c.cond;
@@ -381,9 +400,6 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
 
   // converte uma divergência "aplicável" nas opções de gravação a partir da sugestão da API
   const opcoesAplicarApi = useCallback((item: ConciliacaoItem): { campo: string; valor: any } | null => {
-    if (item.tipo_divergencia === 'valor_divergente') {
-      return { campo: 'valor_parcela', valor: Number(item.sugestao) };
-    }
     if (item.tipo_divergencia === 'classificacao_divergente') {
       const t = tiposMap.get(String(item.sugestao));
       if (!t) return null;
@@ -395,31 +411,29 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
   const aplicarApi = useCallback((item: ConciliacaoItem) => {
     const op = opcoesAplicarApi(item);
     if (!op) { toast.error('Sem sugestão aplicável.'); return; }
-    executarUm(item, { decisao: 'aplicar_api', ...op, motivo: 'Aplicado valor/dado da API do Emusys' });
-  }, [opcoesAplicarApi, executarUm]);
+    executarRPC(item, 'aprovar', { [op.campo]: op.valor });
+  }, [opcoesAplicarApi, executarRPC]);
 
   // ações em lote
   const aplicarLote = useCallback(async () => {
-    const alvos = itemsFiltrados.filter(i => selecionados.has(i.id) && (i.tipo_divergencia === 'auto_preview' || temSugestaoAplicavel(i)));
-    const orfaos = itemsFiltrados.filter(i => selecionados.has(i.id) && i.tipo_divergencia === 'ausente_nosso_sistema');
-    if (!alvos.length && !orfaos.length) { toast.error('Nenhum selecionado aprovável.'); return; }
+    const alvos = itemsFiltrados.filter(i => selecionados.has(i.id) && (
+      (i.tipo_divergencia === 'auto_preview' && !temCampoAltoRisco(i)) || temSugestaoAplicavel(i)
+    ));
+    if (!alvos.length) { toast.error('Nenhum selecionado aprovável.'); return; }
     setProcessandoLote(true);
     const resNormais = await Promise.allSettled(alvos.map(i => {
-      if (i.tipo_divergencia === 'auto_preview') return aplicarDecisaoRPC(i, 'aprovar', i.valor_api?.patch || {});
+      if (i.tipo_divergencia === 'auto_preview') return aplicarDecisaoRPC(i, 'aprovar', limparPatchGuardado(i.valor_api?.patch || {}));
       const op = opcoesAplicarApi(i);
-      return op ? resolverDivergencia(i, { decisao: 'aplicar_api', ...op, motivo: 'Aplicado em lote (API)' }) : Promise.reject();
+      return op ? aplicarDecisaoRPC(i, 'aprovar', { [op.campo]: op.valor }) : Promise.reject();
     }));
-    const resOrfaos = await Promise.allSettled(orfaos.map(i =>
-      resolverDivergencia(i, { decisao: 'ignorar', motivo: 'Ignorado em lote (sem registro nosso)' })
-    ));
-    const todos = [...alvos, ...orfaos];
-    const resAll = [...resNormais, ...resOrfaos];
+    const todos = [...alvos];
+    const resAll = [...resNormais];
     const okIds = todos.filter((_, idx) => resAll[idx].status === 'fulfilled').map(i => i.id);
     removerDoEstado(okIds);
     const falhas = resAll.length - okIds.length;
     toast[falhas ? 'warning' : 'success'](`${okIds.length} aplicada(s)${falhas ? `, ${falhas} falha(s)` : ''}.`);
     setProcessandoLote(false);
-  }, [itemsFiltrados, selecionados, opcoesAplicarApi, resolverDivergencia, aplicarDecisaoRPC, removerDoEstado]);
+  }, [itemsFiltrados, selecionados, opcoesAplicarApi, aplicarDecisaoRPC, removerDoEstado]);
 
   const ignorarLote = useCallback(async () => {
     const alvos = itemsFiltrados.filter(i => selecionados.has(i.id));
@@ -597,6 +611,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                   const emProgresso = salvando.has(item.id);
                   const aplicavel = temSugestaoAplicavel(item);
                   const isPreview = item.tipo_divergencia === 'auto_preview';
+                  const isPreviewAltoRisco = isPreview && temCampoAltoRisco(item);
                   const candidatos: any[] = item.tipo_divergencia === 'ambiguo' && Array.isArray(item.valor_api?.candidatos) ? item.valor_api.candidatos : [];
                   const homonimo = new Set(candidatos.map(c => c.aluno_id)).size > 1;
                   const isOrfao = item.tipo_divergencia === 'ausente_nosso_sistema';
@@ -644,25 +659,27 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                                 </button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" className="w-56">
-                                {isPreview && (
-                                  <DropdownMenuItem onClick={() => executarRPC(item, 'aprovar', item.valor_api?.patch || {})}
+                                {isPreview && !isPreviewAltoRisco && (
+                                  <DropdownMenuItem onClick={() => executarRPC(item, 'aprovar', limparPatchGuardado(item.valor_api?.patch || {}))}
                                     className="cursor-pointer text-emerald-400 focus:text-emerald-400 focus:bg-emerald-500/10">
                                     <Check className="w-4 h-4 mr-2" /> Aprovar (aplicar)
+                                  </DropdownMenuItem>
+                                )}
+                                {isPreviewAltoRisco && (
+                                  <DropdownMenuItem disabled className="text-amber-300 focus:text-amber-300">
+                                    <AlertTriangle className="w-4 h-4 mr-2" /> Revisar individualmente
                                   </DropdownMenuItem>
                                 )}
                                 {aplicavel && (
                                   <DropdownMenuItem onClick={() => aplicarApi(item)}
                                     className="cursor-pointer text-emerald-400 focus:text-emerald-400 focus:bg-emerald-500/10">
                                     <Check className="w-4 h-4 mr-2" />
-                                    {item.tipo_divergencia === 'valor_divergente'
-                                      ? `Aplicar ${fmtBRL(item.sugestao)}`
-                                      : `Aplicar: ${tiposMap.get(String(item.sugestao))?.nome || item.sugestao}`}
+                                    {`Aplicar: ${tiposMap.get(String(item.sugestao))?.nome || item.sugestao}`}
                                   </DropdownMenuItem>
                                 )}
                                 {item.tipo_divergencia === 'valor_divergente' && (
-                                  <DropdownMenuItem onClick={() => setModalValor({ item, valor: String(item.sugestao ?? '') })}
-                                    className="cursor-pointer text-blue-400 focus:text-blue-400 focus:bg-blue-500/10">
-                                    <Pencil className="w-4 h-4 mr-2" /> Editar valor…
+                                  <DropdownMenuItem disabled className="text-amber-300 focus:text-amber-300">
+                                    <AlertTriangle className="w-4 h-4 mr-2" /> Reprocessar valor canônico
                                   </DropdownMenuItem>
                                 )}
                                 {item.tipo_divergencia === 'classificacao_divergente' && (
@@ -729,6 +746,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                                           <span className="font-medium">#{c.id}</span>
                                           <span className="text-slate-400">·</span>
                                           <span>{c.dia || 'dia ?'}</span>
+                                          {(c.horario || c.horario_aula || c.hora) && <span>{String(c.horario || c.horario_aula || c.hora).slice(0, 5)}</span>}
                                           {(c.turmas || []).length > 0 && <span className="text-slate-500 text-xs truncate">{(c.turmas || []).join(', ')}</span>}
                                           {c.sugerido_por_turma && <span className="rounded-full bg-cyan-500/20 text-cyan-300 px-1.5 py-0.5 text-[10px]">sugerido</span>}
                                         </div>
@@ -742,7 +760,9 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                                           const at = alunosAtuais.get(item.aluno_id!);
                                           if (!at) return null;
                                           const diffs: { label: string; de: string; para: string }[] = [];
+                                          const horaCandidato = c.horario || c.horario_aula || c.hora;
                                           if (c.dia && c.dia !== at.dia_aula) diffs.push({ label: 'Dia', de: at.dia_aula || '—', para: c.dia });
+                                          if (horaCandidato && String(horaCandidato).slice(0, 5) !== String(at.horario_aula || '').slice(0, 5)) diffs.push({ label: 'Hora', de: at.horario_aula ? String(at.horario_aula).slice(0, 5) : '—', para: String(horaCandidato).slice(0, 5) });
                                           if (c.curso_id != null && c.curso_id !== at.curso_id) diffs.push({ label: 'Curso', de: diffLookups.cursos.get(Number(at.curso_id)) || '—', para: diffLookups.cursos.get(Number(c.curso_id)) || (c.disciplinas?.join(', ') || `?`) });
                                           if (c.professor_id != null && c.professor_id !== at.professor_atual_id) diffs.push({ label: 'Prof.', de: diffLookups.profs.get(Number(at.professor_atual_id)) || '—', para: diffLookups.profs.get(Number(c.professor_id)) || `?` });
                                           if (!c.parcela_invalida && c.cheio != null && c.cheio !== at.valor_cheio) diffs.push({ label: 'Cheio', de: fmtBRL(at.valor_cheio), para: fmtBRL(c.cheio) });
@@ -765,7 +785,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                                         onClick={async () => {
                                           const patch = patchDeCandidato(c);
                                           const { data: al } = await supabase.from('alunos')
-                                            .select('curso_id, professor_atual_id, dia_aula, data_fim_contrato, valor_cheio, desconto_fixo, desconto_condicional')
+                                            .select('curso_id, professor_atual_id, dia_aula, horario_aula, data_fim_contrato, valor_cheio, desconto_fixo, desconto_condicional')
                                             .eq('id', item.aluno_id!).single();
                                           setConfirmVincular({ item, candidato: c, patch, atual: al || {} });
                                         }}
@@ -840,9 +860,8 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                 if (!modalValor) return;
                 const v = Number(modalValor.valor);
                 if (!Number.isFinite(v) || v < 0) { toast.error('Valor inválido.'); return; }
-                const item = modalValor.item;
                 setModalValor(null);
-                executarUm(item, { decisao: 'editar_manual', campo: 'valor_parcela', valor: v, motivo: 'Valor editado manualmente' });
+                toast.info('Valor divergente antigo precisa ser reprocessado pela regra canônica.');
               }}
               className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-medium">Salvar</button>
           </DialogFooter>
@@ -868,6 +887,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
             const linhas: { label: string; de: string; para: string | null }[] = [
               { label: 'ID Emusys', de: confirmVincular.item.emusys_matricula_id || '—', para: String(candidato.id) },
               patch.dia_aula ? { label: 'Dia da aula', de: atual.dia_aula || '—', para: patch.dia_aula } : null,
+              patch.horario_aula ? { label: 'Horário', de: atual.horario_aula ? String(atual.horario_aula).slice(0, 5) : '—', para: String(patch.horario_aula).slice(0, 5) } : null,
               nomeNovoCurso ? { label: 'Curso', de: nomeAtualCurso, para: nomeNovoCurso } : null,
               nomeNovoProf ? { label: 'Professor', de: nomeAtualProf, para: nomeNovoProf } : null,
               patch.data_fim_contrato ? { label: 'Fim do contrato', de: fmtData(atual.data_fim_contrato), para: fmtData(patch.data_fim_contrato) } : null,
@@ -946,7 +966,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                 if (!tipoId) { toast.error('Selecione um tipo.'); return; }
                 const item = modalReclass.item;
                 setModalReclass(null);
-                executarUm(item, { decisao: 'reclassificar', campo: 'tipo_matricula_id', valor: tipoId, motivo: 'Tipo reclassificado manualmente' });
+                executarRPC(item, 'aprovar', { tipo_matricula_id: tipoId });
               }}
               className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-medium">Salvar</button>
           </DialogFooter>
