@@ -6,6 +6,8 @@ import { supabase } from '@/lib/supabase';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { formatarWhatsApp } from '@/lib/whatsappFormat';
 import { TemplateSelector, isTemplateAutomacao } from '@/components/App/PreAtendimento/components/chat/TemplateSelector';
+import type { VcardChip } from '@/components/App/PreAtendimento/components/chat/TemplateSelector';
+import { useVcardsUnidade } from '@/components/App/SucessoCliente/hooks/useVcardsUnidade';
 import { ModalGerenciarTemplates } from '@/components/App/PreAtendimento/components/chat/ModalGerenciarTemplates';
 import type { TemplateWhatsApp } from '@/components/App/PreAtendimento/types';
 import { toast } from 'sonner';
@@ -37,6 +39,8 @@ interface AdminChatPanelProps {
   onEditarMensagem?: (id: string, novoConteudo: string) => void;
   /** Caixa de templates a usar (cada caixa tem suas mensagens prontas). */
   contexto?: string;
+  /** Nome do usuário logado, para registrar autoria ao disparar cartões de contato. */
+  remetenteNome?: string;
 }
 
 function StatusIcon({ status }: { status: string }) {
@@ -431,6 +435,7 @@ export function AdminChatPanel({
   onApagarMensagem,
   onEditarMensagem,
   contexto = 'administrativo',
+  remetenteNome = 'Admin',
 }: AdminChatPanelProps) {
   const [texto, setTexto] = useState('');
   const [editandoMsg, setEditandoMsg] = useState<AdminMensagem | null>(null);
@@ -446,6 +451,40 @@ export function AdminChatPanel({
   const [tipoUpload, setTipoUpload] = useState<'imagem' | 'audio' | 'video' | 'documento'>('imagem');
   const [automacaoConfirmar, setAutomacaoConfirmar] = useState<TemplateWhatsApp | null>(null);
   const [disparandoAutomacao, setDisparandoAutomacao] = useState(false);
+
+  // Cartões de contato (vCard) — só no inbox Sucesso do Aluno.
+  // O hook é sempre chamado (regra dos hooks); o resultado só é usado quando há unidade real,
+  // pois 'todos' carregaria cartões de todas as unidades.
+  const unidadeCartoes = contexto === 'sucesso_aluno'
+    ? (aluno?.unidade_id || conversa.unidade_id || null)
+    : null;
+  const { cartoes: vcardsRaw } = useVcardsUnidade(unidadeCartoes || 'todos');
+  const vcards: VcardChip[] = (contexto === 'sucesso_aluno' && unidadeCartoes)
+    ? vcardsRaw.map(c => ({ id: c.id, titulo: c.titulo, full_name: c.full_name, qtdTelefones: c.telefones.length }))
+    : [];
+
+  // Dispara um cartão de contato na conversa (envio direto, sem modal).
+  const dispararVcard = useCallback(async (vcardId: string) => {
+    let jid = conversa.whatsapp_jid;
+    if (!jid) {
+      const tel = (aluno?.whatsapp || aluno?.telefone || '').replace(/\D/g, '');
+      if (!tel) { toast.error('Conversa sem telefone para envio'); return; }
+      jid = `${tel.startsWith('55') ? tel : '55' + tel}@s.whatsapp.net`;
+    }
+    try {
+      const { data, error } = await supabase.functions.invoke('enviar-vcard', {
+        body: { vcardId, numeroDestino: jid, conversaId: conversa.id, remetenteNome },
+      });
+      if (error || !data?.ok) {
+        toast.error('Falha ao enviar cartão: ' + (data?.erro || error?.message || 'erro desconhecido'));
+      } else {
+        toast.success('Cartão enviado');
+        // A timeline atualiza via realtime (useAdminMensagens assina INSERT de admin_mensagens).
+      }
+    } catch (err: any) {
+      toast.error('Erro ao enviar cartão: ' + (err?.message || 'desconhecido'));
+    }
+  }, [conversa.whatsapp_jid, conversa.id, aluno, remetenteNome]);
 
   // Sync foto from conversa prop
   useEffect(() => {
@@ -854,6 +893,8 @@ export function AdminChatPanel({
               onSelecionar={handleUsarTemplate}
               onSelecionarTemplate={handleSelecionarTemplate}
               onFechar={() => setTemplateAberto(false)}
+              vcards={vcards}
+              onSelecionarVcard={dispararVcard}
             />
           </div>
         )}
@@ -951,6 +992,8 @@ export function AdminChatPanel({
                   onSelecionar={handleUsarTemplate}
                   onSelecionarTemplate={handleSelecionarTemplate}
                   onFechar={() => { setTemplateDropdownAberto(false); setTexto(''); textareaRef.current?.focus(); }}
+                  vcards={vcards}
+                  onSelecionarVcard={dispararVcard}
                 />
               )}
               <textarea
