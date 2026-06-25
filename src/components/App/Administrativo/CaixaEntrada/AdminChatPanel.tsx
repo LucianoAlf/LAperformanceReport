@@ -363,7 +363,7 @@ function ChatBubble({ msg, onApagar, onEditar }: { msg: AdminMensagem; onApagar?
         {/* Conteúdo */}
         {interativoData ? (
           <div className="flex flex-col gap-2">
-            <p className="text-sm">{interativoData.texto}</p>
+            <p className="text-sm whitespace-pre-wrap break-words">{formatarWhatsApp(interativoData.texto)}</p>
             <div className="flex flex-wrap gap-1.5 mt-0.5">
               {interativoData.opcoes.map((op) => (
                 <span
