@@ -109,3 +109,8 @@ serve(async (req) => {
 - Padrão correto: componente com `useState(imgError)` que renderiza **OU** a foto **OU** o fallback (iniciais/ícone), nunca os dois. Garante tamanho fixo e alinhamento estável. Ref: `AvatarContato` em `AdminInboxList.tsx`.
 - URLs de foto de perfil do WhatsApp/UAZAPI expiram → o `onError` precisa ser robusto.
 - `bg-gradient-to-br` sem `from-`/`to-` definidos = gradiente sem cor; só aplicar a classe quando houver as cores do gradiente.
+
+## Entrypoint híbrido (raiz + src/) — NÃO é código morto
+- Cadeia real: `index.html` → `/index.tsx` (raiz) → `./src/router` → **`../App.tsx` (raiz, importado em `src/router.tsx`)** → `./constants` + `./types` (raiz).
+- ⚠️ `App.tsx` (~140KB), `constants.tsx` e `types.ts` na RAIZ são **código VIVO**, apesar de o grosso da app estar em `src/`. Não confundir com `src/components/App/` (pasta de páginas).
+- Ao auditar "código morto" por grep, lembrar que `src/router.tsx` importa `../App` (sobe pra raiz). Filtro `grep -v "App"` engana. **Sempre validar com `npm run build` antes de remover qualquer .tsx/.ts da raiz.**
