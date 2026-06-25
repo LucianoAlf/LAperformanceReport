@@ -47,7 +47,7 @@ const TIPO_META: Record<string, { label: string; descricao: string; icon: typeof
   disciplina_nao_mapeada: { label: 'Disciplina nova', descricao: 'Disciplina do Emusys sem mapeamento para curso', icon: HelpCircle, cor: 'violet' },
   professor_nao_mapeado: { label: 'Professor novo', descricao: 'Professor do Emusys sem mapeamento', icon: HelpCircle, cor: 'violet' },
   valor_fixado_divergente: { label: 'Valor fixado diverge', descricao: 'Valor editado manualmente difere da API', icon: AlertTriangle, cor: 'orange' },
-  auto_preview: { label: 'Sugestão do sync', descricao: 'Correções que o sync propõe — você aprova (em lote ou uma a uma) ou mantém', icon: Zap, cor: 'emerald' },
+  auto_preview: { label: 'Sugestão do sync', descricao: 'Correções seguras propostas pelo sync. Valor de parcela e status não entram no apply automático.', icon: Zap, cor: 'emerald' },
 };
 
 const COR_CLASSES: Record<string, string> = {
@@ -101,6 +101,11 @@ function limparPatchGuardado(patch: Record<string, any> = {}): Record<string, an
   return Object.fromEntries(
     Object.entries(patch).filter(([campo, valor]) => !CAMPOS_DERIVADOS.has(campo) && valor !== undefined)
   );
+}
+
+function temPatchSeguroAplicavel(item: ConciliacaoItem): boolean {
+  if (item.tipo_divergencia !== 'auto_preview' || temCampoAltoRisco(item)) return false;
+  return Object.keys(limparPatchGuardado(item.valor_api?.patch || {})).length > 0;
 }
 
 interface DiffLookups { cursos: Map<number, string>; profs: Map<number, string> }
@@ -417,7 +422,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
   // ações em lote
   const aplicarLote = useCallback(async () => {
     const alvos = itemsFiltrados.filter(i => selecionados.has(i.id) && (
-      (i.tipo_divergencia === 'auto_preview' && !temCampoAltoRisco(i)) || temSugestaoAplicavel(i)
+      temPatchSeguroAplicavel(i) || temSugestaoAplicavel(i)
     ));
     if (!alvos.length) { toast.error('Nenhum selecionado aprovável.'); return; }
     setProcessandoLote(true);
@@ -512,7 +517,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
             <span className="text-sm font-semibold uppercase tracking-wide text-emerald-300">Sugestões do sync</span>
           </div>
           <p className="hidden md:block text-xs text-emerald-300/70 leading-tight max-w-sm">
-            Correções que o sync propõe (curso, valor, status…). Selecione e aprove em lote, ou uma a uma.
+            Correções seguras do sync. Valor de parcela e status ficam bloqueados para revisão específica.
           </p>
           <span className="ml-auto shrink-0 inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-medium text-emerald-300">
             {previewAtivo ? 'filtrando' : 'clique para revisar'}
@@ -612,6 +617,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                   const aplicavel = temSugestaoAplicavel(item);
                   const isPreview = item.tipo_divergencia === 'auto_preview';
                   const isPreviewAltoRisco = isPreview && temCampoAltoRisco(item);
+                  const isPreviewAplicavel = temPatchSeguroAplicavel(item);
                   const candidatos: any[] = item.tipo_divergencia === 'ambiguo' && Array.isArray(item.valor_api?.candidatos) ? item.valor_api.candidatos : [];
                   const homonimo = new Set(candidatos.map(c => c.aluno_id)).size > 1;
                   const isOrfao = item.tipo_divergencia === 'ausente_nosso_sistema';
@@ -659,7 +665,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                                 </button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" className="w-56">
-                                {isPreview && !isPreviewAltoRisco && (
+                                {isPreviewAplicavel && (
                                   <DropdownMenuItem onClick={() => executarRPC(item, 'aprovar', limparPatchGuardado(item.valor_api?.patch || {}))}
                                     className="cursor-pointer text-emerald-400 focus:text-emerald-400 focus:bg-emerald-500/10">
                                     <Check className="w-4 h-4 mr-2" /> Aprovar (aplicar)
@@ -842,28 +848,23 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
       <Dialog open={!!modalValor} onOpenChange={(o) => !o && setModalValor(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Editar valor da parcela</DialogTitle>
+            <DialogTitle>Valor divergente bloqueado</DialogTitle>
             <DialogDescription>
-              {modalValor?.item.aluno_nome} — a API sugere {fmtBRL(modalValor?.item.sugestao)} (fonte de desconto ambígua, confira).
+              {modalValor?.item.aluno_nome} precisa ser reprocessado pela regra canônica atual: mensalidade menos desconto condicional.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
-            <label className="text-sm text-slate-400">Valor da parcela (R$)</label>
-            <input type="number" step="0.01" value={modalValor?.valor ?? ''}
-              onChange={e => setModalValor(m => m && { ...m, valor: e.target.value })}
-              className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-500/50" />
+          <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-100">
+            Não aplique valor manualmente por esta tela. Primeiro vamos reprocessar as divergências antigas com a fórmula canônica e só depois liberar decisões.
           </div>
           <DialogFooter>
             <button onClick={() => setModalValor(null)} className="px-4 py-2 rounded-lg border border-slate-600 text-slate-300 hover:bg-slate-700/50 text-sm">Cancelar</button>
             <button
               onClick={() => {
                 if (!modalValor) return;
-                const v = Number(modalValor.valor);
-                if (!Number.isFinite(v) || v < 0) { toast.error('Valor inválido.'); return; }
                 setModalValor(null);
                 toast.info('Valor divergente antigo precisa ser reprocessado pela regra canônica.');
               }}
-              className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-medium">Salvar</button>
+              className="px-4 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-700 text-white text-sm font-medium">Entendi</button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
