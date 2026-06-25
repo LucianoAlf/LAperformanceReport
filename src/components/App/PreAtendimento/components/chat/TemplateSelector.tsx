@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { X, Loader2, Search, Zap } from 'lucide-react';
+import { X, Loader2, Search, Zap, Contact } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { TemplateWhatsApp } from '../../types';
 
@@ -7,6 +7,9 @@ import type { TemplateWhatsApp } from '../../types';
 export function isTemplateAutomacao(tipo: string | undefined | null): boolean {
   return !!tipo && tipo.startsWith('automacao');
 }
+
+/** Cartão de contato (vCard) exibido como chip junto dos templates (só admin/sucesso_aluno). */
+export interface VcardChip { id: string; titulo: string; full_name: string; qtdTelefones: number }
 
 interface TemplateSelectorProps {
   onSelecionar: (conteudo: string) => void;
@@ -19,6 +22,10 @@ interface TemplateSelectorProps {
   filtroInicial?: string;
   /** Caixa à qual os templates pertencem. Cada caixa só vê os seus. */
   contexto?: string;
+  /** Cartões de contato a exibir como chips (passado só pelo inbox Sucesso do Aluno). */
+  vcards?: VcardChip[];
+  /** Disparo de um cartão de contato selecionado. */
+  onSelecionarVcard?: (id: string) => void;
 }
 
 const CORES_TEMPLATE: Record<string, string> = {
@@ -52,7 +59,7 @@ const EMOJIS_TEMPLATE: Record<string, string> = {
 // Cache de templates por contexto para evitar fetch repetido
 const templatesCache: Map<string, TemplateWhatsApp[]> = new Map();
 
-export function TemplateSelector({ onSelecionar, onSelecionarTemplate, onFechar, modo = 'bar', filtroInicial = '', contexto = 'pre_atendimento' }: TemplateSelectorProps) {
+export function TemplateSelector({ onSelecionar, onSelecionarTemplate, onFechar, modo = 'bar', filtroInicial = '', contexto = 'pre_atendimento', vcards = [], onSelecionarVcard }: TemplateSelectorProps) {
   // Roteia a seleção: se o pai forneceu onSelecionarTemplate, ele decide (texto vs automação);
   // senão, mantém o comportamento antigo de preencher o textarea com o conteúdo.
   const selecionar = useCallback((t: TemplateWhatsApp) => {
@@ -222,6 +229,25 @@ export function TemplateSelector({ onSelecionar, onSelecionarTemplate, onFechar,
                 </button>
               );
             })}
+            {/* Cartões de contato (vCard) */}
+            {vcards
+              .filter(v => !filtro.trim() || v.titulo.toLowerCase().includes(filtro.toLowerCase()) || v.full_name.toLowerCase().includes(filtro.toLowerCase()))
+              .map(v => (
+                <button
+                  key={`vc-${v.id}`}
+                  onClick={() => { onSelecionarVcard?.(v.id); onFechar(); }}
+                  className="w-full text-left px-3 py-2.5 transition flex items-start gap-3 text-slate-300 hover:bg-slate-700/50"
+                >
+                  <Contact className="w-4 h-4 flex-shrink-0 mt-0.5 text-sky-400" />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium truncate">{v.titulo}</span>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded-full font-semibold uppercase bg-sky-500/15 text-sky-400 border border-sky-500/25 flex-shrink-0">Contato</span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 truncate mt-0.5">{v.full_name} · {v.qtdTelefones} tel.</p>
+                  </div>
+                </button>
+              ))}
           </div>
         )}
       </div>
@@ -261,6 +287,17 @@ export function TemplateSelector({ onSelecionar, onSelecionarTemplate, onFechar,
               </button>
             );
           })}
+          {/* Cartões de contato (vCard) */}
+          {vcards.map(v => (
+            <button
+              key={`vc-${v.id}`}
+              onClick={() => { onSelecionarVcard?.(v.id); onFechar(); }}
+              className="px-3 py-1.5 text-[11px] border rounded-lg transition font-medium inline-flex items-center gap-1.5 bg-sky-500/10 text-sky-400 border-sky-500/25 hover:bg-sky-500/20"
+            >
+              <Contact className="w-3 h-3" />
+              {v.titulo}
+            </button>
+          ))}
         </div>
       )}
     </div>
