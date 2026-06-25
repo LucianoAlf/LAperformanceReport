@@ -613,8 +613,25 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                           {isPreview ? 'Sugestão' : meta.label}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-slate-300">{descreverNosso(item, tiposMap)}</td>
-                      <td className="px-4 py-3 text-slate-400 max-w-md truncate" title={descreverApi(item, tiposMap, diffLookups)}>{descreverApi(item, tiposMap, diffLookups)}</td>
+                      {isPreview ? (
+                        <td colSpan={2} className="px-4 py-2">
+                          <div className="flex flex-wrap gap-x-5 gap-y-1">
+                            {Object.entries(item.valor_api?.diffs || {}).map(([campo, d]: [string, any]) => (
+                              <span key={campo} className="inline-flex items-center gap-1 text-xs whitespace-nowrap">
+                                <span className="text-slate-500">{CAMPO_LABEL[campo] || campo}:</span>
+                                <span className="text-slate-400 line-through">{fmtVal(campo, (d as any)?.de, diffLookups)}</span>
+                                <span className="text-slate-600">→</span>
+                                <span className="text-emerald-400 font-medium">{fmtVal(campo, (d as any)?.para, diffLookups)}</span>
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                      ) : (
+                        <>
+                          <td className="px-4 py-3 text-slate-300 text-xs">{descreverNosso(item, tiposMap)}</td>
+                          <td className="px-4 py-3 text-slate-400 text-xs">{descreverApi(item, tiposMap, diffLookups)}</td>
+                        </>
+                      )}
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-end">
                           {emProgresso ? (

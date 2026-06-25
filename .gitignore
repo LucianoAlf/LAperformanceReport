@@ -36,6 +36,9 @@ dist-ssr
 # Supabase CLI temp files (atualizam a cada upgrade da CLI)
 supabase/.temp/
 
+# Snapshots da API Emusys (consultas locais, não versionar)
+outputs/emusys-snapshots/
+
 # Documentos de auditoria e diagnóstico (gerados localmente)
 docs/AUDITORIA_*.md
 docs/DIAGNOSTICO_*.md
