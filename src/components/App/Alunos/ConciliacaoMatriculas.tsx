@@ -7,6 +7,7 @@ import {
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from '@/components/ui/dropdown-menu';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/select';
@@ -85,14 +86,14 @@ const COR_CLASSES: Record<string, string> = {
 const ATRIBUTO_GRUPOS: Record<string, { label: string; descricao: string; icon: typeof Link2; cor: string; tipos: string[] }> = {
   cadastro: {
     label: 'Dif. cadastro',
-    descricao: 'Responsavel, telefone e email diferentes entre LA e Emusys',
+    descricao: 'Responsavel, telefone e email diferentes entre LA Report e Emusys',
     icon: Phone,
     cor: 'sky',
     tipos: ['contato_divergente', 'responsavel_divergente'],
   },
   imagem: {
     label: 'Foto/Instagram',
-    descricao: 'Campos que existem no Emusys e podem popular o cadastro LA',
+    descricao: 'Campos que existem no Emusys e podem popular o cadastro do LA Report',
     icon: ImageIcon,
     cor: 'violet',
     tipos: ['foto_ausente', 'instagram_ausente', 'instagram_divergente'],
@@ -105,8 +106,8 @@ const ATRIBUTO_GRUPOS: Record<string, { label: string; descricao: string; icon: 
     tipos: ['status_financeiro_divergente', 'forma_pagamento_divergente', 'aguardando_renovacao_divergente'],
   },
   contrato: {
-    label: 'Checklist LA',
-    descricao: 'Pendencias internas do LA, sem dado externo para aplicar automaticamente',
+    label: 'Checklist LA Report',
+    descricao: 'Pendencias internas do LA Report, sem dado externo para aplicar automaticamente',
     icon: FileText,
     cor: 'amber',
     tipos: ['anamnese_pendente', 'contrato_assinatura_pendente'],
@@ -155,6 +156,15 @@ const CAMPO_LABEL: Record<string, string> = {
 const CAMPO_MONETARIO = new Set(['valor_cheio', 'valor_parcela', 'desconto_fixo', 'desconto_condicional']);
 
 const PER_PAGE = 20;
+const EMAILS_SYNC_TECNICO = new Set([
+  'lucianoalf.la@gmail.com',
+  'hugo@lamusic.com.br',
+  ...(String(import.meta.env.VITE_EMUSYS_SYNC_ALLOWED_EMAILS || '')
+    .split(',')
+    .map(email => email.trim().toLowerCase())
+    .filter(Boolean)),
+]);
+
 const ATRIBUTO_LIMITES_CARREGAMENTO: Record<string, number> = {
   criticas: 140,
   financeiro: 160,
@@ -225,21 +235,21 @@ const ATRIBUTO_GRUPO_PRIORIDADE: Record<string, number> = {
 
 function origemAtributo(item: AtributoDivergencia): string {
   const grupo = grupoAtributo(item);
-  if (grupo === 'contrato') return 'Checklist interno LA';
-  if (item.tipo_divergencia === 'foto_ausente' || item.tipo_divergencia.includes('instagram')) return 'Emusys -> LA';
+  if (grupo === 'contrato') return 'Checklist interno LA Report';
+  if (item.tipo_divergencia === 'foto_ausente' || item.tipo_divergencia.includes('instagram')) return 'Emusys -> LA Report';
   if (grupo === 'financeiro') return 'Contrato Emusys';
-  return 'LA x Emusys';
+  return 'LA Report x Emusys';
 }
 
 function descricaoAtributo(item: AtributoDivergencia): { nosso: string; emusys: string; sugestao: string } {
   if (item.tipo_divergencia === 'foto_ausente') {
-    return { nosso: 'Sem foto no LA', emusys: 'Foto disponivel no Emusys', sugestao: 'Aplicar foto do Emusys' };
+    return { nosso: 'Sem foto no LA Report', emusys: 'Foto disponivel no Emusys', sugestao: 'Aplicar foto do Emusys' };
   }
   if (item.tipo_divergencia === 'anamnese_pendente') {
-    return { nosso: 'Anamnese nao preenchida', emusys: 'Checklist interno do LA', sugestao: 'Cobrar preenchimento' };
+    return { nosso: 'Anamnese nao preenchida', emusys: 'Checklist interno do LA Report', sugestao: 'Cobrar preenchimento' };
   }
   if (item.tipo_divergencia === 'contrato_assinatura_pendente') {
-    return { nosso: 'Contrato sem assinatura', emusys: 'Checklist interno do LA', sugestao: 'Regularizar assinatura' };
+    return { nosso: 'Contrato sem assinatura', emusys: 'Checklist interno do LA Report', sugestao: 'Regularizar assinatura' };
   }
   return {
     nosso: textoCurtoValor(item.valor_nosso),
@@ -347,6 +357,7 @@ function descreverApi(item: ConciliacaoItem, tiposMap: Map<string, TipoMatricula
 }
 
 export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null }) {
+  const { user, usuario, session } = useAuth();
   const [dados, setDados] = useState<ConciliacaoPayload>({ resumo: {}, items: [] });
   const [loading, setLoading] = useState(true);
   const [loadingAtributos, setLoadingAtributos] = useState(true);
@@ -382,6 +393,8 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
   const [alunosAtuais, setAlunosAtuais] = useState<Map<number, Record<string, any>>>(new Map());
 
   const tiposMap = useMemo(() => new Map(tipos.map(t => [t.codigo, t])), [tipos]);
+  const emailUsuario = (user?.email || usuario?.email || '').trim().toLowerCase();
+  const podeRodarSync = EMAILS_SYNC_TECNICO.has(emailUsuario);
   const diffLookups = useMemo<DiffLookups>(() => ({
     cursos: new Map(cursos.map(c => [c.id, c.nome])),
     profs: new Map(profs.map(p => [p.id, p.nome])),
@@ -496,19 +509,27 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
   };
 
   const rodarSync = useCallback(async () => {
+    if (!podeRodarSync) {
+      toast.error('Rodar sync Emusys e uma acao tecnica restrita.');
+      return;
+    }
+    const authToken = session?.access_token || (await supabase.auth.getSession()).data.session?.access_token;
+    if (!authToken) {
+      toast.error('Sessao expirada. Entre novamente para rodar o sync.');
+      return;
+    }
     setRodandoSync(true);
     const slugs = unidadeId && unidadeId !== 'todos' && UNIDADE_SLUG[unidadeId]
       ? [UNIDADE_SLUG[unidadeId]]
       : ['cg', 'recreio', 'barra'];
     const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sync-matriculas-emusys`;
-    const key = import.meta.env.VITE_SUPABASE_ANON_KEY;
     for (let i = 0; i < slugs.length; i++) {
       const slug = slugs[i];
       setSyncStatus(`${slug.toUpperCase()} (${i + 1}/${slugs.length})…`);
       try {
         const resp = await fetch(`${url}?u=${slug}`, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+          headers: { Authorization: `Bearer ${authToken}`, 'Content-Type': 'application/json' },
         });
         if (!resp.ok) throw new Error(await resp.text());
       } catch (e: any) {
@@ -518,7 +539,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
     setSyncStatus(null);
     setRodandoSync(false);
     await carregar();
-  }, [unidadeId, carregar]);
+  }, [unidadeId, carregar, podeRodarSync, session?.access_token]);
 
   useEffect(() => {
     supabase.from('tipos_matricula').select('id, codigo, nome').then(({ data }) => setTipos(data || []));
@@ -672,7 +693,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
         decisao === 'aplicar_emusys'
           ? 'Dado do Emusys aplicado.'
           : decisao === 'manter_la'
-            ? 'Valor do LA mantido e travado.'
+            ? 'Valor do LA Report mantido e travado.'
             : decisao === 'ignorar'
               ? 'Divergencia ignorada.'
               : 'Marcado para revisar depois.'
@@ -777,16 +798,18 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
             <Link2 className="w-5 h-5 text-cyan-400" /> Conciliação Emusys
           </h3>
           <p className="text-sm text-slate-400">
-            O sync separa diferencas LA x Emusys, sugestoes de matricula/grade e checklist interno. <span className="text-slate-300">Nada e alterado sem decisao guardada.</span>
+            O sync separa diferencas LA Report x Emusys, sugestoes de matricula/grade e checklist interno. <span className="text-slate-300">Nada e alterado sem decisao guardada.</span>
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {podeRodarSync && (
           <button onClick={rodarSync} disabled={rodandoSync || loading}
             className="inline-flex items-center gap-2 rounded-md border border-cyan-600/50 bg-cyan-600/10 px-3 py-1.5 text-sm text-cyan-300 hover:bg-cyan-600/20 disabled:opacity-50">
             {rodandoSync
               ? <><Loader2 className="w-4 h-4 animate-spin" />{syncStatus || 'Rodando…'}</>
               : <><Zap className="w-4 h-4" /> Rodar Sync</>}
           </button>
+          )}
           <button onClick={carregar} disabled={loading || rodandoSync}
             className="inline-flex items-center gap-2 rounded-md border border-slate-600 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-700/50 disabled:opacity-50">
             <RefreshCw className={cn('w-4 h-4', loading && 'animate-spin')} /> Atualizar
@@ -912,7 +935,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                   <th className="px-4 py-3 font-medium">Aluno</th>
                   <th className="px-4 py-3 font-medium">Unidade</th>
                   <th className="px-4 py-3 font-medium">Tipo</th>
-                  <th className="px-4 py-3 font-medium">No LA</th>
+                  <th className="px-4 py-3 font-medium">No LA Report</th>
                   <th className="px-4 py-3 font-medium">No Emusys/sync</th>
                   <th className="px-4 py-3 font-medium text-right">Ação</th>
                 </tr>
@@ -1004,7 +1027,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                                 {!isOrfao && (
                                   <DropdownMenuItem onClick={() => executarRPC(item, 'manter', isPreview ? patchAtualDoPreview(item) : {})}
                                     className="cursor-pointer text-slate-300">
-                                    <Check className="w-4 h-4 mr-2" /> Manter LA
+                                    <Check className="w-4 h-4 mr-2" /> Manter LA Report
                                   </DropdownMenuItem>
                                 )}
                                 <DropdownMenuItem onClick={() => executarRPC(item, 'ignorar')}
@@ -1149,10 +1172,10 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
               <div>
                 <h4 className="flex items-center gap-2 text-sm font-semibold text-slate-100">
                   <ShieldAlert className="h-4 w-4 text-cyan-300" />
-                  Diferencas LA x Emusys e checklist LA
+                  Diferencas LA Report x Emusys e checklist LA Report
                 </h4>
                 <p className="mt-1 max-w-3xl text-xs leading-relaxed text-slate-400">
-                  Cadastro, foto, Instagram e financeiro podem popular o LA a partir do Emusys. Anamnese e contrato sao checklist interno do LA. Todas as acoes passam por RPC guardada.
+                  Cadastro, foto, Instagram e financeiro podem popular o LA Report a partir do Emusys. Anamnese e contrato sao checklist interno do LA Report. Todas as acoes passam por RPC guardada.
                 </p>
               </div>
               <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-[11px] font-medium text-cyan-300">
@@ -1202,7 +1225,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                       <th className="px-4 py-3 font-medium">Aluno</th>
                       <th className="px-4 py-3 font-medium">Unidade</th>
                       <th className="px-4 py-3 font-medium">Tipo</th>
-                      <th className="px-4 py-3 font-medium">Leitura LA</th>
+                      <th className="px-4 py-3 font-medium">Leitura LA Report</th>
                       <th className="px-4 py-3 font-medium">Fonte externa/interna</th>
                       <th className="px-4 py-3 font-medium">Acao sugerida</th>
                       <th className="px-4 py-3 font-medium text-right">Status</th>
@@ -1219,7 +1242,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                       return (
                         <tr key={item.id} className="hover:bg-slate-800/40">
                           <td className="px-4 py-3 align-top">
-                            <div className="font-medium text-slate-100">{item.aluno_nome || `Aluno LA #${item.aluno_id || '—'}`}</div>
+                            <div className="font-medium text-slate-100">{item.aluno_nome || `Aluno LA Report #${item.aluno_id || '—'}`}</div>
                             <div className="mt-0.5 text-[11px] text-slate-500">
                               {item.emusys_matricula_id ? `Emusys mat. ${item.emusys_matricula_id}` : 'Sem matricula Emusys'}
                             </div>
@@ -1264,7 +1287,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                                 onClick={() => executarAtributoRPC(item, 'manter_la')}
                                 className="inline-flex h-7 items-center rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2 text-[11px] font-medium text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-50"
                               >
-                                Manter LA
+                                Manter LA Report
                               </button>
                               <button
                                 type="button"

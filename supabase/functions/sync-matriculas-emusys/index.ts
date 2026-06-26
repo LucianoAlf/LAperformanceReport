@@ -23,6 +23,12 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const MODO_TESTE = (Deno.env.get('SYNC_MATRICULAS_DRYRUN') ?? 'true') !== 'false';
+const EMAILS_SYNC_TECNICO = new Set(
+  (Deno.env.get('SYNC_MATRICULAS_ALLOWED_EMAILS') ?? 'lucianoalf.la@gmail.com,hugo@lamusic.com.br')
+    .split(',')
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean),
+);
 
 const EMUSYS_API = 'https://api.emusys.com.br/v1';
 const UNIDADES: Record<string, { nome: string; id: string; token: string }> = {
@@ -37,6 +43,34 @@ const corsHeaders = {
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+async function validarAcessoSync(req: Request): Promise<Response | null> {
+  const authHeader = req.headers.get('Authorization') || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+
+  if (!token) {
+    return new Response(JSON.stringify({ erro: 'sync restrito a usuarios tecnicos' }), {
+      status: 403,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  // Permite chamadas tecnicas/cron feitas com service role.
+  if (token === SUPABASE_SERVICE_ROLE_KEY) return null;
+
+  const authClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  const { data, error } = await authClient.auth.getUser(token);
+  const email = data.user?.email?.trim().toLowerCase() || '';
+
+  if (error || !email || !EMAILS_SYNC_TECNICO.has(email)) {
+    return new Response(JSON.stringify({ erro: 'sync restrito a usuarios tecnicos' }), {
+      status: 403,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  return null;
+}
 
 function normalizarNome(s: string): string {
   return (s || '').normalize('NFKD').replace(/[^\x00-\x7f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -471,6 +505,9 @@ function resolverProfessorContrato(mat: any, profMap: Map<number, number>) {
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+
+  const bloqueioAcesso = await validarAcessoSync(req);
+  if (bloqueioAcesso) return bloqueioAcesso;
 
   const alvo = new URL(req.url).searchParams.get('u') || 'cg';
   const u = UNIDADES[alvo];
