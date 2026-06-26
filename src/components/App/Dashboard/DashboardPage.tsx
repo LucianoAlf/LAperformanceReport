@@ -41,6 +41,7 @@ import {
   isTipoMatriculaForaNovaComercial,
 } from '@/lib/comercialMatriculasCanonicas';
 import { filtrarRetencaoCanonica } from '@/lib/atividadesExtras';
+import { anexarCursosMovimentacoesAdmin } from '@/lib/movimentacoesAdminCursos';
 
 
 interface OutletContextType {
@@ -235,8 +236,7 @@ export function DashboardPage() {
         .from('movimentacoes_admin')
         .select(`
           aluno_nome, data, motivo, tipo, curso_id,
-          unidades:unidade_id!inner(nome),
-          cursos:curso_id!left(nome, is_projeto_banda)
+          unidades:unidade_id!inner(nome)
         `)
         .in('tipo', ['evasao', 'nao_renovacao'])
         .gte('data', dataInicio)
@@ -248,7 +248,8 @@ export function DashboardPage() {
       }
 
       const { data } = await query;
-      setDadosModalEvasoes(filtrarRetencaoCanonica(data || []).map((m: any) => ({
+      const dataComCursos = await anexarCursosMovimentacoesAdmin(data || []);
+      setDadosModalEvasoes(filtrarRetencaoCanonica(dataComCursos).map((m: any) => ({
         nome: m.aluno_nome || '—',
         unidade: m.unidades?.nome || '—',
         data_evasao: m.data ? new Date(m.data + 'T12:00:00').toLocaleDateString('pt-BR') : '—',
@@ -347,6 +348,11 @@ export function DashboardPage() {
   useEffect(() => {
     async function fetchDados() {
       try {
+        const hoje = new Date();
+        const hojeAno = hoje.getFullYear();
+        const hojeMes = hoje.getMonth() + 1;
+        const isPeriodoAtual = ano === hojeAno && mesInicio === hojeMes && mesFim === hojeMes;
+
         // Buscar alertas inteligentes da nova view
         let alertasQuery = supabase
           .from('vw_alertas_inteligentes')
@@ -486,7 +492,7 @@ export function DashboardPage() {
         // Buscar renovações e não renovações de movimentacoes_admin (fonte de verdade)
         let renovacoesQuery = supabase
           .from('movimentacoes_admin')
-          .select('tipo, unidade_id, curso_id, cursos:curso_id!left(nome, is_projeto_banda)')
+          .select('tipo, unidade_id, curso_id')
           .in('tipo', ['renovacao', 'nao_renovacao'])
           .gte('data', startDate)
           .lte('data', endDate);
@@ -506,7 +512,7 @@ export function DashboardPage() {
         const profUnidadesData = profUnidR.data;
         const turmasImplicitas = turmasR.data;
         const performanceData = perfR.data;
-        const renovacoesData = renovR.data;
+        const renovacoesData = await anexarCursosMovimentacoesAdmin(renovR.data || []);
 
         // Calcular KPIs
         let totalProfs = 0;
@@ -595,9 +601,6 @@ export function DashboardPage() {
         // ===== EVOLUÇÃO DE ALUNOS ATIVOS (12 meses) =====
         // Histórico vem de dados_mensais; mês corrente vem da fonte canônica viva.
         // IMPORTANTE: Filtrar por unidade se não for consolidado
-        const hojeAno = new Date().getFullYear();
-        const hojeMes = new Date().getMonth() + 1;
-
         let evolucaoQuery = supabase
           .from('dados_mensais')
           .select('ano, mes, alunos_ativos, unidade_id')

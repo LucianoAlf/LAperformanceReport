@@ -11,6 +11,7 @@ import {
   type RetencaoOperacionalPorUnidade,
 } from '@/lib/retencaoOperacionalCanonica';
 import { filtrarRetencaoCanonica } from '@/lib/atividadesExtras';
+import { anexarCursosMovimentacoesAdmin } from '@/lib/movimentacoesAdminCursos';
 
 export interface KPIsRetencao extends RetencaoOperacionalPorUnidade {}
 
@@ -62,8 +63,7 @@ async function fetchMovimentacoesRetencao(
     valor_parcela_evasao, valor_parcela_anterior, valor_parcela_novo,
     tempo_permanencia_meses,
     forma_pagamento_id, agente_comercial,
-    tipo_evasao, motivo, observacoes, professor_id, curso_id,
-    cursos:curso_id!left(nome, is_projeto_banda)
+    tipo_evasao, motivo, observacoes, professor_id, curso_id
   `;
 
   let query = supabase
@@ -95,8 +95,9 @@ async function fetchMovimentacoesRetencao(
     ...((movResult.data || []) as MovimentacaoRetencaoRow[]),
     ...((avisosResult.data || []) as MovimentacaoRetencaoRow[]).filter(row => !ids.has(row.id)),
   ];
+  const movimentacoesComCursos = await anexarCursosMovimentacoesAdmin(movimentacoes);
   const alunoIds = Array.from(new Set(
-    movimentacoes
+    movimentacoesComCursos
       .map(row => row.aluno_id)
       .filter(Boolean)
       .map(String)
@@ -113,7 +114,7 @@ async function fetchMovimentacoesRetencao(
     alunosMap = new Map((alunosData || []).map((aluno: any) => [String(aluno.id), aluno]));
   }
 
-  const enriquecidas = movimentacoes.map(row => aplicarFallbacksRetencao({
+  const enriquecidas = movimentacoesComCursos.map(row => aplicarFallbacksRetencao({
     ...row,
     alunos: row.aluno_id ? alunosMap.get(String(row.aluno_id)) || null : null,
   }));

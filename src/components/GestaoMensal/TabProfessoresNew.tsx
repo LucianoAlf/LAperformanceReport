@@ -8,6 +8,7 @@ import { formatCurrency, getMesNomeCurto } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
 import { cn } from '@/lib/utils';
 import { filtrarRetencaoCanonica } from '@/lib/atividadesExtras';
+import { anexarCursosMovimentacoesAdmin } from '@/lib/movimentacoesAdminCursos';
 
 interface TabProfessoresProps {
   ano: number;
@@ -277,7 +278,7 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
         // Query: movimentacoes_admin - só Cancelamento e Não Renovação
         let movimentacoesQuery = supabase
           .from('movimentacoes_admin')
-          .select('professor_id, unidade_id, valor_parcela_evasao, valor_parcela_anterior, tipo, curso_id, cursos:curso_id!left(nome, is_projeto_banda)')
+          .select('professor_id, unidade_id, valor_parcela_evasao, valor_parcela_anterior, tipo, curso_id')
           .in('tipo', ['evasao', 'nao_renovacao'])
           .gte('data', startDate)
           .lte('data', endDate);
@@ -429,7 +430,8 @@ export function TabProfessoresNew({ ano, mes, mesFim, unidade }: TabProfessoresP
         });
 
         // Processar MRR Perdido de movimentacoes_admin (fonte única)
-        const movimentacoesData = filtrarRetencaoCanonica(movimentacoesResult.data || []);
+        const movimentacoesComCursos = await anexarCursosMovimentacoesAdmin(movimentacoesResult.data || []);
+        const movimentacoesData = filtrarRetencaoCanonica(movimentacoesComCursos);
         const mrrPerdidoPorProfessor = new Map<string, number>();
         let mrrPerdidoTotalDireto = 0;
 
