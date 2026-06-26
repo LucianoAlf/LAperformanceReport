@@ -1931,7 +1931,7 @@ export function TabelaAlunos({
               <> • {inadimplenciaInfo.pendentes} ainda estão sem status financeiro sincronizado</>
             )}
             {inadimplenciaInfo.pendentes > 0 && inadimplenciaInfo.total === 0 && (
-              <> — confirme pela aba Conciliação Emusys para gravar em dia/inadimplente no LA</>
+              <> — confirme pela aba Conciliação Emusys para gravar em dia/inadimplente no LA Report</>
             )}
           </span>
           <button
