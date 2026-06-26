@@ -223,6 +223,68 @@ function extrairFormaPagamentoEmusys(mat: any): string | null {
   return temValor(valor) ? String(valor).trim() : null;
 }
 
+function resolverFormaPagamentoId(formaEmusys: string | null, formasPagamento: Map<number, any>): number | null {
+  if (!formaEmusys) return null;
+  const alvo = normalizarFormaPagamentoValor(formaEmusys);
+  for (const [id, forma] of formasPagamento.entries()) {
+    const nome = normalizarFormaPagamentoValor(forma?.nome);
+    const sigla = normalizarFormaPagamentoValor(forma?.sigla);
+    if (nome === alvo || sigla === alvo) return id;
+  }
+  return null;
+}
+
+function setCampoVazioConfiavel(
+  patch: Record<string, any>,
+  diffs: Record<string, any>,
+  campo: string,
+  valorNovo: any,
+  valorAtual: any,
+  fixados: Set<string>,
+) {
+  if (fixados.has(campo) || !temValor(valorNovo) || temValor(valorAtual)) return;
+  patch[campo] = valorNovo;
+  diffs[campo] = { de: valorAtual ?? null, para: valorNovo };
+}
+
+function gerarPatchAtributosVaziosConfiaveis(
+  a: any,
+  mat: any,
+  formasPagamento: Map<number, any>,
+  fixados: Set<string>,
+) {
+  const patch: Record<string, any> = {};
+  const diffs: Record<string, any> = {};
+
+  const fotoEmusys = extrairFotoAluno(mat);
+  if (!temValor(a.foto_url) && !temValor(a.photo_url)) {
+    setCampoVazioConfiavel(patch, diffs, 'foto_url', fotoEmusys, a.foto_url, fixados);
+  }
+
+  setCampoVazioConfiavel(patch, diffs, 'instagram', extrairInstagramAluno(mat), a.instagram, fixados);
+  setCampoVazioConfiavel(patch, diffs, 'telefone', mat?.aluno?.telefone, a.telefone || a.whatsapp, fixados);
+  setCampoVazioConfiavel(patch, diffs, 'email', mat?.aluno?.email, a.email, fixados);
+
+  const responsavel = mat?.responsavel || {};
+  setCampoVazioConfiavel(patch, diffs, 'responsavel_nome', responsavel.nome, a.responsavel_nome, fixados);
+  setCampoVazioConfiavel(patch, diffs, 'responsavel_telefone', responsavel.telefone, a.responsavel_telefone, fixados);
+
+  const aguardandoRenovacaoEmusys = extrairAguardandoRenovacaoEmusys(mat);
+  if (!fixados.has('aguardando_renovacao') && aguardandoRenovacaoEmusys !== null && a.aguardando_renovacao == null) {
+    patch.aguardando_renovacao = aguardandoRenovacaoEmusys;
+    diffs.aguardando_renovacao = { de: a.aguardando_renovacao ?? null, para: aguardandoRenovacaoEmusys };
+  }
+
+  const formaEmusys = extrairFormaPagamentoEmusys(mat);
+  const formaId = resolverFormaPagamentoId(formaEmusys, formasPagamento);
+  if (!fixados.has('forma_pagamento_id') && !temValor(a.forma_pagamento_id) && formaId) {
+    patch.forma_pagamento_id = formaId;
+    diffs.forma_pagamento_id = { de: a.forma_pagamento_id ?? null, para: formaId, forma_pagamento: formaEmusys };
+  }
+
+  return { patch, diffs };
+}
+
 const TIPOS_DECISAO_IGNORA_SYNC = new Set([
   'ignorar_matricula_api',
   'responsavel_nao_aluno',
@@ -652,7 +714,19 @@ serve(async (req) => {
             fixadosBase,
             camposBloqueadosPorDecisaoCanonica(decisaoAtributos),
           );
-          const atributos = detectarDivergenciasAtributosAluno(a, matAtributos, formaPagamentoLocal, fixadosAtributos, tipoCodigo);
+          const autoAtributos = gerarPatchAtributosVaziosConfiaveis(a, matAtributos, formasPagamentoMap, fixadosAtributos);
+          if (Object.keys(autoAtributos.patch).length) {
+            r.upd = { ...r.upd, ...autoAtributos.patch };
+            r.detalhes = r.detalhes || { emusys_matricula_id: matAtributos.id, status_api: matAtributos.status, diffs: {} };
+            r.detalhes.diffs = { ...(r.detalhes.diffs || {}), ...autoAtributos.diffs };
+            resumo.auto_atributos = (resumo.auto_atributos || 0) + Object.keys(autoAtributos.patch).length;
+          }
+
+          const alunoPosAuto = { ...a, ...r.upd };
+          const formaPagamentoPosAuto = alunoPosAuto.forma_pagamento_id
+            ? formasPagamentoMap.get(Number(alunoPosAuto.forma_pagamento_id))
+            : formaPagamentoLocal;
+          const atributos = detectarDivergenciasAtributosAluno(alunoPosAuto, matAtributos, formaPagamentoPosAuto, fixadosAtributos, tipoCodigo);
           for (const atributo of atributos) {
             resumo.atributos[atributo.tipo_divergencia] = (resumo.atributos[atributo.tipo_divergencia] || 0) + 1;
             attrDivs.push(atributo);

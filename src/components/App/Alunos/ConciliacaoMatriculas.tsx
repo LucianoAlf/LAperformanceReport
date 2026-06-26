@@ -58,6 +58,18 @@ interface AtributoTotais {
   grupos: Record<string, number>;
 }
 
+interface AtributosAlunoGrupo {
+  key: string;
+  aluno_nome: string;
+  aluno_id: number | null;
+  unidade_id: string | null;
+  emusys_matriculas: string[];
+  itens: AtributoDivergencia[];
+  grupos: Record<string, number>;
+  severidadeAlta: boolean;
+  prioridade: number;
+}
+
 interface TipoMatricula { id: number; codigo: string; nome: string }
 
 const TIPO_META: Record<string, { label: string; descricao: string; icon: typeof Link2; cor: string }> = {
@@ -258,6 +270,22 @@ function descricaoAtributo(item: AtributoDivergencia): { nosso: string; emusys: 
   };
 }
 
+function chaveAlunoAtributo(item: AtributoDivergencia): string {
+  if (item.aluno_id) return `aluno:${item.aluno_id}`;
+  if (item.emusys_matricula_id) return `mat:${item.emusys_matricula_id}`;
+  if (item.emusys_student_id) return `student:${item.emusys_student_id}`;
+  return `atributo:${item.id}`;
+}
+
+function resumirGruposAluno(itens: AtributoDivergencia[]): Record<string, number> {
+  const grupos: Record<string, number> = {};
+  for (const item of itens) {
+    const grupo = grupoAtributo(item);
+    grupos[grupo] = (grupos[grupo] || 0) + 1;
+  }
+  return grupos;
+}
+
 function camposDoItem(item: ConciliacaoItem): string[] {
   const campos = new Set<string>();
   Object.keys(item.valor_api?.diffs || {}).forEach(c => campos.add(c));
@@ -377,6 +405,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
   const [filtroUnidade, setFiltroUnidade] = useState<string>('todas');
   const [filtroAtributoGrupo, setFiltroAtributoGrupo] = useState<string>('todos');
   const [filtroAtributoTipo, setFiltroAtributoTipo] = useState<string>('todos');
+  const [alunosAtributosExpandidos, setAlunosAtributosExpandidos] = useState<Set<string>>(new Set());
   const [pagina, setPagina] = useState(1);
 
   // seleção em lote
@@ -610,7 +639,40 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
       return String(b.detectado_em || '').localeCompare(String(a.detectado_em || ''));
     });
   }, [atributos, busca, filtroUnidade, filtroAtributoGrupo, filtroAtributoTipo]);
-  const atributosVisiveis = atributosFiltrados.slice(0, 80);
+  const atributosPorAluno = useMemo<AtributosAlunoGrupo[]>(() => {
+    const porAluno = new Map<string, AtributosAlunoGrupo>();
+    for (const item of atributosFiltrados) {
+      const key = chaveAlunoAtributo(item);
+      if (!porAluno.has(key)) {
+        porAluno.set(key, {
+          key,
+          aluno_nome: item.aluno_nome || `Aluno LA Report #${item.aluno_id || 'sem vinculo'}`,
+          aluno_id: item.aluno_id,
+          unidade_id: item.unidade_id,
+          emusys_matriculas: [],
+          itens: [],
+          grupos: {},
+          severidadeAlta: false,
+          prioridade: 99,
+        });
+      }
+      const grupo = porAluno.get(key)!;
+      grupo.itens.push(item);
+      grupo.grupos = resumirGruposAluno(grupo.itens);
+      grupo.severidadeAlta = grupo.severidadeAlta || item.severidade === 'alta';
+      grupo.prioridade = Math.min(grupo.prioridade, ATRIBUTO_GRUPO_PRIORIDADE[grupoAtributo(item)] ?? 99);
+      if (item.emusys_matricula_id && !grupo.emusys_matriculas.includes(item.emusys_matricula_id)) {
+        grupo.emusys_matriculas.push(item.emusys_matricula_id);
+      }
+    }
+    return Array.from(porAluno.values()).sort((a, b) => {
+      if (a.prioridade !== b.prioridade) return a.prioridade - b.prioridade;
+      if (a.severidadeAlta !== b.severidadeAlta) return a.severidadeAlta ? -1 : 1;
+      if (b.itens.length !== a.itens.length) return b.itens.length - a.itens.length;
+      return a.aluno_nome.localeCompare(b.aluno_nome);
+    });
+  }, [atributosFiltrados]);
+  const alunosAtributosVisiveis = atributosPorAluno.slice(0, 50);
   const tiposAtributoDisponiveis = useMemo(() => {
     const tiposBase = filtroAtributoGrupo === 'todos'
       ? Object.keys(ATRIBUTO_TIPO_META)
@@ -638,7 +700,18 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
     }
     return total;
   }, [atributos, atributoTotais]);
+  const alunosPorGrupo = useMemo(() => {
+    const grupos: Record<string, Set<string>> = Object.fromEntries(
+      Object.keys(ATRIBUTO_GRUPOS).map(grupo => [grupo, new Set<string>()])
+    ) as Record<string, Set<string>>;
+    for (const item of atributos) {
+      if (filtroUnidade !== 'todas' && item.unidade_id !== filtroUnidade) continue;
+      grupos[grupoAtributo(item)]?.add(chaveAlunoAtributo(item));
+    }
+    return Object.fromEntries(Object.entries(grupos).map(([grupo, alunos]) => [grupo, alunos.size]));
+  }, [atributos, filtroUnidade]);
   const totalAtributosFiltrado = atributosFiltrados.length;
+  const totalAlunosAtributosFiltrado = atributosPorAluno.length;
   const totalAtributosPendente = atributoTotais.total || atributos.length;
   const totalAtributosFiltroExato = filtroAtributoTipo !== 'todos'
     ? totalAtributosFiltrado
@@ -648,6 +721,18 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
   const totalAtributosCabecalho = busca.trim()
     ? totalAtributosFiltrado
     : totalAtributosFiltroExato;
+  const totalAlunosAtributosCarregados = useMemo(
+    () => new Set(atributos.map(chaveAlunoAtributo)).size,
+    [atributos]
+  );
+
+  const toggleAlunoAtributos = useCallback((key: string) => {
+    setAlunosAtributosExpandidos(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }, []);
 
   const removerDoEstado = useCallback((ids: number[]) => {
     const idSet = new Set(ids);
@@ -939,7 +1024,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
             {(totalDecisaoFiltrado > 0 || totalPreviewFiltrado > 0) && totalAtributosCabecalho > 0 && <span className="text-slate-600"> · </span>}
             {totalAtributosCabecalho > 0 && (
               <span className="text-cyan-400/80">
-                {totalAtributosCabecalho} atributo(s){busca.trim() ? ' carregado(s)' : ' no banco'}
+                {totalAlunosAtributosFiltrado} aluno(s) carregado(s) · {totalAtributosCabecalho} tarefa(s){busca.trim() ? '' : ' no banco'}
               </span>
             )}
           </span>
@@ -1200,14 +1285,14 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
               <div>
                 <h4 className="flex items-center gap-2 text-sm font-semibold text-slate-100">
                   <ShieldAlert className="h-4 w-4 text-cyan-300" />
-                  Pendencias de cadastro, financeiro e checklist
+                  Pendencias agrupadas por aluno
                 </h4>
                 <p className="mt-1 max-w-3xl text-xs leading-relaxed text-slate-400">
-                  A contagem e por campo/tarefa, nao por aluno. Checklist e interno do LA Report; nada e aplicado sem RPC guardada.
+                  A tela agora agrupa por aluno. Campos vazios confiaveis sao preenchidos pelo sync; aqui ficam apenas conflitos, checklist interno e revisoes que precisam de decisao.
                 </p>
               </div>
               <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-[11px] font-medium text-cyan-300">
-                {totalAtributosPendente} campos/tarefas pendentes · {atributos.length} carregados nesta tela
+                {totalAlunosAtributosCarregados} aluno(s) carregados · {totalAtributosPendente} tarefa(s) no banco
               </span>
             </div>
           </div>
@@ -1215,7 +1300,8 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
           <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-5">
             {Object.entries(ATRIBUTO_GRUPOS).map(([grupo, meta]) => {
               const Icon = meta.icon;
-              const total = atributosPorGrupo[grupo] || 0;
+              const totalAlunos = alunosPorGrupo[grupo] || 0;
+              const totalTarefas = atributosPorGrupo[grupo] || 0;
               const ativo = filtroAtributoGrupo === grupo;
               return (
                 <button
@@ -1227,7 +1313,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                   className={cn(
                     'rounded-lg border p-3 text-left transition',
                     COR_CLASSES[meta.cor],
-                    total === 0 && 'opacity-45',
+                    totalAlunos === 0 && 'opacity-45',
                     ativo ? 'ring-2 ring-offset-1 ring-offset-slate-900 ring-white/60' : 'hover:opacity-100'
                   )}
                 >
@@ -1235,7 +1321,11 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                     <Icon className="h-3.5 w-3.5 shrink-0" />
                     <span className="truncate">{meta.label}</span>
                   </div>
-                  <div className="mt-1 text-2xl font-bold tabular-nums">{total}</div>
+                  <div className="mt-1 flex items-end gap-2">
+                    <span className="text-2xl font-bold tabular-nums">{totalAlunos}</span>
+                    <span className="pb-0.5 text-[11px] font-medium opacity-70">aluno(s)</span>
+                  </div>
+                  <div className="mt-0.5 text-[10px] uppercase tracking-wide opacity-60">{totalTarefas} tarefa(s)</div>
                   <p className="mt-1 line-clamp-2 text-[11px] leading-tight opacity-70">{meta.descricao}</p>
                 </button>
               );
@@ -1298,117 +1388,188 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
           </div>
 
           <div className="border-t border-slate-700/70">
-            {atributosVisiveis.length === 0 ? (
+            {alunosAtributosVisiveis.length === 0 ? (
               <div className="flex items-center gap-2 px-4 py-6 text-sm text-slate-400">
                 <Check className="h-4 w-4 text-emerald-400" />
-                Nenhum atributo encontrado neste filtro.
+                Nenhuma pendencia encontrada neste filtro.
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[980px] text-sm">
-                  <thead className="bg-slate-800/60 text-left text-[11px] uppercase tracking-wide text-slate-500">
-                    <tr>
-                      <th className="px-4 py-3 font-medium">Aluno</th>
-                      <th className="px-4 py-3 font-medium">Unidade</th>
-                      <th className="px-4 py-3 font-medium">Tipo</th>
-                      <th className="px-4 py-3 font-medium">Leitura LA Report</th>
-                      <th className="px-4 py-3 font-medium">Fonte externa/interna</th>
-                      <th className="px-4 py-3 font-medium">Acao sugerida</th>
-                      <th className="px-4 py-3 font-medium text-right">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-700/60">
-                    {atributosVisiveis.map(item => {
-                      const meta = ATRIBUTO_TIPO_META[item.tipo_divergencia] || { label: item.tipo_divergencia, cor: 'sky', icon: HelpCircle };
-                      const Icon = meta.icon;
-                      const desc = descricaoAtributo(item);
-                      const origem = origemAtributo(item);
-                      const podeAplicar = ATRIBUTO_CAMPOS_APLICAVEIS.has(item.campo);
-                      const busy = salvandoAtributo.has(item.id);
-                      return (
-                        <tr key={item.id} className="hover:bg-slate-800/40">
-                          <td className="px-4 py-3 align-top">
-                            <div className="font-medium text-slate-100">{item.aluno_nome || `Aluno LA Report #${item.aluno_id || '—'}`}</div>
-                            <div className="mt-0.5 text-[11px] text-slate-500">
-                              {item.emusys_matricula_id ? `Emusys mat. ${item.emusys_matricula_id}` : 'Sem matricula Emusys'}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 align-top text-slate-400">{item.unidade_id ? (unidadesMap.get(item.unidade_id) || '—') : '—'}</td>
-                          <td className="px-4 py-3 align-top">
-                            <span className={cn('inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium', COR_CLASSES[meta.cor])}>
-                              <Icon className="h-3 w-3 shrink-0" />
-                              {meta.label}
-                            </span>
-                            <div className="mt-1 text-[10px] uppercase tracking-wide text-slate-500">{origem}</div>
-                            {item.severidade === 'alta' && (
-                              <span className="ml-1 inline-flex rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-300">
+              <div className="divide-y divide-slate-700/60">
+                {alunosAtributosVisiveis.map(grupo => {
+                  const aberto = alunosAtributosExpandidos.has(grupo.key);
+                  const unidadeNome = grupo.unidade_id ? (unidadesMap.get(grupo.unidade_id) || '-') : '-';
+                  const resumoTipos = Object.entries(grupo.grupos)
+                    .sort(([a], [b]) => (ATRIBUTO_GRUPO_PRIORIDADE[a] ?? 99) - (ATRIBUTO_GRUPO_PRIORIDADE[b] ?? 99));
+                  const primeirasPendencias = grupo.itens.slice(0, 2).map(item => {
+                    const meta = ATRIBUTO_TIPO_META[item.tipo_divergencia] || { label: item.tipo_divergencia, cor: 'sky', icon: HelpCircle };
+                    return meta.label;
+                  });
+
+                  return (
+                    <div key={grupo.key} className="bg-slate-950/10">
+                      <button
+                        type="button"
+                        onClick={() => toggleAlunoAtributos(grupo.key)}
+                        className="grid w-full gap-3 px-4 py-3 text-left transition hover:bg-slate-800/40 md:grid-cols-[minmax(220px,1.35fr)_110px_minmax(230px,1fr)_minmax(240px,1.25fr)_92px]"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="truncate font-medium text-slate-100">{grupo.aluno_nome}</span>
+                            {grupo.severidadeAlta && (
+                              <span className="shrink-0 rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] font-semibold text-red-300">
                                 critico
                               </span>
                             )}
-                          </td>
-                          <td className="max-w-[220px] px-4 py-3 align-top text-xs text-slate-300">
-                            <span className="line-clamp-3">{desc.nosso}</span>
-                          </td>
-                          <td className="max-w-[260px] px-4 py-3 align-top text-xs text-slate-400">
-                            <span className="line-clamp-3">{desc.emusys}</span>
-                          </td>
-                          <td className="max-w-[260px] px-4 py-3 align-top text-xs text-cyan-200">
-                            <span className="line-clamp-3">{desc.sugestao}</span>
-                          </td>
-                          <td className="px-4 py-3 align-top">
-                            <div className="flex min-w-[260px] flex-wrap justify-end gap-1.5">
-                              {podeAplicar && (
-                                <button
-                                  type="button"
-                                  disabled={busy}
-                                  onClick={() => executarAtributoRPC(item, 'aplicar_emusys')}
-                                  className="inline-flex h-7 items-center rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 text-[11px] font-medium text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-50"
-                                >
-                                  Aplicar Emusys
-                                </button>
-                              )}
-                              <button
-                                type="button"
-                                disabled={busy}
-                                onClick={() => executarAtributoRPC(item, 'manter_la')}
-                                className="inline-flex h-7 items-center rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2 text-[11px] font-medium text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-50"
-                              >
-                                Manter LA Report
-                              </button>
-                              <button
-                                type="button"
-                                disabled={busy}
-                                onClick={() => executarAtributoRPC(item, 'revisar')}
-                                className="inline-flex h-7 items-center rounded-md border border-amber-500/30 bg-amber-500/10 px-2 text-[11px] font-medium text-amber-200 hover:bg-amber-500/20 disabled:opacity-50"
-                              >
-                                Revisar
-                              </button>
-                              <button
-                                type="button"
-                                disabled={busy}
-                                onClick={() => executarAtributoRPC(item, 'ignorar')}
-                                className="inline-flex h-7 items-center rounded-md border border-slate-600 bg-slate-800 px-2 text-[11px] font-medium text-slate-300 hover:bg-slate-700 disabled:opacity-50"
-                              >
-                                Ignorar
-                              </button>
-                            </div>
-                            {!podeAplicar && (
-                              <div className="mt-1 text-right text-[10px] text-slate-500">
-                                checklist interno
-                              </div>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                          </div>
+                          <div className="mt-0.5 text-[11px] text-slate-500">
+                            {grupo.emusys_matriculas.length
+                              ? `Emusys mat. ${grupo.emusys_matriculas.join(', ')}`
+                              : grupo.aluno_id
+                              ? `Aluno LA Report #${grupo.aluno_id}`
+                              : 'Sem matricula Emusys'}
+                          </div>
+                        </div>
+
+                        <div className="text-xs text-slate-400 md:pt-1">{unidadeNome}</div>
+
+                        <div className="flex flex-wrap gap-1.5">
+                          {resumoTipos.map(([grupoTipo, count]) => {
+                            const meta = ATRIBUTO_GRUPOS[grupoTipo] || ATRIBUTO_GRUPOS.cadastro;
+                            const Icon = meta.icon;
+                            return (
+                              <span key={grupoTipo} className={cn('inline-flex h-6 items-center gap-1 rounded-full border px-2 text-[10px] font-medium', COR_CLASSES[meta.cor])}>
+                                <Icon className="h-3 w-3" />
+                                {meta.label} ({count})
+                              </span>
+                            );
+                          })}
+                        </div>
+
+                        <div className="min-w-0 text-xs text-slate-400">
+                          <div className="truncate">
+                            {primeirasPendencias.join(', ')}
+                            {grupo.itens.length > primeirasPendencias.length ? ` +${grupo.itens.length - primeirasPendencias.length}` : ''}
+                          </div>
+                          <div className="mt-0.5 text-[11px] text-slate-500">
+                            {grupo.itens.length} tarefa(s) para decidir/revisar
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-end gap-1 text-xs font-medium text-cyan-200">
+                          <ChevronRight className={cn('h-4 w-4 transition-transform', aberto && 'rotate-90')} />
+                          {aberto ? 'Fechar' : 'Abrir'}
+                        </div>
+                      </button>
+
+                      {aberto && (
+                        <div className="border-t border-slate-700/60 bg-slate-950/30 px-4 py-3">
+                          <div className="grid gap-2">
+                            {grupo.itens.map(item => {
+                              const meta = ATRIBUTO_TIPO_META[item.tipo_divergencia] || { label: item.tipo_divergencia, cor: 'sky', icon: HelpCircle };
+                              const Icon = meta.icon;
+                              const desc = descricaoAtributo(item);
+                              const origem = origemAtributo(item);
+                              const podeAplicar = ATRIBUTO_CAMPOS_APLICAVEIS.has(item.campo);
+                              const busy = salvandoAtributo.has(item.id);
+
+                              return (
+                                <div key={item.id} className="rounded-lg border border-slate-700/70 bg-slate-900/70 p-3">
+                                  <div className="flex flex-wrap items-start justify-between gap-3">
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex flex-wrap items-center gap-2">
+                                        <span className={cn('inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium', COR_CLASSES[meta.cor])}>
+                                          <Icon className="h-3 w-3 shrink-0" />
+                                          {meta.label}
+                                        </span>
+                                        <span className="text-[10px] uppercase tracking-wide text-slate-500">{origem}</span>
+                                        {item.severidade === 'alta' && (
+                                          <span className="rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-300">
+                                            critico
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      <div className="mt-3 grid gap-3 lg:grid-cols-3">
+                                        <div>
+                                          <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Leitura LA Report</div>
+                                          <p className="mt-1 text-xs leading-relaxed text-slate-300">{desc.nosso}</p>
+                                        </div>
+                                        <div>
+                                          <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Fonte externa/interna</div>
+                                          <p className="mt-1 text-xs leading-relaxed text-slate-400">{desc.emusys}</p>
+                                        </div>
+                                        <div>
+                                          <div className="text-[10px] font-semibold uppercase tracking-wide text-cyan-500/80">Acao sugerida</div>
+                                          <p className="mt-1 text-xs leading-relaxed text-cyan-200">{desc.sugestao}</p>
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                    <div className="flex min-w-[250px] flex-wrap justify-end gap-1.5">
+                                      {busy ? (
+                                        <span className="inline-flex h-7 items-center gap-1.5 rounded-md border border-slate-700 bg-slate-800 px-2 text-[11px] font-medium text-slate-300">
+                                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                          Salvando
+                                        </span>
+                                      ) : (
+                                        <>
+                                          {podeAplicar && (
+                                            <button
+                                              type="button"
+                                              onClick={() => executarAtributoRPC(item, 'aplicar_emusys')}
+                                              className="inline-flex h-7 items-center rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 text-[11px] font-medium text-emerald-200 hover:bg-emerald-500/20"
+                                            >
+                                              Aplicar Emusys
+                                            </button>
+                                          )}
+                                          <button
+                                            type="button"
+                                            onClick={() => executarAtributoRPC(item, 'manter_la')}
+                                            className="inline-flex h-7 items-center rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2 text-[11px] font-medium text-cyan-200 hover:bg-cyan-500/20"
+                                          >
+                                            Manter LA Report
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => executarAtributoRPC(item, 'revisar')}
+                                            className="inline-flex h-7 items-center rounded-md border border-amber-500/30 bg-amber-500/10 px-2 text-[11px] font-medium text-amber-200 hover:bg-amber-500/20"
+                                          >
+                                            Revisar
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => executarAtributoRPC(item, 'ignorar')}
+                                            className="inline-flex h-7 items-center rounded-md border border-slate-600 bg-slate-800 px-2 text-[11px] font-medium text-slate-300 hover:bg-slate-700"
+                                          >
+                                            Ignorar
+                                          </button>
+                                        </>
+                                      )}
+                                      {!podeAplicar && (
+                                        <div className="basis-full text-right text-[10px] text-slate-500">
+                                          checklist interno
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
 
-            {totalAtributosFiltroExato > atributosVisiveis.length && (
+            {(totalAlunosAtributosFiltrado > alunosAtributosVisiveis.length || totalAtributosFiltroExato > atributosFiltrados.length) && (
               <div className="border-t border-slate-700/70 px-4 py-2 text-right text-[11px] text-slate-500">
-                Mostrando {atributosVisiveis.length} de {totalAtributosFiltroExato} neste filtro. O lote carrega primeiro prioridade alta, financeiro, foto/Instagram, cadastro e checklist.
+                Mostrando {alunosAtributosVisiveis.length} de {totalAlunosAtributosFiltrado} aluno(s) neste filtro
+                {totalAtributosFiltroExato > atributosFiltrados.length
+                  ? ` - existem mais tarefas no banco (${atributosFiltrados.length} carregadas de ${totalAtributosFiltroExato})`
+                  : ` - ${atributosFiltrados.length} tarefa(s) carregadas`}
               </div>
             )}
           </div>
