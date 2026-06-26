@@ -73,6 +73,21 @@ const formVariants = {
   }
 };
 
+function getLoginErrorMessage(error: Error) {
+  const message = error.message || '';
+  const name = error.name || '';
+
+  if (
+    message === 'Timeout no login' ||
+    message.includes('Failed to fetch') ||
+    name.includes('AuthRetryableFetchError')
+  ) {
+    return 'Erro de comunicacao com o servidor de autenticacao. Verifique a configuracao de CORS/Allowed Origins no Supabase.';
+  }
+
+  return 'Email ou senha incorretos';
+}
+
 export function LoginPage() {
   const navigate = useNavigate();
   const { signIn, signOut, user, loading: authLoading } = useAuth();
@@ -111,7 +126,7 @@ export function LoginPage() {
       const { error } = await Promise.race([loginPromise, timeoutPromise]);
       
       if (error) {
-        toast.error(error.message === 'Timeout no login' ? 'Login demorou demais, tente novamente' : 'Email ou senha incorretos');
+        toast.error(getLoginErrorMessage(error));
         return;
       }
 
