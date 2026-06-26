@@ -52,6 +52,11 @@ interface AtributoDivergencia {
   detectado_em: string | null;
 }
 
+interface AtributoTotais {
+  total: number;
+  grupos: Record<string, number>;
+}
+
 interface TipoMatricula { id: number; codigo: string; nome: string }
 
 const TIPO_META: Record<string, { label: string; descricao: string; icon: typeof Link2; cor: string }> = {
@@ -64,7 +69,7 @@ const TIPO_META: Record<string, { label: string; descricao: string; icon: typeof
   disciplina_nao_mapeada: { label: 'Disciplina nova', descricao: 'Disciplina do Emusys sem mapeamento para curso', icon: HelpCircle, cor: 'violet' },
   professor_nao_mapeado: { label: 'Professor novo', descricao: 'Professor do Emusys sem mapeamento', icon: HelpCircle, cor: 'violet' },
   valor_fixado_divergente: { label: 'Valor fixado diverge', descricao: 'Valor editado manualmente difere da API', icon: AlertTriangle, cor: 'orange' },
-  auto_preview: { label: 'Sugestão do sync', descricao: 'Correções seguras propostas pelo sync. Valor de parcela e status não entram no apply automático.', icon: Zap, cor: 'emerald' },
+  auto_preview: { label: 'Sync matricula/grade', descricao: 'Diferencas de curso, professor, dia ou horario vindas do sync. Financeiro e fim de contrato exigem revisao.', icon: Zap, cor: 'emerald' },
 };
 
 const COR_CLASSES: Record<string, string> = {
@@ -79,35 +84,35 @@ const COR_CLASSES: Record<string, string> = {
 
 const ATRIBUTO_GRUPOS: Record<string, { label: string; descricao: string; icon: typeof Link2; cor: string; tipos: string[] }> = {
   cadastro: {
-    label: 'Cadastro',
-    descricao: 'Responsavel, telefone e email que precisam bater entre LA e Emusys',
+    label: 'Dif. cadastro',
+    descricao: 'Responsavel, telefone e email diferentes entre LA e Emusys',
     icon: Phone,
     cor: 'sky',
     tipos: ['contato_divergente', 'responsavel_divergente'],
   },
   imagem: {
     label: 'Foto/Instagram',
-    descricao: 'Foto ou Instagram ausente/divergente para enriquecer cadastro',
+    descricao: 'Campos que existem no Emusys e podem popular o cadastro LA',
     icon: ImageIcon,
     cor: 'violet',
     tipos: ['foto_ausente', 'instagram_ausente', 'instagram_divergente'],
   },
   financeiro: {
-    label: 'Financeiro',
+    label: 'Dif. financeiro',
     descricao: 'Status financeiro, forma de pagamento e renovacao vindos do contrato Emusys',
     icon: CreditCard,
     cor: 'orange',
     tipos: ['status_financeiro_divergente', 'forma_pagamento_divergente', 'aguardando_renovacao_divergente'],
   },
   contrato: {
-    label: 'Contrato/Anamnese',
-    descricao: 'Checklist interno do LA para assinatura e ficha do aluno',
+    label: 'Checklist LA',
+    descricao: 'Pendencias internas do LA, sem dado externo para aplicar automaticamente',
     icon: FileText,
     cor: 'amber',
     tipos: ['anamnese_pendente', 'contrato_assinatura_pendente'],
   },
   criticas: {
-    label: 'Pendencias criticas',
+    label: 'Criticas',
     descricao: 'Casos de alto impacto para atendimento ou financeiro',
     icon: ShieldAlert,
     cor: 'red',
@@ -150,6 +155,13 @@ const CAMPO_LABEL: Record<string, string> = {
 const CAMPO_MONETARIO = new Set(['valor_cheio', 'valor_parcela', 'desconto_fixo', 'desconto_condicional']);
 
 const PER_PAGE = 20;
+const ATRIBUTO_LIMITES_CARREGAMENTO: Record<string, number> = {
+  criticas: 140,
+  financeiro: 160,
+  imagem: 140,
+  cadastro: 180,
+  contrato: 100,
+};
 
 function fmtBRL(v: any): string {
   const n = Number(v);
@@ -158,7 +170,15 @@ function fmtBRL(v: any): string {
 }
 
 // "tipo aplicável" = divergência com sugestão que dá pra aplicar direto da API
-const CAMPOS_ALTO_RISCO = new Set(['status', 'data_saida', 'emusys_matricula_id']);
+const CAMPOS_ALTO_RISCO = new Set([
+  'status',
+  'data_saida',
+  'emusys_matricula_id',
+  'data_fim_contrato',
+  'valor_cheio',
+  'desconto_fixo',
+  'desconto_condicional',
+]);
 const CAMPOS_DERIVADOS = new Set(['valor_parcela']);
 
 function temSugestaoAplicavel(item: ConciliacaoItem): boolean {
@@ -193,6 +213,22 @@ function grupoAtributo(item: AtributoDivergencia): string {
     return 'criticas';
   }
   return ATRIBUTO_TIPO_META[item.tipo_divergencia]?.grupo || 'cadastro';
+}
+
+const ATRIBUTO_GRUPO_PRIORIDADE: Record<string, number> = {
+  criticas: 0,
+  financeiro: 1,
+  cadastro: 2,
+  imagem: 3,
+  contrato: 4,
+};
+
+function origemAtributo(item: AtributoDivergencia): string {
+  const grupo = grupoAtributo(item);
+  if (grupo === 'contrato') return 'Checklist interno LA';
+  if (item.tipo_divergencia === 'foto_ausente' || item.tipo_divergencia.includes('instagram')) return 'Emusys -> LA';
+  if (grupo === 'financeiro') return 'Contrato Emusys';
+  return 'LA x Emusys';
 }
 
 function descricaoAtributo(item: AtributoDivergencia): { nosso: string; emusys: string; sugestao: string } {
@@ -315,6 +351,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
   const [loading, setLoading] = useState(true);
   const [loadingAtributos, setLoadingAtributos] = useState(true);
   const [atributos, setAtributos] = useState<AtributoDivergencia[]>([]);
+  const [atributoTotais, setAtributoTotais] = useState<AtributoTotais>({ total: 0, grupos: {} });
   const [salvando, setSalvando] = useState<Set<number>>(new Set());
   const [salvandoAtributo, setSalvandoAtributo] = useState<Set<number>>(new Set());
   const [tipos, setTipos] = useState<TipoMatricula[]>([]);
@@ -368,19 +405,67 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
     }
 
     try {
-      let query = (supabase as any)
-        .from('alunos_emusys_atributos_divergencias')
-        .select('id, unidade_id, aluno_id, emusys_student_id, emusys_matricula_id, tipo_divergencia, campo, valor_nosso, valor_emusys, sugestao, severidade, detectado_em')
-        .eq('resolvido', false)
-        .order('detectado_em', { ascending: false })
-        .limit(500);
+      const unidadeSelecionada = unidadeId && unidadeId !== 'todos' ? unidadeId : null;
+      const selectAtributos = 'id, unidade_id, aluno_id, emusys_student_id, emusys_matricula_id, tipo_divergencia, campo, valor_nosso, valor_emusys, sugestao, severidade, detectado_em';
 
-      if (unidadeId && unidadeId !== 'todos') query = query.eq('unidade_id', unidadeId);
+      const baseRowsQuery = () => {
+        let query = (supabase as any)
+          .from('alunos_emusys_atributos_divergencias')
+          .select(selectAtributos)
+          .eq('resolvido', false)
+          .order('detectado_em', { ascending: false });
+        if (unidadeSelecionada) query = query.eq('unidade_id', unidadeSelecionada);
+        return query;
+      };
 
-      const { data: attrData, error: attrError } = await query;
-      if (attrError) throw attrError;
+      const baseCountQuery = () => {
+        let query = (supabase as any)
+          .from('alunos_emusys_atributos_divergencias')
+          .select('id', { count: 'exact', head: true })
+          .eq('resolvido', false);
+        if (unidadeSelecionada) query = query.eq('unidade_id', unidadeSelecionada);
+        return query;
+      };
 
-      const rows = (attrData || []) as AtributoDivergencia[];
+      const aplicarFiltroGrupo = (query: any, grupo: string) => {
+        if (grupo === 'criticas') return query.eq('severidade', 'alta');
+        const tiposGrupo = ATRIBUTO_GRUPOS[grupo]?.tipos || [];
+        return query.in('tipo_divergencia', tiposGrupo).neq('severidade', 'alta');
+      };
+
+      const grupos = Object.keys(ATRIBUTO_GRUPOS);
+      const { count: totalCount, error: totalCountError } = await baseCountQuery();
+      if (totalCountError) throw totalCountError;
+
+      const gruposCounts = await Promise.all(grupos.map(async grupo => {
+        const { count, error } = await aplicarFiltroGrupo(baseCountQuery(), grupo);
+        if (error) throw error;
+        return [grupo, count || 0] as const;
+      }));
+
+      const lotes = await Promise.all(grupos.map(async grupo => {
+        const limite = ATRIBUTO_LIMITES_CARREGAMENTO[grupo] || 100;
+        const { data, error } = await aplicarFiltroGrupo(baseRowsQuery(), grupo).limit(limite);
+        if (error) throw error;
+        return (data || []) as AtributoDivergencia[];
+      }));
+
+      const dedup = new Map<number, AtributoDivergencia>();
+      lotes.flat().forEach(row => dedup.set(row.id, row));
+      const rows = Array.from(dedup.values()).sort((a, b) => {
+        const pa = ATRIBUTO_GRUPO_PRIORIDADE[grupoAtributo(a)] ?? 99;
+        const pb = ATRIBUTO_GRUPO_PRIORIDADE[grupoAtributo(b)] ?? 99;
+        if (pa !== pb) return pa - pb;
+        if (a.severidade === 'alta' && b.severidade !== 'alta') return -1;
+        if (b.severidade === 'alta' && a.severidade !== 'alta') return 1;
+        return String(b.detectado_em || '').localeCompare(String(a.detectado_em || ''));
+      });
+
+      setAtributoTotais({
+        total: totalCount || 0,
+        grupos: Object.fromEntries(gruposCounts),
+      });
+
       const alunoIds = [...new Set(rows.map(r => r.aluno_id).filter(Boolean))] as number[];
       const alunoMap = new Map<number, string>();
       if (alunoIds.length) {
@@ -396,6 +481,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
     } catch (e: any) {
       toast.error(e?.message || 'Erro ao carregar atributos da conciliacao');
       setAtributos([]);
+      setAtributoTotais({ total: 0, grupos: {} });
     } finally {
       setLoadingAtributos(false);
     }
@@ -486,47 +572,33 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
         if (!nome.includes(q) && !campo.includes(q) && !tipo.includes(q)) return false;
       }
       return true;
+    }).sort((a, b) => {
+      const pa = ATRIBUTO_GRUPO_PRIORIDADE[grupoAtributo(a)] ?? 99;
+      const pb = ATRIBUTO_GRUPO_PRIORIDADE[grupoAtributo(b)] ?? 99;
+      if (pa !== pb) return pa - pb;
+      if (a.severidade === 'alta' && b.severidade !== 'alta') return -1;
+      if (b.severidade === 'alta' && a.severidade !== 'alta') return 1;
+      return String(b.detectado_em || '').localeCompare(String(a.detectado_em || ''));
     });
   }, [atributos, busca, filtroUnidade, filtroAtributoGrupo]);
   const atributosVisiveis = atributosFiltrados.slice(0, 80);
   const atributosPorGrupo = useMemo(() => {
+    if (atributoTotais.total > 0) return atributoTotais.grupos;
     const total: Record<string, number> = Object.fromEntries(Object.keys(ATRIBUTO_GRUPOS).map(g => [g, 0]));
     for (const item of atributos) {
       const grupo = grupoAtributo(item);
       total[grupo] = (total[grupo] || 0) + 1;
     }
     return total;
-  }, [atributos]);
+  }, [atributos, atributoTotais]);
   const totalAtributosFiltrado = atributosFiltrados.length;
-
-  // Resolve uma divergência: aplica no aluno (se houver campo/valor), fixa o campo,
-  // registra a decisão e marca como resolvida. Retorna true em sucesso.
-  const resolverDivergencia = useCallback(async (
-    item: ConciliacaoItem,
-    opts: { decisao: string; campo?: string; valor?: any; motivo?: string },
-  ): Promise<boolean> => {
-    const { data: authData } = await supabase.auth.getUser();
-    const email = authData.user?.email || 'usuario_app';
-    const agora = new Date().toISOString();
-
-    if (opts.campo) {
-      throw new Error('Alteracoes em alunos devem passar pela RPC guardada.');
-    }
-
-    const { error: eDec } = await supabase.from('matriculas_divergencias_decisoes').upsert({
-      divergencia_id: item.id, aluno_id: item.aluno_id, decisao: opts.decisao,
-      valor_escolhido: opts.valor ?? null,
-      motivo: opts.motivo || `Decisão via aba de conciliação: ${opts.decisao}`,
-      decidido_por: email, metadata: { tipo: item.tipo_divergencia, aluno_nome: item.aluno_nome, campo: opts.campo ?? null },
-      updated_at: agora,
-    }, { onConflict: 'divergencia_id' });
-    if (eDec) throw eDec;
-
-    const { error: eRes } = await supabase.from('matriculas_divergencias')
-      .update({ resolvido: true, updated_at: agora }).eq('id', item.id);
-    if (eRes) throw eRes;
-    return true;
-  }, []);
+  const totalAtributosPendente = atributoTotais.total || atributos.length;
+  const totalAtributosFiltroExato = filtroAtributoGrupo === 'todos'
+    ? totalAtributosPendente
+    : (atributoTotais.grupos[filtroAtributoGrupo] || totalAtributosFiltrado);
+  const totalAtributosCabecalho = busca.trim()
+    ? totalAtributosFiltrado
+    : totalAtributosFiltroExato;
 
   const removerDoEstado = useCallback((ids: number[]) => {
     const idSet = new Set(ids);
@@ -538,21 +610,6 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
     });
     setSelecionados(prev => { const n = new Set(prev); ids.forEach(id => n.delete(id)); return n; });
   }, []);
-
-  const executarUm = useCallback(async (
-    item: ConciliacaoItem, opts: { decisao: string; campo?: string; valor?: any; motivo?: string },
-  ) => {
-    setSalvando(prev => new Set(prev).add(item.id));
-    try {
-      await resolverDivergencia(item, opts);
-      removerDoEstado([item.id]);
-      toast.success('Decisão registrada.');
-    } catch (e: any) {
-      toast.error(e?.message || 'Erro ao salvar a decisão');
-    } finally {
-      setSalvando(prev => { const n = new Set(prev); n.delete(item.id); return n; });
-    }
-  }, [resolverDivergencia, removerDoEstado]);
 
   // aplica uma decisão via a RPC guardada (trava anti-vínculo-duplicado + régua de valor no banco)
   const aplicarDecisaoRPC = useCallback(async (
@@ -682,13 +739,13 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
     const alvos = itemsFiltrados.filter(i => selecionados.has(i.id));
     if (!alvos.length) return;
     setProcessandoLote(true);
-    const res = await Promise.allSettled(alvos.map(i => resolverDivergencia(i, { decisao: 'ignorar', motivo: 'Ignorado em lote' })));
+    const res = await Promise.allSettled(alvos.map(i => aplicarDecisaoRPC(i, 'ignorar')));
     const okIds = alvos.filter((_, idx) => res[idx].status === 'fulfilled').map(i => i.id);
     removerDoEstado(okIds);
     const falhas = res.length - okIds.length;
     toast[falhas ? 'warning' : 'success'](`${okIds.length} ignorada(s)${falhas ? `, ${falhas} falha(s)` : ''}.`);
     setProcessandoLote(false);
-  }, [itemsFiltrados, selecionados, resolverDivergencia, removerDoEstado]);
+  }, [itemsFiltrados, selecionados, aplicarDecisaoRPC, removerDoEstado]);
 
   const toggleSel = (id: number) => setSelecionados(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const toggleSelTodosPagina = () => {
@@ -704,7 +761,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
   const totalAberto = itemsFiltrados.length;
   const mostrarFiltroUnidade = (!unidadeId || unidadeId === 'todos') && unidades.length > 1;
 
-  // separa a prévia automática (informativa) dos tipos que pedem decisão humana
+  // separa sugestoes de sync/grade dos tipos que pedem decisão humana
   const previewQtd = dados.resumo?.auto_preview || 0;
   const decisaoEntries = Object.entries(dados.resumo || {}).filter(([t]) => t !== 'auto_preview');
   const previewAtivo = filtroTipo === 'auto_preview';
@@ -720,7 +777,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
             <Link2 className="w-5 h-5 text-cyan-400" /> Conciliação Emusys
           </h3>
           <p className="text-sm text-slate-400">
-            O sync só audita e propõe — <span className="text-slate-300">nada é alterado sem você aprovar</span>. Aprove ou mantenha cada divergência/sugestão.
+            O sync separa diferencas LA x Emusys, sugestoes de matricula/grade e checklist interno. <span className="text-slate-300">Nada e alterado sem decisao guardada.</span>
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -737,7 +794,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
         </div>
       </div>
 
-      {/* Faixa da prévia automática (informativa — não pede decisão) */}
+      {/* Faixa da previa de matricula/grade */}
       {previewQtd > 0 && (
         <button
           onClick={() => setFiltroTipo(previewAtivo ? null : 'auto_preview')}
@@ -752,10 +809,10 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
           </div>
           <div className="flex items-baseline gap-2">
             <span className="text-3xl font-bold text-emerald-200 tabular-nums leading-none">{previewQtd}</span>
-            <span className="text-sm font-semibold uppercase tracking-wide text-emerald-300">Sugestões do sync</span>
+            <span className="text-sm font-semibold uppercase tracking-wide text-emerald-300">Sugestoes de matricula/grade</span>
           </div>
           <p className="hidden md:block text-xs text-emerald-300/70 leading-tight max-w-sm">
-            Correções seguras do sync. Valor de parcela e status ficam bloqueados para revisão específica.
+            Dia, horario, curso ou professor passam por RPC. Financeiro e fim de contrato ficam em revisao especifica.
           </p>
           <span className="ml-auto shrink-0 inline-flex items-center gap-1.5 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-[11px] font-medium text-emerald-300">
             {previewAtivo ? 'filtrando' : 'clique para revisar'}
@@ -827,9 +884,13 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
           <span className="text-sm text-slate-500 ml-auto">
             {totalDecisaoFiltrado > 0 && <span>{totalDecisaoFiltrado} p/ decisão</span>}
             {totalDecisaoFiltrado > 0 && totalPreviewFiltrado > 0 && <span className="text-slate-600"> · </span>}
-            {totalPreviewFiltrado > 0 && <span className="text-emerald-500/80">{totalPreviewFiltrado} automática(s)</span>}
-            {(totalDecisaoFiltrado > 0 || totalPreviewFiltrado > 0) && totalAtributosFiltrado > 0 && <span className="text-slate-600"> · </span>}
-            {totalAtributosFiltrado > 0 && <span className="text-cyan-400/80">{totalAtributosFiltrado} atributo(s)</span>}
+            {totalPreviewFiltrado > 0 && <span className="text-emerald-500/80">{totalPreviewFiltrado} sync(s)</span>}
+            {(totalDecisaoFiltrado > 0 || totalPreviewFiltrado > 0) && totalAtributosCabecalho > 0 && <span className="text-slate-600"> · </span>}
+            {totalAtributosCabecalho > 0 && (
+              <span className="text-cyan-400/80">
+                {totalAtributosCabecalho} atributo(s){busca.trim() ? ' carregado(s)' : ' no banco'}
+              </span>
+            )}
           </span>
         </div>
       )}
@@ -851,8 +912,8 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                   <th className="px-4 py-3 font-medium">Aluno</th>
                   <th className="px-4 py-3 font-medium">Unidade</th>
                   <th className="px-4 py-3 font-medium">Tipo</th>
-                  <th className="px-4 py-3 font-medium">Nosso cadastro</th>
-                  <th className="px-4 py-3 font-medium">Na API do Emusys</th>
+                  <th className="px-4 py-3 font-medium">No LA</th>
+                  <th className="px-4 py-3 font-medium">No Emusys/sync</th>
                   <th className="px-4 py-3 font-medium text-right">Ação</th>
                 </tr>
               </thead>
@@ -877,7 +938,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                       <td className="px-4 py-3">
                         <span className={cn('inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 text-[11px] font-medium', COR_CLASSES[meta.cor])}>
                           {isPreview && <Zap className="w-3 h-3 shrink-0" />}
-                          {isPreview ? 'Sugestão' : meta.label}
+                          {isPreview ? 'Sync grade' : meta.label}
                         </span>
                       </td>
                       {isPreview ? (
@@ -914,7 +975,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                                 {isPreviewAplicavel && (
                                   <DropdownMenuItem onClick={() => executarRPC(item, 'aprovar', limparPatchGuardado(item.valor_api?.patch || {}))}
                                     className="cursor-pointer text-emerald-400 focus:text-emerald-400 focus:bg-emerald-500/10">
-                                    <Check className="w-4 h-4 mr-2" /> Aprovar (aplicar)
+                                    <Check className="w-4 h-4 mr-2" /> Aprovar via RPC
                                   </DropdownMenuItem>
                                 )}
                                 {isPreviewAltoRisco && (
@@ -941,16 +1002,12 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                                   </DropdownMenuItem>
                                 )}
                                 {!isOrfao && (
-                                  <DropdownMenuItem onClick={() => (
-                                      isPreview
-                                        ? executarRPC(item, 'manter', patchAtualDoPreview(item))
-                                        : executarUm(item, { decisao: 'manter_nosso' })
-                                    )}
+                                  <DropdownMenuItem onClick={() => executarRPC(item, 'manter', isPreview ? patchAtualDoPreview(item) : {})}
                                     className="cursor-pointer text-slate-300">
-                                    <Check className="w-4 h-4 mr-2" /> Manter nosso
+                                    <Check className="w-4 h-4 mr-2" /> Manter LA
                                   </DropdownMenuItem>
                                 )}
-                                <DropdownMenuItem onClick={() => executarUm(item, { decisao: 'ignorar' })}
+                                <DropdownMenuItem onClick={() => executarRPC(item, 'ignorar')}
                                   className="cursor-pointer text-slate-400">
                                   <X className="w-4 h-4 mr-2" /> Ignorar
                                 </DropdownMenuItem>
@@ -1092,14 +1149,14 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
               <div>
                 <h4 className="flex items-center gap-2 text-sm font-semibold text-slate-100">
                   <ShieldAlert className="h-4 w-4 text-cyan-300" />
-                  Atributos do aluno
+                  Diferencas LA x Emusys e checklist LA
                 </h4>
                 <p className="mt-1 max-w-3xl text-xs leading-relaxed text-slate-400">
-                  Fila expandida do endpoint /matriculas: cadastro, foto, Instagram, financeiro e checklist interno. As acoes abaixo passam por RPC guardada e registram auditoria.
+                  Cadastro, foto, Instagram e financeiro podem popular o LA a partir do Emusys. Anamnese e contrato sao checklist interno do LA. Todas as acoes passam por RPC guardada.
                 </p>
               </div>
               <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-[11px] font-medium text-cyan-300">
-                {atributos.length} pendente(s)
+                {totalAtributosPendente} pendente(s) no banco · {atributos.length} carregada(s)
               </span>
             </div>
           </div>
@@ -1145,9 +1202,9 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                       <th className="px-4 py-3 font-medium">Aluno</th>
                       <th className="px-4 py-3 font-medium">Unidade</th>
                       <th className="px-4 py-3 font-medium">Tipo</th>
-                      <th className="px-4 py-3 font-medium">No LA</th>
-                      <th className="px-4 py-3 font-medium">No Emusys</th>
-                      <th className="px-4 py-3 font-medium">Leitura sugerida</th>
+                      <th className="px-4 py-3 font-medium">Leitura LA</th>
+                      <th className="px-4 py-3 font-medium">Fonte externa/interna</th>
+                      <th className="px-4 py-3 font-medium">Acao sugerida</th>
                       <th className="px-4 py-3 font-medium text-right">Status</th>
                     </tr>
                   </thead>
@@ -1156,6 +1213,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                       const meta = ATRIBUTO_TIPO_META[item.tipo_divergencia] || { label: item.tipo_divergencia, cor: 'sky', icon: HelpCircle };
                       const Icon = meta.icon;
                       const desc = descricaoAtributo(item);
+                      const origem = origemAtributo(item);
                       const podeAplicar = ATRIBUTO_CAMPOS_APLICAVEIS.has(item.campo);
                       const busy = salvandoAtributo.has(item.id);
                       return (
@@ -1172,6 +1230,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                               <Icon className="h-3 w-3 shrink-0" />
                               {meta.label}
                             </span>
+                            <div className="mt-1 text-[10px] uppercase tracking-wide text-slate-500">{origem}</div>
                             {item.severidade === 'alta' && (
                               <span className="ml-1 inline-flex rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-300">
                                 critico
@@ -1196,7 +1255,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                                   onClick={() => executarAtributoRPC(item, 'aplicar_emusys')}
                                   className="inline-flex h-7 items-center rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 text-[11px] font-medium text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-50"
                                 >
-                                  Emusys
+                                  Aplicar Emusys
                                 </button>
                               )}
                               <button
@@ -1238,9 +1297,9 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
               </div>
             )}
 
-            {atributosFiltrados.length > atributosVisiveis.length && (
+            {totalAtributosFiltroExato > atributosVisiveis.length && (
               <div className="border-t border-slate-700/70 px-4 py-2 text-right text-[11px] text-slate-500">
-                Mostrando {atributosVisiveis.length} de {atributosFiltrados.length}. Use busca/unidade/blocos para refinar.
+                Mostrando {atributosVisiveis.length} de {totalAtributosFiltroExato} neste filtro. O lote carrega primeiro criticas, financeiro, foto/Instagram, cadastro e checklist.
               </div>
             )}
           </div>

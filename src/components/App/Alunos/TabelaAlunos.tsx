@@ -1223,7 +1223,7 @@ export function TabelaAlunos({
       setConfirmacaoReset('');
       onRecarregar();
       
-      alert(`✅ Reset concluído!\n\n• ${snapshotData?.length || 0} registros salvos no histórico\n• ${alunosAtivos?.length || 0} matrículas ativas/trancadas resetadas para "Em aberto"`);
+      alert(`✅ Reset concluído!\n\n• ${snapshotData?.length || 0} registros salvos no histórico\n• ${alunosAtivos?.length || 0} matrículas ativas/trancadas resetadas para "Sem sync financeiro"`);
     } catch (error) {
       console.error('Erro ao resetar mês:', error);
       alert('Erro ao resetar mês. Tente novamente.');
@@ -1538,7 +1538,7 @@ export function TabelaAlunos({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="todos">Pagamento</SelectItem>
-              <SelectItem value="-">Em aberto</SelectItem>
+              <SelectItem value="-">Sem sync financeiro</SelectItem>
               <SelectItem value="em_dia">Em dia</SelectItem>
               <SelectItem value="inadimplente">Inadimplente</SelectItem>
               <SelectItem value="parcial">Parcial</SelectItem>
@@ -1921,14 +1921,17 @@ export function TabelaAlunos({
             <strong className={inadimplenciaInfo.total > 0 ? 'text-red-200' : 'text-amber-100'}>
               {inadimplenciaInfo.total > 0 
                 ? `${inadimplenciaInfo.total} aluno${inadimplenciaInfo.total !== 1 ? 's' : ''} inadimplente${inadimplenciaInfo.total !== 1 ? 's' : ''}`
-                : `${inadimplenciaInfo.pendentes} aluno${inadimplenciaInfo.pendentes !== 1 ? 's' : ''} com status financeiro em aberto`
+                : `${inadimplenciaInfo.pendentes} aluno${inadimplenciaInfo.pendentes !== 1 ? 's' : ''} sem status financeiro sincronizado`
               }
             </strong>
             {inadimplenciaInfo.total > 0 && (
               <> — R$ {inadimplenciaInfo.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} em parcelas marcadas como não pagas</>
             )}
             {inadimplenciaInfo.pendentes > 0 && inadimplenciaInfo.total > 0 && (
-              <> • {inadimplenciaInfo.pendentes} ainda estão sem status financeiro</>
+              <> • {inadimplenciaInfo.pendentes} ainda estão sem status financeiro sincronizado</>
+            )}
+            {inadimplenciaInfo.pendentes > 0 && inadimplenciaInfo.total === 0 && (
+              <> — confirme pela aba Conciliação Emusys para gravar em dia/inadimplente no LA</>
             )}
           </span>
           <button
@@ -1939,7 +1942,7 @@ export function TabelaAlunos({
                 : 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-500/30 text-amber-100'
             }`}
           >
-            {inadimplenciaInfo.total > 0 ? 'Filtrar inadimplentes' : 'Filtrar em aberto'}
+            {inadimplenciaInfo.total > 0 ? 'Filtrar inadimplentes' : 'Ver sem sincronizar'}
           </button>
           <button
             onClick={() => setAlertaInadimplenciaDismissed(true)}
@@ -2301,7 +2304,7 @@ export function TabelaAlunos({
                         onChange={async (valor) => salvarCampo(aluno.id, 'status_pagamento', valor)}
                         tipo="select"
                         opcoes={[
-                          { value: '-', label: '- Em aberto' },
+                          { value: '-', label: '- Sem sync financeiro' },
                           { value: 'em_dia', label: '✓ Em dia' },
                           { value: 'inadimplente', label: '✗ Inadimplente' },
                           { value: 'parcial', label: '~ Parcial' },
@@ -2328,7 +2331,7 @@ export function TabelaAlunos({
                               </Tooltip>
                             );
                             case 'sem_parcela': return <span className="text-blue-400" title="Sem Parcela">○</span>;
-                            default: return <span className="text-slate-500" title="Em aberto">- Em aberto</span>;
+                            default: return <span className="text-slate-500" title="Sem status financeiro sincronizado">- Sem sync</span>;
                           }
                         }}
                         className="min-w-[40px]"
@@ -2634,7 +2637,7 @@ export function TabelaAlunos({
                           onChange={async (valor) => salvarCampo(outroCurso.id, 'status_pagamento', valor)}
                           tipo="select"
                           opcoes={[
-                            { value: '-', label: '- Em aberto' },
+                            { value: '-', label: '- Sem sync financeiro' },
                             { value: 'em_dia', label: '✓ Em dia' },
                             { value: 'inadimplente', label: '✗ Inadimplente' },
                             { value: 'parcial', label: '~ Parcial' },
@@ -2661,7 +2664,7 @@ export function TabelaAlunos({
                                 </Tooltip>
                               );
                               case 'sem_parcela': return <span className="text-blue-400" title="Sem Parcela">○</span>;
-                              default: return <span className="text-slate-500" title="Em aberto">- Em aberto</span>;
+                              default: return <span className="text-slate-500" title="Sem status financeiro sincronizado">- Sem sync</span>;
                             }
                           }}
                           className="min-w-[40px]"
@@ -3168,7 +3171,7 @@ export function TabelaAlunos({
               </p>
               <ul className="list-disc list-inside text-sm text-slate-400 space-y-1">
                 <li>Salvar um snapshot do status atual no histórico</li>
-                <li>Resetar <strong className="text-white">matrículas ativas/trancadas</strong> para "Em aberto"</li>
+                <li>Resetar <strong className="text-white">matrículas ativas/trancadas</strong> para "Sem sync financeiro"</li>
               </ul>
               <p className="text-red-400 font-medium text-sm">
                 ⚠️ Esta ação não pode ser desfeita!

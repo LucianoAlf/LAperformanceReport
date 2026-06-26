@@ -63,6 +63,7 @@ interface AlunoCompleto extends Aluno {
   data_fim_contrato?: string;
   data_ultima_renovacao?: string;
   numero_renovacoes?: number;
+  aguardando_renovacao?: boolean | null;
   is_segundo_curso?: boolean;
   is_ex_aluno?: boolean;
   is_aluno_retorno?: boolean;
@@ -968,6 +969,9 @@ export function ModalFichaAluno({
   }
 
   const fotoPerfil = dadosCompletos?.foto_url || aluno?.foto_url || dadosCompletos?.photo_url || aluno?.photo_url || null;
+  const instagramPerfil = dadosCompletos?.instagram || aluno?.instagram || null;
+  const statusFinanceiroPerfil = dadosCompletos?.status_pagamento || aluno?.status_pagamento || null;
+  const aguardandoRenovacaoPerfil = Boolean((dadosCompletos as any)?.aguardando_renovacao || (aluno as any)?.aguardando_renovacao);
 
   return (
     <Dialog open onOpenChange={onClose}>
@@ -984,6 +988,27 @@ export function ModalFichaAluno({
             <div>
               <span className="text-lg">Ficha do Aluno</span>
               <p className="text-sm text-slate-400 font-normal">{formData.nome || 'Sem nome'}</p>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] font-medium">
+                {instagramPerfil && (
+                  <span className="rounded-full border border-violet-500/30 bg-violet-500/10 px-2 py-0.5 text-violet-200">
+                    Instagram: {instagramPerfil}
+                  </span>
+                )}
+                {statusFinanceiroPerfil && statusFinanceiroPerfil !== '-' && (
+                  <span className={`rounded-full border px-2 py-0.5 ${
+                    statusFinanceiroPerfil === 'inadimplente'
+                      ? 'border-red-500/30 bg-red-500/10 text-red-200'
+                      : 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200'
+                  }`}>
+                    Financeiro: {getStatusPagamentoLabel(statusFinanceiroPerfil)}
+                  </span>
+                )}
+                {aguardandoRenovacaoPerfil && (
+                  <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-amber-200">
+                    Aguardando renovacao
+                  </span>
+                )}
+              </div>
             </div>
           </DialogTitle>
         </DialogHeader>

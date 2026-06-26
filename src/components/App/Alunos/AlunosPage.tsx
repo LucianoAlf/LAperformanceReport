@@ -61,6 +61,7 @@ export interface Aluno {
   tempo_permanencia_meses: number | null;
   status: string;
   status_pagamento?: string;
+  aguardando_renovacao?: boolean | null;
   dia_vencimento?: number;
   tipo_matricula_id: number | null;
   tipo_matricula_nome?: string;
@@ -380,7 +381,7 @@ export function AlunosPage() {
     const selectFields = `
       id, nome, classificacao, idade_atual, professor_atual_id, curso_id, modalidade,
       dia_aula, horario_aula, valor_parcela, valor_cheio, desconto_fixo, desconto_condicional, tempo_permanencia_meses,
-      status, status_pagamento, dia_vencimento, tipo_matricula_id, tipo_aluno, unidade_id, data_matricula,
+      status, status_pagamento, aguardando_renovacao, dia_vencimento, tipo_matricula_id, tipo_aluno, unidade_id, data_matricula,
       is_segundo_curso, data_nascimento, forma_pagamento_id, telefone, whatsapp, responsavel_telefone, data_saida,
       arquivado_em, arquivado_por, arquivado_motivo, arquivado_origem, arquivado_aluno_principal_id,
       foto_url, photo_url, instagram,
@@ -978,7 +979,7 @@ export function AlunosPage() {
     // Filtro por status de pagamento
     if (filtros.status_pagamento) {
       resultado = resultado.filter(a => {
-        const statusAluno = a.status_pagamento || '-'; // null/vazio = "Em aberto" (traço)
+        const statusAluno = a.status_pagamento || '-'; // null/vazio = sem sync financeiro
         return statusAluno === filtros.status_pagamento;
       });
     }
