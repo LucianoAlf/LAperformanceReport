@@ -106,8 +106,8 @@ const ATRIBUTO_GRUPOS: Record<string, { label: string; descricao: string; icon: 
     tipos: ['status_financeiro_divergente', 'forma_pagamento_divergente', 'aguardando_renovacao_divergente'],
   },
   contrato: {
-    label: 'Checklist LA Report',
-    descricao: 'Pendencias internas do LA Report, sem dado externo para aplicar automaticamente',
+    label: 'Contrato/Anamnese',
+    descricao: 'Contrato sem assinatura e anamnese pendente no LA Report',
     icon: FileText,
     cor: 'amber',
     tipos: ['anamnese_pendente', 'contrato_assinatura_pendente'],
@@ -166,11 +166,11 @@ const EMAILS_SYNC_TECNICO = new Set([
 ]);
 
 const ATRIBUTO_LIMITES_CARREGAMENTO: Record<string, number> = {
-  criticas: 140,
-  financeiro: 160,
-  imagem: 140,
-  cadastro: 180,
-  contrato: 100,
+  criticas: 1000,
+  financeiro: 1000,
+  imagem: 1000,
+  cadastro: 1000,
+  contrato: 1000,
 };
 
 function fmtBRL(v: any): string {
@@ -376,6 +376,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
   const [filtroTipo, setFiltroTipo] = useState<string | null>(null);
   const [filtroUnidade, setFiltroUnidade] = useState<string>('todas');
   const [filtroAtributoGrupo, setFiltroAtributoGrupo] = useState<string>('todos');
+  const [filtroAtributoTipo, setFiltroAtributoTipo] = useState<string>('todos');
   const [pagina, setPagina] = useState(1);
 
   // seleção em lote
@@ -565,7 +566,13 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
   }, [dados.items]);
 
   // reset de página ao mudar filtro
-  useEffect(() => { setPagina(1); }, [busca, filtroTipo, filtroUnidade]);
+  useEffect(() => { setPagina(1); }, [busca, filtroTipo, filtroUnidade, filtroAtributoGrupo, filtroAtributoTipo]);
+
+  useEffect(() => {
+    if (filtroAtributoTipo === 'todos' || filtroAtributoGrupo === 'todos') return;
+    const tiposGrupo = ATRIBUTO_GRUPOS[filtroAtributoGrupo]?.tipos || [];
+    if (!tiposGrupo.includes(filtroAtributoTipo)) setFiltroAtributoTipo('todos');
+  }, [filtroAtributoGrupo, filtroAtributoTipo]);
 
   const itemsFiltrados = useMemo(() => {
     const q = busca.trim().toLowerCase();
@@ -586,6 +593,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
     return atributos.filter(item => {
       if (filtroUnidade !== 'todas' && item.unidade_id !== filtroUnidade) return false;
       if (filtroAtributoGrupo !== 'todos' && grupoAtributo(item) !== filtroAtributoGrupo) return false;
+      if (filtroAtributoTipo !== 'todos' && item.tipo_divergencia !== filtroAtributoTipo) return false;
       if (q) {
         const nome = (item.aluno_nome || '').toLowerCase();
         const campo = (item.campo || '').toLowerCase();
@@ -601,8 +609,26 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
       if (b.severidade === 'alta' && a.severidade !== 'alta') return 1;
       return String(b.detectado_em || '').localeCompare(String(a.detectado_em || ''));
     });
-  }, [atributos, busca, filtroUnidade, filtroAtributoGrupo]);
+  }, [atributos, busca, filtroUnidade, filtroAtributoGrupo, filtroAtributoTipo]);
   const atributosVisiveis = atributosFiltrados.slice(0, 80);
+  const tiposAtributoDisponiveis = useMemo(() => {
+    const tiposBase = filtroAtributoGrupo === 'todos'
+      ? Object.keys(ATRIBUTO_TIPO_META)
+      : (ATRIBUTO_GRUPOS[filtroAtributoGrupo]?.tipos || []);
+    const contagens = new Map<string, number>();
+    for (const item of atributos) {
+      if (filtroUnidade !== 'todas' && item.unidade_id !== filtroUnidade) continue;
+      if (filtroAtributoGrupo !== 'todos' && grupoAtributo(item) !== filtroAtributoGrupo) continue;
+      contagens.set(item.tipo_divergencia, (contagens.get(item.tipo_divergencia) || 0) + 1);
+    }
+    return tiposBase
+      .map(tipo => ({
+        tipo,
+        count: contagens.get(tipo) || 0,
+        meta: ATRIBUTO_TIPO_META[tipo],
+      }))
+      .filter(item => item.meta && (item.count > 0 || item.tipo === filtroAtributoTipo));
+  }, [atributos, filtroAtributoGrupo, filtroAtributoTipo, filtroUnidade]);
   const atributosPorGrupo = useMemo(() => {
     if (atributoTotais.total > 0) return atributoTotais.grupos;
     const total: Record<string, number> = Object.fromEntries(Object.keys(ATRIBUTO_GRUPOS).map(g => [g, 0]));
@@ -614,7 +640,9 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
   }, [atributos, atributoTotais]);
   const totalAtributosFiltrado = atributosFiltrados.length;
   const totalAtributosPendente = atributoTotais.total || atributos.length;
-  const totalAtributosFiltroExato = filtroAtributoGrupo === 'todos'
+  const totalAtributosFiltroExato = filtroAtributoTipo !== 'todos'
+    ? totalAtributosFiltrado
+    : filtroAtributoGrupo === 'todos'
     ? totalAtributosPendente
     : (atributoTotais.grupos[filtroAtributoGrupo] || totalAtributosFiltrado);
   const totalAtributosCabecalho = busca.trim()
@@ -1172,10 +1200,10 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
               <div>
                 <h4 className="flex items-center gap-2 text-sm font-semibold text-slate-100">
                   <ShieldAlert className="h-4 w-4 text-cyan-300" />
-                  Diferencas LA Report x Emusys e checklist LA Report
+                  Divergencias LA Report x Emusys e checklist interno
                 </h4>
                 <p className="mt-1 max-w-3xl text-xs leading-relaxed text-slate-400">
-                  Cadastro, foto, Instagram e financeiro podem popular o LA Report a partir do Emusys. Anamnese e contrato sao checklist interno do LA Report. Todas as acoes passam por RPC guardada.
+                  Cadastro, foto, Instagram e financeiro comparam LA Report e Emusys. Contrato e anamnese sao checklist interno do LA Report. Todas as acoes passam por RPC guardada.
                 </p>
               </div>
               <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-[11px] font-medium text-cyan-300">
@@ -1192,7 +1220,10 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
               return (
                 <button
                   key={grupo}
-                  onClick={() => setFiltroAtributoGrupo(ativo ? 'todos' : grupo)}
+                  onClick={() => {
+                    setFiltroAtributoGrupo(ativo ? 'todos' : grupo);
+                    setFiltroAtributoTipo('todos');
+                  }}
                   className={cn(
                     'rounded-lg border p-3 text-left transition',
                     COR_CLASSES[meta.cor],
@@ -1209,6 +1240,61 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                 </button>
               );
             })}
+          </div>
+
+          <div className="border-t border-slate-700/70 px-4 py-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <Select value={filtroAtributoTipo} onValueChange={setFiltroAtributoTipo}>
+                <SelectTrigger className="h-9 w-[230px] border-slate-700 bg-slate-900/70 text-sm text-slate-200">
+                  <SelectValue placeholder="Tipo de pendencia" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos os tipos</SelectItem>
+                  {tiposAtributoDisponiveis.map(({ tipo, count, meta }) => (
+                    <SelectItem key={tipo} value={tipo}>
+                      {meta.label} ({count})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <div className="flex max-w-full flex-wrap gap-1.5">
+                {tiposAtributoDisponiveis.map(({ tipo, count, meta }) => {
+                  const ativo = filtroAtributoTipo === tipo;
+                  const Icon = meta.icon;
+                  return (
+                    <button
+                      key={tipo}
+                      type="button"
+                      onClick={() => setFiltroAtributoTipo(ativo ? 'todos' : tipo)}
+                      className={cn(
+                        'inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-[11px] font-medium transition',
+                        ativo
+                          ? 'border-cyan-400 bg-cyan-500/15 text-cyan-100'
+                          : 'border-slate-700 bg-slate-900/60 text-slate-300 hover:border-slate-500 hover:bg-slate-800'
+                      )}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      <span>{meta.label}</span>
+                      <span className="rounded-full bg-slate-950/60 px-1.5 py-0.5 text-[10px] text-slate-400">{count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {(filtroAtributoGrupo !== 'todos' || filtroAtributoTipo !== 'todos') && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFiltroAtributoGrupo('todos');
+                    setFiltroAtributoTipo('todos');
+                  }}
+                  className="ml-auto h-8 rounded-md border border-slate-700 px-2.5 text-[11px] font-medium text-slate-300 hover:bg-slate-800"
+                >
+                  Limpar filtros
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="border-t border-slate-700/70">
