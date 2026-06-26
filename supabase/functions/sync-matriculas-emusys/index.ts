@@ -19,6 +19,7 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { analisarFinanceiroContrato } from './financeiro.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -222,6 +223,45 @@ function extrairFormaPagamentoEmusys(mat: any): string | null {
   return temValor(valor) ? String(valor).trim() : null;
 }
 
+const TIPOS_DECISAO_IGNORA_SYNC = new Set([
+  'ignorar_matricula_api',
+  'responsavel_nao_aluno',
+]);
+
+const CAMPOS_FINANCEIROS_SYNC = [
+  'valor_cheio',
+  'desconto_fixo',
+  'desconto_condicional',
+  'valor_parcela',
+  'status_pagamento',
+  'tipo_matricula_id',
+];
+
+function deveIgnorarSyncPorDecisaoCanonica(decisao: any): boolean {
+  if (!decisao) return false;
+  return decisao.ignorar_sync === true || TIPOS_DECISAO_IGNORA_SYNC.has(String(decisao.tipo_decisao || ''));
+}
+
+function camposBloqueadosPorDecisaoCanonica(decisao: any): Set<string> {
+  const campos = new Set<string>();
+  if (!decisao) return campos;
+  for (const campo of Array.isArray(decisao.campos_bloqueados) ? decisao.campos_bloqueados : []) {
+    if (temValor(campo)) campos.add(String(campo));
+  }
+  if (String(decisao.tipo_decisao || '') === 'bloquear_auto_sync') {
+    for (const campo of CAMPOS_FINANCEIROS_SYNC) campos.add(campo);
+  }
+  return campos;
+}
+
+function combinarCamposFixados(...sets: Set<string>[]): Set<string> {
+  const combinado = new Set<string>();
+  for (const set of sets) {
+    for (const valor of set || []) combinado.add(valor);
+  }
+  return combinado;
+}
+
 function criarDivergenciaAtributo(a: any, mat: any, tipo: string, campo: string, valorNosso: any, valorEmusys: any, sugestao: any, severidade = 'media') {
   return {
     unidade_id: a.unidade_id,
@@ -318,7 +358,8 @@ function detectarDivergenciasAtributosAluno(a: any, mat: any, formaPagamentoLoca
     ));
   }
 
-  const statusFinanceiroEmusys = extrairStatusFinanceiroEmusys(mat);
+  const financeiro = analisarFinanceiroContrato(mat);
+  const statusFinanceiroEmusys = financeiro.statusPagamentoCanonico ?? extrairStatusFinanceiroEmusys(mat);
   if (!fixados.has('status_pagamento') && statusFinanceiroEmusys && normalizarTextoValor(statusFinanceiroEmusys) !== normalizarTextoValor(a.status_pagamento)) {
     rows.push(criarDivergenciaAtributo(
       a, mat, 'status_financeiro_divergente', 'status_pagamento',
@@ -538,7 +579,20 @@ serve(async (req) => {
 
     const { data: alunos } = await supabase.from('alunos')
       .select('id, unidade_id, nome, curso_id, professor_atual_id, emusys_matricula_id, emusys_student_id, status, data_fim_contrato, valor_cheio, desconto_fixo, desconto_condicional, valor_parcela, tipo_matricula_id, dia_aula, horario_aula, telefone, whatsapp, email, responsavel_nome, responsavel_telefone, foto_url, photo_url, instagram, status_pagamento, forma_pagamento_id, anamnese_preenchida, aguardando_renovacao')
-      .eq('unidade_id', u.id).eq('status', 'ativo');
+      .eq('unidade_id', u.id)
+      .is('arquivado_em', null);
+
+    const alunosParaReconciliar = (alunos || []).filter((a: any) => {
+      return a.status === 'ativo' || temValor(a.emusys_matricula_id);
+    });
+
+    const { data: decisoesCanonicas } = await supabase
+      .from('matriculas_emusys_decisoes_canonicas')
+      .select('*')
+      .eq('unidade_id', u.id);
+    const decisoesCanonicasPorMatricula = new Map<string, any>(
+      (decisoesCanonicas || []).map((d: any) => [String(d.emusys_matricula_id), d])
+    );
 
     // tipo_matricula_id -> codigo (BOLSISTA_INT, REGULAR, etc.) para a régua de classificação
     const { data: tiposMat } = await supabase.from('tipos_matricula').select('id, codigo');
@@ -549,7 +603,7 @@ serve(async (req) => {
       (alunos || []).filter((a: any) => a.emusys_matricula_id).map((a: any) => Number(a.emusys_matricula_id))
     );
 
-    const ids = (alunos || []).map((a: any) => a.id);
+    const ids = alunosParaReconciliar.map((a: any) => a.id);
     const fixadosMap = new Map<number, Set<string>>();
     // dedup: (aluno_id|tipo) que o usuário já decidiu — não reenfileirar (respeita a decisão humana)
     const jaDecidido = new Set<string>();
@@ -572,16 +626,22 @@ serve(async (req) => {
       }
     }
 
-    for (const a of alunos || []) {
+    for (const a of alunosParaReconciliar) {
       try {
         const tipoCodigo = a.tipo_matricula_id ? tipoCodigoMap.get(a.tipo_matricula_id) || null : null;
-        const r = reconciliar(a, u, porId, ativasPorNome, depara, profMap, banda, fixadosMap.get(a.id) || new Set(), tipoCodigo, idsVinculadosAtivos);
+        const fixadosBase = fixadosMap.get(a.id) || new Set();
+        const r = reconciliar(a, u, porId, ativasPorNome, depara, profMap, banda, fixadosBase, tipoCodigo, idsVinculadosAtivos, decisoesCanonicasPorMatricula);
         const matAtributos = r.detalhes?.emusys_matricula_id
           ? porId.get(Number(r.detalhes.emusys_matricula_id))
           : (a.emusys_matricula_id ? porId.get(Number(a.emusys_matricula_id)) : null);
-        if (matAtributos) {
+        if (matAtributos && !r.detalhes?.sync_ignorado_por_decisao_canonica) {
           const formaPagamentoLocal = a.forma_pagamento_id ? formasPagamentoMap.get(Number(a.forma_pagamento_id)) : null;
-          const atributos = detectarDivergenciasAtributosAluno(a, matAtributos, formaPagamentoLocal, fixadosMap.get(a.id) || new Set());
+          const decisaoAtributos = decisoesCanonicasPorMatricula.get(String(matAtributos.id));
+          const fixadosAtributos = combinarCamposFixados(
+            fixadosBase,
+            camposBloqueadosPorDecisaoCanonica(decisaoAtributos),
+          );
+          const atributos = detectarDivergenciasAtributosAluno(a, matAtributos, formaPagamentoLocal, fixadosAtributos);
           for (const atributo of atributos) {
             resumo.atributos[atributo.tipo_divergencia] = (resumo.atributos[atributo.tipo_divergencia] || 0) + 1;
             attrDivs.push(atributo);
@@ -621,7 +681,7 @@ serve(async (req) => {
 
         // FILA: cada divergência vira uma linha (respeitando dedup de decisões humanas)
         for (const dv of r.divergencias) {
-          if (jaDecidido.has(`${a.id}|${dv.tipo}`)) continue;
+          if (jaDecidido.has(`${a.id}|${dv.tipo}`) && !dv.reabrir) continue;
           resumo.fila[dv.tipo] = (resumo.fila[dv.tipo] || 0) + 1;
           divs.push({
             aluno_id: a.id, emusys_matricula_id: a.emusys_matricula_id, unidade_id: u.id,
@@ -652,7 +712,7 @@ serve(async (req) => {
     // agora tem match único → row antigo ficaria para sempre sem ser sobrescrito.
     {
       const alunosComAmbiguo = new Set(divs.filter((d: any) => d.tipo_divergencia === 'ambiguo').map((d: any) => d.aluno_id));
-      const alunosSemAmbiguo = (alunos || []).map((a: any) => a.id).filter((id: number) => !alunosComAmbiguo.has(id));
+      const alunosSemAmbiguo = alunosParaReconciliar.map((a: any) => a.id).filter((id: number) => !alunosComAmbiguo.has(id));
       if (alunosSemAmbiguo.length) {
         await supabase.from('matriculas_divergencias')
           .update({ resolvido: true, updated_at: new Date().toISOString() })
@@ -806,7 +866,7 @@ serve(async (req) => {
     }
 
     // limpa ausente_api obsoletos: alunos que foram encontrados na API nesta rodada
-    const encontradosIds = (alunos || [])
+    const encontradosIds = alunosParaReconciliar
       .filter((a: any) => {
         const eid = Number(a.emusys_matricula_id);
         return (a.emusys_matricula_id && porId.has(eid));
@@ -873,6 +933,7 @@ function reconciliar(
   a: any, u: any, porId: Map<number, any>, ativasPorNome: Map<string, any[]>,
   depara: Map<number, number | null>, profMap: Map<number, number>, banda: Set<number>, fixados: Set<string>,
   tipoCodigo: string | null, idsVinculados: Set<number> = new Set(),
+  decisoesCanonicasPorMatricula: Map<string, any> = new Map(),
 ): any {
   const upd: Record<string, any> = {};
   const divergencias: any[] = [];
@@ -897,9 +958,7 @@ function reconciliar(
         const disc = c.disciplinas || [];
         const turmasArr = disc.map((d: any) => d.nome_turma).filter(Boolean);
         const dias = turmasArr.map((t: string) => parseDiaDeTurma(t)).filter(Boolean) as string[];
-        const cheioM = c.valor_mensalidade != null ? Number(c.valor_mensalidade) : null;
-        const condM = Number(c.desconto_condicional || 0);
-        const parcelaM = cheioM != null ? Math.round((cheioM - condM) * 100) / 100 : null;
+        const financeiro = analisarFinanceiroContrato(m);
         const { cursos } = resolverCursoContrato(m, depara, banda);
         return {
           id: m.id, status: m.status, aluno_id: m.aluno?.id ?? null,
@@ -908,9 +967,13 @@ function reconciliar(
           dia: dias[0] || null,
           curso_id: cursos[0] ?? null,
           professor_id: resolverProfessorContrato(m, profMap),
-          cheio: cheioM, fixo: Number(c.desconto_fixo || 0), cond: condM,
-          parcela: (parcelaM != null && parcelaM >= 0) ? parcelaM : null,
-          parcela_invalida: !(parcelaM != null && parcelaM >= 0 && (cheioM ?? 0) > 0),
+          cheio: financeiro.valorCheio,
+          fixo: financeiro.descontoFixo,
+          cond: financeiro.descontoCondicional,
+          parcela: (financeiro.parcelaCanonica != null && financeiro.parcelaCanonica >= 0) ? financeiro.parcelaCanonica : null,
+          parcela_invalida: financeiro.bloqueiaValorAutomatico,
+          tipo_sugerido: financeiro.tipoSugerido,
+          sem_fatura_sem_cobranca: financeiro.contratoSemFaturaSemCobranca,
           data_fim: c.data_original_ultima_aula || null,
           sugerido_por_turma: !!(diaAluno && dias.some((d) => normalizarNome(d) === diaAluno)),
         };
@@ -923,29 +986,48 @@ function reconciliar(
     }
   }
 
+  const decisaoCanonica = decisoesCanonicasPorMatricula.get(String(mat.id)) || null;
+  if (deveIgnorarSyncPorDecisaoCanonica(decisaoCanonica)) {
+    return {
+      upd,
+      divergencias,
+      detalhes: {
+        emusys_matricula_id: mat.id,
+        status_api: mat.status,
+        sync_ignorado_por_decisao_canonica: true,
+        decisao_canonica: decisaoCanonica.tipo_decisao,
+      },
+    };
+  }
+  const fixadosEfetivos = combinarCamposFixados(
+    fixados,
+    camposBloqueadosPorDecisaoCanonica(decisaoCanonica),
+  );
+
   const statusAlvo = STATUS_API_PARA_NOSSO[mat.status] || 'ativo';
   const c = mat.contrato_atual || {};
-  const cheio = c.valor_mensalidade != null ? Number(c.valor_mensalidade) : null;
-  const fixo = Number(c.desconto_fixo || 0);
-  const cond = Number(c.desconto_condicional || 0);
-  // Parcela comercial dos relatorios: contrato mensal menos desconto condicional.
-  // O desconto_fixo fica auditado separadamente e nao entra em valor_parcela.
-  const parcelaComercial = cheio != null ? Math.round((cheio - cond) * 100) / 100 : null;
-  const liquidoFinanceiro = cheio != null ? Math.round((cheio - fixo - cond) * 100) / 100 : null;
-  const bolsa = c.bolsa === true;
+  const financeiro = analisarFinanceiroContrato(mat);
+  const cheio = financeiro.valorCheio;
+  const fixo = financeiro.descontoFixo;
+  const cond = financeiro.descontoCondicional;
+  // Para regular cobravel: mensalidade menos desconto condicional.
+  // Para bolsista integral/sem fatura: preco de tabela nao vira MRR/ticket.
+  const parcelaComercial = financeiro.parcelaCanonica;
+  const liquidoFinanceiro = financeiro.liquidoFinanceiro;
+  const bolsa = financeiro.bolsa;
   const dataFim = c.data_original_ultima_aula || null;
-  const statusFinanceiroEmusys = extrairStatusFinanceiroEmusys(mat);
+  const statusFinanceiroEmusys = financeiro.statusPagamentoCanonico ?? extrairStatusFinanceiroEmusys(mat);
   const fotoEmusys = extrairFotoAluno(mat);
 
   const diffs: Record<string, any> = {};
   const setCampo = (campo: string, vNovo: any, vAtual: any) => {
-    if (vNovo == null || fixados.has(campo)) return;
+    if (vNovo == null || fixadosEfetivos.has(campo)) return;
     if (!valoresIguaisParaCampo(campo, vNovo, vAtual)) { upd[campo] = vNovo; diffs[campo] = { de: vAtual, para: vNovo }; }
   };
 
   if (statusAlvo !== a.status) {
     upd.status = statusAlvo; diffs.status = { de: a.status, para: statusAlvo };
-    if (statusAlvo === 'evadido' && dataFim && !fixados.has('data_saida')) upd.data_saida = dataFim;
+    if (statusAlvo === 'evadido' && dataFim && !fixadosEfetivos.has('data_saida')) upd.data_saida = dataFim;
   }
   setCampo('data_fim_contrato', dataFim, a.data_fim_contrato);
   setCampo('status_pagamento', statusFinanceiroEmusys, a.status_pagamento);
@@ -955,18 +1037,47 @@ function reconciliar(
 
   // Regua de VALOR: contrato Emusys e a fonte da parcela comercial.
   if (cheio != null) {
-    if (parcelaComercial != null && parcelaComercial >= 0 && cheio > 0) {
+    if (!financeiro.bloqueiaValorAutomatico && parcelaComercial != null && parcelaComercial >= 0) {
       setCampo('valor_cheio', cheio, a.valor_cheio);
       setCampo('desconto_fixo', fixo, a.desconto_fixo);
       setCampo('desconto_condicional', cond, a.desconto_condicional);
       setCampo('valor_parcela', parcelaComercial, a.valor_parcela);
-    } else if (!fixados.has('valor_parcela')) {
+    } else if (!fixadosEfetivos.has('valor_parcela')) {
       // Parcela inválida (a API às vezes embute o desconto_fixo no valor_mensalidade → líquido<0) → revisão humana.
       if ((parcelaComercial ?? 0) > 0 && Number(a.valor_parcela ?? 0) !== parcelaComercial) {
         divergencias.push({
           tipo: 'valor_divergente', campo: 'valor_parcela', severidade: 'media',
-          valorApi: { cheio, fixo, cond, parcela_comercial: parcelaComercial, liquido_financeiro: liquidoFinanceiro },
+          valorApi: {
+            cheio,
+            fixo,
+            cond,
+            parcela_comercial: parcelaComercial,
+            parcela_tabela: financeiro.parcelaTabela,
+            liquido_financeiro: liquidoFinanceiro,
+            bolsa,
+            nr_faturas: financeiro.nrFaturas,
+            valor_total: financeiro.valorTotal,
+            sem_fatura_sem_cobranca: financeiro.contratoSemFaturaSemCobranca,
+          },
           sugestao: parcelaComercial,
+        });
+      } else if (financeiro.bloqueiaValorAutomatico) {
+        divergencias.push({
+          tipo: 'valor_divergente', campo: 'valor_parcela', severidade: 'alta',
+          valorApi: {
+            cheio,
+            fixo,
+            cond,
+            parcela_comercial: null,
+            parcela_tabela: financeiro.parcelaTabela,
+            liquido_financeiro: liquidoFinanceiro,
+            bolsa,
+            nr_faturas: financeiro.nrFaturas,
+            valor_total: financeiro.valorTotal,
+            sem_fatura_sem_cobranca: true,
+            motivo: 'Contrato sem faturas e sem cobranca automatica. Valor de tabela bloqueado para MRR/ticket.',
+          },
+          sugestao: null,
         });
       }
     }
@@ -975,18 +1086,19 @@ function reconciliar(
   // Régua de CLASSIFICAÇÃO: tipo de matrícula do nosso x realidade da API (bolsa/valor).
   // Bolsista→REGULAR só quando paga o CHEIO integral (sem desconto algum) — o flag `bolsa=false` da API
   // não é confiável p/ parciais (que têm desconto real). REGULAR→bolsista quando a API marca bolsa=true.
-  if (statusAlvo === 'ativo' && tipoCodigo && !fixados.has('tipo_matricula_id')) {
+  if (statusAlvo === 'ativo' && tipoCodigo && !fixadosEfetivos.has('tipo_matricula_id')) {
     const ehBolsista = tipoCodigo === 'BOLSISTA_INT' || tipoCodigo === 'BOLSISTA_PARC';
-    if (ehBolsista && !bolsa && cheio != null && cheio > 0 && parcelaComercial === cheio) {
+    if (ehBolsista && !bolsa && cheio != null && cheio > 0 && parcelaComercial === cheio && !financeiro.contratoSemFaturaSemCobranca) {
       divergencias.push({
         tipo: 'classificacao_divergente', campo: 'tipo_matricula_id', severidade: 'media',
-        valorApi: { bolsa, parcela_comercial: parcelaComercial, liquido_financeiro: liquidoFinanceiro, cheio, fixo, cond, tipo_sugerido: 'REGULAR' }, sugestao: 'REGULAR',
+        valorApi: { bolsa, efetivo: parcelaComercial, parcela_comercial: parcelaComercial, parcela_tabela: financeiro.parcelaTabela, liquido_financeiro: liquidoFinanceiro, cheio, fixo, cond, nr_faturas: financeiro.nrFaturas, valor_total: financeiro.valorTotal, tipo_sugerido: 'REGULAR' }, sugestao: 'REGULAR',
       });
-    } else if (tipoCodigo === 'REGULAR' && bolsa) {
-      const sug = (parcelaComercial ?? 0) <= 0 ? 'BOLSISTA_INT' : 'BOLSISTA_PARC';
+    } else if (tipoCodigo === 'REGULAR' && financeiro.tipoSugerido) {
+      const sug = financeiro.tipoSugerido;
       divergencias.push({
         tipo: 'classificacao_divergente', campo: 'tipo_matricula_id', severidade: 'media',
-        valorApi: { bolsa, parcela_comercial: parcelaComercial, liquido_financeiro: liquidoFinanceiro, cheio, fixo, cond, tipo_sugerido: sug }, sugestao: sug,
+        valorApi: { bolsa, efetivo: parcelaComercial, parcela_comercial: parcelaComercial, parcela_tabela: financeiro.parcelaTabela, liquido_financeiro: liquidoFinanceiro, cheio, fixo, cond, nr_faturas: financeiro.nrFaturas, valor_total: financeiro.valorTotal, sem_fatura_sem_cobranca: financeiro.contratoSemFaturaSemCobranca, tipo_sugerido: sug }, sugestao: sug,
+        reabrir: financeiro.contratoSemFaturaSemCobranca,
       });
     }
   }
