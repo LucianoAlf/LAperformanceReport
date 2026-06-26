@@ -94,10 +94,10 @@ const ATRIBUTO_GRUPOS: Record<string, { label: string; descricao: string; icon: 
   },
   financeiro: {
     label: 'Financeiro',
-    descricao: 'Status financeiro e forma de pagamento vindos do contrato Emusys',
+    descricao: 'Status financeiro, forma de pagamento e renovacao vindos do contrato Emusys',
     icon: CreditCard,
     cor: 'orange',
-    tipos: ['status_financeiro_divergente', 'forma_pagamento_divergente'],
+    tipos: ['status_financeiro_divergente', 'forma_pagamento_divergente', 'aguardando_renovacao_divergente'],
   },
   contrato: {
     label: 'Contrato/Anamnese',
@@ -123,6 +123,7 @@ const ATRIBUTO_TIPO_META: Record<string, { label: string; grupo: string; cor: st
   responsavel_divergente: { label: 'Responsavel diverge', grupo: 'cadastro', cor: 'sky', icon: Phone },
   status_financeiro_divergente: { label: 'Status financeiro', grupo: 'financeiro', cor: 'orange', icon: CreditCard },
   forma_pagamento_divergente: { label: 'Forma de pagamento', grupo: 'financeiro', cor: 'orange', icon: CreditCard },
+  aguardando_renovacao_divergente: { label: 'Aguardando renovacao', grupo: 'financeiro', cor: 'orange', icon: CreditCard },
   anamnese_pendente: { label: 'Anamnese pendente', grupo: 'contrato', cor: 'amber', icon: FileText },
   contrato_assinatura_pendente: { label: 'Contrato sem assinatura', grupo: 'contrato', cor: 'amber', icon: FileText },
 };
@@ -137,6 +138,7 @@ const ATRIBUTO_CAMPOS_APLICAVEIS = new Set([
   'responsavel_telefone',
   'status_pagamento',
   'forma_pagamento_id',
+  'aguardando_renovacao',
 ]);
 
 const CAMPO_LABEL: Record<string, string> = {
@@ -172,7 +174,7 @@ function textoCurtoValor(v: any): string {
   const preferidos = [
     'status_pagamento', 'status_financeiro', 'inadimplente', 'forma_pagamento',
     'cobranca_automatica_status', 'telefone', 'email', 'responsavel', 'instagram',
-    'foto_url', 'anamnese_preenchida', 'contrato_assinado', 'valor_parcela',
+    'foto_url', 'anamnese_preenchida', 'contrato_assinado', 'aguardando_renovacao', 'valor_parcela',
   ];
   const partes = preferidos
     .filter(chave => v[chave] != null && v[chave] !== '')

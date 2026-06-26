@@ -162,6 +162,25 @@ function extrairStatusFinanceiroEmusys(mat: any): string | null {
   return null;
 }
 
+function extrairAguardandoRenovacaoEmusys(mat: any): boolean | null {
+  const raw = mat?.contrato_atual?.aguardando_renovacao
+    ?? mat?.contrato_atual?.renovacao_pendente
+    ?? mat?.contrato_atual?.pendente_renovacao
+    ?? mat?.aguardando_renovacao
+    ?? mat?.renovacao_pendente
+    ?? mat?.aluno?.aguardando_renovacao;
+  if (typeof raw === 'boolean') return raw;
+  if (!temValor(raw)) return null;
+  const normalizado = normalizarNome(String(raw));
+  if (['true', 'sim', 's', '1', 'aguardando renovacao', 'renovacao pendente', 'pendente'].includes(normalizado)) {
+    return true;
+  }
+  if (['false', 'nao', 'n', '0', 'em dia', 'renovado'].includes(normalizado)) {
+    return false;
+  }
+  return null;
+}
+
 function extrairFormaPagamentoEmusys(mat: any): string | null {
   const valor = mat?.contrato_atual?.forma_pagamento
     ?? mat?.cobranca_automatica?.forma_pagamento
@@ -285,6 +304,17 @@ function detectarDivergenciasAtributosAluno(a: any, mat: any, formaPagamentoLoca
       { forma_pagamento: formaEmusys, cobranca_automatica_status: mat?.cobranca_automatica?.status ?? null },
       { forma_pagamento: formaEmusys },
       'baixa',
+    ));
+  }
+
+  const aguardandoRenovacaoEmusys = extrairAguardandoRenovacaoEmusys(mat);
+  if (!fixados.has('aguardando_renovacao') && aguardandoRenovacaoEmusys !== null && aguardandoRenovacaoEmusys !== a.aguardando_renovacao) {
+    rows.push(criarDivergenciaAtributo(
+      a, mat, 'aguardando_renovacao_divergente', 'aguardando_renovacao',
+      { aguardando_renovacao: a.aguardando_renovacao ?? null },
+      { aguardando_renovacao: aguardandoRenovacaoEmusys },
+      { aguardando_renovacao: aguardandoRenovacaoEmusys },
+      'media',
     ));
   }
 
@@ -470,7 +500,7 @@ serve(async (req) => {
     const formasPagamentoMap = new Map<number, any>((formasPagamento || []).map((f: any) => [f.id, f]));
 
     const { data: alunos } = await supabase.from('alunos')
-      .select('id, unidade_id, nome, curso_id, professor_atual_id, emusys_matricula_id, emusys_student_id, status, data_fim_contrato, valor_cheio, desconto_fixo, desconto_condicional, valor_parcela, tipo_matricula_id, dia_aula, horario_aula, telefone, whatsapp, email, responsavel_nome, responsavel_telefone, foto_url, photo_url, instagram, status_pagamento, forma_pagamento_id, anamnese_preenchida')
+      .select('id, unidade_id, nome, curso_id, professor_atual_id, emusys_matricula_id, emusys_student_id, status, data_fim_contrato, valor_cheio, desconto_fixo, desconto_condicional, valor_parcela, tipo_matricula_id, dia_aula, horario_aula, telefone, whatsapp, email, responsavel_nome, responsavel_telefone, foto_url, photo_url, instagram, status_pagamento, forma_pagamento_id, anamnese_preenchida, aguardando_renovacao')
       .eq('unidade_id', u.id).eq('status', 'ativo');
 
     // tipo_matricula_id -> codigo (BOLSISTA_INT, REGULAR, etc.) para a régua de classificação
