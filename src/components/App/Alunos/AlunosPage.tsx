@@ -96,6 +96,7 @@ export interface Aluno {
   arquivado_origem?: string | null;
   arquivado_aluno_principal_id?: number | null;
   foto_url?: string | null;
+  photo_url?: string | null;
   instagram?: string | null;
   anamnese_diagnosticos?: string[];
 }
@@ -295,16 +296,19 @@ export function AlunosPage() {
     }
   }
 
-  // Calcular alunos sem lançamento de pagamento (após dia 15)
+  // Calcular alunos sem status financeiro canônico (após dia 15)
   const alertaPagamentos = useMemo(() => {
     const hoje = new Date();
     const diaAtual = hoje.getDate();
     const mostrarAlerta = diaAtual >= 15;
 
-    const alunosSemLancamento = alunos.filter(a =>
-      a.status === 'Ativo' &&
-      (!a.status_pagamento || a.status_pagamento === '-' || a.status_pagamento === null)
-    );
+    const alunosSemLancamento = alunos.filter(a => {
+      const status = String(a.status || '').toLowerCase();
+      const tipoMatriculaId = Number(a.tipo_matricula_id || 0);
+      return (status === 'ativo' || status === 'trancado') &&
+        ![3, 4, 5].includes(tipoMatriculaId) &&
+        (!a.status_pagamento || a.status_pagamento === '-' || a.status_pagamento === null);
+    });
 
     return {
       mostrar: mostrarAlerta && alunosSemLancamento.length > 0,
@@ -379,7 +383,7 @@ export function AlunosPage() {
       status, status_pagamento, dia_vencimento, tipo_matricula_id, tipo_aluno, unidade_id, data_matricula,
       is_segundo_curso, data_nascimento, forma_pagamento_id, telefone, whatsapp, responsavel_telefone, data_saida,
       arquivado_em, arquivado_por, arquivado_motivo, arquivado_origem, arquivado_aluno_principal_id,
-      foto_url, instagram,
+      foto_url, photo_url, instagram,
       anamnese_preenchida, anamnese_preenchida_em, temperamento_codinome,
       professores:professor_atual_id!left(nome),
       cursos:curso_id!left(nome, is_projeto_banda),
@@ -1543,7 +1547,7 @@ export function AlunosPage() {
           >
             <AlertTriangle className="w-5 h-5 text-orange-400" />
             <span className="text-orange-300 font-medium">
-              {alertaPagamentos.quantidade} aluno{alertaPagamentos.quantidade > 1 ? 's' : ''} sem lançamento
+              {alertaPagamentos.quantidade} aluno{alertaPagamentos.quantidade > 1 ? 's' : ''} com status financeiro em aberto
             </span>
           </button>
         )}

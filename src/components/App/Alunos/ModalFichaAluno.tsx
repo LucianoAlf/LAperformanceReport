@@ -368,6 +368,7 @@ export function ModalFichaAluno({
     data_fim_contrato: null as Date | null,
     status: 'ativo',
     data_saida: null as Date | null,
+    instagram: '',
     is_segundo_curso: false,
     // Financeiro
     tipo_aluno: 'pagante',
@@ -547,6 +548,7 @@ export function ModalFichaAluno({
         data_fim_contrato: parseLocalDate(alunoData.data_fim_contrato),
         status: alunoData.status || 'ativo',
         data_saida: parseLocalDate(alunoData.data_saida),
+        instagram: alunoData.instagram || '',
         is_segundo_curso: alunoData.is_segundo_curso || false,
         tipo_aluno: alunoData.tipo_aluno || 'pagante',
         tipo_matricula_id: alunoData.tipo_matricula_id || 1,
@@ -607,6 +609,7 @@ export function ModalFichaAluno({
           data_fim_contrato: formatLocalDate(formData.data_fim_contrato),
           status: formData.status,
           data_saida: formatLocalDate(formData.data_saida),
+          instagram: formData.instagram?.trim() || null,
           is_segundo_curso: formData.is_segundo_curso,
           tipo_aluno: formData.tipo_aluno,
           tipo_matricula_id: formData.tipo_matricula_id,
@@ -964,13 +967,15 @@ export function ModalFichaAluno({
     );
   }
 
+  const fotoPerfil = dadosCompletos?.foto_url || aluno?.foto_url || dadosCompletos?.photo_url || aluno?.photo_url || null;
+
   return (
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-4xl max-h-[90vh] flex flex-col">
         <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-3">
-            {aluno?.foto_url ? (
-              <img src={aluno.foto_url} alt={formData.nome} className="w-14 h-14 rounded-full object-cover border-2 border-purple-500/50" />
+            {fotoPerfil ? (
+              <img src={fotoPerfil} alt={formData.nome} className="w-14 h-14 rounded-full object-cover border-2 border-purple-500/50" />
             ) : (
               <div className="w-14 h-14 rounded-full bg-purple-500/20 flex items-center justify-center">
                 <User className="w-6 h-6 text-purple-400" />
@@ -1056,6 +1061,17 @@ export function ModalFichaAluno({
                     </span>
                     <span className="text-xs text-slate-500">(calculado)</span>
                   </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <Label className="mb-2 block">Instagram</Label>
+                  <Input
+                    value={formData.instagram}
+                    onChange={(e) => setFormData({ ...formData, instagram: e.target.value })}
+                    placeholder="@usuario ou link do perfil"
+                  />
                 </div>
               </div>
 

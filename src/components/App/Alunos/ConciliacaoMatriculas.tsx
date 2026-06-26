@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useMemo, Fragment } from 'react';
 import {
   AlertTriangle, RefreshCw, Check, X, Loader2, Link2, UserX, Copy, HelpCircle,
   Search, MoreVertical, DollarSign, GraduationCap, ChevronLeft, ChevronRight, Zap, Link as LinkIcon,
+  FileText, Phone, CreditCard, Image as ImageIcon, AtSign, ShieldAlert,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
@@ -35,6 +36,22 @@ interface ConciliacaoPayload {
   items: ConciliacaoItem[];
 }
 
+interface AtributoDivergencia {
+  id: number;
+  unidade_id: string | null;
+  aluno_id: number | null;
+  aluno_nome?: string | null;
+  emusys_student_id: string | null;
+  emusys_matricula_id: string | null;
+  tipo_divergencia: string;
+  campo: string;
+  valor_nosso: any;
+  valor_emusys: any;
+  sugestao: any;
+  severidade: 'baixa' | 'media' | 'alta' | string;
+  detectado_em: string | null;
+}
+
 interface TipoMatricula { id: number; codigo: string; nome: string }
 
 const TIPO_META: Record<string, { label: string; descricao: string; icon: typeof Link2; cor: string }> = {
@@ -60,7 +77,68 @@ const COR_CLASSES: Record<string, string> = {
   emerald: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300',
 };
 
+const ATRIBUTO_GRUPOS: Record<string, { label: string; descricao: string; icon: typeof Link2; cor: string; tipos: string[] }> = {
+  cadastro: {
+    label: 'Cadastro',
+    descricao: 'Responsavel, telefone e email que precisam bater entre LA e Emusys',
+    icon: Phone,
+    cor: 'sky',
+    tipos: ['contato_divergente', 'responsavel_divergente'],
+  },
+  imagem: {
+    label: 'Foto/Instagram',
+    descricao: 'Foto ou Instagram ausente/divergente para enriquecer cadastro',
+    icon: ImageIcon,
+    cor: 'violet',
+    tipos: ['foto_ausente', 'instagram_ausente', 'instagram_divergente'],
+  },
+  financeiro: {
+    label: 'Financeiro',
+    descricao: 'Status financeiro e forma de pagamento vindos do contrato Emusys',
+    icon: CreditCard,
+    cor: 'orange',
+    tipos: ['status_financeiro_divergente', 'forma_pagamento_divergente'],
+  },
+  contrato: {
+    label: 'Contrato/Anamnese',
+    descricao: 'Checklist interno do LA para assinatura e ficha do aluno',
+    icon: FileText,
+    cor: 'amber',
+    tipos: ['anamnese_pendente', 'contrato_assinatura_pendente'],
+  },
+  criticas: {
+    label: 'Pendencias criticas',
+    descricao: 'Casos de alto impacto para atendimento ou financeiro',
+    icon: ShieldAlert,
+    cor: 'red',
+    tipos: [],
+  },
+};
+
+const ATRIBUTO_TIPO_META: Record<string, { label: string; grupo: string; cor: string; icon: typeof Link2 }> = {
+  foto_ausente: { label: 'Foto ausente', grupo: 'imagem', cor: 'violet', icon: ImageIcon },
+  instagram_ausente: { label: 'Instagram ausente', grupo: 'imagem', cor: 'violet', icon: AtSign },
+  instagram_divergente: { label: 'Instagram diverge', grupo: 'imagem', cor: 'violet', icon: AtSign },
+  contato_divergente: { label: 'Contato diverge', grupo: 'cadastro', cor: 'sky', icon: Phone },
+  responsavel_divergente: { label: 'Responsavel diverge', grupo: 'cadastro', cor: 'sky', icon: Phone },
+  status_financeiro_divergente: { label: 'Status financeiro', grupo: 'financeiro', cor: 'orange', icon: CreditCard },
+  forma_pagamento_divergente: { label: 'Forma de pagamento', grupo: 'financeiro', cor: 'orange', icon: CreditCard },
+  anamnese_pendente: { label: 'Anamnese pendente', grupo: 'contrato', cor: 'amber', icon: FileText },
+  contrato_assinatura_pendente: { label: 'Contrato sem assinatura', grupo: 'contrato', cor: 'amber', icon: FileText },
+};
+
 // rótulos legíveis dos campos que o sync aplica sozinho (chaves do upd da edge)
+const ATRIBUTO_CAMPOS_APLICAVEIS = new Set([
+  'foto_url',
+  'instagram',
+  'telefone',
+  'email',
+  'responsavel_nome',
+  'responsavel_telefone',
+  'status_pagamento',
+  'forma_pagamento_id',
+]);
+
 const CAMPO_LABEL: Record<string, string> = {
   status: 'status', data_fim_contrato: 'fim do contrato', data_saida: 'data de saída',
   curso_id: 'curso', professor_atual_id: 'professor', valor_cheio: 'valor cheio',
@@ -85,6 +163,53 @@ function temSugestaoAplicavel(item: ConciliacaoItem): boolean {
   return item.tipo_divergencia === 'classificacao_divergente' && item.sugestao != null;
 }
 
+function textoCurtoValor(v: any): string {
+  if (v == null || v === '') return '—';
+  if (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') return String(v);
+  if (Array.isArray(v)) return v.map(textoCurtoValor).filter(Boolean).join(', ') || '—';
+  if (typeof v !== 'object') return String(v);
+
+  const preferidos = [
+    'status_pagamento', 'status_financeiro', 'inadimplente', 'forma_pagamento',
+    'cobranca_automatica_status', 'telefone', 'email', 'responsavel', 'instagram',
+    'foto_url', 'anamnese_preenchida', 'contrato_assinado', 'valor_parcela',
+  ];
+  const partes = preferidos
+    .filter(chave => v[chave] != null && v[chave] !== '')
+    .map(chave => `${chave.replaceAll('_', ' ')}: ${String(v[chave])}`);
+
+  if (partes.length) return partes.join(' · ');
+  return Object.entries(v)
+    .slice(0, 3)
+    .map(([chave, valor]) => `${chave.replaceAll('_', ' ')}: ${textoCurtoValor(valor)}`)
+    .join(' · ') || '—';
+}
+
+function grupoAtributo(item: AtributoDivergencia): string {
+  if (item.severidade === 'alta') return 'criticas';
+  if (item.tipo_divergencia === 'status_financeiro_divergente' && item.valor_emusys?.status_pagamento === 'inadimplente') {
+    return 'criticas';
+  }
+  return ATRIBUTO_TIPO_META[item.tipo_divergencia]?.grupo || 'cadastro';
+}
+
+function descricaoAtributo(item: AtributoDivergencia): { nosso: string; emusys: string; sugestao: string } {
+  if (item.tipo_divergencia === 'foto_ausente') {
+    return { nosso: 'Sem foto no LA', emusys: 'Foto disponivel no Emusys', sugestao: 'Aplicar foto do Emusys' };
+  }
+  if (item.tipo_divergencia === 'anamnese_pendente') {
+    return { nosso: 'Anamnese nao preenchida', emusys: 'Checklist interno do LA', sugestao: 'Cobrar preenchimento' };
+  }
+  if (item.tipo_divergencia === 'contrato_assinatura_pendente') {
+    return { nosso: 'Contrato sem assinatura', emusys: 'Checklist interno do LA', sugestao: 'Regularizar assinatura' };
+  }
+  return {
+    nosso: textoCurtoValor(item.valor_nosso),
+    emusys: textoCurtoValor(item.valor_emusys),
+    sugestao: textoCurtoValor(item.sugestao),
+  };
+}
+
 function camposDoItem(item: ConciliacaoItem): string[] {
   const campos = new Set<string>();
   Object.keys(item.valor_api?.diffs || {}).forEach(c => campos.add(c));
@@ -100,6 +225,14 @@ function temCampoAltoRisco(item: ConciliacaoItem): boolean {
 function limparPatchGuardado(patch: Record<string, any> = {}): Record<string, any> {
   return Object.fromEntries(
     Object.entries(patch).filter(([campo, valor]) => !CAMPOS_DERIVADOS.has(campo) && valor !== undefined)
+  );
+}
+
+function patchAtualDoPreview(item: ConciliacaoItem): Record<string, any> {
+  return Object.fromEntries(
+    Object.entries(item.valor_api?.diffs || {})
+      .filter(([campo, diff]: [string, any]) => !CAMPOS_DERIVADOS.has(campo) && diff?.de !== undefined)
+      .map(([campo, diff]: [string, any]) => [campo, diff.de])
   );
 }
 
@@ -178,7 +311,10 @@ function descreverApi(item: ConciliacaoItem, tiposMap: Map<string, TipoMatricula
 export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null }) {
   const [dados, setDados] = useState<ConciliacaoPayload>({ resumo: {}, items: [] });
   const [loading, setLoading] = useState(true);
+  const [loadingAtributos, setLoadingAtributos] = useState(true);
+  const [atributos, setAtributos] = useState<AtributoDivergencia[]>([]);
   const [salvando, setSalvando] = useState<Set<number>>(new Set());
+  const [salvandoAtributo, setSalvandoAtributo] = useState<Set<number>>(new Set());
   const [tipos, setTipos] = useState<TipoMatricula[]>([]);
   const [unidades, setUnidades] = useState<{ id: string; nome: string }[]>([]);
   // mapas id→nome para legibilizar os diffs do auto_preview (curso/professor)
@@ -189,6 +325,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
   const [busca, setBusca] = useState('');
   const [filtroTipo, setFiltroTipo] = useState<string | null>(null);
   const [filtroUnidade, setFiltroUnidade] = useState<string>('todas');
+  const [filtroAtributoGrupo, setFiltroAtributoGrupo] = useState<string>('todos');
   const [pagina, setPagina] = useState(1);
 
   // seleção em lote
@@ -213,6 +350,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
 
   const carregar = useCallback(async () => {
     setLoading(true);
+    setLoadingAtributos(true);
     try {
       const { data, error } = await supabase.rpc('get_conciliacao_matriculas', {
         p_unidade_id: unidadeId && unidadeId !== 'todos' ? unidadeId : null,
@@ -225,6 +363,39 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
       setDados({ resumo: {}, items: [] });
     } finally {
       setLoading(false);
+    }
+
+    try {
+      let query = (supabase as any)
+        .from('alunos_emusys_atributos_divergencias')
+        .select('id, unidade_id, aluno_id, emusys_student_id, emusys_matricula_id, tipo_divergencia, campo, valor_nosso, valor_emusys, sugestao, severidade, detectado_em')
+        .eq('resolvido', false)
+        .order('detectado_em', { ascending: false })
+        .limit(500);
+
+      if (unidadeId && unidadeId !== 'todos') query = query.eq('unidade_id', unidadeId);
+
+      const { data: attrData, error: attrError } = await query;
+      if (attrError) throw attrError;
+
+      const rows = (attrData || []) as AtributoDivergencia[];
+      const alunoIds = [...new Set(rows.map(r => r.aluno_id).filter(Boolean))] as number[];
+      const alunoMap = new Map<number, string>();
+      if (alunoIds.length) {
+        const { data: alunosData, error: alunosError } = await supabase
+          .from('alunos')
+          .select('id, nome')
+          .in('id', alunoIds);
+        if (alunosError) throw alunosError;
+        (alunosData || []).forEach((a: any) => alunoMap.set(a.id, a.nome));
+      }
+
+      setAtributos(rows.map(row => ({ ...row, aluno_nome: row.aluno_id ? alunoMap.get(row.aluno_id) || null : null })));
+    } catch (e: any) {
+      toast.error(e?.message || 'Erro ao carregar atributos da conciliacao');
+      setAtributos([]);
+    } finally {
+      setLoadingAtributos(false);
     }
   }, [unidadeId]);
 
@@ -300,6 +471,31 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
   const totalPaginas = Math.max(1, Math.ceil(itemsFiltrados.length / PER_PAGE));
   const paginaAtual = Math.min(pagina, totalPaginas);
   const itemsPagina = itemsFiltrados.slice((paginaAtual - 1) * PER_PAGE, paginaAtual * PER_PAGE);
+  const unidadesMap = useMemo(() => new Map(unidades.map(u => [u.id, u.nome])), [unidades]);
+  const atributosFiltrados = useMemo(() => {
+    const q = busca.trim().toLowerCase();
+    return atributos.filter(item => {
+      if (filtroUnidade !== 'todas' && item.unidade_id !== filtroUnidade) return false;
+      if (filtroAtributoGrupo !== 'todos' && grupoAtributo(item) !== filtroAtributoGrupo) return false;
+      if (q) {
+        const nome = (item.aluno_nome || '').toLowerCase();
+        const campo = (item.campo || '').toLowerCase();
+        const tipo = (ATRIBUTO_TIPO_META[item.tipo_divergencia]?.label || item.tipo_divergencia).toLowerCase();
+        if (!nome.includes(q) && !campo.includes(q) && !tipo.includes(q)) return false;
+      }
+      return true;
+    });
+  }, [atributos, busca, filtroUnidade, filtroAtributoGrupo]);
+  const atributosVisiveis = atributosFiltrados.slice(0, 80);
+  const atributosPorGrupo = useMemo(() => {
+    const total: Record<string, number> = Object.fromEntries(Object.keys(ATRIBUTO_GRUPOS).map(g => [g, 0]));
+    for (const item of atributos) {
+      const grupo = grupoAtributo(item);
+      total[grupo] = (total[grupo] || 0) + 1;
+    }
+    return total;
+  }, [atributos]);
+  const totalAtributosFiltrado = atributosFiltrados.length;
 
   // Resolve uma divergência: aplica no aluno (se houver campo/valor), fixa o campo,
   // registra a decisão e marca como resolvida. Retorna true em sucesso.
@@ -380,7 +576,13 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
     try {
       await aplicarDecisaoRPC(item, decisao, patch, emusysMatriculaId);
       removerDoEstado([item.id]);
-      toast.success(decisao === 'vincular' ? 'Vinculado e populado.' : 'Aprovado e aplicado.');
+      toast.success(
+        decisao === 'vincular'
+          ? 'Vinculado e populado.'
+          : decisao === 'manter'
+            ? 'Nosso valor mantido e travado.'
+            : 'Aprovado e aplicado.'
+      );
     } catch (e: any) {
       toast.error(e?.message || 'Erro ao aplicar');
     } finally {
@@ -389,6 +591,40 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
   }, [aplicarDecisaoRPC, removerDoEstado]);
 
   // monta o patch (campos→valores) a partir de um candidato do Emusys para "vincular e popular"
+  const removerAtributoDoEstado = useCallback((id: number) => {
+    setAtributos(prev => prev.filter(item => item.id !== id));
+  }, []);
+
+  const executarAtributoRPC = useCallback(async (
+    item: AtributoDivergencia,
+    decisao: 'aplicar_emusys' | 'manter_la' | 'ignorar' | 'revisar',
+  ) => {
+    setSalvandoAtributo(prev => new Set(prev).add(item.id));
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+      const { error } = await supabase.rpc('aplicar_conciliacao_aluno_atributo', {
+        p_divergencia_id: item.id,
+        p_decisao: decisao,
+        p_decidido_por: authData.user?.email || 'usuario_app',
+      });
+      if (error) throw error;
+      if (decisao !== 'revisar') removerAtributoDoEstado(item.id);
+      toast.success(
+        decisao === 'aplicar_emusys'
+          ? 'Dado do Emusys aplicado.'
+          : decisao === 'manter_la'
+            ? 'Valor do LA mantido e travado.'
+            : decisao === 'ignorar'
+              ? 'Divergencia ignorada.'
+              : 'Marcado para revisar depois.'
+      );
+    } catch (e: any) {
+      toast.error(e?.message || 'Erro ao salvar atributo');
+    } finally {
+      setSalvandoAtributo(prev => { const n = new Set(prev); n.delete(item.id); return n; });
+    }
+  }, [removerAtributoDoEstado]);
+
   const patchDeCandidato = useCallback((c: any): Record<string, any> => {
     const p: Record<string, any> = {
       curso_id: c.curso_id,
@@ -549,14 +785,14 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
         </div>
       )}
 
-      {Object.keys(dados.resumo || {}).length === 0 && !loading && (
+      {Object.keys(dados.resumo || {}).length === 0 && atributos.length === 0 && !loading && !loadingAtributos && (
         <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 text-emerald-300 text-sm flex items-center gap-2">
           <Check className="w-4 h-4" /> Nenhuma divergência pendente. Tudo conciliado.
         </div>
       )}
 
       {/* Filtros */}
-      {!loading && (dados.items || []).length > 0 && (
+      {!loading && !loadingAtributos && ((dados.items || []).length > 0 || atributos.length > 0) && (
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -567,6 +803,12 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
             <button onClick={() => setFiltroTipo(null)}
               className="inline-flex items-center gap-1 rounded-lg border border-slate-600 px-3 h-10 text-sm text-slate-300 hover:bg-slate-700/50">
               <X className="w-3.5 h-3.5" /> {TIPO_META[filtroTipo]?.label || filtroTipo}
+            </button>
+          )}
+          {filtroAtributoGrupo !== 'todos' && (
+            <button onClick={() => setFiltroAtributoGrupo('todos')}
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-600 px-3 h-10 text-sm text-slate-300 hover:bg-slate-700/50">
+              <X className="w-3.5 h-3.5" /> {ATRIBUTO_GRUPOS[filtroAtributoGrupo]?.label || filtroAtributoGrupo}
             </button>
           )}
           {mostrarFiltroUnidade && (
@@ -584,6 +826,8 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
             {totalDecisaoFiltrado > 0 && <span>{totalDecisaoFiltrado} p/ decisão</span>}
             {totalDecisaoFiltrado > 0 && totalPreviewFiltrado > 0 && <span className="text-slate-600"> · </span>}
             {totalPreviewFiltrado > 0 && <span className="text-emerald-500/80">{totalPreviewFiltrado} automática(s)</span>}
+            {(totalDecisaoFiltrado > 0 || totalPreviewFiltrado > 0) && totalAtributosFiltrado > 0 && <span className="text-slate-600"> · </span>}
+            {totalAtributosFiltrado > 0 && <span className="text-cyan-400/80">{totalAtributosFiltrado} atributo(s)</span>}
           </span>
         </div>
       )}
@@ -695,7 +939,11 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
                                   </DropdownMenuItem>
                                 )}
                                 {!isOrfao && (
-                                  <DropdownMenuItem onClick={() => executarUm(item, { decisao: 'manter_nosso' })}
+                                  <DropdownMenuItem onClick={() => (
+                                      isPreview
+                                        ? executarRPC(item, 'manter', patchAtualDoPreview(item))
+                                        : executarUm(item, { decisao: 'manter_nosso' })
+                                    )}
                                     className="cursor-pointer text-slate-300">
                                     <Check className="w-4 h-4 mr-2" /> Manter nosso
                                   </DropdownMenuItem>
@@ -829,6 +1077,174 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
       )}
 
       {/* Barra flutuante de ações em lote */}
+      {loadingAtributos && !loading && (
+        <div className="flex items-center justify-center rounded-lg border border-slate-700 bg-slate-900/40 py-8 text-slate-400">
+          <Loader2 className="w-5 h-5 animate-spin mr-2" /> Carregando atributos do Emusys...
+        </div>
+      )}
+
+      {!loadingAtributos && atributos.length > 0 && (
+        <section className="rounded-xl border border-slate-700 bg-slate-900/60 overflow-hidden">
+          <div className="border-b border-slate-700/70 bg-slate-800/40 px-4 py-3">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h4 className="flex items-center gap-2 text-sm font-semibold text-slate-100">
+                  <ShieldAlert className="h-4 w-4 text-cyan-300" />
+                  Atributos do aluno
+                </h4>
+                <p className="mt-1 max-w-3xl text-xs leading-relaxed text-slate-400">
+                  Fila expandida do endpoint /matriculas: cadastro, foto, Instagram, financeiro e checklist interno. As acoes abaixo passam por RPC guardada e registram auditoria.
+                </p>
+              </div>
+              <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-[11px] font-medium text-cyan-300">
+                {atributos.length} pendente(s)
+              </span>
+            </div>
+          </div>
+
+          <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-5">
+            {Object.entries(ATRIBUTO_GRUPOS).map(([grupo, meta]) => {
+              const Icon = meta.icon;
+              const total = atributosPorGrupo[grupo] || 0;
+              const ativo = filtroAtributoGrupo === grupo;
+              return (
+                <button
+                  key={grupo}
+                  onClick={() => setFiltroAtributoGrupo(ativo ? 'todos' : grupo)}
+                  className={cn(
+                    'rounded-lg border p-3 text-left transition',
+                    COR_CLASSES[meta.cor],
+                    total === 0 && 'opacity-45',
+                    ativo ? 'ring-2 ring-offset-1 ring-offset-slate-900 ring-white/60' : 'hover:opacity-100'
+                  )}
+                >
+                  <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide opacity-80">
+                    <Icon className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{meta.label}</span>
+                  </div>
+                  <div className="mt-1 text-2xl font-bold tabular-nums">{total}</div>
+                  <p className="mt-1 line-clamp-2 text-[11px] leading-tight opacity-70">{meta.descricao}</p>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="border-t border-slate-700/70">
+            {atributosVisiveis.length === 0 ? (
+              <div className="flex items-center gap-2 px-4 py-6 text-sm text-slate-400">
+                <Check className="h-4 w-4 text-emerald-400" />
+                Nenhum atributo encontrado neste filtro.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[980px] text-sm">
+                  <thead className="bg-slate-800/60 text-left text-[11px] uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3 font-medium">Aluno</th>
+                      <th className="px-4 py-3 font-medium">Unidade</th>
+                      <th className="px-4 py-3 font-medium">Tipo</th>
+                      <th className="px-4 py-3 font-medium">No LA</th>
+                      <th className="px-4 py-3 font-medium">No Emusys</th>
+                      <th className="px-4 py-3 font-medium">Leitura sugerida</th>
+                      <th className="px-4 py-3 font-medium text-right">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-700/60">
+                    {atributosVisiveis.map(item => {
+                      const meta = ATRIBUTO_TIPO_META[item.tipo_divergencia] || { label: item.tipo_divergencia, cor: 'sky', icon: HelpCircle };
+                      const Icon = meta.icon;
+                      const desc = descricaoAtributo(item);
+                      const podeAplicar = ATRIBUTO_CAMPOS_APLICAVEIS.has(item.campo);
+                      const busy = salvandoAtributo.has(item.id);
+                      return (
+                        <tr key={item.id} className="hover:bg-slate-800/40">
+                          <td className="px-4 py-3 align-top">
+                            <div className="font-medium text-slate-100">{item.aluno_nome || `Aluno LA #${item.aluno_id || '—'}`}</div>
+                            <div className="mt-0.5 text-[11px] text-slate-500">
+                              {item.emusys_matricula_id ? `Emusys mat. ${item.emusys_matricula_id}` : 'Sem matricula Emusys'}
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 align-top text-slate-400">{item.unidade_id ? (unidadesMap.get(item.unidade_id) || '—') : '—'}</td>
+                          <td className="px-4 py-3 align-top">
+                            <span className={cn('inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium', COR_CLASSES[meta.cor])}>
+                              <Icon className="h-3 w-3 shrink-0" />
+                              {meta.label}
+                            </span>
+                            {item.severidade === 'alta' && (
+                              <span className="ml-1 inline-flex rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-300">
+                                critico
+                              </span>
+                            )}
+                          </td>
+                          <td className="max-w-[220px] px-4 py-3 align-top text-xs text-slate-300">
+                            <span className="line-clamp-3">{desc.nosso}</span>
+                          </td>
+                          <td className="max-w-[260px] px-4 py-3 align-top text-xs text-slate-400">
+                            <span className="line-clamp-3">{desc.emusys}</span>
+                          </td>
+                          <td className="max-w-[260px] px-4 py-3 align-top text-xs text-cyan-200">
+                            <span className="line-clamp-3">{desc.sugestao}</span>
+                          </td>
+                          <td className="px-4 py-3 align-top">
+                            <div className="flex min-w-[260px] flex-wrap justify-end gap-1.5">
+                              {podeAplicar && (
+                                <button
+                                  type="button"
+                                  disabled={busy}
+                                  onClick={() => executarAtributoRPC(item, 'aplicar_emusys')}
+                                  className="inline-flex h-7 items-center rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 text-[11px] font-medium text-emerald-200 hover:bg-emerald-500/20 disabled:opacity-50"
+                                >
+                                  Emusys
+                                </button>
+                              )}
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => executarAtributoRPC(item, 'manter_la')}
+                                className="inline-flex h-7 items-center rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2 text-[11px] font-medium text-cyan-200 hover:bg-cyan-500/20 disabled:opacity-50"
+                              >
+                                Manter LA
+                              </button>
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => executarAtributoRPC(item, 'revisar')}
+                                className="inline-flex h-7 items-center rounded-md border border-amber-500/30 bg-amber-500/10 px-2 text-[11px] font-medium text-amber-200 hover:bg-amber-500/20 disabled:opacity-50"
+                              >
+                                Revisar
+                              </button>
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => executarAtributoRPC(item, 'ignorar')}
+                                className="inline-flex h-7 items-center rounded-md border border-slate-600 bg-slate-800 px-2 text-[11px] font-medium text-slate-300 hover:bg-slate-700 disabled:opacity-50"
+                              >
+                                Ignorar
+                              </button>
+                            </div>
+                            {!podeAplicar && (
+                              <div className="mt-1 text-right text-[10px] text-slate-500">
+                                checklist interno
+                              </div>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {atributosFiltrados.length > atributosVisiveis.length && (
+              <div className="border-t border-slate-700/70 px-4 py-2 text-right text-[11px] text-slate-500">
+                Mostrando {atributosVisiveis.length} de {atributosFiltrados.length}. Use busca/unidade/blocos para refinar.
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
       {selecionados.size > 0 && (
         <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 bg-slate-800 border border-slate-600 rounded-lg shadow-2xl px-6 py-4 flex items-center gap-4">
           <span className="text-white font-medium">{selecionados.size} selecionada(s)</span>

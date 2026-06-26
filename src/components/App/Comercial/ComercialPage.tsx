@@ -2524,10 +2524,88 @@ export function ComercialPage() {
     return data.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
   };
 
+  const normalizarTextoRelatorio = (valor?: string | null) =>
+    String(valor || '')
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim();
+
+  const normalizarTelefoneRelatorio = (valor?: string | null) =>
+    String(valor || '').replace(/\D/g, '');
+
+  const valoresUnicosRelatorio = (valores: any[]) =>
+    Array.from(new Set(
+      valores
+        .filter((valor) => valor !== null && valor !== undefined)
+        .map((valor) => String(valor).trim())
+        .filter(Boolean)
+    ));
+
+  const statusExperimentalRealizada = (status?: string | null) =>
+    ['experimental_realizada', 'realizada', 'presente']
+      .includes(String(status || '').trim().toLowerCase());
+
+  const chaveTelefoneUnidade = (unidadeId?: string | null, telefone?: string | null) =>
+    `${unidadeId || 'sem_unidade'}|${normalizarTelefoneRelatorio(telefone)}`;
+
+  const chaveGrupoMatriculaRelatorio = (mat: any) => {
+    const telefone = normalizarTelefoneRelatorio(mat.telefone || mat.responsavel_telefone);
+    const nome = normalizarTextoRelatorio(mat.nome);
+    return `${mat.unidade_id || 'sem_unidade'}|${mat.data_matricula || ''}|${nome}|${telefone}`;
+  };
+
+  const agruparMatriculasParaRelatorio = (matriculas: any[]) => {
+    const grupos = new Map<string, any[]>();
+    (matriculas || []).forEach((mat) => {
+      const chave = chaveGrupoMatriculaRelatorio(mat);
+      const grupo = grupos.get(chave) || [];
+      grupo.push(mat);
+      grupos.set(chave, grupo);
+    });
+
+    return Array.from(grupos.values()).map((grupo) => {
+      const ordenadas = [...grupo].sort((a, b) => Number(a.is_segundo_curso) - Number(b.is_segundo_curso));
+      const principal = ordenadas.find((mat) => ehMatriculaNova(mat)) || ordenadas[0];
+      const cursos = valoresUnicosRelatorio(ordenadas.map((mat) => mat.curso_nome));
+      const professores = valoresUnicosRelatorio(ordenadas.map((mat) => mat.professor_fixo_nome));
+      const professoresExp = valoresUnicosRelatorio(
+        ordenadas.flatMap((mat) => (
+          Array.isArray(mat.professor_exp_nomes) && mat.professor_exp_nomes.length > 0
+            ? mat.professor_exp_nomes
+            : (mat.professor_exp_nome ? [mat.professor_exp_nome] : [])
+        ))
+      );
+      const parcelas = ordenadas
+        .map((mat) => Number(mat.valor_parcela) || 0)
+        .filter((valor) => valor > 0);
+      const formas = valoresUnicosRelatorio(ordenadas.map((mat) => mat.forma_pagamento_nome));
+
+      return {
+        ...principal,
+        cursos_relatorio: cursos.join(' e '),
+        professores_relatorio: professores.join(' e '),
+        professores_exp_relatorio: professoresExp.join(' e '),
+        parcelas_relatorio: parcelas,
+        formas_pagamento_relatorio: formas.join(' / '),
+      };
+    });
+  };
+
+  const formatarParcelasMatriculaRelatorio = (mat: any) => {
+    const parcelas = Array.isArray(mat.parcelas_relatorio)
+      ? mat.parcelas_relatorio.filter((valor: number) => Number(valor) > 0)
+      : [];
+    if (parcelas.length > 1) {
+      return parcelas.map((valor: number) => `R$ ${fmtBRL(Number(valor) || 0)}`).join(' + ');
+    }
+    return `R$ ${fmtBRL(Number(mat.valor_parcela) || 0)}`;
+  };
+
   const buscarMatriculasAlunos = async (uid: string | null | undefined, dataInicio: string, dataFim: string) => {
     let q = supabase
       .from('alunos')
-      .select('id, nome, telefone, responsavel_telefone, idade_atual, data_matricula, tipo_aluno, valor_passaporte, valor_parcela, is_segundo_curso, curso_id, canal_origem_id, professor_atual_id, professor_experimental_id, forma_pagamento_id, tipo_matricula_id, unidade_id, modalidade, status, emusys_matricula_id, cursos:curso_id(nome, is_projeto_banda), canais_origem:canal_origem_id(nome), tipos_matricula:tipo_matricula_id!left(codigo, conta_como_pagante, entra_ticket_medio), unidades:unidade_id(codigo, nome, hunter_nome), formas_pagamento:forma_pagamento_id(nome)')
+      .select('id, nome, telefone, responsavel_telefone, idade_atual, data_matricula, tipo_aluno, valor_passaporte, valor_parcela, is_segundo_curso, curso_id, canal_origem_id, professor_atual_id, professor_experimental_id, forma_pagamento_id, tipo_matricula_id, unidade_id, modalidade, status, emusys_matricula_id, emusys_lead_id, emusys_student_id, cursos:curso_id(nome, is_projeto_banda), canais_origem:canal_origem_id(nome), tipos_matricula:tipo_matricula_id!left(codigo, conta_como_pagante, entra_ticket_medio), unidades:unidade_id(codigo, nome, hunter_nome), formas_pagamento:forma_pagamento_id(nome)')
       .not('data_matricula', 'is', null)
       .gte('data_matricula', dataInicio)
       .lte('data_matricula', dataFim);
@@ -2535,40 +2613,91 @@ export function ComercialPage() {
     const { data } = await q;
     const alunos = (data || []) as any[];
     const alunoIds = alunos.map((a: any) => a.id).filter(Boolean);
+    const unidadeIds = Array.from(new Set(alunos.map((a: any) => a.unidade_id).filter(Boolean)));
+    const telefonesBusca = valoresUnicosRelatorio(
+      alunos.flatMap((a: any) => [a.telefone, a.responsavel_telefone])
+    );
     const emusysLeadIds = Array.from(new Set(
       alunos
         .map((a: any) => Number(a.emusys_lead_id))
         .filter((id: number) => Number.isFinite(id) && id > 0)
     ));
 
-    const [
-      { data: leadsVinculados },
-      { data: experimentaisPorAluno },
-      { data: experimentaisPorEmusys },
-    ] = await Promise.all([
+    const leadSelect = 'id, nome, telefone, aluno_id, unidade_id, emusys_lead_id, status, data_contato, data_experimental, canal_origem_id, professor_experimental_id, canais_origem:canal_origem_id(nome)';
+    const leadQueries: Promise<any>[] = [
       alunoIds.length
         ? supabase
             .from('leads')
-            .select('aluno_id, canal_origem_id, canais_origem:canal_origem_id(nome)')
+            .select(leadSelect)
             .in('aluno_id', alunoIds)
         : Promise.resolve({ data: [] as any[] }),
+    ];
+
+    if (telefonesBusca.length) {
+      let leadsPorTelefone = supabase
+        .from('leads')
+        .select(leadSelect)
+        .in('telefone', telefonesBusca);
+      if (uid && uid !== 'todos') leadsPorTelefone = leadsPorTelefone.eq('unidade_id', uid);
+      else if (unidadeIds.length) leadsPorTelefone = leadsPorTelefone.in('unidade_id', unidadeIds);
+      leadQueries.push(leadsPorTelefone);
+    }
+
+    if (emusysLeadIds.length) {
+      let leadsPorEmusys = supabase
+        .from('leads')
+        .select(leadSelect)
+        .in('emusys_lead_id', emusysLeadIds);
+      if (uid && uid !== 'todos') leadsPorEmusys = leadsPorEmusys.eq('unidade_id', uid);
+      else if (unidadeIds.length) leadsPorEmusys = leadsPorEmusys.in('unidade_id', unidadeIds);
+      leadQueries.push(leadsPorEmusys);
+    }
+
+    const leadResults = await Promise.all(leadQueries);
+    const leadsCanonicos = Array.from(
+      new Map(
+        leadResults
+          .flatMap((result: any) => result.data || [])
+          .filter((lead: any) => lead?.id)
+          .map((lead: any) => [lead.id, lead])
+      ).values()
+    );
+    const leadIds = leadsCanonicos.map((lead: any) => lead.id).filter(Boolean);
+    const emusysLeadIdsComLeads = Array.from(new Set([
+      ...emusysLeadIds,
+      ...leadsCanonicos
+        .map((lead: any) => Number(lead.emusys_lead_id))
+        .filter((id: number) => Number.isFinite(id) && id > 0),
+    ]));
+
+    const [
+      { data: experimentaisPorAluno },
+      { data: experimentaisPorEmusys },
+      { data: experimentaisPorLead },
+    ] = await Promise.all([
       alunoIds.length
         ? supabase
             .from('lead_experimentais')
-            .select('id, aluno_id, emusys_lead_id, status, data_experimental, professor_experimental_id')
+            .select('id, lead_id, aluno_id, emusys_lead_id, nome_aluno, status, data_experimental, professor_experimental_id')
             .in('aluno_id', alunoIds)
         : Promise.resolve({ data: [] as any[] }),
-      emusysLeadIds.length
+      emusysLeadIdsComLeads.length
         ? supabase
             .from('lead_experimentais')
-            .select('id, aluno_id, emusys_lead_id, status, data_experimental, professor_experimental_id')
-            .in('emusys_lead_id', emusysLeadIds)
+            .select('id, lead_id, aluno_id, emusys_lead_id, nome_aluno, status, data_experimental, professor_experimental_id')
+            .in('emusys_lead_id', emusysLeadIdsComLeads)
+        : Promise.resolve({ data: [] as any[] }),
+      leadIds.length
+        ? supabase
+            .from('lead_experimentais')
+            .select('id, lead_id, aluno_id, emusys_lead_id, nome_aluno, status, data_experimental, professor_experimental_id')
+            .in('lead_id', leadIds)
         : Promise.resolve({ data: [] as any[] }),
     ]);
 
     const experimentaisCanonicas = Array.from(
       new Map(
-        [...(experimentaisPorAluno || []), ...(experimentaisPorEmusys || [])]
+        [...(experimentaisPorAluno || []), ...(experimentaisPorEmusys || []), ...(experimentaisPorLead || [])]
           .filter((exp: any) => exp?.id)
           .map((exp: any) => [exp.id, exp])
       ).values()
@@ -2577,6 +2706,8 @@ export function ComercialPage() {
     const professorIds = Array.from(new Set([
       ...alunos.map((a: any) => a.professor_atual_id),
       ...experimentaisCanonicas.map((exp: any) => exp.professor_experimental_id),
+      ...leadsCanonicos.map((lead: any) => lead.professor_experimental_id),
+      ...alunos.map((a: any) => a.professor_experimental_id),
     ].filter(Boolean)));
 
     const { data: professores } = professorIds.length
@@ -2585,11 +2716,25 @@ export function ComercialPage() {
 
     const professoresPorId = new Map((professores || []).map((p: any) => [p.id, p.nome]));
     const leadsPorAluno = new Map();
-    (leadsVinculados || []).forEach((lead: any) => {
+    const leadsPorEmusysLeadId = new Map();
+    const leadsPorTelefone = new Map();
+    leadsCanonicos.forEach((lead: any) => {
       if (lead.aluno_id && !leadsPorAluno.has(lead.aluno_id)) leadsPorAluno.set(lead.aluno_id, lead);
+      const emusysLeadId = Number(lead.emusys_lead_id);
+      if (Number.isFinite(emusysLeadId) && emusysLeadId > 0 && !leadsPorEmusysLeadId.has(emusysLeadId)) {
+        leadsPorEmusysLeadId.set(emusysLeadId, lead);
+      }
+      const tel = normalizarTelefoneRelatorio(lead.telefone);
+      if (tel) {
+        const key = chaveTelefoneUnidade(lead.unidade_id, lead.telefone);
+        const lista = leadsPorTelefone.get(key) || [];
+        lista.push(lead);
+        leadsPorTelefone.set(key, lista);
+      }
     });
     const experimentaisPorAlunoId = new Map();
     const experimentaisPorEmusysLeadId = new Map();
+    const experimentaisPorLeadId = new Map();
     experimentaisCanonicas.forEach((exp: any) => {
       const enriquecida = {
         ...exp,
@@ -2605,21 +2750,80 @@ export function ComercialPage() {
         lista.push(enriquecida);
         experimentaisPorEmusysLeadId.set(Number(exp.emusys_lead_id), lista);
       }
+      if (exp.lead_id) {
+        const lista = experimentaisPorLeadId.get(exp.lead_id) || [];
+        lista.push(enriquecida);
+        experimentaisPorLeadId.set(exp.lead_id, lista);
+      }
     });
 
+    const selecionarLeadParaAluno = (aluno: any) => {
+      const candidatos: any[] = [];
+      const direto = leadsPorAluno.get(aluno.id);
+      if (direto) candidatos.push(direto);
+      const emusysLeadId = Number(aluno.emusys_lead_id);
+      if (Number.isFinite(emusysLeadId) && leadsPorEmusysLeadId.has(emusysLeadId)) {
+        candidatos.push(leadsPorEmusysLeadId.get(emusysLeadId));
+      }
+      [aluno.telefone, aluno.responsavel_telefone].forEach((tel: string | null) => {
+        const normalizado = normalizarTelefoneRelatorio(tel);
+        if (!normalizado) return;
+        const porTelefone = leadsPorTelefone.get(chaveTelefoneUnidade(aluno.unidade_id, tel)) || [];
+        candidatos.push(...porTelefone);
+      });
+
+      const unicos = Array.from(new Map(candidatos.filter(Boolean).map((lead: any) => [lead.id, lead])).values());
+      if (!unicos.length) return null;
+
+      const nomeAluno = normalizarTextoRelatorio(aluno.nome);
+      const dataMatricula = aluno.data_matricula ? new Date(aluno.data_matricula).getTime() : 0;
+      return unicos.sort((a: any, b: any) => {
+        const score = (lead: any) => {
+          let s = 0;
+          if (lead.aluno_id === aluno.id) s += 100;
+          if (Number(lead.emusys_lead_id) === emusysLeadId) s += 80;
+          if (normalizarTextoRelatorio(lead.nome) === nomeAluno) s += 35;
+          if (normalizarTelefoneRelatorio(lead.telefone) && [aluno.telefone, aluno.responsavel_telefone].some((tel: string | null) => normalizarTelefoneRelatorio(tel) === normalizarTelefoneRelatorio(lead.telefone))) s += 20;
+          if (String(lead.status || '').toLowerCase() === 'convertido') s += 15;
+          const dataLead = lead.data_contato || lead.data_experimental;
+          const timeLead = dataLead ? new Date(dataLead).getTime() : 0;
+          if (dataMatricula && timeLead && timeLead <= dataMatricula) s += 5;
+          if (dataMatricula && timeLead && timeLead > dataMatricula) s -= 10;
+          return s;
+        };
+        const diff = score(b) - score(a);
+        if (diff !== 0) return diff;
+        return String(b.data_contato || b.data_experimental || '').localeCompare(String(a.data_contato || a.data_experimental || ''));
+      })[0];
+    };
+
     return alunos.map((aluno: any) => {
-      const lead = leadsPorAluno.get(aluno.id);
+      const lead = selecionarLeadParaAluno(aluno);
       const canalAluno = (aluno.canais_origem as any)?.nome;
       const canalLead = (lead?.canais_origem as any)?.nome;
       const emusysLeadId = Number(aluno.emusys_lead_id);
       const experimentaisCanonicasAluno = [
         ...(experimentaisPorAlunoId.get(aluno.id) || []),
         ...(Number.isFinite(emusysLeadId) ? (experimentaisPorEmusysLeadId.get(emusysLeadId) || []) : []),
+        ...(lead?.emusys_lead_id ? (experimentaisPorEmusysLeadId.get(Number(lead.emusys_lead_id)) || []) : []),
+        ...(lead?.id ? (experimentaisPorLeadId.get(lead.id) || []) : []),
       ];
-      const professorExpCanonico = resolverProfessorExperimentalCanonico({
+      const experimentaisUnicasAluno = Array.from(
+        new Map(experimentaisCanonicasAluno.filter((exp: any) => exp?.id).map((exp: any) => [exp.id, exp])).values()
+      );
+      const professoresExpNomes = valoresUnicosRelatorio([
+        ...experimentaisUnicasAluno
+          .filter((exp: any) => statusExperimentalRealizada(exp.status))
+          .map((exp: any) => exp.professorExperimentalNome || exp.professor_experimental_nome),
+        lead?.professor_experimental_id ? professoresPorId.get(lead.professor_experimental_id) : null,
+      ]);
+      const professorExpFallbackAluno = !lead && !experimentaisUnicasAluno.length && aluno.professor_experimental_id && aluno.professor_experimental_id !== aluno.professor_atual_id
+        ? professoresPorId.get(aluno.professor_experimental_id)
+        : null;
+      const professorExpCanonico = professoresExpNomes.join(' e ') || resolverProfessorExperimentalCanonico({
         dataMatricula: aluno.data_matricula,
-        experimentais: experimentaisCanonicasAluno,
-      });
+        experimentais: experimentaisUnicasAluno,
+      }) || professorExpFallbackAluno;
 
       return {
         ...aluno,
@@ -2636,6 +2840,9 @@ export function ComercialPage() {
         hunter_nome: (aluno.unidades as any)?.hunter_nome,
         professor_fixo_nome: professoresPorId.get(aluno.professor_atual_id) || null,
         professor_exp_nome: professorExpCanonico,
+        professor_exp_nomes: professoresExpNomes.length ? professoresExpNomes : (professorExpCanonico ? [professorExpCanonico] : []),
+        lead_id: lead?.id || null,
+        lead_nome: lead?.nome || null,
         forma_pagamento_nome: (aluno.formas_pagamento as any)?.nome || null,
       };
     });
@@ -2746,7 +2953,7 @@ export function ComercialPage() {
 
     // Nao reaproveitar o state da tela, que pode estar consolidado ou defasado entre filtros.
     const dataInicioMes = `${ano}-${String(hoje.getMonth() + 1).padStart(2, '0')}-01`;
-    const matriculasNovas = (await buscarMatriculasAlunos(unidadeRelatorioId, dataInicioMes, dataFim))
+    const matriculasNovas = agruparMatriculasParaRelatorio(await buscarMatriculasAlunos(unidadeRelatorioId, dataInicioMes, dataFim))
       .filter(ehMatriculaNova)
       .sort((a: any, b: any) => (a.data_matricula || '').localeCompare(b.data_matricula || ''));
 
@@ -2797,14 +3004,14 @@ export function ComercialPage() {
         texto += `👤 Aluno: ${mat.nome || 'Não informado'}`;
         if (mat.idade) texto += ` (${mat.idade} anos)`;
         texto += `\n`;
-        texto += `🎵 Curso: ${mat.curso_nome || 'Não informado'}\n`;
-        texto += `👨‍🏫 Professor: ${mat.professor_fixo_nome || 'Não informado'}\n`;
-        texto += `🎸 Prof. Experimental: ${mat.professor_exp_nome || 'Não teve'}\n`;
+        texto += `🎵 Curso: ${mat.cursos_relatorio || mat.curso_nome || 'Não informado'}\n`;
+        texto += `👨‍🏫 Professor: ${mat.professores_relatorio || mat.professor_fixo_nome || 'Não informado'}\n`;
+        texto += `🎸 Prof. Experimental: ${mat.professores_exp_relatorio || mat.professor_exp_nome || 'Não teve'}\n`;
         texto += `📱 Canal: ${mat.canal_nome || 'Não informado'}\n`;
         texto += `👤 Hunter: ${mat.hunter_nome || hunterNome}\n`;
-        texto += `💵 Pass: R$ ${(mat.valor_passaporte || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
-        texto += `💵 Parc: R$ ${(mat.valor_parcela || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n`;
-        texto += `💳 Pag: ${mat.forma_pagamento_nome || 'Não informado'}\n\n`;
+        texto += `💵 Pass: R$ ${fmtBRL(Number(mat.valor_passaporte) || 0)}\n`;
+        texto += `💵 Parc: ${formatarParcelasMatriculaRelatorio(mat)}\n`;
+        texto += `💳 Pag: ${mat.formas_pagamento_relatorio || mat.forma_pagamento_nome || 'Não informado'}\n\n`;
       });
     }
 
@@ -2960,7 +3167,9 @@ export function ComercialPage() {
     // Matrículas: fonte = alunos por data_matricula (inclui matrículas sem lead).
     // Conta apenas matrículas novas (exclui 2º curso, banda e passaporte zerado),
     // alinhando com o resumo/funil da tela.
-    const matAlunosMes = (await buscarMatriculasAlunos(unidadeRelatorioId, dataInicio, dataFim)).filter(ehMatriculaNova);
+    const matAlunosMesBase = await buscarMatriculasAlunos(unidadeRelatorioId, dataInicio, dataFim);
+    const matAlunosMes = matAlunosMesBase.filter(ehMatriculaNova);
+    const matAlunosMesRelatorio = agruparMatriculasParaRelatorio(matAlunosMesBase).filter(ehMatriculaNova);
     const matriculasMes = matAlunosMes.length;
 
     // Calcular conversões
@@ -2968,7 +3177,7 @@ export function ComercialPage() {
     const conversaoLeadMat = leadsMes > 0 ? (matriculasMes / leadsMes) * 100 : 0;
 
     // Matrículas detalhadas do mês (fonte = alunos por data_matricula)
-    const matriculasDetalhadas = matAlunosMes.map((a: any) => ({
+    const matriculasDetalhadas = matAlunosMesRelatorio.map((a: any) => ({
       nome: a.nome,
       idade: a.idade_atual,
       data_matricula: a.data_matricula,
@@ -2977,6 +3186,14 @@ export function ComercialPage() {
       tipo_aluno: a.tipo_aluno,
       valor_passaporte: a.valor_passaporte,
       valor_parcela: a.valor_parcela,
+      parcelas_relatorio: a.parcelas_relatorio,
+      cursos_relatorio: a.cursos_relatorio,
+      professores_relatorio: a.professores_relatorio,
+      professores_exp_relatorio: a.professores_exp_relatorio,
+      formas_pagamento_relatorio: a.formas_pagamento_relatorio,
+      professor_fixo_nome: a.professor_fixo_nome,
+      professor_exp_nome: a.professor_exp_nome,
+      canal_nome: a.canal_nome,
       cursos: a.cursos,
       canais_origem: a.canais_origem,
     }));
@@ -2997,15 +3214,15 @@ export function ComercialPage() {
 
     // Agrupar matrículas por canal
     const matriculasPorCanal: { [key: string]: number } = {};
-    matAlunosMes.forEach((a: any) => {
-      const canal = (a.canais_origem as any)?.nome || 'Não informado';
+    matAlunosMesRelatorio.forEach((a: any) => {
+      const canal = a.canal_nome || (a.canais_origem as any)?.nome || 'Não informado';
       matriculasPorCanal[canal] = (matriculasPorCanal[canal] || 0) + 1;
     });
 
     // Agrupar matrículas por curso (fonte = alunos)
     const matriculasPorCurso: { [key: string]: number } = {};
-    matAlunosMes.forEach((a: any) => {
-      const curso = (a.cursos as any)?.nome || 'Não informado';
+    matAlunosMesRelatorio.forEach((a: any) => {
+      const curso = a.cursos_relatorio || (a.cursos as any)?.nome || 'Não informado';
       matriculasPorCurso[curso] = (matriculasPorCurso[curso] || 0) + 1;
     });
 
@@ -3015,7 +3232,13 @@ export function ComercialPage() {
     const totalPassaporte = matriculasComPassaporteMes.reduce((acc, m) => acc + (m.valor_passaporte || 0), 0);
     // Regra de negócio: bolsistas não entram no ticket médio da parcela
     const matriculasPagantesMes = matriculasDetalhadas?.filter(m => !TIPOS_SEM_PAGAMENTO.includes(m.tipo_aluno)) || [];
-    const totalParcela = matriculasPagantesMes.reduce((acc, m) => acc + (m.valor_parcela || 0), 0);
+    const totalParcela = matriculasPagantesMes.reduce((acc, m) => {
+      const parcelas = Array.isArray((m as any).parcelas_relatorio)
+        ? (m as any).parcelas_relatorio.filter((valor: number) => Number(valor) > 0)
+        : [];
+      if (parcelas.length > 1) return acc + parcelas.reduce((soma: number, valor: number) => soma + (Number(valor) || 0), 0);
+      return acc + (Number(m.valor_parcela) || 0);
+    }, 0);
     const ticketMedioPass = matriculasComPassaporteMes.length > 0 ? totalPassaporte / matriculasComPassaporteMes.length : 0;
     const ticketMedioPar = matriculasPagantesMes.length > 0 ? totalParcela / matriculasPagantesMes.length : 0;
 
@@ -3125,10 +3348,12 @@ export function ComercialPage() {
         texto += `${i + 1}. ${mat.nome}`;
         if (mat.idade) texto += ` (${mat.idade} anos)`;
         texto += `\n   📅 ${dataFormatada}`;
-        if ((mat.cursos as any)?.nome) texto += ` | 🎵 ${(mat.cursos as any).nome}`;
-        if ((mat.canais_origem as any)?.nome) texto += ` | 📱 ${(mat.canais_origem as any).nome}`;
-        texto += `\n   💵 Pass: R$ ${(mat.valor_passaporte || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
-        texto += ` | Parc: R$ ${(mat.valor_parcela || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n\n`;
+        const cursoTexto = (mat as any).cursos_relatorio || (mat.cursos as any)?.nome;
+        const canalTexto = (mat as any).canal_nome || (mat.canais_origem as any)?.nome;
+        if (cursoTexto) texto += ` | 🎵 ${cursoTexto}`;
+        if (canalTexto) texto += ` | 📱 ${canalTexto}`;
+        texto += `\n   💵 Pass: R$ ${fmtBRL(Number(mat.valor_passaporte) || 0)}`;
+        texto += ` | Parc: ${formatarParcelasMatriculaRelatorio(mat)}\n\n`;
       });
     }
 
@@ -3170,7 +3395,7 @@ export function ComercialPage() {
     // Calcular totais e estatísticas — apenas matrículas novas (exclui 2º curso/banda/passaporte zerado)
     const dataInicioMes = `${ano}-${String(hoje.getMonth() + 1).padStart(2, '0')}-01`;
     const dataFimMes = `${ano}-${String(hoje.getMonth() + 1).padStart(2, '0')}-${new Date(ano, hoje.getMonth() + 1, 0).getDate()}`;
-    const matriculasNovas = (await buscarMatriculasAlunos(unidadeRelatorioId, dataInicioMes, dataFimMes))
+    const matriculasNovas = agruparMatriculasParaRelatorio(await buscarMatriculasAlunos(unidadeRelatorioId, dataInicioMes, dataFimMes))
       .filter(ehMatriculaNova)
       .sort((a: any, b: any) => (a.data_matricula || '').localeCompare(b.data_matricula || ''));
     const totalMatriculas = matriculasNovas.length;
@@ -3182,7 +3407,13 @@ export function ComercialPage() {
     const totalPassaporte = matriculasComPassaporte.reduce((acc, m) => acc + (Number(m.valor_passaporte) || 0), 0);
     // Regra de negócio: bolsistas não entram no ticket médio da parcela
     const matriculasPagantes = matriculasNovas.filter(m => !TIPOS_SEM_PAGAMENTO.includes(m.tipo_aluno) && (Number(m.valor_parcela) || 0) > 0);
-    const totalParcela = matriculasPagantes.reduce((acc, m) => acc + (Number(m.valor_parcela) || 0), 0);
+    const totalParcela = matriculasPagantes.reduce((acc, m) => {
+      const parcelas = Array.isArray((m as any).parcelas_relatorio)
+        ? (m as any).parcelas_relatorio.filter((valor: number) => Number(valor) > 0)
+        : [];
+      if (parcelas.length > 1) return acc + parcelas.reduce((soma: number, valor: number) => soma + (Number(valor) || 0), 0);
+      return acc + (Number(m.valor_parcela) || 0);
+    }, 0);
     const ticketMedioPass = matriculasComPassaporte.length > 0 ? totalPassaporte / matriculasComPassaporte.length : 0;
     const ticketMedioPar = matriculasPagantes.length > 0 ? totalParcela / matriculasPagantes.length : 0;
 
@@ -3196,7 +3427,7 @@ export function ComercialPage() {
     // Agrupar por curso
     const matriculasPorCurso: { [key: string]: number } = {};
     matriculasNovas.forEach(m => {
-      const curso = m.curso_nome || 'Não informado';
+      const curso = (m as any).cursos_relatorio || m.curso_nome || 'Não informado';
       matriculasPorCurso[curso] = (matriculasPorCurso[curso] || 0) + 1;
     });
 
@@ -3267,16 +3498,16 @@ export function ComercialPage() {
       texto += `👤 Aluno: ${mat.nome || 'Não informado'}`;
       if (mat.idade) texto += ` (${mat.idade} anos)`;
       texto += `\n`;
-      texto += `🎵 Curso: ${mat.curso_nome || 'Não informado'}\n`;
-      texto += `👨‍🏫 Professor: ${mat.professor_fixo_nome || 'Não informado'}\n`;
-      texto += `🎸 Prof. Experimental: ${mat.professor_exp_nome || 'Não teve'}\n`;
+      texto += `🎵 Curso: ${(mat as any).cursos_relatorio || mat.curso_nome || 'Não informado'}\n`;
+      texto += `👨‍🏫 Professor: ${(mat as any).professores_relatorio || mat.professor_fixo_nome || 'Não informado'}\n`;
+      texto += `🎸 Prof. Experimental: ${(mat as any).professores_exp_relatorio || mat.professor_exp_nome || 'Não teve'}\n`;
       texto += `📱 Canal: ${mat.canal_nome || 'Não informado'}\n`;
       texto += `👤 Hunter: ${mat.hunter_nome || hunterNome}\n`;
-      texto += `💵 Pass: R$ ${(mat.valor_passaporte || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+      texto += `💵 Pass: R$ ${fmtBRL(Number(mat.valor_passaporte) || 0)}`;
       if (mat.forma_pagamento_passaporte_nome) texto += ` (${mat.forma_pagamento_passaporte_nome})`;
       texto += `\n`;
-      texto += `💵 Parc: R$ ${(mat.valor_parcela || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
-      if (mat.forma_pagamento_nome) texto += ` (${mat.forma_pagamento_nome})`;
+      texto += `💵 Parc: ${formatarParcelasMatriculaRelatorio(mat)}`;
+      if ((mat as any).formas_pagamento_relatorio || mat.forma_pagamento_nome) texto += ` (${(mat as any).formas_pagamento_relatorio || mat.forma_pagamento_nome})`;
       texto += `\n\n`;
     });
 

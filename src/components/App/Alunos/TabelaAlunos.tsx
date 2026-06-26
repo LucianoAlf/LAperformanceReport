@@ -287,9 +287,11 @@ export function TabelaAlunos({
   // Contagem de inadimplentes (usa todosAlunos para não depender de filtros)
   // Conta ALUNOS únicos, mas soma VALOR de todos os cursos (incluindo segundo curso)
   const inadimplenciaInfo = useMemo(() => {
-    const diaAtual = new Date().getDate();
     const fonte = todosAlunos || alunos;
-    const ativos = fonte.filter(a => a.status === 'ativo' || a.status === 'trancado');
+    const ativos = fonte.filter(a => {
+      const status = String(a.status || '').toLowerCase();
+      return status === 'ativo' || status === 'trancado';
+    });
     
     // Contar alunos inadimplentes (únicos) e somar valor de todos os cursos
     let totalAlunosInadimplentes = 0;
@@ -316,20 +318,15 @@ export function TabelaAlunos({
     });
     
     const pendentes = ativos.filter(a => 
-      (a.status_pagamento === 'em_dia' || !a.status_pagamento) && 
-      (a.dia_vencimento || 5) <= diaAtual &&
+      (!a.status_pagamento || a.status_pagamento === '-') &&
       a.tipo_matricula_id !== 3 && a.tipo_matricula_id !== 4 && a.tipo_matricula_id !== 5
     );
-    const diasVencimento = [...new Set<number>(ativos.map(a => a.dia_vencimento || 5))].sort((a, b) => a - b);
-    const vencimentoPassou = diasVencimento.some((d: number) => d <= diaAtual);
     
     return {
       total: totalAlunosInadimplentes,
       pendentes: pendentes.length,
       valor: valorInadimplente,
-      vencimentoPassou,
-      diasVencimento,
-      diaAtual,
+      mostrar: totalAlunosInadimplentes > 0 || pendentes.length > 0,
     };
   }, [todosAlunos, alunos]);
 
@@ -1914,36 +1911,42 @@ export function TabelaAlunos({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Alerta de Inadimplência — Banner fino esticado */}
-      {inadimplenciaInfo.vencimentoPassou && (inadimplenciaInfo.total > 0 || inadimplenciaInfo.pendentes > 0) && !alertaInadimplenciaDismissed && (
-        <div className="flex items-center gap-3 px-4 py-2.5 bg-red-500/15 border border-red-500/30 rounded-xl text-sm">
-          <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0" />
-          <span className="text-red-300 flex-1">
-            <strong className="text-red-200">
+      {/* Alerta financeiro */}
+      {inadimplenciaInfo.mostrar && !alertaInadimplenciaDismissed && (
+        <div className={`flex items-center gap-3 px-4 py-2.5 rounded-xl border text-sm ${
+          inadimplenciaInfo.total > 0 ? 'bg-red-500/15 border-red-500/30' : 'bg-amber-500/15 border-amber-500/30'
+        }`}>
+          <AlertTriangle className={`w-5 h-5 flex-shrink-0 ${inadimplenciaInfo.total > 0 ? 'text-red-400' : 'text-amber-300'}`} />
+          <span className={`${inadimplenciaInfo.total > 0 ? 'text-red-300' : 'text-amber-200'} flex-1`}>
+            <strong className={inadimplenciaInfo.total > 0 ? 'text-red-200' : 'text-amber-100'}>
               {inadimplenciaInfo.total > 0 
                 ? `${inadimplenciaInfo.total} aluno${inadimplenciaInfo.total !== 1 ? 's' : ''} inadimplente${inadimplenciaInfo.total !== 1 ? 's' : ''}`
-                : `${inadimplenciaInfo.pendentes} aluno${inadimplenciaInfo.pendentes !== 1 ? 's' : ''} pendente${inadimplenciaInfo.pendentes !== 1 ? 's' : ''} de verificação`
+                : `${inadimplenciaInfo.pendentes} aluno${inadimplenciaInfo.pendentes !== 1 ? 's' : ''} com status financeiro em aberto`
               }
             </strong>
             {inadimplenciaInfo.total > 0 && (
               <> — R$ {inadimplenciaInfo.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} em parcelas marcadas como não pagas</>
             )}
             {inadimplenciaInfo.pendentes > 0 && inadimplenciaInfo.total > 0 && (
-              <> • {inadimplenciaInfo.pendentes} ainda precisam de conferência financeira</>
+              <> • {inadimplenciaInfo.pendentes} ainda estão sem status financeiro</>
             )}
           </span>
           <button
-            onClick={() => setFiltros({ ...filtros, status_pagamento: 'inadimplente' })}
-            className="px-3 py-1 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 rounded-lg text-red-200 text-xs font-medium transition-colors whitespace-nowrap"
+            onClick={() => setFiltros({ ...filtros, status_pagamento: inadimplenciaInfo.total > 0 ? 'inadimplente' : '-' })}
+            className={`px-3 py-1 rounded-lg border text-xs font-medium transition-colors whitespace-nowrap ${
+              inadimplenciaInfo.total > 0
+                ? 'bg-red-500/20 hover:bg-red-500/30 border-red-500/30 text-red-200'
+                : 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-500/30 text-amber-100'
+            }`}
           >
-            Filtrar inadimplentes
+            {inadimplenciaInfo.total > 0 ? 'Filtrar inadimplentes' : 'Filtrar em aberto'}
           </button>
           <button
             onClick={() => setAlertaInadimplenciaDismissed(true)}
-            className="p-1 hover:bg-red-500/20 rounded transition-colors"
+            className="p-1 hover:bg-white/10 rounded transition-colors"
             title="Dispensar alerta"
           >
-            <X className="w-4 h-4 text-red-400" />
+            <X className={`w-4 h-4 ${inadimplenciaInfo.total > 0 ? 'text-red-400' : 'text-amber-300'}`} />
           </button>
         </div>
       )}
@@ -2041,8 +2044,8 @@ export function TabelaAlunos({
                   <td className="px-4 py-2">
                     <div className="flex items-center gap-1">
                       {/* Avatar do aluno */}
-                      {aluno.foto_url ? (
-                        <img src={aluno.foto_url} alt="" className="w-6 h-6 rounded-full object-cover flex-shrink-0" />
+                      {(aluno.foto_url || aluno.photo_url) ? (
+                        <img src={aluno.foto_url || aluno.photo_url || ''} alt="" className="w-6 h-6 rounded-full object-cover flex-shrink-0" />
                       ) : null}
                       {/* Botão de expansão apenas para alunos com segundo curso */}
                       {aluno.outros_cursos && aluno.outros_cursos.length > 0 && (
