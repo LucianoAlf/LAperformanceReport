@@ -30,6 +30,7 @@ const EMAILS_SYNC_TECNICO = new Set(
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean),
 );
+const SYNC_ADMIN_TOKEN = Deno.env.get('SYNC_MATRICULAS_ADMIN_TOKEN')?.trim() || '';
 
 const EMUSYS_API = 'https://api.emusys.com.br/v1';
 const UNIDADES: Record<string, { nome: string; id: string; token: string }> = {
@@ -40,12 +41,15 @@ const UNIDADES: Record<string, { nome: string; id: string; token: string }> = {
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-sync-token',
 };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function validarAcessoSync(req: Request): Promise<Response | null> {
+  const syncToken = req.headers.get('x-sync-token')?.trim() || '';
+  if (SYNC_ADMIN_TOKEN && syncToken && syncToken === SYNC_ADMIN_TOKEN) return null;
+
   const authHeader = req.headers.get('Authorization') || '';
   const token = authHeader.replace(/^Bearer\s+/i, '').trim();
 
