@@ -1,7 +1,10 @@
 /// <reference lib="deno.ns" />
 
 import { assertEquals } from "jsr:@std/assert@1";
-import { analisarFinanceiroContrato } from "../supabase/functions/sync-matriculas-emusys/financeiro.ts";
+import {
+  analisarFinanceiroContrato,
+  deveIgnorarStatusFinanceiroPorTipo,
+} from "../supabase/functions/sync-matriculas-emusys/financeiro.ts";
 
 Deno.test("bolsista integral sem faturas nao transforma preco de tabela em parcela", () => {
   const analise = analisarFinanceiroContrato({
@@ -63,4 +66,11 @@ Deno.test("matricula regular com cobranca usa mensalidade menos desconto condici
   assertEquals(analise.statusPagamentoCanonico, null);
   assertEquals(analise.tipoSugerido, null);
   assertEquals(analise.bloqueiaValorAutomatico, false);
+});
+
+Deno.test("banda e bolsista integral com sem_parcela nao geram divergencia por status em dia do Emusys", () => {
+  assertEquals(deveIgnorarStatusFinanceiroPorTipo("BANDA", "sem_parcela", "em_dia"), true);
+  assertEquals(deveIgnorarStatusFinanceiroPorTipo("BOLSISTA_INT", "sem_parcela", "em_dia"), true);
+  assertEquals(deveIgnorarStatusFinanceiroPorTipo("REGULAR", "sem_parcela", "em_dia"), false);
+  assertEquals(deveIgnorarStatusFinanceiroPorTipo("BOLSISTA_PARC", "em_dia", "inadimplente"), false);
 });

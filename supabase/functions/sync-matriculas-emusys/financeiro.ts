@@ -91,3 +91,17 @@ export function analisarFinanceiroContrato(matricula: any): AnaliseFinanceiraCon
     bloqueiaValorAutomatico: contratoRegularSemFatura,
   };
 }
+
+export function deveIgnorarStatusFinanceiroPorTipo(
+  tipoCodigo: string | null | undefined,
+  statusNosso: string | null | undefined,
+  statusEmusys: string | null | undefined,
+): boolean {
+  const tipo = String(tipoCodigo ?? "").trim().toUpperCase();
+  const nosso = String(statusNosso ?? "").trim().toLowerCase();
+  const emusys = String(statusEmusys ?? "").trim().toLowerCase();
+
+  return (tipo === "BANDA" || tipo === "BOLSISTA_INT") &&
+    nosso === "sem_parcela" &&
+    emusys === "em_dia";
+}

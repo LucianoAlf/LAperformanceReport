@@ -85,36 +85,36 @@ const COR_CLASSES: Record<string, string> = {
 
 const ATRIBUTO_GRUPOS: Record<string, { label: string; descricao: string; icon: typeof Link2; cor: string; tipos: string[] }> = {
   cadastro: {
-    label: 'Dif. cadastro',
-    descricao: 'Responsavel, telefone e email diferentes entre LA Report e Emusys',
+    label: 'Dados a completar',
+    descricao: 'Responsavel, telefone e email para completar ou revisar. Contagem em campos, nao em alunos.',
     icon: Phone,
     cor: 'sky',
     tipos: ['contato_divergente', 'responsavel_divergente'],
   },
   imagem: {
     label: 'Foto/Instagram',
-    descricao: 'Campos que existem no Emusys e podem popular o cadastro do LA Report',
+    descricao: 'Foto ou Instagram que existem no Emusys e podem completar o cadastro do LA Report.',
     icon: ImageIcon,
     cor: 'violet',
     tipos: ['foto_ausente', 'instagram_ausente', 'instagram_divergente'],
   },
   financeiro: {
-    label: 'Dif. financeiro',
-    descricao: 'Status financeiro, forma de pagamento e renovacao vindos do contrato Emusys',
+    label: 'Financeiro a revisar',
+    descricao: 'Status financeiro e forma de pagamento para revisao. Tipos sem parcela ficam fora.',
     icon: CreditCard,
     cor: 'orange',
     tipos: ['status_financeiro_divergente', 'forma_pagamento_divergente', 'aguardando_renovacao_divergente'],
   },
   contrato: {
-    label: 'Contrato/Anamnese',
-    descricao: 'Contrato sem assinatura e anamnese pendente no LA Report',
+    label: 'Checklist interno',
+    descricao: 'Anamnese e contrato pendentes dentro do LA Report. Nao sao divergencias do Emusys.',
     icon: FileText,
     cor: 'amber',
     tipos: ['anamnese_pendente', 'contrato_assinatura_pendente'],
   },
   criticas: {
-    label: 'Criticas',
-    descricao: 'Casos de alto impacto para atendimento ou financeiro',
+    label: 'Prioridade alta',
+    descricao: 'Somente itens de alto impacto para atendimento ou financeiro.',
     icon: ShieldAlert,
     cor: 'red',
     tipos: [],
@@ -1200,14 +1200,14 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
               <div>
                 <h4 className="flex items-center gap-2 text-sm font-semibold text-slate-100">
                   <ShieldAlert className="h-4 w-4 text-cyan-300" />
-                  Divergencias LA Report x Emusys e checklist interno
+                  Pendencias de cadastro, financeiro e checklist
                 </h4>
                 <p className="mt-1 max-w-3xl text-xs leading-relaxed text-slate-400">
-                  Cadastro, foto, Instagram e financeiro comparam LA Report e Emusys. Contrato e anamnese sao checklist interno do LA Report. Todas as acoes passam por RPC guardada.
+                  A contagem e por campo/tarefa, nao por aluno. Checklist e interno do LA Report; nada e aplicado sem RPC guardada.
                 </p>
               </div>
               <span className="rounded-full border border-cyan-500/30 bg-cyan-500/10 px-3 py-1 text-[11px] font-medium text-cyan-300">
-                {totalAtributosPendente} pendente(s) no banco · {atributos.length} carregada(s)
+                {totalAtributosPendente} campos/tarefas pendentes · {atributos.length} carregados nesta tela
               </span>
             </div>
           </div>
@@ -1408,7 +1408,7 @@ export function ConciliacaoMatriculas({ unidadeId }: { unidadeId?: string | null
 
             {totalAtributosFiltroExato > atributosVisiveis.length && (
               <div className="border-t border-slate-700/70 px-4 py-2 text-right text-[11px] text-slate-500">
-                Mostrando {atributosVisiveis.length} de {totalAtributosFiltroExato} neste filtro. O lote carrega primeiro criticas, financeiro, foto/Instagram, cadastro e checklist.
+                Mostrando {atributosVisiveis.length} de {totalAtributosFiltroExato} neste filtro. O lote carrega primeiro prioridade alta, financeiro, foto/Instagram, cadastro e checklist.
               </div>
             )}
           </div>

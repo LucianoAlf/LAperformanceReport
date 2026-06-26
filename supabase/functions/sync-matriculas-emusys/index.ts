@@ -19,7 +19,7 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { analisarFinanceiroContrato } from './financeiro.ts';
+import { analisarFinanceiroContrato, deveIgnorarStatusFinanceiroPorTipo } from './financeiro.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
@@ -280,7 +280,13 @@ function criarDivergenciaAtributo(a: any, mat: any, tipo: string, campo: string,
   };
 }
 
-function detectarDivergenciasAtributosAluno(a: any, mat: any, formaPagamentoLocal: any, fixados: Set<string> = new Set()) {
+function detectarDivergenciasAtributosAluno(
+  a: any,
+  mat: any,
+  formaPagamentoLocal: any,
+  fixados: Set<string> = new Set(),
+  tipoCodigo: string | null = null,
+) {
   const rows: any[] = [];
   if (!mat) return rows;
 
@@ -360,7 +366,12 @@ function detectarDivergenciasAtributosAluno(a: any, mat: any, formaPagamentoLoca
 
   const financeiro = analisarFinanceiroContrato(mat);
   const statusFinanceiroEmusys = financeiro.statusPagamentoCanonico ?? extrairStatusFinanceiroEmusys(mat);
-  if (!fixados.has('status_pagamento') && statusFinanceiroEmusys && normalizarTextoValor(statusFinanceiroEmusys) !== normalizarTextoValor(a.status_pagamento)) {
+  const ignoraStatusFinanceiro = deveIgnorarStatusFinanceiroPorTipo(
+    tipoCodigo,
+    a.status_pagamento,
+    statusFinanceiroEmusys,
+  );
+  if (!fixados.has('status_pagamento') && statusFinanceiroEmusys && !ignoraStatusFinanceiro && normalizarTextoValor(statusFinanceiroEmusys) !== normalizarTextoValor(a.status_pagamento)) {
     rows.push(criarDivergenciaAtributo(
       a, mat, 'status_financeiro_divergente', 'status_pagamento',
       { status_pagamento: a.status_pagamento ?? null },
@@ -641,7 +652,7 @@ serve(async (req) => {
             fixadosBase,
             camposBloqueadosPorDecisaoCanonica(decisaoAtributos),
           );
-          const atributos = detectarDivergenciasAtributosAluno(a, matAtributos, formaPagamentoLocal, fixadosAtributos);
+          const atributos = detectarDivergenciasAtributosAluno(a, matAtributos, formaPagamentoLocal, fixadosAtributos, tipoCodigo);
           for (const atributo of atributos) {
             resumo.atributos[atributo.tipo_divergencia] = (resumo.atributos[atributo.tipo_divergencia] || 0) + 1;
             attrDivs.push(atributo);
