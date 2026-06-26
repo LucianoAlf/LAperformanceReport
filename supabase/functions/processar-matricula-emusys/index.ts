@@ -72,7 +72,7 @@ import {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 
-const VERSAO = 'v23';
+const VERSAO = 'v24';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -666,6 +666,9 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
           professor_atual_id: professorId,
           professor_experimental_id: professorId,
           emusys_matricula_id: p.matriculaIdEmusys,
+          emusys_lead_id: p.emusysLeadId != null ? String(p.emusysLeadId) : null,
+          responsavel_nome: p.nomeResponsavel,
+          responsavel_telefone: p.telefoneResponsavel,
           foto_url: p.fotoAlunoUrl,
           instagram: p.instagram,
           created_at: new Date().toISOString(),
@@ -696,6 +699,9 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
           foto_url: p.fotoAlunoUrl || undefined,
           instagram: p.instagram || undefined,
           emusys_matricula_id: p.matriculaIdEmusys || undefined,
+          emusys_lead_id: p.emusysLeadId != null ? String(p.emusysLeadId) : undefined,
+          responsavel_nome: p.nomeResponsavel || undefined,
+          responsavel_telefone: p.telefoneResponsavel || undefined,
           updated_at: new Date().toISOString(),
         }).eq('id', found.aluno.id);
 
@@ -724,6 +730,9 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
         professor_atual_id: professorId,
         professor_experimental_id: professorId,
         emusys_matricula_id: p.matriculaIdEmusys,
+        emusys_lead_id: p.emusysLeadId != null ? String(p.emusysLeadId) : null,
+        responsavel_nome: p.nomeResponsavel,
+        responsavel_telefone: p.telefoneResponsavel,
         foto_url: p.fotoAlunoUrl,
         instagram: p.instagram,
         created_at: new Date().toISOString(),
@@ -744,6 +753,16 @@ async function handleMatriculaNova(supabase: any, p: Payload) {
     }
 
     const leadResult = await converterLead(supabase, p, alunoId);
+
+    // Costura aluno→lead: a converterLead só grava o lado lead→aluno (leads.aluno_id).
+    // Aqui gravamos o lead de origem no próprio aluno, só quando ainda está vazio
+    // (não sobrescreve vínculo já existente). Best-effort.
+    if (alunoId && leadResult.leadId) {
+      await supabase.from('alunos')
+        .update({ lead_origem_id: leadResult.leadId })
+        .eq('id', alunoId)
+        .is('lead_origem_id', null);
+    }
 
     const result = {
       action,
