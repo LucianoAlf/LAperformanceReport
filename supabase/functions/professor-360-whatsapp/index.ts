@@ -131,15 +131,12 @@ function montarMensagem(dados: NotificacaoPayload): string {
   return mensagem;
 }
 
-async function enviarWhatsApp(
-  telefone: string,
+// Faz UMA tentativa de envio. Retorna se foi sucesso e se o erro é transitório (vale retry).
+async function tentarEnvio(
+  formattedPhone: string,
   mensagem: string,
   creds: WhatsAppCreds
-): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  const formattedPhone = formatPhoneNumber(telefone);
-
-  console.log(`[professor-360-whatsapp] Enviando para: ${formattedPhone}`);
-
+): Promise<{ success: boolean; messageId?: string; error?: string; retryable: boolean }> {
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 10000);
@@ -164,30 +161,56 @@ async function enviarWhatsApp(
 
     clearTimeout(timeoutId);
 
-    const data = await response.json();
+    const data = await response.json().catch(() => ({}));
 
     if (response.ok && !data.error) {
-      console.log(`[professor-360-whatsapp] Mensagem enviada! ID: ${data.id || data.messageid || data.key?.id}`);
-      return {
-        success: true,
-        messageId: data.id || data.messageid || data.key?.id
-      };
-    } else {
-      const errorMsg = (typeof data.error === 'string' ? data.error : null) || data.message || JSON.stringify(data);
-      console.error(`[professor-360-whatsapp] Erro WhatsApp (${response.status}):`, errorMsg);
-      return { success: false, error: errorMsg };
+      return { success: true, messageId: data.id || data.messageid || data.key?.id, retryable: false };
     }
+
+    const errorMsg = (typeof data.error === 'string' ? data.error : null) || data.message || JSON.stringify(data);
+    // Erros 5xx (inclui o "463" transitório do whatsmeow) e 429 são transitórios → vale retry.
+    // 4xx (exceto 429) é erro do request (número inválido etc) → não adianta repetir.
+    const retryable = response.status >= 500 || response.status === 429;
+    return { success: false, error: errorMsg, retryable };
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
-      console.error(`[professor-360-whatsapp] Timeout ao enviar para ${formattedPhone}`);
-      return { success: false, error: 'Timeout: WhatsApp não respondeu em 10s' };
+      return { success: false, error: 'Timeout: WhatsApp não respondeu em 10s', retryable: true };
     }
-    console.error(`[professor-360-whatsapp] Erro de conexão:`, error);
-    return {
-      success: false,
-      error: `Conexão: ${error instanceof Error ? error.message : 'Erro desconhecido'}`
-    };
+    return { success: false, error: `Conexão: ${error instanceof Error ? error.message : 'Erro desconhecido'}`, retryable: true };
   }
+}
+
+async function enviarWhatsApp(
+  telefone: string,
+  mensagem: string,
+  creds: WhatsAppCreds
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  const formattedPhone = formatPhoneNumber(telefone);
+  const MAX_TENTATIVAS = 3;
+
+  console.log(`[professor-360-whatsapp] Enviando para: ${formattedPhone}`);
+
+  let ultimoErro = 'Falha desconhecida';
+
+  for (let tentativa = 1; tentativa <= MAX_TENTATIVAS; tentativa++) {
+    const r = await tentarEnvio(formattedPhone, mensagem, creds);
+
+    if (r.success) {
+      console.log(`[professor-360-whatsapp] Mensagem enviada (tentativa ${tentativa})! ID: ${r.messageId}`);
+      return { success: true, messageId: r.messageId };
+    }
+
+    ultimoErro = r.error || ultimoErro;
+    console.error(`[professor-360-whatsapp] Falha (tentativa ${tentativa}/${MAX_TENTATIVAS}): ${ultimoErro}`);
+
+    // Erro definitivo (não-transitório) ou última tentativa → desiste.
+    if (!r.retryable || tentativa === MAX_TENTATIVAS) break;
+
+    // Backoff progressivo antes de tentar de novo (1.5s, 3s).
+    await new Promise((res) => setTimeout(res, tentativa * 1500));
+  }
+
+  return { success: false, error: `${ultimoErro} (após ${MAX_TENTATIVAS} tentativas)` };
 }
 
 serve(async (req) => {
