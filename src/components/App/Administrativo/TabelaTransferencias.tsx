@@ -60,7 +60,9 @@ export function TabelaTransferencias({ data }: TabelaTransferenciasProps) {
               >
                 <td className="py-3 px-2 text-slate-500 font-medium border-r border-slate-700/30">{index + 1}</td>
                 <td className="py-3 px-2 text-slate-300 border-r border-slate-700/30">
-                  {aluno.data_matricula
+                  {aluno.transferencia?.data_transferencia
+                    ? new Date(`${aluno.transferencia.data_transferencia}T00:00:00`).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+                    : aluno.data_matricula
                     ? new Date(`${aluno.data_matricula}T00:00:00`).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
                     : '-'}
                 </td>

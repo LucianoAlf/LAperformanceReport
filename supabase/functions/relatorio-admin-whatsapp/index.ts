@@ -472,6 +472,90 @@ async function gerarRelatorioDiario(
   }
   const avisosPrevios = filtrarRetencaoCanonica(avisosComCursos).map(enriquecer);
 
+  const { data: transferenciasData, error: transferenciasError } = await supabase
+    .from('aluno_transferencias')
+    .select('id, aluno_id, unidade_origem_id, unidade_destino_id, data_transferencia, observacao')
+    .eq('unidade_destino_id', unidadeId)
+    .gte('data_transferencia', primeiroDiaMes)
+    .lte('data_transferencia', ultimoDiaMes)
+    .order('data_transferencia', { ascending: false });
+  if (transferenciasError) throw transferenciasError;
+
+  const transferenciasRecebidas = transferenciasData || [];
+  const transferenciasAlunoIds = [...new Set(transferenciasRecebidas.map((t: any) => t.aluno_id).filter(Boolean))];
+  const transferenciasUnidadeIds = [...new Set(
+    transferenciasRecebidas
+      .flatMap((t: any) => [t.unidade_origem_id, t.unidade_destino_id])
+      .filter(Boolean)
+  )];
+  const transferenciasCursoIds = new Set<number>();
+  const transferenciasProfessorIds = new Set<number>();
+  const alunosTransferenciaMap = new Map<number, any>();
+  const unidadesTransferenciaMap = new Map<string, any>();
+  const cursosTransferenciaMap = new Map<number, string>();
+  const professoresTransferenciaMap = new Map<number, string>();
+
+  if (transferenciasAlunoIds.length > 0) {
+    const { data: alunosTransferenciaData } = await supabase
+      .from('alunos')
+      .select('id, nome, curso_id, professor_atual_id, valor_parcela, data_matricula')
+      .in('id', transferenciasAlunoIds);
+
+    (alunosTransferenciaData || []).forEach((aluno: any) => {
+      alunosTransferenciaMap.set(aluno.id, aluno);
+      if (aluno.curso_id) transferenciasCursoIds.add(aluno.curso_id);
+      if (aluno.professor_atual_id) transferenciasProfessorIds.add(aluno.professor_atual_id);
+    });
+  }
+
+  if (transferenciasUnidadeIds.length > 0) {
+    const { data: unidadesTransferenciaData } = await supabase
+      .from('unidades')
+      .select('id, nome, codigo')
+      .in('id', transferenciasUnidadeIds);
+
+    (unidadesTransferenciaData || []).forEach((unidade: any) => {
+      unidadesTransferenciaMap.set(String(unidade.id), unidade);
+    });
+  }
+
+  if (transferenciasCursoIds.size > 0) {
+    const { data: cursosTransferenciaData } = await supabase
+      .from('cursos')
+      .select('id, nome')
+      .in('id', Array.from(transferenciasCursoIds));
+
+    (cursosTransferenciaData || []).forEach((curso: any) => {
+      cursosTransferenciaMap.set(curso.id, curso.nome);
+    });
+  }
+
+  if (transferenciasProfessorIds.size > 0) {
+    const { data: professoresTransferenciaData } = await supabase
+      .from('professores')
+      .select('id, nome')
+      .in('id', Array.from(transferenciasProfessorIds));
+
+    (professoresTransferenciaData || []).forEach((professor: any) => {
+      professoresTransferenciaMap.set(professor.id, professor.nome);
+    });
+  }
+
+  const transferenciasRecebidasDetalhadas = transferenciasRecebidas.map((transferencia: any) => {
+    const aluno = alunosTransferenciaMap.get(transferencia.aluno_id) || {};
+    return {
+      ...transferencia,
+      aluno_nome: aluno.nome || 'Aluno transferido',
+      curso_nome: aluno.curso_id ? cursosTransferenciaMap.get(aluno.curso_id) || null : null,
+      professor_nome: aluno.professor_atual_id ? professoresTransferenciaMap.get(aluno.professor_atual_id) || null : null,
+      valor_parcela: aluno.valor_parcela || null,
+      origem_nome: unidadesTransferenciaMap.get(String(transferencia.unidade_origem_id))?.nome || null,
+      origem_codigo: unidadesTransferenciaMap.get(String(transferencia.unidade_origem_id))?.codigo || null,
+      destino_nome: unidadesTransferenciaMap.get(String(transferencia.unidade_destino_id))?.nome || null,
+      destino_codigo: unidadesTransferenciaMap.get(String(transferencia.unidade_destino_id))?.codigo || null,
+    };
+  });
+
   // === 2. MONTAR TEXTO (idêntico ao frontend) ===
   const taxaInadimplencia = alunosAtivos > 0 ? (alunosNaoPagantes / alunosAtivos * 100) : 0;
   const bolsistasIntegraisTexto = bolsistasIntegraisRegulares || bolsistasIntegraisSegundoCurso
@@ -483,6 +567,15 @@ async function gerarRelatorioDiario(
   const matriculasAtivasTexto = matriculasBaseAlunosAtivos || matriculasBanda || matriculas2Curso
     ? `*${matriculasAtivas}* (${matriculasBaseAlunosAtivos} base alunos + ${matriculasBanda} banda + ${matriculas2Curso} 2o curso)`
     : `*${matriculasAtivas}*`;
+  const entradasAdministrativas = novosAlunos + transferenciasRecebidasDetalhadas.length;
+  const formatarUnidadeTransferencia = (nome?: string | null, codigo?: string | null, fallback = 'N/I') =>
+    nome || codigo || fallback;
+  const formatarParcelaTransferencia = (valor?: number | string | null) => {
+    const numero = Number(valor || 0);
+    return numero > 0
+      ? `R$ ${numero.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
+      : 'N/I';
+  };
 
   let texto = '';
   texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
@@ -500,7 +593,9 @@ async function gerarRelatorioDiario(
   texto += `- Bolsistas Integrais: ${bolsistasIntegraisTexto}\n`;
   texto += `• Bolsistas Parciais: *${bolsistasParciais}*\n`;
   texto += `• Trancados: *${trancados || 0}*\n`;
-  texto += `• Novos no mês: *${novosAlunos}*\n\n`;
+  texto += `• Novos no mês: *${novosAlunos}*\n`;
+  texto += `• Transferências recebidas no mês: *${transferenciasRecebidasDetalhadas.length}*\n`;
+  texto += `• Entradas administrativas no mês: *${entradasAdministrativas}* (${novosAlunos} novos + ${transferenciasRecebidasDetalhadas.length} transferência${transferenciasRecebidasDetalhadas.length !== 1 ? 's' : ''})\n\n`;
 
   texto += `📚 *MATRÍCULAS*\n`;
   texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
@@ -558,6 +653,21 @@ async function gerarRelatorioDiario(
     });
   } else {
     texto += `❌ *NÃO RENOVAÇÕES DO DIA: 0*\n\n`;
+  }
+
+  texto += `🔁 *TRANSFERÊNCIAS RECEBIDAS NO PERÍODO (${transferenciasRecebidasDetalhadas.length})*\n`;
+  texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
+  if (transferenciasRecebidasDetalhadas.length === 0) {
+    texto += `Nenhuma transferência recebida neste período.\n\n`;
+  } else {
+    transferenciasRecebidasDetalhadas.forEach((t: any, i: number) => {
+      const origem = formatarUnidadeTransferencia(t.origem_nome, t.origem_codigo, 'Origem não informada');
+      const destino = formatarUnidadeTransferencia(t.destino_nome, t.destino_codigo, 'Destino não informado');
+      texto += `${i + 1}) Nome: *${t.aluno_nome}*\n`;
+      texto += `   Movimento: ${origem} → ${destino}\n`;
+      texto += `   Curso: ${t.curso_nome || 'N/I'} | Prof: ${t.professor_nome || 'N/I'}\n`;
+      texto += `   Parcela: ${formatarParcelaTransferencia(t.valor_parcela)}\n\n`;
+    });
   }
 
   texto += `⚠️ *AVISOS PRÉVIOS PARA SAIR EM ${proximoMesNome}*\n`;

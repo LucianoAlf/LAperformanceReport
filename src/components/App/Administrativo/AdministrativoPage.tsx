@@ -262,7 +262,7 @@ export function AdministrativoPage() {
   const [formasPagamento, setFormasPagamento] = useState<{ id: number; nome: string; sigla: string }[]>([]);
   const [cursos, setCursos] = useState<{ id: number; nome: string }[]>([]);
   const [alunosNovos, setAlunosNovos] = useState<any[]>([]);
-  const [transferenciasPorAluno, setTransferenciasPorAluno] = useState<Map<string, any>>(new Map());
+  const [transferenciasAdministrativas, setTransferenciasAdministrativas] = useState<any[]>([]);
   const [unidadeCaixaInfo, setUnidadeCaixaInfo] = useState<{ nome: string; codigo: string }>({
     nome: 'Unidade',
     codigo: 'LA',
@@ -566,6 +566,14 @@ export function AdministrativoPage() {
         churn_rate: k.churn_rate || acc.churn_rate || 0,
         ltv_meses: Number(k.tempo_permanencia_medio) || acc.ltv_meses || 0,
       }), {} as any) || {};
+
+      const tempoPermanenciaCanonico = unidade === 'todos'
+        ? Number(kpisAlunosCanonicos.tempoPermanencia) || 0
+        : Number(kpisAlunosCanonicos.porUnidade.find(row => row.unidade_id === unidade)?.tempoPermanencia) || 0;
+      if ((!kpis.ltv_meses || Number(kpis.ltv_meses) <= 0) && tempoPermanenciaCanonico > 0) {
+        kpis.ltv_meses = tempoPermanenciaCanonico;
+      }
+
       kpis.ticket_medio = kpis.alunos_pagantes > 0
         ? kpis.faturamento / kpis.alunos_pagantes
         : 0;
@@ -649,7 +657,7 @@ export function AdministrativoPage() {
         );
       }
 
-      setTransferenciasPorAluno(new Map(
+      const transferenciasEnriquecidasMap = new Map(
         transferenciasHistorico.map((t: any) => [
           String(t.aluno_id),
           {
@@ -660,14 +668,56 @@ export function AdministrativoPage() {
             unidade_destino_codigo: unidadesTransferenciaMap.get(String(t.unidade_destino_id))?.codigo || null,
           },
         ])
+      );
+
+      const alunoIdsTransferencia = Array.from(new Set(
+        transferenciasHistorico.map((t: any) => t.aluno_id).filter(Boolean)
       ));
+      let alunosTransferenciaMap = new Map<string, any>();
+
+      if (alunoIdsTransferencia.length > 0) {
+        const { data: alunosTransferenciaData } = await supabase
+          .from('alunos')
+          .select('id, nome, data_matricula, unidade_id, valor_parcela, is_segundo_curso, tipo_matricula_id, agente_comercial, cursos(nome), professores:professor_atual_id(nome), tipos_matricula(codigo, conta_como_pagante), formas_pagamento:forma_pagamento_id(nome, sigla), unidades(codigo, nome)')
+          .in('id', alunoIdsTransferencia);
+
+        alunosTransferenciaMap = new Map(
+          (alunosTransferenciaData || []).map((a: any) => [String(a.id), a])
+        );
+      }
+
+      const transferenciasAdministrativasPeriodo = transferenciasHistorico
+        .map((t: any) => {
+          const transferencia = transferenciasEnriquecidasMap.get(String(t.aluno_id)) || t;
+          const aluno = alunosTransferenciaMap.get(String(t.aluno_id));
+          const destino = unidadesTransferenciaMap.get(String(t.unidade_destino_id));
+
+          return {
+            ...(aluno || {
+              id: Number(t.aluno_id) || t.id,
+              nome: 'Aluno transferido',
+              data_matricula: t.data_transferencia,
+              valor_parcela: null,
+              cursos: null,
+              professores: null,
+              unidades: {
+                codigo: destino?.codigo || null,
+                nome: destino?.nome || null,
+              },
+            }),
+            transferencia,
+          };
+        })
+        .filter((t: any) => unidade === 'todos' || String(t.transferencia?.unidade_destino_id) === String(unidade));
+
+      setTransferenciasAdministrativas(transferenciasAdministrativasPeriodo);
 
       setAlunosNovos(todosNovos);
       // Filtrar: apenas novos indivíduos pagantes (sem 2º curso, sem bolsistas)
       // tipos_matricula bolsistas: BOLSISTA_INT(3), BOLSISTA_PARC(4), BANDA(5)
       const novosAlunos = todosNovos.filter(isNovoAlunoPaganteOperacional);
       const novosSegundoCurso = todosNovos.filter(a => a.is_segundo_curso).length;
-      const novasTransferencias = todosNovos.filter(isAlunoTransferenciaAdministrativa).length;
+      const novasTransferencias = transferenciasAdministrativasPeriodo.length;
       const novosBolsistas = todosNovos.filter(a =>
         isNovoAlunoForaComercial(a) && !isAlunoTransferenciaAdministrativa(a)
       ).length;
@@ -1111,12 +1161,7 @@ export function AdministrativoPage() {
   const evasoes = movimentacoes.filter(m => m.tipo === 'evasao');
   const naoRenovacoes = movimentacoes.filter(m => m.tipo === 'nao_renovacao');
   const trancamentos = movimentacoes.filter(m => m.tipo === 'trancamento');
-  const transferencias = alunosNovos
-    .filter(isAlunoTransferenciaAdministrativa)
-    .map(aluno => ({
-      ...aluno,
-      transferencia: transferenciasPorAluno.get(String(aluno.id)) || null,
-    }));
+  const transferencias = transferenciasAdministrativas;
 
   // Gerar opções de competência (últimos 12 meses)
   const competenciaOptions = Array.from({ length: 12 }, (_, i) => {
