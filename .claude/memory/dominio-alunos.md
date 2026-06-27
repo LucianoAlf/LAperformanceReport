@@ -72,6 +72,28 @@
 - Tabela `emusys_sync_log` com metricas por unidade/data
 - Campos: total_aulas, presentes, ausentes, matched, nao_encontrados, experimentais_count, inativos_count
 
+## Auditoria de Vínculos `emusys_matricula_id`
+
+### Regra: verificar ID + curso, nunca só o ID
+
+Ao auditar se um `emusys_matricula_id` está correto, **sempre cruzar com `emusys_api_payload`** para confirmar que o ID aponta para o curso certo. Verificar apenas se a linha está ativa/encerrada não é suficiente.
+
+**Padrão legítimo (multi-curso):** pessoa com linha encerrada vinculada a ID X e linha ativa vinculada a ID Y. Se X no Emusys = mesmo curso da linha encerrada no banco → ambos os vínculos estão corretos. Não é vínculo errado.
+
+**Vínculo realmente errado:** `emusys_matricula_id` aponta para um contrato de curso diferente do que está em `alunos.curso_id` — detectável cruzando `ep.curso_nome` (emusys_api_payload) com `c.nome` (cursos).
+
+**Query de diagnóstico correto:**
+```sql
+-- cruza a linha do banco com o que o Emusys diz sobre aquele ID
+LEFT JOIN emusys_api_payload ep
+  ON ep.emusys_id::text = a.emusys_matricula_id
+  AND ep.unidade_codigo = um.codigo
+-- vínculo errado = curso no banco ≠ curso no Emusys para o mesmo ID
+WHERE lower(unaccent(ep.curso_nome)) != lower(unaccent(c.nome))
+```
+
+**Caso real (2026-06-27):** Matheus Alves Tiburcio (Recreio) — banco diz Percussion Kids, ID 1419 no Emusys = Garage Band. Linha evadida, sem impacto operacional.
+
 ## Auditoria IA
 - `src/components/App/Alunos/Auditoria/RelatorioAuditoria.tsx`
 - OpenAI com function calling para insights de alunos

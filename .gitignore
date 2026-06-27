@@ -67,3 +67,4 @@ outputs/la-report-p02q-rpc-experimentais-v2-2026-06-20/
 
 # Fotos da staff (insumos pesados; fonte de verdade = bucket Storage staff-fotos + tabela staff_unidade)
 staff/
+.windsurf/
