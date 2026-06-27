@@ -592,15 +592,38 @@ async function fetchTodasMatriculas(token: string) {
 
 function resolverCursoContrato(mat: any, depara: Map<number, number | null>, banda: Set<number>) {
   const cursos: number[] = [];
+  const cursosBanda: number[] = [];
   let naoMapeada: number | null = null;
   for (const d of (mat.contrato_atual?.disciplinas || [])) {
     const did = Number(d.disciplina_id);
     if (!depara.has(did)) { naoMapeada = did; continue; }
     const cid = depara.get(did);
-    if (cid == null || banda.has(cid)) continue;
+    if (cid == null) continue;
+    if (banda.has(cid)) {
+      if (!cursosBanda.includes(cid)) cursosBanda.push(cid);
+      continue;
+    }
     if (!cursos.includes(cid)) cursos.push(cid);
   }
-  return { cursos, naoMapeada };
+  return { cursos, cursosBanda, naoMapeada };
+}
+
+function matriculaCompativelComLinha(
+  a: any,
+  tipoCodigo: string | null,
+  mat: any,
+  depara: Map<number, number | null>,
+  banda: Set<number>,
+) {
+  const linhaEhBanda = String(tipoCodigo || '').toUpperCase() === 'BANDA' || banda.has(Number(a.curso_id));
+  const { cursos, cursosBanda } = resolverCursoContrato(mat, depara, banda);
+  const emusysTemRegular = cursos.length > 0;
+  const emusysTemBanda = cursosBanda.length > 0;
+
+  // Disciplina ainda sem de/para vira revisao depois; nao bloqueia o match aqui.
+  if (!emusysTemRegular && !emusysTemBanda) return true;
+  if (linhaEhBanda) return emusysTemBanda;
+  return emusysTemRegular || !emusysTemBanda;
 }
 
 const CURSO_MUSICALIZACAO_PREPARATORIA_ID = 40;
@@ -1020,8 +1043,51 @@ function reconciliar(
   if (a.emusys_matricula_id && porId.has(Number(a.emusys_matricula_id))) {
     mat = porId.get(Number(a.emusys_matricula_id));
   } else {
-    const candTodas = (ativasPorNome.get(normalizarNome(a.nome)) || [])
+    const candTodasRaw = (ativasPorNome.get(normalizarNome(a.nome)) || [])
       .filter((m: any) => !idsVinculados.has(Number(m.id)));
+    const diaAluno = a.dia_aula ? normalizarNome(a.dia_aula) : null;
+    const candidatosMeta = (m: any) => {
+      const c = m.contrato_atual || {};
+      const disc = c.disciplinas || [];
+      const turmasArr = disc.map((d: any) => d.nome_turma).filter(Boolean);
+      const dias = turmasArr.map((t: string) => parseDiaDeTurma(t)).filter(Boolean) as string[];
+      const financeiro = analisarFinanceiroContrato(m);
+      const { cursos, cursosBanda } = resolverCursoContrato(m, depara, banda);
+      return {
+        id: m.id, status: m.status, aluno_id: m.aluno?.id ?? null,
+        disciplinas: disc.map((d: any) => d.nome),
+        turmas: turmasArr,
+        dia: dias[0] || null,
+        curso_id: cursos[0] ?? null,
+        curso_banda_id: cursosBanda[0] ?? null,
+        somente_banda: cursosBanda.length > 0 && cursos.length === 0,
+        professor_id: resolverProfessorContrato(m, profMap),
+        cheio: financeiro.valorCheio,
+        fixo: financeiro.descontoFixo,
+        cond: financeiro.descontoCondicional,
+        parcela: (financeiro.parcelaCanonica != null && financeiro.parcelaCanonica >= 0) ? financeiro.parcelaCanonica : null,
+        parcela_invalida: financeiro.bloqueiaValorAutomatico,
+        tipo_sugerido: financeiro.tipoSugerido,
+        sem_fatura_sem_cobranca: financeiro.contratoSemFaturaSemCobranca,
+        data_fim: c.data_original_ultima_aula || null,
+        sugerido_por_turma: !!(diaAluno && dias.some((d) => normalizarNome(d) === diaAluno)),
+      };
+    };
+    const candTodas = candTodasRaw.filter((m: any) => matriculaCompativelComLinha(a, tipoCodigo, m, depara, banda));
+    if (candTodasRaw.length > 0 && candTodas.length === 0) {
+      divergencias.push({
+        tipo: 'ambiguo',
+        campo: '',
+        severidade: 'alta',
+        valorApi: {
+          motivo: 'candidatos_emusys_incompativeis_com_tipo_local',
+          tipo_local: tipoCodigo,
+          curso_id_local: a.curso_id,
+          candidatos: candTodasRaw.map(candidatosMeta),
+        },
+      });
+      return { upd, divergencias };
+    }
     // prefere ativas; só cai para qualquer status se não há ativa (ex: trancada no Emusys, ativo no nosso)
     const candAtivas = candTodas.filter((m: any) => m.status === 'ativa');
     const cand = candAtivas.length > 0 ? candAtivas : candTodas;
@@ -1030,32 +1096,6 @@ function reconciliar(
       // Mantém TODOS os candidatos (não descarta no narrowing — senão a 2ª matrícula do
       // caso 2x/semana some). Marca `sugerido_por_turma` no que bate com o dia_aula, e
       // enriquece cada um com curso/professor/valor/dia pra tela mostrar e o humano vincular.
-      const diaAluno = a.dia_aula ? normalizarNome(a.dia_aula) : null;
-      const candidatosMeta = (m: any) => {
-        const c = m.contrato_atual || {};
-        const disc = c.disciplinas || [];
-        const turmasArr = disc.map((d: any) => d.nome_turma).filter(Boolean);
-        const dias = turmasArr.map((t: string) => parseDiaDeTurma(t)).filter(Boolean) as string[];
-        const financeiro = analisarFinanceiroContrato(m);
-        const { cursos } = resolverCursoContrato(m, depara, banda);
-        return {
-          id: m.id, status: m.status, aluno_id: m.aluno?.id ?? null,
-          disciplinas: disc.map((d: any) => d.nome),
-          turmas: turmasArr,
-          dia: dias[0] || null,
-          curso_id: cursos[0] ?? null,
-          professor_id: resolverProfessorContrato(m, profMap),
-          cheio: financeiro.valorCheio,
-          fixo: financeiro.descontoFixo,
-          cond: financeiro.descontoCondicional,
-          parcela: (financeiro.parcelaCanonica != null && financeiro.parcelaCanonica >= 0) ? financeiro.parcelaCanonica : null,
-          parcela_invalida: financeiro.bloqueiaValorAutomatico,
-          tipo_sugerido: financeiro.tipoSugerido,
-          sem_fatura_sem_cobranca: financeiro.contratoSemFaturaSemCobranca,
-          data_fim: c.data_original_ultima_aula || null,
-          sugerido_por_turma: !!(diaAluno && dias.some((d) => normalizarNome(d) === diaAluno)),
-        };
-      };
       divergencias.push({ tipo: 'ambiguo', campo: '', severidade: 'media', valorApi: { candidatos: cand.map(candidatosMeta) } });
       return { upd, divergencias };
     } else {
