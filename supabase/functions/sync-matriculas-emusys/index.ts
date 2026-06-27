@@ -7,12 +7,11 @@
 // Processa UMA unidade por invocação (?u=cg|barra|recreio) — o cron chama as 3 defasadas,
 // para caber no idle timeout de 150s do Supabase apesar do throttle do rate limit (60/min).
 //
-// Trilha AUTO (determinística, convergente): status, data_fim, curso_id, professor_atual_id, valor LIMPO.
+// Trilha SUGESTÃO (antigo AUTO): status, data_fim, curso_id, professor_atual_id, valor LIMPO.
+//   Nunca aplica automaticamente — registra como `auto_preview` na fila para aprovação humana.
 // Trilha FILA (matriculas_divergencias): ambiguo, ausente_api, disciplina_nao_mapeada,
 //   valor_divergente (parcela comercial divergente), classificacao_divergente (bolsa x tipo).
 // Dedup: (aluno|tipo) já com decisão humana não é reenfileirado.
-// MODO_TESTE (env SYNC_MATRICULAS_DRYRUN != 'false', default true): não aplica AUTO; em vez disso
-//   registra cada mudança AUTO como linha `auto_preview` na fila (prévia do que faria em produção).
 //
 // Salvaguardas: por matrícula (não por pessoa); data_saida = data real da API;
 //   respeita matriculas_campos_fixados; tudo logado em automacao_log (lote).
@@ -23,7 +22,7 @@ import { analisarFinanceiroContrato, deveIgnorarStatusFinanceiroPorTipo } from '
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const MODO_TESTE = (Deno.env.get('SYNC_MATRICULAS_DRYRUN') ?? 'true') !== 'false';
+
 const EMAILS_SYNC_TECNICO = new Set(
   (Deno.env.get('SYNC_MATRICULAS_ALLOWED_EMAILS') ?? 'lucianoalf.la@gmail.com,hugo@lamusic.com.br')
     .split(',')
@@ -632,7 +631,7 @@ serve(async (req) => {
   if (!u) return new Response(JSON.stringify({ erro: 'unidade inválida; use ?u=cg|recreio|barra' }), { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-  const resumo: any = { modo: MODO_TESTE ? 'dry-run' : 'aplicando', unidade: u.nome, auto: 0, fila: {}, atributos: {}, erros: 0 };
+  const resumo: any = { modo: 'sugestao', unidade: u.nome, auto: 0, fila: {}, atributos: {}, erros: 0 };
   const logs: any[] = [];
   const divs: any[] = [];
   const attrDivs: any[] = [];
@@ -737,34 +736,22 @@ serve(async (req) => {
           }
         }
 
-        // AUTO: aplica mudanças seguras. Em produção escreve em `alunos` + loga.
-        // Em dry-run NÃO altera nada, mas registra uma linha `auto_preview` na fila de
-        // conciliação (1 por aluno) com os diffs de→para, para a aba mostrar exatamente
-        // o que o sync faria quando sair do modo auditoria.
+        // SUGESTÃO: nunca aplica automaticamente — sempre registra como `auto_preview` na fila
+        // para aprovação humana na aba de Conciliação.
         if (Object.keys(r.upd).length) {
           resumo.auto++;
-          if (!MODO_TESTE) {
-            r.upd.updated_at = new Date().toISOString();
-            await supabase.from('alunos').update(r.upd).eq('id', a.id);
-            logs.push({
-              aluno_id: a.id, aluno_nome: a.nome, unidade_nome: u.nome,
-              evento: 'sync_matricula_reconciliacao', acao: 'reconciliado',
-              status: 'ok', detalhes: r.detalhes, created_at: new Date().toISOString(),
-            });
-          } else {
-            const campoPreview = autoPreviewCampo(r.upd);
-            if (!jaDecididoCampo.has(`${a.id}|auto_preview|${campoPreview}`)) {
+          const campoPreview = autoPreviewCampo(r.upd);
+          if (!jaDecididoCampo.has(`${a.id}|auto_preview|${campoPreview}`)) {
             previewAlunoIds.push(a.id);
             divs.push({
               aluno_id: a.id, emusys_matricula_id: a.emusys_matricula_id, unidade_id: u.id,
               tipo_divergencia: 'auto_preview', campo: campoPreview, fonte: 'sync',
               valor_nosso: { nome: a.nome },
-              // `patch` = o que o "Aprovar" da tela vai gravar (mesmo upd que o sync aplicaria em produção)
+              // `patch` = o que o "Aprovar" da tela vai gravar
               valor_api: { diffs: r.detalhes?.diffs ?? {}, patch: r.upd, status_api: r.detalhes?.status_api },
               sugestao: null, severidade: 'baixa',
               resolvido: false, updated_at: new Date().toISOString(),
             });
-            }
           }
         }
 
@@ -787,13 +774,11 @@ serve(async (req) => {
     // inserts em lote
     if (logs.length) await supabase.from('automacao_log').insert(logs);
     await persistirDivergenciasAtributos(supabase, u.id, attrDivs);
-    if (MODO_TESTE) {
-      await supabase.from('matriculas_divergencias')
-        .update({ resolvido: true, updated_at: new Date().toISOString() })
-        .eq('unidade_id', u.id)
-        .eq('tipo_divergencia', 'auto_preview')
-        .eq('resolvido', false);
-    }
+    await supabase.from('matriculas_divergencias')
+      .update({ resolvido: true, updated_at: new Date().toISOString() })
+      .eq('unidade_id', u.id)
+      .eq('tipo_divergencia', 'auto_preview')
+      .eq('resolvido', false);
     if (divs.length) await supabase.from('matriculas_divergencias').upsert(divs, { onConflict: 'aluno_id,tipo_divergencia,campo' });
 
     // Limpa ambíguos obsoletos: alunos processados nesta rodada que não geraram novo ambíguo.
