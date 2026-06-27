@@ -7,9 +7,9 @@
 // Processa UMA unidade por invocação (?u=cg|barra|recreio) — o cron chama as 3 defasadas,
 // para caber no idle timeout de 150s do Supabase apesar do throttle do rate limit (60/min).
 //
-// Trilha AUTO (determinística, convergente): status, data_fim, curso_id, professor_atual_id, valor LIMPO.
-// Trilha FILA (matriculas_divergencias): ambiguo, ausente_api, disciplina_nao_mapeada,
-//   valor_divergente (parcela comercial divergente), classificacao_divergente (bolsa x tipo).
+// Trilha AUTO (deterministica, convergente): atributos vazios de cadastro/foto vindos do Emusys.
+// Trilha FILA (matriculas_divergencias): status, grade, valor, classificacao, ambiguo, ausente_api,
+//   disciplina_nao_mapeada. Campos que impactam KPI ou financeiro exigem decisao guardada.
 // Dedup: (aluno|tipo) já com decisão humana não é reenfileirado.
 // MODO_TESTE (env SYNC_MATRICULAS_DRYRUN != 'false', default true): não aplica AUTO; em vez disso
 //   registra cada mudança AUTO como linha `auto_preview` na fila (prévia do que faria em produção).
@@ -770,7 +770,11 @@ serve(async (req) => {
 
         // FILA: cada divergência vira uma linha (respeitando dedup de decisões humanas)
         for (const dv of r.divergencias) {
-          if (jaDecidido.has(`${a.id}|${dv.tipo}`) && !dv.reabrir) continue;
+          if (dv.tipo === 'auto_preview') {
+            if (jaDecididoCampo.has(`${a.id}|auto_preview|${dv.campo || ''}`) && !dv.reabrir) continue;
+          } else if (jaDecidido.has(`${a.id}|${dv.tipo}`) && !dv.reabrir) {
+            continue;
+          }
           resumo.fila[dv.tipo] = (resumo.fila[dv.tipo] || 0) + 1;
           divs.push({
             aluno_id: a.id, emusys_matricula_id: a.emusys_matricula_id, unidade_id: u.id,
@@ -1109,17 +1113,36 @@ function reconciliar(
   const fotoEmusys = extrairFotoAluno(mat);
 
   const diffs: Record<string, any> = {};
+  const patchRevisao: Record<string, any> = {};
+  const diffsRevisao: Record<string, any> = {};
   const setCampo = (campo: string, vNovo: any, vAtual: any) => {
     if (vNovo == null || fixadosEfetivos.has(campo)) return;
     if (!valoresIguaisParaCampo(campo, vNovo, vAtual)) { upd[campo] = vNovo; diffs[campo] = { de: vAtual, para: vNovo }; }
   };
+  const sugerirCampoRevisao = (campo: string, vNovo: any, vAtual: any) => {
+    if (vNovo == null || fixadosEfetivos.has(campo)) return;
+    if (!valoresIguaisParaCampo(campo, vNovo, vAtual)) {
+      patchRevisao[campo] = vNovo;
+      diffsRevisao[campo] = { de: vAtual, para: vNovo };
+    }
+  };
 
   if (statusAlvo !== a.status) {
-    upd.status = statusAlvo; diffs.status = { de: a.status, para: statusAlvo };
-    if (statusAlvo === 'evadido' && dataFim && !fixadosEfetivos.has('data_saida')) upd.data_saida = dataFim;
+    divergencias.push({
+      tipo: 'status_divergente',
+      campo: 'status',
+      severidade: 'alta',
+      valorApi: {
+        status_emusys: mat.status,
+        status_sugerido_la_report: statusAlvo,
+        data_fim: dataFim,
+        emusys_matricula_id: mat.id,
+      },
+      sugestao: statusAlvo,
+    });
   }
-  setCampo('data_fim_contrato', dataFim, a.data_fim_contrato);
-  setCampo('status_pagamento', statusFinanceiroEmusys, a.status_pagamento);
+  sugerirCampoRevisao('data_fim_contrato', dataFim, a.data_fim_contrato);
+  sugerirCampoRevisao('status_pagamento', statusFinanceiroEmusys, a.status_pagamento);
   if (!temValor(a.foto_url) && !temValor(a.photo_url)) {
     setCampo('foto_url', fotoEmusys, a.foto_url);
   }
@@ -1127,10 +1150,10 @@ function reconciliar(
   // Regua de VALOR: contrato Emusys e a fonte da parcela comercial.
   if (cheio != null) {
     if (!financeiro.bloqueiaValorAutomatico && parcelaComercial != null && parcelaComercial >= 0) {
-      setCampo('valor_cheio', cheio, a.valor_cheio);
-      setCampo('desconto_fixo', fixo, a.desconto_fixo);
-      setCampo('desconto_condicional', cond, a.desconto_condicional);
-      setCampo('valor_parcela', parcelaComercial, a.valor_parcela);
+      sugerirCampoRevisao('valor_cheio', cheio, a.valor_cheio);
+      sugerirCampoRevisao('desconto_fixo', fixo, a.desconto_fixo);
+      sugerirCampoRevisao('desconto_condicional', cond, a.desconto_condicional);
+      sugerirCampoRevisao('valor_parcela', parcelaComercial, a.valor_parcela);
     } else if (!fixadosEfetivos.has('valor_parcela')) {
       // Parcela inválida (a API às vezes embute o desconto_fixo no valor_mensalidade → líquido<0) → revisão humana.
       if ((parcelaComercial ?? 0) > 0 && Number(a.valor_parcela ?? 0) !== parcelaComercial) {
@@ -1197,12 +1220,12 @@ function reconciliar(
     if (naoMapeada != null && cursos.length === 0) {
       divergencias.push({ tipo: 'disciplina_nao_mapeada', campo: '', severidade: 'media', valorApi: { disciplina_id: naoMapeada } });
     } else if (cursos.length === 1) {
-      if (!devePreservarCursoBase(a, cursos[0])) setCampo('curso_id', cursos[0], a.curso_id);
+      if (!devePreservarCursoBase(a, cursos[0])) sugerirCampoRevisao('curso_id', cursos[0], a.curso_id);
     } else if (cursos.length > 1 && !cursos.includes(a.curso_id)) {
       divergencias.push({ tipo: 'ambiguo', campo: '', severidade: 'media', valorApi: { motivo: 'multiplos_cursos', cursos } });
     }
     const profId = resolverProfessorContrato(mat, profMap);
-    if (profId != null) setCampo('professor_atual_id', profId, a.professor_atual_id);
+    if (profId != null) sugerirCampoRevisao('professor_atual_id', profId, a.professor_atual_id);
 
     // Dia e horário da aula derivados do nome_turma (fonte determinística do Emusys).
     // Prefere a turma da disciplina que corresponde ao curso do aluno (caso multi-curso);
@@ -1214,8 +1237,18 @@ function reconciliar(
     if (turmasAlvo.length === 0) turmasAlvo = discs.map((d: any) => d.nome_turma).filter(Boolean);
     const diasSet = new Set(turmasAlvo.map((t: string) => parseDiaDeTurma(t)).filter(Boolean));
     const horasSet = new Set(turmasAlvo.map((t: string) => parseHorarioDeTurma(t)).filter(Boolean));
-    if (diasSet.size === 1) setCampo('dia_aula', [...diasSet][0] as string, a.dia_aula);
-    if (horasSet.size === 1) setCampo('horario_aula', [...horasSet][0] as string, a.horario_aula);
+    if (diasSet.size === 1) sugerirCampoRevisao('dia_aula', [...diasSet][0] as string, a.dia_aula);
+    if (horasSet.size === 1) sugerirCampoRevisao('horario_aula', [...horasSet][0] as string, a.horario_aula);
+  }
+
+  if (Object.keys(patchRevisao).length) {
+    divergencias.push({
+      tipo: 'auto_preview',
+      campo: autoPreviewCampo(patchRevisao),
+      severidade: 'media',
+      valorApi: { diffs: diffsRevisao, patch: patchRevisao, status_api: mat.status },
+      sugestao: null,
+    });
   }
 
   return { upd, divergencias, detalhes: { emusys_matricula_id: mat.id, status_api: mat.status, diffs } };

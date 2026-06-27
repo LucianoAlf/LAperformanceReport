@@ -33,9 +33,6 @@ import { TabAutomacao } from './Automacao/TabAutomacao';
 import { TabHistoricoLTV } from './TabHistoricoLTV';
 import { ToastContainer } from '@/components/ui/toast';
 import { useToast } from '@/hooks/useToast';
-import { fetchKPIsAlunosCanonicos } from '@/hooks/useKPIsAlunosCanonicos';
-
-
 // Interfaces
 export interface Aluno {
   id: number;
@@ -137,6 +134,50 @@ export interface KPIsAlunos {
   matriculasSegundoCurso?: number;
   matriculasBanda?: number;
   matriculasCoral?: number;
+}
+
+interface KPIsAlunosAdminOperacional {
+  alunosAtivos: number;
+  alunosPagantes: number;
+  matriculasAtivas: number;
+  matriculasBanda: number;
+  matriculasSegundoCurso: number;
+  matriculasCoral: number;
+  bolsistasIntegrais: number;
+  bolsistasParciais: number;
+}
+
+async function fetchKPIsAlunosAdminOperacional({
+  unidadeId,
+  ano,
+  mes,
+}: {
+  unidadeId?: string | 'todos' | null;
+  ano: number;
+  mes: number;
+}): Promise<KPIsAlunosAdminOperacional | null> {
+  const unidadeFiltro = unidadeId && unidadeId !== 'todos' ? unidadeId : null;
+  const { data, error } = await supabase.rpc('get_kpis_alunos_admin_operacional', {
+    p_unidade_id: unidadeFiltro,
+    p_ano: ano,
+    p_mes: mes,
+  });
+
+  if (error) throw error;
+
+  const totais = data?.totais;
+  if (!totais) return null;
+
+  return {
+    alunosAtivos: Number(totais.alunos_ativos) || 0,
+    alunosPagantes: Number(totais.alunos_pagantes) || 0,
+    matriculasAtivas: Number(totais.matriculas_ativas) || 0,
+    matriculasBanda: Number(totais.matriculas_banda) || 0,
+    matriculasSegundoCurso: Number(totais.matriculas_2_curso) || 0,
+    matriculasCoral: Number(totais.matriculas_coral) || 0,
+    bolsistasIntegrais: Number(totais.bolsistas_integrais) || 0,
+    bolsistasParciais: Number(totais.bolsistas_parciais) || 0,
+  };
 }
 
 export interface Filtros {
@@ -591,48 +632,44 @@ export function AlunosPage() {
       // KPIs usam apenas alunos da query principal (por data_matricula), não os mesclados por data_saida
       const alunosParaKPIs = alunosRaw ?? [];
       // IDs de tipos: 3=BOLSISTA_INT, 4=BOLSISTA_PARC
-      const ativosETrancados = alunosParaKPIs.filter((a: any) =>
-        (a.status === 'ativo' || a.status === 'trancado' || a.status === 'aviso_previo')
-      );
-
-      // Mesma régua canônica viva: pessoas distintas (ativo+trancado),
+      const ativosOperacionais = alunosParaKPIs.filter((a: any) => a.status === 'ativo');
+      // Mesma régua operacional viva: pessoas distintas com matrícula ativa,
       // sem filtrar is_segundo_curso (COUNT DISTINCT nome já deduplicaela)
       const totalAtivos = new Set(
         alunosParaKPIs
-          .filter((a: any) => a.status === 'ativo' || a.status === 'trancado')
+          .filter((a: any) => a.status === 'ativo')
           .map((a: any) => (a.nome ?? '').toLowerCase().trim())
           .filter(Boolean)
       ).size;
-      const totalMatriculasAtivas = ativosETrancados.length; // inclui segundo curso + banda
+      const totalMatriculasAtivas = ativosOperacionais.length; // inclui segundo curso + banda
 
       // Separar banda, coral e segundo curso
       const cursosCoral = ['canto coral'];
 
       // Banda: usar is_projeto_banda do curso
-      const matriculasBanda = ativosETrancados.filter((a: any) =>
+      const matriculasBanda = ativosOperacionais.filter((a: any) =>
         a.cursos?.is_projeto_banda === true
       ).length;
 
-      const matriculasCoral = ativosETrancados.filter((a: any) =>
+      const matriculasCoral = ativosOperacionais.filter((a: any) =>
         cursosCoral.some(nome => a.cursos?.nome?.toLowerCase().includes(nome))
       ).length;
 
       // Segundo curso = is_segundo_curso true, excluindo banda e coral
-      const matriculasSegundoCurso = ativosETrancados.filter((a: any) =>
+      const matriculasSegundoCurso = ativosOperacionais.filter((a: any) =>
         a.is_segundo_curso &&
         a.cursos?.is_projeto_banda !== true &&
         !cursosCoral.some(nome => a.cursos?.nome?.toLowerCase().includes(nome))
       ).length;
       // Pagantes = conta_como_pagante AND NOT is_segundo_curso AND status ativo/trancado
       // aviso_previo fica em ativosETrancados mas NÃO entra na base de pagantes (mesma régua da view)
-      const pagantesRecords = ativosETrancados.filter((a: any) =>
+      const pagantesRecords = ativosOperacionais.filter((a: any) =>
         a.tipos_matricula?.conta_como_pagante === true &&
-        !a.is_segundo_curso &&
-        (a.status === 'ativo' || a.status === 'trancado')
+        !a.is_segundo_curso
       );
       const totalPagantes = pagantesRecords.length;
       // Bolsista real = exclui projeto banda (banda tem categoria própria, mesmo marcada como bolsista)
-      const totalBolsistas = ativosETrancados.filter((a: any) => {
+      const totalBolsistas = ativosOperacionais.filter((a: any) => {
         const codigo = a.tipos_matricula?.codigo;
         return (codigo === 'BOLSISTA_INT' || codigo === 'BOLSISTA_PARC') && a.cursos?.is_projeto_banda !== true;
       }).length;
@@ -641,7 +678,7 @@ export function AlunosPage() {
       // Regra: soma de todas as parcelas / total de alunos pagantes
       // Aluno pagante = tipo_matricula.entra_ticket_medio === true
       // Inclui inadimplentes, em_dia, em_aberto — todos que vão pagar
-      const alunosTicket = ativosETrancados.filter((a: any) =>
+      const alunosTicket = ativosOperacionais.filter((a: any) =>
         a.tipos_matricula?.entra_ticket_medio === true &&
         a.valor_parcela != null &&
         a.valor_parcela > 0
@@ -673,26 +710,31 @@ export function AlunosPage() {
         : 0;
       const turmasSozinhos = turmasViewData.filter((t: any) => t.total_alunos === 1).length;
 
-      const kpisCanonicos = await fetchKPIsAlunosCanonicos({
-        unidadeId: unidadeAtual,
-        ano: competenciaFiltro.ano,
-        mes: competenciaFiltro.mes,
-      });
+      let kpisAdminOperacional: KPIsAlunosAdminOperacional | null = null;
+      try {
+        kpisAdminOperacional = await fetchKPIsAlunosAdminOperacional({
+          unidadeId: unidadeAtual,
+          ano: competenciaFiltro.ano,
+          mes: competenciaFiltro.mes,
+        });
+      } catch (err) {
+        console.error('Erro ao buscar KPIs operacionais de alunos:', err);
+      }
 
-      const usarKpisCanonicos = kpisCanonicos.fonte !== 'indisponivel';
+      const usarKpisAdminOperacional = !!kpisAdminOperacional;
 
       setKpis({
-        totalAtivos: usarKpisCanonicos ? Math.round(kpisCanonicos.alunosAtivos) : totalAtivos,
-        totalMatriculasAtivas: usarKpisCanonicos ? Math.round(kpisCanonicos.matriculasAtivas) : totalMatriculasAtivas,
-        matriculasSegundoCurso: usarKpisCanonicos ? Math.round(kpisCanonicos.matriculasSegundoCurso) : matriculasSegundoCurso,
-        matriculasBanda: usarKpisCanonicos ? Math.round(kpisCanonicos.matriculasBanda) : matriculasBanda,
-        matriculasCoral: usarKpisCanonicos ? Math.round(kpisCanonicos.matriculasCoral) : matriculasCoral,
-        totalPagantes: usarKpisCanonicos ? Math.round(kpisCanonicos.alunosPagantes) : totalPagantes,
-        totalBolsistas: usarKpisCanonicos
-          ? Math.round(kpisCanonicos.bolsistasIntegrais + kpisCanonicos.bolsistasParciais)
+        totalAtivos: usarKpisAdminOperacional ? kpisAdminOperacional.alunosAtivos : totalAtivos,
+        totalMatriculasAtivas: usarKpisAdminOperacional ? kpisAdminOperacional.matriculasAtivas : totalMatriculasAtivas,
+        matriculasSegundoCurso: usarKpisAdminOperacional ? kpisAdminOperacional.matriculasSegundoCurso : matriculasSegundoCurso,
+        matriculasBanda: usarKpisAdminOperacional ? kpisAdminOperacional.matriculasBanda : matriculasBanda,
+        matriculasCoral: usarKpisAdminOperacional ? kpisAdminOperacional.matriculasCoral : matriculasCoral,
+        totalPagantes: usarKpisAdminOperacional ? kpisAdminOperacional.alunosPagantes : totalPagantes,
+        totalBolsistas: usarKpisAdminOperacional
+          ? Math.round(kpisAdminOperacional.bolsistasIntegrais + kpisAdminOperacional.bolsistasParciais)
           : totalBolsistas,
         mediaAlunosTurma: Math.round(mediaAlunosTurma * 100) / 100,
-        ticketMedio: usarKpisCanonicos ? Math.round(kpisCanonicos.ticketMedio) : Math.round(ticketMedio),
+        ticketMedio: Math.round(ticketMedio),
         ltvMedio: Math.round(ltvMedio * 10) / 10,
         totalTurmas,
         turmasSozinhos
