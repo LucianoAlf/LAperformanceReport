@@ -51,6 +51,10 @@
 - `professor-360-whatsapp` — feedback 360 via WhatsApp
 - `projeto-alertas-whatsapp` — alertas de projetos
 - `relatorio-admin-whatsapp` — relatorio admin (tipos: gerencial_ia, diario, mensal, renovacoes, avisos, evasoes)
+  - **modo cron** (`{"modo":"cron"}`, jobs 13 seg-sex 23h UTC / 22 sab 19h UTC): `processarCron` gera o texto por unidade e faz **INSERT em `fila_relatorios_whatsapp`** (status `pendente`); quem envia é `processar-mensagens-agendadas` (a cada min). modo `dry_run` (`{"modo":"dry_run","unidade":<uuid>}`, `verify_jwt:false`) gera o texto **sem enfileirar/enviar** — seguro p/ teste.
+  - ⚠️ **GOTCHA `data_dia` (incidente 2026-06-27):** o INSERT do `processarCron` **nunca** preencheu a coluna `data_dia` (NOT NULL) — sempre dependeu do **DEFAULT** da coluna. Em 2026-06-27 o default sumiu (mudança de banco fora de migration versionada) e os 3 INSERTs do sábado falharam com `null value in column "data_dia" violates not-null constraint` → 0 relatórios na fila, nada enviado. Cron mostrava "succeeded" (net.http_post é fire-and-forget); a resposta real fica em `net._http_response.content`. **Fix:** migration `fila_relatorios_data_dia_default_brt` restaurou `DEFAULT (now() AT TIME ZONE 'America/Sao_Paulo')::date`. Se mexer no INSERT, preencher `data_dia` explicitamente OU manter o default.
+  - **Lição (2026-06-27):** o "git↔prod divergente" observado durante o incidente era só o **local 4 commits atrás** do `origin/main` (commit `b8e1aea` já tinha a v44 com `get_kpis_alunos_admin_operacional` + `anexarCursosMovimentacoes`). Após `pull`, local == prod. Antes de concluir divergência, `git fetch` + comparar com `origin/main`, e `get_edge_function` antes de redeployar.
+  - Sem retry de envio quando a falha é no enfileiramento: o retry do `processar-mensagens-agendadas` só reprocessa itens já na fila (`pendente`/`erro`).
 - `relatorio-coordenacao-whatsapp` — relatorio coordenacao (tipos similares)
 - Modais de envio: `ModalRelatorio.tsx` (Administrativo), `ModalRelatorioVendas.tsx` (Lojinha), `ModalRelatorioCoordenacao.tsx` (Professores), `RelatoriosTab.tsx` (PreAtendimento)
 - Periodos: hoje, ontem, semana, mes, personalizado
