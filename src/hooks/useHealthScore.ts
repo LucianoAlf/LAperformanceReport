@@ -289,11 +289,11 @@ export function calcularHealthScore(
     contribuicao: scoreRet * (weights.retencao / 100)
   });
 
-  // 4. Conversao Exp->Mat legada/bloqueada para KPI oficial
+  // 4. Conversao Exp->Mat canonica
   const conversao = kpis.conversao ?? 0;
   const scoreConv = Math.min(100, conversao);
   detalhes.push({
-    kpi: 'Conversao legado',
+    kpi: 'Conversao Exp->Mat',
     valor: conversao,
     scoreNormalizado: scoreConv,
     peso: weights.conversao / 100,

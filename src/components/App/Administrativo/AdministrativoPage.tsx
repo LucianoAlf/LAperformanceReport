@@ -72,6 +72,47 @@ import {
 
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
 
+async function fetchKPIsAlunosAdminOperacional({
+  unidadeId,
+  ano,
+  mes,
+}: {
+  unidadeId?: string | 'todos' | null;
+  ano: number;
+  mes: number;
+}) {
+  const unidadeFiltro = unidadeId && unidadeId !== 'todos' ? unidadeId : null;
+  const { data, error } = await supabase.rpc('get_kpis_alunos_admin_operacional', {
+    p_unidade_id: unidadeFiltro,
+    p_ano: ano,
+    p_mes: mes,
+  });
+
+  if (error) throw error;
+
+  return (data?.por_unidade || []).map((row: any) => ({
+    unidade_id: row.unidade_id,
+    total_alunos_ativos: Number(row.alunos_ativos) || 0,
+    total_alunos_pagantes: Number(row.alunos_pagantes) || 0,
+    total_bolsistas_integrais: Number(row.bolsistas_integrais) || 0,
+    total_bolsistas_integrais_regulares: Number(row.bolsistas_integrais_regulares) || 0,
+    total_bolsistas_integrais_segundo_curso: Number(row.bolsistas_integrais_segundo_curso) || 0,
+    total_bolsistas_parciais: Number(row.bolsistas_parciais) || 0,
+    total_alunos_trancados: Number(row.alunos_trancados) || 0,
+    ticket_medio: 0,
+    faturamento_previsto: 0,
+    churn_rate: 0,
+    tempo_permanencia_medio: 0,
+    _matriculas_ativas: Number(row.matriculas_ativas) || 0,
+    _matriculas_base_alunos_ativos: Number(row.matriculas_base_alunos_ativos) || 0,
+    _matriculas_banda: Number(row.matriculas_banda) || 0,
+    _matriculas_2_curso: Number(row.matriculas_2_curso) || 0,
+    _alunos_com_2_curso: Number(row.alunos_com_2_curso) || 0,
+    _matriculas_2_curso_extras: Number(row.matriculas_2_curso_extras) || 0,
+    _alunos_coral: Number(row.matriculas_coral) || 0,
+  }));
+}
+
 // Tipos
 export interface MovimentacaoAdmin {
   id?: number;
@@ -434,27 +475,35 @@ export function AdministrativoPage() {
         mes,
       });
 
-      if (kpisAlunosCanonicos.fonte !== 'indisponivel') {
-        kpisData = kpisAlunosCanonicos.porUnidade.map(row => ({
-          unidade_id: row.unidade_id,
-          total_alunos_ativos: row.alunosAtivos,
-          total_alunos_pagantes: row.alunosPagantes,
-          total_bolsistas_integrais: row.bolsistasIntegrais,
-          total_bolsistas_integrais_regulares: row.bolsistasIntegraisRegulares,
-          total_bolsistas_integrais_segundo_curso: row.bolsistasIntegraisSegundoCurso,
-          total_bolsistas_parciais: row.bolsistasParciais,
-          ticket_medio: row.ticketMedio,
-          faturamento_previsto: row.faturamentoPrevisto,
-          churn_rate: row.churnRate,
-          tempo_permanencia_medio: row.tempoPermanencia,
-          _matriculas_ativas: row.matriculasAtivas,
-          _matriculas_base_alunos_ativos: row.matriculasBaseAlunosAtivos,
-          _matriculas_banda: row.matriculasBanda,
-          _matriculas_2_curso: row.matriculasSegundoCurso,
-          _alunos_com_2_curso: row.alunosComSegundoCurso,
-          _matriculas_2_curso_extras: row.matriculasSegundoCursoExtras,
-          _alunos_coral: row.matriculasCoral,
-        }));
+      if (isPeriodoAtual) {
+        kpisData = await fetchKPIsAlunosAdminOperacional({
+          unidadeId: unidade,
+          ano,
+          mes,
+        });
+      } else {
+        if (kpisAlunosCanonicos.fonte !== 'indisponivel') {
+          kpisData = kpisAlunosCanonicos.porUnidade.map(row => ({
+            unidade_id: row.unidade_id,
+            total_alunos_ativos: row.alunosAtivos,
+            total_alunos_pagantes: row.alunosPagantes,
+            total_bolsistas_integrais: row.bolsistasIntegrais,
+            total_bolsistas_integrais_regulares: row.bolsistasIntegraisRegulares,
+            total_bolsistas_integrais_segundo_curso: row.bolsistasIntegraisSegundoCurso,
+            total_bolsistas_parciais: row.bolsistasParciais,
+            ticket_medio: row.ticketMedio,
+            faturamento_previsto: row.faturamentoPrevisto,
+            churn_rate: row.churnRate,
+            tempo_permanencia_medio: row.tempoPermanencia,
+            _matriculas_ativas: row.matriculasAtivas,
+            _matriculas_base_alunos_ativos: row.matriculasBaseAlunosAtivos,
+            _matriculas_banda: row.matriculasBanda,
+            _matriculas_2_curso: row.matriculasSegundoCurso,
+            _alunos_com_2_curso: row.alunosComSegundoCurso,
+            _matriculas_2_curso_extras: row.matriculasSegundoCursoExtras,
+            _alunos_coral: row.matriculasCoral,
+          }));
+        }
       }
       // Buscar matrículas ativas, banda e 2º curso
       // Para período histórico com snapshot disponível, usar dados do dados_mensais

@@ -9,11 +9,11 @@ import { Button } from '@/components/ui/button';
 // Total deve somar 100%
 // NOTA: Professor 360° foi removido do Health Score - agora é nota de corte independente
 export const DEFAULT_HEALTH_WEIGHTS = {
-  taxaCrescimento: 15, // Taxa de crescimento com fator de demanda ponderado
+  taxaCrescimento: 0,  // Desativado ate existir fonte canonica de crescimento por professor
   mediaTurma: 20,      // Média de alunos por turma
   retencao: 25,        // Taxa de retenção (renovações)
-  conversao: 15,       // Conversao Exp->Mat legada/bloqueada para KPI oficial
-  presenca: 15,        // Taxa de presença dos alunos
+  conversao: 20,       // Conversao Exp->Mat canonica
+  presenca: 25,        // Taxa de presença dos alunos
   evasoes: 10,         // Evasões/Churn (inverso: menos = melhor)
 };
 
@@ -41,20 +41,20 @@ const WEIGHT_CONFIG: Record<HealthWeightKey, {
   mediaTurma: { icon: Users, label: 'Média/Turma', color: 'text-purple-400' },
   retencao: { 
     icon: RefreshCw, 
-    label: 'Retenção', 
+    label: 'Retenção',
     description: 'Taxa de renovações',
     color: 'text-cyan-400' 
   },
   conversao: {
     icon: Target,
-    label: 'Conversao legado',
-    description: 'Exp->Mat bloqueada como KPI oficial',
+    label: 'Conversao Exp->Mat',
+    description: 'Conversao de experimentais confirmadas em matriculas',
     color: 'text-pink-400'
   },
   presenca: { icon: Calendar, label: 'Presença', color: 'text-green-400' },
   evasoes: { 
     icon: DoorOpen, 
-    label: 'Evasões', 
+    label: 'Evasões',
     description: 'Inverso: menos = melhor',
     color: 'text-red-400'
   },

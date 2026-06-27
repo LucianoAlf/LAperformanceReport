@@ -82,6 +82,25 @@ function filtrarRetencaoCanonica<T extends any>(rows: T[] | null | undefined): T
   return (rows || []).filter(row => !isAtividadeExtraAcademica(row));
 }
 
+async function anexarCursosMovimentacoes(supabase: any, rows: any[] | null | undefined): Promise<any[]> {
+  const baseRows = rows || [];
+  const cursoIds = [...new Set(baseRows.map((row: any) => row.curso_id).filter(Boolean))];
+  if (cursoIds.length === 0) return baseRows;
+
+  const { data: cursos, error } = await supabase
+    .from('cursos')
+    .select('id, nome, is_projeto_banda')
+    .in('id', cursoIds);
+
+  if (error) throw error;
+
+  const cursoMap = new Map((cursos || []).map((curso: any) => [curso.id, curso]));
+  return baseRows.map((row: any) => ({
+    ...row,
+    cursos: row.cursos || cursoMap.get(row.curso_id) || null,
+  }));
+}
+
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -221,7 +240,7 @@ async function fetchKPIsAlunosRelatorioAdmin(
   ano: number,
   mes: number
 ) {
-  const { data, error } = await supabase.rpc('get_kpis_alunos_canonicos', {
+  const { data, error } = await supabase.rpc('get_kpis_alunos_admin_operacional', {
     p_unidade_id: unidadeId,
     p_ano: ano,
     p_mes: mes,
@@ -360,8 +379,6 @@ async function gerarRelatorioDiario(
   const bolsistasIntegraisSegundoCurso = kpisAlunos.bolsistasIntegraisSegundoCurso;
   const bolsistasParciais = kpisAlunos.bolsistasParciais;
 
-  const trancados = kpisAlunos.trancados;
-
   // Novos no mes: pessoas pagantes novas, sem 2o curso, banda/coral ou bolsista.
   const novosAlunos = kpisAlunos.novosAlunos;
 
@@ -375,14 +392,17 @@ async function gerarRelatorioDiario(
   const alunosCoral = kpisAlunos.alunosCoral;
 
   // Movimentacoes do mes para retencao operacional viva.
-  const { data: movData } = await supabase
+  const { data: movData, error: movError } = await supabase
     .from('movimentacoes_admin')
-    .select('*, unidades(codigo), cursos:curso_id!left(nome, is_projeto_banda)')
+    .select('*')
     .eq('unidade_id', unidadeId)
     .or(`and(data.gte.${primeiroDiaMes},data.lte.${hoje}),and(competencia_referencia.gte.${primeiroDiaMes},competencia_referencia.lte.${ultimoDiaMes})`)
     .order('data', { ascending: false });
+  if (movError) throw movError;
 
-  const alunoIdsMovimentacoes = [...new Set((movData || []).map((m: any) => m.aluno_id).filter(Boolean))];
+  const movComCursos = await anexarCursosMovimentacoes(supabase, movData || []);
+
+  const alunoIdsMovimentacoes = [...new Set(movComCursos.map((m: any) => m.aluno_id).filter(Boolean))];
   const alunosRetencaoMap = new Map<number, any>();
   if (alunoIdsMovimentacoes.length > 0) {
     const { data: alunosRetencaoData } = await supabase
@@ -392,7 +412,7 @@ async function gerarRelatorioDiario(
     (alunosRetencaoData || []).forEach((a: any) => alunosRetencaoMap.set(a.id, a));
   }
 
-  const movimentacoes = filtrarRetencaoCanonica((movData || []).map((m: any) => aplicarFallbacksRetencao({
+  const movimentacoes = filtrarRetencaoCanonica(movComCursos.map((m: any) => aplicarFallbacksRetencao({
     ...m,
     alunos: m.aluno_id ? alunosRetencaoMap.get(m.aluno_id) || null : null,
   })));
@@ -405,6 +425,8 @@ async function gerarRelatorioDiario(
     .filter((m: any) => isRenovacaoAntecipada(m) && competenciaReferenciaMovimento(m) > ultimoDiaMes);
   const naoRenovacoesMov = movimentacoes.filter((m: any) => m.tipo === 'nao_renovacao');
   const evasoesMov = movimentacoes.filter((m: any) => m.tipo === 'evasao');
+  const trancamentosMov = movimentacoes.filter((m: any) => m.tipo === 'trancamento');
+  const trancados = trancamentosMov.length;
 
   // Enriquecer com nomes de professores (mesma lógica do frontend)
   const profIds = [...new Set(movimentacoes.map((m: any) => m.professor_id).filter(Boolean))];
@@ -431,21 +453,24 @@ async function gerarRelatorioDiario(
   const evasoesHoje = evasoes.filter((e: any) => e.data === hoje);
 
   // Avisos prévios (mes_saida do mês seguinte — mesma lógica do fix no frontend)
-  const { data: avisosData } = await supabase
+  const { data: avisosData, error: avisosError } = await supabase
     .from('movimentacoes_admin')
-    .select('*, cursos:curso_id!left(nome, is_projeto_banda)')
+    .select('*')
     .eq('unidade_id', unidadeId)
     .eq('tipo', 'aviso_previo')
     .gte('mes_saida', mesSaidaStart)
     .lte('mes_saida', mesSaidaEnd)
     .order('data', { ascending: false });
+  if (avisosError) throw avisosError;
 
-  const avisosProfIds = [...new Set((avisosData || []).map((a: any) => a.professor_id).filter(Boolean))];
+  const avisosComCursos = await anexarCursosMovimentacoes(supabase, avisosData || []);
+
+  const avisosProfIds = [...new Set(avisosComCursos.map((a: any) => a.professor_id).filter(Boolean))];
   if (avisosProfIds.length > 0) {
     const { data: profs } = await supabase.from('professores').select('id, nome').in('id', avisosProfIds);
     (profs || []).forEach((p: any) => profMap.set(p.id, p.nome));
   }
-  const avisosPrevios = filtrarRetencaoCanonica(avisosData || []).map(enriquecer);
+  const avisosPrevios = filtrarRetencaoCanonica(avisosComCursos).map(enriquecer);
 
   // === 2. MONTAR TEXTO (idêntico ao frontend) ===
   const taxaInadimplencia = alunosAtivos > 0 ? (alunosNaoPagantes / alunosAtivos * 100) : 0;
