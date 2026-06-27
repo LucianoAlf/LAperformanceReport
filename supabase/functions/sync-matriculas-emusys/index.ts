@@ -1112,7 +1112,7 @@ function reconciliar(
     }
   };
 
-  if (statusAlvo !== a.status) {
+  if (statusAlvo !== a.status && !fixadosEfetivos.has('status')) {
     divergencias.push({
       tipo: 'status_divergente',
       campo: 'status',
