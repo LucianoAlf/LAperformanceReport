@@ -65,9 +65,11 @@ import {
 import { filtrarRetencaoCanonica } from '@/lib/atividadesExtras';
 import {
   codigoTipoMatriculaAdministrativo,
+  direcaoTransferenciaNaUnidade,
   isAlunoNovoForaComercial,
   isAlunoNovoPaganteAdministrativo,
   isAlunoTransferenciaAdministrativa,
+  transferenciaPertenceAUnidade,
 } from '@/lib/administrativoTransferencias';
 
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
@@ -688,7 +690,11 @@ export function AdministrativoPage() {
 
       const transferenciasAdministrativasPeriodo = transferenciasHistorico
         .map((t: any) => {
-          const transferencia = transferenciasEnriquecidasMap.get(String(t.aluno_id)) || t;
+          const transferenciaBase = transferenciasEnriquecidasMap.get(String(t.aluno_id)) || t;
+          const transferencia = {
+            ...transferenciaBase,
+            direcao: direcaoTransferenciaNaUnidade(transferenciaBase, unidade),
+          };
           const aluno = alunosTransferenciaMap.get(String(t.aluno_id));
           const destino = unidadesTransferenciaMap.get(String(t.unidade_destino_id));
 
@@ -708,7 +714,7 @@ export function AdministrativoPage() {
             transferencia,
           };
         })
-        .filter((t: any) => unidade === 'todos' || String(t.transferencia?.unidade_destino_id) === String(unidade));
+        .filter((t: any) => transferenciaPertenceAUnidade(t.transferencia, unidade));
 
       setTransferenciasAdministrativas(transferenciasAdministrativasPeriodo);
 

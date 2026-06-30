@@ -81,10 +81,10 @@ export function ModalTransferencia({
     setAlunoSelecionado(aluno || null);
 
     if (aluno) {
-      setUnidadeDestinoId(aluno.unidade_id || unidadeDestinoId || '');
-      if (aluno.data_matricula) {
-        setDataTransferencia(aluno.data_matricula);
-      }
+      setUnidadeOrigemId((origemAtual) => origemAtual || aluno.unidade_id || '');
+      setUnidadeDestinoId((destinoAtual) => (
+        destinoAtual && destinoAtual !== aluno.unidade_id ? destinoAtual : ''
+      ));
     }
   }
 

@@ -19,6 +19,7 @@ interface AlunoTransferencia {
     unidade_destino_nome?: string | null;
     unidade_destino_codigo?: string | null;
     observacao?: string | null;
+    direcao?: 'recebida' | 'enviada' | 'interna' | 'fora';
   } | null;
 }
 
@@ -34,6 +35,18 @@ export function TabelaTransferencias({ data }: TabelaTransferenciasProps) {
     if (nome) return nome;
     if (codigo) return codigo;
     return fallback || '-';
+  };
+
+  const labelRegra = (direcao?: string | null) => {
+    if (direcao === 'recebida') return 'entrada na unidade';
+    if (direcao === 'enviada') return 'saida da unidade';
+    return 'transferencia interna';
+  };
+
+  const classeRegra = (direcao?: string | null) => {
+    if (direcao === 'recebida') return 'bg-emerald-500/15 text-emerald-300';
+    if (direcao === 'enviada') return 'bg-amber-500/15 text-amber-300';
+    return 'bg-sky-500/15 text-sky-300';
   };
 
   return (
@@ -115,8 +128,11 @@ export function TabelaTransferencias({ data }: TabelaTransferenciasProps) {
                     : '-'}
                 </td>
                 <td className="py-3 px-2">
-                  <span className="inline-flex rounded-full bg-sky-500/15 px-2.5 py-1 text-xs font-medium text-sky-300">
-                    transferencia interna
+                  <span className={cn(
+                    'inline-flex rounded-full px-2.5 py-1 text-xs font-medium',
+                    classeRegra(aluno.transferencia?.direcao),
+                  )}>
+                    {labelRegra(aluno.transferencia?.direcao)}
                   </span>
                 </td>
               </tr>
