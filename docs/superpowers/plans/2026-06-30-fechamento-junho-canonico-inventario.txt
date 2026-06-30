@@ -1,0 +1,887 @@
+﻿supabase\migrations\20260120_create_simulacoes_metas.sql:1:-- Migration: Criar tabela simulacoes_metas
+supabase\migrations\20260120_create_simulacoes_metas.sql:6:CREATE TABLE IF NOT EXISTS simulacoes_metas (
+supabase\migrations\20260120_create_simulacoes_metas.sql:54:CREATE INDEX IF NOT EXISTS idx_simulacoes_unidade_ano ON simulacoes_metas(unidade_id, ano);
+supabase\migrations\20260120_create_simulacoes_metas.sql:55:CREATE INDEX IF NOT EXISTS idx_simulacoes_criado_em ON simulacoes_metas(criado_em DESC);
+supabase\migrations\20260120_create_simulacoes_metas.sql:58:ALTER TABLE simulacoes_metas ENABLE ROW LEVEL SECURITY;
+supabase\migrations\20260120_create_simulacoes_metas.sql:61:DROP POLICY IF EXISTS "Usuários autenticados podem ver simulações" ON simulacoes_metas;
+supabase\migrations\20260120_create_simulacoes_metas.sql:63:  ON simulacoes_metas FOR SELECT TO authenticated USING (true);
+supabase\migrations\20260120_create_simulacoes_metas.sql:65:DROP POLICY IF EXISTS "Usuários autenticados podem criar simulações" ON simulacoes_metas;
+supabase\migrations\20260120_create_simulacoes_metas.sql:67:  ON simulacoes_metas FOR INSERT TO authenticated WITH CHECK (true);
+supabase\migrations\20260120_create_simulacoes_metas.sql:69:DROP POLICY IF EXISTS "Usuários autenticados podem atualizar simulações" ON simulacoes_metas;
+supabase\migrations\20260120_create_simulacoes_metas.sql:71:  ON simulacoes_metas FOR UPDATE TO authenticated USING (true);
+supabase\migrations\20260120_create_simulacoes_metas.sql:73:DROP POLICY IF EXISTS "Usuários autenticados podem deletar simulações" ON simulacoes_metas;
+supabase\migrations\20260120_create_simulacoes_metas.sql:75:  ON simulacoes_metas FOR DELETE TO authenticated USING (true);
+supabase\migrations\20260120_create_simulacoes_metas.sql:86:DROP TRIGGER IF EXISTS trigger_update_simulacoes_timestamp ON simulacoes_metas;
+supabase\migrations\20260120_create_simulacoes_metas.sql:88:  BEFORE UPDATE ON simulacoes_metas
+src\hooks\index.ts:8:export * from './useFidelizaPrograma';
+supabase\migrations\20260125_create_get_dados_comercial_ia.sql:4:-- NOTA: Esta função foi atualizada várias vezes. A versão final busca metas da tabela metas_kpi.
+supabase\migrations\20260125_create_get_dados_comercial_ia.sql:45:  -- Metas do mês (simulacoes_metas)
+supabase\migrations\20260125_create_get_dados_comercial_ia.sql:53:  FROM simulacoes_metas
+supabase\migrations\20260124_retencao_insights.sql:158:      FROM dados_mensais dm
+supabase\migrations\20260124_retencao_insights.sql:167:      FROM dados_mensais dm
+supabase\migrations\20260126_create_get_dados_relatorio_coordenacao.sql:1:-- Migração: Criar função get_dados_relatorio_coordenacao
+supabase\migrations\20260126_create_get_dados_relatorio_coordenacao.sql:8:CREATE OR REPLACE FUNCTION get_dados_relatorio_coordenacao(
+supabase\migrations\20260126_create_get_dados_relatorio_coordenacao.sql:359:    FROM metas_kpi mk
+supabase\migrations\20260126_create_get_dados_relatorio_coordenacao.sql:502:COMMENT ON FUNCTION get_dados_relatorio_coordenacao IS 'Funcao para buscar dados do relatorio de coordenacao pedagogica com IA - V2: consulta tabelas base por periodo em vez de vw_kpis_professor_mensal';
+src\types\supabase.ts:325:      relatorios_diarios: {
+supabase\migration-drafts\20260611_p01c_flatten_wrappers_publicos_NAO_APLICAR.sql:14:--   - public.get_dados_relatorio_gerencial(uuid, integer, integer)
+supabase\migration-drafts\20260611_p01c_flatten_wrappers_publicos_NAO_APLICAR.sql:17:--   - public.get_dados_relatorio_gerencial_legacy_p01g
+supabase\migration-drafts\20260611_p01c_flatten_wrappers_publicos_NAO_APLICAR.sql:27:-- - alteracao em dados_mensais
+supabase\migration-drafts\20260611_p01c_flatten_wrappers_publicos_NAO_APLICAR.sql:39:create or replace function public.get_dados_relatorio_gerencial(
+supabase\migration-drafts\20260611_p01c_flatten_wrappers_publicos_NAO_APLICAR.sql:85:  v_kpis := public.get_kpis_alunos_canonicos(p_unidade_id, p_ano, p_mes);
+supabase\migration-drafts\20260611_p01c_flatten_wrappers_publicos_NAO_APLICAR.sql:156:  v_result := v_result || jsonb_build_object('metas_kpi', (
+supabase\migration-drafts\20260611_p01c_flatten_wrappers_publicos_NAO_APLICAR.sql:158:    from public.metas_kpi mk
+supabase\migration-drafts\20260611_p01c_flatten_wrappers_publicos_NAO_APLICAR.sql:177:    from public.dados_mensais dm
+supabase\migration-drafts\20260611_p01c_flatten_wrappers_publicos_NAO_APLICAR.sql:197:    from public.dados_mensais dm
+supabase\migration-drafts\20260611_p01c_flatten_wrappers_publicos_NAO_APLICAR.sql:409:comment on function public.get_dados_relatorio_gerencial(uuid, integer, integer)
+supabase\migration-drafts\20260611_p01c_flatten_wrappers_publicos_NAO_APLICAR.sql:410:is 'P0.1C flatten draft: wrapper publico sem chamada a get_dados_relatorio_gerencial_legacy_p01g. KPIs de alunos via get_kpis_alunos_canonicos; retencao ainda usa vw_kpis_retencao_mensal como legado temporario.';
+supabase\migration-drafts\20260611_p01c_flatten_wrappers_publicos_NAO_APLICAR.sql:437:  v_kpis := public.get_kpis_alunos_canonicos(p_unidade_id, p_ano, p_mes);
+supabase\migration-drafts\20260611_p01c_flatten_wrappers_publicos_NAO_APLICAR.sql:505:      from public.dados_mensais dm
+supabase\migration-drafts\20260611_p01c_flatten_wrappers_publicos_NAO_APLICAR.sql:520:      from public.dados_mensais dm
+supabase\migration-drafts\20260611_p01c_flatten_wrappers_publicos_NAO_APLICAR.sql:628:      from public.dados_mensais dm
+supabase\migration-drafts\20260611_p01c_flatten_wrappers_publicos_NAO_APLICAR.sql:641:is 'P0.1C flatten draft: wrapper publico sem chamada a get_dados_retencao_ia_legacy_p01g. kpis_gestao via get_kpis_alunos_canonicos; kpis_retencao ainda usa vw_kpis_retencao_mensal como legado temporario.';
+supabase\migration-drafts\20260611_p01c_flatten_wrappers_publicos_NAO_APLICAR.sql:653:--   and p.proname in ('get_dados_relatorio_gerencial','get_dados_retencao_ia')
+supabase\migration-drafts\20260611_p01c_flatten_wrappers_publicos_NAO_APLICAR.sql:669:--   and p.proname in ('get_dados_relatorio_gerencial','get_dados_retencao_ia')
+supabase\migration-drafts\20260611_p01c_flatten_wrappers_publicos_NAO_APLICAR.sql:683:--        public.get_dados_relatorio_gerencial(unidade_id, ano, mes) ? 'kpis_alunos_canonicos' as rel_tem_canonico,
+supabase\migration-drafts\20260611_p01c_flatten_wrappers_publicos_NAO_APLICAR.sql:685:--        jsonb_array_length(public.get_dados_relatorio_gerencial(unidade_id, ano, mes)->'kpis_gestao') as rel_kpis_gestao_len,
+supabase\migration-drafts\20260611_p01c_flatten_wrappers_publicos_NAO_APLICAR.sql:702:--          public.get_dados_relatorio_gerencial(unidade_id, ano, mes) as relatorio,
+supabase\migration-drafts\20260611_p01c_flatten_wrappers_publicos_NAO_APLICAR.sql:724:--          public.get_dados_relatorio_gerencial(unidade_id, ano, mes) as relatorio,
+supabase\migration-drafts\20260611_p01c_flatten_wrappers_publicos_NAO_APLICAR.sql:744:-- create or replace function public.get_dados_relatorio_gerencial(...)
+supabase\migration-drafts\20260611_p01c_flatten_wrappers_publicos_NAO_APLICAR.sql:746:--   v_result := public.get_dados_relatorio_gerencial_legacy_p01g(...);
+supabase\migration-drafts\20260611_p01c_flatten_wrappers_publicos_NAO_APLICAR.sql:747:--   v_kpis := public.get_kpis_alunos_canonicos(...);
+supabase\migration-drafts\20260611_p01c_flatten_wrappers_publicos_NAO_APLICAR.sql:754:--   v_kpis := public.get_kpis_alunos_canonicos(...);
+supabase\migration-drafts\20260610_p01_fase1a_comments_deprecated_NAO_APLICAR.sql:27:--    IA/Gemini, Fideliza+, Professores e Comercial;
+supabase\migration-drafts\20260610_p01_fase1a_comments_deprecated_NAO_APLICAR.sql:33:'DEPRECATED_CANDIDATE P0.1: nao usar como fonte canonica de KPIs executivos de alunos. Historico fechado usa dados_mensais; mes atual aberto usa get_kpis_alunos_canonicos/calculo vivo canonico. Nao remover enquanto get_dados_relatorio_gerencial_legacy_p01g ou get_dados_retencao_ia_legacy_p01g consumirem.';
+supabase\migration-drafts\20260610_p01_fase1a_comments_deprecated_NAO_APLICAR.sql:36:'DEPRECATED_CANDIDATE P0.1: nao usar como fonte canonica de retencao/alunos em novas implementacoes. Nao remover enquanto get_dados_relatorio_gerencial_legacy_p01g ou get_dados_retencao_ia_legacy_p01g consumirem.';
+supabase\migration-drafts\20260610_p01_fase1a_comments_deprecated_NAO_APLICAR.sql:38:comment on function public.get_dados_relatorio_gerencial_legacy_p01g(uuid, integer, integer) is
+supabase\migration-drafts\20260610_p01_fase1a_comments_deprecated_NAO_APLICAR.sql:39:'DEPRECATED_CANDIDATE P0.1: manter somente como rollback enquanto get_dados_relatorio_gerencial ainda preservar shape antigo via wrapper. Futuro: flatten do wrapper publico sem dependencia legacy_p01g.';
+src\types\database.types.ts:17:      dados_mensais: {
+src\types\database.types.ts:41:        Insert: Omit<Database['public']['Tables']['dados_mensais']['Row'], 'id' | 'created_at' | 'updated_at' | 'faturamento_estimado' | 'saldo_liquido'>
+src\types\database.types.ts:42:        Update: Partial<Database['public']['Tables']['dados_mensais']['Insert']>
+src\types\database.types.ts:201:      get_kpis_consolidados: {
+src\types\database.types.ts:215:      get_kpis_unidade: {
+src\types\database.types.ts:261:export type DadosMensais = Database['public']['Tables']['dados_mensais']['Row']
+src\lib\fidelizaCanonico.ts:12:interface FarmerFidelizaLike {
+src\lib\fidelizaCanonico.ts:30:interface AplicarMetricasParams<T extends FarmerFidelizaLike> {
+src\lib\fidelizaCanonico.ts:140:export async function aplicarMetricasFidelizaCanonicas<T extends FarmerFidelizaLike>({
+supabase\migrations\20260126_update_get_dados_relatorio_gerencial_v2.sql:1:-- Migration: Atualizar função get_dados_relatorio_gerencial com todos os dados necessários
+supabase\migrations\20260126_update_get_dados_relatorio_gerencial_v2.sql:14:-- Atualizar função get_dados_relatorio_gerencial com todos os dados necessários
+supabase\migrations\20260126_update_get_dados_relatorio_gerencial_v2.sql:15:CREATE OR REPLACE FUNCTION public.get_dados_relatorio_gerencial(
+supabase\migrations\20260126_update_get_dados_relatorio_gerencial_v2.sql:145:    FROM dados_mensais dm
+supabase\migrations\20260126_update_get_dados_relatorio_gerencial_v2.sql:165:    FROM dados_mensais dm
+supabase\migrations\20260126_update_get_dados_relatorio_gerencial_v2.sql:346:    FROM dados_mensais dm
+src\hooks\useComercialOperacionalResumoV2.ts:46:      'get_kpis_comercial_canonicos_v2',
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:2:-- PROGRAMA FIDELIZA+ LA 2026 - TABELAS E FUNÇÕES
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:6:-- 1. Tabela de Configurações do Programa Fideliza+
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:7:CREATE TABLE IF NOT EXISTS programa_fideliza_config (
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:49:-- 2. Tabela de Penalidades do Fideliza+
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:50:CREATE TABLE IF NOT EXISTS programa_fideliza_penalidades (
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:74:CREATE INDEX IF NOT EXISTS idx_fideliza_penalidades_ano_trim 
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:75:ON programa_fideliza_penalidades(ano, trimestre, unidade_id);
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:78:CREATE TABLE IF NOT EXISTS programa_fideliza_historico (
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:117:CREATE INDEX IF NOT EXISTS idx_fideliza_historico_ano_trim 
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:118:ON programa_fideliza_historico(ano, trimestre);
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:121:CREATE TABLE IF NOT EXISTS programa_fideliza_experiencias (
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:142:INSERT INTO programa_fideliza_config (ano)
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:147:INSERT INTO programa_fideliza_experiencias (tipo, nome, descricao, emoji, valor_estimado) VALUES
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:162:-- Função para buscar dados do programa Fideliza+
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:163:CREATE OR REPLACE FUNCTION get_programa_fideliza_dados(
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:214:  FROM programa_fideliza_config c
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:262:    LEFT JOIN dados_mensais dm ON dm.unidade_id = u.id 
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:274:    FROM programa_fideliza_penalidades
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:322:  FROM programa_fideliza_penalidades p
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:350:  FROM programa_fideliza_historico h
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:367:  FROM programa_fideliza_experiencias e
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:382:-- Função para registrar penalidade Fideliza+
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:383:CREATE OR REPLACE FUNCTION registrar_penalidade_fideliza(
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:400:  INSERT INTO programa_fideliza_penalidades (
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:411:-- Função para deletar penalidade Fideliza+
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:412:CREATE OR REPLACE FUNCTION deletar_penalidade_fideliza(p_id INTEGER)
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:418:  DELETE FROM programa_fideliza_penalidades WHERE id = p_id;
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:423:-- Função para atualizar configurações Fideliza+
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:424:CREATE OR REPLACE FUNCTION atualizar_config_fideliza(
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:435:    'UPDATE programa_fideliza_config SET %I = $1, updated_at = NOW() WHERE ano = $2',
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:444:CREATE OR REPLACE FUNCTION salvar_historico_trimestral_fideliza(
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:453:  v_config programa_fideliza_config%ROWTYPE;
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:456:  SELECT * INTO v_config FROM programa_fideliza_config WHERE ano = p_ano;
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:459:  INSERT INTO programa_fideliza_historico (
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:485:    COALESCE((SELECT SUM(pontos_descontados) FROM programa_fideliza_penalidades WHERE ano = p_ano AND trimestre = p_trimestre AND unidade_id = u.id), 0),
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:491:    COALESCE((SELECT SUM(pontos_descontados) FROM programa_fideliza_penalidades WHERE ano = p_ano AND trimestre = p_trimestre AND unidade_id = u.id), 0)
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:493:  LEFT JOIN dados_mensais dm ON dm.unidade_id = u.id 
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:518:    FROM programa_fideliza_historico
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:521:  UPDATE programa_fideliza_historico h
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:527:  UPDATE programa_fideliza_historico
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:540:GRANT EXECUTE ON FUNCTION get_programa_fideliza_dados TO authenticated, anon, service_role;
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:541:GRANT EXECUTE ON FUNCTION registrar_penalidade_fideliza TO authenticated, service_role;
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:542:GRANT EXECUTE ON FUNCTION deletar_penalidade_fideliza TO authenticated, service_role;
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:543:GRANT EXECUTE ON FUNCTION atualizar_config_fideliza TO authenticated, service_role;
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:544:GRANT EXECUTE ON FUNCTION salvar_historico_trimestral_fideliza TO authenticated, service_role;
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:547:GRANT SELECT, INSERT, UPDATE, DELETE ON programa_fideliza_config TO authenticated, service_role;
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:548:GRANT SELECT, INSERT, UPDATE, DELETE ON programa_fideliza_penalidades TO authenticated, service_role;
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:549:GRANT SELECT, INSERT, UPDATE, DELETE ON programa_fideliza_historico TO authenticated, service_role;
+supabase\migrations\20260201230000_programa_fideliza_tabelas.sql:550:GRANT SELECT, INSERT, UPDATE, DELETE ON programa_fideliza_experiencias TO authenticated, service_role;
+src\hooks\useComercialSeriesMensaisV2.ts:110:        const { data, error: rpcError } = await supabase.rpc('get_kpis_comercial_canonicos_v2', {
+src\hooks\useCompetenciaMensalStatus.ts:140:          .from('competencias_mensais')
+supabase\migrations\20260201223000_programa_matriculador_tabelas.sql:6:CREATE TABLE IF NOT EXISTS programa_matriculador_config (
+supabase\migrations\20260201223000_programa_matriculador_tabelas.sql:51:CREATE TABLE IF NOT EXISTS programa_matriculador_penalidades (
+supabase\migrations\20260201223000_programa_matriculador_tabelas.sql:77:ON programa_matriculador_penalidades(ano, unidade_id);
+supabase\migrations\20260201223000_programa_matriculador_tabelas.sql:80:CREATE TABLE IF NOT EXISTS programa_matriculador_historico (
+supabase\migrations\20260201223000_programa_matriculador_tabelas.sql:108:ON programa_matriculador_historico(ano, unidade_id);
+supabase\migrations\20260201223000_programa_matriculador_tabelas.sql:111:INSERT INTO programa_matriculador_config (ano)
+supabase\migrations\20260201223000_programa_matriculador_tabelas.sql:120:CREATE OR REPLACE FUNCTION get_programa_matriculador_dados(
+supabase\migrations\20260201223000_programa_matriculador_tabelas.sql:161:  FROM programa_matriculador_config c
+supabase\migrations\20260201223000_programa_matriculador_tabelas.sql:228:    FROM programa_matriculador_penalidades
+supabase\migrations\20260201223000_programa_matriculador_tabelas.sql:281:  FROM programa_matriculador_penalidades p
+supabase\migrations\20260201223000_programa_matriculador_tabelas.sql:304:  FROM programa_matriculador_historico h
+supabase\migrations\20260201223000_programa_matriculador_tabelas.sql:336:  INSERT INTO programa_matriculador_penalidades (
+supabase\migrations\20260201223000_programa_matriculador_tabelas.sql:354:  DELETE FROM programa_matriculador_penalidades WHERE id = p_id;
+supabase\migrations\20260201223000_programa_matriculador_tabelas.sql:369:  UPDATE programa_matriculador_config
+supabase\migrations\20260201223000_programa_matriculador_tabelas.sql:383:CREATE OR REPLACE FUNCTION salvar_historico_mensal_matriculador(
+supabase\migrations\20260201223000_programa_matriculador_tabelas.sql:393:  INSERT INTO programa_matriculador_historico (ano, mes, unidade_id, total_leads, total_experimentais, total_matriculas, ticket_medio, taxa_showup, taxa_exp_mat, taxa_geral, pontos_mes)
+supabase\migrations\20260201223000_programa_matriculador_tabelas.sql:434:GRANT EXECUTE ON FUNCTION get_programa_matriculador_dados TO authenticated, anon, service_role;
+supabase\migrations\20260201223000_programa_matriculador_tabelas.sql:438:GRANT EXECUTE ON FUNCTION salvar_historico_mensal_matriculador TO authenticated, service_role;
+src\hooks\useComercialResumoV2.ts:139:          const { data, error: rpcError } = await supabase.rpc('get_kpis_comercial_canonicos_v2', {
+src\hooks\useCompetenciaFiltro.ts:208:        // Buscar anos distintos da tabela dados_mensais
+src\hooks\useCompetenciaFiltro.ts:210:          .from('dados_mensais')
+src\hooks\useCursosData.ts:115:            'get_kpis_comercial_canonicos_v2',
+supabase\migrations\20260207_unificar_leads.sql:479:    dados_mensais.unidade_id,
+supabase\migrations\20260207_unificar_leads.sql:480:    dados_mensais.ano,
+supabase\migrations\20260207_unificar_leads.sql:481:    dados_mensais.mes,
+supabase\migrations\20260207_unificar_leads.sql:482:    dados_mensais.alunos_pagantes
+supabase\migrations\20260207_unificar_leads.sql:483:  FROM dados_mensais
+src\hooks\useDadosHistoricos.ts:44:        if (dadosCanonicos.fonte === 'dados_mensais') {
+src\hooks\useDadosHistoricos.ts:46:            .from('dados_mensais')
+src\hooks\useDadosHistoricos.ts:78:          .from('dados_mensais')
+src\hooks\useDadosMensais.ts:44: * Hook para consultar dados históricos da tabela dados_mensais
+src\hooks\useDadosMensais.ts:64:          .from('dados_mensais')
+supabase\migrations\20260311_get_kpis_experimentais_professor.sql:3:CREATE OR REPLACE FUNCTION get_kpis_experimentais_professor(
+src\hooks\useFidelizaPrograma.ts:3:import { aplicarMetricasFidelizaCanonicas } from '@/lib/fidelizaCanonico';
+src\hooks\useFidelizaPrograma.ts:6:export interface ConfigFideliza {
+src\hooks\useFidelizaPrograma.ts:74:export interface PenalidadeFideliza {
+src\hooks\useFidelizaPrograma.ts:116:export interface DadosFideliza {
+src\hooks\useFidelizaPrograma.ts:117:  config: ConfigFideliza;
+src\hooks\useFidelizaPrograma.ts:120:  penalidades: PenalidadeFideliza[];
+src\hooks\useFidelizaPrograma.ts:133:export function useFidelizaPrograma(ano: number = 2026, trimestre?: number, unidadeId?: string) {
+src\hooks\useFidelizaPrograma.ts:136:  const [config, setConfig] = useState<ConfigFideliza | null>(null);
+src\hooks\useFidelizaPrograma.ts:139:  const [penalidades, setPenalidades] = useState<PenalidadeFideliza[]>([]);
+src\hooks\useFidelizaPrograma.ts:144:  const calcularPontuacao = useCallback((farmer: FarmerDados, cfg: ConfigFideliza): FarmerDados => {
+src\hooks\useFidelizaPrograma.ts:235:      const { data, error: rpcError } = await supabase.rpc('get_programa_fideliza_dados', {
+src\hooks\useFidelizaPrograma.ts:243:      const dados = data as DadosFideliza;
+src\hooks\useFidelizaPrograma.ts:254:        const farmersCanonicos = await aplicarMetricasFidelizaCanonicas({
+src\hooks\useFidelizaPrograma.ts:269:      console.error('Erro ao carregar dados do Fideliza+:', err);
+src\hooks\useFidelizaPrograma.ts:288:      const { error } = await supabase.rpc('registrar_penalidade_fideliza', {
+src\hooks\useFidelizaPrograma.ts:312:      const { error } = await supabase.rpc('deletar_penalidade_fideliza', { p_id: id });
+src\hooks\useFidelizaPrograma.ts:331:        .from('programa_fideliza_penalidades')
+src\hooks\useFidelizaPrograma.ts:348:      const { error } = await supabase.rpc('atualizar_config_fideliza', {
+src\hooks\useFidelizaPrograma.ts:368:        .from('programa_fideliza_config')
+src\hooks\useFidelizaPrograma.ts:385:      const { error } = await supabase.rpc('salvar_historico_trimestral_fideliza', {
+src\hooks\useFidelizaPrograma.ts:414:        .from('programa_fideliza_experiencias')
+src\hooks\useFidelizaPrograma.ts:441:        .from('programa_fideliza_experiencias')
+src\hooks\useFidelizaPrograma.ts:459:        .from('programa_fideliza_experiencias')
+src\hooks\useKPIsGestao.ts:126:        .from('dados_mensais')
+src\hooks\useKPIsAlunosCanonicos.ts:5:export type FonteKPIAlunos = 'dados_mensais' | 'vivo' | 'preliminar' | 'indisponivel';
+src\hooks\useKPIsAlunosCanonicos.ts:138:  if (fonte === 'dados_mensais') return 'Snapshot fechado';
+src\hooks\useKPIsAlunosCanonicos.ts:256:    .from('competencias_mensais')
+src\hooks\useKPIsAlunosCanonicos.ts:290:    .from('dados_mensais')
+src\hooks\useKPIsAlunosCanonicos.ts:306:      fonte: competenciaFechada || competenciaParcial ? 'dados_mensais' : 'preliminar',
+src\hooks\useKPIsAlunosCanonicos.ts:310:        ? ['Competência fechada: KPIs executivos lidos de dados_mensais.']
+src\hooks\useKPIsAlunosCanonicos.ts:321:    alertasFonte: ['Competência sem snapshot em dados_mensais. Recalcular silenciosamente a partir de alunos está bloqueado.'],
+src\hooks\useMatriculadorPrograma.ts:211:    const kpisResponse = await supabase.rpc('get_kpis_comercial_canonicos_v2', {
+src\hooks\useMatriculadorPrograma.ts:482:      const { data, error: rpcError } = await supabase.rpc('get_programa_matriculador_dados', {
+src\hooks\useMatriculadorPrograma.ts:602:        .from('programa_matriculador_penalidades')
+src\hooks\useMetasKPI.ts:67:        .from('metas_kpi')
+supabase\functions\bi-agent-lamusic\tools.ts:24:      name: 'get_dados_mensais',
+supabase\functions\bi-agent-lamusic\tools.ts:211:    .from('dados_mensais')
+supabase\functions\bi-agent-lamusic\tools.ts:222:  return JSON.stringify({ dados_mensais: data, total: data.length });
+supabase\functions\bi-agent-lamusic\tools.ts:557:      case 'get_dados_mensais': return await toolGetDadosMensais(supabase, args, ctx);
+supabase\migrations\20260531_recalcular_dados_mensais_v2.sql:1:-- Migration: recalcular_dados_mensais v2
+supabase\migrations\20260531_recalcular_dados_mensais_v2.sql:6:CREATE OR REPLACE FUNCTION public.recalcular_dados_mensais(
+supabase\migrations\20260531_recalcular_dados_mensais_v2.sql:155:  INSERT INTO dados_mensais (
+src\hooks\useSupabaseMutations.ts:10:    .from('dados_mensais')
+src\hooks\useSupabaseMutations.ts:40:    .rpc('upsert_dados_mensais', {
+supabase\migrations\20260609_p01t_breakdown_bolsistas_segundo_curso_rpc.sql:7:-- - A RPC public.get_kpis_alunos_canonicos ja e a fonte canonica para cards,
+supabase\migrations\20260609_p01t_breakdown_bolsistas_segundo_curso_rpc.sql:23:-- - alteracao em dados_mensais.
+supabase\migrations\20260609_p01t_breakdown_bolsistas_segundo_curso_rpc.sql:26:CREATE OR REPLACE FUNCTION public.get_kpis_alunos_vinculos_vivo_canonico(
+supabase\migrations\20260609_p01t_breakdown_bolsistas_segundo_curso_rpc.sql:133:COMMENT ON FUNCTION public.get_kpis_alunos_vinculos_vivo_canonico(uuid, integer, integer)
+supabase\migrations\20260609_p01t_breakdown_bolsistas_segundo_curso_rpc.sql:138:  IF to_regprocedure('public.get_kpis_alunos_canonicos_base_p01t(uuid, integer, integer)') IS NULL THEN
+supabase\migrations\20260609_p01t_breakdown_bolsistas_segundo_curso_rpc.sql:139:    IF to_regprocedure('public.get_kpis_alunos_canonicos(uuid, integer, integer)') IS NULL THEN
+supabase\migrations\20260609_p01t_breakdown_bolsistas_segundo_curso_rpc.sql:140:      RAISE EXCEPTION 'Funcao get_kpis_alunos_canonicos nao encontrada para wrapper P0.1T';
+supabase\migrations\20260609_p01t_breakdown_bolsistas_segundo_curso_rpc.sql:143:    EXECUTE 'ALTER FUNCTION public.get_kpis_alunos_canonicos(uuid, integer, integer) RENAME TO get_kpis_alunos_canonicos_base_p01t';
+supabase\migrations\20260609_p01t_breakdown_bolsistas_segundo_curso_rpc.sql:147:ALTER FUNCTION public.get_kpis_alunos_canonicos_base_p01t(uuid, integer, integer)
+supabase\migrations\20260609_p01t_breakdown_bolsistas_segundo_curso_rpc.sql:150:CREATE OR REPLACE FUNCTION public.get_kpis_alunos_canonicos(
+supabase\migrations\20260609_p01t_breakdown_bolsistas_segundo_curso_rpc.sql:172:  v_result := public.get_kpis_alunos_canonicos_base_p01t(p_unidade_id, p_ano, p_mes);
+supabase\migrations\20260609_p01t_breakdown_bolsistas_segundo_curso_rpc.sql:180:      FROM public.get_kpis_alunos_vinculos_vivo_canonico(
+supabase\migrations\20260609_p01t_breakdown_bolsistas_segundo_curso_rpc.sql:244:COMMENT ON FUNCTION public.get_kpis_alunos_canonicos(uuid, integer, integer)
+supabase\migrations\20260609_p01t_breakdown_bolsistas_segundo_curso_rpc.sql:247:REVOKE ALL ON FUNCTION public.get_kpis_alunos_vinculos_vivo_canonico(uuid, integer, integer) FROM PUBLIC, anon;
+supabase\migrations\20260609_p01t_breakdown_bolsistas_segundo_curso_rpc.sql:248:REVOKE ALL ON FUNCTION public.get_kpis_alunos_canonicos(uuid, integer, integer) FROM PUBLIC, anon;
+supabase\migrations\20260609_p01t_breakdown_bolsistas_segundo_curso_rpc.sql:249:REVOKE ALL ON FUNCTION public.get_kpis_alunos_canonicos_base_p01t(uuid, integer, integer) FROM PUBLIC, anon;
+supabase\migrations\20260609_p01t_breakdown_bolsistas_segundo_curso_rpc.sql:251:GRANT EXECUTE ON FUNCTION public.get_kpis_alunos_vinculos_vivo_canonico(uuid, integer, integer) TO authenticated, service_role;
+supabase\migrations\20260609_p01t_breakdown_bolsistas_segundo_curso_rpc.sql:252:GRANT EXECUTE ON FUNCTION public.get_kpis_alunos_canonicos(uuid, integer, integer) TO authenticated, service_role;
+supabase\migrations\20260609_p01t_breakdown_bolsistas_segundo_curso_rpc.sql:253:GRANT EXECUTE ON FUNCTION public.get_kpis_alunos_canonicos_base_p01t(uuid, integer, integer) TO authenticated, service_role;
+supabase\migrations\20260609_p01t_breakdown_bolsistas_segundo_curso_rpc.sql:259:-- SELECT public.get_kpis_alunos_canonicos(
+supabase\migrations\20260609_p01t_breakdown_bolsistas_segundo_curso_rpc.sql:274:-- SELECT public.get_kpis_alunos_vinculos_vivo_canonico(
+supabase\migrations\20260609_p01t_breakdown_bolsistas_segundo_curso_rpc.sql:282:-- DROP FUNCTION IF EXISTS public.get_kpis_alunos_canonicos(uuid, integer, integer);
+supabase\migrations\20260609_p01t_breakdown_bolsistas_segundo_curso_rpc.sql:283:-- ALTER FUNCTION public.get_kpis_alunos_canonicos_base_p01t(uuid, integer, integer)
+supabase\migrations\20260609_p01t_breakdown_bolsistas_segundo_curso_rpc.sql:284:--   RENAME TO get_kpis_alunos_canonicos;
+supabase\migrations\20260609_p01t_breakdown_bolsistas_segundo_curso_rpc.sql:285:-- DROP FUNCTION IF EXISTS public.get_kpis_alunos_vinculos_vivo_canonico(uuid, integer, integer);
+supabase\functions\auditor-divergencias-emusys\index.ts:380:  // INTEGRIDADE DE DATAS — afeta o recalculo historico de dados_mensais.
+src\hooks\useSupabase.ts:52:          .rpc('get_kpis_consolidados', { p_ano: ano })
+src\hooks\useSupabase.ts:80:          .rpc('get_kpis_unidade', { 
+src\hooks\useSupabase.ts:177:          .from('dados_mensais')
+src\hooks\useSimulador.ts:122:        .from('simulacoes_metas')
+src\hooks\useSimulador.ts:207:        .from('simulacoes_metas')
+src\hooks\useSimulador.ts:245:        .from('simulacoes_metas')
+src\hooks\useSimulador.ts:263:  // Aplicar metas calculadas na tabela metas_kpi
+src\hooks\useSimulador.ts:292:            .from('metas_kpi')
+src\hooks\useSimulador.ts:308:          .from('simulacoes_metas')
+supabase\functions\bi-agent-lamusic\schema.ts:44:- dados_mensais: unidade_id, ano, mes, alunos_ativos, alunos_pagantes, novas_matriculas, evasoes, churn_rate, ticket_medio, taxa_renovacao, faturamento_estimado, matriculas_banda, matriculas_2_curso
+supabase\functions\bi-agent-lamusic\schema.ts:69:- dados_mensais.unidade_id → unidades.id
+supabase\functions\bi-agent-lamusic\schema.ts:93:-- Evolução mensal de alunos ativos (dados_mensais)
+supabase\functions\bi-agent-lamusic\schema.ts:94:SELECT ano, mes, alunos_ativos, alunos_pagantes, evasoes, ticket_medio FROM dados_mensais WHERE unidade_id IS NOT NULL ORDER BY ano, mes;
+supabase\functions\bi-agent-lamusic\schema.ts:101:SELECT m.meta_alunos_ativos, m.meta_matriculas, m.meta_evasoes_maximo, d.alunos_ativos, d.novas_matriculas, d.evasoes FROM metas m LEFT JOIN dados_mensais d ON d.unidade_id = m.unidade_id AND d.ano = m.ano AND d.mes = m.mes WHERE m.ano = :ano AND m.mes = :mes;
+supabase\migrations\20260616_corrigir_rpc_kpis_alunos_extras_retencao.sql:3:-- Contexto: Dashboard usa get_kpis_alunos_canonicos -> base_p01q para card Evasões do mês.
+supabase\migrations\20260616_corrigir_rpc_kpis_alunos_extras_retencao.sql:7:CREATE OR REPLACE FUNCTION public.get_kpis_alunos_canonicos_base_p01q(p_unidade_id uuid DEFAULT NULL::uuid, p_ano integer DEFAULT (EXTRACT(year FROM (now() AT TIME ZONE 'America/Sao_Paulo'::text)))::integer, p_mes integer DEFAULT (EXTRACT(month FROM (now() AT TIME ZONE 'America/Sao_Paulo'::text)))::integer)
+supabase\migrations\20260616_corrigir_rpc_kpis_alunos_extras_retencao.sql:40:    LEFT JOIN public.competencias_mensais cm
+supabase\migrations\20260616_corrigir_rpc_kpis_alunos_extras_retencao.sql:202:    FROM public.dados_mensais dm
+supabase\migrations\20260616_corrigir_rpc_kpis_alunos_extras_retencao.sql:217:        WHEN c.competencia_bloqueada = true AND s.unidade_id IS NOT NULL THEN 'dados_mensais'
+supabase\migrations\20260616_corrigir_rpc_kpis_alunos_extras_retencao.sql:269:      CASE WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_alunos_ativos, 0) ELSE COALESCE(rf.live_alunos_ativos, 0) END::integer AS alunos_ativos,
+supabase\migrations\20260616_corrigir_rpc_kpis_alunos_extras_retencao.sql:270:      CASE WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_alunos_pagantes, 0) ELSE COALESCE(rf.live_alunos_pagantes, 0) END::integer AS alunos_pagantes,
+supabase\migrations\20260616_corrigir_rpc_kpis_alunos_extras_retencao.sql:271:      CASE WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_ticket_medio, 0) ELSE COALESCE(rf.live_ticket_medio, 0) END::numeric AS ticket_medio,
+supabase\migrations\20260616_corrigir_rpc_kpis_alunos_extras_retencao.sql:272:      CASE WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_mrr, 0) ELSE COALESCE(rf.live_mrr, 0) END::numeric AS mrr,
+supabase\migrations\20260616_corrigir_rpc_kpis_alunos_extras_retencao.sql:273:      CASE WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_novas_matriculas, 0) ELSE COALESCE(rf.live_novas_matriculas, 0) END::integer AS novas_matriculas,
+supabase\migrations\20260616_corrigir_rpc_kpis_alunos_extras_retencao.sql:274:      CASE WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_evasoes, 0) ELSE COALESCE(rf.live_evasoes, 0) END::integer AS evasoes,
+supabase\migrations\20260616_corrigir_rpc_kpis_alunos_extras_retencao.sql:276:        WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_churn_rate, 0)
+supabase\migrations\20260616_corrigir_rpc_kpis_alunos_extras_retencao.sql:280:      CASE WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_inadimplencia, 0) ELSE 0 END::numeric AS inadimplencia,
+supabase\migrations\20260616_corrigir_rpc_kpis_alunos_extras_retencao.sql:281:      CASE WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_tempo_permanencia, 0) ELSE 0 END::numeric AS tempo_permanencia,
+supabase\migrations\20260616_corrigir_rpc_kpis_alunos_extras_retencao.sql:282:      CASE WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_reajuste_parcelas, 0) ELSE 0 END::numeric AS reajuste_pct,
+supabase\migrations\20260616_corrigir_rpc_kpis_alunos_extras_retencao.sql:283:      CASE WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_matriculas_ativas, 0) ELSE COALESCE(rf.live_matriculas_ativas, 0) END::integer AS matriculas_ativas,
+supabase\migrations\20260616_corrigir_rpc_kpis_alunos_extras_retencao.sql:284:      CASE WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_matriculas_banda, 0) ELSE COALESCE(rf.live_matriculas_banda, 0) END::integer AS matriculas_banda,
+supabase\migrations\20260616_corrigir_rpc_kpis_alunos_extras_retencao.sql:285:      CASE WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_matriculas_2_curso, 0) ELSE COALESCE(rf.live_matriculas_2_curso, 0) END::integer AS matriculas_2_curso,
+supabase\migrations\20260616_corrigir_rpc_kpis_alunos_extras_retencao.sql:287:      CASE WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_bolsistas_integrais, 0) ELSE COALESCE(rf.live_bolsistas_integrais, 0) END::integer AS bolsistas_integrais,
+supabase\migrations\20260616_corrigir_rpc_kpis_alunos_extras_retencao.sql:288:      CASE WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_bolsistas_parciais, 0) ELSE COALESCE(rf.live_bolsistas_parciais, 0) END::integer AS bolsistas_parciais,
+supabase\migrations\20260616_corrigir_rpc_kpis_alunos_extras_retencao.sql:294:        WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_saldo_liquido, COALESCE(rf.snap_novas_matriculas, 0) - COALESCE(rf.snap_evasoes, 0))
+supabase\migrations\20260616_corrigir_rpc_kpis_alunos_extras_retencao.sql:321:      ELSE jsonb_build_array('Competencia fechada: leitura de dados_mensais.')
+supabase\migrations\20260616_corrigir_rpc_kpis_alunos_extras_retencao.sql:414:COMMENT ON FUNCTION public.get_kpis_alunos_canonicos_base_p01q(uuid, integer, integer)
+src\hooks\useOrigemData.ts:91:        const { data, error: rpcError } = await supabase.rpc('get_kpis_comercial_canonicos_v2', {
+supabase\functions\bi-agent-lamusic\index.ts:41:1. Use as tools especializadas primeiro (get_dados_mensais, search_aluno, etc.)
+supabase\functions\bi-agent-lamusic\index.ts:54:- "dados mensais / métricas / faturamento" → get_dados_mensais
+supabase\functions\bi-agent-lamusic\index.ts:445:              const dataArray = parsed.dados_mensais || parsed.alunos || parsed.leads || parsed.leads_hoje || parsed.resultado || parsed.unidades;
+src\components\GestaoMensal\TabProfessoresNew.tsx:140:        // Dados de base/gestao seguem em dados_mensais.
+src\components\GestaoMensal\TabProfessoresNew.tsx:145:        // Buscar dados do mês anterior de dados_mensais (alunos, ticket, matrículas)
+src\components\GestaoMensal\TabProfessoresNew.tsx:147:          .from('dados_mensais')
+src\components\GestaoMensal\TabProfessoresNew.tsx:156:        // Buscar dados do mesmo mês do ano anterior de dados_mensais
+src\components\GestaoMensal\TabProfessoresNew.tsx:158:          .from('dados_mensais')
+src\components\GestaoMensal\TabProfessoresNew.tsx:834:              tooltip="Carteira operacional ao vivo: total de alunos dividido por professores ativos. Não comparar diretamente com dados_mensais."
+supabase\migrations\fase5_5b_criar_politicas_rls.sql:12:ALTER TABLE relatorios_diarios ENABLE ROW LEVEL SECURITY;
+supabase\migrations\fase5_5b_criar_politicas_rls.sql:162:-- POLÍTICAS PARA TABELA: relatorios_diarios
+supabase\migrations\fase5_5b_criar_politicas_rls.sql:164:DROP POLICY IF EXISTS "relatorios_diarios_select_policy" ON relatorios_diarios;
+supabase\migrations\fase5_5b_criar_politicas_rls.sql:165:CREATE POLICY "relatorios_diarios_select_policy" ON relatorios_diarios
+supabase\migrations\fase5_5b_criar_politicas_rls.sql:170:DROP POLICY IF EXISTS "relatorios_diarios_insert_policy" ON relatorios_diarios;
+supabase\migrations\fase5_5b_criar_politicas_rls.sql:171:CREATE POLICY "relatorios_diarios_insert_policy" ON relatorios_diarios
+supabase\migrations\fase5_5b_criar_politicas_rls.sql:176:DROP POLICY IF EXISTS "relatorios_diarios_update_policy" ON relatorios_diarios;
+supabase\migrations\fase5_5b_criar_politicas_rls.sql:177:CREATE POLICY "relatorios_diarios_update_policy" ON relatorios_diarios
+supabase\migrations\20260609_p01s_materializar_retencao_movimentacoes.sql:9:-- - Nao recalcula historico, nao faz backfill e nao altera dados_mensais.
+supabase\functions\gemini-relatorio-gerencial\index.ts:262:  const metasKpi = dados?.metas_kpi || {};
+supabase\functions\gemini-relatorio-gerencial\index.ts:451:  relatorio += "───────────────────────\n🏆 *PROGRAMA FIDELIZA+ LA* (Trimestral)\n───────────────────────\n";
+supabase\functions\lojinha-relatorio-vendas\index.ts:3:// Tipos: diario, semanal, mensal, meta_fideliza
+supabase\functions\lojinha-relatorio-vendas\index.ts:25:  tipo_relatorio: 'diario' | 'semanal' | 'mensal' | 'meta_fideliza';
+supabase\functions\lojinha-relatorio-vendas\index.ts:194: * Gera relatório de meta Fideliza+
+supabase\functions\lojinha-relatorio-vendas\index.ts:196:function gerarRelatorioMetaFideliza(
+supabase\functions\lojinha-relatorio-vendas\index.ts:208:  let relatorio = `🏆 *META FIDELIZA+ LOJINHA*\n`;
+supabase\functions\lojinha-relatorio-vendas\index.ts:247:  relatorio += `_Programa Fideliza+ LA - 15 pontos_`;
+supabase\functions\lojinha-relatorio-vendas\index.ts:371:    } else if (tipo_relatorio === 'meta_fideliza') {
+supabase\functions\lojinha-relatorio-vendas\index.ts:372:      // Buscar meta do Fideliza+
+supabase\functions\lojinha-relatorio-vendas\index.ts:375:        .from('programa_fideliza_config')
+supabase\functions\lojinha-relatorio-vendas\index.ts:392:      relatorio = gerarRelatorioMetaFideliza(unidadeNome, mesNome, valorTotal, metaValor, percentualAtingido, diasRestantes, farmers);
+supabase\functions\gemini-insights-comercial\index.ts:200:      const { data, error } = await supabase.rpc("get_kpis_comercial_canonicos_v2", {
+supabase\functions\relatorio-admin-whatsapp\index.ts:243:  const { data, error } = await supabase.rpc('get_kpis_alunos_admin_operacional', {
+supabase\migrations\20260616_corrigir_fideliza_extras_retencao.sql:2:-- Migration: Corrigir Fideliza+ para excluir atividades extras em churn/evasões
+supabase\migrations\20260616_corrigir_fideliza_extras_retencao.sql:6:CREATE OR REPLACE FUNCTION public.get_programa_fideliza_dados(p_ano integer DEFAULT 2026, p_trimestre integer DEFAULT NULL::integer, p_unidade_id uuid DEFAULT NULL::uuid)
+supabase\migrations\20260616_corrigir_fideliza_extras_retencao.sql:45:  FROM programa_fideliza_config c WHERE c.ano = p_ano;
+supabase\migrations\20260616_corrigir_fideliza_extras_retencao.sql:77:        (SELECT dm.alunos_pagantes FROM dados_mensais dm WHERE dm.unidade_id = u.id 
+supabase\migrations\20260616_corrigir_fideliza_extras_retencao.sql:111:      COALESCE((SELECT AVG(dm.inadimplencia) FROM dados_mensais dm WHERE dm.unidade_id = u.id AND dm.ano = p_ano 
+supabase\migrations\20260616_corrigir_fideliza_extras_retencao.sql:127:    FROM programa_fideliza_penalidades WHERE ano = p_ano AND trimestre = v_trim_atual AND (p_unidade_id IS NULL OR unidade_id = p_unidade_id)
+supabase\migrations\20260616_corrigir_fideliza_extras_retencao.sql:153:  FROM programa_fideliza_penalidades p JOIN unidades u ON u.id = p.unidade_id
+supabase\migrations\20260616_corrigir_fideliza_extras_retencao.sql:164:  FROM programa_fideliza_historico h JOIN unidades u ON u.id = h.unidade_id
+supabase\migrations\20260616_corrigir_fideliza_extras_retencao.sql:170:  FROM programa_fideliza_experiencias e WHERE e.ativo = true;
+supabase\migrations\20260616_corrigir_fideliza_extras_retencao.sql:182:COMMENT ON FUNCTION public.get_programa_fideliza_dados(integer, integer, uuid)
+supabase\migrations\20260616_corrigir_fideliza_extras_retencao.sql:183:IS 'Programa Fideliza+: churn/evasões excluem atividades extras via is_atividade_extra_curso(COALESCE(movimentacoes_admin.curso_id, alunos.curso_id)).';
+supabase\migrations\20260609_p01r_reajuste_medio_canonico_rpc.sql:27:CREATE OR REPLACE FUNCTION public.get_kpis_alunos_financeiro_vivo_canonico(
+supabase\migrations\20260609_p01r_reajuste_medio_canonico_rpc.sql:171:COMMENT ON FUNCTION public.get_kpis_alunos_financeiro_vivo_canonico(uuid, integer, integer)
+supabase\migrations\20260609_p01r_reajuste_medio_canonico_rpc.sql:178:-- SELECT public.get_kpis_alunos_canonicos(
+supabase\migrations\20260609_p01r_reajuste_medio_canonico_rpc.sql:186:-- SELECT public.get_kpis_alunos_canonicos(
+supabase\migrations\20260609_p01r_reajuste_medio_canonico_rpc.sql:194:-- Reaplicar a definicao de public.get_kpis_alunos_financeiro_vivo_canonico
+supabase\migrations\fase3_views_kpis.sql:59:  FROM dados_mensais
+supabase\migrations\fase3_views_kpis.sql:377:LEFT JOIN dados_mensais dm ON dm.unidade_id = u.id 
+supabase\migrations\fase3_views_kpis.sql:383:-- 5. FUNÇÃO: get_kpis_evolucao_mensal
+supabase\migrations\fase3_views_kpis.sql:386:CREATE OR REPLACE FUNCTION get_kpis_evolucao_mensal(
+supabase\migrations\fase3_views_kpis.sql:413:  FROM dados_mensais dm
+supabase\migrations\fase3_views_kpis.sql:427:GRANT EXECUTE ON FUNCTION get_kpis_evolucao_mensal TO authenticated;
+supabase\functions\gemini-relatorio-coordenacao\index.ts:340:    // Top Fidelização (Tempo médio de permanência dos ALUNOS do professor)
+supabase\functions\gemini-relatorio-coordenacao\index.ts:342:      relatorioTemplate += `🎯 *TOP 3 FIDELIZAÇÃO (Tempo Médio Alunos)*\n`;
+supabase\functions\gemini-ranking-professores\index.ts:206:    // Dados de fidelização
+supabase\functions\gemini-ranking-professores\index.ts:324:    // RANKING FIDELIZAÇÃO
+supabase\functions\gemini-ranking-professores\index.ts:327:      relatorioTemplate += `🎖️ *RANKING FIDELIZAÇÃO*\n`;
+supabase\functions\gemini-ranking-professores\index.ts:331:      const mediaFidelizacao = topRetencao.reduce((sum: number, p: any) => sum + Number(p.tempo_medio), 0) / topRetencao.length;
+supabase\functions\gemini-ranking-professores\index.ts:332:      const maxFidelizacao = topRetencao[0]?.tempo_medio || 1;
+supabase\functions\gemini-ranking-professores\index.ts:336:        const pct = Math.round((tempo / maxFidelizacao) * 100);
+supabase\functions\gemini-ranking-professores\index.ts:337:        const vsMedia = formatarVariacao(tempo, mediaFidelizacao);
+supabase\functions\gemini-ranking-professores\index.ts:343:      relatorioTemplate += `\n📊 Média: *${mediaFidelizacao.toFixed(1)}* meses\n\n`;
+src\components\GestaoMensal\TabGestao.tsx:196:      const { data, error } = await supabase.rpc('recalcular_dados_mensais', {
+src\components\GestaoMensal\TabGestao.tsx:455:          // PERÍODO HISTÓRICO: usar dados_mensais. Sem fallback vivo para mês histórico.
+src\components\GestaoMensal\TabGestao.tsx:457:            .from('dados_mensais')
+src\components\GestaoMensal\TabGestao.tsx:536:            console.warn('Competencia sem snapshot em dados_mensais. KPIs historicos indisponiveis ate fechamento formal.');
+src\components\GestaoMensal\TabGestao.tsx:545:          .from('dados_mensais')
+src\components\GestaoMensal\TabGestao.tsx:595:          .from('dados_mensais')
+src\components\GestaoMensal\TabGestao.tsx:710:          // Usar fonte canônica viva (período atual) ou dados_mensais (histórico)
+src\components\GestaoMensal\TabGestao.tsx:1024:          .from('dados_mensais')
+src\components\GestaoMensal\TabGestao.tsx:1070:        // Buscar dados históricos para gráficos financeiros e retenção (tabela dados_mensais - histórico completo 2023-2026)
+src\components\GestaoMensal\TabGestao.tsx:1072:          .from('dados_mensais')
+supabase\functions\gemini-insights-retencao\index.ts:54:// Programa Fideliza+ LA - Metas (conforme banco programa_fideliza_config)
+supabase\functions\gemini-insights-retencao\index.ts:57:const FIDELIZA_PLUS_METAS = {
+supabase\functions\gemini-insights-retencao\index.ts:297:    // Calcular progresso no Fideliza+ LA (5 critérios conforme banco)
+supabase\functions\gemini-insights-retencao\index.ts:298:    const progressoFidelizaPlus = {
+supabase\functions\gemini-insights-retencao\index.ts:301:        meta: FIDELIZA_PLUS_METAS.churn_maximo,
+supabase\functions\gemini-insights-retencao\index.ts:302:        conquistou: churnRate <= FIDELIZA_PLUS_METAS.churn_maximo,
+supabase\functions\gemini-insights-retencao\index.ts:307:        meta: FIDELIZA_PLUS_METAS.inadimplencia_maxima,
+supabase\functions\gemini-insights-retencao\index.ts:308:        conquistou: inadimplencia <= FIDELIZA_PLUS_METAS.inadimplencia_maxima,
+supabase\functions\gemini-insights-retencao\index.ts:313:        meta: FIDELIZA_PLUS_METAS.renovacao_minima,
+supabase\functions\gemini-insights-retencao\index.ts:314:        conquistou: taxaRenovacao >= FIDELIZA_PLUS_METAS.renovacao_minima,
+supabase\functions\gemini-insights-retencao\index.ts:319:        meta: FIDELIZA_PLUS_METAS.reajuste_minimo,
+supabase\functions\gemini-insights-retencao\index.ts:320:        conquistou: reajusteMedio !== null && reajusteMedio >= FIDELIZA_PLUS_METAS.reajuste_minimo,
+supabase\functions\gemini-insights-retencao\index.ts:333:      progressoFidelizaPlus.churn_premiado.conquistou,
+supabase\functions\gemini-insights-retencao\index.ts:334:      progressoFidelizaPlus.inadimplencia_zero.conquistou,
+supabase\functions\gemini-insights-retencao\index.ts:335:      progressoFidelizaPlus.max_renovacao.conquistou,
+supabase\functions\gemini-insights-retencao\index.ts:336:      progressoFidelizaPlus.reajuste_campeao.conquistou,
+supabase\functions\gemini-insights-retencao\index.ts:337:      progressoFidelizaPlus.mestres_lojinha.conquistou,
+supabase\functions\gemini-insights-retencao\index.ts:342:      (progressoFidelizaPlus.churn_premiado.conquistou ? 25 : 0) +
+supabase\functions\gemini-insights-retencao\index.ts:343:      (progressoFidelizaPlus.inadimplencia_zero.conquistou ? 20 : 0) +
+supabase\functions\gemini-insights-retencao\index.ts:344:      (progressoFidelizaPlus.max_renovacao.conquistou ? 25 : 0) +
+supabase\functions\gemini-insights-retencao\index.ts:345:      (progressoFidelizaPlus.reajuste_campeao.conquistou ? 15 : 0) +
+supabase\functions\gemini-insights-retencao\index.ts:346:      (progressoFidelizaPlus.mestres_lojinha.conquistou ? 15 : 0);
+supabase\functions\gemini-insights-retencao\index.ts:350:      progressoFidelizaPlus.churn_premiado.conquistou,
+supabase\functions\gemini-insights-retencao\index.ts:351:      progressoFidelizaPlus.inadimplencia_zero.conquistou,
+supabase\functions\gemini-insights-retencao\index.ts:352:      progressoFidelizaPlus.max_renovacao.conquistou,
+supabase\functions\gemini-insights-retencao\index.ts:353:      progressoFidelizaPlus.reajuste_campeao.conquistou,
+supabase\functions\gemini-insights-retencao\index.ts:360:## SEUS CONCORRENTES NO FIDELIZA+ LA:
+supabase\functions\gemini-insights-retencao\index.ts:367:- "Quem vai levar o Fideliza+ LA esse mês?"
+supabase\functions\gemini-insights-retencao\index.ts:380:- Eles ganham comissão por renovação e estrelas no programa Fideliza+ LA que geram experiências culinárias, culturais, passeios, cinema, troféus, 14º salário e VR por 6 meses!
+supabase\functions\gemini-insights-retencao\index.ts:402:- Fale sobre as EXPERIÊNCIAS e PRÊMIOS do Fideliza+ LA
+supabase\functions\gemini-insights-retencao\index.ts:422:## PROGRAMA FIDELIZA+ LA (TRIMESTRAL - 5 CRITÉRIOS - 100 pts):
+supabase\functions\gemini-insights-retencao\index.ts:425:⭐ Churn Premiado (25 pts): Taxa de churn ≤ ${FIDELIZA_PLUS_METAS.churn_maximo}%
+supabase\functions\gemini-insights-retencao\index.ts:426:⭐ Inadimplência 1% (20 pts): Inadimplência ≤ ${FIDELIZA_PLUS_METAS.inadimplencia_maxima}%
+supabase\functions\gemini-insights-retencao\index.ts:427:⭐ Max Renovação (25 pts): Taxa de renovação ≥ ${FIDELIZA_PLUS_METAS.renovacao_minima}%
+supabase\functions\gemini-insights-retencao\index.ts:428:⭐ Reajuste Campeão (15 pts): Média de reajustes ≥ ${FIDELIZA_PLUS_METAS.reajuste_minimo}%
+supabase\functions\gemini-insights-retencao\index.ts:442:3. Fale do Fideliza+ LA e das experiências/prêmios
+supabase\functions\gemini-insights-retencao\index.ts:541:  "insights_fidelizacao": [
+supabase\functions\gemini-insights-retencao\index.ts:550:    "ranking_estimado": "Onde a dupla está no ranking do Fideliza+"
+supabase\functions\gemini-insights-retencao\index.ts:552:  "fideliza_plus": {
+supabase\functions\gemini-insights-retencao\index.ts:609:| Reajuste Médio | ${reajusteMedio ? `${reajusteMedio.toFixed(1)}%` : 'N/D'} | ≥${FIDELIZA_PLUS_METAS.reajuste_minimo}% (Fideliza+) | ${reajusteMedio ? (reajusteMedio >= FIDELIZA_PLUS_METAS.reajuste_minimo ? '✅' : '❌') : '⚪'} |
+supabase\functions\gemini-insights-retencao\index.ts:644:🏆 PROGRAMA FIDELIZA+ LA - TRIMESTRAL (${pontuacaoTotal}/100 pts - ${criteriosBatidos}/5 critérios):
+supabase\functions\gemini-insights-retencao\index.ts:645:⭐ Churn Premiado (≤${FIDELIZA_PLUS_METAS.churn_maximo}% → 25pts): ${progressoFidelizaPlus.churn_premiado.conquistou ? '✅ +25pts' : '❌ 0pts'} (${churnRate.toFixed(1)}%)
+supabase\functions\gemini-insights-retencao\index.ts:646:⭐ Inadimplência 1% (≤${FIDELIZA_PLUS_METAS.inadimplencia_maxima}% → 20pts): ${progressoFidelizaPlus.inadimplencia_zero.conquistou ? '✅ +20pts' : '❌ 0pts'} (${inadimplencia.toFixed(1)}%)
+supabase\functions\gemini-insights-retencao\index.ts:647:⭐ Max Renovação (≥${FIDELIZA_PLUS_METAS.renovacao_minima}% → 25pts): ${progressoFidelizaPlus.max_renovacao.conquistou ? '✅ +25pts' : '❌ 0pts'} (${taxaRenovacao.toFixed(0)}%)
+supabase\functions\gemini-insights-retencao\index.ts:648:⭐ Reajuste Campeão (≥${FIDELIZA_PLUS_METAS.reajuste_minimo}% → 15pts): ${progressoFidelizaPlus.reajuste_campeao.conquistou ? '✅ +15pts' : '❌ 0pts'} (${reajusteMedio ? `${reajusteMedio.toFixed(1)}%` : 'N/D'})
+supabase\functions\gemini-insights-retencao\index.ts:649:🛒 Mestres da Lojinha (≥R$${metaLojinhaUnidade.toLocaleString('pt-BR')} → 15pts): ${progressoFidelizaPlus.mestres_lojinha.conquistou ? '✅ +15pts' : '❌ 0pts'}
+supabase\functions\gemini-insights-retencao\index.ts:712:        conquistas: progressoFidelizaPlus.churn_premiado.conquistou ? [{
+supabase\functions\gemini-insights-retencao\index.ts:715:          descricao: `Churn de ${churnRate.toFixed(1)}% está dentro da meta de ${FIDELIZA_PLUS_METAS.churn_maximo}% - +25 pontos Fideliza+!`,
+supabase\functions\gemini-insights-retencao\index.ts:749:        insights_fidelizacao: [
+supabase\functions\gemini-insights-retencao\index.ts:759:        fideliza_plus: {
+supabase\functions\gemini-insights-retencao\index.ts:762:          proxima_estrela: !progressoFidelizaPlus.churn_premiado.conquistou ? 'Churn Premiado' : 
+supabase\functions\gemini-insights-retencao\index.ts:763:                          !progressoFidelizaPlus.inadimplencia_zero.conquistou ? 'Inadimplência 1%' :
+supabase\functions\gemini-insights-retencao\index.ts:764:                          !progressoFidelizaPlus.max_renovacao.conquistou ? 'Max Renovação' : 'Reajuste Campeão',
+supabase\functions\gemini-insights-retencao\index.ts:770:          : `Vambora, ${duplaFormatada?.apelidos || 'pessoal'}! 🚀 O Fideliza+ LA espera vocês!` 
+supabase\migrations\fase3_01_view_gestao.sql:53:  FROM dados_mensais
+supabase\migrations\20260616_corrigir_fechamento_mensal_extras_retencao.sql:3:-- Contexto: recalcular_dados_mensais_unguarded alimenta dados_mensais no fechamento da competência.
+supabase\migrations\20260616_corrigir_fechamento_mensal_extras_retencao.sql:7:CREATE OR REPLACE FUNCTION public.recalcular_dados_mensais_unguarded(p_ano integer, p_mes integer, p_unidade_id uuid)
+supabase\migrations\20260616_corrigir_fechamento_mensal_extras_retencao.sql:114:  INSERT INTO dados_mensais (
+supabase\migrations\20260616_corrigir_fechamento_mensal_extras_retencao.sql:160:COMMENT ON FUNCTION public.recalcular_dados_mensais_unguarded(integer, integer, uuid)
+supabase\migrations\20260609_p01q_financeiro_vivo_canonico_rpc.sql:7:-- - P0.1G criou public.get_kpis_alunos_canonicos.
+supabase\migrations\20260609_p01q_financeiro_vivo_canonico_rpc.sql:25:CREATE OR REPLACE FUNCTION public.get_kpis_alunos_financeiro_vivo_canonico(
+supabase\migrations\20260609_p01q_financeiro_vivo_canonico_rpc.sql:153:COMMENT ON FUNCTION public.get_kpis_alunos_financeiro_vivo_canonico(uuid, integer, integer)
+supabase\migrations\20260609_p01q_financeiro_vivo_canonico_rpc.sql:158:  IF to_regprocedure('public.get_kpis_alunos_canonicos_base_p01q(uuid, integer, integer)') IS NULL THEN
+supabase\migrations\20260609_p01q_financeiro_vivo_canonico_rpc.sql:159:    IF to_regprocedure('public.get_kpis_alunos_canonicos(uuid, integer, integer)') IS NULL THEN
+supabase\migrations\20260609_p01q_financeiro_vivo_canonico_rpc.sql:160:      RAISE EXCEPTION 'Funcao get_kpis_alunos_canonicos nao encontrada para wrapper P0.1Q';
+supabase\migrations\20260609_p01q_financeiro_vivo_canonico_rpc.sql:163:    EXECUTE 'ALTER FUNCTION public.get_kpis_alunos_canonicos(uuid, integer, integer) RENAME TO get_kpis_alunos_canonicos_base_p01q';
+supabase\migrations\20260609_p01q_financeiro_vivo_canonico_rpc.sql:167:ALTER FUNCTION public.get_kpis_alunos_canonicos_base_p01q(uuid, integer, integer)
+supabase\migrations\20260609_p01q_financeiro_vivo_canonico_rpc.sql:170:CREATE OR REPLACE FUNCTION public.get_kpis_alunos_canonicos(
+supabase\migrations\20260609_p01q_financeiro_vivo_canonico_rpc.sql:194:  v_result := public.get_kpis_alunos_canonicos_base_p01q(p_unidade_id, p_ano, p_mes);
+supabase\migrations\20260609_p01q_financeiro_vivo_canonico_rpc.sql:204:      FROM public.get_kpis_alunos_financeiro_vivo_canonico(
+supabase\migrations\20260609_p01q_financeiro_vivo_canonico_rpc.sql:264:COMMENT ON FUNCTION public.get_kpis_alunos_canonicos(uuid, integer, integer)
+supabase\migrations\20260609_p01q_financeiro_vivo_canonico_rpc.sql:267:REVOKE ALL ON FUNCTION public.get_kpis_alunos_financeiro_vivo_canonico(uuid, integer, integer) FROM PUBLIC, anon;
+supabase\migrations\20260609_p01q_financeiro_vivo_canonico_rpc.sql:268:REVOKE ALL ON FUNCTION public.get_kpis_alunos_canonicos(uuid, integer, integer) FROM PUBLIC, anon;
+supabase\migrations\20260609_p01q_financeiro_vivo_canonico_rpc.sql:269:REVOKE ALL ON FUNCTION public.get_kpis_alunos_canonicos_base_p01q(uuid, integer, integer) FROM PUBLIC, anon;
+supabase\migrations\20260609_p01q_financeiro_vivo_canonico_rpc.sql:271:GRANT EXECUTE ON FUNCTION public.get_kpis_alunos_financeiro_vivo_canonico(uuid, integer, integer) TO authenticated, service_role;
+supabase\migrations\20260609_p01q_financeiro_vivo_canonico_rpc.sql:272:GRANT EXECUTE ON FUNCTION public.get_kpis_alunos_canonicos(uuid, integer, integer) TO authenticated, service_role;
+supabase\migrations\20260609_p01q_financeiro_vivo_canonico_rpc.sql:273:GRANT EXECUTE ON FUNCTION public.get_kpis_alunos_canonicos_base_p01q(uuid, integer, integer) TO authenticated, service_role;
+supabase\migrations\20260609_p01q_financeiro_vivo_canonico_rpc.sql:279:-- SELECT public.get_kpis_alunos_canonicos(
+supabase\migrations\20260609_p01q_financeiro_vivo_canonico_rpc.sql:291:-- SELECT public.get_kpis_alunos_canonicos(
+supabase\migrations\20260609_p01q_financeiro_vivo_canonico_rpc.sql:302:-- DROP FUNCTION IF EXISTS public.get_kpis_alunos_canonicos(uuid, integer, integer);
+supabase\migrations\20260609_p01q_financeiro_vivo_canonico_rpc.sql:303:-- ALTER FUNCTION public.get_kpis_alunos_canonicos_base_p01q(uuid, integer, integer)
+supabase\migrations\20260609_p01q_financeiro_vivo_canonico_rpc.sql:304:--   RENAME TO get_kpis_alunos_canonicos;
+supabase\migrations\20260609_p01q_financeiro_vivo_canonico_rpc.sql:305:-- DROP FUNCTION IF EXISTS public.get_kpis_alunos_financeiro_vivo_canonico(uuid, integer, integer);
+supabase\migrations\20260607_p00_fluxo_seguro_arquivar_vinculo_aluno.sql:13:-- Nao recalcula dados_mensais.
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:2:-- P0.0 - Fase 2B - Wrappers/guards dos writers de dados_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:14:--       recalcular_dados_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:15:--       upsert_dados_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:16:--       fechar_dados_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:17:--       snapshot_dados_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:18:--   - Recriar sync_evasao_to_dados_mensais com guard baseado na definicao
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:23:--   - Nao recalcular dados_mensais.
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:36:--   - public.competencias_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:55:  IF to_regprocedure('public.recalcular_dados_mensais_unguarded(integer, integer, uuid)') IS NULL THEN
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:56:    EXECUTE 'ALTER FUNCTION public.recalcular_dados_mensais(integer, integer, uuid) RENAME TO recalcular_dados_mensais_unguarded';
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:63:  IF to_regprocedure('public.upsert_dados_mensais_unguarded(character varying, integer, integer, integer, integer, integer, numeric, numeric, numeric, integer, numeric, numeric)') IS NULL THEN
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:64:    EXECUTE 'ALTER FUNCTION public.upsert_dados_mensais(character varying, integer, integer, integer, integer, integer, numeric, numeric, numeric, integer, numeric, numeric) RENAME TO upsert_dados_mensais_unguarded';
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:71:  IF to_regprocedure('public.fechar_dados_mensais_unguarded(integer, integer)') IS NULL THEN
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:72:    EXECUTE 'ALTER FUNCTION public.fechar_dados_mensais(integer, integer) RENAME TO fechar_dados_mensais_unguarded';
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:79:  IF to_regprocedure('public.snapshot_dados_mensais_unguarded(integer, integer)') IS NULL THEN
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:80:    EXECUTE 'ALTER FUNCTION public.snapshot_dados_mensais(integer, integer) RENAME TO snapshot_dados_mensais_unguarded';
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:89:REVOKE ALL ON FUNCTION public.recalcular_dados_mensais_unguarded(integer, integer, uuid)
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:91:GRANT EXECUTE ON FUNCTION public.recalcular_dados_mensais_unguarded(integer, integer, uuid)
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:94:REVOKE ALL ON FUNCTION public.upsert_dados_mensais_unguarded(
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:108:GRANT EXECUTE ON FUNCTION public.upsert_dados_mensais_unguarded(
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:123:REVOKE ALL ON FUNCTION public.fechar_dados_mensais_unguarded(integer, integer)
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:125:GRANT EXECUTE ON FUNCTION public.fechar_dados_mensais_unguarded(integer, integer)
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:128:REVOKE ALL ON FUNCTION public.snapshot_dados_mensais_unguarded(integer, integer)
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:130:GRANT EXECUTE ON FUNCTION public.snapshot_dados_mensais_unguarded(integer, integer)
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:135:-- 2. Wrapper: recalcular_dados_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:137:-- Antes: recalculava e sobrescrevia dados_mensais para a unidade/ano/mes.
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:141:CREATE OR REPLACE FUNCTION public.recalcular_dados_mensais(
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:154:  RETURN public.recalcular_dados_mensais_unguarded(
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:162:COMMENT ON FUNCTION public.recalcular_dados_mensais(integer, integer, uuid) IS
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:163:  'Wrapper P0.0 Fase 2B: bloqueia competencia fechada antes de chamar recalcular_dados_mensais_unguarded.';
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:167:-- 3. Wrapper: upsert_dados_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:173:CREATE OR REPLACE FUNCTION public.upsert_dados_mensais(
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:202:  RETURN public.upsert_dados_mensais_unguarded(
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:219:COMMENT ON FUNCTION public.upsert_dados_mensais(
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:233:  'Wrapper P0.0 Fase 2B: bloqueia competencia fechada antes de chamar upsert_dados_mensais_unguarded.';
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:237:-- 4. Wrapper: fechar_dados_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:241:-- legado/unguarded e so entao delega para fechar_dados_mensais_unguarded.
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:251:CREATE OR REPLACE FUNCTION public.fechar_dados_mensais(
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:271:  PERFORM public.fechar_dados_mensais_unguarded(p_ano, p_mes);
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:275:COMMENT ON FUNCTION public.fechar_dados_mensais(integer, integer) IS
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:280:-- 5. Wrapper: snapshot_dados_mensais all-or-nothing
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:283:-- dados_mensais por unidade.
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:293:CREATE OR REPLACE FUNCTION public.snapshot_dados_mensais(
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:309:  JOIN public.competencias_mensais c
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:318:      'snapshot_dados_mensais bloqueado em modo all-or-nothing; nenhuma unidade foi processada. Motivo: competencia bloqueada em uma ou mais unidades.';
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:323:      LEFT JOIN public.competencias_mensais c
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:335:          'snapshot_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:356:    LEFT JOIN public.competencias_mensais c
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:368:  FROM public.snapshot_dados_mensais_unguarded(p_ano, p_mes) AS s;
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:374:COMMENT ON FUNCTION public.snapshot_dados_mensais(integer, integer) IS
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:379:-- 6. sync_evasao_to_dados_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:385:-- dados_mensais retroativamente.
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:388:--   - Se fechado/retificacao_pendente: nao altera dados_mensais.
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:393:CREATE OR REPLACE FUNCTION public.sync_evasao_to_dados_mensais()
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:427:  FROM public.competencias_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:438:        'sync_evasao_to_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:451:        'Falha ao registrar bloqueio de sync_evasao_to_dados_mensais: %',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:466:  FROM public.dados_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:471:  UPDATE public.dados_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:486:COMMENT ON FUNCTION public.sync_evasao_to_dados_mensais() IS
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:487:  'P0.0 Fase 2B: trigger sync evasao nao altera dados_mensais quando competencia esta fechada ou em retificacao_pendente.';
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:498:--   - fechar_dados_mensais e snapshot_dados_mensais somente backend.
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:499:--   - recalcular_dados_mensais virar operacao administrativa.
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:500:--   - upsert_dados_mensais somente backend/fluxo controlado.
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:501:--   - sync_evasao_to_dados_mensais sem chamada direta por cliente.
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:506:REVOKE EXECUTE ON FUNCTION public.fechar_dados_mensais(integer, integer)
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:508:GRANT EXECUTE ON FUNCTION public.fechar_dados_mensais(integer, integer)
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:511:REVOKE EXECUTE ON FUNCTION public.snapshot_dados_mensais(integer, integer)
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:513:GRANT EXECUTE ON FUNCTION public.snapshot_dados_mensais(integer, integer)
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:516:REVOKE EXECUTE ON FUNCTION public.recalcular_dados_mensais(integer, integer, uuid)
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:518:GRANT EXECUTE ON FUNCTION public.recalcular_dados_mensais(integer, integer, uuid)
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:521:REVOKE EXECUTE ON FUNCTION public.upsert_dados_mensais(
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:535:GRANT EXECUTE ON FUNCTION public.upsert_dados_mensais(
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:550:REVOKE EXECUTE ON FUNCTION public.sync_evasao_to_dados_mensais()
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:552:GRANT EXECUTE ON FUNCTION public.sync_evasao_to_dados_mensais()
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:568:  AND table_name IN ('competencias_mensais', 'competencias_bloqueios_log')
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:584:    'recalcular_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:585:    'upsert_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:586:    'fechar_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:587:    'snapshot_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:588:    'sync_evasao_to_dados_mensais'
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:598:    'recalcular_dados_mensais_unguarded',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:599:    'upsert_dados_mensais_unguarded',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:600:    'fechar_dados_mensais_unguarded',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:601:    'snapshot_dados_mensais_unguarded'
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:609:  AND action_statement ILIKE '%sync_evasao_to_dados_mensais%'
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:614:FROM public.competencias_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:629:    'fechar_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:630:    'snapshot_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:631:    'recalcular_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:632:    'upsert_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:633:    'sync_evasao_to_dados_mensais'
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:652:    'recalcular_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:653:    'upsert_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:654:    'fechar_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:655:    'snapshot_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:656:    'sync_evasao_to_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:657:    'recalcular_dados_mensais_unguarded',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:658:    'upsert_dados_mensais_unguarded',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:659:    'fechar_dados_mensais_unguarded',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:660:    'snapshot_dados_mensais_unguarded'
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:673:    'recalcular_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:674:    'upsert_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:675:    'fechar_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:676:    'snapshot_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:677:    'sync_evasao_to_dados_mensais'
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:691:    'recalcular_dados_mensais_unguarded',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:692:    'upsert_dados_mensais_unguarded',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:693:    'fechar_dados_mensais_unguarded',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:694:    'snapshot_dados_mensais_unguarded'
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:708:    'fechar_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:709:    'snapshot_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:710:    'recalcular_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:711:    'upsert_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:712:    'sync_evasao_to_dados_mensais'
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:718:FROM public.competencias_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:722:-- 6. Confirmar que a Fase 2B nao alterou dados_mensais via audit_log.
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:723:SELECT count(*) AS eventos_dados_mensais_recentes
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:725:WHERE tabela = 'dados_mensais'
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:743:DROP FUNCTION IF EXISTS public.recalcular_dados_mensais_unguarded(integer, integer, uuid);
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:744:DROP FUNCTION IF EXISTS public.fechar_dados_mensais_unguarded(integer, integer);
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:745:DROP FUNCTION IF EXISTS public.snapshot_dados_mensais_unguarded(integer, integer);
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:746:DROP FUNCTION IF EXISTS public.upsert_dados_mensais_unguarded(
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:775:-- 3. snapshot_dados_mensais e all-or-nothing: uma unidade bloqueada impede
+supabase\migrations\20260607_p00_governanca_competencia_mensal_fase2b_wrappers.sql:778:-- 4. sync_evasao_to_dados_mensais nao bloqueia movimentacoes_admin; se o log
+src\components\App\Auth\LoginPage.tsx:27:    description: 'Programas Matriculador+, Fideliza+ e Professor+ LA'
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:2:-- P0.0 - Governanca de competencia mensal / dados_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:9:--     dados_mensais_retificacoes para marcar legado como aplicada.
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:15:--   - dados_mensais = snapshot historico.
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:16:--   - competencias_mensais = governanca/fechamento.
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:17:--   - dados_mensais_retificacoes = fluxo formal de retificacao.
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:25:--   - Nao recalcular dados_mensais.
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:42:-- 1. competencias_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:50:CREATE TABLE IF NOT EXISTS public.competencias_mensais (
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:68:  CONSTRAINT competencias_mensais_unidade_ano_mes_key
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:71:  CONSTRAINT competencias_mensais_fechamento_campos_chk
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:78:COMMENT ON TABLE public.competencias_mensais IS
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:79:  'Governanca de fechamento mensal por unidade/ano/mes. dados_mensais continua sendo o snapshot historico.';
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:81:COMMENT ON COLUMN public.competencias_mensais.fechamento_lote_id IS
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:84:COMMENT ON COLUMN public.competencias_mensais.fechado_por IS
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:87:CREATE INDEX IF NOT EXISTS idx_competencias_mensais_lookup
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:88:  ON public.competencias_mensais (unidade_id, ano, mes, status);
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:90:CREATE INDEX IF NOT EXISTS idx_competencias_mensais_lote
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:91:  ON public.competencias_mensais (fechamento_lote_id)
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:94:CREATE INDEX IF NOT EXISTS idx_competencias_mensais_status
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:95:  ON public.competencias_mensais (ano, mes, status);
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:99:GRANT SELECT ON public.competencias_mensais TO authenticated;
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:100:GRANT SELECT, INSERT, UPDATE, DELETE ON public.competencias_mensais TO service_role;
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:101:GRANT SELECT, INSERT, UPDATE, DELETE ON public.competencias_mensais TO postgres;
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:105:-- 2. Evolucao de dados_mensais_retificacoes
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:117:ALTER TABLE public.dados_mensais_retificacoes
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:120:    REFERENCES public.dados_mensais_retificacoes(id),
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:124:UPDATE public.dados_mensais_retificacoes
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:128:ALTER TABLE public.dados_mensais_retificacoes
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:132:ALTER TABLE public.dados_mensais_retificacoes
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:133:  DROP CONSTRAINT IF EXISTS dados_mensais_retificacoes_status_chk,
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:134:  ADD CONSTRAINT dados_mensais_retificacoes_status_chk
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:143:COMMENT ON COLUMN public.dados_mensais_retificacoes.status IS
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:146:COMMENT ON COLUMN public.dados_mensais_retificacoes.rollback_de IS
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:149:COMMENT ON COLUMN public.dados_mensais_retificacoes.aplicada_por IS
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:152:CREATE INDEX IF NOT EXISTS idx_dados_mensais_retificacoes_status
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:153:  ON public.dados_mensais_retificacoes (status, ano, mes, unidade_id);
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:155:CREATE INDEX IF NOT EXISTS idx_dados_mensais_retificacoes_rollback_de
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:156:  ON public.dados_mensais_retificacoes (rollback_de)
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:163:-- Usado quando uma rotina tenta alterar dados_mensais de competencia
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:165:-- Especialmente importante para sync_evasao_to_dados_mensais:
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:206:-- Linha inexistente em competencias_mensais significa "aberto" em P0.0.
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:224:  FROM public.competencias_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:250:  'Guarda unica para impedir escrita direta em dados_mensais quando competencia estiver fechada ou com retificacao pendente.';
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:261:-- Pode ser usado por trigger functions como sync_evasao_to_dados_mensais.
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:320:CREATE OR REPLACE FUNCTION public.fechar_competencia(
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:353:  -- Verificar estado atual antes de consultar/validar dados_mensais.
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:356:  FROM public.competencias_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:394:  FROM public.dados_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:400:    RAISE EXCEPTION 'Snapshot ausente em dados_mensais: unidade %, ano %, mes %',
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:441:  INSERT INTO public.competencias_mensais (
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:468:  WHERE competencias_mensais.status = 'aberto';
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:472:  FROM public.competencias_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:490:COMMENT ON FUNCTION public.fechar_competencia(uuid, integer, integer, text, text, uuid) IS
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:493:REVOKE ALL ON FUNCTION public.fechar_competencia(uuid, integer, integer, text, text, uuid)
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:495:GRANT EXECUTE ON FUNCTION public.fechar_competencia(uuid, integer, integer, text, text, uuid)
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:516:--   - fechar_dados_mensais e snapshot_dados_mensais ficam apenas backend.
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:517:--   - recalcular_dados_mensais vira operacao administrativa.
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:518:--   - upsert_dados_mensais vira backend/admin controlado.
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:527:--   pois recalcular_dados_mensais ainda e chamado pelo frontend atual.
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:529:REVOKE EXECUTE ON FUNCTION public.fechar_dados_mensais(integer, integer)
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:531:GRANT EXECUTE ON FUNCTION public.fechar_dados_mensais(integer, integer)
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:534:REVOKE EXECUTE ON FUNCTION public.snapshot_dados_mensais(integer, integer)
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:536:GRANT EXECUTE ON FUNCTION public.snapshot_dados_mensais(integer, integer)
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:539:REVOKE EXECUTE ON FUNCTION public.recalcular_dados_mensais(integer, integer, uuid)
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:541:GRANT EXECUTE ON FUNCTION public.recalcular_dados_mensais(integer, integer, uuid)
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:544:REVOKE EXECUTE ON FUNCTION public.upsert_dados_mensais(
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:558:GRANT EXECUTE ON FUNCTION public.upsert_dados_mensais(
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:575:REVOKE EXECUTE ON FUNCTION public.sync_evasao_to_dados_mensais()
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:584:-- 1. recalcular_dados_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:588:-- 2. upsert_dados_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:592:-- 3. fechar_dados_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:596:-- 4. snapshot_dados_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:601:  FROM public.competencias_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:611:    'snapshot_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:619:-- 5. sync_evasao_to_dados_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:622:--   - dados_mensais fechado nao e alterado.
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:627:  FROM public.competencias_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:638:      'sync_evasao_to_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:650:      'Falha ao registrar bloqueio de sync_evasao_to_dados_mensais: %',
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:668:-- 1. Consultar competencias_mensais por unidade/ano/mes.
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:679:-- FASE 4 - Trigger hard em dados_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:684:CREATE OR REPLACE FUNCTION public.travar_dados_mensais_fechados()
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:701:CREATE TRIGGER trg_travar_dados_mensais_fechados
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:702:BEFORE UPDATE OR DELETE ON public.dados_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:704:EXECUTE FUNCTION public.travar_dados_mensais_fechados();
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:730:FROM public.dados_mensais d
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:739:SELECT public.fechar_competencia(
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:750:FROM public.competencias_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:765:WHERE jobname = 'snapshot_dados_mensais_mensal'
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:766:   OR command ILIKE '%snapshot_dados_mensais%'
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:767:   OR command ILIKE '%dados_mensais%';
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:774:    'competencias_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:778:-- 3. Estrutura atual de dados_mensais_retificacoes.
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:782:  AND table_name = 'dados_mensais_retificacoes'
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:791:    'fechar_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:792:    'snapshot_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:793:    'recalcular_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:794:    'upsert_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:795:    'sync_evasao_to_dados_mensais'
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:804:    'fechar_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:805:    'snapshot_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:806:    'recalcular_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:807:    'upsert_dados_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:808:    'sync_evasao_to_dados_mensais'
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:830:FROM public.dados_mensais d
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:848:    'competencias_mensais',
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:850:    'dados_mensais_retificacoes'
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:858:  AND table_name = 'dados_mensais_retificacoes'
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:870:    'fechar_competencia'
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:876:FROM public.competencias_mensais
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:880:-- 5. Confirmar que dados_mensais nao recebeu backfill/recalculo por esta migration.
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:884:WHERE tabela = 'dados_mensais'
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:899:REVOKE ALL ON FUNCTION public.fechar_competencia(uuid, integer, integer, text, text, uuid)
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:901:DROP FUNCTION IF EXISTS public.fechar_competencia(uuid, integer, integer, text, text, uuid);
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:912:DROP TABLE IF EXISTS public.competencias_mensais;
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:914:ALTER TABLE public.dados_mensais_retificacoes
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:931:-- 1. Revoke de recalcular_dados_mensais quebra botoes atuais ate
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:933:-- 2. Fase 1 cria fechar_competencia, mas nao deve ser chamada para
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:935:-- 3. Fase 1 nao altera sync_evasao_to_dados_mensais; o risco de
+supabase\migrations\20260607_p00_governanca_competencia_mensal.sql:937:-- 4. Trigger hard em dados_mensais nao entra aqui; fica para Fase 4.
+src\components\App\Admin\PainelPermissoes\TabAuditoria.tsx:51:  dados_mensais: 'Dados Mensais',
+src\components\App\Admin\PainelPermissoes\TabAuditoria.tsx:53:  metas_kpi: 'Metas KPI',
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:17:-- - recalculo de dados_mensais.
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:23:-- - Mes fechado/bloqueado: fonte = dados_mensais.
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:29:CREATE OR REPLACE FUNCTION public.get_kpis_alunos_canonicos(
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:66:    LEFT JOIN public.competencias_mensais cm
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:224:    FROM public.dados_mensais dm
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:239:        WHEN c.competencia_bloqueada = true AND s.unidade_id IS NOT NULL THEN 'dados_mensais'
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:291:      CASE WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_alunos_ativos, 0) ELSE COALESCE(rf.live_alunos_ativos, 0) END::integer AS alunos_ativos,
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:292:      CASE WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_alunos_pagantes, 0) ELSE COALESCE(rf.live_alunos_pagantes, 0) END::integer AS alunos_pagantes,
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:293:      CASE WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_ticket_medio, 0) ELSE COALESCE(rf.live_ticket_medio, 0) END::numeric AS ticket_medio,
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:294:      CASE WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_mrr, 0) ELSE COALESCE(rf.live_mrr, 0) END::numeric AS mrr,
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:295:      CASE WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_novas_matriculas, 0) ELSE COALESCE(rf.live_novas_matriculas, 0) END::integer AS novas_matriculas,
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:296:      CASE WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_evasoes, 0) ELSE COALESCE(rf.live_evasoes, 0) END::integer AS evasoes,
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:298:        WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_churn_rate, 0)
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:302:      CASE WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_inadimplencia, 0) ELSE 0 END::numeric AS inadimplencia,
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:303:      CASE WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_tempo_permanencia, 0) ELSE 0 END::numeric AS tempo_permanencia,
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:304:      CASE WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_reajuste_parcelas, 0) ELSE 0 END::numeric AS reajuste_pct,
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:305:      CASE WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_matriculas_ativas, 0) ELSE COALESCE(rf.live_matriculas_ativas, 0) END::integer AS matriculas_ativas,
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:306:      CASE WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_matriculas_banda, 0) ELSE COALESCE(rf.live_matriculas_banda, 0) END::integer AS matriculas_banda,
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:307:      CASE WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_matriculas_2_curso, 0) ELSE COALESCE(rf.live_matriculas_2_curso, 0) END::integer AS matriculas_2_curso,
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:309:      CASE WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_bolsistas_integrais, 0) ELSE COALESCE(rf.live_bolsistas_integrais, 0) END::integer AS bolsistas_integrais,
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:310:      CASE WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_bolsistas_parciais, 0) ELSE COALESCE(rf.live_bolsistas_parciais, 0) END::integer AS bolsistas_parciais,
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:316:        WHEN rf.fonte IN ('dados_mensais', 'preliminar') THEN COALESCE(rf.snap_saldo_liquido, COALESCE(rf.snap_novas_matriculas, 0) - COALESCE(rf.snap_evasoes, 0))
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:343:      ELSE jsonb_build_array('Competencia fechada: leitura de dados_mensais.')
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:435:COMMENT ON FUNCTION public.get_kpis_alunos_canonicos(uuid, integer, integer)
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:436:IS 'P0.1G: Fonte canonica de KPIs executivos de alunos. Fechado usa dados_mensais; mes atual aberto usa calculo vivo canonico; passado aberto sem snapshot fica indisponivel.';
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:442:  IF to_regprocedure('public.get_dados_relatorio_gerencial(uuid, integer, integer)') IS NOT NULL
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:443:     AND to_regprocedure('public.get_dados_relatorio_gerencial_legacy_p01g(uuid, integer, integer)') IS NULL THEN
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:444:    EXECUTE 'ALTER FUNCTION public.get_dados_relatorio_gerencial(uuid, integer, integer) RENAME TO get_dados_relatorio_gerencial_legacy_p01g';
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:445:  ELSIF to_regprocedure('public.get_dados_relatorio_gerencial_legacy_p01g(uuid, integer, integer)') IS NULL THEN
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:446:    RAISE EXCEPTION 'Funcao legado get_dados_relatorio_gerencial nao encontrada para criar wrapper P0.1G';
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:452:ALTER FUNCTION public.get_dados_relatorio_gerencial_legacy_p01g(uuid, integer, integer)
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:455:CREATE OR REPLACE FUNCTION public.get_dados_relatorio_gerencial(
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:470:  v_result := public.get_dados_relatorio_gerencial_legacy_p01g(p_unidade_id, p_ano, p_mes);
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:471:  v_kpis := public.get_kpis_alunos_canonicos(p_unidade_id, p_ano, p_mes);
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:489:COMMENT ON FUNCTION public.get_dados_relatorio_gerencial(uuid, integer, integer)
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:490:IS 'P0.1G wrapper: preserva relatorio gerencial legado e substitui kpis_gestao por get_kpis_alunos_canonicos.';
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:516:  v_kpis := public.get_kpis_alunos_canonicos(p_unidade_id, p_ano, p_mes);
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:526:IS 'P0.1G wrapper: preserva analise de retencao legado e substitui kpis_gestao por get_kpis_alunos_canonicos. kpis_retencao ainda e pendencia P0.1H.';
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:532:REVOKE ALL ON FUNCTION public.get_kpis_alunos_canonicos(uuid, integer, integer) FROM PUBLIC, anon;
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:533:REVOKE ALL ON FUNCTION public.get_dados_relatorio_gerencial(uuid, integer, integer) FROM PUBLIC, anon;
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:534:REVOKE ALL ON FUNCTION public.get_dados_relatorio_gerencial_legacy_p01g(uuid, integer, integer) FROM PUBLIC, anon;
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:538:GRANT EXECUTE ON FUNCTION public.get_kpis_alunos_canonicos(uuid, integer, integer) TO authenticated, service_role;
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:539:GRANT EXECUTE ON FUNCTION public.get_dados_relatorio_gerencial(uuid, integer, integer) TO authenticated, service_role;
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:540:GRANT EXECUTE ON FUNCTION public.get_dados_relatorio_gerencial_legacy_p01g(uuid, integer, integer) TO authenticated, service_role;
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:554:--     'get_kpis_alunos_canonicos',
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:555:--     'get_dados_relatorio_gerencial',
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:556:--     'get_dados_relatorio_gerencial_legacy_p01g',
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:563:-- SELECT public.get_kpis_alunos_canonicos(
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:570:-- SELECT public.get_kpis_alunos_canonicos(
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:573:-- Esperado: fonte=dados_mensais, alunos_ativos=496, pagantes=470,
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:577:-- SELECT public.get_dados_relatorio_gerencial(
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:585:-- DROP FUNCTION IF EXISTS public.get_dados_relatorio_gerencial(uuid, integer, integer);
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:586:-- ALTER FUNCTION public.get_dados_relatorio_gerencial_legacy_p01g(uuid, integer, integer)
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:587:--   RENAME TO get_dados_relatorio_gerencial;
+supabase\migrations\20260608_p01g_fonte_canonica_kpis_alunos_relatorios.sql:593:-- DROP FUNCTION IF EXISTS public.get_kpis_alunos_canonicos(uuid, integer, integer);
+supabase\migrations\20260627194328_admin_operacional_bolsista_por_tipo_canonico.sql:12:CREATE OR REPLACE FUNCTION public.get_kpis_alunos_admin_operacional(
+supabase\migrations\20260627194328_admin_operacional_bolsista_por_tipo_canonico.sql:256:COMMENT ON FUNCTION public.get_kpis_alunos_admin_operacional(uuid, integer, integer)
+supabase\migrations\20260627194328_admin_operacional_bolsista_por_tipo_canonico.sql:259:REVOKE ALL ON FUNCTION public.get_kpis_alunos_admin_operacional(uuid, integer, integer) FROM PUBLIC, anon;
+supabase\migrations\20260627194328_admin_operacional_bolsista_por_tipo_canonico.sql:260:GRANT EXECUTE ON FUNCTION public.get_kpis_alunos_admin_operacional(uuid, integer, integer) TO authenticated, service_role;
+supabase\migrations\20260610_caixa_reabertura_auditada.sql:7:-- Nao altera dados_mensais, KPIs, snapshots, views ou relatorios existentes.
+src\components\Retencao\RetencaoAcoes.tsx:86:    // Ação 5: Programa de Fidelização
+src\components\Retencao\RetencaoAcoes.tsx:89:      titulo: 'Programa de Fidelização e Benefícios',
+supabase\migrations\20260610_caixa_categorias_persistentes.sql:10:-- Nao altera dados_mensais, KPIs, snapshots, views ou relatorios de alunos.
+supabase\migrations\20260610_caixa_diario_cofre_admin.sql:6:-- Nao altera dados_mensais, KPIs, snapshots, views ou relatorios existentes.
+src\components\App\Alunos\TabHistoricoLTV.tsx:299:                  <ChartInsight texto={`Mostra quantos ex-alunos ficaram em cada faixa de tempo. A faixa com mais alunos é ${faixaMaior?.name} (${faixaMaior?.quantidade} alunos). Faixas à direita indicam alunos mais fidelizados.`} />
+supabase\migrations\20260622_p02v_relatorio_gerencial_exp_mat_conciliacao.sql:1:CREATE OR REPLACE FUNCTION public.get_dados_relatorio_gerencial(
+supabase\migrations\20260622_p02v_relatorio_gerencial_exp_mat_conciliacao.sql:34:  v_result := public.get_dados_relatorio_gerencial_legacy_p02r_20260620(p_unidade_id, p_ano, p_mes);
+supabase\migrations\20260622_p02v_relatorio_gerencial_exp_mat_conciliacao.sql:36:  v_comercial := public.get_kpis_comercial_canonicos_v2(p_unidade_id, p_ano, p_mes, 'mensal', null);
+supabase\migrations\20260622_p02v_relatorio_gerencial_exp_mat_conciliacao.sql:103:REVOKE EXECUTE ON FUNCTION public.get_dados_relatorio_gerencial(uuid, integer, integer) FROM PUBLIC;
+supabase\migrations\20260622_p02v_relatorio_gerencial_exp_mat_conciliacao.sql:104:REVOKE EXECUTE ON FUNCTION public.get_dados_relatorio_gerencial(uuid, integer, integer) FROM anon;
+supabase\migrations\20260622_p02v_relatorio_gerencial_exp_mat_conciliacao.sql:105:GRANT EXECUTE ON FUNCTION public.get_dados_relatorio_gerencial(uuid, integer, integer) TO authenticated, service_role;
+src\components\App\Snapshot\SnapshotDiario.tsx:99:        .from('relatorios_diarios')
+src\components\App\Snapshot\SnapshotDiario.tsx:254:          .from('relatorios_diarios')
+src\components\App\Snapshot\SnapshotDiario.tsx:262:          .from('relatorios_diarios')
+supabase\migrations\20260627193949_admin_operacional_banda_nao_tranca.sql:14:CREATE OR REPLACE FUNCTION public.get_kpis_alunos_admin_operacional(
+supabase\migrations\20260627193949_admin_operacional_banda_nao_tranca.sql:261:COMMENT ON FUNCTION public.get_kpis_alunos_admin_operacional(uuid, integer, integer)
+supabase\migrations\20260627193949_admin_operacional_banda_nao_tranca.sql:264:REVOKE ALL ON FUNCTION public.get_kpis_alunos_admin_operacional(uuid, integer, integer) FROM PUBLIC, anon;
+supabase\migrations\20260627193949_admin_operacional_banda_nao_tranca.sql:265:GRANT EXECUTE ON FUNCTION public.get_kpis_alunos_admin_operacional(uuid, integer, integer) TO authenticated, service_role;
+supabase\migrations\20260620_p02r_relatorio_gerencial_comercial_v2_wrapper.sql:8:--   - leads via get_kpis_comercial_canonicos_v2;
+supabase\migrations\20260620_p02r_relatorio_gerencial_comercial_v2_wrapper.sql:18:  if to_regprocedure('public.get_dados_relatorio_gerencial_legacy_p02r_20260620(uuid, integer, integer)') is null then
+supabase\migrations\20260620_p02r_relatorio_gerencial_comercial_v2_wrapper.sql:19:    alter function public.get_dados_relatorio_gerencial(uuid, integer, integer)
+supabase\migrations\20260620_p02r_relatorio_gerencial_comercial_v2_wrapper.sql:20:      rename to get_dados_relatorio_gerencial_legacy_p02r_20260620;
+supabase\migrations\20260620_p02r_relatorio_gerencial_comercial_v2_wrapper.sql:24:create or replace function public.get_dados_relatorio_gerencial(
+supabase\migrations\20260620_p02r_relatorio_gerencial_comercial_v2_wrapper.sql:52:  v_result := public.get_dados_relatorio_gerencial_legacy_p02r_20260620(p_unidade_id, p_ano, p_mes);
+supabase\migrations\20260620_p02r_relatorio_gerencial_comercial_v2_wrapper.sql:54:  v_comercial := public.get_kpis_comercial_canonicos_v2(p_unidade_id, p_ano, p_mes, 'mensal', null);
+supabase\migrations\20260620_p02r_relatorio_gerencial_comercial_v2_wrapper.sql:111:revoke all on function public.get_dados_relatorio_gerencial(uuid, integer, integer) from public, anon;
+supabase\migrations\20260620_p02r_relatorio_gerencial_comercial_v2_wrapper.sql:112:grant execute on function public.get_dados_relatorio_gerencial(uuid, integer, integer) to authenticated, service_role;
+supabase\migrations\20260620_p02r_relatorio_gerencial_comercial_v2_wrapper.sql:114:comment on function public.get_dados_relatorio_gerencial(uuid, integer, integer)
+supabase\migrations\20260620_p02r_relatorio_gerencial_comercial_v2_wrapper.sql:118:-- drop function public.get_dados_relatorio_gerencial(uuid, integer, integer);
+supabase\migrations\20260620_p02r_relatorio_gerencial_comercial_v2_wrapper.sql:119:-- alter function public.get_dados_relatorio_gerencial_legacy_p02r_20260620(uuid, integer, integer)
+supabase\migrations\20260620_p02r_relatorio_gerencial_comercial_v2_wrapper.sql:120:--   rename to get_dados_relatorio_gerencial;
+supabase\migrations\20260616_fechar_sobras_legadas_atividades_extras.sql:68:      )), '[]'::json) FROM dados_mensais dm
+supabase\migrations\20260616_fechar_sobras_legadas_atividades_extras.sql:76:      )), '[]'::json) FROM dados_mensais dm
+supabase\migrations\20260616_fechar_sobras_legadas_atividades_extras.sql:131:      )), '[]'::json) FROM dados_mensais dm
+supabase\migrations\20260626_admin_operacional_kpis_alunos.sql:6:-- - A RPC executiva get_kpis_alunos_canonicos mistura a leitura viva com campos
+supabase\migrations\20260626_admin_operacional_kpis_alunos.sql:10:-- - Esta funcao nao altera snapshots, dados_mensais nem a RPC executiva global.
+supabase\migrations\20260626_admin_operacional_kpis_alunos.sql:13:CREATE OR REPLACE FUNCTION public.get_kpis_alunos_admin_operacional(
+supabase\migrations\20260626_admin_operacional_kpis_alunos.sql:242:COMMENT ON FUNCTION public.get_kpis_alunos_admin_operacional(uuid, integer, integer)
+supabase\migrations\20260626_admin_operacional_kpis_alunos.sql:245:REVOKE ALL ON FUNCTION public.get_kpis_alunos_admin_operacional(uuid, integer, integer) FROM PUBLIC, anon;
+supabase\migrations\20260626_admin_operacional_kpis_alunos.sql:246:GRANT EXECUTE ON FUNCTION public.get_kpis_alunos_admin_operacional(uuid, integer, integer) TO authenticated, service_role;
+src\components\App\Alunos\AlunosPage.tsx:160:  const { data, error } = await supabase.rpc('get_kpis_alunos_admin_operacional', {
+src\components\App\Alunos\AlunosPage.tsx:328:      const { data, error } = await supabase.rpc('recalcular_dados_mensais', {
+supabase\migrations\20260627190635_admin_operacional_inclui_trancados.sql:9:-- - Nao altera evasoes, historico, snapshots nem dados_mensais.
+supabase\migrations\20260627190635_admin_operacional_inclui_trancados.sql:12:CREATE OR REPLACE FUNCTION public.get_kpis_alunos_admin_operacional(
+supabase\migrations\20260627190635_admin_operacional_inclui_trancados.sql:241:COMMENT ON FUNCTION public.get_kpis_alunos_admin_operacional(uuid, integer, integer)
+supabase\migrations\20260627190635_admin_operacional_inclui_trancados.sql:244:REVOKE ALL ON FUNCTION public.get_kpis_alunos_admin_operacional(uuid, integer, integer) FROM PUBLIC, anon;
+supabase\migrations\20260627190635_admin_operacional_inclui_trancados.sql:245:GRANT EXECUTE ON FUNCTION public.get_kpis_alunos_admin_operacional(uuid, integer, integer) TO authenticated, service_role;
+supabase\migrations\20260616_hardening_atividades_extras_metricas_legadas.sql:26:-- ---- function: snapshot_dados_mensais_unguarded_integer_integer.sql ----
+supabase\migrations\20260616_hardening_atividades_extras_metricas_legadas.sql:27:CREATE OR REPLACE FUNCTION public.snapshot_dados_mensais_unguarded(p_ano integer, p_mes integer)
+supabase\migrations\20260616_hardening_atividades_extras_metricas_legadas.sql:35:    INSERT INTO dados_mensais (
+supabase\migrations\20260616_hardening_atividades_extras_metricas_legadas.sql:73:        FROM dados_mensais dm_ant WHERE dm_ant.unidade_id = v_unidade.id 
+supabase\migrations\20260616_hardening_atividades_extras_metricas_legadas.sql:105:-- ---- function: sync_evasao_to_dados_mensais.sql ----
+supabase\migrations\20260616_hardening_atividades_extras_metricas_legadas.sql:106:CREATE OR REPLACE FUNCTION public.sync_evasao_to_dados_mensais()
+supabase\migrations\20260616_hardening_atividades_extras_metricas_legadas.sql:140:  FROM public.competencias_mensais
+supabase\migrations\20260616_hardening_atividades_extras_metricas_legadas.sql:151:        'sync_evasao_to_dados_mensais',
+supabase\migrations\20260616_hardening_atividades_extras_metricas_legadas.sql:164:        'Falha ao registrar bloqueio de sync_evasao_to_dados_mensais: %',
+supabase\migrations\20260616_hardening_atividades_extras_metricas_legadas.sql:180:  FROM public.dados_mensais
+supabase\migrations\20260616_hardening_atividades_extras_metricas_legadas.sql:185:  UPDATE public.dados_mensais
+supabase\migrations\20260616_hardening_atividades_extras_metricas_legadas.sql:200:-- ---- function: get_dados_relatorio_coordenacao_uuid_integer_integer.sql ----
+supabase\migrations\20260616_hardening_atividades_extras_metricas_legadas.sql:201:CREATE OR REPLACE FUNCTION public.get_dados_relatorio_coordenacao(p_unidade_id uuid, p_ano integer, p_mes integer)
+supabase\migrations\20260616_hardening_atividades_extras_metricas_legadas.sql:550:    FROM metas_kpi mk
+supabase\migrations\20260616_hardening_atividades_extras_metricas_legadas.sql:717:  v_kpis := public.get_kpis_alunos_canonicos(p_unidade_id, p_ano, p_mes);
+supabase\migrations\20260616_hardening_atividades_extras_metricas_legadas.sql:785:      from public.dados_mensais dm
+supabase\migrations\20260616_hardening_atividades_extras_metricas_legadas.sql:800:      from public.dados_mensais dm
+supabase\migrations\20260616_hardening_atividades_extras_metricas_legadas.sql:909:      from public.dados_mensais dm
+supabase\migrations\20260616_hardening_atividades_extras_metricas_legadas.sql:984:      )), '[]'::json) FROM dados_mensais dm
+supabase\migrations\20260616_hardening_atividades_extras_metricas_legadas.sql:992:      )), '[]'::json) FROM dados_mensais dm
+supabase\migrations\20260616_hardening_atividades_extras_metricas_legadas.sql:1046:      )), '[]'::json) FROM dados_mensais dm
+supabase\migrations\20260616_hardening_atividades_extras_metricas_legadas.sql:1055:-- ---- function: get_kpis_professor_periodo_integer_integer_uuid_date_date.sql ----
+supabase\migrations\20260616_hardening_atividades_extras_metricas_legadas.sql:1056:CREATE OR REPLACE FUNCTION public.get_kpis_professor_periodo(p_ano integer, p_mes integer, p_unidade_id uuid DEFAULT NULL::uuid, p_data_inicio date DEFAULT NULL::date, p_data_fim date DEFAULT NULL::date)
+supabase\migrations\20260616_hardening_atividades_extras_metricas_legadas.sql:1512:             JOIN dados_mensais dm ON (((dm.unidade_id = tr.unidade_id) AND ((((dm.ano)::numeric = EXTRACT(year FROM CURRENT_DATE)) AND ((dm.mes)::numeric = (EXTRACT(month FROM CURRENT_DATE) - (1)::numeric))) OR (((dm.ano)::numeric = (EXTRACT(year FROM CURRENT_DATE) - (1)::numeric)) AND (dm.mes = 12) AND (EXTRACT(month FROM CURRENT_DATE) = (1)::numeric))))))
+supabase\migrations\20260616_hardening_atividades_extras_metricas_legadas.sql:1546:           FROM (metas_kpi mk
+supabase\migrations\20260616_hardening_atividades_extras_metricas_legadas.sql:1619:         SELECT dados_mensais.unidade_id,
+supabase\migrations\20260616_hardening_atividades_extras_metricas_legadas.sql:1620:            dados_mensais.alunos_pagantes
+supabase\migrations\20260616_hardening_atividades_extras_metricas_legadas.sql:1621:           FROM dados_mensais
+supabase\migrations\20260616_hardening_atividades_extras_metricas_legadas.sql:1622:          WHERE ((((dados_mensais.ano)::numeric = EXTRACT(year FROM CURRENT_DATE)) AND ((dados_mensais.mes)::numeric = (EXTRACT(month FROM CURRENT_DATE) - (1)::numeric))) OR (((dados_mensais.ano)::numeric = (EXTRACT(year FROM CURRENT_DATE) - (1)::numeric)) AND (dados_mensais.mes = 12) AND (EXTRACT(month FROM CURRENT_DATE) = (1)::numeric)))
+supabase\migrations\20260616_hardening_atividades_extras_metricas_legadas.sql:1623:          GROUP BY dados_mensais.unidade_id, dados_mensais.alunos_pagantes
+src\components\App\Administrativo\AdministrativoPage.tsx:41:import { TabProgramaFideliza } from './TabProgramaFideliza';
+src\components\App\Administrativo\AdministrativoPage.tsx:85:  const { data, error } = await supabase.rpc('get_kpis_alunos_admin_operacional', {
+src\components\App\Administrativo\AdministrativoPage.tsx:240:  const periodoFideliza = getTrimestreLabelFromMes(competenciaFiltro.filtro.mes);
+src\components\App\Administrativo\AdministrativoPage.tsx:245:  const [mainTab, setMainTab] = useState<'lancamentos' | 'fideliza' | 'lojinha' | 'farmer' | 'caixa_financeiro' | 'caixa_entrada'>('lancamentos');
+src\components\App\Administrativo\AdministrativoPage.tsx:249:    if (mainTab === 'fideliza') {
+src\components\App\Administrativo\AdministrativoPage.tsx:250:      context?.setPeriodoLabel?.(periodoFideliza);
+src\components\App\Administrativo\AdministrativoPage.tsx:256:  }, [competenciaFiltro.range.label, context, mainTab, periodoFideliza]);
+src\components\App\Administrativo\AdministrativoPage.tsx:509:      // Para período histórico com snapshot disponível, usar dados do dados_mensais
+src\components\App\Administrativo\AdministrativoPage.tsx:518:        // Usar snapshot histórico do dados_mensais
+src\components\App\Administrativo\AdministrativoPage.tsx:1216:          { id: 'fideliza' as const, label: 'Programa Fideliza+ LA', shortLabel: 'Fideliza+', icon: Trophy, activeGradient: 'from-yellow-500 to-orange-500', activeShadow: 'shadow-yellow-500/20' },
+src\components\App\Administrativo\AdministrativoPage.tsx:1235:      ) : mainTab === 'fideliza' ? (
+src\components\App\Administrativo\AdministrativoPage.tsx:1236:        <TabProgramaFideliza 
+src\components\App\Entrada\RelatorioDiario.tsx:71:        .from('relatorios_diarios')
+src\components\App\Entrada\RelatorioDiario.tsx:180:      const { error } = await supabase.from('relatorios_diarios').upsert({
+src\components\App\Comercial\TabProgramaMatriculador.tsx:106:        .from('programa_matriculador_config')
+src\components\App\Administrativo\TabProgramaFideliza.tsx:22:import { useFidelizaPrograma, FarmerDados } from '@/hooks/useFidelizaPrograma';
+src\components\App\Administrativo\TabProgramaFideliza.tsx:72:function FidelizaFonteBadge() {
+src\components\App\Administrativo\TabProgramaFideliza.tsx:76:      content="Fideliza+ ainda usa RPC trimestral propria. P0.2 deve alinhar churn, inadimplencia, renovacao e reajuste com a fonte canonica antes de qualquer deprecacao."
+src\components\App\Administrativo\TabProgramaFideliza.tsx:143:        .from('programa_fideliza_config')
+src\components\App\Administrativo\TabProgramaFideliza.tsx:198:interface TabProgramaFidelizaProps {
+src\components\App\Administrativo\TabProgramaFideliza.tsx:204:export function TabProgramaFideliza({ unidadeSelecionada, ano = 2026, onPeriodoLabelChange }: TabProgramaFidelizaProps) {
+src\components\App\Administrativo\TabProgramaFideliza.tsx:247:  } = useFidelizaPrograma(ano, trimestreSelecionado || undefined, unidadeSelecionada !== 'todos' ? unidadeSelecionada : undefined);
+src\components\App\Administrativo\TabProgramaFideliza.tsx:508:              Programa Fideliza+ LA {ano}
+src\components\App\Administrativo\TabProgramaFideliza.tsx:525:        <FidelizaFonteBadge />
+src\components\App\Administrativo\TabProgramaFideliza.tsx:1094:                  Configuracoes do Programa Fideliza+ LA
+src\components\App\Administrativo\TabProgramaFideliza.tsx:1792:          <FidelizaFonteBadge />
+src\components\App\Administrativo\TabProgramaFideliza.tsx:1813:                {farmerAtual.unidade_nome} • Programa Fideliza+ LA {ano}
+src\components\Onboarding\tours\administrativoTour.ts:28:    content: 'KPIs críticos para o Fideliza+:\n\n• Taxa de Renovação: Meta ≥ 90%\n• Churn Rate: Meta ≤ 4%\n• Tempo Permanência: Média de meses\n• MRR Perdido: Impacto financeiro\n\n💡 Esses indicadores definem sua pontuação!',
+src\components\App\Comercial\ComercialPage.tsx:2887:      supabase.rpc('get_kpis_comercial_canonicos_v2', {
+src\components\App\Comercial\ComercialPage.tsx:2894:      supabase.rpc('get_kpis_comercial_canonicos_v2', {
+src\components\App\Metas\Simulador\SimuladorPage.tsx:92:  // Função para carregar metas aplicadas da tabela metas_kpi
+src\components\App\Metas\Simulador\SimuladorPage.tsx:99:        .from('metas_kpi')
+src\components\App\Administrativo\ModalRelatorio.tsx:209:        .rpc('get_dados_relatorio_gerencial', {
+src\components\App\Administrativo\ModalRelatorio.tsx:551:      .from('metas_kpi')
+src\components\App\Administrativo\ModalRelatorio.tsx:641:    // SEÇÃO 5: BARRAS DE METAS (Fideliza+ LA)
+src\components\App\Administrativo\ModalRelatorio.tsx:642:    texto += `🎯 *METAS FIDELIZA+ LA*\n`;
+src\components\App\Lojinha\ModalRelatorioVendas.tsx:27:type TipoRelatorio = 'diario' | 'semanal' | 'mensal' | 'meta_fideliza';
+src\components\App\Lojinha\ModalRelatorioVendas.tsx:33:  { id: 'meta_fideliza', label: 'Meta Fideliza+ Lojinha', icon: <ShoppingCart className="w-5 h-5" />, desc: 'Progresso da meta de vendas do Fideliza+' },
+src\components\App\Lojinha\ModalRelatorioVendas.tsx:83:      } else if (tipo === 'mensal' || tipo === 'meta_fideliza') {
+src\components\App\Dashboard\DashboardPage.tsx:602:        // Histórico vem de dados_mensais; mês corrente vem da fonte canônica viva.
+src\components\App\Dashboard\DashboardPage.tsx:605:          .from('dados_mensais')
+src\components\App\Dashboard\DashboardPage.tsx:660:          // Para períodos históricos, usar dados_mensais
+src\components\App\Dashboard\DashboardPage.tsx:674:            // Filtrar dados_mensais por unidade se não for consolidado
+src\components\App\Dashboard\DashboardPage.tsx:676:              .from('dados_mensais')
+src\components\App\Dashboard\DashboardPage.tsx:759:            fonteKpisAlunos.fonte === 'dados_mensais'
+src\components\App\Administrativo\PlanoAcaoRetencao.tsx:122:interface FidelizaPlusDetalhe {
+src\components\App\Administrativo\PlanoAcaoRetencao.tsx:139:  fideliza_plus?: {
+src\components\App\Administrativo\PlanoAcaoRetencao.tsx:144:    detalhamento?: FidelizaPlusDetalhe[];
+src\components\App\Administrativo\PlanoAcaoRetencao.tsx:383:          fideliza_plus: raw.fideliza_plus ? {
+src\components\App\Administrativo\PlanoAcaoRetencao.tsx:384:            estrelas_conquistadas: raw.fideliza_plus.estrelas_conquistadas || 0,
+src\components\App\Administrativo\PlanoAcaoRetencao.tsx:385:            estrelas_possiveis: raw.fideliza_plus.estrelas_possiveis || 4,
+src\components\App\Administrativo\PlanoAcaoRetencao.tsx:386:            proxima_estrela: raw.fideliza_plus.proxima_estrela || '',
+src\components\App\Administrativo\PlanoAcaoRetencao.tsx:387:            dica_experiencia: raw.fideliza_plus.dica_experiencia || '',
+src\components\App\Administrativo\PlanoAcaoRetencao.tsx:388:            detalhamento: raw.fideliza_plus.detalhamento || undefined
+src\components\App\Administrativo\PlanoAcaoRetencao.tsx:799:              {/* Fideliza+ LA - com barras de progresso para cada estrela */}
+src\components\App\Administrativo\PlanoAcaoRetencao.tsx:800:              {insights.fideliza_plus && (
+src\components\App\Administrativo\PlanoAcaoRetencao.tsx:804:                    Fideliza+ LA
+src\components\App\Administrativo\PlanoAcaoRetencao.tsx:814:                              i < (insights.fideliza_plus?.estrelas_conquistadas || 0)
+src\components\App\Administrativo\PlanoAcaoRetencao.tsx:822:                        {insights.fideliza_plus.estrelas_conquistadas}/{insights.fideliza_plus.estrelas_possiveis} estrelas
+src\components\App\Administrativo\PlanoAcaoRetencao.tsx:827:                    {insights.fideliza_plus.detalhamento && insights.fideliza_plus.detalhamento.length > 0 && (
+src\components\App\Administrativo\PlanoAcaoRetencao.tsx:829:                        {insights.fideliza_plus.detalhamento.map((item, idx) => {
+src\components\App\Administrativo\PlanoAcaoRetencao.tsx:869:                      🎯 Próxima estrela: <span className="text-yellow-400 font-medium">{String(insights.fideliza_plus.proxima_estrela || '')}</span>
+src\components\App\Administrativo\PlanoAcaoRetencao.tsx:872:                      ✨ {String(insights.fideliza_plus.dica_experiencia || '')}
+src\components\App\Metas\MetasPageNew.tsx:159:          .from('metas_kpi')
+src\components\App\Metas\MetasPageNew.tsx:241:          await supabase.from('metas_kpi').delete().eq('id', existing.id);
+src\components\App\Metas\MetasPageNew.tsx:246:          .from('metas_kpi')
+src\components\App\Metas\MetasPageNew.tsx:252:          .from('metas_kpi')
+src\components\App\Administrativo\AlertasRetencao.tsx:135:        titulo: '🏆 Churn Premiado! +25 pts Fideliza+',
+src\components\App\Administrativo\AlertasRetencao.tsx:144:        descricao: `${totalEvasoes || 0} evasões / ${alunosAtivos || 0} alunos. Meta Fideliza+ é ≤ 4%`,
+src\components\App\Administrativo\AlertasRetencao.tsx:152:        descricao: `${totalEvasoes || 0} evasões / ${alunosAtivos || 0} alunos. Meta Fideliza+ é ≤ 4%`,
+src\components\App\Administrativo\AlertasRetencao.tsx:158:  // Inadimplência (fonte: dados_mensais — mantém pois não há tabela-fonte alternativa)
+src\components\App\Administrativo\AlertasRetencao.tsx:164:        titulo: '🎉 Inadimplência 1%! +20 pts Fideliza+',
+src\components\App\Administrativo\AlertasRetencao.tsx:175:        descricao: 'Meta Fideliza+ é ≤ 1%. Verificar cobranças pendentes.',
+src\components\App\Administrativo\AlertasRetencao.tsx:187:        titulo: '🔥 Max Renovação! +25 pts Fideliza+',
+src\components\App\Administrativo\AlertasRetencao.tsx:198:        descricao: `${totalRenovacoes || 0} de ${totalVencimentos} vencimentos. Meta Fideliza+ é ≥ 90%`,
+src\components\App\Administrativo\AlertasRetencao.tsx:206:        descricao: `${totalRenovacoes || 0} de ${totalVencimentos} vencimentos. Meta Fideliza+ é ≥ 90%`,
+src\components\App\Professores\TabPerformanceProfessores.tsx:218:        .rpc('get_kpis_professor_periodo', rpcParams);
+src\components\App\Professores\ModalDetalhesTurmas.tsx:158:  // Conta apenas turmas com pelo menos 1 aluno ativo (alinha com RPC get_kpis_professor_periodo)
+src\components\App\Professores\ModalRelatorioCoordenacao.tsx:71:        .rpc('get_dados_relatorio_coordenacao', {
