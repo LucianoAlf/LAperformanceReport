@@ -431,12 +431,13 @@ function detectarDivergenciasAtributosAluno(
 
   const financeiro = analisarFinanceiroContrato(mat);
   const statusFinanceiroEmusys = financeiro.statusPagamentoCanonico ?? extrairStatusFinanceiroEmusys(mat);
+  const permiteSyncStatusFinanceiro = String(a.status || '').toLowerCase() === 'ativo';
   const ignoraStatusFinanceiro = deveIgnorarStatusFinanceiroPorTipo(
     tipoCodigo,
     a.status_pagamento,
     statusFinanceiroEmusys,
   );
-  if (!fixados.has('status_pagamento') && statusFinanceiroEmusys && !ignoraStatusFinanceiro && normalizarTextoValor(statusFinanceiroEmusys) !== normalizarTextoValor(a.status_pagamento)) {
+  if (permiteSyncStatusFinanceiro && !fixados.has('status_pagamento') && statusFinanceiroEmusys && !ignoraStatusFinanceiro && normalizarTextoValor(statusFinanceiroEmusys) !== normalizarTextoValor(a.status_pagamento)) {
     rows.push(criarDivergenciaAtributo(
       a, mat, 'status_financeiro_divergente', 'status_pagamento',
       { status_pagamento: a.status_pagamento ?? null },
@@ -1167,7 +1168,9 @@ function reconciliar(
     });
   }
   sugerirCampoRevisao('data_fim_contrato', dataFim, a.data_fim_contrato);
-  sugerirCampoRevisao('status_pagamento', statusFinanceiroEmusys, a.status_pagamento);
+  if (String(a.status || '').toLowerCase() === 'ativo') {
+    sugerirCampoRevisao('status_pagamento', statusFinanceiroEmusys, a.status_pagamento);
+  }
   if (!temValor(a.foto_url) && !temValor(a.photo_url)) {
     setCampo('foto_url', fotoEmusys, a.foto_url);
   }

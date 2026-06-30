@@ -121,7 +121,7 @@ Deno.serve(async (req) => {
     relatorio += `- Curso: ${aluno.curso_nome || 'Não informado'}\n`;
     relatorio += `- Professor: ${aluno.professor_nome || 'Não informado'}\n`;
     relatorio += `- Fase: ${getFaseLabel(aluno.fase_jornada)} (${aluno.tempo_permanencia_meses || 0} meses)\n`;
-    relatorio += `- Pagamento: ${aluno.status_pagamento === 'em_dia' ? 'Em dia' : aluno.status_pagamento === 'atrasado' ? 'Atrasado' : 'Inadimplente'} (R$ ${aluno.valor_parcela?.toFixed(0) || '-'})\n`;
+    relatorio += `- Pagamento: ${getPagamentoLabel(aluno.status_pagamento)} (R$ ${aluno.valor_parcela?.toFixed(0) || '-'})\n`;
     relatorio += `- Presença: ${aluno.percentual_presenca ? aluno.percentual_presenca.toFixed(0) + '%' : '—'}\n`;
     relatorio += `- Feedback Professor: ${getFeedbackLabel(aluno.ultimo_feedback)}\n`;
 

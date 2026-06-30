@@ -173,7 +173,7 @@ function isParcelaRecorrentePagante(row: AlunoRow): boolean {
 }
 
 function isParcelaInadimplente(row: AlunoRow): boolean {
-  return String(row.status_pagamento || '').toLowerCase() === 'inadimplente' && n(row.valor_parcela) > 0;
+  return row.status === 'ativo' && String(row.status_pagamento || '').toLowerCase() === 'inadimplente' && n(row.valor_parcela) > 0;
 }
 
 function isNovaMatriculaExecutiva(row: AlunoRow, inicioMes: string, dataCorte: string): boolean {

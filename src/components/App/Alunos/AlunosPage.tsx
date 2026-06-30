@@ -1022,6 +1022,9 @@ export function AlunosPage() {
     if (filtros.status_pagamento) {
       resultado = resultado.filter(a => {
         const statusAluno = a.status_pagamento || '-'; // null/vazio = sem sync financeiro
+        if (filtros.status_pagamento === 'inadimplente') {
+          return statusAluno === 'inadimplente' && String(a.status || '').toLowerCase() === 'ativo';
+        }
         return statusAluno === filtros.status_pagamento;
       });
     }

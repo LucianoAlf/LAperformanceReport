@@ -85,6 +85,16 @@ interface GovernancaSemParcelaState {
 const DIAS_SEMANA = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado'];
 const HORARIOS_LISTA = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00'];
 
+function isMatriculaAtivaParaInadimplencia(aluno: { status?: string | null }) {
+  return String(aluno.status || '').toLowerCase() === 'ativo';
+}
+
+function getStatusPagamentoOperacional(aluno: { status?: string | null; status_pagamento?: string | null }) {
+  const statusPagamento = aluno.status_pagamento || null;
+  if (statusPagamento === 'inadimplente' && !isMatriculaAtivaParaInadimplencia(aluno)) return null;
+  return statusPagamento;
+}
+
 // Configuração de colunas toggleable
 const COLUNAS_CONFIG = [
   { id: 'telefone', label: 'Telefone', defaultVisible: false },
@@ -290,7 +300,7 @@ export function TabelaAlunos({
     const fonte = todosAlunos || alunos;
     const ativos = fonte.filter(a => {
       const status = String(a.status || '').toLowerCase();
-      return status === 'ativo' || status === 'trancado';
+      return status === 'ativo';
     });
     
     // Contar alunos inadimplentes (únicos) e somar valor de todos os cursos
@@ -300,7 +310,10 @@ export function TabelaAlunos({
     ativos.forEach(a => {
       // Verificar se o aluno (ou algum curso dele) é inadimplente
       const principalInadimplente = a.status_pagamento === 'inadimplente';
-      const outrosCursosInadimplentes = a.outros_cursos?.filter(oc => oc.status_pagamento === 'inadimplente') || [];
+      const outrosCursosInadimplentes = a.outros_cursos?.filter(oc => {
+        const statusCurso = String(oc.status || '').toLowerCase();
+        return statusCurso === 'ativo' && oc.status_pagamento === 'inadimplente';
+      }) || [];
       
       if (principalInadimplente || outrosCursosInadimplentes.length > 0) {
         // Conta como 1 aluno (não importa quantos cursos)
@@ -1140,7 +1153,19 @@ export function TabelaAlunos({
 
   async function marcarSelecionadosComoInadimplentes() {
     if (alunosSelecionados.size === 0) return;
-    if (!confirm(`Marcar ${alunosSelecionados.size} aluno(s) como INADIMPLENTES?`)) return;
+
+    const idsAtivos = alunos
+      .filter(aluno => alunosSelecionados.has(aluno.id) && String(aluno.status || '').toLowerCase() === 'ativo')
+      .map(aluno => aluno.id);
+
+    if (idsAtivos.length === 0) {
+      alert('Nenhum aluno ativo selecionado. Inadimplência operacional só se aplica a alunos ativos.');
+      return;
+    }
+
+    const ignorados = alunosSelecionados.size - idsAtivos.length;
+    const avisoIgnorados = ignorados > 0 ? `\n\n${ignorados} registro(s) trancado(s), evadido(s) ou inativo(s) serão ignorados.` : '';
+    if (!confirm(`Marcar ${idsAtivos.length} aluno(s) ativo(s) como INADIMPLENTES?${avisoIgnorados}`)) return;
 
     setProcessandoMassa(true);
     try {
@@ -1151,7 +1176,7 @@ export function TabelaAlunos({
           updated_at: new Date().toISOString(),
           updated_by: usuario?.email || usuario?.nome || 'sistema',
         })
-        .in('id', Array.from(alunosSelecionados));
+        .in('id', idsAtivos);
 
       if (error) throw error;
 
@@ -1920,7 +1945,7 @@ export function TabelaAlunos({
           <span className={`${inadimplenciaInfo.total > 0 ? 'text-red-300' : 'text-amber-200'} flex-1`}>
             <strong className={inadimplenciaInfo.total > 0 ? 'text-red-200' : 'text-amber-100'}>
               {inadimplenciaInfo.total > 0 
-                ? `${inadimplenciaInfo.total} aluno${inadimplenciaInfo.total !== 1 ? 's' : ''} inadimplente${inadimplenciaInfo.total !== 1 ? 's' : ''}`
+                ? `${inadimplenciaInfo.total} aluno${inadimplenciaInfo.total !== 1 ? 's' : ''} ativo${inadimplenciaInfo.total !== 1 ? 's' : ''} inadimplente${inadimplenciaInfo.total !== 1 ? 's' : ''}`
                 : `${inadimplenciaInfo.pendentes} aluno${inadimplenciaInfo.pendentes !== 1 ? 's' : ''} sem status financeiro sincronizado`
               }
             </strong>
@@ -1942,7 +1967,7 @@ export function TabelaAlunos({
                 : 'bg-amber-500/20 hover:bg-amber-500/30 border-amber-500/30 text-amber-100'
             }`}
           >
-            {inadimplenciaInfo.total > 0 ? 'Filtrar inadimplentes' : 'Ver sem sincronizar'}
+            {inadimplenciaInfo.total > 0 ? 'Filtrar ativos inadimplentes' : 'Ver sem sincronizar'}
           </button>
           <button
             onClick={() => setAlertaInadimplenciaDismissed(true)}
@@ -2252,6 +2277,7 @@ export function TabelaAlunos({
                   {/* Parcela - Edição inline com cor baseada no status de pagamento */}
                   {col('parcela') && (() => {
                     const principal = aluno.valor_parcela;
+                    const statusPagamentoOperacional = getStatusPagamentoOperacional(aluno);
                     const outrosPagantes = aluno.outros_cursos?.filter(oc => oc.valor_parcela && oc.valor_parcela > 0) || [];
                     const valorExibido = (principal && principal > 0)
                       ? principal
@@ -2265,9 +2291,9 @@ export function TabelaAlunos({
                     return (
                       <td className="px-4 py-2">
                         <div className={`rounded-md ${
-                          aluno.status_pagamento === 'inadimplente' ? 'text-red-400' :
-                          aluno.status_pagamento === 'em_dia' ? 'text-emerald-400' :
-                          aluno.status_pagamento === 'parcial' ? 'text-yellow-400' :
+                          statusPagamentoOperacional === 'inadimplente' ? 'text-red-400' :
+                          statusPagamentoOperacional === 'em_dia' ? 'text-emerald-400' :
+                          statusPagamentoOperacional === 'parcial' ? 'text-yellow-400' :
                           ''
                         }`}>
                           <button
@@ -2300,7 +2326,7 @@ export function TabelaAlunos({
                   <td className="px-2 py-2">
                     <div className="flex items-center gap-1">
                       <CelulaEditavel
-                        value={aluno.status_pagamento || '-'}
+                        value={getStatusPagamentoOperacional(aluno) || '-'}
                         onChange={async (valor) => salvarCampo(aluno.id, 'status_pagamento', valor)}
                         tipo="select"
                         opcoes={[
@@ -2314,7 +2340,8 @@ export function TabelaAlunos({
                         formatarExibicao={() => {
                           const icon = getFormaPagamentoIcon(aluno.forma_pagamento_id, aluno.forma_pagamento_nome);
                           const formaNome = aluno.forma_pagamento_nome || 'Não informada';
-                          switch (aluno.status_pagamento) {
+                          const statusPagamentoOperacional = getStatusPagamentoOperacional(aluno);
+                          switch (statusPagamentoOperacional) {
                             case 'inadimplente': return (
                               <Tooltip content={`Inadimplente • ${formaNome}`}>
                                 <span className="flex items-center gap-1 text-red-400 font-bold">✗{icon && <span className="text-red-400/60">{icon}</span>}</span>
@@ -2614,9 +2641,9 @@ export function TabelaAlunos({
                     {col('parcela') && (
                     <td className="px-4 py-2">
                       <div className={`rounded-md ${
-                        outroCurso.status_pagamento === 'inadimplente' ? 'text-red-400' :
-                        outroCurso.status_pagamento === 'em_dia' ? 'text-emerald-400' :
-                        outroCurso.status_pagamento === 'parcial' ? 'text-yellow-400' :
+                        getStatusPagamentoOperacional(outroCurso) === 'inadimplente' ? 'text-red-400' :
+                        getStatusPagamentoOperacional(outroCurso) === 'em_dia' ? 'text-emerald-400' :
+                        getStatusPagamentoOperacional(outroCurso) === 'parcial' ? 'text-yellow-400' :
                         ''
                       }`}>
                         <CelulaEditavel
@@ -2633,7 +2660,7 @@ export function TabelaAlunos({
                     <td className="px-2 py-2">
                       <div className="flex items-center gap-1">
                         <CelulaEditavel
-                          value={outroCurso.status_pagamento || '-'}
+                          value={getStatusPagamentoOperacional(outroCurso) || '-'}
                           onChange={async (valor) => salvarCampo(outroCurso.id, 'status_pagamento', valor)}
                           tipo="select"
                           opcoes={[
@@ -2647,7 +2674,8 @@ export function TabelaAlunos({
                           formatarExibicao={() => {
                             const icon = getFormaPagamentoIcon(outroCurso.forma_pagamento_id, outroCurso.forma_pagamento_nome);
                             const formaNome = outroCurso.forma_pagamento_nome || 'Não informada';
-                            switch (outroCurso.status_pagamento) {
+                            const statusPagamentoOperacional = getStatusPagamentoOperacional(outroCurso);
+                            switch (statusPagamentoOperacional) {
                               case 'inadimplente': return (
                                 <Tooltip content={`Inadimplente • ${formaNome}`}>
                                   <span className="flex items-center gap-1 text-red-400 font-bold">✗{icon && <span className="text-red-400/60">{icon}</span>}</span>
