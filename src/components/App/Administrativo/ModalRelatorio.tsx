@@ -12,6 +12,10 @@ import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import type { MovimentacaoAdmin, ResumoMes } from './AdministrativoPage';
 import { calcularReajusteMedioCanonico } from '@/lib/retencaoOperacionalCanonica';
+import {
+  calcularKpisMensaisAdministrativos,
+  valorPerdidoRelatorioMensal,
+} from '@/lib/relatorioMensalAdministrativo';
 
 // Mapeamento de UUIDs para nomes de unidade
 const UUID_NOME_MAP: Record<string, string> = {
@@ -575,10 +579,18 @@ export function ModalRelatorio({
     const taxaRenovacao = resumo?.renovacoes_previstas && resumo.renovacoes_previstas > 0
       ? ((resumo?.renovacoes_realizadas || 0) / resumo.renovacoes_previstas * 100)
       : 0;
-    const ticketMedio = resumo?.ticket_medio || 0;
-    const ltv = (resumo?.ltv_meses || 0) * ticketMedio;
-    const mrrAtual = resumo?.faturamento || ((resumo?.alunos_pagantes || 0) * ticketMedio);
-    const mrrPerdido = evasoes.reduce((acc, e) => acc + (e.valor_parcela_novo || 0), 0);
+    const {
+      ticketMedio,
+      mrrAtual,
+      ltv,
+      churnRate,
+      mrrPerdido,
+      tempoPermanenciaMeses,
+    } = calcularKpisMensaisAdministrativos({
+      resumo,
+      evasoes,
+      naoRenovacoes,
+    });
 
     // Função para gerar barra de progresso WhatsApp
     const gerarBarra = (atual: number, meta: number, inverso: boolean = false): string => {
@@ -625,12 +637,12 @@ export function ModalRelatorio({
     texto += `• Faturamento Previsto: *R$ ${mrrAtual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n`;
     texto += `• MRR Atual: *R$ ${mrrAtual.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n`;
     texto += `• LTV (Tempo × Ticket): *R$ ${ltv.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}*\n`;
-    texto += `• Tempo Permanência: *${(resumo?.ltv_meses || 0).toFixed(1)} meses*\n\n`;
+    texto += `• Tempo Permanência: *${tempoPermanenciaMeses.toFixed(1)} meses*\n\n`;
 
     // SEÇÃO 4: KPIs DE RETENÇÃO
     texto += `📈 *KPIs DE RETENÇÃO*\n`;
     texto += `━━━━━━━━━━━━━━━━━━━━━━\n`;
-    texto += `• Churn Rate: *${(resumo?.churn_rate || 0).toFixed(1)}%*\n`;
+    texto += `• Churn Rate: *${churnRate.toFixed(1)}%*\n`;
     texto += `• Taxa de Renovação: *${taxaRenovacao.toFixed(1)}%*\n`;
     texto += `• Reajuste Médio: *${reajusteMedio.toFixed(1)}%*\n`;
     texto += `• Inadimplência: *${taxaInadimplencia.toFixed(1)}%*\n`;
@@ -645,8 +657,8 @@ export function ModalRelatorio({
     // Churn (meta: abaixo de 3% para estrela, máximo 4%)
     const metaChurn = metas['churn_rate'] || 4;
     texto += `⭐ *Churn Premiado* (meta: <3%)\n`;
-    texto += `   ${gerarBarra(100 - (resumo?.churn_rate || 0), 100 - 3, false)}\n`;
-    texto += `   Atual: *${(resumo?.churn_rate || 0).toFixed(1)}%* | Meta: *<3%*\n\n`;
+    texto += `   ${gerarBarra(100 - churnRate, 100 - 3, false)}\n`;
+    texto += `   Atual: *${churnRate.toFixed(1)}%* | Meta: *<3%*\n\n`;
     
     // Inadimplência (meta: 0%)
     texto += `⭐ *Inadimplência Zero* (meta: 0%)\n`;
@@ -745,8 +757,12 @@ export function ModalRelatorio({
     
     if (evasoes.length > 0) {
       evasoes.forEach((e, i) => {
+        const valorPerdido = valorPerdidoRelatorioMensal(e);
         texto += `${i + 1}) Nome: *${e.aluno_nome}*\n`;
         texto += `   Motivo: ${e.motivo || 'Não informado'}\n`;
+        if (valorPerdido > 0) {
+          texto += `   Parcela: R$ ${valorPerdido.toFixed(2)}\n`;
+        }
         texto += `   Prof: ${e.professor_nome || 'N/A'}\n\n`;
       });
     } else {
@@ -839,7 +855,7 @@ export function ModalRelatorio({
       return acc;
     }, {} as Record<string, number>);
 
-    const mrrPerdido = evasoes.reduce((acc, e) => acc + (e.valor_parcela_evasao || 0), 0);
+    const mrrPerdido = evasoes.reduce((acc, e) => acc + valorPerdidoRelatorioMensal(e), 0);
 
     let texto = `━━━━━━━━━━━━━━━━━━━━━━\n`;
     texto += `🚪 *RELATÓRIO DE EVASÕES*\n`;
@@ -882,8 +898,9 @@ export function ModalRelatorio({
         const dataFormatada = new Date(e.data + 'T00:00:00').toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' });
         texto += `${i + 1}. *${e.aluno_nome}*\n`;
         texto += `   📅 ${dataFormatada} | ${tipoLabel}\n`;
-        if (e.valor_parcela_evasao) {
-          texto += `   💰 R$ ${e.valor_parcela_evasao.toFixed(2)}`;
+        const valorPerdido = valorPerdidoRelatorioMensal(e);
+        if (valorPerdido > 0) {
+          texto += `   💰 R$ ${valorPerdido.toFixed(2)}`;
           if (e.tempo_permanencia_meses) {
             texto += ` | ⏱️ ${e.tempo_permanencia_meses} meses`;
           }

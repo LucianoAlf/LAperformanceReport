@@ -484,6 +484,32 @@ export function AdministrativoPage() {
           ano,
           mes,
         });
+
+        if (kpisAlunosCanonicos.fonte !== 'indisponivel') {
+          const canonicosPorUnidade = new Map(
+            kpisAlunosCanonicos.porUnidade.map(row => [row.unidade_id, row])
+          );
+
+          kpisData = kpisData.map((row: any) => {
+            const canonico = canonicosPorUnidade.get(row.unidade_id);
+            if (!canonico) return row;
+
+            return {
+              ...row,
+              ticket_medio: canonico.ticketMedio,
+              faturamento_previsto: canonico.faturamentoPrevisto,
+              churn_rate: canonico.churnRate,
+              tempo_permanencia_medio: canonico.tempoPermanencia,
+              _matriculas_ativas: row._matriculas_ativas || canonico.matriculasAtivas,
+              _matriculas_base_alunos_ativos: row._matriculas_base_alunos_ativos || canonico.matriculasBaseAlunosAtivos,
+              _matriculas_banda: row._matriculas_banda || canonico.matriculasBanda,
+              _matriculas_2_curso: row._matriculas_2_curso || canonico.matriculasSegundoCurso,
+              _alunos_com_2_curso: row._alunos_com_2_curso || canonico.alunosComSegundoCurso,
+              _matriculas_2_curso_extras: row._matriculas_2_curso_extras || canonico.matriculasSegundoCursoExtras,
+              _alunos_coral: row._alunos_coral || canonico.matriculasCoral,
+            };
+          });
+        }
       } else {
         if (kpisAlunosCanonicos.fonte !== 'indisponivel') {
           kpisData = kpisAlunosCanonicos.porUnidade.map(row => ({
