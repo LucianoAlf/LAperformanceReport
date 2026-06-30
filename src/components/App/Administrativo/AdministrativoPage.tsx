@@ -70,6 +70,7 @@ import {
   isAlunoNovoPaganteAdministrativo,
   isAlunoTransferenciaAdministrativa,
   transferenciaPertenceAUnidade,
+  transferenciaRecebidaNaUnidade,
 } from '@/lib/administrativoTransferencias';
 
 import type { UnidadeId } from '@/components/ui/UnidadeFilter';
@@ -715,6 +716,11 @@ export function AdministrativoPage() {
           };
         })
         .filter((t: any) => transferenciaPertenceAUnidade(t.transferencia, unidade));
+      const transferenciasRecebidasPeriodo = unidade === 'todos'
+        ? transferenciasAdministrativasPeriodo
+        : transferenciasAdministrativasPeriodo.filter((t: any) => (
+            transferenciaRecebidaNaUnidade(t.transferencia, unidade)
+          ));
 
       setTransferenciasAdministrativas(transferenciasAdministrativasPeriodo);
 
@@ -723,7 +729,7 @@ export function AdministrativoPage() {
       // tipos_matricula bolsistas: BOLSISTA_INT(3), BOLSISTA_PARC(4), BANDA(5)
       const novosAlunos = todosNovos.filter(isNovoAlunoPaganteOperacional);
       const novosSegundoCurso = todosNovos.filter(a => a.is_segundo_curso).length;
-      const novasTransferencias = transferenciasAdministrativasPeriodo.length;
+      const novasTransferencias = transferenciasRecebidasPeriodo.length;
       const novosBolsistas = todosNovos.filter(a =>
         isNovoAlunoForaComercial(a) && !isAlunoTransferenciaAdministrativa(a)
       ).length;
@@ -1168,6 +1174,9 @@ export function AdministrativoPage() {
   const naoRenovacoes = movimentacoes.filter(m => m.tipo === 'nao_renovacao');
   const trancamentos = movimentacoes.filter(m => m.tipo === 'trancamento');
   const transferencias = transferenciasAdministrativas;
+  const transferenciasRecebidas = unidade === 'todos'
+    ? transferencias
+    : transferencias.filter((t: any) => transferenciaRecebidaNaUnidade(t.transferencia, unidade));
 
   // Gerar opções de competência (últimos 12 meses)
   const competenciaOptions = Array.from({ length: 12 }, (_, i) => {
@@ -1909,7 +1918,7 @@ export function AdministrativoPage() {
         naoRenovacoes={naoRenovacoes}
         avisosPrevios={avisosPrevios}
         evasoes={evasoes}
-        transferencias={transferencias}
+        transferencias={transferenciasRecebidas}
         competencia={competencia}
         unidade={unidade}
       />
