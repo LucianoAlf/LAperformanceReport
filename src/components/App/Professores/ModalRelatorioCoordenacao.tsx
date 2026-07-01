@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { 
   Dialog, 
   DialogContent, 
@@ -9,15 +9,17 @@ import {
   DialogDescription 
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Label } from '@/components/ui/label';
+import { DatePicker } from '@/components/ui/date-picker';
+import { cn } from '@/lib/utils';
 import { 
   FileText, 
   Copy, 
   Check, 
   Loader2, 
   Sparkles,
-  Users,
+  Calendar,
   Trophy,
-  AlertTriangle,
   Send
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -34,6 +36,30 @@ interface ModalRelatorioCoordenacaoProps {
 }
 
 type TipoRelatorio = 'mensal' | 'ranking';
+type ModoPeriodo = 'mes_anterior' | 'competencia_tela' | 'personalizado';
+
+function inicioMes(ano: number, mes: number): Date {
+  return new Date(ano, mes - 1, 1);
+}
+
+function fimMes(ano: number, mes: number): Date {
+  return new Date(ano, mes, 0);
+}
+
+function competenciaAnteriorHoje() {
+  const hoje = new Date();
+  const anterior = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+  return {
+    ano: anterior.getFullYear(),
+    mes: anterior.getMonth() + 1,
+  };
+}
+
+function deveAbrirMesAnterior(anoTela: number, mesTela: number): boolean {
+  const hoje = new Date();
+  const telaEhMesAtual = anoTela === hoje.getFullYear() && mesTela === hoje.getMonth() + 1;
+  return telaEhMesAtual && hoje.getDate() <= 10;
+}
 
 export function ModalRelatorioCoordenacao({
   open,
@@ -60,18 +86,90 @@ export function ModalRelatorioCoordenacao({
     9: 'Setembro', 10: 'Outubro', 11: 'Novembro', 12: 'Dezembro'
   };
 
+  const competenciaInicial = useMemo(() => {
+    return deveAbrirMesAnterior(ano, mes)
+      ? competenciaAnteriorHoje()
+      : { ano, mes };
+  }, [ano, mes]);
+
+  const [modoPeriodo, setModoPeriodo] = useState<ModoPeriodo>(
+    deveAbrirMesAnterior(ano, mes) ? 'mes_anterior' : 'competencia_tela'
+  );
+  const [dataInicio, setDataInicio] = useState<Date>(() => inicioMes(competenciaInicial.ano, competenciaInicial.mes));
+  const [dataFim, setDataFim] = useState<Date>(() => fimMes(competenciaInicial.ano, competenciaInicial.mes));
+
+  useEffect(() => {
+    if (!open) return;
+
+    const abrirMesAnterior = deveAbrirMesAnterior(ano, mes);
+    const proximaCompetencia = abrirMesAnterior ? competenciaAnteriorHoje() : { ano, mes };
+
+    setModoPeriodo(abrirMesAnterior ? 'mes_anterior' : 'competencia_tela');
+    setDataInicio(inicioMes(proximaCompetencia.ano, proximaCompetencia.mes));
+    setDataFim(fimMes(proximaCompetencia.ano, proximaCompetencia.mes));
+  }, [ano, mes, open]);
+
+  const periodoSelecionado = useMemo(() => {
+    const mesmoMes = dataInicio.getFullYear() === dataFim.getFullYear()
+      && dataInicio.getMonth() === dataFim.getMonth();
+
+    const mesSelecionado = dataInicio.getMonth() + 1;
+
+    return {
+      ano: dataInicio.getFullYear(),
+      mes: mesSelecionado,
+      mesmoMes,
+      label: `${mesesPorExtenso[mesSelecionado]}/${dataInicio.getFullYear()}`,
+      intervalo: dataInicio.toLocaleDateString('pt-BR') === dataFim.toLocaleDateString('pt-BR')
+        ? dataInicio.toLocaleDateString('pt-BR')
+        : `${dataInicio.toLocaleDateString('pt-BR')} ate ${dataFim.toLocaleDateString('pt-BR')}`,
+    };
+  }, [dataFim, dataInicio, mesesPorExtenso]);
+
+  const selecionarPeriodo = (modo: ModoPeriodo) => {
+    setModoPeriodo(modo);
+
+    if (modo === 'mes_anterior') {
+      const competencia = competenciaAnteriorHoje();
+      setDataInicio(inicioMes(competencia.ano, competencia.mes));
+      setDataFim(fimMes(competencia.ano, competencia.mes));
+      return;
+    }
+
+    if (modo === 'competencia_tela') {
+      setDataInicio(inicioMes(ano, mes));
+      setDataFim(fimMes(ano, mes));
+      return;
+    }
+
+    // Personalizado preserva a competencia ja selecionada e apenas libera os date pickers.
+  };
+
+  const validarCompetenciaMensal = () => {
+    if (!periodoSelecionado.mesmoMes) {
+      throw new Error('O relatorio pedagogico mensal precisa ficar dentro de uma unica competencia.');
+    }
+
+    return {
+      anoRelatorio: periodoSelecionado.ano,
+      mesRelatorio: periodoSelecionado.mes,
+    };
+  };
+
   const gerarRelatorioIA = async (tipo: TipoRelatorio) => {
     setTipoRelatorio(tipo);
     setLoadingIA(true);
     setTextoRelatorio('');
 
     try {
+      const { anoRelatorio, mesRelatorio } = validarCompetenciaMensal();
+
       // Buscar dados via função SQL
       const { data: dadosRelatorio, error: errorDados } = await supabase
         .rpc('get_dados_relatorio_coordenacao', {
           p_unidade_id: unidadeId,
-          p_ano: ano,
-          p_mes: mes
+          p_ano: anoRelatorio,
+          p_mes: mesRelatorio
         });
 
       if (errorDados) {
@@ -208,7 +306,7 @@ export function ModalRelatorioCoordenacao({
           texto: textoRelatorio,
           tipoRelatorio: tipoRelatorio,
           unidadeNome: unidadeNome,
-          competencia: `${ano}-${String(mes).padStart(2, '0')}`,
+          competencia: `${periodoSelecionado.ano}-${String(periodoSelecionado.mes).padStart(2, '0')}`,
           ...(numeroTeste ? { numero_teste: numeroTeste } : {}),
         },
       });
@@ -250,16 +348,82 @@ export function ModalRelatorioCoordenacao({
             Relatório Coordenação Pedagógica
           </DialogTitle>
           <DialogDescription className="text-slate-400">
-            {unidadeNome} • {mesesPorExtenso[mes]}/{ano}
+            {unidadeNome} • {periodoSelecionado.label}
           </DialogDescription>
         </DialogHeader>
 
         {/* Seleção de tipo de relatório */}
         {!tipoRelatorio && !loadingIA && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 py-6">
+          <div className="space-y-5 py-6 overflow-y-auto pr-1">
+            <div className="rounded-xl border border-slate-700 bg-slate-800/50 p-4">
+              <Label className="text-slate-300 text-sm font-medium mb-3 block">
+                Período do relatório
+              </Label>
+
+              <div className="flex flex-wrap gap-2 mb-3">
+                {[
+                  { id: 'mes_anterior' as const, label: 'Mês anterior' },
+                  { id: 'competencia_tela' as const, label: 'Competência da tela' },
+                  { id: 'personalizado' as const, label: 'Personalizado' },
+                ].map((periodo) => (
+                  <button
+                    key={periodo.id}
+                    onClick={() => selecionarPeriodo(periodo.id)}
+                    className={cn(
+                      'px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
+                      modoPeriodo === periodo.id
+                        ? 'bg-violet-600 text-white'
+                        : 'bg-slate-700/50 text-slate-400 hover:text-white hover:bg-slate-600/50'
+                    )}
+                  >
+                    {periodo.label}
+                  </button>
+                ))}
+              </div>
+
+              {modoPeriodo === 'personalizado' && (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3">
+                  <div>
+                    <Label className="text-slate-400 text-xs mb-1 block">Data início</Label>
+                    <DatePicker
+                      date={dataInicio}
+                      onDateChange={(date) => date && setDataInicio(date)}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-slate-400 text-xs mb-1 block">Data fim</Label>
+                    <DatePicker
+                      date={dataFim}
+                      onDateChange={(date) => date && setDataFim(date)}
+                    />
+                  </div>
+                </div>
+              )}
+
+              <div className="mt-3 flex flex-col gap-1 text-xs">
+                <p className="text-cyan-400 flex items-center gap-1">
+                  <Calendar className="w-3 h-3" />
+                  Competência usada: {periodoSelecionado.label}
+                  <span className="text-slate-500">({periodoSelecionado.intervalo})</span>
+                </p>
+                {!periodoSelecionado.mesmoMes && (
+                  <p className="text-amber-300">
+                    Selecione datas dentro do mesmo mês. A fonte pedagógica atual é mensal.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <button
               onClick={() => gerarRelatorioIA('mensal')}
-              className="group p-6 rounded-xl border-2 border-slate-700 hover:border-violet-500/50 bg-slate-800/50 hover:bg-slate-800 transition-all text-left"
+              disabled={!periodoSelecionado.mesmoMes}
+              className={cn(
+                'group p-6 rounded-xl border-2 border-slate-700 bg-slate-800/50 transition-all text-left',
+                periodoSelecionado.mesmoMes
+                  ? 'hover:border-violet-500/50 hover:bg-slate-800'
+                  : 'opacity-60 cursor-not-allowed'
+              )}
             >
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-12 h-12 rounded-xl bg-violet-500/20 flex items-center justify-center group-hover:bg-violet-500/30 transition-colors">
@@ -278,7 +442,13 @@ export function ModalRelatorioCoordenacao({
 
             <button
               onClick={() => gerarRelatorioIA('ranking')}
-              className="group p-6 rounded-xl border-2 border-slate-700 hover:border-amber-500/50 bg-slate-800/50 hover:bg-slate-800 transition-all text-left"
+              disabled={!periodoSelecionado.mesmoMes}
+              className={cn(
+                'group p-6 rounded-xl border-2 border-slate-700 bg-slate-800/50 transition-all text-left',
+                periodoSelecionado.mesmoMes
+                  ? 'hover:border-amber-500/50 hover:bg-slate-800'
+                  : 'opacity-60 cursor-not-allowed'
+              )}
             >
               <div className="flex items-center gap-3 mb-3">
                 <div className="w-12 h-12 rounded-xl bg-amber-500/20 flex items-center justify-center group-hover:bg-amber-500/30 transition-colors">
@@ -294,6 +464,7 @@ export function ModalRelatorioCoordenacao({
                 média de alunos por turma. Ideal para reuniões de equipe.
               </p>
             </button>
+            </div>
           </div>
         )}
 
