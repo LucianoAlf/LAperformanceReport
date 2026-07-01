@@ -134,6 +134,9 @@ export function TabProfessores({ ano, mes, unidade }: TabProfessoresProps) {
     );
   }
 
+  const totalExperimentaisProfessores = professores.reduce((acc, p) => acc + (Number(p.experimentais) || 0), 0);
+  const expMatProfessoresSemBase = totalExperimentaisProfessores === 0;
+
   // Preparar dados para rankings
   const rankingMatriculadores = [...professores]
     .filter(p => (p.matriculas || 0) > 0)
@@ -142,7 +145,9 @@ export function TabProfessores({ ano, mes, unidade }: TabProfessoresProps) {
       id: p.id,
       nome: p.nome,
       valor: p.matriculas || 0,
-      subvalor: `Exp -> Mat bloqueada (diag. ${(Number(p.taxa_conversao) || 0).toFixed(0)}%)`,
+      subvalor: (Number(p.experimentais) || 0) > 0
+        ? `Exp -> Mat bloqueada (diag. ${(Number(p.taxa_conversao) || 0).toFixed(0)}%)`
+        : 'Exp -> Mat sem base no periodo',
     }));
 
   const rankingRenovadores = [...professores]
@@ -201,10 +206,10 @@ export function TabProfessores({ ano, mes, unidade }: TabProfessoresProps) {
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <KPICard
           icon={TrendingUp}
-          label="Exp → Mat bloqueada"
-          value="Bloqueada"
-          subvalue="aguardando regra canônica"
-          variant="amber"
+          label={expMatProfessoresSemBase ? 'Exp → Mat sem base' : 'Exp → Mat bloqueada'}
+          value={expMatProfessoresSemBase ? 'Sem base' : 'Bloqueada'}
+          subvalue={expMatProfessoresSemBase ? 'sem experimentais no período' : 'aguardando regra canônica'}
+          variant={expMatProfessoresSemBase ? 'cyan' : 'amber'}
         />
         <KPICard
           icon={TrendingUp}
@@ -296,14 +301,18 @@ export function TabProfessores({ ano, mes, unidade }: TabProfessoresProps) {
                       {formatCurrency(Number(p.ticket_medio) || 0)}
                     </td>
                     <td className="py-3 px-4 text-right">
-                      <span className="text-yellow-300">
-                        Bloq.
-                        {(Number(p.taxa_conversao) || 0) > 0 && (
-                          <span className="ml-1 text-[10px] text-slate-500">
-                            diag. {Number(p.taxa_conversao).toFixed(0)}%
-                          </span>
-                        )}
-                      </span>
+                      {(Number(p.experimentais) || 0) > 0 ? (
+                        <span className="text-yellow-300">
+                          Bloq.
+                          {(Number(p.taxa_conversao) || 0) > 0 && (
+                            <span className="ml-1 text-[10px] text-slate-500">
+                              diag. {Number(p.taxa_conversao).toFixed(0)}%
+                            </span>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">Sem base</span>
+                      )}
                     </td>
                     <td className="py-3 px-4 text-right">
                       <span className={Number(p.taxa_renovacao) >= 80 ? 'text-emerald-400' : 'text-amber-400'}>

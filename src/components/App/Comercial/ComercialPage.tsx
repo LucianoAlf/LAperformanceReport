@@ -286,6 +286,8 @@ const buscarTaxaExpMatCanonica = async (
 const textoTaxaExpMat = (taxa: TaxaExpMatCanonica) =>
   taxa.liberada
     ? `*${taxa.taxa.toFixed(1)}%* (${taxa.conversoes}/${taxa.denominador})`
+    : taxa.denominador === 0 && taxa.pendencias === 0
+      ? '*SEM BASE* (0 pendencia(s); aguardando experimentais confirmadas)'
     : `*BLOQUEADA* (${taxa.pendencias} pendencia(s) de conciliacao)`;
 
 // Cards de Quick Input
@@ -4201,13 +4203,19 @@ export function ComercialPage() {
               <Tooltip
                 content={resumo.taxaExpMatLiberada
                   ? 'KPI canonico: conversoes / experimentais realizadas confirmadas por presenca ou decisao humana.'
+                  : (resumo.denominadorExpMat || 0) === 0 && (resumo.pendenciasExpMat || 0) === 0
+                    ? 'Competencia sem base de experimentais confirmadas e sem pendencias de conciliacao.'
                   : 'Bloqueada ate a conciliacao de presenca/vinculo ficar completa.'
                 }
                 side="bottom"
               >
                 <div className={cn(
                   'bg-slate-900/60 rounded-xl p-4 border cursor-help',
-                  resumo.taxaExpMatLiberada ? 'border-emerald-500/30' : 'border-amber-500/30'
+                  resumo.taxaExpMatLiberada
+                    ? 'border-emerald-500/30'
+                    : (resumo.denominadorExpMat || 0) === 0 && (resumo.pendenciasExpMat || 0) === 0
+                      ? 'border-cyan-500/30'
+                      : 'border-amber-500/30'
                 )}>
                   <div className="flex items-center gap-2 mb-3">
                     <span className="text-purple-400 text-sm font-medium">Experimental</span>
@@ -4228,13 +4236,28 @@ export function ComercialPage() {
                       </p>
                     </>
                   ) : (
-                    <div className="flex items-center gap-2 text-amber-200 mb-2">
-                      <Lock className="w-4 h-4" />
-                      <p className="text-2xl font-bold">Bloqueada</p>
+                    <div className={cn(
+                      'flex items-center gap-2 mb-2',
+                      (resumo.denominadorExpMat || 0) === 0 && (resumo.pendenciasExpMat || 0) === 0
+                        ? 'text-cyan-200'
+                        : 'text-amber-200'
+                    )}>
+                      {(resumo.denominadorExpMat || 0) === 0 && (resumo.pendenciasExpMat || 0) === 0 ? (
+                        <Clock className="w-4 h-4" />
+                      ) : (
+                        <Lock className="w-4 h-4" />
+                      )}
+                      <p className="text-2xl font-bold">
+                        {(resumo.denominadorExpMat || 0) === 0 && (resumo.pendenciasExpMat || 0) === 0 ? 'Sem base' : 'Bloqueada'}
+                      </p>
                     </div>
                   )}
                   {!resumo.taxaExpMatLiberada && (
-                    <p className="text-xs text-slate-400">{resumo.pendenciasExpMat} pendencia(s) de conciliacao.</p>
+                    <p className="text-xs text-slate-400">
+                      {(resumo.denominadorExpMat || 0) === 0 && (resumo.pendenciasExpMat || 0) === 0
+                        ? '0 pendencia(s); aguardando experimentais confirmadas.'
+                        : `${resumo.pendenciasExpMat} pendencia(s) de conciliacao.`}
+                    </p>
                   )}
                 </div>
               </Tooltip>

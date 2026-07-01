@@ -487,6 +487,7 @@ export function TabProgramaMatriculador({ unidadeId, ano = 2026, mes }: TabProgr
                       <td className="text-center text-slate-400">{config.metas.taxa_experimental_matricula}%</td>
                       {hunters.map(h => {
                         const liberada = h.metricas.taxa_exp_mat_liberada === true;
+                        const semBase = !liberada && (h.metricas.denominador_exp_mat || 0) === 0 && (h.metricas.pendencias_exp_mat || 0) === 0;
                         const bateMeta = liberada && h.metricas.taxa_exp_mat >= config.metas.taxa_experimental_matricula;
 
                         return (
@@ -494,13 +495,15 @@ export function TabProgramaMatriculador({ unidadeId, ano = 2026, mes }: TabProgr
                             key={h.unidade_id}
                             className={cn(
                               "text-center",
-                              !liberada ? "text-yellow-300" : bateMeta ? "text-emerald-400" : "text-red-400",
+                              !liberada ? (semBase ? "text-slate-400" : "text-yellow-300") : bateMeta ? "text-emerald-400" : "text-red-400",
                             )}
                           >
                             {liberada ? (
                               <>
                                 {h.metricas.taxa_exp_mat.toFixed(1)}% {bateMeta ? '✓' : '✗'}
                               </>
+                            ) : semBase ? (
+                              "Sem base"
                             ) : (
                               "Bloqueada"
                             )}
@@ -1091,6 +1094,7 @@ export function TabProgramaMatriculador({ unidadeId, ano = 2026, mes }: TabProgr
   const pendenciasExpMat = hunterAtual.metricas.pendencias_exp_mat || 0;
   const denominadorExpMat = hunterAtual.metricas.denominador_exp_mat || 0;
   const conversoesExpMat = hunterAtual.metricas.conversoes_exp_mat || 0;
+  const taxaExpMatSemBase = !taxaExpMatLiberada && pendenciasExpMat === 0 && denominadorExpMat === 0;
   const textoCompetenciaExpMat = mes
     ? `${String(mes).padStart(2, '0')}/${ano}`
     : `${ano}`;
@@ -1183,18 +1187,20 @@ export function TabProgramaMatriculador({ unidadeId, ano = 2026, mes }: TabProgr
         {/* Taxa Experimental -> Matricula canonica */}
         <div className={cn(
           "bg-slate-900 rounded-xl p-5 border",
-          taxaExpMatLiberada ? "border-emerald-500/30" : "border-yellow-500/30"
+          taxaExpMatLiberada ? "border-emerald-500/30" : taxaExpMatSemBase ? "border-cyan-500/30" : "border-yellow-500/30"
         )}>
           <div className="flex items-center justify-between mb-3">
             <div>
               <h4 className="font-medium flex items-center gap-2">
-                <Lock className={cn("h-4 w-4", taxaExpMatLiberada ? "text-emerald-400" : "text-yellow-400")} />
-                {taxaExpMatLiberada ? "Taxa Exp→Mat oficial" : "Taxa Exp→Mat bloqueada"}
+                <Lock className={cn("h-4 w-4", taxaExpMatLiberada ? "text-emerald-400" : taxaExpMatSemBase ? "text-cyan-400" : "text-yellow-400")} />
+                {taxaExpMatLiberada ? "Taxa Exp→Mat oficial" : taxaExpMatSemBase ? "Taxa Exp→Mat sem base" : "Taxa Exp→Mat bloqueada"}
               </h4>
-              <p className={cn("text-sm", taxaExpMatLiberada ? "text-emerald-300" : "text-yellow-300")}>
+              <p className={cn("text-sm", taxaExpMatLiberada ? "text-emerald-300" : taxaExpMatSemBase ? "text-cyan-300" : "text-yellow-300")}>
                 {taxaExpMatLiberada
                   ? `${textoCompetenciaExpMat}: ${conversoesExpMat}/${denominadorExpMat} conversoes confirmadas`
-                  : `${pendenciasExpMat} pendencia(s) de presenca/vinculo nesta competencia`}
+                  : taxaExpMatSemBase
+                    ? `${textoCompetenciaExpMat}: 0 pendencia(s); aguardando experimentais`
+                    : `${pendenciasExpMat} pendencia(s) de presenca/vinculo nesta competencia`}
               </p>
             </div>
             <div className="text-right">
@@ -1204,9 +1210,11 @@ export function TabProgramaMatriculador({ unidadeId, ano = 2026, mes }: TabProgr
                   ? hunterAtual.metricas.taxa_exp_mat >= config.metas.taxa_experimental_matricula
                     ? "text-emerald-400"
                     : "text-red-400"
-                  : "text-yellow-300"
+                  : taxaExpMatSemBase
+                    ? "text-cyan-300"
+                    : "text-yellow-300"
               )}>
-                {taxaExpMatLiberada ? `${hunterAtual.metricas.taxa_exp_mat.toFixed(1)}%` : "Bloqueada"}
+                {taxaExpMatLiberada ? `${hunterAtual.metricas.taxa_exp_mat.toFixed(1)}%` : taxaExpMatSemBase ? "Sem base" : "Bloqueada"}
               </span>
               <span className={cn(
                 "text-sm block",
@@ -1231,8 +1239,15 @@ export function TabProgramaMatriculador({ unidadeId, ano = 2026, mes }: TabProgr
               />
             </div>
           ) : (
-            <div className="rounded-lg bg-yellow-500/10 border border-yellow-500/20 px-3 py-2 text-xs text-yellow-100">
-              Nao pontuar enquanto a conciliacao v2 indicar pendencias de presenca/vinculo.
+            <div className={cn(
+              "rounded-lg px-3 py-2 text-xs",
+              taxaExpMatSemBase
+                ? "bg-cyan-500/10 border border-cyan-500/20 text-cyan-100"
+                : "bg-yellow-500/10 border border-yellow-500/20 text-yellow-100"
+            )}>
+              {taxaExpMatSemBase
+                ? "Sem pontuacao porque ainda nao ha base de experimentais confirmadas nesta competencia."
+                : "Nao pontuar enquanto a conciliacao v2 indicar pendencias de presenca/vinculo."}
             </div>
           )}
         </div>
@@ -1721,8 +1736,8 @@ function HistoricoMensal({ historico, mediaGrupo, config, metaVolume, metaTicket
             <div className="text-sm text-slate-400 mb-3">Exp &gt; Matricula</div>
             {taxaExpMatMedia === null ? (
               <>
-                <div className="text-2xl font-bold text-yellow-300">Bloqueada</div>
-                <div className="text-xs text-slate-500 mt-1">nenhum mes liberado no periodo</div>
+                <div className="text-2xl font-bold text-slate-300">Sem base</div>
+                <div className="text-xs text-slate-500 mt-1">nenhum mes com taxa publicavel no periodo</div>
               </>
             ) : (
               <>

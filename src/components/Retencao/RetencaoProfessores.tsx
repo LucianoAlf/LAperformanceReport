@@ -276,10 +276,19 @@ export function RetencaoProfessores({ ano, unidade }: RetencaoProfessoresProps) 
                         <td className="p-4 text-right text-gray-300">{prof.experimentais}</td>
                         <td className="p-4 text-right text-gray-300">{prof.matriculas}</td>
                         <td className="p-4 text-right">
-                          <span className="text-amber-300 text-xs font-semibold">Bloqueada</span>
-                          <div className="text-[11px] text-slate-500">
-                            diag. {prof.taxa_conversao_diagnostica?.toFixed(1) || '0.0'}%
-                          </div>
+                          {(prof.experimentais || 0) > 0 ? (
+                            <>
+                              <span className="text-amber-300 text-xs font-semibold">Bloqueada</span>
+                              <div className="text-[11px] text-slate-500">
+                                diag. {prof.taxa_conversao_diagnostica?.toFixed(1) || '0.0'}%
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <span className="text-slate-300 text-xs font-semibold">Sem base</span>
+                              <div className="text-[11px] text-slate-500">sem experimentais</div>
+                            </>
+                          )}
                         </td>
                         <td className="p-4 text-right text-rose-400 font-bold">{prof.evasoes}</td>
                         <td className="p-4 text-right text-gray-300">{prof.renovacoes}</td>
@@ -298,7 +307,7 @@ export function RetencaoProfessores({ ano, unidade }: RetencaoProfessoresProps) 
           </div>
 
           <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-6 mt-8">
-            <h3 className="text-lg font-grotesk font-semibold text-amber-200 mb-2">Conversao por professor bloqueada</h3>
+            <h3 className="text-lg font-grotesk font-semibold text-amber-200 mb-2">Conversao por professor em diagnostico</h3>
             <p className="text-amber-100/80 text-sm">
               A taxa experimental para matricula por professor depende da conciliacao de presenca individual, professor da aula e matricula.
               Enquanto essa regra nao estiver fechada, ela fica apenas como diagnostico e nao entra no score de saude.

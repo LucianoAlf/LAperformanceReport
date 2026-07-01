@@ -28,6 +28,7 @@ import { calcularHealthScore } from '@/hooks/useHealthScore';
 import { DEFAULT_HEALTH_WEIGHTS } from './HealthScoreConfig';
 import { HealthScoreCard } from './HealthScoreCard';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { cn } from '@/lib/utils';
 
 interface ProfessorPerformance {
   id: number;
@@ -738,8 +739,14 @@ export function TabPerformanceProfessores({ unidadeAtual, healthWeights, onPerio
         {/* Conversao Exp->Mat canonica */}
         <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700/50 h-[115px] flex flex-col justify-center">
           <p className="text-xs text-emerald-300 mb-1">Exp -&gt; Matricula</p>
-          <p className="text-white font-semibold text-xl">{conversaoEquipe.taxa.toFixed(1)}%</p>
-          <p className="text-emerald-300 text-xs">{conversaoEquipe.matriculas}/{conversaoEquipe.realizadas} confirmadas</p>
+          <p className="text-white font-semibold text-xl">
+            {conversaoEquipe.realizadas > 0 ? `${conversaoEquipe.taxa.toFixed(1)}%` : 'Sem base'}
+          </p>
+          <p className={cn('text-xs', conversaoEquipe.realizadas > 0 ? 'text-emerald-300' : 'text-slate-400')}>
+            {conversaoEquipe.realizadas > 0
+              ? `${conversaoEquipe.matriculas}/${conversaoEquipe.realizadas} confirmadas`
+              : 'sem experimentais confirmadas no periodo'}
+          </p>
         </div>
 
         {/* Top Retenção */}

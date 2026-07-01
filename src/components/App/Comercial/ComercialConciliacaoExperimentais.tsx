@@ -373,6 +373,10 @@ export function ComercialConciliacaoExperimentais({
   const resumo = { ...resumoVazio, ...(payload?.resumo || {}) };
   const resumoEmusys = { ...resumoEmusysVazio, ...(emusysPayload?.resumo || {}) };
   const items = payload?.items || [];
+  const taxaExpMatSemBase =
+    !resumo.taxa_exp_mat_liberada &&
+    (resumo.denominador_taxa_exp_mat || 0) === 0 &&
+    (resumo.pendencias_taxa_exp_mat || 0) === 0;
 
   const abrirDecisao = (item: ConciliacaoItem) => {
     setItemEmDecisao(item);
@@ -643,29 +647,37 @@ export function ComercialConciliacaoExperimentais({
             'rounded-xl border p-4',
             resumo.taxa_exp_mat_liberada
               ? 'border-emerald-400/30 bg-emerald-500/10'
-              : 'border-amber-400/30 bg-amber-500/10'
+              : taxaExpMatSemBase
+                ? 'border-cyan-400/30 bg-cyan-500/10'
+                : 'border-amber-400/30 bg-amber-500/10'
           )}>
             <div className="flex items-start gap-3">
               {resumo.taxa_exp_mat_liberada ? (
                 <CheckCircle2 className="w-5 h-5 text-emerald-300 mt-0.5" />
+              ) : taxaExpMatSemBase ? (
+                <Calendar className="w-5 h-5 text-cyan-300 mt-0.5" />
               ) : (
                 <AlertTriangle className="w-5 h-5 text-amber-300 mt-0.5" />
               )}
               <div>
                 <h3 className={cn(
                   'text-sm font-semibold',
-                  resumo.taxa_exp_mat_liberada ? 'text-emerald-100' : 'text-amber-100'
+                  resumo.taxa_exp_mat_liberada ? 'text-emerald-100' : taxaExpMatSemBase ? 'text-cyan-100' : 'text-amber-100'
                 )}>
                   {resumo.taxa_exp_mat_liberada
                     ? `Taxa Experimental > Matricula liberada: ${(resumo.taxa_exp_mat_canonica ?? 0).toFixed(1)}%`
+                    : taxaExpMatSemBase
+                      ? 'Taxa Experimental > Matricula sem base'
                     : 'Taxa Experimental > Matricula segue bloqueada'}
                 </h3>
                 <p className={cn(
                   'text-sm mt-1',
-                  resumo.taxa_exp_mat_liberada ? 'text-emerald-100/80' : 'text-amber-100/80'
+                  resumo.taxa_exp_mat_liberada ? 'text-emerald-100/80' : taxaExpMatSemBase ? 'text-cyan-100/80' : 'text-amber-100/80'
                 )}>
                   {resumo.taxa_exp_mat_liberada
                     ? `${resumo.conversoes_exp_mat_canonicas}/${resumo.denominador_taxa_exp_mat} experimentais realizadas confirmadas viraram matricula nesta competencia.`
+                    : taxaExpMatSemBase
+                      ? 'Fila limpa para esta competencia, mas ainda sem experimentais confirmadas no denominador.'
                     : 'As decisoes ja ajustam esta leitura operacional, mas ainda nao publicam KPI oficial. Primeiro vamos validar a fila conciliada por unidade e mes.'}
                 </p>
               </div>

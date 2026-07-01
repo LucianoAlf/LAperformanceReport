@@ -572,6 +572,10 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
     ...experimentaisDiagnosticoVazio,
     ...(dados.experimentais_diagnostico_v2 || {}),
   };
+  const taxaExpMatSemBase =
+    !experimentaisDiagnostico.taxaExpMatLiberada &&
+    experimentaisDiagnostico.denominadorTaxaExpMat === 0 &&
+    experimentaisDiagnostico.pendenciasTaxaExpMat === 0;
   const formatTaxaDiagnostica = (valor: number | null | undefined) =>
     typeof valor === 'number' && Number.isFinite(valor) ? `${valor.toFixed(1)}%` : '-';
 
@@ -731,7 +735,9 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
                   denominador canonico da conciliacao quando a competencia esta sem pendencias.
                   {experimentaisDiagnostico.taxaExpMatLiberada
                     ? ' A taxa Exp → Mat está liberada para esta competência.'
-                    : ' A taxa Exp → Mat segue bloqueada para esta competência.'}
+                    : taxaExpMatSemBase
+                      ? ' Esta competencia ainda esta sem base de experimentais confirmadas.'
+                      : ' A taxa Exp → Mat segue bloqueada para esta competência.'}
                 </p>
               </div>
             </div>
@@ -772,23 +778,27 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
               </div>
               <div>
                 <dt className="text-slate-400">
-                  {experimentaisDiagnostico.taxaExpMatLiberada ? 'Taxa oficial' : 'Faixa em teste'}
+                  {experimentaisDiagnostico.taxaExpMatLiberada ? 'Taxa oficial' : taxaExpMatSemBase ? 'Sem base' : 'Faixa em teste'}
                 </dt>
                 <dd className={cn(
                   'text-xl font-bold',
-                  experimentaisDiagnostico.taxaExpMatLiberada ? 'text-emerald-300' : 'text-amber-200'
+                  experimentaisDiagnostico.taxaExpMatLiberada ? 'text-emerald-300' : taxaExpMatSemBase ? 'text-slate-300' : 'text-amber-200'
                 )}>
                   {experimentaisDiagnostico.taxaExpMatLiberada
                     ? formatTaxaDiagnostica(experimentaisDiagnostico.taxaExpMatCanonica)
-                    : `${formatTaxaDiagnostica(experimentaisDiagnostico.taxaExpMatMinimaCanonica)} - ${formatTaxaDiagnostica(experimentaisDiagnostico.taxaExpMatMaximaAposRevisao)}`}
+                    : taxaExpMatSemBase
+                      ? 'Sem base'
+                      : `${formatTaxaDiagnostica(experimentaisDiagnostico.taxaExpMatMinimaCanonica)} - ${formatTaxaDiagnostica(experimentaisDiagnostico.taxaExpMatMaximaAposRevisao)}`}
                 </dd>
                 <p className={cn(
                   'text-[11px]',
-                  experimentaisDiagnostico.taxaExpMatLiberada ? 'text-emerald-200/80' : 'text-amber-200/80'
+                  experimentaisDiagnostico.taxaExpMatLiberada ? 'text-emerald-200/80' : taxaExpMatSemBase ? 'text-slate-400' : 'text-amber-200/80'
                 )}>
                   {experimentaisDiagnostico.taxaExpMatLiberada
                     ? `${experimentaisDiagnostico.conversoesExpMatCanonicas}/${experimentaisDiagnostico.denominadorTaxaExpMat}`
-                    : 'Não é KPI oficial'}
+                    : taxaExpMatSemBase
+                      ? '0 pendencias'
+                      : 'Não é KPI oficial'}
                 </p>
               </div>
             </dl>
@@ -825,12 +835,16 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
               'bg-slate-800/70 border rounded-xl p-4 min-h-[112px] flex flex-col justify-between',
               experimentaisDiagnostico.taxaExpMatLiberada
                 ? 'border-emerald-500/30'
-                : 'border-slate-700'
+                : taxaExpMatSemBase
+                  ? 'border-cyan-500/30'
+                  : 'border-slate-700'
             )}>
               <div className="flex items-center justify-between gap-3">
                 <span className="text-xs text-slate-400 font-medium">Taxa Exp → Mat</span>
                 {experimentaisDiagnostico.taxaExpMatLiberada ? (
                   <Unlock className="w-4 h-4 text-emerald-300" />
+                ) : taxaExpMatSemBase ? (
+                  <Info className="w-4 h-4 text-cyan-300" />
                 ) : (
                   <Lock className="w-4 h-4 text-amber-300" />
                 )}
@@ -838,16 +852,20 @@ export function TabComercialNew({ ano, mes, mesFim, unidade }: TabComercialProps
               <div>
                 <div className={cn(
                   'text-2xl font-bold',
-                  experimentaisDiagnostico.taxaExpMatLiberada ? 'text-emerald-300' : 'text-amber-200'
+                  experimentaisDiagnostico.taxaExpMatLiberada ? 'text-emerald-300' : taxaExpMatSemBase ? 'text-cyan-200' : 'text-amber-200'
                 )}>
                   {experimentaisDiagnostico.taxaExpMatLiberada
                     ? formatTaxaDiagnostica(experimentaisDiagnostico.taxaExpMatCanonica)
-                    : 'Bloqueada'}
+                    : taxaExpMatSemBase
+                      ? 'Sem base'
+                      : 'Bloqueada'}
                 </div>
                 <p className="text-xs text-slate-400 mt-1">
                   {experimentaisDiagnostico.taxaExpMatLiberada
                     ? `${experimentaisDiagnostico.conversoesExpMatCanonicas}/${experimentaisDiagnostico.denominadorTaxaExpMat} conversões confirmadas.`
-                    : 'Aguarda vínculo aluno → presença e decisões humanas antes de virar KPI oficial.'}
+                    : taxaExpMatSemBase
+                      ? '0 pendencia(s); aguardando experimentais confirmadas.'
+                      : 'Aguarda vínculo aluno → presença e decisões humanas antes de virar KPI oficial.'}
                 </p>
               </div>
             </div>

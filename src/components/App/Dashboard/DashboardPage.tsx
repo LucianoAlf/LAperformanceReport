@@ -728,6 +728,14 @@ export function DashboardPage() {
     );
   }
 
+  const taxaExpMatLiberada = dadosComercial?.taxa_exp_mat_liberada === true;
+  const taxaExpMatSemBase = Boolean(
+    dadosComercial &&
+      !taxaExpMatLiberada &&
+      (dadosComercial.denominador_exp_mat ?? 0) === 0 &&
+      (dadosComercial.pendencias_exp_mat ?? 0) === 0,
+  );
+
   return (
     <div className="space-y-6">
       {/* ===== FILTRO DE COMPETÊNCIA ===== */}
@@ -856,21 +864,25 @@ export function DashboardPage() {
             onClick={() => { fetchExperimentais(); setModalExperimentais(true); }}
           />
           <KPICard
-            icon={dadosComercial?.taxa_exp_mat_liberada ? Percent : Lock}
+            icon={taxaExpMatLiberada ? Percent : taxaExpMatSemBase ? Calendar : Lock}
             label="Taxa Exp→Mat"
             tooltip={
-              dadosComercial?.taxa_exp_mat_liberada
+              taxaExpMatLiberada
                 ? 'KPI canônico: matrículas originadas de experimentais confirmadas dividido por experimentais realizadas confirmadas.'
+                : taxaExpMatSemBase
+                  ? 'Competencia sem base: ainda nao ha experimentais confirmadas para calcular a taxa.'
                 : 'KPI bloqueado: aguarda regra canônica de vínculo lead → aluno → presença experimental individual.'
             }
-            value={dadosComercial?.taxa_exp_mat_liberada ? dadosComercial.taxa_conversao : 'Bloqueada'}
-            format={dadosComercial?.taxa_exp_mat_liberada ? 'percent' : undefined}
+            value={!dadosComercial ? '--' : taxaExpMatLiberada ? dadosComercial.taxa_conversao : taxaExpMatSemBase ? 'Sem base' : 'Bloqueada'}
+            format={taxaExpMatLiberada ? 'percent' : undefined}
             subvalue={
-              dadosComercial?.taxa_exp_mat_liberada
+              taxaExpMatLiberada
                 ? `${dadosComercial.conversoes_exp_mat ?? 0}/${dadosComercial.denominador_exp_mat ?? 0} confirmadas`
+                : taxaExpMatSemBase
+                  ? '0 pendencia(s); aguardando experimentais'
                 : `${dadosComercial?.pendencias_exp_mat ?? 0} pendência(s)`
             }
-            variant={dadosComercial?.taxa_exp_mat_liberada ? 'emerald' : 'amber'}
+            variant={taxaExpMatLiberada ? 'emerald' : taxaExpMatSemBase ? 'cyan' : 'amber'}
           />
           <KPICard
             icon={Ticket}
@@ -1254,14 +1266,18 @@ export function DashboardPage() {
         open={modalConversao}
         onClose={() => setModalConversao(false)}
         titulo={
-          dadosComercial?.taxa_exp_mat_liberada
+          taxaExpMatLiberada
             ? `Taxa Exp → Mat oficial (${labelPeriodo})`
-            : `Taxa Exp → Mat bloqueada (${labelPeriodo})`
+            : taxaExpMatSemBase
+              ? `Taxa Exp → Mat sem base (${labelPeriodo})`
+              : `Taxa Exp → Mat bloqueada (${labelPeriodo})`
         }
         descricao={
-          dadosComercial?.taxa_exp_mat_liberada
+          taxaExpMatLiberada
             ? `KPI canônico pela conciliação Emusys v2: conversões confirmadas / experimentais realizadas confirmadas.`
-            : `Diagnóstico: não usar como KPI oficial até fechar vínculo lead → aluno → presença experimental individual.`
+            : taxaExpMatSemBase
+              ? `Competencia sem experimentais confirmadas no denominador e sem pendencias de conciliacao.`
+              : `Diagnóstico: não usar como KPI oficial até fechar vínculo lead → aluno → presença experimental individual.`
         }
         dados={dadosModalConversao}
         colunas={[
@@ -1281,31 +1297,37 @@ export function DashboardPage() {
           const matriculou = dadosModalConversao.filter(d => d._matriculou).length;
           const naoMatriculou = total - matriculou;
           const taxaLiberada = dadosComercial?.taxa_exp_mat_liberada === true;
+          const semBase = Boolean(
+            dadosComercial &&
+              !taxaLiberada &&
+              (dadosComercial.denominador_exp_mat ?? 0) === 0 &&
+              (dadosComercial.pendencias_exp_mat ?? 0) === 0,
+          );
           return [
             {
               label: taxaLiberada ? 'Denominador v2' : 'Exp. diagnóstico',
-              valor: taxaLiberada ? dadosComercial?.denominador_exp_mat ?? 0 : total,
+              valor: taxaLiberada || semBase ? dadosComercial?.denominador_exp_mat ?? 0 : total,
               icone: <Calendar size={14} />,
               cor: 'text-sky-400',
               destaque: true,
             },
             {
               label: taxaLiberada ? 'Conversões confirmadas' : 'Matricularam',
-              valor: taxaLiberada ? dadosComercial?.conversoes_exp_mat ?? 0 : matriculou,
+              valor: taxaLiberada || semBase ? dadosComercial?.conversoes_exp_mat ?? 0 : matriculou,
               icone: <GraduationCap size={14} />,
               cor: 'text-emerald-400',
             },
             {
               label: taxaLiberada ? 'Pendências' : 'Não Matricularam',
-              valor: taxaLiberada ? dadosComercial?.pendencias_exp_mat ?? 0 : naoMatriculou,
+              valor: taxaLiberada || semBase ? dadosComercial?.pendencias_exp_mat ?? 0 : naoMatriculou,
               icone: <Users size={14} />,
-              cor: taxaLiberada ? 'text-slate-300' : 'text-amber-400',
+              cor: taxaLiberada || semBase ? 'text-slate-300' : 'text-amber-400',
             },
             {
               label: 'Taxa oficial',
-              valor: taxaLiberada ? `${(dadosComercial?.taxa_conversao ?? 0).toFixed(1)}%` : 'Bloqueada',
+              valor: taxaLiberada ? `${(dadosComercial?.taxa_conversao ?? 0).toFixed(1)}%` : semBase ? 'Sem base' : 'Bloqueada',
               icone: <Percent size={14} />,
-              cor: taxaLiberada ? 'text-emerald-400' : 'text-yellow-300',
+              cor: taxaLiberada ? 'text-emerald-400' : semBase ? 'text-slate-300' : 'text-yellow-300',
             },
           ];
         })()}

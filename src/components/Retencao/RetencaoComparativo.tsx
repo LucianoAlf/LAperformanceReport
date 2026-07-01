@@ -107,7 +107,9 @@ export function RetencaoComparativo({ ano }: RetencaoComparativoProps) {
                       <div className="text-xs text-gray-400">Mat</div>
                     </div>
                     <div className="bg-slate-900/50 rounded-xl p-3 text-center">
-                      <div className="text-sm font-bold text-amber-300">Bloq.</div>
+                      <div className={`text-sm font-bold ${(perf?.experimentais || 0) > 0 ? 'text-amber-300' : 'text-slate-300'}`}>
+                        {(perf?.experimentais || 0) > 0 ? 'Bloq.' : 'Sem base'}
+                      </div>
                       <div className="text-xs text-gray-400">Conv</div>
                     </div>
                     <div className="bg-slate-900/50 rounded-xl p-3 text-center">
