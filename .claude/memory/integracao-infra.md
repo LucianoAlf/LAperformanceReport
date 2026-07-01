@@ -237,6 +237,8 @@
 - **GOTCHA**: `POST /webhook` da UAZAPI cria o webhook com `enabled:false` por padrão — SEMPRE incluir `enabled:true`. Conferir com `GET /webhook` (retorna array; `null` = sem webhook = não recebe nada).
 - `CaixasManager`: ao salvar caixa UAZAPI ativa, invoca a edge automaticamente (conecta o recebimento sem colar URL manual). Botão Zap por caixa = "Reconectar webhook".
 - Sintoma de webhook ausente: `webhook_debug_log` sem linhas + recebidas não aparecem (envio funciona, recebimento não). `admin_conversas`/`admin_mensagens` já estão na publication `supabase_realtime` (realtime OK no banco).
+- **MÚLTIPLOS webhooks por instância** (UAZAPI suporta): `POST /webhook` com `action:"add"` (sem `id`, cria novo) / `"update"` (com `id`) / `"delete"` (com `id`). `GET /webhook` retorna o array de todos. Permite a MESMA instância entregar para 2+ destinos.
+- **Incidente recebimento parado (diag. 2026-06-30, parou ~25-26/06)**: caixa 3 "Sol - Sucesso do Aluno" não recebia no inbox. Causa: o ÚNICO webhook da instância apontava para o VPS da **Lia** (`http://89.116.73.186:3001/uazapi-webhook/<token>`), desviando tudo do Supabase. NÃO era verify_jwt (está `false`, correto) nem RLS. Instância estava `connected`. Fix: `action:"add"` do webhook do Supabase (sem remover o da Lia) + `action:"update" enabled:true` → **webhook duplo** (Lia responde no VPS + LA Report registra no inbox). Diagnóstico rápido: `GET {uazapi_url}/webhook` e conferir se a URL do Supabase está lá e `enabled:true`. LA Report NÃO tem autoreply na caixa 3 (sem resposta dobrada).
 
 ## Caixa de Entrada Administrativa
 - Tabelas: `admin_conversas` (1 por aluno por unidade, RLS por unidade; `unidade_id` é NULLABLE desde 2026-06-12) + `admin_mensagens` (CASCADE)

@@ -1,5 +1,17 @@
 # Regras de Negocio — LA Music
 
+## Financeiro / Inadimplencia (regra nova jun/2026)
+- **Inadimplencia operacional conta SO `status='ativo'` + `status_pagamento='inadimplente'` + `valor_parcela>0`.** Trancado/evadido/inativo NAO entram. (`kpisAlunosVivosCanonicos.ts isParcelaInadimplente`, commit "restrict delinquency to active students"). Motivo: lista saltou de ~16 p/ ~40 incluindo nao-ativos.
+- **BANDA e bolsista integral ficam `sem_parcela`** mesmo se Emusys retorna `em_dia` (migration p08k). Sync nao propoe `status_pagamento` p/ matricula nao-ativa.
+- **Bolsista em KPI/MRR = `tipo_matricula_id` canonico (BOLSISTA_INT/PARC), NAO `tipo_aluno` legado** (pode estar contaminado — ex. Adriana Mesquita marcada bolsista mas pagante real). RPC `get_kpis_alunos_admin_operacional`.
+- **Parcela canonica = mensalidade − desconto_condicional** (desconto_fixo so auditado). Financeiro mensal = faturamento PREVISTO (juros/multa aguarda endpoint de faturas Emusys).
+
+## Fechamento mensal / governanca de competencia (jun/2026)
+- **`dados_mensais` NAO e mais fonte de verdade** — virou compatibilidade. Retrato fechado = snapshot.
+- Fluxo: `preview_fechamento_mensal` (read-only) -> `gravar_snapshot_fechamento_mensal` (service_role, hash+auditoria, confirma alertas) -> `atualizar_dados_mensais_por_snapshot` (compat, dry_run default).
+- Tabelas `fechamento_mensal_snapshots`/`_auditoria`. Writers legados (`snapshot_dados_mensais`,`fechar_dados_mensais`,`recalcular_dados_mensais`,`upsert_dados_mensais`) bloqueados p/ anon/authenticated.
+- Migrations p09a-p09g (20260630*), commit c401724, relatorio `docs/luciano/relatorio_randolph_fechamento_junho_2026.md`. Junho ainda NAO fechado (so infra criada). Detalhe canonico: `docs/METRICAS.md`.
+
 ## Leads e Duplicatas
 - Mesmo telefone na mesma unidade = duplicata forte (bloqueia criacao)
 - Mesmo nome exato + ambos sem telefone na mesma unidade = duplicata fraca (aviso)

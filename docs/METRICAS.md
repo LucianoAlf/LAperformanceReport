@@ -63,6 +63,14 @@ Média de `valor_passaporte > 0` das matrículas novas canônicas do período (e
 ### Status de pagamento
 `status_pagamento ∈ {em_dia, inadimplente, parcial, sem_parcela}`. Aberto/indefinido = `null`/`'-'`. Governança de `sem_parcela` em `Alunos/statusPagamentoGovernanca.ts` (considera presença recente ≤30 dias).
 
+### Inadimplência operacional (regra nova, jun/2026)
+Conta como inadimplente **somente** `status = 'ativo'` **E** `status_pagamento = 'inadimplente'` **E** `valor_parcela > 0`. **Trancado, evadido e inativo NÃO entram** no alerta/contagem de inadimplência operacional. Aplicada em `kpisAlunosVivosCanonicos.ts` (`isParcelaInadimplente`, :176), `TabelaAlunos.tsx`, `AlunosPage.tsx`, `gerar-relatorio-aluno`. O `sync-matriculas-emusys` não propõe `status_pagamento` para matrícula não-ativa.
+- Motivo: inadimplentes haviam "saltado" de ~16 p/ ~40 por incluir trancado/evadido/histórico. Fonte: commit `restrict delinquency to active students`.
+- **BANDA e bolsista integral permanecem `sem_parcela`** mesmo quando o Emusys retorna `em_dia` (migration `p08k`).
+
+### Classificação de bolsista (KPI / MRR)
+Usa o **`tipo_matricula_id` canônico** (`BOLSISTA_INT`/`BOLSISTA_PARC`), **não** o `tipo_aluno` legado — que pode estar contaminado (ex.: aluno marcado `bolsista_integral` em `tipo_aluno` mas pagante regular no contrato). RPC `get_kpis_alunos_admin_operacional`. Fonte: migration `admin_operacional_bolsista_por_tipo_canonico`.
+
 ### Kids vs School
 Por idade: `idade ≤ 11` → **LA Music Kids**; `idade ≥ 12` → **LA Music School**. `TabGestao.tsx:811-812`. (Apenas alunos regulares — exclui banda e 2º curso.)
 
@@ -149,6 +157,23 @@ Crítico < 70% · Atenção 70–79% · OK ≥ 80% (`ModalDetalhesPresenca.tsx`)
 - **Health score do aluno / fase da jornada:** view `vw_aluno_sucesso_lista` (`health_score_numerico`, `health_status`, `fase_jornada`, `percentual_presenca`, `status_pagamento`). Recalculado por `calcular_health_score_alunos_batch`.
 - **Faltas:** RPC `get_faltas_periodo` deduplica aulas Emusys (individual+turma) por `(aluno, dia, curso)`, priorizando a visão individual.
 - **Pesquisa pós-1ª aula:** `pesquisas_whatsapp` `tipo='pos_primeira_aula'`; status `respondida/nao_respondida/pendente`. Régua da timeline: 1ª aula → 3 meses → evasão.
+
+---
+
+## Fechamento mensal / Governança de competência (jun/2026)
+
+Para impedir que a virada de mês recalcule/altere competências já fechadas, o fechamento passou a ser **canônico e auditável**:
+
+- **`dados_mensais` deixou de ser fonte de verdade** — virou camada de **compatibilidade** (telas antigas). A fonte do retrato fechado é o snapshot.
+- **Fluxo oficial de fechamento** (só após o último sync/movimento do mês, com confirmação explícita):
+  1. `preview_fechamento_mensal(ano, mes, unidade?, payloads?)` — **read-only**, junta domínios, aponta bloqueios/alertas. Não grava.
+  2. `gravar_snapshot_fechamento_mensal(...)` — grava o retrato com **hash + auditoria**; só `service_role`; bloqueia se houver bloqueios; exige confirmação se houver alertas; não sobrescreve snapshot fechado.
+  3. `atualizar_dados_mensais_por_snapshot(...)` — atualiza `dados_mensais` por compatibilidade a partir do snapshot aprovado (`dry_run` default).
+- **Tabelas:** `fechamento_mensal_snapshots`, `fechamento_mensal_auditoria` (RLS: `authenticated` lê, escrita só `service_role`).
+- **Writers legados bloqueados** para `anon`/`authenticated`: `snapshot_dados_mensais`, `fechar_dados_mensais`, `recalcular_dados_mensais`, `upsert_dados_mensais` (só `service_role`).
+- **Financeiro do mês = faturamento PREVISTO por parcela canônica** (mensalidade − desconto condicional). Faturamento realizado com juros/multa aguarda endpoint de faturas do Emusys (ainda inexistente).
+- Fonte: migrations `p09a`–`p09g` (`20260630*`), commit `c401724 feat: add canonical monthly closing safeguards`, relatório `docs/luciano/relatorio_randolph_fechamento_junho_2026.md`.
+- ⚠️ Junho/2026 **ainda não foi fechado** — infraestrutura criada e validada (`preview` = `aprovavel`, 0 bloqueios), gravação pendente de autorização.
 
 ---
 
